@@ -34,7 +34,7 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
           // gentle roll
           wp.y += sin(uTime * 0.7 + ph * 1.7) * 0.04 * p.x;
         #endif
-        vWorldPos = wp.xyz;
+        vWorldPos = wp.xyz + uWorldOffset;
         vNormalW = normalize(mat3(m) * normal);
         #ifdef FOLIAGE
           // soft, rounded shading: bend normals toward the blob's outward direction

@@ -901,7 +901,7 @@ export function buildingMaterial() {
       varying vec2 vTan;
       void main() {
         vec4 wp = worldMat() * vec4(position, 1.0);
-        vWorldPos = wp.xyz;
+        vWorldPos = wp.xyz + uWorldOffset;
         vNormalW = normalize(mat3(worldMat()) * normal);
         vWall = aWall; vInfo = aInfo; vColor = color; vTan = aTan;
         gl_Position = projectionMatrix * viewMatrix * wp;
@@ -919,7 +919,7 @@ export function buildingMaterial() {
       // Interior mapping: ray-trace a box room behind each window pane (no geometry).
       // Room space: x along the wall (centred on the window cell), y up from the floor, z into the building.
       vec3 room(vec3 T, vec3 N, float cu, float fv, float cellW, float floorH, float rh, float rh2, float lit, bool store) {
-        vec3 V = normalize(vWorldPos - cameraPosition);
+        vec3 V = normalize(vWorldPos - (cameraPosition + uWorldOffset));
         vec3 d = vec3(dot(V, T), V.y, max(-dot(V, N), 0.04));
         float hw = cellW * 0.5;
         float depth = store ? 7.0 : 3.0 + rh * 2.5;
@@ -1017,7 +1017,7 @@ export function buildingMaterial() {
                 float curtain = step(0.45, h3) * step(W.ww * 0.5 * (0.45 + 0.35 * W.h2), abs(W.cu));
                 vec3 cur = mix(vec3(0.85, 0.8, 0.7), vec3(0.62, 0.3, 0.28), step(0.8, h3));
                 rc = mix(rc, cur * (uAmbSky * 0.8 * day + uWindowColor * lit * 0.9 + 0.02), curtain);
-                vec3 V = normalize(vWorldPos - cameraPosition);
+                vec3 V = normalize(vWorldPos - (cameraPosition + uWorldOffset));
                 float fr = 0.12 + 0.55 * pow(1.0 - abs(dot(V, N)), 3.0);
                 glass = mix(rc, mix(uSkyHorizon, uSkyZenith, 0.4) * 0.85, fr * (1.0 - lit * 0.6));
               }

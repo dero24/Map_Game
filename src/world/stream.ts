@@ -77,7 +77,7 @@ export class TileStream {
     private terrain: Terrain,
     private walk: WalkWorld,
     private interiors: Interiors,
-    private scene: THREE.Scene,
+    private scene: THREE.Object3D, // the world root — tile groups join it under the floating origin
   ) {
     const S = man.slice;
     U.uLampBox.value.set(S.x0, S.z0, 1 / (S.x1 - S.x0), 1 / (S.z1 - S.z0));

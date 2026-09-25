@@ -118,7 +118,7 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
       varying float vCanopy;
       void main() {
         vec4 wp = worldMat() * vec4(position, 1.0);
-        vWorldPos = wp.xyz;
+        vWorldPos = wp.xyz + uWorldOffset;
         vNormalW = normal;
         #ifdef CANOPY
         vCanopy = aCanopy;

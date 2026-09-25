@@ -208,7 +208,7 @@ export function signMaterial(tex: THREE.Texture) {
       varying vec2 vUv;
       void main() {
         vec4 wp = worldMat() * vec4(position, 1.0);
-        vWorldPos = wp.xyz;
+        vWorldPos = wp.xyz + uWorldOffset;
         vNormalW = normalize(mat3(worldMat()) * normal);
         vColor = color; vText = aText; vUv = uv;
         gl_Position = projectionMatrix * viewMatrix * wp;

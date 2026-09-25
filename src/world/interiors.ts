@@ -1206,7 +1206,7 @@ function interiorMaterial(I: Interiors) {
       varying vec2 vOut;
       void main() {
         vec4 wp = worldMat() * vec4(position, 1.0);
-        vWorldPos = wp.xyz;
+        vWorldPos = wp.xyz + uWorldOffset;
         vNormalW = normalize(mat3(worldMat()) * normal);
         vColor = color; vWall = aWall; vInfo = aInfo; vOut = aOut;
         gl_Position = projectionMatrix * viewMatrix * wp;
@@ -1324,7 +1324,7 @@ function interiorMaterial(I: Interiors) {
         } else if (part > 8.5 && part < 9.5) {
           gloss = 0.45;
         } else if (part > 9.5 && part < 10.5) {
-          vec3 V = normalize(vWorldPos - cameraPosition);
+          vec3 V = normalize(vWorldPos - (cameraPosition + uWorldOffset));
           alb = mix(alb, mix(uSkyHorizon, vec3(0.9, 0.88, 0.84), 0.5), 0.35 + 0.3 * pow(1.0 - abs(dot(V, N)), 2.0));
           gloss = 0.6;
         } else if (part > 10.5 && part < 11.5) {
@@ -1341,7 +1341,7 @@ function interiorMaterial(I: Interiors) {
         // daylight spilling in from the windows + warm lamps (lamps light only their own storey)
         vec3 amb = mix(vec3(0.5, 0.46, 0.42), uAmbSky * 1.5, 0.5) * (0.12 + 0.55 * (1.0 - uNight));
         vec3 lamp = vec3(0.0);
-        vec3 V = normalize(cameraPosition - vWorldPos);
+        vec3 V = normalize((cameraPosition + uWorldOffset) - vWorldPos);
         float spec = 0.0;
         for (int i = 0; i < 8; i++) {
           vec4 L = uLights[i];

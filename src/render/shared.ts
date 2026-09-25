@@ -32,6 +32,9 @@ export const U = {
   uShadowStrength: { value: 0.8 },
   uLampMap: { value: null as THREE.Texture | null },
   uLampBox: { value: new THREE.Vector4(0, 0, 1, 1) },
+  // Floating origin: the world root renders shifted by -uWorldOffset so the camera stays near 0.
+  // Shaders add it back where they need true region/world coords.
+  uWorldOffset: { value: new THREE.Vector3() },
   uLampColor: c3(0xffb86a),
   uLampPower: { value: 0 },
   uPigment: { value: 0.22 },
@@ -151,8 +154,9 @@ vec3 fogColorDir(vec3 dir) {
   float s = pow(max(dot(dir, uSunDir), 0.0), 6.0);
   return mix(uFogColor, uFogSunColor, s * 0.6);
 }
+uniform vec3 uWorldOffset;
 vec3 applyFog(vec3 col, vec3 wpos) {
-  vec3 v = wpos - cameraPosition;
+  vec3 v = wpos - (cameraPosition + uWorldOffset);
   float d = length(v);
   float h = max(wpos.y, 0.0);
   float dens = uFogDensity * (1.0 + uSeaFog * 12.0 * exp(-h * 0.08)) ;
@@ -163,6 +167,7 @@ vec3 applyFog(vec3 col, vec3 wpos) {
 
 export const GLSL_VERT_COMMON = /* glsl */ `
 uniform float uTime, uWind;
+uniform vec3 uWorldOffset;
 varying vec3 vWorldPos;
 varying vec3 vNormalW;
 mat4 worldMat() {

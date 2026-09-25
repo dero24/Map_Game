@@ -23,7 +23,7 @@ export function buildWater(tt: TerrainTextures) {
     vertex: /* glsl */ `
       void main() {
         vec4 wp = worldMat() * vec4(position, 1.0);
-        vWorldPos = wp.xyz;
+        vWorldPos = wp.xyz + uWorldOffset;
         vNormalW = vec3(0.0, 1.0, 0.0);
         gl_Position = projectionMatrix * viewMatrix * wp;
       }`,
@@ -41,7 +41,7 @@ export function buildWater(tt: TerrainTextures) {
         vec4 T = terrainAt(xz);
         float bed = T.r, sdf = T.g, ocean = T.b;
         float depth = max(0.0, -bed);
-        vec3 V = cameraPosition - vWorldPos;
+        vec3 V = (cameraPosition + uWorldOffset) - vWorldPos;
         float dist = length(V);
         V /= dist;
         float t = uTime;

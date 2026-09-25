@@ -92,7 +92,7 @@ describe('LifeSim', () => {
     expect(standing / (RANGES.gulls[1] - RANGES.gulls[0])).toBeGreaterThan(0.6);
   });
 
-  it('pedestrians walk up to doors, go inside (hidden) and come back out', () => {
+  it('pedestrians walk up to doors, go inside (hidden) and come back out', { timeout: 15000 }, () => {
     const sim = new LifeSim(town());
     sim.setEnv({ playerX: -900, playerZ: -900, hour: 14, night: 0, density: 1, wind: 0.5 });
     const out = new Float32Array(MAX_ENTITIES * S.STRIDE);

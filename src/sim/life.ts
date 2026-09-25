@@ -239,7 +239,7 @@ export function creatureMaterial(defines: Record<string, number>) {
         #endif
         mat4 m = worldMat();
         vec4 wp = m * vec4(p, 1.0);
-        vWorldPos = wp.xyz;
+        vWorldPos = wp.xyz + uWorldOffset;
         vNormalW = normalize(mat3(m) * normal);
         vColor = color;
         #ifdef USE_INSTANCING_COLOR

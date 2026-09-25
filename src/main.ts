@@ -80,8 +80,14 @@ async function main() {
 
   const tt = terrainTextures(world);
   const paint = paintGround(paintWorld, maxTex);
-  scene.add(buildGround(world, paint, tt));
-  scene.add(buildWater(tt));
+  // Floating origin: everything in region coordinates lives under worldRoot. The render loop
+  // shifts worldRoot by -origin so the camera stays near 0; shaders add U.uWorldOffset back
+  // where they need true world positions (pigment, shadows, lamp/paint maps, fog distance).
+  const worldRoot = new THREE.Group();
+  worldRoot.name = 'world';
+  scene.add(worldRoot);
+  worldRoot.add(buildGround(world, paint, tt));
+  worldRoot.add(buildWater(tt));
   const sky = buildSky();
   scene.add(sky);
   U.uSliceBox.value.set(json.slice.x0, json.slice.z0, json.slice.x1, json.slice.z1);
@@ -89,8 +95,8 @@ async function main() {
   // Walk physics + interiors registry: everything is tile-scoped so neighbourhoods stream in and out.
   const walk = new WalkWorld(world.terrain, json.backdrop);
   const interiors = new Interiors(walk);
-  scene.add(interiors.group);
-  const stream = new TileStream(base, manifest, world.terrain, walk, interiors, scene);
+  worldRoot.add(interiors.group);
+  const stream = new TileStream(base, manifest, world.terrain, walk, interiors, worldRoot);
   stream.onTile = (a) => paint.addWalks(a.walks);
   const plans = stream.plans;
   const bld = {
@@ -134,7 +140,7 @@ async function main() {
   await stream.ensureAround(spawn.x, spawn.z);
   const lifeBase = buildLifeBase(paintWorld, walk);
   const life = new LifeClient(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors));
-  scene.add(life.group);
+  worldRoot.add(life.group);
   lifeDirty = false; // init already covers the loaded ring
 
   const post = new WatercolorPost(renderer);
@@ -388,6 +394,16 @@ async function main() {
   (window as unknown as Record<string, unknown>).__PERF__ = perf;
   const focus = new THREE.Vector3();
   const fwd = new THREE.Vector3();
+  // Render origin (world coords), re-snapped when the walker strays >1.5 km from it.
+  const origin = new THREE.Vector3();
+  const reanchor = () => {
+    const nx = Math.round(walker.x / 512) * 512, nz = Math.round(walker.z / 512) * 512;
+    if (Math.abs(nx - origin.x) < 1536 && Math.abs(nz - origin.z) < 1536) return;
+    origin.x = nx;
+    origin.z = nz;
+    worldRoot.position.set(-nx, 0, -nz);
+    U.uWorldOffset.value.set(nx, 0, nz);
+  };
   // Schedule the next frame first: one bad frame must never stop the world.
   const loop = (now: number) => {
     requestAnimationFrame(loop);
@@ -426,7 +442,9 @@ async function main() {
     U.uTime.value = simTime;
     skyUniforms.uCloudShift.value.set(simTime * 0.004 * (0.3 + weather.wind), simTime * 0.0015);
 
+    reanchor();
     walker.update(dt, camera);
+    camera.position.sub(origin); // walker works in world coords; the renderer works origin-local
     stream.update(walker.x, walker.z);
     if (lifeDirty && (!stream.busy || now - lastTileChange > 4000)) {
       lifeDirty = false; // clear first: a failed reinit must not throw every frame
