@@ -50,14 +50,30 @@ sketch above:
   deterministically, and landmarks are emitted by exactly one tile (nearest).
   Soak note: multi-second stalls still appear but reproduce identically with
   the worker disabled — pre-existing/environmental, not tile-related.
+- **IndexedDB tile cache** (`src/world/cache.ts`): tiles, terrain packs,
+  `terrain.bin` and `paint.json` load through a shared `idb` store used by the
+  page and the tile worker. Keys carry a fingerprint of the manifest's tile
+  specs + terrain layouts so a re-bake self-invalidates; stale keys for the
+  base are evicted lazily at init.
+- **Floating origin**: all region-coordinate content lives under `worldRoot`;
+  when the walker strays >1.5 km the origin re-snaps to a 512 m grid,
+  `worldRoot.position` shifts and the camera works origin-local. Shaders keep
+  true world coords via `U.uWorldOffset` (added to `vWorldPos` and to
+  `cameraPosition` for world-space comparisons).
+- **Coarse ring**: tiles in [2.4 km, 8 km) mount a lite worker build —
+  building/structure meshes + halo points only, no collision, interiors,
+  plans or lamp pools. A 4-outstanding budget keeps detail fetches ahead;
+  `mount()` swaps a coarse tile for its detail build atomically.
+- **Deep links**: `?at=lat,lon` picks the region whose slice (then backdrop,
+  then nearest origin) contains the point and spawns there — on a doorstep it
+  places you 2.2 m outside the nearest building's front door.
 
 Verified: typecheck, 44/44 tests (incl. pack/ops/deck round-trip and buildTile
 determinism), build, identical bake hashes, capture montages, and soak
 (mount ≤ ~8 ms; remaining stalls are environmental — see above).
 
-Still open from the plan: coarse LOD ring, IndexedDB tile cache,
-floating-origin re-anchoring, `?at=lat,lon`,
-atlas journal, seam-stitched life districts. The region slice layer is also
+Still open from the plan: atlas journal, seam-stitched life districts,
+on-demand planet tiles, regional style presets. The region slice layer is also
 still whole-region — per-tile packs exist and are live, but
 paint/ground/shader consumers still read the resident slice + backdrop.
 

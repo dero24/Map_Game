@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { loadWorld, loadRegions, loadAtlas, manifestAsWorldJson, type AtlasManifest, type World, type Road, type WorldJson } from './world/data';
+import { loadWorld, loadRegions, loadAtlas, manifestAsWorldJson, fromLatLon, type AtlasManifest, type World, type Road, type WorldJson } from './world/data';
 import { cachedFetchJson } from './world/cache';
 import { TileStream } from './world/stream';
 import { paintGround } from './world/groundPaint';
@@ -26,7 +26,29 @@ const $ = (id: string) => document.getElementById(id)!;
 
 async function main() {
   const regions = await loadRegions();
-  const REGION = params.get('region') ?? regions?.[0]?.id ?? 'seabright';
+  let REGION = params.get('region') ?? regions?.[0]?.id ?? 'seabright';
+  // Deep link: ?at=lat,lon — pick the baked region whose backdrop contains the point
+  // (nearest origin as fallback), then spawn there / at the nearest real front door.
+  const atM = params.get('at')?.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+  const atLatLon = atM ? ([+atM[1], +atM[2]] as [number, number]) : null;
+  if (atLatLon && !params.get('region') && regions?.length) {
+    // Slice containment beats backdrop containment beats nearest (neighbouring regions overlap).
+    const boxD = (b: { x0: number; z0: number; x1: number; z1: number }, x: number, z: number) =>
+      Math.hypot(Math.max(b.x0 - x, x - b.x1, 0), Math.max(b.z0 - z, z - b.z1, 0));
+    let best = Infinity;
+    for (const r of regions) {
+      try {
+        const man = (await cachedFetchJson(`./data/${r.id}/manifest.json`)) as AtlasManifest;
+        const [x, z] = fromLatLon(man.origin, atLatLon[0], atLatLon[1]);
+        const d = boxD(man.slice, x, z) === 0 ? 0 : boxD(man.backdrop, x, z) === 0 ? 1 : 2 + boxD(man.backdrop, x, z);
+        if (d < best) {
+          best = d;
+          REGION = r.id;
+        }
+        if (d === 0) break;
+      } catch { /* region not baked */ }
+    }
+  }
   loadSettings(REGION);
   const canvas = $('view') as HTMLCanvasElement;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: CAPTURE });
@@ -125,19 +147,40 @@ async function main() {
   // (Sea Bright: the east end of the Rumson bridge = where it lands on Ocean Ave) — shifted by
   // `spawn.offset` metres, facing `spawn.toward`, stepped `spawn.sidewalk` m right onto the sidewalk.
   const spec = meta?.spawn;
+  const atPos = atLatLon ? fromLatLon(json.origin, atLatLon[0], atLatLon[1]) : null;
   const sliceC: [number, number] = [(json.slice.x0 + json.slice.x1) / 2, (json.slice.z0 + json.slice.z1) / 2];
   const anchor = spec?.near
     ? roadAnchor(json.roads, spec.near.road, !!spec.near.bridge, spec.near.extreme ?? 'e') ?? sliceC
     : sliceC;
   const target: [number, number] = [anchor[0] + (spec?.offset?.[0] ?? 0), anchor[1] + (spec?.offset?.[1] ?? 0)];
   const onRoad = roadPoint(json.roads, new RegExp(`^${spec?.on ?? ''}`), target[0], target[1], spec?.toward ?? 'north');
-  const spawn = sidewalk(isFinite(onRoad.d) ? onRoad : { x: target[0], z: target[1], yaw: 0, d: 0 }, spec?.sidewalk ?? 0);
-  const respawn = () => walker.place(spawn.x, spawn.z, spawn.yaw, -0.02);
+  let spawn = atPos
+    ? { x: atPos[0], z: atPos[1], yaw: 0, y: undefined as number | undefined }
+    : { ...sidewalk(isFinite(onRoad.d) ? onRoad : { x: target[0], z: target[1], yaw: 0, d: 0 }, spec?.sidewalk ?? 0), y: undefined as number | undefined };
+  const respawn = () => walker.place(spawn.x, spawn.z, spawn.yaw, -0.02, spawn.y);
   respawn();
 
   // Bring the spawn neighbourhood online before we build life or prime interiors.
   $('loading').textContent = 'raising the houses…';
   await stream.ensureAround(spawn.x, spawn.z);
+  if (atPos) {
+    // Deep-link on a doorstep: walk out the front door of the nearest real building;
+    // otherwise stand on the spot facing down the nearest street.
+    let best: Door | null = null, bd = 40 * 40;
+    for (const d of stream.doors) {
+      const dd = (d.wx - atPos[0]) ** 2 + (d.wz - atPos[1]) ** 2;
+      if (dd < bd) {
+        bd = dd;
+        best = d;
+      }
+    }
+    if (best) spawn = { x: best.wx - best.nx * 2.2, z: best.wz - best.nz * 2.2, yaw: Math.atan2(best.nx, best.nz), y: best.y };
+    else {
+      const near = roadPoint(json.roads, /./, atPos[0], atPos[1], 'north');
+      if (isFinite(near.d)) spawn = { x: atPos[0], z: atPos[1], yaw: near.yaw, y: undefined };
+    }
+    respawn();
+  }
   const lifeBase = buildLifeBase(paintWorld, walk);
   const life = new LifeClient(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors));
   worldRoot.add(life.group);
@@ -310,7 +353,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { walker, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream };
+  (window as unknown as Record<string, unknown>).__GAME__ = { walker, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream, get spawn() { return spawn; }, at: atPos };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);

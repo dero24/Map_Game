@@ -250,3 +250,6 @@ const K = (Math.PI / 180) * 6378137;
 export function toLatLon(origin: { lat: number; lon: number }, x: number, z: number): [number, number] {
   return [origin.lat - z / K, origin.lon + x / (K * Math.cos((origin.lat * Math.PI) / 180))];
 }
+export function fromLatLon(origin: { lat: number; lon: number }, lat: number, lon: number): [number, number] {
+  return [(lon - origin.lon) * K * Math.cos((origin.lat * Math.PI) / 180), (origin.lat - lat) * K];
+}

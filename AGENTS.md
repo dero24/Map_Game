@@ -4,6 +4,8 @@
 - Regions: `?region=<id>` selects the town; the intro lists all baked regions. Adding a town = one
   `REGIONS` entry in `scripts/config.mjs`, then `npm run fetch -- --region=<id>` and `npm run bake -- --region=<id>`.
   Region spec fields (slice/backdrop/origin/tz/oceanEdge/spawn/roads/shoreLabel/landmarks) are documented there.
+- Deep links: `?at=lat,lon` picks the region whose slice (then backdrop, then nearest origin) contains
+  the point and spawns there — on a doorstep it places you 2.2 m outside the nearest building's front door.
 - Typecheck: `npm run typecheck`. Tests: `npm test` (vitest: rng, sun ephemeris, LifeSim determinism/behaviour). Build must pass before handing off.
 - Ambient life: pure sim in `src/sim/lifeSim.ts` (testable), worker wrapper `ambient.worker.ts`, renderer/client `life.ts`,
   shared layout `protocol.ts` (SAB when cross-origin isolated, transferable copies otherwise). Sound: `src/audio/ambience.ts` (all synthesized).
