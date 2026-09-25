@@ -122,7 +122,12 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // a tree in the road. ctx carries the unfiltered tile json; box bounds the tree scan to
   // this tile's own area so overlapping scan zones never double-spawn the same tree.
   const ctxJson = extras.ctx ?? json;
-  const maskZone = extras.box ? { x0: extras.box.x0 - 8, z0: extras.box.z0 - 8, x1: extras.box.x1 + 8, z1: extras.box.z1 + 8 } : { x0: S.x0 - 250, z0: S.z0 - 250, x1: S.x1 + 250, z1: S.z1 + 250 };
+  // Cap the mask canvas at the slice + margin: legacy regions hand us box=backdrop, which
+  // would otherwise rasterize a ~12 km canvas (hundreds of MB) in the worker.
+  const big = { x0: S.x0 - 250, z0: S.z0 - 250, x1: S.x1 + 250, z1: S.z1 + 250 };
+  const maskZone = extras.box
+    ? { x0: Math.max(extras.box.x0 - 8, big.x0), z0: Math.max(extras.box.z0 - 8, big.z0), x1: Math.min(extras.box.x1 + 8, big.x1), z1: Math.min(extras.box.z1 + 8, big.z1) }
+    : big;
   const paved = pavedMask({ json: ctxJson, terrain }, maskZone);
 
   // ---------- utility poles, wires, lamps ----------
@@ -242,7 +247,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // ---------- trees ----------
   // kinds: 0 round deciduous, 1 tall oak, 2 shrub, 3 pine, 4 spruce
   const trees: { m: THREE.Matrix4; c: THREE.Color; k: number }[] = [];
-  const zone = { x0: S.x0 - 250, z0: S.z0 - 250, x1: S.x1 + 250, z1: S.z1 + 250 };
+  // When a tile box is provided the scan only walks cells this tile owns — neighbours cover
+  // the rest. Without one (legacy single-tile worlds) it covers slice + margin as before.
+  const zone = extras.box ?? { x0: S.x0 - 250, z0: S.z0 - 250, x1: S.x1 + 250, z1: S.z1 + 250 };
   const G = 9;
   const green = [0x4d6a31, 0x5b7536, 0x6a823e, 0x55703a, 0x72893f, 0x3f5a2e];
   // Nearest point on any nearby road — used to slide mistagged street trees off the carriageway.
@@ -264,14 +271,15 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   };
   for (let z = zone.z0; z < zone.z1; z += G)
     for (let x = zone.x0; x < zone.x1; x += G) {
+      // Only cells this tile owns — the scan zones of adjacent tiles overlap the margin, and
+      // the rng sequence is identical per tile. Skipping here also spares the ~9x redundant
+      // terrain lookups the old S±250 zone spent on cells owned by neighbours.
+      if (extras.box && (x < extras.box.x0 || x >= extras.box.x1 || z < extras.box.z0 || z >= extras.box.z1)) continue;
       const jx = x + rng.float() * G, jz = z + rng.float() * G;
       const cov = terrain.coverAt(jx, jz);
       const beachy = terrain.oceanDistAt(jx, jz) < 90;
       const pr = cov === 10 ? 0.85 : beachy ? 0 : cov === 50 ? 0.035 : cov === 30 ? 0.05 : cov === 20 ? 0.3 : 0;
       if (rng.float() > pr) continue;
-      // Only emit trees this tile owns — the scan zones of adjacent tiles overlap the margin,
-      // and the rng sequence is identical per tile, so an unbounded scan would double-plant.
-      if (extras.box && (jx < extras.box.x0 || jx >= extras.box.x1 || jz < extras.box.z0 || jz >= extras.box.z1)) continue;
       if (terrain.sdfAt(jx, jz) < 3 || paved(jx, jz) || walk.blocked(jx, jz, 2.2)) continue;
       const g = terrain.heightAt(jx, jz);
       const conifer = rng.float() < (terrain.oceanDistAt(jx, jz) < 500 ? 0.55 : 0.2);
@@ -395,6 +403,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   const standAt: [number, number][] = [];
   for (let z = S.z0 + 60; z < S.z1 - 60; z += 12)
     for (let x = S.x0 + 60; x < S.x1 - 60; x += 3) {
+      if (extras.box && (x < extras.box.x0 || x >= extras.box.x1 || z < extras.box.z0 || z >= extras.box.z1)) continue;
       const d = terrain.sdfAt(x, z);
       if (!(terrain.oceanDistAt(x, z) < 60 && d > 22 && d < 30) || standAt.some(([sx, sz]) => Math.hypot(sx - x, sz - z) < 140)) continue;
       const gx = terrain.oceanDistAt(x - 6, z) - terrain.oceanDistAt(x + 6, z), gz = terrain.oceanDistAt(x, z - 6) - terrain.oceanDistAt(x, z + 6);

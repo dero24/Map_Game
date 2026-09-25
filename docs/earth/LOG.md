@@ -57,3 +57,22 @@ Newest first. One entry per work session: what changed, what was verified, what'
   `frameErrors=0`, `maxFrame=167` over 90 s — the last real in-game stall is gone (residual
   multi-second frames from earlier soaks proved environmental).
 - Interior montage (inside / inside-night / stairs / doorway): identical output.
+
+## 2026-09-24 (night, review pass) — Six findings fixed
+
+Reviewed commits `5199fe4`..`06ad50d` with a read-only subagent. Findings + fixes:
+
+1. **Lifeguard stands scanned the whole (expanded) tile slice** — every tile emitted identical
+   stands + duplicate collision ops. Clamped to `extras.box` like trees.
+2. **Tree scan still ran `coverAt/sdfAt` over the entire ~2.9 km² zone per tile** — scan zone
+   is now `extras.box` directly (off-box cells cost one comparison each, not terrain lookups).
+3. **Legacy single-tile path built a backdrop-sized paved mask** — `maskZone` is now
+   `box±8 ∩ slice±250`, capping the worker canvas.
+4. **Deterministic `mount()` failure refetched every frame forever** — catch now records
+   `failed` for the 10 s backoff.
+5. **Shot loops could capture a hollow interior** — 8 pumped frames only cover ~28 ms of
+   build; `interiors.flush()` drains pending before `inside/stairs` shots return.
+6. **`plans.get(fi)!` outside try + pump failure left uniforms live** — stale keys mark failed
+   and `activate(null)` restores the terrain cut + door uniforms instead of a permanent hole.
+
+Post-fix soak: `stalls=0`, `hitches>250ms=1`, `interior=7.75ms`, `frameErrors=0`.

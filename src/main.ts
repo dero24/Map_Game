@@ -276,6 +276,7 @@ async function main() {
       if (n === 'doorway') walker.place(d.fx + d.nx * 5, d.fz + d.nz * 5, Math.atan2(d.nx, d.nz), -0.05);
       else walker.place(d.wx - d.nx * 2.2, d.wz - d.nz * 2.2, Math.atan2(d.nx, d.nz), -0.08, d.y);
       for (let k = 0; k < 8; k++) interiors.update(walker.x, walker.z, 0.25, walker.feet);
+      interiors.flush();
       return n;
     }
     if (n === 'stairs' || n === 'upstairs' || n === 'stairs-night') {
@@ -306,6 +307,7 @@ async function main() {
         walker.place(at[0], at[1], yawTo(at, look), 0.12, P.floor0);
       }
       for (let k = 0; k < 8; k++) interiors.update(walker.x, walker.z, 0.25, walker.feet);
+      interiors.flush();
       return n;
     }
     if (n === 'raised' || n === 'houses' || n === 'porch' || n === 'shop') {

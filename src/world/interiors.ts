@@ -356,13 +356,13 @@ export class Interiors {
   // Interior builds are sliced across frames: activation lands instantly (collision, door and
   // window uniforms go live, the old interior drops) while a pending generator assembles the
   // new mesh over ~3.5 ms/frame slices — the approach walk (target picks ~16 m out) hides it.
-  private pump() {
+  private pump(budget = 3.5) {
     const p = this.pending;
     if (!p) return;
     const t0 = performance.now();
     try {
       let r = p.gen.next();
-      while (!r.done && performance.now() - t0 < 3.5) r = p.gen.next();
+      while (!r.done && performance.now() - t0 < budget) r = p.gen.next();
       if (!r.done) return;
       this.mesh = r.value;
       this.group.add(this.mesh);
@@ -370,9 +370,16 @@ export class Interiors {
       console.warn('interior build failed', p.fi, e);
       this.failed.add(p.fi);
       this.mesh = null;
+      this.pending = null;
+      this.activate(null); // restore terrain cut + door/active uniforms
+      return;
     }
     this.pending = null;
   }
+
+  // Drain any pending build right now — shots capture after the 0.2 s target loop and must
+  // not fire while the interior is still assembling.
+  flush() { while (this.pending) this.pump(Infinity); }
 
   private activate(fi: string | null, sync = false) {
     if (this.mesh) {
@@ -393,7 +400,12 @@ export class Interiors {
       activeBuilding.uActiveId.value = -1;
       return;
     }
-    const P = this.plans.get(fi)!, fp = this.fps.get(fi)!;
+    const P = this.plans.get(fi), fp = this.fps.get(fi);
+    if (!P || !fp) {
+      this.failed.add(fi);
+      this.activate(null);
+      return;
+    }
     if (fp.raise < 0.5) {
       // cut the terrain away inside the footprint (it may stand proud of the floor on a slope)
       const step = Math.ceil(fp.ring.length / HOLE_MAX);

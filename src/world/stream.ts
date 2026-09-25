@@ -308,6 +308,7 @@ export class TileStream {
         g.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose?.(); });
       }
       console.warn('tile mount failed', spec.id, e);
+      this.failed.set(spec.id, performance.now()); // back off — a deterministic failure would otherwise refetch every frame
     }
   }
 
