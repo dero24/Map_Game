@@ -25,6 +25,16 @@ const CAPTURE = params.has('capture');
 const $ = (id: string) => document.getElementById(id)!;
 
 async function main() {
+  // Surface fatal errors on-screen — on a phone there is no console to open.
+  {
+    const show = (msg: string) => {
+      const f = $('fatal');
+      f.textContent = (f.textContent + msg + '\n').slice(-4000);
+      f.classList.remove('hidden');
+    };
+    window.addEventListener('error', (e) => show(e.message + (e.filename ? ` @${e.filename.split('/').pop()}:${e.lineno}` : '')));
+    window.addEventListener('unhandledrejection', (e) => show('rejection: ' + (e.reason?.message ?? String(e.reason))));
+  }
   const regions = await loadRegions();
   let REGION = params.get('region') ?? regions?.[0]?.id ?? 'seabright';
   // Deep link: ?at=lat,lon — pick the baked region whose backdrop contains the point
@@ -158,6 +168,8 @@ async function main() {
     ? { x: atPos[0], z: atPos[1], yaw: 0, y: undefined as number | undefined }
     : { ...sidewalk(isFinite(onRoad.d) ? onRoad : { x: target[0], z: target[1], yaw: 0, d: 0 }, spec?.sidewalk ?? 0), y: undefined as number | undefined };
   const respawn = () => walker.place(spawn.x, spawn.z, spawn.yaw, -0.02, spawn.y);
+  const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+  if (isTouch) document.body.classList.add('touch');
   // Doorstep-first placement: on or near a building → step out its front door;
   // on open ground → stand on the spot facing down the nearest street.
   const teleportLocal = (x: number, z: number) => {
@@ -426,16 +438,24 @@ async function main() {
       if (journal.open) document.exitPointerLock?.();
       else walker.lock();
     }
-    if (e.code === 'KeyG' && $('intro').classList.contains('hidden') && !journal.open) {
-      document.exitPointerLock?.();
-      const v = window.prompt('teleport to (lat, lon)', '40.3620,-73.9755');
-      const m = v?.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
-      if (m) void teleportTo(+m[1], +m[2]);
-      else if (v != null) toast('that is not a lat,lon');
-      else walker.lock();
-    }
+    if (e.code === 'KeyG' && $('intro').classList.contains('hidden') && !journal.open) askTeleport();
     if (e.code === 'Escape' && journal.open) journal.toggle(false);
   });
+  const askTeleport = () => {
+    document.exitPointerLock?.();
+    const v = window.prompt('teleport to (lat, lon)', '40.3620,-73.9755');
+    const m = v?.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+    if (m) void teleportTo(+m[1], +m[2]);
+    else if (v != null) toast('that is not a lat,lon');
+    else walker.lock();
+  };
+  // Touch buttons (shown by body.touch): fly toggle, teleport prompt, journal.
+  $('tfly').onclick = () => walker.setFly(!walkParams.fly);
+  $('tgo').onclick = () => { if ($('intro').classList.contains('hidden') && !journal.open) askTeleport(); };
+  $('tmenu').onclick = () => {
+    journal.toggle();
+    if (!journal.open && !isTouch) walker.lock();
+  };
   if (CAPTURE) {
     $('intro').classList.add('hidden');
     document.body.classList.add('postcard');

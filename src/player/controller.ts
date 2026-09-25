@@ -15,6 +15,12 @@ export class Walker {
   private surfaceY = 0;
   locked = false;
   distance = 0;
+  // Touch: left ~45% of the screen is a floating joystick (analog walk, full push = run),
+  // the rest is a look-drag region. The stick UI is injected on first touch.
+  private tMove = { id: -1, ox: 0, oy: 0, x: 0, y: 0 };
+  private tLook = { id: -1, lx: 0, ly: 0 };
+  private stick?: HTMLElement;
+  private knob?: HTMLElement;
 
   constructor(private world: WalkWorld, private dom: HTMLElement) {
     window.addEventListener('keydown', (e) => {
@@ -36,6 +42,60 @@ export class Walker {
       this.pitch = Math.max(-1.35, Math.min(1.35, this.pitch - e.movementY * s));
     });
     document.addEventListener('pointerlockchange', () => (this.locked = document.pointerLockElement === dom));
+
+    // ---- touch ----
+    const STICK_R = 56;
+    dom.addEventListener('touchstart', (e) => {
+      document.body.classList.add('touch');
+      for (const t of Array.from(e.changedTouches)) {
+        if (t.clientX < window.innerWidth * 0.45 && this.tMove.id < 0) {
+          this.tMove = { id: t.identifier, ox: t.clientX, oy: t.clientY, x: 0, y: 0 };
+          const s = this.stick ?? this.mkStick();
+          s.style.transform = `translate(${t.clientX - STICK_R - 8}px, ${t.clientY - STICK_R - 8}px)`;
+          this.knob!.style.transform = 'translate(0px, 0px)';
+          s.classList.add('on');
+        } else if (this.tLook.id < 0) this.tLook = { id: t.identifier, lx: t.clientX, ly: t.clientY };
+      }
+      e.preventDefault();
+    }, { passive: false });
+    dom.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      for (const t of Array.from(e.changedTouches)) {
+        if (t.identifier === this.tMove.id) {
+          let dx = t.clientX - this.tMove.ox, dy = t.clientY - this.tMove.oy;
+          const l = Math.hypot(dx, dy);
+          if (l > STICK_R) { dx *= STICK_R / l; dy *= STICK_R / l; }
+          this.tMove.x = dx / STICK_R;
+          this.tMove.y = dy / STICK_R;
+          if (this.knob) this.knob.style.transform = `translate(${dx}px, ${dy}px)`;
+        } else if (t.identifier === this.tLook.id) {
+          const s = 0.0045;
+          this.yaw -= (t.clientX - this.tLook.lx) * s;
+          this.pitch = Math.max(-1.35, Math.min(1.35, this.pitch - (t.clientY - this.tLook.ly) * s));
+          this.tLook.lx = t.clientX;
+          this.tLook.ly = t.clientY;
+        }
+      }
+    }, { passive: false });
+    const touchEnd = (e: TouchEvent) => {
+      for (const t of Array.from(e.changedTouches)) {
+        if (t.identifier === this.tMove.id) {
+          this.tMove = { id: -1, ox: 0, oy: 0, x: 0, y: 0 };
+          this.stick?.classList.remove('on');
+        } else if (t.identifier === this.tLook.id) this.tLook = { id: -1, lx: 0, ly: 0 };
+      }
+    };
+    dom.addEventListener('touchend', touchEnd);
+    dom.addEventListener('touchcancel', touchEnd);
+  }
+
+  private mkStick() {
+    const s = document.createElement('div');
+    s.id = 'stick';
+    this.knob = document.createElement('div');
+    s.appendChild(this.knob);
+    document.body.appendChild(s);
+    return (this.stick = s);
   }
 
   lock() { this.dom.requestPointerLock?.(); }
@@ -74,12 +134,19 @@ export class Walker {
       if (k.has('KeyQ')) this.yaw += dt * 1.5;
       if (k.has('KeyE')) this.yaw -= dt * 1.5;
     }
-    const run = k.has('ShiftLeft') || k.has('ShiftRight');
+    // merge the touch stick: up on the stick is -y = forward
+    if (this.tMove.id >= 0 || this.tMove.x !== 0 || this.tMove.y !== 0) {
+      f += -this.tMove.y;
+      s += this.tMove.x;
+    }
+    const analog = Math.min(1, Math.hypot(this.tMove.x, this.tMove.y));
+    const run = k.has('ShiftLeft') || k.has('ShiftRight') || analog > 0.85;
     const len = Math.hypot(f, s);
+    const mag = Math.min(1, len); // keys land on integers (mag 1); the stick is analog
     const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw);
     const rx = Math.cos(this.yaw), rz = -Math.sin(this.yaw);
     if (walkParams.fly) {
-      const sp = walkParams.flySpeed * (run ? 4 : 1) * dt;
+      const sp = walkParams.flySpeed * (run ? 4 : 1) * mag * dt;
       const cp = Math.cos(this.pitch), sp2 = Math.sin(this.pitch);
       if (len > 0) {
         this.x += ((fx * cp * f + rx * s) / len) * sp;
@@ -90,7 +157,7 @@ export class Walker {
       if (k.has('KeyC')) this.y -= sp;
     } else {
       if (len > 0) {
-        const sp = (run ? walkParams.runSpeed : walkParams.speed) * dt;
+        const sp = (run ? walkParams.runSpeed : walkParams.speed) * mag * dt;
         const dx = ((fx * f + rx * s) / len) * sp, dz = ((fz * f + rz * s) / len) * sp;
         const [nx, nz] = this.world.move(this.x, this.z, dx, dz, 0.32, this.surfaceY);
         const moved = Math.hypot(nx - this.x, nz - this.z);

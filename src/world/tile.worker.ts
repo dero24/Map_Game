@@ -30,7 +30,7 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
     terrain = new Terrain(new TerrainLayer(bin, lay.slice), new TerrainLayer(bin, lay.backdrop));
     terrain.patchCell = cell;
   }
-  const tile = buildTile(tj, terrain, spec, msg.idBase, !!msg.lite);
+  const tile = await buildTile(tj, terrain, spec, msg.idBase, !!msg.lite);
   // A copy ships to the main thread for its patch registry; the worker keeps its own bytes.
   tile.terr = tbuf?.slice(0);
   return tile;

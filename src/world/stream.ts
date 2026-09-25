@@ -71,6 +71,7 @@ export class TileStream {
   private workerDead = false;
   private seq = 0;
   private jobs = new Map<number, { res: (t: BuiltTile) => void; rej: (e: Error) => void }>();
+  private jobFails = 0;
   // Night lamp light map: per-tile bitmaps composited over the slice box.
   private lampBits = new Map<string, ImageBitmap>();
   private lampCanvas: HTMLCanvasElement | null = null;
@@ -166,8 +167,23 @@ export class TileStream {
         const j = this.jobs.get(m.id);
         if (!j) return;
         this.jobs.delete(m.id);
-        if (m.kind === 'built') j.res(m.tile);
-        else j.rej(new Error(m.message ?? 'tile build failed'));
+        if (m.kind === 'built') {
+          this.jobFails = 0;
+          j.res(m.tile);
+        } else {
+          j.rej(new Error(m.message ?? 'tile build failed'));
+          // Repeated build failures mean the worker lacks a capability (e.g. OffscreenCanvas
+          // on older iOS) — every tile would retry forever otherwise. Fall back to in-page.
+          if (++this.jobFails >= 3 && !this.workerDead) {
+            this.workerDead = true;
+            this.worker?.terminate();
+            this.worker = null;
+            const rest = [...this.jobs.values()];
+            this.jobs.clear();
+            for (const jj of rest) jj.rej(new Error('tile worker disabled'));
+            console.warn('tile worker builds keep failing; building in-page from now on');
+          }
+        }
       };
       w.onerror = (e) => {
         // Hard crash (OOM/uncaught): in-flight jobs would never resolve — reject them and
@@ -197,8 +213,8 @@ export class TileStream {
       });
     }
     // No worker support: the same pipeline on the main thread.
-    return Promise.all([loadTile(this.base, t), lite ? Promise.resolve(null) : loadTileTerrain(this.base, t)]).then(([tj, tl]) => {
-      const tile = buildTile(tj, this.terrain, t, ord * ID_STRIDE, lite);
+    return Promise.all([loadTile(this.base, t), lite ? Promise.resolve(null) : loadTileTerrain(this.base, t)]).then(async ([tj, tl]) => {
+      const tile = await buildTile(tj, this.terrain, t, ord * ID_STRIDE, lite);
       tile.terr = tl ? (tl.height.buffer as ArrayBuffer) : undefined;
       return tile;
     });

@@ -8,8 +8,9 @@ import { buildSigns } from './signs';
 import { buildProps } from './props';
 import { planInterior } from './interiors';
 import { RecWalk, packGroup, packDeck, type BuiltTile } from './pack';
+import { canvasBitmap } from './canvas';
 
-export function buildTile(tj: TileJson, terrain: Terrain, spec: TileSpec, idBase: number, lite = false): BuiltTile {
+export async function buildTile(tj: TileJson, terrain: Terrain, spec: TileSpec, idBase: number, lite = false): Promise<BuiltTile> {
   const world: World = { json: tj as unknown as WorldJson, terrain };
   const w = new RecWalk(terrain, tj.backdrop);
   const bld = buildBuildings(world, idBase);
@@ -68,8 +69,8 @@ export function buildTile(tj: TileJson, terrain: Terrain, spec: TileSpec, idBase
     plans,
     roads: pj.roads,
     poles: signs.poles,
-    atlas: signs.atlas.transferToImageBitmap(),
-    lamp: props.lampMap.transferToImageBitmap(),
+    atlas: await canvasBitmap(signs.atlas),
+    lamp: await canvasBitmap(props.lampMap),
     lampBox: props.lampBox,
   };
 }

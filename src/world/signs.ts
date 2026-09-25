@@ -5,6 +5,7 @@ import type { World } from './data';
 import type { SignSpec } from './buildings';
 import type { WalkWorld } from '../player/collision';
 import { paintMaterial } from '../render/shared';
+import { makeCanvas, type AnyCanvas } from './canvas';
 
 const RANK: Record<string, number> = { primary: 5, trunk: 5, secondary: 4, tertiary: 3, residential: 2, unclassified: 2, living_street: 2 };
 const SUFFIX: Record<string, string> = { Avenue: 'Ave', Street: 'St', Road: 'Rd', Boulevard: 'Blvd', Drive: 'Dr', Place: 'Pl', Lane: 'Ln', Court: 'Ct', Terrace: 'Ter', Parkway: 'Pkwy', Highway: 'Hwy', Circle: 'Cir', Way: 'Way' };
@@ -18,14 +19,14 @@ const FONTS: Record<Font, string> = {
 };
 
 class Atlas {
-  readonly canvas: OffscreenCanvas;
-  private ctx: OffscreenCanvasRenderingContext2D;
+  readonly canvas: AnyCanvas;
+  private ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
   private x = 8;
   private y = 0;
   private map = new Map<string, { u0: number; v0: number; u1: number; v1: number; aspect: number }>();
   constructor(readonly W = 2048, readonly H = 2048, readonly row = 64) {
-    this.canvas = new OffscreenCanvas(W, H);
-    this.ctx = this.canvas.getContext('2d')!;
+    this.canvas = makeCanvas(W, H);
+    this.ctx = this.canvas.getContext('2d')! as OffscreenCanvasRenderingContext2D;
     this.ctx.textBaseline = 'middle';
   }
   get(text: string, font: Font) {
@@ -187,7 +188,7 @@ export function buildSigns(world: World, specs: SignSpec[], walk: WalkWorld) {
 
 // The atlas texture + painted material for the sign mesh — shared between the in-page build and
 // the tile worker's packed result (which ships the atlas as an ImageBitmap).
-export function signTexture(image: OffscreenCanvas | ImageBitmap) {
+export function signTexture(image: AnyCanvas | ImageBitmap) {
   const tex = new THREE.CanvasTexture(image as unknown as HTMLCanvasElement);
   tex.colorSpace = THREE.NoColorSpace;
   tex.flipY = false; // atlas rows are addressed top-down, like the canvas

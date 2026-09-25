@@ -9,6 +9,7 @@ import { U, GLSL_NOISE } from '../render/shared';
 import { makeRng, hash01 } from '../core/rng';
 import { carGeo } from '../sim/life';
 import type { Mailbox, Door } from './buildings';
+import { makeCanvas } from './canvas';
 
 type P = [number, number];
 const unpackPts = (f: number[]): P[] => {
@@ -42,8 +43,8 @@ export function wireMaterial() {
 function pavedMask(world: World, zone: { x0: number; z0: number; x1: number; z1: number }) {
   const { json } = world;
   const w = Math.ceil((zone.x1 - zone.x0) / 2), h = Math.ceil((zone.z1 - zone.z0) / 2);
-  const c = new OffscreenCanvas(w, h);
-  const ctx = c.getContext('2d', { willReadFrequently: true })!;
+  const c = makeCanvas(w, h);
+  const ctx = c.getContext('2d', { willReadFrequently: true })! as CanvasRenderingContext2D;
   ctx.setTransform(0.5, 0, 0, 0.5, -zone.x0 * 0.5, -zone.z0 * 0.5);
   ctx.strokeStyle = ctx.fillStyle = '#fff';
   ctx.lineCap = ctx.lineJoin = 'round';
@@ -224,8 +225,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
 
   // Lamp light map: soft warm pools painted top-down, sampled by every material at night.
   const LM = 1024;
-  const lc = new OffscreenCanvas(LM, LM);
-  const lctx = lc.getContext('2d')!;
+  const lc = makeCanvas(LM, LM);
+  const lctx = lc.getContext('2d')! as CanvasRenderingContext2D;
   lctx.fillStyle = '#000';
   lctx.fillRect(0, 0, LM, LM);
   const sx = LM / (S.x1 - S.x0), sz = LM / (S.z1 - S.z0);

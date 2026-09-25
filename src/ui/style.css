@@ -42,3 +42,20 @@ body.postcard #hud, body.postcard .lil-gui, body.postcard #toast { display: none
 
 .lil-gui.root { --background-color: rgba(244, 238, 224, 0.94); --text-color: #3a3346; --title-background-color: #e6dcc6; --title-text-color: #3a3346;
   --widget-color: #e2d8c2; --hover-color: #d6cab0; --focus-color: #cfc1a4; --number-color: #5a4c78; --string-color: #6a7a3c; --font-family: Georgia, serif; }
+
+/* touch controls */
+#touchui { position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(84px + env(safe-area-inset-bottom)); display: none; flex-direction: column; gap: 12px; z-index: 40; }
+body.touch #touchui { display: flex; }
+.tbtn { width: 54px; height: 54px; border-radius: 50%; border: 1.5px solid rgba(58,51,70,0.45); background: rgba(245,239,225,0.72); font-size: 22px; color: #3a3346; touch-action: none; }
+.tbtn:active { background: rgba(58,51,70,0.85); color: #f7f2e6; }
+#stick { position: fixed; left: 0; top: 0; width: 112px; height: 112px; border-radius: 50%; border: 2px solid rgba(58,51,70,0.4); background: rgba(245,239,225,0.28); display: none; pointer-events: none; z-index: 41; }
+#stick.on { display: block; }
+#stick > div { position: absolute; left: 34px; top: 34px; width: 44px; height: 44px; border-radius: 50%; background: rgba(58,51,70,0.55); }
+#fatal { position: fixed; left: 0; right: 0; bottom: 0; max-height: 45%; overflow: auto; background: rgba(90,20,20,0.92); color: #ffe; font-family: monospace; font-size: 12px; padding: 8px 12px; white-space: pre-wrap; z-index: 99; }
+@media (max-width: 640px) {
+  .card { padding: 20px 22px; max-width: 92vw; }
+  .card h1 { font-size: 30px; }
+  #hud { left: 14px; bottom: 14px; font-size: 13px; }
+  #journal { inset: 2vh 3vw; flex-direction: column; }
+  #journal-side { width: auto; }
+}

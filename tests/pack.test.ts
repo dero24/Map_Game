@@ -172,13 +172,13 @@ describe('packGroup + buildObject', () => {
 describe('buildTile', () => {
   const build = () => buildTile(JSON.parse(JSON.stringify(tileJson)), terrain, spec, 0);
   let a: BuiltTile;
-  it('packs a tile: objects, ops, footprints, deterministic', () => {
-    a = build();
+  it('packs a tile: objects, ops, footprints, deterministic', async () => {
+    a = await build();
     expect(a.objs.length).toBeGreaterThan(0);
     expect(a.objs.some((o) => o.m.t === 'bld')).toBe(true);
     expect(a.ops.length).toBeGreaterThan(0); // fence walls at least
     expect(a.roads).toHaveLength(2);
-    const b = build();
+    const b = await build();
     const strip = (t: BuiltTile) => ({ ops: t.ops, fps: t.fps, walks: t.walks, plans: t.plans, walls: t.walls, pilings: t.pilings });
     expect(JSON.stringify(strip(b))).toBe(JSON.stringify(strip(a)));
     // margin context rings were seeded but not recorded as ops

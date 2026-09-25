@@ -76,3 +76,19 @@ Reviewed commits `5199fe4`..`06ad50d` with a read-only subagent. Findings + fixe
    and `activate(null)` restores the terrain cut + door uniforms instead of a permanent hole.
 
 Post-fix soak: `stalls=0`, `hitches>250ms=1`, `interior=7.75ms`, `frameErrors=0`.
+
+## 2026-09-24 (night) — Mobile support
+
+- **Touch controls** (`controller.ts`): floating joystick on the left ~45% (analog walk,
+  full push = run), look-drag on the rest; pinch-zoom disabled via viewport. Touch buttons
+  (✈ fly, ⌂ teleport prompt, ☰ journal) appear when `body.touch` (coarse pointer or first
+  touch). Keyboard/mouse untouched.
+- **Why phones probably failed before**: tile-worker build failures (e.g. no OffscreenCanvas
+  on old iOS) retried forever — never escalated to in-page builds. Now 3 consecutive job
+  failures → `workerDead` → main-thread builds. And every `new OffscreenCanvas` went through
+  `makeCanvas()` (new `world/canvas.ts`) with `document.createElement` fallback; atlas/lamp
+  bitmaps via `canvasBitmap()` (`createImageBitmap` path on fallback canvases). `buildTile`
+  is async now.
+- **Fatal error overlay** (`#fatal`): `error`/`unhandledrejection` print to an on-screen
+  panel — screenshot-able on phones.
+- Small-screen CSS: intro card, HUD, journal collapse to column under 640 px.
