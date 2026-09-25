@@ -500,6 +500,12 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
 
   // ---------- street furniture: hydrants, benches, bins, planters, front hedges ----------
   {
+    // Distance from (x,z) to the nearest carriageway edge — the universal "not in the street"
+    // check. Street furniture may sit on pavement but never inside the lane.
+    const clearOfRoad = (x: number, z: number, margin: number) => {
+      const e = roadEdge(x, z);
+      return !e || e.d - e.w / 2 > margin;
+    };
     const HY = mergeGeometries([
       colored(new THREE.CylinderGeometry(0.13, 0.15, 0.55, 6).translate(0, 0.3, 0), 0xffffff),
       colored(new THREE.SphereGeometry(0.14, 6, 5).scale(1, 0.7, 1).translate(0, 0.6, 0), 0xffffff),
@@ -511,7 +517,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       if (hash01(Math.floor(b.x * 7) ^ Math.floor(b.z * 13)) > 0.26) continue; // ~1 in 4 curbs
       const a = b.yaw + Math.PI / 2;
       const x = b.x + Math.sin(a) * 4.2, z = b.z + Math.cos(a) * 4.2;
-      if (walk.blocked(x, z, 1.6)) continue;
+      if (walk.blocked(x, z, 1.6) || !clearOfRoad(x, z, 0.8)) continue;
       hydrants.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), b.yaw), V(1, 1, 1)));
       hydCol.push(new THREE.Color(hash01(Math.floor(x * 5) ^ Math.floor(z * 5)) < 0.8 ? 0xb03024 : 0xd9a52c));
       walk.addLoop([[x - 0.14, z - 0.14], [x + 0.14, z - 0.14], [x + 0.14, z + 0.14], [x - 0.14, z + 0.14]], -Infinity, terrain.heightAt(x, z) + 0.7);
@@ -535,7 +541,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     ]);
     const benches: THREE.Matrix4[] = [], benCol: THREE.Color[] = [];
     const benchAt = (x: number, z: number, yaw: number) => {
-      if (walk.blocked(x, z, 1.4)) return;
+      if (walk.blocked(x, z, 1.4) || !clearOfRoad(x, z, 1.6)) return;
       benches.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, 1)));
       benCol.push(new THREE.Color(rng.pick([0x8a6a4a, 0x9a8f80, 0x5d6e4f, 0x7a5b46])));
       walk.addLoop([[x - 0.85, z - 0.3], [x + 0.85, z - 0.3], [x + 0.85, z + 0.3], [x - 0.85, z + 0.3]], -Infinity, terrain.heightAt(x, z) + 0.9);
@@ -554,7 +560,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         along += L;
         if (along < 42) continue;
         along = 0;
-        const bx = pts[i][0] + (pts[i + 1][0] - pts[i][0]) * 0.5, bz = pts[i][1] + (pts[i + 1][1] - pts[i][1]) * 0.5;
+        const rx = pts[i][0] + (pts[i + 1][0] - pts[i][0]) * 0.5, rz = pts[i][1] + (pts[i + 1][1] - pts[i][1]) * 0.5;
+        const cl = Math.hypot(acx - rx, acz - rz) || 1;
+        const bx = rx + ((acx - rx) / cl) * 1.1, bz = rz + ((acz - rz) / cl) * 1.1; // a step inside the area, off any kerb
         const yaw = Math.atan2(acx - bx, acz - bz) + (faceOut ? Math.PI : 0);
         benchAt(bx, bz, yaw);
       }
@@ -574,7 +582,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     ]);
     const cans: THREE.Matrix4[] = [], canCol: THREE.Color[] = [];
     const canAt = (x: number, z: number) => {
-      if (walk.blocked(x, z, 1.2)) return;
+      if (walk.blocked(x, z, 1.2) || !clearOfRoad(x, z, 1.0)) return;
       cans.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(1, 1, 1)));
       canCol.push(new THREE.Color(rng.pick([0x4a5548, 0x5a6166, 0x3e4a42, 0x6a6e5c])));
       walk.addLoop([[x - 0.2, z - 0.2], [x + 0.2, z - 0.2], [x + 0.2, z + 0.2], [x - 0.2, z + 0.2]], -Infinity, terrain.heightAt(x, z) + 0.85);
@@ -612,16 +620,24 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
             walk.addLoop([[x - 0.16, z - 0.16], [x + 0.16, z - 0.16], [x + 0.16, z + 0.16], [x - 0.16, z + 0.16]], -Infinity, terrain.heightAt(x, z) + 0.6);
           }
         }
-        if (h0 > 0.38 && h0 < 0.6) {
-          // hedge run parallel to the front, split to leave the walk clear
-          const D = 6.0, LEN = 3.4;
-          for (const s of [-2.9, 2.9]) {
-            const hx = d.wx + d.nx * D + tx * s, hz = d.wz + d.nz * D + tz * s;
-            const ax = hx - tx * LEN / 2, az = hz - tz * LEN / 2, bxx = hx + tx * LEN / 2, bz2 = hz + tz * LEN / 2;
-            if (walk.blocked(ax, az, 1) || walk.blocked(bxx, bz2, 1)) continue;
-            hedgeM.push(new THREE.Matrix4().compose(V(hx, terrain.heightAt(hx, hz), hz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(tz, tx)), V(1, 1, 1)));
-            hedgeC.push(new THREE.Color(rng.pick(green)).lerp(new THREE.Color(0x2e4630), 0.15));
-            walk.addWall([ax, az], [bxx, bz2], -Infinity, terrain.heightAt(hx, hz) + 0.95);
+        if (h0 > 0.38 && h0 < 0.6 && !d.porch) {
+          // Hedge run parallel to the front, split to leave the walk clear. Try the yard line
+          // first (6 m out) then hug the foundation (2.4 m) — every point must be off pavement,
+          // unblocked and at least 2.4 m inside the road edge so it can't land on a sidewalk.
+          const LEN = 3.2;
+          for (const D of [6.0, 2.4]) {
+            let placed = 0;
+            for (const s of [-2.8, 2.8]) {
+              const hx = d.wx + d.nx * D + tx * s, hz = d.wz + d.nz * D + tz * s;
+              const ax = hx - tx * LEN / 2, az = hz - tz * LEN / 2, bxx = hx + tx * LEN / 2, bz2 = hz + tz * LEN / 2;
+              const ok = (x: number, z: number) => !walk.blocked(x, z, 1) && !paved(x, z) && clearOfRoad(x, z, 2.4);
+              if (!ok(hx, hz) || !ok(ax, az) || !ok(bxx, bz2)) continue;
+              hedgeM.push(new THREE.Matrix4().compose(V(hx, terrain.heightAt(hx, hz), hz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(tz, tx)), V(1, 1, 1)));
+              hedgeC.push(new THREE.Color(rng.pick(green)).lerp(new THREE.Color(0x2e4630), 0.15));
+              walk.addWall([ax, az], [bxx, bz2], -Infinity, terrain.heightAt(hx, hz) + 0.95);
+              placed++;
+            }
+            if (placed) break; // one row only — foundation fallback fires when the yard is too shallow
           }
         }
       }

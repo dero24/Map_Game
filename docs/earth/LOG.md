@@ -33,3 +33,14 @@ Newest first. One entry per work session: what changed, what was verified, what'
 - Hedge colour softened (15% toward dark spruce) and height dropped to 0.85 m after the
   first montage.
 - Verified: typecheck, 44/44 tests, montages (shop/porch/doorway/raised/roofs/beach tops).
+
+## 2026-09-24 (eve) — Placement fixes from play feedback
+
+- User report: hedges/bushes landing on sidewalks and carriageways. Cause: hedge offsets were
+  a fixed 6 m out from the door with only a `walk.blocked` check — nothing knew where the
+  road edge was. Fix: `clearOfRoad(x,z,margin)` (road-edge distance) + `paved` checks on every
+  hedge end/center; hedge tries yard depth first, falls back to foundation hug; porch doors
+  skipped. Benches pull 1.1 m inside their area ring; hydrants/benches/cans all get road-edge
+  margins (0.8/1.6/1.0 m — furniture may sit on pavement, never in lanes).
+- Re-verified via porch/doorway/raised/shop + residential top-downs: shallow yards now skip
+  hedges instead of planting on the sidewalk; lanes and kerbs clear.
