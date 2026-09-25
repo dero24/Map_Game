@@ -23,6 +23,7 @@ export interface Footprint {
   eave: number; // eave - base (wall-UV space)
   seed: number;
   id: number; // unique per building (exact in float) — shaders key the visited building on it
+  key?: string; // tile-streaming registry key ("tile:idx")
   door?: number;
   pitched?: boolean;
 }
@@ -621,7 +622,7 @@ export interface BuildingsResult {
   pilings: { x: number; z: number; ang: number }[];
 }
 
-export function buildBuildings(world: World): BuildingsResult {
+export function buildBuildings(world: World, idBase = 0): BuildingsResult {
   const { json, terrain } = world;
   const S = json.slice;
   const chunks = new Map<string, Builder>();
@@ -648,7 +649,7 @@ export function buildBuildings(world: World): BuildingsResult {
 
   json.buildings.forEach((bd: Building, bi: number) => {
     const ring = tidy[bi];
-    if (!ring) return;
+    if (!ring || bd.own === 0) return; // own:0 = margin context (a neighbour tile emits it)
     let cx = 0, cz = 0;
     for (const p of ring) (cx += p[0]), (cz += p[1]);
     cx /= ring.length;
@@ -675,7 +676,7 @@ export function buildBuildings(world: World): BuildingsResult {
     if (bd.k === 'church' && bd.fc == null) facade = lin(0xf4f1ea);
     if (bd.k === 'lighthouse' && bd.fc == null) facade = lin(0x9a7b62);
     const roofCol = lin(bd.rc ?? (bd.roof === 'flat' ? FLAT_ROOF : ROOF)[Math.floor(r2 * (bd.roof === 'flat' ? FLAT_ROOF.length : ROOF.length))]);
-    const id = bi;
+    const id = idBase + bi;
 
     if (bd.roof === 'tower') {
       const r = Math.max(2.2, Math.sqrt(Math.abs(ringArea(ring)) / Math.PI));

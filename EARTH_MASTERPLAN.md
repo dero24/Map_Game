@@ -9,6 +9,37 @@ This plan supersedes nothing: `EARTH_SCALE_THOUGHTS.md` argues *why* and *what*,
 `A_REVIEW_FROM_ANOTHER_AGENTS.md` audits what exists. This is the *how*, in
 buildable order.
 
+## Status (Phase 0+1, as built)
+
+Phase 0+1 landed in a slightly different — simpler — shape than the z-pyramid
+sketch above:
+
+- **Bake**: `scripts/bake.mjs` still produces `world.json`/`terrain.bin` per
+  region, and additionally emits `manifest.json`, `paint.json`, and
+  `tiles/<cx>_<cz>.json` — fixed 1024 m cells with a 48 m overlap margin
+  (`scripts/lib/tiles.mjs`). Entities are centroid-owned; margin copies carry
+  `own: 0` so builders see seam context but collision/sim/interiors register
+  exactly once. Output is sorted and byte-identical across runs.
+- **Client**: `src/world/stream.ts` keeps a 1.5 km load ring / 2.4 km drop ring
+  around the walker, mounts one fetched tile per frame, and backs off 10 s on
+  fetch failures. All collision registers under a per-tile `WalkWorld` scope
+  (`beginScope/endScope/removeScope` — tombstones, no grid rebuilds); interiors
+  register/unregister by `"tile:idx"` string keys; the ambient-life worker is
+  re-initialised once per settled tile-set (fresh buffers each time — they
+  transfer, so shared base arrays are copied).
+- **Compat**: regions without `manifest.json` run a synthesized single-tile
+  manifest — the old `world.json` path is untouched.
+
+Verified: typecheck, 34/34 tests (incl. new partition-determinism and
+scope-removal/seam tests), build, identical bake hashes across runs, capture
+montages for both regions, and a 120 s soak (0 frame errors; hitches bounded
+to synchronous tile mounts — moving mesh-build into workers is Phase 2 work).
+
+Still open from the plan: per-tile terrain (terrain.bin is still whole-region),
+coarse LOD ring, IndexedDB tile cache, floating-origin re-anchoring,
+worker-side tile decode/mesh, `?at=lat,lon`, atlas journal, seam-stitched life
+districts.
+
 ## Design invariants (non-negotiable)
 
 - **Procedural-first.** Everything is generated from open data or from seeded

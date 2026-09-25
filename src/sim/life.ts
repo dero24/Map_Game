@@ -3,7 +3,7 @@
 // interpolating between sim ticks and animating wings and legs in the vertex shader.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import type { World } from '../world/data';
+import type { Road, World } from '../world/data';
 import type { WalkWorld } from '../player/collision';
 import type { Door } from '../world/buildings';
 import { paintMaterial, U, GLSL_NOISE } from '../render/shared';
@@ -17,12 +17,62 @@ const RANK: Record<string, number> = {
 };
 
 // ---------------- worker init data ----------------
-export function buildLifeInit(world: World, walk: WalkWorld, doors: Door[]): LifeInit {
+// The slice-scoped parts of the sim world (beach, water, downtown, seaward) are static per region —
+// computed once. The road graph and door list rebuild when the streamed tile set changes.
+export interface LifeBase {
+  seed: number;
+  bounds: [number, number, number, number];
+  beachPts: Float32Array;
+  waterGrid: Uint8Array;
+  waterG: [number, number, number, number, number];
+  downtown: [number, number, number, number];
+  seaward: [number, number];
+}
+
+export function buildLifeBase(world: World, walk: WalkWorld): LifeBase {
   const { json, terrain } = world;
   const S0 = json.slice;
+  // Sand near the surf, for gulls to land on and beach walkers to wander; seaward = down the ocean-distance slope.
+  const beach: number[] = [];
+  let sx = 0, sz = 0;
+  for (let z = S0.z0 + 20; z < S0.z1 - 20; z += 6)
+    for (let x = S0.x0 + 20; x < S0.x1 - 20; x += 6) {
+      const d = terrain.sdfAt(x, z);
+      if (d < 3 || d > 55 || terrain.oceanDistAt(x, z) > 70 || walk.blocked(x, z, 1)) continue;
+      beach.push(x, terrain.heightAt(x, z), z);
+      sx += terrain.oceanDistAt(x - 8, z) - terrain.oceanDistAt(x + 8, z);
+      sz += terrain.oceanDistAt(x, z - 8) - terrain.oceanDistAt(x, z + 8);
+    }
+  const sl = Math.hypot(sx, sz);
+  const seaward: [number, number] = sl > 1e-6 ? [sx / sl, sz / sl] : [1, 0];
+
+  // Downtown = where the shops are: the middle half of the commercial buildings in the slice.
+  const shops: [number, number][] = [];
+  for (const b of json.buildings) {
+    if (b.k !== 'commercial' || b.lod) continue;
+    const x = b.r[0] / 10, z = b.r[1] / 10;
+    if (x > S0.x0 && x < S0.x1 && z > S0.z0 && z < S0.z1) shops.push([x, z]);
+  }
+  const q = (a: number[], t: number) => a.sort((m, n) => m - n)[Math.floor(t * (a.length - 1))];
+  const downtown: [number, number, number, number] = shops.length > 4
+    ? [q(shops.map((s) => s[0]), 0.2) - 40, q(shops.map((s) => s[1]), 0.2) - 40, q(shops.map((s) => s[0]), 0.8) + 40, q(shops.map((s) => s[1]), 0.8) + 40]
+    : [S0.x0, S0.z0, S0.x1, S0.z1];
+
+  const cell = 8;
+  const gw = Math.ceil((S0.x1 - S0.x0) / cell), gh = Math.ceil((S0.z1 - S0.z0) / cell);
+  const water = new Uint8Array(gw * gh);
+  for (let j = 0; j < gh; j++)
+    for (let i = 0; i < gw; i++) {
+      const x = S0.x0 + (i + 0.5) * cell, z = S0.z0 + (j + 0.5) * cell;
+      water[j * gw + i] = terrain.sdfAt(x, z) < -14 && x < S0.x1 - 40 && x > S0.x0 + 40 && z > S0.z0 + 40 && z < S0.z1 - 40 ? 1 : 0;
+    }
+  return { seed: 20260923, bounds: [S0.x0, S0.z0, S0.x1, S0.z1], beachPts: new Float32Array(beach), waterGrid: water, waterG: [S0.x0, S0.z0, cell, gw, gh], downtown, seaward };
+}
+
+export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, doors: Door[]): LifeInit {
   const key = (x: number, z: number) => `${Math.round(x * 2)},${Math.round(z * 2)}`;
-  const ways = json.roads
-    .filter((r) => !r.lod && r.c in RANK && r.c !== 'steps')
+  const ways = roads
+    .filter((r) => !r.lod && r.own !== 0 && r.c in RANK && r.c !== 'steps')
     .map((r) => {
       const p: [number, number][] = [];
       for (let i = 0; i + 1 < r.p.length; i += 2) p.push([r.p[i] / 10, r.p[i + 1] / 10]);
@@ -80,44 +130,11 @@ export function buildLifeInit(world: World, walk: WalkWorld, doors: Door[]): Lif
   const adj = new Int32Array(deg[nNodes]);
   for (let e = 0; e < nEdges; e++) for (const nd of [ends[e * 2], ends[e * 2 + 1]]) adj[fill[nd]++] = e;
 
-  // Sand near the surf, for gulls to land on and beach walkers to wander; seaward = down the ocean-distance slope.
-  const beach: number[] = [];
-  let sx = 0, sz = 0;
-  for (let z = S0.z0 + 20; z < S0.z1 - 20; z += 6)
-    for (let x = S0.x0 + 20; x < S0.x1 - 20; x += 6) {
-      const d = terrain.sdfAt(x, z);
-      if (d < 3 || d > 55 || terrain.oceanDistAt(x, z) > 70 || walk.blocked(x, z, 1)) continue;
-      beach.push(x, terrain.heightAt(x, z), z);
-      sx += terrain.oceanDistAt(x - 8, z) - terrain.oceanDistAt(x + 8, z);
-      sz += terrain.oceanDistAt(x, z - 8) - terrain.oceanDistAt(x, z + 8);
-    }
-  const sl = Math.hypot(sx, sz);
-  const seaward: [number, number] = sl > 1e-6 ? [sx / sl, sz / sl] : [1, 0];
-
-  // Downtown = where the shops are: the middle half of the commercial buildings in the slice.
-  const shops: [number, number][] = [];
-  for (const b of json.buildings) {
-    if (b.k !== 'commercial' || b.lod) continue;
-    const x = b.r[0] / 10, z = b.r[1] / 10;
-    if (x > S0.x0 && x < S0.x1 && z > S0.z0 && z < S0.z1) shops.push([x, z]);
-  }
-  const q = (a: number[], t: number) => a.sort((m, n) => m - n)[Math.floor(t * (a.length - 1))];
-  const downtown: [number, number, number, number] = shops.length > 4
-    ? [q(shops.map((s) => s[0]), 0.2) - 40, q(shops.map((s) => s[1]), 0.2) - 40, q(shops.map((s) => s[0]), 0.8) + 40, q(shops.map((s) => s[1]), 0.8) + 40]
-    : [S0.x0, S0.z0, S0.x1, S0.z1];
-
-  const cell = 8;
-  const gw = Math.ceil((S0.x1 - S0.x0) / cell), gh = Math.ceil((S0.z1 - S0.z0) / cell);
-  const water = new Uint8Array(gw * gh);
-  for (let j = 0; j < gh; j++)
-    for (let i = 0; i < gw; i++) {
-      const x = S0.x0 + (i + 0.5) * cell, z = S0.z0 + (j + 0.5) * cell;
-      water[j * gw + i] = terrain.sdfAt(x, z) < -14 && x < S0.x1 - 40 && x > S0.x0 + 40 && z > S0.z0 + 40 && z < S0.z1 - 40 ? 1 : 0;
-    }
-
   return {
-    seed: 20260923,
-    bounds: [S0.x0, S0.z0, S0.x1, S0.z1],
+    ...base,
+    // base arrays are shared across reinits — fresh copies, since init buffers transfer to the worker
+    beachPts: base.beachPts.slice(),
+    waterGrid: base.waterGrid.slice(),
     edgePts: new Float32Array(pts),
     edgeStart: new Int32Array(start),
     edgeCount: new Int32Array(count),
@@ -126,11 +143,6 @@ export function buildLifeInit(world: World, walk: WalkWorld, doors: Door[]): Lif
     edgeNodes: new Int32Array(ends),
     nodeEdgeStart: deg,
     nodeEdges: adj,
-    beachPts: new Float32Array(beach),
-    waterGrid: water,
-    waterG: [S0.x0, S0.z0, cell, gw, gh],
-    downtown,
-    seaward,
     doors: new Float32Array(doors.flatMap((d) => [d.x, d.y, d.z, d.fx, d.fy, d.fz])),
   };
 }
@@ -265,7 +277,7 @@ export interface LifeStats {
 
 export class LifeClient {
   readonly group = new THREE.Group();
-  private worker: Worker;
+  private worker!: Worker; // assigned by spawn() in the constructor
   private buf: ArrayBuffer | SharedArrayBuffer;
   private V: ReturnType<typeof views>;
   private sab: boolean;
@@ -289,24 +301,7 @@ export class LifeClient {
     this.V = views(this.buf);
     this.V.header[H.DENSITY] = 100;
     this.V.header[H.HOUR] = 1200;
-    this.worker = new Worker(new URL('./ambient.worker.ts', import.meta.url), { type: 'module' });
-    const transfer: Transferable[] = [init.edgePts.buffer, init.edgeStart.buffer, init.edgeCount.buffer, init.edgeLen.buffer, init.edgeInfo.buffer, init.edgeNodes.buffer, init.nodeEdgeStart.buffer, init.nodeEdges.buffer, init.beachPts.buffer, init.waterGrid.buffer, init.doors.buffer] as ArrayBuffer[];
-    if (this.sab) {
-      this.worker.postMessage({ kind: 'init', init, sab: this.buf }, transfer);
-    } else {
-      this.stats.mode = 'copy';
-      const pool = [new ArrayBuffer(total), new ArrayBuffer(total)];
-      this.worker.postMessage({ kind: 'init', init, pool, header: this.V.header.slice() }, [...transfer, ...pool]);
-      this.worker.onmessage = (e) => {
-        if (e.data.kind !== 'snap') return;
-        const old = this.buf as ArrayBuffer;
-        this.buf = e.data.buf as ArrayBuffer;
-        const hdr = this.V.header.slice();
-        this.V = views(this.buf);
-        this.V.header.set(hdr.subarray(H.PLAYER_X, H.WIND + 1), H.PLAYER_X);
-        this.worker.postMessage({ kind: 'return', buf: old }, [old]);
-      };
-    }
+    this.spawn(init);
 
     const make = (geo: THREE.BufferGeometry, defines: Record<string, number>, range: readonly [number, number], scale: number, colors?: (i: number) => number) => {
       const n = range[1] - range[0];
@@ -348,6 +343,34 @@ export class LifeClient {
     this.headPts.frustumCulled = false;
     this.headPts.renderOrder = 8;
     this.group.add(this.headPts);
+  }
+
+  // (Re)start the sim worker with a fresh road graph — called when the streamed tile set changes.
+  reinit(init: LifeInit) {
+    this.worker.terminate();
+    this.spawn(init);
+  }
+
+  private spawn(init: LifeInit) {
+    const total = layout().total;
+    this.worker = new Worker(new URL('./ambient.worker.ts', import.meta.url), { type: 'module' });
+    const transfer: Transferable[] = [init.edgePts.buffer, init.edgeStart.buffer, init.edgeCount.buffer, init.edgeLen.buffer, init.edgeInfo.buffer, init.edgeNodes.buffer, init.nodeEdgeStart.buffer, init.nodeEdges.buffer, init.beachPts.buffer, init.waterGrid.buffer, init.doors.buffer] as ArrayBuffer[];
+    if (this.sab) {
+      this.worker.postMessage({ kind: 'init', init, sab: this.buf }, transfer);
+    } else {
+      this.stats.mode = 'copy';
+      const pool = [new ArrayBuffer(total), new ArrayBuffer(total)];
+      this.worker.postMessage({ kind: 'init', init, pool, header: this.V.header.slice() }, [...transfer, ...pool]);
+      this.worker.onmessage = (e) => {
+        if (e.data.kind !== 'snap') return;
+        const old = this.buf as ArrayBuffer;
+        this.buf = e.data.buf as ArrayBuffer;
+        const hdr = this.V.header.slice();
+        this.V = views(this.buf);
+        this.V.header.set(hdr.subarray(H.PLAYER_X, H.WIND + 1), H.PLAYER_X);
+        this.worker.postMessage({ kind: 'return', buf: old }, [old]);
+      };
+    }
   }
 
   update(now: number, player: { x: number; z: number; yaw: number }, env: { night: number; hour: number; wind: number }) {

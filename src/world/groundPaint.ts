@@ -90,6 +90,10 @@ class Painter {
     this.roads = json.roads.filter((r) => !r.br).sort((a, b) => (ROAD_RANK[a.c] ?? 1) - (ROAD_RANK[b.c] ?? 1)).map((r) => prep(r, [r.p]));
     this.foot = json.buildings.filter((b) => !b.lod).map((b, i) => prep(i, [b.r]));
     this.walks = [];
+    this.addWalks(walks);
+  }
+  // Front-walk paint arrives per tile as the stream loads them.
+  addWalks(walks: number[]) {
     for (let i = 0; i + 4 < walks.length; i += 5) this.walks.push(prep(walks[i + 4], [[walks[i], walks[i + 1], walks[i + 2], walks[i + 3]].map((v) => v * 10)]));
   }
 
@@ -214,6 +218,7 @@ export interface GroundPaint {
   backdrop: THREE.CanvasTexture;
   sliceCanvas: HTMLCanvasElement;
   detail: DetailGround;
+  addWalks: (walks: number[]) => void;
 }
 
 const makeTex = (c: HTMLCanvasElement) => {
@@ -297,5 +302,5 @@ export function paintGround(world: World, maxTex: number, walks: number[] = []):
   painter.paint(bctx, B.x0, B.z0, B.x1, B.z1, bx, 0);
 
   const detail = new DetailGround(painter, sliceCover, terrain.slice, Math.min(2048, maxTex));
-  return { slice: makeTex(sc), backdrop: makeTex(bc), sliceCanvas: sc, detail };
+  return { slice: makeTex(sc), backdrop: makeTex(bc), sliceCanvas: sc, detail, addWalks: (w: number[]) => painter.addWalks(w) };
 }

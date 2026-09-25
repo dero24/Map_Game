@@ -25,7 +25,7 @@ function walkLine(w: WalkWorld, x: number, z: number, dx: number, dz: number, st
 
 describe('walking into buildings', () => {
   const w = new WalkWorld(terrain, bounds);
-  const plan = planInterior(0, fp, door, 1234);
+  const plan = planInterior('t:0', fp, door, 1234);
   registerPlan(w, fp, plan);
   const F = plan.flights[0];
   const vc = F ? (F.v0 + F.v1) / 2 : 0;
@@ -39,7 +39,7 @@ describe('walking into buildings', () => {
     expect(Math.min(F.v0, F.v1)).toBeGreaterThanOrEqual(-plan.W / 2);
     expect(Math.max(F.v0, F.v1)).toBeLessThanOrEqual(plan.W / 2);
     for (const p of plan.parts) expect(p.u < F.u0 - 0.3 || p.u > F.u1 + 0.3).toBe(true);
-    expect(planInterior(0, fp, door, 1234)).toEqual(plan); // deterministic
+    expect(planInterior('t:0', fp, door, 1234)).toEqual(plan); // deterministic
   });
 
   it('lets you through the front door but not through the wall', () => {
@@ -85,12 +85,46 @@ describe('walking into buildings', () => {
   });
 });
 
+describe('tile scopes (streamed unload)', () => {
+  const w = new WalkWorld(terrain, bounds);
+  const houseA: [number, number][] = [[-40, -4], [-30, -4], [-30, 4], [-40, 4]];
+  const houseB: [number, number][] = [[30, -4], [40, -4], [40, 4], [30, 4]];
+  w.beginScope(11); // "tile" A
+  w.addPolygon(houseA);
+  w.addWall([-55, -6], [-55, 6]); // a vertical wall blocking eastward travel
+  w.addDeck({ pts: [[-55, -1], [-55, 1]], cum: [0, 2], halfWidth: 0.5, heightAt: () => 2 });
+  w.endScope();
+  w.beginScope(22); // "tile" B
+  w.addPolygon(houseB);
+  w.endScope();
+
+  it('collides with both scopes before unload', () => {
+    expect(w.buildingAt(-35, 0)).toBeGreaterThanOrEqual(0);
+    expect(w.buildingAt(35, 0)).toBeGreaterThanOrEqual(0);
+    expect(w.blocked(-54.7, 0, 0.5)).toBe(true);
+    expect(w.deckAt(-55, 0)).toBeCloseTo(2);
+  });
+
+  it('drops only the unloaded scope', () => {
+    w.removeScope(11);
+    expect(w.buildingAt(-35, 0)).toBe(-1);
+    expect(w.blocked(-54.7, 0, 0.5)).toBe(false);
+    expect(w.deckAt(-55, 0)).toBeNull();
+    expect(w.buildingAt(35, 0)).toBeGreaterThanOrEqual(0); // tile B untouched
+    // walking through where tile A's wall stood now works; tile B's wall still stops you
+    const through = walkLine(w, -58, 0, 0.1, 0, 80, 0.5);
+    expect(through.x).toBeGreaterThan(-50);
+    const blocked = walkLine(w, 28, 0, 0.1, 0, 80, 0.5);
+    expect(blocked.x).toBeLessThan(30);
+  });
+});
+
 describe('raised shore houses', () => {
   const w = new WalkWorld(terrain, bounds);
   const r2: [number, number][] = [[20, -4], [30, -4], [30, 4], [20, 4]];
   const raised: Footprint = { ring: r2, base: 0.2, top: 10, floor0: 3.3, raise: 2.8, kind: 'house', eave: 8, seed: 0.7, id: 1 };
   const d2: Door = { x: 25, z: -4.2, y: 3.3, nx: 0, nz: -1, fx: 25, fz: -9.4, fy: 0.5, b: 1, w: 1.0, h: 2.15, wx: 25, wz: -4, col: 0 };
-  const plan = planInterior(1, raised, d2, 77);
+  const plan = planInterior('t:1', raised, d2, 77);
   registerPlan(w, raised, plan);
   // the porch stair (built by buildings.ts in the game): a ramp deck from the foot up to the door
   w.addDeck({ pts: [[25, -9.4], [25, -4.2]], cum: [0, 5.2], halfWidth: 0.6, heightAt: (s) => 0.5 + (2.8 * Math.min(1, s / 4.2)) });

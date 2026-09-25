@@ -20,11 +20,12 @@ export interface Building {
   fl?: number; // mapped number of floors
   mh?: number; // mapped min_height (m): the building stands on something (pilings)
   ad?: string; // street address
+  own?: number; // tile tiles: 0 = margin context (a neighbour tile emits it)
 }
-export interface Road { p: number[]; c: string; w: number; n?: string; ref?: string; br?: 'yes' | 'movable'; l?: number; ow?: 1; sw?: 1; sv?: string; lod?: 1 }
-export interface Area { c: string; o: number[][]; i: number[][]; n?: string; lod?: 1 }
-export interface Line { c: string; p: number[]; w?: number; br?: 1 }
-export interface Point { c: string; x: number; z: number }
+export interface Road { p: number[]; c: string; w: number; n?: string; ref?: string; br?: 'yes' | 'movable'; l?: number; ow?: 1; sw?: 1; sv?: string; lod?: 1; own?: number }
+export interface Area { c: string; o: number[][]; i: number[][]; n?: string; lod?: 1; own?: number }
+export interface Line { c: string; p: number[]; w?: number; br?: 1; own?: number }
+export interface Point { c: string; x: number; z: number; own?: number }
 export interface Poi { name: string; kind: string; x: number; z: number; slice: boolean }
 export interface Landmark { id: string; name: string; x: number; z: number; h: number; ground: number }
 
@@ -114,6 +115,82 @@ export class Terrain {
 export interface World {
   json: WorldJson;
   terrain: Terrain;
+}
+
+// ---------------- atlas / tile streaming ----------------
+
+export interface TileSpec { id: string; box: Box; lod: number; file: string }
+
+// Region manifest: identity + slim data (named roads, pois, landmarks) + the tile grid.
+export interface AtlasManifest {
+  version: number;
+  id: string;
+  meta?: RegionMeta;
+  origin: { lat: number; lon: number };
+  slice: Box;
+  backdrop: Box;
+  sources: Record<string, string | null>;
+  cell: number;
+  margin: number;
+  terrain: { slice: LayerLayout; backdrop: LayerLayout }; // layout into terrain.bin
+  roads: Road[]; // named roads only (labels, spawn anchors, HUD)
+  pois: Poi[];
+  landmarks: Landmark[];
+  tiles: TileSpec[];
+}
+
+// One streamed tile: the same entity arrays as WorldJson, scoped to a cell (+ margin context).
+export interface TileJson {
+  version: number;
+  id: string;
+  lod: number;
+  box: Box;
+  origin: { lat: number; lon: number };
+  slice: Box;
+  backdrop: Box;
+  landmarks?: Landmark[];
+  buildings: Building[];
+  roads: Road[];
+  areas: Area[];
+  lines: Line[];
+  points: Point[];
+}
+
+// A WorldJson-shaped view of a manifest for consumers that only need region-level data.
+export function manifestAsWorldJson(m: AtlasManifest): WorldJson {
+  return {
+    version: m.version,
+    meta: m.meta,
+    origin: m.origin,
+    slice: m.slice,
+    backdrop: m.backdrop,
+    sources: m.sources,
+    terrain: { slice: null!, backdrop: null! },
+    buildings: [],
+    roads: m.roads,
+    areas: [],
+    lines: [],
+    points: [],
+    pois: m.pois,
+    landmarks: m.landmarks,
+  };
+}
+
+export async function loadAtlas(base: string): Promise<{ manifest: AtlasManifest; terrain: Terrain } | null> {
+  const r = await fetch(base + 'manifest.json');
+  if (!r.ok) return null;
+  const manifest = (await r.json()) as AtlasManifest;
+  const tb = await fetch(base + 'terrain.bin');
+  if (!tb.ok) return null;
+  const bin = await tb.arrayBuffer();
+  const terrain = new Terrain(new TerrainLayer(bin, manifest.terrain.slice), new TerrainLayer(bin, manifest.terrain.backdrop));
+  return { manifest, terrain };
+}
+
+export async function loadTile(base: string, spec: TileSpec): Promise<TileJson> {
+  const r = await fetch(base + spec.file);
+  if (!r.ok) throw new Error(`tile ${spec.id} ${r.status}`);
+  return (await r.json()) as TileJson;
 }
 
 export async function loadWorld(base = './data/', onProgress?: (msg: string) => void): Promise<World> {

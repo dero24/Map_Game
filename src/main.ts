@@ -1,17 +1,15 @@
 import * as THREE from 'three';
-import { loadWorld, loadRegions, type World, type Road } from './world/data';
+import { loadWorld, loadRegions, loadAtlas, manifestAsWorldJson, type AtlasManifest, type World, type Road, type WorldJson } from './world/data';
+import { TileStream } from './world/stream';
 import { paintGround } from './world/groundPaint';
 import { buildGround, terrainTextures } from './world/ground';
 import { buildWater } from './world/water';
-import { buildBuildings } from './world/buildings';
+import type { Door, Footprint } from './world/buildings';
 import { buildSky, skyUniforms } from './world/sky';
-import { buildStructures } from './world/structures';
-import { buildProps } from './world/props';
-import { buildSigns } from './world/signs';
-import { LifeClient, buildLifeInit } from './sim/life';
+import { LifeClient, buildLifeBase, buildLifeInit } from './sim/life';
 import { Ambience } from './audio/ambience';
 import { Journal } from './ui/journal';
-import { Interiors, planInterior, registerPlan, type Plan } from './world/interiors';
+import { Interiors, type Plan } from './world/interiors';
 import { applyAtmosphere, type Weather } from './world/atmosphere';
 import { U } from './render/shared';
 import { WatercolorPost, postParams } from './render/post';
@@ -36,7 +34,27 @@ async function main() {
   renderer.setClearColor(0xd8e0e4, 1);
   const maxTex = renderer.capabilities.maxTextureSize;
 
-  const world: World = await loadWorld(`./data/${REGION}/`, (m) => ($('loading').textContent = m));
+  // Atlas = manifest + terrain + streamed tiles. Regions baked before tiling still work: the manifest
+  // is synthesised as a single tile pointing at world.json.
+  const base = `./data/${REGION}/`;
+  const atlasRes = await loadAtlas(base);
+  let manifest: AtlasManifest;
+  let paintWorld: World;
+  if (atlasRes) {
+    manifest = atlasRes.manifest;
+    const paintJson = (await (await fetch(base + 'paint.json')).json()) as WorldJson;
+    paintWorld = { json: paintJson, terrain: atlasRes.terrain };
+  } else {
+    const w = await loadWorld(base, (m) => ($('loading').textContent = m));
+    manifest = {
+      version: 1, id: REGION, meta: w.json.meta, origin: w.json.origin, slice: w.json.slice, backdrop: w.json.backdrop,
+      sources: w.json.sources, cell: 1e9, margin: 0, terrain: w.json.terrain,
+      roads: w.json.roads.filter((r) => r.n), pois: w.json.pois, landmarks: w.json.landmarks,
+      tiles: [{ id: '0_0', box: w.json.backdrop, lod: 0, file: 'world.json' }],
+    };
+    paintWorld = w;
+  }
+  const world: World = { json: manifestAsWorldJson(manifest), terrain: atlasRes ? atlasRes.terrain : paintWorld.terrain };
   const { json } = world;
   const meta = json.meta;
   const townName = meta?.name ?? 'town';
@@ -59,52 +77,26 @@ async function main() {
   camera.layers.enable(1);
 
   const tt = terrainTextures(world);
-  const bld = buildBuildings(world);
-  scene.add(bld.group);
-  const paint = paintGround(world, maxTex, bld.walks);
+  const paint = paintGround(paintWorld, maxTex);
   scene.add(buildGround(world, paint, tt));
   scene.add(buildWater(tt));
   const sky = buildSky();
   scene.add(sky);
   U.uSliceBox.value.set(json.slice.x0, json.slice.z0, json.slice.x1, json.slice.z1);
 
-  // Walk physics
-  // Walk anywhere on the map; every building with a door gets a floor plan and can be entered.
+  // Walk physics + interiors registry: everything is tile-scoped so neighbourhoods stream in and out.
   const walk = new WalkWorld(world.terrain, json.backdrop);
-  const plans = new Map<number, Plan>();
-  const walkIds = new Map<number, number>();
-  bld.footprints.forEach((f, fi) => {
-    if (f.kind === 'lighthouse') return;
-    if (f.door === undefined) {
-      // raised houses stand on open pilings: walk underneath, walls start at the floor
-      if (f.raise > 0.5) walk.addPolygon(f.ring, { floor0: f.floor0, floorH: 3, levels: 1, ground: true }, null, f.floor0 - 0.6);
-      else walk.addPolygon(f.ring);
-      return;
-    }
-    const plan = planInterior(fi, f, bld.doors[f.door], Math.floor(f.seed * 4294967296));
-    plans.set(fi, plan);
-    walkIds.set(fi, registerPlan(walk, f, plan));
-  });
-  // porches, stoops, raised-house stairs + landings, lattice skirts, pilings
-  for (const [a, b, y0, y1] of bld.colliders.walls) walk.addWall(a, b, y0, y1);
-  for (const d of bld.colliders.decks) walk.addDeck(d);
-  for (const p of bld.pilings) {
-    const c = Math.cos(p.ang) * 0.17, s = Math.sin(p.ang) * 0.17;
-    walk.addLoop([[p.x - c + s, p.z - s - c], [p.x + c + s, p.z + s - c], [p.x + c - s, p.z + s + c], [p.x - c - s, p.z - s + c]], -Infinity, 2.2 + Math.max(0, world.terrain.heightAt(p.x, p.z)));
-  }
-  const interiors = new Interiors(plans, bld.footprints, walk);
-  walkIds.forEach((pid, fi) => interiors.setWalkId(fi, pid));
+  const interiors = new Interiors(walk);
   scene.add(interiors.group);
-  const structures = buildStructures(world, walk);
-  scene.add(structures.group);
-  const signs = buildSigns(world, bld.signs, walk);
-  scene.add(signs.mesh);
-  const props = buildProps(world, walk, structures.pierSegs, { mailboxes: bld.mailboxes });
-  scene.add(props.group);
-  scene.add(props.halo(bld.lanterns, 7, new THREE.Color(1.0, 0.85, 0.55)));
-  scene.add(props.halo(structures.towers, 1.2, new THREE.Color(1.0, 0.75, 0.45)));
-  const life = new LifeClient(buildLifeInit(world, walk, bld.doors));
-  scene.add(life.group);
+  const stream = new TileStream(base, manifest, world.terrain, walk, interiors, scene);
+  stream.onTile = (a) => paint.addWalks(a.walks);
+  const plans = stream.plans;
+  const bld = {
+    get footprints() { return stream.footprints; },
+    get doors() { return stream.doors; },
+    doorOf: (f: Footprint) => stream.doorOf(f),
+  };
+  let lifeDirty = false;
   let ambience: Ambience | null = null;
   const startAudio = () => {
     try { ambience ??= new Ambience(); ambience.resume(); } catch (e) { console.warn('audio unavailable', e); }
@@ -135,13 +127,21 @@ async function main() {
   const respawn = () => walker.place(spawn.x, spawn.z, spawn.yaw, -0.02);
   respawn();
 
+  // Bring the spawn neighbourhood online before we build life or prime interiors.
+  $('loading').textContent = 'raising the houses…';
+  await stream.ensureAround(spawn.x, spawn.z);
+  const lifeBase = buildLifeBase(paintWorld, walk);
+  const life = new LifeClient(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors));
+  scene.add(life.group);
+  lifeDirty = false; // init already covers the loaded ring
+
   const post = new WatercolorPost(renderer);
   const shadows = new SunShadows(renderer);
   // Compile every shader now (incl. the interior + NPC materials) so the first front door doesn't hitch.
   const firstPlan = plans.keys().next().value;
   if (firstPlan !== undefined) interiors.prime(firstPlan);
   renderer.compile(scene, camera);
-  if (firstPlan !== undefined) interiors.prime(-1);
+  if (firstPlan !== undefined) interiors.prime(null);
   const resize = () => {
     renderer.setSize(innerWidth, innerHeight, false);
     camera.aspect = innerWidth / innerHeight;
@@ -198,7 +198,7 @@ async function main() {
       // the enterable house nearest the spawn (prefer a multi-storey home)
       let best: Plan | null = null, bd = Infinity;
       for (const P of plans.values()) {
-        const homey = bld.footprints[P.fp].kind === 'house' && P.L * P.W < 170;
+        const homey = stream.fpByKey.get(P.fp)?.kind === 'house' && P.L * P.W < 170;
         const d = Math.hypot(P.door.x - spawn.x, P.door.z - spawn.z) - (P.levels > 1 ? 40 : 0) - (homey ? 60 : 0);
         if (d < bd) (bd = d), (best = P);
       }
@@ -214,7 +214,7 @@ async function main() {
       let best: Plan | null = null, bd = Infinity;
       for (const P of plans.values()) {
         if (!P.flights.length) continue;
-        const dd = Math.hypot(P.door.x - spawn.x, P.door.z - spawn.z) - (bld.footprints[P.fp].kind === 'house' && P.L * P.W < 170 ? 60 : 0);
+        const dd = Math.hypot(P.door.x - spawn.x, P.door.z - spawn.z) - (stream.fpByKey.get(P.fp)?.kind === 'house' && P.L * P.W < 170 ? 60 : 0);
         if (dd < bd) (bd = dd), (best = P);
       }
       shots[n === 'stairs-night' ? 'ocean-night' : 'ocean-noon']();
@@ -241,19 +241,20 @@ async function main() {
     }
     if (n === 'raised' || n === 'houses' || n === 'porch' || n === 'shop') {
       // a raised shore house / a house with a porch / a cross-gabled house / a named shop, from its street
-      let best = -1, bd = Infinity;
-      bld.footprints.forEach((f, fi) => {
-        if (f.door === undefined || (n === 'shop' ? f.kind !== 'commercial' || !f.name : f.kind !== 'house')) return;
-        const d = bld.doors[f.door];
-        if (n === 'raised' && f.raise < 0.5) return;
-        if (n === 'houses' && (f.ring.length < 6 || !f.pitched)) return;
-        if (n === 'porch' && !d.porch) return;
+      let best: Door | null = null, bd = Infinity;
+      for (const f of bld.footprints) {
+        if (f.door === undefined || (n === 'shop' ? f.kind !== 'commercial' || !f.name : f.kind !== 'house')) continue;
+        const d = bld.doorOf(f);
+        if (!d) continue;
+        if (n === 'raised' && f.raise < 0.5) continue;
+        if (n === 'houses' && (f.ring.length < 6 || !f.pitched)) continue;
+        if (n === 'porch' && !d.porch) continue;
         const dd = Math.hypot(d.x - spawn.x, d.z - spawn.z);
-        if (dd < bd) (bd = dd), (best = fi);
-      });
+        if (dd < bd) (bd = dd), (best = d);
+      }
       shots['ocean-noon']();
-      if (best < 0) return n;
-      const d = bld.doors[bld.footprints[best].door!];
+      if (!best) return n;
+      const d = best;
       // stand back from the door, somewhere open (not inside the neighbour's house)
       let x = d.wx + d.nx * 12, z = d.wz + d.nz * 12;
       for (const [back, side] of n === 'houses' ? [[17, 7], [15, -7], [13, 5], [11, 0]] : [[13, 3], [11, 0], [9, -2], [7, 0]]) {
@@ -265,8 +266,9 @@ async function main() {
     }
     if (n === 'sign') {
       // the street-name sign nearest the start, from the crosswalk
-      let best = signs.poles[0], bd = Infinity;
-      for (const p of signs.poles) { const dd = Math.hypot(p.x - spawn.x, p.z - spawn.z); if (dd < bd) (bd = dd), (best = p); }
+      type Pole = { x: number; z: number; cx: number; cz: number };
+      let best = stream.poles[0] as Pole | undefined, bd = Infinity;
+      for (const p of stream.poles as Pole[]) { const dd = Math.hypot(p.x - spawn.x, p.z - spawn.z); if (dd < bd) (bd = dd), (best = p); }
       shots['ocean-noon']();
       if (!best) return n;
       const dx = best.x - best.cx, dz = best.z - best.cz, l = Math.hypot(dx, dz) || 1;
@@ -300,7 +302,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { walker, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life };
+  (window as unknown as Record<string, unknown>).__GAME__ = { walker, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);
@@ -316,18 +318,18 @@ async function main() {
     $('place').textContent = bd < 40 ? best : world.terrain.oceanDistAt(walker.x, walker.z) < 60 ? shoreLabel : townName;
     if (walkParams.fly) $('place').textContent = `flying over ${$('place').textContent} · ${Math.round(walker.y)} m`;
     else if (interiors.indoors && interiors.activePlan) {
-      const fp = bld.footprints[interiors.activeIndex];
+      const fp = stream.fpByKey.get(interiors.activeIndex!);
       const P = interiors.activePlan;
       const storey = Math.max(0, Math.round((walker.feet - P.floor0) / P.floorH));
-      const kindName = ({ house: 'a house', commercial: 'a shop', church: 'the church', large: 'an apartment building' } as Record<string, string>)[fp.kind] ?? 'a building';
-      const what = fp.name ?? fp.addr ?? (P.door.street ? `${kindName} on ${P.door.street}` : kindName);
+      const kindName = ({ house: 'a house', commercial: 'a shop', church: 'the church', large: 'an apartment building' } as Record<string, string>)[fp?.kind ?? ''] ?? 'a building';
+      const what = fp?.name ?? fp?.addr ?? (P.door.street ? `${kindName} on ${P.door.street}` : kindName);
       const floorName = storey === 0 ? 'ground floor' : storey === P.levels - 1 ? (P.levels > 2 ? 'top floor' : 'upstairs') : `floor ${storey + 1}`;
       $('place').textContent = `inside ${what}${P.levels > 1 ? ` · ${interiors.onStairs ? 'on the stairs' : floorName}` : ''}`;
     } else if (interiors.activePlan) {
       // at someone's front steps: the real address or the shop's name
-      const P = interiors.activePlan, fp = bld.footprints[interiors.activeIndex];
+      const P = interiors.activePlan, fp = stream.fpByKey.get(interiors.activeIndex!);
       if (Math.hypot(P.door.fx - walker.x, P.door.fz - walker.z) < 3.5 || Math.hypot(P.door.x - walker.x, P.door.z - walker.z) < 3) {
-        const label = fp.name ?? fp.addr;
+        const label = fp?.name ?? fp?.addr;
         if (label) $('place').textContent = label;
       }
     }
@@ -363,9 +365,16 @@ async function main() {
   }
 
   // Sound context from the data: churches within earshot, how many houses are around.
-  const churches = bld.footprints.filter((f) => f.kind === 'church').map((f) => f.ring[0]);
-  const houseGrid = new Map<number, number>();
-  for (const f of bld.footprints) if (f.kind === 'house') { const k = Math.floor(f.ring[0][0] / 80) * 92821 + Math.floor(f.ring[0][1] / 80); houseGrid.set(k, (houseGrid.get(k) ?? 0) + 1); }
+  // (Rebuilt as tiles stream in/out.)
+  let churches = stream.churches;
+  let houseGrid = stream.houseGrid();
+  let lastTileChange = 0;
+  stream.onChange = () => {
+    lifeDirty = true;
+    lastTileChange = performance.now();
+    churches = stream.churches;
+    houseGrid = stream.houseGrid();
+  };
 
   // ---- loop ----
   let last = performance.now();
@@ -416,6 +425,12 @@ async function main() {
     skyUniforms.uCloudShift.value.set(simTime * 0.004 * (0.3 + weather.wind), simTime * 0.0015);
 
     walker.update(dt, camera);
+    stream.update(walker.x, walker.z);
+    if (lifeDirty && (!stream.busy || now - lastTileChange > 4000)) {
+      lifeDirty = false; // clear first: a failed reinit must not throw every frame
+      try { life.reinit(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors)); }
+      catch (e) { console.warn('life reinit failed', e); }
+    }
     const tp = performance.now();
     if (paint.detail.update(walker.x, walker.z)) perf.detail = Math.max(perf.detail, performance.now() - tp);
     sky.position.copy(camera.position);

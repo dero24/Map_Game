@@ -8,6 +8,7 @@ import { project, bboxToLocal, ringArea, centroid, pointInRing, cleanRing, assem
 import { parseColour, materialColour, roofMaterialColour, paintFromAerial } from './lib/colour.mjs';
 import { Grid, fillRings, stampSegment, components, signedDistance, edt, bilinear } from './lib/raster.mjs';
 import { terrainSampler } from './lib/terrain.mjs';
+import { partitionEntities, tileSpecs, TILE_CELL, TILE_MARGIN } from './lib/tiles.mjs';
 
 const t0 = Date.now();
 const log = (...a) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1)}s]`, ...a);
@@ -464,3 +465,48 @@ manifest.push({ id: REGION, name: CFG.name, title: CFG.title, sub: CFG.sub, orig
 manifest.sort((a, b) => a.id.localeCompare(b.id));
 writeFileSync(mfPath, JSON.stringify(manifest, null, 2));
 log(`regions.json -> [${manifest.map((r) => r.id).join(', ')}]`);
+
+// ---------- 5. Tiles + atlas manifest ----------
+// The same content as world.json, cut into a grid of cells the client can stream around the walker.
+// Margin-context entities carry `own: 0` so the renderer never double-draws them at seams.
+mkdirSync(resolve(OUT, 'tiles'), { recursive: true });
+const specs = tileSpecs(B, S);
+const parts = partitionEntities({ buildings, roads, areas, lines, points }, specs, TILE_MARGIN);
+const tiles = [];
+let tBytes = 0;
+for (const { spec, tile } of parts) {
+  const file = `tiles/${spec.id}.json`;
+  const out = JSON.stringify({ ...tile, origin: ORIGIN, slice: S, backdrop: B, landmarks });
+  writeFileSync(resolve(OUT, file), out);
+  tBytes += out.length;
+  tiles.push({ id: spec.id, box: spec.box, lod: spec.lod, file });
+}
+// The manifest doubles as the slim region record the journal/HUD/spawn logic needs:
+// everything except the bulky entity arrays (named roads are kept — labels, spawn anchors, HUD).
+const namedRoads = roads.filter((r) => r.n);
+const atlas = {
+  version: 1,
+  id: REGION,
+  meta: world.meta,
+  origin: ORIGIN,
+  slice: S,
+  backdrop: B,
+  sources: world.sources,
+  cell: TILE_CELL,
+  margin: TILE_MARGIN,
+  terrain: layout,
+  roads: namedRoads,
+  pois,
+  landmarks,
+  tiles,
+};
+writeFileSync(resolve(OUT, 'manifest.json'), JSON.stringify(atlas));
+// Slim entity dump for the ground painter: full geometry, only the fields the Painter reads.
+const paintJson = {
+  version: 1, slice: S, backdrop: B,
+  areas: areas.map((a) => ({ c: a.c, o: a.o, i: a.i, lod: a.lod })),
+  roads: roads.map((r) => ({ p: r.p, c: r.c, w: r.w, br: r.br, lod: r.lod, sw: r.sw })),
+  buildings: buildings.map((b) => ({ r: b.r, k: b.k, lod: b.lod })),
+};
+writeFileSync(resolve(OUT, 'paint.json'), JSON.stringify(paintJson));
+log(`wrote ${tiles.length} tiles (${(tBytes / 1e6).toFixed(2)} MB) + manifest.json (${namedRoads.length} named roads) + paint.json`);

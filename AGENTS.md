@@ -8,9 +8,16 @@
 - Ambient life: pure sim in `src/sim/lifeSim.ts` (testable), worker wrapper `ambient.worker.ts`, renderer/client `life.ts`,
   shared layout `protocol.ts` (SAB when cross-origin isolated, transferable copies otherwise). Sound: `src/audio/ambience.ts` (all synthesized).
 - Data: `npm run fetch` (osm/terrain/worldcover/overture/imagery, raw → `raw/<region>/`, archived),
-  then `npm run bake` → `public/data/<region>/{world.json,terrain.bin}` + `public/data/regions.json`. Debug masks land in `raw/<region>/debug/`.
+  then `npm run bake` → `public/data/<region>/{world.json,terrain.bin,manifest.json,paint.json,tiles/*.json}` + `public/data/regions.json`.
+  Debug masks land in `raw/<region>/debug/`.
   `fetch-imagery.mjs` samples USDA NAIP aerial photos (public domain, US only) inside every footprint → `raw/<region>/roofs.json`
   (real roof colours; tags/materials still win). Neither town has mapped facade/roof colours in OSM/Overture.
+- Streaming (`src/world/stream.ts`): the runtime loads `manifest.json` + `terrain.bin` + `paint.json`, then streams
+  `tiles/<cx>_<cz>.json` (1024 m cells, 48 m margin) around the walker. Margin entities carry `own: 0` (context only —
+  buildings/roads/areas/lines/points are emitted once by their owner tile; context copies exist for door snapping,
+  porch clearance and sign intersections). `WalkWorld.beginScope/endScope/removeScope` scopes all collision per tile;
+  interiors register under `"tile:idx"` keys and unregister on unload. The ambient-life worker re-inits when the
+  loaded set settles (or after 4 s). Regions without a manifest fall back to a single-tile world.json.
 - Buildings: walls follow the true footprint; pitched roofs come from a straight skeleton (`src/world/roof.ts`, unit-tested)
   with gable folding. Raised houses (pilings), porches, stoops, railed stairs are in `buildings.ts`; their collision goes out
   as `colliders` (walls with a feet-height band + ramp decks) and is registered in `main.ts`.

@@ -14,7 +14,7 @@ import { pedGeo, creatureMaterial } from '../sim/life';
 type P2 = [number, number];
 export interface Flight { u0: number; u1: number; v0: number; v1: number; bottomU: number; topU: number; level: number }
 export interface Plan {
-  fp: number;
+  fp: string;
   door: Door;
   cx: number; cz: number; ux: number; uz: number; vx: number; vz: number; L: number; W: number;
   loc: P2[]; // the footprint in the local (u, v) frame
@@ -81,7 +81,7 @@ export class LocalPoly {
   }
 }
 
-export function planInterior(fpIndex: number, fp: Footprint, door: Door, seed: number): Plan {
+export function planInterior(fpKey: string, fp: Footprint, door: Door, seed: number): Plan {
   const ring = fp.ring;
   let bi = 0, bl = 0;
   for (let i = 0; i < ring.length; i++) {
@@ -159,7 +159,7 @@ export function planInterior(fpIndex: number, fp: Footprint, door: Door, seed: n
       if (segs.length) parts.push({ u: s, segs });
     }
   }
-  return { fp: fpIndex, door, cx, cz, ux, uz, vx, vz, L, W, loc, floor0, floorH, levels, ceilTop, flights, parts, ud, vd };
+  return { fp: fpKey, door, cx, cz, ux, uz, vx, vz, L, W, loc, floor0, floorH, levels, ceilTop, flights, parts, ud, vd };
 }
 
 const toW = (P: Plan, u: number, v: number): P2 => [P.cx + P.ux * u + P.vx * v, P.cz + P.uz * u + P.vz * v];
@@ -242,10 +242,12 @@ interface Light { x: number; y: number; z: number; w: number }
 
 export class Interiors {
   readonly group = new THREE.Group();
-  private active = -1;
+  private active: string | null = null;
   private mesh: THREE.Object3D | null = null;
   private timer = 0;
-  private doorGrid = new Map<number, number[]>();
+  private doorGrid = new Map<number, string[]>();
+  private plans = new Map<string, Plan>();
+  private fps = new Map<string, Footprint>();
   readonly lightsU = { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, -999, 0, 0)) };
   readonly frameU = { value: new THREE.Vector4() }; // cx, cz, ux, uz
   readonly levelsU = { value: new THREE.Vector4() }; // floor0, floorH, door x, door z
@@ -258,21 +260,39 @@ export class Interiors {
   private npcMat = creatureMaterial({ LEGS: 1 });
   private npcGeo = pedGeo();
   private lights: Light[] = [];
-  private failed = new Set<number>();
+  private failed = new Set<string>();
   private openAmt = 0;
   indoors = false;
   onStairs = false;
 
-  constructor(private plans: Map<number, Plan>, private fps: Footprint[], private walk: WalkWorld) {
+  constructor(private walk: WalkWorld) {
     this.group.name = 'interiors';
-    for (const [fi, P] of plans) {
-      const k = Math.floor(P.door.x / 25) * 92821 + Math.floor(P.door.z / 25);
-      let l = this.doorGrid.get(k);
-      if (!l) this.doorGrid.set(k, (l = []));
-      l.push(fi);
-    }
     this.mat = interiorMaterial(this);
     this.npcGeo.setAttribute('aAnim', new THREE.InstancedBufferAttribute(new Float32Array(12), 3));
+  }
+
+  // Tile streaming registers each enterable footprint under a unique key ("tile:idx"); unloading a tile
+  // drops its plans without disturbing the rest of the world.
+  register(key: string, fp: Footprint, plan: Plan, walkPid: number) {
+    this.plans.set(key, plan);
+    this.fps.set(key, fp);
+    this.walkIds.set(key, walkPid);
+    const k = Math.floor(plan.door.x / 25) * 92821 + Math.floor(plan.door.z / 25);
+    let l = this.doorGrid.get(k);
+    if (!l) this.doorGrid.set(k, (l = []));
+    l.push(key);
+  }
+  unregister(keys: Iterable<string>) {
+    for (const key of keys) {
+      this.plans.delete(key);
+      this.fps.delete(key);
+      this.walkIds.delete(key);
+      this.failed.delete(key);
+    }
+    for (const l of this.doorGrid.values()) {
+      for (let i = l.length - 1; i >= 0; i--) if (!this.plans.has(l[i])) l.splice(i, 1);
+    }
+    if (this.active !== null && !this.plans.has(this.active)) this.activate(null);
   }
 
   update(x: number, z: number, dt: number, feet = 0) {
@@ -280,13 +300,14 @@ export class Interiors {
     this.indoors = inside >= 0 && inside === this.walkId(this.active);
     // windows become real openings as you come close (dithered cross-fade, no popping)
     let want = 0;
-    if (this.active >= 0) {
-      const d = this.indoors ? 0 : ringDist(this.fps[this.active].ring, x, z);
+    const afp = this.active !== null ? this.fps.get(this.active) : undefined;
+    if (afp) {
+      const d = this.indoors ? 0 : ringDist(afp.ring, x, z);
       want = 1 - Math.min(1, Math.max(0, (d - 7) / 7));
     }
     this.openAmt += (want - this.openAmt) * Math.min(1, dt * 4);
     activeBuilding.uOpenAmt.value = this.openAmt < 0.02 ? 0 : this.openAmt > 0.98 ? 1 : this.openAmt;
-    const P = this.active >= 0 ? this.plans.get(this.active) : undefined;
+    const P = this.active !== null ? this.plans.get(this.active) : undefined;
     if (P && this.indoors) {
       const lv = (feet - P.floor0) / P.floorH;
       this.onStairs = Math.abs(lv - Math.round(lv)) > 0.06;
@@ -294,11 +315,11 @@ export class Interiors {
     if ((this.timer -= dt) > 0) return;
     this.timer = 0.2;
     this.pickLights(x, feet + 1.4, z);
-    let target = -1;
+    let target: string | null = null;
     if (inside >= 0) {
       for (const [fi] of this.plans) if (this.walkId(fi) === inside) { target = fi; break; }
     }
-    if (target < 0) {
+    if (target === null) {
       let best = 16;
       const gx = Math.floor(x / 25), gz = Math.floor(z / 25);
       for (let a = -1; a <= 1; a++)
@@ -309,14 +330,15 @@ export class Interiors {
             if (dist < best) (best = dist), (target = fi);
           }
     }
-    if (target !== this.active && !this.failed.has(target)) this.activate(target);
+    if (target !== this.active && !(target !== null && this.failed.has(target))) this.activate(target);
   }
 
   get activeIndex() { return this.active; }
-  get activePlan() { return this.active >= 0 ? this.plans.get(this.active) ?? null : null; }
-  private walkIds = new Map<number, number>();
-  setWalkId(fi: number, pid: number) { this.walkIds.set(fi, pid); }
-  private walkId(fi: number) { return this.walkIds.get(fi) ?? -2; }
+  get activePlan() { return this.active !== null ? this.plans.get(this.active) ?? null : null; }
+  fpOf(key: string | null) { return key !== null ? this.fps.get(key) : undefined; }
+  planOf(key: string | null) { return key !== null ? this.plans.get(key) : undefined; }
+  private walkIds = new Map<string, number>();
+  private walkId(fi: string | null) { return fi !== null ? this.walkIds.get(fi) ?? -2 : -2; }
 
   private pickLights(x: number, y: number, z: number) {
     const ls = this.lights.slice().sort((a, b) => (a.x - x) ** 2 + ((a.y - y) * 2.5) ** 2 + (a.z - z) ** 2 - ((b.x - x) ** 2 + ((b.y - y) * 2.5) ** 2 + (b.z - z) ** 2));
@@ -327,9 +349,9 @@ export class Interiors {
   }
 
   // Build (or drop) a building's interior right now — used to compile the interior shaders during loading.
-  prime(fi: number) { this.activate(fi); }
+  prime(fi: string | null) { this.activate(fi); }
 
-  private activate(fi: number) {
+  private activate(fi: string | null) {
     if (this.mesh) {
       this.group.remove(this.mesh);
       this.mesh.traverse((o) => {
@@ -343,11 +365,11 @@ export class Interiors {
     this.lights = [];
     this.openAmt = 0;
     U.uHoleInfo.value.z = 0;
-    if (fi < 0) {
+    if (fi === null) {
       activeBuilding.uActiveId.value = -1;
       return;
     }
-    const P = this.plans.get(fi)!, fp = this.fps[fi];
+    const P = this.plans.get(fi)!, fp = this.fps.get(fi)!;
     if (fp.raise < 0.5) {
       // cut the terrain away inside the footprint (it may stand proud of the floor on a slope)
       const step = Math.ceil(fp.ring.length / HOLE_MAX);

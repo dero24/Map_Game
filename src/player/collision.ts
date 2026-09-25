@@ -38,8 +38,31 @@ export class WalkWorld {
   private polyGrid = new Map<number, number[]>();
   private marks: number[] = [];
   private markId = 0;
+  // Scoped registration: everything added between beginScope/endScope can be dropped with removeScope
+  // (tile streaming unloads whole neighbourhoods this way). Tombstoned ids stay in the grids but are
+  // skipped by every query — cheap and correct; a compact() pass can reclaim them later if needed.
+  private curScope = 0;
+  private segDead: number[] = [];
+  private polyDead: number[] = [];
+  private deckDead: number[] = [];
+  private scopeIds = new Map<number, { segs: number[]; polys: number[]; decks: number[] }>();
 
   constructor(private terrain: Terrain, private bounds: Box) {}
+
+  beginScope(id: number) { this.curScope = id; if (!this.scopeIds.has(id)) this.scopeIds.set(id, { segs: [], polys: [], decks: [] }); }
+  endScope() { this.curScope = 0; }
+  removeScope(id: number) {
+    const s = this.scopeIds.get(id);
+    if (!s) return;
+    for (const i of s.segs) this.segDead[i] = 1;
+    for (const i of s.polys) this.polyDead[i] = 1;
+    for (const i of s.decks) this.deckDead[i] = 1;
+    this.scopeIds.delete(id);
+  }
+  private track(rec: 'segs' | 'polys' | 'decks', id: number) {
+    const s = this.scopeIds.get(this.curScope);
+    if (s) s[rec].push(id);
+  }
 
   // True if (x,z) is inside a footprint or within r of any wall.
   blocked(x: number, z: number, r: number) {
@@ -50,7 +73,7 @@ export class WalkWorld {
 
   buildingAt(x: number, z: number) {
     const k = Math.floor(x / 16) * 73856093 ^ Math.floor(z / 16) * 19349663;
-    for (const id of this.polyGrid.get(k) ?? []) if (inRing(x, z, this.polys[id])) return id;
+    for (const id of this.polyGrid.get(k) ?? []) if (!this.polyDead[id] && inRing(x, z, this.polys[id])) return id;
     return -1;
   }
   // The building whose rooms you are standing in (not the one you're walking underneath).
@@ -66,6 +89,8 @@ export class WalkWorld {
   addWall(a: P2, b: P2, y0 = -Infinity, y1 = Infinity) {
     const id = this.segs.length;
     this.segs.push([a[0], a[1], b[0], b[1], y0, y1]);
+    this.segDead.push(0);
+    this.track('segs', id);
     const i0 = Math.floor(Math.min(a[0], b[0]) / this.cell), i1 = Math.floor(Math.max(a[0], b[0]) / this.cell);
     const j0 = Math.floor(Math.min(a[1], b[1]) / this.cell), j1 = Math.floor(Math.max(a[1], b[1]) / this.cell);
     for (let i = i0; i <= i1; i++)
@@ -87,6 +112,8 @@ export class WalkWorld {
     const pid = this.polys.length;
     this.polys.push(ring);
     this.floors.push(floors);
+    this.polyDead.push(0);
+    this.track('polys', pid);
     let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
     for (const [x, z] of ring) (x0 = Math.min(x0, x)), (z0 = Math.min(z0, z)), (x1 = Math.max(x1, x)), (z1 = Math.max(z1, z));
     for (let i = Math.floor(x0 / 16); i <= Math.floor(x1 / 16); i++)
@@ -124,6 +151,8 @@ export class WalkWorld {
   addDeck(d: Deck) {
     const id = this.decks.length;
     this.decks.push(d);
+    this.deckDead.push(0);
+    this.track('decks', id);
     let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
     for (const [x, z] of d.pts) (x0 = Math.min(x0, x)), (z0 = Math.min(z0, z)), (x1 = Math.max(x1, x)), (z1 = Math.max(z1, z));
     const m = d.halfWidth + 1;
@@ -148,7 +177,7 @@ export class WalkWorld {
         if (ex * ex + ez * ez <= d.halfWidth * d.halfWidth) { out.push(d.heightAt(d.cum[i] + Math.sqrt(l2) * t)); return; }
       }
     };
-    for (const id of this.deckGrid.get(Math.floor(x / 50) * 92821 + Math.floor(z / 50)) ?? []) test(this.decks[id]);
+    for (const id of this.deckGrid.get(Math.floor(x / 50) * 92821 + Math.floor(z / 50)) ?? []) if (!this.deckDead[id]) test(this.decks[id]);
     return out;
   }
 
@@ -235,7 +264,7 @@ export class WalkWorld {
           const l = this.grid.get(i * 73856093 ^ j * 19349663);
           if (!l) continue;
           for (const id of l) {
-            if (this.marks[id] === mark) continue;
+            if (this.segDead[id] || this.marks[id] === mark) continue;
             this.marks[id] = mark;
             const s = this.segs[id];
             if (feetY !== undefined && (feetY < s[4] || feetY > s[5])) continue;
