@@ -1,4 +1,5 @@
 // Baked world data: types, loader and CPU-side terrain sampling.
+import { cachedFetch, cachedFetchJson, initCache, manifestFingerprint } from './cache';
 
 export interface Box { x0: number; z0: number; x1: number; z1: number }
 export interface GridHeader { x0: number; z0: number; cell: number; w: number; h: number }
@@ -198,25 +199,20 @@ export async function loadAtlas(base: string): Promise<{ manifest: AtlasManifest
   const r = await fetch(base + 'manifest.json');
   if (!r.ok) return null;
   const manifest = (await r.json()) as AtlasManifest;
-  const tb = await fetch(base + 'terrain.bin');
-  if (!tb.ok) return null;
-  const bin = await tb.arrayBuffer();
+  initCache(base, manifestFingerprint(manifest)); // everything else in this bake goes through idb
+  const bin = await cachedFetch(base + 'terrain.bin');
   const terrain = new Terrain(new TerrainLayer(bin, manifest.terrain.slice), new TerrainLayer(bin, manifest.terrain.backdrop));
   return { manifest, terrain };
 }
 
 export async function loadTile(base: string, spec: TileSpec): Promise<TileJson> {
-  const r = await fetch(base + spec.file);
-  if (!r.ok) throw new Error(`tile ${spec.id} ${r.status}`);
-  return (await r.json()) as TileJson;
+  return (await cachedFetchJson(base + spec.file)) as TileJson;
 }
 
 // A tile's slice-resolution terrain pack (lod-0 tiles only; null when the tile has none).
 export async function loadTileTerrain(base: string, spec: TileSpec): Promise<TerrainLayer | null> {
   if (!spec.terrain) return null;
-  const r = await fetch(base + spec.terrain.file);
-  if (!r.ok) throw new Error(`terrain ${spec.id} ${r.status}`);
-  return new TerrainLayer(await r.arrayBuffer(), spec.terrain.layout);
+  return new TerrainLayer(await cachedFetch(base + spec.terrain.file), spec.terrain.layout);
 }
 
 export async function loadWorld(base = './data/', onProgress?: (msg: string) => void): Promise<World> {

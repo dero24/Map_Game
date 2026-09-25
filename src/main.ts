@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { loadWorld, loadRegions, loadAtlas, manifestAsWorldJson, type AtlasManifest, type World, type Road, type WorldJson } from './world/data';
+import { cachedFetchJson } from './world/cache';
 import { TileStream } from './world/stream';
 import { paintGround } from './world/groundPaint';
 import { buildGround, terrainTextures } from './world/ground';
@@ -42,7 +43,7 @@ async function main() {
   let paintWorld: World;
   if (atlasRes) {
     manifest = atlasRes.manifest;
-    const paintJson = (await (await fetch(base + 'paint.json')).json()) as WorldJson;
+    const paintJson = (await cachedFetchJson(base + 'paint.json')) as WorldJson;
     paintWorld = { json: paintJson, terrain: atlasRes.terrain };
   } else {
     const w = await loadWorld(base, (m) => ($('loading').textContent = m));

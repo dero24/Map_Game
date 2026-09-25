@@ -4,6 +4,7 @@
 // WalkWorld scope, interiors registered under "tile:idx" keys. Unload removes all three cleanly.
 import * as THREE from 'three';
 import { loadTile, loadTileTerrain, type AtlasManifest, type Box, type Road, type TileSpec, type Terrain, TerrainLayer } from './data';
+import { manifestFingerprint } from './cache';
 import type { Door, Footprint } from './buildings';
 import { buildTile } from './tileBuild';
 import { buildObject, replayOps, unpackDeck, type BuiltTile } from './pack';
@@ -148,7 +149,7 @@ export class TileStream {
         else j.rej(new Error(m.message ?? 'tile build failed'));
       };
       // Worker fetches resolve against its own module URL — hand it an absolute base.
-      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell });
+      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man) });
       this.worker = w;
     } catch {
       this.workerDead = true;

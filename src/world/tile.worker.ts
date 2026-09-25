@@ -1,6 +1,7 @@
 // Worker-side tile build: fetch + decode + mesh + collision for one tile, packed for transfer.
 // Runs the same buildTile pipeline as the main-thread fallback — same output, off the main thread.
 import { Terrain, TerrainLayer, type LayerLayout, type TileJson, type TileSpec, type WorldJson } from './data';
+import { cachedFetch, cachedFetchJson, initCache } from './cache';
 import { buildTile } from './tileBuild';
 import type { BuiltTile } from './pack';
 
@@ -15,25 +16,13 @@ let cell = 1024;
 let terrain: Terrain | null = null;
 let binPromise: Promise<ArrayBuffer> | null = null;
 
-const loadBin = () =>
-  (binPromise ??= fetch(base + 'terrain.bin').then((r) => {
-    if (!r.ok) throw new Error(`terrain.bin ${r.status}`);
-    return r.arrayBuffer();
-  }));
+const loadBin = () => (binPromise ??= cachedFetch(base + 'terrain.bin'));
 
 async function build(msg: { id: number; spec: TileSpec; idBase: number; terr?: { slice: LayerLayout; backdrop: LayerLayout } }): Promise<BuiltTile> {
   const spec = msg.spec;
   const [tj, tbuf] = await Promise.all([
-    fetch(base + spec.file).then((r) => {
-      if (!r.ok) throw new Error(`${spec.file} ${r.status}`);
-      return r.json() as Promise<TileJson>;
-    }),
-    spec.terrain
-      ? fetch(base + spec.terrain.file).then((r) => {
-          if (!r.ok) throw new Error(`${spec.terrain!.file} ${r.status}`);
-          return r.arrayBuffer();
-        })
-      : Promise.resolve(undefined),
+    cachedFetchJson(base + spec.file) as Promise<TileJson>,
+    spec.terrain ? cachedFetch(base + spec.terrain.file) : Promise.resolve(undefined),
   ]);
   if (!terrain) {
     const lay = msg.terr ?? (tj as unknown as WorldJson).terrain;
@@ -52,6 +41,7 @@ ctx.onmessage = (e: MessageEvent) => {
   if (m.kind === 'init') {
     base = m.base;
     cell = m.cell;
+    if (m.fp) initCache(base, m.fp); // same idb database as the page
     return;
   }
   if (m.kind !== 'build') return;
