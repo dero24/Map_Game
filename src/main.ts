@@ -158,17 +158,12 @@ async function main() {
     ? { x: atPos[0], z: atPos[1], yaw: 0, y: undefined as number | undefined }
     : { ...sidewalk(isFinite(onRoad.d) ? onRoad : { x: target[0], z: target[1], yaw: 0, d: 0 }, spec?.sidewalk ?? 0), y: undefined as number | undefined };
   const respawn = () => walker.place(spawn.x, spawn.z, spawn.yaw, -0.02, spawn.y);
-  respawn();
-
-  // Bring the spawn neighbourhood online before we build life or prime interiors.
-  $('loading').textContent = 'raising the houses…';
-  await stream.ensureAround(spawn.x, spawn.z);
-  if (atPos) {
-    // Deep-link on a doorstep: walk out the front door of the nearest real building;
-    // otherwise stand on the spot facing down the nearest street.
+  // Doorstep-first placement: on or near a building → step out its front door;
+  // on open ground → stand on the spot facing down the nearest street.
+  const teleportLocal = (x: number, z: number) => {
     let best: Door | null = null, bd = 40 * 40;
     for (const d of stream.doors) {
-      const dd = (d.wx - atPos[0]) ** 2 + (d.wz - atPos[1]) ** 2;
+      const dd = (d.wx - x) ** 2 + (d.wz - z) ** 2;
       if (dd < bd) {
         bd = dd;
         best = d;
@@ -176,11 +171,34 @@ async function main() {
     }
     if (best) spawn = { x: best.wx - best.nx * 2.2, z: best.wz - best.nz * 2.2, yaw: Math.atan2(best.nx, best.nz), y: best.y };
     else {
-      const near = roadPoint(json.roads, /./, atPos[0], atPos[1], 'north');
-      if (isFinite(near.d)) spawn = { x: atPos[0], z: atPos[1], yaw: near.yaw, y: undefined };
+      const near = roadPoint(json.roads, /./, x, z, 'north');
+      spawn = { x, z, yaw: isFinite(near.d) ? near.yaw : 0, y: undefined };
     }
     respawn();
-  }
+  };
+  respawn();
+
+  // Bring the spawn neighbourhood online before we build life or prime interiors.
+  $('loading').textContent = 'raising the houses…';
+  await stream.ensureAround(spawn.x, spawn.z);
+  if (atPos) teleportLocal(atPos[0], atPos[1]);
+
+  // Runtime teleport (G): same door-snap rule, waiting for the neighbourhood to stream in.
+  const teleportTo = async (lat: number, lon: number) => {
+    const [x, z] = fromLatLon(json.origin, lat, lon);
+    const b = json.backdrop;
+    if (x < b.x0 || x > b.x1 || z < b.z0 || z > b.z1) {
+      // Outside this region — let the deep-link picker choose the right town.
+      const p = new URLSearchParams(location.search);
+      p.delete('shot');
+      p.set('at', `${lat},${lon}`);
+      location.search = p.toString();
+      return;
+    }
+    toast('walking over…');
+    await stream.ensureAround(x, z);
+    teleportLocal(x, z);
+  };
   const lifeBase = buildLifeBase(paintWorld, walk);
   const life = new LifeClient(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors));
   worldRoot.add(life.group);
@@ -353,7 +371,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { walker, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream, get spawn() { return spawn; }, at: atPos };
+  (window as unknown as Record<string, unknown>).__GAME__ = { walker, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream, teleport: teleportTo, get spawn() { return spawn; }, at: atPos };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);
@@ -404,6 +422,14 @@ async function main() {
     if (e.code === 'KeyM' && $('intro').classList.contains('hidden')) {
       journal.toggle();
       if (journal.open) document.exitPointerLock?.();
+      else walker.lock();
+    }
+    if (e.code === 'KeyG' && $('intro').classList.contains('hidden') && !journal.open) {
+      document.exitPointerLock?.();
+      const v = window.prompt('teleport to (lat, lon)', '40.3620,-73.9755');
+      const m = v?.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+      if (m) void teleportTo(+m[1], +m[2]);
+      else if (v != null) toast('that is not a lat,lon');
       else walker.lock();
     }
     if (e.code === 'Escape' && journal.open) journal.toggle(false);
