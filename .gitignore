@@ -1,0 +1,24 @@
+# dependencies / build output
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+
+# raw downloaded datasets (regenerate with `npm run fetch`)
+raw/
+
+# generated proof captures (regenerate with `node tools/capture.mjs`)
+shots/
+
+# scratch/debug
+tests/_dbg.test.ts
+*.log
+*.tmp
+*.bak
+*.orig
+
+# OS / editor cruft
+Thumbs.db
+desktop.ini
+.DS_Store
+.idea/

@@ -1,0 +1,448 @@
+// Street furniture and life: utility poles with sagging wires and cobra-head lamps (plus the lamp light map
+// that paints warm pools on the ground at night), trees from WorldCover, moored boats, lifeguard stands.
+import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import type { World, Road } from './data';
+import type { WalkWorld } from '../player/collision';
+import { propMaterial, colored } from '../render/propMaterial';
+import { U, GLSL_NOISE } from '../render/shared';
+import { makeRng, hash01 } from '../core/rng';
+import { carGeo } from '../sim/life';
+import type { Mailbox } from './buildings';
+
+type P = [number, number];
+const unpackPts = (f: number[]): P[] => {
+  const o: P[] = [];
+  for (let i = 0; i + 1 < f.length; i += 2) o.push([f[i] / 10, f[i + 1] / 10]);
+  return o;
+};
+const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+const RANK: Record<string, number> = { residential: 2, unclassified: 2, living_street: 2, tertiary: 3, secondary: 4, primary: 5 };
+
+function wireMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: { uFogColor: U.uFogColor, uFogDensity: U.uFogDensity, uNight: U.uNight },
+    vertexShader: /* glsl */ `
+      varying float vDist;
+      void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vDist = -mv.z; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uFogColor; uniform float uFogDensity, uNight;
+      varying float vDist;
+      void main() {
+        vec3 c = mix(vec3(0.16, 0.15, 0.17), vec3(0.05, 0.06, 0.1), uNight);
+        float f = 1.0 - exp(-vDist * (uFogDensity * 2.0 + 0.004));
+        gl_FragColor = vec4(mix(c, uFogColor, f), 1.0 - f * 0.9);
+      }`,
+    transparent: true,
+    depthWrite: false,
+  });
+}
+
+// 2 m/px mask of paved / sandy / built-over ground where nothing should grow or stand.
+function pavedMask(world: World, zone: { x0: number; z0: number; x1: number; z1: number }) {
+  const { json } = world;
+  const w = Math.ceil((zone.x1 - zone.x0) / 2), h = Math.ceil((zone.z1 - zone.z0) / 2);
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d', { willReadFrequently: true })!;
+  ctx.setTransform(0.5, 0, 0, 0.5, -zone.x0 * 0.5, -zone.z0 * 0.5);
+  ctx.strokeStyle = ctx.fillStyle = '#fff';
+  ctx.lineCap = ctx.lineJoin = 'round';
+  for (const r of json.roads) {
+    if (r.lod) continue;
+    const p = unpackPts(r.p);
+    ctx.beginPath();
+    p.forEach(([x, z], i) => (i ? ctx.lineTo(x, z) : ctx.moveTo(x, z)));
+    ctx.lineWidth = r.w + (RANK[r.c] ? 3 : 1.2);
+    ctx.stroke();
+  }
+  for (const a of json.areas) {
+    if (!['parking', 'plaza', 'beach', 'pier', 'pool', 'pitch', 'marina'].includes(a.c)) continue;
+    ctx.beginPath();
+    for (const ring of a.o) unpackPts(ring).forEach(([x, z], i) => (i ? ctx.lineTo(x, z) : ctx.moveTo(x, z)));
+    ctx.fill();
+  }
+  const data = ctx.getImageData(0, 0, w, h).data;
+  return (x: number, z: number) => {
+    const i = Math.floor((x - zone.x0) / 2), j = Math.floor((z - zone.z0) / 2);
+    if (i < 0 || j < 0 || i >= w || j >= h) return false;
+    return data[(j * w + i) * 4] > 60;
+  };
+}
+
+export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P; w: number }[], extras: { mailboxes?: Mailbox[] } = {}) {
+  const { json, terrain } = world;
+  const S = json.slice;
+  const group = new THREE.Group();
+  group.name = 'props';
+  const rng = makeRng(7);
+  const paved = pavedMask(world, { x0: S.x0 - 250, z0: S.z0 - 250, x1: S.x1 + 250, z1: S.z1 + 250 });
+
+  // ---------- utility poles, wires, lamps ----------
+  const poleMats: THREE.Matrix4[] = [];
+  const armMats: THREE.Matrix4[] = [];
+  const lampHeads: THREE.Vector3[] = [];
+  const lampGround: [number, number][] = [];
+  const wire: number[] = [];
+  const q = new THREE.Quaternion();
+  const roads = json.roads.filter((r) => !r.lod && !r.br && (RANK[r.c] ?? 0) >= 2) as Road[];
+  for (const r of roads) {
+    const rank = RANK[r.c];
+    const p = unpackPts(r.p);
+    const side = hash01(r.p[0] * 31 + r.p[1]) < 0.5 ? 1 : -1;
+    const off = (r.w / 2 + (rank >= 5 ? 3.8 : 1.6)) * side;
+    const spacing = rank >= 5 ? 34 : 38;
+    let carry = spacing * 0.35;
+    let prev: { top: THREE.Vector3; ang: number } | null = null;
+    let count = 0;
+    for (let i = 0; i + 1 < p.length; i++) {
+      const [ax, az] = p[i], [bx, bz] = p[i + 1];
+      const L = Math.hypot(bx - ax, bz - az);
+      if (L < 0.01) continue;
+      const tx = (bx - ax) / L, tz = (bz - az) / L;
+      const nx = tz, nz = -tx;
+      let s = carry;
+      while (s < L) {
+        const x = ax + tx * s + nx * off, z = az + tz * s + nz * off;
+        s += spacing;
+        if (!terrain.slice.contains(x, z, 20) || terrain.sdfAt(x, z) < 1.5 || walk.blocked(x, z, 0.8)) { prev = null; continue; }
+        const g = terrain.heightAt(x, z);
+        const ang = Math.atan2(tz, tx);
+        q.setFromAxisAngle(V(0, 1, 0), -ang);
+        poleMats.push(new THREE.Matrix4().compose(V(x, g, z), q, V(1, 1, 1)));
+        const top = V(x, g + 9.6, z);
+        if (prev) {
+          for (const [dv, dy] of [[-1.05, 0], [1.05, 0], [0, -2.0]] as const) {
+            const ox = nx * dv, oz = nz * dv;
+            const a = V(prev.top.x + ox, prev.top.y + dy, prev.top.z + oz), b = V(top.x + ox, top.y + dy, top.z + oz);
+            const span = a.distanceTo(b);
+            const sag = 0.012 * span + 0.15;
+            const N = 8;
+            for (let k = 0; k < N; k++) {
+              const t0 = k / N, t1 = (k + 1) / N;
+              const p0 = a.clone().lerp(b, t0), p1 = a.clone().lerp(b, t1);
+              p0.y -= sag * 4 * t0 * (1 - t0);
+              p1.y -= sag * 4 * t1 * (1 - t1);
+              wire.push(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z);
+            }
+          }
+        }
+        prev = { top, ang };
+        // cobra-head lamp on some poles, reaching over the street
+        if (count++ % (rank >= 5 ? 2 : 3) === 0) {
+          const dir = -side;
+          const hx = x + nx * dir * 2.1, hz = z + nz * dir * 2.1;
+          armMats.push(new THREE.Matrix4().compose(V(x, g, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -ang + (dir > 0 ? 0 : Math.PI)), V(1, 1, 1)));
+          lampHeads.push(V(hx, g + 8.05, hz));
+          lampGround.push([x + nx * dir * 4.5, z + nz * dir * 4.5]);
+        }
+      }
+      carry = s - L;
+    }
+  }
+  const poleGeo = mergeGeometries([
+    colored(new THREE.CylinderGeometry(0.12, 0.17, 10.2, 7).translate(0, 5.1, 0), 0x5e5043),
+    colored(new THREE.BoxGeometry(0.12, 0.12, 2.5).translate(0, 9.6, 0), 0x5a4c3f),
+    colored(new THREE.CylinderGeometry(0.05, 0.05, 0.25, 5).translate(0, 9.8, -1.05), 0x9fb0a8),
+    colored(new THREE.CylinderGeometry(0.05, 0.05, 0.25, 5).translate(0, 9.8, 1.05), 0x9fb0a8),
+    colored(new THREE.CylinderGeometry(0.32, 0.32, 0.9, 8).translate(0.3, 8.3, 0), 0x6f7479), // transformer can
+  ]);
+  const poles = new THREE.InstancedMesh(poleGeo, propMaterial(), poleMats.length);
+  poleMats.forEach((m, i) => poles.setMatrixAt(i, m));
+  poles.layers.enable(1);
+  group.add(poles);
+
+  const armGeo = mergeGeometries([
+    colored(new THREE.BoxGeometry(0.08, 0.08, 2.2).translate(0, 8.25, 1.1), 0x8d9296),
+    colored(new THREE.BoxGeometry(0.34, 0.14, 0.62).translate(0, 8.12, 2.2), 0x9aa0a4),
+  ]);
+  const arms = new THREE.InstancedMesh(armGeo, propMaterial(), armMats.length);
+  armMats.forEach((m, i) => arms.setMatrixAt(i, m));
+  group.add(arms);
+  // glowing lenses
+  const lens = new THREE.InstancedMesh(colored(new THREE.BoxGeometry(0.3, 0.05, 0.5), 0xfff0d0), propMaterial({ emissive: new THREE.Color(1.0, 0.72, 0.4), emissiveNight: true }), lampHeads.length);
+  lampHeads.forEach((p, i) => lens.setMatrixAt(i, new THREE.Matrix4().makeTranslation(p.x, p.y - 0.02, p.z)));
+  group.add(lens);
+
+  const wg = new THREE.BufferGeometry();
+  wg.setAttribute('position', new THREE.Float32BufferAttribute(wire, 3));
+  const wires = new THREE.LineSegments(wg, wireMaterial());
+  wires.renderOrder = 6;
+  group.add(wires);
+
+  // Lamp light map: soft warm pools painted top-down, sampled by every material at night.
+  const LM = 1024;
+  const lc = document.createElement('canvas');
+  lc.width = lc.height = LM;
+  const lctx = lc.getContext('2d')!;
+  lctx.fillStyle = '#000';
+  lctx.fillRect(0, 0, LM, LM);
+  const sx = LM / (S.x1 - S.x0), sz = LM / (S.z1 - S.z0);
+  lctx.globalCompositeOperation = 'lighter';
+  for (const [x, z] of lampGround) {
+    const px = (x - S.x0) * sx, pz = (z - S.z0) * sz;
+    const r = 15 * sx;
+    const g = lctx.createRadialGradient(px, pz, 0, px, pz, r);
+    g.addColorStop(0, 'rgba(255,255,255,0.85)');
+    g.addColorStop(0.35, 'rgba(255,255,255,0.4)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    lctx.fillStyle = g;
+    lctx.fillRect(px - r, pz - r, r * 2, r * 2);
+  }
+  const lampTex = new THREE.CanvasTexture(lc);
+  lampTex.flipY = false;
+  lampTex.minFilter = THREE.LinearFilter;
+  lampTex.generateMipmaps = false;
+  U.uLampMap.value = lampTex;
+  U.uLampBox.value.set(S.x0, S.z0, 1 / (S.x1 - S.x0), 1 / (S.z1 - S.z0));
+
+  // Night halos around lamp heads and lanterns (soft wet blooms, additive).
+  const halo = (pts: THREE.Vector3[], size: number, color: THREE.Color) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pts.flatMap((p) => [p.x, p.y, p.z]), 3));
+    const m = new THREE.ShaderMaterial({
+      uniforms: { uLampPower: U.uLampPower, uSize: { value: size }, uColor: { value: color }, uTime: U.uTime },
+      vertexShader: /* glsl */ `
+        uniform float uSize;
+        varying float vFade;
+        void main() {
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          gl_Position = projectionMatrix * mv;
+          gl_PointSize = clamp(uSize * 900.0 / -mv.z, 2.0, 220.0);
+          vFade = clamp(1.0 - (-mv.z) / 2500.0, 0.0, 1.0);
+        }`,
+      fragmentShader: /* glsl */ `
+        uniform float uLampPower, uTime;
+        uniform vec3 uColor;
+        varying float vFade;
+        ${GLSL_NOISE}
+        void main() {
+          vec2 d = gl_PointCoord - 0.5;
+          float r = length(d) * 2.0;
+          float rag = 0.85 + 0.3 * vnoise(d * 7.0 + 3.0);
+          float a = smoothstep(1.0 * rag, 0.0, r);
+          a = a * a * uLampPower * vFade;
+          gl_FragColor = vec4(uColor * a, a);
+        }`,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const pts3 = new THREE.Points(g, m);
+    pts3.renderOrder = 8;
+    pts3.frustumCulled = false;
+    return pts3;
+  };
+  group.add(halo(lampHeads, 1.6, new THREE.Color(1.0, 0.7, 0.38)));
+
+  // ---------- trees ----------
+  const trees: { m: THREE.Matrix4; c: THREE.Color; pine: boolean }[] = [];
+  const zone = { x0: S.x0 - 250, z0: S.z0 - 250, x1: S.x1 + 250, z1: S.z1 + 250 };
+  const G = 9;
+  const green = [0x4d6a31, 0x5b7536, 0x6a823e, 0x55703a, 0x72893f, 0x3f5a2e];
+  for (let z = zone.z0; z < zone.z1; z += G)
+    for (let x = zone.x0; x < zone.x1; x += G) {
+      const jx = x + rng.float() * G, jz = z + rng.float() * G;
+      const cov = terrain.coverAt(jx, jz);
+      const beachy = terrain.oceanDistAt(jx, jz) < 90;
+      const pr = cov === 10 ? 0.85 : beachy ? 0 : cov === 50 ? 0.035 : cov === 30 ? 0.05 : cov === 20 ? 0.3 : 0;
+      if (rng.float() > pr) continue;
+      if (terrain.sdfAt(jx, jz) < 3 || paved(jx, jz) || walk.blocked(jx, jz, 2.2)) continue;
+      const g = terrain.heightAt(jx, jz);
+      const pine = rng.float() < (terrain.oceanDistAt(jx, jz) < 500 ? 0.55 : 0.2);
+      const h = (pine ? 7 : 8) + rng.float() * 7;
+      const s = h / 10;
+      const m = new THREE.Matrix4().compose(V(jx, g - 0.2, jz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(s * (0.85 + rng.float() * 0.3), s, s * (0.85 + rng.float() * 0.3)));
+      const c = new THREE.Color(rng.pick(green));
+      if (rng.float() < 0.12) c.lerp(new THREE.Color(0xb59a3e), 0.45); // first hints of autumn
+      trees.push({ m, c, pine });
+    }
+  for (const p of json.points) if (p.c === 'tree' && terrain.slice.contains(p.x, p.z)) trees.push({ m: new THREE.Matrix4().compose(V(p.x, terrain.heightAt(p.x, p.z), p.z), new THREE.Quaternion(), V(0.9, 0.9, 0.9)), c: new THREE.Color(green[1]), pine: false });
+
+  const blob = (r: number, y: number, ox: number, oz: number, seed: number) => {
+    const g = new THREE.IcosahedronGeometry(r, 1);
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const v = V(pos.getX(i), pos.getY(i), pos.getZ(i));
+      const n = 0.82 + 0.3 * hash01(Math.floor((v.x + 9) * 3) * 73 + Math.floor((v.y + 9) * 3) * 19 + Math.floor((v.z + 9) * 3) + seed);
+      v.multiplyScalar(n);
+      pos.setXYZ(i, v.x + ox, v.y * 0.85 + y, v.z + oz);
+    }
+    g.computeVertexNormals();
+    return colored(g, 0xffffff);
+  };
+  const decid = mergeGeometries([
+    colored(new THREE.CylinderGeometry(0.18, 0.3, 4.4, 5).translate(0, 2.2, 0), 0x6b5a48),
+    blob(2.6, 6.2, 0, 0, 1), blob(2.0, 7.4, 1.4, 0.6, 2), blob(1.9, 5.6, -1.3, -0.8, 3), blob(1.6, 8.1, -0.4, 1.0, 4),
+  ]);
+  const pineGeo = mergeGeometries([
+    colored(new THREE.CylinderGeometry(0.16, 0.26, 6.5, 5).translate(0, 3.25, 0), 0x6b5140),
+    blob(1.9, 6.4, 0.3, 0, 5), blob(1.5, 8.2, -0.4, 0.3, 6), blob(1.4, 5.0, 0.8, -0.5, 7), blob(1.0, 9.4, 0, 0, 8),
+  ]);
+  // Trunks keep their brown: instance colour only tints foliage (vertex color white there).
+  for (const [geo, pine] of [[decid, false], [pineGeo, true]] as const) {
+    const list = trees.filter((t) => t.pine === pine);
+    if (!list.length) continue;
+    const im = new THREE.InstancedMesh(geo, propMaterial({ wind: true, foliage: true }), list.length);
+    list.forEach((t, i) => { im.setMatrixAt(i, t.m); im.setColorAt(i, t.c); });
+    im.layers.enable(1);
+    im.computeBoundingSphere();
+    group.add(im);
+  }
+
+  // ---------- moored boats ----------
+  const boats: THREE.Matrix4[] = [];
+  const boatCol: THREE.Color[] = [];
+  const sails: THREE.Matrix4[] = [];
+  for (const s of pierSegs) {
+    const dx = s.b[0] - s.a[0], dz = s.b[1] - s.a[1];
+    const L = Math.hypot(dx, dz);
+    if (L < 4) continue;
+    const tx = dx / L, tz = dz / L;
+    for (let d = 3; d < L - 2; d += 6.5) {
+      for (const side of [-1, 1]) {
+        if (rng.float() < 0.45) continue;
+        const len = 7 + rng.float() * 6;
+        const off = s.w / 2 + 1.9 + rng.float() * 0.4;
+        const x = s.a[0] + tx * d + tz * side * off, z = s.a[1] + tz * d - tx * side * off;
+        if (terrain.sdfAt(x, z) > -2.5 || walk.deckAt(x, z) !== null) continue;
+        const ang = Math.atan2(tz, tx) + (rng.float() < 0.5 ? 0 : Math.PI);
+        const m = new THREE.Matrix4().compose(V(x, 0, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -ang), V(len / 10, len / 10, len / 10));
+        boats.push(m);
+        boatCol.push(new THREE.Color(rng.pick([0xf4f2ec, 0xf4f2ec, 0xeef0f0, 0x2d4a6a, 0xd9e4ea, 0x9b3b32])));
+        if (rng.float() < 0.3) sails.push(m);
+      }
+    }
+  }
+  if (boats.length) {
+    const hullShape = new THREE.Shape();
+    hullShape.moveTo(-5, -1.3); hullShape.lineTo(3.2, -1.3); hullShape.quadraticCurveTo(5.3, -0.6, 5.3, 0); hullShape.quadraticCurveTo(5.3, 0.6, 3.2, 1.3); hullShape.lineTo(-5, 1.3); hullShape.lineTo(-5, -1.3);
+    const hull = new THREE.ExtrudeGeometry(hullShape, { depth: 1.1, bevelEnabled: false }).rotateX(-Math.PI / 2).translate(0, -0.35, 0);
+    const boatGeo = mergeGeometries([
+      colored(hull, 0xffffff),
+      colored(new THREE.BoxGeometry(3.4, 0.9, 2.0).translate(-0.6, 1.2, 0), 0xf6f4ee),
+      colored(new THREE.BoxGeometry(2.2, 0.25, 2.1).translate(-0.4, 1.75, 0), 0x3a4f63),
+      colored(new THREE.BoxGeometry(10.1, 0.18, 2.66).translate(0.1, 0.75, 0), 0x3d4d5d),
+    ]);
+    const im = new THREE.InstancedMesh(boatGeo, propMaterial({ bob: true }), boats.length);
+    boats.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, boatCol[i]); });
+    im.layers.enable(1);
+    group.add(im);
+    if (sails.length) {
+      const mast = new THREE.InstancedMesh(colored(new THREE.CylinderGeometry(0.06, 0.08, 11, 5).translate(0.8, 6.2, 0), 0xd8d8d4), propMaterial({ bob: true }), sails.length);
+      sails.forEach((m, i) => mast.setMatrixAt(i, m));
+      group.add(mast);
+    }
+  }
+
+  // ---------- lifeguard stands along the beach, facing the sea ----------
+  const stands: THREE.Matrix4[] = [];
+  const standAt: [number, number][] = [];
+  for (let z = S.z0 + 60; z < S.z1 - 60; z += 12)
+    for (let x = S.x0 + 60; x < S.x1 - 60; x += 3) {
+      const d = terrain.sdfAt(x, z);
+      if (!(terrain.oceanDistAt(x, z) < 60 && d > 22 && d < 30) || standAt.some(([sx, sz]) => Math.hypot(sx - x, sz - z) < 140)) continue;
+      const gx = terrain.oceanDistAt(x - 6, z) - terrain.oceanDistAt(x + 6, z), gz = terrain.oceanDistAt(x, z - 6) - terrain.oceanDistAt(x, z + 6);
+      standAt.push([x, z]);
+      // the chair's back (local -z) to the land, looking out along the seaward slope
+      stands.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(gx, gz)), V(1, 1, 1)));
+      walk.addLoop([[x - 1, z - 0.9], [x + 1, z - 0.9], [x + 1, z + 0.9], [x - 1, z + 0.9]]);
+    }
+
+  // ---------- parked cars at the house end of real driveways ----------
+  const parked: { m: THREE.Matrix4; c: THREE.Color }[] = [];
+  const CAR = [0xf2f2ee, 0xb9bcc0, 0x26282c, 0x5a5e64, 0x2b3f63, 0x9c2a26, 0x3d5a46, 0xcdbf9e, 0x7a8894];
+  for (const r of json.roads) {
+    if (r.lod || r.sv !== 'driveway' || r.p.length < 4) continue;
+    const p = unpackPts(r.p);
+    const h = hash01(r.p[0] * 131 + r.p[1] * 7);
+    if (h > 0.62) continue;
+    // the end farther from any street is the house end
+    const a = p[0], b = p[p.length - 1];
+    const blockedA = walk.blocked(a[0], a[1], 3), blockedB = walk.blocked(b[0], b[1], 3);
+    const [e, f] = blockedA && !blockedB ? [a, p[1]] : blockedB && !blockedA ? [b, p[p.length - 2]] : hash01(r.p[2] * 17) < 0.5 ? [a, p[1]] : [b, p[p.length - 2]];
+    const dx = f[0] - e[0], dz = f[1] - e[1], l = Math.hypot(dx, dz);
+    if (l < 0.5) continue;
+    const back = Math.min(3.2, l * 0.5);
+    const x = e[0] + (dx / l) * back, z = e[1] + (dz / l) * back;
+    const yaw = Math.atan2(-dx, -dz) + (h < 0.3 ? Math.PI : 0);
+    const cy = Math.cos(yaw), sy = Math.sin(yaw);
+    const corners: P[] = [[-1, -2.3], [1, -2.3], [1, 2.3], [-1, 2.3]].map(([u, v]) => [x + u * cy + v * sy, z - u * sy + v * cy]);
+    if (!terrain.slice.contains(x, z, 10) || corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.3)) || terrain.sdfAt(x, z) < 2) continue;
+    parked.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, 1)), c: new THREE.Color(CAR[Math.floor(h * 97) % CAR.length]) });
+    walk.addLoop(corners);
+  }
+  if (parked.length) {
+    const im = new THREE.InstancedMesh(carGeo(), propMaterial(), parked.length);
+    parked.forEach((p, i) => { im.setMatrixAt(i, p.m); im.setColorAt(i, p.c); });
+    im.layers.enable(1);
+    group.add(im);
+  }
+
+  // ---------- mapped fences (picket / rail) ----------
+  const fm = new THREE.Group();
+  const fencePosts: THREE.Matrix4[] = [], fenceRails: THREE.Matrix4[] = [];
+  for (const l of json.lines) {
+    if (l.c !== 'fence') continue;
+    const p = unpackPts(l.p);
+    if (!p.some(([x, z]) => terrain.slice.contains(x, z, -20))) continue;
+    for (let i = 0; i + 1 < p.length; i++) {
+      const [ax, az] = p[i], [bx, bz] = p[i + 1];
+      const L = Math.hypot(bx - ax, bz - az);
+      if (L < 0.2) continue;
+      const ang = Math.atan2(bz - az, bx - ax);
+      const n = Math.max(1, Math.round(L / 2.2));
+      for (let k = 0; k <= n; k++) {
+        const x = ax + ((bx - ax) * k) / n, z = az + ((bz - az) * k) / n;
+        fencePosts.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -ang), V(1, 1, 1)));
+      }
+      for (const y of [0.35, 0.95]) {
+        const mx = (ax + bx) / 2, mz = (az + bz) / 2;
+        fenceRails.push(new THREE.Matrix4().compose(V(mx, terrain.heightAt(mx, mz) + y, mz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -ang), V(L, 1, 1)));
+      }
+      walk.addWall([ax, az], [bx, bz]);
+    }
+  }
+  if (fencePosts.length) {
+    const post = new THREE.InstancedMesh(colored(new THREE.BoxGeometry(0.1, 1.15, 0.1).translate(0, 0.575, 0), 0xefebe2), propMaterial(), fencePosts.length);
+    fencePosts.forEach((mt, i) => post.setMatrixAt(i, mt));
+    const rail = new THREE.InstancedMesh(colored(new THREE.BoxGeometry(1, 0.07, 0.04), 0xefebe2), propMaterial(), fenceRails.length);
+    fenceRails.forEach((mt, i) => rail.setMatrixAt(i, mt));
+    post.layers.enable(1);
+    fm.add(post, rail);
+    group.add(fm);
+  }
+
+  // ---------- curbside mailboxes for the houses with a mapped address ----------
+  if (extras.mailboxes?.length) {
+    const mb = mergeGeometries([
+      colored(new THREE.BoxGeometry(0.09, 1.05, 0.09).translate(0, 0.52, 0), 0x6b5a48),
+      colored(new THREE.BoxGeometry(0.24, 0.24, 0.5).translate(0, 1.15, 0), 0xffffff),
+      colored(new THREE.BoxGeometry(0.03, 0.14, 0.04).translate(0.13, 1.2, -0.12), 0xc2412f),
+    ]);
+    const im = new THREE.InstancedMesh(mb, propMaterial(), extras.mailboxes.length);
+    const MBC = [0x2b2d30, 0x2b2d30, 0xf2efe6, 0x3e5b45, 0x2c3e5c];
+    extras.mailboxes.forEach((b, i) => {
+      im.setMatrixAt(i, new THREE.Matrix4().compose(V(b.x, terrain.heightAt(b.x, b.z), b.z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), b.yaw), V(1, 1, 1)));
+      im.setColorAt(i, new THREE.Color(MBC[Math.floor(hash01(Math.floor(b.x * 10) ^ Math.floor(b.z * 10)) * MBC.length)]));
+      walk.addLoop([[b.x - 0.12, b.z - 0.12], [b.x + 0.12, b.z - 0.12], [b.x + 0.12, b.z + 0.12], [b.x - 0.12, b.z + 0.12]]);
+    });
+    im.layers.enable(1);
+    group.add(im);
+  }
+  if (stands.length) {
+    const parts: THREE.BufferGeometry[] = [];
+    for (const [x, zz] of [[-0.8, -0.7], [0.8, -0.7], [-0.8, 0.7], [0.8, 0.7]]) parts.push(colored(new THREE.BoxGeometry(0.14, 2.4, 0.14).translate(x, 1.2, zz).rotateX(zz * 0.12), 0xf4f1ea));
+    parts.push(colored(new THREE.BoxGeometry(1.9, 0.12, 1.6).translate(0, 2.4, 0), 0xf4f1ea));
+    parts.push(colored(new THREE.BoxGeometry(1.9, 1.0, 0.12).translate(0, 2.95, -0.75), 0xf4f1ea));
+    parts.push(colored(new THREE.BoxGeometry(1.4, 0.35, 0.05).translate(0, 3.2, 0.3), 0xc2412f));
+    for (let k = 0; k < 4; k++) parts.push(colored(new THREE.BoxGeometry(1.7, 0.06, 0.1).translate(0, 0.4 + k * 0.5, 0.78), 0xf4f1ea));
+    const im = new THREE.InstancedMesh(mergeGeometries(parts), propMaterial(), stands.length);
+    stands.forEach((m, i) => im.setMatrixAt(i, m));
+    im.layers.enable(1);
+    group.add(im);
+  }
+
+  return { group, lampHeads, halo };
+}

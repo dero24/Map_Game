@@ -1,0 +1,22 @@
+[
+  {
+    "id": "monmouthbeach",
+    "name": "Monmouth Beach",
+    "title": "Monmouth Beach, N.J.",
+    "sub": "a watercolor walk · Monmouth County, New Jersey",
+    "origin": {
+      "lat": 40.3304,
+      "lon": -73.9862
+    }
+  },
+  {
+    "id": "seabright",
+    "name": "Sea Bright",
+    "title": "Sea Bright, N.J.",
+    "sub": "a watercolor walk · Monmouth County, New Jersey",
+    "origin": {
+      "lat": 40.362,
+      "lon": -73.9755
+    }
+  }
+]

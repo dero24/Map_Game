@@ -1,0 +1,35 @@
+{
+  "name": "map-game",
+  "version": "0.1.0",
+  "description": "First-person watercolor walk through the real Sea Bright, NJ — built from free baked map data.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "fetch": "node scripts/fetch-all.mjs",
+    "bake": "node scripts/bake.mjs",
+    "shot": "node tools/capture.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "idb": "^8.0.3",
+    "lil-gui": "^0.21.0",
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "@duckdb/node-api": "^1.5.5-r.5",
+    "@types/three": "^0.186.0",
+    "earcut": "^3.2.3",
+    "geotiff": "^3.0.5",
+    "pngjs": "^7.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
+  }
+}

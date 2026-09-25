@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>a watercolor walk</title>
+    <link rel="stylesheet" href="./src/ui/style.css" />
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <div id="hud">
+      <div id="place"></div>
+      <div id="clock"></div>
+      <div class="hint">M — journal &amp; keys</div>
+    </div>
+    <div id="toast"></div>
+    <div id="journal" class="hidden">
+      <canvas id="journal-map"></canvas>
+      <div id="journal-side">
+        <h2 id="journal-title">the town</h2>
+        <div id="journal-stats"></div>
+        <h3>Keys</h3>
+        <table class="keymap">
+          <tr><td>W A S D</td><td>walk</td></tr>
+          <tr><td>Mouse</td><td>look around</td></tr>
+          <tr><td>Shift</td><td>stroll faster</td></tr>
+          <tr><td>F</td><td>fly / land</td></tr>
+          <tr><td>Space / C</td><td>fly up / down</td></tr>
+          <tr><td>Wheel</td><td>flying speed</td></tr>
+          <tr><td>Doors</td><td>just walk in</td></tr>
+          <tr><td>M</td><td>this journal</td></tr>
+          <tr><td>T</td><td>skip an hour</td></tr>
+          <tr><td>P</td><td>postcard (hide UI)</td></tr>
+          <tr><td>Q / E</td><td>turn (without mouse)</td></tr>
+          <tr><td>Esc</td><td>release mouse / close</td></tr>
+          <tr><td>Click</td><td>grab mouse again</td></tr>
+        </table>
+        <p class="hint">M or Esc to close · walk to paint in the map</p>
+        <h3>Places</h3>
+        <ul id="journal-stamps"></ul>
+      </div>
+    </div>
+    <div id="intro">
+      <div class="card">
+        <h1 id="town-name">a watercolor walk</h1>
+        <p class="sub" id="town-sub">real places, painted</p>
+        <p id="loading">mixing paints&hellip;</p>
+        <button id="start" disabled>Begin walking</button>
+        <p id="regions"></p>
+        <p class="keys">
+          <b>WASD</b> walk &middot; <b>Mouse</b> look &middot; <b>Shift</b> stroll faster &middot; <b>F</b> fly &middot; walk through any front door &middot; <b>M</b> journal map &middot;
+          <b>T</b> skip an hour &middot; <b>P</b> postcard (hide UI) &middot; <b>Esc</b> release mouse
+        </p>
+        <a href="#" id="credits-link">Credits &amp; data attribution</a>
+      </div>
+    </div>
+    <div id="credits" class="hidden">
+      <div class="card">
+        <h2>Credits</h2>
+        <p>Map data &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap contributors</a> (ODbL)</p>
+        <p>Buildings: <a href="https://overturemaps.org" target="_blank">Overture Maps Foundation</a> (CDLA-Permissive 2.0), incl. data from OpenStreetMap, Microsoft and Google Open Buildings</p>
+        <p>Elevation: <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank">AWS Terrain Tiles</a> (Mapzen/Tilezen; sources incl. USGS 3DEP, public domain)</p>
+        <p>Land cover: <a href="https://esa-worldcover.org" target="_blank">ESA WorldCover 2021</a> (CC BY 4.0) &copy; ESA WorldCover project</p>
+        <p>Roof colours: sampled from <a href="https://naip-usdaonline.hub.arcgis.com/" target="_blank">USDA NAIP</a> aerial imagery via the USGS National Map (public domain)</p>
+        <p>Rendering: three.js (MIT), lil-gui (MIT), idb (ISC)</p>
+        <button id="credits-close">Close</button>
+      </div>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
