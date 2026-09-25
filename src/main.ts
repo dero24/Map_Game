@@ -55,6 +55,7 @@ async function main() {
     paintWorld = w;
   }
   const world: World = { json: manifestAsWorldJson(manifest), terrain: atlasRes ? atlasRes.terrain : paintWorld.terrain };
+  world.terrain.patchCell = manifest.cell;
   const { json } = world;
   const meta = json.meta;
   const townName = meta?.name ?? 'town';

@@ -18,6 +18,10 @@
   porch clearance and sign intersections). `WalkWorld.beginScope/endScope/removeScope` scopes all collision per tile;
   interiors register under `"tile:idx"` keys and unregister on unload. The ambient-life worker re-inits when the
   loaded set settles (or after 4 s). Regions without a manifest fall back to a single-tile world.json.
+- Terrain packs: lod-0 tiles also fetch `tiles/<cx>_<cz>.terrain.bin` — a subgrid of the slice layer snapped to the
+  shared lattice (no margin). `Terrain.registerPatch/removePatch` (called alongside the walk scope on mount/unload)
+  makes the pack the preferred sampling layer for its box; region slice/backdrop layers stay resident, so unloaded
+  areas still answer at region resolution and every consumer keeps the same signatures.
 - Buildings: walls follow the true footprint; pitched roofs come from a straight skeleton (`src/world/roof.ts`, unit-tested)
   with gable folding. Raised houses (pilings), porches, stoops, railed stairs are in `buildings.ts`; their collision goes out
   as `colliders` (walls with a feet-height band + ramp decks) and is registered in `main.ts`.

@@ -56,3 +56,40 @@ export function tileSpecs(box, slice, cell = TILE_CELL) {
     }
   return out;
 }
+
+// A tile's terrain pack: the subgrid of a baked layer (grid: {x0,z0,cell,w,h} + the five field
+// arrays) covering `box`. No margin — terrain is a continuous field on one lattice, so a sample on a
+// tile edge reads identical corner heights from either side. Returns null when the box misses the grid.
+export function terrainPack(L, box) {
+  const g = L.grid;
+  const i0 = Math.max(0, Math.floor((box.x0 - g.x0) / g.cell));
+  const j0 = Math.max(0, Math.floor((box.z0 - g.z0) / g.cell));
+  const i1 = Math.min(g.w, Math.ceil((box.x1 - g.x0) / g.cell));
+  const j1 = Math.min(g.h, Math.ceil((box.z1 - g.z0) / g.cell));
+  const w = i1 - i0, h = j1 - j0;
+  if (w <= 0 || h <= 0) return null;
+  const out = { grid: { x0: g.x0 + i0 * g.cell, z0: g.z0 + j0 * g.cell, cell: g.cell, w, h } };
+  for (const key of ['height', 'sdf', 'cover', 'flags', 'oceanD']) {
+    const src = L[key], dst = new src.constructor(w * h);
+    for (let j = 0; j < h; j++) dst.set(src.subarray((j0 + j) * g.w + i0, (j0 + j) * g.w + i0 + w), j * w);
+    out[key] = dst;
+  }
+  return out;
+}
+
+// Serialise a pack with the same aligned-chunk layout terrain.bin uses, plus its layout JSON — the
+// client wraps the buffer straight in a TerrainLayer.
+export function packToBin(pack) {
+  const chunks = [];
+  let offset = 0;
+  const layout = { grid: pack.grid };
+  for (const key of ['height', 'sdf', 'cover', 'flags', 'oceanD']) {
+    const arr = pack[key];
+    const pad = (arr.BYTES_PER_ELEMENT - (offset % arr.BYTES_PER_ELEMENT)) % arr.BYTES_PER_ELEMENT;
+    if (pad) chunks.push(Buffer.alloc(pad)), (offset += pad);
+    layout[key] = { offset, length: arr.length, type: arr.constructor.name };
+    chunks.push(Buffer.from(arr.buffer, arr.byteOffset, arr.byteLength));
+    offset += arr.byteLength;
+  }
+  return { layout, buf: Buffer.concat(chunks) };
+}

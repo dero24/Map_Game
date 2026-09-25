@@ -29,16 +29,25 @@ sketch above:
   transfer, so shared base arrays are copied).
 - **Compat**: regions without `manifest.json` run a synthesized single-tile
   manifest — the old `world.json` path is untouched.
+- **Terrain packs**: lod-0 tiles also emit `tiles/<id>.terrain.bin` — a subgrid
+  of the slice layer on the shared lattice (no margin; seams are exact by
+  construction). `Terrain` gained a patch registry (`registerPatch`/
+  `removePatch`, keyed by tile id) consulted before the region layers; the
+  stream registers/removes each pack alongside its collision scope. Both
+  region layers stay in `terrain.bin` this phase — packs are the delivery +
+  ownership mechanism; dropping the slice layer (and its shader/paint
+  consumers) is a later cleanup.
 
 Verified: typecheck, 34/34 tests (incl. new partition-determinism and
 scope-removal/seam tests), build, identical bake hashes across runs, capture
 montages for both regions, and a 120 s soak (0 frame errors; hitches bounded
 to synchronous tile mounts — moving mesh-build into workers is Phase 2 work).
 
-Still open from the plan: per-tile terrain (terrain.bin is still whole-region),
-coarse LOD ring, IndexedDB tile cache, floating-origin re-anchoring,
-worker-side tile decode/mesh, `?at=lat,lon`, atlas journal, seam-stitched life
-districts.
+Still open from the plan: coarse LOD ring, IndexedDB tile cache,
+floating-origin re-anchoring, worker-side tile decode/mesh, `?at=lat,lon`,
+atlas journal, seam-stitched life districts. The region slice layer is also
+still whole-region — per-tile packs exist and are live, but
+paint/ground/shader consumers still read the resident slice + backdrop.
 
 ## Design invariants (non-negotiable)
 

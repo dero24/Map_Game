@@ -8,7 +8,7 @@ import { project, bboxToLocal, ringArea, centroid, pointInRing, cleanRing, assem
 import { parseColour, materialColour, roofMaterialColour, paintFromAerial } from './lib/colour.mjs';
 import { Grid, fillRings, stampSegment, components, signedDistance, edt, bilinear } from './lib/raster.mjs';
 import { terrainSampler } from './lib/terrain.mjs';
-import { partitionEntities, tileSpecs, TILE_CELL, TILE_MARGIN } from './lib/tiles.mjs';
+import { partitionEntities, tileSpecs, terrainPack, packToBin, TILE_CELL, TILE_MARGIN } from './lib/tiles.mjs';
 
 const t0 = Date.now();
 const log = (...a) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1)}s]`, ...a);
@@ -474,12 +474,27 @@ const specs = tileSpecs(B, S);
 const parts = partitionEntities({ buildings, roads, areas, lines, points }, specs, TILE_MARGIN);
 const tiles = [];
 let tBytes = 0;
+let packCount = 0;
 for (const { spec, tile } of parts) {
   const file = `tiles/${spec.id}.json`;
   const out = JSON.stringify({ ...tile, origin: ORIGIN, slice: S, backdrop: B, landmarks });
   writeFileSync(resolve(OUT, file), out);
   tBytes += out.length;
-  tiles.push({ id: spec.id, box: spec.box, lod: spec.lod, file });
+  const entry = { id: spec.id, box: spec.box, lod: spec.lod, file };
+  // Detail tiles carry their own slice-resolution terrain pack (a subgrid of the slice layer, no
+  // margin — the shared lattice keeps seams exact). Backdrop tiles sample the region backdrop layer.
+  if (spec.lod === 0) {
+    const pack = terrainPack(sliceLayer, spec.box);
+    if (pack) {
+      const { layout, buf } = packToBin(pack);
+      const tfile = `tiles/${spec.id}.terrain.bin`;
+      writeFileSync(resolve(OUT, tfile), buf);
+      entry.terrain = { file: tfile, layout };
+      tBytes += buf.length;
+      packCount++;
+    }
+  }
+  tiles.push(entry);
 }
 // The manifest doubles as the slim region record the journal/HUD/spawn logic needs:
 // everything except the bulky entity arrays (named roads are kept — labels, spawn anchors, HUD).
@@ -509,4 +524,4 @@ const paintJson = {
   buildings: buildings.map((b) => ({ r: b.r, k: b.k, lod: b.lod })),
 };
 writeFileSync(resolve(OUT, 'paint.json'), JSON.stringify(paintJson));
-log(`wrote ${tiles.length} tiles (${(tBytes / 1e6).toFixed(2)} MB) + manifest.json (${namedRoads.length} named roads) + paint.json`);
+log(`wrote ${tiles.length} tiles (${(tBytes / 1e6).toFixed(2)} MB, ${packCount} terrain packs) + manifest.json (${namedRoads.length} named roads) + paint.json`);

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 // @ts-expect-error plain js lib
-import { partitionEntities, tileSpecs } from '../scripts/lib/tiles.mjs';
+import { partitionEntities, tileSpecs, terrainPack, packToBin } from '../scripts/lib/tiles.mjs';
 
 const B = { x0: 0, z0: 0, x1: 2048, z1: 1024 };
 const SLICE = { x0: 0, z0: 0, x1: 1100, z1: 1024 }; // detail half
@@ -84,5 +84,46 @@ describe('partitionEntities', () => {
   it('is deterministic', () => {
     const again = partitionEntities(entities, tileSpecs(B, SLICE));
     expect(JSON.stringify(again)).toBe(JSON.stringify(parts));
+  });
+});
+
+describe('terrainPack', () => {
+  // A 16 m grid at 2 m cells, every field filled with its own ramp so we can spot mix-ups.
+  const gw = 8, gh = 8, cell = 2;
+  const layer = {
+    grid: { x0: 0, z0: 0, cell, w: gw, h: gh },
+    height: new Int16Array(gw * gh).map((_, i) => i * 10),
+    sdf: new Int16Array(gw * gh).map((_, i) => -i),
+    cover: new Uint8Array(gw * gh).map((_, i) => i % 100),
+    flags: new Uint8Array(gw * gh).map((_, i) => i % 3),
+    oceanD: new Uint8Array(gw * gh).map((_, i) => 255 - (i % 200)),
+  };
+
+  it('extracts the exact subgrid a tile box covers', () => {
+    const pack = terrainPack(layer, { x0: 4, z0: 4, x1: 12, z1: 12 });
+    expect(pack.grid).toEqual({ x0: 4, z0: 4, cell, w: 4, h: 4 });
+    expect([...pack.height.slice(0, 4)]).toEqual([180, 190, 200, 210]); // layer row j=2, cols i=2..5
+    expect(pack.sdf[0]).toBe(-18);
+    expect(pack.cover[5]).toBe(27); // pack (i=1,j=1) -> layer idx 27
+    expect(pack.flags.length).toBe(16);
+    expect(pack.oceanD[15]).toBe(210); // pack (i=3,j=3) -> layer idx 45
+  });
+
+  it('clamps to the layer edge and misses cleanly', () => {
+    const pack = terrainPack(layer, { x0: 12, z0: 12, x1: 30, z1: 30 });
+    expect(pack.grid).toEqual({ x0: 12, z0: 12, cell, w: 2, h: 2 });
+    expect(terrainPack(layer, { x0: 100, z0: 100, x1: 200, z1: 200 })).toBeNull();
+    expect(terrainPack(layer, { x0: -30, z0: -30, x1: -20, z1: -20 })).toBeNull();
+  });
+
+  it('serialises to an aligned layout the client can wrap in a TerrainLayer', () => {
+    const pack = terrainPack(layer, { x0: 4, z0: 4, x1: 12, z1: 12 });
+    const { layout, buf } = packToBin(pack);
+    expect(layout.grid.w).toBe(4);
+    expect(layout.height).toEqual({ offset: 0, length: 16, type: 'Int16Array' });
+    expect(layout.sdf.offset).toBe(32);
+    expect(layout.sdf.offset % 2).toBe(0);
+    const h = new Int16Array(buf.buffer.slice(buf.byteOffset + layout.height.offset, buf.byteOffset + layout.height.offset + layout.height.length * 2));
+    expect([...h.slice(0, 4)]).toEqual([180, 190, 200, 210]);
   });
 });

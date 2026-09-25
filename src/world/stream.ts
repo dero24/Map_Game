@@ -2,7 +2,7 @@
 // the same per-region builders (given a tile-scoped WorldJson), registers all its collision under one
 // WalkWorld scope, and unloads cleanly — scene objects disposed, collision tombstoned, interiors dropped.
 import * as THREE from 'three';
-import { loadTile, type AtlasManifest, type Box, type TileJson, type TileSpec, type Terrain, type World, type WorldJson } from './data';
+import { loadTile, loadTileTerrain, type AtlasManifest, type Box, type TileJson, type TileSpec, type Terrain, type TerrainLayer, type World, type WorldJson } from './data';
 import { buildBuildings, type BuildingsResult, type Door, type Footprint } from './buildings';
 import { buildStructures } from './structures';
 import { buildProps } from './props';
@@ -27,7 +27,7 @@ export interface TileArt {
   primRoads: TileJson['roads'];
 }
 
-interface Pending { spec: TileSpec; json: TileJson }
+interface Pending { spec: TileSpec; json: TileJson; terrain: TerrainLayer | null }
 
 const boxDist2 = (b: Box, x: number, z: number) => {
   const dx = Math.max(b.x0 - x, 0, x - b.x1), dz = Math.max(b.z0 - z, 0, z - b.z1);
@@ -119,8 +119,8 @@ export class TileStream {
   private fetch(t: TileSpec): Promise<Pending | null> {
     let p = this.fetching.get(t.id);
     if (!p) {
-      p = loadTile(this.base, t)
-        .then((json): Pending | null => ({ spec: t, json }))
+      p = Promise.all([loadTile(this.base, t), loadTileTerrain(this.base, t)])
+        .then(([json, terrain]): Pending | null => ({ spec: t, json, terrain }))
         .catch((e) => { this.failed.set(t.id, performance.now()); console.warn('tile load failed', t.id, e); return null; })
         .finally(() => this.fetching.delete(t.id));
       this.fetching.set(t.id, p);
@@ -130,11 +130,12 @@ export class TileStream {
 
   private mount(p: Pending | null) {
     if (!p || this.loaded.has(p.spec.id)) return;
-    const { spec, json: tj } = p;
+    const { spec, json: tj, terrain: tpack } = p;
     const ord = this.man.tiles.indexOf(spec);
     const scope = this.scopeSeq++;
     const w = this.walk;
     const keys: string[] = [], fpKeys: string[] = [], fpList: Footprint[] = [];
+    if (tpack) this.terrain.registerPatch(spec.id, tpack);
     w.beginScope(scope);
     try {
       const shim: World = { json: tj as unknown as WorldJson, terrain: this.terrain };
@@ -193,6 +194,7 @@ export class TileStream {
     } catch (e) {
       w.endScope();
       w.removeScope(scope);
+      if (tpack) this.terrain.removePatch(spec.id);
       // sweep any state the failed build registered part-way through
       if (keys.length) this.interiors.unregister(keys);
       for (const k of keys) this.plans.delete(k);
@@ -211,6 +213,7 @@ export class TileStream {
     const a = this.loaded.get(id);
     if (!a) return;
     this.walk.removeScope(a.scope);
+    this.terrain.removePatch(id);
     this.interiors.unregister(a.keys);
     for (const k of a.keys) this.plans.delete(k);
     for (const f of a.fps) { this.fpByKey.delete(f.key!); this.fpDoor.delete(f); }

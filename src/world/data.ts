@@ -104,8 +104,23 @@ export class TerrainLayer {
 }
 
 export class Terrain {
+  // Per-tile detail packs, registered/removed with the tile stream — the same lifecycle and
+  // ownership story as WalkWorld scopes. A pack covers tile∩slice on the shared lattice, so its
+  // samples are identical to the slice layer's; the patch wins where present (it's the tile's own
+  // data), then the region slice layer, then the always-resident backdrop.
+  private patches = new Map<string, TerrainLayer>();
+  patchCell = 1024;
   constructor(readonly slice: TerrainLayer, readonly backdrop: TerrainLayer) {}
-  layer(x: number, z: number) { return this.slice.contains(x, z, 2) ? this.slice : this.backdrop; }
+  registerPatch(id: string, L: TerrainLayer) { this.patches.set(id, L); }
+  removePatch(id: string) { this.patches.delete(id); }
+  private patchFor(x: number, z: number) {
+    if (!this.patches.size) return null;
+    const p = this.patches.get(`${Math.floor(x / this.patchCell)}_${Math.floor(z / this.patchCell)}`);
+    return p && p.contains(x, z) ? p : null;
+  }
+  layer(x: number, z: number) {
+    return this.patchFor(x, z) ?? (this.slice.contains(x, z, 2) ? this.slice : this.backdrop);
+  }
   heightAt(x: number, z: number) { return this.layer(x, z).heightAt(x, z); }
   sdfAt(x: number, z: number) { return this.layer(x, z).sdfAt(x, z); }
   coverAt(x: number, z: number) { return this.layer(x, z).coverAt(x, z); }
@@ -119,7 +134,7 @@ export interface World {
 
 // ---------------- atlas / tile streaming ----------------
 
-export interface TileSpec { id: string; box: Box; lod: number; file: string }
+export interface TileSpec { id: string; box: Box; lod: number; file: string; terrain?: { file: string; layout: LayerLayout } }
 
 // Region manifest: identity + slim data (named roads, pois, landmarks) + the tile grid.
 export interface AtlasManifest {
@@ -191,6 +206,14 @@ export async function loadTile(base: string, spec: TileSpec): Promise<TileJson> 
   const r = await fetch(base + spec.file);
   if (!r.ok) throw new Error(`tile ${spec.id} ${r.status}`);
   return (await r.json()) as TileJson;
+}
+
+// A tile's slice-resolution terrain pack (lod-0 tiles only; null when the tile has none).
+export async function loadTileTerrain(base: string, spec: TileSpec): Promise<TerrainLayer | null> {
+  if (!spec.terrain) return null;
+  const r = await fetch(base + spec.terrain.file);
+  if (!r.ok) throw new Error(`terrain ${spec.id} ${r.status}`);
+  return new TerrainLayer(await r.arrayBuffer(), spec.terrain.layout);
 }
 
 export async function loadWorld(base = './data/', onProgress?: (msg: string) => void): Promise<World> {
