@@ -100,3 +100,9 @@ Post-fix soak: `stalls=0`, `hitches>250ms=1`, `interior=7.75ms`, `frameErrors=0`
   on every device. `.github/workflows/pages.yml` builds `dist/` (npm ci + build, node 20,
   `public/data/` is committed so tiles ship inside the artifact) and publishes via
   `actions/deploy-pages`. Required once: Settings → Pages → Source → **GitHub Actions**.
+  Deployed: run 36200249416 green in 42 s — https://dero24.github.io/Map_Game/ now serves
+  the built bundle.
+- **Church steeple restored**: the roof-skeleton refactor dropped the backup-era steeple
+  (white tower + green 4-sided spire). Re-added on the `roofG` path — tower at the ridge's
+  longest-axis end (facade white), `cone()` spire in weathered copper green. Verified via
+  ground-level shot at Saint George's: clearly a church again.

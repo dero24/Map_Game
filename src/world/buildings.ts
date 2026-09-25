@@ -750,6 +750,28 @@ export function buildBuildings(world: World, idBase = 0): BuildingsResult {
         b.setColor(lin(0x5a5550));
         box(b, px + ox, pz + oz, ang, 1.0, 0.72, eave + ph + 0.85, eave + ph + 0.97);
       }
+      if (bd.k === 'church') {
+        // steeple: a square tower at one end of the ridge, capped with a green spire —
+        // churches should read as churches from blocks away (and in the coarse ring)
+        let bl = 0, bi2 = 0;
+        for (let i = 0; i < ring.length; i++) { const p = ring[i], q = ring[(i + 1) % ring.length]; const l = Math.hypot(q[0] - p[0], q[1] - p[1]); if (l > bl) (bl = l), (bi2 = i); }
+        const p = ring[bi2], q = ring[(bi2 + 1) % ring.length];
+        const ax = (q[0] - p[0]) / bl, az = (q[1] - p[1]) / bl;
+        let u1 = -Infinity, v1 = 0;
+        for (const v of ring) {
+          u1 = Math.max(u1, (v[0] - cx) * ax + (v[1] - cz) * az);
+          v1 = Math.max(v1, Math.abs((v[0] - cx) * -az + (v[1] - cz) * ax));
+        }
+        const ts = Math.min(4.5, v1 * 2 * 0.55);
+        const tcx = cx + ax * (u1 - ts / 2), tcz = cz + az * (u1 - ts / 2);
+        const ang = Math.atan2(az, ax);
+        b.setInfo(id, kindI, PART.wall, fo);
+        b.setColor(facade);
+        box(b, tcx, tcz, ang, ts, ts, base, eave + roofG.rise + 4);
+        b.setInfo(id, kindI, PART.roof, fo);
+        b.setColor(lin(0x5d6b58));
+        cone(b, tcx, tcz, ts * 0.72, 4, eave + roofG.rise + 4, eave + roofG.rise + 12, ang + Math.PI / 4);
+      }
     } else if (skTop) {
       walls(b, ring, base, wallY0, skTop, eave - base);
       b.setInfo(id, kindI, PART.roof, fo);
