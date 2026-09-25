@@ -16,6 +16,8 @@ import { U } from '../render/shared';
 
 const LOAD_R = 1500; // keep tiles this close (3×3 cells and then some)
 const DROP_R = 2400; // drop tiles beyond this
+const COARSE_R = 8000; // silhouette ring: lite builds (meshes only) out to the horizon
+const COARSE_BUDGET = 4; // max outstanding lite builds — they're lowest priority
 const ID_STRIDE = 1 << 16; // building-id space per tile (window-fade keys, <2^24 total)
 
 export interface TileArt {
@@ -52,6 +54,11 @@ export class TileStream {
   private fetching = new Map<string, Promise<Pending | null>>();
   private failed = new Map<string, number>(); // tile -> last failure time (retry backoff)
   private buildQueue: Pending[] = [];
+  // Coarse tier: display-only tiles in [DROP_R, COARSE_R) — meshes rebuilt from lite builds,
+  // no collision/interiors/plans. A tile entering the detail ring sheds its coarse mount.
+  private coarseLoaded = new Map<string, { spec: TileSpec; group: THREE.Group }>();
+  private coarseFetching = new Map<string, Promise<Pending | null>>();
+  private coarseQueue: Pending[] = [];
   private scopeSeq = 1;
   private dirty = true;
   private _fps: Footprint[] = [];
@@ -103,7 +110,7 @@ export class TileStream {
   get poles() { this.sync(); return this._poles; }
   get churches() { this.sync(); return this._churches; }
   get primRoads() { this.sync(); return this._primRoads; }
-  get busy() { return this.fetching.size > 0 || this.buildQueue.length > 0; }
+  get busy() { return this.fetching.size > 0 || this.buildQueue.length > 0 || this.coarseFetching.size > 0 || this.coarseQueue.length > 0; }
   doorOf(fp: Footprint) { return this.fpDoor.get(fp); }
 
   houseGrid() {
@@ -123,17 +130,31 @@ export class TileStream {
     for (const p of pends) this.mount(p);
   }
 
-  // Per-frame: kick fetches for wanted tiles, mount at most one finished tile, drop far ones.
+  // Per-frame: kick fetches for wanted tiles (detail ring first, then the coarse silhouette
+  // ring under a small budget), mount at most one finished tile of each tier, drop far ones.
   update(x: number, z: number) {
+    const now = performance.now();
     for (const t of this.man.tiles) {
       const d2 = boxDist2(t.box, x, z);
-      if (d2 > DROP_R * DROP_R && this.loaded.has(t.id)) this.unload(t.id);
-      else if (d2 < LOAD_R * LOAD_R && !this.loaded.has(t.id) && !this.fetching.has(t.id) && performance.now() - (this.failed.get(t.id) ?? -30000) > 10000) void this.fetch(t).then((p) => { if (p) this.buildQueue.push(p); });
+      if (d2 < LOAD_R * LOAD_R) {
+        // A coarse mount stays up until the detail mount swaps it — silhouette beats a hole.
+        if (!this.loaded.has(t.id) && !this.fetching.has(t.id) && now - (this.failed.get(t.id) ?? -30000) > 10000) void this.fetch(t).then((p) => { if (p) this.buildQueue.push(p); });
+      } else {
+        if (d2 > DROP_R * DROP_R && this.loaded.has(t.id)) this.unload(t.id);
+        if (d2 >= DROP_R * DROP_R && d2 < COARSE_R * COARSE_R) {
+          if (!this.loaded.has(t.id) && !this.coarseLoaded.has(t.id) && !this.coarseFetching.has(t.id) && this.coarseFetching.size < COARSE_BUDGET && now - (this.failed.get('c' + t.id) ?? -30000) > 10000) void this.fetchCoarse(t).then((p) => { if (p) this.coarseQueue.push(p); });
+        } else if (d2 >= COARSE_R * COARSE_R && this.coarseLoaded.has(t.id)) this.unloadCoarse(t.id);
+      }
     }
     if (this.buildQueue.length) {
       this.buildQueue.sort((a, b) => boxDist2(a.spec.box, x, z) - boxDist2(b.spec.box, x, z));
       const p = this.buildQueue.shift()!;
       if (boxDist2(p.spec.box, x, z) < DROP_R * DROP_R) this.mount(p);
+    }
+    if (this.coarseQueue.length) {
+      this.coarseQueue.sort((a, b) => boxDist2(a.spec.box, x, z) - boxDist2(b.spec.box, x, z));
+      const p = this.coarseQueue.shift()!;
+      if (boxDist2(p.spec.box, x, z) < COARSE_R * COARSE_R) this.mountCoarse(p);
     }
   }
 
@@ -156,18 +177,18 @@ export class TileStream {
     }
   }
 
-  private build(t: TileSpec, ord: number): Promise<BuiltTile> {
+  private build(t: TileSpec, ord: number, lite = false): Promise<BuiltTile> {
     if (!this.worker && !this.workerDead) this.spawn();
     if (this.worker) {
       const id = ++this.seq;
       return new Promise((res, rej) => {
         this.jobs.set(id, { res, rej });
-        this.worker!.postMessage({ kind: 'build', id, spec: t, idBase: ord * ID_STRIDE, terr: this.man.terrain?.slice ? this.man.terrain : undefined });
+        this.worker!.postMessage({ kind: 'build', id, spec: t, idBase: ord * ID_STRIDE, lite, terr: this.man.terrain?.slice ? this.man.terrain : undefined });
       });
     }
     // No worker support: the same pipeline on the main thread.
-    return Promise.all([loadTile(this.base, t), loadTileTerrain(this.base, t)]).then(([tj, tl]) => {
-      const tile = buildTile(tj, this.terrain, t, ord * ID_STRIDE);
+    return Promise.all([loadTile(this.base, t), lite ? Promise.resolve(null) : loadTileTerrain(this.base, t)]).then(([tj, tl]) => {
+      const tile = buildTile(tj, this.terrain, t, ord * ID_STRIDE, lite);
       tile.terr = tl ? (tl.height.buffer as ArrayBuffer) : undefined;
       return tile;
     });
@@ -185,8 +206,21 @@ export class TileStream {
     return p;
   }
 
+  private fetchCoarse(t: TileSpec): Promise<Pending | null> {
+    let p = this.coarseFetching.get(t.id);
+    if (!p) {
+      p = this.build(t, this.man.tiles.indexOf(t), true)
+        .then((tile): Pending => ({ spec: t, tile }))
+        .catch((e) => { this.failed.set('c' + t.id, performance.now()); console.warn('coarse tile load failed', t.id, e); return null; })
+        .finally(() => this.coarseFetching.delete(t.id));
+      this.coarseFetching.set(t.id, p);
+    }
+    return p;
+  }
+
   private mount(p: Pending | null) {
     if (!p || this.loaded.has(p.spec.id)) return;
+    this.unloadCoarse(p.spec.id); // seamless upgrade — the detail tile replaces its silhouette
     const { spec, tile } = p;
     const scope = this.scopeSeq++;
     const w = this.walk;
@@ -314,5 +348,36 @@ export class TileStream {
     }
     this.loaded.delete(id);
     this.markDirty();
+  }
+
+  // Coarse tier: display geometry only — objects + halo points, no collision, interiors,
+  // plans, lamp pools or terrain patch. Swapped for the detail mount on approach.
+  private mountCoarse(p: Pending | null) {
+    if (!p || this.coarseLoaded.has(p.spec.id) || this.loaded.has(p.spec.id)) return;
+    const { spec, tile } = p;
+    try {
+      const group = new THREE.Group();
+      group.name = `ctile:${spec.id}`;
+      const atlasTex = tile.atlas ? signTexture(tile.atlas) : undefined;
+      for (const o of tile.objs) group.add(buildObject(o, atlasTex));
+      group.add(haloPoints(v3s(tile.lanterns), 7, new THREE.Color(1.0, 0.85, 0.55)));
+      group.add(haloPoints(v3s(tile.towers), 1.2, new THREE.Color(1.0, 0.75, 0.45)));
+      this.scene.add(group);
+      this.coarseLoaded.set(spec.id, { spec, group });
+    } catch (e) {
+      console.warn('coarse mount failed', spec.id, e);
+    }
+  }
+
+  private unloadCoarse(id: string) {
+    const a = this.coarseLoaded.get(id);
+    if (!a) return;
+    this.scene.remove(a.group);
+    a.group.traverse((o) => {
+      const m = o as THREE.Mesh;
+      m.geometry?.dispose?.();
+      if ((m as unknown as THREE.InstancedMesh).isInstancedMesh) (m as THREE.InstancedMesh).dispose();
+    });
+    this.coarseLoaded.delete(id);
   }
 }

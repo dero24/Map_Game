@@ -9,19 +9,41 @@ import { buildProps } from './props';
 import { planInterior } from './interiors';
 import { RecWalk, packGroup, packDeck, type BuiltTile } from './pack';
 
-export function buildTile(tj: TileJson, terrain: Terrain, spec: TileSpec, idBase: number): BuiltTile {
+export function buildTile(tj: TileJson, terrain: Terrain, spec: TileSpec, idBase: number, lite = false): BuiltTile {
   const world: World = { json: tj as unknown as WorldJson, terrain };
   const w = new RecWalk(terrain, tj.backdrop);
   const bld = buildBuildings(world, idBase);
+  // Only owner-flagged entities emit — margin context exists solely for builders that need it.
+  const pj = { ...tj, roads: prim(tj.roads), areas: prim(tj.areas), lines: prim(tj.lines), points: prim(tj.points) } as unknown as WorldJson;
+  const world2: World = { json: pj, terrain };
+  if (lite) {
+    // Coarse ring: silhouettes only — building + structure meshes, no collision, interiors,
+    // signs or props. The stream mounts these as display geometry until the detail ring takes over.
+    const structures = buildStructures(world2, w);
+    return {
+      id: spec.id,
+      lod: spec.lod,
+      objs: [...packGroup(bld.group), ...packGroup(structures.group)],
+      ops: [],
+      fps: [],
+      doors: [],
+      walls: [],
+      decks: [],
+      walks: [],
+      pilings: [],
+      lanterns: bld.lanterns.flatMap((v) => [v.x, v.y, v.z]),
+      towers: structures.towers.flatMap((v) => [v.x, v.y, v.z]),
+      plans: [],
+      roads: [],
+      poles: [],
+    };
+  }
   // Seed the scratch walk with margin-context buildings so prop/sign placement queries see
   // neighbours' houses the way the live world does once neighbours have mounted (deterministically —
   // independent of mount order). The seed is context, not part of the tile's ops.
   w.recording = false;
   for (const r of bld.ctxRings) w.addPolygon(r);
   w.recording = true;
-  // Only owner-flagged entities emit — margin context exists solely for builders that need it.
-  const pj = { ...tj, roads: prim(tj.roads), areas: prim(tj.areas), lines: prim(tj.lines), points: prim(tj.points) } as unknown as WorldJson;
-  const world2: World = { json: pj, terrain };
   const structures = buildStructures(world2, w);
   const signs = buildSigns(world, bld.signs, w); // full json: intersection signs need context roads
   const props = buildProps(world2, w, structures.pierSegs, { mailboxes: bld.mailboxes });
