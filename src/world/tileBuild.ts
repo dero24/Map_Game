@@ -46,7 +46,7 @@ export function buildTile(tj: TileJson, terrain: Terrain, spec: TileSpec, idBase
   w.recording = true;
   const structures = buildStructures(world2, w);
   const signs = buildSigns(world, bld.signs, w); // full json: intersection signs need context roads
-  const props = buildProps(world2, w, structures.pierSegs, { mailboxes: bld.mailboxes });
+  const props = buildProps(world2, w, structures.pierSegs, { mailboxes: bld.mailboxes, doors: bld.doors, ctx: tj as unknown as WorldJson, box: spec.box });
   const plans: BuiltTile['plans'] = [];
   bld.footprints.forEach((f, i) => {
     if (f.door === undefined || f.kind === 'lighthouse') return;

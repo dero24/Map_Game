@@ -2,13 +2,13 @@
 // that paints warm pools on the ground at night), trees from WorldCover, moored boats, lifeguard stands.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import type { World, Road } from './data';
+import type { World, WorldJson, Road, Box } from './data';
 import type { WalkWorld } from '../player/collision';
 import { propMaterial, colored } from '../render/propMaterial';
 import { U, GLSL_NOISE } from '../render/shared';
 import { makeRng, hash01 } from '../core/rng';
 import { carGeo } from '../sim/life';
-import type { Mailbox } from './buildings';
+import type { Mailbox, Door } from './buildings';
 
 type P = [number, number];
 const unpackPts = (f: number[]): P[] => {
@@ -111,13 +111,19 @@ export function haloPoints(pts: THREE.Vector3[], size: number, color: THREE.Colo
   return pts3;
 }
 
-export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P; w: number }[], extras: { mailboxes?: Mailbox[] } = {}) {
+export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P; w: number }[], extras: { mailboxes?: Mailbox[]; doors?: Door[]; ctx?: WorldJson; box?: Box } = {}) {
   const { json, terrain } = world;
   const S = json.slice;
   const group = new THREE.Group();
   group.name = 'props';
   const rng = makeRng(7);
-  const paved = pavedMask(world, { x0: S.x0 - 250, z0: S.z0 - 250, x1: S.x1 + 250, z1: S.z1 + 250 });
+  // The paved/blocked masks must see EVERY entity — margin-context roads (own: 0) are
+  // stripped from `json` by prim(), but a tree dropped on a neighbour-owned road is still
+  // a tree in the road. ctx carries the unfiltered tile json; box bounds the tree scan to
+  // this tile's own area so overlapping scan zones never double-spawn the same tree.
+  const ctxJson = extras.ctx ?? json;
+  const maskZone = extras.box ? { x0: extras.box.x0 - 8, z0: extras.box.z0 - 8, x1: extras.box.x1 + 8, z1: extras.box.z1 + 8 } : { x0: S.x0 - 250, z0: S.z0 - 250, x1: S.x1 + 250, z1: S.z1 + 250 };
+  const paved = pavedMask({ json: ctxJson, terrain }, maskZone);
 
   // ---------- utility poles, wires, lamps ----------
   const poleMats: THREE.Matrix4[] = [];
@@ -242,7 +248,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // Nearest point on any nearby road — used to slide mistagged street trees off the carriageway.
   const roadEdge = (x: number, z: number) => {
     let best: { x: number; z: number; w: number; d: number } | null = null;
-    for (const r of json.roads) {
+    for (const r of ctxJson.roads) {
       if (r.lod || r.br) continue;
       const p = unpackPts(r.p);
       for (let i = 0; i + 1 < p.length; i++) {
@@ -263,6 +269,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       const beachy = terrain.oceanDistAt(jx, jz) < 90;
       const pr = cov === 10 ? 0.85 : beachy ? 0 : cov === 50 ? 0.035 : cov === 30 ? 0.05 : cov === 20 ? 0.3 : 0;
       if (rng.float() > pr) continue;
+      // Only emit trees this tile owns — the scan zones of adjacent tiles overlap the margin,
+      // and the rng sequence is identical per tile, so an unbounded scan would double-plant.
+      if (extras.box && (jx < extras.box.x0 || jx >= extras.box.x1 || jz < extras.box.z0 || jz >= extras.box.z1)) continue;
       if (terrain.sdfAt(jx, jz) < 3 || paved(jx, jz) || walk.blocked(jx, jz, 2.2)) continue;
       const g = terrain.heightAt(jx, jz);
       const conifer = rng.float() < (terrain.oceanDistAt(jx, jz) < 500 ? 0.55 : 0.2);
@@ -487,6 +496,148 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     stands.forEach((m, i) => im.setMatrixAt(i, m));
     im.layers.enable(1);
     group.add(im);
+  }
+
+  // ---------- street furniture: hydrants, benches, bins, planters, front hedges ----------
+  {
+    const HY = mergeGeometries([
+      colored(new THREE.CylinderGeometry(0.13, 0.15, 0.55, 6).translate(0, 0.3, 0), 0xffffff),
+      colored(new THREE.SphereGeometry(0.14, 6, 5).scale(1, 0.7, 1).translate(0, 0.6, 0), 0xffffff),
+      colored(new THREE.CylinderGeometry(0.05, 0.05, 0.34, 5).rotateZ(Math.PI / 2).translate(0, 0.44, 0), 0xffffff),
+      colored(new THREE.CylinderGeometry(0.045, 0.045, 0.1, 5).translate(0, 0.68, 0), 0xffffff),
+    ]);
+    const hydrants: THREE.Matrix4[] = [], hydCol: THREE.Color[] = [];
+    for (const b of extras.mailboxes ?? []) {
+      if (hash01(Math.floor(b.x * 7) ^ Math.floor(b.z * 13)) > 0.26) continue; // ~1 in 4 curbs
+      const a = b.yaw + Math.PI / 2;
+      const x = b.x + Math.sin(a) * 4.2, z = b.z + Math.cos(a) * 4.2;
+      if (walk.blocked(x, z, 1.6)) continue;
+      hydrants.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), b.yaw), V(1, 1, 1)));
+      hydCol.push(new THREE.Color(hash01(Math.floor(x * 5) ^ Math.floor(z * 5)) < 0.8 ? 0xb03024 : 0xd9a52c));
+      walk.addLoop([[x - 0.14, z - 0.14], [x + 0.14, z - 0.14], [x + 0.14, z + 0.14], [x - 0.14, z + 0.14]], -Infinity, terrain.heightAt(x, z) + 0.7);
+    }
+    if (hydrants.length) {
+      const im = new THREE.InstancedMesh(HY, propMaterial(), hydrants.length);
+      hydrants.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, hydCol[i]); });
+      im.layers.enable(1);
+      group.add(im);
+    }
+
+    // Benches: real bench points, plus a rim of them inside plazas, parks, pitches and the
+    // beach edge (seaward-facing there). They belong on pavement, so no paved check.
+    const BEN = mergeGeometries([
+      colored(new THREE.BoxGeometry(1.7, 0.08, 0.45).translate(0, 0.46, 0), 0xffffff),
+      colored(new THREE.BoxGeometry(1.7, 0.4, 0.06).rotateX(-0.12).translate(0, 0.82, -0.22), 0xffffff),
+      ...[-0.65, 0.65].flatMap((x) => [
+        colored(new THREE.BoxGeometry(0.08, 0.46, 0.38).translate(x, 0.23, 0), 0x4a4239),
+        colored(new THREE.BoxGeometry(0.08, 0.5, 0.06).translate(x, 0.7, -0.2), 0x4a4239),
+      ]),
+    ]);
+    const benches: THREE.Matrix4[] = [], benCol: THREE.Color[] = [];
+    const benchAt = (x: number, z: number, yaw: number) => {
+      if (walk.blocked(x, z, 1.4)) return;
+      benches.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, 1)));
+      benCol.push(new THREE.Color(rng.pick([0x8a6a4a, 0x9a8f80, 0x5d6e4f, 0x7a5b46])));
+      walk.addLoop([[x - 0.85, z - 0.3], [x + 0.85, z - 0.3], [x + 0.85, z + 0.3], [x - 0.85, z + 0.3]], -Infinity, terrain.heightAt(x, z) + 0.9);
+    };
+    for (const p of json.points) if (p.c === 'bench') benchAt(p.x, p.z, rng.float() * 6.28);
+    for (const a of json.areas) {
+      if (!['plaza', 'grass', 'pitch', 'pool', 'beach', 'playground'].includes(a.c)) continue;
+      const ring = a.o?.[0];
+      if (!ring || ring.length < 8) continue;
+      const pts = unpackPts(ring);
+      const acx = pts.reduce((s, p) => s + p[0], 0) / pts.length, acz = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+      const faceOut = a.c === 'beach'; // beach benches look at the water
+      let along = 0;
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+        along += L;
+        if (along < 42) continue;
+        along = 0;
+        const bx = pts[i][0] + (pts[i + 1][0] - pts[i][0]) * 0.5, bz = pts[i][1] + (pts[i + 1][1] - pts[i][1]) * 0.5;
+        const yaw = Math.atan2(acx - bx, acz - bz) + (faceOut ? Math.PI : 0);
+        benchAt(bx, bz, yaw);
+      }
+    }
+    if (benches.length) {
+      const im = new THREE.InstancedMesh(BEN, propMaterial(), benches.length);
+      benches.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, benCol[i]); });
+      im.layers.enable(1);
+      group.add(im);
+    }
+
+    // Bins: beside ~40% of benches, near plaza edges and a sprinkle at parking corners.
+    const CAN = mergeGeometries([
+      colored(new THREE.CylinderGeometry(0.26, 0.24, 0.72, 7).translate(0, 0.38, 0), 0xffffff),
+      colored(new THREE.CylinderGeometry(0.3, 0.3, 0.08, 7).translate(0, 0.76, 0), 0x3a3d38),
+      colored(new THREE.CylinderGeometry(0.1, 0.1, 0.06, 6).translate(0, 0.83, 0), 0x3a3d38),
+    ]);
+    const cans: THREE.Matrix4[] = [], canCol: THREE.Color[] = [];
+    const canAt = (x: number, z: number) => {
+      if (walk.blocked(x, z, 1.2)) return;
+      cans.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(1, 1, 1)));
+      canCol.push(new THREE.Color(rng.pick([0x4a5548, 0x5a6166, 0x3e4a42, 0x6a6e5c])));
+      walk.addLoop([[x - 0.2, z - 0.2], [x + 0.2, z - 0.2], [x + 0.2, z + 0.2], [x - 0.2, z + 0.2]], -Infinity, terrain.heightAt(x, z) + 0.85);
+    };
+    benches.forEach((m, i) => {
+      if (i % 3 !== 0) return;
+      const e = m.elements;
+      const a = rng.float() * 6.28;
+      canAt(e[12] + Math.sin(a) * 1.5, e[14] + Math.cos(a) * 1.5);
+    });
+    if (cans.length) {
+      const im = new THREE.InstancedMesh(CAN, propMaterial(), cans.length);
+      cans.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, canCol[i]); });
+      im.layers.enable(1);
+      group.add(im);
+    }
+
+    // Planters beside doors + hedge strips flanking the front walk — both need door data.
+    if (extras.doors?.length) {
+      const POT = mergeGeometries([
+        colored(new THREE.CylinderGeometry(0.2, 0.15, 0.3, 6).translate(0, 0.15, 0), 0xa9623f),
+        blob(0.26, 0.42, 0, 0, 31),
+      ]);
+      const pots: THREE.Matrix4[] = [];
+      const hedgeM: THREE.Matrix4[] = [], hedgeC: THREE.Color[] = [];
+      for (const d of extras.doors) {
+        const h0 = hash01(Math.floor(d.wx * 11) ^ Math.floor(d.wz * 17));
+        const tx = -d.nz, tz = d.nx; // along the house front
+        if (h0 < 0.2) {
+          // planter pair tucked beside the door
+          for (const s of h0 < 0.08 ? [-0.85, 0.85] : [h0 < 0.12 ? -0.8 : 0.8]) {
+            const x = d.wx + d.nx * 0.7 + tx * s, z = d.wz + d.nz * 0.7 + tz * s;
+            if (walk.blocked(x, z, 0.8)) continue;
+            pots.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion(), V(1, 0.9 + h0, 1)));
+            walk.addLoop([[x - 0.16, z - 0.16], [x + 0.16, z - 0.16], [x + 0.16, z + 0.16], [x - 0.16, z + 0.16]], -Infinity, terrain.heightAt(x, z) + 0.6);
+          }
+        }
+        if (h0 > 0.38 && h0 < 0.6) {
+          // hedge run parallel to the front, split to leave the walk clear
+          const D = 6.0, LEN = 3.4;
+          for (const s of [-2.9, 2.9]) {
+            const hx = d.wx + d.nx * D + tx * s, hz = d.wz + d.nz * D + tz * s;
+            const ax = hx - tx * LEN / 2, az = hz - tz * LEN / 2, bxx = hx + tx * LEN / 2, bz2 = hz + tz * LEN / 2;
+            if (walk.blocked(ax, az, 1) || walk.blocked(bxx, bz2, 1)) continue;
+            hedgeM.push(new THREE.Matrix4().compose(V(hx, terrain.heightAt(hx, hz), hz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(tz, tx)), V(1, 1, 1)));
+            hedgeC.push(new THREE.Color(rng.pick(green)).lerp(new THREE.Color(0x2e4630), 0.15));
+            walk.addWall([ax, az], [bxx, bz2], -Infinity, terrain.heightAt(hx, hz) + 0.95);
+          }
+        }
+      }
+      if (pots.length) {
+        const im = new THREE.InstancedMesh(POT, propMaterial(), pots.length);
+        pots.forEach((m, i) => im.setMatrixAt(i, m));
+        im.layers.enable(1);
+        group.add(im);
+      }
+      if (hedgeM.length) {
+        const im = new THREE.InstancedMesh(colored(new THREE.BoxGeometry(3.4, 0.85, 0.55).translate(0, 0.48, 0), 0xffffff), propMaterial({ foliage: true }), hedgeM.length);
+        hedgeM.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, hedgeC[i]); });
+        im.layers.enable(1);
+        group.add(im);
+      }
+    }
   }
 
   return { group, lampHeads, lampMap: lc, lampBox };
