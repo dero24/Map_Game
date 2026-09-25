@@ -92,3 +92,11 @@ Post-fix soak: `stalls=0`, `hitches>250ms=1`, `interior=7.75ms`, `frameErrors=0`
 - **Fatal error overlay** (`#fatal`): `error`/`unhandledrejection` print to an on-screen
   panel — screenshot-able on phones.
 - Small-screen CSS: intro card, HUD, journal collapse to column under 640 px.
+
+## 2026-09-24 (night) — GitHub Pages deploy
+
+- Pages was set to "Deploy from a branch: main /root" → it served the **raw TS source** —
+  `index.html` loads but `./src/main.ts` can never execute → intro stuck at "mixing paints…"
+  on every device. `.github/workflows/pages.yml` builds `dist/` (npm ci + build, node 20,
+  `public/data/` is committed so tiles ship inside the artifact) and publishes via
+  `actions/deploy-pages`. Required once: Settings → Pages → Source → **GitHub Actions**.
