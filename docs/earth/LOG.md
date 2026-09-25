@@ -44,3 +44,16 @@ Newest first. One entry per work session: what changed, what was verified, what'
   margins (0.8/1.6/1.0 m — furniture may sit on pavement, never in lanes).
 - Re-verified via porch/doorway/raised/shop + residential top-downs: shallow yards now skip
   hedges instead of planting on the sidewalk; lanes and kerbs clear.
+
+## 2026-09-24 (night) — Interior amortization
+
+- `Interiors.build` became `buildGen` — a generator yielding between sections (facade walls,
+  per-storey slabs, per-partition, per-flight stairs, per-room furniture, assembly).
+  `activate()` now lands state immediately and queues a pending build; `pump()` inside
+  `update()` advances it under a ~3.5 ms/frame budget. The ~16 m door-proximity target means
+  the approach walk covers the whole build; mesh swaps in atomically on completion.
+  `prime()` keeps a synchronous drain for shader warmup at load.
+- Soak: worst interior subsystem ms 112 → **7.3**, `stalls=0`, `hitches>250ms=0`,
+  `frameErrors=0`, `maxFrame=167` over 90 s — the last real in-game stall is gone (residual
+  multi-second frames from earlier soaks proved environmental).
+- Interior montage (inside / inside-night / stairs / doorway): identical output.

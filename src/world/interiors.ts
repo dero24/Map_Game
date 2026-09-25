@@ -261,6 +261,7 @@ export class Interiors {
   private npcGeo = pedGeo();
   private lights: Light[] = [];
   private failed = new Set<string>();
+  private pending: { fi: string; gen: Generator<void, THREE.Object3D, void> } | null = null;
   private openAmt = 0;
   indoors = false;
   onStairs = false;
@@ -296,6 +297,7 @@ export class Interiors {
   }
 
   update(x: number, z: number, dt: number, feet = 0) {
+    this.pump();
     const inside = this.walk.interiorAt(x, z, feet);
     this.indoors = inside >= 0 && inside === this.walkId(this.active);
     // windows become real openings as you come close (dithered cross-fade, no popping)
@@ -349,9 +351,30 @@ export class Interiors {
   }
 
   // Build (or drop) a building's interior right now — used to compile the interior shaders during loading.
-  prime(fi: string | null) { this.activate(fi); }
+  prime(fi: string | null) { this.activate(fi, true); }
 
-  private activate(fi: string | null) {
+  // Interior builds are sliced across frames: activation lands instantly (collision, door and
+  // window uniforms go live, the old interior drops) while a pending generator assembles the
+  // new mesh over ~3.5 ms/frame slices — the approach walk (target picks ~16 m out) hides it.
+  private pump() {
+    const p = this.pending;
+    if (!p) return;
+    const t0 = performance.now();
+    try {
+      let r = p.gen.next();
+      while (!r.done && performance.now() - t0 < 3.5) r = p.gen.next();
+      if (!r.done) return;
+      this.mesh = r.value;
+      this.group.add(this.mesh);
+    } catch (e) {
+      console.warn('interior build failed', p.fi, e);
+      this.failed.add(p.fi);
+      this.mesh = null;
+    }
+    this.pending = null;
+  }
+
+  private activate(fi: string | null, sync = false) {
     if (this.mesh) {
       this.group.remove(this.mesh);
       this.mesh.traverse((o) => {
@@ -361,6 +384,7 @@ export class Interiors {
       });
       this.mesh = null;
     }
+    this.pending = null;
     this.active = fi;
     this.lights = [];
     this.openAmt = 0;
@@ -383,8 +407,10 @@ export class Interiors {
     activeBuilding.uOpenDoor.value.set(P.door.wx, P.door.y, P.door.wz, P.door.w / 2);
     activeBuilding.uOpenDoorH.value = P.door.h;
     try {
-      this.mesh = this.build(P, fp);
-      this.group.add(this.mesh);
+      if (sync) {
+        this.mesh = this.build(P, fp);
+        this.group.add(this.mesh);
+      } else this.pending = { fi, gen: this.buildGen(P, fp) };
     } catch (e) {
       console.warn('interior build failed', fi, e);
       this.failed.add(fi);
@@ -393,6 +419,13 @@ export class Interiors {
   }
 
   private build(P: Plan, fp: Footprint): THREE.Object3D {
+    const g = this.buildGen(P, fp);
+    let r = g.next();
+    while (!r.done) r = g.next();
+    return r.value;
+  }
+
+  private *buildGen(P: Plan, fp: Footprint): Generator<void, THREE.Object3D, void> {
     const rng = makeRng(Math.floor(fp.seed * 1e9) ^ 0x1234);
     const m = new Mesher();
     const kind = KIND[fp.kind as keyof typeof KIND] ?? 0;
@@ -424,6 +457,7 @@ export class Interiors {
         [[0, y0 - base, len, eave], [len, y0 - base, len, eave], [len, y1 - base, len, eave], [0, y1 - base, len, eave]]);
     }
     m.setOut(0, 0);
+    yield; // facade shell done
 
     // Floors and ceilings for each storey, with the stairwell openings cut out.
     const holeRing = (F: Flight) => [toW(P, F.u0, F.v0), toW(P, F.u1, F.v0), toW(P, F.u1, F.v1), toW(P, F.u0, F.v1)] as P2[];
@@ -441,6 +475,7 @@ export class Interiors {
       ringFlat(fl(k) + 0.01, true, P.flights.filter((F) => F.level === k - 1).map(holeRing), IP.floor);
       const cy = k === P.levels - 1 ? top : fl(k + 1) - 0.02;
       ringFlat(cy, false, P.flights.filter((F) => F.level === k).map(holeRing), IP.ceil);
+      yield; // one storey of slab+ceiling done
     }
 
     // Local-frame box (furniture, partitions, stairs).
@@ -539,10 +574,12 @@ export class Interiors {
           box(ua - dir * 0.03, ub, vm - 0.33, vm + 0.33, y + (i + 1) * rise, y + (i + 1) * rise + 0.012, rc, IP.fabric);
         }
       }
+      yield; // one staircase done
     }
 
     // ---- partitions with doorways, casings and a lintel, on every storey ----
-    for (const pt of P.parts)
+    for (const pt of P.parts) {
+      yield; // one partition wall's worth
       for (const sg of pt.segs)
         for (let k = 0; k < P.levels; k++) {
           const y = fl(k), yc = k === P.levels - 1 ? top : fl(k + 1);
@@ -555,6 +592,7 @@ export class Interiors {
           box(pt.u - 0.08, pt.u + 0.08, sg.gap - 0.58, sg.gap + 0.58, y + 2.15, y + 2.25, 0xf4f1ea);
           box(pt.u - 0.08, pt.u + 0.08, lo, hi, y, y + 0.1, 0x7a6048); // baseboard
         }
+    }
 
     // ---- the front door, standing open inward ----
     {
@@ -830,6 +868,7 @@ export class Interiors {
     };
 
     for (const R of rooms) {
+      yield; // one room's furniture done
       const y = fl(R.level);
       const cy = R.level === P.levels - 1 ? top : fl(R.level + 1);
       const fab = FABRIC[Math.floor(rng.float() * FABRIC.length)];
@@ -1145,6 +1184,7 @@ export class Interiors {
     }
 
     // Residents: a few people where people would be.
+    yield; // all geometry accumulated — assemble
     const group = new THREE.Group();
     group.add(new THREE.Mesh(m.geometry(), this.mat));
     const n = Math.min(4, npcSpots.length, 1 + Math.floor(rng.float() * 3));

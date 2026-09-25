@@ -18,11 +18,14 @@ walking — forever — while the world paints itself around you. The design liv
 | F | `?at=lat,lon` deep links + region picking (slice > backdrop > nearest) | ✅ done | `154cf60` |
 | — | In-game teleport (`G` → lat,lon; doorstep-snap; cross-region via `?at`) | ✅ done | `d3f9b92` |
 | — | Review fixes: worker-crash rejection, late coarse swap | ✅ done | `5764762` |
-| — | Street trees off carriageway; paved mask sees context roads; tree scan bounded to own box | ✅ done | `5199fe4` + follow-up |
+| — | Street trees off carriageway; paved mask sees context roads; tree scan bounded to own box | ✅ done | `5199fe4` + `66b9d1d` |
+| — | Street furniture variety: hydrants, benches, bins, planters, front hedges | ✅ done | `66b9d1d` |
+| — | Placement fix: `clearOfRoad` margins keep all furniture off lanes/sidewalks | ✅ done | `a9ae915` |
+| — | Interior amortization: `buildGen` sliced ~3.5 ms/frame, atomic swap on finish | ✅ done | pending |
 
 ## Next up (per masterplan, in rough order)
 
-- Amortize interior generation — `interiors.update` still spikes ~112–250 ms on plan entry.
+- ~~Amortize interior generation~~ — done: worst subsystem 112 ms → 7.3 ms, soak `stalls=0`, `hitches=0`.
 - Atlas journaling improvements (the journal exists; "humanity map" is Phase 5).
 - Seam-stitched life districts (ambient life across tile boundaries).
 - On-demand planet tile generation (browser-worker bake vs $0 Cloudflare worker — needs a spike first).
