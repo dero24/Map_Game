@@ -234,10 +234,28 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   group.add(haloPoints(lampHeads, 1.6, new THREE.Color(1.0, 0.7, 0.38)));
 
   // ---------- trees ----------
-  const trees: { m: THREE.Matrix4; c: THREE.Color; pine: boolean }[] = [];
+  // kinds: 0 round deciduous, 1 tall oak, 2 shrub, 3 pine, 4 spruce
+  const trees: { m: THREE.Matrix4; c: THREE.Color; k: number }[] = [];
   const zone = { x0: S.x0 - 250, z0: S.z0 - 250, x1: S.x1 + 250, z1: S.z1 + 250 };
   const G = 9;
   const green = [0x4d6a31, 0x5b7536, 0x6a823e, 0x55703a, 0x72893f, 0x3f5a2e];
+  // Nearest point on any nearby road — used to slide mistagged street trees off the carriageway.
+  const roadEdge = (x: number, z: number) => {
+    let best: { x: number; z: number; w: number; d: number } | null = null;
+    for (const r of json.roads) {
+      if (r.lod || r.br) continue;
+      const p = unpackPts(r.p);
+      for (let i = 0; i + 1 < p.length; i++) {
+        const dx = p[i + 1][0] - p[i][0], dz = p[i + 1][1] - p[i][1];
+        const L2 = dx * dx + dz * dz || 1;
+        const t = Math.max(0, Math.min(1, ((x - p[i][0]) * dx + (z - p[i][1]) * dz) / L2));
+        const qx = p[i][0] + dx * t, qz = p[i][1] + dz * t;
+        const d = Math.hypot(x - qx, z - qz);
+        if (!best || d < best.d) best = { x: qx, z: qz, w: r.w, d };
+      }
+    }
+    return best && best.d < 60 ? best : null;
+  };
   for (let z = zone.z0; z < zone.z1; z += G)
     for (let x = zone.x0; x < zone.x1; x += G) {
       const jx = x + rng.float() * G, jz = z + rng.float() * G;
@@ -247,24 +265,41 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       if (rng.float() > pr) continue;
       if (terrain.sdfAt(jx, jz) < 3 || paved(jx, jz) || walk.blocked(jx, jz, 2.2)) continue;
       const g = terrain.heightAt(jx, jz);
-      const pine = rng.float() < (terrain.oceanDistAt(jx, jz) < 500 ? 0.55 : 0.2);
-      const h = (pine ? 7 : 8) + rng.float() * 7;
+      const conifer = rng.float() < (terrain.oceanDistAt(jx, jz) < 500 ? 0.55 : 0.2);
+      const k = conifer ? (rng.float() < 0.6 ? 3 : 4) : rng.float() < 0.55 ? 0 : rng.float() < 0.75 ? 1 : 2;
+      const h = k === 2 ? 2.4 + rng.float() * 1.6 : (k >= 3 ? 7 : 8) + rng.float() * 7;
       const s = h / 10;
-      const m = new THREE.Matrix4().compose(V(jx, g - 0.2, jz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(s * (0.85 + rng.float() * 0.3), s, s * (0.85 + rng.float() * 0.3)));
+      const m = new THREE.Matrix4().compose(V(jx, g - 0.2, jz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(s * (0.85 + rng.float() * 0.3), s * (k === 2 ? 1.3 : 1), s * (0.85 + rng.float() * 0.3)));
       const c = new THREE.Color(rng.pick(green));
-      if (rng.float() < 0.12) c.lerp(new THREE.Color(0xb59a3e), 0.45); // first hints of autumn
-      trees.push({ m, c, pine });
+      if (k === 4) c.lerp(new THREE.Color(0x2e4630), 0.55); // spruces run dark
+      else if (rng.float() < 0.12) c.lerp(new THREE.Color(0xb59a3e), 0.45); // first hints of autumn
+      trees.push({ m, c, k });
     }
-  for (const p of json.points) if (p.c === 'tree' && terrain.slice.contains(p.x, p.z)) trees.push({ m: new THREE.Matrix4().compose(V(p.x, terrain.heightAt(p.x, p.z), p.z), new THREE.Quaternion(), V(0.9, 0.9, 0.9)), c: new THREE.Color(green[1]), pine: false });
+  for (const p of json.points) {
+    if (p.c !== 'tree' || !terrain.slice.contains(p.x, p.z)) continue;
+    let { x, z } = p;
+    if (paved(x, z)) {
+      // OSM street trees are often tagged on the carriageway — slide to the near verge
+      // instead of dropping them, so the canopy still shades the street.
+      const e = roadEdge(x, z);
+      if (!e) continue;
+      const nx = x - e.x, nz = z - e.z, L = Math.hypot(nx, nz) || 1;
+      const out = e.w / 2 + 2.0 + rng.float() * 1.2;
+      x = e.x + (nx / L) * out;
+      z = e.z + (nz / L) * out;
+      if (paved(x, z) || walk.blocked(x, z, 2.2)) continue;
+    }
+    trees.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(0.9, 0.9, 0.9)), c: new THREE.Color(rng.pick(green)), k: rng.float() < 0.6 ? 0 : 1 });
+  }
 
-  const blob = (r: number, y: number, ox: number, oz: number, seed: number) => {
+  const blob = (r: number, y: number, ox: number, oz: number, seed: number, sy = 0.85) => {
     const g = new THREE.IcosahedronGeometry(r, 1);
     const pos = g.attributes.position;
     for (let i = 0; i < pos.count; i++) {
       const v = V(pos.getX(i), pos.getY(i), pos.getZ(i));
       const n = 0.82 + 0.3 * hash01(Math.floor((v.x + 9) * 3) * 73 + Math.floor((v.y + 9) * 3) * 19 + Math.floor((v.z + 9) * 3) + seed);
       v.multiplyScalar(n);
-      pos.setXYZ(i, v.x + ox, v.y * 0.85 + y, v.z + oz);
+      pos.setXYZ(i, v.x + ox, v.y * sy + y, v.z + oz);
     }
     g.computeVertexNormals();
     return colored(g, 0xffffff);
@@ -273,15 +308,28 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     colored(new THREE.CylinderGeometry(0.18, 0.3, 4.4, 5).translate(0, 2.2, 0), 0x6b5a48),
     blob(2.6, 6.2, 0, 0, 1), blob(2.0, 7.4, 1.4, 0.6, 2), blob(1.9, 5.6, -1.3, -0.8, 3), blob(1.6, 8.1, -0.4, 1.0, 4),
   ]);
+  const oak = mergeGeometries([
+    colored(new THREE.CylinderGeometry(0.22, 0.36, 5.6, 5).translate(0, 2.8, 0), 0x6b5a48),
+    blob(3.1, 7.6, 0, 0, 11, 0.62), blob(2.4, 8.4, 1.9, 0.8, 12, 0.55), blob(2.2, 6.9, -1.8, -0.7, 13, 0.6), blob(1.8, 8.9, -0.4, 1.5, 14, 0.5),
+  ]);
+  const shrub = mergeGeometries([
+    colored(new THREE.CylinderGeometry(0.09, 0.14, 1.3, 5).translate(0, 0.65, 0), 0x6b5a48),
+    blob(1.35, 1.8, 0, 0, 15), blob(0.95, 2.4, 0.75, -0.35, 16), blob(0.9, 1.6, -0.7, 0.4, 17),
+  ]);
   const pineGeo = mergeGeometries([
     colored(new THREE.CylinderGeometry(0.16, 0.26, 6.5, 5).translate(0, 3.25, 0), 0x6b5140),
     blob(1.9, 6.4, 0.3, 0, 5), blob(1.5, 8.2, -0.4, 0.3, 6), blob(1.4, 5.0, 0.8, -0.5, 7), blob(1.0, 9.4, 0, 0, 8),
   ]);
+  const spruce = mergeGeometries([
+    colored(new THREE.CylinderGeometry(0.12, 0.2, 6.0, 5).translate(0, 3.0, 0), 0x5d4a3a),
+    blob(1.6, 4.3, 0, 0, 18, 0.95), blob(1.3, 5.7, 0.15, -0.1, 19, 0.95), blob(1.0, 7.0, -0.1, 0.15, 20, 0.95), blob(0.7, 8.2, 0, 0, 21, 0.95), blob(0.45, 9.1, 0, 0, 22, 0.95),
+  ]);
   // Trunks keep their brown: instance colour only tints foliage (vertex color white there).
-  for (const [geo, pine] of [[decid, false], [pineGeo, true]] as const) {
-    const list = trees.filter((t) => t.pine === pine);
+  const geos = [decid, oak, shrub, pineGeo, spruce];
+  for (let k = 0; k < geos.length; k++) {
+    const list = trees.filter((t) => t.k === k);
     if (!list.length) continue;
-    const im = new THREE.InstancedMesh(geo, propMaterial({ wind: true, foliage: true }), list.length);
+    const im = new THREE.InstancedMesh(geos[k], propMaterial({ wind: true, foliage: true }), list.length);
     list.forEach((t, i) => { im.setMatrixAt(i, t.m); im.setColorAt(i, t.c); });
     im.layers.enable(1);
     im.computeBoundingSphere();
