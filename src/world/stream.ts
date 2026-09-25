@@ -169,6 +169,16 @@ export class TileStream {
         if (m.kind === 'built') j.res(m.tile);
         else j.rej(new Error(m.message ?? 'tile build failed'));
       };
+      w.onerror = (e) => {
+        // Hard crash (OOM/uncaught): in-flight jobs would never resolve — reject them and
+        // fall back to in-page builds so no tile load hangs forever.
+        const jobs = [...this.jobs.values()];
+        this.jobs.clear();
+        for (const j of jobs) j.rej(new Error('tile worker died'));
+        this.worker = null;
+        this.workerDead = true;
+        console.warn('tile worker failed; building in-page from now on', e.message);
+      };
       // Worker fetches resolve against its own module URL — hand it an absolute base.
       w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man) });
       this.worker = w;
@@ -220,7 +230,6 @@ export class TileStream {
 
   private mount(p: Pending | null) {
     if (!p || this.loaded.has(p.spec.id)) return;
-    this.unloadCoarse(p.spec.id); // seamless upgrade — the detail tile replaces its silhouette
     const { spec, tile } = p;
     const scope = this.scopeSeq++;
     const w = this.walk;
@@ -267,6 +276,7 @@ export class TileStream {
       for (const o of tile.objs) group.add(buildObject(o, atlasTex));
       group.add(haloPoints(v3s(tile.lanterns), 7, new THREE.Color(1.0, 0.85, 0.55)));
       group.add(haloPoints(v3s(tile.towers), 1.2, new THREE.Color(1.0, 0.75, 0.45)));
+      this.unloadCoarse(spec.id); // seamless upgrade — detail replaces the silhouette only once ready
       this.scene.add(group);
       if (tile.lamp) {
         this.lampBits.set(spec.id, tile.lamp);
