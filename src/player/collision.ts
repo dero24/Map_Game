@@ -13,7 +13,14 @@ export interface Deck {
   cum: number[]; // cumulative length at each point
   halfWidth: number;
   heightAt: (s: number) => number;
+  // The height profile, when the builder knows it — lets the tile stream ship the deck across a
+  // worker boundary exactly instead of sampling heightAt.
+  profile?: DeckProfile;
 }
+export type DeckProfile =
+  | { k: 'const'; y: number }
+  | { k: 'ramp'; y0: number; y1: number; total: number }
+  | { k: 'arch'; hA: number; hB: number; peak: number; total: number };
 // Stairwell opening: storey `level` has no floor inside `ring`.
 export interface Hole { level: number; ring: P2[] }
 export interface Floors { floor0: number; floorH: number; levels: number; holes?: Hole[]; ground?: boolean }

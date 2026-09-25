@@ -18,6 +18,12 @@
   porch clearance and sign intersections). `WalkWorld.beginScope/endScope/removeScope` scopes all collision per tile;
   interiors register under `"tile:idx"` keys and unregister on unload. The ambient-life worker re-inits when the
   loaded set settles (or after 4 s). Regions without a manifest fall back to a single-tile world.json.
+- Tile builds run in a module worker (`src/world/tile.worker.ts`): fetch + decode + builders + interior plans +
+  a recording scratch `WalkWorld` happen off-thread (`src/world/tileBuild.ts`, shared with the no-worker fallback).
+  Results cross as `BuiltTile` records (`src/world/pack.ts`): attribute arrays + material tags → `buildObject`
+  recreates meshes/materials on mount; canvas work ships as `ImageBitmap` (sign atlas; per-tile lamp pools are
+  composited into `U.uLampMap` by the stream); collision ships as `WalkOp`s replayed inside the scope; deck heights
+  ship as exact `DeckProfile` params (ramp/const/arch on the `Deck` interface).
 - Terrain packs: lod-0 tiles also fetch `tiles/<cx>_<cz>.terrain.bin` — a subgrid of the slice layer snapped to the
   shared lattice (no margin). `Terrain.registerPatch/removePatch` (called alongside the walk scope on mount/unload)
   makes the pack the preferred sampling layer for its box; region slice/backdrop layers stay resident, so unloaded

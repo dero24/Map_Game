@@ -179,7 +179,7 @@ export function buildStructures(world: World, walk: WalkWorld) {
         V(a.p.x + a.nx * hw + a.p.tx * 0.2, a.y + 0.02, a.p.z + a.nz * hw + a.p.tz * 0.2),
         V(a.p.x + a.nx * -hw + a.p.tx * 0.2, a.y + 0.02, a.p.z + a.nz * -hw + a.p.tz * 0.2), up);
     }
-    walk.addDeck({ pts: pts.map((p) => [p.x, p.z]), cum: pts.map((p) => p.s), halfWidth: hw - 0.35, heightAt: (s) => heightAt(s) + 0.1 });
+    walk.addDeck({ pts: pts.map((p) => [p.x, p.z]), cum: pts.map((p) => p.s), halfWidth: hw - 0.35, heightAt: (s) => heightAt(s) + 0.1, profile: { k: 'arch', hA: hA + 0.1, hB: hB + 0.1, peak: peak + 0.1, total: L } });
   }
 
   // ---------- piers & docks ----------
@@ -216,7 +216,7 @@ export function buildStructures(world: World, walk: WalkWorld) {
     for (let i = 0; i + 1 < p.length; i++) pierSegs.push({ a: p[i], b: p[i + 1], w });
     const cum = [0];
     for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]));
-    walk.addDeck({ pts: p, cum, halfWidth: w / 2, heightAt: () => DECK });
+    walk.addDeck({ pts: p, cum, halfWidth: w / 2, heightAt: () => DECK, profile: { k: 'const', y: DECK } });
   }
   if (posts.length) {
     const pg = colored(new THREE.CylinderGeometry(0.13, 0.15, 1, 6), 0x5c4e3f);

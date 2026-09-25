@@ -3,7 +3,10 @@
 export interface Box { x0: number; z0: number; x1: number; z1: number }
 export interface GridHeader { x0: number; z0: number; cell: number; w: number; h: number }
 interface Chunk { offset: number; length: number; type: string }
-interface LayerLayout { grid: GridHeader; height: Chunk; sdf: Chunk; cover: Chunk; flags: Chunk; oceanD: Chunk }
+export interface LayerLayout { grid: GridHeader; height: Chunk; sdf: Chunk; cover: Chunk; flags: Chunk; oceanD: Chunk }
+
+// Owner-flagged entities only — margin context (own: 0) is emitted once by its owner tile.
+export const prim = <T extends { own?: number }>(a: T[]) => a.filter((e) => e.own !== 0);
 
 export type RoofKind = 'flat' | 'gable' | 'hip' | 'skillion' | 'tower';
 export type BuildingKind = 'house' | 'shed' | 'commercial' | 'large' | 'church' | 'lighthouse';

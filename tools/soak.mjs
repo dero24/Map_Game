@@ -29,6 +29,8 @@ let code = 0;
 try {
   await page.goto(`http://localhost:${PORT}/?region=${REGION}`, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForFunction('window.__READY__ === true', null, { timeout: 180000 });
+  // Optional instrumentation: --inject="…" evaluates a snippet before driving (wrap subsystems, counters).
+  if (args.inject) await page.evaluate(String(args.inject));
   await page.evaluate(() => {
     document.getElementById('intro')?.classList.add('hidden');
     const w = window;

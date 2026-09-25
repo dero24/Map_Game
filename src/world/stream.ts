@@ -1,14 +1,17 @@
-// Tile streaming: keeps a ring of neighbourhood tiles alive around the walker. Each tile is built with
-// the same per-region builders (given a tile-scoped WorldJson), registers all its collision under one
-// WalkWorld scope, and unloads cleanly — scene objects disposed, collision tombstoned, interiors dropped.
+// Tile streaming: keeps a ring of neighbourhood tiles alive around the walker. Tiles are decoded
+// and built in a worker (src/world/tile.worker.ts — same pipeline as the in-page fallback), then
+// mounted cheaply: packed objects rebuilt into scene meshes, collision ops replayed inside a
+// WalkWorld scope, interiors registered under "tile:idx" keys. Unload removes all three cleanly.
 import * as THREE from 'three';
-import { loadTile, loadTileTerrain, type AtlasManifest, type Box, type TileJson, type TileSpec, type Terrain, type TerrainLayer, type World, type WorldJson } from './data';
-import { buildBuildings, type BuildingsResult, type Door, type Footprint } from './buildings';
-import { buildStructures } from './structures';
-import { buildProps } from './props';
-import { buildSigns } from './signs';
-import { planInterior, registerPlan, type Interiors, type Plan } from './interiors';
+import { loadTile, loadTileTerrain, type AtlasManifest, type Box, type Road, type TileSpec, type Terrain, TerrainLayer } from './data';
+import type { Door, Footprint } from './buildings';
+import { buildTile } from './tileBuild';
+import { buildObject, replayOps, unpackDeck, type BuiltTile } from './pack';
+import { haloPoints } from './props';
+import { signTexture } from './signs';
+import { registerPlan, type Interiors, type Plan } from './interiors';
 import type { WalkWorld } from '../player/collision';
+import { U } from '../render/shared';
 
 const LOAD_R = 1500; // keep tiles this close (3×3 cells and then some)
 const DROP_R = 2400; // drop tiles beyond this
@@ -24,16 +27,21 @@ export interface TileArt {
   walks: number[];
   poles: unknown[];
   churches: [number, number][];
-  primRoads: TileJson['roads'];
+  primRoads: Road[];
 }
 
-interface Pending { spec: TileSpec; json: TileJson; terrain: TerrainLayer | null }
+interface Pending { spec: TileSpec; tile: BuiltTile }
 
 const boxDist2 = (b: Box, x: number, z: number) => {
   const dx = Math.max(b.x0 - x, 0, x - b.x1), dz = Math.max(b.z0 - z, 0, z - b.z1);
   return dx * dx + dz * dz;
 };
-const prim = <T extends { own?: number }>(a: T[]) => a.filter((e) => e.own !== 0);
+
+const v3s = (flat: number[]) => {
+  const out: THREE.Vector3[] = [];
+  for (let i = 0; i + 2 < flat.length; i += 3) out.push(new THREE.Vector3(flat[i], flat[i + 1], flat[i + 2]));
+  return out;
+};
 
 export class TileStream {
   loaded = new Map<string, TileArt>();
@@ -49,7 +57,16 @@ export class TileStream {
   private _doors: Door[] = [];
   private _poles: unknown[] = [];
   private _churches: [number, number][] = [];
-  private _primRoads: TileJson['roads'] = [];
+  private _primRoads: Road[] = [];
+  // The tile worker: decode + mesh + collision run off-thread; jobs resolve with a BuiltTile.
+  private worker: Worker | null = null;
+  private workerDead = false;
+  private seq = 0;
+  private jobs = new Map<number, { res: (t: BuiltTile) => void; rej: (e: Error) => void }>();
+  // Night lamp light map: per-tile bitmaps composited over the slice box.
+  private lampBits = new Map<string, ImageBitmap>();
+  private lampCanvas: HTMLCanvasElement | null = null;
+  private lampTex: THREE.CanvasTexture | null = null;
   onChange: (() => void) | null = null;
   onTile: ((a: TileArt) => void) | null = null; // fired after a tile mounts (walks -> ground paint)
 
@@ -60,7 +77,10 @@ export class TileStream {
     private walk: WalkWorld,
     private interiors: Interiors,
     private scene: THREE.Scene,
-  ) {}
+  ) {
+    const S = man.slice;
+    U.uLampBox.value.set(S.x0, S.z0, 1 / (S.x1 - S.x0), 1 / (S.z1 - S.z0));
+  }
 
   private markDirty() {
     this.dirty = true;
@@ -102,7 +122,7 @@ export class TileStream {
     for (const p of pends) this.mount(p);
   }
 
-  // Per-frame: kick fetches for wanted tiles, build at most one fetched tile, drop far ones.
+  // Per-frame: kick fetches for wanted tiles, mount at most one finished tile, drop far ones.
   update(x: number, z: number) {
     for (const t of this.man.tiles) {
       const d2 = boxDist2(t.box, x, z);
@@ -116,11 +136,47 @@ export class TileStream {
     }
   }
 
+  private spawn() {
+    try {
+      const w = new Worker(new URL('./tile.worker.ts', import.meta.url), { type: 'module' });
+      w.onmessage = (e) => {
+        const m = e.data;
+        const j = this.jobs.get(m.id);
+        if (!j) return;
+        this.jobs.delete(m.id);
+        if (m.kind === 'built') j.res(m.tile);
+        else j.rej(new Error(m.message ?? 'tile build failed'));
+      };
+      // Worker fetches resolve against its own module URL — hand it an absolute base.
+      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell });
+      this.worker = w;
+    } catch {
+      this.workerDead = true;
+    }
+  }
+
+  private build(t: TileSpec, ord: number): Promise<BuiltTile> {
+    if (!this.worker && !this.workerDead) this.spawn();
+    if (this.worker) {
+      const id = ++this.seq;
+      return new Promise((res, rej) => {
+        this.jobs.set(id, { res, rej });
+        this.worker!.postMessage({ kind: 'build', id, spec: t, idBase: ord * ID_STRIDE, terr: this.man.terrain?.slice ? this.man.terrain : undefined });
+      });
+    }
+    // No worker support: the same pipeline on the main thread.
+    return Promise.all([loadTile(this.base, t), loadTileTerrain(this.base, t)]).then(([tj, tl]) => {
+      const tile = buildTile(tj, this.terrain, t, ord * ID_STRIDE);
+      tile.terr = tl ? (tl.height.buffer as ArrayBuffer) : undefined;
+      return tile;
+    });
+  }
+
   private fetch(t: TileSpec): Promise<Pending | null> {
     let p = this.fetching.get(t.id);
     if (!p) {
-      p = Promise.all([loadTile(this.base, t), loadTileTerrain(this.base, t)])
-        .then(([json, terrain]): Pending | null => ({ spec: t, json, terrain }))
+      p = this.build(t, this.man.tiles.indexOf(t))
+        .then((tile): Pending => ({ spec: t, tile }))
         .catch((e) => { this.failed.set(t.id, performance.now()); console.warn('tile load failed', t.id, e); return null; })
         .finally(() => this.fetching.delete(t.id));
       this.fetching.set(t.id, p);
@@ -130,45 +186,41 @@ export class TileStream {
 
   private mount(p: Pending | null) {
     if (!p || this.loaded.has(p.spec.id)) return;
-    const { spec, json: tj, terrain: tpack } = p;
-    const ord = this.man.tiles.indexOf(spec);
+    const { spec, tile } = p;
     const scope = this.scopeSeq++;
     const w = this.walk;
     const keys: string[] = [], fpKeys: string[] = [], fpList: Footprint[] = [];
-    if (tpack) this.terrain.registerPatch(spec.id, tpack);
+    const tl = tile.terr && spec.terrain ? new TerrainLayer(tile.terr, spec.terrain.layout) : null;
+    if (tl) this.terrain.registerPatch(spec.id, tl);
     w.beginScope(scope);
     try {
-      const shim: World = { json: tj as unknown as WorldJson, terrain: this.terrain };
-      const bld = buildBuildings(shim, ord * ID_STRIDE);
-      bld.footprints.forEach((f, i) => { f.key = `${spec.id}:${i}`; });
-      // Only owner-flagged entities emit — margin context exists solely for builders that need it.
-      const pj = { ...tj, roads: prim(tj.roads), areas: prim(tj.areas), lines: prim(tj.lines), points: prim(tj.points) } as unknown as WorldJson;
-      const shim2: World = { json: pj, terrain: this.terrain };
-      const structures = buildStructures(shim2, w);
-      const signs = buildSigns(shim, bld.signs, w); // full json: intersection signs need context roads
-      const props = buildProps(shim2, w, structures.pierSegs, { mailboxes: bld.mailboxes });
-
+      // Builder-emitted collision (bridge/pier decks, poles, fences, parked cars) replays first —
+      // the same order the live build registered them in.
+      replayOps(w, tile.ops);
+      const planByFp = new Map(tile.plans.map((pl) => [pl.i, pl.p]));
       const doors: Door[] = [];
-      bld.footprints.forEach((f) => { fpKeys.push(f.key!); fpList.push(f);
+      tile.fps.forEach((f, i) => {
+        fpKeys.push((f.key = `${spec.id}:${i}`));
+        fpList.push(f);
         const key = f.key!;
         this.fpByKey.set(key, f);
-        if (f.door === undefined || f.kind === 'lighthouse') {
+        const plan = planByFp.get(i);
+        if (!plan) {
           if (f.raise > 0.5) w.addPolygon(f.ring, { floor0: f.floor0, floorH: 3, levels: 1, ground: true }, null, f.floor0 - 0.6);
           else w.addPolygon(f.ring);
           return;
         }
-        const door = bld.doors[f.door];
+        const door = tile.doors[f.door!];
         this.fpDoor.set(f, door);
         doors.push(door);
-        const plan = planInterior(key, f, door, Math.floor(f.seed * 4294967296));
         const pid = registerPlan(w, f, plan);
         this.plans.set(key, plan);
         this.interiors.register(key, f, plan, pid);
         keys.push(key);
       });
-      for (const [a, b, y0, y1] of bld.colliders.walls) w.addWall(a, b, y0, y1);
-      for (const d of bld.colliders.decks) w.addDeck(d);
-      for (const pl of bld.pilings) {
+      for (const [a, b, y0, y1] of tile.walls) w.addWall(a, b, y0, y1);
+      for (const d of tile.decks) w.addDeck(unpackDeck(d));
+      for (const pl of tile.pilings) {
         const c = Math.cos(pl.ang) * 0.17, s = Math.sin(pl.ang) * 0.17;
         w.addLoop([[pl.x - c + s, pl.z - s - c], [pl.x + c + s, pl.z + s - c], [pl.x + c - s, pl.z + s + c], [pl.x - c - s, pl.z - s + c]], -Infinity, 2.2 + Math.max(0, this.terrain.heightAt(pl.x, pl.z)));
       }
@@ -176,26 +228,31 @@ export class TileStream {
 
       const group = new THREE.Group();
       group.name = `tile:${spec.id}`;
-      group.add(bld.group, structures.group, signs.mesh, props.group);
-      group.add(props.halo(bld.lanterns, 7, new THREE.Color(1.0, 0.85, 0.55)));
-      group.add(props.halo(structures.towers, 1.2, new THREE.Color(1.0, 0.75, 0.45)));
+      const atlasTex = tile.atlas ? signTexture(tile.atlas) : undefined;
+      for (const o of tile.objs) group.add(buildObject(o, atlasTex));
+      group.add(haloPoints(v3s(tile.lanterns), 7, new THREE.Color(1.0, 0.85, 0.55)));
+      group.add(haloPoints(v3s(tile.towers), 1.2, new THREE.Color(1.0, 0.75, 0.45)));
       this.scene.add(group);
+      if (tile.lamp) {
+        this.lampBits.set(spec.id, tile.lamp);
+        this.repaintLamps();
+      }
       this.loaded.set(spec.id, {
         spec, group, scope, keys,
-        fps: bld.footprints,
+        fps: tile.fps,
         doors,
-        walks: bld.walks,
-        poles: signs.poles,
-        churches: bld.footprints.filter((f) => f.kind === 'church').map((f) => f.ring[0] as [number, number]),
-        primRoads: pj.roads,
+        walks: tile.walks,
+        poles: tile.poles,
+        churches: tile.fps.filter((f) => f.kind === 'church').map((f) => f.ring[0] as [number, number]),
+        primRoads: tile.roads,
       });
       this.markDirty();
       this.onTile?.(this.loaded.get(spec.id)!);
     } catch (e) {
       w.endScope();
       w.removeScope(scope);
-      if (tpack) this.terrain.removePatch(spec.id);
-      // sweep any state the failed build registered part-way through
+      if (tl) this.terrain.removePatch(spec.id);
+      // sweep any state the failed mount registered part-way through
       if (keys.length) this.interiors.unregister(keys);
       for (const k of keys) this.plans.delete(k);
       for (const k of fpKeys) this.fpByKey.delete(k);
@@ -205,8 +262,33 @@ export class TileStream {
         this.scene.remove(g);
         g.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose?.(); });
       }
-      console.warn('tile build failed', spec.id, e);
+      console.warn('tile mount failed', spec.id, e);
     }
+  }
+
+  // Composite every mounted tile's lamp bitmap over the slice box — additive pools.
+  private repaintLamps() {
+    const any = [...this.lampBits.values()];
+    const W = any[0]?.width ?? 0, H = any[0]?.height ?? 0;
+    if (!W || !H) return;
+    if (!this.lampCanvas) {
+      this.lampCanvas = document.createElement('canvas');
+      this.lampCanvas.width = W;
+      this.lampCanvas.height = H;
+    }
+    const ctx = this.lampCanvas.getContext('2d')!;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'lighter';
+    for (const b of any) ctx.drawImage(b, 0, 0, W, H);
+    if (!this.lampTex) {
+      this.lampTex = new THREE.CanvasTexture(this.lampCanvas);
+      this.lampTex.flipY = false;
+      this.lampTex.minFilter = THREE.LinearFilter;
+      this.lampTex.generateMipmaps = false;
+      U.uLampMap.value = this.lampTex;
+    } else this.lampTex.needsUpdate = true;
   }
 
   unload(id: string) {
@@ -223,10 +305,13 @@ export class TileStream {
       m.geometry?.dispose?.();
       if ((m as unknown as THREE.InstancedMesh).isInstancedMesh) (m as THREE.InstancedMesh).dispose();
     });
+    const bmp = this.lampBits.get(id);
+    if (bmp) {
+      this.lampBits.delete(id);
+      bmp.close();
+      this.repaintLamps();
+    }
     this.loaded.delete(id);
     this.markDirty();
   }
 }
-
-// BuildingsResult type re-export for convenience.
-export type { BuildingsResult };

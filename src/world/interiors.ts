@@ -179,7 +179,7 @@ export function registerPlan(walk: WalkWorld, fp: Footprint, P: Plan) {
     }
   for (const F of P.flights) {
     const run = Math.abs(F.topU - F.bottomU), vc = (F.v0 + F.v1) / 2, base = f(F.level), up = f(F.level + 1);
-    walk.addDeck({ pts: [toW(P, F.bottomU, vc), toW(P, F.topU, vc)], cum: [0, run], halfWidth: (F.v1 - F.v0) / 2 - 0.05, heightAt: (s) => base + (Math.min(run, Math.max(0, s)) / run) * P.floorH });
+    walk.addDeck({ pts: [toW(P, F.bottomU, vc), toW(P, F.topU, vc)], cum: [0, run], halfWidth: (F.v1 - F.v0) / 2 - 0.05, heightAt: (s) => base + (Math.min(run, Math.max(0, s)) / run) * P.floorH, profile: { k: 'ramp', y0: base, y1: base + P.floorH, total: run } });
     // sides (banister + wall): block both the hallway below and the landing above
     walk.addWall(toW(P, F.u0, F.v0), toW(P, F.u1, F.v0), base - 0.4, up + 0.6);
     walk.addWall(toW(P, F.u0, F.v1), toW(P, F.u1, F.v1), base - 0.4, up + 0.6);

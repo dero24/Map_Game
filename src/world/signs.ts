@@ -18,14 +18,13 @@ const FONTS: Record<Font, string> = {
 };
 
 class Atlas {
-  readonly canvas = document.createElement('canvas');
-  private ctx: CanvasRenderingContext2D;
+  readonly canvas: OffscreenCanvas;
+  private ctx: OffscreenCanvasRenderingContext2D;
   private x = 8;
   private y = 0;
   private map = new Map<string, { u0: number; v0: number; u1: number; v1: number; aspect: number }>();
   constructor(readonly W = 2048, readonly H = 2048, readonly row = 64) {
-    this.canvas.width = W;
-    this.canvas.height = H;
+    this.canvas = new OffscreenCanvas(W, H);
     this.ctx = this.canvas.getContext('2d')!;
     this.ctx.textBaseline = 'middle';
   }
@@ -179,13 +178,27 @@ export function buildSigns(world: World, specs: SignSpec[], walk: WalkWorld) {
     }
   }
 
-  const tex = new THREE.CanvasTexture(atlas.canvas);
+  const mat = signMaterial(signTexture(atlas.canvas));
+  const mesh = new THREE.Mesh(m.geometry(), mat);
+  mesh.layers.enable(1);
+  mesh.name = 'signs';
+  return { mesh, poles, atlas: atlas.canvas };
+}
+
+// The atlas texture + painted material for the sign mesh — shared between the in-page build and
+// the tile worker's packed result (which ships the atlas as an ImageBitmap).
+export function signTexture(image: OffscreenCanvas | ImageBitmap) {
+  const tex = new THREE.CanvasTexture(image as unknown as HTMLCanvasElement);
   tex.colorSpace = THREE.NoColorSpace;
   tex.flipY = false; // atlas rows are addressed top-down, like the canvas
   tex.generateMipmaps = true;
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.anisotropy = 4;
-  const mat = paintMaterial({
+  return tex;
+}
+
+export function signMaterial(tex: THREE.Texture) {
+  return paintMaterial({
     uniforms: { uAtlas: { value: tex } },
     vertex: /* glsl */ `
       attribute vec3 color;
@@ -216,8 +229,4 @@ export function buildSigns(world: World, specs: SignSpec[], walk: WalkWorld) {
         gl_FragColor = vec4(applyFog(col, vWorldPos), 1.0);
       }`,
   });
-  const mesh = new THREE.Mesh(m.geometry(), mat);
-  mesh.layers.enable(1);
-  mesh.name = 'signs';
-  return { mesh, poles };
 }

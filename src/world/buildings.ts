@@ -281,10 +281,10 @@ interface Ctx {
 }
 interface BInfo { ring: P2[]; base: number; floor0: number; raise: number; eave: number; kind: string; seed: number; id: number; fo: number; roofCol: THREE.Color; addr?: string; name?: string; bi: number }
 
-const deckLine = (pts: P2[], hw: number, heightAt: (s: number) => number): Deck => {
+const deckLine = (pts: P2[], hw: number, heightAt: (s: number) => number, profile?: Deck['profile']): Deck => {
   const cum = [0];
   for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-  return { pts, cum, halfWidth: hw, heightAt };
+  return { pts, cum, halfWidth: hw, heightAt, profile };
 };
 
 // A straight exterior flight: treads, open risers, stringers, railings; walkable as a ramp deck with side walls.
@@ -314,7 +314,7 @@ function stairFlight(C: Ctx, x0: number, z0: number, dx: number, dz: number, sw:
     beam(b, V(x0 + ox2, yTop + 0.92, z0 + oz2), V(foot.x + ox2, yBot + 0.95, foot.z + oz2), 0.07, 0.06);
     railPanel(b, V(x0 + ox2, yTop + 0.05, z0 + oz2), V(foot.x + ox2, yBot + 0.08, foot.z + oz2), 0.85);
   }
-  C.col.decks.push(deckLine([[foot.x, foot.z], [x0, z0]], sw / 2 - 0.08, (s) => yBot + rise * Math.min(1, Math.max(0, s / total))));
+  C.col.decks.push(deckLine([[foot.x, foot.z], [x0, z0]], sw / 2 - 0.08, (s) => yBot + rise * Math.min(1, Math.max(0, s / total)), { k: 'ramp', y0: yBot, y1: yBot + rise, total }));
   for (const s of [-1, 1]) {
     const ox = px * s * (sw / 2), oz = pz * s * (sw / 2);
     C.col.walls.push([[x0 + ox, z0 + oz], [foot.x + ox, foot.z + oz], -Infinity, Infinity]);
@@ -450,7 +450,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
       C.col.walls.push([at(l0, D), at(u - sw / 2, D), -Infinity, Infinity], [at(u + sw / 2, D), at(l1, D), -Infinity, Infinity]);
       C.col.walls.push([at(l0, 0.05), at(l0, D), -Infinity, Infinity], [at(l1, 0.05), at(l1, D), -Infinity, Infinity]);
     }
-    C.col.decks.push(deckLine([at(l0 + 0.2, D / 2), at(l1 - 0.2, D / 2)], D / 2 + 0.05, () => floorY));
+    C.col.decks.push(deckLine([at(l0 + 0.2, D / 2), at(l1 - 0.2, D / 2)], D / 2 + 0.05, () => floorY, { k: 'const', y: floorY }));
     fx = st.fx; fz = st.fz; fy = g;
   } else if (porch) {
     // Front porch: deck, turned posts, railing, a shed roof; steps down in front of the door.
@@ -497,7 +497,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
     if (pu1 - gap1 > 0.3) railSeg(at(gap1, D - 0.12), at(pu1 - 0.1, D - 0.12));
     railSeg(at(pu0 + 0.1, 0.1), at(pu0 + 0.1, D - 0.12));
     railSeg(at(pu1 - 0.1, 0.1), at(pu1 - 0.1, D - 0.12));
-    C.col.decks.push(deckLine([at(pu0 + 0.5, D / 2), at(pu1 - 0.5, D / 2)], D / 2, () => deckY));
+    C.col.decks.push(deckLine([at(pu0 + 0.5, D / 2), at(pu1 - 0.5, D / 2)], D / 2, () => deckY, { k: 'const', y: deckY }));
     const rise = deckY - gFront;
     if (rise > 0.12) {
       const [sx, sz] = at(u, D);
@@ -519,7 +519,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
       }
       const L1 = 0.6 + (nS - 1) * 0.3;
       fx = cx + nx * (L1 + 0.3); fz = cz + nz * (L1 + 0.3); fy = g;
-      C.col.decks.push(deckLine([[fx, fz], [cx + nx * 0.25, cz + nz * 0.25]], wide / 2 + 0.2, (s) => g + rise * Math.min(1, s / Math.max(0.1, L1 + 0.05))));
+      C.col.decks.push(deckLine([[fx, fz], [cx + nx * 0.25, cz + nz * 0.25]], wide / 2 + 0.2, (s) => g + rise * Math.min(1, s / Math.max(0.1, L1 + 0.05)), { k: 'ramp', y0: g, y1: g + rise, total: Math.max(0.1, L1 + 0.05) }));
     } else {
       box(b, cx + nx * 0.3, cz + nz * 0.3, ang, wide + 0.5, 0.6, floorY - 0.2, floorY + 0.02);
       fy = g;
@@ -612,6 +612,7 @@ function emitRoof(b: Builder, R: RoofGeom, eave: number, base: number, roofCol: 
 export interface BuildingsResult {
   group: THREE.Group;
   footprints: Footprint[];
+  ctxRings: P2[][]; // tidy rings of margin-context buildings (own:0) — neighbour shapes for placement queries
   lanterns: THREE.Vector3[];
   material: THREE.ShaderMaterial;
   doors: Door[];
@@ -646,6 +647,8 @@ export function buildBuildings(world: World, idBase = 0): BuildingsResult {
     return t.length >= 3 && ringArea(t) > 4 ? t : null;
   });
   tidy.forEach((r) => { if (r && near(r[0][0], r[0][1], 80)) rings.add(r); });
+  // Margin-context buildings (own:0): neighbours' shapes, for scratch-walk seeds in the tile worker.
+  const ctxRings: P2[][] = json.buildings.map((bd, bi) => (bd.own === 0 ? tidy[bi] : null)).filter((r): r is P2[] => !!r);
 
   json.buildings.forEach((bd: Building, bi: number) => {
     const ring = tidy[bi];
@@ -821,7 +824,7 @@ export function buildBuildings(world: World, idBase = 0): BuildingsResult {
   // Lighthouses mapped only as points (e.g. Sandy Hook) + explicit skyline landmarks.
   const sh = new Builder();
   const haveLighthouse = (x: number, z: number) => json.buildings.some((bd) => bd.k === 'lighthouse' && Math.abs(bd.r[0] / 10 - x) < 150 && Math.abs(bd.r[1] / 10 - z) < 150);
-  const pointLights = json.points.filter((p) => p.c === 'lighthouse').map((p) => ({ x: p.x, z: p.z, h: 29 }));
+  const pointLights = json.points.filter((p) => p.c === 'lighthouse' && p.own !== 0).map((p) => ({ x: p.x, z: p.z, h: 29 }));
   [...pointLights, ...json.landmarks.map((l) => ({ x: l.x, z: l.z, h: l.h }))].forEach((lm, k) => {
     if (haveLighthouse(lm.x, lm.z)) return;
     const base = Math.max(terrain.heightAt(lm.x, lm.z), 2);
@@ -839,7 +842,7 @@ export function buildBuildings(world: World, idBase = 0): BuildingsResult {
     m.layers.enable(1);
     group.add(m);
   }
-  return { group, footprints, lanterns, material, doors, colliders, signs, mailboxes, walks, pilings };
+  return { group, footprints, ctxRings, lanterns, material, doors, colliders, signs, mailboxes, walks, pilings };
 }
 
 // The building you're visiting: its door stands open and its windows become real openings (cross-faded

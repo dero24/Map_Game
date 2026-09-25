@@ -472,12 +472,23 @@ log(`regions.json -> [${manifest.map((r) => r.id).join(', ')}]`);
 mkdirSync(resolve(OUT, 'tiles'), { recursive: true });
 const specs = tileSpecs(B, S);
 const parts = partitionEntities({ buildings, roads, areas, lines, points }, specs, TILE_MARGIN);
+// Landmarks are emitted exactly once, by the tile nearest each — otherwise every mounted tile
+// would stack a copy of the same tower mesh.
+const lmTile = landmarks.map((l) => {
+  let best = '', bd = Infinity;
+  for (const { spec } of parts) {
+    const dx = Math.max(spec.box.x0 - l.x, 0, l.x - spec.box.x1), dz = Math.max(spec.box.z0 - l.z, 0, l.z - spec.box.z1);
+    const d = dx * dx + dz * dz;
+    if (d < bd) (bd = d), (best = spec.id);
+  }
+  return best;
+});
 const tiles = [];
 let tBytes = 0;
 let packCount = 0;
 for (const { spec, tile } of parts) {
   const file = `tiles/${spec.id}.json`;
-  const out = JSON.stringify({ ...tile, origin: ORIGIN, slice: S, backdrop: B, landmarks });
+  const out = JSON.stringify({ ...tile, origin: ORIGIN, slice: S, backdrop: B, landmarks: landmarks.filter((_, i) => lmTile[i] === spec.id) });
   writeFileSync(resolve(OUT, file), out);
   tBytes += out.length;
   const entry = { id: spec.id, box: spec.box, lod: spec.lod, file };

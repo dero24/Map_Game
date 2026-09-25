@@ -19,7 +19,7 @@ const unpackPts = (f: number[]): P[] => {
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const RANK: Record<string, number> = { residential: 2, unclassified: 2, living_street: 2, tertiary: 3, secondary: 4, primary: 5 };
 
-function wireMaterial() {
+export function wireMaterial() {
   return new THREE.ShaderMaterial({
     uniforms: { uFogColor: U.uFogColor, uFogDensity: U.uFogDensity, uNight: U.uNight },
     vertexShader: /* glsl */ `
@@ -42,9 +42,7 @@ function wireMaterial() {
 function pavedMask(world: World, zone: { x0: number; z0: number; x1: number; z1: number }) {
   const { json } = world;
   const w = Math.ceil((zone.x1 - zone.x0) / 2), h = Math.ceil((zone.z1 - zone.z0) / 2);
-  const c = document.createElement('canvas');
-  c.width = w;
-  c.height = h;
+  const c = new OffscreenCanvas(w, h);
   const ctx = c.getContext('2d', { willReadFrequently: true })!;
   ctx.setTransform(0.5, 0, 0, 0.5, -zone.x0 * 0.5, -zone.z0 * 0.5);
   ctx.strokeStyle = ctx.fillStyle = '#fff';
@@ -69,6 +67,48 @@ function pavedMask(world: World, zone: { x0: number; z0: number; x1: number; z1:
     if (i < 0 || j < 0 || i >= w || j >= h) return false;
     return data[(j * w + i) * 4] > 60;
   };
+}
+
+// Night halos around lamp heads and lanterns (soft wet blooms, additive). Module-level so the
+// tile worker's packed objects can be rebuilt with the same material on the main thread.
+export function haloMaterial(size: number, color: THREE.Color) {
+  return new THREE.ShaderMaterial({
+    uniforms: { uLampPower: U.uLampPower, uSize: { value: size }, uColor: { value: color }, uTime: U.uTime },
+    vertexShader: /* glsl */ `
+      uniform float uSize;
+      varying float vFade;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = clamp(uSize * 900.0 / -mv.z, 2.0, 220.0);
+        vFade = clamp(1.0 - (-mv.z) / 2500.0, 0.0, 1.0);
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform float uLampPower, uTime;
+      uniform vec3 uColor;
+      varying float vFade;
+      ${GLSL_NOISE}
+      void main() {
+        vec2 d = gl_PointCoord - 0.5;
+        float r = length(d) * 2.0;
+        float rag = 0.85 + 0.3 * vnoise(d * 7.0 + 3.0);
+        float a = smoothstep(1.0 * rag, 0.0, r);
+        a = a * a * uLampPower * vFade;
+        gl_FragColor = vec4(uColor * a, a);
+      }`,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+}
+
+export function haloPoints(pts: THREE.Vector3[], size: number, color: THREE.Color) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pts.flatMap((p) => [p.x, p.y, p.z]), 3));
+  const pts3 = new THREE.Points(g, haloMaterial(size, color));
+  pts3.renderOrder = 8;
+  pts3.frustumCulled = false;
+  return pts3;
 }
 
 export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P; w: number }[], extras: { mailboxes?: Mailbox[] } = {}) {
@@ -173,8 +213,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
 
   // Lamp light map: soft warm pools painted top-down, sampled by every material at night.
   const LM = 1024;
-  const lc = document.createElement('canvas');
-  lc.width = lc.height = LM;
+  const lc = new OffscreenCanvas(LM, LM);
   const lctx = lc.getContext('2d')!;
   lctx.fillStyle = '#000';
   lctx.fillRect(0, 0, LM, LM);
@@ -190,51 +229,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     lctx.fillStyle = g;
     lctx.fillRect(px - r, pz - r, r * 2, r * 2);
   }
-  const lampTex = new THREE.CanvasTexture(lc);
-  lampTex.flipY = false;
-  lampTex.minFilter = THREE.LinearFilter;
-  lampTex.generateMipmaps = false;
-  U.uLampMap.value = lampTex;
-  U.uLampBox.value.set(S.x0, S.z0, 1 / (S.x1 - S.x0), 1 / (S.z1 - S.z0));
-
-  // Night halos around lamp heads and lanterns (soft wet blooms, additive).
-  const halo = (pts: THREE.Vector3[], size: number, color: THREE.Color) => {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pts.flatMap((p) => [p.x, p.y, p.z]), 3));
-    const m = new THREE.ShaderMaterial({
-      uniforms: { uLampPower: U.uLampPower, uSize: { value: size }, uColor: { value: color }, uTime: U.uTime },
-      vertexShader: /* glsl */ `
-        uniform float uSize;
-        varying float vFade;
-        void main() {
-          vec4 mv = modelViewMatrix * vec4(position, 1.0);
-          gl_Position = projectionMatrix * mv;
-          gl_PointSize = clamp(uSize * 900.0 / -mv.z, 2.0, 220.0);
-          vFade = clamp(1.0 - (-mv.z) / 2500.0, 0.0, 1.0);
-        }`,
-      fragmentShader: /* glsl */ `
-        uniform float uLampPower, uTime;
-        uniform vec3 uColor;
-        varying float vFade;
-        ${GLSL_NOISE}
-        void main() {
-          vec2 d = gl_PointCoord - 0.5;
-          float r = length(d) * 2.0;
-          float rag = 0.85 + 0.3 * vnoise(d * 7.0 + 3.0);
-          float a = smoothstep(1.0 * rag, 0.0, r);
-          a = a * a * uLampPower * vFade;
-          gl_FragColor = vec4(uColor * a, a);
-        }`,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-    const pts3 = new THREE.Points(g, m);
-    pts3.renderOrder = 8;
-    pts3.frustumCulled = false;
-    return pts3;
-  };
-  group.add(halo(lampHeads, 1.6, new THREE.Color(1.0, 0.7, 0.38)));
+  // The lamp map ships to the stream, which composites every mounted tile's pools into uLampMap.
+  const lampBox: [number, number, number, number] = [S.x0, S.z0, 1 / (S.x1 - S.x0), 1 / (S.z1 - S.z0)];
+  group.add(haloPoints(lampHeads, 1.6, new THREE.Color(1.0, 0.7, 0.38)));
 
   // ---------- trees ----------
   const trees: { m: THREE.Matrix4; c: THREE.Color; pine: boolean }[] = [];
@@ -444,5 +441,5 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     group.add(im);
   }
 
-  return { group, lampHeads, halo };
+  return { group, lampHeads, lampMap: lc, lampBox };
 }

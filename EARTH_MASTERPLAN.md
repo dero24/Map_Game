@@ -37,14 +37,26 @@ sketch above:
   region layers stay in `terrain.bin` this phase — packs are the delivery +
   ownership mechanism; dropping the slice layer (and its shader/paint
   consumers) is a later cleanup.
+- **Worker tile build** (`src/world/tile.worker.ts` + `tileBuild.ts` +
+  `pack.ts`): the whole tile pipeline — fetch, JSON decode, builders, interior
+  plans, scratch `RecWalk` collision — runs in a module worker. Results cross
+  as a `BuiltTile`: geometry as transferable attribute arrays with material
+  tags (rebuilt from the main-thread factories), canvases as `ImageBitmap`s
+  (sign atlas, per-tile lamp pools — composited into `uLampMap` on mount),
+  collision as replayed ops, deck heights as exact `DeckProfile` params.
+  Mount now costs ~5 ms instead of a synchronous decode+build; without worker
+  support the same `buildTile` runs in-page. Margin-context buildings seed
+  the scratch walk (`ctxRings`) so placement queries see neighbours
+  deterministically, and landmarks are emitted by exactly one tile (nearest).
+  Soak note: multi-second stalls still appear but reproduce identically with
+  the worker disabled — pre-existing/environmental, not tile-related.
 
-Verified: typecheck, 34/34 tests (incl. new partition-determinism and
-scope-removal/seam tests), build, identical bake hashes across runs, capture
-montages for both regions, and a 120 s soak (0 frame errors; hitches bounded
-to synchronous tile mounts — moving mesh-build into workers is Phase 2 work).
+Verified: typecheck, 44/44 tests (incl. pack/ops/deck round-trip and buildTile
+determinism), build, identical bake hashes, capture montages, and soak
+(mount ≤ ~8 ms; remaining stalls are environmental — see above).
 
 Still open from the plan: coarse LOD ring, IndexedDB tile cache,
-floating-origin re-anchoring, worker-side tile decode/mesh, `?at=lat,lon`,
+floating-origin re-anchoring, `?at=lat,lon`,
 atlas journal, seam-stitched life districts. The region slice layer is also
 still whole-region — per-tile packs exist and are live, but
 paint/ground/shader consumers still read the resident slice + backdrop.
