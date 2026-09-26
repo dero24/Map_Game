@@ -69,6 +69,7 @@ export interface BuiltTile {
   lampBox?: [number, number, number, number]; // x0 z0 invW invH
   terr?: ArrayBuffer; // the tile's terrain pack, for the main thread's patch registry
   dem?: { buf: ArrayBuffer; layout: LayerLayout }; // H2: Terrarium patch for virtual cells — registered under the cell key
+  demLate?: 1; // synth placeholder built flat because its DEM race timed out — relief rebuild wanted
 }
 
 // ---------------- decks ----------------

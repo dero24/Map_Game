@@ -62,6 +62,12 @@
   → `shots/<region>-montage.jpg` (one JPEG contact sheet — agents: read ONLY this file, never the
   per-shot PNGs; `--montage=only` skips writing PNGs). Also `top:x:z:alt` top-down, `--eval="…"` to poke
   `window.__GAME__`. Uses Playwright from `../../shot-harness`.
+- No Playwright? (agent driving the built-in/live browser): open `?capture=1&region=<id>`, then
+  `await import('/tools/inpage-montage.js')` and `await __MONTAGE__([shotName | {label, fn(game)}], {save:'x.jpg'})`
+  — the dev server's `/__shot` sink (vite.config.ts, serve-only) writes `shots/x.jpg`. Emulate a
+  landscape viewport (e.g. 1600×900) first; the canvas is the capture size.
+- Shader varyings that carry ids/seeds (`vInfo`, `vTan`, `vOut`) must be `flat` — interpolated ids
+  (up to ~8.5 M) drift per pixel and every `seedOf(id)` choice shimmers (the old window flicker).
 - Local frame: +x east, +z south (north = -z), metres, per-region origin from config.
 - All materials are custom ShaderMaterials sharing uniforms in `src/render/shared.ts`; the look lives in `src/render/post.ts`.
 - Region identity (name/tz/spawn/labels/style) travels in `world.json`/`manifest` `meta` — runtime code must not

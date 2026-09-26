@@ -867,8 +867,8 @@ export function buildBuildings(world: World, idBase = 0): BuildingsResult {
   return { group, footprints, ctxRings, lanterns, material, doors, colliders, signs, mailboxes, walks, pilings };
 }
 
-// The building you're visiting: its door stands open and its windows become real openings (cross-faded
-// by uOpenAmt as you come close, so nothing pops).
+// The building you're visiting: its door stands open and its windows become real openings (a short
+// world-anchored wash driven by uOpenAmt once you're within ~8 m and its interior is built).
 export const activeBuilding = {
   uActiveId: { value: -1 },
   uOpenAmt: { value: 0 },
@@ -878,24 +878,26 @@ export const activeBuilding = {
 
 // Window layout shared by the facade and the interior walls so the openings line up exactly.
 export const GLSL_WINDOWS = /* glsl */ `
-struct Win { float cu, cy, ww, wh, cellW, floorH, fv, fi, h1, h2; bool store, ok; };
+struct Win { float cu, cy, ww, wh, cellW, floorH, fv, fi, h1, h2; bool store, ok, arch; };
 Win windowAt(float u, float v, float len, float eave, float seed, float kind, float fo, vec3 N) {
   Win w;
   bool shop = kind > 1.5 && kind < 2.5;
-  w.floorH = shop ? 3.8 : (kind > 2.5 && kind < 3.5 ? 3.1 : 2.9);
+  bool church = kind > 3.5 && kind < 4.5; // tall round-headed lancets, one tier
+  w.arch = church;
+  w.floorH = shop ? 3.8 : (kind > 2.5 && kind < 3.5 ? 3.1 : church ? 60.0 : 2.9);
   float vf = v - fo;
   w.ok = kind < 4.5 && len > 2.0 && vf > 0.0 && v < eave - 0.25;
   w.fi = floor(max(vf, 0.0) / w.floorH);
   w.fv = vf - w.fi * w.floorH;
   w.store = shop && w.fi < 0.5;
-  float spacing = w.store ? 3.4 : (kind > 2.5 && kind < 3.5 ? 2.2 : 2.7);
+  float spacing = w.store ? 3.4 : (kind > 2.5 && kind < 3.5 ? 2.2 : church ? 3.4 : 2.7);
   float nWin = max(1.0, floor((len - 0.6) / spacing));
   w.cellW = len / nWin;
   float ci = floor(u / w.cellW);
   w.cu = u - (ci + 0.5) * w.cellW;
-  w.ww = w.store ? w.cellW * 0.78 : min(1.0, w.cellW * 0.5);
+  w.ww = w.store ? w.cellW * 0.78 : church ? min(1.1, w.cellW * 0.4) : min(1.0, w.cellW * 0.5);
   float sill = w.store ? 0.45 : 0.9;
-  w.wh = w.store ? 2.3 : 1.35;
+  w.wh = w.store ? 2.3 : church ? clamp(eave - fo - sill - 0.35, 1.2, 3.4) : 1.35;
   w.cy = w.fv - (sill + w.wh * 0.5);
   vec2 qn = floor(N.xz * 8.0 + 0.5);
   w.h1 = hash12(vec2(ci * 1.37 + seed * 911.0 + qn.x * 7.0, w.fi * 3.1 + qn.y * 5.0));
@@ -903,6 +905,12 @@ Win windowAt(float u, float v, float len, float eave, float seed, float kind, fl
   if (!w.store && w.h1 < 0.14) w.ok = false;
   if (!w.store && w.fi * w.floorH + sill + w.wh > eave - fo - 0.12) w.ok = false; // would cut the eave
   return w;
+}
+// Round-headed (church) windows: 1 inside the arch cap shrunk by inset, else 1 everywhere.
+float archIn(Win w, float cu, float cy, float inset) {
+  if (!w.arch) return 1.0;
+  float r = w.ww * 0.5 - inset, c = w.wh * 0.5 - w.ww * 0.5;
+  return cy <= c ? 1.0 : step(length(vec2(cu, cy - c)), r);
 }
 float seedOf(float id) { return hash12(vec2(id * 0.0137 + 0.31, id * 0.0071 + 7.7)); }
 // anti-aliased box: 1 inside |x| < h, filtered over a pixel footprint w
@@ -918,9 +926,9 @@ export function buildingMaterial() {
       attribute vec3 color;
       attribute vec2 aTan;
       varying vec4 vWall;
-      varying vec4 vInfo;
+      flat varying vec4 vInfo;
       varying vec3 vColor;
-      varying vec2 vTan;
+      flat varying vec2 vTan;
       void main() {
         vec4 wp = worldMat() * vec4(position, 1.0);
         vWorldPos = wp.xyz + uWorldOffset;
@@ -933,9 +941,9 @@ export function buildingMaterial() {
       uniform float uActiveId, uOpenAmt, uOpenDoorH;
       uniform vec4 uOpenDoor;
       varying vec4 vWall;
-      varying vec4 vInfo;
+      flat varying vec4 vInfo;
       varying vec3 vColor;
-      varying vec2 vTan;
+      flat varying vec2 vTan;
       ${GLSL_WINDOWS}
 
       // Interior mapping: ray-trace a box room behind each window pane (no geometry).
@@ -991,7 +999,10 @@ export function buildingMaterial() {
         float winMask = 0.0;
         vec3 winCol = vec3(0.0);
         bool visiting = abs(id - uActiveId) < 0.5;
-        bool cut = visiting && uOpenAmt > dither4(gl_FragCoord.xy);
+        // World-anchored wash (not a screen-space dither): the opening dissolves like wet
+        // paint lifting, and the pattern can't crawl as the camera moves. uOpenAmt only sits
+        // between 0 and 1 for the ~0.3 s transition (interiors.update hysteresis).
+        bool cut = visiting && uOpenAmt > 0.04 + 0.92 * vnoise3(vWorldPos * 2.2);
         if (cut && part < 2.5 && abs(N.y) < 0.5) {
           vec2 dd = vWorldPos.xz - uOpenDoor.xz;
           if (length(dd) < uOpenDoor.w + 0.03 && vWorldPos.y > uOpenDoor.y - 0.05 && vWorldPos.y < uOpenDoor.y + uOpenDoorH) discard;
@@ -1015,37 +1026,101 @@ export function buildingMaterial() {
           }
           Win W = windowAt(u, v, len, eave, seed, kind, fo, N);
           if (W.ok) {
+            // ---- the window asset (painted, low-frequency; details fade before they alias) ----
             float day = 1.0 - uNight;
             float lit = step(W.h2, W.store ? max(uWindowLit * 1.3, day * 0.85) : uWindowLit);
-            float frameM = aab(W.cu, W.ww * 0.5, fw.x) * aab(W.cy, W.wh * 0.5, fw.y);
-            float innerM = aab(W.cu, W.ww * 0.5 - 0.08, fw.x) * aab(W.cy, W.wh * 0.5 - 0.08, fw.y);
+            float hw = W.ww * 0.5, hh = W.wh * 0.5;
+            float gw = hw - 0.08, gh = hh - 0.08; // glass half-size — interiors cut this exact hole
             float lod = smoothstep(0.1, 0.4, max(fw.x, fw.y));
             float far = smoothstep(0.35 * W.cellW, 1.2 * W.cellW, fw.x);
-            if (house && seed < 0.45) {
-              // shutters
-              float shm = aab(abs(W.cu) - (W.ww * 0.5 + 0.2), 0.18, fw.x) * aab(W.cy, W.wh * 0.5, fw.y);
-              vec3 shc = seed < 0.12 ? vec3(0.12, 0.2, 0.16) : seed < 0.22 ? vec3(0.13, 0.17, 0.26) : seed < 0.32 ? vec3(0.1, 0.1, 0.11) : seed < 0.38 ? vec3(0.4, 0.14, 0.12) : vec3(0.86, 0.86, 0.83);
-              alb = mix(alb, shc * mix(1.0, 0.86 + 0.14 * step(0.5, fract(W.fv / 0.09)), fine), shm * (1.0 - far));
+            float nearW = 1.0 - far;
+            float fineL = 1.0 - smoothstep(0.012, 0.03, max(fw.x, fw.y)); // thin bars: gone before they shimmer
+            float frameM = aab(W.cu, hw, fw.x) * aab(W.cy, hh, fw.y) * archIn(W, W.cu, W.cy, 0.0);
+            float innerM = aab(W.cu, gw, fw.x) * aab(W.cy, gh, fw.y) * archIn(W, W.cu, W.cy, 0.08);
+            // head (drip cap wider than the casing) + sill (a ledge that catches light) + the
+            // soft shadow the sill throws down the siding — the three strokes that make it read 3D
+            float headM = W.arch ? 0.0 : aab(W.cu, hw + 0.07, fw.x) * aab(W.cy - hh - 0.055, 0.055, fw.y);
+            float sillM = aab(W.cu, hw + 0.09, fw.x) * aab(W.cy + hh + 0.035, 0.035, fw.y);
+            float sillSh = aab(W.cu, hw + 0.07, fw.x) * smoothstep(-hh - 0.36, -hh - 0.07, W.cy) * step(W.cy, -hh - 0.07);
+            float headSh = aab(W.cu, hw + 0.05, fw.x) * smoothstep(hh + 0.02, hh - 0.14, W.cy) * step(hh - 0.14, W.cy) * (1.0 - headM);
+            alb *= 1.0 - 0.2 * sillSh * nearW;
+            if (house && seed < 0.45 && !W.arch) {
+              // panel shutters: flat colour + two recessed panels + a contact shadow on the wall
+              float sw = min(hw * 0.62, 0.42);
+              float sx = abs(W.cu) - (hw + 0.045 + sw * 0.5);
+              float shm = aab(sx, sw * 0.5, fw.x) * aab(W.cy, hh, fw.y);
+              float castM = aab(sx, sw * 0.5 + 0.05, fw.x) * aab(W.cy + 0.03, hh + 0.05, fw.y);
+              float pan = aab(sx, sw * 0.5 - 0.065, fw.x) * (aab(W.cy - hh * 0.5, hh * 0.5 - 0.075, fw.y) + aab(W.cy + hh * 0.5, hh * 0.5 - 0.075, fw.y));
+              vec3 shc = seed < 0.12 ? vec3(0.16, 0.26, 0.2) : seed < 0.22 ? vec3(0.17, 0.22, 0.34) : seed < 0.32 ? vec3(0.14, 0.14, 0.15) : seed < 0.38 ? vec3(0.46, 0.18, 0.15) : vec3(0.86, 0.86, 0.83);
+              shc *= 1.0 - 0.14 * pan * smoothstep(0.0, 1.0, 1.0 - smoothstep(0.02, 0.05, fw.x));
+              alb = mix(alb, alb * 0.8, max(castM - shm, 0.0) * nearW);
+              alb = mix(alb, shc, shm * nearW);
             }
-            alb = mix(alb, trimCol, (frameM - innerM) * (1.0 - far));
-            if (innerM > 0.5 && cut) discard; // real room behind: see straight in
-            float inner = innerM * (1.0 - far);
-            if (inner > 0.001) {
-              vec3 glass = vec3(0.0);
+            alb = mix(alb, trimCol, (frameM - innerM) * nearW);
+            alb = mix(alb, trimCol * 1.04, max(headM, sillM) * nearW);
+            alb *= 1.0 - 0.18 * headSh * nearW * (1.0 - frameM + innerM);
+            // sash bars: meeting rail + muntins by building style (6/6, 2/2, 1/1); storefronts get
+            // a transom bar and mullions; church lancets get leading
+            float ms = fract(seed * 7.13 + 0.3);
+            float cols = W.store ? max(1.0, floor(2.0 * gw / 1.3 + 0.5)) : house ? (ms < 0.4 ? 3.0 : ms < 0.7 ? 2.0 : 1.0) : (ms < 0.5 ? 2.0 : 1.0);
+            float rows = W.store ? 1.0 : house && ms < 0.4 ? 2.0 : 1.0;
+            float cw = 2.0 * gw / cols;
+            float px = (W.cu + gw) / cw, kx = floor(px + 0.5);
+            float barX = step(0.5, kx) * step(kx, cols - 0.5) * aab((px - kx) * cw, W.store ? 0.03 : 0.016, fw.x);
+            float sashH = gh / rows;
+            float py = abs(W.cy) / sashH, ky = floor(py + 0.5);
+            float barY = W.store ? 0.0 : step(0.5, ky) * step(ky, rows - 0.5) * aab((py - ky) * sashH, 0.016, fw.y);
+            float rail = W.store ? aab(W.cy - (gh - 0.5), 0.03, fw.y) : W.arch ? aab(W.cy - (gh - gw), 0.02, fw.y) : aab(W.cy, 0.028, fw.y);
+            if (W.arch) barY = aab(fract((W.cy + gh) / 0.45) * 0.45 - 0.225, 0.012, fw.y) * 0.8;
+            float barM = clamp(max(max(barX, barY) * (W.store ? 1.0 : fineL), rail * (1.0 - smoothstep(0.02, 0.06, fw.y))), 0.0, 1.0) * innerM;
+            // the pulled-down shade (lived-in): top fraction of the glass, cream, glows at night
+            float shadeF = (house || kind > 2.5) && !W.arch ? step(0.66, W.h1) * (0.14 + 0.36 * fract(W.h1 * 7.31)) : 0.0;
+            float shadeM = shadeF > 0.0 ? clamp((W.cy - (gh - 2.0 * gh * shadeF)) / max(fw.y, 1e-4) + 0.5, 0.0, 1.0) * innerM * (1.0 - barM) : 0.0;
+            vec3 shadeCol = mix(vec3(0.93, 0.9, 0.82), vec3(0.84, 0.86, 0.8), step(0.7, W.h2));
+            alb = mix(alb, trimCol, barM * nearW);
+            alb = mix(alb, shadeCol * (0.92 + 0.08 * step(0.02, fract(W.cy * 4.0)) * fineL), shadeM * nearW);
+            glow += shadeM * lit * 0.55 * nearW;
+            // Real room behind: see straight in through the sash bars — but only at the windows
+            // you're actually near (per-window distance, washed edge). From the street the visited
+            // house keeps its glass like its neighbours; from indoors the facade is back-facing
+            // anyway, so the interior wall's own hole is what you look through.
+            if (innerM > 0.5 && barM < 0.5 && cut) {
+              float wd = 0.0;
+              if (dot(vTan, vTan) > 0.5) {
+                vec3 Tw = normalize(vec3(vTan.x, 0.0, vTan.y));
+                vec3 wc = vWorldPos - Tw * W.cu - vec3(0.0, W.cy, 0.0);
+                wd = length(wc - (cameraPosition + uWorldOffset));
+              }
+              if (wd < 4.2 + 1.6 * vnoise3(vWorldPos * 2.2)) discard;
+            }
+            float glassM = innerM * (1.0 - barM) * (1.0 - shadeM) * nearW;
+            if (glassM > 0.001) {
+              float gx = W.cu / max(gw, 0.05), gy = W.cy / max(gh, 0.05); // -1..1 across the pane
+              vec3 V = normalize(vWorldPos - (cameraPosition + uWorldOffset));
+              float fr = 0.22 + 0.55 * pow(1.0 - abs(dot(V, N)), 3.0);
+              // deep blue-grey glass body; the room shows through it muted, only up close
+              vec3 body = mix(vec3(0.1, 0.12, 0.17), vec3(0.14, 0.16, 0.21), W.h1);
+              vec3 inside = body;
               if (lod < 0.999 && dot(vTan, vTan) > 0.5) {
                 vec3 T = normalize(vec3(vTan.x, 0.0, vTan.y));
                 float h3 = hash12(vec2(W.h1 * 31.0, W.h2 * 17.0));
                 vec3 rc = room(T, N, W.cu, W.fv, W.cellW, W.floorH, W.h1, h3, lit, W.store);
-                float curtain = step(0.45, h3) * step(W.ww * 0.5 * (0.45 + 0.35 * W.h2), abs(W.cu));
-                vec3 cur = mix(vec3(0.85, 0.8, 0.7), vec3(0.62, 0.3, 0.28), step(0.8, h3));
-                rc = mix(rc, cur * (uAmbSky * 0.8 * day + uWindowColor * lit * 0.9 + 0.02), curtain);
-                vec3 V = normalize(vWorldPos - (cameraPosition + uWorldOffset));
-                float fr = 0.12 + 0.55 * pow(1.0 - abs(dot(V, N)), 3.0);
-                glass = mix(rc, mix(uSkyHorizon, uSkyZenith, 0.4) * 0.85, fr * (1.0 - lit * 0.6));
+                // rooms read darker than the street in daylight — that's what makes glass read as glass
+                inside = mix(body, rc * mix(1.0, 0.5, day), (W.store ? 0.42 : 0.4) * (1.0 - lod));
               }
-              vec3 flatGlass = mix(vec3(0.13, 0.16, 0.21), uSkyHorizon * 0.7, 0.35) * (1.0 - uNight * 0.6) + uWindowColor * lit * (0.2 + 1.2 * uNight);
-              winCol = mix(glass, flatGlass, lod);
-              winMask = inner;
+              // sky in the glass (darker overhead, paler low) + one soft diagonal sheen stroke
+              vec3 sky = mix(uSkyHorizon, uSkyZenith, clamp(0.45 + 0.35 * gy, 0.0, 1.0));
+              float sheen = smoothstep(0.32, 0.0, abs(gx * 0.75 + gy * 0.65 - 0.2 + (W.h2 - 0.5) * 0.5)) * (0.55 + 0.45 * fineL);
+              vec3 glass = mix(inside, sky * 0.62, fr * (0.35 + 0.65 * day));
+              glass += sheen * 0.07 * day * (0.4 + 0.6 * step(0.5, W.h2));
+              if (W.arch) glass = mix(glass, mix(vec3(0.55, 0.2, 0.2), vec3(0.2, 0.32, 0.55), step(0.5, hash12(floor(vec2(W.cu / 0.3, W.cy / 0.45)) + seed))) * (0.4 + 0.6 * day), 0.45);
+              // lamp light: a daytime shop's lights barely show through the glare; at night they carry
+              glass += uWindowColor * lit * (0.05 + 1.15 * uNight) * (1.0 - fr * 0.4);
+              // recess: the reveal shades the top and sides of the pane
+              float rev = smoothstep(0.72, 1.0, gy) + 0.45 * smoothstep(0.84, 1.0, abs(gx));
+              glass *= 1.0 - 0.32 * clamp(rev, 0.0, 1.0) * day;
+              winCol = glass;
+              winMask = glassM;
             }
             // far away: the cell's average instead of sub-pixel panes
             float cover = (W.ww * W.wh) / (W.cellW * W.floorH);
@@ -1057,13 +1132,18 @@ export function buildingMaterial() {
               alb = mix(alb, aw, 1.0 - far * 0.5);
             }
           }
-          // small attic window in the gable
+          // small attic window in the gable: casing, four lights, a sill
           if (!tower && v > eave + 0.4 && v < eave + 1.6) {
-            float aw = aab(u - len * 0.5, 0.4, fw.x) * aab(v - (eave + 1.0), 0.5, fw.y);
-            float ai = aab(u - len * 0.5, 0.32, fw.x) * aab(v - (eave + 1.0), 0.42, fw.y);
-            alb = mix(alb, trimCol, aw);
-            alb = mix(alb, vec3(0.14, 0.17, 0.22), ai);
-            glow += ai * step(hash12(vec2(seed * 97.0, N.x)), uWindowLit * 0.6);
+            float au = u - len * 0.5, av = v - (eave + 1.0);
+            float fineA = 1.0 - smoothstep(0.012, 0.03, max(fw.x, fw.y));
+            float aw = aab(au, 0.4, fw.x) * aab(av, 0.5, fw.y);
+            float ai = aab(au, 0.31, fw.x) * aab(av, 0.41, fw.y);
+            float asill = aab(au, 0.47, fw.x) * aab(av + 0.53, 0.035, fw.y);
+            float abar = max(aab(au, 0.018, fw.x), aab(av, 0.018, fw.y)) * fineA * ai;
+            alb = mix(alb, trimCol, max(max(aw - ai, asill), abar));
+            vec3 ag = mix(vec3(0.14, 0.17, 0.22), mix(uSkyHorizon, uSkyZenith, 0.5) * 0.7, 0.35 * (1.0 - uNight));
+            alb = mix(alb, ag, ai * (1.0 - abar));
+            glow += ai * (1.0 - abar) * step(hash12(vec2(seed * 97.0, N.x)), uWindowLit * 0.6);
           }
           if (!tower) {
             float trim = max(aab(u - 0.09, 0.09, fw.x), aab(len - u - 0.09, 0.09, fw.x));

@@ -33,9 +33,11 @@ export interface TileArt {
   poles: unknown[];
   churches: [number, number][];
   primRoads: Road[];
+  flat?: boolean; // synth placeholder mounted without its (late) DEM — a relief rebuild will replace it
 }
 
-interface Pending { spec: TileSpec; tile: BuiltTile }
+// `replace`: a relief rebuild of an already-mounted flat cell — swapped in atomically.
+interface Pending { spec: TileSpec; tile: BuiltTile; replace?: boolean }
 
 const boxDist2 = (b: Box, x: number, z: number) => {
   const dx = Math.max(b.x0 - x, 0, x - b.x1), dz = Math.max(b.z0 - z, 0, z - b.z1);
@@ -72,7 +74,7 @@ export class TileStream {
   private worker: Worker | null = null;
   private workerDead = false;
   private seq = 0;
-  private jobs = new Map<number, { res: (t: BuiltTile) => void; rej: (e: Error) => void }>();
+  private jobs = new Map<number, { res: (t: BuiltTile | null) => void; rej: (e: Error) => void }>();
   private jobFails = 0;
   // Night lamp light map: per-tile bitmaps composited over the slice box.
   private lampBits = new Map<string, ImageBitmap>();
@@ -96,6 +98,10 @@ export class TileStream {
   // the mounted spec ids holding it, so the s→w swap can't yank terrain mid-stride.
   private demHolders = new Map<string, Set<string>>();
   private demCache = new Map<string, Promise<{ buf: ArrayBuffer; layout: LayerLayout } | null>>(); // main-thread fallback path only
+  // Late-DEM relief: s-cells that mounted flat (4 s race lost) re-request a build that
+  // awaits the real patch, then swap in place. id → attempts so far (bounded retries).
+  private relief = new Map<string, number>();
+  private reliefBusy = new Set<string>();
 
   constructor(
     private base: string,
@@ -322,21 +328,32 @@ export class TileStream {
     }
   }
 
-  private build(t: TileSpec, ord: number, lite = false): Promise<BuiltTile> {
+  // null only for relief builds whose DEM never arrived (nothing to swap).
+  private build(t: TileSpec, ord: number, lite = false, relief = false): Promise<BuiltTile | null> {
     if (!this.worker && !this.workerDead) this.spawn();
     if (this.worker) {
       const id = ++this.seq;
       return new Promise((res, rej) => {
         this.jobs.set(id, { res, rej });
-        this.worker!.postMessage({ kind: 'build', id, spec: t, idBase: ord * ID_STRIDE, lite, terr: this.man.terrain?.slice ? this.man.terrain : undefined });
+        this.worker!.postMessage({ kind: 'build', id, spec: t, idBase: ord * ID_STRIDE, lite, relief, terr: this.man.terrain?.slice ? this.man.terrain : undefined });
       });
     }
     // No worker support: the same pipeline on the main thread.
     const cellKey = t.id.slice(1);
     if (this.demEnabled && this.tilesBase) setDemBase(this.tilesBase);
-    const demP = this.demEnabled && (t.synth || t.world)
-      ? (this.demCache.get(cellKey) ?? this.demCache.set(cellKey, fetchDem(t.box, this.man.origin).then((d) => (d ? demLayer(d) : null))).get(cellKey)!)
-      : null;
+    let demP: Promise<{ buf: ArrayBuffer; layout: LayerLayout } | null> | null = null;
+    if (this.demEnabled && (t.synth || t.world)) {
+      demP = this.demCache.get(cellKey) ?? null;
+      if (!demP) {
+        const p = fetchDem(t.box, this.man.origin).then((d) => (d ? demLayer(d) : null));
+        this.demCache.set(cellKey, (demP = p));
+        void p.then((d) => { if (!d && this.demCache.get(cellKey) === p) this.demCache.delete(cellKey); }); // failures retry
+      }
+    }
+    if (relief) {
+      const dp = demP;
+      return (dp ? dp : Promise.resolve(null)).then((d) => (d ? this.build(t, ord, lite, false).then((tile) => (tile && !tile.dem ? null : tile)) : null));
+    }
     const src: Promise<TileJson | null> = t.synth
       ? Promise.resolve(null)
       : t.world
@@ -345,6 +362,7 @@ export class TileStream {
     return src
       .then(async (tj0) => {
         const dem = demP ? (t.synth ? await raceNull(demP, 4000) : await demP) : null;
+        const demLate = !!(demP && !dem && t.synth && !lite);
         if (dem) this.terrain.registerPatch(cellKey, new TerrainLayer(dem.buf.slice(0), dem.layout));
         const syn = t.synth ? synthTile(t, this.seed, this.terrain) : null;
         const tj = tj0 ?? syn!.tj;
@@ -354,6 +372,7 @@ export class TileStream {
         else if (t.world) tile.objs.push(...packGroup(realExtras(tj, this.terrain)));
         tile.terr = tl ? (tl.height.buffer as ArrayBuffer) : undefined;
         tile.dem = dem ? { buf: dem.buf.slice(0), layout: dem.layout } : undefined; // cached buf is shared by twins — ship a copy
+        if (demLate) tile.demLate = 1;
         return tile;
       });
   }
@@ -362,7 +381,7 @@ export class TileStream {
     let p = this.fetching.get(t.id);
     if (!p) {
       p = this.build(t, this.ordOf(t))
-        .then((tile): Pending => ({ spec: t, tile }))
+        .then((tile): Pending | null => (tile ? { spec: t, tile } : null))
         .catch((e) => { this.failed.set(t.id, performance.now()); console.warn('tile load failed', t.id, e); return null; })
         .finally(() => this.fetching.delete(t.id));
       this.fetching.set(t.id, p);
@@ -374,7 +393,7 @@ export class TileStream {
     let p = this.coarseFetching.get(t.id);
     if (!p) {
       p = this.build(t, this.ordOf(t), true)
-        .then((tile): Pending => ({ spec: t, tile }))
+        .then((tile): Pending | null => (tile ? { spec: t, tile } : null))
         .catch((e) => { this.failed.set('c' + t.id, performance.now()); console.warn('coarse tile load failed', t.id, e); return null; })
         .finally(() => this.coarseFetching.delete(t.id));
       this.coarseFetching.set(t.id, p);
@@ -382,9 +401,40 @@ export class TileStream {
     return p;
   }
 
+  // Late-DEM relief: a flat-mounted synth cell asks the builder for a version on real
+  // heights. The worker awaits the untimed patch (shared with the w-twin via its cache);
+  // if none ever comes the flat mount simply stays, retried a couple of times with backoff.
+  private relieve(spec: TileSpec) {
+    const id = spec.id;
+    if (this.reliefBusy.has(id)) return;
+    const n = this.relief.get(id) ?? 0;
+    if (n >= 3) return;
+    this.relief.set(id, n + 1);
+    this.reliefBusy.add(id);
+    this.build(spec, this.ordOf(spec), false, true)
+      .then((tile) => {
+        const cur = this.loaded.get(id);
+        if (!cur?.flat) return; // unloaded, or its real twin already won the cell
+        if (tile) {
+          this.queued.add(id);
+          this.buildQueue.push({ spec, tile, replace: true });
+        } else setTimeout(() => { if (this.loaded.get(id)?.flat) this.relieve(spec); }, 12000 * (n + 1));
+      })
+      .catch((e) => console.warn('relief build failed', id, e))
+      .finally(() => this.reliefBusy.delete(id));
+  }
+
   private mount(p: Pending | null) {
-    if (!p || this.loaded.has(p.spec.id)) return;
+    if (!p) return;
     if (p.spec.synth && this.loaded.has('w' + p.spec.id.slice(1))) return; // its real-lite twin already won the cell
+    if (p.replace) {
+      // Relief swap: only while the flat version is still what's mounted. Unloading first
+      // is required (fp/interior keys are `${id}:${i}` — identical across the two builds)
+      // and safe: both happen inside this one synchronous call, so no frame ever renders
+      // or collides against an empty cell.
+      if (!this.loaded.get(p.spec.id)?.flat) return;
+      this.unload(p.spec.id);
+    } else if (this.loaded.has(p.spec.id)) return;
     const { spec, tile } = p;
     const scope = this.scopeSeq++;
     const w = this.walk;
@@ -459,7 +509,10 @@ export class TileStream {
         poles: tile.poles,
         churches: tile.fps.filter((f) => f.kind === 'church').map((f) => f.ring[0] as [number, number]),
         primRoads: tile.roads,
+        flat: !!tile.demLate,
       });
+      if (tile.demLate) this.relieve(spec);
+      else this.relief.delete(spec.id);
       this.markDirty();
       this.onTile?.(this.loaded.get(spec.id)!);
       this.onMount?.(spec);

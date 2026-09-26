@@ -26,7 +26,23 @@ const demCache = new Map<string, Promise<{ buf: ArrayBuffer; layout: LayerLayout
 
 const loadBin = () => (binPromise ??= binInit ? Promise.resolve(binInit) : cachedFetch(base + 'terrain.bin'));
 
-async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: boolean; terr?: { slice: LayerLayout; backdrop: LayerLayout } }): Promise<BuiltTile> {
+// DEM results are cached per cell for the session — but only successes: a null (fetch
+// failure, worker hiccup) is forgotten once settled so the next build of that cell (the
+// w-twin, or the main thread's relief rebuild) retries instead of inheriting it forever.
+function demFor(cellKey: string, box: TileSpec['box']) {
+  let p = demCache.get(cellKey);
+  if (!p) {
+    p = fetchDem(box, origin!).then((d) => (d ? demLayer(d) : null));
+    demCache.set(cellKey, p);
+    void p.then((d) => { if (!d && demCache.get(cellKey) === p) demCache.delete(cellKey); });
+  }
+  return p;
+}
+
+// `relief`: the main thread already has this synth cell mounted FLAT (its 4 s DEM race
+// lost). Await the untimed patch; no patch → null (nothing to swap), else a full rebuild
+// on real heights that the stream swaps in place of the flat mount.
+async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: boolean; relief?: boolean; terr?: { slice: LayerLayout; backdrop: LayerLayout } }): Promise<BuiltTile | null> {
   const spec = msg.spec;
   if (!terrain) {
     const lay = msg.terr;
@@ -41,14 +57,12 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   // 4 s (they exist to be fast); real tiles await it — OSM is the slow pole anyway.
   const cellKey = spec.id.slice(1);
   let demP: Promise<{ buf: ArrayBuffer; layout: LayerLayout } | null> | null = null;
-  if (demOn && origin && (spec.synth || spec.world)) {
-    demP = demCache.get(cellKey) ?? null;
-    if (!demP) {
-      // Cache the UNTIMED grid — the s-twin races it at 4 s; when the w-twin lands later
-      // it awaits the same promise and still gets the real heights.
-      demP = fetchDem(spec.box, origin).then((d) => (d ? demLayer(d) : null));
-      demCache.set(cellKey, demP);
-    }
+  // Cache the UNTIMED grid — the s-twin races it at 4 s; when the w-twin (or a relief
+  // rebuild) comes later it awaits the same promise and still gets the real heights.
+  if (demOn && origin && (spec.synth || spec.world)) demP = demFor(cellKey, spec.box);
+  if (msg.relief) {
+    const d = demP ? await demP : null;
+    if (!d) return null;
   }
   // OSM/tile fetch starts first (it's the slow pole); DEM resolves in parallel.
   const tjP: Promise<TileJson> | null = spec.synth
@@ -56,7 +70,7 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
     : spec.world
       ? (cachedFetchJson(spec.file) as Promise<TileJson>) // real-lite: absolute tile-service URL
       : (cachedFetchJson(base + spec.file) as Promise<TileJson>);
-  const dem = demP ? (spec.synth ? await raceNull(demP, 4000) : await demP) : null;
+  const dem = demP ? (spec.synth && !msg.relief ? await raceNull(demP, 4000) : await demP) : null;
   if (dem) {
     // The worker keeps its own view; a copy crosses to the main thread for the walker.
     // Registering BEFORE synthTile matters — placeholder lots must sit on real hills.
@@ -73,6 +87,8 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   // dem.buf is shared via demCache (the w-twin build will reuse it) — ship a copy, not
   // the cached buffer itself, or the transfer detaches it and the next twin reads zeros.
   if (dem) tile.dem = { buf: dem.buf.slice(0), layout: dem.layout };
+  // Built flat while real terrain was expected — the stream asks for a relief rebuild.
+  else if (demP && spec.synth && !msg.lite) tile.demLate = 1;
   return tile;
 }
 
@@ -92,6 +108,7 @@ ctx.onmessage = (e: MessageEvent) => {
   if (m.kind !== 'build') return;
   build(m).then(
     (tile) => {
+      if (!tile) return ctx.postMessage({ kind: 'built', id: m.id, tile: null });
       const tr: Transferable[] = [];
       for (const o of tile.objs) {
         for (const a of Object.values(o.at)) tr.push(a.a.buffer);

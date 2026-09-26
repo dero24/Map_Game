@@ -61,6 +61,8 @@ async function demTile(tx: number, ty: number): Promise<Float32Array | null> {
     }
   })();
   tileCache.set(k, p);
+  // Failures aren't cached — a transient 5xx/timeout must not pin a cell flat for the session.
+  void p.then((h) => { if (!h && tileCache.get(k) === p) tileCache.delete(k); });
   return p;
 }
 
@@ -90,6 +92,7 @@ export async function fetchDem(box: Box, origin: LatLon): Promise<DemGrid | null
     const x0 = Math.floor(lon2tx(lonW)), x1 = Math.floor(lon2tx(lonE));
     const y0 = Math.floor(lat2ty(latN)), y1 = Math.floor(lat2ty(latS));
     const tiles = new Map<string, Float32Array>(); // 'x_y' -> decoded heights, 256×256
+    const want = (x1 - x0 + 1) * (y1 - y0 + 1);
     await Promise.all(
       Array.from({ length: x1 - x0 + 1 }, (_, i) => x0 + i).flatMap((tx) =>
         Array.from({ length: y1 - y0 + 1 }, (_, j) => y0 + j).map(async (ty) => {
@@ -98,7 +101,9 @@ export async function fetchDem(box: Box, origin: LatLon): Promise<DemGrid | null
         }),
       ),
     );
-    if (!tiles.size) return null;
+    // All-or-nothing: a missing slippy tile would sample as 0 m — a cliff down to "sea"
+    // (which also flags it water). A flat cell that retries later beats a fake shoreline.
+    if (tiles.size < want) return null;
     const sample = (x: number, z: number) => {
       const [lat, lon] = P.unproject(x, z);
       const fx = lon2tx(lon) * 256 - 0.5, fy = lat2ty(lat) * 256 - 0.5;

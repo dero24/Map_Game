@@ -263,6 +263,7 @@ export class Interiors {
   private failed = new Set<string>();
   private pending: { fi: string; gen: Generator<void, THREE.Object3D, void> } | null = null;
   private openAmt = 0;
+  private opened = false; // hysteresis state for the facade openings (see update)
   indoors = false;
   onStairs = false;
 
@@ -300,14 +301,19 @@ export class Interiors {
     this.pump();
     const inside = this.walk.interiorAt(x, z, feet);
     this.indoors = inside >= 0 && inside === this.walkId(this.active);
-    // windows become real openings as you come close (dithered cross-fade, no popping)
-    let want = 0;
+    // Windows + door become real openings as you come close. This used to track distance
+    // continuously (7–14 m) — standing at mid range left the facade permanently half-cut
+    // in a screen-space dither that crawled as you moved (the "sill/door flicker"), and it
+    // opened onto nothing while the sliced interior build was still pending. Now: a
+    // hysteresis switch (open < 8 m, close > 10 m), only once the interior mesh exists,
+    // and a short time-based wash (~0.3 s, world-anchored noise in the facade shader).
     const afp = this.active !== null ? this.fps.get(this.active) : undefined;
-    if (afp) {
+    if (afp && !this.pending && this.mesh) {
       const d = this.indoors ? 0 : ringDist(afp.ring, x, z);
-      want = 1 - Math.min(1, Math.max(0, (d - 7) / 7));
-    }
-    this.openAmt += (want - this.openAmt) * Math.min(1, dt * 4);
+      this.opened = d < (this.opened ? 10 : 8);
+    } else this.opened = false;
+    const want = this.opened ? 1 : 0;
+    this.openAmt += Math.max(-dt * 3.5, Math.min(dt * 3.5, want - this.openAmt));
     activeBuilding.uOpenAmt.value = this.openAmt < 0.02 ? 0 : this.openAmt > 0.98 ? 1 : this.openAmt;
     const P = this.active !== null ? this.plans.get(this.active) : undefined;
     if (P && this.indoors) {
@@ -321,6 +327,9 @@ export class Interiors {
     if (inside >= 0) {
       for (const [fi] of this.plans) if (this.walkId(fi) === inside) { target = fi; break; }
     }
+    // An opened (or still-closing) house keeps the focus until its wash has run out —
+    // switching mid-open used to snap its windows and door shut in one frame.
+    if (target === null && this.active !== null && this.openAmt > 0.001) return;
     if (target === null) {
       let best = 16;
       const gx = Math.floor(x / 25), gz = Math.floor(z / 25);
@@ -395,6 +404,7 @@ export class Interiors {
     this.active = fi;
     this.lights = [];
     this.openAmt = 0;
+    this.opened = false;
     U.uHoleInfo.value.z = 0;
     if (fi === null) {
       activeBuilding.uActiveId.value = -1;
@@ -1254,8 +1264,8 @@ function interiorMaterial(I: Interiors) {
       attribute vec2 aOut;
       varying vec3 vColor;
       varying vec4 vWall;
-      varying vec4 vInfo;
-      varying vec2 vOut;
+      flat varying vec4 vInfo;
+      flat varying vec2 vOut;
       void main() {
         vec4 wp = worldMat() * vec4(position, 1.0);
         vWorldPos = wp.xyz + uWorldOffset;
@@ -1270,8 +1280,8 @@ function interiorMaterial(I: Interiors) {
       uniform vec3 uWindowColor, uFab;
       varying vec3 vColor;
       varying vec4 vWall;
-      varying vec4 vInfo;
-      varying vec2 vOut;
+      flat varying vec4 vInfo;
+      flat varying vec2 vOut;
       ${GLSL_WINDOWS}
 
       // a little watercolour on the wall: sea, sky, dune — or a sailboat, or a bunch of washes
@@ -1313,7 +1323,7 @@ function interiorMaterial(I: Interiors) {
             vec3 NO = normalize(vec3(vOut.x, 0.0, vOut.y));
             Win W = windowAt(vWall.x, vWall.y, vWall.z, vWall.w, seedOf(vInfo.x), vInfo.y, vInfo.w, NO);
             if (W.ok) {
-              float inner = step(abs(W.cu), W.ww * 0.5 - 0.08) * step(abs(W.cy), W.wh * 0.5 - 0.08);
+              float inner = step(abs(W.cu), W.ww * 0.5 - 0.08) * step(abs(W.cy), W.wh * 0.5 - 0.08) * archIn(W, W.cu, W.cy, 0.08);
               if (inner > 0.5) discard;
               float frame = step(abs(W.cu), W.ww * 0.5 + 0.04) * step(abs(W.cy), W.wh * 0.5 + 0.06);
               // curtains + a valance, pulled to the sides

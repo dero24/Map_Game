@@ -2,6 +2,60 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-26 — Queued bugs fixed + the window asset rebuilt (Opus handoff session)
+
+**Late-DEM seam (fixed).** s-tiles that lost the 4 s DEM race were built flat and never
+revisited. Now the worker marks such a build `BuiltTile.demLate`; the stream records the
+mount as `flat` and immediately asks for a *relief* build (`build(..., relief=true)`): the
+worker awaits the untimed cell DEM (same promise the w-twin shares) and returns either
+`null` (no patch — nothing to swap, retried ≤3× with 12/24/36 s backoff) or a full rebuild
+on real heights. That lands in the build queue as `{replace:true}`; `mount()` unloads the
+flat version and mounts the new one inside one synchronous call (fp/interior keys are
+identical `${id}:${i}` across builds, so unload-first is required and no frame ever sees an
+empty cell). Discarded if the w-twin already won or the cell unloaded. Related shelf bug
+fixed en route: a *partially* failed DEM fetch sampled missing slippy tiles as 0 m — a fake
+cliff to "sea" (also flagging water). `fetchDem` is now all-or-nothing, and neither the
+slippy-tile cache nor the per-cell cache (worker + main-thread fallback) keeps failures, so
+transient 5xx/timeouts retry instead of pinning a cell flat for the session.
+Not yet verified live (needs `wrangler dev` running); typecheck + 60/60 tests.
+
+**Window/door flicker (root cause found — it wasn't the fade).** `vInfo.x` (building id,
+up to ~8.5 M for synth cells: `ord × 4096`) was an *interpolated* float varying; barycentric
+error nudged it per pixel and `seedOf(id)` → every per-building choice (shutters or not,
+their colour, siding, which windows exist) re-hashed pixel-to-pixel. That is the "black
+sill/door flicker on approach": fine horizontal hatching that shifts with distance/angle,
+which the Kuwahara pass then shredded into speckle. Fix: `flat varying` for `vInfo`,
+`vTan` (buildings) and `vInfo`/`vOut` (interiors). Montage proof: raw close-up hatching gone.
+Also fixed the transition itself: facade openings used to track distance continuously
+(7–14 m) through a screen-space Bayer dither — standing mid-range left the house
+permanently half-cut, crawling as you moved, and it opened onto nothing while the sliced
+interior was still pending. Now: open only once the interior mesh exists, hysteresis
+(open < 8 m, close > 10 m), ~0.3 s time-based wash with world-anchored `vnoise3` (can't
+crawl), the opened house keeps focus until its wash runs out (no snap-shut when a neighbour's
+door gets closer), and individual *windows* only turn into real openings within ~4–6 m of
+that window — from the street the visited house keeps its glass like its neighbours.
+Doors still read closed at range (kept, per the user).
+
+**Window asset rebuilt** (user: "they look horrible" — agreed; J2's SDF-decal item pulled
+forward). `buildings.ts` facade shader: head/drip-cap + light-catching sill with a soft
+shadow down the siding; deep blue-grey glass with sky reflection (fresnel), one soft
+diagonal sheen, reveal shadow at top/sides; muted interior-mapped room only up close and
+darker than the street by day (that's what makes glass read as glass); per-building sash
+style (6/6, 2/2, 1/1) with muntins that fade before they alias; pulled-down shades on ~⅓ of
+windows (glow at night); panel shutters with a contact shadow replace the louvred stripes;
+storefronts get mullions + transom bar, and shop lamps no longer tint daytime glass peach;
+churches get round-headed lancets with stained-glass tint (`Win.arch`, `archIn()` shared
+with the interior shader so the cut holes match); attic gable window gets lights + sill.
+Hole geometry for interiors is unchanged (glass half-size `ww/2-0.08`).
+
+**Tooling.** `tools/inpage-montage.js` + a dev-only `/__shot` sink in `vite.config.ts`:
+agents driving a live browser (no Playwright) can pose shots and save a full-res contact
+sheet to `shots/`. Vitest can't run in a Linux sandbox against a Windows `node_modules`
+(rolldown native binding) — this session ran the suites through a throwaway ts-transpile +
+vitest-API shim (60/60). `npm run build` still needs a run on the dev machine.
+Shots: `shots/flicker-before.jpg`, `flicker-after.jpg`, `windows-before.jpg`,
+`windows-after.jpg`, `shutter-close.jpg`.
+
 ## 2026-09-25 — H2: Terrarium DEM for virtual cells (shipped, reviewed 8.5/10)
 
 **Status: shipped.** Expert review: **8.5/10 — SHIP, `?at=` earns the public flag once
