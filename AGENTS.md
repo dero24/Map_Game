@@ -6,7 +6,8 @@
   Region spec fields (slice/backdrop/origin/tz/oceanEdge/spawn/roads/shoreLabel/landmarks) are documented there.
 - Deep links: `?at=lat,lon` picks the region whose slice (then backdrop, then nearest origin) contains
   the point and spawns there — on a doorstep it places you 2.2 m outside the nearest building's front door.
-- Typecheck: `npm run typecheck`. Tests: `npm test` (vitest: rng, sun ephemeris, LifeSim determinism/behaviour). Build must pass before handing off.
+- Typecheck: `npm run typecheck`. Tests: `npm test` (vitest: rng, sun ephemeris, LifeSim determinism/behaviour,
+  realTile OSM→TileJson, demLayer packing). Build must pass before handing off.
 - Ambient life: pure sim in `src/sim/lifeSim.ts` (testable), worker wrapper `ambient.worker.ts`, renderer/client `life.ts`,
   shared layout `protocol.ts` (SAB when cross-origin isolated, transferable copies otherwise). Sound: `src/audio/ambience.ts` (all synthesized).
 - Data: `npm run fetch` (osm/terrain/worldcover/overture/imagery, raw → `raw/<region>/`, archived),
@@ -20,10 +21,17 @@
   porch clearance and sign intersections). `WalkWorld.beginScope/endScope/removeScope` scopes all collision per tile;
   interiors register under `"tile:idx"` keys and unregister on unload. The ambient-life worker re-inits when the
   loaded set settles (or after 4 s). Regions without a manifest fall back to a single-tile world.json.
-- Real-lite tiles (open world, `worker/`): `cd worker && npx wrangler dev` → `http://localhost:8787`, then the game
-  takes `?tiles=http://localhost:8787`; `?at=lat,lon` beyond every baked backdrop + `?tiles` builds a virtual
-  manifest (origin snapped to 1/64° so players share cell/R2 keys, flat synthetic terrain until H2's DEM) —
+- Real-lite tiles (open world, `worker/`): `cd worker && npx wrangler dev` → `http://localhost:8787`. On localhost
+  the game auto-defaults `tiles` to that base (`?tiles=` explicit overrides, `?tiles=off` disables; a `/health`
+  probe falls back to pure procedural with a toast if no worker answers). `?at=lat,lon` beyond every baked
+  backdrop builds a virtual manifest (origin snapped to 1/64° so players share cell/R2 keys) —
   `w-<cx>_<cz>` specs stream OSM→TileJson while `s-*` synth twins mount instantly and upgrade in place.
+  Terrain: worker route `GET /dem/<z>/<x>/<y>.png` proxies Terrarium (S3 has no CORP headers — module-worker
+  fetches must go through the proxy). `src/world/dem.ts` decodes z14 PNGs → 64×64 grid at 16 m pitch → a
+  synthetic `TerrainLayer` (heights f32-cm; sdf/flags derive from elevation — sea nodes = water). The worker
+  registers the patch before `buildTile` so props/ground/interiors sit on real heights; `BuiltTile.dem` ships
+  a copy to the main thread, which registers it under the cell key with `demHolders` refcounting so the s→w
+  swap can't drop terrain. Placeholder tiles race DEM at 4 s; real tiles await it.
   Deploy once: `npx wrangler login`, `npx wrangler r2 bucket create map-game-tiles`, `npx wrangler deploy`, then
   set `AtlasManifest.tilesUrl` (or pass `?tiles=`). The shared transform is `src/world/realTile.ts` (bundled by
   the worker, unit-tested client-side — keep its tag tables in sync with `scripts/bake.mjs`/`lib/colour.mjs`).
@@ -35,8 +43,10 @@
   composited into `U.uLampMap` by the stream); collision ships as `WalkOp`s replayed inside the scope; deck heights
   ship as exact `DeckProfile` params (ramp/const/arch on the `Deck` interface).
 - Terrain packs: lod-0 tiles also fetch `tiles/<cx>_<cz>.terrain.bin` — a subgrid of the slice layer snapped to the
-  shared lattice (no margin). `Terrain.registerPatch/removePatch` (called alongside the walk scope on mount/unload)
-  makes the pack the preferred sampling layer for its box; region slice/backdrop layers stay resident, so unloaded
+  shared lattice (no margin). Virtual cells carry a DEM `TerrainLayer` in-band instead (`BuiltTile.dem`, see above).
+  `Terrain.registerPatch/removePatch` (called alongside the walk scope on mount/unload) makes the pack the preferred
+  sampling layer for its box; `patchFor` also checks the 8 neighbour cells (DEM grids overhang by a pitch) so a
+  not-yet-loaded neighbour doesn't leave a flat shelf. Region slice/backdrop layers stay resident, so unloaded
   areas still answer at region resolution and every consumer keeps the same signatures.
 - Buildings: walls follow the true footprint; pitched roofs come from a straight skeleton (`src/world/roof.ts`, unit-tested)
   with gable folding. Raised houses (pilings), porches, stoops, railed stairs are in `buildings.ts`; their collision goes out
@@ -54,4 +64,10 @@
   `window.__GAME__`. Uses Playwright from `../../shot-harness`.
 - Local frame: +x east, +z south (north = -z), metres, per-region origin from config.
 - All materials are custom ShaderMaterials sharing uniforms in `src/render/shared.ts`; the look lives in `src/render/post.ts`.
-- Region identity (name/tz/spawn/labels) travels in `world.json` `meta` — runtime code must not hardcode place names.
+- Region identity (name/tz/spawn/labels/style) travels in `world.json`/`manifest` `meta` — runtime code must not
+  hardcode place names. Virtual manifests must emit `meta.style` too (derive from `?at=` via the same LUT —
+  see `docs/ASSET_FIDELITY.md` §4).
+- Roadmap/working docs: `docs/earth/OPEN_WORLD.md` (phase list: H1✅ H2✅ H3-lite✅ → I style+recipe → J detail →
+  J2 asset craft → L measured tier → K life), `docs/earth/LOG.md` (session log + queued bugs), 
+  `docs/earth/PROGRESS.md` (tracker), `docs/earth/REVIEWER.md` (expert-review history — keep scores/rationale
+  consistent), `docs/ASSET_FIDELITY.md` (data/builder upgrade plan for J2/L).

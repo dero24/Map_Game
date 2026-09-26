@@ -87,13 +87,30 @@ a shared R2 cache means each street is fetched once per *population*, not per pl
   premise true anywhere.
 - **H2 — Global terrain.** Terrarium decode → per-cell `registerPatch`. Real relief
   worldwide; also fixes the synth plateau inside synth territory (real data *is* the fix).
+  Terrarium is the floor — upgrade to national DTMs where open (3DEP 1 m, IGN, AHN, NZ…;
+  ladder in `ASSET_FIDELITY.md` §1).
 - **H3 — Hybrid fill.** landuse without footprints → synth lots on real roads.
 - **I — Regional style engine.** `regionStyle(lat,lon)` LUT: biome palettes, tree species,
   vehicle mix, driving side, roof/wall palettes, snow rules, animal species. Applies to
-  every feeder including baked.
+  every feeder including baked. Includes the recipe/seed layer (`recipe.ts`/`styles.ts` —
+  every per-building decision a pure function of `bd.s`); same LUT, build once
+  (`ASSET_FIDELITY.md` §4). **Virtual manifests must emit `meta.style` too** — `virtual.ts`
+  builds `meta` inline today; derive style from `?at=` coords via the same LUT or `?at=`
+  tiles stay style-less.
 - **J — Detail parity.** Ground-paint layer, building pads/grading, intersection pads,
   per-tile lamp boxes, signage from real `name` tags.
+- **J2 — Asset craft.** Feeder-agnostic builder/shader upgrades that raise believability on
+  every layer: vertex-AO bake in the worker (`three-mesh-bvh` → `aAO` into `paintLight`),
+  banded roofs (mansard/gambrel), dormers, SDF window decals, rounded prop edges.
+  Designs in `docs/ASSET_FIDELITY.md` §2–3.
 - **K — Life + ambience.** Vehicles/animals/peds per region style; biome sound palettes.
+- **L — Measured tier.** Bake-enrich stage: `bd.h` heights for ~80–90% of world buildings
+  (Overture/3D-GloBFP join, CC-BY-clean); US LiDAR (`usgs-lidar` EPT polygon crops) →
+  fitted roof planes `bd.rp` + 1 m DEM + real tree positions; national LoD2/lidar adapters
+  where open; open-ortho roof classifier (licensed sources only). `bd.h`/`bd.rp`/`bd.eav`/
+  `bd.rs` are optional TileJson fields every feeder may emit — real-lite gains heights via
+  Overture fields or DSM COG range-reads in the worker. Needs J2's roof vocabulary to
+  express `bd.rp`. Ladder + licenses: `docs/ASSET_FIDELITY.md` §1.
 
 (Paused synth polish — synth-terrain relief field, deeper streetscape — now folded into
 I/J where it pays off for *all* feeders, not just the fallback.)

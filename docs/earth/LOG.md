@@ -46,8 +46,14 @@ the worker deploys** (user step: `wrangler login` → `r2 bucket create` → `wr
   door meshes flicker on approach — likely the window-fade/door distance threshold or
   z-fighting on facade decals. Doors reading closed at range is liked; the pop-in is
   the ugly part.
-
-## 2026-09-25 — H1c/H3-lite: hybrid fill — sparse real streets grow lots (shipped)
+- **User-reported seam bug (H2 follow-up, asked me not to fix yet):** flying past the
+  bake edge, an s-tile whose DEM raced out at 4 s builds flat forever — beside a
+  DEM-hilled cell it reads as sunken houses/trees + walking through the hill. Mesh
+  heights and walker heights are consistent *within* a tile; the tile just never
+  upgrades. Candidate fix: re-queue a rebuild when a mounted s-cell's DEM resolves
+  late (mesh + collision-scope swap mid-walk), or lengthen the placeholder budget.
+  Mostly affects cells reached slowly — spawn cells block on `ensureAround` and
+  usually get DEM first.
 
 - `realTile.ts` hybrid fill: when a cell's owner building density is <20/km of
   fillable road (residential/unclassified/tertiary/secondary/living_street), seeded

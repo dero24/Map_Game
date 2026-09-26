@@ -28,14 +28,15 @@ walking — forever — while the world paints itself around you. The design liv
 | H1c | **Open world `?at=`** — virtual manifest (snapped origin, flat synthetic terrain) beyond baked regions; verified at London (8.3k fps, 8.5k roads, 0 errors) | ✅ done | `0107bb7` |
 | — | Expert design/gameplay review ×2 (6.5 → 8/10): first-minute promise toast, stranded-`at` guards, HUD street names, tz, swap-settle nudge, tree/bench points, paved footsteps | ✅ done | `5dc3f9e` + `adc60f5` |
 | H3-lite | **Hybrid fill** — sparse real cells (<20 bldg/km) plant seeded lots along real roads; land masks, round-robin cap, interior clamp, per-road rng. Reviewed 7.5 → 8.5/10, "move to H2" | ✅ done | `7f32dfb` + `e379253` + `96fe7c6` |
-| H2 | **Terrarium DEM** — `/dem/` worker route (edge+R2 cached), per-cell f32-cm TerrainLayer patches (s/w twin shared, holder-refcounted), elevation-derived sdf (sea can't host synth lots), neighbour-patch lookup; reviewed **8.5/10 — SHIP pending worker deploy** | ✅ done | pending commit |
+| H2 | **Terrarium DEM** — `/dem/` worker route (edge+R2 cached), per-cell f32-cm TerrainLayer patches (s/w twin shared, holder-refcounted), elevation-derived sdf (sea can't host synth lots), neighbour-patch lookup; reviewed **8.5/10 — SHIP pending worker deploy** | ✅ done | `6d38ede` |
 
 ## Next up (per masterplan, in rough order)
 
 - ~~Amortize interior generation~~ — done: worst subsystem 112 ms → 7.3 ms, soak `stalls=0`, `hitches=0`.
 - **Deploy the worker** (user step — needs their Cloudflare account): `cd worker && wrangler login && wrangler r2 bucket create map-game-tiles && wrangler deploy`, then `tilesUrl` into manifests/Pages. Until then `?at=` is dev-only via localhost auto-default.
 - Window-sill/door flicker (user-reported): facade-decal z-fighting or the window-fade distance threshold — cosmetic, queued.
-- H3 full / I regional style / J detail parity / K life+ambience — same review loop each.
+- Late-DEM seam (user-reported, unfixed by request): flat-built s-tiles beside DEM-hilled cells look sunken — rebuild the mounted s-cell when its DEM resolves, or lengthen the placeholder budget.
+- Next phases (see `OPEN_WORLD.md` + `ASSET_FIDELITY.md`): **I** regional style + recipe/seed layer (incl. `meta.style` for virtual manifests) → **J** detail parity → **J2** asset craft (vertex-AO, banded roofs, dormers, SDF decals, rounded props) → **L** measured tier (`bd.h/rp/eav/rs`) → **K** life+ambience. Same implement→montage→review loop each.
 - Deploy `worker/` (needs the Cloudflare account: `wrangler login` → `r2 bucket create` → `deploy`),
   then set `tilesUrl` in manifests / wire it into the Pages deployment.
 - Atlas journaling improvements (the journal exists; "humanity map" is Phase 5).
