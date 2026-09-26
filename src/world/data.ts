@@ -69,14 +69,14 @@ export interface WorldJson {
 
 export class TerrainLayer {
   readonly g: GridHeader;
-  readonly height: Int16Array; // cm
+  readonly height: Int16Array | Float32Array; // cm — i16 baked packs, f32 DEM patches (real mountains exceed 327 m)
   readonly sdf: Int16Array; // dm, + land
   readonly cover: Uint8Array; // ESA WorldCover class
   readonly flags: Uint8Array; // bit0 water, bit1 ocean
   readonly oceanD: Uint8Array; // distance to ocean /2 m
   constructor(buf: ArrayBuffer, L: LayerLayout) {
     this.g = L.grid;
-    this.height = new Int16Array(buf, L.height.offset, L.height.length);
+    this.height = L.height.type === 'f32' ? new Float32Array(buf, L.height.offset, L.height.length) : new Int16Array(buf, L.height.offset, L.height.length);
     this.sdf = new Int16Array(buf, L.sdf.offset, L.sdf.length);
     this.cover = new Uint8Array(buf, L.cover.offset, L.cover.length);
     this.flags = new Uint8Array(buf, L.flags.offset, L.flags.length);
@@ -120,8 +120,18 @@ export class Terrain {
   removePatch(id: string) { this.patches.delete(id); }
   private patchFor(x: number, z: number) {
     if (!this.patches.size) return null;
-    const p = this.patches.get(`${Math.floor(x / this.patchCell)}_${Math.floor(z / this.patchCell)}`);
-    return p && p.contains(x, z) ? p : null;
+    const cx = Math.floor(x / this.patchCell), cz = Math.floor(z / this.patchCell);
+    const p = this.patches.get(`${cx}_${cz}`);
+    if (p && p.contains(x, z)) return p;
+    // DEM patches overhang their cell by up to one pitch — near an edge, check the
+    // neighbours too, or a not-yet-loaded cell's rim reads as a flat shelf.
+    for (let ox = -1; ox <= 1; ox++)
+      for (let oz = -1; oz <= 1; oz++) {
+        if (!ox && !oz) continue;
+        const q = this.patches.get(`${cx + ox}_${cz + oz}`);
+        if (q && q.contains(x, z)) return q;
+      }
+    return null;
   }
   layer(x: number, z: number) {
     return this.patchFor(x, z) ?? (this.slice.contains(x, z, 2) ? this.slice : this.backdrop);

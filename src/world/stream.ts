@@ -3,7 +3,8 @@
 // mounted cheaply: packed objects rebuilt into scene meshes, collision ops replayed inside a
 // WalkWorld scope, interiors registered under "tile:idx" keys. Unload removes all three cleanly.
 import * as THREE from 'three';
-import { loadTile, loadTileTerrain, type AtlasManifest, type Box, type Road, type TileJson, type TileSpec, type Terrain, TerrainLayer } from './data';
+import { loadTile, loadTileTerrain, type AtlasManifest, type Box, type LayerLayout, type Road, type TileJson, type TileSpec, type Terrain, TerrainLayer } from './data';
+import { fetchDem, demLayer, setDemBase, raceNull } from './dem';
 import { cachedFetchJson, manifestFingerprint } from './cache';
 import type { Door, Footprint } from './buildings';
 import { buildTile } from './tileBuild';
@@ -80,6 +81,9 @@ export class TileStream {
   onChange: (() => void) | null = null;
   onTile: ((a: TileArt) => void) | null = null; // fired after a tile mounts (walks -> ground paint)
 
+  /** Kill switch for the real-lite service (dead local worker → synth everywhere). */
+  setTilesBase(v: string) { this.tilesBase = v; }
+
   // Manifest cells by cx_cz key + the procedural-cell cache: past the manifest's grid the
   // world is synthesised deterministically (synth.ts) — same BuiltTile pipeline after that.
   private byCell = new Map<string, TileSpec>();
@@ -88,6 +92,10 @@ export class TileStream {
   private seed = 0;
   private synthOrd = 0; // fp-id base offset — starts at man.tiles.length so ids stay <2^24
   private queued = new Set<string>(); // ids sitting in buildQueue — gates the per-frame refetch
+  // H2 DEM patches live per-CELL (s/w twins share identical bytes): keyed 'cx_cz' →
+  // the mounted spec ids holding it, so the s→w swap can't yank terrain mid-stride.
+  private demHolders = new Map<string, Set<string>>();
+  private demCache = new Map<string, Promise<{ buf: ArrayBuffer; layout: LayerLayout } | null>>(); // main-thread fallback path only
 
   constructor(
     private base: string,
@@ -98,6 +106,7 @@ export class TileStream {
     private scene: THREE.Object3D, // the world root — tile groups join it under the floating origin
     private tilesBase = '', // real-lite tile service ('' = synth everywhere past the bake)
     private terrBin: ArrayBuffer | null = null, // terrain.bin bytes for virtual regions (no URL exists)
+    private demEnabled = false, // H2: Terrarium patches for virtual cells (baked regions carry real terrain already)
   ) {
     const S = man.slice;
     U.uLampBox.value.set(S.x0, S.z0, 1 / (S.x1 - S.x0), 1 / (S.z1 - S.z0));
@@ -306,7 +315,7 @@ export class TileStream {
       // Worker fetches resolve against its own module URL — hand it an absolute base.
       // Virtual regions (the ?at= open world) carry their terrain bytes in-band: there is
       // no terrain.bin URL to fetch, so the same buffer the page uses is passed here.
-      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin });
+      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin, origin: this.man.origin, dem: this.demEnabled, demBase: this.tilesBase });
       this.worker = w;
     } catch {
       this.workerDead = true;
@@ -323,15 +332,30 @@ export class TileStream {
       });
     }
     // No worker support: the same pipeline on the main thread.
-    const syn = t.synth ? synthTile(t, this.seed, this.terrain) : null;
-    const src: Promise<TileJson> = syn ? Promise.resolve(syn.tj) : t.world ? (cachedFetchJson(t.file) as Promise<TileJson>) : loadTile(this.base, t);
-    return Promise.all([src, lite || syn || t.world ? Promise.resolve(null) : loadTileTerrain(this.base, t)]).then(async ([tj, tl]) => {
-      const tile = await buildTile(tj, this.terrain, t, ord * ID_STRIDE, lite);
-      if (syn) tile.objs.push(...packGroup(syn.extra));
-      else if (t.world) tile.objs.push(...packGroup(realExtras(tj, this.terrain)));
-      tile.terr = tl ? (tl.height.buffer as ArrayBuffer) : undefined;
-      return tile;
-    });
+    const cellKey = t.id.slice(1);
+    if (this.demEnabled && this.tilesBase) setDemBase(this.tilesBase);
+    const demP = this.demEnabled && (t.synth || t.world)
+      ? (this.demCache.get(cellKey) ?? this.demCache.set(cellKey, fetchDem(t.box, this.man.origin).then((d) => (d ? demLayer(d) : null))).get(cellKey)!)
+      : null;
+    const src: Promise<TileJson | null> = t.synth
+      ? Promise.resolve(null)
+      : t.world
+        ? (cachedFetchJson(t.file) as Promise<TileJson>)
+        : loadTile(this.base, t);
+    return src
+      .then(async (tj0) => {
+        const dem = demP ? (t.synth ? await raceNull(demP, 4000) : await demP) : null;
+        if (dem) this.terrain.registerPatch(cellKey, new TerrainLayer(dem.buf.slice(0), dem.layout));
+        const syn = t.synth ? synthTile(t, this.seed, this.terrain) : null;
+        const tj = tj0 ?? syn!.tj;
+        const tl = lite || syn || t.world ? null : await loadTileTerrain(this.base, t);
+        const tile = await buildTile(tj, this.terrain, t, ord * ID_STRIDE, lite);
+        if (syn) tile.objs.push(...packGroup(syn.extra));
+        else if (t.world) tile.objs.push(...packGroup(realExtras(tj, this.terrain)));
+        tile.terr = tl ? (tl.height.buffer as ArrayBuffer) : undefined;
+        tile.dem = dem ? { buf: dem.buf.slice(0), layout: dem.layout } : undefined; // cached buf is shared by twins — ship a copy
+        return tile;
+      });
   }
 
   private fetch(t: TileSpec): Promise<Pending | null> {
@@ -367,6 +391,15 @@ export class TileStream {
     const keys: string[] = [], fpKeys: string[] = [], fpList: Footprint[] = [];
     const tl = tile.terr && spec.terrain ? new TerrainLayer(tile.terr, spec.terrain.layout) : null;
     if (tl) this.terrain.registerPatch(spec.id, tl);
+    if (tile.dem) {
+      const cell = spec.id.slice(1); // strip the s/w prefix — DEM patches key on the cell
+      let holders = this.demHolders.get(cell);
+      if (!holders) {
+        this.terrain.registerPatch(cell, new TerrainLayer(tile.dem.buf, tile.dem.layout));
+        this.demHolders.set(cell, (holders = new Set()));
+      }
+      holders.add(spec.id);
+    }
     w.beginScope(scope);
     try {
       // Builder-emitted collision (bridge/pier decks, poles, fences, parked cars) replays first —
@@ -434,6 +467,11 @@ export class TileStream {
       w.endScope();
       w.removeScope(scope);
       if (tl) this.terrain.removePatch(spec.id);
+      if (tile.dem) {
+        const cell = spec.id.slice(1);
+        const h = this.demHolders.get(cell);
+        if (h && (h.delete(spec.id), !h.size)) { this.demHolders.delete(cell); this.terrain.removePatch(cell); }
+      }
       // sweep any state the failed mount registered part-way through
       if (keys.length) this.interiors.unregister(keys);
       for (const k of keys) this.plans.delete(k);
@@ -479,6 +517,16 @@ export class TileStream {
     if (!a) return;
     this.walk.removeScope(a.scope);
     this.terrain.removePatch(id);
+    // DEM patch bookkeeping: the patch belongs to the CELL; retire it only when the
+    // last mounted twin leaves (an s-unload mid-swap mustn't drop the w-twin's terrain).
+    const cell = /^[sw]/.test(id) ? id.slice(1) : null;
+    if (cell) {
+      const holders = this.demHolders.get(cell);
+      if (holders && (holders.delete(id), !holders.size)) {
+        this.demHolders.delete(cell);
+        this.terrain.removePatch(cell);
+      }
+    }
     this.interiors.unregister(a.keys);
     for (const k of a.keys) this.plans.delete(k);
     for (const f of a.fps) { this.fpByKey.delete(f.key!); this.fpDoor.delete(f); }

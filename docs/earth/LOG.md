@@ -2,7 +2,52 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
-## 2026-09-25 — H1c/H3-lite: hybrid fill — sparse real streets grow lots
+## 2026-09-25 — H2: Terrarium DEM for virtual cells (shipped, reviewed 8.5/10)
+
+**Status: shipped.** Expert review: **8.5/10 — SHIP, `?at=` earns the public flag once
+the worker deploys** (user step: `wrangler login` → `r2 bucket create` → `wrangler deploy`
+→ `manifest.tilesUrl`).
+
+- New `src/world/dem.ts`: fetches Terrarium z14 PNGs through the CF worker's new
+  `GET /dem/<z>/<x>/<y>.png` route (S3 `elevation-tiles-prod` proxy — required because
+  the game is COEP-isolated and the bucket sends no CORP), decodes R*256+G+B/256-32768,
+  bilinear-samples a 65×65 grid at 16 m pitch per cell, packs a synthetic TerrainLayer
+  (heights f32-cm — i16 would cap real mountains at 327 m — plus honest defaults:
+  sdf +50 m, cover 30 grass, flags 0, oceanD far).
+- Plumbing: `BuiltTile.dem` carries `{buf, layout}`; tile worker fetches per-cell
+  (s/w twins share via `demCache`), registers the patch BEFORE synthTile/buildTile so
+  placeholder lots and real tiles both build on real heights; main thread registers
+  under the cell key (prefix stripped) with `demHolders` refcounting so the s→w swap
+  can't drop terrain mid-stride. `TerrainLayer.height` accepts `type:'f32'` chunks.
+  s-tiles race DEM at 4 s; w-tiles await (masked by OSM). Enabled only when VIRTUAL.
+- Cache: worker edge+R2 `dem/v1/` keys (PNGs immutable → 7-day edge TTL).
+- **Verified live:** Presidio SF (37.8005,-122.4661) — 14 cells patched, heights
+  71/96.7/94.7/25.2/56.7 m, walker stands at y=28.6 on a real hill. s-tiles get DEM.
+- **Bugs found + fixed en route:** `bmp.close()` zeroed dims before `getImageData`
+  (every fetch null — the real reason DEM silently failed); per-cell fetch bursts
+  self-stampeded (now slippy-tile dedupe + 4-concurrency gate); the 4 s s-tile race
+  poisoned the shared cache promise (now callers race an untimed per-cell promise).
+- **FIXED pre-review:** `bmp.close()` zeroed dims before `getImageData` (silent-null
+  root cause); per-cell DEM fetch stampede → slippy-tile dedupe + 4-concurrency gate;
+  the 4 s s-tile race poisoned the shared cell promise → callers race an untimed one;
+  `dem.buf` transfer detached the cached buffer → `slice(0)` per build; samples sat
+  corner-aligned while `TerrainLayer.bil` expects cell centers → 64×64 at half-offsets.
+- Reviewer should-fixes applied: sdf/flags now derive from elevation (sea = water —
+  synth can't plant suburbs in bays anymore); `patchFor` checks the 8 neighbour cells
+  (DEM overhang margin) so unbuilt rims don't leave flat shelves; health probe on the
+  auto-defaulted service — dead worker → toast + synth-only (`?tiles=off` also works).
+- Verified live: Presidio SF — 14 cells patched, heights 71/96.7/94.7/25.2/56.7 m,
+  walker at y≈28 on a real hill, patches persist through s→w swaps; montage shows the
+  bay and the real Marina grid with relief. 60/60 tests (new `dem.test.ts`), build clean.
+- Deferred polish (reviewer): partial-tile-failure shelf (null cached per session),
+  coarse-tier DEM is free real-mountain silhouettes (kept), spawn-adjacent DEM priority
+  if the flat→hill pop reads badly in play, antimeridian (works — commented).
+- User-reported cosmetic (queued): window-sill quads flicker black/pop at mid-distance;
+  door meshes flicker on approach — likely the window-fade/door distance threshold or
+  z-fighting on facade decals. Doors reading closed at range is liked; the pop-in is
+  the ugly part.
+
+## 2026-09-25 — H1c/H3-lite: hybrid fill — sparse real streets grow lots (shipped)
 
 - `realTile.ts` hybrid fill: when a cell's owner building density is <20/km of
   fillable road (residential/unclassified/tertiary/secondary/living_street), seeded
@@ -22,6 +67,12 @@ Newest first. One entry per work session: what changed, what was verified, what'
   (small chapel inside a fill rect can't be swallowed); fill centers clamp to cell
   interior (no cross-seam stacking); diagonal bucket neighbours; position-seeded lots.
   Cache bumped v2→v3. Verified: 57/57 tests, live tile spread 18/28/24/20 by z-band.
+- Round 2: **8.5/10 — no must-fix, "move to H2"**. Applied the cheap polish: per-road
+  rng streams keyed by first vertex (mirror-order can't perturb lot positions), height
+  derived from `s`, cache v3→v4. Deferred polish (rare-input): highway-plaza bypass,
+  tangential graze vs large buildings, cross-seam fill adjacency.
+- Commits: `7f32dfb` (fill), `e379253` (round-1 fixes), `96fe7c6` (round-2 polish).
+  All local only — not yet pushed (earlier push went through `9a27f4d`).
 
 ## 2026-09-25 — Session handoff (for the next worker on this codebase)
 

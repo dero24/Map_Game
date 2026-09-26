@@ -121,3 +121,27 @@ draw at emit time). Cache v3→v4.
 **Open polish (accepted, post-H2):** `highway`-tagged plazas bypass masks; tangential
 graze vs large mapped buildings; cross-seam fill-vs-fill adjacency; wasted inner-ring
 collection. All rare-input.
+
+---
+
+### 2026-09-25 — H2 review: Terrarium DEM for virtual cells
+**Verdict:** **8.5/10 — PASS, ship `?at=` publicly once the worker is deployed.**
+Strongest-scoped phase yet: "DEM is just another TerrainLayer patch" rides the same
+mount/unload + refcount lifecycle as everything else — zero new consumers.
+**Applied from the review:**
+1. ~~sdf `+50m` lie → ocean read as lawn, synth could plant suburbs in bays~~ — sdf/flags
+   now derive from elevation (h ≤ 0.5 m = water); below-sea-level land reads water too
+   (rare, placement-only, heights stay true).
+2. ~~`patchFor` keyed only the sample's cell → flat shelf at edges~~ — neighbour cells
+   checked (DEM patches overhang by design).
+3. ~~localhost TILES auto-default could spam a dead worker~~ — `/health` probe on first
+   use → toast + synth-only fallback.
+**Also applied during bring-up:** corner-aligned → cell-center sampling (TerrainLayer's
+bilinear convention), `bmp.close()` dims bug, fetch stampede → slippy dedupe + gate,
+timed-promise cache poisoning, `dem.buf` detachment.
+**Confirmed correct:** mercator frame math, nodata sentinel, refcount+ordering on the
+s→w swap, coarse tiers get free real-mountain silhouettes (kept deliberately).
+**Deferred:** partial-tile-failure shelf (retry), spawn-adjacent DEM priority if the
+flat→hill pop reads badly, comment-vs-code drift cleanup.
+**Player-found (new, not from this review):** window-sill/door decal flicker at
+approach — cosmetic, queued.

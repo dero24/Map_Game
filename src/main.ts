@@ -24,7 +24,10 @@ import { buildPanel, loadSettings, timeParams, weatherParams, debugParams } from
 
 const params = new URLSearchParams(location.search);
 const CAPTURE = params.has('capture');
-const TILES = params.get('tiles') ?? ''; // real-lite tile service base (the H1 worker)
+// real-lite tile service base (the H1 worker). Dev convenience: when the page runs on
+// localhost with no explicit ?tiles=, assume the local wrangler dev worker — teleporting
+// past the bake edge and ?at= then just work. ?tiles=off disables; prod never defaults.
+const TILES = params.get('tiles') === 'off' ? '' : (params.get('tiles') ?? (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? 'http://localhost:8787' : ''));
 const $ = (id: string) => document.getElementById(id)!;
 
 async function main() {
@@ -153,7 +156,16 @@ async function main() {
   walk.bounds = { x0: -4e6, z0: -4e6, x1: 4e6, z1: 4e6 };
   const interiors = new Interiors(walk);
   worldRoot.add(interiors.group);
-  const stream = new TileStream(base, manifest, world.terrain, walk, interiors, worldRoot, TILES || manifest.tilesUrl || '', terrBin);
+  const stream = new TileStream(base, manifest, world.terrain, walk, interiors, worldRoot, TILES || manifest.tilesUrl || '', terrBin, VIRTUAL);
+  // The localhost auto-default is a convenience, not a trap: if no worker answers,
+  // quietly go fully procedural instead of spamming dead fetches per cell.
+  if (!params.get('tiles') && TILES)
+    fetch(`${TILES}/health`, { signal: AbortSignal.timeout(4000) })
+      .then((r) => { if (!r.ok) throw new Error(String(r.status)); })
+      .catch(() => {
+        stream.setTilesBase('');
+        toast('local tile service isn\'t running — staying procedural (start it with: npm run worker)');
+      });
   stream.onTile = (a) => paint.addWalks(a.walks);
   const plans = stream.plans;
   const bld = {

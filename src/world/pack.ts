@@ -8,7 +8,7 @@ import type { Deck, DeckProfile, Floors, WalkWorld } from '../player/collision';
 import { WalkWorld as WalkWorldImpl } from '../player/collision';
 import type { Footprint, Door } from './buildings';
 import type { Plan } from './interiors';
-import type { Road } from './data';
+import type { LayerLayout, Road } from './data';
 import { buildingMaterial } from './buildings';
 import { propMaterial } from '../render/propMaterial';
 import { wireMaterial, haloMaterial } from './props';
@@ -68,6 +68,7 @@ export interface BuiltTile {
   lamp?: ImageBitmap; // lamp light map over the slice box
   lampBox?: [number, number, number, number]; // x0 z0 invW invH
   terr?: ArrayBuffer; // the tile's terrain pack, for the main thread's patch registry
+  dem?: { buf: ArrayBuffer; layout: LayerLayout }; // H2: Terrarium patch for virtual cells — registered under the cell key
 }
 
 // ---------------- decks ----------------

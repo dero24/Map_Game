@@ -40,12 +40,48 @@ export default {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
     if (url.pathname === '/' || url.pathname === '/health')
-      return json({ ok: true, service: 'map-game-tiles', usage: 'GET /tile/<cx>_<cz>.json?olat=<deg>&olon=<deg>' });
+      return json({ ok: true, service: 'map-game-tiles', usage: 'GET /tile/<cx>_<cz>.json?olat=<deg>&olon=<deg> | GET /dem/<z>/<x>/<y>.png' });
+    const dm = url.pathname.match(/^\/dem\/(\d+)\/(\d+)\/(\d+)\.png$/);
+    if (dm) return dem(request, env, ctx, url, parseInt(dm[1]), parseInt(dm[2]), parseInt(dm[3]));
     const m = url.pathname.match(/^\/tile\/(-?\d+)_(-?\d+)\.json$/);
-    if (!m) return json({ error: 'unknown route', usage: 'GET /tile/<cx>_<cz>.json?olat=<deg>&olon=<deg>' }, { status: 404 });
+    if (!m) return json({ error: 'unknown route', usage: 'GET /tile/<cx>_<cz>.json?olat=<deg>&olon=<deg> | GET /dem/<z>/<x>/<y>.png' }, { status: 404 });
     return tile(request, env, ctx, url, parseInt(m[1]), parseInt(m[2]));
   },
 };
+
+// GET /dem/<z>/<x>/<y>.png — Terrarium DEM tile via AWS Open Data. The game is COEP-
+// isolated: fetching s3.amazonaws.com directly from a module worker is blocked (the
+// bucket sends no CORP header), so the worker proxies it — PNGs are immutable, so
+// edge-cache them for a week and stash in R2 forever (same cache chain as tiles).
+async function dem(request, env, ctx, url, z, x, y) {
+  if (z > 15 || y >= 2 ** z || x < 0 || y < 0) return json({ error: 'bad dem tile' }, { status: 400 });
+  const cache = caches.default;
+  const hit = await cache.match(request);
+  if (hit) return hit;
+  const okey = `dem/v1/${z}/${x}/${y}.png`;
+  const bucket = env.TILES ?? null;
+  if (bucket) {
+    try {
+      const o = await bucket.get(okey);
+      if (o) {
+        const res = new Response(o.body, { headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=604800, immutable', 'x-dem-cache': 'r2', ...CORS } });
+        ctx.waitUntil(cache.put(request, res.clone()));
+        return res;
+      }
+    } catch (e) { console.warn('R2 dem get failed', e); }
+  }
+  try {
+    const up = await fetch(`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`, { signal: AbortSignal.timeout(10000) });
+    if (!up.ok) return json({ error: `dem upstream ${up.status}` }, { status: 502 });
+    const bytes = await up.arrayBuffer();
+    if (bucket) ctx.waitUntil(bucket.put(okey, bytes, { httpMetadata: { contentType: 'image/png' } }).catch((e) => console.warn('R2 dem put failed', e)));
+    const res = new Response(bytes, { headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=604800, immutable', 'x-dem-cache': 'miss', ...CORS } });
+    ctx.waitUntil(cache.put(request, res.clone()));
+    return res;
+  } catch (e) {
+    return json({ error: `dem fetch ${e?.message ?? e}` }, { status: 502 });
+  }
+}
 
 async function tile(request, env, ctx, url, cx, cz) {
   const olat = parseFloat(url.searchParams.get('olat') ?? 'NaN');
