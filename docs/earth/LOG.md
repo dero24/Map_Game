@@ -2,6 +2,47 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-25 — Session handoff (for the next worker on this codebase)
+
+**Where things stand.** H1 is done and reviewed twice (6.5 → 8/10). The open-world
+premise is literally true in dev: `?at=51.5033,-0.1195&tiles=http://localhost:8787`
+walked real London tonight — 8.3k footprints / 8.5k roads, real street names on the
+HUD ("The Queen's Walk"), clean placeholder→real swaps, zero errors. `?at=` stays
+behind the flag; the reviewer's gate for calling it shipped is H2's real terrain.
+
+**Commits (all local — nothing pushed; branch is 4 ahead of origin):**
+- `16095e9` Phase G: infinite world via deterministic procedural tiles
+- `0107bb7` H1: real-lite tile service + open world `?at=` (worker/, realTile.ts, w-*/s-* swap, virtual manifest, ODbL credit)
+- `5dc3f9e` Review round 1 fixes (painting toast, stranded-`?at` guard, HUD names, tz, settleWalker, spawn yaw, tree/bench points, paved footsteps)
+- `adc60f5` Review round 2 fixes (settleWalker only fires on genuine swallows, region+far-`at` redirect, toast dedupe/throttle)
+
+**Architecture in one paragraph.** `realTile.ts` (Overpass→TileJson) is the single
+shared transform: the CF worker bundles it, vitest exercises it. `TileStream.specAt`
+returns `[w-*, s-*]` twin specs for non-baked cells when `tilesBase` is set; s mounts
+instantly, w retires it on arrival (`mount()` → `unload(s-twin)`). `virtual.ts` builds
+a manifest with a snapped origin + flat 3 m synthetic terrain layer (rides in-band to
+the tile worker as `bin`). Everything flows the same `buildTile → pack → mount` pipe.
+
+**Gotchas learned the hard way.**
+- The page is COEP-isolated: cross-origin worker responses need
+  `Cross-Origin-Resource-Policy: cross-origin` or tiles get blocked.
+- `x-tile-cache` baked into a cached response lies forever — store a twin response.
+- Concurrent misses stampede Overpass unless the worker dedups in-flight promises.
+- `--eval` strings in capture.mjs must be an IIFE/expression — top-level `return` throws.
+- PowerShell: `git commit -m "<here-string>"` breaks on embedded quotes — write the
+  message to `.commitmsg.tmp` and `git commit -F`.
+- `worker/.wrangler/` is miniflare state — gitignored, keep it out of commits.
+- Overpass reality tonight: 25–90 s/cell, 429/504 storms — the placeholder + negative
+  edge cache + rotation all earned their keep. R2 makes it once-per-population.
+
+**Next queue.** Worker deploy needs the user's Cloudflare account
+(`wrangler login` → `r2 bucket create map-game-tiles` → `deploy`, then `tilesUrl` on
+manifests / Pages). Then: H1c hybrid fill (synth lots on sparse real roads) → H2
+Terrarium DEM (kills the flat plateau; ungates `?at=` publicly) → J/K parity.
+Phase-G reviewer Round 2 (screenshot-backed) is still pending in `REVIEWER.md`.
+
+---
+
 ## 2026-09-24 — Expert review round 2 → fixes (score 8/10)
 
 - Re-review verdict: fixes landed; `?at=` is now honest behind the flag. Two real

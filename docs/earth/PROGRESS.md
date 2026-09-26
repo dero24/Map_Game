@@ -22,10 +22,11 @@ walking — forever — while the world paints itself around you. The design liv
 | — | Street furniture variety: hydrants, benches, bins, planters, front hedges | ✅ done | `66b9d1d` |
 | — | Placement fix: `clearOfRoad` margins keep all furniture off lanes/sidewalks | ✅ done | `a9ae915` |
 | — | Interior amortization: `buildGen` sliced ~3.5 ms/frame, atomic swap on finish | ✅ done | pending |
-| G | **Procedural fallback tiles** — cells beyond the manifest synthesize deterministic towns (warped grid + town mask + field-driven lots); same build/mount path; walkable forever | ✅ done (r1) | pending |
-| H1a | **Real-lite tile service** — CF worker `GET /tile/<cx>_<cz>.json?olat&olon`: Overpass→`TileJson` (roads+buildings+water, margin/own:0, coastline→water), R2+edge cache, in-flight dedup, ODbL credit | ✅ done | pending |
-| H1b | **Client w-\* specs** — `?tiles=`/`tilesUrl`; synth placeholder mounts instantly, real tile upgrades in place; ground+ribbon+water extras; lamp guard | ✅ done | pending |
-| H1c | **Open world `?at=`** — virtual manifest (snapped origin, flat synthetic terrain) beyond baked regions; verified at London (8.3k fps, 8.5k roads, 0 errors) | ✅ done | pending |
+| G | **Procedural fallback tiles** — cells beyond the manifest synthesize deterministic towns (warped grid + town mask + field-driven lots); same build/mount path; walkable forever | ✅ done (r1) | `16095e9` |
+| H1a | **Real-lite tile service** — CF worker `GET /tile/<cx>_<cz>.json?olat&olon`: Overpass→`TileJson` (roads+buildings+water, margin/own:0, coastline→water), R2+edge cache, in-flight dedup, ODbL credit | ✅ done | `0107bb7` |
+| H1b | **Client w-\* specs** — `?tiles=`/`tilesUrl`; synth placeholder mounts instantly, real tile upgrades in place; ground+ribbon+water extras; lamp guard | ✅ done | `0107bb7` |
+| H1c | **Open world `?at=`** — virtual manifest (snapped origin, flat synthetic terrain) beyond baked regions; verified at London (8.3k fps, 8.5k roads, 0 errors) | ✅ done | `0107bb7` |
+| — | Expert design/gameplay review ×2 (6.5 → 8/10): first-minute promise toast, stranded-`at` guards, HUD street names, tz, swap-settle nudge, tree/bench points, paved footsteps | ✅ done | `5dc3f9e` + `adc60f5` |
 
 ## Next up (per masterplan, in rough order)
 
