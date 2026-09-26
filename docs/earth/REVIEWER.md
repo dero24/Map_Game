@@ -54,3 +54,41 @@ Round 2 (with pixels) is the confirmation gate.
   orchestrator should either embed images in prompt paths it can open, or confirm montage path.
 - Judge: town/clump believability from the air; seam cleanliness on a tile boundary; whether
   the streetscape pass reads at ground level; water-adjacent behaviour.
+
+---
+
+### 2026-09-25 — H1 Round 1: real-lite tile service + open-world `?at=`
+**Verdict:** 6.5/10 — "the skeleton shipped; the fantasy still arrives late."
+**Reads real:** the `w-*`/`s-*` twin architecture is right — one `buildTile → pack → mount`
+pipeline for all four feeders, placeholder mounts instantly, real tile upgrades in place,
+scoped collision. Verified live in dev at `?at=51.5033,-0.1195` (Elephant & Castle):
+8.3k footprints / 8.5k roads from real OSM.
+**Reads fake:** zero UI signal while real tiles stream (player meets synth suburbia and
+assumes that IS the mode); `?at=` without `?tiles` stranded the spawn ~5,500 km out;
+virtual spawn faced north regardless of streets; HUD could never learn a street name;
+UTC clock; the swap could tombstone collision under the player's feet; grass footsteps
+on London tarmac; intro card showed raw coordinates.
+**Must-fix (all applied, `5dc3f9e`):** painting toast while `worldPending`; stranded-`at`
+guard + `teleportTo` drops `region`; HUD scans `stream.primRoads` (verified: showed
+"The Queen's Walk"); `Etc/GMT±lon/15` tz; `onMount`+`settleWalker` nudge; spawn yaw from
+mounted roads; `natural=tree`/`amenity=bench` OSM nodes → points; paved footsteps near
+streets; place-like virtual sub.
+**Deferred (tracked):** flat terrain → H2 DEM gate; per-tile lamp pools + life palette →
+J/K; coarse ring stays synth by design.
+
+### 2026-09-25 — H1 Round 2: re-review of the fixes
+**Verdict:** 8/10 — fixes landed; `?at=` is honest behind the flag. `?at=` may ship publicly
+once H2's DEM lands.
+**Caught in the fix set (all applied, `adc60f5`):** `settleWalker` yanked legit indoor
+players on any mount (2D footprint test can't tell indoor from swallowed — now gated on
+wall-through-body `blocked@0.28` + solid-footprint-no-interior); `?region=x&at=far` still
+stranded silently (boot redirect drops `region`); paint toast stomped other toasts + died
+after one window (now defers, re-arms per burst, throttles 2.7→9 s after 3 fires).
+**Open polish:** toast queue proper; wall-band/deck swallow detection partial; coarse ring
+synth forever (accepted design, may revisit with idle-queue prefetch).
+
+### For the next phase review (H3 hybrid fill)
+- The feature under review: sparse real-lite cells fill lots along real roads (synth
+  houses seeded per-cell). Judge: does hybrid sell "a real place" or read as planted?
+- Density gating is the risk — a village with 5 mapped buildings but real character
+  shouldn't get buried in generated lots.

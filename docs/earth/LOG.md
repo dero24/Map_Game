@@ -2,6 +2,21 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-25 — H1c/H3-lite: hybrid fill — sparse real streets grow lots
+
+- `realTile.ts` hybrid fill: when a cell's owner building density is <20/km of
+  fillable road (residential/unclassified/tertiary/secondary/living_street), seeded
+  L-shaped lots plant along real street edges — pitch ~22–32 m, jittered setback,
+  alternating sides, 18 m bucket dedupe, rejects corners inside water or mapped
+  footprints. Always `own` on the emitting (road-owner) cell so margin-landing fills
+  don't get dropped by both neighbours. `Building.gen='fill'` marks them.
+- Cache versioning: worker R2 key `t/v1→t/v2`; client tile URL gains `&v=2` (edge
+  Cache API keys on the full URL — both layers bust together).
+- Verified: 12/12 realTile tests (new: sparse→fills, dense→none, no water/footprint
+  overlap, determinism); live worker on Hastings NE (40.586,-98.388): 88 mapped +
+  90 fills = 153 bldgs; farmland/track-only cells correctly emit zero fills;
+  56/56 suite, build clean, montage shows the sparse grid town reading as a place.
+
 ## 2026-09-25 — Session handoff (for the next worker on this codebase)
 
 **Where things stand.** H1 is done and reviewed twice (6.5 → 8/10). The open-world

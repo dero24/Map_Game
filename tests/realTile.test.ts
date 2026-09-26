@@ -180,3 +180,58 @@ describe('osmToTile — determinism + provenance', () => {
     expect(t.backdrop).toEqual(t.slice);
   });
 });
+
+const ringHas = (x: number, z: number, r: [number, number][]) => {
+  let ins = false;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const [xi, zi] = r[i], [xj, zj] = r[j];
+    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) ins = !ins;
+  }
+  return ins;
+};
+const centroidM = (b: { r: number[] }): [number, number] => {
+  let x = 0, z = 0, n = 0;
+  for (let i = 0; i + 1 < b.r.length; i += 2) (x += b.r[i]), (z += b.r[i + 1]), n++;
+  return [x / n / 10, z / n / 10];
+};
+
+describe('osmToTile — hybrid fill (H3)', () => {
+  it('grows deterministic houses along sparse real streets', () => {
+    const road = way(70, { highway: 'residential', name: 'Main Street' }, [[50, 300], [950, 300]]);
+    const t1 = osmToTile(osm(road), OPTS);
+    expect(t1.buildings.length).toBeGreaterThan(10); // ~900 m of street, ~25–32 m pitch, both sides
+    for (const b of t1.buildings) {
+      expect(b.k).toBe('house');
+      expect(b.gen).toBe('fill');
+      expect(b.own).toBeUndefined(); // the road owner emits every fill, even into the margin
+    }
+    const t2 = osmToTile(osm(road), OPTS);
+    expect(JSON.stringify(t1.buildings)).toBe(JSON.stringify(t2.buildings)); // deterministic
+  });
+
+  it('leaves well-mapped cells alone', () => {
+    const els = [way(71, { highway: 'residential' }, [[0, 300], [900, 300]])];
+    for (let i = 0; i < 40; i++) els.push(way(100 + i, { building: 'yes' }, sq(20 + (i % 8) * 110, 500 + Math.floor(i / 8) * 90, 14), true));
+    const t = osmToTile(osm(...els), OPTS);
+    expect(t.buildings).toHaveLength(40); // the mapped ones — zero fills
+    expect(t.buildings.every((b) => b.gen !== 'fill')).toBe(true);
+  });
+
+  it('never plants fill lots in water or on mapped footprints', () => {
+    // Lake straddles the street's middle stretch; a mapped house sits on the north row.
+    const lake = way(72, { natural: 'water' }, [[200, 280], [200, 420], [420, 420], [420, 280]], true);
+    const house = way(73, { building: 'yes' }, sq(600, 332, 16), true);
+    const road = way(74, { highway: 'residential' }, [[50, 350], [950, 350]]);
+    const t = osmToTile(osm(road, lake, house), OPTS);
+    const water: [number, number][] = [[200, 280], [200, 420], [420, 420], [420, 280]];
+    const mapped: [number, number][] = sq(600, 332, 16);
+    expect(t.buildings.length).toBeGreaterThan(4); // the mapped house + fills on land stretches
+    let mappedCount = 0;
+    for (const b of t.buildings) {
+      const [cx, cz] = centroidM(b);
+      expect(ringHas(cx, cz, water)).toBe(false); // never in the lake
+      if (ringHas(cx, cz, mapped)) mappedCount++; // only the mapped house itself may sit here
+    }
+    expect(mappedCount).toBe(1);
+  });
+});

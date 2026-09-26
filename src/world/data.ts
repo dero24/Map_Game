@@ -25,6 +25,7 @@ export interface Building {
   mh?: number; // mapped min_height (m): the building stands on something (pilings)
   ad?: string; // street address
   own?: number; // tile tiles: 0 = margin context (a neighbour tile emits it)
+  gen?: 'fill'; // hybrid-fill lot (H3): seeded house planted beside a real street — not mapped OSM
 }
 export interface Road { p: number[]; c: string; w: number; n?: string; ref?: string; br?: 'yes' | 'movable'; l?: number; ow?: 1; sw?: 1; sv?: string; lod?: 1; own?: number }
 export interface Area { c: string; o: number[][]; i: number[][]; n?: string; lod?: 1; own?: number }

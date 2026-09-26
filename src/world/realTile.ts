@@ -469,6 +469,81 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
     }
   }
 
+  // ---- hybrid fill (H3-lite): sparse cells grow houses along their real streets ----
+  // OSM building coverage is patchy outside cities — a mapped street with two barns
+  // shouldn't read as empty. When owner building density is very low relative to
+  // fillable road mileage, seed deterministic lots beside those roads. They're real
+  // content for the tile (cached in R2): every visitor sees the same fill.
+  {
+    const FILLABLE = new Set(['residential', 'unclassified', 'tertiary', 'secondary', 'living_street']);
+    let ownRoadM = 0;
+    for (const r of roads) {
+      if (r.own === 0 || !FILLABLE.has(r.c)) continue;
+      for (let i = 0; i + 3 < r.p.length; i += 2) ownRoadM += Math.hypot((r.p[i + 2] - r.p[i]) / 10, (r.p[i + 3] - r.p[i + 1]) / 10);
+    }
+    const ownBldgs = buildings.reduce((n, b) => n + (b.own === 0 ? 0 : 1), 0);
+    // <20 buildings per km of street = clearly sparse (a packed village core is ~60/km,
+    // suburbia 30+). No absolute cap: sparse country roads stay sparse-looking even when
+    // a hamlet pushes the cell's raw count up.
+    const sparse = ownRoadM >= 200 && ownBldgs < (ownRoadM / 1000) * 20;
+    if (sparse) {
+      let rs = hashStr('fill:' + opts.id);
+      const rng = () => ((rs = (rs * 1664525 + 1013904223) >>> 0), rs / 4294967296);
+      const unflat = (f: number[]): P2[] => { const o: P2[] = []; for (let i = 0; i + 1 < f.length; i += 2) o.push([f[i] / 10, f[i + 1] / 10]); return o; };
+      const rings = buildings.map((b) => unflat(b.r)); // existing footprints, metres
+      const waterO = areas.flatMap((a) => a.o.map(unflat));
+      const waterI = areas.flatMap((a) => a.i.map(unflat));
+      const inWater = (x: number, z: number) => waterO.some((o) => pointInRing(x, z, o) && !waterI.some((i) => pointInRing(x, z, i)));
+      const inBuilding = (x: number, z: number) => rings.some((r) => pointInRing(x, z, r));
+      const buckets = new Set<string>(); // 18 m lot buckets so fills don't pile up
+      const bkey = (x: number, z: number) => `${Math.floor(x / 18)}_${Math.floor(z / 18)}`;
+      let emitted = 0;
+      for (const r of roads) {
+        if (emitted >= 90 || r.own === 0 || !FILLABLE.has(r.c)) continue;
+        let side = hashStr(`${opts.id}/${r.p[0]}`) & 1 ? 1 : -1;
+        let carry = 0;
+        for (let i = 0; i + 3 < r.p.length && emitted < 90; i += 2) {
+          const ax = r.p[i] / 10, az = r.p[i + 1] / 10, bx = r.p[i + 2] / 10, bz = r.p[i + 3] / 10;
+          const len = Math.hypot(bx - ax, bz - az);
+          if (len < 1) continue;
+          const dx = (bx - ax) / len, dz = (bz - az) / len;
+          let t = carry;
+          for (; t < len; t += 22 + rng() * 10) {
+            side = -side;
+            if (rng() < 0.28) continue; // gaps in the row keep it from reading like a comb
+            const depth = 9 + rng() * 4, wid = 11 + rng() * 7;
+            const off = r.w / 2 + 5.5 + rng() * 3.5 + depth / 2;
+            const cx = ax + dx * t + -dz * side * off, cz = az + dz * t + dx * side * off;
+            if (!inB(cx, cz, margin)) continue;
+            const ring: P2[] = [
+              [cx - dx * (wid / 2) + dz * (depth / 2), cz - dz * (wid / 2) - dx * (depth / 2)],
+              [cx + dx * (wid / 2) + dz * (depth / 2), cz + dz * (wid / 2) - dx * (depth / 2)],
+              [cx + dx * (wid / 2) - dz * (depth / 2), cz + dz * (wid / 2) + dx * (depth / 2)],
+              [cx - dx * (wid / 2) - dz * (depth / 2), cz - dz * (wid / 2) + dx * (depth / 2)],
+            ];
+            if (ring.some(([x, z]) => inWater(x, z) || inBuilding(x, z))) continue;
+            const bk = bkey(cx, cz);
+            if (buckets.has(bk) || buckets.has(bkey(cx + 18, cz)) || buckets.has(bkey(cx - 18, cz)) || buckets.has(bkey(cx, cz + 18)) || buckets.has(bkey(cx, cz - 18))) continue;
+            buckets.add(bk);
+            const seed = hashStr(`fill/${opts.id}/${emitted}`);
+            const f = flat(ring);
+            const r4 = (seed >>> 8) % 100;
+            // Fills emit as own even when their centroid lands in the margin: the road's
+            // owner cell is the only emitter — a context flag would drop it for everyone.
+            buildings.push({
+              r: f, h: +(6.5 + rng() * 3).toFixed(1), k: 'house', s: seed,
+              roof: r4 < 62 ? 'gable' : r4 < 94 ? 'hip' : 'flat',
+              own: undefined, gen: 'fill',
+            });
+            rings.push(ring);
+            emitted++;
+          }
+          carry = Math.max(0, t - len); // leftover pitch carries into the next segment
+        }
+      }
+    }
+  }
+
   return {
     version: 1,
     id: opts.id,

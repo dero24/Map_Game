@@ -59,7 +59,9 @@ async function tile(request, env, ctx, url, cx, cz) {
   const cache = caches.default;
   const hit = await cache.match(request);
   if (hit) return hit;
-  const okey = `t/v1/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
+  // v2: tiles now carry hybrid-fill lots + tree/bench points — bump the object key so
+  // stale pre-fill payloads can't be served past the edge TTL.
+  const okey = `t/v2/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
   const bucket = env.TILES ?? null; // binding may be absent under `wrangler dev` before the bucket exists
   if (bucket) {
     try {
