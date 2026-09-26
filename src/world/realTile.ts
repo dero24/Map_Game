@@ -296,6 +296,11 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
   const areas: Area[] = [];
   const lines: Line[] = [];
   const points: Point[] = [];
+  const blockO: P2[][] = []; // landuse/leisure rings fills must not plant on (not rendered — reject masks)
+  const blockI: P2[][] = [];
+  const BLOCK = (t: Record<string, string>) =>
+    (t.leisure && /^(park|pitch|playground|garden|recreation_ground)$/.test(t.leisure)) ||
+    (t.landuse && /^(forest|farmland|meadow|reservoir|cemetery|basin|quarry|landfill|grass)$/.test(t.landuse));
 
   for (const e of els) {
     const t = e.tags ?? {};
@@ -380,6 +385,14 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         buildings.push(b);
       }
       continue;
+    }
+    if (BLOCK(t)) {
+      const rings = areaRings(e);
+      if (rings) {
+        for (const ring of rings.outer) { const r = cleanRing(ring); if (r.length >= 3 && anyVertex(flat(r), margin)) blockO.push(r); }
+        for (const ring of rings.inner) { const r = cleanRing(ring); if (r.length >= 3) blockI.push(r); }
+      }
+      // not `continue` — a way can carry both landuse and building tags; fall through.
     }
     const wc = WATER_CLASS(t);
     if (wc) {
@@ -491,18 +504,26 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       const rng = () => ((rs = (rs * 1664525 + 1013904223) >>> 0), rs / 4294967296);
       const unflat = (f: number[]): P2[] => { const o: P2[] = []; for (let i = 0; i + 1 < f.length; i += 2) o.push([f[i] / 10, f[i + 1] / 10]); return o; };
       const rings = buildings.map((b) => unflat(b.r)); // existing footprints, metres
-      const waterO = areas.flatMap((a) => a.o.map(unflat));
-      const waterI = areas.flatMap((a) => a.i.map(unflat));
-      const inWater = (x: number, z: number) => waterO.some((o) => pointInRing(x, z, o) && !waterI.some((i) => pointInRing(x, z, i)));
+      const inRing = (xs: P2[][], ys: P2[][]) => (x: number, z: number) => xs.some((o) => pointInRing(x, z, o) && !ys.some((i) => pointInRing(x, z, i)));
+      const inWater = inRing(areas.flatMap((a) => a.o.map(unflat)), areas.flatMap((a) => a.i.map(unflat)));
+      const inBlock = inRing(blockO, blockI); // landuse/leisure masks — already metres
       const inBuilding = (x: number, z: number) => rings.some((r) => pointInRing(x, z, r));
-      const buckets = new Set<string>(); // 18 m lot buckets so fills don't pile up
+      const buckets = new Set<string>(); // 18 m lot buckets — keeps rows + mapped buildings clear
       const bkey = (x: number, z: number) => `${Math.floor(x / 18)}_${Math.floor(z / 18)}`;
-      let emitted = 0;
+      for (const b of buildings) { const u = unflat(b.r); let cx = 0, cz = 0; for (const [x, z] of u) (cx += x), (cz += z); if (u.length) buckets.add(bkey(cx / u.length, cz / u.length)); }
+      const taken = (x: number, z: number) => {
+        for (let ox = -18; ox <= 18; ox += 18) for (let oz = -18; oz <= 18; oz += 18) if (buckets.has(bkey(x + ox, z + oz))) return true;
+        return false;
+      };
+      // Collect candidate sites per road first, then emit round-robin — an element-order
+      // cap otherwise front-loads the first-listed streets and leaves later ones bare.
+      const siteLists: { ring: P2[]; cx: number; cz: number }[][] = [];
       for (const r of roads) {
-        if (emitted >= 90 || r.own === 0 || !FILLABLE.has(r.c)) continue;
+        if (r.own === 0 || !FILLABLE.has(r.c)) continue;
+        const sites: { ring: P2[]; cx: number; cz: number }[] = [];
         let side = hashStr(`${opts.id}/${r.p[0]}`) & 1 ? 1 : -1;
         let carry = 0;
-        for (let i = 0; i + 3 < r.p.length && emitted < 90; i += 2) {
+        for (let i = 0; i + 3 < r.p.length; i += 2) {
           const ax = r.p[i] / 10, az = r.p[i + 1] / 10, bx = r.p[i + 2] / 10, bz = r.p[i + 3] / 10;
           const len = Math.hypot(bx - ax, bz - az);
           if (len < 1) continue;
@@ -514,32 +535,43 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
             const depth = 9 + rng() * 4, wid = 11 + rng() * 7;
             const off = r.w / 2 + 5.5 + rng() * 3.5 + depth / 2;
             const cx = ax + dx * t + -dz * side * off, cz = az + dz * t + dx * side * off;
-            if (!inB(cx, cz, margin)) continue;
-            const ring: P2[] = [
-              [cx - dx * (wid / 2) + dz * (depth / 2), cz - dz * (wid / 2) - dx * (depth / 2)],
-              [cx + dx * (wid / 2) + dz * (depth / 2), cz + dz * (wid / 2) - dx * (depth / 2)],
-              [cx + dx * (wid / 2) - dz * (depth / 2), cz + dz * (wid / 2) + dx * (depth / 2)],
-              [cx - dx * (wid / 2) - dz * (depth / 2), cz - dz * (wid / 2) + dx * (depth / 2)],
-            ];
-            if (ring.some(([x, z]) => inWater(x, z) || inBuilding(x, z))) continue;
-            const bk = bkey(cx, cz);
-            if (buckets.has(bk) || buckets.has(bkey(cx + 18, cz)) || buckets.has(bkey(cx - 18, cz)) || buckets.has(bkey(cx, cz + 18)) || buckets.has(bkey(cx, cz - 18))) continue;
-            buckets.add(bk);
-            const seed = hashStr(`fill/${opts.id}/${emitted}`);
-            const f = flat(ring);
-            const r4 = (seed >>> 8) % 100;
-            // Fills emit as own even when their centroid lands in the margin: the road's
-            // owner cell is the only emitter — a context flag would drop it for everyone.
-            buildings.push({
-              r: f, h: +(6.5 + rng() * 3).toFixed(1), k: 'house', s: seed,
-              roof: r4 < 62 ? 'gable' : r4 < 94 ? 'hip' : 'flat',
-              own: undefined, gen: 'fill',
+            if (!inB(cx, cz)) continue; // interior-only: margin fills could stack against a neighbour's
+            sites.push({
+              cx, cz,
+              ring: [
+                [cx - dx * (wid / 2) + dz * (depth / 2), cz - dz * (wid / 2) - dx * (depth / 2)],
+                [cx + dx * (wid / 2) + dz * (depth / 2), cz + dz * (wid / 2) - dx * (depth / 2)],
+                [cx + dx * (wid / 2) - dz * (depth / 2), cz + dz * (wid / 2) + dx * (depth / 2)],
+                [cx - dx * (wid / 2) - dz * (depth / 2), cz - dz * (wid / 2) + dx * (depth / 2)],
+              ],
             });
-            rings.push(ring);
-            emitted++;
           }
           carry = Math.max(0, t - len); // leftover pitch carries into the next segment
         }
+        if (sites.length) siteLists.push(sites);
+      }
+      let emitted = 0;
+      for (let i = 0; emitted < 90; i++) {
+        let any = false;
+        for (const sites of siteLists) {
+          if (i >= sites.length) continue;
+          any = true;
+          const { ring, cx, cz } = sites[i];
+          if (ring.some(([x, z]) => inWater(x, z) || inBlock(x, z) || inBuilding(x, z)) || taken(cx, cz)) continue;
+          buckets.add(bkey(cx, cz));
+          // Position-seeded: a mirror serving elements in a different order still produces
+          // the same building seed for the same lot.
+          const seed = hashStr(`fill/${opts.id}/${Math.round(cx * 10)}_${Math.round(cz * 10)}`);
+          const r4 = (seed >>> 8) % 100;
+          buildings.push({
+            r: flat(ring), h: +(6.5 + rng() * 3).toFixed(1), k: 'house', s: seed,
+            roof: r4 < 62 ? 'gable' : r4 < 94 ? 'hip' : 'flat',
+            own: undefined, gen: 'fill',
+          });
+          rings.push(ring);
+          if (++emitted >= 90) break;
+        }
+        if (!any) break;
       }
     }
   }

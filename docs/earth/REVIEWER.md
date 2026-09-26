@@ -92,3 +92,21 @@ synth forever (accepted design, may revisit with idle-queue prefetch).
   houses seeded per-cell). Judge: does hybrid sell "a real place" or read as planted?
 - Density gating is the risk — a village with 5 mapped buildings but real character
   shouldn't get buried in generated lots.
+
+---
+
+### 2026-09-25 — H3-lite Round 1: hybrid fill on sparse real streets
+**Verdict:** 7.5/10 — idea and gating right; betrayed by cap distribution + missing land masks.
+**Findings (all applied):**
+1. ~~90-cap starved later roads~~ — sites now collect per-road and emit round-robin;
+   verified live (Hastings fills spread 18/28/24/20 across 256 m z-bands).
+2. ~~fills could plant in parks/farmland~~ — query gains `leisure`/`landuse` ways+relations;
+   rings become reject masks (not rendered).
+3. ~~corners-only containment missed small buildings inside a fill rect~~ — mapped
+   building centroids now stamp the 18 m buckets before fills start.
+4. ~~margin fills could stack across cell seams~~ — fill centers clamp to cell interior.
+**Also:** diagonal bucket neighbours; fills position-seeded (`cx_cz`) so a different
+element order still yields the same building seed; cache keys bumped `v2 → v3`.
+**Confirmed correct:** winding matches `ringArea` expectation; fills are plain `k:'house'`
+(doors/interiors/porches all work); `service`/`track` excluded from fill streets.
+**Still open:** none blocking. Round 2 pending.

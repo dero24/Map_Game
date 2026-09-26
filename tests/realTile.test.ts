@@ -234,4 +234,14 @@ describe('osmToTile — hybrid fill (H3)', () => {
     }
     expect(mappedCount).toBe(1);
   });
+
+  it('spreads the fill cap across every street, not just the first-listed', () => {
+    const a = way(80, { highway: 'residential' }, [[50, 200], [950, 200]]);
+    const b = way(81, { highway: 'residential' }, [[50, 700], [950, 700]]);
+    const t = osmToTile(osm(a, b), OPTS);
+    const north = t.buildings.filter((x) => centroidM(x)[1] < 500).length;
+    const south = t.buildings.filter((x) => centroidM(x)[1] >= 500).length;
+    expect(north).toBeGreaterThan(10); // ~90-cap split across both streets, not stacked on road A
+    expect(south).toBeGreaterThan(10);
+  });
 });

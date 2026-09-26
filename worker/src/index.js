@@ -59,9 +59,9 @@ async function tile(request, env, ctx, url, cx, cz) {
   const cache = caches.default;
   const hit = await cache.match(request);
   if (hit) return hit;
-  // v2: tiles now carry hybrid-fill lots + tree/bench points — bump the object key so
-  // stale pre-fill payloads can't be served past the edge TTL.
-  const okey = `t/v2/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
+  // v3: fills gained landuse/leisure rejection + interleaved emission — bump the object
+  // key so stale tile payloads can't be served past the edge TTL.
+  const okey = `t/v3/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
   const bucket = env.TILES ?? null; // binding may be absent under `wrangler dev` before the bucket exists
   if (bucket) {
     try {
@@ -114,6 +114,10 @@ async function coldTile(env, okey, cx, cz, box, origin) {
   way["waterway"="riverbank"];
   node["natural"="tree"];
   node["amenity"="bench"];
+  way["leisure"~"^(park|pitch|playground|garden|recreation_ground)$"];
+  way["landuse"~"^(forest|farmland|meadow|reservoir|cemetery|basin|quarry|landfill|grass)$"];
+  relation["leisure"~"^(park|pitch|playground|garden|recreation_ground)$"];
+  relation["landuse"~"^(forest|farmland|meadow|reservoir|cemetery|basin|quarry|landfill|grass)$"];
 );out geom qt;`;
   const endpoints = (env.OVERPASS_ENDPOINTS ? env.OVERPASS_ENDPOINTS.split(',').map((s) => s.trim()).filter(Boolean) : DEFAULT_ENDPOINTS);
   let osm = null;

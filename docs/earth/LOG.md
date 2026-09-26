@@ -16,6 +16,12 @@ Newest first. One entry per work session: what changed, what was verified, what'
   overlap, determinism); live worker on Hastings NE (40.586,-98.388): 88 mapped +
   90 fills = 153 bldgs; farmland/track-only cells correctly emit zero fills;
   56/56 suite, build clean, montage shows the sparse grid town reading as a place.
+- Expert review round 1 on the fill (7.5/10) → fixes: fills emit round-robin across
+  roads (cap can't starve later streets); `leisure`/`landuse` rings fetched as reject
+  masks (no houses in parks/fields); mapped-building centroids stamp the 18 m buckets
+  (small chapel inside a fill rect can't be swallowed); fill centers clamp to cell
+  interior (no cross-seam stacking); diagonal bucket neighbours; position-seeded lots.
+  Cache bumped v2→v3. Verified: 57/57 tests, live tile spread 18/28/24/20 by z-band.
 
 ## 2026-09-25 — Session handoff (for the next worker on this codebase)
 
