@@ -51,9 +51,9 @@ vec4 terrainAt(vec2 xz) {
 }
 `;
 
-interface GridSpec { x0: number; z0: number; x1: number; z1: number; step: number }
+export interface GridSpec { x0: number; z0: number; x1: number; z1: number; step: number }
 
-function buildGrid(spec: GridSpec, heightFn: (x: number, z: number) => number, keepQuad: (x: number, z: number, h: number[]) => boolean, extra?: (x: number, z: number) => number) {
+export function buildGrid(spec: GridSpec, heightFn: (x: number, z: number) => number, keepQuad: (x: number, z: number, h: number[]) => boolean, extra?: (x: number, z: number) => number) {
   const nx = Math.ceil((spec.x1 - spec.x0) / spec.step) + 1;
   const nz = Math.ceil((spec.z1 - spec.z0) / spec.step) + 1;
   const H = new Float32Array(nx * nz);
@@ -167,6 +167,8 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
         gl_FragColor = vec4(applyFog(col, vWorldPos), 1.0);
       }`,
   });
+  // the shared ground material — synthetic tiles pack 'gnd' chunks that resolve to it
+  group.userData.groundMat = mat;
   const canopyMat = mat.clone();
   canopyMat.defines = { CANOPY: 1 };
   // clone() copies uniform values, not references: re-share the global ones.

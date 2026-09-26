@@ -70,7 +70,9 @@ export async function buildTile(tj: TileJson, terrain: Terrain, spec: TileSpec, 
     roads: pj.roads,
     poles: signs.poles,
     atlas: await canvasBitmap(signs.atlas),
-    lamp: await canvasBitmap(props.lampMap),
+    // Synth tiles get no lamp map: its canvas covers spec.box±48 but repaintLamps stretches
+    // every bitmap across the region slice box, so pools would land on the wrong streets.
+    lamp: spec.synth ? undefined : await canvasBitmap(props.lampMap),
     lampBox: props.lampBox,
   };
 }

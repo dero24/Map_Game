@@ -115,6 +115,9 @@ export function haloPoints(pts: THREE.Vector3[], size: number, color: THREE.Colo
 export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P; w: number }[], extras: { mailboxes?: Mailbox[]; doors?: Door[]; ctx?: WorldJson; box?: Box } = {}) {
   const { json, terrain } = world;
   const S = json.slice;
+  // Placement gate: the tile's own slice box (region slice for baked tiles, cell+margin for
+  // synthetic ones — so props render past the baked grids where synth tiles live).
+  const inSlice = (x: number, z: number, m = 0) => x > S.x0 - m && x < S.x1 + m && z > S.z0 - m && z < S.z1 + m;
   const group = new THREE.Group();
   group.name = 'props';
   const rng = makeRng(7);
@@ -127,7 +130,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // would otherwise rasterize a ~12 km canvas (hundreds of MB) in the worker.
   const big = { x0: S.x0 - 250, z0: S.z0 - 250, x1: S.x1 + 250, z1: S.z1 + 250 };
   const maskZone = extras.box
-    ? { x0: Math.max(extras.box.x0 - 8, big.x0), z0: Math.max(extras.box.z0 - 8, big.z0), x1: Math.min(extras.box.x1 + 8, big.x1), z1: Math.min(extras.box.z1 + 8, big.z1) }
+    ? { x0: extras.box.x0 - 8, z0: extras.box.z0 - 8, x1: extras.box.x1 + 8, z1: extras.box.z1 + 8 }
     : big;
   const paved = pavedMask({ json: ctxJson, terrain }, maskZone);
 
@@ -158,7 +161,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       while (s < L) {
         const x = ax + tx * s + nx * off, z = az + tz * s + nz * off;
         s += spacing;
-        if (!terrain.slice.contains(x, z, 20) || terrain.sdfAt(x, z) < 1.5 || walk.blocked(x, z, 0.8)) { prev = null; continue; }
+        if (!inSlice(x, z, 20) || terrain.sdfAt(x, z) < 1.5 || walk.blocked(x, z, 0.8)) { prev = null; continue; }
         const g = terrain.heightAt(x, z);
         const ang = Math.atan2(tz, tx);
         q.setFromAxisAngle(V(0, 1, 0), -ang);
@@ -294,7 +297,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       trees.push({ m, c, k });
     }
   for (const p of json.points) {
-    if (p.c !== 'tree' || !terrain.slice.contains(p.x, p.z)) continue;
+    if (p.c !== 'tree' || !inSlice(p.x, p.z)) continue;
     let { x, z } = p;
     if (paved(x, z)) {
       // OSM street trees are often tagged on the carriageway — slide to the near verge
@@ -433,7 +436,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     const yaw = Math.atan2(-dx, -dz) + (h < 0.3 ? Math.PI : 0);
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     const corners: P[] = [[-1, -2.3], [1, -2.3], [1, 2.3], [-1, 2.3]].map(([u, v]) => [x + u * cy + v * sy, z - u * sy + v * cy]);
-    if (!terrain.slice.contains(x, z, 10) || corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.3)) || terrain.sdfAt(x, z) < 2) continue;
+    if (!inSlice(x, z, 10) || corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.3)) || terrain.sdfAt(x, z) < 2) continue;
     parked.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, 1)), c: new THREE.Color(CAR[Math.floor(h * 97) % CAR.length]) });
     walk.addLoop(corners);
   }
@@ -450,7 +453,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   for (const l of json.lines) {
     if (l.c !== 'fence') continue;
     const p = unpackPts(l.p);
-    if (!p.some(([x, z]) => terrain.slice.contains(x, z, -20))) continue;
+    if (!p.some(([x, z]) => inSlice(x, z, -20))) continue;
     for (let i = 0; i + 1 < p.length; i++) {
       const [ax, az] = p[i], [bx, bz] = p[i + 1];
       const L = Math.hypot(bx - ax, bz - az);

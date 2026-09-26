@@ -4,6 +4,7 @@ import { cachedFetchJson } from './world/cache';
 import { TileStream } from './world/stream';
 import { paintGround } from './world/groundPaint';
 import { buildGround, terrainTextures } from './world/ground';
+import { setGndMaterial } from './world/pack';
 import { buildWater } from './world/water';
 import type { Door, Footprint } from './world/buildings';
 import { buildSky, skyUniforms } from './world/sky';
@@ -118,7 +119,9 @@ async function main() {
   const worldRoot = new THREE.Group();
   worldRoot.name = 'world';
   scene.add(worldRoot);
-  worldRoot.add(buildGround(world, paint, tt));
+  const groundGroup = buildGround(world, paint, tt);
+  worldRoot.add(groundGroup);
+  setGndMaterial(groundGroup.userData.groundMat); // synthetic tiles reuse this material
   worldRoot.add(buildWater(tt));
   const sky = buildSky();
   scene.add(sky);
@@ -126,6 +129,9 @@ async function main() {
 
   // Walk physics + interiors registry: everything is tile-scoped so neighbourhoods stream in and out.
   const walk = new WalkWorld(world.terrain, json.backdrop);
+  // Synthetic tiles continue past the backdrop — the walkable bound must too (water still
+  // gates via terrain height/sdf; this only widens the geometric fence).
+  walk.bounds = { x0: -4e6, z0: -4e6, x1: 4e6, z1: 4e6 };
   const interiors = new Interiors(walk);
   worldRoot.add(interiors.group);
   const stream = new TileStream(base, manifest, world.terrain, walk, interiors, worldRoot);

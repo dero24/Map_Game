@@ -24,7 +24,8 @@ export type PMat =
   | { t: 'wire' }
   | { t: 'signs' }
   | { t: 'halo'; size: number; color: number }
-  | { t: 'prop'; o: { wind?: boolean; bob?: boolean; foliage?: boolean; emissive?: number; emissiveNight?: boolean } };
+  | { t: 'prop'; o: { wind?: boolean; bob?: boolean; foliage?: boolean; emissive?: number; emissiveNight?: boolean } }
+  | { t: 'gnd' }; // region ground material (shared; set via setGndMaterial at boot)
 
 export interface PObj {
   k: 'mesh' | 'inst' | 'pts' | 'lines';
@@ -151,6 +152,8 @@ export function replayOps(w: WalkWorld, ops: WalkOp[]) {
 // fingerprinted by their vertex shader. Throws on anything unexpected — loud, not wrong.
 export function matTag(m: THREE.Material): PMat {
   const s = m as THREE.ShaderMaterial;
+  const forced = (s.userData?.tag as PMat['t'] | undefined);
+  if (forced) return { t: forced } as PMat;
   const vs = s.vertexShader ?? '';
   if (vs.includes('aWall')) return { t: 'bld' };
   if (vs.includes('aText')) return { t: 'signs' };
@@ -173,12 +176,17 @@ export function matTag(m: THREE.Material): PMat {
   throw new Error('unrecognised tile material');
 }
 
+// The ground shader lives on the boot-time region ground mesh; synthetic tiles reuse it.
+let gndMat: THREE.Material | null = null;
+export function setGndMaterial(m: THREE.Material) { gndMat = m; }
+
 export function matFromTag(t: PMat, atlas?: THREE.Texture): THREE.Material {
   switch (t.t) {
     case 'bld': return buildingMaterial();
     case 'wire': return wireMaterial();
     case 'signs': return signMaterial(atlas!);
     case 'halo': return haloMaterial(t.size, new THREE.Color(t.color));
+    case 'gnd': return gndMat ?? propMaterial();
     case 'prop':
       return propMaterial({ ...t.o, emissive: t.o.emissive !== undefined ? new THREE.Color(t.o.emissive) : undefined });
   }

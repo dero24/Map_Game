@@ -66,7 +66,10 @@ export function buildLifeBase(world: World, walk: WalkWorld): LifeBase {
       const x = S0.x0 + (i + 0.5) * cell, z = S0.z0 + (j + 0.5) * cell;
       water[j * gw + i] = terrain.sdfAt(x, z) < -14 && x < S0.x1 - 40 && x > S0.x0 + 40 && z > S0.z0 + 40 && z < S0.z1 - 40 ? 1 : 0;
     }
-  return { seed: 20260923, bounds: [S0.x0, S0.z0, S0.x1, S0.z1], beachPts: new Float32Array(beach), waterGrid: water, waterG: [S0.x0, S0.z0, cell, gw, gh], downtown, seaward };
+  // Bounds only steer gulls/home anchors — synthetic tiles keep the world (and its road
+  // graph) going well past the bake, so agents get a generous 20 km apron, not the slice.
+  const PAD = 10000;
+  return { seed: 20260923, bounds: [S0.x0 - PAD, S0.z0 - PAD, S0.x1 + PAD, S0.z1 + PAD], beachPts: new Float32Array(beach), waterGrid: water, waterG: [S0.x0, S0.z0, cell, gw, gh], downtown, seaward };
 }
 
 export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, doors: Door[]): LifeInit {

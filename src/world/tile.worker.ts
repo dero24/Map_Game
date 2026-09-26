@@ -1,9 +1,11 @@
 // Worker-side tile build: fetch + decode + mesh + collision for one tile, packed for transfer.
 // Runs the same buildTile pipeline as the main-thread fallback — same output, off the main thread.
-import { Terrain, TerrainLayer, type LayerLayout, type TileJson, type TileSpec, type WorldJson } from './data';
+import { Terrain, TerrainLayer, type LayerLayout, type TileJson, type TileSpec } from './data';
 import { cachedFetch, cachedFetchJson, initCache } from './cache';
 import { buildTile } from './tileBuild';
-import type { BuiltTile } from './pack';
+import { packGroup, type BuiltTile } from './pack';
+import { synthTile } from './synth';
+import type { SynthResult } from './synth';
 
 interface TileWorkerScope {
   postMessage(msg: unknown, transfer?: Transferable[]): void;
@@ -13,6 +15,7 @@ const ctx = self as unknown as TileWorkerScope;
 
 let base = '';
 let cell = 1024;
+let seed = 0;
 let terrain: Terrain | null = null;
 let binPromise: Promise<ArrayBuffer> | null = null;
 
@@ -20,17 +23,20 @@ const loadBin = () => (binPromise ??= cachedFetch(base + 'terrain.bin'));
 
 async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: boolean; terr?: { slice: LayerLayout; backdrop: LayerLayout } }): Promise<BuiltTile> {
   const spec = msg.spec;
-  const [tj, tbuf] = await Promise.all([
-    cachedFetchJson(base + spec.file) as Promise<TileJson>,
-    spec.terrain && !msg.lite ? cachedFetch(base + spec.terrain.file) : Promise.resolve(undefined),
-  ]);
   if (!terrain) {
-    const lay = msg.terr ?? (tj as unknown as WorldJson).terrain;
+    const lay = msg.terr;
+    if (!lay) throw new Error('no terrain layout');
     const bin = await loadBin();
     terrain = new Terrain(new TerrainLayer(bin, lay.slice), new TerrainLayer(bin, lay.backdrop));
     terrain.patchCell = cell;
   }
+  let syn: SynthResult | null = null;
+  const [tj, tbuf] = await Promise.all([
+    spec.synth ? Promise.resolve((syn = synthTile(spec, seed, terrain)).tj) : cachedFetchJson(base + spec.file) as Promise<TileJson>,
+    spec.terrain && !msg.lite ? cachedFetch(base + spec.terrain.file) : Promise.resolve(undefined),
+  ]);
   const tile = await buildTile(tj, terrain, spec, msg.idBase, !!msg.lite);
+  if (syn) tile.objs.push(...packGroup(syn.extra));
   // A copy ships to the main thread for its patch registry; the worker keeps its own bytes.
   tile.terr = tbuf?.slice(0);
   return tile;
@@ -41,6 +47,7 @@ ctx.onmessage = (e: MessageEvent) => {
   if (m.kind === 'init') {
     base = m.base;
     cell = m.cell;
+    seed = m.seed ?? 0;
     if (m.fp) initCache(base, m.fp); // same idb database as the page
     return;
   }

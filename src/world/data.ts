@@ -138,7 +138,7 @@ export interface World {
 
 // ---------------- atlas / tile streaming ----------------
 
-export interface TileSpec { id: string; box: Box; lod: number; file: string; terrain?: { file: string; layout: LayerLayout } }
+export interface TileSpec { id: string; box: Box; lod: number; file: string; terrain?: { file: string; layout: LayerLayout }; synth?: 1 }
 
 // Region manifest: identity + slim data (named roads, pois, landmarks) + the tile grid.
 export interface AtlasManifest {

@@ -22,6 +22,7 @@ walking — forever — while the world paints itself around you. The design liv
 | — | Street furniture variety: hydrants, benches, bins, planters, front hedges | ✅ done | `66b9d1d` |
 | — | Placement fix: `clearOfRoad` margins keep all furniture off lanes/sidewalks | ✅ done | `a9ae915` |
 | — | Interior amortization: `buildGen` sliced ~3.5 ms/frame, atomic swap on finish | ✅ done | pending |
+| G | **Procedural fallback tiles** — cells beyond the manifest synthesize deterministic towns (warped grid + town mask + field-driven lots); same build/mount path; walkable forever | ✅ done (r1) | pending |
 
 ## Next up (per masterplan, in rough order)
 
@@ -40,8 +41,11 @@ walking — forever — while the world paints itself around you. The design liv
 - `lifeSim` pedestrian test sits near the 5 s vitest timeout (bumped to 15 s; it flakes under load).
 - The tile cache keeps two namespaces (page-relative vs worker-absolute base URLs) — correct but
   duplicates entries; dedupe later if disk matters.
-- Only **Sea Bright** and **Monmouth Beach** are baked — `?at`/`G` can pick between them, but
-  planet-scale coverage needs the on-demand generation phase.
+- Only **Sea Bright** and **Monmouth Beach** are baked — `?at`/`G` can pick between them, and
+  walking now keeps going via Phase G synth tiles (deterministic procedural suburbs). Synth
+  quality is "PASS WITH CONDITIONS" per the reviewer — see `docs/earth/REVIEWER.md`.
+- Synth tiles currently have **no lamp-map/night pools** (skipped — the lamp compositor is
+  slice-scoped; needs a per-tile lamp box, deferred) and **no paint layer** for paved lots.
 
 ## Verification ritual (run before committing world changes)
 

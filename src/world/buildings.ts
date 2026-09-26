@@ -847,7 +847,7 @@ export function buildBuildings(world: World, idBase = 0): BuildingsResult {
   const sh = new Builder();
   const haveLighthouse = (x: number, z: number) => json.buildings.some((bd) => bd.k === 'lighthouse' && Math.abs(bd.r[0] / 10 - x) < 150 && Math.abs(bd.r[1] / 10 - z) < 150);
   const pointLights = json.points.filter((p) => p.c === 'lighthouse' && p.own !== 0).map((p) => ({ x: p.x, z: p.z, h: 29 }));
-  [...pointLights, ...json.landmarks.map((l) => ({ x: l.x, z: l.z, h: l.h }))].forEach((lm, k) => {
+  [...pointLights, ...(json.landmarks ?? []).map((l) => ({ x: l.x, z: l.z, h: l.h }))].forEach((lm, k) => {
     if (haveLighthouse(lm.x, lm.z)) return;
     const base = Math.max(terrain.heightAt(lm.x, lm.z), 2);
     lighthouseTower(sh, lm.x, lm.z, 3.5, base, lm.h, lin(0xf2efe8), 1e6 + k, 8);

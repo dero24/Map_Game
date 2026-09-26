@@ -54,7 +54,7 @@ export class WalkWorld {
   private deckDead: number[] = [];
   private scopeIds = new Map<number, { segs: number[]; polys: number[]; decks: number[] }>();
 
-  constructor(private terrain: Terrain, private bounds: Box) {}
+  constructor(private terrain: Terrain, public bounds: Box) {}
 
   beginScope(id: number) { this.curScope = id; if (!this.scopeIds.has(id)) this.scopeIds.set(id, { segs: [], polys: [], decks: [] }); }
   endScope() { this.curScope = 0; }

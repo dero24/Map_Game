@@ -106,3 +106,41 @@ Post-fix soak: `stalls=0`, `hitches>250ms=1`, `interior=7.75ms`, `frameErrors=0`
   (white tower + green 4-sided spire). Re-added on the `roofG` path â€” tower at the ridge's
   longest-axis end (facade white), `cone()` spire in weathered copper green. Verified via
   ground-level shot at Saint George's: clearly a church again.
+
+## 2026-09-23 — Infinite world: deterministic procedural fallback tiles
+
+The world no longer ends at the manifest edge. Cells outside the baked region synthesize a
+watercolor suburb forever — streets, sidewalks, poles, varied houses, benches, trees — via
+the same build/pack/mount path as real tiles.
+
+- **src/world/synth.ts** (new): synthTile(spec, seed, terrain) -> a full TileJson +
+  extra group (ground chunk + road/sidewalk ribbons). Everything is *field-driven*: a
+  warped street grid (108 m pitch, sine-wandered lines), a low-freq noise town mask for
+  density, lattice-hash h for every choice. No per-tile RNG for layout -> seams are
+  structurally impossible; neighbour tiles agree about shared roads/lots by position.
+- **Streaming** (stream.ts): specAt(cx,cz) -> baked manifest tile or {id:s+key, synth:1}
+  spec; update() iterates the cell window (not the manifest); radius sweep for drops.
+  Fixes found by subagent trace: a queued set kills a resolved-but-unmounted refetch
+  storm; coarse silhouettes now cover [LOAD_R, COARSE_R) (was [DROP_R, COARSE_R) - a
+  900 m dead zone where nothing loaded); ensureAround enumerates synth cells too;
+  synthOrd is cell-hashed (session-independent ids).
+- **Worker** (	ile.worker.ts): init takes seed; spec.synth -> synthTile on-thread
+  (pure JS, no fetches), then the identical uildTile+pack path. In-page fallback same.
+- **Ground** (ground.ts/pack.ts): ground material exposed via userData.groundMat ->
+  setGndMaterial(); new pack tag 'gnd'; synth tiles emit a ground chunk into extra.
+- **Props** (props.ts): slice containment now uses the tile's own slice box (inSlice)
+  so poles/trees/benches emit outside the baked grid; pavedMask bounds clamped for boxes
+  fully outside the slice (was negative canvas size).
+- **Buildings** (uildings.ts): landmarks ?? [] (synth has none).
+- **Collision/main** (collision.ts, main.ts): walk.bounds widened to ±4e6 m —
+  walkable  forever, water still gates via height/sdf.
+- **Life** (life.ts): env bounds widened ±10 km so gulls/agents aren't slice-trapped;
+  synth roads already reach the sim via primRoads.
+- Determinism: seed = egionSeed(region) ^ cellHash; all layout choices hash position.
+  ID_STRIDE reduced so fpIds stay exact in Float32 attrs.
+- **Reviewer** (docs/earth/REVIEWER.md): persistent AAA-designer memory file created;
+  round-1 verdict PASS WITH CONDITIONS 6/10 -> must-fixes applied same session
+  (town-gated streets, per-axis ribbon heights, benches/entrances, lot jitter + L-shapes,
+  life bounds). Round 2 (with screenshots) is the confirmation gate.
+- Verified: typecheck + 44 tests + build + soak clean; captures at (-6800,-200) show a
+  rendered suburb noon/golden/aerial.

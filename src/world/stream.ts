@@ -7,7 +7,8 @@ import { loadTile, loadTileTerrain, type AtlasManifest, type Box, type Road, typ
 import { manifestFingerprint } from './cache';
 import type { Door, Footprint } from './buildings';
 import { buildTile } from './tileBuild';
-import { buildObject, replayOps, unpackDeck, type BuiltTile } from './pack';
+import { buildObject, packGroup, replayOps, unpackDeck, type BuiltTile } from './pack';
+import { synthTile, regionSeed } from './synth';
 import { haloPoints } from './props';
 import { signTexture } from './signs';
 import { registerPlan, type Interiors, type Plan } from './interiors';
@@ -18,7 +19,7 @@ const LOAD_R = 1500; // keep tiles this close (3×3 cells and then some)
 const DROP_R = 2400; // drop tiles beyond this
 const COARSE_R = 8000; // silhouette ring: lite builds (meshes only) out to the horizon
 const COARSE_BUDGET = 4; // max outstanding lite builds — they're lowest priority
-const ID_STRIDE = 1 << 16; // building-id space per tile (window-fade keys, <2^24 total)
+const ID_STRIDE = 1 << 12; // building-id space per tile (window-fade keys, <2^24 total; synth cells raise the ord count)
 
 export interface TileArt {
   spec: TileSpec;
@@ -79,6 +80,14 @@ export class TileStream {
   onChange: (() => void) | null = null;
   onTile: ((a: TileArt) => void) | null = null; // fired after a tile mounts (walks -> ground paint)
 
+  // Manifest cells by cx_cz key + the procedural-cell cache: past the manifest's grid the
+  // world is synthesised deterministically (synth.ts) — same BuiltTile pipeline after that.
+  private byCell = new Map<string, TileSpec>();
+  private synthSpecs = new Map<string, TileSpec>();
+  private seed = 0;
+  private synthOrd = 0; // fp-id base offset — starts at man.tiles.length so ids stay <2^24
+  private queued = new Set<string>(); // ids sitting in buildQueue — gates the per-frame refetch
+
   constructor(
     private base: string,
     private man: AtlasManifest,
@@ -89,6 +98,32 @@ export class TileStream {
   ) {
     const S = man.slice;
     U.uLampBox.value.set(S.x0, S.z0, 1 / (S.x1 - S.x0), 1 / (S.z1 - S.z0));
+    for (const t of man.tiles) this.byCell.set(t.id, t);
+    this.seed = regionSeed(man.id);
+    this.synthOrd = man.tiles.length;
+  }
+
+  // The spec for cell (cx,cz): the baked tile if the manifest has it, else a synthetic one.
+  private specAt(cx: number, cz: number): TileSpec {
+    const key = `${cx}_${cz}`;
+    const baked = this.byCell.get(key);
+    if (baked) return baked;
+    let s = this.synthSpecs.get(key);
+    if (!s) {
+      const c = this.man.cell;
+      s = { id: 's' + key, box: { x0: cx * c, z0: cz * c, x1: cx * c + c, z1: cz * c + c }, lod: 0, file: '', synth: 1 };
+      this.synthSpecs.set(key, s);
+    }
+    return s;
+  }
+
+  private ordOf(t: TileSpec) {
+    const i = this.man.tiles.indexOf(t);
+    if (i >= 0) return i;
+    // Cell-derived so ids are identical every session; hash collisions across synth cells
+    // only ever share a window-pattern key — cosmetic, never structural.
+    const c = this.man.cell, cx = Math.floor(t.box.x0 / c), cz = Math.floor(t.box.z0 / c);
+    return this.synthOrd + ((Math.imul(cx, 331) ^ Math.imul(cz, 577)) >>> 0) % 2048;
   }
 
   private markDirty() {
@@ -125,8 +160,15 @@ export class TileStream {
   }
 
   // Load every tile within r of (x,z) now — used during startup so the spawn area is solid.
+  // Covers synthetic cells too, so a teleport/respawn past the bake isn't born in a void.
   async ensureAround(x: number, z: number, r = LOAD_R) {
-    const wanted = this.man.tiles.filter((t) => boxDist2(t.box, x, z) < r * r);
+    const c = this.man.cell;
+    const wanted: TileSpec[] = [];
+    for (let cz = Math.floor((z - r) / c); cz <= Math.floor((z + r) / c); cz++)
+      for (let cx = Math.floor((x - r) / c); cx <= Math.floor((x + r) / c); cx++) {
+        const t = this.specAt(cx, cz);
+        if (boxDist2(t.box, x, z) < r * r) wanted.push(t);
+      }
     const pends = await Promise.all(wanted.map((t) => this.fetch(t)));
     for (const p of pends) this.mount(p);
   }
@@ -135,26 +177,41 @@ export class TileStream {
   // ring under a small budget), mount at most one finished tile of each tier, drop far ones.
   update(x: number, z: number) {
     const now = performance.now();
-    for (const t of this.man.tiles) {
-      const d2 = boxDist2(t.box, x, z);
-      if (d2 < LOAD_R * LOAD_R) {
-        // A coarse mount stays up until the detail mount swaps it — silhouette beats a hole.
-        if (!this.loaded.has(t.id) && !this.fetching.has(t.id) && now - (this.failed.get(t.id) ?? -30000) > 10000) void this.fetch(t).then((p) => { if (p) this.buildQueue.push(p); });
-      } else {
-        if (d2 > DROP_R * DROP_R && this.loaded.has(t.id)) this.unload(t.id);
-        if (d2 >= DROP_R * DROP_R && d2 < COARSE_R * COARSE_R) {
-          if (!this.loaded.has(t.id) && !this.coarseLoaded.has(t.id) && !this.coarseFetching.has(t.id) && this.coarseFetching.size < COARSE_BUDGET && now - (this.failed.get('c' + t.id) ?? -30000) > 10000) void this.fetchCoarse(t).then((p) => { if (p) this.coarseQueue.push(p); });
-        } else if (d2 >= COARSE_R * COARSE_R && this.coarseLoaded.has(t.id)) this.unloadCoarse(t.id);
+    // Cells in the coarse ring — manifest tiles where baked, synthetic where not. Iterating
+    // cells rather than man.tiles is what makes the world continue past the bake.
+    const c = this.man.cell;
+    const cx0 = Math.floor((x - COARSE_R) / c), cx1 = Math.floor((x + COARSE_R) / c);
+    const cz0 = Math.floor((z - COARSE_R) / c), cz1 = Math.floor((z + COARSE_R) / c);
+    for (let cz = cz0; cz <= cz1; cz++)
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const t = this.specAt(cx, cz);
+        const d2 = boxDist2(t.box, x, z);
+        if (d2 < LOAD_R * LOAD_R) {
+          // A coarse mount stays up until the detail mount swaps it — silhouette beats a hole.
+          if (!this.loaded.has(t.id) && !this.fetching.has(t.id) && !this.queued.has(t.id) && now - (this.failed.get(t.id) ?? -30000) > 10000) void this.fetch(t).then((p) => { if (p) { this.queued.add(t.id); this.buildQueue.push(p); } });
+        } else {
+          if (d2 > DROP_R * DROP_R && this.loaded.has(t.id)) this.unload(t.id);
+          // Silhouettes fill the [LOAD_R, COARSE_R) band — without this, cells between
+          // LOAD_R and DROP_R were a dead zone that neither tier ever fetched.
+          if (d2 >= LOAD_R * LOAD_R && d2 < COARSE_R * COARSE_R) {
+            if (!this.loaded.has(t.id) && !this.coarseLoaded.has(t.id) && !this.coarseFetching.has(t.id) && !this.queued.has('c' + t.id) && this.coarseFetching.size < COARSE_BUDGET && now - (this.failed.get('c' + t.id) ?? -30000) > 10000) void this.fetchCoarse(t).then((p) => { if (p) { this.queued.add('c' + t.id); this.coarseQueue.push(p); } });
+          } else if (d2 >= COARSE_R * COARSE_R && this.coarseLoaded.has(t.id)) this.unloadCoarse(t.id);
+        }
       }
-    }
+    // Cells outside the iteration window aren't visited above — sweep mounts so tiles left
+    // behind the corner of the box unload the same way the old manifest-wide loop did.
+    for (const [id, a] of [...this.loaded]) if (boxDist2(a.spec.box, x, z) > DROP_R * DROP_R) this.unload(id);
+    for (const [id, a] of [...this.coarseLoaded]) if (boxDist2(a.spec.box, x, z) > COARSE_R * COARSE_R) this.unloadCoarse(id);
     if (this.buildQueue.length) {
       this.buildQueue.sort((a, b) => boxDist2(a.spec.box, x, z) - boxDist2(b.spec.box, x, z));
       const p = this.buildQueue.shift()!;
+      this.queued.delete(p.spec.id);
       if (boxDist2(p.spec.box, x, z) < DROP_R * DROP_R) this.mount(p);
     }
     if (this.coarseQueue.length) {
       this.coarseQueue.sort((a, b) => boxDist2(a.spec.box, x, z) - boxDist2(b.spec.box, x, z));
       const p = this.coarseQueue.shift()!;
+      this.queued.delete('c' + p.spec.id);
       if (boxDist2(p.spec.box, x, z) < COARSE_R * COARSE_R) this.mountCoarse(p);
     }
   }
@@ -196,7 +253,7 @@ export class TileStream {
         console.warn('tile worker failed; building in-page from now on', e.message);
       };
       // Worker fetches resolve against its own module URL — hand it an absolute base.
-      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man) });
+      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed });
       this.worker = w;
     } catch {
       this.workerDead = true;
@@ -213,8 +270,10 @@ export class TileStream {
       });
     }
     // No worker support: the same pipeline on the main thread.
-    return Promise.all([loadTile(this.base, t), lite ? Promise.resolve(null) : loadTileTerrain(this.base, t)]).then(async ([tj, tl]) => {
+    const syn = t.synth ? synthTile(t, this.seed, this.terrain) : null;
+    return Promise.all([syn ? Promise.resolve(syn.tj) : loadTile(this.base, t), lite || syn ? Promise.resolve(null) : loadTileTerrain(this.base, t)]).then(async ([tj, tl]) => {
       const tile = await buildTile(tj, this.terrain, t, ord * ID_STRIDE, lite);
+      if (syn) tile.objs.push(...packGroup(syn.extra));
       tile.terr = tl ? (tl.height.buffer as ArrayBuffer) : undefined;
       return tile;
     });
@@ -223,7 +282,7 @@ export class TileStream {
   private fetch(t: TileSpec): Promise<Pending | null> {
     let p = this.fetching.get(t.id);
     if (!p) {
-      p = this.build(t, this.man.tiles.indexOf(t))
+      p = this.build(t, this.ordOf(t))
         .then((tile): Pending => ({ spec: t, tile }))
         .catch((e) => { this.failed.set(t.id, performance.now()); console.warn('tile load failed', t.id, e); return null; })
         .finally(() => this.fetching.delete(t.id));
@@ -235,7 +294,7 @@ export class TileStream {
   private fetchCoarse(t: TileSpec): Promise<Pending | null> {
     let p = this.coarseFetching.get(t.id);
     if (!p) {
-      p = this.build(t, this.man.tiles.indexOf(t), true)
+      p = this.build(t, this.ordOf(t), true)
         .then((tile): Pending => ({ spec: t, tile }))
         .catch((e) => { this.failed.set('c' + t.id, performance.now()); console.warn('coarse tile load failed', t.id, e); return null; })
         .finally(() => this.coarseFetching.delete(t.id));
