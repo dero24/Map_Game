@@ -2,6 +2,44 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-24 — H1: real-lite tile service + open-world `?at=` — walking London
+
+- **`src/world/realTile.ts`** (new): Overpass JSON → `TileJson`, shared verbatim between
+  the Cloudflare worker and the client test-suite. Ports the bake's road/building/colour
+  tables + `partitionEntities` margin/`own:0` semantics; coastline ways close against the
+  cell boundary via a boundary-parametrized arc + wet-side probe (sea gets a real shore).
+  Element-id-seeded heights/roofs → deterministic tiles for every client.
+- **`worker/`** (new): `wrangler.toml` + `src/index.js` —
+  `GET /tile/<cx>_<cz>.json?olat=<deg>&olon=<deg>` → edge Cache API → R2 → Overpass
+  (3-endpoint rotation on 429/504) → transform → R2+edge put. In-flight dedup so
+  concurrent misses share one upstream call; 60 s negative edge-cache on upstream
+  failure; CORS + `cross-origin-resource-policy` (the page is COEP-isolated in dev);
+  `x-osm-attribution` header + `attribution` field on every tile (ODbL).
+- **Client**: `?tiles=<base>` (or `AtlasManifest.tilesUrl`) → non-baked cells become
+  `w-*` specs fetching absolute URLs (IndexedDB-cached as usual); each streams a `s-*`
+  synth placeholder twin that mounts instantly and retires when the real tile lands —
+  same seamless-swap idiom as coarse→detail. Coarse silhouettes stay synth (no Overpass
+  burn for distant cells). `realExtras` gives w-tiles ground chunk + asphalt ribbons on
+  real centrelines + water sheets (earcut, holes included). Lamp maps skip w/s cells.
+- **Open world**: `?at=` beyond every baked backdrop + `?tiles` → `virtualRegion()`
+  builds a manifest in code — origin snapped to a 1/64° grid (players at a place share
+  cells AND the R2 cache), flat synthetic terrain layer (3 m land; H2 DEM replaces),
+  terrain bytes passed in-band to the tile worker. `initCache` namespaces idb per origin.
+- **UI**: `© OpenStreetMap contributors` credit line, bottom-right HUD, links to ODbL.
+- **Verified**: typecheck, 53/53 tests (9 new realTile cases incl. neighbour-cell
+  ownership + coastline wet side), build. Worker smoke under `wrangler dev`: real cells
+  for Sea Bright (Ocean Ave, 7-Eleven) and central London (Blackfriars Rd, Inner London
+  Crown Court — 1292 buildings/2740 roads per cell). Playwright probe at `?at=London`:
+  8.3k footprints/8.5k roads mounted, s→w swaps clean, 0 errors. Montage shows real
+  streets + buildings rendering in watercolor.
+- **Upstream reality**: Overpass ran 25–90 s/cell tonight (not the 2–8 s the plan
+  assumes). The placeholder absorbs it; R2 + in-flight dedup make each slow fetch
+  one-time-per-population. Watch it — may warrant a `maxsize`/timeout tune or
+  Geofabrik pre-seeding for popular regions.
+- Next: H1c hybrid fill (synth lots on real roads where footprints are sparse), then
+  H2 Terrarium DEM; deploy the worker (needs the user's Cloudflare account) and set
+  `tilesUrl` on manifests / the Pages deployment.
+
 ## 2026-09-24 — Tiles → worker → cache → origin → coarse ring → deep links
 
 - Shipped the whole Phase A–F sequence (commits `e433f1b`…`154cf60`): per-tile terrain packs,
@@ -107,10 +145,10 @@ Post-fix soak: `stalls=0`, `hitches>250ms=1`, `interior=7.75ms`, `frameErrors=0`
   longest-axis end (facade white), `cone()` spire in weathered copper green. Verified via
   ground-level shot at Saint George's: clearly a church again.
 
-## 2026-09-23 � Infinite world: deterministic procedural fallback tiles
+## 2026-09-23 � Infinite world: deterministic procedural fallback tiles
 
 The world no longer ends at the manifest edge. Cells outside the baked region synthesize a
-watercolor suburb forever � streets, sidewalks, poles, varied houses, benches, trees � via
+watercolor suburb forever � streets, sidewalks, poles, varied houses, benches, trees � via
 the same build/pack/mount path as real tiles.
 
 - **src/world/synth.ts** (new): synthTile(spec, seed, terrain) -> a full TileJson +
@@ -132,11 +170,12 @@ the same build/pack/mount path as real tiles.
   so poles/trees/benches emit outside the baked grid; pavedMask bounds clamped for boxes
   fully outside the slice (was negative canvas size).
 - **Buildings** (uildings.ts): landmarks ?? [] (synth has none).
-- **Collision/main** (collision.ts, main.ts): walk.bounds widened to �4e6 m �
+- **Collision/main** (collision.ts, main.ts): walk.bounds widened to �4e6 m �
   walkable  forever, water still gates via height/sdf.
-- **Life** (life.ts): env bounds widened �10 km so gulls/agents aren't slice-trapped;
+- **Life** (life.ts): env bounds widened �10 km so gulls/agents aren't slice-trapped;
   synth roads already reach the sim via primRoads.
-- Determinism: seed = egionSeed(region) ^ cellHash; all layout choices hash position.
+- Determinism: seed = 
+egionSeed(region) ^ cellHash; all layout choices hash position.
   ID_STRIDE reduced so fpIds stay exact in Float32 attrs.
 - **Reviewer** (docs/earth/REVIEWER.md): persistent AAA-designer memory file created;
   round-1 verdict PASS WITH CONDITIONS 6/10 -> must-fixes applied same session

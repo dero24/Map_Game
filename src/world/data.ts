@@ -3,7 +3,7 @@ import { cachedFetch, cachedFetchJson, initCache, manifestFingerprint } from './
 
 export interface Box { x0: number; z0: number; x1: number; z1: number }
 export interface GridHeader { x0: number; z0: number; cell: number; w: number; h: number }
-interface Chunk { offset: number; length: number; type: string }
+export interface Chunk { offset: number; length: number; type: string }
 export interface LayerLayout { grid: GridHeader; height: Chunk; sdf: Chunk; cover: Chunk; flags: Chunk; oceanD: Chunk }
 
 // Owner-flagged entities only — margin context (own: 0) is emitted once by its owner tile.
@@ -138,7 +138,7 @@ export interface World {
 
 // ---------------- atlas / tile streaming ----------------
 
-export interface TileSpec { id: string; box: Box; lod: number; file: string; terrain?: { file: string; layout: LayerLayout }; synth?: 1 }
+export interface TileSpec { id: string; box: Box; lod: number; file: string; terrain?: { file: string; layout: LayerLayout }; synth?: 1; world?: 1 }
 
 // Region manifest: identity + slim data (named roads, pois, landmarks) + the tile grid.
 export interface AtlasManifest {
@@ -156,6 +156,7 @@ export interface AtlasManifest {
   pois: Poi[];
   landmarks: Landmark[];
   tiles: TileSpec[];
+  tilesUrl?: string; // real-lite tile service base (worker); ?tiles= overrides
 }
 
 // One streamed tile: the same entity arrays as WorldJson, scoped to a cell (+ margin context).
@@ -173,6 +174,9 @@ export interface TileJson {
   areas: Area[];
   lines: Line[];
   points: Point[];
+  // Real-lite (worker-served) tiles carry provenance; baked tiles don't emit these.
+  attribution?: string;
+  osmBase?: string | null;
 }
 
 // A WorldJson-shaped view of a manifest for consumers that only need region-level data.

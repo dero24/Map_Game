@@ -4,7 +4,7 @@ import { Terrain, TerrainLayer, type LayerLayout, type TileJson, type TileSpec }
 import { cachedFetch, cachedFetchJson, initCache } from './cache';
 import { buildTile } from './tileBuild';
 import { packGroup, type BuiltTile } from './pack';
-import { synthTile } from './synth';
+import { synthTile, realExtras } from './synth';
 import type { SynthResult } from './synth';
 
 interface TileWorkerScope {
@@ -17,9 +17,10 @@ let base = '';
 let cell = 1024;
 let seed = 0;
 let terrain: Terrain | null = null;
+let binInit: ArrayBuffer | null = null; // virtual-region terrain bytes (no terrain.bin exists)
 let binPromise: Promise<ArrayBuffer> | null = null;
 
-const loadBin = () => (binPromise ??= cachedFetch(base + 'terrain.bin'));
+const loadBin = () => (binPromise ??= binInit ? Promise.resolve(binInit) : cachedFetch(base + 'terrain.bin'));
 
 async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: boolean; terr?: { slice: LayerLayout; backdrop: LayerLayout } }): Promise<BuiltTile> {
   const spec = msg.spec;
@@ -32,11 +33,16 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   }
   let syn: SynthResult | null = null;
   const [tj, tbuf] = await Promise.all([
-    spec.synth ? Promise.resolve((syn = synthTile(spec, seed, terrain)).tj) : cachedFetchJson(base + spec.file) as Promise<TileJson>,
+    spec.synth
+      ? Promise.resolve((syn = synthTile(spec, seed, terrain)).tj)
+      : spec.world
+        ? (cachedFetchJson(spec.file) as Promise<TileJson>) // real-lite: absolute tile-service URL
+        : (cachedFetchJson(base + spec.file) as Promise<TileJson>),
     spec.terrain && !msg.lite ? cachedFetch(base + spec.terrain.file) : Promise.resolve(undefined),
   ]);
   const tile = await buildTile(tj, terrain, spec, msg.idBase, !!msg.lite);
   if (syn) tile.objs.push(...packGroup(syn.extra));
+  else if (spec.world) tile.objs.push(...packGroup(realExtras(tj, terrain))); // ground + real-street ribbons + water
   // A copy ships to the main thread for its patch registry; the worker keeps its own bytes.
   tile.terr = tbuf?.slice(0);
   return tile;
@@ -48,6 +54,7 @@ ctx.onmessage = (e: MessageEvent) => {
     base = m.base;
     cell = m.cell;
     seed = m.seed ?? 0;
+    if (m.bin) binInit = m.bin;
     if (m.fp) initCache(base, m.fp); // same idb database as the page
     return;
   }

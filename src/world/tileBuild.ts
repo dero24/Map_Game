@@ -72,7 +72,8 @@ export async function buildTile(tj: TileJson, terrain: Terrain, spec: TileSpec, 
     atlas: await canvasBitmap(signs.atlas),
     // Synth tiles get no lamp map: its canvas covers spec.box±48 but repaintLamps stretches
     // every bitmap across the region slice box, so pools would land on the wrong streets.
-    lamp: spec.synth ? undefined : await canvasBitmap(props.lampMap),
+    // Real-lite (w-*) tiles live past the slice the same way — no lamp map for them either.
+    lamp: spec.synth || spec.world ? undefined : await canvasBitmap(props.lampMap),
     lampBox: props.lampBox,
   };
 }

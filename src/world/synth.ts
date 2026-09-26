@@ -3,9 +3,11 @@
 // a pure function of (x, z, regionSeed), so neighbouring tiles agree on shared roads and
 // lots without ever seeing each other, and every client builds the same world forever.
 import * as THREE from 'three';
+import earcut from 'earcut';
 import type { Building, Point, Road, TileJson, TileSpec } from './data';
 import { propMaterial } from '../render/propMaterial';
 import { buildGrid } from './ground';
+import { pointInRing } from './realTile';
 
 // Region seed: stable hash of the manifest id (same bake → same synthetic world).
 export function regionSeed(id: string): number {
@@ -223,4 +225,58 @@ function roadRibbons(roads: Road[], terrain: { heightAt(x: number, z: number): n
   geo.setIndex(idx);
   const m = new THREE.Mesh(geo, propMaterial());
   return m;
+}
+
+// Real-lite tiles (worker-served OSM data) need the same visuals the bake gets from
+// paint/atlas: a ground chunk, asphalt ribbons along the REAL road centrelines, and
+// water sheets over the tile's water/coast areas (the terrain has no shore data here).
+export function realExtras(tj: TileJson, terrain: { sdfAt(x: number, z: number): number; heightAt(x: number, z: number): number }): THREE.Group {
+  const box = tj.box;
+  const extra = new THREE.Group();
+  const unpack = (f: number[]): [number, number][] => {
+    const out: [number, number][] = [];
+    for (let i = 0; i + 1 < f.length; i += 2) out.push([f[i] / 10, f[i + 1] / 10]);
+    return out;
+  };
+  const waters = tj.areas.filter((a) => a.c === 'water' || a.c === 'wetland');
+  const waterRings = waters.flatMap((a) => a.o.map(unpack));
+  const inWater = (x: number, z: number) => waterRings.some((r) => pointInRing(x, z, r));
+  const g = buildGrid({ x0: box.x0, z0: box.z0, x1: box.x1, z1: box.z1, step: 8 }, (x, z) => terrain.heightAt(x, z), (x, z) => terrain.sdfAt(x, z) > -45 && !inWater(x, z));
+  if (g.index && g.index.count) {
+    const gm = new THREE.Mesh(g, new THREE.ShaderMaterial());
+    gm.material.userData.tag = 'gnd';
+    extra.add(gm);
+  }
+  extra.add(roadRibbons(tj.roads, terrain));
+  // Water sheets: flat tinted polygons hugging the ground. The watercolor post-pass
+  // softens them toward the painted look; sdf/ocean shading arrives with real DEM (H2).
+  const WET: Record<string, [number, number, number]> = { water: [0.32, 0.44, 0.55], wetland: [0.38, 0.45, 0.4], beach: [0.82, 0.75, 0.58] };
+  for (const a of tj.areas) {
+    const col = WET[a.c];
+    if (!col) continue;
+    const outers = a.o.map(unpack).filter((r) => r.length >= 3);
+    const inners = a.i.map(unpack).filter((r) => r.length >= 3);
+    for (const pts of outers) {
+      // earcut handles holes: outer ring first, then each inner ring as a hole.
+      const rings = [pts, ...inners];
+      const flat = rings.flatMap((r) => r.flat());
+      const holes = inners.length ? inners.reduce<number[]>((hs, _r, i) => [...hs, pts.length + inners.slice(0, i).reduce((n, rr) => n + rr.length, 0)], []) : undefined;
+      const idx = earcut(flat, holes);
+      if (!idx.length) continue;
+      const pos: number[] = [], nrm: number[] = [], cc: number[] = [];
+      for (const ring of rings)
+        for (const [x, z] of ring) {
+          pos.push(x, terrain.heightAt(x, z) + 0.06, z);
+          nrm.push(0, 1, 0);
+          cc.push(col[0], col[1], col[2]);
+        }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(cc, 3));
+      geo.setIndex(idx);
+      extra.add(new THREE.Mesh(geo, propMaterial()));
+    }
+  }
+  return extra;
 }

@@ -24,7 +24,9 @@ const W = Number(args.w ?? 1600), H = Number(args.h ?? 900);
 const SETTLE = Number(args.settle ?? 30);
 const SHOTS = String(args.shots ?? 'ocean-golden').split(',');
 const REGION = args.region ? String(args.region) : 'seabright';
-const EXTRA = `&region=${REGION}${args.query ? `&${args.query}` : ''}`;
+// --region=none drops the param entirely: ?at= deep-links and the open-world virtual
+// region only run when no explicit region is requested.
+const EXTRA = `${REGION === 'none' ? '' : `&region=${REGION}`}${args.query ? `&${args.query}` : ''}`;
 
 const portOpen = (port) => new Promise((res) => {
   const s = net.connect({ port, host: 'localhost' }, () => (s.destroy(), res(true)));

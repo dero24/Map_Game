@@ -40,6 +40,11 @@ body.postcard #hud, body.postcard .lil-gui, body.postcard #toast { display: none
 .keymap td:first-child { font-weight: bold; white-space: nowrap; color: #5a4c78; width: 40%; }
 #hud .hint { font-size: 12px; opacity: 0.55; margin-top: 4px; }
 
+/* ODbL attribution — always on while the world streams OpenStreetMap-derived tiles. */
+#osm-credit { position: fixed; right: 18px; bottom: 12px; font-size: 10.5px; opacity: 0.5; pointer-events: none; text-shadow: 0 0 6px rgba(245, 239, 225, 0.9); }
+#osm-credit a { color: inherit; pointer-events: auto; }
+body.postcard #osm-credit { display: none; }
+
 .lil-gui.root { --background-color: rgba(244, 238, 224, 0.94); --text-color: #3a3346; --title-background-color: #e6dcc6; --title-text-color: #3a3346;
   --widget-color: #e2d8c2; --hover-color: #d6cab0; --focus-color: #cfc1a4; --number-color: #5a4c78; --string-color: #6a7a3c; --font-family: Georgia, serif; }
 

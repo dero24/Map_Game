@@ -20,6 +20,14 @@
   porch clearance and sign intersections). `WalkWorld.beginScope/endScope/removeScope` scopes all collision per tile;
   interiors register under `"tile:idx"` keys and unregister on unload. The ambient-life worker re-inits when the
   loaded set settles (or after 4 s). Regions without a manifest fall back to a single-tile world.json.
+- Real-lite tiles (open world, `worker/`): `cd worker && npx wrangler dev` → `http://localhost:8787`, then the game
+  takes `?tiles=http://localhost:8787`; `?at=lat,lon` beyond every baked backdrop + `?tiles` builds a virtual
+  manifest (origin snapped to 1/64° so players share cell/R2 keys, flat synthetic terrain until H2's DEM) —
+  `w-<cx>_<cz>` specs stream OSM→TileJson while `s-*` synth twins mount instantly and upgrade in place.
+  Deploy once: `npx wrangler login`, `npx wrangler r2 bucket create map-game-tiles`, `npx wrangler deploy`, then
+  set `AtlasManifest.tilesUrl` (or pass `?tiles=`). The shared transform is `src/world/realTile.ts` (bundled by
+  the worker, unit-tested client-side — keep its tag tables in sync with `scripts/bake.mjs`/`lib/colour.mjs`).
+  The `© OpenStreetMap contributors` HUD credit is ODbL-required — keep it visible.
 - Tile builds run in a module worker (`src/world/tile.worker.ts`): fetch + decode + builders + interior plans +
   a recording scratch `WalkWorld` happen off-thread (`src/world/tileBuild.ts`, shared with the no-worker fallback).
   Results cross as `BuiltTile` records (`src/world/pack.ts`): attribute arrays + material tags → `buildObject`

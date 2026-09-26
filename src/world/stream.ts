@@ -3,12 +3,12 @@
 // mounted cheaply: packed objects rebuilt into scene meshes, collision ops replayed inside a
 // WalkWorld scope, interiors registered under "tile:idx" keys. Unload removes all three cleanly.
 import * as THREE from 'three';
-import { loadTile, loadTileTerrain, type AtlasManifest, type Box, type Road, type TileSpec, type Terrain, TerrainLayer } from './data';
-import { manifestFingerprint } from './cache';
+import { loadTile, loadTileTerrain, type AtlasManifest, type Box, type Road, type TileJson, type TileSpec, type Terrain, TerrainLayer } from './data';
+import { cachedFetchJson, manifestFingerprint } from './cache';
 import type { Door, Footprint } from './buildings';
 import { buildTile } from './tileBuild';
 import { buildObject, packGroup, replayOps, unpackDeck, type BuiltTile } from './pack';
-import { synthTile, regionSeed } from './synth';
+import { synthTile, realExtras, regionSeed } from './synth';
 import { haloPoints } from './props';
 import { signTexture } from './signs';
 import { registerPlan, type Interiors, type Plan } from './interiors';
@@ -84,6 +84,7 @@ export class TileStream {
   // world is synthesised deterministically (synth.ts) — same BuiltTile pipeline after that.
   private byCell = new Map<string, TileSpec>();
   private synthSpecs = new Map<string, TileSpec>();
+  private worldSpecs = new Map<string, TileSpec>(); // real-lite cells served by the tile worker
   private seed = 0;
   private synthOrd = 0; // fp-id base offset — starts at man.tiles.length so ids stay <2^24
   private queued = new Set<string>(); // ids sitting in buildQueue — gates the per-frame refetch
@@ -95,6 +96,8 @@ export class TileStream {
     private walk: WalkWorld,
     private interiors: Interiors,
     private scene: THREE.Object3D, // the world root — tile groups join it under the floating origin
+    private tilesBase = '', // real-lite tile service ('' = synth everywhere past the bake)
+    private terrBin: ArrayBuffer | null = null, // terrain.bin bytes for virtual regions (no URL exists)
   ) {
     const S = man.slice;
     U.uLampBox.value.set(S.x0, S.z0, 1 / (S.x1 - S.x0), 1 / (S.z1 - S.z0));
@@ -103,11 +106,29 @@ export class TileStream {
     this.synthOrd = man.tiles.length;
   }
 
-  // The spec for cell (cx,cz): the baked tile if the manifest has it, else a synthetic one.
+  // The spec for cell (cx,cz): the baked tile if the manifest has it, else a real-lite
+  // tile when a tile service is configured, else a synthetic one.
   private specAt(cx: number, cz: number): TileSpec {
     const key = `${cx}_${cz}`;
     const baked = this.byCell.get(key);
     if (baked) return baked;
+    if (this.tilesBase) {
+      let w = this.worldSpecs.get(key);
+      if (!w) {
+        const c = this.man.cell;
+        // file is an absolute URL — the tile worker fetches it directly (no base prefix).
+        const file = `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}`;
+        w = { id: 'w' + key, box: { x0: cx * c, z0: cz * c, x1: cx * c + c, z1: cz * c + c }, lod: 0, file, world: 1 };
+        this.worldSpecs.set(key, w);
+      }
+      return w;
+    }
+    return this.synthSpec(cx, cz);
+  }
+
+  // The deterministic placeholder twin of a real-lite cell (or the whole world offline).
+  private synthSpec(cx: number, cz: number): TileSpec {
+    const key = `${cx}_${cz}`;
     let s = this.synthSpecs.get(key);
     if (!s) {
       const c = this.man.cell;
@@ -167,10 +188,17 @@ export class TileStream {
     for (let cz = Math.floor((z - r) / c); cz <= Math.floor((z + r) / c); cz++)
       for (let cx = Math.floor((x - r) / c); cx <= Math.floor((x + r) / c); cx++) {
         const t = this.specAt(cx, cz);
-        if (boxDist2(t.box, x, z) < r * r) wanted.push(t);
+        if (boxDist2(t.box, x, z) < r * r) {
+          wanted.push(t);
+          if (t.world) wanted.push(this.synthSpec(cx, cz)); // placeholder twin — mounts now, upgrades later
+        }
       }
-    const pends = await Promise.all(wanted.map((t) => this.fetch(t)));
+    // Baked and synth tiles resolve instantly — the spawn waits on those. Real-lite cells
+    // stream in behind their synth twins; blocking spawn on Overpass is exactly the
+    // cold-remote-tile wait the placeholder exists to avoid.
+    const pends = await Promise.all(wanted.map((t) => (t.world ? Promise.resolve(null) : this.fetch(t))));
     for (const p of pends) this.mount(p);
+    for (const t of wanted) if (t.world) void this.fetch(t).then((p) => { if (p) { this.queued.add(t.id); this.buildQueue.push(p); } });
   }
 
   // Per-frame: kick fetches for wanted tiles (detail ring first, then the coarse silhouette
@@ -187,15 +215,26 @@ export class TileStream {
         const t = this.specAt(cx, cz);
         const d2 = boxDist2(t.box, x, z);
         if (d2 < LOAD_R * LOAD_R) {
-          // A coarse mount stays up until the detail mount swaps it — silhouette beats a hole.
-          if (!this.loaded.has(t.id) && !this.fetching.has(t.id) && !this.queued.has(t.id) && now - (this.failed.get(t.id) ?? -30000) > 10000) void this.fetch(t).then((p) => { if (p) { this.queued.add(t.id); this.buildQueue.push(p); } });
+          // Real-lite cells stream their synth placeholder twin alongside — it mounts
+          // instantly and the worker tile swaps in over it when it lands. Failed real
+          // fetches just retry later under the same backoff while the synth holds.
+          const specs = t.world ? [t, this.synthSpec(cx, cz)] : [t];
+          for (const sp of specs)
+            if (!this.loaded.has(sp.id) && !this.fetching.has(sp.id) && !this.queued.has(sp.id) && now - (this.failed.get(sp.id) ?? -30000) > 10000) void this.fetch(sp).then((p) => { if (p) { this.queued.add(sp.id); this.buildQueue.push(p); } });
         } else {
           if (d2 > DROP_R * DROP_R && this.loaded.has(t.id)) this.unload(t.id);
+          if (t.world) { const sid = 's' + t.id.slice(1); if (d2 > DROP_R * DROP_R && this.loaded.has(sid)) this.unload(sid); }
           // Silhouettes fill the [LOAD_R, COARSE_R) band — without this, cells between
-          // LOAD_R and DROP_R were a dead zone that neither tier ever fetched.
+          // LOAD_R and DROP_R were a dead zone that neither tier ever fetched. They stay
+          // synth even under a tile service: cheap, local, and a distant cell isn't worth
+          // an Overpass query.
           if (d2 >= LOAD_R * LOAD_R && d2 < COARSE_R * COARSE_R) {
-            if (!this.loaded.has(t.id) && !this.coarseLoaded.has(t.id) && !this.coarseFetching.has(t.id) && !this.queued.has('c' + t.id) && this.coarseFetching.size < COARSE_BUDGET && now - (this.failed.get('c' + t.id) ?? -30000) > 10000) void this.fetchCoarse(t).then((p) => { if (p) { this.queued.add('c' + t.id); this.coarseQueue.push(p); } });
-          } else if (d2 >= COARSE_R * COARSE_R && this.coarseLoaded.has(t.id)) this.unloadCoarse(t.id);
+            const cs = t.world ? this.synthSpec(cx, cz) : t;
+            if (!this.loaded.has(t.id) && !this.loaded.has(cs.id) && !this.coarseLoaded.has(cs.id) && !this.coarseFetching.has(cs.id) && !this.queued.has('c' + cs.id) && !this.queued.has(cs.id) && this.coarseFetching.size < COARSE_BUDGET && now - (this.failed.get('c' + cs.id) ?? -30000) > 10000) void this.fetchCoarse(cs).then((p) => { if (p) { this.queued.add('c' + cs.id); this.coarseQueue.push(p); } });
+          } else if (d2 >= COARSE_R * COARSE_R) {
+            if (this.coarseLoaded.has(t.id)) this.unloadCoarse(t.id);
+            if (t.world) { const sid = 's' + t.id.slice(1); if (this.coarseLoaded.has(sid)) this.unloadCoarse(sid); }
+          }
         }
       }
     // Cells outside the iteration window aren't visited above — sweep mounts so tiles left
@@ -253,7 +292,9 @@ export class TileStream {
         console.warn('tile worker failed; building in-page from now on', e.message);
       };
       // Worker fetches resolve against its own module URL — hand it an absolute base.
-      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed });
+      // Virtual regions (the ?at= open world) carry their terrain bytes in-band: there is
+      // no terrain.bin URL to fetch, so the same buffer the page uses is passed here.
+      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin });
       this.worker = w;
     } catch {
       this.workerDead = true;
@@ -271,9 +312,11 @@ export class TileStream {
     }
     // No worker support: the same pipeline on the main thread.
     const syn = t.synth ? synthTile(t, this.seed, this.terrain) : null;
-    return Promise.all([syn ? Promise.resolve(syn.tj) : loadTile(this.base, t), lite || syn ? Promise.resolve(null) : loadTileTerrain(this.base, t)]).then(async ([tj, tl]) => {
+    const src: Promise<TileJson> = syn ? Promise.resolve(syn.tj) : t.world ? (cachedFetchJson(t.file) as Promise<TileJson>) : loadTile(this.base, t);
+    return Promise.all([src, lite || syn || t.world ? Promise.resolve(null) : loadTileTerrain(this.base, t)]).then(async ([tj, tl]) => {
       const tile = await buildTile(tj, this.terrain, t, ord * ID_STRIDE, lite);
       if (syn) tile.objs.push(...packGroup(syn.extra));
+      else if (t.world) tile.objs.push(...packGroup(realExtras(tj, this.terrain)));
       tile.terr = tl ? (tl.height.buffer as ArrayBuffer) : undefined;
       return tile;
     });
@@ -305,6 +348,7 @@ export class TileStream {
 
   private mount(p: Pending | null) {
     if (!p || this.loaded.has(p.spec.id)) return;
+    if (p.spec.synth && this.loaded.has('w' + p.spec.id.slice(1))) return; // its real-lite twin already won the cell
     const { spec, tile } = p;
     const scope = this.scopeSeq++;
     const w = this.walk;
@@ -352,6 +396,11 @@ export class TileStream {
       group.add(haloPoints(v3s(tile.lanterns), 7, new THREE.Color(1.0, 0.85, 0.55)));
       group.add(haloPoints(v3s(tile.towers), 1.2, new THREE.Color(1.0, 0.75, 0.45)));
       this.unloadCoarse(spec.id); // seamless upgrade — detail replaces the silhouette only once ready
+      if (spec.world) {
+        // The real tile lands: its synth placeholder (detail or silhouette) retires now.
+        this.unload('s' + spec.id.slice(1));
+        this.unloadCoarse('s' + spec.id.slice(1));
+      }
       this.scene.add(group);
       if (tile.lamp) {
         this.lampBits.set(spec.id, tile.lamp);
@@ -440,6 +489,7 @@ export class TileStream {
   // plans, lamp pools or terrain patch. Swapped for the detail mount on approach.
   private mountCoarse(p: Pending | null) {
     if (!p || this.coarseLoaded.has(p.spec.id) || this.loaded.has(p.spec.id)) return;
+    if (p.spec.synth && this.loaded.has('w' + p.spec.id.slice(1))) return; // real tile owns this cell already
     const { spec, tile } = p;
     try {
       const group = new THREE.Group();

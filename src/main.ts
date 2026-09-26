@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { loadWorld, loadRegions, loadAtlas, manifestAsWorldJson, fromLatLon, type AtlasManifest, type World, type Road, type WorldJson } from './world/data';
-import { cachedFetchJson } from './world/cache';
+import { loadWorld, loadRegions, loadAtlas, manifestAsWorldJson, fromLatLon, type AtlasManifest, type Terrain, type World, type Road, type WorldJson } from './world/data';
+import { cachedFetchJson, initCache, manifestFingerprint } from './world/cache';
 import { TileStream } from './world/stream';
+import { virtualRegion } from './world/virtual';
 import { paintGround } from './world/groundPaint';
 import { buildGround, terrainTextures } from './world/ground';
 import { setGndMaterial } from './world/pack';
@@ -23,6 +24,7 @@ import { buildPanel, loadSettings, timeParams, weatherParams, debugParams } from
 
 const params = new URLSearchParams(location.search);
 const CAPTURE = params.has('capture');
+const TILES = params.get('tiles') ?? ''; // real-lite tile service base (the H1 worker)
 const $ = (id: string) => document.getElementById(id)!;
 
 async function main() {
@@ -42,11 +44,11 @@ async function main() {
   // (nearest origin as fallback), then spawn there / at the nearest real front door.
   const atM = params.get('at')?.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
   const atLatLon = atM ? ([+atM[1], +atM[2]] as [number, number]) : null;
+  let best = Infinity;
   if (atLatLon && !params.get('region') && regions?.length) {
     // Slice containment beats backdrop containment beats nearest (neighbouring regions overlap).
     const boxD = (b: { x0: number; z0: number; x1: number; z1: number }, x: number, z: number) =>
       Math.hypot(Math.max(b.x0 - x, x - b.x1, 0), Math.max(b.z0 - z, z - b.z1, 0));
-    let best = Infinity;
     for (const r of regions) {
       try {
         const man = (await cachedFetchJson(`./data/${r.id}/manifest.json`)) as AtlasManifest;
@@ -60,6 +62,9 @@ async function main() {
       } catch { /* region not baked */ }
     }
   }
+  // Open world: ?at= anywhere past every baked backdrop + a tile service → a virtual
+  // manifest anchored there; every cell streams real-lite (or synth fallback) tiles.
+  const VIRTUAL = !!(atLatLon && TILES && !params.get('region') && (!regions?.length || best >= 2));
   loadSettings(REGION);
   const canvas = $('view') as HTMLCanvasElement;
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: CAPTURE });
@@ -69,26 +74,40 @@ async function main() {
   const maxTex = renderer.capabilities.maxTextureSize;
 
   // Atlas = manifest + terrain + streamed tiles. Regions baked before tiling still work: the manifest
-  // is synthesised as a single tile pointing at world.json.
+  // is synthesised as a single tile pointing at world.json. Virtual regions are built in code —
+  // there is no atlas on disk (and no terrain.bin; the flat layer rides in-band to the worker).
   const base = `./data/${REGION}/`;
-  const atlasRes = await loadAtlas(base);
   let manifest: AtlasManifest;
   let paintWorld: World;
-  if (atlasRes) {
-    manifest = atlasRes.manifest;
-    const paintJson = (await cachedFetchJson(base + 'paint.json')) as WorldJson;
-    paintWorld = { json: paintJson, terrain: atlasRes.terrain };
+  let terrain: Terrain;
+  let terrBin: ArrayBuffer | null = null;
+  if (VIRTUAL) {
+    const v = virtualRegion(atLatLon!);
+    manifest = v.manifest;
+    terrain = v.terrain;
+    terrBin = v.bin;
+    paintWorld = { json: manifestAsWorldJson(manifest), terrain };
+    initCache(base, manifestFingerprint(manifest)); // remote tiles share the idb cache, namespaced per origin
   } else {
-    const w = await loadWorld(base, (m) => ($('loading').textContent = m));
-    manifest = {
-      version: 1, id: REGION, meta: w.json.meta, origin: w.json.origin, slice: w.json.slice, backdrop: w.json.backdrop,
-      sources: w.json.sources, cell: 1e9, margin: 0, terrain: w.json.terrain,
-      roads: w.json.roads.filter((r) => r.n), pois: w.json.pois, landmarks: w.json.landmarks,
-      tiles: [{ id: '0_0', box: w.json.backdrop, lod: 0, file: 'world.json' }],
-    };
-    paintWorld = w;
+    const atlasRes = await loadAtlas(base);
+    if (atlasRes) {
+      manifest = atlasRes.manifest;
+      terrain = atlasRes.terrain;
+      const paintJson = (await cachedFetchJson(base + 'paint.json')) as WorldJson;
+      paintWorld = { json: paintJson, terrain };
+    } else {
+      const w = await loadWorld(base, (m) => ($('loading').textContent = m));
+      manifest = {
+        version: 1, id: REGION, meta: w.json.meta, origin: w.json.origin, slice: w.json.slice, backdrop: w.json.backdrop,
+        sources: w.json.sources, cell: 1e9, margin: 0, terrain: w.json.terrain,
+        roads: w.json.roads.filter((r) => r.n), pois: w.json.pois, landmarks: w.json.landmarks,
+        tiles: [{ id: '0_0', box: w.json.backdrop, lod: 0, file: 'world.json' }],
+      };
+      paintWorld = w;
+      terrain = w.terrain;
+    }
   }
-  const world: World = { json: manifestAsWorldJson(manifest), terrain: atlasRes ? atlasRes.terrain : paintWorld.terrain };
+  const world: World = { json: manifestAsWorldJson(manifest), terrain };
   world.terrain.patchCell = manifest.cell;
   const { json } = world;
   const meta = json.meta;
@@ -134,7 +153,7 @@ async function main() {
   walk.bounds = { x0: -4e6, z0: -4e6, x1: 4e6, z1: 4e6 };
   const interiors = new Interiors(walk);
   worldRoot.add(interiors.group);
-  const stream = new TileStream(base, manifest, world.terrain, walk, interiors, worldRoot);
+  const stream = new TileStream(base, manifest, world.terrain, walk, interiors, worldRoot, TILES || manifest.tilesUrl || '', terrBin);
   stream.onTile = (a) => paint.addWalks(a.walks);
   const plans = stream.plans;
   const bld = {
