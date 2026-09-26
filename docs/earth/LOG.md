@@ -2,6 +2,22 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-25 — Fidelity reality check (research, no code)
+
+- User asked: MSFS shows "even my home house" via satellite imagery — should we chase
+  it, pivot to an AI asset-builder product, or upgrade? 3 research agents ran.
+- Findings + verdict in **`docs/FIDELITY_REALITY.md`**: MSFS = licensed photogrammetry
+  (few hundred metros only, legally unreachable); per-house identity is achievable as
+  *structural* truth (footprint+height+roof+roof color) under watercolor — facade
+  color/texture is the one true gap (~1–3% global coverage, license-blocked).
+  Japan PLATEAU is the outlier (CC-BY textured LOD2 — a JP bake could show real
+  facades). Verdict: keep watercolor path; `bd.h` + US lidar roofs + vertex AO next;
+  user-photo upload is the one legal path to true per-house fidelity.
+- Also this session: dev UX — `TILES` auto-defaults to `localhost:8787`, `/health`
+  probe + `?tiles=off`; user reported two queued bugs — window/door decal flicker
+  (cosmetic) and the late-DEM seam (flat s-tiles beside hilled cells). Both logged in
+  PROGRESS; handoff prompt written for the next agent.
+
 ## 2026-09-26 — Queued bugs fixed + the window asset rebuilt (Opus handoff session)
 
 **Late-DEM seam (fixed).** s-tiles that lost the 4 s DEM race were built flat and never
