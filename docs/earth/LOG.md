@@ -2,6 +2,24 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-24 — Expert review round 2 → fixes (score 8/10)
+
+- Re-review verdict: fixes landed; `?at=` is now honest behind the flag. Two real
+  bugs in my round-1 code: `settleWalker` fired on every mount — including while the
+  player stood legitimately inside a house (2D footprint test can't tell indoor from
+  swallowed); and `?region=x&at=far-outside` still stranded silently.
+- Fixed: `settleWalker` now only moves genuinely swallowed walkers — a wall through
+  the body (`walk.blocked` at 0.28 < the 0.35 walker radius, so leaning on a wall is
+  safe) or inside a solid footprint with no interior (`buildingAt` + `!interiors.indoors`
+  + `interiorAt<0`). Boot-time `?region` + far `?at` redirects like `teleportTo` does
+  (drops `region`, re-picks or goes virtual). Paint toast: re-arms per streaming
+  burst, throttles after 3 fires (2.7 s → 9 s), defers instead of stomping other toasts.
+- Verified: typecheck, 53/53 tests, build, 90 s soak with the hooks live — 0 stalls,
+  0 hitches >250 ms, 0 frame errors (worst subsystem 9.9 ms interior).
+- Reviewer's remaining notes (accepted, deferred): toast queue proper; wall-band/deck
+  swallow detection is partial (wall-through-body covered); `?at=` public-shipped
+  still gated on H2 DEM.
+
 ## 2026-09-24 — Expert review round 1 → fixes (score 6.5/10)
 
 - Reviewer verdict: "the skeleton shipped; the fantasy still arrives late" — the

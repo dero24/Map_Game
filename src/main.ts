@@ -188,6 +188,18 @@ async function main() {
   const atStranded = !!(atLatLon && !VIRTUAL && !params.get('region') && (!regions?.length || best >= 2));
   const atPos = atLatLon && !atStranded ? fromLatLon(json.origin, atLatLon[0], atLatLon[1]) : null;
   if (atStranded) setTimeout(() => toast('no tile service — that place can\'t stream yet; you\'re at the nearest baked town'), 0);
+  // Explicit region + a point outside its backdrop: same fix as runtime teleport —
+  // drop `region` and let the picker choose (or go virtual) instead of stranding.
+  if (atPos && params.get('region')) {
+    const b = json.backdrop;
+    if (atPos[0] < b.x0 || atPos[0] > b.x1 || atPos[1] < b.z0 || atPos[1] > b.z1) {
+      const p = new URLSearchParams(location.search);
+      p.delete('region');
+      p.delete('shot');
+      location.search = p.toString();
+      return;
+    }
+  }
   const sliceC: [number, number] = [(json.slice.x0 + json.slice.x1) / 2, (json.slice.z0 + json.slice.z1) / 2];
   const anchor = spec?.near
     ? roadAnchor(json.roads, spec.near.road, !!spec.near.bridge, spec.near.extreme ?? 'e') ?? sliceC
@@ -247,9 +259,14 @@ async function main() {
     teleportLocal(x, z);
   };
   // When a real tile swaps in under the walker, the synth placeholder's collision is
-  // tombstoned with it — the player can end up inside a wall. Nudge them clear.
+  // tombstoned with it — the player can end up inside a wall. Nudge them clear — but
+  // only when genuinely swallowed: a wall through their position, or inside a solid
+  // footprint with no interior. Legit indoor players must not be yanked outside.
   const settleWalker = () => {
-    if (walk.buildingAt(walker.x, walker.z) < 0) return;
+    // blocked at 0.28 < the walker's 0.35 radius: a wall running *through* their body,
+    // not a wall they're legally pressed against.
+    const swallowed = walk.blocked(walker.x, walker.z, 0.28) || (walk.buildingAt(walker.x, walker.z) >= 0 && !interiors.indoors && walk.interiorAt(walker.x, walker.z, walker.feet) < 0);
+    if (!swallowed) return;
     for (const r of [2.5, 4, 6, 9, 14])
       for (const a of [0, 0.8, -0.8, 1.6, -1.6, 2.4, -2.4, Math.PI]) {
         const nx = walker.x + Math.sin(walker.yaw + a) * r, nz = walker.z + Math.cos(walker.yaw + a) * r;
@@ -534,7 +551,8 @@ async function main() {
   let journalTimer = 0;
   let frames = 0;
   let roadPadT = 0, roadPadD = 1e9; // metres to the nearest mapped street edge (footstep surface)
-  let paintT = 0, paintSince: number | null = null; // "the real streets are painting in" toast
+  let paintT = 0, paintSince: number | null = null, paintShown = 0; // "the real streets are painting in" toast
+  const PAINT_MSG = 'the real streets are painting in…';
   const errors = new Map<string, number>();
   const perf = { detail: 0, interior: 0 }; // worst-case ms, for tools/soak.mjs
   (window as unknown as Record<string, unknown>).__PERF__ = perf;
@@ -643,10 +661,19 @@ async function main() {
     if ((hudTimer -= dt) < 0) { hudTimer = 0.4; updateHud(); }
     // While real tiles are on the wire, keep the promise visible — otherwise the first
     // minute reads as plain synth suburbia and the swap at second ~60 lands as a glitch.
+    // 120 s per streaming burst (re-arms when pending clears), throttles after 3 fires,
+    // and never stomps a different toast mid-display.
     if (stream.worldPending) {
-      if (paintSince == null) paintSince = simTime;
-      if (simTime - paintSince < 120 && (paintT -= dt) <= 0) { paintT = 2.7; toast('the real streets are painting in…'); }
-    }
+      paintSince ??= simTime;
+      if (simTime - paintSince < 120 && (paintT -= dt) <= 0) {
+        const el = $('toast');
+        if (el.classList.contains('show') && el.textContent !== PAINT_MSG) paintT = 0.5; // another toast owns the spot — retry soon
+        else {
+          paintT = ++paintShown > 3 ? 9 : 2.7;
+          toast(PAINT_MSG);
+        }
+      }
+    } else if (paintSince != null) { paintSince = null; paintShown = 0; }
     if (!walkParams.fly) journal.update(walker.x, walker.z, dt);
     if (journal.open && (journalTimer -= dt) < 0) { journalTimer = 0.15; journal.render(walker.x, walker.z, walker.yaw); }
     frames++;
