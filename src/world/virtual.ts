@@ -44,6 +44,11 @@ export interface VirtualRegion { manifest: AtlasManifest; terrain: Terrain; bin:
 export function virtualRegion(at: [number, number]): VirtualRegion {
   const snap = (v: number) => Math.round(v * 64) / 64;
   const origin = { lat: snap(at[0]), lon: snap(at[1]) };
+  // No tz database on the client — longitude zone is honest for anywhere on Earth
+  // (POSIX sign flips: Etc/GMT-N == UTC+N).
+  const zh = Math.round(origin.lon / 15);
+  const tz = zh === 0 ? 'Etc/GMT' : zh > 0 ? `Etc/GMT-${zh}` : `Etc/GMT+${-zh}`;
+  const ns = at[0] >= 0 ? 'N' : 'S', ew = at[1] >= 0 ? 'E' : 'W';
   const backdrop: Box = { x0: -BACKDROP_HALF, z0: -BACKDROP_HALF, x1: BACKDROP_HALF, z1: BACKDROP_HALF };
   const { layout, bin } = flatLayer(backdrop, LAYER_CELL, {
     height: 300, // 3 m — gentle land everywhere
@@ -62,8 +67,8 @@ export function virtualRegion(at: [number, number]): VirtualRegion {
       id: 'earth',
       name: 'the open world',
       title: 'Somewhere on Earth',
-      sub: `${at[0].toFixed(4)}°, ${at[1].toFixed(4)}°`,
-      tz: 'UTC',
+      sub: `${Math.abs(at[0]).toFixed(2)}° ${ns}, ${Math.abs(at[1]).toFixed(2)}° ${ew} — the real streets stream in`,
+      tz,
       spawn: null,
       roads: {},
       shoreLabel: 'the shore',

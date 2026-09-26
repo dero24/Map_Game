@@ -299,6 +299,16 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
 
   for (const e of els) {
     const t = e.tags ?? {};
+    if (e.type === 'node') {
+      // Point furniture — same tag→class the bake emits; props.ts consumes these.
+      const pc = t.natural === 'tree' ? 'tree' : t.amenity === 'bench' ? 'bench' : null;
+      if (pc && e.lat != null && e.lon != null) {
+        const [x, z] = P.project(e.lat, e.lon);
+        if (inB(x, z, margin))
+          points.push({ c: pc, x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10, own: inB(x, z) ? undefined : OWN_CTX });
+      }
+      continue;
+    }
     if (e.type === 'way' && t.highway && t.highway in ROAD_W) {
       const pts = wayPts(e);
       if (pts.length < 2) continue;

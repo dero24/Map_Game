@@ -182,7 +182,12 @@ async function main() {
   // (Sea Bright: the east end of the Rumson bridge = where it lands on Ocean Ave) — shifted by
   // `spawn.offset` metres, facing `spawn.toward`, stepped `spawn.sidewalk` m right onto the sidewalk.
   const spec = meta?.spawn;
-  const atPos = atLatLon ? fromLatLon(json.origin, atLatLon[0], atLatLon[1]) : null;
+  // Review fix: ?at= beyond every backdrop with no tile service would teleport 5,500 km
+  // into a synth void with no explanation — suppress the deep link, drop at the region
+  // spawn, and say why.
+  const atStranded = !!(atLatLon && !VIRTUAL && !params.get('region') && (!regions?.length || best >= 2));
+  const atPos = atLatLon && !atStranded ? fromLatLon(json.origin, atLatLon[0], atLatLon[1]) : null;
+  if (atStranded) setTimeout(() => toast('no tile service — that place can\'t stream yet; you\'re at the nearest baked town'), 0);
   const sliceC: [number, number] = [(json.slice.x0 + json.slice.x1) / 2, (json.slice.z0 + json.slice.z1) / 2];
   const anchor = spec?.near
     ? roadAnchor(json.roads, spec.near.road, !!spec.near.bridge, spec.near.extreme ?? 'e') ?? sliceC
@@ -208,7 +213,9 @@ async function main() {
     }
     if (best) spawn = { x: best.wx - best.nx * 2.2, z: best.wz - best.nz * 2.2, yaw: Math.atan2(best.nx, best.nz), y: best.y };
     else {
-      const near = roadPoint(json.roads, /./, x, z, 'north');
+      // Manifest roads plus whatever tiles have mounted (synth/remote) — in the virtual
+      // world the manifest list is empty and a yaw-0 spawn would face nowhere.
+      const near = roadPoint([...json.roads, ...stream.primRoads], /./, x, z, 'north');
       spawn = { x, z, yaw: isFinite(near.d) ? near.yaw : 0, y: undefined };
     }
     respawn();
@@ -225,9 +232,12 @@ async function main() {
     const [x, z] = fromLatLon(json.origin, lat, lon);
     const b = json.backdrop;
     if (x < b.x0 || x > b.x1 || z < b.z0 || z > b.z1) {
-      // Outside this region — let the deep-link picker choose the right town.
+      // Outside this region — let the deep-link picker choose the right town (or go
+      // virtual). Dropping `region` too: keeping it would suppress the ?at picker AND
+      // the virtual manifest, stranding the spawn far outside every backdrop.
       const p = new URLSearchParams(location.search);
       p.delete('shot');
+      p.delete('region');
       p.set('at', `${lat},${lon}`);
       location.search = p.toString();
       return;
@@ -236,6 +246,22 @@ async function main() {
     await stream.ensureAround(x, z);
     teleportLocal(x, z);
   };
+  // When a real tile swaps in under the walker, the synth placeholder's collision is
+  // tombstoned with it — the player can end up inside a wall. Nudge them clear.
+  const settleWalker = () => {
+    if (walk.buildingAt(walker.x, walker.z) < 0) return;
+    for (const r of [2.5, 4, 6, 9, 14])
+      for (const a of [0, 0.8, -0.8, 1.6, -1.6, 2.4, -2.4, Math.PI]) {
+        const nx = walker.x + Math.sin(walker.yaw + a) * r, nz = walker.z + Math.cos(walker.yaw + a) * r;
+        if (walk.buildingAt(nx, nz) < 0 && !walk.blocked(nx, nz, 0.45)) {
+          walker.place(nx, nz, walker.yaw, -0.02);
+          toast('the paint settled — stepped you clear');
+          return;
+        }
+      }
+  };
+  stream.onMount = () => settleWalker();
+
   const lifeBase = buildLifeBase(paintWorld, walk);
   const life = new LifeClient(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors));
   worldRoot.add(life.group);
@@ -417,12 +443,14 @@ async function main() {
   let hudTimer = 0;
   const updateHud = () => {
     let best = '', bd = 1e9;
-    for (const r of named) {
+    const scan = (r: Road) => {
       for (let i = 0; i + 3 < r.p.length; i += 2) {
         const d = segDist(walker.x, walker.z, r.p[i] / 10, r.p[i + 1] / 10, r.p[i + 2] / 10, r.p[i + 3] / 10);
         if (d < bd) (bd = d), (best = r.n!);
       }
-    }
+    };
+    for (const r of named) scan(r);
+    for (const r of stream.primRoads) if (r.n && !r.lod) scan(r); // real streets carried by w-*/s-* tiles
     $('place').textContent = bd < 40 ? best : world.terrain.oceanDistAt(walker.x, walker.z) < 60 ? shoreLabel : townName;
     if (walkParams.fly) $('place').textContent = `flying over ${$('place').textContent} · ${Math.round(walker.y)} m`;
     else if (interiors.indoors && interiors.activePlan) {
@@ -505,6 +533,8 @@ async function main() {
   let lastStep = 0;
   let journalTimer = 0;
   let frames = 0;
+  let roadPadT = 0, roadPadD = 1e9; // metres to the nearest mapped street edge (footstep surface)
+  let paintT = 0, paintSince: number | null = null; // "the real streets are painting in" toast
   const errors = new Map<string, number>();
   const perf = { detail: 0, interior: 0 }; // worst-case ms, for tools/soak.mjs
   (window as unknown as Record<string, unknown>).__PERF__ = perf;
@@ -586,7 +616,22 @@ async function main() {
       const cov = world.terrain.coverAt(walker.x, walker.z);
       const oceanDist = world.terrain.oceanDistAt(walker.x, walker.z);
       const onDeck = deck !== null && Math.abs(deck - walker.feet) < 0.3;
-      const surface = interiors.onStairs ? 'stairs' : interiors.indoors ? 'wood' : onDeck ? (world.terrain.sdfAt(walker.x, walker.z) < 0 || deck! - world.terrain.heightAt(walker.x, walker.z) > 0.25 ? 'wood' : 'paved') : oceanDist < 45 || cov === 60 ? 'sand' : cov === 30 || cov === 10 ? 'grass' : 'paved';
+      // Near a mapped street the surface is paved whatever the cover says — the virtual
+      // region's flat layer reports grass under every London road (review finding).
+      if ((roadPadT -= dt) < 0) {
+        roadPadT = 0.5;
+        roadPadD = 1e9;
+        for (const r of stream.primRoads) {
+          if (r.w > 0 && r.w < 2) continue; // skip bare footway lines — they read as grass paths
+          for (let i = 0; i + 3 < r.p.length; i += 2) {
+            const d = segDist(walker.x, walker.z, r.p[i] / 10, r.p[i + 1] / 10, r.p[i + 2] / 10, r.p[i + 3] / 10) - r.w / 2;
+            if (d < roadPadD) roadPadD = d;
+            if (roadPadD < 0) break;
+          }
+          if (roadPadD < 0) break;
+        }
+      }
+      const surface = interiors.onStairs ? 'stairs' : interiors.indoors ? 'wood' : onDeck ? (world.terrain.sdfAt(walker.x, walker.z) < 0 || deck! - world.terrain.heightAt(walker.x, walker.z) > 0.25 ? 'wood' : 'paved') : oceanDist < 45 || cov === 60 ? 'sand' : roadPadD < 4 ? 'paved' : cov === 30 || cov === 10 ? 'grass' : 'paved';
       let churchDist = 1e9;
       for (const c of churches) churchDist = Math.min(churchDist, Math.hypot(c[0] - walker.x, c[1] - walker.z));
       const houses = houseGrid.get(Math.floor(walker.x / 80) * 92821 + Math.floor(walker.z / 80)) ?? 0;
@@ -596,6 +641,12 @@ async function main() {
     post.render(scene, camera, simTime, U.uNight.value, U.uGolden.value, walker.yaw, walker.pitch, debugParams.rawScene);
 
     if ((hudTimer -= dt) < 0) { hudTimer = 0.4; updateHud(); }
+    // While real tiles are on the wire, keep the promise visible — otherwise the first
+    // minute reads as plain synth suburbia and the swap at second ~60 lands as a glitch.
+    if (stream.worldPending) {
+      if (paintSince == null) paintSince = simTime;
+      if (simTime - paintSince < 120 && (paintT -= dt) <= 0) { paintT = 2.7; toast('the real streets are painting in…'); }
+    }
     if (!walkParams.fly) journal.update(walker.x, walker.z, dt);
     if (journal.open && (journalTimer -= dt) < 0) { journalTimer = 0.15; journal.render(walker.x, walker.z, walker.yaw); }
     frames++;

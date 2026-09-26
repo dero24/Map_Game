@@ -2,6 +2,28 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-24 — Expert review round 1 → fixes (score 6.5/10)
+
+- Reviewer verdict: "the skeleton shipped; the fantasy still arrives late" — the
+  open-world swap architecture is right, but the first minute gives zero signal that
+  real streets are coming, `?at=` without `?tiles` could strand the spawn 5,500 km out,
+  the HUD never learns a street name, UTC clock lied, and the s→w swap could tombstone
+  collision under the player's feet.
+- Fixed: persistent "the real streets are painting in…" toast while `w-*` fetches are
+  in flight; `?at=` beyond all backdrops without a service now drops at the nearest
+  baked town with an explanation (G-teleport redirects also drop `region`); HUD place
+  line scans `stream.primRoads` so real names show (verified live: "The Queen's Walk",
+  South Bank); virtual tz derived from longitude (`Etc/GMT±n`); `stream.onMount` +
+  `settleWalker` nudges the player out of walls after a swap (verified live — fired);
+  spawn yaw falls back to nearest mounted road instead of north; real-lite query now
+  also pulls `natural=tree`/`amenity=bench` nodes → points; footsteps near mapped
+  streets are 'paved' even where the flat layer says grass; virtual sub reads like a
+  place ("51.50° N, 0.12° W — the real streets stream in").
+- Held for later (documented): flat terrain/water gating → H2 DEM; per-tile lamp pools
+  + hybrid lots + life palette → H3/J/K; coarse ring stays synth by design.
+- Verified: typecheck, 53/53 tests, build, live probe in virtual London (toast fired,
+  settle nudge fired, real names on HUD, 11 w-tiles mounted, 0 errors).
+
 ## 2026-09-24 — H1: real-lite tile service + open-world `?at=` — walking London
 
 - **`src/world/realTile.ts`** (new): Overpass JSON → `TileJson`, shared verbatim between

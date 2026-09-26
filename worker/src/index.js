@@ -110,6 +110,8 @@ async function coldTile(env, okey, cx, cz, box, origin) {
   way["natural"~"^(water|coastline|beach|sand|wetland)$"];
   relation["natural"="water"];
   way["waterway"="riverbank"];
+  node["natural"="tree"];
+  node["amenity"="bench"];
 );out geom qt;`;
   const endpoints = (env.OVERPASS_ENDPOINTS ? env.OVERPASS_ENDPOINTS.split(',').map((s) => s.trim()).filter(Boolean) : DEFAULT_ENDPOINTS);
   let osm = null;

@@ -168,6 +168,16 @@ export class TileStream {
   get churches() { this.sync(); return this._churches; }
   get primRoads() { this.sync(); return this._primRoads; }
   get busy() { return this.fetching.size > 0 || this.buildQueue.length > 0 || this.coarseFetching.size > 0 || this.coarseQueue.length > 0; }
+  // Fired once a detail tile is fully mounted (visual + collision). main.ts uses it to
+  // re-settle the walker when a real tile replaces the synth placeholder underfoot.
+  onMount?: (spec: TileSpec) => void;
+  // w-* cells still on the wire — drives the "the real streets are painting in" toast.
+  get worldPending() {
+    let n = 0;
+    for (const id of this.fetching.keys()) if (id[0] === 'w') n++;
+    for (const id of this.queued) if (id[0] === 'w') n++;
+    return n;
+  }
   doorOf(fp: Footprint) { return this.fpDoor.get(fp); }
 
   houseGrid() {
@@ -417,6 +427,7 @@ export class TileStream {
       });
       this.markDirty();
       this.onTile?.(this.loaded.get(spec.id)!);
+      this.onMount?.(spec);
     } catch (e) {
       w.endScope();
       w.removeScope(scope);
