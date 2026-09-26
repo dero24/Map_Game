@@ -34,7 +34,7 @@ export interface TileArt {
   poles: unknown[];
   churches: [number, number][];
   primRoads: Road[];
-  flat?: boolean; // synth placeholder mounted without its (late) DEM — a relief rebuild will replace it
+  flat?: boolean; // mounted without data still in flight (late DEM or LiDAR) — a relief rebuild will replace it
 }
 
 // `replace`: a relief rebuild of an already-mounted flat cell — swapped in atomically.
@@ -86,6 +86,10 @@ export class TileStream {
 
   /** Kill switch for the real-lite service (dead local worker → synth everywhere). */
   setTilesBase(v: string) { this.tilesBase = v; }
+  /** Real tiles get LiDAR-measured buildings (lidar.ts). Set before the first build. */
+  lidar = true;
+  /** Recent tile-worker notes (LiDAR cells read/measured/failed) — also in the console. */
+  readonly workerLog: string[] = [];
 
   // Manifest cells by cx_cz key + the procedural-cell cache: past the manifest's grid the
   // world is synthesised deterministically (synth.ts) — same BuiltTile pipeline after that.
@@ -289,6 +293,13 @@ export class TileStream {
       const w = new Worker(new URL('./tile.worker.ts', import.meta.url), { type: 'module' });
       w.onmessage = (e) => {
         const m = e.data;
+        if (m.kind === 'log') {
+          // worker-side notes (LiDAR reads): the page console + a short ring for tools/debug
+          console.info(m.msg);
+          this.workerLog.push(m.msg);
+          if (this.workerLog.length > 60) this.workerLog.shift();
+          return;
+        }
         const j = this.jobs.get(m.id);
         if (!j) return;
         this.jobs.delete(m.id);
@@ -299,7 +310,9 @@ export class TileStream {
           j.rej(new Error(m.message ?? 'tile build failed'));
           // Repeated build failures mean the worker lacks a capability (e.g. OffscreenCanvas
           // on older iOS) — every tile would retry forever otherwise. Fall back to in-page.
-          if (++this.jobFails >= 3 && !this.workerDead) {
+          // Fetch failures (tile service down, rate-limited) aren't the worker's fault: the
+          // in-page path would fetch the same URL — they retry via the failed-tile backoff.
+          if (!m.net && ++this.jobFails >= 3 && !this.workerDead) {
             this.workerDead = true;
             this.worker?.terminate();
             this.worker = null;
@@ -323,7 +336,7 @@ export class TileStream {
       // Worker fetches resolve against its own module URL — hand it an absolute base.
       // Virtual regions (the ?at= open world) carry their terrain bytes in-band: there is
       // no terrain.bin URL to fetch, so the same buffer the page uses is passed here.
-      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin, origin: this.man.origin, dem: this.demEnabled, demBase: this.tilesBase, style: activeStyle().key, baked: this.man.tiles.map((t) => t.id) });
+      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin, origin: this.man.origin, dem: this.demEnabled, demBase: this.tilesBase, style: activeStyle().key, baked: this.man.tiles.map((t) => t.id), lidar: this.lidar });
       this.worker = w;
     } catch {
       this.workerDead = true;
@@ -364,7 +377,7 @@ export class TileStream {
     return src
       .then(async (tj0) => {
         const dem = demP ? (t.synth ? await raceNull(demP, 4000) : await demP) : null;
-        const demLate = !!(demP && !dem && t.synth && !lite);
+        const late = !!(demP && !dem && t.synth && !lite);
         if (dem) this.terrain.registerPatch(cellKey, new TerrainLayer(dem.buf.slice(0), dem.layout));
         const syn = t.synth ? synthTile(t, this.seed, this.terrain) : null;
         const tj = tj0 ?? syn!.tj;
@@ -374,7 +387,7 @@ export class TileStream {
         else if (t.world) tile.objs.push(...packGroup(realExtras(tj, this.terrain)));
         tile.terr = tl ? (tl.height.buffer as ArrayBuffer) : undefined;
         tile.dem = dem ? { buf: dem.buf.slice(0), layout: dem.layout } : undefined; // cached buf is shared by twins — ship a copy
-        if (demLate) tile.demLate = 1;
+        if (late) tile.late = 1;
         return tile;
       });
   }
@@ -403,9 +416,10 @@ export class TileStream {
     return p;
   }
 
-  // Late-DEM relief: a flat-mounted synth cell asks the builder for a version on real
-  // heights. The worker awaits the untimed patch (shared with the w-twin via its cache);
-  // if none ever comes the flat mount simply stays, retried a couple of times with backoff.
+  // Relief: a cell mounted without data still in flight asks the builder for the finished
+  // version — a synth cell its DEM (real heights), a real cell its LiDAR measurement. The
+  // worker awaits the untimed read (shared with twins via its caches); if none ever comes
+  // the first mount simply stays, retried a couple of times with backoff.
   private relieve(spec: TileSpec) {
     const id = spec.id;
     if (this.reliefBusy.has(id)) return;
@@ -511,9 +525,9 @@ export class TileStream {
         poles: tile.poles,
         churches: tile.fps.filter((f) => f.kind === 'church').map((f) => f.ring[0] as [number, number]),
         primRoads: tile.roads,
-        flat: !!tile.demLate,
+        flat: !!tile.late,
       });
-      if (tile.demLate) this.relieve(spec);
+      if (tile.late) this.relieve(spec);
       else this.relief.delete(spec.id);
       this.markDirty();
       this.onTile?.(this.loaded.get(spec.id)!);

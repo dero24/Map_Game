@@ -186,6 +186,9 @@ async function main() {
   // region's backdrop the resident terrain is just its clamped edge, so hills need the patch too.
   const tilesBase = TILES || manifest.tilesUrl || '';
   const stream = new TileStream(base, manifest, world.terrain, walk, interiors, worldRoot, tilesBase, terrBin, !!tilesBase);
+  // Measured buildings from USGS 3DEP LiDAR wherever a survey covers the cell (lidar.ts);
+  // `?lidar=0` builds from mapped priors only.
+  stream.lidar = params.get('lidar') !== '0';
   // The localhost auto-default was probed before setup: no worker answered → procedural past the bake.
   if (TILES_PARAM === null && LOCAL && !TILES)
     setTimeout(() => toast('local tile service isn\'t running — past the bake the world stays procedural (cd worker && npx wrangler dev)'), 0);

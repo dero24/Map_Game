@@ -989,7 +989,8 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     const found = bd.k === 'commercial' || bd.k === 'large' ? 0.15 : bd.k === 'shed' ? 0.08 : 0.35 + r5 * 0.25;
     const floor0 = Math.min(gmax + found, base + 1.6) + raise;
     const fo = floor0 - base;
-    const top = base + 0.3 + bd.h;
+    // LiDAR heights stand on the footprint's MEAN ground; mapped ones on its lowest corner
+    const top = base + 0.3 + bd.h + (bd.ms ? (gmax - gmin) / 2 : 0);
     const fH = floorHeight(bd.k);
     const pitched = bd.roof === 'gable' || bd.roof === 'hip';
     let eave = top, roofG: RoofGeom | null = null;
@@ -1004,8 +1005,11 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
         // Dormered houses are 1½ storeys: the top floor lives in the roof (Cape Cod / bungalow),
         // so the roof gets the height a full storey would have taken.
         const lv = Math.max(1, bd.fl ?? (half && fullLv >= 2 ? fullLv - 1 : fullLv));
-        const maxRise = Math.max(0.9, Math.min(bd.k === 'church' ? 10 : 5.5, room - lv * fH));
-        const pitch = bd.k === 'church' ? 1.0 : bd.k === 'shed' ? 0.45 + r2 * 0.2 : half ? rc.pitch : rc.basePitch;
+        // LiDAR-measured (lidar.ts): the rise IS ridge − eave; a steep nominal pitch lets the
+        // skeleton reach it exactly (buildRoof caps pitch so inner·pitch = maxRise).
+        const meas = bd.eav != null;
+        const maxRise = meas ? Math.max(0.6, Math.min(12, bd.h - bd.eav!)) : Math.max(0.9, Math.min(bd.k === 'church' ? 10 : 5.5, room - lv * fH));
+        const pitch = meas ? 3 : bd.k === 'church' ? 1.0 : bd.k === 'shed' ? 0.45 + r2 * 0.2 : half ? rc.pitch : rc.basePitch;
         let R = ring.length <= 40 ? buildRoof(ring, bd.roof as 'gable' | 'hip', pitch, ov, maxRise) : null;
         // skeleton failed on this outline? a house still gets a pitched roof: the other style, then a
         // hip over the convex hull (the true walls rise to meet it) before ever falling back to flat

@@ -8,6 +8,11 @@ import { synthTile, realExtras } from './synth';
 import { fetchDem, demLayer, setDemBase, raceNull } from './dem';
 import type { SynthResult } from './synth';
 import { setActiveStyle, styleByKey } from './styles';
+import { enrichTile, initLidar, lidarOn, setLidarLog } from './lidar';
+
+// First visit to a cell: how long a detail build waits for its LiDAR measurement before
+// building from mapped priors (the measured rebuild then swaps in when it lands).
+const LIDAR_WAIT = 3500;
 
 interface TileWorkerScope {
   postMessage(msg: unknown, transfer?: Transferable[]): void;
@@ -63,7 +68,8 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   // Cache the UNTIMED grid — the s-twin races it at 4 s; when the w-twin (or a relief
   // rebuild) comes later it awaits the same promise and still gets the real heights.
   if (demOn && origin && (spec.synth || spec.world)) demP = demFor(cellKey, spec.box);
-  if (msg.relief) {
+  // Relief rebuilds: a synth cell waits for its DEM, a real cell for its LiDAR (below).
+  if (msg.relief && spec.synth) {
     const d = demP ? await demP : null;
     if (!d) return null;
   }
@@ -81,6 +87,14 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   }
   const syn: SynthResult | null = spec.synth ? synthTile(spec, seed, terrain) : null;
   const tj = tjP ? await tjP : syn!.tj;
+  // Measured buildings: real footprints get LiDAR ridge/eave/roof shape before the builders
+  // run. Lite (LOD) builds only use what's already cached; detail builds wait briefly.
+  let lidarLate = false;
+  if (!syn && lidarOn()) {
+    const e = await enrichTile(tj, spec.box, msg.relief ? null : LIDAR_WAIT, !msg.lite);
+    if (msg.relief && e !== 'done') return null;
+    lidarLate = e === 'late';
+  }
   const tbuf = spec.terrain && !msg.lite ? await cachedFetch(base + spec.terrain.file) : undefined;
   const tile = await buildTile(tj, terrain, spec, msg.idBase, !!msg.lite);
   if (syn) tile.objs.push(...packGroup(syn.extra));
@@ -90,8 +104,10 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   // dem.buf is shared via demCache (the w-twin build will reuse it) — ship a copy, not
   // the cached buffer itself, or the transfer detaches it and the next twin reads zeros.
   if (dem) tile.dem = { buf: dem.buf.slice(0), layout: dem.layout };
-  // Built flat while real terrain was expected — the stream asks for a relief rebuild.
-  else if (demP && spec.synth && !msg.lite) tile.demLate = 1;
+  // Built without data that's still coming (flat while a DEM was expected, or from priors
+  // while the LiDAR read runs) — the stream asks for a relief rebuild and swaps it in.
+  else if (demP && spec.synth && !msg.lite) tile.late = 1;
+  if (lidarLate && !msg.lite) tile.late = 1;
   return tile;
 }
 
@@ -106,6 +122,10 @@ ctx.onmessage = (e: MessageEvent) => {
     if (m.dem) demOn = true;
     if (m.baked) bakedCells = m.baked;
     if (m.demBase) setDemBase(m.demBase);
+    if (m.lidar && m.origin) {
+      setLidarLog((msg) => ctx.postMessage({ kind: 'log', msg }));
+      initLidar(m.origin);
+    }
     if (m.fp) initCache(base, m.fp); // same idb database as the page
     const st = m.style ? styleByKey(m.style) : null;
     if (st) setActiveStyle(st); // Phase I: builders read the region's style (palettes, species, roof habits)
@@ -130,6 +150,6 @@ ctx.onmessage = (e: MessageEvent) => {
       if (tile.dem) tr.push(tile.dem.buf);
       ctx.postMessage({ kind: 'built', id: m.id, tile }, tr);
     },
-    (e) => ctx.postMessage({ kind: 'error', id: m.id, message: String(e?.stack ?? e) }),
+    (e) => ctx.postMessage({ kind: 'error', id: m.id, message: String(e?.stack ?? e), net: e?.name === 'FetchError' ? 1 : 0 }),
   );
 };

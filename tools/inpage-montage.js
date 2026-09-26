@@ -4,8 +4,11 @@
 // Each entry is a shot name (window.__APPLY_SHOT__) or a function(game) that poses the
 // camera itself. The contact sheet covers the page as an overlay — take ONE screenshot.
 // `__MONTAGE_CLOSE__()` removes it. Mirrors tools/capture.mjs' sheet layout.
+// Occluded/unfocused browser panes stop requestAnimationFrame entirely (the montage then
+// hangs mid-sheet): `{ timers: true }` drives the game loop from setTimeout instead.
 window.__MONTAGE__ = async (items, opts = {}) => {
   const settle = opts.settle ?? 40, cols = Math.min(opts.cols ?? 3, items.length);
+  if (opts.timers) window.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16);
   const canvas = document.querySelector('canvas');
   const frames = (n) => new Promise((done) => { let i = 0; const t = () => (++i >= n ? done() : requestAnimationFrame(t)); requestAnimationFrame(t); });
   const CW = opts.cw ?? 640, CH = Math.round(CW * canvas.height / canvas.width), PAD = 22;

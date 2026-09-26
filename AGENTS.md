@@ -82,6 +82,16 @@
 - Vehicles: `src/player/vehicles.ts` — E enter/exit, V car, B boat, N plane; driveway cars (props'
   `parked-cars` InstancedMesh) are enterable. While riding, `Vehicles.update` owns the camera and
   carries the walker (streaming/life/interiors key off it); `walker.update` is skipped.
+- Measured buildings: `src/world/lidar.ts` (worker IO: bundled 3DEP project index, EPT octree
+  reads from the public `usgs-lidar-public` S3 bucket, laz-perf WASM in `src/vendor/laz-perf`,
+  IndexedDB cache per cell `lidar|vN|…`) → `lidarCore.ts` (pure: projections, index lookup,
+  1 m HAG grids) → `measure.ts` (pure roof fits). `enrichTile` writes `h/eav/roof/ms` onto real
+  buildings before `buildTile`; a late read flags `tile.late` → stream relief rebuild.
+  `?lidar=0` disables. Bump `VER` in lidar.ts whenever measure/raster logic changes.
+  Worker notes: page console + `__GAME__.stream.workerLog`.
+- Dev server is HTTP/1.1: slow `/__tiles` calls starve other same-origin fetches — anything the
+  worker needs early ships in its bundle. Occluded browser panes stop rAF: montage with
+  `{timers: true}`.
 - Grass: `src/world/grass.ts` — player-centred tuft cells, masked by `GroundPaint.grassMask`
   (grows only where the painted ground is open/green). Walks start at today's sunrise (`?hour=`).
 - Local frame: +x east, +z south (north = -z), metres, per-region origin from config.

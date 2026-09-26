@@ -2,6 +2,103 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-26 (d) — Measured buildings for the lower 48 (USGS 3DEP LiDAR, in the browser)
+
+**User direction:** make buildings match real life, MSFS-style but open-licensed — for the whole
+lower 48, not just the shore.
+
+**Why LiDAR, and which LiDAR.** Overture heights exist for 88 % of shore buildings but the median
+house is 5.0 m (too low), there are no roof shapes, and OSM has 94 `building:levels` tags. The
+Planetary Computer 3DEP HAG rasters work from the browser but cover only about half the metros
+tested (no Chicago, LA, Seattle, Atlanta, Phoenix, Miami, Minneapolis). USGS's **Entwine Point
+Tile** copy of 3DEP (`usgs-lidar-public` S3, 2,274 projects) covers everything, is CORS-open and
+is public domain. So there is one source for all cells.
+
+**Pipeline (tile worker, per real cell, no server compute):**
+1. **Project index.** `src/world/lidar-index.json` is 331 KB, compacted from hobu's
+   `resources.geojson` (`scripts/lidar-index.mjs`) and bundled into the worker chunk. It gives
+   the candidate surveys for the cell, newest first.
+2. **Octree read.** The EPT octree is read down to about 1.5 points/m², chosen from the
+   hierarchy counts rather than a fixed depth (a 2020 Denver survey is 7× denser than NJ 2014),
+   with whole levels dropped over a 4 M-point budget so the result is deterministic.
+   - Nodes are decoded by vendored **laz-perf** WASM (`src/vendor/laz-perf`, Apache-2.0,
+     inlined as base64).
+3. **Height grids (`lidarCore.ts`).** Points are binned into 1 m grids: surface max over
+   everything except noise and water, and ground mean. Pull-push fills the ground under roofs,
+   giving height above ground.
+4. **Roof fits (`measure.ts`).** On a 1 m grid inset from the walls, a Tukey-IRLS fit of
+   h = eave + k·f is run for:
+   - flat
+   - hip (f = distance to the outline)
+   - gable along either axis (rectangles only)
+
+   Model choice gives a true ridge, a true eave, a style and a confidence score.
+5. **Apply to the building.** `enrichTile` writes `h`, `eav`, `roof` and `ms` onto the Building,
+   and `buildings.ts` builds exactly that:
+   - rise = h − eav through the straight skeleton
+   - top sits on the footprint's mean ground
+
+   A cell is cached in IndexedDB as a few KB of fits, so it is measured once per browser.
+6. **First visit.** A detail build waits 3.5 s, then builds from priors and flags `tile.late`.
+   The stream's relief path (generalised from late-DEM) swaps in the measured rebuild when it
+   lands. At most 2 cells read at once, newest request first.
+
+**Verified.**
+- **Registration.** HAG raster vs footprints is pixel-exact (`shots/hag.png`).
+- **Sea Bright.** 11 spawn cells measured in about 21 s cold (41 % of footprints confidently).
+  The rest are under canopy or newer than the 2014 survey, and they keep their priors.
+- **Sea Bright looks.** `shots/lidar-on.jpg` vs `lidar-off.jpg` (same poses). Ocean Ave's
+  flat-roofed blocks and townhouse rows come out flat. Raised post-Sandy houses get their real
+  9 m ridges. Gables have true eaves.
+- **Denver** (`?at=39.7005,-104.9705`, 2020 DRCOG survey).
+  - 4–6 s per cell.
+  - Detached alley garages go flat and Denver squares go hip: `shots/den-on.jpg` vs `den-off.jpg`.
+- **Tests and types.** 83 unit tests pass (synthetic gable/hip/flat/tree/L-shape/cross-ridge
+  fits, affine error under 5 cm, pull-push, EPT density depth, coverage) and `tsc` is clean.
+
+**Review (subagent, 17 findings) — fixed:**
+- **Candidate robustness**
+  - Each candidate is tried separately, so a 404 after an index refresh skips that survey.
+  - The point budget is per candidate.
+  - `none` is written only when every survey was read and none had ground returns.
+- **Cache key.** It is versioned and includes the index date.
+- **Non-rectangular outlines** keep their mapped gable/hip style and take only the measured eave
+  and ridge (no more L-houses turned into hips).
+- **Cross-ridge gables** keep the measured ridge and pitch.
+- **Plausibility gate.** Houses taller than 40 m are rejected.
+- **Feet detection.** A survey whose median house is over 14 m is read as US feet and scaled
+  (EPT keeps source Z units and `srs` doesn't say).
+- **Octree and decoding**
+  - Hierarchy expansion reaches the cap depth.
+  - The point format comes from the masked header.
+  - Holes fill with the mean of their neighbours.
+- **Scheduling**
+  - Fetches time out after 30 s.
+  - The limiter hands its slot straight to the next waiter (LIFO).
+  - Cells with no survey settle before queueing.
+- **Slope.** Measured roofs stand on the footprint's mean ground.
+
+**Deferred:**
+- ridge axis for cross gables in `buildRoof`
+- float32 node caches and a separate LiDAR worker
+- vertical-datum offset when two surveys mix
+
+**Also fixed.** Tile-fetch failures (for example the tile service returning 503 under Overpass
+load) used to count toward "this worker can't build" and dropped every build to the main
+thread. `FetchError` (cache.ts) now marks them `net`, and they retry via the failed-tile backoff.
+
+**Dev notes.**
+- Vite serves over HTTP/1.1. Slow `/__tiles` calls can starve other same-origin requests for
+  minutes, which is why the index and WASM ship inside the worker bundle.
+- Occluded browser panes stop `requestAnimationFrame`, so `__MONTAGE__(…, {timers: true})`
+  drives the loop from timers instead.
+- The worker's LiDAR notes land in the page console and `__GAME__.stream.workerLog`.
+
+**Next:**
+- trees from the same raster (canopy heights and positions: real street trees)
+- J1 ground paint for streamed tiles
+- vehicle polish
+
 ## 2026-09-26 (c) — Ride anything: cars, boats, planes · lush grass · sunrise start
 
 **User direction:** buildings are good — now cars, boats and planes the player can ride/fly;

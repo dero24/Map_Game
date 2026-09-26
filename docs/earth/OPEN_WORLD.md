@@ -84,9 +84,10 @@ Status: H1 ✅ H2 ✅ H3-lite ✅ · **One World** ✅ (single `shore` bake, ful
 backdrop) · **I** ✅ first cut (`styles.ts` + `recipe.ts`; raster upgrade pending) · **J2-a**
 ✅ (house realism: materials, dormers, bays, chimneys, plinths, windows). Next, in order:
 
-1. **L-lite — measured massing.** `bd.h` / `bd.fl` from Overture `height`/`num_floors` (already
-   in the bake join) + 3D-GloBFP where missing; real-lite mirrors via Overture fields. Storeys
-   and roof silhouette drive recognition at 50–300 m (`docs/FIDELITY_REALITY.md`).
+1. ✅ **L — measured buildings from LiDAR** (2026-09-26 d; replaced L-lite). Every real
+   footprint in a 3DEP-covered US cell gets a fitted ridge, eave and roof style from the USGS
+   EPT point clouds, read in the tile worker (see LOG). Outside the US / uncovered: Overture
+   `height` priors as before. Remaining: cross-gable ridge axis in `buildRoof`; LiDAR trees.
 2. **J1 — detail parity for the walkable ring** (in parallel): ground paint (walks, drives,
    lawns, curb strips) and per-tile lamp pools outside the slice + for streamed tiles;
    street-tree species/scale; signage from real names.
@@ -94,7 +95,8 @@ backdrop) · **I** ✅ first cut (`styles.ts` + `recipe.ts`; raster upgrade pend
 4. **Traversal spike** — ride any vehicle / fast movement abilities at ~25 m/s: stress-tests
    LOAD_R, worker throughput, DEM latency before life is layered on top. Core-gameplay seed.
 5. **K — life + ambience** per region style (vehicle mix + driving side already in `styles.ts`).
-6. **L full** — US LiDAR roof planes (`bd.rp`), national LoD2 adapters.
+6. **L full** — multi-plane roofs (`bd.rp`) from the same rasters, national LoD2/lidar
+   adapters outside the US (NL AHN, UK EA, DK, FR IGN — same EPT/COG pattern).
 
 The original list below is kept for rationale.
 

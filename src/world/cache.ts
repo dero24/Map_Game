@@ -30,6 +30,26 @@ export function manifestFingerprint(man: AtlasManifest): string {
 
 let prefix = '';
 
+// A payload that couldn't be fetched (HTTP status or network) — the data's fault, not the
+// builder's: the tile worker reports these as `net` so the stream retries the tile later
+// instead of counting them toward "this worker can't build" (which falls back to in-page).
+export class FetchError extends Error {
+  constructor(msg: string) {
+    super(msg);
+    this.name = 'FetchError';
+  }
+}
+const get = async (url: string) => {
+  let r: Response;
+  try {
+    r = await fetch(url);
+  } catch (e) {
+    throw new FetchError(`${url} ${(e as Error)?.message ?? e}`);
+  }
+  if (!r.ok) throw new FetchError(`${url} ${r.status}`);
+  return r.arrayBuffer();
+};
+
 export function initCache(base: string, fp: string) {
   prefix = `${base}|${fp}|`;
   void (async () => {
@@ -51,22 +71,34 @@ export function initCache(base: string, fp: string) {
 
 // Fetch a baked payload through the cache. Without initCache (legacy path) it's a plain fetch.
 export async function cachedFetch(url: string): Promise<ArrayBuffer> {
-  if (!prefix) {
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(`${url} ${r.status}`);
-    return r.arrayBuffer();
-  }
+  if (!prefix) return get(url);
   const d = await db();
   const key = prefix + url;
   const hit = (await d.get('files', key)) as ArrayBuffer | undefined;
   if (hit) return hit; // a fresh structured clone — safe to transfer/detach downstream
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`${url} ${r.status}`);
-  const buf = await r.arrayBuffer();
+  const buf = await get(url);
   void d.put('files', buf, key).catch((e) => console.warn('tile cache put failed', e));
   return buf;
 }
 
 export async function cachedFetchJson(url: string): Promise<unknown> {
   return JSON.parse(new TextDecoder().decode(await cachedFetch(url)));
+}
+
+// Small keyed records that are NOT bake payloads (LiDAR measurements per cell): same store,
+// keys outside any `${base}|` prefix so bake eviction never touches them. Failures are
+// silent — this is a cache, the caller recomputes.
+export async function kvGet<T>(key: string): Promise<T | undefined> {
+  try {
+    return (await (await db()).get('files', key)) as T | undefined;
+  } catch {
+    return undefined;
+  }
+}
+export async function kvPut(key: string, v: unknown): Promise<void> {
+  try {
+    await (await db()).put('files', v, key);
+  } catch (e) {
+    console.warn('kv put failed', e);
+  }
 }

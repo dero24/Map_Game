@@ -185,3 +185,38 @@ glazing; bakeId ignores terrain.bin; old `?region=` links → `?at=`.
 heights/storeys: Overture height/num_floors, 3D-GloBFP) ∥ **J1** (ground paint + lamps for the
 whole backdrop) → J2 → vehicle/traversal spike (stress LOAD_R/worker/DEM at 25 m/s) → K.
 Silhouette/storeys drive recognition at 50–300 m; asset polish on wrong massing is wasted.
+
+## 2026-09-26 (d) — LiDAR measured buildings: code review (engineering, not visual)
+**Scope:** `lidar.ts`, `lidarCore.ts`, `measure.ts`, worker/stream relief wiring, builder use.
+**Verdict:** sound architecture; 6 must-fix, 11 nice-to-have. The synth-DEM relief path is
+unchanged, and there is no relief loop (relief builds wait with no timer).
+**Must-fix (all applied):**
+- Cross-ridge gables collapsed to the long-axis skeleton at double pitch → keep the ridge and
+  pitch, and restate the eave.
+- The shared point budget starved later candidate surveys, and `none` was then cached for
+  good → budget per survey; `none` only when every survey was read.
+- One failing survey broke the whole cell, and `none` never expired → try/catch per
+  candidate; key includes the index date plus a version.
+- L/T-shaped gables became hips → non-rectangles are "pitched" and keep the mapped style.
+- No plausibility or units gate → reject houses over 40 m; detect feet by the median house.
+- Unbounded reads with FIFO queueing → 30 s fetch timeout; LIFO slot handoff.
+
+**Nice-to-have applied:**
+- expand the hierarchy to the cap
+- deterministic level-budget read order
+- masked point format
+- mean hole fill
+- settle no-coverage cells early
+- limiter race and recMem race
+- slope (mean ground)
+- widened coverage test
+
+**Deferred:**
+- ridge-axis flag in `buildRoof`
+- float32 node cache / a dedicated LiDAR worker
+- cross-survey datum offset
+- hierarchy cache eviction
+
+**Visual check** (same poses, on vs off): Sea Bright and Denver both read truer (flat
+Ocean Ave blocks, raised 9 m post-Sandy houses, Denver-square hips, flat alley garages).
+A design review with screenshots is still owed for the next visual round.
