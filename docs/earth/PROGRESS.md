@@ -34,6 +34,8 @@ walking — forever — while the world paints itself around you. The design liv
 | I (first cut) | **Regional style** `styles.ts` (climate/family/palettes/species/biome/driving side), `meta.style`, style → worker | ✅ done | this session |
 | J2-a | **House realism** `recipe.ts` + siding/roof materials, dormers (1½-storey), bays, side chimneys, plinths, cornices, downspouts, hull roofs, roof gamut, new window asset, flicker root cause | ✅ done (review 7 → fixes applied) | `51d1cc8` + this session |
 
+| Traversal | **Rideable vehicles** (car/boat/plane, E/V/B/N, driveway cars, chase cam) · **grass** (painter-masked, lush tiers) · sunrise start · in-frame teleport | ✅ done (first cut) | this session |
+
 ## Next up (revised 2026-09-26 — see OPEN_WORLD.md "Phases — revised order")
 
 - **L-lite** measured heights/storeys → **J1** ground paint + per-tile lamps for the walkable

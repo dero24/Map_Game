@@ -203,7 +203,7 @@ export function carGeo() {
     part(box(0.3, 0.12, 0.05, -0.64, 0.8, 2.21), 0x9a1c1c, 4),
   ]);
 }
-function boatGeo() {
+export function boatGeo() {
   const sh = new THREE.Shape();
   sh.moveTo(-2.4, 0.9); sh.lineTo(-2.4, -0.9); sh.lineTo(1.6, -0.9); sh.quadraticCurveTo(3.4, -0.4, 3.6, 0); sh.quadraticCurveTo(3.4, 0.4, 1.6, 0.9); sh.lineTo(-2.4, 0.9);
   const hull = new THREE.ExtrudeGeometry(sh, { depth: 0.9, bevelEnabled: false }).rotateX(-Math.PI / 2).rotateY(Math.PI / 2).translate(0, -0.3, 0);

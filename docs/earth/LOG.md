@@ -2,6 +2,49 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-26 (c) — Ride anything: cars, boats, planes · lush grass · sunrise start
+
+**User direction:** buildings are good — now cars, boats and planes the player can ride/fly;
+tall lush grass (not everywhere); grass must sit on lawns/fields, never sidewalks; start at
+sunrise. (This is the plan's "traversal spike", pulled forward — it's also core gameplay.)
+
+**Vehicles (`src/player/vehicles.ts`).** E enters/exits the nearest vehicle; V / B / N summon a
+car (onto the nearest street lane, driving side from `styles.ts`), a boat (nearest open water,
+bow away from land) or a plane (a clear 160 m run ahead, else circling overhead; airborne if
+you're already flying). Driveway cars baked into tiles are enterable too: props names their
+InstancedMesh `parked-cars`; the one you take is zero-scaled and stays hidden across tile
+remounts. Arcade physics: car = bicycle model on terrain + decks with WalkWorld collision and
+body pitch/roll from wheel heights; boat = water-bound (bumps off the shore), bobbing, bow
+lift; plane = throttle (Shift/C), pitch (W/S), bank (A/D) → coordinated turn, stall sink,
+takeoff rotation, landing/crash forgiveness (hard landings and rooftops set it down nearby),
+auto-level; step out mid-air → free flight. Chase camera orbits with the mouse and eases
+back; the walker is carried so streaming/life/interiors/HUD follow the vehicle. HUD shows
+speed (+ altitude/throttle). Up to 6 player vehicles persist where you leave them.
+Verified: `shots/vehicles-1.jpg`, `vehicles-2.jpg` (car on its lane + driving, boat on the
+ocean, plane climbing/banking over the bay); 87–108 fps with grass on.
+
+**Grass (`src/world/grass.ts`)** — after studying exploration-game3's GrassRenderer (dense
+cheap blades, vivid per-biome tints, three height tiers, dark-base→bright-tip, continuous
+coverage): player-centred instanced tufts in 20 m cells (72 m radius, shrink-fade, 3
+cells/frame), deterministic per position. Lush saturated greens per climate, tall tiers
+roughly half of open ground (meadow patches taller, the odd wildflower), mown lawns near
+houses, wind sway with gusts, building shadows, back-lit glowing tips toward the sun. It
+grows only where the *painted* ground is open: `GroundPaint.grassMask` paints each cell with
+the same painter the player sees and allows only unpainted land or green washes — so no grass
+on sidewalks, front walks, lots, plazas or beaches; streamed streets add a carriageway +
+sidewalk margin. Built-up land-cover wash is now a muted lawn green (was grey khaki).
+
+**Sunrise start.** Every walk begins a few minutes after today's real sunrise at the region's
+location (ephemeris scan; `?hour=` overrides), then the clock runs on. Verified 07:10 at Sea
+Bright (sun just over the ocean horizon) — `shots/start.jpg`.
+
+**Teleport stays in the world.** `G` within ~80 km of the origin streams real tiles in the
+same frame instead of reloading into a separate `?at=` world.
+
+**Next:** vehicle polish (engine audio, headlights, ambient traffic you can hail, boat wake,
+plane building collision via footprint heights, touch buttons); J1 ground paint for streamed
+tiles (grass mask there is margin-based); L-lite measured heights.
+
 ## 2026-09-26 (b) — One consistent world, Phase I style, realistic houses
 
 **User direction:** land in Sea Bright, walk to Monmouth Beach and beyond with no detail cliff;

@@ -79,6 +79,11 @@
   landscape viewport (e.g. 1600×900) first; the canvas is the capture size.
 - Shader varyings that carry ids/seeds (`vInfo`, `vTan`, `vOut`) must be `flat` — interpolated ids
   (up to ~8.5 M) drift per pixel and every `seedOf(id)` choice shimmers (the old window flicker).
+- Vehicles: `src/player/vehicles.ts` — E enter/exit, V car, B boat, N plane; driveway cars (props'
+  `parked-cars` InstancedMesh) are enterable. While riding, `Vehicles.update` owns the camera and
+  carries the walker (streaming/life/interiors key off it); `walker.update` is skipped.
+- Grass: `src/world/grass.ts` — player-centred tuft cells, masked by `GroundPaint.grassMask`
+  (grows only where the painted ground is open/green). Walks start at today's sunrise (`?hour=`).
 - Local frame: +x east, +z south (north = -z), metres, per-region origin from config.
 - All materials are custom ShaderMaterials sharing uniforms in `src/render/shared.ts`; the look lives in `src/render/post.ts`.
 - Region identity (name/tz/spawn/labels/style) travels in `world.json`/`manifest` `meta` — runtime code must not

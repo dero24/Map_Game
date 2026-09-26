@@ -471,6 +471,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   }
   if (parked.length) {
     const im = new THREE.InstancedMesh(carGeo(), propMaterial(), parked.length);
+    im.name = 'parked-cars'; // player/vehicles.ts finds these to let you drive off in one
     parked.forEach((p, i) => { im.setMatrixAt(i, p.m); im.setColorAt(i, p.c); });
     im.layers.enable(1);
     group.add(im);

@@ -9,6 +9,8 @@ import { setGndMaterial } from './world/pack';
 import { buildWater } from './world/water';
 import { activeBuilding, type Door, type Footprint } from './world/buildings';
 import { styleFor, setActiveStyle } from './world/styles';
+import { Vehicles } from './player/vehicles';
+import { GrassField } from './world/grass';
 import { buildSky, skyUniforms } from './world/sky';
 import { LifeClient, buildLifeBase, buildLifeInit } from './sim/life';
 import { Ambience } from './audio/ambience';
@@ -20,7 +22,7 @@ import { WatercolorPost, postParams } from './render/post';
 import { SunShadows } from './render/shadows';
 import { WalkWorld } from './player/collision';
 import { Walker, walkParams } from './player/controller';
-import { celestial, localHour, localToMs } from './core/sun';
+import { celestial, localHour, localToMs, sunPosition } from './core/sun';
 import { buildPanel, loadSettings, timeParams, weatherParams, debugParams } from './ui/panel';
 
 const params = new URLSearchParams(location.search);
@@ -187,7 +189,10 @@ async function main() {
   // The localhost auto-default was probed before setup: no worker answered → procedural past the bake.
   if (TILES_PARAM === null && LOCAL && !TILES)
     setTimeout(() => toast('local tile service isn\'t running — past the bake the world stays procedural (cd worker && npx wrangler dev)'), 0);
-  stream.onTile = (a) => paint.addWalks(a.walks);
+  // Grass: tufts grow on open land around the walker (lawns short, open ground tall + lush).
+  const grass = new GrassField(world.terrain, walk, () => stream.primRoads, paint.grassMask);
+  worldRoot.add(grass.group);
+  stream.onTile = (a) => { paint.addWalks(a.walks); grass.invalidateBox(a.spec.box); };
   const plans = stream.plans;
   const bld = {
     get footprints() { return stream.footprints; },
@@ -276,7 +281,10 @@ async function main() {
   const teleportTo = async (lat: number, lon: number) => {
     const [x, z] = fromLatLon(json.origin, lat, lon);
     const b = json.backdrop;
-    if (x < b.x0 || x > b.x1 || z < b.z0 || z > b.z1) {
+    // One world: anywhere within ~80 km stays in this frame when real tiles can stream there
+    // (the local tangent plane is still accurate to centimetres); only farther jumps re-anchor.
+    const inFrame = (x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1) || (!!(TILES || manifest.tilesUrl) && Math.hypot(x, z) < 80000);
+    if (!inFrame) {
       // Outside this region — let the deep-link picker choose the right town (or go
       // virtual). Dropping `region` too: keeping it would suppress the ?at picker AND
       // the virtual manifest, stranding the spawn far outside every backdrop.
@@ -310,7 +318,16 @@ async function main() {
         }
       }
   };
-  stream.onMount = () => settleWalker();
+  stream.onMount = () => { if (!vehicles.driving) settleWalker(); };
+  // Rideable vehicles (E enter/exit · V car · B boat · N plane) — the walker rides along.
+  const vehicles = new Vehicles({
+    walk, terrain: world.terrain, walker, root: worldRoot, toast,
+    roads: () => stream.primRoads,
+    tiles: () => stream.loaded.values(),
+    driveLeft: regionLook.driveLeft,
+    enabled: () => $('intro').classList.contains('hidden') && !journal.open,
+  });
+  { const prev = stream.onTile; stream.onTile = (a) => { prev?.(a); vehicles.onTile(a); }; } // re-hide taken driveway cars on remount
 
   const lifeBase = buildLifeBase(paintWorld, walk);
   const life = new LifeClient(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors));
@@ -341,6 +358,18 @@ async function main() {
     worldMs = localToMs(Date.now(), h, tz);
   };
   if (!timeParams.realTime) worldMs = localToMs(Date.now(), timeParams.hour, tz);
+  // Every walk begins at sunrise (today's real sunrise at this place, a few minutes after the
+  // disc clears the horizon); the clock then runs on. ?hour=H overrides; capture shots set their own.
+  if (!CAPTURE) {
+    const hq = params.get('hour');
+    if (hq !== null && isFinite(+hq)) setHour(+hq);
+    else {
+      let rise = 6.5;
+      for (let h = 2; h < 11; h += 0.05)
+        if (sunPosition(localToMs(Date.now(), h, tz), json.origin.lat, json.origin.lon).alt > 0) { rise = h; break; }
+      setHour(rise + 0.2);
+    }
+  }
 
   const gui = CAPTURE && !params.has('panel') ? null : buildPanel({ onResize: resize, onPreset: setHour, onRespawn: respawn, onResetExplore: () => void journal.reset() }, { name: townName, tz, respawn: spec?.on });
 
@@ -486,7 +515,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { walker, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream, teleport: teleportTo, get spawn() { return spawn; }, at: atPos };
+  (window as unknown as Record<string, unknown>).__GAME__ = { walker, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream, vehicles, grass, teleport: teleportTo, get spawn() { return spawn; }, at: atPos };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);
@@ -640,9 +669,10 @@ async function main() {
     skyUniforms.uCloudShift.value.set(simTime * 0.004 * (0.3 + weather.wind), simTime * 0.0015);
 
     reanchor();
-    walker.update(dt, camera);
+    if (!vehicles.update(dt, camera)) walker.update(dt, camera);
     camera.position.sub(origin); // walker works in world coords; the renderer works origin-local
     stream.update(walker.x, walker.z);
+    if (!walkParams.fly || walker.y - walker.feet < 60) grass.update(walker.x, walker.z);
     if (lifeDirty && (!stream.busy || now - lastTileChange > 4000)) {
       lifeDirty = false; // clear first: a failed reinit must not throw every frame
       try { life.reinit(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors)); }

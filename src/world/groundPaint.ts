@@ -7,7 +7,9 @@ import type { World, TerrainLayer, Road, Area, WorldJson } from './data';
 
 // ESA WorldCover class -> ground wash (sRGB). Water cells = sea/river bed.
 const COVER: Record<number, string> = {
-  10: '#76834f', 20: '#8b9a5c', 30: '#9fb06c', 40: '#b3b070', 50: '#aeae8e', 60: '#e4d4ab', 70: '#f0f0f0',
+  // 50 built-up: in towns the unpainted land between roads, walks, lots and houses is lawn —
+  // a muted lawn green, not grey khaki (paved things are painted over it)
+  10: '#76834f', 20: '#8b9a5c', 30: '#9fb06c', 40: '#b3b070', 50: '#a6b27a', 60: '#e4d4ab', 70: '#f0f0f0',
   80: '#8c8768', 90: '#8e9562', 95: '#708055', 100: '#a8a882', 0: '#aeb08e',
 };
 const AREA_FILL: Record<string, string> = {
@@ -219,6 +221,9 @@ export interface GroundPaint {
   sliceCanvas: HTMLCanvasElement;
   detail: DetailGround;
   addWalks: (walks: number[]) => void;
+  /** Where the painted ground is open (unpainted land or a green wash) inside a square — the
+   *  grass field grows only there, so it can never sit on a painted sidewalk, walk, lot or beach. */
+  grassMask: (x0: number, z0: number, size: number) => { res: number; data: Uint8Array };
 }
 
 const makeTex = (c: HTMLCanvasElement) => {
@@ -302,5 +307,24 @@ export function paintGround(world: World, maxTex: number, walks: number[] = []):
   painter.paint(bctx, B.x0, B.z0, B.x1, B.z1, bx, 0);
 
   const detail = new DetailGround(painter, sliceCover, terrain.slice, Math.min(2048, maxTex));
-  return { slice: makeTex(sc), backdrop: makeTex(bc), sliceCanvas: sc, detail, addWalks: (w: number[]) => painter.addWalks(w) };
+  const mc = document.createElement('canvas');
+  mc.width = mc.height = 80; // 4 px/m over a 20 m grass cell
+  const mctx = mc.getContext('2d', { willReadFrequently: true })!;
+  const grassMask = (x0: number, z0: number, size: number) => {
+    const res = mc.width, k = res / size;
+    mctx.setTransform(1, 0, 0, 1, 0, 0);
+    mctx.clearRect(0, 0, res, res);
+    mctx.setTransform(k, 0, 0, k, -x0 * k, -z0 * k);
+    painter.paint(mctx, x0, z0, x0 + size, z0 + size, k, 2);
+    const d = mctx.getImageData(0, 0, res, res).data;
+    const out = new Uint8Array(res * res);
+    for (let i = 0; i < out.length; i++) {
+      const a = d[i * 4 + 3];
+      if (a < 50) { out[i] = 1; continue; } // unpainted: the land-cover wash (lawns in town)
+      const r = d[i * 4], g = d[i * 4 + 1], b = d[i * 4 + 2];
+      out[i] = g > r + 4 && g > b + 10 ? 1 : 0; // a green wash (grass/park/golf/scrub/wood)
+    }
+    return { res, data: out };
+  };
+  return { slice: makeTex(sc), backdrop: makeTex(bc), sliceCanvas: sc, detail, addWalks: (w: number[]) => painter.addWalks(w), grassMask };
 }
