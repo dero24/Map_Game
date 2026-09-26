@@ -7,6 +7,7 @@ import { packGroup, type BuiltTile } from './pack';
 import { synthTile, realExtras } from './synth';
 import { fetchDem, demLayer, setDemBase, raceNull } from './dem';
 import type { SynthResult } from './synth';
+import { setActiveStyle, styleByKey } from './styles';
 
 interface TileWorkerScope {
   postMessage(msg: unknown, transfer?: Transferable[]): void;
@@ -22,6 +23,7 @@ let binInit: ArrayBuffer | null = null; // virtual-region terrain bytes (no terr
 let binPromise: Promise<ArrayBuffer> | null = null;
 let origin: { lat: number; lon: number } | null = null;
 let demOn = false; // H2: fetch Terrarium patches for virtual-region cells
+let bakedCells: string[] = []; // manifest cell ids — never overridden by a neighbour's DEM overhang
 const demCache = new Map<string, Promise<{ buf: ArrayBuffer; layout: LayerLayout } | null>>();
 
 const loadBin = () => (binPromise ??= binInit ? Promise.resolve(binInit) : cachedFetch(base + 'terrain.bin'));
@@ -50,6 +52,7 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
     const bin = await loadBin();
     terrain = new Terrain(new TerrainLayer(bin, lay.slice), new TerrainLayer(bin, lay.backdrop));
     terrain.patchCell = cell;
+    terrain.baked = new Set(bakedCells);
   }
   // H2: virtual cells get a real Terrarium patch — fetched per-cell (s/w twins share),
   // registered into this worker's terrain BEFORE synthTile/buildTile so ground mesh,
@@ -101,8 +104,11 @@ ctx.onmessage = (e: MessageEvent) => {
     if (m.bin) binInit = m.bin;
     if (m.origin) origin = m.origin;
     if (m.dem) demOn = true;
+    if (m.baked) bakedCells = m.baked;
     if (m.demBase) setDemBase(m.demBase);
     if (m.fp) initCache(base, m.fp); // same idb database as the page
+    const st = m.style ? styleByKey(m.style) : null;
+    if (st) setActiveStyle(st); // Phase I: builders read the region's style (palettes, species, roof habits)
     return;
   }
   if (m.kind !== 'build') return;

@@ -367,7 +367,7 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         const roof: Building['roof'] =
           kind === 'lighthouse' ? 'tower'
           : tagRoof ?? (kind === 'church' ? 'gable'
-          : kind === 'house' ? (o.wid > 18 || ring.length > 40 ? 'flat' : r4 < 58 ? 'gable' : r4 < 92 ? 'hip' : 'flat')
+          : kind === 'house' ? (ring.length > 60 ? 'flat' : o.wid > 18 ? (r4 < 85 ? 'hip' : 'flat') : r4 < 55 ? 'gable' : r4 < 97 ? 'hip' : 'flat') // keep in sync with bake.mjs
           : kind === 'shed' ? (r4 < 50 ? 'gable' : r4 < 75 ? 'skillion' : r4 < 85 ? 'hip' : 'flat')
           : kind === 'commercial' ? (o.wid < 13 && area < 400 && r4 < 45 ? (r4 < 30 ? 'gable' : 'hip') : 'flat')
           : kind === 'large' ? (o.wid < 16 && r4 < 25 ? 'hip' : 'flat')

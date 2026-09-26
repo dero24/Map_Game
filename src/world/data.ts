@@ -47,6 +47,7 @@ export interface RegionMeta {
   spawn: SpawnSpec | null;
   roads: { main?: string; bridge?: string };
   shoreLabel: string;
+  style?: string; // styles.ts key (climate/family/L|R/region); absent → derived from the origin
 }
 export interface RegionEntry { id: string; name: string; title: string; sub: string; origin: { lat: number; lon: number } }
 
@@ -56,6 +57,7 @@ export interface WorldJson {
   origin: { lat: number; lon: number };
   slice: Box;
   backdrop: Box;
+  detail?: Box; // full-detail zone for builders (see detailBox)
   sources: Record<string, string | null>;
   terrain: { slice: LayerLayout; backdrop: LayerLayout };
   buildings: Building[];
@@ -115,6 +117,9 @@ export class Terrain {
   // data), then the region slice layer, then the always-resident backdrop.
   private patches = new Map<string, TerrainLayer>();
   patchCell = 1024;
+  // Cells the bake owns ('cx_cz'): their heights come from the bake's own layers — a streamed
+  // neighbour's DEM overhang must never reach in (bake-placed buildings would float or sink).
+  baked: Set<string> | null = null;
   constructor(readonly slice: TerrainLayer, readonly backdrop: TerrainLayer) {}
   registerPatch(id: string, L: TerrainLayer) { this.patches.set(id, L); }
   removePatch(id: string) { this.patches.delete(id); }
@@ -123,6 +128,7 @@ export class Terrain {
     const cx = Math.floor(x / this.patchCell), cz = Math.floor(z / this.patchCell);
     const p = this.patches.get(`${cx}_${cz}`);
     if (p && p.contains(x, z)) return p;
+    if (this.baked?.has(`${cx}_${cz}`)) return null;
     // DEM patches overhang their cell by up to one pitch — near an edge, check the
     // neighbours too, or a not-yet-loaded cell's rim reads as a flat shelf.
     for (let ox = -1; ox <= 1; ox++)
@@ -168,9 +174,16 @@ export interface AtlasManifest {
   landmarks: Landmark[];
   tiles: TileSpec[];
   tilesUrl?: string; // real-lite tile service base (worker); ?tiles= overrides
+  bakeId?: string; // content hash of the baked tiles — part of the cache fingerprint
 }
 
 // One streamed tile: the same entity arrays as WorldJson, scoped to a cell (+ margin context).
+// Where builders place full detail (doors, porches, interiors, props, street signs). Baked tiles
+// carry `detail` (the backdrop since the one-world bake); synth/real-lite tiles set slice = their
+// own box; old bakes fall back to the region slice. The slice itself keeps its other meanings:
+// the fine terrain lattice and the lamp-map compositor box.
+export const detailBox = (j: { slice: Box; detail?: Box }): Box => j.detail ?? j.slice;
+
 export interface TileJson {
   version: number;
   id: string;
@@ -179,6 +192,7 @@ export interface TileJson {
   origin: { lat: number; lon: number };
   slice: Box;
   backdrop: Box;
+  detail?: Box; // full-detail zone (bake: backdrop); absent on old bakes → slice
   landmarks?: Landmark[];
   buildings: Building[];
   roads: Road[];

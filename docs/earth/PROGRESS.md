@@ -30,7 +30,16 @@ walking — forever — while the world paints itself around you. The design liv
 | H3-lite | **Hybrid fill** — sparse real cells (<20 bldg/km) plant seeded lots along real roads; land masks, round-robin cap, interior clamp, per-road rng. Reviewed 7.5 → 8.5/10, "move to H2" | ✅ done | `7f32dfb` + `e379253` + `96fe7c6` |
 | H2 | **Terrarium DEM** — `/dem/` worker route (edge+R2 cached), per-cell f32-cm TerrainLayer patches (s/w twin shared, holder-refcounted), elevation-derived sdf (sea can't host synth lots), neighbour-patch lookup; reviewed **8.5/10 — SHIP pending worker deploy** | ✅ done | `6d38ede` |
 
-## Next up (per masterplan, in rough order)
+| One World | **`shore` bake** (Sea Bright → Monmouth Beach, merged offline via `merge-raw.mjs`); full detail across the backdrop (`detailBox`); `bakeId` cache fingerprint; DEM for all streamed cells; `/__tiles` dev proxy | ✅ done | this session |
+| I (first cut) | **Regional style** `styles.ts` (climate/family/palettes/species/biome/driving side), `meta.style`, style → worker | ✅ done | this session |
+| J2-a | **House realism** `recipe.ts` + siding/roof materials, dormers (1½-storey), bays, side chimneys, plinths, cornices, downspouts, hull roofs, roof gamut, new window asset, flicker root cause | ✅ done (review 7 → fixes applied) | `51d1cc8` + this session |
+
+## Next up (revised 2026-09-26 — see OPEN_WORLD.md "Phases — revised order")
+
+- **L-lite** measured heights/storeys → **J1** ground paint + per-tile lamps for the walkable
+  ring → J2 rest → traversal spike (vehicles/abilities) → K life.
+
+## Next up (older list, kept for reference)
 
 - ~~Amortize interior generation~~ — done: worst subsystem 112 ms → 7.3 ms, soak `stalls=0`, `hitches=0`.
 - **Deploy the worker** (user step — needs their Cloudflare account): `cd worker && wrangler login && wrangler r2 bucket create map-game-tiles && wrangler deploy`, then `tilesUrl` into manifests/Pages. Until then `?at=` is dev-only via localhost auto-default.

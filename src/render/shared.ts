@@ -40,6 +40,9 @@ export const U = {
   uPigment: { value: 0.22 },
   uPigmentScale: { value: 0.35 },
   uWind: { value: 0.5 },
+  // Phase I biome wash for the ground: x = dryness (greens → straw/ochre), y = lushness,
+  // z = cold/dark (boreal/polar greens). Set once per region from styles.ts.
+  uBiome: { value: new THREE.Vector4(0, 0, 0, 0) },
   uSliceBox: { value: new THREE.Vector4(0, 0, 1, 1) },
   // footprint polygon of the building being visited: ground is cut away inside (below maxY)
   uHoleBox: { value: new THREE.Vector4() }, // x0 z0 x1 z1
@@ -80,6 +83,7 @@ uniform sampler2D uLampMap;
 uniform vec4 uLampBox;
 uniform vec3 uLampColor;
 uniform float uLampPower, uPigment, uPigmentScale, uWind;
+uniform vec4 uBiome;
 uniform vec4 uSliceBox;
 uniform vec4 uHoleBox, uHoleInfo;
 uniform vec2 uHolePts[${HOLE_MAX}];

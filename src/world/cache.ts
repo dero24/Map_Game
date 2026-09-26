@@ -17,7 +17,9 @@ const db = () =>
 // A bake fingerprint: any change to tiles, cell, terrain layouts or slice makes every cached
 // payload stale. Small enough to compute once per session.
 export function manifestFingerprint(man: AtlasManifest): string {
-  const s = JSON.stringify(man.tiles) + '|' + man.cell + '|' + JSON.stringify(man.terrain) + '|' + JSON.stringify(man.slice);
+  // bakeId: a content hash the bake stamps — a re-bake with an identical layout (same cells,
+  // terrain, slice) must still retire every cached tile payload.
+  const s = JSON.stringify(man.tiles) + '|' + man.cell + '|' + JSON.stringify(man.terrain) + '|' + JSON.stringify(man.slice) + '|' + (man.bakeId ?? '');
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i);

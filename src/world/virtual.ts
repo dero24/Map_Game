@@ -6,6 +6,7 @@
 // buildGround / heightAt / sdfAt to answer while every cell streams w-*/s-* tiles. Real
 // elevation lands with the Terrarium DEM in H2 — replace this layer, nothing else changes.
 import { Terrain, TerrainLayer, type AtlasManifest, type Box, type Chunk, type LayerLayout } from './data';
+import { regionStyle } from './styles';
 
 const SLICE_HALF = 512; // region "slice" box — the fine ground mesh extent (kept small: flat)
 const BACKDROP_HALF = 3072; // region "backdrop" box — horizon ground; coarse tiles carry past it
@@ -72,6 +73,7 @@ export function virtualRegion(at: [number, number]): VirtualRegion {
       spawn: null,
       roads: {},
       shoreLabel: 'the shore',
+      style: regionStyle(at[0], at[1]).key, // Phase I: the open world carries its regional look too
     },
     origin,
     slice: { x0: -SLICE_HALF, z0: -SLICE_HALF, x1: SLICE_HALF, z1: SLICE_HALF },

@@ -3,7 +3,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PNG } from 'pngjs';
-import { RAW, OUT, DATA, SLICE, BACKDROP, ORIGIN, REGION, CFG } from './config.mjs';
+import { RAW, OUT, DATA, SLICE, BACKDROP, ORIGIN, REGION, CFG, REGIONS } from './config.mjs';
 import { project, bboxToLocal, ringArea, centroid, pointInRing, cleanRing, assembleRings, obb, simplify, hashStr, parseWkt } from './lib/geo.mjs';
 import { parseColour, materialColour, roofMaterialColour, paintFromAerial } from './lib/colour.mjs';
 import { Grid, fillRings, stampSegment, components, signedDistance, edt, bilinear } from './lib/raster.mjs';
@@ -24,6 +24,11 @@ const z13 = terrainSampler(13);
 
 const S = bboxToLocal(SLICE);
 const B = bboxToLocal(BACKDROP);
+// Detail box: features inside it bake at full fidelity (no lod simplification, minor roads kept,
+// addresses resolved). It used to be the slice, which left the whole backdrop ring as a
+// permanent low-detail zone once streaming made it walkable. The slice now only sets the fine
+// (2 m) terrain lattice; streaming distance decides what renders at full detail.
+const D = CFG.detail === 'slice' ? S : B;
 const inBox = (b, x, z, m = 0) => x >= b.x0 - m && x <= b.x1 + m && z >= b.z0 - m && z <= b.z1 + m;
 const K = (Math.PI / 180) * 6378137;
 const COS0 = Math.cos((ORIGIN.lat * Math.PI) / 180);
@@ -231,7 +236,7 @@ for (const row of overture.rows) {
     if (ringArea(ring) < 0) ring.reverse(); // ringArea>0 == CCW in x-east/z-south screen sense; normalize one winding
     const [cx, cz] = centroid(ring);
     if (!inBox(B, cx, cz)) continue;
-    const inS = inBox(S, cx, cz, 60);
+    const inS = inBox(D, cx, cz, 60);
     if (!inS) ring = cleanRing(simplify([...ring, ring[0]], 0.8).slice(0, -1), 0.5);
     if (ring.length < 3) continue;
     const o = obb(ring);
@@ -264,7 +269,8 @@ for (const row of overture.rows) {
     if (kind === 'lighthouse') roof = 'tower';
     else if (tagRoof) roof = tagRoof;
     else if (kind === 'church') roof = 'gable';
-    else if (kind === 'house') roof = o.wid > 18 || ring.length > 40 ? 'flat' : r4 < 58 ? 'gable' : r4 < 92 ? 'hip' : 'flat';
+    // ~97% of detached houses are pitched; wide ones hip rather than going flat
+    else if (kind === 'house') roof = ring.length > 60 ? 'flat' : o.wid > 18 ? (r4 < 85 ? 'hip' : 'flat') : r4 < 55 ? 'gable' : r4 < 97 ? 'hip' : 'flat';
     else if (kind === 'shed') roof = r4 < 50 ? 'gable' : r4 < 75 ? 'skillion' : r4 < 85 ? 'hip' : 'flat';
     else if (kind === 'commercial') roof = o.wid < 13 && area < 400 && r4 < 45 ? (r4 < 30 ? 'gable' : 'hip') : 'flat';
     else if (kind === 'large') roof = o.wid < 16 && r4 < 25 ? 'hip' : 'flat';
@@ -305,7 +311,7 @@ for (const e of els) {
   if (e.type !== 'way' || !t.highway || !(t.highway in ROAD_W)) continue;
   let pts = wayPts(e);
   if (pts.length < 2) continue;
-  const inS = pts.some(([x, z]) => inBox(S, x, z, 80));
+  const inS = pts.some(([x, z]) => inBox(D, x, z, 80));
   const minor = ['footway', 'path', 'cycleway', 'steps', 'bridleway', 'track'].includes(t.highway);
   if (!inS && minor) continue;
   if (!pts.some(([x, z]) => inBox(B, x, z))) continue;
@@ -353,7 +359,7 @@ for (const e of els) {
   if (!r) continue;
   const all = [...r.outer, ...r.inner];
   if (!all.some((ring) => ring.some(([x, z]) => inBox(B, x, z)))) continue;
-  const inS = all.some((ring) => ring.some(([x, z]) => inBox(S, x, z, 100)));
+  const inS = all.some((ring) => ring.some(([x, z]) => inBox(D, x, z, 100)));
   const tol = inS ? 0.25 : 2;
   const a = { c: cls, o: r.outer.map((ring) => flat(simplify(ring, tol))), i: r.inner.map((ring) => flat(simplify(ring, tol))) };
   if (t.name) a.n = t.name;
@@ -460,8 +466,10 @@ mkdirSync(DATA, { recursive: true });
 const mfPath = resolve(DATA, 'regions.json');
 let manifest = [];
 try { manifest = JSON.parse(readFileSync(mfPath, 'utf8')); } catch { /* first bake */ }
-manifest = manifest.filter((r) => r.id !== REGION);
-manifest.push({ id: REGION, name: CFG.name, title: CFG.title, sub: CFG.sub, origin: ORIGIN });
+// `hidden` regions are merge sources (e.g. the towns inside `shore`) — baked data for them is
+// never listed, so the game offers exactly one consistent world.
+manifest = manifest.filter((r) => r.id !== REGION && !REGIONS[r.id]?.hidden);
+if (!CFG.hidden) manifest.push({ id: REGION, name: CFG.name, title: CFG.title, sub: CFG.sub, origin: ORIGIN });
 manifest.sort((a, b) => a.id.localeCompare(b.id));
 writeFileSync(mfPath, JSON.stringify(manifest, null, 2));
 log(`regions.json -> [${manifest.map((r) => r.id).join(', ')}]`);
@@ -485,11 +493,14 @@ const lmTile = landmarks.map((l) => {
 });
 const tiles = [];
 let tBytes = 0;
+let bakeHash = 0x811c9dc5; // FNV-1a over every tile payload → atlas.bakeId (client cache key)
+const hashIn = (s) => { for (let i = 0; i < s.length; i++) bakeHash = Math.imul(bakeHash ^ s.charCodeAt(i), 0x01000193); };
 let packCount = 0;
 for (const { spec, tile } of parts) {
   const file = `tiles/${spec.id}.json`;
-  const out = JSON.stringify({ ...tile, origin: ORIGIN, slice: S, backdrop: B, landmarks: landmarks.filter((_, i) => lmTile[i] === spec.id) });
+  const out = JSON.stringify({ ...tile, origin: ORIGIN, slice: S, backdrop: B, detail: D, landmarks: landmarks.filter((_, i) => lmTile[i] === spec.id) });
   writeFileSync(resolve(OUT, file), out);
+  hashIn(out);
   tBytes += out.length;
   const entry = { id: spec.id, box: spec.box, lod: spec.lod, file };
   // Detail tiles carry their own slice-resolution terrain pack (a subgrid of the slice layer, no
@@ -518,6 +529,7 @@ const atlas = {
   slice: S,
   backdrop: B,
   sources: world.sources,
+  bakeId: (bakeHash >>> 0).toString(36),
   cell: TILE_CELL,
   margin: TILE_MARGIN,
   terrain: layout,

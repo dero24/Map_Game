@@ -15,6 +15,7 @@ import { signTexture } from './signs';
 import { registerPlan, type Interiors, type Plan } from './interiors';
 import type { WalkWorld } from '../player/collision';
 import { U } from '../render/shared';
+import { activeStyle } from './styles';
 
 const LOAD_R = 1500; // keep tiles this close (3×3 cells and then some)
 const DROP_R = 2400; // drop tiles beyond this
@@ -117,6 +118,7 @@ export class TileStream {
     const S = man.slice;
     U.uLampBox.value.set(S.x0, S.z0, 1 / (S.x1 - S.x0), 1 / (S.z1 - S.z0));
     for (const t of man.tiles) this.byCell.set(t.id, t);
+    terrain.baked = new Set(man.tiles.map((t) => t.id)); // baked cells never sample a neighbour's DEM overhang
     this.seed = regionSeed(man.id);
     this.synthOrd = man.tiles.length;
   }
@@ -132,9 +134,9 @@ export class TileStream {
       if (!w) {
         const c = this.man.cell;
         // file is an absolute URL — the tile worker fetches it directly (no base prefix).
-        // &v=4 — the edge Cache API keys on the full URL; bumping alongside the
-        // worker's R2 key (t/v4) retires stale tile payloads.
-        const file = `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}&v=4`;
+        // &v=5 — the edge Cache API keys on the full URL; bumping alongside the
+        // worker's R2 key (t/v5) retires stale tile payloads.
+        const file = `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}&v=5`;
         w = { id: 'w' + key, box: { x0: cx * c, z0: cz * c, x1: cx * c + c, z1: cz * c + c }, lod: 0, file, world: 1 };
         this.worldSpecs.set(key, w);
       }
@@ -321,7 +323,7 @@ export class TileStream {
       // Worker fetches resolve against its own module URL — hand it an absolute base.
       // Virtual regions (the ?at= open world) carry their terrain bytes in-band: there is
       // no terrain.bin URL to fetch, so the same buffer the page uses is passed here.
-      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin, origin: this.man.origin, dem: this.demEnabled, demBase: this.tilesBase });
+      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin, origin: this.man.origin, dem: this.demEnabled, demBase: this.tilesBase, style: activeStyle().key, baked: this.man.tiles.map((t) => t.id) });
       this.worker = w;
     } catch {
       this.workerDead = true;

@@ -78,7 +78,27 @@ a shared R2 cache means each street is fetched once per *population*, not per pl
 - **Tree types per place**: biome → species palette (palm/eucalyptus/pine/oak/bare
   deciduous variants), canopy color shifts; follows from existing tree builder.
 
-## Phases, in order
+## Phases — revised order (2026-09-26)
+
+Status: H1 ✅ H2 ✅ H3-lite ✅ · **One World** ✅ (single `shore` bake, full detail across the
+backdrop) · **I** ✅ first cut (`styles.ts` + `recipe.ts`; raster upgrade pending) · **J2-a**
+✅ (house realism: materials, dormers, bays, chimneys, plinths, windows). Next, in order:
+
+1. **L-lite — measured massing.** `bd.h` / `bd.fl` from Overture `height`/`num_floors` (already
+   in the bake join) + 3D-GloBFP where missing; real-lite mirrors via Overture fields. Storeys
+   and roof silhouette drive recognition at 50–300 m (`docs/FIDELITY_REALITY.md`).
+2. **J1 — detail parity for the walkable ring** (in parallel): ground paint (walks, drives,
+   lawns, curb strips) and per-tile lamp pools outside the slice + for streamed tiles;
+   street-tree species/scale; signage from real names.
+3. **J2 rest** — vertex AO, banded roofs, rounded props, bay glazing, garages.
+4. **Traversal spike** — ride any vehicle / fast movement abilities at ~25 m/s: stress-tests
+   LOAD_R, worker throughput, DEM latency before life is layered on top. Core-gameplay seed.
+5. **K — life + ambience** per region style (vehicle mix + driving side already in `styles.ts`).
+6. **L full** — US LiDAR roof planes (`bd.rp`), national LoD2 adapters.
+
+The original list below is kept for rationale.
+
+## Phases, in order (original)
 
 - **H1 — World tile service + real-lite pipeline.** Cloudflare worker (Overpass proxy + R2
   + attribution footer in UI); client `w-<cx>_<cz>` specs; Overpass JSON → `TileJson`

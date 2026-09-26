@@ -20,7 +20,32 @@ export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 //   landmarks  skyline-only features beyond the backdrop: {id,name,lat,lon,h,ground}
 //   imagery    false to skip the aerial roof-colour pass (default: USDA NAIP where it has coverage)
 export const REGIONS = {
+  // The one world: Sea Bright through Monmouth Beach as a single bake (shared origin = Sea
+  // Bright's, so its spawn is unchanged); everything beyond streams real-lite tiles.
+  // Built offline from the two towns' fetches: `node scripts/merge-raw.mjs --region=shore`
+  // then `npm run bake -- --region=shore` (or fetch it fresh over the union bbox).
+  shore: {
+    name: 'Sea Bright',
+    title: 'The Jersey Shore',
+    sub: 'a watercolor walk · Sea Bright to Monmouth Beach, New Jersey — and beyond',
+    tz: 'America/New_York',
+    slice: { s: 40.316, w: -74.005, n: 40.372, e: -73.963 },
+    // w = -74.04: the union rectangle's NW corner (Highlands hills) lies outside both towns'
+    // fetches — past this edge the tile service streams real cells instead.
+    backdrop: { s: 40.27, w: -74.04, n: 40.475, e: -73.94 },
+    origin: { lat: 40.362, lon: -73.9755 },
+    oceanEdge: 'e',
+    spawn: { on: 'Ocean Avenue', near: { road: 'Rumson Road', bridge: true, extreme: 'e' }, offset: [40, 215], toward: 'south', sidewalk: 7.5 },
+    roads: { main: 'Ocean Avenue', bridge: 'Rumson Road' },
+    shoreLabel: 'the beach',
+    landmarks: [
+      { id: 'sandy-hook-light', name: 'Sandy Hook Lighthouse', lat: 40.46173, lon: -74.00197, h: 31, ground: 3 },
+    ],
+    mergeFrom: ['seabright', 'monmouthbeach'],
+  },
+  // Merge sources for `shore` (hidden: fetched per town, never listed as separate worlds).
   seabright: {
+    hidden: true,
     name: 'Sea Bright',
     title: 'Sea Bright, N.J.',
     sub: 'a watercolor walk · Monmouth County, New Jersey',
@@ -37,6 +62,7 @@ export const REGIONS = {
     ],
   },
   monmouthbeach: {
+    hidden: true,
     name: 'Monmouth Beach',
     title: 'Monmouth Beach, N.J.',
     sub: 'a watercolor walk · Monmouth County, New Jersey',
@@ -56,7 +82,7 @@ export const REGIONS = {
 
 // Region selection: `--region=<id>` argv flag wins, then REGION env var, else 'seabright'.
 const arg = process.argv.find((a) => a.startsWith('--region='))?.split('=')[1];
-export const REGION = arg ?? process.env.REGION ?? 'seabright';
+export const REGION = arg ?? process.env.REGION ?? 'shore';
 export const CFG = REGIONS[REGION];
 if (!CFG) {
   console.error(`unknown region '${REGION}' — known: ${Object.keys(REGIONS).join(', ')}`);

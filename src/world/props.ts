@@ -2,7 +2,7 @@
 // that paints warm pools on the ground at night), trees from WorldCover, moored boats, lifeguard stands.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import type { World, WorldJson, Road, Box } from './data';
+import { detailBox, type World, type WorldJson, type Road, type Box } from './data';
 import type { WalkWorld } from '../player/collision';
 import { propMaterial, colored } from '../render/propMaterial';
 import { U, GLSL_NOISE } from '../render/shared';
@@ -10,6 +10,7 @@ import { makeRng, hash01 } from '../core/rng';
 import { carGeo } from '../sim/life';
 import type { Mailbox, Door } from './buildings';
 import { makeCanvas } from './canvas';
+import { activeStyle, pickWeighted } from './styles';
 
 type P = [number, number];
 const unpackPts = (f: number[]): P[] => {
@@ -112,12 +113,35 @@ export function haloPoints(pts: THREE.Vector3[], size: number, color: THREE.Colo
   return pts3;
 }
 
+// A clipped hedge run (3.4 × 0.85 × 0.55 m, same footprint the old box had): overlapping
+// squashed blobs with a gently lumpy skin and a flatter top — reads as foliage, not a crate.
+let hedgeCache: THREE.BufferGeometry | null = null;
+function hedgeGeo() {
+  if (hedgeCache) return hedgeCache.clone();
+  const parts: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 5; i++) {
+    const g = new THREE.IcosahedronGeometry(0.5, 1);
+    const pos = g.attributes.position;
+    for (let k = 0; k < pos.count; k++) {
+      const x = pos.getX(k), y = pos.getY(k), z = pos.getZ(k);
+      const n = 1 + 0.12 * Math.sin(x * 9.1 + i * 1.7) * Math.cos(z * 7.3 + y * 5.1);
+      pos.setXYZ(k, x * 0.95 * n, Math.min(y, 0.36) * 0.95 * n, z * 0.6 * n);
+    }
+    g.computeVertexNormals();
+    parts.push(g.translate((-1.36 + i * 0.68) * 0.86, 0.42, 0).scale(1, 1, 1));
+  }
+  hedgeCache = mergeGeometries(parts.map((p) => p.toNonIndexed()));
+  hedgeCache.computeVertexNormals();
+  return hedgeCache.clone();
+}
+
 export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P; w: number }[], extras: { mailboxes?: Mailbox[]; doors?: Door[]; ctx?: WorldJson; box?: Box } = {}) {
   const { json, terrain } = world;
-  const S = json.slice;
-  // Placement gate: the tile's own slice box (region slice for baked tiles, cell+margin for
-  // synthetic ones — so props render past the baked grids where synth tiles live).
-  const inSlice = (x: number, z: number, m = 0) => x > S.x0 - m && x < S.x1 + m && z > S.z0 - m && z < S.z1 + m;
+  const S = json.slice; // region slice: lamp-map compositor box
+  // Placement gate: the detail zone (the backdrop for baked tiles, cell+margin for synthetic
+  // and real-lite ones — so props render everywhere a tile is mounted at detail).
+  const DZ = detailBox(json);
+  const inSlice = (x: number, z: number, m = 0) => x > DZ.x0 - m && x < DZ.x1 + m && z > DZ.z0 - m && z < DZ.z1 + m;
   const group = new THREE.Group();
   group.name = 'props';
   const rng = makeRng(7);
@@ -255,7 +279,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // the rest. Without one (legacy single-tile worlds) it covers slice + margin as before.
   const zone = extras.box ?? { x0: S.x0 - 250, z0: S.z0 - 250, x1: S.x1 + 250, z1: S.z1 + 250 };
   const G = 9;
-  const green = [0x4d6a31, 0x5b7536, 0x6a823e, 0x55703a, 0x72893f, 0x3f5a2e];
+  const look = activeStyle(); // Phase I: region species mix, density and greens
+  const green = look.greens;
   // Nearest point on any nearby road — used to slide mistagged street trees off the carriageway.
   const roadEdge = (x: number, z: number) => {
     let best: { x: number; z: number; w: number; d: number } | null = null;
@@ -283,11 +308,12 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       const cov = terrain.coverAt(jx, jz);
       const beachy = terrain.oceanDistAt(jx, jz) < 90;
       const pr = cov === 10 ? 0.85 : beachy ? 0 : cov === 50 ? 0.035 : cov === 30 ? 0.05 : cov === 20 ? 0.3 : 0;
-      if (rng.float() > pr) continue;
+      if (rng.float() > pr * look.treeDensity) continue;
       if (terrain.sdfAt(jx, jz) < 3 || paved(jx, jz) || walk.blocked(jx, jz, 2.2)) continue;
       const g = terrain.heightAt(jx, jz);
-      const conifer = rng.float() < (terrain.oceanDistAt(jx, jz) < 500 ? 0.55 : 0.2);
-      const k = conifer ? (rng.float() < 0.6 ? 3 : 4) : rng.float() < 0.55 ? 0 : rng.float() < 0.75 ? 1 : 2;
+      // species from the region's weights; coastal cells lean to wind-shaped pines everywhere
+      const coastPine = terrain.oceanDistAt(jx, jz) < 500 && look.trees[3] > 0.5 && rng.float() < 0.35;
+      const k = coastPine ? 3 : pickWeighted(look.trees, rng.float());
       const h = k === 2 ? 2.4 + rng.float() * 1.6 : (k >= 3 ? 7 : 8) + rng.float() * 7;
       const s = h / 10;
       const m = new THREE.Matrix4().compose(V(jx, g - 0.2, jz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(s * (0.85 + rng.float() * 0.3), s * (k === 2 ? 1.3 : 1), s * (0.85 + rng.float() * 0.3)));
@@ -405,8 +431,11 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // ---------- lifeguard stands along the beach, facing the sea ----------
   const stands: THREE.Matrix4[] = [];
   const standAt: [number, number][] = [];
-  for (let z = S.z0 + 60; z < S.z1 - 60; z += 12)
-    for (let x = S.x0 + 60; x < S.x1 - 60; x += 3) {
+  const SZ = extras.box
+    ? { x0: Math.max(DZ.x0 + 60, extras.box.x0), z0: Math.max(DZ.z0 + 60, extras.box.z0), x1: Math.min(DZ.x1 - 60, extras.box.x1), z1: Math.min(DZ.z1 - 60, extras.box.z1) }
+    : { x0: DZ.x0 + 60, z0: DZ.z0 + 60, x1: DZ.x1 - 60, z1: DZ.z1 - 60 };
+  for (let z = SZ.z0; z < SZ.z1; z += 12)
+    for (let x = SZ.x0; x < SZ.x1; x += 3) {
       if (extras.box && (x < extras.box.x0 || x >= extras.box.x1 || z < extras.box.z0 || z >= extras.box.z1)) continue;
       const d = terrain.sdfAt(x, z);
       if (!(terrain.oceanDistAt(x, z) < 60 && d > 22 && d < 30) || standAt.some(([sx, sz]) => Math.hypot(sx - x, sz - z) < 140)) continue;
@@ -661,7 +690,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         group.add(im);
       }
       if (hedgeM.length) {
-        const im = new THREE.InstancedMesh(colored(new THREE.BoxGeometry(3.4, 0.85, 0.55).translate(0, 0.48, 0), 0xffffff), propMaterial({ foliage: true }), hedgeM.length);
+        const im = new THREE.InstancedMesh(colored(hedgeGeo(), 0xffffff), propMaterial({ foliage: true }), hedgeM.length);
         hedgeM.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, hedgeC[i]); });
         im.layers.enable(1);
         group.add(im);

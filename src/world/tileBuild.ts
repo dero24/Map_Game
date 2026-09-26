@@ -13,7 +13,7 @@ import { canvasBitmap } from './canvas';
 export async function buildTile(tj: TileJson, terrain: Terrain, spec: TileSpec, idBase: number, lite = false): Promise<BuiltTile> {
   const world: World = { json: tj as unknown as WorldJson, terrain };
   const w = new RecWalk(terrain, tj.backdrop);
-  const bld = buildBuildings(world, idBase);
+  const bld = buildBuildings(world, idBase, lite);
   // Only owner-flagged entities emit — margin context exists solely for builders that need it.
   const pj = { ...tj, roads: prim(tj.roads), areas: prim(tj.areas), lines: prim(tj.lines), points: prim(tj.points) } as unknown as WorldJson;
   const world2: World = { json: pj, terrain };

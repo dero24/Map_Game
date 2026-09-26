@@ -2,7 +2,7 @@
 // Freeze hunter: drives the real game in headless Chromium for a while — walking in through front doors,
 // up and down staircases, along streets, flying, skipping hours — and reports frame-loop stalls, long
 // hitches and any page errors.
-//   node tools/soak.mjs [--region=seabright] [--seconds=120] [--port=5191]
+//   node tools/soak.mjs [--region=shore] [--seconds=120] [--port=5191]
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { resolve, dirname } from 'node:path';
@@ -12,7 +12,7 @@ import net from 'node:net';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const { chromium } = createRequire(resolve(ROOT, '../../shot-harness/package.json'))('playwright');
 const args = Object.fromEntries(process.argv.slice(2).map((a) => { const m = a.match(/^--([^=]+)(?:=(.*))?$/); return m ? [m[1], m[2] ?? true] : [a, true]; }));
-const PORT = Number(args.port ?? 5191), REGION = String(args.region ?? 'seabright'), SECONDS = Number(args.seconds ?? 120);
+const PORT = Number(args.port ?? 5191), REGION = String(args.region ?? 'shore'), SECONDS = Number(args.seconds ?? 120);
 const portOpen = (port) => new Promise((res) => { const s = net.connect({ port, host: 'localhost' }, () => (s.destroy(), res(true))); s.on('error', () => res(false)); s.setTimeout(400, () => (s.destroy(), res(false))); });
 
 let server = null;

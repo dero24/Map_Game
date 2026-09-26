@@ -146,6 +146,14 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
           if (wd > 0.0) alb = mix(alb, texture2D(uPaintD, ud).rgb, wd);
         }
         else alb = texture2D(uPaintB, (xz - uPaintBBox.xy) * uPaintBBox.zw).rgb;
+        // Phase I biome wash: greens dry toward straw/ochre (arid, Mediterranean summers),
+        // saturate (tropics) or darken/cool (boreal) — painted land cover stays the source.
+        float greenness = clamp((alb.g - max(alb.r, alb.b)) * 6.0, 0.0, 1.0);
+        float lum0 = dot(alb, vec3(0.3, 0.59, 0.11));
+        vec3 straw = vec3(lum0 * 1.32, lum0 * 1.12, lum0 * 0.72) * (0.92 + 0.16 * fbm(xz * 0.03 + 7.0));
+        alb = mix(alb, straw, uBiome.x * greenness);
+        alb = mix(alb, alb * vec3(0.9, 1.08, 0.86), uBiome.y * greenness);
+        alb = mix(alb, alb * vec3(0.82, 0.88, 0.86), uBiome.z * greenness);
         float n1 = vnoise(xz * 0.9), n2 = fbm(xz * 0.06);
         alb *= 0.9 + 0.16 * n1 + 0.12 * (n2 - 0.5);
         // distant woods: lumpy canopy

@@ -2,6 +2,68 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-26 (b) — One consistent world, Phase I style, realistic houses
+
+**User direction:** land in Sea Bright, walk to Monmouth Beach and beyond with no detail cliff;
+houses should look real (shape, detail, windows, variety); one world to build on.
+
+**One world (`shore`).** Diagnosis: each town had its own origin + bake, and the bake gave
+full detail only inside `slice` — the whole backdrop ring (Rumson, Long Branch, Highlands)
+was baked `lod` (simplified outlines, minor roads dropped, no addresses) and the runtime gated
+doors/porches/interiors/props on the region slice. Fix, in three parts:
+- `scripts/merge-raw.mjs` unions already-fetched regions (`mergeFrom`) — OSM by type+id,
+  Overture by id, NAIP roof colours, WorldCover mosaic on ESA's 1/12000° grid, terrain tiles —
+  with a coverage assertion. `shore` = Sea Bright → Monmouth Beach, Sea Bright's origin +
+  spawn; the towns are `hidden` merge sources (never listed); old `?region=` links land in it.
+- Bake detail zone = backdrop (`D`, `CFG.detail === 'slice'` restores the old behaviour);
+  tiles carry `detail`; builders use `detailBox(json)` (buildings/props/signs). The slice keeps
+  its two real jobs: the 2 m terrain lattice and the lamp compositor box.
+- Past the backdrop, real-lite + DEM stream as before; DEM is now on whenever a tile service
+  exists (baked regions included); baked cells never read a neighbour's DEM overhang.
+Found en route: the IndexedDB cache fingerprint ignored tile *content* — a re-bake with the
+same layout served stale tiles forever. Bake stamps `bakeId` (FNV over tile payloads).
+
+**Dev plumbing.** `vite.config.ts`: `/__tiles/*` proxies to whichever port `wrangler dev`
+took (8787/8788/8789) — the client probes it first (same-origin: no port guessing, no COEP
+friction; the in-app browser blocks cross-port fetches). `/__shot` sink +
+`tools/inpage-montage.js` (see AGENTS.md) — the shot harness for agents without Playwright.
+
+**Phase I (first cut).** `src/world/styles.ts`: `regionStyle(lat,lon)` → climate (coarse
+Köppen from latitude + continental boxes), world region, family (clapboard / brick / nordic /
+stucco / adobe / tropical / eastasian), palettes, roof habits, window vocabulary, tree species
++ greens + density, biome ground wash, driving side. `meta.style` on virtual manifests; baked
+regions derive it from the origin (NJ → `temperate/clapboard/R/na`, bit-identical palettes);
+the key reaches the tile worker at init. Consumers: building palettes, synth roof mix, tree
+scan, ground `uBiome`, facade `uWinStyle`. Upgrade path: a real Köppen/WorldCover raster
+behind the same function. Tests: `tests/styles.test.ts` (NJ unchanged; Oslo nordic, Windhoek
+adobe, London brick+left, Tokyo/Sydney left, Rome Mediterranean…; recipe determinism).
+
+**Houses (J2-a, pulled forward — user priority).** `src/world/recipe.ts`: every per-building
+decision = pure f(bd.s, style, fc/rc): facade/roof/trim colour, siding (clapboard / cedar
+shingle / brick / stucco / board-and-batten → fraction of `vInfo.y`), roof material (asphalt /
+standing-seam / clay tile / slate / shake → `vInfo.w` on roof faces), pitch, dormers, bay,
+downspouts, chimney type; mapped brick-coloured walls get brick siding; aerial roof colours
+clamp into a roofing gamut. Geometry: foundation plinth + ledge, parapet coping + cornice,
+gabled dormers fitted into the street-facing roof plane (pure pre-pass → 1½-storey only when
+one fits), downspouts with kick-outs, exterior side chimneys (door-aware, clearance-tested),
+canted bay windows, lumpy clipped hedges. Roof priors: houses ~97% pitched (bake + realTile,
+tile cache v4→v5); skeleton failures fall back to the other style, then a convex-hull hip
+with walls rising to meet it. Regional sash vocabulary in the window shader.
+
+**Verified:** typecheck; 67/67 tests (vitest-API shim — vitest can't load its Windows rolldown
+binding from this sandbox); montages `shots/houses-1..4.jpg`, `dormers.jpg`, `oneworld.jpg`;
+in-game roof audit 4.4% flat houses (= data). Expert review 7/10 → all must-fixes applied
+(REVIEWER.md). `npm run build` still needs a run on the dev machine.
+
+**Re-plan (why):** the fidelity research (massing/storeys/roof silhouette carry recognition;
+facade colour is forgiven under paint) and the reviewer agree — **L-lite before J2**: measured
+heights/storeys (Overture `height`/`num_floors` already in the raw join, 3D-GloBFP where
+missing) matter more than more asset polish. **J1 in parallel**: the ring is walkable now, so
+ground paint (walks, drives, lawns) and per-tile lamp pools outside the slice are the
+"keep walking" contract. Then J2 rest, then a **vehicle/traversal spike** (25 m/s stresses
+LOAD_R, worker throughput, DEM latency — and powers "ride any vehicle"/flight abilities),
+then K life. Gameplay (vehicles, abilities) rides on the traversal spike, not before it.
+
 ## 2026-09-25 — Fidelity reality check (research, no code)
 
 - User asked: MSFS shows "even my home house" via satellite imagery — should we chase

@@ -7,7 +7,8 @@ import { paintGround } from './world/groundPaint';
 import { buildGround, terrainTextures } from './world/ground';
 import { setGndMaterial } from './world/pack';
 import { buildWater } from './world/water';
-import type { Door, Footprint } from './world/buildings';
+import { activeBuilding, type Door, type Footprint } from './world/buildings';
+import { styleFor, setActiveStyle } from './world/styles';
 import { buildSky, skyUniforms } from './world/sky';
 import { LifeClient, buildLifeBase, buildLifeInit } from './sim/life';
 import { Ambience } from './audio/ambience';
@@ -27,10 +28,25 @@ const CAPTURE = params.has('capture');
 // real-lite tile service base (the H1 worker). Dev convenience: when the page runs on
 // localhost with no explicit ?tiles=, assume the local wrangler dev worker — teleporting
 // past the bake edge and ?at= then just work. ?tiles=off disables; prod never defaults.
-const TILES = params.get('tiles') === 'off' ? '' : (params.get('tiles') ?? (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? 'http://localhost:8787' : ''));
+// ?tiles=<url> is explicit; ?tiles=off disables. On localhost with neither, probe the usual
+// `wrangler dev` ports (8787, or 8789 when 8787 is taken) before the world is set up — so the
+// open world and the streaming past the bake just work, and a dead worker costs one probe.
+const LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+const TILES_PARAM = params.get('tiles');
+let TILES = TILES_PARAM === 'off' ? '' : TILES_PARAM ?? '';
+async function probeLocalTiles(): Promise<string> {
+  // The dev server proxies /__tiles → whichever port `wrangler dev` took (vite.config.ts).
+  const via = `${location.origin}/__tiles`;
+  const ok = await fetch(`${via}/health`, { signal: AbortSignal.timeout(2500) }).then((r) => r.ok, () => false);
+  if (ok) return via;
+  const ports = [8787, 8788, 8789]; // `vite preview` has no proxy — try the worker directly
+  const hits = await Promise.all(ports.map((p) => fetch(`http://localhost:${p}/health`, { signal: AbortSignal.timeout(1500) }).then((r) => (r.ok ? `http://localhost:${p}` : ''), () => '')));
+  return hits.find((h) => h) ?? '';
+}
 const $ = (id: string) => document.getElementById(id)!;
 
 async function main() {
+  if (TILES_PARAM === null && LOCAL) TILES = await probeLocalTiles();
   // Surface fatal errors on-screen — on a phone there is no console to open.
   {
     const show = (msg: string) => {
@@ -42,7 +58,9 @@ async function main() {
     window.addEventListener('unhandledrejection', (e) => show('rejection: ' + (e.reason?.message ?? String(e.reason))));
   }
   const regions = await loadRegions();
-  let REGION = params.get('region') ?? regions?.[0]?.id ?? 'seabright';
+  // One consistent world: an unknown ?region= (old per-town links) lands in the listed one.
+  const asked = params.get('region');
+  let REGION = asked && (!regions?.length || regions.some((r) => r.id === asked)) ? asked : regions?.[0]?.id ?? 'shore';
   // Deep link: ?at=lat,lon — pick the baked region whose backdrop contains the point
   // (nearest origin as fallback), then spawn there / at the nearest real front door.
   const atM = params.get('at')?.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
@@ -114,6 +132,12 @@ async function main() {
   world.terrain.patchCell = manifest.cell;
   const { json } = world;
   const meta = json.meta;
+  // Phase I: the region's look — meta.style when the manifest pins one, else derived from the
+  // origin. Set before any tile builds (the stream hands the key to the tile worker at spawn).
+  const regionLook = styleFor(meta, manifest.origin);
+  setActiveStyle(regionLook);
+  activeBuilding.uWinStyle.value.set(regionLook.windowCode, regionLook.shutterP, 0, 0);
+  U.uBiome.value.set(...regionLook.biome);
   const townName = meta?.name ?? 'town';
   const shoreLabel = meta?.shoreLabel ?? 'the beach';
   const tz = meta?.tz ?? 'America/New_York';
@@ -156,16 +180,13 @@ async function main() {
   walk.bounds = { x0: -4e6, z0: -4e6, x1: 4e6, z1: 4e6 };
   const interiors = new Interiors(walk);
   worldRoot.add(interiors.group);
-  const stream = new TileStream(base, manifest, world.terrain, walk, interiors, worldRoot, TILES || manifest.tilesUrl || '', terrBin, VIRTUAL);
-  // The localhost auto-default is a convenience, not a trap: if no worker answers,
-  // quietly go fully procedural instead of spamming dead fetches per cell.
-  if (!params.get('tiles') && TILES)
-    fetch(`${TILES}/health`, { signal: AbortSignal.timeout(4000) })
-      .then((r) => { if (!r.ok) throw new Error(String(r.status)); })
-      .catch(() => {
-        stream.setTilesBase('');
-        toast('local tile service isn\'t running — staying procedural (start it with: npm run worker)');
-      });
+  // DEM patches for every streamed cell (w-/s-) whenever a tile service exists — past a baked
+  // region's backdrop the resident terrain is just its clamped edge, so hills need the patch too.
+  const tilesBase = TILES || manifest.tilesUrl || '';
+  const stream = new TileStream(base, manifest, world.terrain, walk, interiors, worldRoot, tilesBase, terrBin, !!tilesBase);
+  // The localhost auto-default was probed before setup: no worker answered → procedural past the bake.
+  if (TILES_PARAM === null && LOCAL && !TILES)
+    setTimeout(() => toast('local tile service isn\'t running — past the bake the world stays procedural (cd worker && npx wrangler dev)'), 0);
   stream.onTile = (a) => paint.addWalks(a.walks);
   const plans = stream.plans;
   const bld = {

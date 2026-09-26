@@ -145,3 +145,43 @@ s→w swap, coarse tiers get free real-mountain silhouettes (kept deliberately).
 flat→hill pop reads badly, comment-vs-code drift cleanup.
 **Player-found (new, not from this review):** window-sill/door decal flicker at
 approach — cosmetic, queued.
+
+---
+
+### 2026-09-26 — One World + Phase I style + house realism (J2-a)
+**Verdict:** 7/10 — NOT PASSED at review time (3 must-fix); all three + the key should-fixes
+were applied the same session (see below). Architecture right; new house features were
+visibly misfiring in the montages.
+**Reads real:** Sea Bright / N. Monmouth Beach street views are the most convincing yet —
+raised post-Sandy houses on pilings with stairs, centre-hall colonial with chimney, hip
+bungalows, shutters, painted sash windows. Recipe is pure f(bd.s, style, fc/rc); detailBox
+kills the permanent low-detail ring; bakeId in the cache fingerprint; style key reaches the
+worker; NJ palettes/pitch bit-identical.
+**Reads fake:** Rumson read as a motel/trailer park (flat boxes, 40 m ranch) — real Rumson is
+big pitched colonials under oaks; Long Branch has no walks/drives (outside slice paint);
+ground is one undifferentiated wash; lollipop trees on 5–6 m bare trunks; every roof sage/teal;
+only 1 of 5 "dormer" frames showed a dormer.
+**Must-fix (all applied):**
+1. ~~Side chimneys painted as concrete block~~ — `fo` 99 put the whole stack under the
+   foundation band; now `fo = 0` (brick-coded wall, faces < 2 m carry no windows).
+2. ~~Side chimney on the street/door gable, collider walls off the stoop~~ — now placed after
+   the door: never the door wall, prefers the gable facing away from the street, clearance
+   test against neighbours (`rings.hit`) and roads.
+3. ~~Dormers promised but not delivered~~ — pure `planDormers` pre-pass on the roof; the
+   1½-storey massing + steep pitch only apply when ≥1 dormer fits, else the house is rebuilt
+   full-storey with the style pitch; dormers ≥ 2.1 m wide and flagged (len+1000) so windowAt
+   never drops their window.
+**Should-fix applied:** porch roofs carry the recipe roof material (were `round(fo)` → random
+metal/tile); convex-hull hip roof for outlines the skeleton rejects (walls rise to meet it) —
+houses only go flat when the data says so (~4.4%, measured in-game); lite (coarse-ring)
+builds skip all detail geometry again (`buildBuildings(…, lite)`); baked cells never sample a
+neighbour's DEM overhang (`Terrain.baked`); merge-raw asserts backdrop coverage + clamps the
+WorldCover mosaic (shore backdrop trimmed to w −74.04 / e −73.94 — the union's NW corner had
+no data); aerial roof colours clamped into a roofing gamut (`roofGamut`); hedge run 3.4 m.
+**Open (tracked):** per-tile lamp pools for the now-walkable ring (J1); ground paint (walks,
+drives, lawns) outside the slice (J1); lollipop trees → street-tree species/scale; bay side
+glazing; bakeId ignores terrain.bin; old `?region=` links → `?at=`.
+**Plan re-order (reviewer + fidelity research agree):** must-fixes → **L-lite** (measured
+heights/storeys: Overture height/num_floors, 3D-GloBFP) ∥ **J1** (ground paint + lamps for the
+whole backdrop) → J2 → vehicle/traversal spike (stress LOAD_R/worker/DEM at 25 m/s) → K.
+Silhouette/storeys drive recognition at 50–300 m; asset polish on wrong massing is wasted.

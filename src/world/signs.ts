@@ -1,7 +1,7 @@
 // Lettering from the map: street-name blades on poles where differently named streets meet, shop names
 // over storefronts, house numbers beside front doors. All text is drawn once into a canvas atlas.
 import * as THREE from 'three';
-import type { World } from './data';
+import { detailBox, type World } from './data';
 import type { SignSpec } from './buildings';
 import type { WalkWorld } from '../player/collision';
 import { paintMaterial } from '../render/shared';
@@ -89,7 +89,7 @@ class SignMesher {
 
 export function buildSigns(world: World, specs: SignSpec[], walk: WalkWorld) {
   const { json, terrain } = world;
-  const S = json.slice;
+  const S = detailBox(json);
   const atlas = new Atlas();
   const m = new SignMesher();
 

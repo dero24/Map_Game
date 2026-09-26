@@ -8,6 +8,7 @@ import type { Building, Point, Road, TileJson, TileSpec } from './data';
 import { propMaterial } from '../render/propMaterial';
 import { buildGrid } from './ground';
 import { pointInRing } from './realTile';
+import { activeStyle } from './styles';
 
 // Region seed: stable hash of the manifest id (same bake → same synthetic world).
 export function regionSeed(id: string): number {
@@ -121,7 +122,9 @@ export function synthTile(spec: TileSpec, seed: number, terrain: { sdfAt(x: numb
     if (lots.some((o) => Math.hypot(o.x - cx, o.z - cz) < o.r + rr)) return;
     if (!ring.every(([x, z]) => land(x, z))) return; // corner lots can't hang over water
     lots.push({ x: cx, z: cz, r: rr });
-    const roof = k === 'commercial' ? (vh(id, 11, seed) < 0.7 ? 'flat' : 'gable') : vh(id, 11, seed) < 0.6 ? 'gable' : vh(id, 11, seed) < 0.85 ? 'hip' : 'flat';
+    const mix = activeStyle().roofMix; // regional roof habit (gable / hip / rest flat)
+    const rv = vh(id, 11, seed);
+    const roof = k === 'commercial' ? (rv < 0.7 ? 'flat' : 'gable') : rv < mix[0] ? 'gable' : rv < mix[0] + mix[1] ? 'hip' : 'flat';
     const h = k === 'commercial' ? 5 + vh(id, 13, seed) * 5 : k === 'shed' ? 2.6 : 3.4 + vh(id, 13, seed) * 5.6;
     buildings.push({ r: ints(ring), h, k: k as Building['k'], roof: roof as Building['roof'], s: vh(id, 17, seed) * 4294967296, own: own(cx, cz) });
     // An entrance point on the street face biases the door toward the street, like OSM data does.

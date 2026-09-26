@@ -1,9 +1,19 @@
 # map_game — watercolor walks in real places
 
 - Play: `npm run dev` → http://localhost:5173 (click "Begin walking"). Prod: `npm run build && npm run preview` (:4173).
-- Regions: `?region=<id>` selects the town; the intro lists all baked regions. Adding a town = one
-  `REGIONS` entry in `scripts/config.mjs`, then `npm run fetch -- --region=<id>` and `npm run bake -- --region=<id>`.
-  Region spec fields (slice/backdrop/origin/tz/oceanEdge/spawn/roads/shoreLabel/landmarks) are documented there.
+- One world: the game ships a single baked region, `shore` (Sea Bright → Monmouth Beach, Sea Bright's
+  origin/spawn); everything past its backdrop streams real-lite tiles. `seabright`/`monmouthbeach` are
+  `hidden` merge sources: `node scripts/merge-raw.mjs --region=shore` unions their raw fetches (coverage
+  asserted), then `npm run bake -- --region=shore`. Unknown `?region=` values land in the listed world.
+  Adding a region = one `REGIONS` entry in `scripts/config.mjs` + fetch + bake. Spec fields
+  (slice/backdrop/origin/tz/oceanEdge/spawn/roads/shoreLabel/landmarks/mergeFrom/hidden/detail) are documented there.
+- Detail zone: the bake keeps full detail across the whole backdrop; builders gate on
+  `detailBox(json)` (= `json.detail ?? json.slice`). The slice only sets the 2 m terrain lattice and
+  the lamp-map compositor box. `manifest.bakeId` (tile content hash) is part of the IDB cache key.
+- Style + recipe: `src/world/styles.ts` (`regionStyle(lat,lon)`, `meta.style`, `setActiveStyle` on
+  main + tile worker) and `src/world/recipe.ts` (`recipeFor(bd, style)` — every per-building look
+  decision, pure f(bd.s, style, fc/rc)). Facade shader codes: siding in the fraction of `vInfo.y`
+  (kind + code/10), roof material in `vInfo.w` on roof faces, region window vocabulary in `uWinStyle`.
 - Deep links: `?at=lat,lon` picks the region whose slice (then backdrop, then nearest origin) contains
   the point and spawns there — on a doorstep it places you 2.2 m outside the nearest building's front door.
 - Typecheck: `npm run typecheck`. Tests: `npm test` (vitest: rng, sun ephemeris, LifeSim determinism/behaviour,
@@ -21,9 +31,10 @@
   porch clearance and sign intersections). `WalkWorld.beginScope/endScope/removeScope` scopes all collision per tile;
   interiors register under `"tile:idx"` keys and unregister on unload. The ambient-life worker re-inits when the
   loaded set settles (or after 4 s). Regions without a manifest fall back to a single-tile world.json.
-- Real-lite tiles (open world, `worker/`): `cd worker && npx wrangler dev` → `http://localhost:8787`. On localhost
-  the game auto-defaults `tiles` to that base (`?tiles=` explicit overrides, `?tiles=off` disables; a `/health`
-  probe falls back to pure procedural with a toast if no worker answers). `?at=lat,lon` beyond every baked
+- Real-lite tiles (open world, `worker/`): `cd worker && npx wrangler dev` (port 8787, or 8788/8789 if taken).
+  In dev the Vite server proxies `/__tiles/*` to whichever port answers and the game probes that first
+  (`?tiles=` explicit overrides, `?tiles=off` disables; no worker → procedural past the bake + a toast).
+  Tile cache key: worker R2 `t/v5`, client `&v=5` — bump both when realTile output changes. `?at=lat,lon` beyond every baked
   backdrop builds a virtual manifest (origin snapped to 1/64° so players share cell/R2 keys) —
   `w-<cx>_<cz>` specs stream OSM→TileJson while `s-*` synth twins mount instantly and upgrade in place.
   Terrain: worker route `GET /dem/<z>/<x>/<y>.png` proxies Terrarium (S3 has no CORP headers — module-worker

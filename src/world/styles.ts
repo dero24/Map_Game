@@ -1,0 +1,228 @@
+// Phase I — regional style engine. regionStyle(lat, lon) → how a place *looks*: climate, the
+// building family (materials + palettes + roof habits + window vocabulary), tree species and
+// greens, ground dryness, driving side. Pure data lookups on coordinates — never place names
+// (AGENTS.md rule): a coarse Köppen approximation from latitude + continental-scale boxes
+// (deserts, Mediterranean coasts, continental interiors), and a coarse world-region code.
+//
+// It is deliberately coarse (±a few hundred km at climate borders). The upgrade path is a real
+// raster — Beck et al. Köppen-Geiger (CC BY 4.0) at ~0.5° baked to a byte grid + WorldCover —
+// behind the same function; every consumer keeps its signature.
+//
+// Every feeder uses it: baked regions derive their style from the manifest origin (or an
+// explicit meta.style), virtual ?at= manifests emit meta.style, and the tile worker receives
+// the key at init — so synth, hybrid, real-lite and baked tiles in one session agree.
+
+export type Climate = 'tropical' | 'arid' | 'mediterranean' | 'temperate' | 'continental' | 'boreal' | 'polar';
+export type Family = 'clapboard' | 'brick' | 'nordic' | 'stucco' | 'adobe' | 'tropical' | 'eastasian';
+export type WorldRegion = 'na' | 'latam' | 'eu' | 'mena' | 'africa' | 'sasia' | 'easia' | 'seasia' | 'oceania' | 'north';
+
+export interface RegionStyle {
+  key: string; // `${climate}/${family}/${L|R}` — what meta.style stores
+  climate: Climate;
+  family: Family;
+  region: WorldRegion;
+  driveLeft: boolean;
+  facadeHouse: number[]; facadeShop: number[]; facadeLarge: number[];
+  roof: number[]; flatRoof: number[];
+  trim: number; // default window/door casing colour
+  pitch: [number, number]; // roof pitch range (rise/run) for pitched roofs
+  roofMix: [number, number]; // synth lots: P(gable), P(hip), rest flat
+  windowCode: number; // 0 N.American sash+shutters · 1 European casement · 2 Mediterranean shuttered · 3 Nordic · 4 deep-set small
+  shutterP: number; // share of houses with shutters (windowCode 0/2)
+  trees: [number, number, number, number, number]; // weights: round deciduous, oak, shrub, pine, spruce
+  treeDensity: number; // multiplier on the procedural tree scan
+  greens: number[]; // canopy palette
+  biome: [number, number, number, number]; // ground: dry (0..1), lush, cold/dark, reserved
+}
+
+type Box = [number, number, number, number]; // latMin, latMax, lonMin, lonMax
+const inside = (lat: number, lon: number, b: Box) => lat >= b[0] && lat <= b[1] && lon >= b[2] && lon <= b[3];
+const any = (lat: number, lon: number, bs: Box[]) => bs.some((b) => inside(lat, lon, b));
+
+// Coarse climate boxes (continental scale). Order matters: deserts, then Mediterranean.
+const DESERT: Box[] = [
+  [15, 31, -17, 33], // Sahara
+  [12, 32, 34, 59], // Arabia
+  [25, 38, 52, 71], // Iran / Afghanistan / Pakistan plateau
+  [24, 30, 68, 75.5], // Thar
+  [37, 48, 51, 75], // Central Asian steppe-desert
+  [36, 45.5, 75, 112], // Taklamakan / Gobi
+  [-31, -19, 117, 143], // Australian interior
+  [-29, -17, 11.5, 25], // Namib / Kalahari
+  [2, 12, 40, 51.5], // Horn of Africa
+  [24, 37.5, -117.5, -103], // US Southwest / N. Mexico
+  [-30, -4, -81.5, -69.5], // Atacama / coastal Peru
+  [-50, -38, -71, -63], // Patagonian steppe
+];
+const MED: Box[] = [
+  [30, 45.5, -10, 37], // Mediterranean basin
+  [32, 42.5, -124.5, -117.5], // California
+  [-38, -30, -74, -70], // central Chile
+  [-36, -30, 114, 120], // SW Australia
+  [-35, -32.5, 17.5, 21], // Western Cape
+];
+const LEFT: Box[] = [
+  [49.8, 61, -11, 2], // Britain + Ireland
+  [24, 46, 128, 146], // Japan
+  [5, 37, 60, 93], // Indian subcontinent (+ Sri Lanka, Nepal, Bangladesh)
+  [-11, 21, 95, 141], // Thailand / Malaysia / Indonesia (Myanmar drives right — tolerated)
+  [-35, -8, 11.5, 41], // southern Africa
+  [-48, -9, 112, 179], // Australia + New Zealand
+  [-4, 5, 29, 42], // Kenya / Uganda / Tanzania
+];
+
+export function worldRegion(lat: number, lon: number): WorldRegion {
+  if (lat > 60 || lat < -60) return 'north';
+  if (lon >= -170 && lon < -50) return lat > 23 ? 'na' : 'latam';
+  if (lon >= -50 && lon < -30) return 'latam';
+  if (lat >= 35 && lon >= -30 && lon < 45) return 'eu';
+  if (lat >= 45 && lon >= 45) return lat >= 50 || lon < 90 ? 'eu' : 'easia';
+  if (lat >= 12 && lon >= -30 && lon < 63) return 'mena';
+  if (lon >= -30 && lon < 52) return 'africa';
+  if (lon >= 60 && lon < 92 && lat >= 5) return 'sasia';
+  if (lat < -10 && lon >= 110) return 'oceania';
+  if (lat < 18 && lon >= 92) return 'seasia';
+  if (lon >= 92) return 'easia';
+  return 'mena';
+}
+
+export function climateAt(lat: number, lon: number): Climate {
+  const L = Math.abs(lat);
+  if (L > 66.5 || lat < -60 || inside(lat, lon, [59, 84, -74, -11])) return 'polar'; // + Greenland
+  if (any(lat, lon, DESERT)) return 'arid';
+  if (any(lat, lon, MED)) return 'mediterranean';
+  if (L < 23.5) return 'tropical';
+  if (lat > 24 && lat < 27.5 && lon > -82.5 && lon < -79.5) return 'tropical'; // S. Florida
+  // Continental interiors: maritime west coasts stay temperate.
+  const na = lon >= -170 && lon < -50, eura = lon >= 20 && lon < 180;
+  if (lat >= 55 && (na || (eura && !(lon < 30 && lat < 63)))) return 'boreal';
+  if (lat >= 60) return 'boreal'; // Scandinavia north of the maritime rim
+  if (lat >= 58.5 && lon >= 8 && lon < 32) return 'boreal'; // Oslo/Stockholm/Helsinki — east of Norway's maritime coast
+  if (na && lat >= 41.5 && lon > -120) return 'continental';
+  if (eura && lat >= 45 && lon >= 25) return 'continental';
+  if (lat >= 35 && lat < 45 && lon >= 110 && lon < 131) return 'continental'; // N. China / Korea
+  return 'temperate';
+}
+
+function familyOf(c: Climate, r: WorldRegion): Family {
+  if (c === 'polar' || c === 'boreal') return r === 'na' ? 'clapboard' : 'nordic';
+  if (c === 'arid') return 'adobe';
+  if (c === 'mediterranean') return r === 'na' ? 'stucco' : 'stucco';
+  if (c === 'tropical') return r === 'latam' || r === 'africa' ? 'stucco' : 'tropical';
+  if (r === 'na' || r === 'oceania') return 'clapboard';
+  if (r === 'eu') return c === 'continental' ? 'nordic' : 'brick';
+  if (r === 'easia') return 'eastasian';
+  return 'stucco';
+}
+
+// ---- palettes (sRGB). clapboard is the original shore-town set: baked NJ must not change. ----
+const PAL: Record<Family, Pick<RegionStyle, 'facadeHouse' | 'facadeShop' | 'facadeLarge' | 'roof' | 'flatRoof' | 'trim' | 'pitch' | 'roofMix' | 'windowCode' | 'shutterP'>> = {
+  clapboard: {
+    facadeHouse: [0xf2eee4, 0xe8e2d4, 0xf4f1ea, 0xbdb8ad, 0xa39f95, 0xaec2d1, 0x93adc2, 0xc9d8e0, 0xb7c1a3, 0xeee0aa, 0xdac9a6, 0xe9c7b3, 0xbbdace, 0x55657b, 0x5d5f63, 0xd9d4c4, 0x8f7c66],
+    facadeShop: [0xa65a44, 0x3f8f8a, 0xf0dc9a, 0xf3efe6, 0xc9d9e2, 0x7fa0b8, 0xe1b48f, 0x9a4b50, 0xd8d0bf],
+    facadeLarge: [0xe9e4d8, 0xd3cbbb, 0xbfc7cc, 0xc9b99f, 0xf1ede4],
+    roof: [0x6b6b6b, 0x55585c, 0x3f4246, 0x7a6252, 0x8a4b3b, 0x5d6b58, 0x9aa3a8, 0x4b4f57, 0x74706a],
+    flatRoof: [0x8c8a85, 0x9d9a92, 0x77757a, 0xa9a59a],
+    trim: 0xf3f0e8, pitch: [0.5, 0.82], roofMix: [0.6, 0.25], windowCode: 0, shutterP: 0.45,
+  },
+  brick: {
+    facadeHouse: [0x9c5a44, 0xa8674f, 0x8a4f3c, 0xb07a5c, 0x7e4a3a, 0xe9e1cf, 0xd8cdb8, 0xbdb7ab, 0xc98f6d, 0xa3624b],
+    facadeShop: [0x2f4a3a, 0x6b2b24, 0xe9e1cf, 0x23364a, 0x9c5a44, 0xd8cdb8, 0x3a2e46],
+    facadeLarge: [0xa8674f, 0xd8cdb8, 0x8a4f3c, 0xc9bfae, 0xe4dccb],
+    roof: [0x5a5d63, 0x4a4d52, 0x8e4a36, 0xa25a3f, 0x6d4b3e, 0x3f4247],
+    flatRoof: [0x7d7b77, 0x8c8a85, 0x6f6d6a],
+    trim: 0xf1ede2, pitch: [0.75, 1.05], roofMix: [0.7, 0.2], windowCode: 1, shutterP: 0.04,
+  },
+  nordic: {
+    facadeHouse: [0x8f2f25, 0x9b3a2c, 0xd9a441, 0xefece4, 0xe8d28a, 0x7d8fa0, 0x6f8a6a, 0xf1ede2, 0xc9b27a, 0x5f6f7c],
+    facadeShop: [0xefece4, 0x8f2f25, 0x2f4a5a, 0xd9a441, 0x6f8a6a],
+    facadeLarge: [0xe8e2d4, 0xd9c79a, 0xbfc5c8, 0xa9b3b8, 0xefe6cf],
+    roof: [0x3a3c40, 0x2f3134, 0x8a3a2c, 0x4a4d52, 0x5a4a40],
+    flatRoof: [0x6f6d6a, 0x5c5b59],
+    trim: 0xf6f3ea, pitch: [0.7, 1.0], roofMix: [0.85, 0.1], windowCode: 3, shutterP: 0.0,
+  },
+  stucco: {
+    facadeHouse: [0xf4efe6, 0xefe7d6, 0xe3c08a, 0xd99a6c, 0xe6b8a8, 0xf0dc9e, 0x9fc0d8, 0xf6f1e8, 0xdcc3a0, 0xc97f5a],
+    facadeShop: [0xf4efe6, 0xe3c08a, 0x9fc0d8, 0xd99a6c, 0x6f9a8a, 0xf0dc9e],
+    facadeLarge: [0xf1ece2, 0xe6d7bd, 0xd8c6a8, 0xefe4cf, 0xcbbca4],
+    roof: [0xb45a3c, 0xa84e34, 0xc0673f, 0x9c4a32, 0xb8704e],
+    flatRoof: [0xd8cdb8, 0xc9bca4, 0xe0d6c2],
+    trim: 0xf6f2ea, pitch: [0.35, 0.55], roofMix: [0.25, 0.4], windowCode: 2, shutterP: 0.55,
+  },
+  adobe: {
+    facadeHouse: [0xd8b98c, 0xcfa878, 0xe2cfa6, 0xc08a5e, 0xefe8da, 0xd9c3a0, 0xb9936a, 0xe8dcc2],
+    facadeShop: [0xefe8da, 0xd8b98c, 0x8fb0b8, 0xc08a5e, 0xe2cfa6],
+    facadeLarge: [0xe2cfa6, 0xd8c6a8, 0xefe4cf, 0xcdb48c],
+    roof: [0xb8704e, 0xa86a4a, 0x9c7a5a],
+    flatRoof: [0xd8c3a0, 0xcbb38c, 0xe0cfae, 0xbfa37c],
+    trim: 0xe9ddc4, pitch: [0.3, 0.45], roofMix: [0.08, 0.07], windowCode: 4, shutterP: 0.0,
+  },
+  tropical: {
+    facadeHouse: [0xf2d06b, 0x8fcfc0, 0xf2a58e, 0xfaf7ef, 0x9ec7e8, 0xd6e89a, 0xe89a8e, 0xf6e7b8, 0x7fbfa8],
+    facadeShop: [0xf2d06b, 0x3f8f8a, 0xf2a58e, 0xfaf7ef, 0x9ec7e8],
+    facadeLarge: [0xf4efe6, 0xe9e4d8, 0xd8e4e0, 0xefe2c8],
+    roof: [0x9aa3a8, 0x8a4b3b, 0x5f7f6a, 0xa7473a, 0x7d8a90],
+    flatRoof: [0xc9c4ba, 0xb8b3a8, 0xd8d2c4],
+    trim: 0xfaf7ef, pitch: [0.35, 0.55], roofMix: [0.35, 0.45], windowCode: 2, shutterP: 0.3,
+  },
+  eastasian: {
+    facadeHouse: [0xe8e6e0, 0xcfcac0, 0xb8b4ab, 0xefece6, 0xd9d2c4, 0xa8a49c, 0xc9c0ae],
+    facadeShop: [0xefece6, 0xd9d2c4, 0x8a3a30, 0x2f3f4f, 0xe8e6e0],
+    facadeLarge: [0xe8e6e0, 0xd3d0c8, 0xbfbcb4, 0xc9c6be],
+    roof: [0x4a5058, 0x3d434b, 0x5a6068, 0x6b5a4a, 0x2f3438],
+    flatRoof: [0x9a9892, 0x8c8a85, 0xa9a7a0],
+    trim: 0xe9e6de, pitch: [0.45, 0.65], roofMix: [0.35, 0.45], windowCode: 1, shutterP: 0.0,
+  },
+};
+
+// Vegetation per climate. Tree kinds: round deciduous, oak, shrub, pine, spruce.
+const VEG: Record<Climate, Pick<RegionStyle, 'trees' | 'treeDensity' | 'greens' | 'biome'>> = {
+  temperate: { trees: [5.5, 2.5, 1, 1.4, 0.6], treeDensity: 1, greens: [0x4d6a31, 0x5b7536, 0x6a823e, 0x55703a, 0x72893f, 0x3f5a2e], biome: [0, 0, 0, 0] },
+  continental: { trees: [4, 2, 1, 2, 2.5], treeDensity: 1, greens: [0x4a6630, 0x56703a, 0x3f5a2e, 0x61793a, 0x4e6a3e], biome: [0.05, 0, 0.1, 0] },
+  boreal: { trees: [1, 0, 1, 3, 7], treeDensity: 1.2, greens: [0x3a5230, 0x2f4a2e, 0x46603a, 0x2e4630, 0x566e3e], biome: [0, 0, 0.35, 0] },
+  polar: { trees: [0, 0, 3, 0, 1], treeDensity: 0.15, greens: [0x5a6a48, 0x4e5e42, 0x66704e], biome: [0.25, 0, 0.55, 0] },
+  mediterranean: { trees: [2, 1.5, 3, 3.5, 0], treeDensity: 0.7, greens: [0x5f6f38, 0x6e7a3e, 0x55653a, 0x7a8045, 0x4a5a34], biome: [0.45, 0, 0, 0] },
+  arid: { trees: [0.3, 0, 6, 1, 0], treeDensity: 0.22, greens: [0x6e7442, 0x7d7a48, 0x5f6a3e, 0x8a8452], biome: [0.9, 0, 0, 0] },
+  tropical: { trees: [6, 1.5, 3, 0.2, 0], treeDensity: 1.25, greens: [0x3f7a2e, 0x4a8a34, 0x2f6a2a, 0x5a9a3a, 0x3a6e30], biome: [0, 0.6, 0, 0] },
+};
+
+const cache = new Map<string, RegionStyle>();
+
+/** The full style for a meta.style key (`climate/family/L|R`), or null if malformed. */
+export function styleByKey(key: string): RegionStyle | null {
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const [c, f, side, reg] = key.split('/');
+  if (!(c in VEG) || !(f in PAL)) return null;
+  const s: RegionStyle = { key, climate: c as Climate, family: f as Family, region: (reg as WorldRegion) || 'na', driveLeft: side === 'L', ...PAL[f as Family], ...VEG[c as Climate] };
+  cache.set(key, s);
+  return s;
+}
+
+export function regionStyle(lat: number, lon: number): RegionStyle {
+  const climate = climateAt(lat, lon);
+  const region = worldRegion(lat, lon);
+  const family = familyOf(climate, region);
+  const left = any(lat, lon, LEFT);
+  return styleByKey(`${climate}/${family}/${left ? 'L' : 'R'}/${region}`)!;
+}
+
+/** meta.style wins (lets a baked region pin its look); else derive from the origin. */
+export function styleFor(meta: { style?: string } | undefined | null, origin: { lat: number; lon: number }): RegionStyle {
+  return (meta?.style && styleByKey(meta.style)) || regionStyle(origin.lat, origin.lon);
+}
+
+// One region per page/worker — builders read the active style without threading it through
+// every signature. Set once at init (main thread + tile worker) before any tile builds.
+let active: RegionStyle = regionStyle(40.36, -73.97); // NJ shore = the original look
+export function setActiveStyle(s: RegionStyle) { active = s; }
+export function activeStyle(): RegionStyle { return active; }
+
+/** Weighted pick with a [0,1) draw — deterministic given the draw. */
+export function pickWeighted(w: readonly number[], r: number): number {
+  let sum = 0;
+  for (const v of w) sum += v;
+  let t = r * sum;
+  for (let i = 0; i < w.length; i++) if ((t -= w[i]) < 0) return i;
+  return w.length - 1;
+}
