@@ -59,9 +59,9 @@ async function tile(request, env, ctx, url, cx, cz) {
   const cache = caches.default;
   const hit = await cache.match(request);
   if (hit) return hit;
-  // v3: fills gained landuse/leisure rejection + interleaved emission — bump the object
-  // key so stale tile payloads can't be served past the edge TTL.
-  const okey = `t/v3/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
+  // v4: fills gained per-road rng + land masks + interior clamp — bump the object key
+  // so stale tile payloads can't be served past the edge TTL.
+  const okey = `t/v4/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
   const bucket = env.TILES ?? null; // binding may be absent under `wrangler dev` before the bucket exists
   if (bucket) {
     try {

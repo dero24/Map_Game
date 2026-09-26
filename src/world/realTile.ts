@@ -500,8 +500,7 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
     // a hamlet pushes the cell's raw count up.
     const sparse = ownRoadM >= 200 && ownBldgs < (ownRoadM / 1000) * 20;
     if (sparse) {
-      let rs = hashStr('fill:' + opts.id);
-      const rng = () => ((rs = (rs * 1664525 + 1013904223) >>> 0), rs / 4294967296);
+      const mkRng = (seed: number) => { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0), s / 4294967296); };
       const unflat = (f: number[]): P2[] => { const o: P2[] = []; for (let i = 0; i + 1 < f.length; i += 2) o.push([f[i] / 10, f[i + 1] / 10]); return o; };
       const rings = buildings.map((b) => unflat(b.r)); // existing footprints, metres
       const inRing = (xs: P2[][], ys: P2[][]) => (x: number, z: number) => xs.some((o) => pointInRing(x, z, o) && !ys.some((i) => pointInRing(x, z, i)));
@@ -520,6 +519,9 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       const siteLists: { ring: P2[]; cx: number; cz: number }[][] = [];
       for (const r of roads) {
         if (r.own === 0 || !FILLABLE.has(r.c)) continue;
+        // Per-road stream seeded by the road's own first vertex — an Overpass mirror
+        // serving elements in a different order can no longer perturb other roads' lots.
+        const rng = mkRng(hashStr(`fill/${opts.id}/r${r.p[0]}_${r.p[1]}`));
         const sites: { ring: P2[]; cx: number; cz: number }[] = [];
         let side = hashStr(`${opts.id}/${r.p[0]}`) & 1 ? 1 : -1;
         let carry = 0;
@@ -564,7 +566,7 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
           const seed = hashStr(`fill/${opts.id}/${Math.round(cx * 10)}_${Math.round(cz * 10)}`);
           const r4 = (seed >>> 8) % 100;
           buildings.push({
-            r: flat(ring), h: +(6.5 + rng() * 3).toFixed(1), k: 'house', s: seed,
+            r: flat(ring), h: +(6.5 + ((seed % 1000) / 1000) * 3).toFixed(1), k: 'house', s: seed,
             roof: r4 < 62 ? 'gable' : r4 < 94 ? 'hip' : 'flat',
             own: undefined, gen: 'fill',
           });

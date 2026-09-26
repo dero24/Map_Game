@@ -109,4 +109,15 @@ synth forever (accepted design, may revisit with idle-queue prefetch).
 element order still yields the same building seed; cache keys bumped `v2 → v3`.
 **Confirmed correct:** winding matches `ringArea` expectation; fills are plain `k:'house'`
 (doors/interiors/porches all work); `service`/`track` excluded from fill streets.
-**Still open:** none blocking. Round 2 pending.
+
+### 2026-09-25 — H3-lite Round 2: re-review of the fill fixes
+**Verdict:** 8.5/10 — no must-fix, no blocking should-fix. **Move to H2.**
+All four fixes landed correctly (round-robin fairness incl. unequal lists; land masks
+with proper fall-through for `landuse+building` ways; bucket-stamp kills the
+small-building-in-rect case; interior clamp is consistent with the emit rule).
+**Applied from polish:** per-road rng streams (true mirror-order independence — element
+ordering no longer perturbs lot positions) and height derived from `s` (no shared-rng
+draw at emit time). Cache v3→v4.
+**Open polish (accepted, post-H2):** `highway`-tagged plazas bypass masks; tangential
+graze vs large mapped buildings; cross-seam fill-vs-fill adjacency; wasted inner-ring
+collection. All rare-input.
