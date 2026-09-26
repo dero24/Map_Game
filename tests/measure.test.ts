@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { measureFootprint, obb, robustFit } from '../src/world/measure';
-import { LidarGrid, pullPush, mercToLocal, toMerc, candidates, depthFor, depthForDensity, projectLocal, unprojectLocal, type LidarIndex } from '../src/world/lidarCore';
+import { LidarGrid, pullPush, mercToLocal, toMerc, candidates, depthFor, depthForDensity, detectTrees, ringMask, projectLocal, unprojectLocal, type LidarIndex } from '../src/world/lidarCore';
 
 type P2 = [number, number];
 // A house: rectangle 2L×2W centred at (cx,cz) rotated by `a`, with a roof function of (u,v).
@@ -157,5 +157,46 @@ describe('lidarCore: coverage', () => {
     let s = 7;
     for (let n = 0; n < 1600; n++) { s = (s * 16807) % 2147483647; const x = (s % 4000) / 100; s = (s * 16807) % 2147483647; G.add(x, (s % 4000) / 100, 5, 2); }
     expect(G.surfaceFraction()).toBeGreaterThan(0.9);
+  });
+});
+
+describe('lidarCore: trees', () => {
+  const g = { x0: 0, z0: 0, res: 1, w: 80, h: 80 };
+  const box = { x0: 0, z0: 0, x1: 80, z1: 80 };
+  // three crowns (h, radius), a flat unmapped roof, a mapped house, a pole — with leafy noise
+  function scene() {
+    const H = new Float32Array(g.w * g.h);
+    let s = 3;
+    const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647 - 0.5);
+    const crowns = [[15, 15, 12, 4], [40, 20, 8, 3], [20, 55, 18, 6]];
+    for (let j = 0; j < g.h; j++) for (let i = 0; i < g.w; i++) {
+      const x = i + 0.5, z = j + 0.5;
+      let v = 0;
+      for (const [cx, cz, h, r] of crowns) {
+        const d = Math.hypot(x - cx, z - cz);
+        if (d < r * 1.3) v = Math.max(v, h * (1 - 0.45 * (d / r) ** 2) + rnd() * 1.2);
+      }
+      if (x > 55 && x < 70 && z > 50 && z < 62) v = 6.5; // unmapped flat roof
+      if (x > 50 && x < 62 && z > 8 && z < 18) v = 7 - 0.5 * Math.abs(z - 13); // mapped gable house
+      if (Math.abs(x - 70.5) < 0.6 && Math.abs(z - 30.5) < 0.6) v = 9; // pole
+      H[j * g.w + i] = v;
+    }
+    return H;
+  }
+  it('finds each crown once, with a sane radius, and nothing else', () => {
+    const house: [number, number][] = [[50, 8], [62, 8], [62, 18], [50, 18]];
+    const mask = ringMask(g, [house], 1);
+    const T = detectTrees(g, scene(), mask, box, true);
+    expect(T.length).toBe(3);
+    const big = T.find((t) => Math.hypot(t.x - 20, t.z - 55) < 2)!;
+    expect(big.h).toBeGreaterThan(16);
+    expect(big.r).toBeGreaterThan(3.5);
+    expect(big.r).toBeLessThan(8);
+  });
+  it('ringMask covers the footprint plus the pad', () => {
+    const m = ringMask(g, [[[10, 10], [20, 10], [20, 20], [10, 20]]], 1);
+    expect(m[15 * 80 + 15]).toBe(1);
+    expect(m[15 * 80 + 20]).toBe(1); // 0.5 m outside
+    expect(m[15 * 80 + 23]).toBe(0);
   });
 });

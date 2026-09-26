@@ -298,6 +298,14 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     }
     return best && best.d < 60 ? best : null;
   };
+  // LiDAR trees (lidar.ts): where the survey covered the ground, the real trees replace
+  // both the WorldCover scan and OSM tree points (they're the same trees, measured).
+  const LT = json.trees, LC = json.treeCov, TB = extras.box;
+  const lidarCovered = (x: number, z: number) => {
+    if (!LC || !TB) return false;
+    const I = Math.floor(((x - TB.x0) / (TB.x1 - TB.x0)) * 16), J = Math.floor(((z - TB.z0) / (TB.z1 - TB.z0)) * 16);
+    return I >= 0 && J >= 0 && I < 16 && J < 16 && LC[J * 16 + I] === 1;
+  };
   for (let z = zone.z0; z < zone.z1; z += G)
     for (let x = zone.x0; x < zone.x1; x += G) {
       // Only cells this tile owns — the scan zones of adjacent tiles overlap the margin, and
@@ -305,6 +313,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       // terrain lookups the old S±250 zone spent on cells owned by neighbours.
       if (extras.box && (x < extras.box.x0 || x >= extras.box.x1 || z < extras.box.z0 || z >= extras.box.z1)) continue;
       const jx = x + rng.float() * G, jz = z + rng.float() * G;
+      if (lidarCovered(jx, jz)) continue;
       const cov = terrain.coverAt(jx, jz);
       const beachy = terrain.oceanDistAt(jx, jz) < 90;
       const pr = cov === 10 ? 0.85 : beachy ? 0 : cov === 50 ? 0.035 : cov === 30 ? 0.05 : cov === 20 ? 0.3 : 0;
@@ -323,7 +332,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       trees.push({ m, c, k });
     }
   for (const p of json.points) {
-    if (p.c !== 'tree' || !inSlice(p.x, p.z)) continue;
+    if (p.c !== 'tree' || !inSlice(p.x, p.z) || lidarCovered(p.x, p.z)) continue;
     let { x, z } = p;
     if (paved(x, z)) {
       // OSM street trees are often tagged on the carriageway — slide to the near verge
@@ -337,6 +346,47 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       if (paved(x, z) || walk.blocked(x, z, 2.2)) continue;
     }
     trees.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(0.9, 0.9, 0.9)), c: new THREE.Color(rng.pick(green)), k: rng.float() < 0.6 ? 0 : 1 });
+  }
+
+  if (LT && TB) {
+    // model extents per kind (height to crown top, crown radius) — scale each to the measured tree
+    const DIM: [number, number][] = [[9.7, 3.6], [10.7, 4.8], [3.3, 1.9], [10.4, 2.4], [9.6, 1.7]];
+    const wsum = look.trees.reduce((a, b) => a + b, 0) || 1;
+    const conifer = (look.trees[3] + look.trees[4]) / wsum; // the region's conifer share
+    for (let i = 0; i + 3 < LT.length; i += 4) {
+      let x = LT[i] / 10, z = LT[i + 1] / 10;
+      const h = LT[i + 2] / 10, r = LT[i + 3] / 10;
+      if (x < TB.x0 || x >= TB.x1 || z < TB.z0 || z >= TB.z1) continue; // each tree is its own cell's
+      if (terrain.sdfAt(x, z) < 1) continue;
+      if (paved(x, z)) {
+        // crown tops over the street: plant the trunk on the verge beneath the edge of it
+        const e = roadEdge(x, z);
+        if (!e) continue;
+        const nx = x - e.x, nz = z - e.z, L = Math.hypot(nx, nz) || 1;
+        const out = e.w / 2 + 1.6 + rng.float() * 0.8;
+        x = e.x + (nx / L) * out;
+        z = e.z + (nz / L) * out;
+        if (paved(x, z)) continue;
+      }
+      if (walk.blocked(x, z, 0.6)) continue;
+      // species: shrubs are short; a narrow crown for its height reads conifer where the
+      // region grows them; otherwise the region's broadleaf mix (oaks for the broad ones)
+      const slim = r / h < 0.3;
+      let k: number;
+      if (h < 4.2) k = 2;
+      else if (slim && rng.float() < Math.min(1, conifer * 3)) k = look.trees[4] > look.trees[3] ? 4 : 3;
+      else if (!slim && conifer > 0.6 && rng.float() < 0.5) k = look.trees[4] > look.trees[3] ? 4 : 3;
+      else k = r / h > 0.42 || rng.float() < look.trees[1] / Math.max(0.01, look.trees[0] + look.trees[1]) ? 1 : 0;
+      const [mh, mr] = DIM[k];
+      // crowns never thinner than ~the model's own proportions: a lone 20 m oak measured
+      // at half-height reads narrow, and a stretched-thin model reads as a lollipop
+      const sy = h / mh, sr = Math.max(0.85 * sy, Math.min(1.8 * sy, r / mr));
+      const m = new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z) - 0.2, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(sr * (0.92 + rng.float() * 0.16), sy, sr * (0.92 + rng.float() * 0.16)));
+      const c = new THREE.Color(rng.pick(green));
+      if (k === 4) c.lerp(new THREE.Color(0x2e4630), 0.55);
+      else if (rng.float() < 0.12) c.lerp(new THREE.Color(0xb59a3e), 0.45);
+      trees.push({ m, c, k });
+    }
   }
 
   const blob = (r: number, y: number, ox: number, oz: number, seed: number, sy = 0.85) => {

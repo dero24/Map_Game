@@ -2,6 +2,49 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-26 (e) — Real trees from the same LiDAR
+
+**User direction:** yes, do trees next.
+
+**What.** The cell read that measures roofs now also plants the real trees. `lidarCore.ts`
+`detectTrees` finds individual crowns in the canopy height model:
+- **Crown tops** are local maxima of the 3×3-smoothed height-above-ground (the search window
+  grows with height).
+- **Crown radius** is where the profile falls to half height, averaged over 8 directions.
+- **Thinning** goes tallest-first so one crown never spawns two trees, with a 12k/cell cap.
+- **Roofs are masked out:** every mapped footprint (+1 m) via `ringMask`.
+- **Surveys that classify vegetation** (ASPRS 3/4/5) use a vegetation-only canopy.
+- **Surveys that don't** (NJ 2014, Denver DRCOG 2020 both read "unclassified") get two extra
+  rejects:
+  - *Smooth tops:* a 5×5 plane-fit residual under 0.3 m, or a plateau with 60 % of cells
+    within 25 cm of the top, is a roof, deck or tank.
+  - *Pencil-thin peaks:* a crown radius under 1.4 m on anything over 5 m is a pole or wire.
+
+**Caching.** Trees are cached in the cell's IDB record as lat/lon µ-degree offsets, so they
+don't depend on the world's origin. With them goes a 16×16 coverage map of where the survey
+saw the ground.
+
+**Placement** (`TileJson.trees`/`treeCov` → props):
+- Covered blocks replace both the WorldCover random scan and OSM tree points (the same trees,
+  measured). Uncovered blocks keep the old scan.
+- Crown tops over a street plant their trunk on the verge.
+- Size and shape come from the measurement: model scaled to the measured height, crown to the
+  measured radius (never thinner than 0.85× the model's proportions — thin reads as lollipop).
+- Species are a short/slim/broad heuristic over the region's style weights.
+
+**Verified.**
+- Cell counts: Sea Bright barrier cells 190–400 trees, wooded Rumson 5–9k, Denver 2.8–4.1k.
+- `shots/trees-on.jpg` vs `trees-off.jpg` (same poses):
+  - Rumson now reads as the wooded town it is, with tall street trees lining the lanes.
+  - Open lawns are open where the random scan had dotted them evenly.
+- 85 tests (crowns found once each; flat roof, mapped house and pole rejected; mask padding),
+  `tsc` clean.
+
+**Next:**
+- tree collision (trunks)
+- J1 ground paint for streamed tiles
+- vehicle polish
+
 ## 2026-09-26 (d) — Measured buildings for the lower 48 (USGS 3DEP LiDAR, in the browser)
 
 **User direction:** make buildings match real life, MSFS-style but open-licensed — for the whole

@@ -87,7 +87,9 @@
   IndexedDB cache per cell `lidar|vN|…`) → `lidarCore.ts` (pure: projections, index lookup,
   1 m HAG grids) → `measure.ts` (pure roof fits). `enrichTile` writes `h/eav/roof/ms` onto real
   buildings before `buildTile`; a late read flags `tile.late` → stream relief rebuild.
-  `?lidar=0` disables. Bump `VER` in lidar.ts whenever measure/raster logic changes.
+  The same read plants real trees (`detectTrees` → `TileJson.trees/treeCov` → props, which
+  keeps the WorldCover scan only where the survey has no coverage).
+  `?lidar=0` disables. Bump `VER` in lidar.ts whenever measure/raster/tree logic changes.
   Worker notes: page console + `__GAME__.stream.workerLog`.
 - Dev server is HTTP/1.1: slow `/__tiles` calls starve other same-origin fetches — anything the
   worker needs early ships in its bundle. Occluded browser panes stop rAF: montage with

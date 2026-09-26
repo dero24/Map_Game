@@ -60,6 +60,8 @@ export interface WorldJson {
   slice: Box;
   backdrop: Box;
   detail?: Box; // full-detail zone for builders (see detailBox)
+  trees?: number[]; // see TileJson.trees
+  treeCov?: number[];
   sources: Record<string, string | null>;
   terrain: { slice: LayerLayout; backdrop: LayerLayout };
   buildings: Building[];
@@ -201,6 +203,11 @@ export interface TileJson {
   areas: Area[];
   lines: Line[];
   points: Point[];
+  // LiDAR trees (lidar.ts, added in the worker): [x dm, z dm, height dm, crown radius dm]…
+  // local frame; treeCov = 16×16 blocks over `box` the survey covered (elsewhere props falls
+  // back to the WorldCover scan).
+  trees?: number[];
+  treeCov?: number[];
   // Real-lite (worker-served) tiles carry provenance; baked tiles don't emit these.
   attribution?: string;
   osmBase?: string | null;

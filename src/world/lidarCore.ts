@@ -168,18 +168,22 @@ export const lasClass = (rec: Uint8Array, off: number, pf: number) => (pf >= 6 ?
 // ASPRS: 2 ground, 7 low noise, 9 water, 17 bridge deck, 18 high noise.
 export const isGround = (c: number) => c === 2;
 export const isSurface = (c: number) => c !== 7 && c !== 9 && c !== 17 && c !== 18;
+export const isVeg = (c: number) => c >= 3 && c <= 5;
 
 // ---------- grids ----------
 export class LidarGrid {
   readonly w: number; readonly h: number;
   readonly top: Float32Array; // max surface Z per bin (−Inf = none) — canopy included
-
+  readonly veg: Float32Array; // max vegetation-classified Z (ASPRS 3/4/5; −Inf = none)
+  readonly any: Uint8Array; // bin saw any return at all (water and noise included) — coverage
   readonly gs: Float32Array; readonly gn: Uint16Array; // ground Z sum / count
+  n = 0; vegN = 0;
   constructor(readonly x0: number, readonly z0: number, readonly res: number, x1: number, z1: number) {
     this.w = Math.ceil((x1 - x0) / res);
     this.h = Math.ceil((z1 - z0) / res);
     this.top = new Float32Array(this.w * this.h).fill(-Infinity);
-
+    this.veg = new Float32Array(this.w * this.h).fill(-Infinity);
+    this.any = new Uint8Array(this.w * this.h);
     this.gs = new Float32Array(this.w * this.h);
     this.gn = new Uint16Array(this.w * this.h);
   }
@@ -187,14 +191,26 @@ export class LidarGrid {
     const i = Math.floor((x - this.x0) / this.res), j = Math.floor((z - this.z0) / this.res);
     if (i < 0 || j < 0 || i >= this.w || j >= this.h) return;
     const k = j * this.w + i;
+    this.any[k] = 1;
+    this.n++;
     if (isSurface(cls) && y > this.top[k]) this.top[k] = y;
     if (isGround(cls) && this.gn[k] < 65535) (this.gs[k] += y), this.gn[k]++;
+    if (isVeg(cls)) {
+      this.vegN++;
+      if (y > this.veg[k]) this.veg[k] = y;
+    }
+  }
+  // Does this survey classify vegetation? (Newer 3DEP QL1/QL2 deliveries do; older ones
+  // leave everything above ground as 1 "unclassified".)
+  vegClassified() {
+    return this.vegN > this.n * 0.03;
   }
   // Holes in this grid take another survey's bins (older data only where newer has none —
   // never a mix inside one bin, so a rebuilt house doesn't average with its predecessor).
   fillFrom(o: LidarGrid) {
     for (let k = 0; k < this.top.length; k++) {
-      if (this.top[k] === -Infinity && !this.gn[k]) (this.top[k] = o.top[k]), (this.gs[k] = o.gs[k]), (this.gn[k] = o.gn[k]);
+      if (this.top[k] === -Infinity && !this.gn[k]) (this.top[k] = o.top[k]), (this.veg[k] = o.veg[k]), (this.gs[k] = o.gs[k]), (this.gn[k] = o.gn[k]);
+      this.any[k] |= o.any[k];
     }
   }
   groundFraction() {
@@ -223,25 +239,49 @@ export class LidarGrid {
   // lowest non-ground return per bin (roof under leaf-off canopy) — noisier on the shore
   // survey (more low-confidence fits in every cell), so not used.
   hag(): Float32Array {
+    return this.above(this.top, pullPush(this.gs, this.gn, this.w, this.h));
+  }
+  // Canopy height from vegetation-classified returns only (buildings, wires and poles can't
+  // pose as trees) — null when the survey doesn't classify vegetation.
+  canopy(): Float32Array | null {
+    if (!this.vegClassified()) return null;
+    return this.above(this.veg, pullPush(this.gs, this.gn, this.w, this.h), false);
+  }
+  // Which of `n`×`n` blocks over `box` saw any return (land, water, noise): where a survey
+  // simply has no data, LiDAR can't be trusted to say "no tree here".
+  coverage(box: Box, n = 16): Uint8Array {
+    const out = new Uint8Array(n * n);
+    const bw = (box.x1 - box.x0) / n, bh = (box.z1 - box.z0) / n;
+    for (let J = 0; J < n; J++) for (let I = 0; I < n; I++) {
+      const i0 = Math.floor((box.x0 + I * bw - this.x0) / this.res), i1 = Math.floor((box.x0 + (I + 1) * bw - this.x0) / this.res);
+      const j0 = Math.floor((box.z0 + J * bh - this.z0) / this.res), j1 = Math.floor((box.z0 + (J + 1) * bh - this.z0) / this.res);
+      let c = 0, t = 0;
+      for (let j = Math.max(0, j0); j < Math.min(this.h, j1); j++) for (let i = Math.max(0, i0); i < Math.min(this.w, i1); i++) (t++), (c += this.any[j * this.w + i]);
+      out[J * n + I] = t && c > t * 0.25 ? 1 : 0;
+    }
+    return out;
+  }
+  private above(S: Float32Array, g: Float32Array, fill = true): Float32Array {
     const { w, h } = this;
-    const g = pullPush(this.gs, this.gn, w, h);
     const out = new Float32Array(w * h).fill(NaN);
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
       const k = j * w + i;
-      let t = this.top[k];
-      if (t === -Infinity) {
+      let t = S[k];
+      if (t === -Infinity && fill) {
         // the MEAN of known neighbours (the max would lift a sloped roof ~half a bin's rise)
         let s = 0, n = 0;
         for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
           const ii = i + di, jj = j + dj;
-          if (ii >= 0 && jj >= 0 && ii < w && jj < h && this.top[jj * w + ii] > -Infinity) (s += this.top[jj * w + ii]), n++;
+          if (ii >= 0 && jj >= 0 && ii < w && jj < h && S[jj * w + ii] > -Infinity) (s += S[jj * w + ii]), n++;
         }
         if (n) t = s / n;
       }
       if (t > -Infinity && !Number.isNaN(g[k])) out[k] = Math.max(0, t - g[k]);
+      else if (!fill && !Number.isNaN(g[k]) && this.any[k]) out[k] = 0; // seen, and not vegetation
     }
     return out;
   }
+
 }
 
 // Pull-push hole filling: average known values up a pyramid, then fill every unknown bin
@@ -279,9 +319,150 @@ export function pullPush(sum: Float32Array, cnt: Uint16Array, w: number, h: numb
 
 // A finished HAG raster in the local frame; `at` is a nearest-bin lookup (roof edges must
 // not blend with the ground beside them).
-export interface Hag { x0: number; z0: number; res: number; w: number; h: number; v: Float32Array; src: string; year: number }
+export interface Hag {
+  x0: number; z0: number; res: number; w: number; h: number;
+  v: Float32Array; // surface height above ground (roofs, canopy, everything)
+  chm: Float32Array | null; // vegetation-only canopy height, when the survey classifies it
+  cov: Uint8Array; // 16×16 coverage blocks over the cell box
+  src: string; year: number;
+}
 export function hagAt(g: Hag, x: number, z: number): number {
   const i = Math.floor((x - g.x0) / g.res), j = Math.floor((z - g.z0) / g.res);
   if (i < 0 || j < 0 || i >= g.w || j >= g.h) return NaN;
   return g.v[j * g.w + i];
+}
+
+// ---------- trees ----------
+export interface TreeHit { x: number; z: number; h: number; r: number }
+// Cells of the grid inside (or within `pad` m of) any ring — building footprints, so a roof
+// peak is never read as a tree top.
+export function ringMask(g: { x0: number; z0: number; res: number; w: number; h: number }, rings: [number, number][][], pad: number): Uint8Array {
+  const m = new Uint8Array(g.w * g.h);
+  for (const r of rings) {
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (const [x, z] of r) (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z));
+    const i0 = Math.max(0, Math.floor((x0 - pad - g.x0) / g.res)), i1 = Math.min(g.w - 1, Math.floor((x1 + pad - g.x0) / g.res));
+    const j0 = Math.max(0, Math.floor((z0 - pad - g.z0) / g.res)), j1 = Math.min(g.h - 1, Math.floor((z1 + pad - g.z0) / g.res));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const x = g.x0 + (i + 0.5) * g.res, z = g.z0 + (j + 0.5) * g.res;
+      let inside = false, d = Infinity;
+      for (let a = 0, b = r.length - 1; a < r.length; b = a++) {
+        const [xa, za] = r[a], [xb, zb] = r[b];
+        if (za > z !== zb > z && x < ((xb - xa) * (z - za)) / (zb - za) + xa) inside = !inside;
+        if (pad > 0) {
+          const dx = xb - xa, dz = zb - za, L2 = dx * dx + dz * dz || 1e-9;
+          const t = Math.max(0, Math.min(1, ((x - xa) * dx + (z - za) * dz) / L2));
+          d = Math.min(d, Math.hypot(x - xa - t * dx, z - za - t * dz));
+        }
+      }
+      if (inside || d <= pad) m[j * g.w + i] = 1;
+    }
+  }
+  return m;
+}
+
+// Individual trees from a canopy height model: local maxima of the lightly smoothed CHM
+// (window grows with height — big crowns have one top), crown radius from where the
+// profile falls to ~half height in 8 directions, then tallest-first thinning so one crown
+// never spawns two trees. `strict` (the survey doesn't classify vegetation, so the CHM is
+// every non-ground return): also reject smooth tops (unmapped roofs, sheds) and pencil-thin
+// peaks (poles, wires) — foliage is rough at 1 m, roofs are planes.
+export function detectTrees(g: { x0: number; z0: number; res: number; w: number; h: number }, H: Float32Array, blocked: Uint8Array, box: Box, strict: boolean, cap = 12000): TreeHit[] {
+  const { w, h } = g;
+  const at = (i: number, j: number) => (i < 0 || j < 0 || i >= w || j >= h ? NaN : H[j * w + i]);
+  // 3×3 mean (NaN-aware)
+  const S = new Float32Array(w * h);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    let s = 0, n = 0;
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+      const v = at(i + di, j + dj);
+      if (!Number.isNaN(v)) (s += v), n++;
+    }
+    S[j * w + i] = n ? s / n : 0;
+  }
+  const cand: TreeHit[] = [];
+  const i0 = Math.max(0, Math.floor((box.x0 - g.x0) / g.res)), i1 = Math.min(w, Math.ceil((box.x1 - g.x0) / g.res));
+  const j0 = Math.max(0, Math.floor((box.z0 - g.z0) / g.res)), j1 = Math.min(h, Math.ceil((box.z1 - g.z0) / g.res));
+  const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7071, 0.7071], [-0.7071, 0.7071], [0.7071, -0.7071], [-0.7071, -0.7071]];
+  for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) {
+    const k = j * w + i, s0 = S[k];
+    if (s0 < 2.5 || blocked[k]) continue;
+    const R = Math.max(2, Math.min(5, Math.round(1.2 + 0.12 * s0)));
+    let peak = true;
+    for (let dj = -R; dj <= R && peak; dj++) for (let di = -R; di <= R; di++) {
+      if ((!di && !dj) || di * di + dj * dj > R * R) continue;
+      const ii = i + di, jj = j + dj;
+      if (ii < 0 || jj < 0 || ii >= w || jj >= h) continue;
+      const v = S[jj * w + ii];
+      if (v > s0 || (v === s0 && jj * w + ii < k)) { peak = false; break; }
+    }
+    if (!peak) continue;
+    // true top: the raw max around the smoothed peak
+    let top = 0;
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const v = at(i + di, j + dj); if (v > top) top = v; }
+    // crown radius
+    let rs = 0;
+    for (const [dx, dz] of DIRS) {
+      let d = 1;
+      for (; d <= 12; d++) {
+        const v = at(Math.round(i + dx * d), Math.round(j + dz * d));
+        if (Number.isNaN(v) || v < top * 0.5 || v > top + 0.5) break;
+      }
+      rs += d - 0.5;
+    }
+    const r = Math.max(1, (rs / DIRS.length) * g.res);
+    if (strict) {
+      if (r < 1.4 && top > 5) continue; // a pole or a wire span, not a crown
+      // a plateau at the top (flat roof, deck, tank) — foliage never sits level to 25 cm
+      let near = 0, all = 0;
+      for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) {
+        if (di * di + dj * dj > 4) continue;
+        const v = at(i + di, j + dj);
+        if (Number.isNaN(v)) continue;
+        all++;
+        if (Math.abs(v - top) < 0.25) near++;
+      }
+      if (all && near / all >= 0.6) continue;
+      // plane fit over 5×5: foliage leaves a rough residual, a roof (even a ridge) doesn't
+      let n = 0, sx = 0, sz = 0, sv = 0, sxx = 0, szz = 0, sxv = 0, szv = 0;
+      for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) {
+        const v = at(i + di, j + dj);
+        if (Number.isNaN(v)) continue;
+        n++, (sx += di), (sz += dj), (sv += v), (sxx += di * di), (szz += dj * dj), (sxv += di * v), (szv += dj * v);
+      }
+      if (n >= 12) {
+        const mx = sx / n, mz = sz / n, mv = sv / n;
+        const bx = (sxv - n * mx * mv) / (sxx - n * mx * mx || 1), bz = (szv - n * mz * mv) / (szz - n * mz * mz || 1);
+        let e = 0;
+        for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) {
+          const v = at(i + di, j + dj);
+          if (Number.isNaN(v)) continue;
+          const f = mv + bx * (di - mx) + bz * (dj - mz);
+          e += (v - f) * (v - f);
+        }
+        if (Math.sqrt(e / n) < 0.3) continue;
+      }
+    }
+    cand.push({ x: g.x0 + (i + 0.5) * g.res, z: g.z0 + (j + 0.5) * g.res, h: top, r: Math.min(r, 0.75 * top + 1) });
+  }
+  // tallest first; a tree claims its crown — later peaks inside it are the same tree
+  cand.sort((a, b) => b.h - a.h || a.x - b.x || a.z - b.z);
+  const cell = 8, grid = new Map<number, TreeHit[]>();
+  const key = (cx: number, cz: number) => cx * 73856093 ^ cz * 19349663;
+  const out: TreeHit[] = [];
+  for (const t of cand) {
+    if (out.length >= cap) break;
+    const cx = Math.floor(t.x / cell), cz = Math.floor(t.z / cell);
+    let ok = true;
+    for (let a = -2; a <= 2 && ok; a++) for (let b = -2; b <= 2 && ok; b++) {
+      for (const o of grid.get(key(cx + a, cz + b)) ?? []) if (Math.hypot(o.x - t.x, o.z - t.z) < Math.max(1.8, 0.7 * o.r)) { ok = false; break; }
+    }
+    if (!ok) continue;
+    out.push(t);
+    const kk = key(cx, cz);
+    const l = grid.get(kk);
+    if (l) l.push(t);
+    else grid.set(kk, [t]);
+  }
+  return out;
 }

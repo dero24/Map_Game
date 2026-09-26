@@ -22,14 +22,14 @@ import INDEX from './lidar-index.json';
 import { kvGet, kvPut } from './cache';
 import { measureFootprint, type RoofFit } from './measure';
 import {
-  LidarGrid, boxLatLon, candidates, depthFor, depthForDensity, hagAt, lasClass, lasHeader, localToMercBox, mercToLocal, nodesIn, unprojectLocal,
-  type EptInfo, type Hag, type LidarIndex, type LidarProject,
+  LidarGrid, boxLatLon, candidates, depthFor, depthForDensity, detectTrees, hagAt, lasClass, lasHeader, localToMercBox, mercToLocal, nodesIn, projectLocal, ringMask, unprojectLocal,
+  type EptInfo, type Hag, type LidarIndex, type LidarProject, type TreeHit,
 } from './lidarCore';
 
 type LatLon = { lat: number; lon: number };
 // Cache key version: bump when measure.ts / the raster change; the index snapshot date is part
 // of the key too, so a regenerated index re-checks cells it once found uncovered.
-const VER = `lidar|v3|${(INDEX as unknown as { made?: string }).made ?? ''}|`;
+const VER = `lidar|v4|${(INDEX as unknown as { made?: string }).made ?? ''}|`;
 const PAD = 12; // m of raster beyond the cell: footprints straddling the edge still measure
 const MAX_PROJECTS = 3;
 const MAX_POINTS = 4e6; // per cell per survey — whole octree levels are dropped to stay under it
@@ -190,11 +190,16 @@ export async function hagFor(box: Box, cands: LidarProject[]): Promise<Hag | nul
     if (failed) throw failed;
     return null;
   }
-  return { x0: grid.x0, z0: grid.z0, res: grid.res, w: grid.w, h: grid.h, v: grid.hag(), src, year };
+  return { x0: grid.x0, z0: grid.z0, res: grid.res, w: grid.w, h: grid.h, v: grid.hag(), chm: grid.canopy(), cov: grid.coverage(box, 16), src, year };
 }
 
 // ---------- per-tile enrichment ----------
-interface Rec { src?: string; yr?: number; none?: 1; m: Record<string, number[]> } // [h, eav, rs, q] or [] (unmeasurable)
+interface Rec {
+  src?: string; yr?: number; none?: 1;
+  m: Record<string, number[]>; // building fits by centroid lat/lon: [h, eav, rs, q] or [] (unmeasurable)
+  t?: number[]; // trees: [Δlat µdeg, Δlon µdeg, h dm, crown r dm]… from the cell-key centre
+  tc?: number[]; // 16×16 coverage blocks (1 = the survey saw this ground)
+}
 const RS: RoofFit[] = ['flat', 'hip', 'gable', 'gableX', 'pitched'];
 const recMem = new Map<string, Rec>();
 const hagMem = new Map<string, Promise<Hag | null>>();
@@ -233,6 +238,30 @@ function bKey(b: Building) {
   const [lat, lon] = unprojectLocal(origin!, x / n / 10, z / n / 10);
   return `${lat.toFixed(5)},${lon.toFixed(5)}`;
 }
+// Trees ride in the record as lat/lon offsets (origin-independent), out to local ints on the tile.
+function packTrees(ck: string, T: TreeHit[]): number[] {
+  const [clat, clon] = ck.split(',').map(Number);
+  const out: number[] = [];
+  for (const t of T) {
+    const [lat, lon] = unprojectLocal(origin!, t.x, t.z);
+    out.push(Math.round((lat - clat) * 1e6), Math.round((lon - clon) * 1e6), Math.round(t.h * 10), Math.round(t.r * 10));
+  }
+  return out;
+}
+function unpackTrees(ck: string, P: number[]): number[] {
+  const [clat, clon] = ck.split(',').map(Number);
+  const out: number[] = [];
+  for (let i = 0; i + 3 < P.length; i += 4) {
+    const [x, z] = projectLocal(origin!, clat + P[i] / 1e6, clon + P[i + 1] / 1e6);
+    out.push(Math.round(x * 10), Math.round(z * 10), P[i + 2], P[i + 3]);
+  }
+  return out;
+}
+function applyTrees(tj: TileJson, ck: string, rec: Rec) {
+  if (!rec.t || !rec.tc) return;
+  tj.trees = unpackTrees(ck, rec.t);
+  tj.treeCov = rec.tc;
+}
 const measurable = (b: Building) => b.own !== 0 && !b.gen && b.k !== 'lighthouse' && b.k !== 'church' && b.roof !== 'tower';
 
 // Stored fit → Building. Flat: flat (a mapped skillion keeps its slope). Rectangles: the
@@ -263,7 +292,6 @@ const LATE = Symbol('late');
 export async function enrichTile(tj: TileJson, box: Box, wait: number | null, fetchOk = true): Promise<Enrich> {
   if (!lidarOn()) return 'none';
   const todo = tj.buildings.filter(measurable);
-  if (!todo.length) return 'none';
   const ck = cellKeyOf(box);
   let rec = recMem.get(ck);
   if (!rec) {
@@ -274,8 +302,9 @@ export async function enrichTile(tj: TileJson, box: Box, wait: number | null, fe
   if (rec?.none) return 'none';
   const keys = todo.map(bKey);
   if (rec) todo.forEach((b, i) => { const m = rec!.m[keys[i]]; if (m) apply(b, m); });
+  if (rec) applyTrees(tj, ck, rec);
   const missing = todo.filter((_, i) => !rec?.m[keys[i]]);
-  if (!missing.length || (rec && missing.length <= todo.length * 0.03)) return 'done';
+  if (rec?.t && (!missing.length || missing.length <= todo.length * 0.03)) return 'done';
   if (!fetchOk) return rec ? 'done' : 'none';
   // No survey near this cell at all (outside the US, open ocean): settle it now, before
   // queueing behind other cells' reads or racing a timer into a pointless rebuild.
@@ -290,7 +319,7 @@ export async function enrichTile(tj: TileJson, box: Box, wait: number | null, fe
   let gp = hagMem.get(ck);
   if (!gp) {
     const t0 = performance.now();
-    log(`lidar ${ck}: reading for ${missing.length} footprints`);
+    log(`lidar ${ck}: reading for ${missing.length} footprints${rec?.t ? '' : ' + trees'}`);
     hagMem.set(ck, (gp = limited(() => hagFor(box, cands))));
     void gp.then(() => hagDone.add(ck), () => {});
     void gp.then((g) => log(g ? `lidar ${ck}: ${g.src} read in ${((performance.now() - t0) / 1000).toFixed(1)} s` : `lidar ${ck}: no survey covers this cell`), () => {});
@@ -335,7 +364,16 @@ export async function enrichTile(tj: TileJson, box: Box, wait: number | null, fe
   }
   recMem.set(ck, rec);
   void kvPut(VER + ck, rec);
+  if (!rec.t) {
+    // Trees: the vegetation-classified canopy when the survey has one, else every
+    // non-ground return with roofs (mapped footprints + 1 m) masked and smooth tops rejected.
+    const blocked = ringMask(G, tj.buildings.map(ringOf), 1.0);
+    const T = detectTrees(G, G.chm ?? G.v, blocked, box, !G.chm);
+    rec.t = packTrees(ck, T);
+    rec.tc = Array.from(G.cov);
+  }
+  applyTrees(tj, ck, rec);
   const ok = Object.values(rec.m).filter((m) => m.length === 4 && m[3] >= 0.35).length;
-  log(`lidar ${ck}: ${ok}/${Object.keys(rec.m).length} buildings measured from ${G.src}`);
+  log(`lidar ${ck}: ${ok}/${Object.keys(rec.m).length} buildings measured, ${rec.t.length / 4} trees (${G.chm ? 'classified' : 'unclassified'} canopy) from ${G.src}`);
   return 'done';
 }
