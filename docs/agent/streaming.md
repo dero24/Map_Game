@@ -1,0 +1,82 @@
+# Streaming — tiles, workers, real-lite, DEM, LiDAR
+
+Read this when the task touches tile streaming, the tile worker, the Cloudflare worker,
+terrain/DEM, or the LiDAR measure pipeline.
+
+## Tile stream (`src/world/stream.ts`)
+
+- Runtime loads `manifest.json` + `terrain.bin` + `paint.json`, then streams
+  `tiles/<cx>_<cz>.json` (1024 m cells, 48 m margin) around the walker.
+- Margin entities carry `own: 0` (context only — buildings/roads/areas/lines/points are
+  emitted once by their owner tile; context copies exist for door snapping, porch clearance
+  and sign intersections).
+- `WalkWorld.beginScope/endScope/removeScope` scopes all collision per tile; interiors
+  register under `"tile:idx"` keys and unregister on unload.
+- The ambient-life worker re-inits when the loaded set settles (or after 4 s).
+- Regions without a manifest fall back to a single-tile world.json.
+
+## Tile worker + packing
+
+- Tile builds run in a module worker (`src/world/tile.worker.ts`): fetch + decode + builders +
+  interior plans + a recording scratch `WalkWorld` happen off-thread (`src/world/tileBuild.ts`,
+  shared with the no-worker fallback).
+- Results cross as `BuiltTile` records (`src/world/pack.ts`): attribute arrays + material
+  tags → `buildObject` recreates meshes/materials on mount; canvas work ships as
+  `ImageBitmap` (sign atlas; per-tile lamp pools are composited into `U.uLampMap` by the
+  stream); collision ships as `WalkOp`s replayed inside the scope; deck heights ship as exact
+  `DeckProfile` params (ramp/const/arch on the `Deck` interface).
+
+## Terrain packs
+
+- lod-0 tiles also fetch `tiles/<cx>_<cz>.terrain.bin` — a subgrid of the slice layer snapped
+  to the shared lattice (no margin). Virtual cells carry a DEM `TerrainLayer` in-band instead
+  (`BuiltTile.dem`).
+- `Terrain.registerPatch/removePatch` (called alongside the walk scope on mount/unload) makes
+  the pack the preferred sampling layer for its box; `patchFor` also checks the 8 neighbour
+  cells (DEM grids overhang by a pitch) so a not-yet-loaded neighbour doesn't leave a flat
+  shelf.
+- Region slice/backdrop layers stay resident, so unloaded areas still answer at region
+  resolution and every consumer keeps the same signatures.
+
+## Real-lite tiles (open world, `worker/`)
+
+- Dev: `cd worker && npx wrangler dev` (port 8787, or 8788/8789 if taken). In dev the Vite
+  server proxies `/__tiles/*` to whichever port answers and the game probes that first
+  (`?tiles=` explicit overrides, `?tiles=off` disables; no worker → procedural past the bake
+  + a toast).
+- Tile cache key: worker R2 `t/v5`, client `&v=5` — bump both when realTile output changes.
+- `?at=lat,lon` beyond every baked backdrop builds a virtual manifest (origin snapped to
+  1/64° so players share cell/R2 keys) — `w-<cx>_<cz>` specs stream OSM→TileJson while `s-*`
+  synth twins mount instantly and upgrade in place.
+- Deployed: live at `https://map-game-tiles.map-game-tiles.workers.dev` (R2 bound as TILES).
+  Production defaults to it; localhost prefers `wrangler dev` and falls back to it. Redeploy:
+  `cd worker && npx wrangler deploy`.
+- The shared transform is `src/world/realTile.ts` (bundled by the worker, unit-tested
+  client-side — keep its tag tables in sync with `scripts/bake.mjs`/`lib/colour.mjs`).
+
+## DEM terrain
+
+- Worker route `GET /dem/<z>/<x>/<y>.png` proxies Terrarium (S3 has no CORP headers —
+  module-worker fetches must go through the proxy).
+- `src/world/dem.ts` decodes z14 PNGs → 64×64 grid at 16 m pitch → a synthetic `TerrainLayer`
+  (heights f32-cm; sdf/flags derive from elevation — sea nodes = water).
+- The worker registers the patch before `buildTile` so props/ground/interiors sit on real
+  heights; `BuiltTile.dem` ships a copy to the main thread, which registers it under the cell
+  key with `demHolders` refcounting so the s→w swap can't drop terrain.
+- Placeholder tiles race DEM at 4 s; real tiles await it.
+
+## LiDAR measured buildings
+
+- `src/world/lidar.ts` — worker IO: bundled 3DEP project index, EPT octree reads from the
+  public `usgs-lidar-public` S3 bucket, laz-perf WASM in `src/vendor/laz-perf`, IndexedDB
+  cache per cell `lidar|vN|…`.
+- `lidarCore.ts` — pure: projections, index lookup, 1 m HAG grids. `measure.ts` — pure roof
+  fits.
+- `enrichTile` writes `h/eav/roof/ms` onto real buildings before `buildTile`; a late read
+  flags `tile.late` → stream relief rebuild.
+- The same read plants real trees (`detectTrees` → `TileJson.trees/treeCov` → props, which
+  keeps the WorldCover scan only where the survey has no coverage).
+- Runs in its own worker (`lidar.worker.ts` → `lidarCell.ts`: EPT reads, rasters, fits,
+  `detectBuildings`, `detectTrees`), spawned by the stream and wired to the tile worker with
+  a MessageChannel; `lidar.ts` (tile worker) owns the IDB cache and applies results.
+- `?lidar=0` disables. Bump `VER` in lidar.ts whenever measure/raster/tree logic changes.

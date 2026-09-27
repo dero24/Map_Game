@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { loadWorld, loadRegions, loadAtlas, manifestAsWorldJson, fromLatLon, type AtlasManifest, type Terrain, type World, type Road, type WorldJson } from './world/data';
+import { loadWorld, loadRegions, loadAtlas, manifestAsWorldJson, fromLatLon, toLatLon, type AtlasManifest, type Terrain, type World, type Road, type WorldJson } from './world/data';
 import { cachedFetchJson, initCache, manifestFingerprint } from './world/cache';
 import { TileStream } from './world/stream';
 import { virtualRegion } from './world/virtual';
@@ -15,6 +15,14 @@ import { buildSky, skyUniforms } from './world/sky';
 import { LifeClient, buildLifeBase, buildLifeInit } from './sim/life';
 import { Ambience } from './audio/ambience';
 import { Journal } from './ui/journal';
+import { Explore } from './world/explore';
+import { Atlas } from './ui/atlas';
+import { PhotoMode } from './ui/photo';
+import { Commissions } from './ui/commissions';
+import { Hints } from './ui/hints';
+import { Arrival } from './ui/arrival';
+import type { GameCtx } from './ui/ctx';
+import { modelName } from './player/vehicles';
 import { Interiors, type Plan } from './world/interiors';
 import { applyAtmosphere, type Weather } from './world/atmosphere';
 import { U } from './render/shared';
@@ -226,6 +234,10 @@ async function main() {
   };
   const journal = new Journal(world, paint.sliceCanvas, toast);
   await journal.load();
+  // Paint as you explore: a global, persistent record of where you've been (pencil elsewhere).
+  const explore = new Explore(json.origin);
+  if (CAPTURE) postParams.sketch = params.get('sketch') === '1'; // regression shots stay fully painted unless asked
+  else if (params.get('sketch') === '0') postParams.sketch = false;
   const walker = new Walker(walk, canvas);
 
   // Spawn: nearest point on `spawn.on` to an anchor point — the `extreme` end of `spawn.near.road`
@@ -337,7 +349,7 @@ async function main() {
     roads: () => stream.primRoads,
     tiles: () => stream.loaded.values(),
     driveLeft: regionLook.driveLeft,
-    enabled: () => $('intro').classList.contains('hidden') && !journal.open,
+    enabled: () => $('intro').classList.contains('hidden') && !atlas.open && !photo.active,
   });
   { const prev = stream.onTile; stream.onTile = (a) => { prev?.(a); vehicles.onTile(a); }; } // re-hide taken driveway cars on remount
 
@@ -345,6 +357,78 @@ async function main() {
   const life = new LifeClient(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors));
   worldRoot.add(life.group);
   lifeDirty = false; // init already covers the loaded ring
+
+  // ---- the sketchbook layer: photo mode, commissions, the atlas (map + search), hints, arrivals ----
+  const origin = new THREE.Vector3(); // render origin (floating origin; see reanchor)
+  const ndc = new THREE.Vector3(), im4 = new THREE.Matrix4(), ip = new THREE.Vector3();
+  const playerGroup = worldRoot.getObjectByName('player-vehicles');
+  const ctx: GameCtx = {
+    walker, camera, canvas, terrain: world.terrain, json, explore, origin: json.origin,
+    toLatLon: (x, z) => toLatLon(json.origin, x, z),
+    fromLatLon: (lat, lon) => fromLatLon(json.origin, lat, lon),
+    toNdc: (x, y, z) => ndc.set(x - origin.x, y, z - origin.z).project(camera),
+    roads: () => (stream.primRoads.length ? [...json.roads, ...stream.primRoads] : json.roads),
+    footprints: () => stream.footprints,
+    instances: (prefix, x, z, r) => {
+      const out: { x: number; y: number; z: number; name: string }[] = [];
+      const scan = (m: THREE.Object3D) => {
+        if (!m.name.startsWith(prefix)) return;
+        if ((m as THREE.InstancedMesh).isInstancedMesh) {
+          const im = m as THREE.InstancedMesh;
+          for (let i = 0; i < im.count; i++) {
+            im.getMatrixAt(i, im4);
+            if (im4.elements[0] === 0 && im4.elements[5] === 0) continue; // hidden / zero-scaled
+            ip.setFromMatrixPosition(im4).applyMatrix4(im.matrixWorld);
+            const wx = ip.x + origin.x, wz = ip.z + origin.z;
+            if (Math.abs(wx - x) < r && Math.abs(wz - z) < r && Math.hypot(wx - x, wz - z) < r) out.push({ x: wx, y: ip.y, z: wz, name: im.name });
+          }
+        } else {
+          m.getWorldPosition(ip);
+          const wx = ip.x + origin.x, wz = ip.z + origin.z;
+          if (Math.hypot(wx - x, wz - z) < r) out.push({ x: wx, y: ip.y, z: wz, name: m.name });
+        }
+      };
+      for (const t of stream.loaded.values()) for (const c of t.group.children) scan(c);
+      for (const c of life.group.children) scan(c);
+      if (playerGroup) for (const c of playerGroup.children) scan(c);
+      return out;
+    },
+    hour: () => timeParams.hour,
+    setHour: (h) => setHour(h),
+    env: () => ({ night: U.uNight.value, golden: U.uGolden.value, fog: weather.seaFog, oceanDist: world.terrain.oceanDistAt(walker.x, walker.z) }),
+    placeLabel: () => $('place').textContent || townName,
+    locality: () => arrival.locality || townName,
+    toast,
+    teleport: async (lat, lon) => { await teleportTo(lat, lon); arrival.greet(); },
+    sound: (k) => ambience?.ui(k),
+    uiOpen: () => !$('intro').classList.contains('hidden') || atlas.open,
+    lock: () => { if (!isTouch) walker.lock(); },
+  };
+  const commissions = new Commissions(ctx);
+  void commissions.load();
+  const photo = new PhotoMode(ctx, commissions);
+  const atlas = new Atlas(ctx, commissions, () => journal.stamps());
+  photo.onSaved = () => void atlas.refreshPages();
+  const arrival = new Arrival(ctx, { name: townName, sub: meta?.sub ?? '' });
+  const hints = new Hints();
+  let brushT = 0;
+  explore.onBloom = (n) => { if (n > 3 && brushT <= 0) { brushT = 1.6; ambience?.ui('brush'); } };
+  const VERB = { car: 'drive this', boat: 'take the helm of this', plane: 'fly this' } as const;
+  hints.add(() => { const e = vehicles.enterable(); return e ? { key: 'E', text: `${VERB[e.kind]} ${modelName(e.model)}`, pri: 10 } : null; });
+  hints.add(() => {
+    const P = interiors.activePlan;
+    if (!P || interiors.indoors || vehicles.driving) return null;
+    return Math.hypot(P.door.fx - walker.x, P.door.fz - walker.z) < 3.5 ? { text: 'walk through the door to go inside', pri: 5 } : null;
+  });
+  hints.add(() => {
+    for (const t of commissions.targets()) if (Math.hypot(t.x - walker.x, t.z - walker.z) < 60) return { key: 'P', text: `✧ ${t.title.replace(/^Paint /, 'paint ')}`, pri: 7 };
+    return null;
+  });
+  hints.add(() => (walkParams.fly && !vehicles.driving ? { key: 'F', text: 'land · Space / C up and down · wheel for speed', pri: 3, once: 'fly' } : null));
+  hints.add(() => (!vehicles.driving && !walkParams.fly && (world.terrain.oceanDistAt(walker.x, walker.z) < 70 || world.terrain.sdfAt(walker.x, walker.z) < 25) ? { key: 'B', text: 'call a boat', pri: 2, once: 'boat' } : null));
+  hints.add(() => (simTime > 12 ? { key: 'M', text: 'your map, sketchbook & commissions', pri: 1, once: 'atlas' } : null));
+  hints.add(() => (simTime > 45 ? { key: 'P', text: 'frame a view and paint it into your sketchbook', pri: 1, once: 'photo' } : null));
+  hints.add(() => (simTime > 100 ? { key: 'G', text: 'go anywhere — search a town or an address', pri: 1, once: 'go' } : null));
 
   const post = new WatercolorPost(renderer);
   const shadows = new SunShadows(renderer);
@@ -383,7 +467,7 @@ async function main() {
     }
   }
 
-  const gui = CAPTURE && !params.has('panel') ? null : buildPanel({ onResize: resize, onPreset: setHour, onRespawn: respawn, onResetExplore: () => void journal.reset() }, { name: townName, tz, respawn: spec?.on });
+  const gui = CAPTURE && !params.has('panel') ? null : buildPanel({ onResize: resize, onPreset: setHour, onRespawn: respawn, onResetExplore: () => { void journal.reset(); void explore.reset(); } }, { name: townName, tz, respawn: spec?.on });
 
   const weather: Weather = { cloud: weatherParams.cloud, seaFog: weatherParams.seaFog, haze: weatherParams.haze, wind: weatherParams.wind };
   let simTime = 0;
@@ -512,7 +596,7 @@ async function main() {
       // stroll the length of downtown so the map has something painted, then open it
       shots['ocean-golden']();
       for (let s = 0; s < 60; s++) journal.update(spawn.x - Math.sin(spawn.yaw) * s * 8, spawn.z - Math.cos(spawn.yaw) * s * 8, 0);
-      journal.toggle(true);
+      atlas.toggle(true, 'map');
       return n;
     }
     if (n.startsWith('top')) {
@@ -527,7 +611,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { walker, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream, vehicles, grass, setHour, teleport: teleportTo, get spawn() { return spawn; }, at: atPos };
+  (window as unknown as Record<string, unknown>).__GAME__ = { walker, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream, vehicles, grass, explore, commissions, photo, atlas, arrival, hints, setHour, teleport: teleportTo, get spawn() { return spawn; }, at: atPos };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);
@@ -542,7 +626,7 @@ async function main() {
     };
     for (const r of named) scan(r);
     for (const r of stream.primRoads) if (r.n && !r.lod) scan(r); // real streets carried by w-*/s-* tiles
-    $('place').textContent = bd < 40 ? best : world.terrain.oceanDistAt(walker.x, walker.z) < 60 ? shoreLabel : townName;
+    $('place').textContent = bd < 40 ? best : world.terrain.oceanDistAt(walker.x, walker.z) < 60 ? shoreLabel : arrival.locality || townName;
     if (walkParams.fly) $('place').textContent = `flying over ${$('place').textContent} · ${Math.round(walker.y)} m`;
     else if (interiors.indoors && interiors.activePlan) {
       const fp = stream.fpByKey.get(interiors.activeIndex!);
@@ -569,36 +653,26 @@ async function main() {
   $('loading').textContent = '';
   const startBtn = $('start') as HTMLButtonElement;
   startBtn.disabled = false;
-  startBtn.onclick = () => { $('intro').classList.add('hidden'); walker.lock(); startAudio(); };
+  startBtn.onclick = () => { $('intro').classList.add('hidden'); walker.lock(); startAudio(); arrival.greet(); };
   canvas.addEventListener('click', () => { if ($('intro').classList.contains('hidden')) { walker.lock(); startAudio(); } });
   $('credits-link').onclick = (e) => { e.preventDefault(); $('credits').classList.remove('hidden'); };
   $('credits-close').onclick = () => $('credits').classList.add('hidden');
   window.addEventListener('keydown', (e) => {
     if ((e.target as HTMLElement)?.closest?.('.lil-gui')) return;
     if (e.code === 'KeyT') setHour((localHour(worldMs, tz) + 1) % 24);
-    if (e.code === 'KeyP') document.body.classList.toggle('postcard');
-    if (e.code === 'KeyM' && $('intro').classList.contains('hidden')) {
-      journal.toggle();
-      if (journal.open) document.exitPointerLock?.();
-      else walker.lock();
-    }
-    if (e.code === 'KeyG' && $('intro').classList.contains('hidden') && !journal.open) askTeleport();
-    if (e.code === 'Escape' && journal.open) journal.toggle(false);
+    if ((e.target as HTMLElement)?.closest?.('input,textarea')) return;
+    const playing = $('intro').classList.contains('hidden');
+    if (e.code === 'KeyP' && playing && !atlas.open && !vehicles.driving) photo.toggle();
+    if (e.code === 'KeyM' && playing) { if (photo.active) photo.toggle(false); atlas.toggle(); }
+    if (e.code === 'KeyG' && playing && !atlas.open) { if (photo.active) photo.toggle(false); atlas.focusSearch(); }
+    if (e.code === 'Escape' && atlas.open) atlas.toggle(false);
   });
-  const askTeleport = () => {
-    document.exitPointerLock?.();
-    const v = window.prompt('teleport to (lat, lon)', '40.3620,-73.9755');
-    const m = v?.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
-    if (m) void teleportTo(+m[1], +m[2]);
-    else if (v != null) toast('that is not a lat,lon');
-    else walker.lock();
-  };
-  // Touch buttons (shown by body.touch): fly toggle, teleport prompt, journal.
+  // Touch buttons (shown by body.touch): fly toggle, go-anywhere search, atlas, photo mode.
   $('tfly').onclick = () => walker.setFly(!walkParams.fly);
-  $('tgo').onclick = () => { if ($('intro').classList.contains('hidden') && !journal.open) askTeleport(); };
+  $('tgo').onclick = () => { if ($('intro').classList.contains('hidden') && !atlas.open) atlas.focusSearch(); };
+  $('tphoto').onclick = () => { if ($('intro').classList.contains('hidden') && !atlas.open) photo.toggle(); };
   $('tmenu').onclick = () => {
-    journal.toggle();
-    if (!journal.open && !isTouch) walker.lock();
+    atlas.toggle();
   };
   if (CAPTURE) {
     $('intro').classList.add('hidden');
@@ -625,6 +699,7 @@ async function main() {
   let journalTimer = 0;
   let frames = 0;
   let roadPadT = 0, roadPadD = 1e9; // metres to the nearest mapped street edge (footstep surface)
+  let soundScanT = 0, harbourD = 1e9, sailsN = 0, treeCover = 0;
   let paintT = 0, paintSince: number | null = null, paintShown = 0; // "the real streets are painting in" toast
   const PAINT_MSG = 'the real streets are painting in…';
   const errors = new Map<string, number>();
@@ -632,8 +707,7 @@ async function main() {
   (window as unknown as Record<string, unknown>).__PERF__ = perf;
   const focus = new THREE.Vector3();
   const fwd = new THREE.Vector3();
-  // Render origin (world coords), re-snapped when the walker strays >1.5 km from it.
-  const origin = new THREE.Vector3();
+  // Render origin (world coords), re-snapped when the walker strays >1.5 km from it — `origin` above.
   const reanchor = () => {
     const nx = Math.round(walker.x / 512) * 512, nz = Math.round(walker.z / 512) * 512;
     if (Math.abs(nx - origin.x) < 1536 && Math.abs(nz - origin.z) < 1536) return;
@@ -729,10 +803,25 @@ async function main() {
       let churchDist = 1e9;
       for (const c of churches) churchDist = Math.min(churchDist, Math.hypot(c[0] - walker.x, c[1] - walker.z));
       const houses = houseGrid.get(Math.floor(walker.x / 80) * 92821 + Math.floor(walker.z / 80)) ?? 0;
-      ambience.update({ dt, oceanDist, indoors: interiors.indoors, riverDist: Math.max(0, world.terrain.sdfAt(walker.x, walker.z)), wind: weather.wind, night: U.uNight.value, surface, stepped, running: run, life: life.stats, hour: timeParams.hour, churchDist, houses });
+      // harbour + leaves: sampled once a second (instance scans are cheap but not free)
+      if ((soundScanT -= dt) <= 0) {
+        soundScanT = 1;
+        let hb = 1e9, sails = 0;
+        for (const b of ctx.instances('moored-boats:', walker.x, walker.z, 120)) {
+          const d = Math.hypot(b.x - walker.x, b.z - walker.z);
+          hb = Math.min(hb, d);
+          if (b.name.endsWith(':sail') && d < 80) sails++;
+        }
+        harbourD = hb; sailsN = sails;
+        let tc = 0;
+        for (const [ox, oz] of [[0, 0], [20, 0], [-20, 0], [0, 20], [0, -20], [14, 14], [-14, -14], [14, -14], [-14, 14]]) if (world.terrain.coverAt(walker.x + ox, walker.z + oz) === 10) tc++;
+        treeCover = tc / 9;
+      }
+      ambience.update({ dt, oceanDist, indoors: interiors.indoors, riverDist: Math.max(0, world.terrain.sdfAt(walker.x, walker.z)), wind: weather.wind, night: U.uNight.value, surface, stepped, running: run, life: life.stats, hour: timeParams.hour, churchDist, houses, harbour: harbourD, sails: sailsN, trees: Math.max(treeCover, Math.min(1, houses / 20) * 0.4), ride: vehicles.ride });
     }
     shadows.update(scene, focus, U.uKeyDir.value);
     post.render(scene, camera, simTime, U.uNight.value, U.uGolden.value, walker.yaw, walker.pitch, debugParams.rawScene);
+    photo.afterRender(); // Space in photo mode grabs this very frame
 
     if ((hudTimer -= dt) < 0) { hudTimer = 0.4; updateHud(); }
     // While real tiles are on the wire, keep the promise visible — otherwise the first
@@ -751,7 +840,19 @@ async function main() {
       }
     } else if (paintSince != null) { paintSince = null; paintShown = 0; }
     if (!walkParams.fly) journal.update(walker.x, walker.z, dt);
-    if (journal.open && (journalTimer -= dt) < 0) { journalTimer = 0.15; journal.render(walker.x, walker.z, walker.yaw); }
+    explore.enabled = postParams.sketch;
+    explore.update(walker.x, walker.z, camera.position.y - Math.max(world.terrain.heightAt(walker.x, walker.z), 0), dt);
+    if (atlas.open && (journalTimer -= dt) < 0) {
+      journalTimer = 0.5;
+      const st = explore.stats();
+      journal.render(`<b>${st.km2 < 1 ? st.km2.toFixed(3) : st.km2.toFixed(2)} km²</b> painted by your walks (${(st.session * (8 * Math.cos((json.origin.lat * Math.PI) / 180)) ** 2 / 1e6).toFixed(3)} km² today)<br>${commissions.state.done.length} commissions painted · ${Object.values(commissions.state.spotted).reduce((a, l) => a + l.length, 0)} vehicle types spotted<br>`);
+    }
+    brushT -= dt;
+    const blocked = !$('intro').classList.contains('hidden') || atlas.open;
+    if (!blocked) commissions.update(dt);
+    hints.update(dt, blocked || photo.active);
+    arrival.update(dt, blocked || photo.active);
+    atlas.update(dt);
     frames++;
     if (frames === 3) (window as unknown as Record<string, unknown>).__READY__ = true;
     (window as unknown as Record<string, unknown>).__RENDER_INFO__ = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, errors: errors.size, frames };

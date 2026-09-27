@@ -4,7 +4,7 @@
 //                                                               │     pigment, granulation, ink, glow, paper)
 //            depth ─────────────────────────────────────────────┘
 import * as THREE from 'three';
-import { GLSL_NOISE } from './shared';
+import { GLSL_NOISE, U } from './shared';
 
 export const postParams = {
   enabled: true,
@@ -24,6 +24,7 @@ export const postParams = {
   vignette: 0.55,
   boilFps: 0,
   nightWash: 0.55,
+  sketch: true, // paint as you explore: unvisited places stay a pencil underdrawing
   paperColor: '#f8f4ea',
   inkColor: '#2e2a3a',
 };
@@ -166,7 +167,21 @@ export class WatercolorPost {
       uniform float uWobble, uEdgeDark, uTurb, uGran, uPaper, uInk, uInkDist, uGlow, uVignette, uSat, uNightWash, uNight;
       uniform vec3 uPaperColor, uInkColor, uNightTint, uWarm;
       uniform float uGolden, uRaw;
+      uniform sampler2D tExplore;
+      uniform vec4 uExploreBox;
+      uniform float uSketch;
+      uniform mat4 uInvProj, uCamWorld;
+      uniform vec3 uWorldOff;
       varying vec2 vUv;
+      // one pencil stroke family: parallel lines at angle a, spacing sp px, broken into dashes
+      float hatch(vec2 q, float a, float sp, float w) {
+        vec2 d = vec2(cos(a), sin(a)), t = vec2(-d.y, d.x);
+        float s = dot(q, d) + (vnoise(q * 0.015) - 0.5) * 7.0;
+        float along = dot(q, t);
+        float l = 1.0 - smoothstep(w * 0.5, w * 0.5 + 0.9, abs(fract(s / sp) - 0.5) * sp);
+        float dash = smoothstep(0.22, 0.5, vnoise(vec2(along * 0.035, floor(s / sp) * 7.3)));
+        return l * dash;
+      }
       float linZ(float d) { float z = d * 2.0 - 1.0; return 2.0 * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }
       vec3 toSrgb(vec3 c) { return mix(c * 12.92, 1.055 * pow(max(c, 0.0), vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
       float paperH(vec2 px) {
@@ -204,6 +219,36 @@ export class WatercolorPost {
         float p = paperH(px);
         c = c - (c - c * c) * (0.55 - p) * uGran * 1.6;
 
+        // paint as you explore: where you haven't been, the page is still a pencil underdrawing;
+        // colour blooms in (noisy wet edge, pigment pooling at the rim) as you arrive.
+        float sketchAmt = 0.0;
+        float dS = texture2D(tDepth, uv).r;
+        if (uSketch > 0.001 && dS < 0.99999) {
+          vec4 vp = uInvProj * vec4(uv * 2.0 - 1.0, dS * 2.0 - 1.0, 1.0);
+          vec3 wp = (uCamWorld * vec4(vp.xyz / vp.w, 1.0)).xyz + uWorldOff;
+          vec2 eu = (wp.xz - uExploreBox.xy) * uExploreBox.zw;
+          float e = (eu.x > 0.0 && eu.y > 0.0 && eu.x < 1.0 && eu.y < 1.0) ? texture2D(tExplore, eu).r : 0.0;
+          float n = fbm(wp.xz * 0.03) - 0.5 + (vnoise(wp.xz * 0.35 + wp.y) - 0.5) * 0.3;
+          float rev = smoothstep(0.34, 0.66, e + n * 0.5);
+          sketchAmt = (1.0 - rev) * uSketch;
+          float rim = rev * (1.0 - rev) * 4.0 * uSketch;
+          c = mix(c, c * c * 1.15, rim * 0.35); // pigment pooled where the wash stopped spreading
+          if (sketchAmt > 0.001) {
+            float L = dot(c, vec3(0.299, 0.587, 0.114));
+            float tone = 1.0 - smoothstep(0.12, 0.92, L);
+            vec2 hq = nuv * uRes.y; // view-anchored, like the paper noise
+            float g = hatch(hq, 0.8, 6.5, 1.1) * smoothstep(0.3, 0.5, tone);
+            g = max(g, hatch(hq, -0.55, 5.5, 1.0) * smoothstep(0.55, 0.72, tone));
+            g = max(g, hatch(hq, 0.12, 4.5, 1.0) * smoothstep(0.78, 0.92, tone));
+            // distance lightens the drawing (a lighter hand for what's far away)
+            g *= (0.55 + 0.45 * p) * (1.0 - 0.55 * smoothstep(250.0, 1400.0, linZ(dS)));
+            vec3 graphite = vec3(0.33, 0.32, 0.37);
+            vec3 sk = mix(vec3(0.965, 0.95, 0.915), graphite, g * 0.55 + tone * 0.1);
+            sk = mix(sk, c, 0.1); // the faintest colour note, like a first wash
+            c = mix(c, sk, sketchAmt);
+          }
+        }
+
         // ink: Laplacian of 1/z (zero on planes, spikes at creases and silhouettes), broken and wobbly
         vec2 jit = wob * 1.6 + (vec2(vnoise(px * 0.07 + bt), vnoise(px * 0.07 + 9.0 + bt)) - 0.5) * 1.5 / uRes;
         vec2 o = 1.25 / uRes;
@@ -222,7 +267,7 @@ export class WatercolorPost {
         float brk = smoothstep(0.25, 0.6, vnoise(px * 0.045 + bt * 3.0));
         float fade = 1.0 - smoothstep(uInkDist * 0.35, uInkDist, z0);
         float bright = smoothstep(0.75, 0.95, dot(c, vec3(0.33)));
-        c = mix(c, uInkColor, clamp(inkE * brk * fade * uInk * (1.0 - bright), 0.0, 0.85));
+        c = mix(c, uInkColor, clamp(inkE * brk * fade * uInk * (1.0 - bright) * (1.0 + sketchAmt * 0.6), 0.0, 0.85));
 
         // wet bloom around lamps and lit windows
         vec3 g = max(blurHdr * uExposure - 1.3, 0.0);
@@ -260,6 +305,8 @@ export class WatercolorPost {
         uInk: { value: 0.5 }, uInkDist: { value: 300 }, uGlow: { value: 0.8 }, uVignette: { value: 0.5 }, uSat: { value: 1 },
         uNightWash: { value: 0.5 }, uNight: { value: 0 }, uGolden: { value: 0 }, uExposure: { value: 1 }, uRaw: { value: 0 },
         uPaperColor: { value: new THREE.Color() }, uInkColor: { value: new THREE.Color() },
+        tExplore: U.uExplore, uExploreBox: U.uExploreBox, uSketch: { value: 0 },
+        uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() }, uWorldOff: U.uWorldOffset,
         uNightTint: { value: new THREE.Color(0.55, 0.62, 1.0) }, uWarm: { value: new THREE.Color(1.08, 0.97, 0.86) },
       },
     );
@@ -365,6 +412,9 @@ export class WatercolorPost {
     c.uGolden.value = golden;
     c.uExposure.value = P.exposure;
     c.uRaw.value = raw ? 1 : 0;
+    c.uSketch.value = P.sketch && U.uExplore.value ? 1 : 0;
+    (c.uInvProj.value as THREE.Matrix4).copy(camera.projectionMatrixInverse);
+    (c.uCamWorld.value as THREE.Matrix4).copy(camera.matrixWorld);
     (c.uPaperColor.value as THREE.Color).set(P.paperColor).convertLinearToSRGB();
     (c.uInkColor.value as THREE.Color).set(P.inkColor).convertLinearToSRGB();
     this.draw(this.mComp, null);

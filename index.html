@@ -11,40 +11,77 @@
     <div id="hud">
       <div id="place"></div>
       <div id="clock"></div>
-      <div class="hint">M — journal &amp; keys</div>
+      <div class="hint">M — map &amp; sketchbook · P — paint a view</div>
     </div>
     <div id="touchui">
       <button id="tfly" class="tbtn" title="fly / land">✈</button>
       <button id="tgo" class="tbtn" title="teleport">⌂</button>
-      <button id="tmenu" class="tbtn" title="journal">☰</button>
+      <button id="tmenu" class="tbtn" title="map">☰</button>
+      <button id="tphoto" class="tbtn" title="paint a view">▣</button>
     </div>
     <div id="fatal" class="hidden"></div>
     <div id="toast"></div>
     <div id="osm-credit">map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> · ODbL</div>
-    <div id="journal" class="hidden">
-      <canvas id="journal-map"></canvas>
-      <div id="journal-side">
+    <div id="hint"></div>
+    <div id="arrival"></div>
+    <div id="photo" class="hidden">
+      <div class="vf tl"></div><div class="vf tr"></div><div class="vf bl"></div><div class="vf br"></div>
+      <div id="photo-bar">
+        <div id="photo-info"></div>
+        <div class="keys"><kbd>Space</kbd> paint it · <kbd>Wheel</kbd> zoom · <kbd>[</kbd> <kbd>]</kbd> the hour · <kbd>H</kbd> hide frame · <kbd>P</kbd>/<kbd>Esc</kbd> done
+          <button id="photo-shoot" class="tonly">paint</button><button id="photo-exit" class="tonly">done</button></div>
+      </div>
+    </div>
+    <div id="photo-flash"></div>
+    <div id="atlas" class="hidden">
+      <div id="atlas-head">
         <h2 id="journal-title">the town</h2>
-        <div id="journal-stats"></div>
-        <h3>Keys</h3>
-        <table class="keymap">
-          <tr><td>W A S D</td><td>walk</td></tr>
-          <tr><td>Mouse</td><td>look around</td></tr>
-          <tr><td>Shift</td><td>stroll faster</td></tr>
-          <tr><td>F</td><td>fly / land</td></tr>
-          <tr><td>Space / C</td><td>fly up / down</td></tr>
-          <tr><td>Wheel</td><td>flying speed</td></tr>
-          <tr><td>Doors</td><td>just walk in</td></tr>
-          <tr><td>M</td><td>this journal</td></tr>
-          <tr><td>T</td><td>skip an hour</td></tr>
-          <tr><td>P</td><td>postcard (hide UI)</td></tr>
-          <tr><td>Q / E</td><td>turn (without mouse)</td></tr>
-          <tr><td>Esc</td><td>release mouse / close</td></tr>
-          <tr><td>Click</td><td>grab mouse again</td></tr>
-        </table>
-        <p class="hint">M or Esc to close · walk to paint in the map</p>
-        <h3>Places</h3>
-        <ul id="journal-stamps"></ul>
+        <nav id="atlas-tabs"><button data-tab="map" class="on">Map</button><button data-tab="book">Sketchbook</button><button data-tab="jobs">Commissions</button><button data-tab="journal">Journal</button></nav>
+        <button id="atlas-close" title="close (M / Esc)">×</button>
+      </div>
+      <div id="page-map" class="page">
+        <canvas id="atlas-map"></canvas>
+        <div id="atlas-find">
+          <input id="atlas-search" type="search" placeholder="search an address, a town, a street — or lat, lon" autocomplete="off" spellcheck="false" />
+          <ul id="atlas-results"></ul>
+        </div>
+        <button id="atlas-here" title="back to you">⌖</button>
+        <div id="atlas-pop" class="hidden"></div>
+        <div id="atlas-legend">pencil = not yet visited · colour = painted by your walks · ▣ your paintings · ✧ commissions · click the map to walk there</div>
+      </div>
+      <div id="page-book" class="page hidden"></div>
+      <div id="page-jobs" class="page hidden"></div>
+      <div id="page-journal" class="page hidden">
+        <div id="journal-side">
+          <div id="journal-stats"></div>
+          <h3>Keys</h3>
+          <table class="keymap">
+            <tr><td>W A S D</td><td>walk</td></tr>
+            <tr><td>Mouse</td><td>look around</td></tr>
+            <tr><td>Shift</td><td>stroll faster</td></tr>
+            <tr><td>E</td><td>get in / out of a car, boat or plane</td></tr>
+            <tr><td>V · B · N</td><td>call a car · a boat · a plane</td></tr>
+            <tr><td>F</td><td>fly / land</td></tr>
+            <tr><td>Space / C</td><td>fly up / down</td></tr>
+            <tr><td>Wheel</td><td>flying speed</td></tr>
+            <tr><td>Doors</td><td>just walk in</td></tr>
+            <tr><td>P</td><td>photo mode — paint into your sketchbook</td></tr>
+            <tr><td>M</td><td>this atlas</td></tr>
+            <tr><td>G</td><td>go anywhere (search)</td></tr>
+            <tr><td>T</td><td>skip an hour</td></tr>
+            <tr><td>Q / E</td><td>turn (without mouse)</td></tr>
+            <tr><td>Esc</td><td>release mouse / close</td></tr>
+          </table>
+          <h3>Places</h3>
+          <ul id="journal-stamps"></ul>
+        </div>
+      </div>
+    </div>
+    <div id="lightbox" class="hidden">
+      <div class="lb-card">
+        <img id="lb-img" alt="" />
+        <div id="lb-cap"></div>
+        <div class="lb-btns"><button id="lb-go">walk back there</button><a id="lb-dl" class="btn">download</a><button id="lb-del">remove</button><button id="lb-close">close</button></div>
       </div>
     </div>
     <div id="intro">
@@ -55,8 +92,8 @@
         <button id="start" disabled>Begin walking</button>
         <p id="regions"></p>
         <p class="keys">
-          <b>WASD</b> walk &middot; <b>Mouse</b> look &middot; <b>Shift</b> stroll faster &middot; <b>F</b> fly &middot; <b>E</b> get in/out &middot; <b>V</b> car &middot; <b>B</b> boat &middot; <b>N</b> plane &middot; walk through any front door &middot; <b>M</b> journal map &middot;
-          <b>T</b> skip an hour &middot; <b>P</b> postcard (hide UI) &middot; <b>Esc</b> release mouse
+          <b>WASD</b> walk &middot; <b>Mouse</b> look &middot; <b>Shift</b> stroll faster &middot; <b>F</b> fly &middot; <b>E</b> get in/out &middot; <b>V</b> car &middot; <b>B</b> boat &middot; <b>N</b> plane &middot; walk through any front door &middot; <b>M</b> map &amp; sketchbook &middot; <b>G</b> go anywhere &middot;
+          <b>T</b> skip an hour &middot; <b>P</b> paint a view &middot; <b>Esc</b> release mouse
         </p>
         <a href="#" id="credits-link">Credits &amp; data attribution</a>
       </div>

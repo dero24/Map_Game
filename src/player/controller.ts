@@ -98,7 +98,7 @@ export class Walker {
     return (this.stick = s);
   }
 
-  lock() { this.dom.requestPointerLock?.(); }
+  lock() { void (this.dom.requestPointerLock?.() as unknown as Promise<void> | undefined)?.catch?.(() => { /* embedded panes refuse pointer lock */ }); }
 
   // Take off where you stand, or come down to the nearest walkable spot below you.
   setFly(on: boolean) {

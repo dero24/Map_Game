@@ -1,0 +1,275 @@
+{
+  "project": "map_game",
+  "last_updated": "2026-09-27",
+  "rules": {
+    "single_active_feature": true,
+    "passing_requires_evidence": true,
+    "do_not_skip_verification": true
+  },
+  "status_legend": {
+    "not_started": "Work has not begun.",
+    "in_progress": "The feature is the current active task (at most one).",
+    "blocked": "Cannot proceed until the documented blocker clears.",
+    "passing": "Verification ran and evidence is recorded."
+  },
+  "history_note": "Completed work is tracked in docs/earth/LOG.md + git log — do not duplicate it here. This file is the forward-looking queue. Ordering rule: git commits beat docs when they disagree.",
+  "features": [
+    {
+      "id": "paint-your-walk",
+      "priority": 1,
+      "area": "core",
+      "title": "Paint your walk — the world paints in as you explore, a sketchbook, hints, arrival cards, map + search, sound",
+      "user_visible_behavior": "Unvisited places are a pencil sketch that blooms into watercolor as you arrive, and your painted map is the record of every walk. Photo mode becomes a sketchbook with gentle commissions from real places plus spotting logs (boat/car/plane types). Context hints ('E — drive this car'), arrival cards when you enter a new town, an M map screen with address/place search + teleport, and a richer synthesized soundscape (halyards, lapping water, wind in trees, crickets, birdsong, engines, brush strokes).",
+      "status": "in_progress",
+      "verification": [
+        "npm run typecheck && npm test",
+        "Montage: sketch→paint transition (unexplored vs explored), photo mode frame, sketchbook page, map screen with search results, arrival card, hint pill",
+        "node tools/soak.mjs --region=shore --seconds=90 — no new frame errors",
+        "Explored state + sketchbook persist across reload (IndexedDB)"
+      ],
+      "evidence": [
+        "tsc --noEmit clean; 99/99 tests incl. tests/explore.test.ts (vitest-compatible runner in the Linux shell)",
+        "Live montages: sketch vs painted at street level, golden hour, night and from the air (shots/sketch-a.jpg, sketch-b.jpg)",
+        "Photo mode: page saved to IndexedDB and completed commission 'Paint Gracie and the Dudes Homemade Ice Cream'; sketchbook grid + commissions/spotting page rendered",
+        "Atlas map with painted downtown; search 'asbury park convention hall' → walk here → arrival card 'Asbury Park · Monmouth County, New Jersey · first visit'",
+        "Hint pill 'E drive this jeep' next to a driveway jeep; flight hint while flying"
+      ],
+      "notes": "From the 2026-09-27 gameplay brainstorm (ideas 1+2 plus the agreed UX list and ideas 5). Everything region-agnostic: explored store is a sparse world-cell bitmap (not the slice), commissions come from real POIs/landmarks/kit types near the walker, geocoding degrades to local street/POI search when offline. Remaining before 'passing': npm run build + node tools/soak.mjs --region=shore --seconds=90 on the Windows toolchain."
+    },
+    {
+      "id": "traversal-spike",
+      "priority": 1,
+      "area": "core",
+      "title": "Fast traversal spike (~25 m/s)",
+      "user_visible_behavior": "Riding/flying at speed stays smooth — streaming, worker throughput and DEM latency hold up.",
+      "status": "not_started",
+      "verification": [
+        "node tools/soak.mjs --region=shore --seconds=120 while traversing at speed — stalls/hitches reported",
+        "npm run typecheck && npm test"
+      ],
+      "evidence": [],
+      "notes": "Core-gameplay seed per OPEN_WORLD.md. Answers two questions at once: does the pipeline survive 25 m/s, and does fast traversal feel good enough to anchor the gameplay loop? Do this before deciding the loop."
+    },
+    {
+      "id": "j1-lamp-pools",
+      "priority": 2,
+      "area": "presentation",
+      "title": "Verify night lamp pools everywhere (past slice + streamed)",
+      "user_visible_behavior": "Streets stay lit at night on streamed tiles and in the baked backdrop — not just inside the slice.",
+      "status": "not_started",
+      "verification": [
+        "npm run typecheck && npm test",
+        "node tools/capture.mjs --shots=ocean-night,inside-night --montage=only — read shots/shore-montage.jpg",
+        "Night shot on a streamed tile past the backdrop (e.g. ?at= west of the bake) — lamps lit"
+      ],
+      "evidence": [],
+      "notes": "Mostly shipped in 6260066: tiles ship lampPts + walker-centred 2 km lamp map paints on every streamed tile. What remains is verification + any backdrop coverage gap past the slice. Close it with evidence or fix what's missing."
+    },
+    {
+      "id": "j1-road-ribbon",
+      "priority": 3,
+      "area": "presentation",
+      "title": "Road-ribbon geometry to match ground paint (curb height)",
+      "user_visible_behavior": "Roads have real geometry at curb height instead of only painted ground.",
+      "status": "not_started",
+      "verification": [
+        "npm run typecheck && npm test",
+        "node tools/capture.mjs --shots=houses,porch --montage=only — read shots/shore-montage.jpg"
+      ],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "vehicle-polish",
+      "priority": 4,
+      "area": "life",
+      "title": "Vehicle polish",
+      "user_visible_behavior": "Riding vehicles feel finished — handling, camera, sound.",
+      "status": "not_started",
+      "verification": [
+        "npm run typecheck && npm test",
+        "node tools/soak.mjs --region=shore --seconds=90 — stalls/hitches/errors"
+      ],
+      "evidence": [],
+      "notes": "Tree trunk collision already shipped in 6260066 (walk.addLoop on trunks)."
+    },
+    {
+      "id": "l-cross-gable",
+      "priority": 5,
+      "area": "buildings",
+      "title": "Cross-gable ridge axis in buildRoof",
+      "user_visible_behavior": "L/T-shaped measured buildings get correct intersecting ridges instead of a single ridge.",
+      "status": "not_started",
+      "verification": [
+        "npm run typecheck && npm test (roof.ts is unit-tested — extend tests)",
+        "Montage over a LiDAR-covered area showing cross-gable footprints"
+      ],
+      "evidence": [],
+      "notes": "Last remaining item from phase L per docs/earth/OPEN_WORLD.md revised order."
+    },
+    {
+      "id": "j2-rest",
+      "priority": 6,
+      "area": "buildings",
+      "title": "J2 rest — vertex AO, banded roofs, rounded props, bay glazing, garages",
+      "user_visible_behavior": "Buildings show AO grounding, mansard/gambrel roofs where appropriate, glazed bays, garages.",
+      "status": "not_started",
+      "verification": [
+        "npm run typecheck && npm test",
+        "node tools/capture.mjs --shots=houses,roofs,doorway --montage=only — read shots/shore-montage.jpg"
+      ],
+      "evidence": [],
+      "notes": "Designs in docs/ASSET_FIDELITY.md §2–3."
+    },
+    {
+      "id": "k-life",
+      "priority": 7,
+      "area": "life",
+      "title": "Life + ambience per region style",
+      "user_visible_behavior": "Vehicle mix, driving side, pedestrian density and animal species follow the region's style LUT.",
+      "status": "not_started",
+      "verification": [
+        "npm run typecheck && npm test (lifeSim determinism tests still pass)",
+        "Soak + montage in two regions with different styles"
+      ],
+      "evidence": [],
+      "notes": "Phase K. vehicle mix + driving side already live in styles.ts."
+    },
+    {
+      "id": "l-full",
+      "priority": 8,
+      "area": "data",
+      "title": "L full — multi-plane roofs (bd.rp) + national LoD2/lidar adapters",
+      "user_visible_behavior": "Measured buildings outside the US get fitted roofs too (NL AHN, UK EA, DK, FR IGN).",
+      "status": "not_started",
+      "verification": [
+        "npm run typecheck && npm test",
+        "node tools/verify-region.mjs --region=<covered-region>"
+      ],
+      "evidence": [],
+      "notes": "Same EPT/COG pattern as the 3DEP path."
+    },
+    {
+      "id": "bug-flicker",
+      "priority": 98,
+      "area": "rendering",
+      "title": "Window-sill/door flicker",
+      "user_visible_behavior": "No z-fighting shimmer on sills/doors at distance.",
+      "status": "passing",
+      "verification": [
+        "Montage at a flicker-prone distance — compare before/after contact sheets"
+      ],
+      "evidence": [
+        "commit 51d1cc8 — root cause fixed (varyings made flat, window asset rebuilt)"
+      ],
+      "notes": "Fix committed in 51d1cc8. Confirm visually on the next montage; reopen if shimmer persists."
+    },
+    {
+      "id": "bug-dem-seam",
+      "priority": 99,
+      "area": "streaming",
+      "title": "Late-DEM seam between placeholder and DEM-hilled cells",
+      "user_visible_behavior": "Flat-built s-cells beside DEM cells no longer look sunken.",
+      "status": "passing",
+      "verification": [
+        "Walk a synth→real boundary where DEM arrived late — no visible shelf"
+      ],
+      "evidence": [
+        "commit 51d1cc8 — seam fix shipped"
+      ],
+      "notes": "Fix committed in 51d1cc8. Confirm at a known seam site; reopen if the shelf is still visible."
+    },
+    {
+      "id": "k-life-districts",
+      "priority": 9,
+      "area": "life",
+      "title": "Seam-stitched life districts — ambient life across tile boundaries",
+      "user_visible_behavior": "Pedestrians/vehicles/animals don't pop or reset at tile borders — life districts span boundaries seamlessly.",
+      "status": "not_started",
+      "verification": [
+        "npm run typecheck && npm test (lifeSim determinism holds)",
+        "Soak across a tile boundary — no agent resets/pops at the seam"
+      ],
+      "evidence": [],
+      "notes": "Carried over from retired PROGRESS.md. Belongs to phase K."
+    },
+    {
+      "id": "atlas-journal",
+      "priority": 11,
+      "area": "core",
+      "title": "Atlas journaling + humanity map",
+      "user_visible_behavior": "The in-game journal records where you've been; a humanity map visualizes coverage.",
+      "status": "not_started",
+      "verification": [
+        "npm run typecheck && npm test",
+        "Montage of journal UI"
+      ],
+      "evidence": [],
+      "notes": "Far-horizon (Phase 5 territory per retired PROGRESS.md). The journal exists — this is improvements + the map layer."
+    },
+    {
+      "id": "hero-region-02",
+      "priority": 10,
+      "area": "data",
+      "title": "Second baked hero region — pick for style contrast",
+      "user_visible_behavior": "A second flagship place with a visibly different look (climate/palette/species) than the Jersey Shore.",
+      "status": "not_started",
+      "verification": [
+        "One REGIONS entry in scripts/config.mjs → npm run fetch → merge-raw if needed → npm run bake",
+        "npm run verify:region -- --region=<id> exits 0 (static checks + --soak=90 + --shots)",
+        "Montage shows the style LUT actually differentiating the region"
+      ],
+      "evidence": [],
+      "notes": "Coverage is already infinite via the tile worker — new bakes are hero regions for style-variety testing, not coverage. Pick a place with a different Köppen zone (desert SW, Pacific NW, Gulf Coast). This is the real test of the lower-48 factory."
+    },
+    {
+      "id": "kit-variety",
+      "priority": 12,
+      "area": "presentation",
+      "title": "Asset kit variety + detail pass",
+      "user_visible_behavior": "Cars hold up close; no two SUVs on a street are identical; more street furniture comes from the kit.",
+      "status": "not_started",
+      "verification": [
+        "npm run typecheck && npm test (tests/kit.test.ts covers new variants/add-ons)",
+        "/kit.html review of every family + in-game montage of a driveway street and a marina"
+      ],
+      "evidence": [],
+      "notes": "Cars look blocky up close (from a distance they read fine; boats already look good). Every model of one type is identical: each type has a single canonical model, so every SUV on the street is the same SUV. Next: 3–4 seeded versions per type, plus add-ons like roof racks, surfboards, kayaks on top, rust and fading paint. Extend the same recipe pattern to mailboxes, lifeguard stands, beach umbrellas, docks and playgrounds."
+    }
+  ],
+  "regions": {
+    "note": "The lower-48 factory. Each region advances planned → fetched → baked → verified → live. Gate: npm run verify:region -- --region=<id>. A region is 'live' only when verify-region exits 0 and evidence is recorded.",
+    "status_legend": {
+      "planned": "REGIONS entry exists, nothing fetched.",
+      "fetched": "raw/<id>/ inputs present.",
+      "baked": "public/data/<id>/ pack built.",
+      "verified": "verify-region static checks + soak + montage passed, evidence recorded.",
+      "live": "Listed in regions.json and shipped.",
+      "merged": "Hidden REGIONS source folded into another region's bake — not independently listed."
+    },
+    "list": [
+      {
+        "id": "shore",
+        "status": "live",
+        "evidence": [
+          "public/data/shore manifest bakeId=4cju3w, 216 tiles",
+          "sessions verified — docs/earth/LOG.md"
+        ]
+      },
+      {
+        "id": "seabright",
+        "status": "merged",
+        "evidence": [
+          "hidden merge source folded into shore — raw data in flat raw/ layout"
+        ]
+      },
+      {
+        "id": "monmouthbeach",
+        "status": "merged",
+        "evidence": [
+          "hidden merge source folded into shore — raw/monmouthbeach/"
+        ]
+      }
+    ]
+  }
+}

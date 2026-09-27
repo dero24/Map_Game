@@ -57,6 +57,7 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
 
   const p = gui.addFolder('Watercolor');
   p.add(postParams, 'enabled').name('painting on');
+  p.add(postParams, 'sketch').name('paint as you explore');
   p.add(postParams, 'kuwaharaRadius', 1, 7, 0.1).name('brush size');
   p.add(postParams, 'kuwaharaSharpness', 1, 16, 0.1).name('brush sharpness');
   p.add(postParams, 'wobble', 0, 3, 0.01).name('hand wobble');

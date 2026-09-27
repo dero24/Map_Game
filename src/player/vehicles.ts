@@ -113,6 +113,21 @@ export class Vehicles {
   }
 
   get driving() { return this.active !== null; }
+  /** The ride you're in (sound + HUD): kind, model, speed m/s, throttle 0..1. */
+  get ride() { const v = this.active; return v ? { kind: v.kind, model: v.model, v: v.v, throttle: v.throttle, airborne: v.airborne } : null; }
+  /** What E would board right now, without boarding it (context hints). */
+  enterable(): { kind: VKind; model: string } | null {
+    if (this.active || walkParams.fly) return null;
+    const w = this.o.walker;
+    let best: Veh | null = null, bd = Infinity;
+    for (const v of this.list) {
+      const d = Math.hypot(v.x - w.x, v.z - w.z) - SPECS[v.kind].reach;
+      if (d < 0 && d < bd) (bd = d), (best = v);
+    }
+    if (best) return { kind: best.kind, model: best.model };
+    const pk = this.parkedNear(w.x, w.z, SPECS.car.reach + 0.6);
+    return pk ? { kind: 'car', model: pk.model } : null;
+  }
   get activeKind(): VKind | null { return this.active?.kind ?? null; }
 
   // ---------------- world queries ----------------
@@ -153,6 +168,7 @@ export class Vehicles {
       obj.add(prop);
       gearY = P.gearY;
     }
+    obj.name = `ride-${kind}:${model}`; // the spotting log + hints read the model off the name
     obj.traverse((m) => m.layers.enable(1));
     this.group.add(obj);
     const y = kind === 'boat' ? 0 : this.o.walk.surfaceAt(x, z);

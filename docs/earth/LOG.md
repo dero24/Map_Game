@@ -2,6 +2,64 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-27 (i) — Paint your walk: sketch→paint world, sketchbook + commissions, atlas map + search, hints, arrival cards, sound
+
+This is the `paint-your-walk` feature. Its source is the gameplay brainstorm: ideas 1 (the world paints in as you explore) and 2 (a sketchbook in place of a camera), plus the agreed UX list and the soundscape.
+
+- **Paint as you explore** (`src/world/explore.ts`, post composite).
+  - Every unvisited place is a pencil underdrawing: graphite hatching on paper, three stroke families by tone, a lighter hand with distance, and stronger ink.
+  - Colour blooms in around you with a noisy wet edge and pigment pooling at the rim. Flying paints a wider circle, up to 450 m.
+  - The record is a global Web-Mercator grid (8 m cells, IndexedDB), so it survives teleports, re-anchoring and regions.
+  - Capture mode stays fully painted unless `&sketch=1`, so the old montages don't change.
+- **Photo mode → sketchbook** (`src/ui/photo.ts`, `book.ts`).
+  - P frames the view: viewfinder, wheel zoom, `[` `]` to move the hour, H to hide the frame.
+  - Space paints a page: the frame is grabbed right after `post.render`, then gets a handwritten caption (place, time, light, date, lat/lon, commission).
+  - Pages are stored as JPEG + thumbnail. The lightbox offers walk back / download / remove.
+- **Commissions + spotting** (`src/ui/commissions.ts`).
+  - Three live offers built from what's really there: named buildings (churches, lighthouses, shops), POIs, the boat types moored nearby, and scenes (sea at golden hour, fog, sunrise, lamps at night, rooftops from above).
+  - A building that also appears as a POI yields one commission, not two (deduped by subject title).
+  - `judge()` checks the camera frame and the conditions at the moment you paint.
+  - The spotting log fills per family (car / boat / plane) as you look at kit models: tile props (`parked-cars:`, `moored-boats:`), ambient life (`life-car:`, `life-boat:`) and your own rides (`ride-*:`).
+- **Atlas (M, G = search)** (`src/ui/atlas.ts`, `mapview.ts`, `geo.ts`). It replaces the old journal overlay and has four pages:
+  - **Map:** hand-drawn from the loaded world — pencil streets, footprints, hatched water (from the terrain sdf) — and painted wherever your walks have been. It has pins, drag/zoom, and click → "walk here".
+  - **Sketchbook.**
+  - **Commissions + Spotted.**
+  - **Journal:** keys, km² painted, found places.
+  - **Search** uses the Photon OpenStreetMap geocoder (CORS, no key, cached), merged with local streets, named buildings, POIs and lat/lon. Offline it shows local matches only.
+- **Context hints** (`hints.ts`). Examples:
+  - "E drive this jeep" (`vehicles.enterable()`).
+  - "walk through the door to go inside".
+  - "P ✧ paint …" near a commission.
+  - Flight keys.
+  - "B call a boat" by the water.
+  - First-time M/P/G tips that retire after three showings.
+- **Arrival cards** (`arrival.ts`).
+  - The reverse-geocoded town, "Monmouth County, New Jersey", the time and light, then either "first visit — walk to paint it in" (read from the *saved* explore block) or the km² painted so far.
+  - Shown at the start of a walk, on crossing into a new town (the new name must hold for two looks) and after teleports.
+  - The HUD now names the town from the same source.
+- **Sound** (`ambience.ts`).
+  - Brush / shutter / chime / page UI sounds, and a brush stroke when a patch blooms.
+  - Halyards ringing on moored sailboats when it blows; water lapping near boats and on piers.
+  - Leaves by tree cover; songbirds by hour.
+  - Engine models: car (gears), outboard (throttle + spray), propeller (chop + wind rush).
+- **Fixes along the way:**
+  - A pointer-lock rejection no longer paints the red fatal bar (common in embedded panes).
+  - The atlas hides lil-gui (the panel class is now `lil-root`; the old `.lil-gui.root` theme selector no longer matches — left as is).
+
+Verified:
+- tsc clean. 99 tests pass, including the new `tests/explore.test.ts`: reveal/bloom, painting stays local, the record survives a re-anchor, lat/lon parsing, local search ranking.
+- Live session at Sea Bright, checked in the browser:
+  - Sketch→paint montages at noon, golden hour, night and from the air.
+  - Photo mode painted a page that completed "Gracie and the Dudes Homemade Ice Cream".
+  - Sketchbook grid, and the commissions + spotting page (7/8 car types).
+  - Map with the painted downtown.
+  - Search "asbury park convention hall" → walk here → arrival card "Asbury Park · Monmouth County, New Jersey · first visit".
+  - Hint pill "E drive this jeep".
+
+Not run here: `npm run build` and the soak. Both need the Windows toolchain (native vite/rolldown + Playwright).
+
+Noticed: the deployed tile worker sometimes answers cold cells near Asbury Park with a platform error that has no CORS headers (browser reports CORS; the client falls back to synth). Likely a CPU/time limit on cold Overpass fetches — worth a look in `worker/`.
+
 ## 2026-09-27 (h) — Asset kit (recipe + seed), stairs that hug the house, signs that fit, lamp pools everywhere
 
 **Asset kit** (`src/assets/kit.ts`, viewer at `/kit.html`). This implements `3d_asset_creator.md`:

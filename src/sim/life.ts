@@ -287,11 +287,11 @@ export class LifeClient {
 
     // One InstancedMesh per model variant (the asset kit's car / boat types); an agent shows
     // in the mesh its variant picks and is zero-scaled in the others.
-    const make = (geos: THREE.BufferGeometry | THREE.BufferGeometry[], defines: Record<string, number>, range: readonly [number, number], scale: number, colors?: (i: number) => number) => {
+    const make = (geos: THREE.BufferGeometry | THREE.BufferGeometry[], defines: Record<string, number>, range: readonly [number, number], scale: number, colors?: (i: number) => number, names?: string[]) => {
       const n = range[1] - range[0];
       const anim = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
       anim.setUsage(THREE.DynamicDrawUsage);
-      const meshes = (Array.isArray(geos) ? geos : [geos]).map((g0) => {
+      const meshes = (Array.isArray(geos) ? geos : [geos]).map((g0, gi) => {
         const geo = g0.clone();
         geo.setAttribute('aAnim', anim);
         const mesh = new THREE.InstancedMesh(geo, creatureMaterial(defines), n);
@@ -304,15 +304,16 @@ export class LifeClient {
           const c = new THREE.Color();
           for (let i = 0; i < n; i++) mesh.setColorAt(i, c.set(colors(i)));
         }
+        if (names) mesh.name = names[gi];
         this.group.add(mesh);
         return mesh;
       });
       this.groups.push({ mesh: meshes[0], meshes, anim, range, scale });
     };
     make(gullGeo(), { WINGS: 1 }, RANGES.gulls, 1.8);
-    make(CAR_TYPES.map((t) => carLib(t)), {}, RANGES.cars, 1, () => 0xffffff);
+    make(CAR_TYPES.map((t) => carLib(t)), {}, RANGES.cars, 1, () => 0xffffff, CAR_TYPES.map((t) => `life-car:${t}`));
     make(pedGeo(), { LEGS: 1 }, RANGES.peds, 1, () => 0xffffff);
-    make(LIFE_BOATS.map((t) => boatLib(t)), {}, RANGES.boats, 1, () => 0xffffff);
+    make(LIFE_BOATS.map((t) => boatLib(t)), {}, RANGES.boats, 1, () => 0xffffff, LIFE_BOATS.map((t) => `life-boat:${t}`));
 
     // Headlight / masthead halos at night (positions rewritten per frame).
     const hg = new THREE.BufferGeometry();

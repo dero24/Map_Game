@@ -25,16 +25,105 @@ body.postcard #hud, body.postcard .lil-gui, body.postcard #toast { display: none
 #credits .card { text-align: left; font-size: 14px; line-height: 1.5; }
 #credits .card button { display: block; margin: 18px auto 0; }
 
-#journal { position: fixed; inset: 4vh 5vw; display: flex; gap: 20px; background: #f4eddc; border: 1px solid rgba(58, 51, 70, 0.25);
-  box-shadow: 0 8px 50px rgba(40, 30, 60, 0.25); padding: 18px; }
-#journal-map { flex: 1; min-width: 0; height: 100%; }
-#journal-side { width: 260px; overflow-y: auto; }
-#journal-side h2 { font-weight: normal; font-style: italic; margin: 4px 0 10px; }
-#journal-stamps { list-style: none; padding: 0; font-size: 14px; line-height: 1.6; }
+/* ---- atlas (M): map · sketchbook · commissions · journal ---- */
+#atlas { position: fixed; inset: 3vh 3vw; display: flex; flex-direction: column; background: #f4eddc; border: 1px solid rgba(58, 51, 70, 0.25);
+  box-shadow: 0 8px 50px rgba(40, 30, 60, 0.25); z-index: 30; }
+#atlas-head { display: flex; align-items: center; gap: 18px; padding: 10px 18px; border-bottom: 1px solid rgba(58, 51, 70, 0.15); }
+#atlas-head h2 { font-weight: normal; font-style: italic; margin: 0; font-size: 22px; flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#atlas-tabs { display: flex; gap: 4px; flex: 1; }
+#atlas-tabs button, #atlas-close, #atlas-here, #atlas-pop button, .lb-btns button, .lb-btns .btn { font-family: inherit; font-size: 15px; background: none; border: 1px solid transparent; color: #3a3346; padding: 5px 12px; cursor: pointer; border-radius: 2px; }
+#atlas-tabs button.on { border-color: rgba(58, 51, 70, 0.35); background: #efe5cf; font-style: italic; }
+#atlas-tabs button:hover, #atlas-close:hover { background: #ebe1c9; }
+#atlas-close { font-size: 24px; line-height: 1; padding: 2px 10px; }
+#atlas .page { flex: 1; min-height: 0; position: relative; overflow: auto; }
+#page-map { overflow: hidden; }
+#atlas-map { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+#atlas-map:active { cursor: grabbing; }
+#atlas-find { position: absolute; left: 16px; top: 14px; width: min(420px, calc(100% - 90px)); }
+#atlas-search { width: 100%; box-sizing: border-box; font-family: inherit; font-size: 16px; padding: 9px 12px; background: rgba(247, 242, 230, 0.96);
+  border: 1px solid rgba(58, 51, 70, 0.3); border-radius: 2px; color: #3a3346; box-shadow: 0 2px 12px rgba(40, 30, 60, 0.12); outline: none; }
+#atlas-search:focus { border-color: rgba(58, 51, 70, 0.6); }
+#atlas-results { list-style: none; margin: 4px 0 0; padding: 0; background: rgba(247, 242, 230, 0.97); box-shadow: 0 2px 12px rgba(40, 30, 60, 0.12); max-height: 50vh; overflow: auto; }
+#atlas-results li { padding: 7px 12px; cursor: pointer; border-bottom: 1px solid rgba(58, 51, 70, 0.08); }
+#atlas-results li:hover { background: #ece2cb; }
+#atlas-results li b { font-weight: normal; display: block; }
+#atlas-results li span { font-size: 12px; opacity: 0.65; font-style: italic; }
+#atlas-results li.note { cursor: default; font-size: 12px; font-style: italic; opacity: 0.6; }
+#atlas-here { position: absolute; right: 16px; bottom: 44px; font-size: 22px; background: rgba(247, 242, 230, 0.9); border-color: rgba(58, 51, 70, 0.3); }
+#atlas-pop { position: absolute; transform: translate(-50%, calc(-100% - 14px)); background: #f7f2e6; border: 1px solid rgba(58, 51, 70, 0.3); padding: 8px 12px;
+  box-shadow: 0 4px 18px rgba(40, 30, 60, 0.2); font-size: 14px; text-align: center; max-width: 280px; }
+#atlas-pop span { font-size: 12px; opacity: 0.7; font-style: italic; }
+#atlas-pop button { display: block; margin: 6px auto 0; background: #3a3346; color: #f7f2e6; font-size: 14px; }
+#atlas-legend { position: absolute; left: 16px; bottom: 12px; right: 80px; font-size: 12px; font-style: italic; opacity: 0.6; pointer-events: none; }
+#page-book, #page-jobs, #page-journal { padding: 18px 24px; }
+.book { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px; }
+.book figure { margin: 0; background: #faf6ec; padding: 8px 8px 10px; box-shadow: 0 2px 10px rgba(40, 30, 60, 0.14); cursor: pointer; transform: rotate(-0.4deg); transition: transform 0.2s; }
+.book figure:nth-child(2n) { transform: rotate(0.5deg); }
+.book figure:hover { transform: scale(1.03) rotate(0); }
+.book img { width: 100%; display: block; }
+.book figcaption { font-size: 13px; font-style: italic; margin-top: 6px; }
+.book figcaption span { display: block; font-size: 11px; opacity: 0.6; font-style: normal; }
+.empty { text-align: center; margin-top: 12vh; opacity: 0.8; }
+.empty h3 { font-weight: normal; font-style: italic; font-size: 24px; }
+kbd { font-family: inherit; font-size: 0.85em; border: 1px solid rgba(58, 51, 70, 0.4); border-bottom-width: 2px; border-radius: 3px; padding: 0 5px; background: rgba(247, 242, 230, 0.8); }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; }
+.cols h3, #journal-side h3 { font-weight: normal; font-style: italic; margin: 6px 0 8px; border-bottom: 1px solid rgba(58, 51, 70, 0.15); padding-bottom: 6px; }
+.jobs { list-style: none; padding: 0; margin: 0 0 18px; }
+.jobs li { padding: 7px 0; border-bottom: 1px dotted rgba(58, 51, 70, 0.15); }
+.jobs li b { font-weight: normal; display: block; }
+.jobs li span { font-size: 12px; opacity: 0.65; font-style: italic; }
+.jobs li.done { color: #a0503c; font-style: italic; font-size: 14px; }
+.note { font-size: 12px; font-style: italic; opacity: 0.6; }
+.spot h4 { font-weight: normal; margin: 14px 0 6px; }
+.chip { display: inline-block; font-size: 12px; padding: 2px 9px; margin: 2px; border-radius: 10px; background: #e8dcc0; }
+.chip.unseen { background: none; border: 1px dashed rgba(58, 51, 70, 0.3); opacity: 0.6; }
+#journal-side { max-width: 560px; }
+#journal-stats { font-size: 15px; line-height: 1.7; margin-bottom: 10px; }
+#journal-stamps { list-style: none; padding: 0; font-size: 14px; line-height: 1.6; columns: 2; }
 #journal-stamps li.found::before { content: '✦ '; color: #a0503c; }
 #journal-stamps li.unknown { opacity: 0.4; }
-#journal-side .hint { font-size: 12px; opacity: 0.6; }
-#journal-side h3 { font-weight: normal; font-style: italic; margin: 18px 0 6px; border-top: 1px solid rgba(58, 51, 70, 0.2); padding-top: 12px; }
+#lightbox { position: fixed; inset: 0; background: rgba(40, 34, 50, 0.55); display: flex; align-items: center; justify-content: center; z-index: 50; }
+.lb-card { background: #f7f2e6; padding: 14px; max-width: 90vw; max-height: 92vh; display: flex; flex-direction: column; box-shadow: 0 10px 50px rgba(0, 0, 0, 0.35); }
+#lb-img { max-width: 86vw; max-height: 74vh; object-fit: contain; }
+#lb-cap { font-size: 14px; margin: 10px 4px 4px; }
+.lb-btns { display: flex; gap: 8px; justify-content: flex-end; }
+.lb-btns button, .lb-btns .btn { border-color: rgba(58, 51, 70, 0.3); text-decoration: none; }
+#lb-go { background: #3a3346; color: #f7f2e6; }
+
+/* ---- hint pill, arrival card, photo mode ---- */
+#hint { position: fixed; left: 50%; bottom: 58px; transform: translate(-50%, 8px); padding: 6px 16px; background: rgba(245, 239, 225, 0.88); border: 1px solid rgba(58, 51, 70, 0.2);
+  border-radius: 16px; font-size: 15px; opacity: 0; transition: opacity 0.35s, transform 0.35s; pointer-events: none; white-space: nowrap; z-index: 19; }
+#hint.show { opacity: 1; transform: translate(-50%, 0); }
+body.postcard #hint { display: none; }
+#arrival { position: fixed; left: 50%; top: 11vh; transform: translateX(-50%); text-align: center; pointer-events: none; opacity: 0; z-index: 18; padding: 26px 90px 30px; white-space: nowrap;
+  background: radial-gradient(ellipse at center, rgba(245, 239, 225, 0.9) 0%, rgba(245, 239, 225, 0.72) 48%, rgba(245, 239, 225, 0) 72%);
+  text-shadow: 0 0 18px rgba(245, 239, 225, 0.95), 0 0 4px rgba(245, 239, 225, 0.9); }
+#arrival.show { animation: arrive 5.5s ease-in-out forwards; }
+@keyframes arrive { 0% { opacity: 0; letter-spacing: 0.02em; } 14% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; letter-spacing: 0.08em; } }
+#arrival .a-name { font-size: 54px; font-style: italic; letter-spacing: 0.04em; }
+#arrival .a-name::after { content: ''; display: block; height: 7px; margin: 2px auto 8px; width: 70%; border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(160, 80, 60, 0.55), rgba(160, 80, 60, 0) 70%); }
+#arrival .a-region { font-size: 18px; opacity: 0.8; }
+#arrival .a-line { font-size: 14px; font-style: italic; opacity: 0.7; margin-top: 6px; }
+body.postcard #arrival { display: none; }
+#photo { position: fixed; inset: 0; pointer-events: none; z-index: 17; }
+#photo .vf { position: absolute; width: 38px; height: 38px; border: 0 solid rgba(46, 42, 58, 0.55); }
+#photo .tl { left: 5vw; top: 6vh; border-left-width: 2px; border-top-width: 2px; }
+#photo .tr { right: 5vw; top: 6vh; border-right-width: 2px; border-top-width: 2px; }
+#photo .bl { left: 5vw; bottom: 12vh; border-left-width: 2px; border-bottom-width: 2px; }
+#photo .br { right: 5vw; bottom: 12vh; border-right-width: 2px; border-bottom-width: 2px; }
+#photo-bar { position: absolute; left: 50%; transform: translateX(-50%); bottom: 16px; text-align: center; font-size: 14px; pointer-events: auto; background: rgba(245, 239, 225, 0.86);
+  border: 1px solid rgba(58, 51, 70, 0.2); border-radius: 4px; padding: 8px 18px; white-space: nowrap; }
+#photo-info { font-style: italic; font-size: 16px; margin-bottom: 4px; }
+#photo-info .ok { color: #a0503c; }
+#photo.bare > * { display: none; }
+#photo-bar .tonly { display: none; }
+body.touch #photo-bar .tonly { display: inline-block; font-family: inherit; margin-left: 8px; padding: 6px 14px; background: #3a3346; color: #f7f2e6; border: none; }
+#photo-flash { position: fixed; inset: 0; background: #fbf7ec; opacity: 0; pointer-events: none; z-index: 60; }
+#photo-flash.go { animation: flash 0.9s ease-out; }
+@keyframes flash { 0% { opacity: 0.85; } 100% { opacity: 0; } }
+body.postcard #vehud { display: none !important; }
+body.atlas-open .lil-gui, body.atlas-open #hud, body.atlas-open #toast { display: none; }
 .keymap { font-size: 13px; border-collapse: collapse; width: 100%; }
 .keymap td { padding: 2px 4px; }
 .keymap td:first-child { font-weight: bold; white-space: nowrap; color: #5a4c78; width: 40%; }
@@ -61,6 +150,11 @@ body.touch #touchui { display: flex; }
   .card { padding: 20px 22px; max-width: 92vw; }
   .card h1 { font-size: 30px; }
   #hud { left: 14px; bottom: 14px; font-size: 13px; }
-  #journal { inset: 2vh 3vw; flex-direction: column; }
-  #journal-side { width: auto; }
+  #atlas { inset: 0; }
+  #atlas-head { gap: 8px; padding: 8px; flex-wrap: wrap; }
+  #atlas-head h2 { font-size: 17px; }
+  #atlas-tabs button { padding: 4px 7px; font-size: 13px; }
+  .cols { grid-template-columns: 1fr; }
+  #arrival .a-name { font-size: 34px; }
+  #hint { bottom: 150px; font-size: 13px; }
 }

@@ -1,6 +1,8 @@
 // Synthesized soundscape (no audio files): surf that swells as you near the Atlantic, wind, gull calls,
 // passing cars, footsteps that know sand from pavement from boards (and creaky stairs), a distant bell buoy,
-// night crickets, the hush and clock of a house, doors, church bells on the hour, dogs, porch wind chimes.
+// night crickets, the hush and clock of a house, doors, church bells on the hour, dogs, porch wind chimes,
+// halyards ringing on moored sailboats and water lapping the pilings, leaves in the wind, birdsong by day,
+// engines for whatever you ride (car / outboard / propeller), and the brush + paper sounds of the sketchbook.
 import type { LifeStats } from '../sim/life';
 
 export const audioParams = { volume: 0.7, muted: false };
@@ -19,6 +21,10 @@ export interface AudioFrame {
   hour: number; // local clock
   churchDist: number; // m to the nearest church (bells on the hour)
   houses: number; // houses within ~80 m (dogs, wind chimes on porches)
+  harbour?: number; // m to the nearest moored boat
+  sails?: number; // moored sailboats within ~80 m (halyards)
+  trees?: number; // 0..1 tree cover around you (leaves, birds)
+  ride?: { kind: 'car' | 'boat' | 'plane'; v: number; throttle: number; airborne: boolean } | null;
 }
 
 function noiseBuffer(ctx: AudioContext, seconds: number, color: 'white' | 'pink' | 'brown') {
@@ -67,6 +73,12 @@ export class Ambience {
   private strikeVol = 0;
   private dogTimer = 20;
   private chimeTimer = 6;
+  private halyardT = 3;
+  private lapT = 1;
+  private birdT = 4;
+  private leafGain!: GainNode;
+  private engine!: { g: GainNode; lp: BiquadFilterNode; o1: OscillatorNode; o2: OscillatorNode; am: GainNode; lfo: OscillatorNode; rush: GainNode };
+  private pink!: AudioBuffer;
 
   constructor() {
     const ctx = (this.ctx = new AudioContext());
@@ -79,7 +91,7 @@ export class Ambience {
       s.start(0, Math.random() * buf.duration);
       return s;
     };
-    const brown = noiseBuffer(ctx, 6, 'brown'), pink = noiseBuffer(ctx, 6, 'pink');
+    const brown = noiseBuffer(ctx, 6, 'brown'), pink = (this.pink = noiseBuffer(ctx, 6, 'pink'));
     this.white = noiseBuffer(ctx, 2, 'white');
 
     // Surf: low roar + foamy hiss, both breathing with the swell.
@@ -153,6 +165,147 @@ export class Ambience {
     hg.gain.value = 0.05;
     hum.connect(hg).connect(this.roomGain);
     hum.start();
+
+    // Leaves: a high, airy rustle that gusts with the wind where there are trees.
+    const lf = ctx.createBiquadFilter();
+    lf.type = 'highpass';
+    lf.frequency.value = 2600;
+    this.leafGain = ctx.createGain();
+    this.leafGain.gain.value = 0;
+    loop(pink).connect(lf).connect(this.leafGain).connect(this.master);
+
+    // Engine: two detuned oscillators through a lowpass, a tremolo for the propeller's chop,
+    // and a wind rush that grows with speed. Silent until you ride something.
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 400;
+    const am = ctx.createGain();
+    am.gain.value = 1;
+    const o1 = ctx.createOscillator(), o2 = ctx.createOscillator();
+    o1.type = 'sawtooth';
+    o2.type = 'square';
+    o1.connect(lp); o2.connect(lp);
+    lp.connect(am).connect(g).connect(this.master);
+    const lfo = ctx.createOscillator();
+    const lfoG = ctx.createGain();
+    lfoG.gain.value = 0;
+    lfo.connect(lfoG).connect(am.gain);
+    o1.start(); o2.start(); lfo.start();
+    const rush = ctx.createGain();
+    rush.gain.value = 0;
+    const rf2 = ctx.createBiquadFilter();
+    rf2.type = 'bandpass';
+    rf2.frequency.value = 900;
+    rf2.Q.value = 0.5;
+    loop(pink).connect(rf2).connect(rush).connect(this.master);
+    this.engine = { g, lp, o1, o2, am: lfoG, lfo, rush };
+  }
+
+  // ---- sketchbook + UI sounds ----
+  /** brush: a soft wet stroke · shutter: a longer stroke + paper · chime: two soft bells · page: paper. */
+  ui(kind: 'brush' | 'shutter' | 'chime' | 'page') {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const stroke = (dur: number, f0: number, f1: number, vol: number, delay = 0) => {
+      const s = ctx.createBufferSource();
+      s.buffer = this.pink;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.Q.value = 1.4;
+      bp.frequency.setValueAtTime(f0, t + delay);
+      bp.frequency.exponentialRampToValueAtTime(f1, t + delay + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t + delay);
+      g.gain.linearRampToValueAtTime(vol, t + delay + dur * 0.35);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + delay + dur);
+      const p = ctx.createStereoPanner();
+      p.pan.setValueAtTime(-0.3, t + delay);
+      p.pan.linearRampToValueAtTime(0.3, t + delay + dur);
+      s.connect(bp).connect(g).connect(p).connect(this.master);
+      s.start(t + delay, Math.random() * 4);
+      s.stop(t + delay + dur + 0.05);
+    };
+    if (kind === 'brush') stroke(0.55, 700, 2200, 0.035);
+    else if (kind === 'shutter') { stroke(0.7, 500, 2600, 0.07); stroke(0.35, 3000, 1500, 0.03, 0.55); this.blip({ freq: 160, q: 1, dur: 0.2, gain: 0.05, type: 'lowpass' }); }
+    else if (kind === 'page') { this.blip({ freq: 4200, q: 0.6, dur: 0.12, gain: 0.03 }); this.blip({ freq: 2600, q: 0.8, dur: 0.18, gain: 0.02 }); }
+    else if (kind === 'chime') {
+      for (const [f, d] of [[784, 0], [1175, 0.16]]) {
+        const o = ctx.createOscillator();
+        o.frequency.value = f;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, t + d);
+        g.gain.linearRampToValueAtTime(0.035, t + d + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + d + 1.6);
+        o.connect(g).connect(this.master);
+        o.start(t + d);
+        o.stop(t + d + 1.7);
+      }
+    }
+  }
+
+  // A halyard slapping a mast: a bright metallic ping (inharmonic partials, fast decay).
+  private halyard(vol: number, pan: number) {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const base = 1800 + Math.random() * 900;
+    for (const [m, a, d] of [[1, 1, 0.5], [2.41, 0.5, 0.3], [3.93, 0.3, 0.18]]) {
+      const o = ctx.createOscillator();
+      o.frequency.value = base * m;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vol * a, t + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      const p = ctx.createStereoPanner();
+      p.pan.value = pan;
+      o.connect(g).connect(p).connect(this.master);
+      o.start(t);
+      o.stop(t + d + 0.05);
+    }
+  }
+  // Water lapping at pilings and hulls: a soft low slosh with a quick in and slow out.
+  private lap(vol: number) {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const s = ctx.createBufferSource();
+    s.buffer = this.pink;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(500 + Math.random() * 400, t);
+    lp.frequency.linearRampToValueAtTime(250, t + 0.6);
+    const g = ctx.createGain();
+    const d = 0.35 + Math.random() * 0.4;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    const p = ctx.createStereoPanner();
+    p.pan.value = Math.random() * 1.2 - 0.6;
+    s.connect(lp).connect(g).connect(p).connect(this.master);
+    s.start(t, Math.random() * 5);
+    s.stop(t + d + 0.05);
+  }
+  // A songbird phrase: a few quick whistled notes with little upward flicks.
+  private bird(vol: number) {
+    const ctx = this.ctx, t0 = ctx.currentTime;
+    const pan = Math.random() * 1.6 - 0.8;
+    const n = 3 + Math.floor(Math.random() * 5);
+    const base = 2200 + Math.random() * 1600;
+    const style = Math.random();
+    for (let k = 0; k < n; k++) {
+      const t = t0 + k * (0.09 + Math.random() * 0.08);
+      const f = base * (style < 0.5 ? 1 + ((k % 3) - 1) * 0.12 : 1.25 - k * 0.05);
+      const o = ctx.createOscillator();
+      o.frequency.setValueAtTime(f * 0.85, t);
+      o.frequency.exponentialRampToValueAtTime(f * 1.2, t + 0.05);
+      o.frequency.exponentialRampToValueAtTime(f, t + 0.08);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vol, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+      const p = ctx.createStereoPanner();
+      p.pan.value = pan;
+      o.connect(g).connect(p).connect(this.master);
+      o.start(t);
+      o.stop(t + 0.11);
+    }
   }
 
   // A door opening / closing: latch click + a soft wooden thump + a short creak.
@@ -411,6 +564,59 @@ export class Ambience {
       this.chimeTimer = 5 + Math.random() * (14 - f.wind * 8);
       if (f.houses > 3 && f.oceanDist < 600 && f.wind > 0.3 && !f.indoors) this.chimes(0.012 * Math.min(1.5, f.wind));
     }
+
+    // Harbour: halyards ring on the masts when it blows; water laps the pilings
+    const hb = f.harbour ?? 1e9;
+    if ((this.halyardT -= f.dt) <= 0) {
+      this.halyardT = 0.4 + Math.random() * (3.5 - f.wind * 2.5);
+      if ((f.sails ?? 0) > 0 && hb < 110 && f.wind > 0.2) {
+        const v = 0.02 * Math.min(1, 40 / (hb + 10)) * Math.min(1.5, f.wind + 0.3) * muffle;
+        this.halyard(v, Math.random() * 1.6 - 0.8);
+        if (Math.random() < 0.4) setTimeout(() => this.halyard(v * 0.6, Math.random() * 1.6 - 0.8), 120 + Math.random() * 200);
+      }
+    }
+    if ((this.lapT -= f.dt) <= 0) {
+      this.lapT = 0.5 + Math.random() * 1.4;
+      const edge = Math.min(hb, f.riverDist < 1 ? 0 : 1e9);
+      if ((hb < 60 || (f.riverDist <= 0 && f.oceanDist > 250)) && !f.indoors) this.lap(0.05 * Math.min(1, 25 / (edge + 10)) * (0.5 + f.wind));
+    }
+    // Leaves in the wind; songbirds by day where there are trees and gardens
+    const trees = f.trees ?? 0;
+    set(this.leafGain.gain, trees * (0.012 + f.wind * 0.03) * (0.6 + 0.4 * Math.sin(this.t * 0.9) * Math.sin(this.t * 0.31)) * muffle, 0.6);
+    if ((this.birdT -= f.dt) <= 0) {
+      const morning = f.hour > 5 && f.hour < 10 ? 1 : f.hour >= 10 && f.hour < 18 ? 0.35 : 0;
+      this.birdT = 2 + Math.random() * (morning > 0.5 ? 5 : 14);
+      if (!f.indoors && f.night < 0.3 && morning > 0 && (trees > 0.15 || f.houses > 4) && f.oceanDist > 80 && Math.random() < morning + 0.2) this.bird(0.02 * morning * (0.5 + trees));
+    }
+
+    // Engine of whatever you're riding
+    const e = this.engine, r = f.ride;
+    if (r) {
+      const sp = Math.abs(r.v);
+      if (r.kind === 'car') {
+        const gear = 1 + Math.min(4, Math.floor(sp / 9));
+        const rpm = 38 + ((sp % 9) / 9) * 40 + gear * 4;
+        set(e.o1.frequency, rpm, 0.1); set(e.o2.frequency, rpm * 1.51, 0.1);
+        set(e.lp.frequency, 260 + sp * 22, 0.2);
+        set(e.g.gain, 0.05 + Math.min(0.06, sp * 0.004), 0.2);
+        set(e.am.gain, 0, 0.2);
+        set(e.rush.gain, Math.min(0.06, sp * 0.002), 0.3);
+      } else if (r.kind === 'boat') {
+        const f0 = 70 + r.throttle * 90 + sp * 2;
+        set(e.o1.frequency, f0, 0.15); set(e.o2.frequency, f0 * 2.02, 0.15);
+        set(e.lp.frequency, 500 + r.throttle * 1400, 0.2);
+        set(e.g.gain, 0.025 + r.throttle * 0.05, 0.25);
+        set(e.am.gain, 0.2, 0.2); set(e.lfo.frequency, 9 + r.throttle * 12, 0.2);
+        set(e.rush.gain, Math.min(0.08, sp * 0.006), 0.3); // hull slap + spray
+      } else {
+        const f0 = 62 + r.throttle * 55;
+        set(e.o1.frequency, f0, 0.3); set(e.o2.frequency, f0 * 1.99, 0.3);
+        set(e.lp.frequency, 380 + r.throttle * 700, 0.3);
+        set(e.g.gain, 0.03 + r.throttle * 0.06, 0.3);
+        set(e.am.gain, 0.45, 0.2); set(e.lfo.frequency, 14 + r.throttle * 30, 0.3); // the propeller's chop
+        set(e.rush.gain, Math.min(0.1, sp * 0.0018) * (r.airborne ? 1 : 0.4), 0.4);
+      }
+    } else { set(e.g.gain, 0, 0.3); set(e.rush.gain, 0, 0.3); }
 
     // Footsteps
     if (f.stepped) {
