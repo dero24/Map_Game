@@ -149,7 +149,6 @@ ctx.onmessage = (e: MessageEvent) => {
       for (const d of tile.decks) if (d.h) tr.push(d.h.buffer);
       for (const op of tile.ops) if (op.o === 'd' && op.d.h) tr.push(op.d.h.buffer);
       if (tile.atlas) tr.push(tile.atlas);
-      if (tile.lamp) tr.push(tile.lamp);
       if (tile.terr) tr.push(tile.terr);
       if (tile.dem) tr.push(tile.dem.buf);
       ctx.postMessage({ kind: 'built', id: m.id, tile }, tr);

@@ -5,6 +5,7 @@ import type { World } from './data';
 import type { WalkWorld } from '../player/collision';
 import { propMaterial, colored } from '../render/propMaterial';
 import { makeRng } from '../core/rng';
+import { rockLib, type RockType } from '../assets/kit';
 
 type P = [number, number];
 const unpackPts = (f: number[]): P[] => {
@@ -109,6 +110,17 @@ export function buildStructures(world: World, walk: WalkWorld) {
   const up = new THREE.Vector3(0, 1, 0);
   const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
   const rng = makeRng(20260923);
+  // Rocks: a few canonical kit variants per type, one InstancedMesh each (yaw + a little tilt,
+  // so the flattened undersides still sit on what's beneath them).
+  const ROCK_VARIANTS = 4;
+  const stones = new Map<string, THREE.Matrix4[]>();
+  const tilt = new THREE.Euler();
+  const stone = (type: RockType, x: number, y: number, z: number, s: number, yaw: number, lean: number) => {
+    const key = `${type}:${Math.floor(rng.float() * ROCK_VARIANTS)}`;
+    if (!stones.has(key)) stones.set(key, []);
+    const q = new THREE.Quaternion().setFromEuler(tilt.set(lean, yaw, lean * 0.6, 'YXZ'));
+    stones.get(key)!.push(new THREE.Matrix4().compose(V(x, y, z), q, V(s, s * (0.8 + rng.float() * 0.3), s)));
+  };
 
   // ---------- road bridges ----------
   const towers: THREE.Vector3[] = [];
@@ -251,11 +263,18 @@ export function buildStructures(world: World, walk: WalkWorld) {
       m.quad(A(0.7, a.top), B(0.7, b.top), B(3.2, b.bot), A(3.2, a.bot), V(a.nx, 0.6, a.nz)); // armour slope to the sea
       m.color(0x9a938a).quad(A(-0.9, a.top), B(-0.9, b.top), B(0.7, b.top), A(0.7, a.top), up);
       m.color(0x7c756b).quad(A(-0.9, a.bot + 0.4), B(-0.9, b.bot + 0.4), B(-0.9, b.top), A(-0.9, a.top), V(-a.nx, 0, -a.nz));
+      // armour stone heaped on the seaward slope (the quad above reads as the gaps between them)
+      for (let k = 0; k < 2; k++) {
+        const t = rng.float(), o = 1.0 + rng.float() * 2.1, f = (o - 0.7) / 2.5;
+        const x = a.p.x + (b.p.x - a.p.x) * t + a.nx * o, z = a.p.z + (b.p.z - a.p.z) * t + a.nz * o;
+        const y = a.top + (a.bot - a.top) * f + 0.15;
+        const sc = 0.45 + rng.float() * 0.5;
+        stone(rng.float() < 0.8 ? 'riprap' : 'boulder', x, y, z, sc, rng.float() * 6.3, (rng.float() - 0.5) * 0.5);
+      }
     }
   }
 
-  // ---------- rock groynes / jetties ----------
-  const rocks: THREE.Matrix4[] = [];
+  // ---------- rock groynes / jetties (asset-kit riprap and boulders) ----------
   for (const l of json.lines) {
     if (l.c !== 'groyne') continue;
     const { pts } = resample(unpackPts(l.p), 1.3);
@@ -263,20 +282,20 @@ export function buildStructures(world: World, walk: WalkWorld) {
       for (let k = 0; k < 2; k++) {
         const off = (rng.float() - 0.5) * 3.2;
         const x = p.x + p.tz * off, z = p.z - p.tx * off;
-        const s = 0.9 + rng.float() * 1.1;
-        const y = Math.max(terrain.heightAt(x, z), -1.2) + 0.25;
-        const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(rng.float() * 3, rng.float() * 3, rng.float() * 3));
-        rocks.push(new THREE.Matrix4().compose(V(x, y, z), q, V(s, s * 0.7, s)));
+        const sc = 0.75 + rng.float() * 0.95;
+        const y = Math.max(terrain.heightAt(x, z), -1.2) + 0.1;
+        stone(rng.float() < 0.7 ? 'riprap' : 'boulder', x, y, z, sc, rng.float() * 6.3, (rng.float() - 0.5) * 0.7);
       }
     }
   }
-  if (rocks.length) {
-    const rg = colored(new THREE.DodecahedronGeometry(0.8, 0), 0x7e776d);
-    const im = new THREE.InstancedMesh(rg, propMaterial(), rocks.length);
-    rocks.forEach((mt, i) => im.setMatrixAt(i, mt));
+  for (const [key, list] of stones) {
+    const [type, v] = key.split(':');
+    const im = new THREE.InstancedMesh(rockLib(type as RockType, +v).clone(), propMaterial(), list.length);
+    im.name = 'rocks:' + key;
     const c = new THREE.Color();
-    for (let i = 0; i < rocks.length; i++) im.setColorAt(i, c.setScalar(0.8 + rng.float() * 0.35));
+    list.forEach((mt, i) => { im.setMatrixAt(i, mt); im.setColorAt(i, c.setScalar(0.82 + rng.float() * 0.3)); });
     im.layers.enable(1);
+    im.computeBoundingSphere();
     group.add(im);
   }
 

@@ -62,6 +62,11 @@
 - Buildings: walls follow the true footprint; pitched roofs come from a straight skeleton (`src/world/roof.ts`, unit-tested)
   with gable folding. Raised houses (pilings), porches, stoops, railed stairs are in `buildings.ts`; their collision goes out
   as `colliders` (walls with a feet-height band + ramp decks) and is registered in `main.ts`.
+- Asset kit (`src/assets/kit.ts`, viewer `/kit.html` with GLB export): cars, boats, planes and rocks are built from recipe + seed → validated proportions → geometry.
+  - Convention: non-indexed; vertex `color` (white = tint by instance colour); `aPart` (3 = head/nav lights, 4 = tail lights); front toward −z; origin on the ground or waterline.
+  - Draw one InstancedMesh per type from `carLib`/`boatLib`/`rockLib`. Pick types with `carMix(region, climate)` / `boatMix(climate)`; never with per-town lists.
+  - **In tile builders, `.clone()` the library geometry.** Pack transfers the buffers, so a shared cached geometry detaches and later tiles throw DataCloneError.
+  - `vehicles.ts` finds driveway cars by the `parked-cars:<type>` mesh-name prefix.
 - Interiors: `planInterior` works on any polygon (local-frame spans), stair flights get stairwell holes + height-banded rails
   (`registerPlan`); the on-demand mesh + furniture kit + per-room paint/floor uniforms live in `interiors.ts`.
 - Collision: `WalkWorld.move(x,z,dx,dz,r,feetY)` — walls may carry a y-band; floors may have holes; `ground: true` floors

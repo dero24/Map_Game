@@ -72,3 +72,14 @@ describe('recipeFor', () => {
     expect(stucco).toBeGreaterThan(70);
   });
 });
+
+import { signName } from '../src/world/signs';
+describe('street-name blades', () => {
+  it('abbreviates like the real signs', () => {
+    expect(signName('North Ocean Avenue')).toBe('N Ocean Ave');
+    expect(signName('Peninsula Avenue')).toBe('Peninsula Ave');
+    expect(signName('Avenue of Two Rivers')).toBe('Avenue of Two Rivers');
+    expect(signName('Saint Johns Boulevard')).toBe('St Johns Blvd');
+    expect(signName('Rumson Road (County Route 520)')).toBe('Rumson Rd');
+  });
+});

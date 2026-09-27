@@ -10,15 +10,18 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { propMaterial, colored } from '../render/propMaterial';
-import { carGeo, boatGeo } from '../sim/life';
+import { carMix, carLib, boatLib, planeGeometry, planeRecipe, pickFrom, PLANE_TYPES, CAR_TYPES, type CarType, type BoatType, type PlaneType } from '../assets/kit';
 import type { WalkWorld } from './collision';
 import { walkParams, type Walker } from './controller';
 import type { Road, Terrain } from '../world/data';
+import { activeStyle } from '../world/styles';
 
 export type VKind = 'car' | 'boat' | 'plane';
 
 interface Veh {
   kind: VKind;
+  model: string; // the asset kit type (sedan, pickup, console, seaplane …)
+  gearY: number; // plane: height of the gear above the origin
   obj: THREE.Group;
   prop?: THREE.Object3D; // spinning propeller
   x: number; y: number; z: number;
@@ -46,29 +49,19 @@ function tint(g: THREE.BufferGeometry, hex: number) {
   return g;
 }
 
-// A high-wing single-engine plane (nose toward -z, like every model here), ~8 m long.
-function planeGeo() {
-  const B = (w: number, h: number, d: number, x: number, y: number, z: number, hex: number) => colored(new THREE.BoxGeometry(w, h, d).translate(x, y, z), hex);
-  const nose = colored(new THREE.CylinderGeometry(0.45, 0.62, 1.1, 10).rotateX(Math.PI / 2).translate(0, 1.0, -3.55), 0xf2efe6);
-  const spinner = colored(new THREE.ConeGeometry(0.2, 0.45, 10).rotateX(-Math.PI / 2).translate(0, 1.0, -4.3), 0x9c2a26);
-  const wheel = (x: number, z: number) => colored(new THREE.CylinderGeometry(0.26, 0.26, 0.16, 10).rotateZ(Math.PI / 2).translate(x, 0.26, z), 0x1d1e21);
-  return mergeGeometries([
-    B(1.25, 1.35, 4.2, 0, 1.05, -0.9, 0xffffff), // cabin + engine bay (tintable stripe colour below)
-    B(1.28, 0.18, 4.25, 0, 0.95, -0.9, 0x9c2a26), // cheat line
-    B(0.9, 0.9, 3.6, 0, 1.2, 2.6, 0xffffff), // tail boom
-    nose, spinner,
-    B(1.1, 0.5, 1.4, 0, 1.6, -1.6, 0x2a3442), // windscreen / side windows
-    B(10.6, 0.14, 1.55, 0, 1.86, -0.95, 0xf4f1ea), // high wing
-    B(0.9, 0.16, 1.58, 4.9, 1.87, -0.95, 0x9c2a26), B(0.9, 0.16, 1.58, -4.9, 1.87, -0.95, 0x9c2a26), // wingtips
-    B(0.07, 1.2, 0.07, 1.9, 1.25, -0.9, 0x8d8a82), B(0.07, 1.2, 0.07, -1.9, 1.25, -0.9, 0x8d8a82), // struts
-    B(3.6, 0.1, 1.0, 0, 1.45, 4.05, 0xf4f1ea), // tailplane
-    B(0.1, 1.5, 1.2, 0, 2.2, 4.1, 0xf4f1ea), B(0.12, 0.5, 0.5, 0, 2.7, 4.35, 0x9c2a26), // fin + flash
-    B(0.08, 0.7, 0.08, 0.75, 0.55, -1.1, 0x5a5550), B(0.08, 0.7, 0.08, -0.75, 0.55, -1.1, 0x5a5550),
-    wheel(0.85, -1.1), wheel(-0.85, -1.1), wheel(0, 3.5),
-  ]);
-}
 function propGeo() {
   return mergeGeometries([colored(new THREE.BoxGeometry(2.1, 0.14, 0.05), 0x2a2a2c), colored(new THREE.BoxGeometry(0.14, 2.1, 0.05), 0x2a2a2c)]);
+}
+// Summoned boats cycle the kit's hulls; hull paint rotates independently.
+const BOAT_CYCLE: BoatType[] = ['console', 'skiff', 'cabin', 'sail', 'pontoon', 'lobster'];
+const HULLS = [0xf4f1ea, 0xeef0f0, 0x2d4a6a, 0xd9e4ea, 0x9b3b32];
+const NAME: Record<string, string> = { hatch: 'hatchback', suv: 'SUV', console: 'center-console', cabin: 'cabin cruiser', sail: 'sailboat', pontoon: 'pontoon boat', lobster: 'lobster boat', highwing: 'high-wing plane', lowwing: 'low-wing plane', seaplane: 'seaplane', biplane: 'biplane' };
+export const modelName = (m: string) => NAME[m] ?? m;
+/** Every baked driveway-car mesh in a tile (props.ts: one InstancedMesh per kit type, named 'parked-cars:<type>'). */
+function parkedMeshes(g: THREE.Object3D) {
+  const out: THREE.InstancedMesh[] = [];
+  for (const c of g.children) if (c.name.startsWith('parked-cars')) out.push(c as THREE.InstancedMesh);
+  return out;
 }
 
 export class Vehicles {
@@ -84,6 +77,8 @@ export class Vehicles {
   private orbitYaw = 0;
   private orbitPitch = 0;
   private seed = 1;
+  private boatN = 0;
+  private planeN = 0;
 
   constructor(
     private o: {
@@ -134,22 +129,34 @@ export class Vehicles {
   }
 
   // ---------------- lifecycle ----------------
-  private make(kind: VKind, x: number, z: number, yaw: number, color?: number): Veh {
+  private make(kind: VKind, x: number, z: number, yaw: number, color?: number, model?: string): Veh {
     const obj = new THREE.Group();
     let prop: THREE.Object3D | undefined;
-    const c = color ?? CAR_COLORS[(this.seed++ * 7) % CAR_COLORS.length];
-    if (kind === 'car') obj.add(new THREE.Mesh(tint(carGeo(), c), this.mat));
-    else if (kind === 'boat') obj.add(new THREE.Mesh(tint(boatGeo(), 0xf4f1ea), this.mat));
-    else {
-      obj.add(new THREE.Mesh(tint(planeGeo(), c === 0x26282c ? 0xf4f1ea : 0xf4f1ea), this.mat));
+    let gearY = 0;
+    const c = color ?? CAR_COLORS[(this.seed * 7) % CAR_COLORS.length];
+    const seed = this.seed++;
+    if (kind === 'car') {
+      const m = (model && (CAR_TYPES as string[]).includes(model) ? model : pickFrom(carMix(activeStyle().region, activeStyle().climate), (seed * 0.618034) % 1)) as CarType;
+      model = m;
+      obj.add(new THREE.Mesh(tint(carLib(m).clone(), c), this.mat));
+    } else if (kind === 'boat') {
+      const m = (model ?? BOAT_CYCLE[this.boatN++ % BOAT_CYCLE.length]) as BoatType;
+      model = m;
+      obj.add(new THREE.Mesh(tint(boatLib(m).clone(), HULLS[seed % HULLS.length]), this.mat));
+    } else {
+      const m = (model ?? PLANE_TYPES[this.planeN++ % PLANE_TYPES.length]) as PlaneType;
+      model = m;
+      const P = planeGeometry(planeRecipe(m, seed));
+      obj.add(new THREE.Mesh(tint(P.geo, 0xf4f1ea), this.mat));
       prop = new THREE.Mesh(propGeo(), this.mat);
-      prop.position.set(0, 1.0, -4.55);
+      prop.position.copy(P.prop);
       obj.add(prop);
+      gearY = P.gearY;
     }
     obj.traverse((m) => m.layers.enable(1));
     this.group.add(obj);
     const y = kind === 'boat' ? 0 : this.o.walk.surfaceAt(x, z);
-    const v: Veh = { kind, obj, prop, x, y, z, yaw, pitch: 0, roll: 0, v: 0, steer: 0, throttle: 0, feet: y, airborne: false };
+    const v: Veh = { kind, model: model!, gearY, obj, prop, x, y, z, yaw, pitch: 0, roll: 0, v: 0, steer: 0, throttle: 0, feet: y, airborne: false };
     this.list.push(v);
     // keep the world tidy: recycle the oldest parked player vehicle
     while (this.list.length > MAX_KEPT) {
@@ -169,13 +176,11 @@ export class Vehicles {
   // Driveway cars baked into tiles (props.ts names their InstancedMesh 'parked-cars'): the one you
   // take is hidden (and stays hidden across tile reloads) and becomes your car.
   private parkedNear(x: number, z: number, r: number) {
-    let best: { key: string; im: THREE.InstancedMesh; i: number; x: number; z: number; yaw: number; color: number; d: number } | null = null;
+    let best: { key: string; im: THREE.InstancedMesh; i: number; x: number; z: number; yaw: number; color: number; model: string; d: number } | null = null;
     const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(), e = new THREE.Euler(), c = new THREE.Color();
     for (const t of this.o.tiles()) {
-      const im = t.group.getObjectByName('parked-cars') as THREE.InstancedMesh | undefined;
-      if (!im) continue;
-      for (let i = 0; i < im.count; i++) {
-        const key = `${t.spec.id}:${i}`;
+      for (const im of parkedMeshes(t.group)) for (let i = 0; i < im.count; i++) {
+        const key = `${t.spec.id}:${im.name}:${i}`;
         if (this.taken.has(key)) continue;
         im.getMatrixAt(i, m);
         m.decompose(p, q, s);
@@ -183,7 +188,7 @@ export class Vehicles {
         if (d < r && (!best || d < best.d)) {
           e.setFromQuaternion(q, 'YXZ');
           if (im.instanceColor) im.getColorAt(i, c);
-          best = { key, im, i, x: p.x, z: p.z, yaw: e.y, color: im.instanceColor ? c.getHex() : 0xb9bcc0, d };
+          best = { key, im, i, x: p.x, z: p.z, yaw: e.y, color: im.instanceColor ? c.getHex() : 0xb9bcc0, model: im.name.split(':')[1] ?? 'sedan', d };
         }
       }
     }
@@ -195,9 +200,7 @@ export class Vehicles {
   }
   /** Re-hide taken driveway cars when their tile remounts. */
   onTile(t: { spec: { id: string }; group: THREE.Group }) {
-    const im = t.group.getObjectByName('parked-cars') as THREE.InstancedMesh | undefined;
-    if (!im) return;
-    for (let i = 0; i < im.count; i++) if (this.taken.has(`${t.spec.id}:${i}`)) this.hideInstance(im, i);
+    for (const im of parkedMeshes(t.group)) for (let i = 0; i < im.count; i++) if (this.taken.has(`${t.spec.id}:${im.name}:${i}`)) this.hideInstance(im, i);
   }
 
   // ---------------- enter / exit ----------------
@@ -214,7 +217,7 @@ export class Vehicles {
       if (pk) {
         this.taken.add(pk.key);
         this.hideInstance(pk.im, pk.i);
-        best = this.make('car', pk.x, pk.z, pk.yaw, pk.color);
+        best = this.make('car', pk.x, pk.z, pk.yaw, pk.color, pk.model);
       }
     }
     if (!best) return;
@@ -300,8 +303,8 @@ export class Vehicles {
         }
       }
       if (!best) return this.o.toast('no street nearby for a car');
-      this.make('car', best.x, best.z, best.yaw);
-      return this.o.toast('a car pulls up — walk over and press E');
+      const car = this.make('car', best.x, best.z, best.yaw);
+      return this.o.toast(`${/^[aeiou]|^SUV/i.test(modelName(car.model)) ? 'an' : 'a'} ${modelName(car.model)} pulls up — walk over and press E`);
     }
     if (kind === 'boat') {
       for (let r = 6; r <= 700; r += 8) {
@@ -313,8 +316,9 @@ export class Vehicles {
           // bow away from land: along the terrain's falling slope
           const gx = this.o.terrain.heightAt(x + 8, z) - this.o.terrain.heightAt(x - 8, z), gz = this.o.terrain.heightAt(x, z + 8) - this.o.terrain.heightAt(x, z - 8);
           const yaw = Math.hypot(gx, gz) > 1e-3 ? Math.atan2(gx, gz) : w.yaw;
-          this.make('boat', x, z, yaw);
-          return this.o.toast(r < 60 ? 'a boat bobs at the water’s edge — press E aboard' : `a boat waits on the water ${Math.round(r)} m away`);
+          const b = this.make('boat', x, z, yaw);
+          const nm = modelName(b.model);
+          return this.o.toast(r < 60 ? `a ${nm} bobs at the water’s edge — press E aboard` : `a ${nm} waits on the water ${Math.round(r)} m away`);
         }
       }
       return this.o.toast('no open water nearby');
@@ -343,8 +347,8 @@ export class Vehicles {
           }
         }
         if (ok) {
-          this.make('plane', sx, sz, yaw);
-          return this.o.toast('a plane is waiting on a clear run — press E');
+          const pl = this.make('plane', sx, sz, yaw);
+          return this.o.toast(`a ${modelName(pl.model)} is waiting on a clear run — press E`);
         }
       }
     }
@@ -441,7 +445,8 @@ export class Vehicles {
     const pitchIn = this.axis(['KeyS', 'ArrowDown'], ['KeyW', 'ArrowUp']); // S = nose up (pull back)
     const rollIn = this.axis(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight']);
     const ground = this.ground(v.x, v.z);
-    const gear = 1.0;
+    // gear on the ground; a raised nose swings the tail down about the origin, so lift by that
+    const gear = v.gearY + 0.05 + Math.max(0, Math.sin(v.pitch)) * 3.4;
     const vTarget = v.throttle * 72;
     v.v += (vTarget - v.v) * dt * 0.28 - Math.sin(v.pitch) * 9.8 * dt * 0.55;
     v.v = Math.max(0, v.v);

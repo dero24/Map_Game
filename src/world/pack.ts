@@ -65,8 +65,7 @@ export interface BuiltTile {
   roads: Road[]; // prim (own-only) roads for the life sim
   poles: { x: number; z: number; cx: number; cz: number }[];
   atlas?: ImageBitmap; // street-sign atlas
-  lamp?: ImageBitmap; // lamp light map over the slice box
-  lampBox?: [number, number, number, number]; // x0 z0 invW invH
+  lampPts?: number[]; // street-lamp pool centres (x,z pairs) — the stream paints the light map
   terr?: ArrayBuffer; // the tile's terrain pack, for the main thread's patch registry
   dem?: { buf: ArrayBuffer; layout: LayerLayout }; // H2: Terrarium patch for virtual cells — registered under the cell key
   late?: 1; // built without data still in flight (flat for a late DEM, mapped priors for a late LiDAR read) — relief rebuild wanted

@@ -8,6 +8,11 @@ import type { WalkWorld } from '../player/collision';
 import type { Door } from '../world/buildings';
 import { paintMaterial, U, GLSL_NOISE } from '../render/shared';
 import { CAPS, H, RANGES, S, SIM_HZ, layout, views, type LifeInit } from './protocol';
+import { CAR_TYPES, carMix, carLib, boatLib, pickFrom, type BoatType } from '../assets/kit';
+import { activeStyle } from '../world/styles';
+
+// Moving boats offshore: the working/pleasure mix (skiffs and pontoons stay moored near shore).
+const LIFE_BOATS: BoatType[] = ['console', 'cabin', 'sail', 'lobster', 'skiff'];
 
 export const lifeParams = { density: 1, enabled: true };
 
@@ -189,33 +194,7 @@ export function pedGeo() {
     part(new THREE.SphereGeometry(0.12, 8, 4, 0, Math.PI * 2, 0, Math.PI * 0.55).translate(0, 1.67, 0.01), 0x3a2c22, 0),
   ]);
 }
-export function carGeo() {
-  const wheels = [[0.86, -1.35], [-0.86, -1.35], [0.86, 1.35], [-0.86, 1.35]].map(([x, z]) => part(new THREE.CylinderGeometry(0.32, 0.32, 0.22, 10).rotateZ(Math.PI / 2).translate(x, 0.32, z), 0x1d1e21, 0));
-  return mergeGeometries([
-    part(box(1.8, 0.62, 4.4, 0, 0.66, 0), 0xffffff, 0),
-    part(box(1.62, 0.52, 2.3, 0, 1.22, 0.2), 0x283240, 0),
-    part(box(1.64, 0.07, 2.05, 0, 1.5, 0.25), 0xffffff, 0),
-    part(box(1.82, 0.12, 4.42, 0, 0.4, 0), 0x2c2d30, 0),
-    ...wheels,
-    part(box(0.34, 0.14, 0.05, 0.62, 0.76, -2.21), 0xf6f1da, 3),
-    part(box(0.34, 0.14, 0.05, -0.62, 0.76, -2.21), 0xf6f1da, 3),
-    part(box(0.3, 0.12, 0.05, 0.64, 0.8, 2.21), 0x9a1c1c, 4),
-    part(box(0.3, 0.12, 0.05, -0.64, 0.8, 2.21), 0x9a1c1c, 4),
-  ]);
-}
-export function boatGeo() {
-  const sh = new THREE.Shape();
-  sh.moveTo(-2.4, 0.9); sh.lineTo(-2.4, -0.9); sh.lineTo(1.6, -0.9); sh.quadraticCurveTo(3.4, -0.4, 3.6, 0); sh.quadraticCurveTo(3.4, 0.4, 1.6, 0.9); sh.lineTo(-2.4, 0.9);
-  const hull = new THREE.ExtrudeGeometry(sh, { depth: 0.9, bevelEnabled: false }).rotateX(-Math.PI / 2).rotateY(Math.PI / 2).translate(0, -0.3, 0);
-  return mergeGeometries([
-    part(hull, 0xffffff, 0),
-    part(box(1.3, 0.8, 1.6, 0, 0.95, 0.4), 0xf3f1ea, 0),
-    part(box(1.35, 0.25, 1.1, 0, 1.2, -0.25), 0x33495e, 0),
-    part(box(1.84, 0.1, 5.9, 0, 0.55, -0.55), 0x3f4d59, 0),
-    part(box(0.12, 0.12, 0.12, 0, 1.8, 0.8), 0xfff4d6, 3),
-  ]);
-}
-
+// Cars and boats come from the asset kit (src/assets/kit.ts): one InstancedMesh per type.
 export function creatureMaterial(defines: Record<string, number>) {
   return paintMaterial({
     defines,
@@ -270,7 +249,7 @@ const CAR_COLORS = [0xf2f2ee, 0xb9bcc0, 0x26282c, 0x5a5e64, 0x2b3f63, 0x9c2a26, 
 const SHIRTS = [0xe8d8b0, 0x5b7fa6, 0xc4553f, 0xf2efe6, 0x6e8c5a, 0xe0a33b, 0x7a5b8c, 0x3f6f78, 0xd98a8a, 0x2f3a4a];
 const BOATS = [0xf5f3ee, 0xf5f3ee, 0xe9eef0, 0x2d4a6a, 0xc9d8de, 0x9b3b32];
 
-interface Group { mesh: THREE.InstancedMesh; anim: THREE.InstancedBufferAttribute; range: readonly [number, number]; scale: number }
+interface Group { mesh: THREE.InstancedMesh; meshes: THREE.InstancedMesh[]; anim: THREE.InstancedBufferAttribute; range: readonly [number, number]; scale: number }
 
 export interface LifeStats {
   nearestCar: number; carPan: number; carSpeed: number;
@@ -306,28 +285,34 @@ export class LifeClient {
     this.V.header[H.HOUR] = 1200;
     this.spawn(init);
 
-    const make = (geo: THREE.BufferGeometry, defines: Record<string, number>, range: readonly [number, number], scale: number, colors?: (i: number) => number) => {
+    // One InstancedMesh per model variant (the asset kit's car / boat types); an agent shows
+    // in the mesh its variant picks and is zero-scaled in the others.
+    const make = (geos: THREE.BufferGeometry | THREE.BufferGeometry[], defines: Record<string, number>, range: readonly [number, number], scale: number, colors?: (i: number) => number) => {
       const n = range[1] - range[0];
-      const mesh = new THREE.InstancedMesh(geo, creatureMaterial(defines), n);
       const anim = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
       anim.setUsage(THREE.DynamicDrawUsage);
-      geo.setAttribute('aAnim', anim);
-      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      mesh.frustumCulled = false;
-      mesh.layers.enable(1);
-      const zero = new THREE.Matrix4().makeScale(0, 0, 0);
-      for (let i = 0; i < n; i++) mesh.setMatrixAt(i, zero);
-      if (colors) {
-        const c = new THREE.Color();
-        for (let i = 0; i < n; i++) mesh.setColorAt(i, c.set(colors(i)));
-      }
-      this.group.add(mesh);
-      this.groups.push({ mesh, anim, range, scale });
+      const meshes = (Array.isArray(geos) ? geos : [geos]).map((g0) => {
+        const geo = g0.clone();
+        geo.setAttribute('aAnim', anim);
+        const mesh = new THREE.InstancedMesh(geo, creatureMaterial(defines), n);
+        mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        mesh.frustumCulled = false;
+        mesh.layers.enable(1);
+        const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+        for (let i = 0; i < n; i++) mesh.setMatrixAt(i, zero);
+        if (colors) {
+          const c = new THREE.Color();
+          for (let i = 0; i < n; i++) mesh.setColorAt(i, c.set(colors(i)));
+        }
+        this.group.add(mesh);
+        return mesh;
+      });
+      this.groups.push({ mesh: meshes[0], meshes, anim, range, scale });
     };
     make(gullGeo(), { WINGS: 1 }, RANGES.gulls, 1.8);
-    make(carGeo(), {}, RANGES.cars, 1, () => 0xffffff);
+    make(CAR_TYPES.map((t) => carLib(t)), {}, RANGES.cars, 1, () => 0xffffff);
     make(pedGeo(), { LEGS: 1 }, RANGES.peds, 1, () => 0xffffff);
-    make(boatGeo(), {}, RANGES.boats, 1.3, () => 0xffffff);
+    make(LIFE_BOATS.map((t) => boatLib(t)), {}, RANGES.boats, 1, () => 0xffffff);
 
     // Headlight / masthead halos at night (positions rewritten per frame).
     const hg = new THREE.BufferGeometry();
@@ -406,7 +391,7 @@ export class LifeClient {
       for (let i = r0; i < r1; i++) {
         const o = i * S.STRIDE, li = i - r0;
         const flags = snap[o + S.FLAGS];
-        if (!(flags & 1) || snap[o + S.Y] < -500) { this.m.makeScale(0, 0, 0); g.mesh.setMatrixAt(li, this.m); continue; }
+        if (!(flags & 1) || snap[o + S.Y] < -500) { for (const mm of g.meshes) mm.setMatrixAt(li, this.zeroM); continue; }
         const x = snap[o + S.PX] + (snap[o + S.X] - snap[o + S.PX]) * a;
         let y = snap[o + S.PY] + (snap[o + S.Y] - snap[o + S.PY]) * a;
         const z = snap[o + S.PZ] + (snap[o + S.Z] - snap[o + S.PZ]) * a;
@@ -433,6 +418,7 @@ export class LifeClient {
             heads.setXYZ(hk++, hx - rx, y + 0.76, hz - rz);
           }
           g.mesh.setColorAt(li, this.tmpC.set(CAR_COLORS[variant % 10 % CAR_COLORS.length]));
+          sx = sy = sz = 1; // the kit's vans / SUVs are their own models now
         } else if (kind === 2) {
           if (dist < 25) st.pedsNear++;
           g.mesh.setColorAt(li, this.tmpC.set(SHIRTS[variant % SHIRTS.length]));
@@ -446,19 +432,31 @@ export class LifeClient {
         this.q.setFromAxisAngle(this.up, yaw);
         if (roll) this.q.multiply(this.tmpQ.setFromAxisAngle(this.fwdAxis, roll));
         this.m.compose(this.p.set(x, y, z), this.q, this.sc.set(sx, sy, sz));
-        g.mesh.setMatrixAt(li, this.m);
+        if (g.meshes.length > 1) {
+          // the agent's model: a stable pick from its variant (cars follow the street mix)
+          const pick = kind === 1 ? CAR_TYPES.indexOf(pickFrom(carMix(activeStyle().region, activeStyle().climate), ((variant * 0.618034) % 1 + (i * 0.1234) % 1) % 1)) : (variant + i) % g.meshes.length;
+          for (let k = 0; k < g.meshes.length; k++) {
+            if (k === pick) {
+              g.meshes[k].setMatrixAt(li, this.m);
+              if (g.meshes[k] !== g.mesh && g.mesh.instanceColor) { g.mesh.getColorAt(li, this.tmpC); g.meshes[k].setColorAt(li, this.tmpC); }
+            } else g.meshes[k].setMatrixAt(li, this.zeroM);
+          }
+        } else g.mesh.setMatrixAt(li, this.m);
         const aph = snap[o + S.ANIM];
         A[li * 3] = aph; A[li * 3 + 1] = amt; A[li * 3 + 2] = lights;
         if (kind === 1) A[li * 3 + 1] = 0;
       }
-      g.mesh.instanceMatrix.needsUpdate = true;
-      if (g.mesh.instanceColor) g.mesh.instanceColor.needsUpdate = true;
+      for (const mm of g.meshes) {
+        mm.instanceMatrix.needsUpdate = true;
+        if (mm.instanceColor) mm.instanceColor.needsUpdate = true;
+      }
       g.anim.needsUpdate = true;
     }
     for (let k = hk; k < heads.count; k++) heads.setXYZ(k, 0, -9999, 0);
     heads.needsUpdate = true;
   }
   private tmpC = new THREE.Color();
+  private zeroM = new THREE.Matrix4().makeScale(0, 0, 0);
   private tmpQ = new THREE.Quaternion();
   private fwdAxis = new THREE.Vector3(0, 0, 1);
 }

@@ -38,6 +38,7 @@ walking — forever — while the world paints itself around you. The design liv
 | L-trees | **Real trees from LiDAR** — crown detection on the same cell raster (`detectTrees`), measured height/crown/position replace the WorldCover scan where the survey covered the ground | ✅ done | this session |
 | J1 + L-new | **Past the bake**: ground paint windows everywhere (streamed tiles paint), LiDAR-detected unmapped buildings, LiDAR worker, Overpass-remark fix + client/service throttling, tree clearance | ✅ done | this session |
 | Traversal | **Rideable vehicles** (car/boat/plane, E/V/B/N, driveway cars, chase cam) · **grass** (painter-masked, lush tiers) · sunrise start · in-frame teleport | ✅ done (first cut) | this session |
+| Kit | **Asset kit** (`src/assets/kit.ts`, `/kit.html`): recipe+seed cars/boats/planes/rocks, region street/boat mixes; life, driveways, moorings, player vehicles, groynes + seawall armour all draw from it · stairs hug houses · signs always fit · lamp pools on every streamed tile | ✅ done | this session |
 
 ## Next up (revised 2026-09-26 — see OPEN_WORLD.md "Phases — revised order")
 

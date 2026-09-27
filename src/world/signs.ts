@@ -8,8 +8,20 @@ import { paintMaterial } from '../render/shared';
 import { makeCanvas, type AnyCanvas } from './canvas';
 
 const RANK: Record<string, number> = { primary: 5, trunk: 5, secondary: 4, tertiary: 3, residential: 2, unclassified: 2, living_street: 2 };
-const SUFFIX: Record<string, string> = { Avenue: 'Ave', Street: 'St', Road: 'Rd', Boulevard: 'Blvd', Drive: 'Dr', Place: 'Pl', Lane: 'Ln', Court: 'Ct', Terrace: 'Ter', Parkway: 'Pkwy', Highway: 'Hwy', Circle: 'Cir', Way: 'Way' };
-export const signName = (n: string) => n.replace(/\b(North|South|East|West)\b/g, (m) => m[0]).replace(/\b(\w+)$/, (w) => SUFFIX[w] ?? w);
+// USPS Publication 28 street-suffix abbreviations (the common ones) — blades print these.
+const SUFFIX: Record<string, string> = {
+  Avenue: 'Ave', Street: 'St', Road: 'Rd', Boulevard: 'Blvd', Drive: 'Dr', Place: 'Pl', Lane: 'Ln', Court: 'Ct',
+  Terrace: 'Ter', Parkway: 'Pkwy', Highway: 'Hwy', Circle: 'Cir', Way: 'Way', Square: 'Sq', Trail: 'Trl',
+  Crescent: 'Cres', Expressway: 'Expy', Turnpike: 'Tpke', Point: 'Pt', Plaza: 'Plz', Heights: 'Hts',
+  Extension: 'Ext', Crossing: 'Xing', Ridge: 'Rdg', Harbor: 'Hbr', Landing: 'Lndg', Mount: 'Mt', Fort: 'Ft', Saint: 'St',
+};
+const DIR: Record<string, string> = { North: 'N', South: 'S', East: 'E', West: 'W', Northeast: 'NE', Northwest: 'NW', Southeast: 'SE', Southwest: 'SW' };
+// "North Ocean Avenue" → "N Ocean Ave"; "Avenue of Two Rivers" keeps its leading word (a
+// suffix abbreviates only after the name proper); bracketed notes are dropped.
+export const signName = (n: string) => {
+  const words = n.replace(/\s*\(.*?\)\s*/g, ' ').trim().split(/\s+/);
+  return words.map((w, i) => DIR[w] ?? (i > 0 && SUFFIX[w] ? SUFFIX[w] : w === 'Saint' || w === 'Mount' || w === 'Fort' ? SUFFIX[w] : w)).join(' ');
+};
 
 type Font = 'street' | 'shop' | 'number';
 const FONTS: Record<Font, string> = {
@@ -148,11 +160,15 @@ export function buildSigns(world: World, specs: SignSpec[], walk: WalkWorld) {
     [A, B].forEach((way, i) => {
       const e = atlas.get(signName(way.name), 'street');
       if (!e) return;
-      const h = 0.2, w = Math.min(1.6, Math.max(0.75, h * e.aspect * 0.95));
+      // Blades grow with the name (real ones run to ~8 ft); past that the lettering shrinks
+      // rather than squashing, so every name reads with its true proportions.
+      const h = 0.2, natural = h * e.aspect * 0.95;
+      const w = Math.min(2.4, Math.max(0.75, natural + 0.1));
+      const th = natural + 0.1 > 2.4 ? Math.max(0.12, (2.3 / natural) * h) : h;
       const y = g + 2.6 + i * 0.24;
       m.colors(green, 0xf6f6f0);
       // the blade runs along its street, centred over the pole
-      lettered(pos![0], y, pos![1], way.dx, way.dz, w, h, e, true, 0.012);
+      lettered(pos![0], y, pos![1], way.dx, way.dz, Math.min(w - 0.1, (th / h) * natural), th, e, true, 0.012);
       m.colors(green, green);
       m.box(pos![0], pos![1], y - h / 2, y + h / 2, w / 2, 0.01, Math.atan2(way.dz, way.dx));
     });

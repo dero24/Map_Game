@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Asset kit — map_game</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #f5efe1; font: 14px Georgia, serif; color: #3a3346; overflow: hidden; }
+  #bar { position: fixed; top: 10px; left: 10px; right: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; z-index: 2; }
+  #bar button, #bar select, #bar input { font: inherit; padding: 5px 10px; border-radius: 10px; border: 1px solid #b9ae98; background: #fbf7ec; color: #3a3346; }
+  #bar .t { font-size: 18px; margin-right: 8px; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <span class="t">Asset kit</span>
+  <select id="family"><option value="all">everything</option><option>cars</option><option>boats</option><option>planes</option><option>rocks</option></select>
+  <label>seed <input id="seed" type="number" value="1" min="1" style="width:70px" /></label>
+  <button id="reroll">new seeds</button>
+  <button id="glb">export .glb</button>
+</div>
+<script type="module" src="/src/tools/kitViewer.ts"></script>
+</body>
+</html>

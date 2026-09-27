@@ -2,6 +2,50 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-27 (h) — Asset kit (recipe + seed), stairs that hug the house, signs that fit, lamp pools everywhere
+
+**Asset kit** (`src/assets/kit.ts`, viewer at `/kit.html`). This implements `3d_asset_creator.md`:
+- A model is a *recipe* (type + seed → validated proportions) passed through one geometry function per family.
+- Every family follows one convention: non-indexed, vertex `color` (white = tintable by instance colour), `aPart` (3 = head/nav lights, 4 = tail), front toward −z, origin on the ground or waterline.
+- Families:
+  - Cars: sedan, hatch, wagon, SUV, pickup, van, coupe, jeep.
+  - Boats: skiff, console, cabin, sail, pontoon, lobster.
+  - Planes: high-wing, low-wing, seaplane, biplane. The prop position is returned so the rider spins it in place.
+  - Rocks: boulder, riprap, stone.
+- `carLib`/`boatLib`/`rockLib` cache one canonical variant per type. The world draws one InstancedMesh per type.
+- Wired in:
+  - **Life traffic.** One mesh per type. Each agent picks a stable type from the street mix and is zero-scaled in the other meshes.
+  - **Driveway cars.** `parked-cars:<type>` meshes. The collision footprint comes from the recipe's L×W.
+  - **Moored boats.** `moored-boats:<type>`, packed bow-to-stern along each pier side, with empty slips.
+  - **Player vehicles.** V picks from the street mix, B cycles boat types, N cycles plane types. The toast names the model ("a pickup pulls up"). Taking a driveway car keeps its model.
+  - **Groynes and seawall.** 4 riprap and 4 boulder variants, yaw plus a small lean so flat undersides sit down. The seawall now carries armour stone on its seaward slope.
+- **Scales by region.** `carMix(region, climate)` and `boatMix(climate)` shift the mix without any per-town code:
+  - Europe and Japan get more hatchbacks and wagons.
+  - The arid and continental interior gets more pickups.
+  - Places with cold winters get SUVs and jeeps.
+  - Lobster boats up north, center-consoles in warm water.
+- **Worker gotcha.** Pack *transfers* geometry buffers. A cached library geometry mounted directly in a tile detaches on the first tile, and every later postMessage then throws DataCloneError. Tiles must `.clone()` library geometry; the main thread (life, vehicles) can share it.
+- Old ad-hoc `carGeo`/`boatGeo`/`planeGeo` removed.
+
+**Stairs.** Raised houses (flood zone) try these layouts in order:
+1. A flight parallel to the door wall.
+2. A flight wrapping down the adjacent side wall.
+3. A dogleg with a mid landing.
+4. The old perpendicular run, only as a last resort.
+
+Stairs no longer poke into side streets. This is generic: it works from the footprint ring, not per town.
+
+**Signs.** `signName` uses USPS suffix and directional abbreviations: only after the first word, parentheticals dropped, and Saint/Mount/Fort always shortened. The blade grows to 2.4 m, then the lettering shrinks, so every name fits.
+
+**Lamp pools.** Tiles ship `lampPts`. `stream.ts` paints a walker-centred 2 km lamp light map and repaints on tile change or after moving 512 m. Night pools now work on every streamed tile, not just the bake.
+
+**Tree trunks** collide (`walk.addLoop`); shrubs don't.
+
+Verified:
+- tsc clean and 94 tests pass, including the new `tests/kit.test.ts`: ground/waterline origins, determinism, prop at the nose, and the regional mix shift.
+- In-game at Sea Bright: 107 driveway cars across 8 types, 180 moored boats across 6 types, about 8k rocks.
+- Views checked: a console boat alongside its pier and a jeep in its driveway.
+
 ## 2026-09-27 (g) — Tile service deployed
 
 The user created the R2 bucket and deployed `worker/` on Cloudflare. It is live at

@@ -403,10 +403,39 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
     const total = (nSteps - 1) * 0.27;
     const sw = 1.1, D = 1.35;
     const spaceR = len - (u + wide / 2 + 0.45), spaceL = u - wide / 2 - 0.45;
-    const parallel = Math.max(spaceR, spaceL) >= total + 0.3;
-    const dir = spaceR >= spaceL ? 1 : -1;
+    const room = Math.max(spaceR, spaceL);
+    // Stairs hug the house: one flight along the wall when it fits, else a switchback (two
+    // half-flights along the wall, the second outside the first, a landing between). Straight
+    // out toward the street only when the wall is too short even for that — on the shore's
+    // tight lots a straight flight lands on the sidewalk.
+    const parallel = room >= total + 0.3;
+    let dir = spaceR >= spaceL ? 1 : -1;
+    // Side-wrap: the landing runs to the house corner and the flight goes down along the side
+    // wall toward the back — how narrow raised shore houses actually do it (the door on the
+    // street gable, the stair along the side). Needs a convex corner and a long enough side.
+    let side: { cx: number; cz: number; dx: number; dz: number; sx: number; sz: number } | null = null;
+    if (!parallel) {
+      const R = B.ring, n = R.length;
+      for (const d of dir > 0 ? [1, -1] : [-1, 1]) {
+        const c = d > 0 ? R[(wall.i + 1) % n] : R[wall.i];
+        const o = d > 0 ? R[(wall.i + 2) % n] : R[(wall.i - 1 + n) % n];
+        const sl = Math.hypot(o[0] - c[0], o[1] - c[1]);
+        if (sl < total + 0.4) continue;
+        const dx = (o[0] - c[0]) / sl, dz = (o[1] - c[1]) / sl;
+        if (dx * nx + dz * nz > -0.7) continue; // the side wall must run back from the street wall
+        let sx = -dz, sz = dx;
+        if (sx * tx * d + sz * tz * d < 0) (sx = -sx), (sz = -sz); // outward from the side wall
+        side = { cx: c[0], cz: c[1], dx, dz, sx, sz };
+        dir = d;
+        break;
+      }
+    }
+    const dogleg = !parallel && !side && room >= Math.ceil(nSteps / 2) * 0.27 + sw + 0.4;
     let la: number, lb: number; // landing extent along the wall
-    if (parallel) {
+    if (side) {
+      la = u - dir * (wide / 2 + 0.45);
+      lb = (dir > 0 ? len : 0) + dir * (sw + 0.16);
+    } else if (parallel || dogleg) {
       la = u - dir * (wide / 2 + 0.45);
       lb = u + dir * (wide / 2 + 0.45);
     } else {
@@ -424,7 +453,47 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
     for (const uu of [l0 + 0.1, l1 - 0.1]) { const [x, z] = at(uu, D - 0.1); box(b, x, z, ang, 0.2, 0.2, g - 0.2, floorY - 0.25); }
     b.setColor(trim);
     let st;
-    if (parallel) {
+    if (side) {
+      const out = 0.08 + sw / 2;
+      const sx0 = side.cx + side.sx * out, sz0 = side.cz + side.sz * out;
+      st = stairFlight(C, sx0, sz0, side.dx, side.dz, sw, floorY, g, wood);
+      const P3 = (pt: P2) => V(pt[0], floorY, pt[1]);
+      railPanel(b, P3(at(l0, D)), P3(at(l1, D)), 0.95);
+      railPanel(b, P3(at(la, 0.05)), P3(at(la, D)), 0.95);
+      railPanel(b, P3(at(lb, 0.0)), P3(at(lb, D)), 0.95);
+      C.col.walls.push([at(l0, D), at(l1, D), -Infinity, Infinity], [at(la, 0.05), at(la, D), -Infinity, Infinity], [at(lb, 0), at(lb, D), -Infinity, Infinity]);
+    } else if (dogleg) {
+      // flight A along the wall from the door landing down to a mid landing; flight B turns
+      // back outside it to the ground
+      const midY = floorY - (Math.ceil(nSteps / 2) * rise) / nSteps;
+      const outA = 0.08 + sw / 2, outB = 0.08 + sw * 1.5 + 0.12;
+      const [ax, az] = at(lb, outA);
+      const A = stairFlight(C, ax, az, tx * dir, tz * dir, sw, floorY, midY, wood);
+      const uA = lb + dir * A.total; // along-wall position where flight A ends
+      const u0 = Math.min(uA, uA + dir * sw), u1 = Math.max(uA, uA + dir * sw);
+      const ml: P2[] = [at(u0, 0.08), at(u1, 0.08), at(u1, 0.08 + 2 * sw + 0.12), at(u0, 0.08 + 2 * sw + 0.12)];
+      b.setColor(wood);
+      walls(b, ml, midY - 0.22, midY - 0.22, midY, 0.22);
+      flatCap(b, ml, midY);
+      flatCap(b, ml, midY - 0.22, DOWN);
+      b.setColor(lin(0xb9ad9a));
+      for (const [pu, po] of [[u0 + 0.1, 0.2], [u1 - 0.1, 0.2], [u0 + 0.1, 2 * sw], [u1 - 0.1, 2 * sw]] as const) {
+        const [x, z] = at(pu, po);
+        box(b, x, z, ang, 0.18, 0.18, terrain.heightAt(x, z) - 0.2, midY - 0.22);
+      }
+      b.setColor(trim);
+      const uEnd = uA + dir * sw; // far edge of the mid landing
+      const [bx, bz] = at(uA, outB);
+      st = stairFlight(C, bx, bz, -tx * dir, -tz * dir, sw, midY, g, wood);
+      // rails: door landing's outer edge up to flight A, the mid landing's far end and outer side
+      const P3 = (pt: P2, y: number) => V(pt[0], y, pt[1]);
+      railPanel(b, P3(at(l0, D), floorY), P3(at(l1, D), floorY), 0.95);
+      railPanel(b, P3(at(la, 0.05), floorY), P3(at(la, D), floorY), 0.95);
+      railPanel(b, P3(at(uEnd, 0.08), midY), P3(at(uEnd, 0.08 + 2 * sw + 0.12), midY), 0.95);
+      C.col.walls.push([at(l0, D), at(l1, D), -Infinity, Infinity], [at(la, 0.05), at(la, D), -Infinity, Infinity]);
+      C.col.walls.push([at(uEnd, 0.08), at(uEnd, 0.08 + 2 * sw + 0.12), -Infinity, Infinity]);
+      C.col.decks.push(deckLine([at(Math.min(u0, u1) + 0.15, 0.08 + sw + 0.06), at(Math.max(u0, u1) - 0.15, 0.08 + sw + 0.06)], sw + 0.05, () => midY, { k: 'const', y: midY }));
+    } else if (parallel) {
       const ue = lb, out = 0.08 + sw / 2;
       const [sx, sz] = at(ue, out);
       st = stairFlight(C, sx, sz, tx * dir, tz * dir, sw, floorY, g, wood);

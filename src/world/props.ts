@@ -7,7 +7,7 @@ import type { WalkWorld } from '../player/collision';
 import { propMaterial, colored } from '../render/propMaterial';
 import { U, GLSL_NOISE } from '../render/shared';
 import { makeRng, hash01 } from '../core/rng';
-import { carGeo } from '../sim/life';
+import { carMix, boatMix, carLib, boatLib, boatRecipe, carRecipe, pickFrom, type BoatType, type CarType } from '../assets/kit';
 import type { Mailbox, Door } from './buildings';
 import { makeCanvas } from './canvas';
 import { activeStyle, pickWeighted } from './styles';
@@ -250,26 +250,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   wires.renderOrder = 6;
   group.add(wires);
 
-  // Lamp light map: soft warm pools painted top-down, sampled by every material at night.
-  const LM = 1024;
-  const lc = makeCanvas(LM, LM);
-  const lctx = lc.getContext('2d')! as CanvasRenderingContext2D;
-  lctx.fillStyle = '#000';
-  lctx.fillRect(0, 0, LM, LM);
-  const sx = LM / (S.x1 - S.x0), sz = LM / (S.z1 - S.z0);
-  lctx.globalCompositeOperation = 'lighter';
-  for (const [x, z] of lampGround) {
-    const px = (x - S.x0) * sx, pz = (z - S.z0) * sz;
-    const r = 15 * sx;
-    const g = lctx.createRadialGradient(px, pz, 0, px, pz, r);
-    g.addColorStop(0, 'rgba(255,255,255,0.85)');
-    g.addColorStop(0.35, 'rgba(255,255,255,0.4)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    lctx.fillStyle = g;
-    lctx.fillRect(px - r, pz - r, r * 2, r * 2);
-  }
-  // The lamp map ships to the stream, which composites every mounted tile's pools into uLampMap.
-  const lampBox: [number, number, number, number] = [S.x0, S.z0, 1 / (S.x1 - S.x0), 1 / (S.z1 - S.z0)];
+  // Lamp pools: the ground points ship to the stream, which paints one walker-centred light
+  // map from every mounted tile's lamps (so pools follow you past the bake too).
+  const lampPts = lampGround.flat();
   group.add(haloPoints(lampHeads, 1.6, new THREE.Color(1.0, 0.7, 0.38)));
 
   // ---------- trees ----------
@@ -461,6 +444,14 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       }
       t.m.compose(pos, q, sc);
     }
+    // Solid trunks: walking, driving and landing bump into trees now (shrubs stay brushable).
+    const TR = [0.3, 0.36, 0, 0.26, 0.2];
+    for (const t of trees) {
+      if (t.k === 2) continue;
+      t.m.decompose(pos, q, sc);
+      const r = Math.max(0.15, TR[t.k] * Math.max(sc.x, sc.z));
+      walk.addLoop([[pos.x - r, pos.z - r], [pos.x + r, pos.z - r], [pos.x + r, pos.z + r], [pos.x - r, pos.z + r]]);
+    }
   }
 
   const blob = (r: number, y: number, ox: number, oz: number, seed: number, sy = 0.85) => {
@@ -507,49 +498,41 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     group.add(im);
   }
 
-  // ---------- moored boats ----------
-  const boats: THREE.Matrix4[] = [];
-  const boatCol: THREE.Color[] = [];
-  const sails: THREE.Matrix4[] = [];
+  // ---------- moored boats (asset kit hulls, packed along each pier side bow-to-stern) ----------
+  const MOOR = boatMix(look.climate);
+  const moored = new Map<BoatType, { m: THREE.Matrix4; c: THREE.Color }[]>();
   for (const s of pierSegs) {
     const dx = s.b[0] - s.a[0], dz = s.b[1] - s.a[1];
     const L = Math.hypot(dx, dz);
     if (L < 4) continue;
     const tx = dx / L, tz = dz / L;
-    for (let d = 3; d < L - 2; d += 6.5) {
-      for (const side of [-1, 1]) {
-        if (rng.float() < 0.45) continue;
-        const len = 7 + rng.float() * 6;
-        const off = s.w / 2 + 1.9 + rng.float() * 0.4;
-        const x = s.a[0] + tx * d + tz * side * off, z = s.a[1] + tz * d - tx * side * off;
+    for (const side of [-1, 1]) {
+      let d = 2;
+      while (d < L - 3) {
+        if (rng.float() < 0.35) { d += 4; continue; } // an empty slip
+        const type = pickFrom(MOOR, rng.float());
+        const r = boatRecipe(type, 1);
+        if (d + r.L > L - 1) break;
+        const off = s.w / 2 + r.B / 2 + 0.6;
+        const c = d + r.L / 2;
+        const x = s.a[0] + tx * c + tz * side * off, z = s.a[1] + tz * c - tx * side * off;
+        d += r.L + 1.2;
         if (terrain.sdfAt(x, z) > -2.5 || walk.deckAt(x, z) !== null) continue;
-        const ang = Math.atan2(tz, tx) + (rng.float() < 0.5 ? 0 : Math.PI);
-        const m = new THREE.Matrix4().compose(V(x, 0, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -ang), V(len / 10, len / 10, len / 10));
-        boats.push(m);
-        boatCol.push(new THREE.Color(rng.pick([0xf4f2ec, 0xf4f2ec, 0xeef0f0, 0x2d4a6a, 0xd9e4ea, 0x9b3b32])));
-        if (rng.float() < 0.3) sails.push(m);
+        // bow (−z in the model) toward either end of the pier
+        const f = rng.float() < 0.5 ? 1 : -1;
+        const m = new THREE.Matrix4().compose(V(x, 0, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(-tx * f, -tz * f)), V(1, 1, 1));
+        if (!moored.has(type)) moored.set(type, []);
+        moored.get(type)!.push({ m, c: new THREE.Color(rng.pick([0xf4f2ec, 0xf4f2ec, 0xeef0f0, 0x2d4a6a, 0xd9e4ea, 0x9b3b32])) });
       }
     }
   }
-  if (boats.length) {
-    const hullShape = new THREE.Shape();
-    hullShape.moveTo(-5, -1.3); hullShape.lineTo(3.2, -1.3); hullShape.quadraticCurveTo(5.3, -0.6, 5.3, 0); hullShape.quadraticCurveTo(5.3, 0.6, 3.2, 1.3); hullShape.lineTo(-5, 1.3); hullShape.lineTo(-5, -1.3);
-    const hull = new THREE.ExtrudeGeometry(hullShape, { depth: 1.1, bevelEnabled: false }).rotateX(-Math.PI / 2).translate(0, -0.35, 0);
-    const boatGeo = mergeGeometries([
-      colored(hull, 0xffffff),
-      colored(new THREE.BoxGeometry(3.4, 0.9, 2.0).translate(-0.6, 1.2, 0), 0xf6f4ee),
-      colored(new THREE.BoxGeometry(2.2, 0.25, 2.1).translate(-0.4, 1.75, 0), 0x3a4f63),
-      colored(new THREE.BoxGeometry(10.1, 0.18, 2.66).translate(0.1, 0.75, 0), 0x3d4d5d),
-    ]);
-    const im = new THREE.InstancedMesh(boatGeo, propMaterial({ bob: true }), boats.length);
-    boats.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, boatCol[i]); });
+  for (const [type, list] of moored) {
+    const im = new THREE.InstancedMesh(boatLib(type).clone(), propMaterial({ bob: true }), list.length);
+    im.name = 'moored-boats:' + type;
+    list.forEach((b, i) => { im.setMatrixAt(i, b.m); im.setColorAt(i, b.c); });
     im.layers.enable(1);
+    im.computeBoundingSphere();
     group.add(im);
-    if (sails.length) {
-      const mast = new THREE.InstancedMesh(colored(new THREE.CylinderGeometry(0.06, 0.08, 11, 5).translate(0.8, 6.2, 0), 0xd8d8d4), propMaterial({ bob: true }), sails.length);
-      sails.forEach((m, i) => mast.setMatrixAt(i, m));
-      group.add(mast);
-    }
   }
 
   // ---------- lifeguard stands along the beach, facing the sea ----------
@@ -571,7 +554,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     }
 
   // ---------- parked cars at the house end of real driveways ----------
-  const parked: { m: THREE.Matrix4; c: THREE.Color }[] = [];
+  const parked = new Map<CarType, { m: THREE.Matrix4; c: THREE.Color }[]>();
   const CAR = [0xf2f2ee, 0xb9bcc0, 0x26282c, 0x5a5e64, 0x2b3f63, 0x9c2a26, 0x3d5a46, 0xcdbf9e, 0x7a8894];
   for (const r of json.roads) {
     if (r.lod || r.sv !== 'driveway' || r.p.length < 4) continue;
@@ -587,17 +570,22 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     const back = Math.min(3.2, l * 0.5);
     const x = e[0] + (dx / l) * back, z = e[1] + (dz / l) * back;
     const yaw = Math.atan2(-dx, -dz) + (h < 0.3 ? Math.PI : 0);
+    // the model: the region's street mix, footprint sized by its recipe
+    const type = pickFrom(carMix(look.region, look.climate), hash01(r.p[1] * 53 + r.p[0] * 3));
+    const rc = carRecipe(type, 1), hl = rc.L / 2, hw = rc.W / 2 + 0.05;
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
-    const corners: P[] = [[-1, -2.3], [1, -2.3], [1, 2.3], [-1, 2.3]].map(([u, v]) => [x + u * cy + v * sy, z - u * sy + v * cy]);
+    const corners: P[] = [[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]].map(([u, v]) => [x + u * cy + v * sy, z - u * sy + v * cy]);
     if (!inSlice(x, z, 10) || corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.3)) || terrain.sdfAt(x, z) < 2) continue;
-    parked.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, 1)), c: new THREE.Color(CAR[Math.floor(h * 97) % CAR.length]) });
+    if (!parked.has(type)) parked.set(type, []);
+    parked.get(type)!.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, 1)), c: new THREE.Color(CAR[Math.floor(h * 97) % CAR.length]) });
     walk.addLoop(corners);
   }
-  if (parked.length) {
-    const im = new THREE.InstancedMesh(carGeo(), propMaterial(), parked.length);
-    im.name = 'parked-cars'; // player/vehicles.ts finds these to let you drive off in one
-    parked.forEach((p, i) => { im.setMatrixAt(i, p.m); im.setColorAt(i, p.c); });
+  for (const [type, list] of parked) {
+    const im = new THREE.InstancedMesh(carLib(type).clone(), propMaterial(), list.length);
+    im.name = 'parked-cars:' + type; // player/vehicles.ts finds these to let you drive off in one
+    list.forEach((p, i) => { im.setMatrixAt(i, p.m); im.setColorAt(i, p.c); });
     im.layers.enable(1);
+    im.computeBoundingSphere();
     group.add(im);
   }
 
@@ -823,5 +811,5 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     }
   }
 
-  return { group, lampHeads, lampMap: lc, lampBox };
+  return { group, lampHeads, lampPts };
 }

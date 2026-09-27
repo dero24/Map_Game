@@ -21,6 +21,7 @@ const LOAD_R = 1500; // keep tiles this close (3×3 cells and then some)
 const DROP_R = 2400; // drop tiles beyond this
 const COARSE_R = 8000; // silhouette ring: lite builds (meshes only) out to the horizon
 const W_CONC = 3; // real-lite (tile service) builds in flight at once
+const LAMP_WIN = 2048; // m — the night light-map window around the walker
 const COARSE_BUDGET = 4; // max outstanding lite builds — they're lowest priority
 const ID_STRIDE = 1 << 12; // building-id space per tile (window-fade keys, <2^24 total; synth cells raise the ord count)
 
@@ -78,8 +79,12 @@ export class TileStream {
   private seq = 0;
   private jobs = new Map<number, { res: (t: BuiltTile | null) => void; rej: (e: Error) => void }>();
   private jobFails = 0;
-  // Night lamp light map: per-tile bitmaps composited over the slice box.
-  private lampBits = new Map<string, ImageBitmap>();
+  // Night lamp light map: every mounted tile's lamp points painted into one window that
+  // re-centres on the walker (LAMP_WIN m square), so pools light the streets everywhere.
+  private lampPts = new Map<string, number[]>();
+  private lampCx = Infinity;
+  private lampCz = Infinity;
+  private lampDirty = false;
   private lampCanvas: HTMLCanvasElement | null = null;
   private lampTex: THREE.CanvasTexture | null = null;
   onChange: (() => void) | null = null;
@@ -122,7 +127,7 @@ export class TileStream {
     private demEnabled = false, // H2: Terrarium patches for virtual cells (baked regions carry real terrain already)
   ) {
     const S = man.slice;
-    U.uLampBox.value.set(S.x0, S.z0, 1 / (S.x1 - S.x0), 1 / (S.z1 - S.z0));
+    void S;
     for (const t of man.tiles) this.byCell.set(t.id, t);
     terrain.baked = new Set(man.tiles.map((t) => t.id)); // baked cells never sample a neighbour's DEM overhang
     this.seed = regionSeed(man.id);
@@ -240,6 +245,9 @@ export class TileStream {
   // ring under a small budget), mount at most one finished tile of each tier, drop far ones.
   update(x: number, z: number) {
     const now = performance.now();
+    if (this.lampDirty || Math.hypot(x - this.lampCx, z - this.lampCz) > LAMP_WIN * 0.25) {
+      if (this.lampPts.size) this.repaintLamps(x, z);
+    }
     // Cells in the coarse ring — manifest tiles where baked, synthetic where not. Iterating
     // cells rather than man.tiles is what makes the world continue past the bake.
     const c = this.man.cell;
@@ -542,9 +550,9 @@ export class TileStream {
         this.unloadCoarse('s' + spec.id.slice(1));
       }
       this.scene.add(group);
-      if (tile.lamp) {
-        this.lampBits.set(spec.id, tile.lamp);
-        this.repaintLamps();
+      if (tile.lampPts?.length) {
+        this.lampPts.set(spec.id, tile.lampPts);
+        this.lampDirty = true;
       }
       this.loaded.set(spec.id, {
         spec, group, scope, keys,
@@ -585,22 +593,34 @@ export class TileStream {
     }
   }
 
-  // Composite every mounted tile's lamp bitmap over the slice box — additive pools.
-  private repaintLamps() {
-    const any = [...this.lampBits.values()];
-    const W = any[0]?.width ?? 0, H = any[0]?.height ?? 0;
-    if (!W || !H) return;
+  // Paint the lamp window around (x,z): soft additive pools, ~2 m/px over 2 km.
+  private repaintLamps(x: number, z: number) {
+    const R = 1024, size = LAMP_WIN;
+    this.lampCx = Math.round(x / 50) * 50;
+    this.lampCz = Math.round(z / 50) * 50;
+    this.lampDirty = false;
+    const x0 = this.lampCx - size / 2, z0 = this.lampCz - size / 2, k = R / size;
     if (!this.lampCanvas) {
       this.lampCanvas = document.createElement('canvas');
-      this.lampCanvas.width = W;
-      this.lampCanvas.height = H;
+      this.lampCanvas.width = this.lampCanvas.height = R;
     }
     const ctx = this.lampCanvas.getContext('2d')!;
     ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(0, 0, R, R);
     ctx.globalCompositeOperation = 'lighter';
-    for (const b of any) ctx.drawImage(b, 0, 0, W, H);
+    const r = 15 * k;
+    for (const pts of this.lampPts.values())
+      for (let i = 0; i + 1 < pts.length; i += 2) {
+        const px = (pts[i] - x0) * k, pz = (pts[i + 1] - z0) * k;
+        if (px < -r || pz < -r || px > R + r || pz > R + r) continue;
+        const g = ctx.createRadialGradient(px, pz, 0, px, pz, r);
+        g.addColorStop(0, 'rgba(255,255,255,0.85)');
+        g.addColorStop(0.35, 'rgba(255,255,255,0.4)');
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(px - r, pz - r, r * 2, r * 2);
+      }
     if (!this.lampTex) {
       this.lampTex = new THREE.CanvasTexture(this.lampCanvas);
       this.lampTex.flipY = false;
@@ -608,6 +628,7 @@ export class TileStream {
       this.lampTex.generateMipmaps = false;
       U.uLampMap.value = this.lampTex;
     } else this.lampTex.needsUpdate = true;
+    U.uLampBox.value.set(x0, z0, 1 / size, 1 / size);
   }
 
   unload(id: string) {
@@ -634,12 +655,7 @@ export class TileStream {
       m.geometry?.dispose?.();
       if ((m as unknown as THREE.InstancedMesh).isInstancedMesh) (m as THREE.InstancedMesh).dispose();
     });
-    const bmp = this.lampBits.get(id);
-    if (bmp) {
-      this.lampBits.delete(id);
-      bmp.close();
-      this.repaintLamps();
-    }
+    if (this.lampPts.delete(id)) this.lampDirty = true;
     this.loaded.delete(id);
     this.onUnload?.(id);
     this.markDirty();
