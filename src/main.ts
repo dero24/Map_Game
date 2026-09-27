@@ -35,7 +35,11 @@ const CAPTURE = params.has('capture');
 // open world and the streaming past the bake just work, and a dead worker costs one probe.
 const LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 const TILES_PARAM = params.get('tiles');
-let TILES = TILES_PARAM === 'off' ? '' : TILES_PARAM ?? '';
+// The deployed tile service (worker/, Cloudflare Workers + R2): every cell is fetched from
+// Overpass once, then served from R2/edge to everyone. Production uses it by default;
+// localhost prefers a running `wrangler dev` and falls back to it.
+const DEPLOYED_TILES = 'https://map-game-tiles.map-game-tiles.workers.dev';
+let TILES = TILES_PARAM === 'off' ? '' : TILES_PARAM ?? (LOCAL ? '' : DEPLOYED_TILES);
 async function probeLocalTiles(): Promise<string> {
   // The dev server proxies /__tiles → whichever port `wrangler dev` took (vite.config.ts).
   const via = `${location.origin}/__tiles`;
@@ -43,7 +47,7 @@ async function probeLocalTiles(): Promise<string> {
   if (ok) return via;
   const ports = [8787, 8788, 8789]; // `vite preview` has no proxy — try the worker directly
   const hits = await Promise.all(ports.map((p) => fetch(`http://localhost:${p}/health`, { signal: AbortSignal.timeout(1500) }).then((r) => (r.ok ? `http://localhost:${p}` : ''), () => '')));
-  return hits.find((h) => h) ?? '';
+  return hits.find((h) => h) ?? DEPLOYED_TILES;
 }
 const $ = (id: string) => document.getElementById(id)!;
 
@@ -190,8 +194,7 @@ async function main() {
   // `?lidar=0` builds from mapped priors only.
   stream.lidar = params.get('lidar') !== '0';
   // The localhost auto-default was probed before setup: no worker answered → procedural past the bake.
-  if (TILES_PARAM === null && LOCAL && !TILES)
-    setTimeout(() => toast('local tile service isn\'t running — past the bake the world stays procedural (cd worker && npx wrangler dev)'), 0);
+
   // Grass: tufts grow on open land around the walker (lawns short, open ground tall + lush).
   const grass = new GrassField(world.terrain, walk, () => stream.primRoads, paint.grassMask);
   worldRoot.add(grass.group);

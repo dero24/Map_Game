@@ -2,6 +2,22 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-27 (g) — Tile service deployed
+
+The user created the R2 bucket and deployed `worker/` on Cloudflare. It is live at
+`https://map-game-tiles.map-game-tiles.workers.dev`.
+- `/health` answers.
+- A cold cell took 28.5 s, all of it Overpass. The same cell cached took 50 ms.
+- A DEM tile takes about 0.5 s.
+
+`main.ts` routing:
+- Production (not localhost, no `?tiles=`) uses the deployed service by default.
+- Localhost still prefers a running `wrangler dev` (via `/__tiles`) and falls back to the
+  deployed service.
+- `?tiles=<url>` and `?tiles=off` behave as before.
+
+To redeploy after `worker/` changes: `cd worker && npx wrangler deploy`.
+
 ## 2026-09-27 (f) — Past the bake: real houses from LiDAR, painted streets, tiles that arrive
 
 **User report:** trees in and through buildings; flying to Monmouth Beach and beyond, the

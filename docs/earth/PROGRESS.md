@@ -44,7 +44,7 @@ walking — forever — while the world paints itself around you. The design liv
 - ~~L-lite~~ superseded by **L (LiDAR)** — done for every 3DEP-covered US cell.
 - ~~Trees from LiDAR~~, ~~J1 ground paint~~ — done. Next: per-tile lamp pools past the slice;
   road-ribbon geometry to match the paint (curb height); vehicle polish (+ tree trunk
-  collision) → J2 rest → K life. Deploy the tile service (R2 makes cold Overpass rare).
+  collision) → J2 rest → K life. ~~Deploy the tile service~~ — live at https://map-game-tiles.map-game-tiles.workers.dev (R2 bound as TILES); production defaults to it, localhost prefers `wrangler dev` and falls back to it.
 
 ## Next up (older list, kept for reference)
 
