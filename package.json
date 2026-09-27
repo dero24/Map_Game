@@ -12,7 +12,9 @@
     "test": "vitest run",
     "fetch": "node scripts/fetch-all.mjs",
     "bake": "node scripts/bake.mjs",
-    "shot": "node tools/capture.mjs"
+    "shot": "node tools/capture.mjs",
+    "init": "node tools/init.mjs",
+    "verify:region": "node tools/verify-region.mjs"
   },
   "engines": {
     "node": ">=20"
