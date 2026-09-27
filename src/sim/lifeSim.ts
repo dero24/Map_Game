@@ -5,7 +5,7 @@ import { CAPS, RANGES, S, type LifeInit } from './protocol';
 
 export interface LifeEnv { playerX: number; playerZ: number; night: number; hour: number; density: number; wind: number }
 
-const ST = { WALK: 0, PAUSE: 1, BEACH: 2, FLY: 3, STAND: 4, LAND: 5, TO_DOOR: 6, INSIDE: 7, FROM_DOOR: 8 } as const;
+const ST = { WALK: 0, PAUSE: 1, BEACH: 2, FLY: 3, STAND: 4, LAND: 5, TO_DOOR: 6, INSIDE: 7, FROM_DOOR: 8, DOWN: 9 } as const;
 export const PED_STATE = ST;
 const TAU = Math.PI * 2;
 const angLerp = (a: number, b: number, t: number) => {
@@ -155,6 +155,30 @@ export class LifeSim {
   }
 
   setEnv(e: Partial<LifeEnv>) { Object.assign(this.env, e); }
+
+  /** A car (the player's) at (x,z) moving (vx,vz): walkers it catches are knocked down — thrown
+   *  along with the car, they tumble, lie a moment, get up and walk off. Returns how many. */
+  bump(x: number, z: number, vx: number, vz: number) {
+    const sp = Math.hypot(vx, vz);
+    if (sp < 2.5) return 0;
+    const fx = vx / sp, fz = vz / sp;
+    let n = 0;
+    for (let i = RANGES.peds[0]; i < RANGES.peds[1]; i++) {
+      if (!this.active[i] || this.state[i] === ST.INSIDE || this.state[i] === ST.DOWN) continue;
+      const dx = this.x[i] - x, dz = this.z[i] - z;
+      const ahead = dx * fx + dz * fz, side = Math.abs(dx * -fz + dz * fx);
+      if (ahead < -1.2 || ahead > 2.8 || side > 1.3) continue;
+      const kick = Math.min(9, sp * 0.65);
+      const lat = (dx * -fz + dz * fx >= 0 ? 1 : -1) * sp * 0.25;
+      this.vx[i] = fx * kick - fz * lat; this.vz[i] = fz * kick + fx * lat;
+      this.vy[i] = Math.min(4, sp * 0.18);
+      this.ty[i] = this.y[i]; // the ground they were walking on
+      this.state[i] = ST.DOWN;
+      this.timer[i] = 2.6 + this.rng.float() * 0.4; // ~1.5 s sprawled, ~1 s sitting up, then up and off
+      n++;
+    }
+    return n;
+  }
 
   // ---------------- road graph helpers ----------------
   private rank(e: number) { return this.w.edgeInfo[e * 4]; }
@@ -330,7 +354,7 @@ export class LifeSim {
       this.sample(e, 0, this.tmp);
       return this.tmp[0] > dx0 && this.tmp[0] < dx1 && this.tmp[2] > dz0 && this.tmp[2] < dz1;
     };
-    const e = this.pickEdge((e) => this.walkable(e), (e) => (inDown(e) ? 3 : 0.35), far ? [this.env.playerX, this.env.playerZ] : undefined, far ? 90 : 0);
+    const e = this.pickEdge((e) => this.walkable(e), (e) => (inDown(e) ? 6 : 0.35), far ? [this.env.playerX, this.env.playerZ] : undefined, far ? 90 : 0);
     if (e < 0) { this.active[i] = 0; return; }
     this.placeOnEdge(i, e, this.rng.float() < 0.5 ? 1 : -1, this.rng.float() * this.w.edgeLen[e]);
     this.state[i] = ST.WALK;
@@ -403,7 +427,8 @@ export class LifeSim {
     if (kind === 'car') {
       f = 0.1 + 0.45 * bell(8.3, 2.2) + 0.55 * bell(15, 4.5) + 0.35 * bell(19, 2.5);
     } else {
-      f = 0.04 + 0.3 * bell(8, 2.5) + 0.85 * bell(15.5, 4) + 0.3 * bell(20.5, 2.5);
+      // (+ a coffee-run morning and a lunch hour: downtown is never empty 8 am – 8 pm)
+      f = 0.06 + 0.5 * bell(8.5, 2.5) + 0.35 * bell(12.5, 2.5) + 0.85 * bell(15.5, 4) + 0.3 * bell(20.5, 2.5);
     }
     f = Math.min(1, f);
     const cap = kind === 'car' ? Math.min(CAPS.cars, Math.floor(this.drivableLen / 25)) : CAPS.peds;
@@ -604,6 +629,32 @@ export class LifeSim {
           this.state[i] = ST.FROM_DOOR;
           this.leg[i] = 0;
         }
+      } else if (st === ST.DOWN) {
+        // thrown, sliding to a stop on the ground, then back on their feet
+        moving = 0;
+        this.x[i] += this.vx[i] * dt; this.z[i] += this.vz[i] * dt;
+        this.y[i] = Math.max(this.ty[i], this.y[i] + this.vy[i] * dt);
+        this.vy[i] = this.y[i] <= this.ty[i] ? 0 : this.vy[i] - 9.8 * dt;
+        const f = Math.exp(-dt * 2.6);
+        this.vx[i] *= f; this.vz[i] *= f;
+        this.timer[i] -= dt;
+        if (this.timer[i] <= 0) {
+          // up again: brush off and walk back to the path (no teleport), then carry on along it
+          const ne = this.nearestEdge(this.x[i], this.z[i], (e) => this.walkable(e), 30);
+          if (!ne) { this.active[i] = 0; this.y[i] = -1000; this.snapPrev(i); }
+          else {
+            this.sample(ne[0], ne[1], this.tmp);
+            const dx = this.tmp[0] - this.x[i], dz = this.tmp[2] - this.z[i], L = Math.hypot(dx, dz);
+            if (L < 0.35 || this.timer[i] < -4) { this.placeOnEdge(i, ne[0], this.rng.float() < 0.5 ? 1 : -1, ne[1]); this.state[i] = ST.WALK; this.updatePedPose(i, 1); this.snapPrev(i); }
+            else {
+              const st = Math.min(L, 1.2 * dt);
+              this.x[i] += dx / L * st; this.z[i] += dz / L * st; this.y[i] += (this.tmp[1] - this.y[i]) * Math.min(1, dt * 4);
+              this.yaw[i] = Math.atan2(-dx, -dz);
+              this.vx[i] = 0; this.vz[i] = 0;
+              moving = 1;
+            }
+          }
+        }
       } else if (st === ST.BEACH) {
         const dx = this.tx[i] - this.x[i], dz = this.tz[i] - this.z[i];
         const l = Math.hypot(dx, dz);
@@ -621,7 +672,9 @@ export class LifeSim {
           this.yaw[i] = angLerp(this.yaw[i], Math.atan2(-dx, -dz), Math.min(1, dt * 4));
         }
       }
-      this.amt[i] = moving;
+      // knocked down: −1…−1.9 sprawled (the fraction is how far into the fall — the renderer tumbles
+      // them once), −2.5 sitting up; back to a walk (≥ 0) once the timer runs out
+      this.amt[i] = st === ST.DOWN && this.timer[i] > 0 ? (this.timer[i] > 1.1 ? -1 - Math.min(0.9, Math.max(0, (2.6 - this.timer[i]) / 1.5)) : -2.5) : moving;
       this.anim[i] += moving * this.speed[i] * dt * 5.2;
     }
   }

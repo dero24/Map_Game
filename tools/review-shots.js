@@ -53,7 +53,8 @@ window.__REVIEW__ = async (tag = 'r', opts = {}) => {
     const at = () => { mesh.getMatrixAt(i, m); p.setFromMatrixPosition(m); return { x: p.x, y: p.y, z: p.z }; };
     const t0 = at(); look(t0, dist, h, ang, 0.05);
     const a = G.walker.yaw;
-    track = setInterval(() => { const t = at(); if (m.elements[0] === 0) return; const cx = t.x + Math.sin(a) * dist, cz = t.z + Math.cos(a) * dist; G.walker.place(cx, cz, a, -0.05); }, 50);
+    const fly = G.walkParams.fly;
+    track = setInterval(() => { const t = at(); if (m.elements[0] === 0) return; const cx = t.x + Math.sin(a) * dist, cz = t.z + Math.cos(a) * dist; G.walker.place(cx, cz, a, -0.05); if (fly) { G.walkParams.fly = true; G.walker.y = t.y + h; } }, 50);
   };
   const ground = (x, z, yaw, pitch = -0.03) => {
     // step off anything solid: spiral out to the nearest spot with 2 m of room
@@ -118,18 +119,122 @@ window.__REVIEW__ = async (tag = 'r', opts = {}) => {
   // every pose waits for the streamer to finish mounting (a pose far from the last one would
   // otherwise be shot before its buildings and trees arrive — r2 frame 12)
   const idle = async () => { for (let i = 0; i < 160; i++) { const b = typeof G.stream.busy === 'function' ? G.stream.busy() : G.stream.busy; if (!b) return; await wait(250); } };
-  for (const L of [A, B, C]) for (const it of L) { const f = it.fn; it.fn = async () => { clearInterval(track); await f(); await wait(400); await idle(); }; }
+  // D: downtown life and interiors (the areas the user asked for by name)
+  const { useOf } = await import('/src/world/uses.ts');
+  // the enterable business (a plan whose footprint the map names) of the wanted use, nearest spawn
+  const shopPlan = (want) => {
+    let best = null, bd = Infinity;
+    for (const P of G.plans.values()) {
+      const f = G.stream.fpByKey.get(P.fp);
+      if (!f || f.kind !== 'commercial' || !want.includes(useOf(f.name))) continue;
+      const d = Math.hypot(P.door.x - s.x, P.door.z - s.z);
+      if (d < bd) (bd = d), (best = P);
+    }
+    return best;
+  };
+  const inside = async (P, h) => {
+    set(h);
+    G.walkParams.fly = false;
+    const d = P.door;
+    G.walker.place(d.wx - d.nx * 2.6, d.wz - d.nz * 2.6, Math.atan2(d.nx, d.nz) + 0.35, -0.12, d.y);
+    for (let k = 0; k < 8; k++) G.interiors.update(G.walker.x, G.walker.z, 0.25, G.walker.feet);
+    G.interiors.flush();
+    // the plan's walls only register once its interior exists: place again so collision doesn't push us out
+    G.walker.place(d.wx - d.nx * 2.6, d.wz - d.nz * 2.6, Math.atan2(d.nx, d.nz) + 0.35, -0.12, d.y);
+    for (let k = 0; k < 4; k++) G.interiors.update(G.walker.x, G.walker.z, 0.25, G.walker.feet);
+    await wait(2500);
+  };
+  const D4 = [
+    { label: '17 café terrace', fn: async () => { set(12.5); const t = near('terrace:', s.x, s.z); if (t) look({ ...t, y: t.y + 0.8 }, 7, 1.7, 0.9); await wait(800); } },
+    { label: '18 inside a café / diner', fn: async () => { const P = shopPlan(['cafe', 'restaurant', 'bar']) ?? shopPlan(['shop', 'unknown']); if (P) await inside(P, 13); } },
+    { label: '19 inside a house, morning sun', fn: async () => { shot('inside')(); set(9.3); await wait(1500); } },
+    { label: '20 a walker, side on', fn: async () => {
+      set(15); ground(s.x, s.z, 0); await wait(3500);
+      let mesh = null; G.scene.traverse((o) => { if (o.name === 'life-ped') mesh = o; });
+      let bi = -1, bd = 1e9;
+      if (mesh) for (let i = 0; i < mesh.count; i++) { mesh.getMatrixAt(i, m); if (m.elements[0] === 0) continue; p.setFromMatrixPosition(m); const dd = Math.hypot(p.x - s.x, p.z - s.z); if (dd < bd && G.world.terrain.sdfAt(p.x, p.z) > 40) { bd = dd; bi = i; } }
+      if (bi >= 0) { mesh.getMatrixAt(bi, m); const q = new T.Quaternion(), sc = new T.Vector3(); m.decompose(p, q, sc); const yaw = new T.Euler().setFromQuaternion(q, 'YXZ').y; follow('life-ped', bi, 4.5, 1.2, yaw + Math.PI / 2); }
+    } },
+  ];
+  // E: the ecosystem and street physics (fox, hawk, a walker knocked down, a lamp close up)
+  const crit = (kind, x, z, extra = {}) => {
+    const C = G.critters.list;
+    for (let i = C.length - 1; i >= 0; i--) if (C[i].kind === kind) C.splice(i, 1);
+    const y = Math.max(0, G.world.terrain.heightAt(x, z));
+    const c = { kind, x, y, z, yaw: 0.9, pitch: 0, state: 'perch', t: 999, tx: x, tz: z, ty: y, phase: 0.3, amt: 0, s: 1.1, c: new T.Color(1, 1, 1), seed: 7, vig: 0.5, ...extra };
+    C.push(c);
+    return c;
+  };
+  const E = [
+    { label: '21 a red fox at dusk', fn: async () => { set(19.2); const f = crit('fox', lawn.x, lawn.z); look({ ...f, y: f.y + 0.3 }, 3.2, 0.7, 2.2, -0.05); await wait(600); } },
+    { label: '22 a red-tailed hawk on the thermal', fn: async () => {
+      set(13); const y = Math.max(0, G.world.terrain.heightAt(lawn.x, lawn.z)) + 24;
+      crit('hawk', lawn.x + 18, lawn.z, { state: 'soar', y, ty: y, home: { x: lawn.x, z: lawn.z }, t: 999 });
+      await wait(300); follow('critter:hawk', 0, 4.5, 0.9, 0.6);
+    } },
+    { label: '23 a walker knocked down by a car', fn: async () => {
+      set(15); ground(s.x, s.z, 0); await wait(3500);
+      let mesh = null; G.scene.traverse((o) => { if (o.name === 'life-ped') mesh = o; });
+      let bi = -1, bd = 1e9, bp = null;
+      if (mesh) for (let i = 0; i < mesh.count; i++) { mesh.getMatrixAt(i, m); if (m.elements[0] === 0) continue; p.setFromMatrixPosition(m); const dd = Math.hypot(p.x - s.x, p.z - s.z); if (dd < bd && G.world.terrain.sdfAt(p.x, p.z) > 40) { bd = dd; bi = i; bp = p.clone(); } }
+      if (bi >= 0) { G.life.bump(bp.x - 1, bp.z, 9, 0); await wait(1400); follow('life-ped', bi, 4, 1.1, 2.4); }
+    } },
+    { label: '24 a street lamp, close, at dusk', fn: async () => { set(19.6); const L = near('lamp:lens', s.x, s.z, 2); if (L) look(L, 7, -7, 1.2, -0.1); } },
+  ];
+  // the round-3/6 assert: no single mesh (or instance) may fill > 25 % of a pose within 4 m of the lens
+  const occluder = () => {
+    const rc = new T.Raycaster(), hits = new Map();
+    let n = 0;
+    for (let gx = 0; gx < 8; gx++) for (let gy = 0; gy < 5; gy++) {
+      n++;
+      rc.setFromCamera(new T.Vector2(-0.9 + gx * (1.8 / 7), -0.8 + gy * 0.4), G.camera);
+      let h = null;
+      try { h = rc.intersectObjects(G.scene.children, true).find((x) => Number.isFinite(x.distance) && x.object.visible && !x.object.isPoints && !x.object.isLine); } catch { h = null; }
+      if (!h || h.distance > 4) continue;
+      // the ground under your feet isn't an occluder
+      const nm = h.object.name || h.object.parent?.name || '';
+      if (/^(water|ground|grass|ocean|sky)/.test(nm) || (/^tile:/.test(nm) && h.face && h.face.normal.y > 0.7)) continue;
+      const key = `${h.object.name || h.object.parent?.name || h.object.type}${h.instanceId !== undefined ? '#' + h.instanceId : ''}`;
+      hits.set(key, (hits.get(key) ?? 0) + 1);
+    }
+    for (const [k, c] of hits) if (c / n > 0.25) return k;
+    return null;
+  };
+  for (const L of [A, B, C, D4, E]) for (const it of L) {
+    const f = it.fn, label = it.label;
+    it.fn = async () => {
+      clearInterval(track); track = 0; await f(); await wait(400); await idle();
+      // a parked car (or a van going by) right in the lens: step back along the view, up to 3 times
+      for (let k = 0; k < 3 && !track && !G.interiors.indoors; k++) {
+        const o = occluder();
+        if (!o) break;
+        const y = G.walker.yaw, back = 3;
+        G.walker.place(G.walker.x + Math.sin(y) * back, G.walker.z + Math.cos(y) * back, y, G.walker.pitch ?? -0.03);
+        await wait(300);
+      }
+    };
+    it.after = () => {
+      const o = occluder();
+      it.label = o ? `${label}  ⚠ occluder: ${o}` : label;
+      if (o) console.warn('[review] occluder in', label, o);
+    };
+  }
   const settle = opts.settle ?? 45;
-  await window.__MONTAGE__(A, { settle, timers: true, cw: 800, cols: 2, save: `review-${tag}-a.jpg` });
+  // opts.only: which montages, e.g. 'ab', 'd', 'de' (default: all five)
+  const want = (k) => (opts.only ?? 'abcde').includes(k);
+  const sets = [['a', A], ['b', B], ['c', C], ['d', D4], ['e', E]];
+  // warm-up: the first capture after a fresh load can come back blank (paper) — throw one away
+  // (it's always the arrival pose: pose it once and let the stream + post chain settle first)
+  if (want('a')) { await A[0].fn(); await wait(4000); }
+  await window.__MONTAGE__([{ label: 'warm-up', fn: () => {} }], { settle: 20, timers: true, cw: 200, cols: 1 });
   window.__MONTAGE_CLOSE__?.();
-  await wait(300);
-  await window.__MONTAGE__(B, { settle, timers: true, cw: 800, cols: 2, save: `review-${tag}-b.jpg` });
-  window.__MONTAGE_CLOSE__?.();
-  if (opts.only !== 'ab') {
-    await wait(300);
-    await window.__MONTAGE__(C, { settle, timers: true, cw: 800, cols: 2, save: `review-${tag}-c.jpg` });
+  for (const [k, L] of sets) {
+    if (!want(k)) continue;
+    await window.__MONTAGE__(L, { settle, timers: true, cw: 800, cols: 2, save: `review-${tag}-${k}.jpg` });
     window.__MONTAGE_CLOSE__?.();
+    await wait(300);
   }
   clearInterval(track);
-  return `review-${tag}-a.jpg, review-${tag}-b.jpg, review-${tag}-c.jpg`;
+  G.walkParams.fly = false;
+  return sets.filter(([k]) => want(k)).map(([k]) => `review-${tag}-${k}.jpg`).join(', ');
 };

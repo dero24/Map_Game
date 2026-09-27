@@ -2,6 +2,92 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-27 (l) — Downtown life, furnished interiors, walker proportions, a wildlife ecosystem, cars that hit people
+
+This session came from user feedback:
+- walkers' legs were too long;
+- Ocean Ave downtown needed shop goods, café tables and more life;
+- restaurant, house and office interiors needed real furniture and sunlight through the windows;
+- lamp posts had a floating light, detached from the arm;
+- animals should interact as an ecosystem, and cars should be able to hit people.
+
+- **People.** `people.ts` is re-proportioned to a ~1.72 m adult: hip at 0.87, knee at 0.47, a
+  shorter shin, the shoulder at 1.39 and the head at 1.6. The gait pivots moved with it.
+  `creatureMaterial` now lives in `render/creature.ts`. A `SEATED` define folds the thighs
+  forward and the shins down, bends the forearms, and drops the body 0.42 m; seated people are
+  hidden at night.
+- **Lamps.**
+  - The arm rotation gets an extra half turn for poles on the +n side of the street, so the head,
+    glow and pool are on the same side.
+  - The lens is now set under the head and turns with the arm.
+  - Rank-3+ streets have a lamp on every second pole.
+- **Downtown** (`props.ts`, `world/uses.ts`)
+  - `useOf(name, poiKind)` classifies a business as café, restaurant, bar, grocery, shop, office,
+    civic or unknown, from its name plus the POI kind. There are no per-town lists.
+  - Café, restaurant and bar doors get up to three terrace sets (`decor.cafeSet`), each with a
+    walker loop. They get parasols in warm climates.
+  - Terraces have seated guests: one instanced draw, with a pack material tag `people`.
+  - Curbside parking on wide commercial streets; these cars are enterable.
+  - Shop windows show goods on stands (the interior-mapping display planes).
+  - Downtown walker weight is up from 3 to 6.
+- **Interiors** (`assets/decor.ts`, a new foundry family)
+  - Pieces: sofa, armchair, bed, table, round table, chair, bistro chair, office chair, monitor,
+    lamp, café counter with a pastry case and espresso machine, diner booth, stocked shelves,
+    potted plant, storage bench. They are built from rounded boxes and tapered legs, and placed by
+    `piece()` / `fit()` / `facing()` in the plan frame with smooth normals (`Mesher.triN`).
+  - The ground-floor role follows the business:
+    - café: a counter with stools, and a table set per ~7 m²;
+    - **diner** for restaurants and bars: vinyl booths, a counter with stools, a menu board, tables;
+    - office: desks with monitors and office chairs;
+    - grocery: stocked gondolas.
+  - The generic box clutter (the "crates") is gone from businesses and replaced with decor pieces
+    in homes.
+  - **Sun pools**: the interior shader traces the sun ray to the outer wall (`uDims`). Where the
+    ray passes the window band, the floor is lit, so morning sun lies across the boards.
+- **Ecosystem** (`sim/critters.ts`, `assets/fauna.ts`)
+  - A **red fox** (dusk and night: russet with black stockings, a white bib and a white-tipped
+    brush) stalks with a slow creep and pounces on rabbits, squirrels and songbirds.
+  - A **red-tailed hawk** (by day: the bird plan at 3.3×, broad fingered wings, a rufous tail, a
+    soaring flap mode) circles a thermal and stoops on animals in the open, then labours back up.
+  - Prey freeze for a beat first. The beat is shorter for watchful animals (per-animal
+    vigilance). Then they flee the fox, a stooping hawk, the walker, or **moving traffic**
+    (`LifeClient.movers` plus the player's ride). The faster a car comes, the sooner they go.
+  - Alarms spread through a flock or warren, and to other small prey within 5 m.
+  - `birdGeometry()` is the shared bird plan.
+  - The Almanac wildlife family grows by two cards automatically.
+- **Traffic physics.**
+  - `Vehicles.onMove` → `LifeClient.bump` → `lifeSim.bump`: walkers in a moving car's path are
+    thrown along with it, slide to a stop, lie on their side for 3–5 s, then get up and walk on.
+  - A thud plays.
+- **Harness.**
+  - Montage **d** (terrace, café/diner, house in morning sun, a walker side on) and montage
+    **e** (fox, hawk, a knocked-down walker, a lamp close up).
+  - `opts.only` takes any subset, for example `'de'`.
+
+- **Reviewer round 6** (8/10, not passed on the expanded scope; see REVIEWER.md). All five
+  must-fixes were applied:
+  - the arrival-frame occluder: a harness assert plus carriageway-aware curbside parking;
+  - a zoned, filled and pendant-lit café;
+  - slapstick knockdowns: sprawl, sit up, walk back;
+  - a proper soaring hawk;
+  - morning and lunch downtown life.
+  Also a foundry ceiling fan, crisper and brighter sun pools with muntins, and lifted shop
+  displays.
+- **Storefronts** (user): the one red/white striped band on every shop is gone. Each building
+  gets a sign fascia, a solid trade-colour awning over its windows, or rarely (5%) a striped one.
+- Decor stopped calling `toNonIndexed()` on the already non-indexed rounded boxes, which was
+  thousands of console warnings per interior build.
+
+Verified:
+- `tsc` is clean and **115 tests** pass: 4 new critters tests (car scare plus alarm, the fox
+  catching a dozy rabbit while a watchful one escapes, the fox avoiding the walker, the hawk
+  stoop), a lifeSim knockdown test, and fauna budget/wing checks. The fox is 1596 verts, under
+  the 1600 budget.
+- Montages r11–r17 (`shots/review-r17-*.jpg`).
+
+Next: animals crossing roads and AI traffic braking for them; dogs on leads; ordering and painting
+the dish at a diner (Local Plates); the tree silhouette pass at 5–10 m.
+
 ## 2026-09-27 (k) — The AAA look + play pass: five review rounds (PASS), people, the Almanac, a persistent town
 
 This session came from user feedback:

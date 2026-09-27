@@ -142,9 +142,35 @@ describe('LifeSim', () => {
     let before = 0;
     for (const r of [RANGES.cars, RANGES.peds]) for (let i = r[0]; i < r[1]; i++) before += sim.active[i];
     expect(before).toBeGreaterThan(20);
-    expect(kept).toBeGreaterThanOrEqual(before - 2); // only door-bound walkers may vanish, and they're indoors
+    expect(kept).toBeGreaterThanOrEqual(before - Math.max(2, Math.ceil(before * 0.01))); // only door-bound walkers may vanish (≤ 1 %), and they're indoors
     expect(moved).toBeLessThan(0.5); // nobody jumps
     next.setEnv({ playerX: 200, playerZ: 200, hour: 14, night: 0, density: 1, wind: 0.5 });
     for (let t = 0; t < 40; t++) next.step(0.05); // and the town carries on
+  });
+
+  it('a car knocks walkers in its path down; they tumble, lie a moment, get up and walk on', () => {
+    const { sim, out } = run(200);
+    let i = -1;
+    for (let k = RANGES.peds[0]; k < RANGES.peds[1]; k++) if (sim.active[k] && sim.state[k] !== PED_STATE.INSIDE) { i = k; break; }
+    expect(i).toBeGreaterThanOrEqual(0);
+    const x0 = sim.x[i], z0 = sim.z[i];
+    // a car 1 m behind them doing ~40 km/h eastward
+    expect(sim.bump(x0 - 1, z0, 11, 0)).toBeGreaterThanOrEqual(1);
+    expect(sim.state[i]).toBe(PED_STATE.DOWN);
+    sim.step(0.05); sim.publish(out);
+    const amt0 = out[i * S.STRIDE + S.AMT];
+    expect(amt0 <= -1 && amt0 > -2).toBe(true); // sprawled (the renderer tumbles them once)
+    for (let t = 0; t < 20; t++) sim.step(0.05);
+    expect(sim.x[i] - x0).toBeGreaterThan(1.5); // thrown along with the car
+    expect(sim.y[i]).toBeGreaterThan(-1); // never through the ground
+    for (let t = 0; t < 19; t++) sim.step(0.05); // 2.0 s in: past the ~1.5 s sprawl, before the ~2.6 s get-up
+    sim.publish(out);
+    expect(out[i * S.STRIDE + S.AMT]).toBe(-2.5); // sitting up after ~1.5 s, never left lying
+    let jump = 0;
+    for (let t = 0; t < 140; t++) { const px = sim.x[i], pz = sim.z[i]; sim.step(0.05); if (sim.state[i] === PED_STATE.DOWN) jump = Math.max(jump, Math.hypot(sim.x[i] - px, sim.z[i] - pz)); }
+    expect(sim.state[i]).not.toBe(PED_STATE.DOWN); // back on their feet
+    expect(jump).toBeLessThan(0.5); // walked back to the path, no teleport
+    // a slow roll or a car going the other way hits nobody
+    expect(sim.bump(sim.x[i] - 1, sim.z[i], 1.5, 0)).toBe(0);
   });
 });

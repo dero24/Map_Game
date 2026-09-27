@@ -14,6 +14,10 @@ import { activeStyle, pickWeighted } from './styles';
 import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, plantLib, inBloom, SPECIES, STAGES, type PlantSpecies } from '../assets/flora';
 import { MAILBOXES, mailboxLib, beachLib, gearFor, type MailboxStyle, type CarGear } from '../assets/furniture';
 import { variantAt, hashf } from '../assets/core';
+import { cafeSet, mergeDecor } from '../assets/decor';
+import { personGeometry } from '../assets/people';
+import { creatureMaterial } from '../render/creature';
+import { useOf, terraceUse } from './uses';
 
 type P = [number, number];
 const unpackPts = (f: number[]): P[] => {
@@ -226,8 +230,10 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         // cobra-head lamp on some poles, reaching over the street
         if (count++ % (rank >= 3 ? 2 : 3) === 0) {
           const dir = -side;
-          const hx = x + nx * dir * 2.1, hz = z + nz * dir * 2.1;
-          armMats.push(new THREE.Matrix4().compose(V(x, g, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -ang + (dir > 0 ? 0 : Math.PI)), V(1, 1, 1)));
+          // the arm's local +z must point where the head (and its glow + pool) goes: rotating +z by
+          // −ang gives (−tz, tx) = −n, so the side toward +n needs the extra half turn
+          const hx = x + nx * dir * 2.2, hz = z + nz * dir * 2.2;
+          armMats.push(new THREE.Matrix4().compose(V(x, g, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -ang + (dir > 0 ? Math.PI : 0)), V(1, 1, 1)));
           lampHeads.push(V(hx, g + 8.05, hz));
           lampGround.push([x + nx * dir * 4.5, z + nz * dir * 4.5]);
         }
@@ -253,10 +259,14 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   ]);
   const arms = new THREE.InstancedMesh(armGeo, propMaterial(), armMats.length);
   armMats.forEach((m, i) => arms.setMatrixAt(i, m));
+  arms.name = 'lamp:arms';
   group.add(arms);
   // glowing lenses
   const lens = new THREE.InstancedMesh(colored(new THREE.BoxGeometry(0.3, 0.05, 0.5), 0xfff0d0), propMaterial({ emissive: new THREE.Color(1.0, 0.72, 0.4), emissiveNight: true }), lampHeads.length);
-  lampHeads.forEach((p, i) => lens.setMatrixAt(i, new THREE.Matrix4().makeTranslation(p.x, p.y - 0.02, p.z)));
+  // the lens sits under the head, turned with its arm
+  const lensAt = new THREE.Matrix4().makeTranslation(0, 8.03, 2.2);
+  armMats.forEach((am, i) => lens.setMatrixAt(i, new THREE.Matrix4().multiplyMatrices(am, lensAt)));
+  lens.name = 'lamp:lens';
   group.add(lens);
 
   const wg = new THREE.BufferGeometry();
@@ -630,6 +640,47 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     parked.get(key)!.push({ m: new THREE.Matrix4().compose(V(d.x, terrain.heightAt(d.x, d.z), d.z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(0.97 + u1 * 0.06, 0.96 + u2 * 0.08, 0.97 + u3 * 0.06)), c: paint });
     walk.addLoop(corners);
   }
+  // curbside parking on main streets in front of businesses (parallel, ~60 % of spaces taken):
+  // downtowns read busy because their curbs are full
+  // the nearest carriageway (not the footway in front of the shop, which is usually nearer)
+  const CARRIAGE = new Set(['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'residential', 'unclassified', 'living_street']);
+  const carriageEdge = (x: number, z: number) => {
+    let best: { x: number; z: number; w: number; d: number } | null = null;
+    for (const r of ctxJson.roads) {
+      if (r.lod || r.br || !CARRIAGE.has(r.c) || r.w < 9) continue;
+      const p = unpackPts(r.p);
+      for (let i = 0; i + 1 < p.length; i++) {
+        const dx = p[i + 1][0] - p[i][0], dz = p[i + 1][1] - p[i][1], L2 = dx * dx + dz * dz || 1;
+        const t = Math.max(0, Math.min(1, ((x - p[i][0]) * dx + (z - p[i][1]) * dz) / L2));
+        const qx = p[i][0] + dx * t, qz = p[i][1] + dz * t, dd = Math.hypot(x - qx, z - qz);
+        if (!best || dd < best.d) best = { x: qx, z: qz, w: r.w, d: dd };
+      }
+    }
+    return best;
+  };
+  for (const d of extras.doors ?? []) {
+    if (d.kind !== 'commercial') continue;
+    const e = carriageEdge(d.fx, d.fz);
+    if (!e || e.d > e.w / 2 + 14) continue;
+    const ox = d.fx - e.x, oz = d.fz - e.z, ol = Math.hypot(ox, oz) || 1;
+    const ux = ox / ol, uz = oz / ol, tx = -uz, tz = ux; // toward the door, and along the curb
+    for (const along of [-3.2, 3.3]) {
+      const hq = hashf(Math.floor(d.fx * 5.3 + along) * 92821 + Math.floor(d.fz * 3.7));
+      if (hq > 0.6) continue;
+      const x = e.x + ux * (e.w / 2 - 1.15) + tx * along, z = e.z + uz * (e.w / 2 - 1.15) + tz * along;
+      const yaw = Math.atan2(-tx, -tz) + (hq < 0.3 ? Math.PI : 0);
+      const type = pickFrom(carMix(look.region, look.climate), hashf(Math.floor(x * 3.3) + Math.floor(z * 7.1) * 131));
+      const rc = carRecipe(type, 1), hl = rc.L / 2, hw = rc.W / 2 + 0.05;
+      const cy = Math.cos(yaw), sy = Math.sin(yaw);
+      const corners: P[] = [[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]].map(([u, v]) => [x + u * cy + v * sy, z - u * sy + v * cy]);
+      if (corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.2)) || terrain.sdfAt(x, z) < 2) continue;
+      const key = `${type}|`;
+      if (!parked.has(key)) parked.set(key, []);
+      const u3 = hashf(Math.floor(x * 13 + z * 97));
+      parked.get(key)!.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(0.97 + hq * 0.06, 0.97 + u3 * 0.06, 0.98)), c: new THREE.Color(CAR[Math.floor(hq * 97 + u3 * 31) % CAR.length]) });
+      walk.addLoop(corners);
+    }
+  }
   for (const [key, list] of parked) {
     const [type, gear] = key.split('|') as [CarType, string];
     const im = new THREE.InstancedMesh(carLib(type, (gear || null) as CarGear | null).clone(), propMaterial(), list.length);
@@ -858,6 +909,73 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
           }
         }
       }
+      // Café terraces: cafés, restaurants and bars the map names put tables out front — a round
+      // table, two bistro chairs, a parasol where it's warm — and, by day, people at them.
+      const sets: THREE.Matrix4[] = [], setsP: THREE.Matrix4[] = [], guests: THREE.Matrix4[] = [];
+      // tables may stand on the sidewalk (and on mapped footways), never in a carriageway
+      const WALKWAYS = new Set(['footway', 'path', 'cycleway', 'steps', 'pedestrian', 'service', 'track', 'bridleway']);
+      const carriageClear = (x: number, z: number, margin: number) => {
+        for (const r of ctxJson.roads) {
+          if (r.lod || r.br || WALKWAYS.has(r.c)) continue;
+          for (let i = 0; i + 3 < r.p.length; i += 2) {
+            const ax = r.p[i] / 10, az = r.p[i + 1] / 10, dx = r.p[i + 2] / 10 - ax, dz = r.p[i + 3] / 10 - az, L2 = dx * dx + dz * dz || 1;
+            if (Math.abs(ax - x) > 200 && Math.abs(ax + dx - x) > 200) continue;
+            const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
+            if (Math.hypot(ax + dx * t - x, az + dz * t - z) < r.w / 2 + margin) return false;
+          }
+        }
+        return true;
+      };
+      const poiKind = new Map<string, string>();
+      for (const q of world.json.pois ?? []) poiKind.set(q.name.toLowerCase(), q.kind);
+      const warm = look.climate !== 'boreal' && look.climate !== 'polar';
+      for (const d of extras.doors) {
+        if (d.kind !== 'commercial' || !terraceUse(useOf(d.name, d.name ? poiKind.get(d.name.toLowerCase()) : undefined))) continue;
+        const tx = -d.nz, tz = d.nx;
+        const h0 = hash01(Math.floor(d.wx * 13) ^ Math.floor(d.wz * 7));
+        let n = 0;
+        for (const along of [-1.9, 1.9, -3.8, 3.8]) {
+          for (const out of [2.2, 1.7]) {
+            const x = d.wx + d.nx * out + tx * along, z = d.wz + d.nz * out + tz * along;
+            if (walk.blocked(x, z, 0.95) || !carriageClear(x, z, 1.0) || terrain.sdfAt(x, z) < 2) continue;
+            const yaw = Math.atan2(tx, tz) + (h0 > 0.5 ? Math.PI / 2 : 0);
+            const mt = new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, 1));
+            (warm && hashf(Math.floor(x * 9) + Math.floor(z * 11) * 57) < 0.6 ? setsP : sets).push(mt);
+            walk.addLoop([[x - 0.45, z - 0.45], [x + 0.45, z - 0.45], [x + 0.45, z + 0.45], [x - 0.45, z + 0.45]], -Infinity, terrain.heightAt(x, z) + 0.8);
+            // one or two guests, sitting on the chairs (chairs sit ±0.58 along the table's local x)
+            for (const s2 of [-1, 1]) {
+              if (hashf(Math.floor(x * 31 + s2) * 7 + Math.floor(z * 17)) > 0.55) continue;
+              const cx = x + Math.cos(yaw) * 0.62 * s2, cz = z - Math.sin(yaw) * 0.62 * s2;
+              const gy = yaw + (s2 > 0 ? Math.PI / 2 : -Math.PI / 2); // facing the table
+              guests.push(new THREE.Matrix4().compose(V(cx, terrain.heightAt(cx, cz), cz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), gy), V(1, 1, 1)));
+            }
+            n++;
+            break;
+          }
+          if (n >= 3) break;
+        }
+      }
+      const mk = (geo: THREE.BufferGeometry, list: THREE.Matrix4[], name: string) => {
+        if (!list.length) return;
+        const im = new THREE.InstancedMesh(geo, propMaterial(), list.length);
+        im.name = name;
+        list.forEach((m, i) => im.setMatrixAt(i, m));
+        im.layers.enable(1);
+        group.add(im);
+      };
+      const topC = [0xf1ede4, 0x3a3530, 0x2f4a3a][Math.floor(hashf(Math.floor(S.x0) + Math.floor(S.z0)) * 3)];
+      mk(mergeDecor(cafeSet(topC, 0x2e2c2a, null)), sets, 'terrace:table');
+      mk(mergeDecor(cafeSet(topC, 0x2e2c2a, [0xf2efe6, 0x9c2a26, 0x2f4a6a, 0x3d5a46][Math.floor(hashf(Math.floor(S.z0)) * 4)])), setsP, 'terrace:parasol');
+      if (guests.length) {
+        const im = new THREE.InstancedMesh(personGeometry(), creatureMaterial({ LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1, SEATED: 1 }), guests.length);
+        im.name = 'terrace:guests';
+        guests.forEach((m, i) => im.setMatrixAt(i, m));
+        im.setColorAt(0, new THREE.Color(1, 1, 1));
+        guests.forEach((_, i) => im.setColorAt(i, new THREE.Color([0xe8d8b0, 0x5b7fa6, 0xc4553f, 0xf2efe6, 0x6e8c5a, 0xe0a33b, 0x7a5b8c][Math.floor(hashf(i * 7919 + Math.floor(S.x0)) * 7)])));
+        im.layers.enable(1);
+        group.add(im);
+      }
+
       if (pots.length) {
         const im = new THREE.InstancedMesh(POT, propMaterial(), pots.length);
         pots.forEach((m, i) => im.setMatrixAt(i, m));

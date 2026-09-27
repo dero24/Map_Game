@@ -421,6 +421,17 @@ async function main() {
   worldRoot.add(garden.group);
   void garden.load();
   critters.onEvent = (kind, what, pan, dist) => ambience?.critter(kind, what, pan, dist);
+  // the world reacts to your ride: walkers in a moving car's path are knocked down (they get up and
+  // walk on), and animals give way to anything moving — traffic and you alike
+  const rideMover = { x: 0, z: 0, vx: 0, vz: 0 };
+  let rideMoving = 0, bumpAt = 0;
+  vehicles.onMove = (kind, x, _y, z, vx, vz) => {
+    rideMover.x = x; rideMover.z = z; rideMover.vx = vx; rideMover.vz = vz; rideMoving = 2;
+    const now = performance.now();
+    if (kind === 'car' && now - bumpAt > 90 && Math.hypot(vx, vz) > 2.5) { bumpAt = now; life.bump(x, z, vx, vz); }
+  };
+  life.onBumped = (n) => { if (n > 0) ambience?.ui('thud'); };
+  const movers: { x: number; z: number; vx: number; vz: number }[] = [];
   garden.onClear = (x, z) => grass.invalidateBox({ x0: x - 3, z0: z - 3, x1: x + 3, z1: z + 3 });
   garden.onBloom = (p) => { toast(`your ${SPECIES[p.sp].label} is in bloom ✿`); ambience?.ui('chime'); };
   // habitat lookups for the critters: trees + garden beds near the walker, refreshed every 2 s
@@ -888,7 +899,10 @@ async function main() {
       life.coastal = world.terrain.oceanDistAt(walker.x, walker.z) < 5000;
     }
     critters.enabled = lifeParams.enabled && !interiors.indoors;
-    critters.update(dt, walker.x, walker.z, { hour: timeParams.hour, night: U.uNight.value, month, south, wind: weather.wind, camFwd: fwd, trees: (x, z, r) => within(nearTrees, x, z, r), gardens: (x, z, r) => within(nearGardens, x, z, r) });
+    movers.length = 0;
+    for (const m of life.movers) movers.push(m);
+    if (rideMoving-- > 0) movers.push(rideMover);
+    critters.update(dt, walker.x, walker.z, { hour: timeParams.hour, night: U.uNight.value, month, south, wind: weather.wind, camFwd: fwd, trees: (x, z, r) => within(nearTrees, x, z, r), gardens: (x, z, r) => within(nearGardens, x, z, r), movers });
     garden.update(dt, month, south);
     frames++;
     if (frames === 3) (window as unknown as Record<string, unknown>).__READY__ = true;

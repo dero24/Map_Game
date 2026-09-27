@@ -204,8 +204,8 @@ export class Ambience {
   }
 
   // ---- sketchbook + UI sounds ----
-  /** brush: a soft wet stroke · shutter: a longer stroke + paper · chime: two soft bells · page: paper. */
-  ui(kind: 'brush' | 'shutter' | 'chime' | 'page') {
+  /** brush: a soft wet stroke · shutter: a longer stroke + paper · chime: two soft bells · page: paper · thud: a body against a bumper. */
+  ui(kind: 'brush' | 'shutter' | 'chime' | 'page' | 'thud') {
     const ctx = this.ctx, t = ctx.currentTime;
     const stroke = (dur: number, f0: number, f1: number, vol: number, delay = 0) => {
       const s = ctx.createBufferSource();
@@ -228,6 +228,11 @@ export class Ambience {
     };
     if (kind === 'brush') stroke(0.55, 700, 2200, 0.035);
     else if (kind === 'shutter') { stroke(0.7, 500, 2600, 0.07); stroke(0.35, 3000, 1500, 0.03, 0.55); this.blip({ freq: 160, q: 1, dur: 0.2, gain: 0.05, type: 'lowpass' }); }
+    else if (kind === 'thud') {
+      // a soft bump and an "oof" (a falling voiced formant) — slapstick, not a crash
+      this.blip({ freq: 110, q: 0.9, dur: 0.22, gain: 0.14, type: 'lowpass' });
+      setTimeout(() => { this.blip({ freq: 420, q: 5, dur: 0.2, gain: 0.05 }); this.blip({ freq: 820, q: 6, dur: 0.16, gain: 0.025 }); }, 70);
+    }
     else if (kind === 'page') { this.blip({ freq: 4200, q: 0.6, dur: 0.12, gain: 0.03 }); this.blip({ freq: 2600, q: 0.8, dur: 0.18, gain: 0.02 }); }
     else if (kind === 'chime') {
       for (const [f, d] of [[784, 0], [1175, 0.16]]) {

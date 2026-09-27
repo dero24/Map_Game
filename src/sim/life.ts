@@ -6,14 +6,14 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Road, World } from '../world/data';
 import type { WalkWorld } from '../player/collision';
 import type { Door } from '../world/buildings';
-import { paintMaterial, U, GLSL_NOISE } from '../render/shared';
+import { U, GLSL_NOISE } from '../render/shared';
 import { CAPS, H, RANGES, S, SIM_HZ, layout, views, type LifeInit } from './protocol';
 import { CAR_TYPES, carMix, carLib, boatLib, pickFrom, carRecipe, type BoatType } from '../assets/kit';
 import { gearGeometry, gearFor, type CarGear } from '../assets/furniture';
 import { hashf } from '../assets/core';
 import { propMaterial } from '../render/propMaterial';
 import { activeStyle } from '../world/styles';
-import { personLib, PEOPLE_GLSL_DECL, PEOPLE_GLSL_MAIN, warmthFor } from '../assets/people';
+import { personLib, warmthFor } from '../assets/people';
 
 // Moving boats offshore: the working/pleasure mix (skiffs and pontoons stay moored near shore).
 const LIFE_BOATS: BoatType[] = ['console', 'cabin', 'sail', 'lobster', 'skiff'];
@@ -193,85 +193,8 @@ function gullGeo() {
  *  instance in the shader — use creatureMaterial({ LEGS: 1, PEOPLE: 1 }). */
 export function pedGeo() { return personLib().clone(); }
 // Cars and boats come from the asset kit (src/assets/kit.ts): one InstancedMesh per type.
-/** The region's clothing warmth (0 coats … 1 beach), shared by every people material. */
-export const peopleU = { uWarmth: { value: 0.5 } };
-export function creatureMaterial(defines: Record<string, number>) {
-  return paintMaterial({
-    defines,
-    uniforms: defines.PEOPLE ? peopleU : {},
-    vertex: /* glsl */ `
-      attribute vec3 color;
-      attribute float aPart;
-      attribute vec3 aAnim;
-      varying vec3 vColor;
-      varying float vGlow;
-      #ifdef PEOPLE
-      ${PEOPLE_GLSL_DECL}
-      #endif
-      void main() {
-        vec3 p = position;
-        vec3 pc = color;
-        float ph = aAnim.x, amt = aAnim.y;
-        #ifdef PEOPLE
-          #ifdef STATIC_PEOPLE
-            // residents stand still: their look is keyed to where they stand
-            vec3 o0 = (worldMat() * vec4(0.0, 0.0, 0.0, 1.0)).xyz + uWorldOffset;
-            float seed = floor(o0.x * 3.1) + floor(o0.z * 1.7) * 57.0;
-          #else
-            float seed = float(gl_InstanceID) * 1.37;
-          #endif
-          ${PEOPLE_GLSL_MAIN}
-        #endif
-        #ifdef WINGS
-          if (aPart > 0.5 && aPart < 1.5) {
-            if (amt < 0.0) { p.x *= 0.3; p.y += 0.05; p.z += 0.06; }
-            else { float f = sin(ph) * amt; p.y += f * abs(p.x) * 1.3; p.x *= 1.0 - abs(f) * 0.15; }
-          }
-        #endif
-        #ifdef LEGS
-          float sw = sin(ph) * amt * 0.32;
-          if (aPart > 0.5 && aPart < 2.5) {
-            float side = aPart < 1.5 ? 1.0 : -1.0;
-            p.z += (0.92 - p.y) * sw * side;
-            // the knee folds on the forward swing: the shin and foot trail back and lift
-            float flex = max(0.0, -cos(ph) * side) * amt;
-            float below = max(0.0, 0.5 - p.y);
-            p.z += below * flex * 0.9;
-            p.y += below * flex * 0.25;
-          }
-          if (aPart > 4.5 && aPart < 6.5) p.z += (1.41 - p.y) * sw * (aPart < 5.5 ? -0.8 : 0.8);
-          p.y += abs(sin(ph)) * amt * 0.03;
-          // standing still is never frozen: a slow weight shift and a little arm sway
-          float idle = 1.0 - clamp(amt * 4.0, 0.0, 1.0);
-          float ip = ph * 3.7 + float(gl_InstanceID) * 1.3;
-          if (aPart > 4.5 && aPart < 6.5) p.z += (1.41 - p.y) * sin(uTime * 1.1 + ip + aPart) * 0.08 * idle;
-          p.x += sin(uTime * 0.45 + ip) * 0.025 * idle * clamp(p.y / 1.7, 0.0, 1.0);
-        #endif
-        mat4 m = worldMat();
-        vec4 wp = m * vec4(p, 1.0);
-        vWorldPos = wp.xyz + uWorldOffset;
-        vNormalW = normalize(mat3(m) * normal);
-        vColor = pc;
-        #ifdef USE_INSTANCING_COLOR
-          float tintable = step(0.98, min(pc.r, min(pc.g, pc.b)));
-          vColor = mix(pc, pc * instanceColor, tintable);
-        #endif
-        vGlow = (aPart > 2.5 && aPart < 4.5) ? aAnim.z : 0.0;
-        gl_Position = projectionMatrix * viewMatrix * wp;
-      }`,
-    fragment: /* glsl */ `
-      varying vec3 vColor;
-      varying float vGlow;
-      void main() {
-        vec3 N = normalize(vNormalW);
-        vec3 alb = pigment(vColor, vWorldPos);
-        float sh = shadowAt(vWorldPos, N);
-        vec3 col = paintLight(alb, N, vWorldPos, sh, 1.0);
-        col += vColor * vGlow * 3.5;
-        gl_FragColor = vec4(applyFog(col, vWorldPos), 1.0);
-      }`,
-  });
-}
+import { peopleU, creatureMaterial } from '../render/creature';
+export { peopleU, creatureMaterial };
 
 const CAR_COLORS = [0xf2f2ee, 0xb9bcc0, 0x26282c, 0x5a5e64, 0x2b3f63, 0x9c2a26, 0x3d5a46, 0xcdbf9e];
 const SHIRTS = [0xe8d8b0, 0x5b7fa6, 0xc4553f, 0xf2efe6, 0x6e8c5a, 0xe0a33b, 0x7a5b8c, 0x3f6f78, 0xd98a8a, 0x2f3a4a];
@@ -375,6 +298,12 @@ export class LifeClient {
   }
 
   // (Re)start the sim worker with a fresh road graph — called when the streamed tile set changes.
+  /** The player's car at (x,z) moving (vx,vz): walkers in its path are knocked down (lifeSim.bump). */
+  bump(x: number, z: number, vx: number, vz: number) { this.worker.postMessage({ kind: 'bump', x, z, vx, vz }); }
+  onBumped: ((n: number) => void) | null = null;
+  /** Moving traffic near the player this frame (x, z, velocity) — the critters give way to it. */
+  readonly movers: { x: number; z: number; vx: number; vz: number }[] = [];
+  private nMovers = 0;
   /** The road graph changed (tiles streamed in or out): hand the worker the new graph. Its agents
    *  carry over by position (LifeSim.adopt), so traffic and walkers never reset. */
   reinit(init: LifeInit) {
@@ -385,6 +314,7 @@ export class LifeClient {
   private spawn(init: LifeInit) {
     const total = layout().total;
     this.worker = new Worker(new URL('./ambient.worker.ts', import.meta.url), { type: 'module' });
+    this.worker.addEventListener('message', (e) => { if (e.data?.kind === 'bumped') this.onBumped?.(e.data.n as number); });
     const transfer: Transferable[] = [init.edgePts.buffer, init.edgeStart.buffer, init.edgeCount.buffer, init.edgeLen.buffer, init.edgeInfo.buffer, init.edgeNodes.buffer, init.nodeEdgeStart.buffer, init.nodeEdges.buffer, init.beachPts.buffer, init.waterGrid.buffer, init.doors.buffer] as ArrayBuffer[];
     if (this.sab) {
       this.worker.postMessage({ kind: 'init', init, sab: this.buf }, transfer);
@@ -418,6 +348,7 @@ export class LifeClient {
     const snap = this.V.snaps[h[H.FRONT]];
     const st = this.stats;
     st.nearestCar = 1e9; st.gullsNear = 0; st.gullDist = 1e9; st.pedsNear = 0;
+    this.nMovers = 0;
     st.active = h[H.ACTIVE];
     st.simMs = h[H.SIM_US] / 1000;
     const heads = this.headPts.geometry.attributes.position as THREE.BufferAttribute;
@@ -449,7 +380,7 @@ export class LifeClient {
         const variant = snap[o + S.VARIANT];
         const lights = flags & 2 ? 1 : 0;
         let sx = g.scale, sy = g.scale, sz = g.scale;
-        let roll = 0;
+        let roll = 0, pitch = 0, spin = 0;
         const dist = Math.hypot(x - player.x, z - player.z);
         if (kind === 0) {
           if (amt < 0) y += 0.2 * g.scale;
@@ -458,6 +389,10 @@ export class LifeClient {
         } else if (kind === 1) {
           if (variant >= 10) { sx = 1.06; sy = 1.22; sz = 1.04; }
           if (dist < st.nearestCar) { st.nearestCar = dist; st.carPan = pan(x, z); st.carSpeed = amt; }
+          if (dist < 100 && amt > 2 && this.nMovers < 48) {
+            const m = this.movers[this.nMovers] ?? (this.movers[this.nMovers] = { x: 0, z: 0, vx: 0, vz: 0 });
+            m.x = x; m.z = z; m.vx = -Math.sin(yaw) * amt; m.vz = -Math.cos(yaw) * amt; this.nMovers++;
+          }
           if (lights) {
             const hx = x - Math.sin(yaw) * 2.3, hz = z - Math.cos(yaw) * 2.3;
             const rx = Math.cos(yaw) * 0.62, rz = -Math.sin(yaw) * 0.62;
@@ -469,6 +404,14 @@ export class LifeClient {
           sx = 0.97 + hashf(i * 7919 + variant) * 0.06; sy = 0.96 + hashf(i * 104729 + variant) * 0.08; sz = 0.97 + hashf(i * 31 + variant * 131) * 0.06;
         } else if (kind === 2) {
           if (dist < 25) st.pedsNear++;
+          if (amt < -0.5 && amt > -1.999) {
+            // knocked down: laid back over ~0.15 s with one log-roll as they slide, then sprawled
+            // face-up (the pose itself — knees up, an arm flung out — is in the shader)
+            const t = -1 - amt;
+            pitch = Math.PI / 2 * Math.min(1, t / 0.1);
+            spin = Math.PI * 2 * Math.min(1, t / 0.35);
+            y += 0.13 * Math.min(1, t / 0.1);
+          }
           g.mesh.setColorAt(li, this.tmpC.set(SHIRTS[variant % SHIRTS.length]));
         } else {
           const t = snap[o + S.ANIM];
@@ -479,6 +422,8 @@ export class LifeClient {
         }
         this.q.setFromAxisAngle(this.up, yaw);
         if (roll) this.q.multiply(this.tmpQ.setFromAxisAngle(this.fwdAxis, roll));
+        if (pitch) this.q.multiply(this.tmpQ.setFromAxisAngle(this.sideAxis, pitch));
+        if (spin) this.q.multiply(this.tmpQ.setFromAxisAngle(this.up, spin));
         this.m.compose(this.p.set(x, y, z), this.q, this.sc.set(sx, sy, sz));
         if (g.meshes.length > 1) {
           // the agent's model: a stable pick from its variant (cars follow the street mix)
@@ -499,7 +444,7 @@ export class LifeClient {
           }
         } else g.mesh.setMatrixAt(li, this.m);
         const aph = snap[o + S.ANIM];
-        A[li * 3] = aph; A[li * 3 + 1] = amt; A[li * 3 + 2] = lights;
+        A[li * 3] = aph; A[li * 3 + 1] = amt; // walkers pass the knockdown code (< 0) through to the pose shader A[li * 3 + 2] = lights;
         if (kind === 1) A[li * 3 + 1] = 0;
       }
       if (kind === 1) for (const gm of this.gear.values()) gm.instanceMatrix.needsUpdate = true;
@@ -511,6 +456,7 @@ export class LifeClient {
     }
     for (let k = hk; k < heads.count; k++) heads.setXYZ(k, 0, -9999, 0);
     heads.needsUpdate = true;
+    this.movers.length = this.nMovers;
   }
   private tmpC = new THREE.Color();
   private zeroM = new THREE.Matrix4().makeScale(0, 0, 0);
@@ -521,4 +467,5 @@ export class LifeClient {
   coastal = true;
   private tmpQ = new THREE.Quaternion();
   private fwdAxis = new THREE.Vector3(0, 0, 1);
+  private sideAxis = new THREE.Vector3(1, 0, 0);
 }

@@ -75,6 +75,10 @@ describe('fauna', () => {
     }
     expect(partCount(critterGeometry('squirrel'), 5)).toBeGreaterThan(0); // the tail swings
     expect(partCount(critterGeometry('songbird'), 7)).toBeGreaterThan(0); // wings
+    expect(partCount(critterGeometry('hawk'), 7)).toBeGreaterThan(0); // the hawk soars on the bird plan
+    expect(partCount(critterGeometry('fox'), 5)).toBeGreaterThan(0); // the brush
+    const hb = new THREE.Box3().setFromBufferAttribute(critterGeometry('hawk').getAttribute('position') as THREE.BufferAttribute);
+    expect(hb.max.x - hb.min.x).toBeGreaterThan(0.5); // a raptor's wingspan, not a songbird's
   });
 });
 

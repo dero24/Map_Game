@@ -4,6 +4,8 @@
 // ceilings, stairs with treads/risers/balusters, furniture by room, lamps, residents — are generated on
 // demand for the building you walk up to, and dropped when you leave.
 import * as THREE from 'three';
+import * as D from '../assets/decor';
+import { useOf } from './uses';
 import type { Footprint, Door } from './buildings';
 import { activeBuilding, floorHeight, GLSL_WINDOWS, KIND } from './buildings';
 import type { WalkWorld } from '../player/collision';
@@ -211,6 +213,13 @@ class Mesher {
     const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z, vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
     const d = (uy * vz - uz * vy) * n.x + (uz * vx - ux * vz) * n.y + (ux * vy - uy * vx) * n.z;
     if (d < 0) { this.v(a, n, wa); this.v(c, n, wc); this.v(b, n, wb); } else { this.v(a, n, wa); this.v(b, n, wb); this.v(c, n, wc); }
+  }
+  /** A triangle with its own smooth vertex normals (foundry furniture). */
+  triN(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, na: THREE.Vector3, nb: THREE.Vector3, nc: THREE.Vector3) {
+    const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z, vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
+    const nx = na.x + nb.x + nc.x, ny = na.y + nb.y + nc.y, nz = na.z + nb.z + nc.z;
+    const d = (uy * vz - uz * vy) * nx + (uz * vx - ux * vz) * ny + (ux * vy - uy * vx) * nz;
+    if (d < 0) { this.v(a, na, Z4); this.v(c, nc, Z4); this.v(b, nb, Z4); } else { this.v(a, na, Z4); this.v(b, nb, Z4); this.v(c, nc, Z4); }
   }
   quad(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, d: THREE.Vector3, n: THREE.Vector3, w?: number[][]) {
     this.tri(a, b, c, n, w?.[0], w?.[1], w?.[2]);
@@ -641,7 +650,10 @@ export class Interiors {
     const cuts = [-hl, ...P.parts.map((p) => p.u).sort((a, b) => a - b), hl];
     const nSlab = cuts.length - 1;
     const rooms: Room[] = [];
-    const cafe = fp.kind === 'commercial' && rng.float() < 0.4;
+    // the ground floor follows the business the map names (uses.ts); unnamed shops roll
+    const use = fp.kind === 'commercial' ? useOf(fp.name) : 'unknown';
+    const ground = use === 'cafe' ? 'cafe' : use === 'restaurant' || use === 'bar' ? 'diner' : use === 'office' || use === 'civic' ? 'office' : use === 'grocery' ? 'shop'
+      : use === 'unknown' ? (rng.float() < 0.25 ? 'cafe' : rng.float() < 0.3 ? 'diner' : 'shop') : 'shop';
     const doorSlab = Math.max(0, cuts.findIndex((c, i) => i < nSlab && P.ud >= c - 0.6 && P.ud <= cuts[i + 1] + 0.6));
     for (let k = 0; k < P.levels; k++)
       for (let r = 0; r < nSlab; r++) {
@@ -649,7 +661,7 @@ export class Interiors {
         let role: string;
         const dist = Math.abs(r - doorSlab);
         if (fp.kind === 'church') role = 'church';
-        else if (fp.kind === 'commercial') role = k === 0 ? (cafe ? 'cafe' : 'shop') : rng.float() < 0.5 ? 'office' : 'living';
+        else if (fp.kind === 'commercial') role = k === 0 ? ground : rng.float() < 0.5 ? 'office' : 'living';
         else if (fp.kind === 'large') role = k === 0 ? 'lobby' : ['living', 'bedroom', 'kitchen'][(r + k) % 3];
         else if (P.levels === 1) role = nSlab === 1 ? 'great' : r === doorSlab ? 'living' : ['kitchen', 'bedroom', 'bath', 'bedroom'][Math.min(3, dist - 1)];
         else if (k === 0) role = nSlab === 1 ? 'great' : r === doorSlab ? 'living' : dist === 1 ? 'kitchen' : 'dining';
@@ -718,6 +730,7 @@ export class Interiors {
     };
     // Against a long wall (side ±1 on v): returns the item rect and the wall's v. `tall` pieces avoid windows.
     type Put = (a: number, b: number, c: number, d: number, side: number, wallV: number) => void;
+    const roomArea = (R: Room) => (R.u1 - R.u0) * LP.spans((R.u0 + R.u1) / 2).reduce((s, [a, b]) => s + b - a, 0);
     const place = (R: Room, lu: number, lv: number, side: number, rngl: Rng, fn: Put, tall = false) => {
       for (let t = 0; t < 12; t++) {
         const u = R.u0 + 0.2 + rngl.float() * Math.max(0, R.u1 - R.u0 - lu - 0.4);
@@ -768,36 +781,31 @@ export class Interiors {
     const glowAt = (u: number, v: number, y: number, w: number) => { const p = toW(P, u, v); lights.push({ x: p[0], y, z: p[1], w }); };
 
     // ---- the furniture kit (all in the local frame; side = which v-wall the piece backs onto) ----
+    // Foundry pieces (src/assets/decor.ts): local x → ax, local z (back = +z) → az, y up.
+    const DM: Record<D.DecorMat, number> = { fabric: IP.fabric, wood: IP.wood, metal: IP.porcelain, porcelain: IP.porcelain, glass: IP.glass, solid: IP.solid, glow: IP.glow };
+    const pa = new THREE.Vector3(), pb = new THREE.Vector3(), pc = new THREE.Vector3(), na = new THREE.Vector3(), nb = new THREE.Vector3(), nc = new THREE.Vector3();
+    const piece = (parts: D.DecorPart[], uc: number, vc: number, y: number, ax: P2, az: P2) => {
+      const wx = [P.ux * ax[0] + P.vx * ax[1], P.uz * ax[0] + P.vz * ax[1]], wz = [P.ux * az[0] + P.vx * az[1], P.uz * az[0] + P.vz * az[1]];
+      for (const p of parts) {
+        m.part(DM[p.mat]).color(p.hex);
+        const pos = p.g.getAttribute('position'), nrm = p.g.getAttribute('normal');
+        const W = (i: number, out: THREE.Vector3) => { const x = pos.getX(i), z = pos.getZ(i); const w = toW(P, uc + x * ax[0] + z * az[0], vc + x * ax[1] + z * az[1]); return out.set(w[0], y + pos.getY(i), w[1]); };
+        const N = (i: number, out: THREE.Vector3) => { const x = nrm.getX(i), z = nrm.getZ(i); return out.set(x * wx[0] + z * wz[0], nrm.getY(i), x * wx[1] + z * wz[1]).normalize(); };
+        for (let i = 0; i + 2 < pos.count; i += 3) m.triN(W(i, pa), W(i + 1, pb), W(i + 2, pc), N(i, na), N(i + 1, nb), N(i + 2, nc));
+      }
+    };
+    const fit = (parts: D.DecorPart[], a: number, b: number, c: number, d: number, y: number, side: number) => piece(parts, (a + b) / 2, (c + d) / 2, y, [1, 0], [0, side]);
+    const facing = (parts: D.DecorPart[], uc: number, vc: number, y: number, face: P2) => piece(parts, uc, vc, y, [face[1], -face[0]], [-face[0], -face[1]]);
     const legs = (a: number, b: number, c: number, d: number, y: number, h: number, hex: number, t = 0.05) => {
       for (const [uu, vv] of [[a, c], [b - t, c], [a, d - t], [b - t, d - t]]) box(uu, uu + t, vv, vv + t, y, y + h, hex, IP.wood);
     };
-    const table = (a: number, b: number, c: number, d: number, y: number, h: number, hex: number) => {
-      box(a, b, c, d, y + h - 0.04, y + h, hex, IP.wood);
-      legs(a + 0.04, b - 0.04, c + 0.04, d - 0.04, y, h - 0.04, hex);
-    };
-    const chair = (uc: number, vc: number, face: P2, y: number, hex: number) => {
-      box(uc - 0.21, uc + 0.21, vc - 0.21, vc + 0.21, y + 0.43, y + 0.47, hex, IP.wood);
-      legs(uc - 0.19, uc + 0.19, vc - 0.19, vc + 0.19, y, 0.43, hex, 0.035);
-      const bu = uc - face[0] * 0.19, bv = vc - face[1] * 0.19;
-      if (Math.abs(face[0]) > 0.5) box(bu - 0.02, bu + 0.02, vc - 0.2, vc + 0.2, y + 0.47, y + 0.92, hex, IP.wood);
-      else box(uc - 0.2, uc + 0.2, bv - 0.02, bv + 0.02, y + 0.47, y + 0.92, hex, IP.wood);
-    };
+    const table = (a: number, b: number, c: number, d: number, y: number, h: number, hex: number) => piece(D.table(b - a, d - c, h, hex), (a + b) / 2, (c + d) / 2, y, [1, 0], [0, 1]);
+    const chair = (uc: number, vc: number, face: P2, y: number, hex: number) => facing(D.chair(hex, rng.float() < 0.3 ? FABRIC[Math.floor(rng.float() * FABRIC.length)] : undefined), uc, vc, y, face);
     const lamp = (u: number, v: number, y: number, h: number) => {
-      box(u - 0.08, u + 0.08, v - 0.08, v + 0.08, y, y + 0.03, 0x3a3530);
-      box(u - 0.015, u + 0.015, v - 0.015, v + 0.015, y, y + h - 0.25, 0x3a3530);
-      box(u - 0.17, u + 0.17, v - 0.17, v + 0.17, y + h - 0.3, y + h, 0xfff1d0, IP.glow);
-      glowAt(u, v, y + h - 0.15, 0.55);
+      piece(D.lamp(h > 1), u, v, y, [1, 0], [0, 1]);
+      glowAt(u, v, y + (h > 1 ? 1.35 : 0.4), 0.55);
     };
-    const plant = (u: number, v: number, y: number, big: boolean) => {
-      const r = big ? 0.22 : 0.14;
-      box(u - r, u + r, v - r, v + r, y, y + (big ? 0.4 : 0.22), 0xa86a4a);
-      const g = [0x5f8a45, 0x4d7a3a, 0x6f9a50][Math.floor(rng.float() * 3)];
-      for (let i = 0; i < 3; i++) {
-        const du = (rng.float() - 0.5) * r, dv = (rng.float() - 0.5) * r, s = r * (1.1 + rng.float() * 0.6);
-        const y0 = y + (big ? 0.4 : 0.22) + i * (big ? 0.25 : 0.1);
-        box(u + du - s, u + du + s, v + dv - s, v + dv + s, y0, y0 + s * 1.6, g, IP.fabric);
-      }
-    };
+    const plant = (u: number, v: number, y: number, big: boolean) => piece(D.pottedPlant(big, [0x5f8a45, 0x4d7a3a, 0x6f9a50][Math.floor(rng.float() * 3)], [0xa86a4a, 0xe9e4d6, 0x5a6a78][Math.floor(rng.float() * 3)]), u, v, y, [1, 0], [0, 1]);
     const books = (a: number, b: number, c: number, d: number, y: number, shelves: number, gap = 0.42) => {
       for (let r = 0; r < shelves; r++) {
         let uu = a + 0.04;
@@ -809,36 +817,15 @@ export class Interiors {
       }
     };
     const sofa = (a: number, b: number, c: number, d: number, side: number, y: number, fab: number) => {
-      const back = side > 0 ? [d - 0.22, d] : [c, c + 0.22];
-      box(a, b, c, d, y + 0.1, y + 0.42, fab, IP.fabric);
-      box(a, b, back[0], back[1], y + 0.1, y + 0.88, fab, IP.fabric);
-      box(a, a + 0.18, c, d, y + 0.1, y + 0.64, fab, IP.fabric);
-      box(b - 0.18, b, c, d, y + 0.1, y + 0.64, fab, IP.fabric);
-      legs(a + 0.03, b - 0.03, c + 0.03, d - 0.03, y, 0.1, 0x3a2e24, 0.04);
-      const lighter = new THREE.Color(fab).lerp(new THREE.Color(0xffffff), 0.12);
-      const nC = b - a > 1.8 ? 3 : 2, cw = (b - a - 0.36) / nC;
-      const sc = side > 0 ? [c + 0.05, d - 0.24] : [c + 0.24, d - 0.05];
-      for (let i = 0; i < nC; i++) box(a + 0.18 + i * cw + 0.01, a + 0.18 + (i + 1) * cw - 0.01, sc[0], sc[1], y + 0.42, y + 0.5, lighter, IP.fabric);
+      fit(D.sofa(b - a, d - c, fab), a, b, c, d, y, side);
+      // two throw pillows in a contrasting fabric, leaning into the corners
       const pc = FABRIC[Math.floor(rng.float() * FABRIC.length)];
-      const pv = side > 0 ? [d - 0.36, d - 0.22] : [c + 0.22, c + 0.36];
-      box(a + 0.22, a + 0.6, pv[0], pv[1], y + 0.5, y + 0.82, pc, IP.fabric);
-      box(b - 0.6, b - 0.22, pv[0], pv[1], y + 0.5, y + 0.82, pc, IP.fabric);
+      for (const s of [-1, 1]) {
+        const pl = D.sofa(0.4, 0.2, pc).slice(0, 1).map((p) => ({ ...p, g: p.g.clone().scale(1, 0.9, 1).rotateX(-0.25).translate(s * ((b - a) / 2 - 0.42), 0.36, (d - c) / 2 - 0.34) }));
+        fit(pl, a, b, c, d, y, side);
+      }
     };
-    const bed = (a: number, b: number, c: number, d: number, side: number, y: number, fab: number, wood: number) => {
-      box(a, b, c, d, y + 0.12, y + 0.35, wood, IP.wood);
-      legs(a, b, c, d, y, 0.12, wood, 0.06);
-      box(a + 0.04, b - 0.04, c + 0.04, d - 0.04, y + 0.35, y + 0.56, 0xf6f4ee, IP.fabric);
-      const head = side > 0 ? [d - 0.07, d] : [c, c + 0.07];
-      box(a, b, head[0], head[1], y, y + 1.15, wood, IP.wood);
-      const blanket = side > 0 ? [c + 0.02, d - 0.62] : [c + 0.62, d - 0.02];
-      box(a + 0.01, b - 0.01, blanket[0], blanket[1], y + 0.5, y + 0.62, fab, IP.fabric);
-      const fold = side > 0 ? [blanket[1] - 0.25, blanket[1]] : [blanket[0], blanket[0] + 0.25];
-      box(a + 0.01, b - 0.01, fold[0], fold[1], y + 0.62, y + 0.66, new THREE.Color(fab).lerp(new THREE.Color(0xffffff), 0.3), IP.fabric);
-      const pl = side > 0 ? [d - 0.5, d - 0.12] : [c + 0.12, c + 0.5];
-      const pw = (b - a - 0.2) / 2;
-      box(a + 0.08, a + 0.08 + pw, pl[0], pl[1], y + 0.56, y + 0.7, 0xfbfaf6, IP.fabric);
-      box(b - 0.08 - pw, b - 0.08, pl[0], pl[1], y + 0.56, y + 0.7, 0xfbfaf6, IP.fabric);
-    };
+    const bed = (a: number, b: number, c: number, d: number, side: number, y: number, fab: number, wood: number) => fit(D.bed(b - a, d - c, fab, wood), a, b, c, d, y, side);
     const dresser = (a: number, b: number, c: number, d: number, side: number, wallV: number, y: number, wood: number, mirror: boolean) => {
       box(a, b, c, d, y + 0.06, y + 0.85, wood, IP.wood);
       legs(a, b, c, d, y, 0.06, wood);
@@ -860,13 +847,8 @@ export class Interiors {
       const um = (R.u0 + R.u1) / 2;
       const sp = LP.spans(um).sort((x, y2) => y2[1] - y2[0] - (x[1] - x[0]))[0];
       const vm = sp ? (sp[0] + sp[1]) / 2 : 0;
-      box(um - 0.2, um + 0.2, vm - 0.2, vm + 0.2, cy - 0.13, cy - 0.02, 0xfff3d0, IP.glow);
-      if (fan) {
-        box(um - 0.06, um + 0.06, vm - 0.06, vm + 0.06, cy - 0.35, cy - 0.13, 0xf1ede4);
-        const bc = rng.float() < 0.5 ? 0xf1ede4 : 0x8a6242;
-        box(um - 0.7, um + 0.7, vm - 0.07, vm + 0.07, cy - 0.3, cy - 0.28, bc, IP.wood);
-        box(um - 0.07, um + 0.07, vm - 0.7, vm + 0.07 + 0.63, cy - 0.3, cy - 0.28, bc, IP.wood);
-      }
+      if (fan) piece(D.ceilingFan(rng.float() < 0.5 ? 0xf1ede4 : 0x8a6242), um, vm, cy - 0.45, [1, 0], [0, 1]);
+      else box(um - 0.2, um + 0.2, vm - 0.2, vm + 0.2, cy - 0.13, cy - 0.02, 0xfff3d0, IP.glow);
       glowAt(um, vm, cy - 0.35, fp.kind === 'church' ? 2.2 : 1);
       return vm;
     };
@@ -927,9 +909,8 @@ export class Interiors {
         }, true);
         placeFree(R, 0.5, 0.5, rng, (a, b, c, d) => plant((a + b) / 2, (c + d) / 2, y, true));
         placeFree(R, 0.8, 0.8, rng, (a, b, c, d) => {
-          box(a, b, c, d, y + 0.1, y + 0.42, FABRIC[(FABRIC.indexOf(fab) + 4) % FABRIC.length], IP.fabric);
-          box(a, a + 0.18, c, d, y + 0.1, y + 0.85, FABRIC[(FABRIC.indexOf(fab) + 4) % FABRIC.length], IP.fabric);
-          legs(a, b, c, d, y, 0.1, 0x3a2e24, 0.04);
+          // an armchair turned toward the room, a standard lamp at its shoulder
+          facing(D.armchair(0.8, 0.8, FABRIC[(FABRIC.indexOf(fab) + 4) % FABRIC.length]), (a + b) / 2, (c + d) / 2, y, [1, 0]);
           lamp(b + 0.2, (c + d) / 2, y, 1.55);
           npcSpots.push([(a + b) / 2, (c + d) / 2, y, Math.PI / 2]);
         });
@@ -1064,13 +1045,10 @@ export class Interiors {
             const v0 = sp[0] + (sp[1] - sp[0]) * 0.22, v1 = sp[1] - (sp[1] - sp[0]) * 0.22;
             if (!free(u, u + 0.5, v0, v1, 0)) continue;
             claim(u, u + 0.5, v0, v1, 0);
-            box(u, u + 0.5, v0, v1, y, y + 1.7, 0xd8d2c4);
-            for (let r = 0; r < 4; r++)
-              for (let i = 0; i < 9; i++) {
-                const vv = v0 + (i / 9) * (v1 - v0);
-                const hh = 0.18 + rng.float() * 0.14;
-                box(u - 0.05, u + 0.55, vv + 0.03, vv + (v1 - v0) / 9 - 0.03, y + 0.15 + r * 0.42, y + 0.15 + r * 0.42 + hh, FABRIC[Math.floor(rng.float() * FABRIC.length)]);
-              }
+            // a gondola: two stocked faces back to back
+            const stock = use === 'grocery' ? [0xd9573f, 0xe0a33b, 0x6e8c5a, 0xf2efe6, 0x5b7fa6, 0xc9a24b, 0x8a4a3a] : FABRIC;
+            const seedS = Math.floor(rng.float() * 1e9);
+            for (const s2 of [1, -1]) piece(D.shelves(v1 - v0, 0.25, 1.7, 0xd8d2c4, stock, seedS + s2), u + 0.25 + s2 * 0.125 * -1, (v0 + v1) / 2, y, [0, 1], [s2, 0]);
           }
           place(R, Math.min(2.4, (R.u1 - R.u0) * 0.4), 0.62, sideA, rng, (a, b, c, d, side) => {
             box(a, b, c, d, y, y + 1.0, wood, IP.wood);
@@ -1086,35 +1064,89 @@ export class Interiors {
           break;
         }
         case 'cafe': {
-          place(R, Math.min(3.2, (R.u1 - R.u0) * 0.5), 0.65, sideA, rng, (a, b, c, d, side, wallV) => {
-            box(a, b, c, d, y, y + 1.05, wood, IP.wood);
-            box(a - 0.04, b + 0.04, c - 0.04, d + 0.04, y + 1.05, y + 1.1, 0x3a3530);
-            box(a + 0.2, a + 0.55, c + 0.1, d - 0.1, y + 1.1, y + 1.5, 0xb8bcbf, IP.porcelain); // espresso machine
-            for (let i = 0; i < 4; i++) box(a + 0.8 + i * 0.25, a + 0.9 + i * 0.25, c + 0.2, c + 0.3, y + 1.1, y + 1.2, 0xf6f4ee, IP.porcelain);
+          // Zoned like a real café: the counter (pastry case, espresso machine, menu board, a back
+          // bar of cups) on the wall facing the way in so it's the first read; tables on a ~2.2 m
+          // pitch filling the floor (2 or 4 chairs); a pendant over each table; art on the walls.
+          const back = P.vd > 0 ? -1 : 1;
+          const nSets = Math.max(6, Math.min(30, Math.floor(roomArea(R) / 4.8)));
+          const ceil = y + P.floorH - 0.14;
+          const pendant = (u: number, v: number, k: number) => {
+            box(u - 0.006, u + 0.006, v - 0.006, v + 0.006, ceil - 0.72, ceil, 0x2a2622);
+            box(u - 0.15, u + 0.15, v - 0.15, v + 0.15, ceil - 0.86, ceil - 0.72, [0x2f4a3a, 0xb08a4a, 0xe9e4d6][k % 3], IP.porcelain);
+            box(u - 0.07, u + 0.07, v - 0.07, v + 0.07, ceil - 0.89, ceil - 0.86, 0xffd890, IP.glow);
+          };
+          const counterAt = (a: number, b: number, c: number, d: number, side: number, wallV: number) => {
+            fit(D.counter(b - a, d - c, wood), a, b, c, d, y, side);
             const vs = side > 0 ? c - 0.45 : d + 0.45;
-            for (let uu = a + 0.3; uu < b - 0.2; uu += 0.7) { box(uu - 0.16, uu + 0.16, vs - 0.16, vs + 0.16, y + 0.72, y + 0.76, 0x3a3530); box(uu - 0.03, uu + 0.03, vs - 0.03, vs + 0.03, y, y + 0.72, 0x3a3530); }
-            box(a + 0.3, b - 0.3, wallV - side * 0.03, wallV, y + 1.6, y + 2.3, 0x2a2e2b, IP.art);
+            for (let uu = a + 0.3; uu < b - 0.2; uu += 0.7) piece(D.roundTable(0.17, 0.72, 0x3a3530), uu, vs, y, [1, 0], [0, 1]); // stools
+            // the menu board and a back bar of cups — where the wall is solid (under a window: a
+            // low shelf of cups on the sill line instead)
+            const solid = winClear(a, b, wallV);
+            if (solid) box(a + 0.3, b - 0.3, wallV - side * 0.03, wallV, y + 1.75, y + 2.35, 0x2a2e2b, IP.art); // menu board
+            for (const sy of solid ? [1.25, 1.55] : [0.9]) {
+              box(a + 0.2, b - 0.2, wallV - side * 0.22, wallV, y + sy, y + sy + 0.03, wood, IP.wood);
+              for (let uu = a + 0.3; uu < b - 0.3; uu += 0.16 + rng.float() * 0.1)
+                box(uu, uu + 0.07, wallV - side * 0.16, wallV - side * 0.08, y + sy + 0.03, y + sy + 0.12 + rng.float() * 0.08, [0xf6f4ee, 0xd9c7a8, 0x7fa0b8, 0xc46a4a][Math.floor(rng.float() * 4)], IP.porcelain);
+            }
+            pendant((a + b) / 2 - 0.6, side > 0 ? c - 0.2 : d + 0.2, 0); pendant((a + b) / 2 + 0.6, side > 0 ? c - 0.2 : d + 0.2, 0);
+            glowAt((a + b) / 2, side > 0 ? c : d, ceil - 0.9, 0.9);
             npcSpots.push([(a + b) / 2, side > 0 ? d + 0.4 : c - 0.4, y, side > 0 ? -Math.PI / 2 : Math.PI / 2]);
-          }, true);
-          for (let t = 0; t < 5; t++)
-            placeFree(R, 0.7, 0.7, rng, (a, b, c, d) => {
+          };
+          if (!place(R, Math.min(3.6, (R.u1 - R.u0) * 0.55), 0.65, back, rng, counterAt)) place(R, Math.min(3.2, (R.u1 - R.u0) * 0.5), 0.65, -back, rng, counterAt);
+          let lit = 0;
+          for (let t = 0; t < nSets; t++) {
+            const four = rng.float() < 0.4;
+            placeFree(R, four ? 1.1 : 0.7, four ? 1.1 : 0.7, rng, (a, b, c, d) => {
               const uc = (a + b) / 2, vc = (c + d) / 2;
-              box(uc - 0.35, uc + 0.35, vc - 0.35, vc + 0.35, y + 0.72, y + 0.75, [0xf1ede4, wood][t % 2], IP.wood);
-              box(uc - 0.04, uc + 0.04, vc - 0.04, vc + 0.04, y, y + 0.72, 0x3a3530);
-              chair(uc - 0.55, vc, [1, 0], y, wood);
-              chair(uc + 0.55, vc, [-1, 0], y, wood);
+              piece(D.roundTable(four ? 0.42 : 0.35, 0.74, [0xf1ede4, wood][t % 2]), uc, vc, y, [1, 0], [0, 1]);
+              const r = four ? 0.62 : 0.55;
+              facing(D.bistroChair(wood), uc - r, vc, y, [1, 0]);
+              facing(D.bistroChair(wood), uc + r, vc, y, [-1, 0]);
+              if (four) { facing(D.bistroChair(wood), uc, vc - r, y, [0, 1]); facing(D.bistroChair(wood), uc, vc + r, y, [0, -1]); }
               box(uc - 0.06, uc + 0.06, vc - 0.06, vc + 0.06, y + 0.75, y + 0.83, 0xf6f4ee, IP.porcelain);
-              claim(a - 0.8, b + 0.8, c, d, R.level);
-              if (t < 2) npcSpots.push([uc - 0.55, vc, y, -Math.PI / 2]);
+              pendant(uc, vc, t);
+              if (lit++ < 3) glowAt(uc, vc, ceil - 0.9, 0.6);
+              claim(a - 0.8, b + 0.8, c - (four ? 0.8 : 0), d + (four ? 0.8 : 0), R.level);
+              if (t < 2) npcSpots.push([uc - r, vc, y, -Math.PI / 2]);
             });
+          }
+          wallArt(R, y, Math.max(2, Math.min(6, Math.floor((R.u1 - R.u0) / 3))));
+          break;
+        }
+        case 'diner': {
+          // booths down the long wall, a counter with stools, a pass-through to the kitchen
+          const vinyl = [0x9c2a26, 0x2f4a6a, 0x3d5a46, 0xb5793a][Math.floor(rng.float() * 4)];
+          const topC = [0xe9e2d0, 0x8a6242, 0xd9d2c0][Math.floor(rng.float() * 3)];
+          const dArea = roomArea(R);
+          for (let t = 0; t < Math.max(4, Math.min(12, Math.floor(dArea / 14))); t++)
+            place(R, 1.25, 2.1, t % 2 ? -sideA : sideA, rng, (a, b, c, d, side) => {
+              piece(D.booth(b - a, vinyl, topC), (a + b) / 2, (c + d) / 2, y, [1, 0], [0, 1]);
+              for (let i = 0; i < 2; i++) box((a + b) / 2 - 0.35 + i * 0.5, (a + b) / 2 - 0.15 + i * 0.5, (c + d) / 2 - 0.12, (c + d) / 2 + 0.08, y + 0.74, y + 0.76, 0xf6f4ee, IP.porcelain);
+              if (t < 2) npcSpots.push([(a + b) / 2, (c + d) / 2 + side * 0.72, y, side > 0 ? Math.PI : 0]);
+            });
+          place(R, Math.min(3.4, (R.u1 - R.u0) * 0.5), 0.62, sideA, rng, (a, b, c, d, side, wallV) => {
+            fit(D.counter(b - a, d - c, wood, false), a, b, c, d, y, side);
+            const vs = side > 0 ? c - 0.42 : d + 0.42;
+            for (let uu = a + 0.3; uu < b - 0.2; uu += 0.65) piece(D.roundTable(0.18, 0.74, vinyl), uu, vs, y, [1, 0], [0, 1]);
+            box(a + 0.3, b - 0.3, wallV - side * 0.03, wallV, y + 1.6, y + 2.25, 0x2a2e2b, IP.art); // menu board
+          }, true);
+          for (let t = 0; t < Math.max(2, Math.min(8, Math.floor(dArea / 16))); t++)
+            placeFree(R, 1.3, 1.3, rng, (a, b, c, d) => {
+              const uc = (a + b) / 2, vc = (c + d) / 2;
+              table(uc - 0.4, uc + 0.4, vc - 0.4, vc + 0.4, y, 0.75, topC);
+              chair(uc, vc - 0.62, [0, 1], y, 0x3a3530);
+              chair(uc, vc + 0.62, [0, -1], y, 0x3a3530);
+            });
+          placeFree(R, 0.5, 0.5, rng, (a, b, c, d) => plant((a + b) / 2, (c + d) / 2, y, true));
+          wallArt(R, y, 2);
           break;
         }
         case 'office':
           for (let t = 0; t < 3; t++)
             place(R, 1.4, 0.7, t % 2 ? sideA : -sideA, rng, (a, b, c, d, side) => {
               table(a, b, c, d, y, 0.75, wood);
-              box(a + 0.45, b - 0.45, side > 0 ? d - 0.12 : c + 0.06, side > 0 ? d - 0.06 : c + 0.12, y + 0.75, y + 1.15, 0x1c1d22, IP.glass);
-              chair((a + b) / 2, side > 0 ? c - 0.35 : d + 0.35, [0, side > 0 ? 1 : -1], y, 0x3a3b3e);
+              fit(D.monitor(), (a + b) / 2 - 0.3, (a + b) / 2 + 0.3, c + 0.1, d - 0.1, y + 0.75, side);
+              facing(D.officeChair([0x3a3b3e, 0x2f4a5a, 0x5a3a3a][t % 3]), (a + b) / 2, side > 0 ? c - 0.35 : d + 0.35, y, [0, side > 0 ? 1 : -1]);
               if (t === 0) npcSpots.push([(a + b) / 2, side > 0 ? c - 0.35 : d + 0.35, y, side > 0 ? 0 : Math.PI]);
             });
           place(R, 0.9, 0.5, sideA, rng, (a, b, c, d) => box(a, b, c, d, y, y + 1.3, 0x8d9296), true);
@@ -1159,10 +1191,9 @@ export class Interiors {
       }
       // Big rooms get lived-in clutter in proportion to their floor area.
       if (R.role === 'church') continue;
-      const sp = LP.spans((R.u0 + R.u1) / 2).reduce((s, [a, b]) => s + b - a, 0);
-      const area = (R.u1 - R.u0) * sp;
+      const area = roomArea(R);
       const extra = Math.min(10, Math.floor(area / 8));
-      const homey = R.role !== 'shop' && R.role !== 'cafe' && R.role !== 'office';
+      const homey = R.role !== 'shop' && R.role !== 'cafe' && R.role !== 'office' && R.role !== 'diner';
       // the end walls: a sideboard with things on it, a tall bookcase, a chest under a picture
       if (homey) {
         placeEnd(R, 1.4, 0.45, rng, (a, b, c, d) => {
@@ -1182,6 +1213,8 @@ export class Interiors {
       }
       for (let k = 0; k < extra; k++) {
         const pick = rng.float();
+        // businesses are furnished by their role above; the generic clutter is for homes
+        if (!homey) { if (pick < 0.12) placeFree(R, 0.5, 0.5, rng, (a, b, c, d) => plant((a + b) / 2, (c + d) / 2, y, true)); else if (pick > 0.9) wallArt(R, y, 1); continue; }
         if (pick < 0.2) placeFree(R, 0.5, 0.5, rng, (a, b, c, d) => plant((a + b) / 2, (c + d) / 2, y, rng.float() < 0.6));
         else if (pick < 0.35 && homey) place(R, 0.5, 0.5, rng.float() < 0.5 ? 1 : -1, rng, (a, b, c, d) => { table(a, b, c, d, y, 0.6, wood); lamp((a + b) / 2, (c + d) / 2, y + 0.6, 0.45); });
         else if (pick < 0.5 && homey) place(R, 1.2, 0.45, rng.float() < 0.5 ? 1 : -1, rng, (a, b, c, d) => {
@@ -1189,12 +1222,11 @@ export class Interiors {
           legs(a, b, c, d, y, 0.08, wood);
           for (let i = 0; i < 3; i++) box(a + 0.15 + i * 0.35, a + 0.3 + i * 0.35, c + 0.1, d - 0.1, y + 0.8, y + 0.8 + 0.1 + rng.float() * 0.25, [0x7fa0b8, 0xe0a33b, 0xf1ede4, 0xa65a44][Math.floor(rng.float() * 4)], IP.porcelain);
         });
-        else if (pick < 0.62 && homey) placeFree(R, 0.75, 0.75, rng, (a, b, c, d) => {
-          const fc = FABRIC[Math.floor(rng.float() * FABRIC.length)];
-          box(a, b, c, d, y + 0.1, y + 0.42, fc, IP.fabric);
-          box(a, b, c, c + 0.16, y + 0.1, y + 0.85, fc, IP.fabric);
-          legs(a, b, c, d, y, 0.1, 0x3a2e24, 0.04);
-          npcSpots.push([(a + b) / 2, (c + d) / 2, y, 0]);
+        else if (pick < 0.62 && homey) placeFree(R, 0.8, 0.8, rng, (a, b, c, d) => {
+          // an armchair turned toward the room's middle
+          const uc = (a + b) / 2, vc = (c + d) / 2, face: [number, number] = rng.float() < 0.5 ? [1, 0] : [-1, 0];
+          facing(D.armchair(0.8, 0.8, FABRIC[Math.floor(rng.float() * FABRIC.length)]), uc, vc, y, face);
+          npcSpots.push([uc, vc, y, 0]);
         });
         else if (pick < 0.72 && homey) place(R, 1.0, 0.4, rng.float() < 0.5 ? 1 : -1, rng, (a, b, c, d) => {
           box(a, b, c, d, y, y + 1.2, wood, IP.wood);
@@ -1202,7 +1234,7 @@ export class Interiors {
           books(a, b, c, d, y, 3, 0.4);
         }, true);
         else if (pick < 0.82 && homey) placeFree(R, 1.8, 1.3, rng, (a, b, c, d) => rug(a, b, c, d, y));
-        else if (pick < 0.9) placeFree(R, 0.9, 0.5, rng, (a, b, c, d) => { box(a, b, c, d, y, y + 0.45, [0x8a6242, 0x5f7a8c, 0xa65a44][Math.floor(rng.float() * 3)], IP.wood); box(a + 0.1, b - 0.1, c + 0.1, d - 0.1, y + 0.45, y + 0.5, FABRIC[Math.floor(rng.float() * FABRIC.length)], IP.fabric); });
+        else if (pick < 0.9 && homey) place(R, 1.0, 0.42, rng.float() < 0.5 ? 1 : -1, rng, (a, b, c, d, side) => fit(D.chestBench(b - a, d - c, [wood, 0x6e5a48, 0xe9e2d0][Math.floor(rng.float() * 3)], FABRIC[Math.floor(rng.float() * FABRIC.length)]), a, b, c, d, y, side));
         else wallArt(R, y, 1);
       }
     }
@@ -1424,6 +1456,27 @@ function interiorMaterial(I: Interiors) {
           spec += att * same * pow(max(dot(reflect(-ld, N), V), 0.0), 24.0);
         }
         vec3 col = alb * (amb + lamp * (0.55 + 0.6 * uNight));
+        // Sun through the windows: follow the ray toward the sun to the outer wall it leaves by,
+        // and light this point if it passes through a pane (house windows: 0.9–2.25 m above the
+        // floor, one per ~2.7 m of wall). Warm pools on the floorboards, slanting up the walls.
+        if (uKeyDir.y > 0.04 && uNight < 0.5) {
+          vec2 sd = vec2(dot(uKeyDir.xz, ua), dot(uKeyDir.xz, va));
+          float hl = length(sd);
+          if (hl > 1e-3) {
+            vec2 hd = sd / hl;
+            float tu = hd.x > 0.0 ? (uDims.x - pu) / hd.x : hd.x < 0.0 ? (-uDims.x - pu) / hd.x : 1e9;
+            float tv = hd.y > 0.0 ? (uDims.y - pv) / hd.y : hd.y < 0.0 ? (-uDims.y - pv) / hd.y : 1e9;
+            float t = min(tu, tv);
+            float hitY = yl + t * uKeyDir.y / hl;
+            float along = tu < tv ? pv + t * hd.y : pu + t * hd.x;
+            float cellW = 2.7, cu = (fract(along / cellW) - 0.5) * cellW;
+            // a crisp window shape with its muntin cross (sash bars) printed in the light
+            float pane = (1.0 - smoothstep(0.455, 0.475, abs(cu))) * smoothstep(0.9, 0.92, hitY) * (1.0 - smoothstep(2.23, 2.25, hitY));
+            pane *= smoothstep(0.018, 0.03, abs(cu)) * smoothstep(0.018, 0.03, abs(hitY - 1.575));
+            float sun = pane * step(t, 7.0) * max(dot(N, uKeyDir), 0.0) * (1.0 - smoothstep(0.2, 0.5, uNight));
+            col += alb * uKeyColor * sun * 1.5;
+          }
+        }
         col += uWindowColor * spec * gloss * 0.6;
         col += uWindowColor * emis * 2.2;
         gl_FragColor = vec4(col, 1.0);

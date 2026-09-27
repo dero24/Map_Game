@@ -329,3 +329,66 @@ the tail is attached and curls over the back, the deer has its forward neck.
 3. Almanac regional sets plus place cards from streamed POIs.
 4. Local Plates, plus the restaurant, café and home interior pass.
 5. Hero region 02, desert Southwest.
+
+---
+
+### 2026-09-27 — Round 6: downtown, interiors, ecosystem (expanded scope) — 8/10, NOT PASSED on the expanded scope
+The same reviewer read montages r14 a–e: the 16 old poses plus **d** (terrace, café interior,
+house in morning sun, a walker side-on) and **e** (fox, hawk, knocked-down walker, lamp).
+
+**Landed:**
+- Frame 17, the café terrace, is the best downtown frame yet.
+- The walker's proportions (20).
+- The fox reads (21).
+- The lamp head, arm and lens (24).
+- Night rhythm in 13.
+- Frame 14's pick.
+
+**Must-fixes, applied the same session (r15–r17):**
+1. **A grey beam across the arrival frame.** It was a vehicle or parked car right at the lens.
+   - The harness now runs the occluder assert asked for in round 3: no mesh may fill more than
+     25% of a pose within 4 m. It steps back up to 3× and labels any frame it can't clear.
+   - Curbside parking now finds the nearest *carriageway*, not the footway.
+2. **The café reads as a ballroom.** Now zoned:
+   - the counter, pastry case, espresso machine, menu board and a back bar of cups sit on the wall
+     facing the entrance;
+   - tables are on a ~2.2 m pitch (floor area / 4.8), with 2 or 4 chairs;
+   - a pendant hangs over every table, emissive with 3 of them lit as lights;
+   - wall art scales with the wall length;
+   - generic clutter is barred from businesses.
+3. **The knockdown reads as a fatality.** It is now slapstick:
+   - laid back with one log-roll while sliding;
+   - sprawled face-up with the knees drawn up and one arm flung out for ~1.5 s;
+   - sitting up for ~1 s;
+   - walking back to the path (no teleport), with a soft thud and an "oof".
+   - Never motionless face-down. Tested.
+4. **The hawk is a toy.** It now has a slim body (0.58 × 1.5), broad wings with a 1.26 m span,
+   4 fingered primaries, a rufous tail, a cream belly with a dark band, and an 8° soaring
+   dihedral. It soars 55–75 m up.
+5. **Ocean Ave empty in the morning.**
+   - Curbside parking now finds the carriageway (the footway was nearer, so every shop failed the
+     wide-road gate).
+   - Pedestrian demand has a coffee-run morning (0.5) and a lunch hour (0.35), so downtown is
+     never empty 8 am – 8 pm.
+   - Frame 2 now shows parked cars and walkers.
+
+**Should-fixes applied:**
+- The ceiling "plank" was a fan built from two crossed boards; it is now a foundry ceiling fan
+  with a downrod, motor, glass globe and five pitched blades.
+- Sun pools are 2× brighter, with crisp window edges and the muntin cross printed in the light.
+- The shop-window displays were raised 0.3 m to clear the sill and spot-lit.
+- The fox's brush droops ~20° and sways more with the trot.
+
+**User direction folded in:** "the red and white sidings on like all restaurants, convenience
+stores … need to change". Every storefront shared one striped band. Now each building gets its
+own:
+- 58% a sign fascia (a dark trade colour, or the wall's own shade, between mouldings);
+- the rest a solid fabric awning over the windows only, in a trade colour;
+- striped awnings only 5% of the time.
+
+Real facade colours already come from `building:colour`, Overture or material tags where
+mapped; awnings aren't in the data.
+
+**Carried to round 7:** tree crowns at 5–10 m (frame 15, outer-lobe silhouette; now three rounds
+old, so round 7 treats it as a must-fix). A blank first capture of montage **a** after a fresh
+load: a harness warm-up is in and needs confirming.

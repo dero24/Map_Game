@@ -84,7 +84,7 @@ for plants you grow and the workbench); animals < 1,600; cars about 1,800.
   - Each species has a climate weighting (`plantMix`) and a bloom season (`inBloom`, flipped in the southern hemisphere).
   - Growth stages 0–7 go from sprout, to leafing out, to blossoms opening from about 60% grown.
   - World beds line the house fronts on open ground only.
-- **Fauna** (`fauna.ts` + `sim/critters.ts`): squirrel, rabbit, songbird, sandpiper, deer, butterfly and firefly, all on one body plan.
+- **Fauna** (`fauna.ts` + `sim/critters.ts`): squirrel, rabbit, songbird, sandpiper, deer, butterfly, firefly, red fox and red-tailed hawk, all on one body plan. Birds share `birdGeometry(coat, belly, legs, beak, legH, beakL)`; the hawk is that plan at 3.3× with a hooked bill and soars (`uFlap`: slow beats by amount, a shallow dihedral, folded in a stoop).
   - Limbs, tail, head and wings carry `aPart` plus an `aPivot` joint.
   - `critterMaterial` swings them in the vertex shader from a per-instance `aAnim` (gait phase, amount, pose), with per-species gait offsets (bound vs walk) and limb amplitude.
   - Behaviour comes from habitat:
@@ -94,7 +94,10 @@ for plants you grow and the workbench); animals < 1,600; cars about 1,800.
     - sandpipers on the surf line;
     - deer in woods at dawn and dusk;
     - butterflies over gardens in summer;
-    - fireflies on summer nights.
+    - fireflies on summer nights;
+    - a fox on lawns and wood edges at dusk and night;
+    - a hawk circling a thermal by day.
+  - They form one ecosystem: the fox stalks (a slow creep) and pounces; the hawk stoops on animals in the open; prey freeze a beat (shorter for the watchful — per-animal vigilance) then flee the fox, the stoop, the walker or a moving car (the faster it comes, the sooner they go); an alarm spreads through a flock or warren and to other small prey nearby. Tested in `tests/critters.test.ts`.
   - Small animals are drawn 1.3–2× life size, an illustrator's licence: at painting scale a true-size squirrel dissolves into the grass.
 - **People** (`people.ts`): one jointed body for every walker and resident (hips, knees,
   shoulders; ~1.4k vertices), varied per instance on the GPU: skin, hair and trouser palettes,

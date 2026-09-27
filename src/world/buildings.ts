@@ -274,7 +274,7 @@ class RingGrid {
 
 // ---------------- doors, steps, porches ----------------
 // x,z,y: threshold just outside; wx,wz: centre of the opening in the wall; fx,fy,fz: foot of the steps.
-export interface Door { x: number; z: number; y: number; nx: number; nz: number; fx: number; fz: number; fy: number; b: number; w: number; h: number; wx: number; wz: number; col: number; street?: string; porch?: boolean }
+export interface Door { x: number; z: number; y: number; nx: number; nz: number; fx: number; fz: number; fy: number; b: number; w: number; h: number; wx: number; wz: number; col: number; street?: string; porch?: boolean; kind?: string; name?: string }
 export interface Colliders { walls: [P2, P2, number, number][]; decks: Deck[] }
 export interface SignSpec { x: number; z: number; y: number; tx: number; tz: number; nx: number; nz: number; w: number; h: number; text: string; style: 'shop' | 'number'; color: number }
 export interface Mailbox { x: number; z: number; yaw: number }
@@ -655,7 +655,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
       }
     }
   }
-  return { x: cx + nx * 0.2, z: cz + nz * 0.2, y: floorY, nx, nz, fx, fz, fy, b: B.bi, w: wide, h: tall, wx: cx, wz: cz, col: doorHex, street, porch: porch && B.raise <= 0.5 };
+  return { x: cx + nx * 0.2, z: cz + nz * 0.2, y: floorY, nx, nz, fx, fz, fy, b: B.bi, w: wide, h: tall, wx: cx, wz: cz, col: doorHex, street, porch: porch && B.raise <= 0.5, kind: B.kind, name: B.name };
 }
 
 // Is there room for a porch on this wall (no neighbours, not onto the street)?
@@ -1401,10 +1401,26 @@ export function buildingMaterial() {
         float tz = depth / d.z;
         float t = min(tx, min(ty, tz));
         vec3 p = o + d * t;
+        // shopfronts: a display just inside the glass — a low wooden table and, above it, goods
+        // on stands (clothes, books, bottles, pastries — varied per cell) — before the shelves
+        int disp = 0;
+        if (store) {
+          float t1 = 1.1 / d.z; vec3 q1 = o + d * t1;
+          // (raised to 1.08 m so the display clears the sill and sits in the glass, not below it)
+          if (t1 < t && q1.y > 0.0 && q1.y < 1.08 && abs(q1.x) < hw * 0.8) { t = t1; p = q1; disp = 1; }
+          float t2 = 1.45 / d.z; vec3 q2 = o + d * t2;
+          float cellG = floor(q2.x * 3.0);
+          if (disp == 0 && t2 < t && q2.y > 1.08 && q2.y < 1.08 + 0.6 * (0.5 + hash12(vec2(cellG, rh * 7.0))) && abs(q2.x) < hw * 0.8 && hash12(vec2(cellG, rh2 * 5.0)) > 0.3) { t = t2; p = q2; disp = 2; }
+        }
         vec3 wallC = mix(mix(vec3(0.88, 0.82, 0.7), vec3(0.64, 0.74, 0.76), step(0.5, rh)), vec3(0.8, 0.68, 0.66), step(0.8, rh));
         vec3 floorC = mix(vec3(0.46, 0.33, 0.22), vec3(0.62, 0.6, 0.56), step(0.6, rh2));
         vec3 c;
-        if (t == tz) {
+        if (disp == 1) c = mix(vec3(0.45, 0.32, 0.22), vec3(0.62, 0.52, 0.4), step(1.02, p.y)) * 1.15;
+        else if (disp == 2) {
+          vec3 g1 = mix(vec3(0.82, 0.38, 0.3), vec3(0.32, 0.5, 0.68), hash12(vec2(floor(p.x * 3.0), rh)));
+          c = mix(g1, vec3(0.93, 0.88, 0.76), step(0.6, hash12(vec2(floor(p.x * 6.0), floor(p.y * 5.0))))) * 1.3; // spot-lit
+        }
+        else if (t == tz) {
           c = wallC;
           if (store) {
             float row = fract(p.y / 0.55);
@@ -1605,10 +1621,27 @@ export function buildingMaterial() {
             float cover = (W.ww * W.wh) / (W.cellW * W.floorH);
             alb = mix(alb, mix(alb, vec3(0.2, 0.22, 0.26), min(1.0, cover * 1.3)), far);
             glow += far * cover * mix(lit, uWindowLit * 0.86, smoothstep(1.2 * W.cellW, 3.0 * W.cellW, fw.x)) * 1.8;
-            if (W.store && W.fv > 0.45 + W.wh + 0.15 && W.fv < 0.45 + W.wh + 0.75) {
-              vec3 aw = mix(vec3(0.62, 0.16, 0.14), vec3(0.95, 0.93, 0.88), step(0.5, fract(u / 0.5)));
-              if (seed > 0.5) aw = mix(vec3(0.12, 0.35, 0.42), vec3(0.95, 0.93, 0.88), step(0.5, fract(u / 0.5)));
-              alb = mix(alb, aw, 1.0 - far * 0.5);
+            // Above the shop glass: each building its own storefront, not one striped recipe for all.
+            // Most get a sign fascia (a painted band in a dark trade colour or the wall's own shade);
+            // some a solid fabric awning over the windows only; a rare few a striped one.
+            if (W.store && W.fv > 0.45 + W.wh + 0.12 && W.fv < 0.45 + W.wh + 0.78) {
+              float sA = fract(seed * 7.13), sB = fract(seed * 13.7), sC = fract(seed * 29.3);
+              vec3 trade = sB < 0.2 ? vec3(0.1, 0.1, 0.11) : sB < 0.38 ? vec3(0.12, 0.26, 0.18) : sB < 0.54 ? vec3(0.12, 0.17, 0.3)
+                         : sB < 0.68 ? vec3(0.36, 0.1, 0.12) : sB < 0.82 ? vec3(0.62, 0.5, 0.34) : vec3(0.55, 0.28, 0.18);
+              float bandV = (W.fv - (0.45 + W.wh + 0.12)) / 0.66; // 0 at the bottom edge, 1 at the top
+              if (sA < 0.58) {
+                // a sign fascia across the front, with a thin moulding above and below
+                vec3 fascia = sC < 0.5 ? trade : alb * 0.62;
+                float mould = aab(bandV - 0.04, 0.04, fw.y / 0.66) + aab(bandV - 0.96, 0.04, fw.y / 0.66);
+                alb = mix(alb, mix(fascia, trimCol, clamp(mould, 0.0, 1.0)), 1.0 - far * 0.5);
+              } else if (abs(W.cu) < W.ww * 0.5 + 0.12) {
+                // a fabric awning over each window: shaded as it slopes out, a darker valance hem
+                vec3 aw = trade * 1.25;
+                if (sA > 0.95) aw = mix(trade * 1.3, vec3(0.93, 0.9, 0.84), step(0.5, fract(u / 0.45)));
+                aw *= mix(0.72, 1.05, bandV);
+                aw = mix(aw, aw * 0.6, step(bandV, 0.16));
+                alb = mix(alb, aw, 1.0 - far * 0.5);
+              }
             }
           }
           // small attic window in the gable: casing, four lights, a sill

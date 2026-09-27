@@ -62,6 +62,9 @@ ctx.onmessage = (e: MessageEvent) => {
     sim = new LifeSim(init);
     ctx.postMessage({ kind: 'ready', mode });
     tick();
+  } else if (d.kind === 'bump' && sim) {
+    const n = sim.bump(d.x, d.z, d.vx, d.vz);
+    if (n) ctx.postMessage({ kind: 'bumped', n });
   } else if (d.kind === 'regraph' && sim) {
     // new tiles streamed in: same worker, same agents, a bigger road graph
     sim = new LifeSim(d.init as LifeInit, sim);

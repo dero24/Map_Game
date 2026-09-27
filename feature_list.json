@@ -308,13 +308,52 @@
       "area": "gameplay",
       "title": "Local Plates + restaurant, café and home interiors",
       "user_visible_behavior": "Walk into a real diner/café/pizza place (OSM amenity+cuisine): archetype interior (booths, counter, pastry case), order, paint the dish; homes get sun pools and real (non-crate) furniture.",
-      "status": "not_started",
+      "status": "in_progress",
       "verification": [
         "interior montage: diner, café, home at noon and night",
         "reviewer round"
       ],
-      "evidence": [],
-      "notes": "The user's explicit ask and the one hero-region area the reviewer did not pass. IMMERSION_BACKLOG 3.x, 6.2."
+      "evidence": [
+        "shots/review-r17-d.jpg frames 18 (zoned café: counter, pendants, 2.2 m table pitch) and 19 (house, morning sun pools with muntins)",
+        "decor.ts foundry family (incl. ceiling fan, storage bench)"
+      ],
+      "notes": "The user's explicit ask and the one hero-region area the reviewer did not pass. IMMERSION_BACKLOG 3.x, 6.2. 2026-09-27: furniture foundry (decor.ts), café/diner/office/shop roles by useOf, interior sun pools. Ordering + painting the dish still to do."
+    },
+    {
+      "id": "downtown-life",
+      "priority": 4,
+      "area": "gameplay",
+      "title": "Ocean Ave downtown: café terraces, seated guests, curbside parking, more walkers",
+      "user_visible_behavior": "Commercial streets have café tables with parasols and seated people by day, parked cars at the curb and busier sidewalks; shop windows show goods on stands.",
+      "status": "passing",
+      "verification": [
+        "r11 montage d frame 17",
+        "typecheck + tests"
+      ],
+      "evidence": [
+        "shots/review-r17-a.jpg frame 2 (curbside cars + walkers in the morning)",
+        "shots/review-r17-d.jpg frame 17 (terrace + seated guests)",
+        "per-building storefronts: fascia / solid awning / rare stripes"
+      ],
+      "notes": "Driven by uses.ts (name + POI kind), never per-town lists."
+    },
+    {
+      "id": "ecosystem-physics",
+      "priority": 4,
+      "area": "gameplay",
+      "title": "Wildlife ecosystem + cars knock walkers down",
+      "user_visible_behavior": "A fox stalks and pounces on rabbits and songbirds at dusk, a hawk circles and stoops by day, animals bolt from traffic and alarm their neighbours; your car knocks walkers over, and they get up and walk on.",
+      "status": "passing",
+      "verification": [
+        "tests/critters.test.ts (4)",
+        "tests/lifeSim.test.ts knockdown",
+        "r11 montage e"
+      ],
+      "evidence": [
+        "tests/critters.test.ts (4) + lifeSim knockdown (sprawl → sit up → walk back, no teleport)",
+        "shots/review-r17-e.jpg"
+      ],
+      "notes": "Next: animals crossing roads (and road kill avoidance by AI traffic), dogs on leads with walkers, gulls stealing chips."
     }
   ],
   "regions": {

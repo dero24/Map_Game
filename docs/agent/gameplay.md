@@ -15,8 +15,13 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 ## Interiors
 
 - `planInterior` works on any polygon (local-frame spans); stair flights get stairwell holes
-  + height-banded rails (`registerPlan`); the on-demand mesh + furniture kit + per-room
-  paint/floor uniforms live in `interiors.ts`.
+  + height-banded rails (`registerPlan`); the on-demand mesh + per-room paint/floor uniforms
+  live in `interiors.ts`, furniture from the `decor.ts` foundry family.
+- Ground-floor role follows the business (`useOf`): café (counter, pastry case, bistro sets),
+  diner for restaurants/bars (vinyl booths, counter + stools, menu board), office/civic (desks,
+  monitors, office chairs), shop for groceries (stocked gondolas).
+- Sun pools: the interior shader traces the sun ray to the outer wall (`uDims`) and lights the
+  floor where it passes a window band (0.9–2.25 m, 2.7 m cells).
 
 ## Collision
 
@@ -33,6 +38,9 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 
 ## Ambient life + sound
 
+- Knockdowns: `Vehicles.onMove` → `LifeClient.bump` (throttled ~11 Hz) → worker `lifeSim.bump`: walkers in the car's path go `DOWN` — thrown with the car, slide with friction, lie 3–5 s (rolled on their side by the renderer, `amt −1`), snap back to the nearest walkable edge and walk on. `onBumped` plays a thud.
+- Downtown: café terraces at commercial doors whose use (`world/uses.ts` `useOf(name, poiKind)`) is café/restaurant/bar — table sets, parasols in warm climates, seated guests (`SEATED` define, one instanced draw, hidden at night); curbside parking on wide streets (enterable).
+
 - Pure sim in `src/sim/lifeSim.ts` (testable), worker wrapper `ambient.worker.ts`,
   renderer/client `life.ts`, shared layout `protocol.ts` (SAB when cross-origin isolated,
   transferable copies otherwise). Sound: `src/audio/ambience.ts` (all synthesized).
@@ -48,7 +56,8 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
 - Families:
   - `kit.ts`: cars (+ gear), boats, planes, rocks;
   - `flora.ts`: 7 tree species × 3 variants (`treeMeta` gives real dims), 12 garden species with growth stages, `plantMix`, `inBloom`;
-  - `fauna.ts`: 7 animals on one jointed body plan + `critterMaterial`;
+  - `fauna.ts`: 9 animals (incl. red fox, red-tailed hawk) on one jointed body plan + `birdGeometry` + `critterMaterial`;
+  - `decor.ts`: the furniture family for interiors and terraces (sofa, armchair, bed, tables, chairs, bistro and office chairs, monitor, lamps, café counter, booth, stocked shelves, plants, `cafeSet`), rounded boxes and tapered legs, merged by `mergeDecor` or placed by `piece()` in `interiors.ts`;
   - `people.ts`: one jointed person (~1.4k verts) for walkers and residents. Skin, hair and trouser palettes, 5 hairstyles, shorts/sleeves by `warmthFor(climate, month)` — all chosen per instance in the shader (`PEOPLE` define in `creatureMaterial`, marker vertex colours `MARK`), so a crowd is one draw;
   - `furniture.ts`: mailboxes, beach set, picnic table, car gear + `gearFor`.
 - Lot dressing (NA): `buildings.ts` lays a generated drive (a 2.9 m strip in `walks`) beside the front walk where the map has no service way near the door, and emits `drives`; `props.ts` parks a car at the house end (never on paved ground or the sidewalk strip). Doors also get hedges or `fence:picket` runs.
@@ -64,7 +73,7 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
     - `critter:` (wildlife);
     - `plant:` (the player's garden).
   - The spotting log, commissions, hints and critter habitat all find things by these prefixes. A vehicle model string may carry gear: `suv+surf`.
-- Wildlife (`src/sim/critters.ts`) is a main-thread sim within ~90 m of the walker. Habitat comes from tree instances, land cover, the ocean edge and gardens. Behaviours: wander, flee, climb, flush, drift. Animals are drawn 1.3–2× life size on purpose.
+- Wildlife (`src/sim/critters.ts`) is a main-thread sim within ~90 m of the walker. Habitat comes from tree instances, land cover, the ocean edge and gardens. Behaviours: wander, flee, climb, flush, drift, and the ecosystem states stalk/pounce (fox), soar/stoop/rise (hawk). Threats: the walker, predators, and `env.movers` (traffic from `LifeClient.movers` plus the player's ride via `Vehicles.onMove`). Alarms spread (`alarm` delay). `critters.eco` tallies hunts, catches and scares. Animals are drawn 1.3–2× life size on purpose.
 - Grow verb (`src/ui/garden.ts`): R plants, Shift+R picks the next seed. Plants grow while you play (about 20 min) and while you're away (IndexedDB `map-game-garden`). Each bed adds a collider and clears the grass.
 
 ## Paint as you explore (`src/world/explore.ts`)

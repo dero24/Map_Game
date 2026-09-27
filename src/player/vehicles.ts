@@ -145,6 +145,8 @@ export class Vehicles {
   }
 
   get driving() { return this.active !== null; }
+  /** Each frame a ride moves: (kind, x, y, z, vx, vz). main.ts hands it to life (knockdowns) and critters (they scatter). */
+  onMove: ((kind: VKind, x: number, y: number, z: number, vx: number, vz: number) => void) | null = null;
   /** The ride you're in (sound + HUD): kind, model, speed m/s, throttle 0..1. */
   get ride() { const v = this.active; return v ? { kind: v.kind, model: v.model, v: v.v, throttle: v.throttle, airborne: v.airborne } : null; }
   /** What E would board right now, without boarding it (context hints). */
@@ -429,6 +431,8 @@ export class Vehicles {
     else if (v.kind === 'boat') this.sail(v, dt);
     else this.fly(v, dt);
     this.pose(v);
+    // the world reacts to where the ride goes: walkers in a car's path, animals near anything moving
+    if (Math.abs(v.v) > 1) this.onMove?.(v.kind, v.x, v.y, v.z, -Math.sin(v.yaw) * v.v, -Math.cos(v.yaw) * v.v);
     // carry the walker: streaming, life, interiors, HUD all read its position
     const w = this.o.walker;
     w.x = v.x;

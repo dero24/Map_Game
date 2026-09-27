@@ -11,6 +11,7 @@ import type { Plan } from './interiors';
 import type { LayerLayout, Road } from './data';
 import { buildingMaterial } from './buildings';
 import { propMaterial } from '../render/propMaterial';
+import { creatureMaterial } from '../render/creature';
 import { wireMaterial, haloMaterial } from './props';
 import { signMaterial } from './signs';
 
@@ -24,6 +25,7 @@ export type PMat =
   | { t: 'wire' }
   | { t: 'signs' }
   | { t: 'halo'; size: number; color: number }
+  | { t: 'people'; seated: boolean }
   | { t: 'prop'; o: { wind?: boolean; bob?: boolean; foliage?: boolean; emissive?: number; emissiveNight?: boolean; crown?: [number, number] } }
   | { t: 'gnd' }; // region ground material (shared; set via setGndMaterial at boot)
 
@@ -164,6 +166,7 @@ export function matTag(m: THREE.Material): PMat {
     return { t: 'halo', size: u.uSize.value, color: (u.uColor.value as THREE.Color).getHex() };
   }
   const u = s.uniforms ?? {}, d = s.defines ?? {};
+  if (d.PEOPLE) return { t: 'people', seated: !!d.SEATED };
   if (u.uEmissive !== undefined) {
     return {
       t: 'prop',
@@ -189,6 +192,7 @@ export function matFromTag(t: PMat, atlas?: THREE.Texture): THREE.Material {
     case 'signs': return signMaterial(atlas!);
     case 'halo': return haloMaterial(t.size, new THREE.Color(t.color));
     case 'gnd': return gndMat ?? propMaterial();
+    case 'people': return creatureMaterial({ LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1, ...(t.seated ? { SEATED: 1 } : {}) });
     case 'prop':
       return propMaterial({ ...t.o, emissive: t.o.emissive !== undefined ? new THREE.Color(t.o.emissive) : undefined });
   }

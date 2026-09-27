@@ -21,10 +21,11 @@ window.__MONTAGE__ = async (items, opts = {}) => {
   document.getElementById('__montage')?.remove();
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
-    let label = typeof it === 'string' ? it : (it.label ?? `#${i}`);
     if (typeof it === 'string') window.__APPLY_SHOT__(it);
     else await (it.fn ?? it)(window.__GAME__);
     await frames(settle);
+    if (typeof it !== 'string' && it.after) await it.after(); // a post-settle check may amend the label
+    const label = typeof it === 'string' ? it : (it.label ?? `#${i}`);
     const x = (i % cols) * CW, y = Math.floor(i / cols) * (CH + PAD);
     ctx.drawImage(canvas, x, y, CW, CH);
     ctx.fillText(label, x + 8, y + CH + 16);

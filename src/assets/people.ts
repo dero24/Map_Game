@@ -6,7 +6,7 @@
 //   · one of five hairstyles (short, long, bun, cap, cropped) — the others collapse away,
 //   · shorts or trousers, short or long sleeves — by the region's warmth (climate × season),
 //   · the shirt is the instance colour (white = TINT), exactly like every other foundry asset.
-// Joints: hips at 0.92 m, knees at 0.5 m, shoulders at 1.40 m — the LEGS gait in
+// Joints: hips at 0.86 m, knees at 0.47 m, shoulders at 1.39 m — the LEGS gait in
 // creatureMaterial (src/sim/life.ts) swings thighs about the hip, flexes the knee on the
 // forward swing and counter-swings the arms. Front toward −z; origin on the ground.
 import * as THREE from 'three';
@@ -47,31 +47,34 @@ const v = (x: number, y: number, z = 0) => new THREE.Vector3(x, y, z);
 /** The shared body (≈1.75 m). */
 export function personGeometry() {
   const parts: THREE.BufferGeometry[] = [];
+  // Proportions of a ~1.72 m adult (about 7½ heads): hip joint 0.86, knee 0.47, waist 1.02,
+  // shoulders 1.39, chin 1.49, crown 1.72 — legs just under half the height, a real chest, a
+  // head big enough to read at 20 m (a pin head on long legs read as a stick figure).
   for (const s of [1, -1]) {
-    const leg = s > 0 ? 1 : 2, arm = s > 0 ? 5 : 6, x = 0.09 * s;
-    parts.push(mark(lim(v(x, 0.93), v(x, 0.5), 0.078, 0.058), MARK.pants, leg)); // thigh
-    parts.push(mark(lim(v(x, 0.5), v(x, 0.07, 0.01), 0.055, 0.042), MARK.shin, leg)); // shin
-    parts.push(part(box(0.1, 0.075, 0.25, x, 0.038, -0.035), 0x2a2622, leg)); // shoe
-    parts.push(part(lim(v(0.19 * s, 1.41), v(0.23 * s, 1.14, 0.01), 0.055, 0.046), TINT, arm)); // upper arm
-    parts.push(mark(lim(v(0.23 * s, 1.14, 0.01), v(0.24 * s, 0.9, -0.02), 0.043, 0.034), MARK.forearm, arm)); // forearm
-    parts.push(mark(box(0.07, 0.1, 0.08, 0.245 * s, 0.85, -0.02), MARK.skin, arm)); // hand
+    const leg = s > 0 ? 1 : 2, arm = s > 0 ? 5 : 6, x = 0.092 * s;
+    parts.push(mark(lim(v(x, 0.87), v(x, 0.47), 0.085, 0.062), MARK.pants, leg)); // thigh
+    parts.push(mark(lim(v(x, 0.47), v(x, 0.075, 0.01), 0.058, 0.042), MARK.shin, leg)); // shin
+    parts.push(part(box(0.095, 0.07, 0.22, x, 0.035, -0.03), 0x2a2622, leg)); // shoe
+    parts.push(part(lim(v(0.2 * s, 1.39), v(0.235 * s, 1.12, 0.01), 0.058, 0.048), TINT, arm)); // upper arm
+    parts.push(mark(lim(v(0.235 * s, 1.12, 0.01), v(0.245 * s, 0.88, -0.02), 0.045, 0.035), MARK.forearm, arm)); // forearm
+    parts.push(mark(box(0.07, 0.1, 0.08, 0.248 * s, 0.83, -0.02), MARK.skin, arm)); // hand
   }
   // hips (trousers) and torso (shirt): turned, then flattened front-to-back
-  parts.push(mark(lathe([[0.001, 0.84], [0.16, 0.85], [0.172, 0.92], [0.166, 0.99]], 7).scale(1, 1, 0.62), MARK.pants, 0));
-  parts.push(part(lathe([[0.166, 0.97], [0.152, 1.08], [0.19, 1.32], [0.2, 1.4], [0.14, 1.46], [0.001, 1.48]], 7).scale(1, 1, 0.6), TINT, 0));
-  parts.push(mark(lim(v(0, 1.44), v(0, 1.56), 0.05, 0.046), MARK.skin, 0)); // neck
-  parts.push(mark(new THREE.SphereGeometry(1, 7, 5).scale(0.094, 0.114, 0.104).translate(0, 1.64, 0), MARK.skin, 0)); // head
-  parts.push(mark(box(0.03, 0.04, 0.03, 0, 1.625, -0.105), MARK.skin, 0)); // nose: gives the face a direction
+  parts.push(mark(lathe([[0.001, 0.8], [0.158, 0.81], [0.178, 0.88], [0.172, 0.99]], 7).scale(1, 1, 0.66), MARK.pants, 0));
+  parts.push(part(lathe([[0.172, 0.97], [0.16, 1.05], [0.188, 1.25], [0.207, 1.37], [0.15, 1.44], [0.001, 1.46]], 7).scale(1, 1, 0.66), TINT, 0));
+  parts.push(mark(lim(v(0, 1.42), v(0, 1.52), 0.052, 0.048), MARK.skin, 0)); // neck
+  parts.push(mark(new THREE.SphereGeometry(1, 7, 5).scale(0.1, 0.12, 0.11).translate(0, 1.6, 0), MARK.skin, 0)); // head
+  parts.push(mark(box(0.03, 0.04, 0.03, 0, 1.585, -0.11), MARK.skin, 0)); // nose: gives the face a direction
   // hairstyles
-  const cap = (id: number, sy = 0.125, segs = 7) => mark(new THREE.SphereGeometry(1, segs, 3, 0, Math.PI * 2, 0, Math.PI * 0.56).scale(0.103, sy, 0.114).translate(0, 1.645, 0.01), MARK.hair, id);
+  const cap = (id: number, sy = 0.13, segs = 7) => mark(new THREE.SphereGeometry(1, segs, 3, 0, Math.PI * 2, 0, Math.PI * 0.56).scale(0.109, sy, 0.12).translate(0, 1.605, 0.01), MARK.hair, id);
   parts.push(cap(HAIR_PART0)); // shared by short, long and bun
-  parts.push(mark(box(0.19, 0.27, 0.07, 0, 1.53, 0.075), MARK.hair, HAIR_PART0 + 1)); // long
-  parts.push(mark(new THREE.SphereGeometry(0.052, 5, 3).translate(0, 1.71, 0.1), MARK.hair, HAIR_PART0 + 2)); // bun
+  parts.push(mark(box(0.2, 0.27, 0.07, 0, 1.49, 0.08), MARK.hair, HAIR_PART0 + 1)); // long
+  parts.push(mark(new THREE.SphereGeometry(0.054, 5, 3).translate(0, 1.675, 0.105), MARK.hair, HAIR_PART0 + 2)); // bun
   parts.push(
-    part(new THREE.SphereGeometry(1, 7, 3, 0, Math.PI * 2, 0, Math.PI * 0.5).scale(0.108, 0.1, 0.118).translate(0, 1.67, 0.005), 0xf2efe6, HAIR_PART0 + 3),
-    part(box(0.17, 0.016, 0.11, 0, 1.672, -0.125), 0xf2efe6, HAIR_PART0 + 3),
+    part(new THREE.SphereGeometry(1, 7, 3, 0, Math.PI * 2, 0, Math.PI * 0.5).scale(0.114, 0.105, 0.124).translate(0, 1.63, 0.005), 0xf2efe6, HAIR_PART0 + 3),
+    part(box(0.17, 0.016, 0.11, 0, 1.632, -0.13), 0xf2efe6, HAIR_PART0 + 3),
   ); // cap (the shader tints it from the trouser palette so caps vary)
-  parts.push(cap(HAIR_PART0 + 4, 0.105, 6)); // cropped
+  parts.push(cap(HAIR_PART0 + 4, 0.11, 6)); // cropped
   const g = merge(parts);
   g.computeBoundingSphere();
   return g;
@@ -101,7 +104,7 @@ export const PEOPLE_GLSL_MAIN = /* glsl */ `
     if (aPart > ${HAIR_PART0 - 0.5}) {
       float hp = aPart - ${HAIR_PART0}.0;
       bool worn = hp < 0.5 ? style < 2.5 : abs(hp - style) < 0.5;
-      if (!worn) p = vec3(0.0, 1.62, 0.0);
+      if (!worn) p = vec3(0.0, 1.58, 0.0);
     }
     vec3 skin = SKIN[int(r1 * ${SKIN_TONES.length}.0)];
     vec3 hair = HAIRC[int(r3 * ${HAIR_COLOURS.length}.0)];
