@@ -2,6 +2,84 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-27 (f) — Past the bake: real houses from LiDAR, painted streets, tiles that arrive
+
+**User report:** trees in and through buildings; flying to Monmouth Beach and beyond, the
+roads lose all detail and the buildings look buried in the terrain.
+
+**Diagnosis (in-game probes + shots):**
+1. **Trees.**
+   - Only 10 of 28k trunks stood inside a footprint.
+   - About 2,000 stood within 3 m of a wall with crowns 4–7 m wide. Blob crowns through walls
+     read as "a tree in the house".
+2. **"Loses all detail" had four causes:**
+   - **Unpainted ground.** The ground shader applied the detail paint window only inside the
+     original slice. Everywhere else it showed the level-0 backdrop paint (no sidewalks,
+     curbs or walks), and past the bake a smeared edge colour. Streamed tiles were never in
+     the painter at all.
+   - **Poisoned tile cache.** Overpass answers a timed-out query with HTTP 200 and a `remark`.
+     The tile service cached those as empty cells in R2, forever. Elberon/Deal cells came
+     back with 0 roads and 0 buildings.
+   - **Tile pile-up.** The client fired every cold real cell at once. The service fanned all
+     of them out to Overpass, which rate-limits per client, so everything timed out
+     together. Meanwhile the placeholders sat over the bare sea plane.
+   - **Blocked tile worker.** LiDAR decode and raster passes ran on the tile worker and held
+     up every other build.
+3. **"Buried".**
+   - Coarse-ring synth silhouettes raced the DEM at 4 s and were never relieved when they
+     lost, leaving flat plates sunk among DEM hills.
+   - Real buildings were not the cause: every mounted footprint sat within 1 m of its ground
+     (probe).
+
+**Fixes:**
+- **Tree clearance (props, every tree source).**
+  - Trunks inside or within 1.3 m of a footprint move out to 1.3 m, or are dropped if wedged.
+  - A crown whose bottom sits below the neighbouring roof is narrowed to stop 0.4 m short of
+    the wall. If that would leave a stick, the tree is dropped.
+  - Result: 0 trunks inside footprints (probe).
+- **J1 — ground paint everywhere.** The painter takes streamed tiles' roads and footprints
+  (`setTile`/`dropTile` on mount/unload).
+  - A new **mid window** (1.6 km, about 0.8 m/px: sidewalks, walks, markings, contact
+    shadows) joins the 300 m detail window.
+  - Both paint over the backdrop and slice land cover, with a lawn wash past the bake.
+  - The shader applies them anywhere. The mid repaint costs about 7 ms, at most one window
+    per frame.
+- **Unmapped buildings from LiDAR** (`detectBuildings`).
+  - Roof pixels are ≥ 2.2 m, planar at 3×3, not vegetation and not under a mapped footprint.
+    Ridges are rejoined and the outer ring grown back.
+  - Components become a min-area rectangle, or an orthogonal quarter-cell outline (L/T/U).
+    Each is measured like a mapped building.
+  - Hybrid-fill guesses retire wherever the survey covered the ground.
+  - Deal/Ocean Twp cells with 0–70 OSM buildings gained 190–430 real ones each.
+- **LiDAR worker** (`lidar.worker.ts` + `lidarCell.ts`).
+  - The page spawns it and wires it to the tile worker with a MessageChannel. Nested workers
+    aren't available everywhere, and the first try hung silently.
+  - The tile worker keeps the cache and apply logic; the LiDAR worker owns the rasters.
+- **Tile service.**
+  - A `remark` saying "runtime error / timed out / out of memory" is now a failure: the next
+    mirror is tried, and nothing is cached.
+  - Two Overpass slots per isolate.
+  - On a 429, it waits (Retry-After, up to 8 s) before the next mirror.
+  - Cache keys are bumped (R2 `t/v6`, URL `&v=6`), so the poisoned empties retire.
+- **Client.**
+  - Real-lite cells queue nearest-first, 3 in flight.
+  - A synth placeholder isn't fetched once its real twin is mounted.
+- **Coarse silhouettes** wait up to 20 s for their DEM instead of 4 s.
+
+**Also:**
+- `?hour=` works in capture mode.
+- `__GAME__.setHour` is available to tools.
+- The worker log keeps 400 lines.
+
+**Verified:**
+- Tree probe: 0 trunks inside footprints.
+- `shots/south-after.jpg`: painted sidewalks and curbs past the bake.
+- Asbury Park (z 16.5 km): 5 real cells mounted within 10 s of arriving (it was 0 in 40 s).
+- 87 tests; `tsc` clean.
+
+**Dev note.** Wrangler dev reloads the service on save. Its local R2 still holds the old
+empties under `t/v5`; they are simply never asked for again.
+
 ## 2026-09-26 (e) — Real trees from the same LiDAR
 
 **User direction:** yes, do trees next.

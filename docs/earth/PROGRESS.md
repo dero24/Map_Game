@@ -36,13 +36,15 @@ walking — forever — while the world paints itself around you. The design liv
 
 | L | **Measured buildings (lower 48)** — USGS 3DEP LiDAR (EPT, in-browser laz-perf) → per-footprint ridge/eave/roof-style fits (`lidar.ts`, `lidarCore.ts`, `measure.ts`); IDB-cached per cell; late-measure relief swap | ✅ done (first cut, reviewed) | this session |
 | L-trees | **Real trees from LiDAR** — crown detection on the same cell raster (`detectTrees`), measured height/crown/position replace the WorldCover scan where the survey covered the ground | ✅ done | this session |
+| J1 + L-new | **Past the bake**: ground paint windows everywhere (streamed tiles paint), LiDAR-detected unmapped buildings, LiDAR worker, Overpass-remark fix + client/service throttling, tree clearance | ✅ done | this session |
 | Traversal | **Rideable vehicles** (car/boat/plane, E/V/B/N, driveway cars, chase cam) · **grass** (painter-masked, lush tiers) · sunrise start · in-frame teleport | ✅ done (first cut) | this session |
 
 ## Next up (revised 2026-09-26 — see OPEN_WORLD.md "Phases — revised order")
 
 - ~~L-lite~~ superseded by **L (LiDAR)** — done for every 3DEP-covered US cell.
-- ~~Trees from LiDAR~~ — done. Next: **J1** ground paint + per-tile lamps for streamed tiles →
-  vehicle polish (+ tree trunk collision) → J2 rest → K life.
+- ~~Trees from LiDAR~~, ~~J1 ground paint~~ — done. Next: per-tile lamp pools past the slice;
+  road-ribbon geometry to match the paint (curb height); vehicle polish (+ tree trunk
+  collision) → J2 rest → K life. Deploy the tile service (R2 makes cold Overpass rare).
 
 ## Next up (older list, kept for reference)
 

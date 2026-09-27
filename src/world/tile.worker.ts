@@ -8,7 +8,7 @@ import { synthTile, realExtras } from './synth';
 import { fetchDem, demLayer, setDemBase, raceNull } from './dem';
 import type { SynthResult } from './synth';
 import { setActiveStyle, styleByKey } from './styles';
-import { enrichTile, initLidar, lidarOn, setLidarLog } from './lidar';
+import { enrichTile, initLidar, lidarOn, setLidarLog, setLidarPort } from './lidar';
 
 // First visit to a cell: how long a detail build waits for its LiDAR measurement before
 // building from mapped priors (the measured rebuild then swaps in when it lands).
@@ -79,7 +79,10 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
     : spec.world
       ? (cachedFetchJson(spec.file) as Promise<TileJson>) // real-lite: absolute tile-service URL
       : (cachedFetchJson(base + spec.file) as Promise<TileJson>);
-  const dem = demP ? (spec.synth && !msg.relief ? await raceNull(demP, 4000) : await demP) : null;
+  // Detail placeholders race the DEM (they exist to be fast; a late patch triggers a relief
+  // rebuild). Coarse silhouettes wait up to 20 s: they're distant, never relieved, and a flat one
+  // reads as buildings sunk into the hills around it.
+  const dem = demP ? (spec.synth && !msg.relief ? await raceNull(demP, msg.lite ? 20000 : 4000) : await demP) : null;
   if (dem) {
     // The worker keeps its own view; a copy crosses to the main thread for the walker.
     // Registering BEFORE synthTile matters — placeholder lots must sit on real hills.
@@ -124,6 +127,7 @@ ctx.onmessage = (e: MessageEvent) => {
     if (m.demBase) setDemBase(m.demBase);
     if (m.lidar && m.origin) {
       setLidarLog((msg) => ctx.postMessage({ kind: 'log', msg }));
+      if (m.lidarPort) setLidarPort(m.lidarPort);
       initLidar(m.origin);
     }
     if (m.fp) initCache(base, m.fp); // same idb database as the page

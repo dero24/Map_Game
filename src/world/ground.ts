@@ -110,6 +110,8 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
       uPaintB: { value: paint.backdrop },
       uPaintD: { value: paint.detail.texture },
       uPaintDBox: { value: paint.detail.box },
+      uPaintM: { value: paint.mid.texture },
+      uPaintMBox: { value: paint.mid.box },
       uPaintSBox: { value: new THREE.Vector4(S.x0, S.z0, 1 / (S.x1 - S.x0), 1 / (S.z1 - S.z0)) },
       uPaintBBox: { value: new THREE.Vector4(B.x0, B.z0, 1 / (B.x1 - B.x0), 1 / (B.z1 - B.z0)) },
     },
@@ -129,8 +131,8 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
       }`,
     fragment: /* glsl */ `
       ${GLSL_TERRAIN}
-      uniform sampler2D uPaintS, uPaintB, uPaintD;
-      uniform vec4 uPaintSBox, uPaintBBox, uPaintDBox;
+      uniform sampler2D uPaintS, uPaintB, uPaintD, uPaintM;
+      uniform vec4 uPaintSBox, uPaintBBox, uPaintDBox, uPaintMBox;
       varying float vCanopy;
       void main() {
         if (inHole(vWorldPos)) discard;
@@ -138,14 +140,20 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
         vec2 xz = vWorldPos.xz;
         vec2 us = (xz - uPaintSBox.xy) * uPaintSBox.zw;
         vec3 alb;
-        if (us.x > 0.0 && us.y > 0.0 && us.x < 1.0 && us.y < 1.0) {
-          alb = texture2D(uPaintS, us).rgb;
-          vec2 ud = (xz - uPaintDBox.xy) * uPaintDBox.zw;
-          vec2 e = min(ud, 1.0 - ud);
-          float wd = smoothstep(0.0, 0.08, min(e.x, e.y));
-          if (wd > 0.0) alb = mix(alb, texture2D(uPaintD, ud).rgb, wd);
-        }
-        else alb = texture2D(uPaintB, (xz - uPaintBBox.xy) * uPaintBBox.zw).rgb;
+        vec2 ub = (xz - uPaintBBox.xy) * uPaintBBox.zw;
+        if (us.x > 0.0 && us.y > 0.0 && us.x < 1.0 && us.y < 1.0) alb = texture2D(uPaintS, us).rgb;
+        else if (ub.x > 0.0 && ub.y > 0.0 && ub.x < 1.0 && ub.y < 1.0) alb = texture2D(uPaintB, ub).rgb;
+        else alb = vec3(0.381, 0.445, 0.195); // past the bake: the town-lawn wash (the windows paint over it)
+        // J1: the walker-centred windows paint baked AND streamed features everywhere —
+        // mid (1.6 km: sidewalks, walks, markings), then detail (300 m: curbs, fine lines)
+        vec2 um = (xz - uPaintMBox.xy) * uPaintMBox.zw;
+        vec2 em = min(um, 1.0 - um);
+        float wm = smoothstep(0.0, 0.06, min(em.x, em.y));
+        if (wm > 0.0) alb = mix(alb, texture2D(uPaintM, um).rgb, wm);
+        vec2 ud = (xz - uPaintDBox.xy) * uPaintDBox.zw;
+        vec2 e = min(ud, 1.0 - ud);
+        float wd = smoothstep(0.0, 0.08, min(e.x, e.y));
+        if (wd > 0.0) alb = mix(alb, texture2D(uPaintD, ud).rgb, wd);
         // Phase I biome wash: greens dry toward straw/ochre (arid, Mediterranean summers),
         // saturate (tropics) or darken/cool (boreal) — painted land cover stays the source.
         float greenness = clamp((alb.g - max(alb.r, alb.b)) * 6.0, 0.0, 1.0);

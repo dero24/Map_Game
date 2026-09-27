@@ -466,3 +466,203 @@ export function detectTrees(g: { x0: number; z0: number; res: number; w: number;
   }
   return out;
 }
+
+// ---------- unmapped buildings ----------
+// OSM is thin in much of the US (whole towns with a road grid and no houses). The survey
+// has them all: roof pixels are high (≥ 2.2 m), locally planar at 1 m (a 3×3 plane fits to
+// ~20 cm — foliage doesn't), not vegetation when the survey says so, and not under a mapped
+// footprint. Connected roof regions of house size and up become outlines: their minimum-
+// area rectangle when they fill it, else the union of the rectangle's quarter-cells they
+// fill (L/T/U shapes), so every outline is orthogonal and wall-friendly.
+export interface RoofHit { ring: [number, number][]; area: number; h: number }
+export function detectBuildings(g: { x0: number; z0: number; res: number; w: number; h: number }, H: Float32Array, veg: Float32Array | null, mapped: Uint8Array, box: Box): RoofHit[] {
+  const { w, h, res } = g;
+  const cand = new Uint8Array(w * h);
+  for (let j = 1; j < h - 1; j++) for (let i = 1; i < w - 1; i++) {
+    const k = j * w + i, v = H[k];
+    if (!(v >= 2.2) || mapped[k]) continue;
+    if (veg && veg[k] > 0.5) continue;
+    // plane fit over 3×3 (symmetric stencil: slopes are simple differences)
+    let n = 0, s = 0;
+    const vals: number[] = [];
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+      const u = H[(j + dj) * w + i + di];
+      vals.push(u);
+      if (!Number.isNaN(u)) (n++), (s += u);
+    }
+    if (n < 9) continue;
+    const m = s / 9;
+    const bx = (vals[2] + vals[5] + vals[8] - vals[0] - vals[3] - vals[6]) / 6, bz = (vals[6] + vals[7] + vals[8] - vals[0] - vals[1] - vals[2]) / 6;
+    let e = 0, q = 0;
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const r = vals[q++] - (m + bx * di + bz * dj); e += r * r; }
+    if (Math.sqrt(e / 9) < 0.22) cand[k] = 1;
+  }
+  // ridges, hips and valleys aren't planar at 3×3 — rejoin a high pixel flanked by roof on
+  // two opposite sides, or the two slopes of a gable become two "buildings"
+  const join: number[] = [];
+  for (let j = 1; j < h - 1; j++) for (let i = 1; i < w - 1; i++) {
+    const k = j * w + i;
+    if (cand[k] || !(H[k] >= 2.2) || mapped[k] || (veg && veg[k] > 0.5)) continue;
+    if ((cand[k - 1] && cand[k + 1]) || (cand[k - w] && cand[k + w]) || (cand[k - w - 1] && cand[k + w + 1]) || (cand[k - w + 1] && cand[k + w - 1])) join.push(k);
+  }
+  for (const k of join) cand[k] = 1;
+  const seen = new Uint8Array(w * h), out: RoofHit[] = [];
+  const stack: number[] = [];
+  for (let k0 = 0; k0 < w * h; k0++) {
+    if (!cand[k0] || seen[k0]) continue;
+    const px: number[] = [];
+    stack.push(k0);
+    seen[k0] = 1;
+    while (stack.length) {
+      const k = stack.pop()!;
+      px.push(k);
+      const i = k % w, j = (k / w) | 0;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ii = i + di, jj = j + dj;
+        if (ii < 0 || jj < 0 || ii >= w || jj >= h) continue;
+        const kk = jj * w + ii;
+        if (cand[kk] && !seen[kk]) (seen[kk] = 1), stack.push(kk);
+      }
+    }
+    // grow one pixel: the roof's outer ring fails the 3×3 test (its stencil touches ground)
+    const grown: number[] = [];
+    for (const k of px) {
+      for (const d of [1, -1, w, -w]) {
+        const kk = k + d;
+        if (kk < 0 || kk >= w * h || seen[kk] || cand[kk] || !(H[kk] >= 2.2) || mapped[kk] || (veg && veg[kk] > 0.5)) continue;
+        seen[kk] = 2;
+        grown.push(kk);
+      }
+    }
+    px.push(...grown);
+    const area = px.length * res * res;
+    if (area < 30 || area > 40000) continue;
+    let cx = 0, cz = 0;
+    const hs: number[] = [];
+    const pts: [number, number][] = px.map((k) => {
+      const x = g.x0 + ((k % w) + 0.5) * res, z = g.z0 + (((k / w) | 0) + 0.5) * res;
+      cx += x;
+      cz += z;
+      hs.push(H[k]);
+      return [x, z];
+    });
+    cx /= px.length;
+    cz /= px.length;
+    if (cx < box.x0 || cx >= box.x1 || cz < box.z0 || cz >= box.z1) continue; // the owning cell emits it
+    hs.sort((a, b) => a - b);
+    const med = hs[hs.length >> 1];
+    if (med > 30 && area < 600) continue; // a smooth-topped tall crown, not a building
+    if (hs[Math.floor(hs.length * 0.9)] - hs[Math.floor(hs.length * 0.1)] > Math.max(6, med * 0.8)) continue; // ragged: canopy
+    // min-area rectangle over the pixel corners (hull of the pixel centres, grown half a pixel)
+    const B = rectOf(pts, res / 2);
+    if (!B) continue;
+    const fill = area / (4 * B.L * B.W);
+    if (fill < 0.5 || B.W < 2.2) continue;
+    const toW = (u: number, v: number): [number, number] => [B.cx + u * B.ux - v * B.uz, B.cz + u * B.uz + v * B.ux];
+    const shrink = 0.3; // LiDAR sees the eaves: the walls stand a little inside the roof
+    let ring: [number, number][];
+    if (fill >= 0.78) {
+      const L = B.L - shrink, W = B.W - shrink;
+      ring = [toW(-L, -W), toW(L, -W), toW(L, W), toW(-L, W)];
+    } else {
+      // quarter-cells of the rectangle the roof fills → an orthogonal outline
+      const N = 4, cnt = new Float32Array(N * N);
+      const cellA = ((2 * B.L) / N) * ((2 * B.W) / N);
+      for (const [x, z] of pts) {
+        const dx = x - B.cx, dz = z - B.cz;
+        const u = dx * B.ux + dz * B.uz, v = -dx * B.uz + dz * B.ux;
+        const a = Math.min(N - 1, Math.max(0, Math.floor(((u + B.L) / (2 * B.L)) * N)));
+        const b = Math.min(N - 1, Math.max(0, Math.floor(((v + B.W) / (2 * B.W)) * N)));
+        cnt[b * N + a] += res * res;
+      }
+      const on = Array.from(cnt, (c) => c / cellA >= 0.5);
+      const loop = outlineCells(on, N);
+      if (!loop || loop.length < 4) continue;
+      const su = (2 * B.L) / N, sv = (2 * B.W) / N;
+      ring = loop.map(([a, b]) => toW(-B.L + a * su, -B.W + b * sv));
+    }
+    out.push({ ring, area, h: med });
+  }
+  return out;
+}
+
+function rectOf(pts: [number, number][], grow: number) {
+  // convex hull (monotone chain)
+  const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cr = (o: number[], a: number[], b: number[]) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo: [number, number][] = [], up: [number, number][] = [];
+  for (const q of p) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+  for (let i = p.length - 1; i >= 0; i--) { const q = p[i]; while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
+  const Hh = lo.slice(0, -1).concat(up.slice(0, -1));
+  if (Hh.length < 3) return null;
+  let best: { area: number; cx: number; cz: number; ux: number; uz: number; L: number; W: number } | null = null;
+  for (let i = 0; i < Hh.length; i++) {
+    const a = Hh[i], b = Hh[(i + 1) % Hh.length];
+    const l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (l < 1e-6) continue;
+    let ux = (b[0] - a[0]) / l, uz = (b[1] - a[1]) / l;
+    let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+    for (const q of Hh) {
+      const u = q[0] * ux + q[1] * uz, v = -q[0] * uz + q[1] * ux;
+      (u0 = Math.min(u0, u)), (u1 = Math.max(u1, u)), (v0 = Math.min(v0, v)), (v1 = Math.max(v1, v));
+    }
+    const area = (u1 - u0 + 2 * grow) * (v1 - v0 + 2 * grow);
+    if (!best || area < best.area) {
+      const uc = (u0 + u1) / 2, vc = (v0 + v1) / 2;
+      let L = (u1 - u0) / 2 + grow, W = (v1 - v0) / 2 + grow;
+      if (W > L) { [L, W] = [W, L]; [ux, uz] = [-uz, ux]; }
+      best = { area, cx: 0, cz: 0, ux, uz, L, W };
+      // centre from the ORIGINAL axis frame
+      const ox = (b[0] - a[0]) / l, oz = (b[1] - a[1]) / l;
+      best.cx = uc * ox - vc * oz;
+      best.cz = uc * oz + vc * ox;
+    }
+  }
+  return best;
+}
+
+// Outline of the "on" cells of an N×N grid (cell (a,b) spans [a,a+1]×[b,b+1]) as one
+// counter-clockwise loop of grid corners, collinear corners dropped. The largest loop wins
+// (an isolated cell elsewhere is ignored). null when nothing is on.
+export function outlineCells(on: boolean[], N: number): [number, number][] | null {
+  const at = (a: number, b: number) => a >= 0 && b >= 0 && a < N && b < N && on[b * N + a];
+  // directed boundary edges, interior on the left
+  const next = new Map<string, [number, number][]>();
+  const add = (x0: number, y0: number, x1: number, y1: number) => {
+    const k = x0 + ',' + y0;
+    const l = next.get(k);
+    if (l) l.push([x1, y1]);
+    else next.set(k, [[x1, y1]]);
+  };
+  for (let b = 0; b < N; b++) for (let a = 0; a < N; a++) {
+    if (!at(a, b)) continue;
+    if (!at(a, b - 1)) add(a, b, a + 1, b);
+    if (!at(a + 1, b)) add(a + 1, b, a + 1, b + 1);
+    if (!at(a, b + 1)) add(a + 1, b + 1, a, b + 1);
+    if (!at(a - 1, b)) add(a, b + 1, a, b);
+  }
+  let best: [number, number][] | null = null;
+  while (next.size) {
+    const start = next.keys().next().value as string;
+    const loop: [number, number][] = [];
+    let cur = start.split(',').map(Number) as [number, number];
+    for (let guard = 0; guard < 4 * N * N + 8; guard++) {
+      loop.push(cur);
+      const k = cur[0] + ',' + cur[1];
+      const l = next.get(k);
+      if (!l || !l.length) break;
+      const nx = l.pop()!;
+      if (!l.length) next.delete(k);
+      cur = nx;
+      if (cur[0] + ',' + cur[1] === start) break;
+    }
+    // drop collinear corners
+    const s = loop.filter((p, i) => {
+      const a = loop[(i + loop.length - 1) % loop.length], b = loop[(i + 1) % loop.length];
+      return (p[0] - a[0]) * (b[1] - p[1]) - (p[1] - a[1]) * (b[0] - p[0]) !== 0;
+    });
+    const ar = Math.abs(s.reduce((acc, p, i) => { const q = s[(i + 1) % s.length]; return acc + p[0] * q[1] - q[0] * p[1]; }, 0));
+    if (s.length >= 4 && (!best || ar > Math.abs(best.reduce((acc, p, i) => { const q = best![(i + 1) % best!.length]; return acc + p[0] * q[1] - q[0] * p[1]; }, 0)))) best = s;
+  }
+  return best;
+}

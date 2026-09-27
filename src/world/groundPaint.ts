@@ -87,6 +87,31 @@ class Painter {
   roads: Prepared<Road>[];
   foot: Prepared<number>[];
   walks: Prepared<number>[];
+  // Streamed tiles (real-lite / synth — everything past the bake) paint too: their roads and
+  // footprints join while mounted, so sidewalks, curbs, markings, walks and contact shadows
+  // continue wherever the world does.
+  private tiles = new Map<string, { roads: Prepared<Road>[]; foot: Prepared<number>[]; box: [number, number, number, number] }>();
+  setTile(id: string, roads: Road[], rings: [number, number][][], box: [number, number, number, number]) {
+    this.tiles.set(id, {
+      roads: roads.filter((r) => !r.br).map((r) => prep(r, [r.p])),
+      foot: rings.map((r, i) => prep(i, [r.flatMap(([x, z]) => [x * 10, z * 10])])),
+      box,
+    });
+  }
+  dropTile(id: string) { this.tiles.delete(id); }
+  private roadsIn(x0: number, z0: number, x1: number, z1: number): Prepared<Road>[] {
+    if (!this.tiles.size) return this.roads;
+    const extra: Prepared<Road>[] = [];
+    for (const t of this.tiles.values()) if (t.box[2] > x0 - 50 && t.box[0] < x1 + 50 && t.box[3] > z0 - 50 && t.box[1] < z1 + 50) extra.push(...t.roads);
+    if (!extra.length) return this.roads;
+    return [...this.roads, ...extra].sort((a, b) => (ROAD_RANK[a.item.c] ?? 1) - (ROAD_RANK[b.item.c] ?? 1));
+  }
+  private footIn(x0: number, z0: number, x1: number, z1: number): Prepared<number>[] {
+    if (!this.tiles.size) return this.foot;
+    const out = [...this.foot];
+    for (const t of this.tiles.values()) if (t.box[2] > x0 - 50 && t.box[0] < x1 + 50 && t.box[3] > z0 - 50 && t.box[1] < z1 + 50) out.push(...t.foot);
+    return out;
+  }
   constructor(json: WorldJson, walks: number[] = []) {
     this.areas = json.areas.filter((a) => AREA_FILL[a.c]).sort((a, b) => AREA_ORDER.indexOf(a.c) - AREA_ORDER.indexOf(b.c)).map((a) => prep(a, [...a.o, ...a.i]));
     this.roads = json.roads.filter((r) => !r.br).sort((a, b) => (ROAD_RANK[a.c] ?? 1) - (ROAD_RANK[b.c] ?? 1)).map((r) => prep(r, [r.p]));
@@ -123,7 +148,7 @@ class Painter {
       ctx.fillStyle = 'rgba(90,84,72,0.5)';
       ctx.lineWidth = level === 2 ? 1.1 : 1.6;
       ctx.lineJoin = 'round';
-      for (const f of this.foot) {
+      for (const f of this.footIn(x0, z0, x1, z1)) {
         if (!overlaps(f, x0, z0, x1, z1, 5)) continue;
         ctx.beginPath();
         pathOf(ctx, f.pts[0], true);
@@ -131,7 +156,7 @@ class Painter {
         ctx.stroke();
       }
     }
-    const list = this.roads.filter((r) => (level > 0 ? !r.item.lod : true) && (detail || !MINOR.has(r.item.c)) && overlaps(r, x0, z0, x1, z1));
+    const list = this.roadsIn(x0, z0, x1, z1).filter((r) => (level > 0 ? !r.item.lod : true) && (detail || !MINOR.has(r.item.c)) && overlaps(r, x0, z0, x1, z1));
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     // Front walks from each door to the street (flagstone-pale, under everything else).
@@ -220,7 +245,10 @@ export interface GroundPaint {
   backdrop: THREE.CanvasTexture;
   sliceCanvas: HTMLCanvasElement;
   detail: DetailGround;
+  mid: DetailGround;
   addWalks: (walks: number[]) => void;
+  setTile: (id: string, roads: Road[], rings: [number, number][][], box: [number, number, number, number]) => void;
+  dropTile: (id: string) => void;
   /** Where the painted ground is open (unpainted land or a green wash) inside a square — the
    *  grass field grows only there, so it can never sit on a painted sidewalk, walk, lot or beach. */
   grassMask: (x0: number, z0: number, size: number) => { res: number; data: Uint8Array };
@@ -237,37 +265,52 @@ const makeTex = (c: HTMLCanvasElement) => {
   return t;
 };
 
-// Near-field ground window that re-centres on the walker.
+// A ground window that re-centres on the walker: `detail` (300 m, ~15 cm/px, curbs and
+// double centre lines) and `mid` (1.6 km, ~0.8 m/px: sidewalks, walks, markings) — both
+// paint the baked features AND the mounted streamed tiles, over the land-cover wash where
+// the bake has one and a lawn wash past it.
 export class DetailGround {
-  readonly size = 300;
   readonly canvas = document.createElement('canvas');
   readonly texture: THREE.CanvasTexture;
   readonly box = new THREE.Vector4(0, 0, 1, 1);
   private cx = Infinity;
   private cz = Infinity;
-  constructor(private painter: Painter, private cover: HTMLCanvasElement, private L: TerrainLayer, res: number) {
+  private dirty = false;
+  constructor(private painter: Painter, private covers: { img: HTMLCanvasElement; L: TerrainLayer }[], res: number, readonly size = 300, private level: 1 | 2 = 2, private blur = 6) {
     this.canvas.width = this.canvas.height = res;
     this.texture = makeTex(this.canvas);
   }
+  /** A tile inside the window changed — repaint on the next update. */
+  touch(b: [number, number, number, number]) {
+    const h = this.size / 2;
+    if (b[2] > this.cx - h && b[0] < this.cx + h && b[3] > this.cz - h && b[1] < this.cz + h) this.dirty = true;
+  }
   update(x: number, z: number, force = false) {
-    if (!force && Math.hypot(x - this.cx, z - this.cz) < this.size * 0.22) return false;
+    if (!force && !this.dirty && Math.hypot(x - this.cx, z - this.cz) < this.size * 0.22) return false;
+    this.dirty = false;
     const s = this.size, res = this.canvas.width;
-    this.cx = Math.round(x / 10) * 10;
-    this.cz = Math.round(z / 10) * 10;
+    const snap = s > 1000 ? 50 : 10;
+    this.cx = Math.round(x / snap) * snap;
+    this.cz = Math.round(z / snap) * snap;
     const x0 = this.cx - s / 2, z0 = this.cz - s / 2;
     const ctx = this.canvas.getContext('2d')!;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const g = this.L.g;
-    const sx = (x0 - g.x0) / g.cell, sz = (z0 - g.z0) / g.cell, sw = s / g.cell;
-    ctx.filter = 'blur(6px)';
-    ctx.fillStyle = '#aeb08e';
+    ctx.filter = `blur(${this.blur}px)`;
+    ctx.fillStyle = COVER[50]; // past the bake: town lawn (streamed tiles paint their paving on top)
     ctx.fillRect(0, 0, res, res);
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(this.cover, sx, sz, sw, sw, 0, 0, res, res);
+    for (const { img, L } of this.covers) {
+      const g = L.g;
+      // destination rect of the layer's grid inside this window
+      const k = res / s;
+      const dx = (g.x0 - x0) * k, dz = (g.z0 - z0) * k, dw = g.w * g.cell * k, dh = g.h * g.cell * k;
+      if (dx > res || dz > res || dx + dw < 0 || dz + dh < 0) continue;
+      ctx.drawImage(img, dx, dz, dw, dh);
+    }
     ctx.filter = 'none';
     const k = res / s;
     ctx.setTransform(k, 0, 0, k, -x0 * k, -z0 * k);
-    this.painter.paint(ctx, x0, z0, x0 + s, z0 + s, k, 2);
+    this.painter.paint(ctx, x0, z0, x0 + s, z0 + s, k, this.level);
     this.texture.needsUpdate = true;
     this.box.set(x0, z0, 1 / s, 1 / s);
     return true;
@@ -293,6 +336,7 @@ export function paintGround(world: World, maxTex: number, walks: number[] = []):
   ctx.setTransform(sx, 0, 0, sz, -S.x0 * sx, -S.z0 * sz);
   painter.paint(ctx, S.x0, S.z0, S.x1, S.z1, sx, 1);
 
+  const backCover0 = coverImage(terrain.backdrop);
   const bw = Math.min(2048, maxTex), bh = Math.min(4096, maxTex);
   const bc = document.createElement('canvas');
   bc.width = bw;
@@ -301,12 +345,15 @@ export function paintGround(world: World, maxTex: number, walks: number[] = []):
   const bctx = bc.getContext('2d')!;
   bctx.imageSmoothingEnabled = true;
   bctx.filter = 'blur(1.5px)';
-  bctx.drawImage(coverImage(terrain.backdrop), 0, 0, bw, bh);
+  bctx.drawImage(backCover0, 0, 0, bw, bh);
   bctx.filter = 'none';
   bctx.setTransform(bx, 0, 0, bz, -B.x0 * bx, -B.z0 * bz);
   painter.paint(bctx, B.x0, B.z0, B.x1, B.z1, bx, 0);
 
-  const detail = new DetailGround(painter, sliceCover, terrain.slice, Math.min(2048, maxTex));
+  const backCover = backCover0;
+  const covers = [{ img: backCover, L: terrain.backdrop }, { img: sliceCover, L: terrain.slice }];
+  const detail = new DetailGround(painter, covers, Math.min(2048, maxTex), 300, 2, 6);
+  const mid = new DetailGround(painter, covers, Math.min(2048, maxTex), 1600, 1, 2);
   const mc = document.createElement('canvas');
   mc.width = mc.height = 80; // 4 px/m over a 20 m grass cell
   const mctx = mc.getContext('2d', { willReadFrequently: true })!;
@@ -326,5 +373,10 @@ export function paintGround(world: World, maxTex: number, walks: number[] = []):
     }
     return { res, data: out };
   };
-  return { slice: makeTex(sc), backdrop: makeTex(bc), sliceCanvas: sc, detail, addWalks: (w: number[]) => painter.addWalks(w), grassMask };
+  return {
+    slice: makeTex(sc), backdrop: makeTex(bc), sliceCanvas: sc, detail, mid, grassMask,
+    addWalks: (w: number[]) => painter.addWalks(w),
+    setTile: (id, roads, rings, box) => { painter.setTile(id, roads, rings, box); detail.touch(box); mid.touch(box); },
+    dropTile: (id) => painter.dropTile(id),
+  };
 }

@@ -25,7 +25,7 @@ export interface Building {
   mh?: number; // mapped min_height (m): the building stands on something (pilings)
   ad?: string; // street address
   own?: number; // tile tiles: 0 = margin context (a neighbour tile emits it)
-  gen?: 'fill'; // hybrid-fill lot (H3): seeded house planted beside a real street — not mapped OSM
+  gen?: 'fill' | 'lidar'; // 'fill': hybrid-fill guess beside a real street (H3); 'lidar': unmapped, found in the survey
   eav?: number; // measured eave height above ground (m) — 3DEP LiDAR (lidar.ts); h is then the ridge
   ms?: 1; // h/roof/eav measured from LiDAR (not mapped priors)
 }

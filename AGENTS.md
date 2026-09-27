@@ -82,6 +82,12 @@
 - Vehicles: `src/player/vehicles.ts` — E enter/exit, V car, B boat, N plane; driveway cars (props'
   `parked-cars` InstancedMesh) are enterable. While riding, `Vehicles.update` owns the camera and
   carries the walker (streaming/life/interiors key off it); `walker.update` is skipped.
+- LiDAR runs in its own worker (`lidar.worker.ts` → `lidarCell.ts`: EPT reads, rasters, fits,
+  `detectBuildings`, `detectTrees`), spawned by the stream and wired to the tile worker with a
+  MessageChannel; `lidar.ts` (tile worker) owns the IDB cache and applies results.
+- Ground paint: `groundPaint.ts` windows `detail` (300 m) + `mid` (1.6 km) re-centre on the
+  walker and paint baked + streamed-tile features (stream `onTile`/`onUnload` →
+  `paint.setTile/dropTile`); the shader applies them everywhere.
 - Measured buildings: `src/world/lidar.ts` (worker IO: bundled 3DEP project index, EPT octree
   reads from the public `usgs-lidar-public` S3 bucket, laz-perf WASM in `src/vendor/laz-perf`,
   IndexedDB cache per cell `lidar|vN|…`) → `lidarCore.ts` (pure: projections, index lookup,

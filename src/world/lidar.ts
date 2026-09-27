@@ -1,196 +1,69 @@
-// Measured buildings for the lower 48: USGS 3DEP LiDAR, read and fitted in the tile worker.
+// Measured buildings for the lower 48: USGS 3DEP LiDAR, applied in the tile worker.
 //
 // Per real (OSM/Overture) tile, before the builders run:
-//   1. candidate 3DEP projects for the cell from lidar-index.json (bundled) (newest first)
-//   2. that project's Entwine Point Tile octree (public S3, CORS-open, EPSG:3857): every node
-//      over the cell down to ~1 m point spacing, LAZ-decoded by the vendored laz-perf WASM
-//   3. points → 1 m surface / ground grids → height above ground (lidarCore.ts)
-//   4. each footprint's roof fitted (measure.ts): true ridge, true eave, flat / hip / gable
-//   5. written onto the Building (h, eav, roof) — buildings.ts builds exactly that
-// Results are cached per cell in IndexedDB (a few KB), so a cell is only ever measured once
-// per browser. Graceful by construction: no index / no coverage / offline → the tile builds
-// from its mapped priors exactly as before. Deterministic for a given survey.
-import createLazPerf, { type LazPerf } from '../vendor/laz-perf/laz-perf.js';
-// The decoder's WASM rides in the worker chunk as base64 rather than a separate request:
-// a same-origin fetch can queue for minutes behind slow tile-service calls (HTTP/1.1 dev).
-import WASM_B64 from '../vendor/laz-perf/wasm-b64';
+//   1. candidate 3DEP projects for the cell from lidar-index.json (bundled), newest first
+//   2. the LiDAR worker (lidar.worker.ts → lidarCell.ts) reads the survey's Entwine Point
+//      Tile octree (public S3, CORS-open, EPSG:3857), LAZ-decoded by vendored laz-perf, into
+//      1 m height-above-ground rasters (lidarCore.ts), fits each footprint's roof (measure.ts),
+//      finds buildings the map doesn't have and the real trees
+//   3. results land here: cached per cell in IndexedDB (a few KB) and written onto the tile's
+//      Buildings (h, eav, roof), new Buildings and TileJson.trees — the builders build that
+// Its own worker (spawned by the page, wired here by a MessageChannel) because the decode
+// and raster passes take seconds per cell: on the tile worker they held every other build
+// (placeholders, the coarse ring) behind them.
+// Graceful by construction: no coverage / offline → the tile builds from its mapped priors.
 import type { Box, Building, TileJson } from './data';
 // The project index ships inside the worker bundle (≈100 KB gzipped): no request of its own
 // to queue behind tile fetches, and every build sees the same snapshot. Regenerate with
 // `node scripts/lidar-index.mjs`.
 import INDEX from './lidar-index.json';
 import { kvGet, kvPut } from './cache';
-import { measureFootprint, type RoofFit } from './measure';
-import {
-  LidarGrid, boxLatLon, candidates, depthFor, depthForDensity, detectTrees, hagAt, lasClass, lasHeader, localToMercBox, mercToLocal, nodesIn, projectLocal, ringMask, unprojectLocal,
-  type EptInfo, type Hag, type LidarIndex, type LidarProject, type TreeHit,
-} from './lidarCore';
+import { boxLatLon, candidates, projectLocal, unprojectLocal, type LidarIndex } from './lidarCore';
+import { RS, type CellReq, type CellRes } from './lidarCell';
 
 type LatLon = { lat: number; lon: number };
-// Cache key version: bump when measure.ts / the raster change; the index snapshot date is part
-// of the key too, so a regenerated index re-checks cells it once found uncovered.
-const VER = `lidar|v4|${(INDEX as unknown as { made?: string }).made ?? ''}|`;
-const PAD = 12; // m of raster beyond the cell: footprints straddling the edge still measure
-const MAX_PROJECTS = 3;
-const MAX_POINTS = 4e6; // per cell per survey — whole octree levels are dropped to stay under it
-const CONC = 6;
-const FETCH_MS = 30000; // a stalled S3 read gives up rather than holding a cell slot
+// Cache key version: bump when measure/raster/detection logic changes; the index snapshot
+// date is part of the key too, so a regenerated index re-checks cells it once found uncovered.
+const VER = `lidar|v6|${(INDEX as unknown as { made?: string }).made ?? ''}|`;
 
 let on = false;
 let origin: LatLon | null = null;
-let lpP: Promise<LazPerf> | null = null;
-
 export function initLidar(o: LatLon) {
   on = true;
   origin = o;
 }
 export const lidarOn = () => on && !!origin;
-// Where notes go (the worker forwards them to the page console).
+// Where notes go (the tile worker forwards them to the page console).
 let log: (msg: string) => void = (m) => console.info(m);
 export function setLidarLog(fn: (msg: string) => void) { log = fn; }
-
 const index = () => INDEX as unknown as LidarIndex;
-const lazperf = () =>
-  (lpP ??= (async () => {
-    const bin = atob(WASM_B64), u8 = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-    return createLazPerf({ wasmBinary: u8.buffer });
-  })());
 
-// ---------- EPT reads (session-cached) ----------
-const eptP = new Map<string, Promise<EptInfo>>();
-const hierP = new Map<string, Promise<Record<string, number>>>();
-const get = (url: string) => fetch(url, { signal: AbortSignal.timeout(FETCH_MS) }).then((r) => { if (!r.ok) throw new Error(`${url} ${r.status}`); return r; });
-const json = <T>(url: string) => get(url).then((r) => r.json() as Promise<T>);
-function ept(base: string) {
-  let p = eptP.get(base);
-  if (!p) eptP.set(base, (p = json<EptInfo>(base + 'ept.json')));
-  p.catch(() => eptP.delete(base));
-  return p;
+// ---------- the LiDAR worker ----------
+// The page spawns it next to the tile worker and hands us one end of a MessageChannel
+// (no nested workers — not every engine has them). Without a port, the work runs inline.
+let port: MessagePort | null = null, lseq = 0;
+const ljobs = new Map<number, { res: (r: CellRes) => void; rej: (e: Error) => void }>();
+export function setLidarPort(p: MessagePort) {
+  port = p;
+  port.onmessage = (e) => {
+    const m = e.data;
+    if (m.kind === 'log') return log(m.msg);
+    const j = ljobs.get(m.id);
+    if (!j) return;
+    ljobs.delete(m.id);
+    if (m.kind === 'done') j.res(m.res);
+    else j.rej(new Error(m.message));
+  };
 }
-function hier(base: string, key: string) {
-  const k = base + key;
-  let p = hierP.get(k);
-  if (!p) hierP.set(k, (p = json<Record<string, number>>(`${base}ept-hierarchy/${key}.json`)));
-  p.catch(() => hierP.delete(k));
-  return p;
-}
-// Nodes over the cell down to the depth that gives DENSITY points/m² (≈0.8 m spacing —
-// a 10×12 m house gets ~180 returns); `cap` bounds the hierarchy walk. Whole levels are
-// then dropped while the read would exceed MAX_POINTS, so what gets read never depends on
-// network timing (the result is cached for good — it must be the same every time).
-const DENSITY = 1.5;
-async function nodesFor(base: string, E: EptInfo, mb: [number, number, number, number], lat: number) {
-  const cap = depthFor(E, lat, 0.6);
-  const H: Record<string, number> = { ...(await hier(base, '0-0-0-0')) };
-  const seen = new Set<string>(['0-0-0-0']);
-  for (;;) {
-    const pend = nodesIn(E, H, mb, cap).filter((k) => H[k] === -1 && !seen.has(k));
-    if (!pend.length) break;
-    for (const k of pend) seen.add(k);
-    const subs = await Promise.all(pend.map((k) => hier(base, k)));
-    for (const s of subs) Object.assign(H, s);
+function cellWork(q: CellReq): Promise<CellRes> {
+  if (port) {
+    const id = ++lseq;
+    return new Promise((res, rej) => {
+      ljobs.set(id, { res, rej });
+      port!.postMessage({ kind: 'cell', id, q });
+    });
   }
-  const all = nodesIn(E, H, mb, cap).filter((k) => H[k] !== 0);
-  let maxD = depthForDensity(E, H, all, lat, DENSITY, cap);
-  const sum = (d: number) => all.reduce((a, k) => a + (+k.split('-')[0] <= d ? Math.max(0, H[k]) : 0), 0);
-  while (maxD > 0 && sum(maxD) > MAX_POINTS) maxD--;
-  const nodes = all.filter((k) => +k.split('-')[0] <= maxD).sort((a, b) => +a.split('-')[0] - +b.split('-')[0] || (a < b ? -1 : 1));
-  return { maxD, nodes };
-}
-
-// Decoded shallow nodes are shared by every cell under them — keep a few.
-interface Pts { X: Float64Array; Y: Float64Array; Z: Float32Array; C: Uint8Array }
-const ptsCache = new Map<string, Promise<Pts>>();
-function points(url: string, keep: boolean): Promise<Pts> {
-  const hit = ptsCache.get(url);
-  if (hit) return hit;
-  const p = (async () => {
-    const [ab, LP] = await Promise.all([get(url).then((r) => r.arrayBuffer()), lazperf()]);
-    const buf = new Uint8Array(ab);
-    const hd = lasHeader(buf);
-    const src = LP._malloc(buf.length);
-    LP.HEAPU8.set(buf, src);
-    const z = new LP.LASZip();
-    try {
-      z.open(src, buf.length);
-      const n = z.getCount(), len = z.getPointLength(), pf = hd.pf; // header's id, compression bits masked
-      const rec = LP._malloc(len);
-      const out: Pts = { X: new Float64Array(n), Y: new Float64Array(n), Z: new Float32Array(n), C: new Uint8Array(n) };
-      try {
-        let H8 = LP.HEAPU8, dv = new DataView(H8.buffer, rec, len);
-        for (let i = 0; i < n; i++) {
-          z.getPoint(rec);
-          if (LP.HEAPU8.buffer !== H8.buffer) (H8 = LP.HEAPU8), (dv = new DataView(H8.buffer, rec, len)); // wasm memory grew
-          out.X[i] = dv.getInt32(0, true) * hd.sx + hd.ox;
-          out.Y[i] = dv.getInt32(4, true) * hd.sy + hd.oy;
-          out.Z[i] = dv.getInt32(8, true) * hd.sz + hd.oz;
-          out.C[i] = lasClass(H8, rec, pf);
-        }
-      } finally {
-        LP._free(rec);
-      }
-      return out;
-    } finally {
-      z.delete();
-      LP._free(src);
-    }
-  })();
-  if (keep) {
-    ptsCache.set(url, p);
-    p.catch(() => ptsCache.delete(url));
-    while (ptsCache.size > 24) ptsCache.delete(ptsCache.keys().next().value!);
-  }
-  return p;
-}
-
-// ---------- the cell raster ----------
-// Surveys are tried newest first; a survey that fails (404 after an index refresh, S3
-// hiccup) is skipped, not fatal. null = every candidate was read and none had ground
-// returns here (safe to remember); a throw = nothing usable AND something failed (retry).
-export async function hagFor(box: Box, cands: LidarProject[]): Promise<Hag | null> {
-  const idx = index();
-  if (!origin) throw new Error('lidar: no origin');
-  const bb = boxLatLon(origin, box);
-  const A = mercToLocal(origin, box);
-  const mb = localToMercBox(origin, box, PAD);
-  let grid: LidarGrid | null = null;
-  let src = '', year = 0, failed: unknown = null;
-  for (const c of cands.slice(0, MAX_PROJECTS)) {
-    const base = `${idx.ept}${c.n}/`;
-    let g: LidarGrid;
-    try {
-      const E = await ept(base);
-      const { maxD, nodes } = await nodesFor(base, E, mb, (bb.s + bb.n) / 2);
-      if (!nodes.length) continue;
-      g = new LidarGrid(box.x0 - PAD, box.z0 - PAD, 1, box.x1 + PAD, box.z1 + PAD);
-      let i = 0;
-      const work = async () => {
-        while (i < nodes.length) {
-          const k = nodes[i++];
-          const P = await points(`${base}ept-data/${k}.laz`, +k.split('-')[0] <= maxD - 2);
-          for (let j = 0; j < P.X.length; j++) {
-            const X = P.X[j], Y = P.Y[j];
-            if (X < mb[0] || X > mb[2] || Y < mb[1] || Y > mb[3]) continue;
-            g.add(A.a * X + A.b * Y + A.c, A.d * X + A.e * Y + A.f, P.Z[j], P.C[j]);
-          }
-        }
-      };
-      await Promise.all(Array.from({ length: CONC }, work));
-    } catch (e) {
-      failed = e;
-      continue;
-    }
-    if (g.groundFraction() < 0.02) continue; // outline said yes, the survey says no (or unclassified)
-    if (!grid) (grid = g), (src = c.n), (year = c.y);
-    else grid.fillFrom(g);
-    if (grid.surfaceFraction() > 0.9) break;
-  }
-  if (!grid) {
-    if (failed) throw failed;
-    return null;
-  }
-  return { x0: grid.x0, z0: grid.z0, res: grid.res, w: grid.w, h: grid.h, v: grid.hag(), chm: grid.canopy(), cov: grid.coverage(box, 16), src, year };
+  return import('./lidarCell').then((m) => (m.setCellLog(log), m.measureCell(q)));
 }
 
 // ---------- per-tile enrichment ----------
@@ -199,37 +72,13 @@ interface Rec {
   m: Record<string, number[]>; // building fits by centroid lat/lon: [h, eav, rs, q] or [] (unmeasurable)
   t?: number[]; // trees: [Δlat µdeg, Δlon µdeg, h dm, crown r dm]… from the cell-key centre
   tc?: number[]; // 16×16 coverage blocks (1 = the survey saw this ground)
+  nb?: { r: number[]; m: number[] }[]; // unmapped buildings found in the survey: ring as µdeg offsets, fit [h, eav, rs, q]
 }
-const RS: RoofFit[] = ['flat', 'hip', 'gable', 'gableX', 'pitched'];
 const recMem = new Map<string, Rec>();
-const hagMem = new Map<string, Promise<Hag | null>>();
-const hagDone = new Set<string>(); // settled entries — only these are evictable
-// Cells read two at a time: six cells sharing the network finish together after 30 s;
-// two at a time, the first lands in ~5 s and the rest follow. Newest request first — the
-// player has moved on, and the cells asked for last are the ones around them now. A
-// finishing read hands its slot straight to the next waiter (no window for a third).
-let running = 0;
-const waiting: (() => void)[] = [];
-async function limited<T>(f: () => Promise<T>): Promise<T> {
-  if (running >= 2) await new Promise<void>((r) => waiting.push(r));
-  else running++;
-  try {
-    return await f();
-  } finally {
-    const next = waiting.pop();
-    if (next) next();
-    else running--;
-  }
-}
 
 function cellKeyOf(box: Box) {
   const [lat, lon] = unprojectLocal(origin!, (box.x0 + box.x1) / 2, (box.z0 + box.z1) / 2);
   return `${lat.toFixed(4)},${lon.toFixed(4)}`;
-}
-function ringOf(b: Building): [number, number][] {
-  const r: [number, number][] = [];
-  for (let i = 0; i < b.r.length; i += 2) r.push([b.r[i] / 10, b.r[i + 1] / 10]);
-  return r;
 }
 function bKey(b: Building) {
   let x = 0, z = 0;
@@ -239,15 +88,6 @@ function bKey(b: Building) {
   return `${lat.toFixed(5)},${lon.toFixed(5)}`;
 }
 // Trees ride in the record as lat/lon offsets (origin-independent), out to local ints on the tile.
-function packTrees(ck: string, T: TreeHit[]): number[] {
-  const [clat, clon] = ck.split(',').map(Number);
-  const out: number[] = [];
-  for (const t of T) {
-    const [lat, lon] = unprojectLocal(origin!, t.x, t.z);
-    out.push(Math.round((lat - clat) * 1e6), Math.round((lon - clon) * 1e6), Math.round(t.h * 10), Math.round(t.r * 10));
-  }
-  return out;
-}
 function unpackTrees(ck: string, P: number[]): number[] {
   const [clat, clon] = ck.split(',').map(Number);
   const out: number[] = [];
@@ -257,6 +97,54 @@ function unpackTrees(ck: string, P: number[]): number[] {
   }
   return out;
 }
+// Buildings the map doesn't have (detectBuildings) join the tile as real, measured
+// footprints; the hybrid-fill guesses (seeded houses along real streets) retire wherever
+// the survey saw the ground — the survey knows what's actually standing there.
+const newApplied = new WeakSet<TileJson>();
+function applyNew(tj: TileJson, box: Box, ck: string, rec: Rec) {
+  if (!rec.nb || !rec.tc || newApplied.has(tj)) return;
+  newApplied.add(tj);
+  const tc = rec.tc;
+  const covered = (x: number, z: number) => {
+    const I = Math.floor(((x - box.x0) / (box.x1 - box.x0)) * 16), J = Math.floor(((z - box.z0) / (box.z1 - box.z0)) * 16);
+    return I >= 0 && J >= 0 && I < 16 && J < 16 && tc[J * 16 + I] === 1;
+  };
+  tj.buildings = tj.buildings.filter((b) => {
+    if (b.gen !== 'fill') return true;
+    let x = 0, z = 0;
+    for (let i = 0; i < b.r.length; i += 2) (x += b.r[i]), (z += b.r[i + 1]);
+    return !covered(x / (b.r.length / 2) / 10, z / (b.r.length / 2) / 10);
+  });
+  const [clat, clon] = ck.split(',').map(Number);
+  for (const nb of rec.nb) {
+    const r: number[] = [];
+    let sx = 0, sz = 0;
+    for (let i = 0; i + 1 < nb.r.length; i += 2) {
+      const [x, z] = projectLocal(origin!, clat + nb.r[i] / 1e6, clon + nb.r[i + 1] / 1e6);
+      r.push(Math.round(x * 10), Math.round(z * 10));
+      (sx += x), (sz += z);
+    }
+    const n = nb.r.length / 2;
+    let area = 0;
+    for (let i = 0, j = n - 1; i < n; j = i++) area += (r[2 * j] / 10) * (r[2 * i + 1] / 10) - (r[2 * i] / 10) * (r[2 * j + 1] / 10);
+    area = Math.abs(area) / 2;
+    const [h] = nb.m;
+    const b: Building = {
+      r, h: Math.max(2.4, h), roof: 'gable', s: Math.floor(hash2(sx / n, sz / n) * 0x7fffffff),
+      k: area < 45 ? 'shed' : h > 20 || area > 2500 ? 'large' : area < 260 ? 'house' : 'commercial',
+      gen: 'lidar',
+    };
+    if (nb.m.length === 4 && nb.m[3] >= 0.35) apply(b, nb.m);
+    else if (b.k === 'house' || b.k === 'shed') b.h = Math.max(3, h + 1); // no clean fit (canopy over it): the usual pitched house, ridge a little above the median roof height
+    else apply(b, [h, h, 0, 1]); // a flat block at the measured height
+    tj.buildings.push(b);
+  }
+}
+const hash2 = (x: number, z: number) => {
+  let hh = Math.imul(Math.round(x * 10) | 0, 0x27d4eb2d) ^ Math.imul(Math.round(z * 10) | 0, 0x165667b1);
+  hh = Math.imul(hh ^ (hh >>> 15), 0x85ebca6b);
+  return ((hh ^ (hh >>> 13)) >>> 0) / 4294967296;
+};
 function applyTrees(tj: TileJson, ck: string, rec: Rec) {
   if (!rec.t || !rec.tc) return;
   tj.trees = unpackTrees(ck, rec.t);
@@ -287,7 +175,7 @@ export type Enrich = 'done' | 'late' | 'none';
 const LATE = Symbol('late');
 
 // `wait`: ms to wait for a first-time measurement before building from priors (→ 'late':
-// the caller rebuilds when it lands); null waits for it. `fetch: false` (lite/LOD builds)
+// the caller rebuilds when it lands); null waits for it. `fetchOk: false` (lite/LOD builds)
 // only applies what the cache already knows.
 export async function enrichTile(tj: TileJson, box: Box, wait: number | null, fetchOk = true): Promise<Enrich> {
   if (!lidarOn()) return 'none';
@@ -302,9 +190,9 @@ export async function enrichTile(tj: TileJson, box: Box, wait: number | null, fe
   if (rec?.none) return 'none';
   const keys = todo.map(bKey);
   if (rec) todo.forEach((b, i) => { const m = rec!.m[keys[i]]; if (m) apply(b, m); });
-  if (rec) applyTrees(tj, ck, rec);
-  const missing = todo.filter((_, i) => !rec?.m[keys[i]]);
-  if (rec?.t && (!missing.length || missing.length <= todo.length * 0.03)) return 'done';
+  if (rec) applyNew(tj, box, ck, rec), applyTrees(tj, ck, rec);
+  const missing = todo.map((b, i) => [b, keys[i]] as const).filter(([, k]) => !rec?.m[k]);
+  if (rec?.t && rec.nb && (!missing.length || missing.length <= todo.length * 0.03)) return 'done';
   if (!fetchOk) return rec ? 'done' : 'none';
   // No survey near this cell at all (outside the US, open ocean): settle it now, before
   // queueing behind other cells' reads or racing a timer into a pointless rebuild.
@@ -315,65 +203,48 @@ export async function enrichTile(tj: TileJson, box: Box, wait: number | null, fe
     void kvPut(VER + ck, rec);
     return 'none';
   }
-
-  let gp = hagMem.get(ck);
-  if (!gp) {
-    const t0 = performance.now();
-    log(`lidar ${ck}: reading for ${missing.length} footprints${rec?.t ? '' : ' + trees'}`);
-    hagMem.set(ck, (gp = limited(() => hagFor(box, cands))));
-    void gp.then(() => hagDone.add(ck), () => {});
-    void gp.then((g) => log(g ? `lidar ${ck}: ${g.src} read in ${((performance.now() - t0) / 1000).toFixed(1)} s` : `lidar ${ck}: no survey covers this cell`), () => {});
-    gp.catch((e) => { log(`lidar ${ck}: unavailable (${e?.message ?? e})`); hagMem.delete(ck); });
-    for (const k of hagMem.keys()) {
-      if (hagMem.size <= 4) break;
-      if (hagDone.has(k)) hagMem.delete(k), hagDone.delete(k);
-    }
-  }
-  let g: Hag | null | typeof LATE;
+  const q: CellReq = {
+    ck, box, origin: origin!, cands: cands.map(({ n, y, b }) => ({ n, y, b, r: [] })), ept: index().ept,
+    bld: missing.map(([b, k]) => ({ k, r: b.r, prior: b.roof === 'gable' || b.roof === 'hip' || b.roof === 'flat' ? b.roof : undefined, house: b.k === 'house' })),
+    mapped: tj.buildings.filter((b) => b.gen !== 'fill').map((b) => b.r),
+    wantNew: !rec?.nb, wantTrees: !rec?.t,
+  };
+  const job = cellWork(q);
+  let res: CellRes | typeof LATE;
   try {
-    g = wait == null ? await gp : await Promise.race([gp, new Promise<typeof LATE>((r) => setTimeout(() => r(LATE), wait))]);
+    res = wait == null ? await job : await Promise.race([job, new Promise<typeof LATE>((r) => setTimeout(() => r(LATE), wait))]);
   } catch {
     return rec ? 'done' : 'none'; // network trouble: build from priors, try again another visit
   }
-  if (g === LATE) return 'late';
-  rec = recMem.get(ck) ?? rec ?? { m: {} };
-  if (!g) {
-    if (!Object.keys(rec.m).length) (rec.none = 1), recMem.set(ck, rec), void kvPut(VER + ck, rec);
-    return 'none';
+  if (res === LATE) {
+    void job.then((r) => merge(ck, r), () => {}); // bank it for the relief rebuild
+    return 'late';
   }
-  const G = g;
-  rec.src = G.src;
-  rec.yr = G.year;
-  const fresh: [Building, string, number[]][] = [];
-  todo.forEach((b, i) => {
-    const k = keys[i];
-    if (rec!.m[k]) return;
-    const prior = b.roof === 'gable' || b.roof === 'hip' || b.roof === 'flat' ? b.roof : undefined;
-    const m = measureFootprint(ringOf(b), (x, z) => hagAt(G, x, z), prior);
-    fresh.push([b, k, m ? [m.h, m.eav, RS.indexOf(m.rs), m.q] : []]);
-  });
-  // Vertical units: EPT keeps each survey's Z units, and some 3DEP deliveries are in US
-  // survey feet (the index doesn't say). Houses standing ~25 m tall on median is feet.
-  const hs = fresh.filter(([b, , m]) => b.k === 'house' && m.length && m[3] >= 0.35).map(([, , m]) => m[0]).sort((a, b) => a - b);
-  const feet = hs.length >= 8 && hs[hs.length >> 1] > 14;
-  if (feet) log(`lidar ${ck}: ${G.src} reads as feet (median house ${hs[hs.length >> 1].toFixed(1)}) — scaling`);
-  for (const [b, k, m] of fresh) {
-    if (m.length && feet) (m[0] *= 0.3048006), (m[1] *= 0.3048006);
-    rec.m[k] = m.length ? [+m[0].toFixed(2), +m[1].toFixed(2), m[2], +m[3].toFixed(2)] : [];
-    apply(b, rec.m[k]);
+  rec = merge(ck, res);
+  if (rec.none) return 'none';
+  todo.forEach((b, i) => { const m = rec!.m[keys[i]]; if (m) apply(b, m); });
+  applyNew(tj, box, ck, rec);
+  applyTrees(tj, ck, rec);
+  if (res.fits.length || res.nb || res.t) {
+    const ok = Object.values(rec.m).filter((m) => m.length === 4 && m[3] >= 0.35).length;
+    log(`lidar ${ck}: ${ok}/${Object.keys(rec.m).length} buildings measured, ${rec.nb?.length ?? 0} unmapped found, ${(rec.t?.length ?? 0) / 4} trees (${res.canopy ?? '?'} canopy) from ${rec.src}`);
+  }
+  return 'done';
+}
+
+// Fold a worker result into the cell record (and persist it).
+function merge(ck: string, r: CellRes): Rec {
+  const rec = recMem.get(ck) ?? { m: {} };
+  if (r.none) {
+    if (!Object.keys(rec.m).length && !rec.nb) rec.none = 1;
+  } else {
+    if (r.src) (rec.src = r.src), (rec.yr = r.year);
+    for (const [k, m] of r.fits) rec.m[k] ??= m;
+    if (r.nb && !rec.nb) rec.nb = r.nb;
+    if (r.t && !rec.t) rec.t = r.t;
+    if (r.tc) rec.tc ??= r.tc;
   }
   recMem.set(ck, rec);
   void kvPut(VER + ck, rec);
-  if (!rec.t) {
-    // Trees: the vegetation-classified canopy when the survey has one, else every
-    // non-ground return with roofs (mapped footprints + 1 m) masked and smooth tops rejected.
-    const blocked = ringMask(G, tj.buildings.map(ringOf), 1.0);
-    const T = detectTrees(G, G.chm ?? G.v, blocked, box, !G.chm);
-    rec.t = packTrees(ck, T);
-    rec.tc = Array.from(G.cov);
-  }
-  applyTrees(tj, ck, rec);
-  const ok = Object.values(rec.m).filter((m) => m.length === 4 && m[3] >= 0.35).length;
-  log(`lidar ${ck}: ${ok}/${Object.keys(rec.m).length} buildings measured, ${rec.t.length / 4} trees (${G.chm ? 'classified' : 'unclassified'} canopy) from ${G.src}`);
-  return 'done';
+  return rec;
 }

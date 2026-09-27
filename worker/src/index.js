@@ -97,7 +97,7 @@ async function tile(request, env, ctx, url, cx, cz) {
   if (hit) return hit;
   // v4: fills gained per-road rng + land masks + interior clamp — bump the object key
   // so stale tile payloads can't be served past the edge TTL.
-  const okey = `t/v5/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
+  const okey = `t/v6/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
   const bucket = env.TILES ?? null; // binding may be absent under `wrangler dev` before the bucket exists
   if (bucket) {
     try {
@@ -139,7 +139,25 @@ async function tile(request, env, ctx, url, cx, cz) {
 // Cold cells: Overpass -> transform -> R2. Returns {body,stats} or {body:null,detail} —
 // never rejects (the inflight map would leak a rejection into every waiter).
 const inflight = new Map();
+// Overpass allows a couple of concurrent queries per client IP; more just earn 429s and
+// timeouts for all of them. One isolate serialises its cold queries through two slots.
+let opSlots = 2;
+const opWait = [];
+async function overpassSlot(fn) {
+  if (opSlots <= 0) await new Promise((r) => opWait.push(r));
+  else opSlots--;
+  try {
+    return await fn();
+  } finally {
+    const next = opWait.shift();
+    if (next) next();
+    else opSlots++;
+  }
+}
 async function coldTile(env, okey, cx, cz, box, origin) {
+  return overpassSlot(() => coldTileNow(env, okey, cx, cz, box, origin));
+}
+async function coldTileNow(env, okey, cx, cz, box, origin) {
   const bb = makeProjector(origin).localToBbox({ x0: box.x0 - MARGIN, z0: box.z0 - MARGIN, x1: box.x1 + MARGIN, z1: box.z1 + MARGIN });
   const query = `[out:json][timeout:25][bbox:${bb.s.toFixed(7)},${bb.w.toFixed(7)},${bb.n.toFixed(7)},${bb.e.toFixed(7)}];(
   way["highway"];
@@ -168,9 +186,18 @@ async function coldTile(env, okey, cx, cz, box, origin) {
       });
       if (!r.ok) {
         lastErr = `${ep} -> ${r.status}`;
+        if (r.status === 429) await new Promise((res) => setTimeout(res, Math.min(8, +(r.headers.get('retry-after') ?? 2) || 2) * 1000));
         continue; // 429 rate-limit / 504 timeout: try the next mirror
       }
-      osm = await r.json();
+      const j = await r.json();
+      // Overpass answers a timed-out / out-of-memory query with 200 and a `remark` (and
+      // no or partial elements). That is a failure, not an empty cell — caching it would
+      // leave a real town blank for every player, forever.
+      if (typeof j.remark === 'string' && /runtime error|timed out|out of memory|runtime limit/i.test(j.remark)) {
+        lastErr = `${ep} -> ${j.remark.slice(0, 120)}`;
+        continue;
+      }
+      osm = j;
       break;
     } catch (e) {
       lastErr = `${ep} -> ${e?.message ?? e}`;

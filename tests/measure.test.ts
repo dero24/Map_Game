@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { measureFootprint, obb, robustFit } from '../src/world/measure';
-import { LidarGrid, pullPush, mercToLocal, toMerc, candidates, depthFor, depthForDensity, detectTrees, ringMask, projectLocal, unprojectLocal, type LidarIndex } from '../src/world/lidarCore';
+import { LidarGrid, pullPush, mercToLocal, toMerc, candidates, depthFor, depthForDensity, detectTrees, detectBuildings, outlineCells, ringMask, projectLocal, unprojectLocal, type LidarIndex } from '../src/world/lidarCore';
 
 type P2 = [number, number];
 // A house: rectangle 2L×2W centred at (cx,cz) rotated by `a`, with a roof function of (u,v).
@@ -198,5 +198,41 @@ describe('lidarCore: trees', () => {
     expect(m[15 * 80 + 15]).toBe(1);
     expect(m[15 * 80 + 20]).toBe(1); // 0.5 m outside
     expect(m[15 * 80 + 23]).toBe(0);
+  });
+});
+
+describe('lidarCore: unmapped buildings', () => {
+  const g = { x0: 0, z0: 0, res: 1, w: 100, h: 100 };
+  const box = { x0: 0, z0: 0, x1: 100, z1: 100 };
+  function scene() {
+    const H = new Float32Array(g.w * g.h);
+    let s = 9;
+    const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647 - 0.5);
+    for (let j = 0; j < g.h; j++) for (let i = 0; i < g.w; i++) {
+      const x = i + 0.5, z = j + 0.5;
+      let v = rnd() * 0.05;
+      if (x > 10 && x < 24 && z > 10 && z < 20) v = 4 + 0.5 * (5 - Math.abs(z - 15)); // gable 14×10
+      if ((x > 40 && x < 60 && z > 10 && z < 18) || (x > 40 && x < 48 && z > 18 && z < 34)) v = 6.2; // flat L
+      const d = Math.hypot(x - 30, z - 70);
+      if (d < 6) v = 12 * (1 - 0.4 * (d / 6) ** 2) + rnd() * 1.5; // a tree
+      if (x > 70 && x < 84 && z > 60 && z < 72) v = 5.5; // a mapped building
+      H[j * g.w + i] = v;
+    }
+    return H;
+  }
+  it('outlines unmapped roofs (rectangle, L) and skips trees and mapped footprints', () => {
+    const mapped = ringMask(g, [[[70, 60], [84, 60], [84, 72], [70, 72]]], 1);
+    const B = detectBuildings(g, scene(), null, mapped, box);
+    expect(B.length).toBe(2);
+    const gable = B.find((b) => b.ring.every(([x]) => x < 30))!;
+    expect(gable.ring.length).toBe(4);
+    expect(Math.abs(gable.area - 140)).toBeLessThan(30);
+    const L = B.find((b) => b.ring.some(([x]) => x > 40))!;
+    expect(L.ring.length).toBeGreaterThanOrEqual(6);
+  });
+  it('outlineCells traces an L', () => {
+    const on = [true, true, false, true, false, false, false, false, false];
+    const loop = outlineCells(on, 3)!;
+    expect(loop.length).toBe(6);
   });
 });

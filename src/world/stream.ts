@@ -20,6 +20,7 @@ import { activeStyle } from './styles';
 const LOAD_R = 1500; // keep tiles this close (3×3 cells and then some)
 const DROP_R = 2400; // drop tiles beyond this
 const COARSE_R = 8000; // silhouette ring: lite builds (meshes only) out to the horizon
+const W_CONC = 3; // real-lite (tile service) builds in flight at once
 const COARSE_BUDGET = 4; // max outstanding lite builds — they're lowest priority
 const ID_STRIDE = 1 << 12; // building-id space per tile (window-fade keys, <2^24 total; synth cells raise the ord count)
 
@@ -83,6 +84,7 @@ export class TileStream {
   private lampTex: THREE.CanvasTexture | null = null;
   onChange: (() => void) | null = null;
   onTile: ((a: TileArt) => void) | null = null; // fired after a tile mounts (walks -> ground paint)
+  onUnload: ((id: string) => void) | null = null; // fired after a detail tile unmounts
 
   /** Kill switch for the real-lite service (dead local worker → synth everywhere). */
   setTilesBase(v: string) { this.tilesBase = v; }
@@ -138,9 +140,9 @@ export class TileStream {
       if (!w) {
         const c = this.man.cell;
         // file is an absolute URL — the tile worker fetches it directly (no base prefix).
-        // &v=5 — the edge Cache API keys on the full URL; bumping alongside the
-        // worker's R2 key (t/v5) retires stale tile payloads.
-        const file = `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}&v=5`;
+        // &v=6 — the edge Cache API keys on the full URL; bumping alongside the
+        // worker's R2 key (t/v6) retires stale tile payloads.
+        const file = `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}&v=6`;
         w = { id: 'w' + key, box: { x0: cx * c, z0: cz * c, x1: cx * c + c, z1: cz * c + c }, lod: 0, file, world: 1 };
         this.worldSpecs.set(key, w);
       }
@@ -243,6 +245,7 @@ export class TileStream {
     const c = this.man.cell;
     const cx0 = Math.floor((x - COARSE_R) / c), cx1 = Math.floor((x + COARSE_R) / c);
     const cz0 = Math.floor((z - COARSE_R) / c), cz1 = Math.floor((z + COARSE_R) / c);
+    const wantW: [number, TileSpec][] = [];
     for (let cz = cz0; cz <= cz1; cz++)
       for (let cx = cx0; cx <= cx1; cx++) {
         const t = this.specAt(cx, cz);
@@ -251,7 +254,10 @@ export class TileStream {
           // Real-lite cells stream their synth placeholder twin alongside — it mounts
           // instantly and the worker tile swaps in over it when it lands. Failed real
           // fetches just retry later under the same backoff while the synth holds.
-          const specs = t.world ? [t, this.synthSpec(cx, cz)] : [t];
+          // Real cells queue by distance (below): the tile service fans out to Overpass,
+          // which rate-limits per client — a dozen parallel cold cells all time out together.
+          const specs = t.world ? (this.loaded.has(t.id) ? [] : [this.synthSpec(cx, cz)]) : [t];
+          if (t.world && !this.loaded.has(t.id) && !this.fetching.has(t.id) && !this.queued.has(t.id) && now - (this.failed.get(t.id) ?? -30000) > 10000) wantW.push([d2, t]);
           for (const sp of specs)
             if (!this.loaded.has(sp.id) && !this.fetching.has(sp.id) && !this.queued.has(sp.id) && now - (this.failed.get(sp.id) ?? -30000) > 10000) void this.fetch(sp).then((p) => { if (p) { this.queued.add(sp.id); this.buildQueue.push(p); } });
         } else {
@@ -270,6 +276,17 @@ export class TileStream {
           }
         }
       }
+    // Real-lite cells: nearest first, a few at a time.
+    if (wantW.length) {
+      let inflight = 0;
+      for (const id of this.fetching.keys()) if (id[0] === 'w') inflight++;
+      wantW.sort((a, b) => a[0] - b[0]);
+      for (const [, sp] of wantW) {
+        if (inflight >= W_CONC) break;
+        inflight++;
+        void this.fetch(sp).then((p) => { if (p) { this.queued.add(sp.id); this.buildQueue.push(p); } });
+      }
+    }
     // Cells outside the iteration window aren't visited above — sweep mounts so tiles left
     // behind the corner of the box unload the same way the old manifest-wide loop did.
     for (const [id, a] of [...this.loaded]) if (boxDist2(a.spec.box, x, z) > DROP_R * DROP_R) this.unload(id);
@@ -297,7 +314,7 @@ export class TileStream {
           // worker-side notes (LiDAR reads): the page console + a short ring for tools/debug
           console.info(m.msg);
           this.workerLog.push(m.msg);
-          if (this.workerLog.length > 60) this.workerLog.shift();
+          if (this.workerLog.length > 400) this.workerLog.shift();
           return;
         }
         const j = this.jobs.get(m.id);
@@ -336,7 +353,19 @@ export class TileStream {
       // Worker fetches resolve against its own module URL — hand it an absolute base.
       // Virtual regions (the ?at= open world) carry their terrain bytes in-band: there is
       // no terrain.bin URL to fetch, so the same buffer the page uses is passed here.
-      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin, origin: this.man.origin, dem: this.demEnabled, demBase: this.tilesBase, style: activeStyle().key, baked: this.man.tiles.map((t) => t.id), lidar: this.lidar });
+      // LiDAR gets its own worker, wired straight to the tile worker (no main-thread hop).
+      let lidarPort: MessagePort | undefined;
+      if (this.lidar) {
+        try {
+          const lw = new Worker(new URL('./lidar.worker.ts', import.meta.url), { type: 'module' });
+          const ch = new MessageChannel();
+          lw.postMessage({ kind: 'port', port: ch.port2 }, [ch.port2]);
+          lidarPort = ch.port1;
+        } catch (e) {
+          console.warn('lidar worker unavailable; measuring on the tile worker', e);
+        }
+      }
+      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin, origin: this.man.origin, dem: this.demEnabled, demBase: this.tilesBase, style: activeStyle().key, baked: this.man.tiles.map((t) => t.id), lidar: this.lidar, lidarPort }, lidarPort ? [lidarPort] : []);
       this.worker = w;
     } catch {
       this.workerDead = true;
@@ -376,7 +405,7 @@ export class TileStream {
         : loadTile(this.base, t);
     return src
       .then(async (tj0) => {
-        const dem = demP ? (t.synth ? await raceNull(demP, 4000) : await demP) : null;
+        const dem = demP ? (t.synth ? await raceNull(demP, lite ? 20000 : 4000) : await demP) : null;
         const late = !!(demP && !dem && t.synth && !lite);
         if (dem) this.terrain.registerPatch(cellKey, new TerrainLayer(dem.buf.slice(0), dem.layout));
         const syn = t.synth ? synthTile(t, this.seed, this.terrain) : null;
@@ -612,6 +641,7 @@ export class TileStream {
       this.repaintLamps();
     }
     this.loaded.delete(id);
+    this.onUnload?.(id);
     this.markDirty();
   }
 

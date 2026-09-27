@@ -195,7 +195,13 @@ async function main() {
   // Grass: tufts grow on open land around the walker (lawns short, open ground tall + lush).
   const grass = new GrassField(world.terrain, walk, () => stream.primRoads, paint.grassMask);
   worldRoot.add(grass.group);
-  stream.onTile = (a) => { paint.addWalks(a.walks); grass.invalidateBox(a.spec.box); };
+  stream.onTile = (a) => {
+    paint.addWalks(a.walks);
+    // J1: streamed tiles (past the bake) paint their streets and footprints into the ground windows
+    if (a.spec.world || a.spec.synth) paint.setTile(a.spec.id, a.primRoads, a.fps.map((f) => f.ring as [number, number][]), [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1]);
+    grass.invalidateBox(a.spec.box);
+  };
+  stream.onUnload = (id) => paint.dropTile(id);
   const plans = stream.plans;
   const bld = {
     get footprints() { return stream.footprints; },
@@ -363,7 +369,7 @@ async function main() {
   if (!timeParams.realTime) worldMs = localToMs(Date.now(), timeParams.hour, tz);
   // Every walk begins at sunrise (today's real sunrise at this place, a few minutes after the
   // disc clears the horizon); the clock then runs on. ?hour=H overrides; capture shots set their own.
-  if (!CAPTURE) {
+  if (!CAPTURE || params.get('hour') !== null) {
     const hq = params.get('hour');
     if (hq !== null && isFinite(+hq)) setHour(+hq);
     else {
@@ -518,7 +524,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { walker, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream, vehicles, grass, teleport: teleportTo, get spawn() { return spawn; }, at: atPos };
+  (window as unknown as Record<string, unknown>).__GAME__ = { walker, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream, vehicles, grass, setHour, teleport: teleportTo, get spawn() { return spawn; }, at: atPos };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);
@@ -683,6 +689,7 @@ async function main() {
     }
     const tp = performance.now();
     if (paint.detail.update(walker.x, walker.z)) perf.detail = Math.max(perf.detail, performance.now() - tp);
+    else if (paint.mid.update(walker.x, walker.z)) perf.detail = Math.max(perf.detail, performance.now() - tp); // at most one window repaint per frame
     sky.position.copy(camera.position);
     camera.updateMatrixWorld();
     camera.getWorldDirection(fwd);

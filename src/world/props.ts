@@ -389,6 +389,80 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     }
   }
 
+  // ---- clearance against buildings (every tree source) ----
+  // Real trees overhang roofs, but a watercolour blob crown through a wall reads as a tree
+  // growing inside the house. A crown that sits below the neighbouring roof is narrowed to
+  // stop just short of the wall; one that clears the roof may overhang it; a trunk inside
+  // or hugging a footprint is moved out to 1.3 m, and a tree squeezed to a stick is dropped.
+  {
+    type FB = { r: P[]; h: number; bb: [number, number, number, number] };
+    const fbs: FB[] = [];
+    const cellB = 32, byCell = new Map<number, FB[]>();
+    const ck = (a: number, b: number) => a * 92821 + b;
+    for (const bd of ctxJson.buildings) {
+      const r = unpackPts(bd.r).map(([x, z]) => [x, z] as P);
+      let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+      for (const [x, z] of r) (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z));
+      const f: FB = { r, h: bd.h, bb: [x0, z0, x1, z1] };
+      fbs.push(f);
+      for (let a = Math.floor((x0 - 10) / cellB); a <= Math.floor((x1 + 10) / cellB); a++)
+        for (let b = Math.floor((z0 - 10) / cellB); b <= Math.floor((z1 + 10) / cellB); b++) {
+          const l = byCell.get(ck(a, b));
+          if (l) l.push(f);
+          else byCell.set(ck(a, b), [f]);
+        }
+    }
+    // nearest footprint edge: distance, outward normal, inside?, building height
+    const nearest = (x: number, z: number) => {
+      let best: { d: number; nx: number; nz: number; inside: boolean; h: number } | null = null;
+      for (const f of byCell.get(ck(Math.floor(x / cellB), Math.floor(z / cellB))) ?? []) {
+        if (x < f.bb[0] - 10 || x > f.bb[2] + 10 || z < f.bb[1] - 10 || z > f.bb[3] + 10) continue;
+        let inside = false, d = Infinity, qx = 0, qz = 0;
+        for (let a = 0, b = f.r.length - 1; a < f.r.length; b = a++) {
+          const [xa, za] = f.r[a], [xb, zb] = f.r[b];
+          if (za > z !== zb > z && x < ((xb - xa) * (z - za)) / (zb - za) + xa) inside = !inside;
+          const dx = xb - xa, dz = zb - za, L2 = dx * dx + dz * dz || 1e-9;
+          const t = Math.max(0, Math.min(1, ((x - xa) * dx + (z - za) * dz) / L2));
+          const px = xa + t * dx, pz = za + t * dz, dd = Math.hypot(x - px, z - pz);
+          if (dd < d) (d = dd), (qx = px), (qz = pz);
+        }
+        const sd = inside ? -d : d;
+        if (!best || sd < (best.inside ? -best.d : best.d)) {
+          const L = Math.hypot(x - qx, z - qz) || 1;
+          best = { d, nx: ((x - qx) / L) * (inside ? -1 : 1), nz: ((z - qz) / L) * (inside ? -1 : 1), inside, h: f.h };
+        }
+      }
+      return best;
+    };
+    // per model: crown radius and crown-bottom height (at scale 1)
+    const CR = [3.6, 4.8, 1.9, 2.4, 1.7], CB = [4.0, 5.7, 0.5, 3.4, 2.7];
+    const pos = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+    for (let i = trees.length - 1; i >= 0; i--) {
+      const t = trees[i];
+      t.m.decompose(pos, q, sc);
+      let n = nearest(pos.x, pos.z);
+      if (!n) continue;
+      if (n.inside || n.d < 1.3) {
+        const push = (n.inside ? n.d : -n.d) + 1.3;
+        pos.x += n.nx * push;
+        pos.z += n.nz * push;
+        n = nearest(pos.x, pos.z);
+        if (n && (n.inside || n.d < 1.2)) { trees.splice(i, 1); continue; } // wedged between houses
+        pos.y = terrain.heightAt(pos.x, pos.z) - 0.2;
+      }
+      if (n) {
+        const crownR = CR[t.k] * Math.max(sc.x, sc.z), crownBottom = CB[t.k] * sc.y;
+        if (crownBottom < n.h + 0.8 && crownR > n.d + 0.4) {
+          const f = (n.d + 0.4) / crownR;
+          if (f * Math.max(sc.x, sc.z) < 0.45 * sc.y) { trees.splice(i, 1); continue; } // would be a stick
+          sc.x *= f;
+          sc.z *= f;
+        }
+      }
+      t.m.compose(pos, q, sc);
+    }
+  }
+
   const blob = (r: number, y: number, ox: number, oz: number, seed: number, sy = 0.85) => {
     const g = new THREE.IcosahedronGeometry(r, 1);
     const pos = g.attributes.position;
