@@ -11,6 +11,9 @@ import { carMix, boatMix, carLib, boatLib, boatRecipe, carRecipe, pickFrom, type
 import type { Mailbox, Door } from './buildings';
 import { makeCanvas } from './canvas';
 import { activeStyle, pickWeighted } from './styles';
+import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, plantLib, inBloom, SPECIES, STAGES, type PlantSpecies } from '../assets/flora';
+import { MAILBOXES, mailboxLib, beachLib, gearFor, type MailboxStyle, type CarGear } from '../assets/furniture';
+import { variantAt, hashf } from '../assets/core';
 
 type P = [number, number];
 const unpackPts = (f: number[]): P[] => {
@@ -256,8 +259,21 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   group.add(haloPoints(lampHeads, 1.6, new THREE.Color(1.0, 0.7, 0.38)));
 
   // ---------- trees ----------
+  const look0 = () => activeStyle();
   // kinds: 0 round deciduous, 1 tall oak, 2 shrub, 3 pine, 4 spruce
-  const trees: { m: THREE.Matrix4; c: THREE.Color; k: number }[] = [];
+  // kinds: 0 round · 1 oak · 2 shrub · 3 pine · 4 spruce · 5 palm · 6 birch (assets/flora.ts), each in
+  // TREE_VARIANTS grown variants; v is position-hashed so neighbouring tiles agree.
+  const trees: { m: THREE.Matrix4; c: THREE.Color; k: number; v: number }[] = [];
+  const tropical = look0().climate === 'tropical', aridCoast = look0().climate === 'arid' || look0().climate === 'mediterranean';
+  const birchy = look0().climate === 'boreal' || look0().climate === 'continental';
+  // the region re-reads a broadleaf as its own tree: palms where it's warm by the sea, birches up north
+  const regional = (k: number, x: number, z: number) => {
+    if (k > 1) return k;
+    const u = hashf(Math.floor(x * 3.1) * 7919 + Math.floor(z * 2.7) * 104729);
+    if ((tropical && u < 0.75) || (aridCoast && terrain.oceanDistAt(x, z) < 1500 && u < 0.4)) return 5;
+    if (birchy && k === 0 && u < 0.35) return 6;
+    return k;
+  };
   // When a tile box is provided the scan only walks cells this tile owns — neighbours cover
   // the rest. Without one (legacy single-tile worlds) it covers slice + margin as before.
   const zone = extras.box ?? { x0: S.x0 - 250, z0: S.z0 - 250, x1: S.x1 + 250, z1: S.z1 + 250 };
@@ -305,14 +321,15 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       const g = terrain.heightAt(jx, jz);
       // species from the region's weights; coastal cells lean to wind-shaped pines everywhere
       const coastPine = terrain.oceanDistAt(jx, jz) < 500 && look.trees[3] > 0.5 && rng.float() < 0.35;
-      const k = coastPine ? 3 : pickWeighted(look.trees, rng.float());
+      const k = regional(coastPine ? 3 : pickWeighted(look.trees, rng.float()), jx, jz);
+      const v = variantAt(jx, jz, TREE_VARIANTS, 11);
       const h = k === 2 ? 2.4 + rng.float() * 1.6 : (k >= 3 ? 7 : 8) + rng.float() * 7;
-      const s = h / 10;
+      const s = h / treeMeta(TREE_KINDS[k], v).h;
       const m = new THREE.Matrix4().compose(V(jx, g - 0.2, jz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(s * (0.85 + rng.float() * 0.3), s * (k === 2 ? 1.3 : 1), s * (0.85 + rng.float() * 0.3)));
       const c = new THREE.Color(rng.pick(green));
       if (k === 4) c.lerp(new THREE.Color(0x2e4630), 0.55); // spruces run dark
       else if (rng.float() < 0.12) c.lerp(new THREE.Color(0xb59a3e), 0.45); // first hints of autumn
-      trees.push({ m, c, k });
+      trees.push({ m, c, k, v });
     }
   for (const p of json.points) {
     if (p.c !== 'tree' || !inSlice(p.x, p.z) || lidarCovered(p.x, p.z)) continue;
@@ -328,12 +345,13 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       z = e.z + (nz / L) * out;
       if (paved(x, z) || walk.blocked(x, z, 2.2)) continue;
     }
-    trees.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(0.9, 0.9, 0.9)), c: new THREE.Color(rng.pick(green)), k: rng.float() < 0.6 ? 0 : 1 });
+    const k = regional(rng.float() < 0.6 ? 0 : 1, x, z), v = variantAt(x, z, TREE_VARIANTS, 11);
+    const s = 9 / treeMeta(TREE_KINDS[k], v).h;
+    trees.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(s, s, s)), c: new THREE.Color(rng.pick(green)), k, v });
   }
 
   if (LT && TB) {
     // model extents per kind (height to crown top, crown radius) — scale each to the measured tree
-    const DIM: [number, number][] = [[9.7, 3.6], [10.7, 4.8], [3.3, 1.9], [10.4, 2.4], [9.6, 1.7]];
     const wsum = look.trees.reduce((a, b) => a + b, 0) || 1;
     const conifer = (look.trees[3] + look.trees[4]) / wsum; // the region's conifer share
     for (let i = 0; i + 3 < LT.length; i += 4) {
@@ -360,7 +378,10 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       else if (slim && rng.float() < Math.min(1, conifer * 3)) k = look.trees[4] > look.trees[3] ? 4 : 3;
       else if (!slim && conifer > 0.6 && rng.float() < 0.5) k = look.trees[4] > look.trees[3] ? 4 : 3;
       else k = r / h > 0.42 || rng.float() < look.trees[1] / Math.max(0.01, look.trees[0] + look.trees[1]) ? 1 : 0;
-      const [mh, mr] = DIM[k];
+      k = regional(k, x, z);
+      const v = variantAt(x, z, TREE_VARIANTS, 11);
+      const tm = treeMeta(TREE_KINDS[k], v);
+      const mh = tm.h, mr = tm.crownR;
       // crowns never thinner than ~the model's own proportions: a lone 20 m oak measured
       // at half-height reads narrow, and a stretched-thin model reads as a lollipop
       const sy = h / mh, sr = Math.max(0.85 * sy, Math.min(1.8 * sy, r / mr));
@@ -368,7 +389,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       const c = new THREE.Color(rng.pick(green));
       if (k === 4) c.lerp(new THREE.Color(0x2e4630), 0.55);
       else if (rng.float() < 0.12) c.lerp(new THREE.Color(0xb59a3e), 0.45);
-      trees.push({ m, c, k });
+      trees.push({ m, c, k, v });
     }
   }
 
@@ -418,7 +439,6 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       return best;
     };
     // per model: crown radius and crown-bottom height (at scale 1)
-    const CR = [3.6, 4.8, 1.9, 2.4, 1.7], CB = [4.0, 5.7, 0.5, 3.4, 2.7];
     const pos = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
     for (let i = trees.length - 1; i >= 0; i--) {
       const t = trees[i];
@@ -434,7 +454,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         pos.y = terrain.heightAt(pos.x, pos.z) - 0.2;
       }
       if (n) {
-        const crownR = CR[t.k] * Math.max(sc.x, sc.z), crownBottom = CB[t.k] * sc.y;
+        const tm = treeMeta(TREE_KINDS[t.k], t.v);
+        const crownR = tm.crownR * Math.max(sc.x, sc.z), crownBottom = tm.crownBottom * sc.y;
         if (crownBottom < n.h + 0.8 && crownR > n.d + 0.4) {
           const f = (n.d + 0.4) / crownR;
           if (f * Math.max(sc.x, sc.z) < 0.45 * sc.y) { trees.splice(i, 1); continue; } // would be a stick
@@ -445,11 +466,10 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       t.m.compose(pos, q, sc);
     }
     // Solid trunks: walking, driving and landing bump into trees now (shrubs stay brushable).
-    const TR = [0.3, 0.36, 0, 0.26, 0.2];
     for (const t of trees) {
       if (t.k === 2) continue;
       t.m.decompose(pos, q, sc);
-      const r = Math.max(0.15, TR[t.k] * Math.max(sc.x, sc.z));
+      const r = Math.max(0.15, treeMeta(TREE_KINDS[t.k], t.v).trunkR * Math.max(sc.x, sc.z));
       walk.addLoop([[pos.x - r, pos.z - r], [pos.x + r, pos.z - r], [pos.x + r, pos.z + r], [pos.x - r, pos.z + r]]);
     }
   }
@@ -466,37 +486,19 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     g.computeVertexNormals();
     return colored(g, 0xffffff);
   };
-  const decid = mergeGeometries([
-    colored(new THREE.CylinderGeometry(0.18, 0.3, 4.4, 5).translate(0, 2.2, 0), 0x6b5a48),
-    blob(2.6, 6.2, 0, 0, 1), blob(2.0, 7.4, 1.4, 0.6, 2), blob(1.9, 5.6, -1.3, -0.8, 3), blob(1.6, 8.1, -0.4, 1.0, 4),
-  ]);
-  const oak = mergeGeometries([
-    colored(new THREE.CylinderGeometry(0.22, 0.36, 5.6, 5).translate(0, 2.8, 0), 0x6b5a48),
-    blob(3.1, 7.6, 0, 0, 11, 0.62), blob(2.4, 8.4, 1.9, 0.8, 12, 0.55), blob(2.2, 6.9, -1.8, -0.7, 13, 0.6), blob(1.8, 8.9, -0.4, 1.5, 14, 0.5),
-  ]);
-  const shrub = mergeGeometries([
-    colored(new THREE.CylinderGeometry(0.09, 0.14, 1.3, 5).translate(0, 0.65, 0), 0x6b5a48),
-    blob(1.35, 1.8, 0, 0, 15), blob(0.95, 2.4, 0.75, -0.35, 16), blob(0.9, 1.6, -0.7, 0.4, 17),
-  ]);
-  const pineGeo = mergeGeometries([
-    colored(new THREE.CylinderGeometry(0.16, 0.26, 6.5, 5).translate(0, 3.25, 0), 0x6b5140),
-    blob(1.9, 6.4, 0.3, 0, 5), blob(1.5, 8.2, -0.4, 0.3, 6), blob(1.4, 5.0, 0.8, -0.5, 7), blob(1.0, 9.4, 0, 0, 8),
-  ]);
-  const spruce = mergeGeometries([
-    colored(new THREE.CylinderGeometry(0.12, 0.2, 6.0, 5).translate(0, 3.0, 0), 0x5d4a3a),
-    blob(1.6, 4.3, 0, 0, 18, 0.95), blob(1.3, 5.7, 0.15, -0.1, 19, 0.95), blob(1.0, 7.0, -0.1, 0.15, 20, 0.95), blob(0.7, 8.2, 0, 0, 21, 0.95), blob(0.45, 9.1, 0, 0, 22, 0.95),
-  ]);
-  // Trunks keep their brown: instance colour only tints foliage (vertex color white there).
-  const geos = [decid, oak, shrub, pineGeo, spruce];
-  for (let k = 0; k < geos.length; k++) {
-    const list = trees.filter((t) => t.k === k);
-    if (!list.length) continue;
-    const im = new THREE.InstancedMesh(geos[k], propMaterial({ wind: true, foliage: true }), list.length);
-    list.forEach((t, i) => { im.setMatrixAt(i, t.m); im.setColorAt(i, t.c); });
-    im.layers.enable(1);
-    im.computeBoundingSphere();
-    group.add(im);
-  }
+  // Trees from the foundry (assets/flora.ts): one InstancedMesh per species × grown variant.
+  // Trunks keep their bark: instance colour only tints foliage (vertex color white there).
+  for (let k = 0; k < TREE_KINDS.length; k++)
+    for (let v = 0; v < TREE_VARIANTS; v++) {
+      const list = trees.filter((t) => t.k === k && t.v === v);
+      if (!list.length) continue;
+      const im = new THREE.InstancedMesh(treeLib(TREE_KINDS[k], v).clone(), propMaterial({ wind: true, foliage: true }), list.length);
+      im.name = `trees:${TREE_KINDS[k]}:${v}`;
+      list.forEach((t, i) => { im.setMatrixAt(i, t.m); im.setColorAt(i, t.c); });
+      im.layers.enable(1);
+      im.computeBoundingSphere();
+      group.add(im);
+    }
 
   // ---------- moored boats (asset kit hulls, packed along each pier side bow-to-stern) ----------
   const MOOR = boatMix(look.climate);
@@ -554,7 +556,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     }
 
   // ---------- parked cars at the house end of real driveways ----------
-  const parked = new Map<CarType, { m: THREE.Matrix4; c: THREE.Color }[]>();
+  // keyed type|gear: every car of a type still differs — proportions breathe ±3–4 % per car, paint
+  // fades with age, and some carry gear (surfboards near the coast, racks, kayaks, bikes).
+  const parked = new Map<string, { m: THREE.Matrix4; c: THREE.Color }[]>();
   const CAR = [0xf2f2ee, 0xb9bcc0, 0x26282c, 0x5a5e64, 0x2b3f63, 0x9c2a26, 0x3d5a46, 0xcdbf9e, 0x7a8894];
   for (const r of json.roads) {
     if (r.lod || r.sv !== 'driveway' || r.p.length < 4) continue;
@@ -576,13 +580,18 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     const corners: P[] = [[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]].map(([u, v]) => [x + u * cy + v * sy, z - u * sy + v * cy]);
     if (!inSlice(x, z, 10) || corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.3)) || terrain.sdfAt(x, z) < 2) continue;
-    if (!parked.has(type)) parked.set(type, []);
-    parked.get(type)!.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, 1)), c: new THREE.Color(CAR[Math.floor(h * 97) % CAR.length]) });
+    const u1 = hashf(r.p[0] * 31 + r.p[1]), u2 = hashf(r.p[1] * 17 + r.p[0] * 5), u3 = hashf(r.p[0] + r.p[1] * 97);
+    const gear = gearFor(hashf(r.p[0] * 7 + r.p[1] * 13), terrain.oceanDistAt(x, z) < 3000);
+    const key = `${type}|${gear ?? ''}`;
+    if (!parked.has(key)) parked.set(key, []);
+    const paint = new THREE.Color(CAR[Math.floor(h * 97) % CAR.length]).lerp(new THREE.Color(0xd8d4cc), u3 < 0.25 ? 0.12 + u3 : 0); // an old car's sun-faded paint
+    parked.get(key)!.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(0.97 + u1 * 0.06, 0.96 + u2 * 0.08, 0.97 + u3 * 0.06)), c: paint });
     walk.addLoop(corners);
   }
-  for (const [type, list] of parked) {
-    const im = new THREE.InstancedMesh(carLib(type).clone(), propMaterial(), list.length);
-    im.name = 'parked-cars:' + type; // player/vehicles.ts finds these to let you drive off in one
+  for (const [key, list] of parked) {
+    const [type, gear] = key.split('|') as [CarType, string];
+    const im = new THREE.InstancedMesh(carLib(type, (gear || null) as CarGear | null).clone(), propMaterial(), list.length);
+    im.name = `parked-cars:${type}${gear ? ':' + gear : ''}`; // player/vehicles.ts finds these to let you drive off in one
     list.forEach((p, i) => { im.setMatrixAt(i, p.m); im.setColorAt(i, p.c); });
     im.layers.enable(1);
     im.computeBoundingSphere();
@@ -624,21 +633,29 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   }
 
   // ---------- curbside mailboxes for the houses with a mapped address ----------
-  if (extras.mailboxes?.length) {
-    const mb = mergeGeometries([
-      colored(new THREE.BoxGeometry(0.09, 1.05, 0.09).translate(0, 0.52, 0), 0x6b5a48),
-      colored(new THREE.BoxGeometry(0.24, 0.24, 0.5).translate(0, 1.15, 0), 0xffffff),
-      colored(new THREE.BoxGeometry(0.03, 0.14, 0.04).translate(0.13, 1.2, -0.12), 0xc2412f),
-    ]);
-    const im = new THREE.InstancedMesh(mb, propMaterial(), extras.mailboxes.length);
-    const MBC = [0x2b2d30, 0x2b2d30, 0xf2efe6, 0x3e5b45, 0x2c3e5c];
-    extras.mailboxes.forEach((b, i) => {
-      im.setMatrixAt(i, new THREE.Matrix4().compose(V(b.x, terrain.heightAt(b.x, b.z), b.z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), b.yaw), V(1, 1, 1)));
-      im.setColorAt(i, new THREE.Color(MBC[Math.floor(hash01(Math.floor(b.x * 10) ^ Math.floor(b.z * 10)) * MBC.length)]));
-      walk.addLoop([[b.x - 0.12, b.z - 0.12], [b.x + 0.12, b.z - 0.12], [b.x + 0.12, b.z + 0.12], [b.x - 0.12, b.z + 0.12]]);
-    });
-    im.layers.enable(1);
-    group.add(im);
+  // North American curbs only (elsewhere the post goes through the door); a street mixes styles,
+  // chosen per house by position so neighbouring tiles agree.
+  if (extras.mailboxes?.length && look.region === 'na') {
+    const MIX: [MailboxStyle, number][] = [['post', 5], ['rural', 2], ['newspaper', 1.5], ['brick', 1], ['lantern', 1]];
+    const MBC = [0x2b2d30, 0x2b2d30, 0xf2efe6, 0x3e5b45, 0x2c3e5c, 0x7a2a26];
+    const byStyle = new Map<MailboxStyle, { m: THREE.Matrix4; c: THREE.Color }[]>();
+    for (const b of extras.mailboxes) {
+      const st = pickFrom(MIX, hashf(Math.floor(b.x * 10) * 7919 + Math.floor(b.z * 10)));
+      if (!byStyle.has(st)) byStyle.set(st, []);
+      // the door faces the street (the mailbox yaw points −z at the house)
+      byStyle.get(st)!.push({ m: new THREE.Matrix4().compose(V(b.x, terrain.heightAt(b.x, b.z), b.z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), b.yaw + Math.PI), V(1, 0.94 + hashf(Math.floor(b.x * 3)) * 0.12, 1)), c: new THREE.Color(MBC[Math.floor(hash01(Math.floor(b.x * 10) ^ Math.floor(b.z * 10)) * MBC.length)]) });
+      const r0 = st === 'brick' ? 0.3 : 0.14;
+      walk.addLoop([[b.x - r0, b.z - r0], [b.x + r0, b.z - r0], [b.x + r0, b.z + r0], [b.x - r0, b.z + r0]]);
+    }
+    for (const st of MAILBOXES) {
+      const list = byStyle.get(st);
+      if (!list) continue;
+      const im = new THREE.InstancedMesh(mailboxLib(st).clone(), propMaterial(), list.length);
+      im.name = `mailbox:${st}`;
+      list.forEach((q, i) => { im.setMatrixAt(i, q.m); im.setColorAt(i, q.c); });
+      im.layers.enable(1);
+      group.add(im);
+    }
   }
   if (stands.length) {
     const parts: THREE.BufferGeometry[] = [];
@@ -808,6 +825,106 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         im.layers.enable(1);
         group.add(im);
       }
+    }
+  }
+
+  // ---------- gardens: foundation beds along the house fronts (assets/flora.ts) ----------
+  // Species from the region's garden mix; in bloom when the real calendar says so (seasons flip
+  // south of the equator). A house plants one or two species, a few of each either side of the
+  // door, on open (unpaved, unblocked) ground only — storefronts on sidewalks get none.
+  const month = new Date().getMonth() + 1, south = json.origin.lat < 0;
+  const gardenMix = plantMix(look.climate);
+  const beds = new Map<string, { m: THREE.Matrix4; c: THREE.Color }[]>();
+  const bed = (sp: PlantSpecies, v: number, x: number, z: number, yaw: number, s: number) => {
+    const bloom = inBloom(sp, month, south);
+    const key = `${sp}|${v}|${bloom ? 1 : 0}`;
+    if (!beds.has(key)) beds.set(key, []);
+    beds.get(key)!.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(s, s * (0.9 + hashf(Math.floor(x * 13)) * 0.2), s)), c: new THREE.Color(rng.pick(green)).lerp(new THREE.Color(0x6f9a48), 0.25) });
+    if (SPECIES[sp].h >= 1) walk.addLoop([[x - 0.3, z - 0.3], [x + 0.3, z - 0.3], [x + 0.3, z + 0.3], [x - 0.3, z + 0.3]], -Infinity, terrain.heightAt(x, z) + SPECIES[sp].h * s);
+  };
+  for (const d of extras.doors ?? []) {
+    const h0 = hashf(Math.floor(d.wx * 13) * 7919 + Math.floor(d.wz * 11));
+    if (h0 > 0.7) continue; // not every house gardens
+    const tx = -d.nz, tz = d.nx;
+    const spA = pickFrom(gardenMix, hashf(Math.floor(d.wx * 3) + Math.floor(d.wz * 5) * 31));
+    const spB = pickFrom(gardenMix, hashf(Math.floor(d.wx * 5) * 17 + Math.floor(d.wz * 3)));
+    const out = 0.8 + SPECIES[spA].w * 0.35;
+    for (const side of [-1, 1])
+      for (let k = 0; k < 3; k++) {
+        const along = side * (1.4 + k * (0.9 + SPECIES[spA].w * 0.4));
+        const x = d.wx + d.nx * out + tx * along, z = d.wz + d.nz * out + tz * along;
+        if (paved(x, z) || walk.blocked(x, z, 0.45) || terrain.sdfAt(x, z) < 1) continue;
+        const sp = k === 2 || (h0 > 0.45 && k === 1) ? spB : spA;
+        bed(sp, variantAt(x, z, 2, 5), x, z, hashf(Math.floor(x * 7)) * 6.28, 0.8 + hashf(Math.floor(z * 7)) * 0.35);
+      }
+  }
+  for (const [key, list] of beds) {
+    const [sp, v, bl] = key.split('|');
+    const stage = bl === '1' ? STAGES - 1 : STAGES - 2;
+    const im = new THREE.InstancedMesh(plantLib(sp as PlantSpecies, +v, stage, bl === '1', true).clone(), propMaterial({ wind: true }), list.length);
+    im.name = `garden:${sp}`;
+    list.forEach((q, i) => { im.setMatrixAt(i, q.m); im.setColorAt(i, q.c); });
+    im.layers.enable(1);
+    im.computeBoundingSphere();
+    group.add(im);
+  }
+
+  // ---------- a summer beach: umbrellas, towels and chairs around the lifeguard stands ----------
+  const warmMonth = south ? ((month + 5) % 12) + 1 : month;
+  if (standAt.length && warmMonth >= 6 && warmMonth <= 9 && look.climate !== 'boreal' && look.climate !== 'polar') {
+    const beach = { umbrella: [] as { m: THREE.Matrix4; c: THREE.Color }[], towel: [] as { m: THREE.Matrix4; c: THREE.Color }[], chair: [] as { m: THREE.Matrix4; c: THREE.Color }[] };
+    const UMB = [0x3a8ac0, 0xd8342c, 0x2e8a6a, 0xf2c23a, 0xe0705a, 0x5a4a9a];
+    const TOW = [0xf2c23a, 0x5aa4c8, 0xe0705a, 0x8ac06a, 0xd86a9a, 0xf2efe6];
+    for (const [sx, sz] of standAt) {
+      const gx = terrain.oceanDistAt(sx - 6, sz) - terrain.oceanDistAt(sx + 6, sz), gz = terrain.oceanDistAt(sx, sz - 6) - terrain.oceanDistAt(sx, sz + 6);
+      const L = Math.hypot(gx, gz) || 1, sea = [gx / L, gz / L], along = [-sea[1], sea[0]];
+      const n = 5 + Math.floor(hashf(Math.floor(sx) * 31 + Math.floor(sz)) * 8);
+      for (let i = 0; i < n; i++) {
+        const u = hashf(Math.floor(sx) * 131 + i * 7919), w = hashf(Math.floor(sz) * 71 + i * 104729);
+        const a = (u - 0.5) * 90, b = -6 + w * 16; // up and down the beach, toward and back from the water
+        const x = sx + along[0] * a + sea[0] * b, z = sz + along[1] * a + sea[1] * b;
+        if (terrain.sdfAt(x, z) < 6 || walk.blocked(x, z, 1.4)) continue;
+        const yaw = Math.atan2(-sea[0], -sea[1]) + (u - 0.5) * 0.6; // looking out to sea
+        const y = terrain.heightAt(x, z);
+        beach.umbrella.push({ m: new THREE.Matrix4().compose(V(x, y, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw + (w - 0.5)), V(1, 1, 1)), c: new THREE.Color(UMB[Math.floor(u * 97) % UMB.length]) });
+        const tq = new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw);
+        const ox = Math.sin(yaw + 1.6) * 1.2, oz = Math.cos(yaw + 1.6) * 1.2;
+        if (w < 0.7) beach.towel.push({ m: new THREE.Matrix4().compose(V(x + ox, terrain.heightAt(x + ox, z + oz) + 0.01, z + oz), tq, V(1, 1, 1)), c: new THREE.Color(TOW[Math.floor(w * 91) % TOW.length]) });
+        if (u < 0.6) beach.chair.push({ m: new THREE.Matrix4().compose(V(x - ox * 0.8, terrain.heightAt(x - ox * 0.8, z - oz * 0.8), z - oz * 0.8), tq, V(1, 1, 1)), c: new THREE.Color(TOW[Math.floor(u * 53) % TOW.length]) });
+      }
+    }
+    for (const k of ['umbrella', 'towel', 'chair'] as const) {
+      const list = beach[k];
+      if (!list.length) continue;
+      const im = new THREE.InstancedMesh(beachLib(k).clone(), propMaterial(), list.length);
+      im.name = `beach:${k}`;
+      list.forEach((q, i) => { im.setMatrixAt(i, q.m); im.setColorAt(i, q.c); });
+      im.layers.enable(1);
+      group.add(im);
+    }
+  }
+
+  // ---------- picnic tables in the parks and on the greens ----------
+  {
+    const tables: { m: THREE.Matrix4; c: THREE.Color }[] = [];
+    for (const a of json.areas) {
+      if (!['grass', 'playground', 'park', 'picnic_site'].includes(a.c)) continue;
+      const ring = a.o?.[0];
+      if (!ring || ring.length < 8) continue;
+      const pts = unpackPts(ring);
+      const cx = pts.reduce((q, p) => q + p[0], 0) / pts.length, cz = pts.reduce((q, p) => q + p[1], 0) / pts.length;
+      if (!inSlice(cx, cz) || paved(cx, cz) || walk.blocked(cx, cz, 2) || terrain.sdfAt(cx, cz) < 3) continue;
+      const yaw = hashf(Math.floor(cx) * 31 + Math.floor(cz)) * 6.28;
+      tables.push({ m: new THREE.Matrix4().compose(V(cx, terrain.heightAt(cx, cz), cz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, 1)), c: new THREE.Color([0x8a6a4a, 0x7a5b46, 0x5d6e4f, 0x9a8f80][Math.floor(hashf(Math.floor(cz) * 7) * 4)]) });
+      const c = Math.cos(yaw), sn = Math.sin(yaw);
+      walk.addLoop([[-0.9, -0.95], [0.9, -0.95], [0.9, 0.95], [-0.9, 0.95]].map(([u, v]) => [cx + u * c + v * sn, cz - u * sn + v * c] as P), -Infinity, terrain.heightAt(cx, cz) + 0.8);
+    }
+    if (tables.length) {
+      const im = new THREE.InstancedMesh(beachLib('picnic').clone(), propMaterial(), tables.length);
+      im.name = 'picnic:table';
+      tables.forEach((q, i) => { im.setMatrixAt(i, q.m); im.setColorAt(i, q.c); });
+      im.layers.enable(1);
+      group.add(im);
     }
   }
 

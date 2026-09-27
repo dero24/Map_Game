@@ -38,8 +38,9 @@ docs below; read a topic doc only when the task touches that subsystem.
 7. Shader varyings carrying ids/seeds (`vInfo`, `vTan`, `vOut`) must be `flat` —
    interpolated ids drift per pixel and every `seedOf(id)` choice shimmers.
 8. Keep the `© OpenStreetMap contributors` HUD credit visible — ODbL-required.
-9. Pick vehicle/boat types via `carMix(region, climate)` / `boatMix(climate)` — never
-   per-town lists.
+9. Variety comes from the asset foundry (`src/assets/`, `docs/ASSET_FOUNDRY.md`): mixes via
+   `carMix`/`boatMix`/`plantMix`/`gearFor`, variants via `variantAt` — never per-town lists; every new
+   family gets validation + a vertex budget in `tests/foundry.test.ts`.
 10. Bump paired cache keys together: worker R2 `t/vN` + client `&v=N`; bump `VER` in
     `lidar.ts` whenever measure/raster/tree logic changes.
 11. Visual review reads ONLY `shots/<region>-montage.jpg` — never the per-shot PNGs.
@@ -62,6 +63,6 @@ Context low? Wrap early — write state before polish. A clean handoff beats a r
 - `docs/agent/world-data.md` — regions, REGIONS spec, fetch/merge/bake, detail zone, `?at=` deep links, NAIP roof imagery
 - `docs/agent/streaming.md` — tile stream + margin semantics, tile worker + BuiltTile packing, terrain packs, real-lite worker (wrangler/R2/virtual manifests), DEM, LiDAR measure pipeline
 - `docs/agent/rendering.md` — styles/recipe, shader + material conventions, ground paint, grass
-- `docs/agent/gameplay.md` — buildings/roofs, interiors, WalkWorld collision, vehicles, ambient life, asset kit, paint-as-you-explore, photo mode/sketchbook/commissions, atlas map + search, hints, arrival cards, sound
+- `docs/agent/gameplay.md` — buildings/roofs, interiors, WalkWorld collision, vehicles, ambient life, asset foundry (flora/fauna/furniture, wildlife, the Grow verb), paint-as-you-explore, photo mode/sketchbook/commissions, atlas map + search, hints, arrival cards, sound
 - `docs/agent/debugging.md` — soak, capture/montage contract, in-page montage fallback, worker logs, dev-server quirks
 - `docs/earth/OPEN_WORLD.md` — phase list + vision · `docs/earth/LOG.md` — session log + queued bugs · `docs/earth/REVIEWER.md` — review history (keep scores/rationale consistent) · `docs/ASSET_FIDELITY.md` — data/builder upgrade plan for J2/L · `docs/FIDELITY_REALITY.md`

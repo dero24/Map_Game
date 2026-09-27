@@ -7,6 +7,7 @@ import type { GameCtx } from './ctx';
 import { loadState, saveState, type BookState } from './book';
 import { CAR_TYPES, BOAT_TYPES, PLANE_TYPES } from '../assets/kit';
 import { modelName } from '../player/vehicles';
+import { CRITTERS, CRITTER_NAME } from '../assets/fauna';
 
 type Active = BookState['active'][number];
 const ACTIVE = 3;
@@ -14,7 +15,9 @@ const FAMILY: Record<string, { label: string; all: string[] }> = {
   car: { label: 'car', all: CAR_TYPES },
   boat: { label: 'boat', all: BOAT_TYPES },
   plane: { label: 'plane', all: PLANE_TYPES },
+  wildlife: { label: 'animal', all: CRITTERS },
 };
+const niceName = (t: string) => CRITTER_NAME[t as keyof typeof CRITTER_NAME] ?? modelName(t);
 const art = (s: string) => (/^[aeiou]/i.test(s) || /^SUV/.test(s) ? 'an' : 'a');
 const hash = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return (h >>> 0) / 4294967296; };
 
@@ -87,6 +90,19 @@ export class Commissions {
       const [lat, lon] = ll(b.x, b.z);
       const id = `k:boat:${type}:${Math.round(lat * 200)}:${Math.round(lon * 200)}`;
       add({ id, title: `Paint ${art(modelName(type))} ${modelName(type)} at its mooring`, hint: 'down at the piers', kind: 'kit', type: `moored-boats:${type}`, lat, lon }, Math.hypot(b.x - w.x, b.z - w.z) * 1.4 + 200);
+    }
+    // the animals about right now: a quick sketch of one is a commission of its own
+    for (const c of this.g.instances('critter:', w.x, w.z, 70)) {
+      const kind = c.name.split(':')[1];
+      const [lat, lon] = ll(c.x, c.z);
+      const nm = CRITTER_NAME[kind as keyof typeof CRITTER_NAME] ?? kind;
+      add({ id: `w:${kind}:${Math.round(lat * 100)}:${Math.round(lon * 100)}`, title: `Paint ${art(nm)} ${nm}`, hint: 'quietly — they startle', kind: 'kit', type: `critter:${kind}` }, 400);
+    }
+    // your own garden: paint what you grew once it flowers
+    for (const c of this.g.instances('plant:', w.x, w.z, 200)) {
+      const sp = c.name.split(':')[1];
+      const [lat, lon] = ll(c.x, c.z);
+      add({ id: `g:${sp}:${lat.toFixed(5)}:${lon.toFixed(5)}`, title: `Paint the ${sp} you grew`, hint: 'once it has grown — your garden is on the map (❀)', kind: 'kit', type: `plant:${sp}` }, 300);
     }
     const env = this.g.env();
     const [wl, wn] = ll(w.x, w.z);
@@ -169,7 +185,8 @@ export class Commissions {
         const [x, z] = this.g.fromLatLon(a.lat!, a.lon!);
         if (inFrame(x, a.y ?? this.g.terrain.heightAt(x, z) + 3, z, 320)) return a;
       } else if (a.kind === 'kit') {
-        if (this.g.instances(a.type!, w.x, w.z, 90).some((p) => inFrame(p.x, p.y + 1, p.z, 90))) return a;
+        const small = a.type!.startsWith('critter:');
+        if (this.g.instances(a.type!, w.x, w.z, small ? 40 : 90).some((p) => inFrame(p.x, p.y + (small ? 0.15 : 1), p.z, small ? 40 : 90))) return a;
       } else return a; // scenes: the conditions are the subject
     }
     return null;
@@ -204,14 +221,14 @@ export class Commissions {
       list.push(type);
       this.save();
       const F = FAMILY[family];
-      const nm = modelName(type);
-      this.g.toast(`spotted ${art(nm)} ${nm} — ${list.length} of ${F.all.length} ${F.label} types`);
+      const nm = niceName(type);
+      this.g.toast(`spotted ${art(nm)} ${nm} — ${list.length} of ${F.all.length} ${F.label} ${family === 'wildlife' ? 'kinds' : 'types'}`);
       this.g.sound('page');
     };
-    for (const [prefix, family] of [['parked-cars:', 'car'], ['life-car:', 'car'], ['moored-boats:', 'boat'], ['life-boat:', 'boat'], ['ride-car:', 'car'], ['ride-boat:', 'boat'], ['ride-plane:', 'plane']] as const)
-      for (const p of this.g.instances(prefix, w.x, w.z, family === 'boat' ? 60 : 30)) {
-        const n = this.g.toNdc(p.x, p.y + 0.8, p.z);
-        if (n.z < 1 && Math.abs(n.x) < 0.9 && Math.abs(n.y) < 0.9) hit(family, p.name.split(':')[1]);
+    for (const [prefix, family] of [['parked-cars:', 'car'], ['life-car:', 'car'], ['moored-boats:', 'boat'], ['life-boat:', 'boat'], ['ride-car:', 'car'], ['ride-boat:', 'boat'], ['ride-plane:', 'plane'], ['critter:', 'wildlife']] as const)
+      for (const p of this.g.instances(prefix, w.x, w.z, family === 'boat' ? 60 : family === 'wildlife' ? 35 : 30)) {
+        const n = this.g.toNdc(p.x, p.y + (family === 'wildlife' ? 0.2 : 0.8), p.z);
+        if (n.z < 1 && Math.abs(n.x) < 0.9 && Math.abs(n.y) < 0.9) hit(family, p.name.split(':')[1].split('+')[0]);
       }
   }
   spottedSummary() {

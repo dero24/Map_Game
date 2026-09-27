@@ -20,7 +20,7 @@
       "area": "core",
       "title": "Paint your walk — the world paints in as you explore, a sketchbook, hints, arrival cards, map + search, sound",
       "user_visible_behavior": "Unvisited places are a pencil sketch that blooms into watercolor as you arrive, and your painted map is the record of every walk. Photo mode becomes a sketchbook with gentle commissions from real places plus spotting logs (boat/car/plane types). Context hints ('E — drive this car'), arrival cards when you enter a new town, an M map screen with address/place search + teleport, and a richer synthesized soundscape (halyards, lapping water, wind in trees, crickets, birdsong, engines, brush strokes).",
-      "status": "in_progress",
+      "status": "blocked",
       "verification": [
         "npm run typecheck && npm test",
         "Montage: sketch→paint transition (unexplored vs explored), photo mode frame, sketchbook page, map screen with search results, arrival card, hint pill",
@@ -34,7 +34,7 @@
         "Atlas map with painted downtown; search 'asbury park convention hall' → walk here → arrival card 'Asbury Park · Monmouth County, New Jersey · first visit'",
         "Hint pill 'E drive this jeep' next to a driveway jeep; flight hint while flying"
       ],
-      "notes": "From the 2026-09-27 gameplay brainstorm (ideas 1+2 plus the agreed UX list and ideas 5). Everything region-agnostic: explored store is a sparse world-cell bitmap (not the slice), commissions come from real POIs/landmarks/kit types near the walker, geocoding degrades to local street/POI search when offline. Remaining before 'passing': npm run build + node tools/soak.mjs --region=shore --seconds=90 on the Windows toolchain."
+      "notes": "From the 2026-09-27 gameplay brainstorm (ideas 1+2 plus the agreed UX list and ideas 5). Everything region-agnostic: explored store is a sparse world-cell bitmap (not the slice), commissions come from real POIs/landmarks/kit types near the walker, geocoding degrades to local street/POI search when offline. Remaining before 'passing': npm run build + node tools/soak.mjs --region=shore --seconds=90 on the Windows toolchain. BLOCKED (2026-09-27): only the Windows-toolchain checks remain (npm run build + soak); moved aside so kit-variety can be the single active item."
     },
     {
       "id": "traversal-spike",
@@ -224,17 +224,23 @@
     },
     {
       "id": "kit-variety",
-      "priority": 12,
+      "priority": 1,
       "area": "presentation",
-      "title": "Asset kit variety + detail pass",
-      "user_visible_behavior": "Cars hold up close; no two SUVs on a street are identical; more street furniture comes from the kit.",
-      "status": "not_started",
+      "title": "Asset Foundry — recipe+seed variety for everything, critters, plants that grow",
+      "user_visible_behavior": "Every family of thing in the world comes from one foundry: trees (more species, several grown variants each), garden plants that bloom by season, mailboxes/beach gear/street furniture in regional styles, cars that differ within a type (proportions, fade, roof racks, surfboards, kayaks), wildlife (squirrels, rabbits, songbirds, sandpipers, deer, butterflies) that lives and flees, and a Grow verb: plant a seed and watch it grow across sessions.",
+      "status": "in_progress",
       "verification": [
-        "npm run typecheck && npm test (tests/kit.test.ts covers new variants/add-ons)",
-        "/kit.html review of every family + in-game montage of a driveway street and a marina"
+        "npm run typecheck && npm test (tests/kit.test.ts + tests/foundry.test.ts: every family validates, determinism, growth monotonic)",
+        "/kit.html: every family, variants, growth slider, critter animation",
+        "In-game montage: a garden street, a wooded lawn with critters, the beach with umbrellas, a driveway row of cars",
+        "node tools/soak.mjs --region=shore --seconds=90 on Windows"
       ],
-      "evidence": [],
-      "notes": "Cars look blocky up close (from a distance they read fine; boats already look good). Every model of one type is identical: each type has a single canonical model, so every SUV on the street is the same SUV. Next: 3–4 seeded versions per type, plus add-ons like roof racks, surfboards, kayaks on top, rust and fading paint. Extend the same recipe pattern to mailboxes, lifeguard stands, beach umbrellas, docks and playgrounds."
+      "evidence": [
+        "tsc clean; 107/107 tests incl. tests/foundry.test.ts (all families validate + vertex budgets + growth/bloom/gear rules)",
+        "/kit.html workbench captures of every family (shots/kit-*.jpg)",
+        "In-game montages shots/foundry-a.jpg, foundry-b.jpg, foundry-c.jpg, critters-a.jpg, garden-a.jpg: beds, beach, gear, mailboxes, picnic table, wildlife, planted garden grown + persisted across reload"
+      ],
+      "notes": "Cars look blocky up close (from a distance they read fine; boats already look good). Every model of one type is identical: each type has a single canonical model, so every SUV on the street is the same SUV. Next: 3–4 seeded versions per type, plus add-ons like roof racks, surfboards, kayaks on top, rust and fading paint. Extend the same recipe pattern to mailboxes, lifeguard stands, beach umbrellas, docks and playgrounds. Remaining before 'passing': npm run build + soak on Windows (watch garden-bed frame cost)."
     }
   ],
   "regions": {

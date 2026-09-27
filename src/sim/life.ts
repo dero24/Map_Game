@@ -8,11 +8,16 @@ import type { WalkWorld } from '../player/collision';
 import type { Door } from '../world/buildings';
 import { paintMaterial, U, GLSL_NOISE } from '../render/shared';
 import { CAPS, H, RANGES, S, SIM_HZ, layout, views, type LifeInit } from './protocol';
-import { CAR_TYPES, carMix, carLib, boatLib, pickFrom, type BoatType } from '../assets/kit';
+import { CAR_TYPES, carMix, carLib, boatLib, pickFrom, carRecipe, type BoatType } from '../assets/kit';
+import { gearGeometry, gearFor, type CarGear } from '../assets/furniture';
+import { hashf } from '../assets/core';
+import { propMaterial } from '../render/propMaterial';
 import { activeStyle } from '../world/styles';
 
 // Moving boats offshore: the working/pleasure mix (skiffs and pontoons stay moored near shore).
 const LIFE_BOATS: BoatType[] = ['console', 'cabin', 'sail', 'lobster', 'skiff'];
+const LIFE_GEAR: CarGear[] = ['rack', 'surf', 'kayak', 'cargo'];
+const ROOF = Object.fromEntries(CAR_TYPES.map((t) => [t, carRecipe(t, 1).roof])) as Record<(typeof CAR_TYPES)[number], number>;
 
 export const lifeParams = { density: 1, enabled: true };
 
@@ -313,6 +318,17 @@ export class LifeClient {
     make(gullGeo(), { WINGS: 1 }, RANGES.gulls, 1.8);
     make(CAR_TYPES.map((t) => carLib(t)), {}, RANGES.cars, 1, () => 0xffffff, CAR_TYPES.map((t) => `life-car:${t}`));
     make(pedGeo(), { LEGS: 1 }, RANGES.peds, 1, () => 0xffffff);
+    // gear on the roofs of passing cars (placed on each car's own roof height per frame)
+    for (const gname of LIFE_GEAR) {
+      const m = new THREE.InstancedMesh(gearGeometry(gname, 0, 4.6, 1.86, 1), propMaterial(), CAPS.cars);
+      m.name = `life-gear:${gname}`;
+      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      m.frustumCulled = false;
+      for (let i = 0; i < CAPS.cars; i++) m.setMatrixAt(i, this.zeroM);
+      m.layers.enable(1);
+      this.group.add(m);
+      this.gear.set(gname, m);
+    }
     make(LIFE_BOATS.map((t) => boatLib(t)), {}, RANGES.boats, 1, () => 0xffffff, LIFE_BOATS.map((t) => `life-boat:${t}`));
 
     // Headlight / masthead halos at night (positions rewritten per frame).
@@ -392,7 +408,11 @@ export class LifeClient {
       for (let i = r0; i < r1; i++) {
         const o = i * S.STRIDE, li = i - r0;
         const flags = snap[o + S.FLAGS];
-        if (!(flags & 1) || snap[o + S.Y] < -500) { for (const mm of g.meshes) mm.setMatrixAt(li, this.zeroM); continue; }
+        if (!(flags & 1) || snap[o + S.Y] < -500) {
+          for (const mm of g.meshes) mm.setMatrixAt(li, this.zeroM);
+          if (kind === 1) for (const gm of this.gear.values()) gm.setMatrixAt(li, this.zeroM);
+          continue;
+        }
         const x = snap[o + S.PX] + (snap[o + S.X] - snap[o + S.PX]) * a;
         let y = snap[o + S.PY] + (snap[o + S.Y] - snap[o + S.PY]) * a;
         const z = snap[o + S.PZ] + (snap[o + S.Z] - snap[o + S.PZ]) * a;
@@ -419,7 +439,8 @@ export class LifeClient {
             heads.setXYZ(hk++, hx - rx, y + 0.76, hz - rz);
           }
           g.mesh.setColorAt(li, this.tmpC.set(CAR_COLORS[variant % 10 % CAR_COLORS.length]));
-          sx = sy = sz = 1; // the kit's vans / SUVs are their own models now
+          // the kit's vans / SUVs are their own models; each car breathes a little within its type
+          sx = 0.97 + hashf(i * 7919 + variant) * 0.06; sy = 0.96 + hashf(i * 104729 + variant) * 0.08; sz = 0.97 + hashf(i * 31 + variant * 131) * 0.06;
         } else if (kind === 2) {
           if (dist < 25) st.pedsNear++;
           g.mesh.setColorAt(li, this.tmpC.set(SHIRTS[variant % SHIRTS.length]));
@@ -436,6 +457,14 @@ export class LifeClient {
         if (g.meshes.length > 1) {
           // the agent's model: a stable pick from its variant (cars follow the street mix)
           const pick = kind === 1 ? CAR_TYPES.indexOf(pickFrom(carMix(activeStyle().region, activeStyle().climate), ((variant * 0.618034) % 1 + (i * 0.1234) % 1) % 1)) : (variant + i) % g.meshes.length;
+          if (kind === 1) {
+            const gr = gearFor(hashf(i * 613 + variant * 7), this.coastal);
+            const gname = gr === 'bike' ? null : gr;
+            for (const [gk, gm] of this.gear) {
+              if (gk === gname) gm.setMatrixAt(li, this.gm.multiplyMatrices(this.m, this.gt.makeTranslation(0, ROOF[CAR_TYPES[pick]], 0)));
+              else gm.setMatrixAt(li, this.zeroM);
+            }
+          }
           for (let k = 0; k < g.meshes.length; k++) {
             if (k === pick) {
               g.meshes[k].setMatrixAt(li, this.m);
@@ -447,6 +476,7 @@ export class LifeClient {
         A[li * 3] = aph; A[li * 3 + 1] = amt; A[li * 3 + 2] = lights;
         if (kind === 1) A[li * 3 + 1] = 0;
       }
+      if (kind === 1) for (const gm of this.gear.values()) gm.instanceMatrix.needsUpdate = true;
       for (const mm of g.meshes) {
         mm.instanceMatrix.needsUpdate = true;
         if (mm.instanceColor) mm.instanceColor.needsUpdate = true;
@@ -458,6 +488,11 @@ export class LifeClient {
   }
   private tmpC = new THREE.Color();
   private zeroM = new THREE.Matrix4().makeScale(0, 0, 0);
+  private gear = new Map<CarGear, THREE.InstancedMesh>();
+  private gm = new THREE.Matrix4();
+  private gt = new THREE.Matrix4();
+  /** near the coast, cars carry surfboards and kayaks (main sets this from the walker's position) */
+  coastal = true;
   private tmpQ = new THREE.Quaternion();
   private fwdAxis = new THREE.Vector3(0, 0, 1);
 }

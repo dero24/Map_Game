@@ -244,6 +244,18 @@ export class Ambience {
     }
   }
 
+  /** Wildlife: a squirrel's scolding chatter, a flush of wings, a deer's snort. */
+  critter(kind: string, what: 'flee' | 'flush', pan: number, dist: number) {
+    const vol = Math.min(1, 12 / (dist + 4));
+    if (kind === 'squirrel') {
+      for (let k = 0; k < 6; k++) setTimeout(() => this.blip({ freq: 3200 + Math.random() * 900, q: 7, dur: 0.035, gain: 0.03 * vol, pan }), k * 70);
+    } else if (what === 'flush') {
+      // a whirr of wings: a few fast noise bursts
+      for (let k = 0; k < 5; k++) setTimeout(() => this.blip({ freq: 900 + Math.random() * 500, q: 0.8, dur: 0.06, gain: 0.04 * vol, pan }), k * 45);
+      if (kind === 'songbird') setTimeout(() => this.bird(0.02 * vol), 180);
+    } else if (kind === 'deer') this.blip({ freq: 500, q: 1.2, dur: 0.25, gain: 0.05 * vol, pan, type: 'lowpass' });
+  }
+
   // A halyard slapping a mast: a bright metallic ping (inharmonic partials, fast decay).
   private halyard(vol: number, pan: number) {
     const ctx = this.ctx, t = ctx.currentTime;

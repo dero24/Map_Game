@@ -37,17 +37,33 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
   renderer/client `life.ts`, shared layout `protocol.ts` (SAB when cross-origin isolated,
   transferable copies otherwise). Sound: `src/audio/ambience.ts` (all synthesized).
 
-## Asset kit (`src/assets/kit.ts`, viewer `/kit.html` with GLB export)
+## Asset foundry (`src/assets/`, workbench `/kit.html`)
 
-- Cars, boats, planes and rocks are built from recipe + seed → validated proportions →
-  geometry.
-- Conventions: non-indexed; vertex `color` (white = tint by instance colour); `aPart`
-  (3 = head/nav lights, 4 = tail lights); front toward −z; origin on the ground or waterline.
-- Draw one InstancedMesh per type from `carLib`/`boatLib`/`rockLib`. Pick types with
-  `carMix(region, climate)` / `boatMix(climate)`; never with per-town lists.
-- **In tile builders, `.clone()` the library geometry.** Pack transfers the buffers, so a
-  shared cached geometry detaches and later tiles throw DataCloneError.
-- `vehicles.ts` finds driveway cars by the `parked-cars:<type>` mesh-name prefix.
+Design and reasoning: `docs/ASSET_FOUNDRY.md`.
+
+- `core.ts` holds the primitives:
+  - shapes: part/merge/box/profile/lathe/limb/blob/card;
+  - growth maths: GOLDEN, fibCount, fibSphere, taper;
+  - `hashf`, `variantAt`, `validGeometry`, `cached`.
+- Families:
+  - `kit.ts`: cars (+ gear), boats, planes, rocks;
+  - `flora.ts`: 7 tree species × 3 variants (`treeMeta` gives real dims), 12 garden species with growth stages, `plantMix`, `inBloom`;
+  - `fauna.ts`: 7 animals on one jointed body plan + `critterMaterial`;
+  - `furniture.ts`: mailboxes, beach set, picnic table, car gear + `gearFor`.
+- Conventions:
+  - Non-indexed; vertex `color` (white = tint by instance colour); `aPart` channels: 0 body, 1/2 fore/hind limbs, 3 lights/glow, 4 tail lights, 5 tail, 6 head, 7 wings, 8 blossom. Animals also carry `aPivot`.
+  - Front toward −z; origin on the ground or waterline.
+- Variety budget: per-instance scale/colour first (free), then discrete variants (+1 draw each), then add-on model keys, then state rebuilds. Vertex budgets are enforced in `tests/foundry.test.ts`. World garden beds use the `lite` genome.
+- **In tile builders, `.clone()` library geometry.** Pack transfers the buffers, so a shared cached geometry detaches and later tiles throw DataCloneError.
+- Placement:
+  - Choose variants by position (`variantAt`) and mixes by region/climate tables (`carMix`, `boatMix`, `plantMix`, `gearFor`). Never per-town lists.
+  - Name each InstancedMesh `family:type[:variant]`:
+    - `trees:`, `garden:`, `mailbox:`, `beach:`, `picnic:`, `parked-cars:<type>[:<gear>]`, `moored-boats:`, `rocks:` (tile props);
+    - `critter:` (wildlife);
+    - `plant:` (the player's garden).
+  - The spotting log, commissions, hints and critter habitat all find things by these prefixes. A vehicle model string may carry gear: `suv+surf`.
+- Wildlife (`src/sim/critters.ts`) is a main-thread sim within ~90 m of the walker. Habitat comes from tree instances, land cover, the ocean edge and gardens. Behaviours: wander, flee, climb, flush, drift. Animals are drawn 1.3–2× life size on purpose.
+- Grow verb (`src/ui/garden.ts`): R plants, Shift+R picks the next seed. Plants grow while you play (about 20 min) and while you're away (IndexedDB `map-game-garden`). Each bed adds a collider and clears the grass.
 
 ## Paint as you explore (`src/world/explore.ts`)
 

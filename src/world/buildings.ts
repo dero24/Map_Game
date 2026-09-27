@@ -611,7 +611,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
     if (dl > edge + 1.5) {
       const ex = st[0] + (ddx / dl) * edge, ez = st[1] + (ddz / dl) * edge;
       C.walks.push(fx, fz, ex, ez, B.kind === 'commercial' ? 2.0 : 1.1);
-      if (num && B.kind === 'house' && dl > edge + 3) {
+      if (B.kind === 'house' && dl > edge + 3) { // every house with a walk to the street gets a curbside box (props.ts picks the style, NA only)
         const mx = st[0] + (ddx / dl) * (edge + 0.5) + (-ddz / dl) * 0.9, mz = st[1] + (ddz / dl) * (edge + 0.5) + (ddx / dl) * 0.9;
         if (!C.rings.hit(mx, mz, B.ring)) C.mail.push({ x: mx, z: mz, yaw: Math.atan2(-ddx, -ddz) });
       }

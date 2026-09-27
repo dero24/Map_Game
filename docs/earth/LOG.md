@@ -2,6 +2,66 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-27 (j) — The asset foundry: variety for everything, wildlife, gardens that grow
+
+This is the `kit-variety` feature, grown into the foundry. The design and reasoning are in the new `docs/ASSET_FOUNDRY.md`.
+
+- **Foundry core** (`src/assets/core.ts`).
+  - The shared primitives: part, merge, box, profile, lathe, limb, blob, card.
+  - Growth maths: golden angle, Fibonacci counts, Fibonacci-sphere organ placement, taper.
+  - Position-hashed variants (`variantAt`), validation, and the geometry cache.
+  - `kit.ts` now builds on it.
+- **Flora** (`flora.ts`).
+  - Trees: 7 species (round, oak, shrub, pine, spruce, palm, birch) × 3 grown variants.
+    - The species is re-read by region: palms where it's warm by the sea, birches up north.
+    - LiDAR trees now scale by each variant's real `treeMeta`, and building clearance uses the real crown and trunk.
+    - Tree vertex counts are at or under the old hand-built trees (~800–1,260).
+  - Gardens: 12 species in 6 growth forms. Each has a climate weighting (`plantMix`), a bloom season from the real calendar (flipped in the south), and 8 growth stages. Blossoms open from about 60% grown.
+  - House-front beds on open ground use a `lite` genome (<900 vertices).
+- **Fauna** (`fauna.ts` + `src/sim/critters.ts`).
+  - Squirrel, rabbit, songbird, sandpiper, deer, butterfly and firefly, all on one jointed body plan (`aPivot`), animated in the vertex shader. Each species has its own gait offset and limb amplitude.
+  - A main-thread sim within ~90 m, with habitat taken from the world:
+    - squirrels at trees (they bolt up the trunk);
+    - rabbits on lawns at dawn and dusk;
+    - songbirds by day (they flush);
+    - sandpipers on the surf line;
+    - deer in woods at dawn and dusk;
+    - butterflies over gardens in summer;
+    - fireflies on summer nights.
+  - Sounds: squirrel chatter, wing flush, a deer's snort.
+  - Small animals are drawn 1.3–2× life size, because at painting scale they vanished into the grass.
+- **Furniture** (`furniture.ts`).
+  - Five mailbox styles, North American curbs only.
+    - Every house with a walk to the street now gets one; before, only houses with a mapped house number did: 1 → ~1,290 at Sea Bright.
+    - The door faces the street.
+  - Summer beaches: umbrellas, towels and chairs around the lifeguard stands.
+  - Picnic tables on greens and in parks.
+- **Car variety.**
+  - Each parked car and each car in traffic now has slightly different proportions (±3–4%), and some have sun-faded paint.
+  - Gear by `gearFor`: surfboards and kayaks near the coast, racks, roof boxes, hitch bikes.
+    - Driveway cars carry it as a model key (`parked-cars:suv:surf`). The car you take keeps it: "E drive this SUV with a surfboard".
+    - Traffic carries roof gear on per-type roof heights.
+- **Grow verb** (`src/ui/garden.ts`; CONSTRUCTION.md stage 1).
+  - R plants the region's seed (Shift+R picks another) on valid ground.
+  - It blooms after ~20 min of play and keeps growing while you're away (IndexedDB, real lat/lon).
+  - Also: map pins (❀), a commission ("Paint the … you grew"), a bloom toast + chime, a solid bed that clears the grass, and a count on the journal page.
+- **Spotting + commissions** now cover wildlife ("spotted a squirrel — 1 of 7 animal kinds") and "Paint a rabbit" style offers.
+- **Workbench** `/kit.html` is now the Asset Foundry:
+  - vehicles + gear, trees, garden plants (growth slider), animated wildlife, street + beach furniture, rocks;
+  - rendered through the game's own watercolor pass.
+
+Verified:
+- tsc clean. 107 tests pass, including the new `tests/foundry.test.ts`: every family sane / grounded / deterministic / within its vertex budget; growth monotonic; blossoms only when mature and in season; the southern-hemisphere flip; gear on the roof; surfboards only near the coast.
+- Workbench captures: trees, plants, wildlife, furniture, vehicles.
+- In-game montages at Sea Bright:
+  - house-front beds (hydrangea, sunflower, daylily …);
+  - a summer beach, a wagon with a surfboard, a picnic table on a green, a rural mailbox;
+  - wildlife in the grass;
+  - five planted seeds going from seedlings to bloom, and still there after a reload.
+- Counts at Sea Bright: trees in 7×3 variant meshes, ~1,290 mailboxes, ~6.6k garden plants, 264 umbrellas, 17 gear combinations on driveway cars.
+
+Not run here: `npm run build` and the soak (Windows toolchain). Watch the frame cost of garden beds on low-end machines. The `lite` genome and the budget test are the dials.
+
 ## 2026-09-27 (i) — Paint your walk: sketch→paint world, sketchbook + commissions, atlas map + search, hints, arrival cards, sound
 
 This is the `paint-your-walk` feature. Its source is the gameplay brainstorm: ideas 1 (the world paints in as you explore) and 2 (a sketchbook in place of a camera), plus the agreed UX list and the soundscape.

@@ -20,6 +20,8 @@ export class Atlas {
   private $ = (id: string) => document.getElementById(id)!;
   private renderT = 0;
   private searchSeq = 0;
+  /** more pins from the game (your garden) */
+  extraPins: () => Pin[] = () => [];
 
   constructor(private g: GameCtx, private com: Commissions, private stamps: () => { name: string; x: number; z: number }[]) {
     this.map = new MapView(g, this.$('atlas-map') as HTMLCanvasElement);
@@ -94,6 +96,7 @@ export class Atlas {
     for (const p of this.pages) { const [x, z] = this.g.fromLatLon(p.lat, p.lon); out.push({ x, z, kind: 'page', label: p.place, id: p.id }); }
     for (const t of this.com.targets()) out.push({ x: t.x, z: t.z, kind: 'commission', label: t.title });
     for (const s of this.stamps()) out.push({ x: s.x, z: s.z, kind: 'stamp', label: s.name });
+    out.push(...this.extraPins());
     for (const r of this.results) { const [x, z] = this.g.fromLatLon(r.lat, r.lon); out.push({ x, z, kind: 'result', label: r.name }); }
     return out;
   }

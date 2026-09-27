@@ -7,39 +7,11 @@
 // life material reads) — so it instances, packs and paints exactly like the hand-built props.
 // Conventions: metres; y up; the front (nose, bow) toward −z; origin at ground / waterline.
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeRng } from '../core/rng';
+import { TINT, part, merge, box, profile, cached } from './core';
+import { gearGeometry, type CarGear } from './furniture';
+export { TINT, part, merge } from './core';
 
-export const TINT = 0xffffff; // tintable surfaces (the instance colour paints them)
-
-export function part(g: THREE.BufferGeometry, hex: number, id = 0) {
-  const geo = g.index ? g.toNonIndexed() : g;
-  if (geo.getAttribute('uv')) geo.deleteAttribute('uv');
-  if (geo.getAttribute('uv1')) geo.deleteAttribute('uv1');
-  if (!geo.getAttribute('normal')) geo.computeVertexNormals();
-  const n = geo.attributes.position.count;
-  const c = new THREE.Color(hex);
-  const col = new Float32Array(n * 3), pa = new Float32Array(n).fill(id);
-  for (let i = 0; i < n; i++) col.set([c.r, c.g, c.b], i * 3);
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  geo.setAttribute('aPart', new THREE.BufferAttribute(pa, 1));
-  return geo;
-}
-export const merge = (parts: THREE.BufferGeometry[]) => mergeGeometries(parts)!;
-const box = (w: number, h: number, d: number, x: number, y: number, z: number) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
-
-// A side profile (z along the length, y up) extruded across the width, centred on x = 0,
-// with a small bevel so silhouettes read soft rather than boxy.
-function profile(pts: [number, number][], width: number, bevel = 0.05) {
-  const sh = new THREE.Shape();
-  pts.forEach(([z, y], i) => (i ? sh.lineTo(z, y) : sh.moveTo(z, y)));
-  const g = new THREE.ExtrudeGeometry(sh, { depth: Math.max(0.01, width - 2 * bevel), bevelEnabled: bevel > 0, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 1, curveSegments: 4 });
-  // shape (x = length, y = up), extruded along +z. rotateY(−90°) maps x → z (the authored
-  // length coordinate, bow at −z) and the extrusion z → −x; then centre across the width.
-  g.rotateY(-Math.PI / 2);
-  g.translate((width - 2 * bevel) / 2, 0, 0);
-  return g;
-}
 const wheel = (r: number, w: number, x: number, z: number) => [
   part(new THREE.CylinderGeometry(r, r, w, 12).rotateZ(Math.PI / 2).translate(x, r, z), 0x1d1e21),
   part(new THREE.CylinderGeometry(r * 0.55, r * 0.55, w + 0.02, 10).rotateZ(Math.PI / 2).translate(x, r, z), 0x9a9da2),
@@ -353,13 +325,11 @@ export function rockGeometry(type: RockType, seed = 1): THREE.BufferGeometry {
 
 // ---------------------------------------------------------------- libraries (cached)
 // A handful of canonical variants per family — each one InstancedMesh in the world.
-const cache = new Map<string, THREE.BufferGeometry>();
-const cached = (k: string, f: () => THREE.BufferGeometry) => {
-  let g = cache.get(k);
-  if (!g) cache.set(k, (g = f()));
-  return g;
-};
-export const carLib = (type: CarType) => cached('car:' + type, () => carGeometry(carRecipe(type, 1)));
+export const carLib = (type: CarType, gear?: CarGear | null) =>
+  cached(`car:${type}:${gear ?? ''}`, () => {
+    const r = carRecipe(type, 1);
+    return gear ? merge([carGeometry(r), gearGeometry(gear, r.roof, r.L, r.W, type.length)]) : carGeometry(r);
+  });
 export const boatLib = (type: BoatType) => cached('boat:' + type, () => boatGeometry(boatRecipe(type, 1)));
 export const rockLib = (type: RockType, v: number) => cached(`rock:${type}:${v}`, () => rockGeometry(type, v + 1));
 // Street mix (weights). CAR_MIX is the US default; carMix() shifts it by region + climate so the

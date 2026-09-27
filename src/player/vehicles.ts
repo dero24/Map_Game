@@ -15,6 +15,7 @@ import type { WalkWorld } from './collision';
 import { walkParams, type Walker } from './controller';
 import type { Road, Terrain } from '../world/data';
 import { activeStyle } from '../world/styles';
+import { GEAR_NAME, type CarGear } from '../assets/furniture';
 
 export type VKind = 'car' | 'boat' | 'plane';
 
@@ -56,7 +57,10 @@ function propGeo() {
 const BOAT_CYCLE: BoatType[] = ['console', 'skiff', 'cabin', 'sail', 'pontoon', 'lobster'];
 const HULLS = [0xf4f1ea, 0xeef0f0, 0x2d4a6a, 0xd9e4ea, 0x9b3b32];
 const NAME: Record<string, string> = { hatch: 'hatchback', suv: 'SUV', console: 'center-console', cabin: 'cabin cruiser', sail: 'sailboat', pontoon: 'pontoon boat', lobster: 'lobster boat', highwing: 'high-wing plane', lowwing: 'low-wing plane', seaplane: 'seaplane', biplane: 'biplane' };
-export const modelName = (m: string) => NAME[m] ?? m;
+export const modelName = (m: string) => {
+  const [base, gear] = m.split('+');
+  return (NAME[base] ?? base) + (gear && gear in GEAR_NAME ? ` with ${GEAR_NAME[gear as CarGear]}` : '');
+};
 /** Every baked driveway-car mesh in a tile (props.ts: one InstancedMesh per kit type, named 'parked-cars:<type>'). */
 function parkedMeshes(g: THREE.Object3D) {
   const out: THREE.InstancedMesh[] = [];
@@ -151,9 +155,11 @@ export class Vehicles {
     const c = color ?? CAR_COLORS[(this.seed * 7) % CAR_COLORS.length];
     const seed = this.seed++;
     if (kind === 'car') {
-      const m = (model && (CAR_TYPES as string[]).includes(model) ? model : pickFrom(carMix(activeStyle().region, activeStyle().climate), (seed * 0.618034) % 1)) as CarType;
-      model = m;
-      obj.add(new THREE.Mesh(tint(carLib(m).clone(), c), this.mat));
+      const [base, gear] = (model ?? '').split('+');
+      const m = ((CAR_TYPES as string[]).includes(base) ? base : pickFrom(carMix(activeStyle().region, activeStyle().climate), (seed * 0.618034) % 1)) as CarType;
+      const g = gear && gear in GEAR_NAME ? (gear as CarGear) : null;
+      model = g ? `${m}+${g}` : m;
+      obj.add(new THREE.Mesh(tint(carLib(m, g).clone(), c), this.mat));
     } else if (kind === 'boat') {
       const m = (model ?? BOAT_CYCLE[this.boatN++ % BOAT_CYCLE.length]) as BoatType;
       model = m;
@@ -204,7 +210,7 @@ export class Vehicles {
         if (d < r && (!best || d < best.d)) {
           e.setFromQuaternion(q, 'YXZ');
           if (im.instanceColor) im.getColorAt(i, c);
-          best = { key, im, i, x: p.x, z: p.z, yaw: e.y, color: im.instanceColor ? c.getHex() : 0xb9bcc0, model: im.name.split(':')[1] ?? 'sedan', d };
+          best = { key, im, i, x: p.x, z: p.z, yaw: e.y, color: im.instanceColor ? c.getHex() : 0xb9bcc0, model: (im.name.split(':')[1] ?? 'sedan') + (im.name.split(':')[2] ? '+' + im.name.split(':')[2] : ''), d };
         }
       }
     }

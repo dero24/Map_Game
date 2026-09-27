@@ -3,20 +3,26 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Asset kit — map_game</title>
+<title>Asset foundry — map_game</title>
 <style>
   html, body { margin: 0; height: 100%; background: #f5efe1; font: 14px Georgia, serif; color: #3a3346; overflow: hidden; }
   #bar { position: fixed; top: 10px; left: 10px; right: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; z-index: 2; }
-  #bar button, #bar select, #bar input { font: inherit; padding: 5px 10px; border-radius: 10px; border: 1px solid #b9ae98; background: #fbf7ec; color: #3a3346; }
-  #bar .t { font-size: 18px; margin-right: 8px; }
+  #bar button, #bar select, #bar input[type=number] { font: inherit; padding: 5px 10px; border-radius: 10px; border: 1px solid #b9ae98; background: #fbf7ec; color: #3a3346; }
+  #bar .t { font-size: 18px; margin-right: 8px; font-style: italic; }
+  #bar label { display: inline-flex; gap: 6px; align-items: center; }
   canvas { display: block; }
 </style>
 </head>
 <body>
 <div id="bar">
-  <span class="t">Asset kit</span>
-  <select id="family"><option value="all">everything</option><option>cars</option><option>boats</option><option>planes</option><option>rocks</option></select>
+  <span class="t">Asset foundry</span>
+  <select id="family">
+    <option value="all">everything</option><option value="vehicles">vehicles + gear</option><option value="trees">trees</option>
+    <option value="plants">garden plants</option><option value="wildlife">wildlife</option><option value="furniture">street + beach</option><option value="rocks">rocks</option>
+  </select>
   <label>seed <input id="seed" type="number" value="1" min="1" style="width:70px" /></label>
+  <label>growth <input id="growth" type="range" min="0.05" max="1" step="0.05" value="1" /></label>
+  <label><input id="painted" type="checkbox" checked /> painted</label>
   <button id="reroll">new seeds</button>
   <button id="glb">export .glb</button>
 </div>

@@ -5,7 +5,7 @@
 // commissions and you.
 import type { GameCtx } from './ctx';
 
-export interface Pin { x: number; z: number; kind: 'page' | 'commission' | 'result' | 'stamp'; label: string; id?: string }
+export interface Pin { x: number; z: number; kind: 'page' | 'commission' | 'result' | 'stamp' | 'plant'; label: string; id?: string }
 
 const PAPER = '#f1e9d6';
 const INK = 'rgba(58,51,70,';
@@ -209,8 +209,8 @@ export class MapView {
       const [a, b] = this.toScreen(p.x, p.z);
       if (a < -20 || b < -20 || a > W + 20 || b > H + 20) continue;
       this.lastPins.push({ p, sx: a, sy: b });
-      const glyph = p.kind === 'page' ? '▣' : p.kind === 'commission' ? '✧' : p.kind === 'result' ? '●' : '✦';
-      ctx.fillStyle = p.kind === 'page' ? '#3a5a78' : p.kind === 'result' ? '#2e2a3a' : '#a0503c';
+      const glyph = p.kind === 'page' ? '▣' : p.kind === 'commission' ? '✧' : p.kind === 'result' ? '●' : p.kind === 'plant' ? '❀' : '✦';
+      ctx.fillStyle = p.kind === 'page' ? '#3a5a78' : p.kind === 'result' ? '#2e2a3a' : p.kind === 'plant' ? '#4f7a36' : '#a0503c';
       ctx.font = `${Math.round((p.kind === 'commission' ? 20 : 15) * k)}px Georgia, serif`;
       ctx.fillText(glyph, a, b + 5 * k);
       if ((p.kind === 'commission' || p.kind === 'result') ? s > 0.15 : p.kind === 'stamp' && s > 1.6) {

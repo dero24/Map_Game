@@ -12,7 +12,7 @@ import { styleFor, setActiveStyle } from './world/styles';
 import { Vehicles } from './player/vehicles';
 import { GrassField } from './world/grass';
 import { buildSky, skyUniforms } from './world/sky';
-import { LifeClient, buildLifeBase, buildLifeInit } from './sim/life';
+import { LifeClient, buildLifeBase, buildLifeInit, lifeParams } from './sim/life';
 import { Ambience } from './audio/ambience';
 import { Journal } from './ui/journal';
 import { Explore } from './world/explore';
@@ -23,6 +23,9 @@ import { Hints } from './ui/hints';
 import { Arrival } from './ui/arrival';
 import type { GameCtx } from './ui/ctx';
 import { modelName } from './player/vehicles';
+import { Critters } from './sim/critters';
+import { Garden } from './ui/garden';
+import { SPECIES } from './assets/flora';
 import { Interiors, type Plan } from './world/interiors';
 import { applyAtmosphere, type Weather } from './world/atmosphere';
 import { U } from './render/shared';
@@ -390,6 +393,8 @@ async function main() {
       };
       for (const t of stream.loaded.values()) for (const c of t.group.children) scan(c);
       for (const c of life.group.children) scan(c);
+      for (const c of critters.group.children) scan(c);
+      for (const c of garden.group.children) scan(c);
       if (playerGroup) for (const c of playerGroup.children) scan(c);
       return out;
     },
@@ -404,11 +409,25 @@ async function main() {
     uiOpen: () => !$('intro').classList.contains('hidden') || atlas.open,
     lock: () => { if (!isTouch) walker.lock(); },
   };
+  // wildlife + your garden (assets/fauna.ts, assets/flora.ts)
+  const critters = new Critters(world.terrain, walk);
+  worldRoot.add(critters.group);
+  const garden = new Garden(ctx, walk, regionLook.climate);
+  worldRoot.add(garden.group);
+  void garden.load();
+  critters.onEvent = (kind, what, pan, dist) => ambience?.critter(kind, what, pan, dist);
+  garden.onClear = (x, z) => grass.invalidateBox({ x0: x - 3, z0: z - 3, x1: x + 3, z1: z + 3 });
+  garden.onBloom = (p) => { toast(`your ${SPECIES[p.sp].label} is in bloom ✿`); ambience?.ui('chime'); };
+  // habitat lookups for the critters: trees + garden beds near the walker, refreshed every 2 s
+  let habitatT = 0, nearTrees: { x: number; z: number }[] = [], nearGardens: { x: number; z: number }[] = [];
+  const within = (list: { x: number; z: number }[], x: number, z: number, r: number) => list.filter((p) => Math.abs(p.x - x) < r && Math.abs(p.z - z) < r && Math.hypot(p.x - x, p.z - z) < r);
+  const month = new Date().getMonth() + 1, south = json.origin.lat < 0;
   const commissions = new Commissions(ctx);
   void commissions.load();
   const photo = new PhotoMode(ctx, commissions);
   const atlas = new Atlas(ctx, commissions, () => journal.stamps());
   photo.onSaved = () => void atlas.refreshPages();
+  atlas.extraPins = () => garden.positions().map((p) => ({ x: p.x, z: p.z, kind: 'plant' as const, label: SPECIES[p.sp].label }));
   const arrival = new Arrival(ctx, { name: townName, sub: meta?.sub ?? '' });
   const hints = new Hints();
   let brushT = 0;
@@ -427,6 +446,7 @@ async function main() {
   hints.add(() => (walkParams.fly && !vehicles.driving ? { key: 'F', text: 'land · Space / C up and down · wheel for speed', pri: 3, once: 'fly' } : null));
   hints.add(() => (!vehicles.driving && !walkParams.fly && (world.terrain.oceanDistAt(walker.x, walker.z) < 70 || world.terrain.sdfAt(walker.x, walker.z) < 25) ? { key: 'B', text: 'call a boat', pri: 2, once: 'boat' } : null));
   hints.add(() => (simTime > 12 ? { key: 'M', text: 'your map, sketchbook & commissions', pri: 1, once: 'atlas' } : null));
+  hints.add(() => (simTime > 70 && !vehicles.driving && !walkParams.fly && world.terrain.coverAt(walker.x, walker.z) === 30 ? { key: 'R', text: `plant a ${SPECIES[garden.nextSpecies].label} here (Shift+R: another seed)`, pri: 1, once: 'plant' } : null));
   hints.add(() => (simTime > 45 ? { key: 'P', text: 'frame a view and paint it into your sketchbook', pri: 1, once: 'photo' } : null));
   hints.add(() => (simTime > 100 ? { key: 'G', text: 'go anywhere — search a town or an address', pri: 1, once: 'go' } : null));
 
@@ -611,7 +631,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { walker, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream, vehicles, grass, explore, commissions, photo, atlas, arrival, hints, setHour, teleport: teleportTo, get spawn() { return spawn; }, at: atPos };
+  (window as unknown as Record<string, unknown>).__GAME__ = { walker, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream, vehicles, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, setHour, teleport: teleportTo, get spawn() { return spawn; }, at: atPos };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);
@@ -665,6 +685,7 @@ async function main() {
     if (e.code === 'KeyP' && playing && !atlas.open && !vehicles.driving) photo.toggle();
     if (e.code === 'KeyM' && playing) { if (photo.active) photo.toggle(false); atlas.toggle(); }
     if (e.code === 'KeyG' && playing && !atlas.open) { if (photo.active) photo.toggle(false); atlas.focusSearch(); }
+    if (e.code === 'KeyR' && playing && !atlas.open && !photo.active && !vehicles.driving && !e.repeat) { if (e.shiftKey) garden.cycle(); else garden.plant(); }
     if (e.code === 'Escape' && atlas.open) atlas.toggle(false);
   });
   // Touch buttons (shown by body.touch): fly toggle, go-anywhere search, atlas, photo mode.
@@ -845,7 +866,7 @@ async function main() {
     if (atlas.open && (journalTimer -= dt) < 0) {
       journalTimer = 0.5;
       const st = explore.stats();
-      journal.render(`<b>${st.km2 < 1 ? st.km2.toFixed(3) : st.km2.toFixed(2)} km²</b> painted by your walks (${(st.session * (8 * Math.cos((json.origin.lat * Math.PI) / 180)) ** 2 / 1e6).toFixed(3)} km² today)<br>${commissions.state.done.length} commissions painted · ${Object.values(commissions.state.spotted).reduce((a, l) => a + l.length, 0)} vehicle types spotted<br>`);
+      journal.render(`<b>${st.km2 < 1 ? st.km2.toFixed(3) : st.km2.toFixed(2)} km²</b> painted by your walks (${(st.session * (8 * Math.cos((json.origin.lat * Math.PI) / 180)) ** 2 / 1e6).toFixed(3)} km² today)<br>${commissions.state.done.length} commissions painted · ${Object.values(commissions.state.spotted).reduce((a, l) => a + l.length, 0)} vehicle and animal types spotted · ${garden.plants.length} plants in your garden<br>`);
     }
     brushT -= dt;
     const blocked = !$('intro').classList.contains('hidden') || atlas.open;
@@ -853,6 +874,16 @@ async function main() {
     hints.update(dt, blocked || photo.active);
     arrival.update(dt, blocked || photo.active);
     atlas.update(dt);
+    // wildlife + garden
+    if ((habitatT -= dt) <= 0) {
+      habitatT = 2;
+      nearTrees = ctx.instances('trees:', walker.x, walker.z, 130).filter((t) => !t.name.includes(':shrub:'));
+      nearGardens = [...ctx.instances('garden:', walker.x, walker.z, 130), ...garden.positions().filter((p) => p.g > 0.5)];
+      life.coastal = world.terrain.oceanDistAt(walker.x, walker.z) < 5000;
+    }
+    critters.enabled = lifeParams.enabled && !interiors.indoors;
+    critters.update(dt, walker.x, walker.z, { hour: timeParams.hour, night: U.uNight.value, month, south, wind: weather.wind, camFwd: fwd, trees: (x, z, r) => within(nearTrees, x, z, r), gardens: (x, z, r) => within(nearGardens, x, z, r) });
+    garden.update(dt, month, south);
     frames++;
     if (frames === 3) (window as unknown as Record<string, unknown>).__READY__ = true;
     (window as unknown as Record<string, unknown>).__RENDER_INFO__ = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, errors: errors.size, frames };
