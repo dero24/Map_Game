@@ -15,6 +15,7 @@ export class Arrival {
   private hideT = 0;
   private force = false;
   locality = '';
+  region = '';
 
   constructor(private g: GameCtx, private fallback: { name: string; sub: string }) {
     this.el = document.getElementById('arrival')!;
@@ -46,6 +47,7 @@ export class Arrival {
         this.pendingName = '';
         this.cur = name;
         this.locality = name;
+        this.region = region;
         if (!blocked) this.show(name, region, first);
       } else if (wasForced && !blocked) this.show(name, region, false);
       this.force = false;

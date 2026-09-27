@@ -6,9 +6,8 @@ import { MapView, type Pin } from './mapview';
 import { listPages, deletePage, type Page } from './book';
 import type { Commissions } from './commissions';
 import { searchRemote, searchLocal, parseLatLon, type Place } from './geo';
-import { modelName } from '../player/vehicles';
 
-type Tab = 'map' | 'book' | 'jobs' | 'journal';
+type Tab = 'map' | 'book' | 'jobs' | 'almanac' | 'journal';
 
 export class Atlas {
   open = false;
@@ -47,7 +46,7 @@ export class Atlas {
     });
     this.$('atlas-here').onclick = () => this.map.centerOn(g.walker.x, g.walker.z);
     this.$('lb-close').onclick = () => this.$('lightbox').classList.add('hidden');
-    com.onChange = () => { if (this.open && this.tab === 'jobs') this.drawJobs(); this.map.invalidate(); };
+    com.onChange = () => { if (this.open && this.tab === 'jobs') this.drawJobs(); if (this.open && this.tab === 'almanac') this.drawAlmanac(); this.map.invalidate(); };
   }
 
   toggle(force?: boolean, tab?: Tab) {
@@ -79,6 +78,7 @@ export class Atlas {
     for (const p of document.querySelectorAll<HTMLElement>('#atlas .page')) p.classList.toggle('hidden', p.id !== `page-${tab}`);
     if (tab === 'book') this.drawBook();
     if (tab === 'jobs') this.drawJobs();
+    if (tab === 'almanac') this.drawAlmanac();
     if (tab === 'map') this.map.invalidate();
   }
 
@@ -227,8 +227,48 @@ export class Atlas {
       return `<li><b>✧ ${esc(a.title)}</b><span>${esc(a.hint)}${where ? ` · ${where}` : ''}</span></li>`;
     }).join('') || '<li class="note">new commissions appear as you explore</li>';
     const done = this.com.state.done.slice(-12).reverse().map((d) => `<li class="done">✦ ${esc(d.title.replace(/^Paint /, ''))}</li>`).join('');
-    const spot = this.com.spottedSummary().map((f) => `<div class="spot"><h4>${f.label}s · ${f.seen.length} of ${f.all.length}</h4>${f.all.map((t) => (f.seen.includes(t) ? `<span class="chip">${esc(modelName(t))}</span>` : '<span class="chip unseen">?</span>')).join('')}</div>`).join('');
-    el.innerHTML = `<div class="cols"><div><h3>Commissions</h3><ul class="jobs">${act}</ul>${done ? `<h3>Completed</h3><ul class="jobs">${done}</ul>` : ''}</div><div><h3>Spotted</h3><p class="note">Walk near a car, boat or plane (and look at it) to note its type.</p>${spot}</div></div>`;
+    const spot = this.com.spottedSummary().map((f) => `<div class="spot"><h4>${f.label}s · ${f.seen.length} of ${f.all.length}</h4></div>`).join('');
+    el.innerHTML = `<div class="cols"><div><h3>Commissions</h3><ul class="jobs">${act}</ul>${done ? `<h3>Completed</h3><ul class="jobs">${done}</ul>` : ''}</div><div><h3>Spotted</h3><p class="note">Every new kind you notice becomes a card in the Almanac.</p>${spot}</div></div>`;
+  }
+
+  // ---------------- the Almanac: a field guide of everything you've noticed, stamped by town ----
+  private thumbUrl(p: Page) {
+    let u = this.urls.get(p.id);
+    if (!u) this.urls.set(p.id, (u = URL.createObjectURL(p.thumb)));
+    return u;
+  }
+  private drawAlmanac() {
+    const el = this.$('page-almanac');
+    const fams = this.com.almanac();
+    const all = fams.reduce((n, f) => n + f.entries.length, 0);
+    const found = fams.reduce((n, f) => n + f.entries.filter((e) => e.seen).length, 0);
+    const painted = fams.reduce((n, f) => n + f.entries.filter((e) => e.seen?.painted).length, 0);
+    const region = this.g.region(), town = this.g.locality();
+    const places = this.com.placeCards();
+    const here = region ? fams.reduce((n, f) => n + f.entries.filter((e) => e.seen && e.seen.region === region).length, 0) + places.filter((p) => p.region === region).length : 0;
+    const stamps = Object.values(this.com.state.stamps ?? {}).sort((a, b) => a.t - b.t);
+    const date = (t: number) => (t ? new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '');
+    const stampHtml = stamps.length
+      ? stamps.map((s) => `<div class="stamp" title="${esc(s.region)}"><b>${esc(s.town)}</b><span>${esc(s.region.split(',')[0] ?? '')}</span><i>${date(s.t)}</i></div>`).join('')
+      : '<p class="note">walk into a town to collect its stamp</p>';
+    const where = (s: { town: string; t: number }) => `${s.town ? `first seen in ${esc(s.town)}` : 'seen'}${s.t ? ` · ${date(s.t)}` : ''}`;
+    const cards = fams.map((f) => {
+      const n = f.entries.filter((e) => e.seen?.painted).length, sk = f.entries.filter((e) => e.seen && !e.seen.painted).length;
+      const list = f.entries.map((e) => e.seen
+        ? `<figure class="card${e.seen.painted ? '' : ' pencil'}"><img alt="" src="${this.g.cardArt(f.family, e.type, !e.seen.painted)}"><figcaption><b>${esc(e.name)}</b><span>${e.seen.painted ? where(e.seen) : 'sketched — paint one to finish'}</span></figcaption></figure>`
+        : `<figure class="card unseen"><div class="q">?</div><figcaption><b>not yet seen</b><span>${esc(f.label)}</span></figcaption></figure>`).join('');
+      return `<section><h4>${esc(f.label)}s · ${n} painted${sk ? ` · ${sk} sketched` : ''} · of ${f.entries.length}</h4><div class="cards">${list}</div></section>`;
+    }).join('');
+    const placeHtml = places.length
+      ? places.map((p) => {
+          const pg = p.page ? this.pages.find((q) => q.id === p.page) : undefined;
+          const url = pg ? this.thumbUrl(pg) : '';
+          return url
+            ? `<figure class="card place"><img alt="" src="${url}"><figcaption><b>${esc(p.name ?? '')}</b><span>${esc(p.kind ?? 'place')} · ${where(p)}</span></figcaption></figure>`
+            : `<figure class="card place pencil"><div class="q name">${esc(p.name ?? '')}</div><figcaption><b>${esc(p.kind ?? 'place')}</b><span>sketched — paint it to finish</span></figcaption></figure>`;
+        }).join('')
+      : '<p class="note">named places you walk up to (churches, lighthouses, shops, beaches…) become cards; paint one and your painting is its card</p>';
+    el.innerHTML = `<div class="almanac"><header><h3>Almanac · ${painted} painted · ${found - painted} sketched · of ${all}</h3>${region ? `<p class="note">${here} found in ${esc(region.split(',')[0])}${town ? ` · you're in ${esc(town)}` : ''} · ${places.length} places</p>` : ''}</header><div class="stamps">${stampHtml}</div><section><h4>places · ${places.filter((p) => p.painted).length} painted of ${places.length} found</h4><div class="cards">${placeHtml}</div></section>${cards}</div>`;
   }
 }
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);

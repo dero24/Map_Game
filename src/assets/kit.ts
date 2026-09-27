@@ -12,10 +12,17 @@ import { TINT, part, merge, box, profile, cached } from './core';
 import { gearGeometry, type CarGear } from './furniture';
 export { TINT, part, merge } from './core';
 
-const wheel = (r: number, w: number, x: number, z: number) => [
-  part(new THREE.CylinderGeometry(r, r, w, 12).rotateZ(Math.PI / 2).translate(x, r, z), 0x1d1e21),
-  part(new THREE.CylinderGeometry(r * 0.55, r * 0.55, w + 0.02, 10).rotateZ(Math.PI / 2).translate(x, r, z), 0x9a9da2),
-];
+// A wheel: a round tyre (open tread + outer sidewall) with the rim recessed into the sidewall,
+// never a proud disc — the difference between "made" and "blocked out" at arm's length.
+const wheel = (r: number, w: number, x: number, z: number) => {
+  const side = Math.sign(x) || 1, out: THREE.BufferGeometry[] = [];
+  out.push(part(new THREE.CylinderGeometry(r, r, w, 14, 1, true).rotateZ(Math.PI / 2).translate(x, r, z), 0x1d1e21)); // tread
+  out.push(part(new THREE.RingGeometry(r * 0.62, r, 14, 1).rotateY((side * Math.PI) / 2).translate(x + (side * w) / 2, r, z), 0x232427)); // outer sidewall
+  out.push(part(new THREE.CylinderGeometry(r * 0.62, r * 0.62, 0.04, 12, 1, true).rotateZ(Math.PI / 2).translate(x + side * (w / 2 - 0.02), r, z), 0x2a2b2e)); // the rim's lip
+  out.push(part(new THREE.CircleGeometry(r * 0.62, 12).rotateY((side * Math.PI) / 2).translate(x + side * (w / 2 - 0.04), r, z), 0x8e9196)); // rim, recessed
+  out.push(part(new THREE.CircleGeometry(r * 0.16, 6).rotateY((side * Math.PI) / 2).translate(x + side * (w / 2 - 0.035), r, z), 0x5a5d62)); // hub
+  return out;
+};
 
 // ---------------------------------------------------------------- cars
 export type CarType = 'sedan' | 'hatch' | 'wagon' | 'suv' | 'pickup' | 'van' | 'coupe' | 'jeep';
@@ -63,13 +70,17 @@ export function carGeometry(c: CarRecipe): THREE.BufferGeometry {
     [zf + 0.05, 0.28], [zf, 0.45], [zf + 0.02, noseY - 0.08], [zf + 0.25, noseY],
     [zf + c.hood, belt], [zr - 0.1, belt], [zr, belt - 0.12], [zr, 0.45], [zr - 0.05, 0.28],
   ];
-  const parts: THREE.BufferGeometry[] = [part(profile(lower, W, 0.06), TINT)];
+  // a softer, rounder bevel (0.1, two segments): inset the outline by the extra 0.04 so the body
+  // keeps its size and the bumpers stay proud of it
+  const k = (L / 2 - 0.04) / (L / 2);
+  const lowerIn = lower.map(([z, y]): [number, number] => [z * k, y < 0.5 ? y + 0.04 : y - 0.04]);
+  const parts: THREE.BufferGeometry[] = [part(profile(lowerIn, W, 0.1, 2), TINT)];
   // greenhouse: glass trapezoid from windshield base to the back of the cabin, roof slab on top
   const zw = zf + c.hood; // windshield base
   const zrear = c.rear === 'box' || c.rear === 'hatch' ? zr - 0.08 : zr - c.deck - 0.12;
   const zRoof0 = zw + c.windshield, zRoof1 = Math.max(zRoof0 + 0.4, zrear - c.rearGlass);
   const glass: [number, number][] = [[zw, belt - 0.02], [zRoof0, roof - 0.06], [zRoof1, roof - 0.06], [zrear, belt - 0.02]];
-  parts.push(part(profile(glass, W - 0.16, 0.03), 0x2a3440));
+  parts.push(part(profile(glass, W - 0.24, 0.03), 0x2a3440)); // glass set in from the body side
   parts.push(part(profile([[zRoof0 - 0.05, roof - 0.07], [zRoof0 + 0.05, roof], [zRoof1 - 0.05, roof], [zRoof1 + 0.05, roof - 0.07]], W - 0.1, 0.03), TINT));
   // pillars between front and rear side windows (a B-pillar keeps it from reading as a bubble)
   const bz = (zRoof0 + zRoof1) / 2;
@@ -96,7 +107,12 @@ export function carGeometry(c: CarRecipe): THREE.BufferGeometry {
   }
   // wheels at the axle positions implied by the overhangs
   const af = zf + Math.min(0.95, L * 0.19), ar = zr - Math.min(1.05, L * 0.21);
-  for (const s of [-1, 1]) for (const z of [af, ar]) parts.push(...wheel(R, 0.24, s * (W / 2 - 0.12), z));
+  for (const s of [-1, 1])
+    for (const z of [af, ar]) {
+      parts.push(...wheel(R, 0.24, s * (W / 2 - 0.1), z));
+      // a dark wheel arch just proud of the body side, behind the tyre face
+      parts.push(part(new THREE.CircleGeometry(R + 0.07, 10, 0, Math.PI).rotateY((s * Math.PI) / 2).translate(s * (W / 2 + 0.004), R, z), 0x151618));
+    }
   return merge(parts);
 }
 

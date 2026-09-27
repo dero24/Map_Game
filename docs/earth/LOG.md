@@ -2,6 +2,82 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-27 (k) — The AAA look + play pass: five review rounds (PASS), people, the Almanac, a persistent town
+
+This session came from user feedback:
+- the distant pencil sketch looked broken;
+- the watercolour filter smeared blotches over the grass that moved with the camera;
+- assets and interiors should look better up close;
+- the defaults should be the best without touching sliders;
+- traffic and people kept resetting or vanishing while driving.
+
+An expert reviewer subagent (persona: Nintendo EAD / Rockstar North) judged four rounds of
+fixed-pose montages. Scores went 6 → 7 → 7.5 → 8 → **8.5 PASS** (the hero region is cleared for scale-out; interiors and downtown are the carried-forward gaps). The verdicts are in `docs/earth/REVIEWER.md`.
+
+- **Look (post / lighting)**
+  - The pencil hatching is gone. "Paint as you explore" is a pale first wash only within ~160 m
+    (`sketchAmt` fades by camera distance), so the horizon is always finished watercolour. The
+    atlas map keeps pencil for unvisited places.
+  - Pigment turbulence is world-anchored and luminance-only. That was the real cause of the
+    swimming, tinted blotches.
+  - Depth-adaptive Kuwahara.
+  - A hue-shift shadow glaze replaces the dark multiply ("mud").
+  - Tighter terminator; less and greyer sky fill; exposure 0.9 / saturation 1.12.
+  - Water strokes use world-fixed frames (the radial fan is gone).
+  - Roofs: gamut 75–260° → warm grey, plus a daytime desaturation in the roof shader.
+  - Interior daylight falls off from the outer walls; room edges are darker.
+  - Lamp pools light the street relative to the local ground, so streamed DEM towns get pools.
+    Pools are `max(albedo, 0.3)`, there are more lamps on rank-3+ streets, and pools are larger.
+- **Grass**
+  - Towns are mown (built cells and non-wild cover); meadow grass only in open country.
+  - Greens are desaturated ×0.7, with roots in the lawn wash.
+  - Blades write depth plus alpha 0, and the composite masks ink by scene alpha.
+  - Lawn cells are denser and tinted toward the wash; the ground adds a mown stipple.
+- **Ground**
+  - Paint tables at real reflectance: asphalt #55575b, sidewalk #b3ad9f, sand #dccb9f, and so on.
+  - Sand ripples, a wrack line and footprints come from the shore distance field.
+- **Foundry**
+  - New `people.ts`: one jointed person (~1.4k verts) with GPU-chosen skin, hair and trousers, 5
+    hairstyles, and shorts/sleeves by climate × season. Knee flex, arm swing, idle sway. Tested.
+  - `blob()` writes ellipsoid normals.
+  - Trees: crown-sphere normals, underside AO and self-shadow lift. Pine has three overlapping
+    tiers; round/oak crowns skirt their forks. Street trees are broadleaf in built cells.
+  - Cars: recessed rims, round treads, wheel arches, softer bevel, inset glass.
+  - Squirrel tail is one plume; the deer has a forward neck and two-part legs.
+- **Lot dressing (NA)**
+  - A generated drive with a parked car where the map has none (`buildings.ts` `drives` →
+    `props.ts`).
+  - `fence:picket` runs beside hedges.
+- **The Almanac** (new atlas tab; `commissions.ts`, `cardArt.ts`)
+  - 44 species/model cards across cars, boats, planes, wildlife, trees and garden plants.
+  - Spotting draws a **pencil** card. Painting the subject (photo mode, in frame) colours it
+    with a watercolour plate rendered from the real foundry model.
+  - **Place cards** come from named POIs and buildings, and your painting becomes the card.
+  - One stamp per town (reverse geocoder), and a "found in <county>" count.
+- **Persistence**
+  - Streaming no longer resets life. The worker takes a `regraph` message and `LifeSim.adopt`
+    snaps every car and walker onto the new graph by position. Tested: nobody jumps, everyone
+    is kept.
+  - Parked player vehicles and taken driveway cars persist across sessions (localStorage,
+    real lat/lon).
+- **Defaults**
+  - The settings panel is hidden (the backquote key opens it).
+  - Settings persist as diffs against the defaults (v3), so improved defaults reach everyone.
+- **Harness** (`tools/review-shots.js`)
+  - 16 fixed poses (a/b/c montages).
+  - Waits for streaming; searches for a clear view; places the camera at the street edge;
+    follows a live walker.
+- **Backlog:** `docs/IMMERSION_BACKLOG.md` is the exhaustive list for the 48-state scale-out.
+
+Verified:
+- `tsc` is clean and 110 tests pass (a vitest shim in the cloud mirror; the Windows toolchain
+  is the user's).
+- Montages r1–r9 were reviewed; card sheets are in `shots/almanac-cards*.jpg`.
+
+Next (the reviewer's amended order): boot GPU benchmark → streamed-parity harness on 3 random
+US towns → Almanac regional sets + streamed POIs → Local Plates + interiors → hero region 02
+(desert SW). The next review opens with the four carried-forward checks in REVIEWER.md.
+
 ## 2026-09-27 (j) — The asset foundry: variety for everything, wildlife, gardens that grow
 
 This is the `kit-variety` feature, grown into the foundry. The design and reasoning are in the new `docs/ASSET_FOUNDRY.md`.

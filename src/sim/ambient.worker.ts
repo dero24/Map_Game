@@ -62,6 +62,9 @@ ctx.onmessage = (e: MessageEvent) => {
     sim = new LifeSim(init);
     ctx.postMessage({ kind: 'ready', mode });
     tick();
+  } else if (d.kind === 'regraph' && sim) {
+    // new tiles streamed in: same worker, same agents, a bigger road graph
+    sim = new LifeSim(d.init as LifeInit, sim);
   } else if (d.kind === 'return') {
     pool.push(d.buf as ArrayBuffer);
   } else if (d.kind === 'env' && mode === 'copy') {

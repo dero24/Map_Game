@@ -30,7 +30,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
 
   if (kind === 'round' || kind === 'oak' || kind === 'birch') {
     const oak = kind === 'oak', birch = kind === 'birch';
-    const th = (oak ? 3.6 : birch ? 5.2 : 4.2) + j(0.5);
+    const th = (oak ? 3.6 : birch ? 4.4 : 4.2) + j(0.5);
     trunkR = oak ? 0.38 : birch ? 0.16 : 0.28;
     const lean = V3(j(0.35), 0, j(0.35));
     const top = V3(lean.x, th, lean.z);
@@ -54,7 +54,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     }
     // crown: lobes on a Fibonacci sphere around the fork tips, smaller toward the top
     const rx = oak ? 3.5 : birch ? 1.9 : 2.7, ry = oak ? 1.7 : birch ? 2.6 : 2.2;
-    const cy = top.y + (oak ? 1.6 : birch ? 2.4 : 2.1);
+    const cy = top.y + (oak ? 1.1 : birch ? 1.9 : 1.6); // low enough that the crown skirts over the forks
     const n = oak ? 8 : birch ? 8 : 6;
     for (let i = 0; i < n; i++) {
       const u = fibSphere(i, n, -0.35, r.float() * 6);
@@ -63,6 +63,11 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
       lobe(rad * 1.06, c, 100 + v * 17 + i, oak ? 0.62 : birch ? 1.0 : 0.85, 0);
     }
     lobe(oak ? 2.6 : birch ? 1.2 : 2.3, V3(lean.x, cy, lean.z), 7 + v, oak ? 0.55 : 0.85);
+    // two low skirt lobes hide the bare slingshot of the scaffold forks
+    for (let k = 0; k < 2; k++) {
+      const a = k * Math.PI + r.float() * 1.5;
+      lobe((oak ? 1.7 : birch ? 0.8 : 1.35) * (0.9 + r.float() * 0.2), V3(lean.x + Math.cos(a) * rx * 0.45, top.y + 0.3, lean.z + Math.sin(a) * rx * 0.45), 150 + v * 5 + k, 0.7, 0);
+    }
   } else if (kind === 'shrub') {
     trunkR = 0.1;
     const stems = fibCount(r.float(), 1, 2);
@@ -77,20 +82,37 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     }
     lobe(1.25, V3(0, 1.5, 0), 211 + v);
   } else if (kind === 'pine') {
-    // a coastal pitch pine: long bare, slightly kinked trunk, a windswept flat-topped crown
+    // a coastal pitch pine: kinked trunk, a windswept flat-topped crown that starts well down the
+    // trunk (open, clumped tufts), and a couple of lower limbs with their own tufts
     trunkR = 0.24;
     const kink = V3(j(0.4), 3.6, j(0.4)), top = V3(kink.x + j(0.6), 7.0 + j(0.5), kink.z + j(0.6));
     wood.push(part(limb(V3(0, -0.3, 0), kink, trunkR, trunkR * 0.8, 6), BARK_DARK), part(limb(kink, top, trunkR * 0.8, trunkR * 0.45, 6), BARK_DARK));
     const wind = r.float() * Math.PI * 2;
-    const n = 5;
-    for (let i = 0; i < n; i++) {
-      const a = i * GOLDEN + wind;
-      const d = 0.6 + (i / n) * 1.6;
-      const c = V3(top.x + Math.cos(a) * d + Math.cos(wind) * 0.6, top.y + 0.9 - (i / n) * 1.2 + j(0.2), top.z + Math.sin(a) * d + Math.sin(wind) * 0.6);
-      wood.push(part(limb(top.clone().add(V3(0, -1, 0)), c, 0.1, 0.05, 3), BARK_DARK));
-      lobe(1.35 * taper(i / n, 0.6) + 0.3, c, 300 + v * 11 + i, 0.55, 0);
+    // three overlapping tiers of clumped tufts (never separate pancakes with sky between them):
+    // each tuft's radius ≥ 0.7 × the tier spacing, tufts staggered ±0.6 m, leaning downwind
+    const tiers = 3, gap = 1.15;
+    for (let t = 0; t < tiers; t++) {
+      const y = top.y - (tiers - 1 - t) * gap;
+      const spread = 1.35 - t * 0.3;
+      for (let k = 0; k < 3; k++) {
+        const a = wind + t * GOLDEN + (k / 3) * Math.PI * 2 + j(0.3);
+        const c = V3(top.x + Math.cos(a) * spread + Math.cos(wind) * 0.45 + j(0.6) * 0.5, y + j(0.25), top.z + Math.sin(a) * spread + Math.sin(wind) * 0.45 + j(0.6) * 0.5);
+        wood.push(part(limb(V3(top.x, y - 0.5, top.z), c, 0.09, 0.045, 3), BARK_DARK));
+        lobe(Math.max(0.7 * gap * 1.25, 1.2 - t * 0.12) + r.float() * 0.12, c, 300 + v * 11 + t * 3 + k, 0.8, 0);
+      }
     }
-    lobe(1.5, top.clone().add(V3(0, 1.0, 0)), 311 + v, 0.6);
+    // one or two lower limbs whose tufts tuck up under the crown (overlapping it, no sky gap)
+    const stubs = 1 + (v % 2);
+    for (let i = 0; i < stubs; i++) {
+      const a = wind + Math.PI + i * GOLDEN;
+      const y = top.y - 3.5 + i * 0.45 + j(0.15);
+      const f = Math.min(1, y / 3.6);
+      const from = V3(kink.x * f + (top.x - kink.x) * Math.max(0, (y - 3.6) / (top.y - 3.6)), y, kink.z * f + (top.z - kink.z) * Math.max(0, (y - 3.6) / (top.y - 3.6)));
+      const tip = from.clone().add(V3(Math.cos(a) * 1.15, 0.45, Math.sin(a) * 1.15));
+      wood.push(part(limb(from, tip, 0.08, 0.04, 3), BARK_DARK));
+      lobe(0.95 + r.float() * 0.15, tip.clone().add(V3(0, 0.25, 0)), 320 + v * 7 + i, 0.6, 0);
+    }
+    lobe(1.6, top.clone().add(V3(Math.cos(wind) * 0.4, 0.55, Math.sin(wind) * 0.4)), 311 + v, 0.62); // swallows the upper tier
   } else if (kind === 'spruce') {
     // conical tiers — a Fibonacci count of whorls, each a ring of drooping lobes
     trunkR = 0.18;

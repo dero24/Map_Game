@@ -158,3 +158,25 @@ body.touch #touchui { display: flex; }
   #arrival .a-name { font-size: 34px; }
   #hint { bottom: 150px; font-size: 13px; }
 }
+
+/* ---- the Almanac ---- */
+.almanac header { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+.almanac h4 { font-weight: normal; font-style: italic; margin: 18px 0 8px; border-bottom: 1px solid rgba(58, 51, 70, 0.15); padding-bottom: 4px; }
+.stamps { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 4px; }
+.stamp { width: 92px; height: 92px; border-radius: 50%; border: 2px dashed rgba(160, 80, 60, 0.7); color: #8a3f2e; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; transform: rotate(-6deg); font-size: 11px; line-height: 1.15; padding: 6px; box-sizing: border-box; background: rgba(160, 80, 60, 0.05); }
+.stamp:nth-child(2n) { transform: rotate(5deg); border-color: rgba(60, 90, 120, 0.7); color: #34506c; background: rgba(60, 90, 120, 0.05); }
+.stamp b { font-size: 12px; font-weight: normal; font-variant: small-caps; }
+.stamp span { opacity: 0.8; font-style: italic; }
+.stamp i { opacity: 0.6; font-size: 10px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 12px; }
+.card { margin: 0; background: #fbf8f0; box-shadow: 0 1px 3px rgba(58, 51, 70, 0.18); padding: 6px 6px 8px; }
+.card img, .card .q { width: 100%; aspect-ratio: 1; display: block; }
+.card .q { display: flex; align-items: center; justify-content: center; font-size: 34px; color: rgba(58, 51, 70, 0.25); border: 1px dashed rgba(58, 51, 70, 0.25); box-sizing: border-box; }
+.card figcaption { font-size: 12px; margin-top: 5px; }
+.card figcaption b { font-weight: normal; display: block; }
+.card figcaption span { font-size: 10.5px; opacity: 0.6; font-style: italic; }
+.card.unseen { opacity: 0.7; box-shadow: none; background: none; }
+.card.pencil { background: #fbf9f3; }
+.card.pencil figcaption span { color: #6a6474; }
+.card.place img { object-fit: cover; }
+.card .q.name { font-size: 15px; font-style: italic; color: rgba(58, 51, 70, 0.55); padding: 10px; text-align: center; font-family: Georgia, serif; }

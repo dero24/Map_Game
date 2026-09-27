@@ -251,13 +251,14 @@ export class Interiors {
   readonly lightsU = { value: Array.from({ length: 8 }, () => new THREE.Vector4(0, -999, 0, 0)) };
   readonly frameU = { value: new THREE.Vector4() }; // cx, cz, ux, uz
   readonly levelsU = { value: new THREE.Vector4() }; // floor0, floorH, door x, door z
+  readonly dimsU = { value: new THREE.Vector2(6, 4) }; // half length, half width of the footprint frame
   readonly doorU = { value: new THREE.Vector4() }; // door y, half width, height, -
   readonly cutsU = { value: new THREE.Vector4() }; // cut1, cut2, count, -
   readonly roomAU = { value: Array.from({ length: 24 }, () => new THREE.Vector4(0.9, 0.88, 0.82, 0)) }; // wall rgb, style
   readonly roomBU = { value: Array.from({ length: 24 }, () => new THREE.Vector4(0.5, 0.36, 0.24, 0)) }; // floor rgb, type
   readonly fabU = { value: new THREE.Color() };
   private mat: THREE.ShaderMaterial;
-  private npcMat = creatureMaterial({ LEGS: 1 });
+  private npcMat = creatureMaterial({ LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1 });
   private npcGeo = pedGeo();
   private lights: Light[] = [];
   private failed = new Set<string>();
@@ -459,6 +460,7 @@ export class Interiors {
     const f0 = P.floor0, fH = P.floorH, top = P.ceilTop;
     const fl = (k: number) => f0 + k * fH;
     this.frameU.value.set(P.cx, P.cz, P.ux, P.uz);
+    this.dimsU.value.set(P.L / 2, P.W / 2);
     this.levelsU.value.set(f0, P.levels > 1 ? fH : top - f0, P.door.wx, P.door.wz);
     this.doorU.value.set(P.door.y, P.door.w / 2, P.door.h, 0);
     this.fabU.value.set(FABRIC[Math.floor(rng.float() * FABRIC.length)]);
@@ -1254,7 +1256,7 @@ function ringDist(r: P2[], x: number, z: number) {
 function interiorMaterial(I: Interiors) {
   return paintMaterial({
     uniforms: {
-      uLights: I.lightsU, uFrame: I.frameU, uLevels: I.levelsU, uDoor: I.doorU, uCuts: I.cutsU,
+      uLights: I.lightsU, uFrame: I.frameU, uDims: I.dimsU, uLevels: I.levelsU, uDoor: I.doorU, uCuts: I.cutsU,
       uRoomA: I.roomAU, uRoomB: I.roomBU, uFab: I.fabU, uWindowColor: { value: lin(0xffc27a) },
     },
     vertex: /* glsl */ `
@@ -1276,6 +1278,7 @@ function interiorMaterial(I: Interiors) {
     fragment: /* glsl */ `
       uniform vec4 uLights[8];
       uniform vec4 uFrame, uLevels, uDoor, uCuts;
+      uniform vec2 uDims;
       uniform vec4 uRoomA[24], uRoomB[24];
       uniform vec3 uWindowColor, uFab;
       varying vec3 vColor;
@@ -1402,6 +1405,11 @@ function interiorMaterial(I: Interiors) {
         alb = pigment(alb, vWorldPos);
         // daylight spilling in from the windows + warm lamps (lamps light only their own storey)
         vec3 amb = mix(vec3(0.5, 0.46, 0.42), uAmbSky * 1.5, 0.5) * (0.12 + 0.55 * (1.0 - uNight));
+        // daylight falls off away from the outer walls (where the windows are), and the room's
+        // edges — along the floor and under the ceiling — sit a little darker
+        float dW = min(uDims.x - abs(pu), uDims.y - abs(pv));
+        amb *= mix(mix(1.25, 0.72, smoothstep(0.5, 4.0, dW)), 1.0, uNight);
+        amb *= mix(0.78, 1.0, smoothstep(0.0, 0.35, yl) * smoothstep(0.0, 0.45, fH - yl));
         vec3 lamp = vec3(0.0);
         vec3 V = normalize((cameraPosition + uWorldOffset) - vWorldPos);
         float spec = 0.0;

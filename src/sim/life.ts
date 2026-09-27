@@ -13,6 +13,7 @@ import { gearGeometry, gearFor, type CarGear } from '../assets/furniture';
 import { hashf } from '../assets/core';
 import { propMaterial } from '../render/propMaterial';
 import { activeStyle } from '../world/styles';
+import { personLib, PEOPLE_GLSL_DECL, PEOPLE_GLSL_MAIN, warmthFor } from '../assets/people';
 
 // Moving boats offshore: the working/pleasure mix (skiffs and pontoons stay moored near shore).
 const LIFE_BOATS: BoatType[] = ['console', 'cabin', 'sail', 'lobster', 'skiff'];
@@ -188,30 +189,39 @@ function gullGeo() {
     part(box(0.02, 0.2, 0.02, -0.05, -0.17, 0.02), 0xd9a07a, 0),
   ]);
 }
-export function pedGeo() {
-  return mergeGeometries([
-    part(box(0.14, 0.86, 0.16, 0.1, 0.45, 0), 0x3b4454, 1),
-    part(box(0.14, 0.86, 0.16, -0.1, 0.45, 0), 0x3b4454, 2),
-    part(box(0.4, 0.62, 0.23, 0, 1.2, 0), 0xffffff, 0),
-    part(box(0.1, 0.6, 0.11, 0.26, 1.2, 0), 0xffffff, 5),
-    part(box(0.1, 0.6, 0.11, -0.26, 1.2, 0), 0xffffff, 6),
-    part(new THREE.SphereGeometry(0.115, 8, 6).translate(0, 1.64, 0), 0xc99a7a, 0),
-    part(new THREE.SphereGeometry(0.12, 8, 4, 0, Math.PI * 2, 0, Math.PI * 0.55).translate(0, 1.67, 0.01), 0x3a2c22, 0),
-  ]);
-}
+/** Walkers and residents: the foundry's jointed person (src/assets/people.ts), varied per
+ *  instance in the shader — use creatureMaterial({ LEGS: 1, PEOPLE: 1 }). */
+export function pedGeo() { return personLib().clone(); }
 // Cars and boats come from the asset kit (src/assets/kit.ts): one InstancedMesh per type.
+/** The region's clothing warmth (0 coats … 1 beach), shared by every people material. */
+export const peopleU = { uWarmth: { value: 0.5 } };
 export function creatureMaterial(defines: Record<string, number>) {
   return paintMaterial({
     defines,
+    uniforms: defines.PEOPLE ? peopleU : {},
     vertex: /* glsl */ `
       attribute vec3 color;
       attribute float aPart;
       attribute vec3 aAnim;
       varying vec3 vColor;
       varying float vGlow;
+      #ifdef PEOPLE
+      ${PEOPLE_GLSL_DECL}
+      #endif
       void main() {
         vec3 p = position;
+        vec3 pc = color;
         float ph = aAnim.x, amt = aAnim.y;
+        #ifdef PEOPLE
+          #ifdef STATIC_PEOPLE
+            // residents stand still: their look is keyed to where they stand
+            vec3 o0 = (worldMat() * vec4(0.0, 0.0, 0.0, 1.0)).xyz + uWorldOffset;
+            float seed = floor(o0.x * 3.1) + floor(o0.z * 1.7) * 57.0;
+          #else
+            float seed = float(gl_InstanceID) * 1.37;
+          #endif
+          ${PEOPLE_GLSL_MAIN}
+        #endif
         #ifdef WINGS
           if (aPart > 0.5 && aPart < 1.5) {
             if (amt < 0.0) { p.x *= 0.3; p.y += 0.05; p.z += 0.06; }
@@ -220,18 +230,31 @@ export function creatureMaterial(defines: Record<string, number>) {
         #endif
         #ifdef LEGS
           float sw = sin(ph) * amt * 0.32;
-          if (aPart > 0.5 && aPart < 2.5) p.z += (0.9 - p.y) * sw * (aPart < 1.5 ? 1.0 : -1.0);
-          if (aPart > 4.5) p.z += (1.48 - p.y) * sw * (aPart < 5.5 ? -0.8 : 0.8);
-          p.y += abs(sin(ph)) * amt * 0.035;
+          if (aPart > 0.5 && aPart < 2.5) {
+            float side = aPart < 1.5 ? 1.0 : -1.0;
+            p.z += (0.92 - p.y) * sw * side;
+            // the knee folds on the forward swing: the shin and foot trail back and lift
+            float flex = max(0.0, -cos(ph) * side) * amt;
+            float below = max(0.0, 0.5 - p.y);
+            p.z += below * flex * 0.9;
+            p.y += below * flex * 0.25;
+          }
+          if (aPart > 4.5 && aPart < 6.5) p.z += (1.41 - p.y) * sw * (aPart < 5.5 ? -0.8 : 0.8);
+          p.y += abs(sin(ph)) * amt * 0.03;
+          // standing still is never frozen: a slow weight shift and a little arm sway
+          float idle = 1.0 - clamp(amt * 4.0, 0.0, 1.0);
+          float ip = ph * 3.7 + float(gl_InstanceID) * 1.3;
+          if (aPart > 4.5 && aPart < 6.5) p.z += (1.41 - p.y) * sin(uTime * 1.1 + ip + aPart) * 0.08 * idle;
+          p.x += sin(uTime * 0.45 + ip) * 0.025 * idle * clamp(p.y / 1.7, 0.0, 1.0);
         #endif
         mat4 m = worldMat();
         vec4 wp = m * vec4(p, 1.0);
         vWorldPos = wp.xyz + uWorldOffset;
         vNormalW = normalize(mat3(m) * normal);
-        vColor = color;
+        vColor = pc;
         #ifdef USE_INSTANCING_COLOR
-          float tintable = step(0.98, min(color.r, min(color.g, color.b)));
-          vColor = mix(color, color * instanceColor, tintable);
+          float tintable = step(0.98, min(pc.r, min(pc.g, pc.b)));
+          vColor = mix(pc, pc * instanceColor, tintable);
         #endif
         vGlow = (aPart > 2.5 && aPart < 4.5) ? aAnim.z : 0.0;
         gl_Position = projectionMatrix * viewMatrix * wp;
@@ -317,7 +340,8 @@ export class LifeClient {
     };
     make(gullGeo(), { WINGS: 1 }, RANGES.gulls, 1.8);
     make(CAR_TYPES.map((t) => carLib(t)), {}, RANGES.cars, 1, () => 0xffffff, CAR_TYPES.map((t) => `life-car:${t}`));
-    make(pedGeo(), { LEGS: 1 }, RANGES.peds, 1, () => 0xffffff);
+    make(pedGeo(), { LEGS: 1, PEOPLE: 1 }, RANGES.peds, 1, () => 0xffffff, ['life-ped']);
+    { const st = activeStyle(), now = new Date(); peopleU.uWarmth.value = warmthFor(st.climate, now.getMonth() + 1, st.region === "oceania"); }
     // gear on the roofs of passing cars (placed on each car's own roof height per frame)
     for (const gname of LIFE_GEAR) {
       const m = new THREE.InstancedMesh(gearGeometry(gname, 0, 4.6, 1.86, 1), propMaterial(), CAPS.cars);
@@ -351,9 +375,11 @@ export class LifeClient {
   }
 
   // (Re)start the sim worker with a fresh road graph — called when the streamed tile set changes.
+  /** The road graph changed (tiles streamed in or out): hand the worker the new graph. Its agents
+   *  carry over by position (LifeSim.adopt), so traffic and walkers never reset. */
   reinit(init: LifeInit) {
-    this.worker.terminate();
-    this.spawn(init);
+    const transfer = [init.edgePts.buffer, init.edgeStart.buffer, init.edgeCount.buffer, init.edgeLen.buffer, init.edgeInfo.buffer, init.edgeNodes.buffer, init.nodeEdgeStart.buffer, init.nodeEdges.buffer, init.beachPts.buffer, init.waterGrid.buffer, init.doors.buffer] as ArrayBuffer[];
+    this.worker.postMessage({ kind: 'regraph', init }, transfer);
   }
 
   private spawn(init: LifeInit) {

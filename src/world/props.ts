@@ -8,7 +8,7 @@ import { propMaterial, colored } from '../render/propMaterial';
 import { U, GLSL_NOISE } from '../render/shared';
 import { makeRng, hash01 } from '../core/rng';
 import { carMix, boatMix, carLib, boatLib, boatRecipe, carRecipe, pickFrom, type BoatType, type CarType } from '../assets/kit';
-import type { Mailbox, Door } from './buildings';
+import type { Mailbox, Door, Drive } from './buildings';
 import { makeCanvas } from './canvas';
 import { activeStyle, pickWeighted } from './styles';
 import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, plantLib, inBloom, SPECIES, STAGES, type PlantSpecies } from '../assets/flora';
@@ -118,6 +118,18 @@ export function haloPoints(pts: THREE.Vector3[], size: number, color: THREE.Colo
 
 // A clipped hedge run (3.4 × 0.85 × 0.55 m, same footprint the old box had): overlapping
 // squashed blobs with a gently lumpy skin and a flatter top — reads as foliage, not a crate.
+// A 3.2 m run of picket fence along x (the hedge's footprint): pointed pickets, two rails, end posts.
+function picketGeo() {
+  const parts: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 20; i++) {
+    const x = -1.52 + i * 0.16;
+    parts.push(new THREE.BoxGeometry(0.075, 0.9, 0.022).translate(x, 0.45, 0));
+    parts.push(new THREE.ConeGeometry(0.053, 0.08, 4, 1).rotateY(Math.PI / 4).scale(1, 1, 0.3).translate(x, 0.94, 0));
+  }
+  for (const y of [0.25, 0.7]) parts.push(new THREE.BoxGeometry(3.2, 0.07, 0.035).translate(0, y, 0.03));
+  for (const x of [-1.6, 1.6]) parts.push(new THREE.BoxGeometry(0.1, 1.05, 0.1).translate(x, 0.52, 0.03));
+  return colored(mergeGeometries(parts.map((p) => p.toNonIndexed())), 0xffffff);
+}
 let hedgeCache: THREE.BufferGeometry | null = null;
 function hedgeGeo() {
   if (hedgeCache) return hedgeCache.clone();
@@ -138,7 +150,7 @@ function hedgeGeo() {
   return hedgeCache.clone();
 }
 
-export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P; w: number }[], extras: { mailboxes?: Mailbox[]; doors?: Door[]; ctx?: WorldJson; box?: Box } = {}) {
+export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P; w: number }[], extras: { mailboxes?: Mailbox[]; drives?: Drive[]; doors?: Door[]; ctx?: WorldJson; box?: Box } = {}) {
   const { json, terrain } = world;
   const S = json.slice; // region slice: lamp-map compositor box
   // Placement gate: the detail zone (the backdrop for baked tiles, cell+margin for synthetic
@@ -212,7 +224,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         }
         prev = { top, ang };
         // cobra-head lamp on some poles, reaching over the street
-        if (count++ % (rank >= 5 ? 2 : 3) === 0) {
+        if (count++ % (rank >= 3 ? 2 : 3) === 0) {
           const dir = -side;
           const hx = x + nx * dir * 2.1, hz = z + nz * dir * 2.1;
           armMats.push(new THREE.Matrix4().compose(V(x, g, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -ang + (dir > 0 ? 0 : Math.PI)), V(1, 1, 1)));
@@ -379,7 +391,15 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       else if (!slim && conifer > 0.6 && rng.float() < 0.5) k = look.trees[4] > look.trees[3] ? 4 : 3;
       else k = r / h > 0.42 || rng.float() < look.trees[1] / Math.max(0.01, look.trees[0] + look.trees[1]) ? 1 : 0;
       k = regional(k, x, z);
-      const v = variantAt(x, z, TREE_VARIANTS, 11);
+      let v = variantAt(x, z, TREE_VARIANTS, 11);
+      // In town, silhouette decides: street and yard trees are broadleaf with the crown filling
+      // the upper half or more. Conifers only where the region is mostly conifer, and no model
+      // whose bare trunk would be stretched into a lollipop by the measured height.
+      if (k !== 2 && walk.blocked(x, z, 14)) {
+        if ((k === 3 || k === 4) && conifer <= 0.5) k = r / h > 0.42 ? 1 : 0;
+        if (treeMeta(TREE_KINDS[k], v).crownBottom / treeMeta(TREE_KINDS[k], v).h > 0.56) k = r / h > 0.42 ? 1 : 0;
+        v = variantAt(x, z, TREE_VARIANTS, 11);
+      }
       const tm = treeMeta(TREE_KINDS[k], v);
       const mh = tm.h, mr = tm.crownR;
       // crowns never thinner than ~the model's own proportions: a lone 20 m oak measured
@@ -492,7 +512,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     for (let v = 0; v < TREE_VARIANTS; v++) {
       const list = trees.filter((t) => t.k === k && t.v === v);
       if (!list.length) continue;
-      const im = new THREE.InstancedMesh(treeLib(TREE_KINDS[k], v).clone(), propMaterial({ wind: true, foliage: true }), list.length);
+      const tm = treeMeta(TREE_KINDS[k], v);
+      const crown: [number, number] = [tm.crownBottom + 0.85 * tm.crownR, tm.crownR];
+      const im = new THREE.InstancedMesh(treeLib(TREE_KINDS[k], v).clone(), propMaterial({ wind: true, foliage: true, crown }), list.length);
       im.name = `trees:${TREE_KINDS[k]}:${v}`;
       list.forEach((t, i) => { im.setMatrixAt(i, t.m); im.setColorAt(i, t.c); });
       im.layers.enable(1);
@@ -586,6 +608,26 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     if (!parked.has(key)) parked.set(key, []);
     const paint = new THREE.Color(CAR[Math.floor(h * 97) % CAR.length]).lerp(new THREE.Color(0xd8d4cc), u3 < 0.25 ? 0.12 + u3 : 0); // an old car's sun-faded paint
     parked.get(key)!.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(0.97 + u1 * 0.06, 0.96 + u2 * 0.08, 0.97 + u3 * 0.06)), c: paint });
+    walk.addLoop(corners);
+  }
+  // generated drives (buildings.ts lot dressing): most have a car at the house end
+  for (const d of extras.drives ?? []) {
+    const hq = hashf(Math.floor(d.x * 7.3) * 92821 + Math.floor(d.z * 5.1));
+    if (hq > 0.72) continue;
+    const yaw = d.yaw + (hq < 0.18 ? Math.PI : 0); // most nose in, some backed in
+    const type = pickFrom(carMix(look.region, look.climate), hashf(Math.floor(d.x * 3.1) + Math.floor(d.z * 11.7) * 31));
+    const rc = carRecipe(type, 1), hl = rc.L / 2, hw = rc.W / 2 + 0.05;
+    const cy = Math.cos(yaw), sy = Math.sin(yaw);
+    const corners: P[] = [[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]].map(([u, v]) => [d.x + u * cy + v * sy, d.z - u * sy + v * cy]);
+    if (corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.3) || paved(cx, cz)) || terrain.sdfAt(d.x, d.z) < 2) continue;
+    const e = roadEdge(d.x, d.z);
+    if (e && e.d - e.w / 2 < 4.5) continue; // never on the sidewalk strip or a footway
+    const u1 = hashf(Math.floor(d.x * 31)), u2 = hashf(Math.floor(d.z * 17)), u3 = hashf(Math.floor(d.x * 13 + d.z * 97));
+    const gear = gearFor(hashf(Math.floor(d.x * 7) + Math.floor(d.z * 13) * 7), terrain.oceanDistAt(d.x, d.z) < 3000);
+    const key = `${type}|${gear ?? ''}`;
+    if (!parked.has(key)) parked.set(key, []);
+    const paint = new THREE.Color(CAR[Math.floor(hq * 97) % CAR.length]).lerp(new THREE.Color(0xd8d4cc), u3 < 0.25 ? 0.12 + u3 : 0);
+    parked.get(key)!.push({ m: new THREE.Matrix4().compose(V(d.x, terrain.heightAt(d.x, d.z), d.z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(0.97 + u1 * 0.06, 0.96 + u2 * 0.08, 0.97 + u3 * 0.06)), c: paint });
     walk.addLoop(corners);
   }
   for (const [key, list] of parked) {
@@ -780,6 +822,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       ]);
       const pots: THREE.Matrix4[] = [];
       const hedgeM: THREE.Matrix4[] = [], hedgeC: THREE.Color[] = [];
+      const picketM: THREE.Matrix4[] = [], picketC: THREE.Color[] = [];
       for (const d of extras.doors) {
         const h0 = hash01(Math.floor(d.wx * 11) ^ Math.floor(d.wz * 17));
         const tx = -d.nz, tz = d.nx; // along the house front
@@ -792,7 +835,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
             walk.addLoop([[x - 0.16, z - 0.16], [x + 0.16, z - 0.16], [x + 0.16, z + 0.16], [x - 0.16, z + 0.16]], -Infinity, terrain.heightAt(x, z) + 0.6);
           }
         }
-        if (h0 > 0.38 && h0 < 0.6 && !d.porch) {
+        const picket = h0 >= 0.6 && h0 < 0.74 && look.region === 'na';
+        if (((h0 > 0.38 && h0 < 0.6) || picket) && !d.porch) {
           // Hedge run parallel to the front, split to leave the walk clear. Try the yard line
           // first (6 m out) then hug the foundation (2.4 m) — every point must be off pavement,
           // unblocked and at least 2.4 m inside the road edge so it can't land on a sidewalk.
@@ -804,8 +848,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
               const ax = hx - tx * LEN / 2, az = hz - tz * LEN / 2, bxx = hx + tx * LEN / 2, bz2 = hz + tz * LEN / 2;
               const ok = (x: number, z: number) => !walk.blocked(x, z, 1) && !paved(x, z) && clearOfRoad(x, z, 2.4);
               if (!ok(hx, hz) || !ok(ax, az) || !ok(bxx, bz2)) continue;
-              hedgeM.push(new THREE.Matrix4().compose(V(hx, terrain.heightAt(hx, hz), hz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(tz, tx)), V(1, 1, 1)));
-              hedgeC.push(new THREE.Color(rng.pick(green)).lerp(new THREE.Color(0x2e4630), 0.15));
+              const mt = new THREE.Matrix4().compose(V(hx, terrain.heightAt(hx, hz), hz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(tz, tx)), V(1, 1, 1));
+              if (picket) { picketM.push(mt); picketC.push(new THREE.Color([0xf2efe6, 0xeae5d8, 0xdcd4c2][Math.floor(h0 * 1000) % 3])); }
+              else { hedgeM.push(mt); hedgeC.push(new THREE.Color(rng.pick(green)).lerp(new THREE.Color(0x2e4630), 0.15)); }
               walk.addWall([ax, az], [bxx, bz2], -Infinity, terrain.heightAt(hx, hz) + 0.95);
               placed++;
             }
@@ -816,6 +861,13 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       if (pots.length) {
         const im = new THREE.InstancedMesh(POT, propMaterial(), pots.length);
         pots.forEach((m, i) => im.setMatrixAt(i, m));
+        im.layers.enable(1);
+        group.add(im);
+      }
+      if (picketM.length) {
+        const im = new THREE.InstancedMesh(picketGeo(), propMaterial(), picketM.length);
+        im.name = 'fence:picket';
+        picketM.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, picketC[i]); });
         im.layers.enable(1);
         group.add(im);
       }

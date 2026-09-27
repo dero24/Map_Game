@@ -245,6 +245,8 @@ export class TileStream {
   // ring under a small budget), mount at most one finished tile of each tier, drop far ones.
   update(x: number, z: number) {
     const now = performance.now();
+    const gy = Math.max(0, this.terrain.heightAt(x, z));
+    if (Number.isFinite(gy)) U.uLampBaseY.value = Number.isFinite(U.uLampBaseY.value) ? U.uLampBaseY.value + (gy - U.uLampBaseY.value) * 0.05 : gy;
     if (this.lampDirty || Math.hypot(x - this.lampCx, z - this.lampCz) > LAMP_WIN * 0.25) {
       if (this.lampPts.size) this.repaintLamps(x, z);
     }
@@ -609,14 +611,14 @@ export class TileStream {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, R, R);
     ctx.globalCompositeOperation = 'lighter';
-    const r = 15 * k;
+    const r = 13 * k; // pool, dark, pool: night reads through the rhythm between the poles
     for (const pts of this.lampPts.values())
       for (let i = 0; i + 1 < pts.length; i += 2) {
         const px = (pts[i] - x0) * k, pz = (pts[i + 1] - z0) * k;
         if (px < -r || pz < -r || px > R + r || pz > R + r) continue;
         const g = ctx.createRadialGradient(px, pz, 0, px, pz, r);
-        g.addColorStop(0, 'rgba(255,255,255,0.85)');
-        g.addColorStop(0.35, 'rgba(255,255,255,0.4)');
+        g.addColorStop(0, 'rgba(255,255,255,1)');
+        g.addColorStop(0.35, 'rgba(255,255,255,0.5)');
         g.addColorStop(1, 'rgba(255,255,255,0)');
         ctx.fillStyle = g;
         ctx.fillRect(px - r, pz - r, r * 2, r * 2);

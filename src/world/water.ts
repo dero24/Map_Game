@@ -62,12 +62,18 @@ export function buildWater(tt: TerrainTextures) {
         vec3 body = mix(shallow, deep, smoothstep(0.2, 4.0, depth));
         float sh = shadowAt(vWorldPos, vec3(0.0, 1.0, 0.0));
         body *= uAmbSky * 0.75 + uKeyColor * (0.25 + 0.35 * sh) * max(uKeyDir.y + 0.1, 0.0);
-        // dry-brush strokes laid horizontally across the view (perpendicular to the look direction)
-        vec2 vd = normalize(-V.xz + 1e-5);
-        vec2 pp = vec2(dot(xz, vec2(-vd.y, vd.x)), dot(xz, vd));
-        float st = vnoise(vec2(pp.x * 0.018, pp.y * 0.5) + vec2(t * 0.02, 0.0));
-        float st2 = vnoise(vec2(pp.x * 0.05, pp.y * 1.6) + vec2(-t * 0.05, 3.0));
-        float strokes = smoothstep(0.35, 0.75, st) * 0.6 + smoothstep(0.55, 0.8, st2) * 0.4;
+        // dry-brush strokes laid across the view. Two world-fixed stroke frames (along x, along z)
+        // blended by the camera's forward — never a per-pixel rotation (the per-pixel view angle
+        // times kilometre-scale coordinates fanned out into radial curtains), never sliding.
+        vec2 fw = -vec2(viewMatrix[0][2], viewMatrix[2][2]);
+        fw /= max(length(fw), 1e-4);
+        float wx = smoothstep(0.3, 0.7, abs(fw.y));
+        float stA = vnoise(vec2(xz.x * 0.018, xz.y * 0.5) + vec2(t * 0.02, 0.0));
+        float stB = vnoise(vec2(xz.y * 0.018, xz.x * 0.5) + vec2(t * 0.02, 7.0));
+        float st2A = vnoise(vec2(xz.x * 0.05, xz.y * 1.6) + vec2(-t * 0.05, 3.0));
+        float st2B = vnoise(vec2(xz.y * 0.05, xz.x * 1.6) + vec2(-t * 0.05, 11.0));
+        float strokes = mix(smoothstep(0.35, 0.75, stB) * 0.6 + smoothstep(0.55, 0.8, st2B) * 0.4,
+                            smoothstep(0.35, 0.75, stA) * 0.6 + smoothstep(0.55, 0.8, st2A) * 0.4, wx);
         body *= 0.86 + 0.28 * strokes;
         vec3 col = mix(body, skyR, clamp(fres * 0.7, 0.0, 0.62));
         col = mix(col, col * 1.12 + 0.03, strokes * 0.35 * (1.0 - uNight));

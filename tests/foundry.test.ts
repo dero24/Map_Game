@@ -4,6 +4,7 @@ import { TREE_KINDS, TREE_VARIANTS, treeGeometry, PLANT_SPECIES, plantGeometry, 
 import { CRITTERS, critterGeometry } from '../src/assets/fauna';
 import { MAILBOXES, mailboxGeometry, gearGeometry, gearFor, CAR_GEAR, umbrellaGeometry, picnicTableGeometry } from '../src/assets/furniture';
 import { fibCount, fibSphere, hashf, variantAt } from '../src/assets/core';
+import { personGeometry, HAIRSTYLES, MARK, warmthFor } from '../src/assets/people';
 
 const bb = (g: THREE.BufferGeometry) => (g.computeBoundingBox(), g.boundingBox!);
 const verts = (g: THREE.BufferGeometry) => g.getAttribute('position').count;
@@ -89,5 +90,30 @@ describe('furniture', () => {
     for (let i = 0; i < 2000; i++) { if (gearFor((i + 0.5) / 2000, true) === 'surf') coast++; if (gearFor((i + 0.5) / 2000, false) === 'surf') inland++; }
     expect(coast).toBeGreaterThan(100);
     expect(inland).toBe(0);
+  });
+});
+
+describe('people', () => {
+  it('one jointed body: on its feet, person-sized, every hairstyle and colour marker present, within budget', () => {
+    const g = personGeometry();
+    const b = bb(g);
+    expect(finite(g)).toBe(true);
+    expect(Math.abs(b.min.y)).toBeLessThan(0.02);
+    expect(b.max.y).toBeGreaterThan(1.65);
+    expect(b.max.y).toBeLessThan(1.85);
+    expect(verts(g)).toBeLessThan(1600);
+    for (const id of [1, 2, 5, 6]) expect(partCount(g, id)).toBeGreaterThan(0); // legs and arms swing
+    HAIRSTYLES.forEach((_, i) => expect(partCount(g, 9 + i)).toBeGreaterThan(0));
+    const col = g.getAttribute('color');
+    for (const m of Object.values(MARK)) {
+      let n = 0;
+      for (let i = 0; i < col.count; i++) if (col.getX(i) === m[0] && col.getY(i) === m[1] && col.getZ(i) === m[2]) n++;
+      expect(n).toBeGreaterThan(0);
+    }
+  });
+  it('people dress for the climate and the season', () => {
+    expect(warmthFor('tropical', 7)).toBeGreaterThan(warmthFor('continental', 1));
+    expect(warmthFor('temperate', 7)).toBeGreaterThan(warmthFor('temperate', 1));
+    expect(warmthFor('temperate', 1, true)).toBeGreaterThan(warmthFor('temperate', 1));
   });
 });

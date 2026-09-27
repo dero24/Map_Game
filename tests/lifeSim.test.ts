@@ -127,4 +127,24 @@ describe('LifeSim', () => {
       expect(sim.x[i]).toBeGreaterThan(-50 + 15 * 32 - 12);
     }
   });
+
+  it('keeps every car and walker when the road graph is rebuilt (tiles streaming in)', () => {
+    const { sim } = run(200);
+    const next = new LifeSim(town(), sim); // the same roads, re-sent as a new graph
+    let kept = 0, moved = 0;
+    for (const r of [RANGES.cars, RANGES.peds])
+      for (let i = r[0]; i < r[1]; i++) {
+        if (!sim.active[i]) continue;
+        if (next.active[i]) kept++;
+        if (next.variant[i] !== sim.variant[i]) moved += 100;
+        if (next.active[i] && next.y[i] > -500) moved = Math.max(moved, Math.hypot(next.x[i] - sim.x[i], next.z[i] - sim.z[i]));
+      }
+    let before = 0;
+    for (const r of [RANGES.cars, RANGES.peds]) for (let i = r[0]; i < r[1]; i++) before += sim.active[i];
+    expect(before).toBeGreaterThan(20);
+    expect(kept).toBeGreaterThanOrEqual(before - 2); // only door-bound walkers may vanish, and they're indoors
+    expect(moved).toBeLessThan(0.5); // nobody jumps
+    next.setEnv({ playerX: 200, playerZ: 200, hour: 14, night: 0, density: 1, wind: 0.5 });
+    for (let t = 0; t < 40; t++) next.step(0.05); // and the town carries on
+  });
 });

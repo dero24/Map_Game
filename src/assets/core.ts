@@ -28,10 +28,10 @@ export const merge = (parts: THREE.BufferGeometry[]) => mergeGeometries(parts)!;
 export const box = (w: number, h: number, d: number, x: number, y: number, z: number) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
 
 /** A side profile (z along the length, y up) extruded across the width, centred on x = 0. */
-export function profile(pts: [number, number][], width: number, bevel = 0.05) {
+export function profile(pts: [number, number][], width: number, bevel = 0.05, bevelSegments = 1) {
   const sh = new THREE.Shape();
   pts.forEach(([z, y], i) => (i ? sh.lineTo(z, y) : sh.moveTo(z, y)));
-  const g = new THREE.ExtrudeGeometry(sh, { depth: Math.max(0.01, width - 2 * bevel), bevelEnabled: bevel > 0, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 1, curveSegments: 4 });
+  const g = new THREE.ExtrudeGeometry(sh, { depth: Math.max(0.01, width - 2 * bevel), bevelEnabled: bevel > 0, bevelSize: bevel, bevelThickness: bevel, bevelSegments, curveSegments: 4 });
   g.rotateY(-Math.PI / 2);
   g.translate((width - 2 * bevel) / 2, 0, 0);
   return g;
@@ -68,7 +68,14 @@ export function blob(r: number, seed: number, opts: { detail?: number; squash?: 
     }
     pos.setXYZ(i, x * n, y * n * sq, z * n);
   }
-  g.computeVertexNormals();
+  // soft normals (the ellipsoid's, not each facet's): a lumpy silhouette that still shades as
+  // one rounded mass — flat facet normals read as cut gems up close
+  const nrm = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i) / (sq * sq), z = pos.getZ(i), L = Math.hypot(x, y, z) || 1;
+    nrm[i * 3] = x / L; nrm[i * 3 + 1] = y / L; nrm[i * 3 + 2] = z / L;
+  }
+  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
   return g;
 }
 

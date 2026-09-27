@@ -18,6 +18,17 @@ export interface BookState {
   done: { id: string; title: string; page: string; t: number }[];
   active: { id: string; title: string; hint: string; kind: string; lat?: number; lon?: number; y?: number; type?: string; cond?: string }[];
   spotted: Record<string, string[]>; // family → types seen ("car" → ["sedan", "pickup"])
+  /** The Almanac: where and when each entry ("car:pickup") was first seen. */
+  seen?: Record<string, Seen>;
+  /** Town stamps ("Monmouth Beach|Monmouth County, New Jersey") in the order you reached them. */
+  stamps?: Record<string, { t: number; town: string; region: string }>;
+}
+export interface Seen {
+  t: number; lat: number; lon: number; town: string; region: string;
+  /** Spotting makes a pencil card; painting the subject (photo mode, in frame) colours it in. */
+  painted?: boolean;
+  page?: string; // the sketchbook page that painted it (place cards show your painting)
+  name?: string; kind?: string; // place cards: the real name and category
 }
 export const emptyState = (): BookState => ({ done: [], active: [], spotted: {} });
 

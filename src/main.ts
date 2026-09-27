@@ -19,6 +19,7 @@ import { Explore } from './world/explore';
 import { Atlas } from './ui/atlas';
 import { PhotoMode } from './ui/photo';
 import { Commissions } from './ui/commissions';
+import { makeCardArt } from './ui/cardArt';
 import { Hints } from './ui/hints';
 import { Arrival } from './ui/arrival';
 import type { GameCtx } from './ui/ctx';
@@ -353,6 +354,7 @@ async function main() {
     tiles: () => stream.loaded.values(),
     driveLeft: regionLook.driveLeft,
     enabled: () => $('intro').classList.contains('hidden') && !atlas.open && !photo.active,
+    geo: { toLatLon: (x, z) => toLatLon(json.origin, x, z), fromLatLon: (lat, lon) => fromLatLon(json.origin, lat, lon) },
   });
   { const prev = stream.onTile; stream.onTile = (a) => { prev?.(a); vehicles.onTile(a); }; } // re-hide taken driveway cars on remount
 
@@ -365,6 +367,7 @@ async function main() {
   const origin = new THREE.Vector3(); // render origin (floating origin; see reanchor)
   const ndc = new THREE.Vector3(), im4 = new THREE.Matrix4(), ip = new THREE.Vector3();
   const playerGroup = worldRoot.getObjectByName('player-vehicles');
+  const cardArt = makeCardArt(renderer);
   const ctx: GameCtx = {
     walker, camera, canvas, terrain: world.terrain, json, explore, origin: json.origin,
     toLatLon: (x, z) => toLatLon(json.origin, x, z),
@@ -403,6 +406,8 @@ async function main() {
     env: () => ({ night: U.uNight.value, golden: U.uGolden.value, fog: weather.seaFog, oceanDist: world.terrain.oceanDistAt(walker.x, walker.z) }),
     placeLabel: () => $('place').textContent || townName,
     locality: () => arrival.locality || townName,
+    region: () => arrival.region || meta?.sub || '',
+    cardArt: (family, type, pencil) => cardArt(family, type, pencil),
     toast,
     teleport: async (lat, lon) => { await teleportTo(lat, lon); arrival.greet(); },
     sound: (k) => ambience?.ui(k),
@@ -424,6 +429,7 @@ async function main() {
   const month = new Date().getMonth() + 1, south = json.origin.lat < 0;
   const commissions = new Commissions(ctx);
   void commissions.load();
+  commissions.onStamp = (town, region) => { toast(`almanac stamp: ${town}${region ? ` · ${region}` : ''}`); ambience?.ui('chime'); };
   const photo = new PhotoMode(ctx, commissions);
   const atlas = new Atlas(ctx, commissions, () => journal.stamps());
   photo.onSaved = () => void atlas.refreshPages();
@@ -631,7 +637,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { walker, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream, vehicles, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, setHour, teleport: teleportTo, get spawn() { return spawn; }, at: atPos };
+  (window as unknown as Record<string, unknown>).__GAME__ = { walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream, vehicles, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, setHour, teleport: teleportTo, get spawn() { return spawn; }, at: atPos };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);

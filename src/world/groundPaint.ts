@@ -6,15 +6,17 @@ import * as THREE from 'three';
 import type { World, TerrainLayer, Road, Area, WorldJson } from './data';
 
 // ESA WorldCover class -> ground wash (sRGB). Water cells = sea/river bed.
+// Values sit near real-world reflectance (asphalt ~0.1, concrete ~0.35, dry sand ~0.4 linear):
+// watercolour keeps the lightest values for highlights, so sunlit ground must stay mid-value.
 const COVER: Record<number, string> = {
   // 50 built-up: in towns the unpainted land between roads, walks, lots and houses is lawn —
   // a muted lawn green, not grey khaki (paved things are painted over it)
-  10: '#76834f', 20: '#8b9a5c', 30: '#9fb06c', 40: '#b3b070', 50: '#a6b27a', 60: '#e4d4ab', 70: '#f0f0f0',
+  10: '#76834f', 20: '#8b9a5c', 30: '#9fb06c', 40: '#b3b070', 50: '#a6b27a', 60: '#d8c8a0', 70: '#f0f0f0',
   80: '#8c8768', 90: '#8e9562', 95: '#708055', 100: '#a8a882', 0: '#aeb08e',
 };
 const AREA_FILL: Record<string, string> = {
-  beach: '#e9d9b1', wood: '#617043', scrub: '#8a955c', wetland: '#8c9761', grass: '#9fb56d', pitch: '#8db35f',
-  golf: '#9fc373', parking: '#a3a09a', plaza: '#d3cbbb', pool: '#63c2cf', marina: '#aaa698', commercial: '#bcb7a8',
+  beach: '#dccb9f', wood: '#617043', scrub: '#8a955c', wetland: '#8c9761', grass: '#9fb56d', pitch: '#8db35f',
+  golf: '#9fc373', parking: '#8a8883', plaza: '#c2baa8', pool: '#63c2cf', marina: '#aaa698', commercial: '#aaa597',
   bare: '#cbbb93', pier: '#9c8466',
 };
 const AREA_ORDER = ['wood', 'scrub', 'wetland', 'grass', 'golf', 'commercial', 'bare', 'beach', 'pitch', 'marina', 'parking', 'plaza', 'pier', 'pool'];
@@ -161,7 +163,7 @@ class Painter {
     ctx.lineCap = 'round';
     // Front walks from each door to the street (flagstone-pale, under everything else).
     if (detail) {
-      ctx.strokeStyle = '#d9d2c2';
+      ctx.strokeStyle = '#bdb5a3';
       for (const w of this.walks) {
         if (!overlaps(w, x0, z0, x1, z1, 5)) continue;
         ctx.beginPath();
@@ -178,7 +180,7 @@ class Painter {
         if (rank < 2 || r.sw) continue;
         ctx.beginPath();
         pathOf(ctx, pts[0]);
-        ctx.strokeStyle = rank >= 5 ? '#d8d2c5' : '#cdc7b6';
+        ctx.strokeStyle = rank >= 5 ? '#bab4a6' : '#b3ad9f';
         ctx.lineWidth = r.w + (rank >= 5 ? 7 : 3);
         ctx.stroke();
       }
@@ -196,7 +198,7 @@ class Painter {
     for (const { item: r, pts } of list) {
       const rank = ROAD_RANK[r.c] ?? 1;
       const minor = MINOR.has(r.c);
-      const base = r.sw ? '#d2ccbf' : minor ? '#d6cdb9' : rank >= 5 ? '#6c6e73' : rank >= 2 ? '#7b7c7f' : '#8e8c86';
+      const base = r.sw ? '#b8b2a4' : minor ? '#bdb5a3' : rank >= 5 ? '#55575b' : rank >= 2 ? '#606265' : '#6f6d68';
       ctx.beginPath();
       pathOf(ctx, pts[0]);
       ctx.strokeStyle = base;
@@ -204,7 +206,7 @@ class Painter {
       ctx.stroke();
       if (!minor && detail) {
         ctx.globalAlpha = 0.3;
-        ctx.strokeStyle = rank >= 5 ? '#85878b' : '#939496';
+        ctx.strokeStyle = rank >= 5 ? '#6a6c70' : '#76787b';
         ctx.lineWidth = r.w * 0.72;
         ctx.stroke();
         ctx.globalAlpha = 1;

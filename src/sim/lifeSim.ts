@@ -39,7 +39,10 @@ export class LifeSim {
   private drivableLen = 0;
   visits = 0;
 
-  constructor(private w: LifeInit) {
+  /** `prev`: the sim on the previous road graph. Its agents carry over (snapped onto the new
+   *  graph by position), so streaming tiles in never resets the town — the same cars keep
+   *  driving and the same people keep walking. */
+  constructor(private w: LifeInit, prev?: LifeSim) {
     const D = w.doors;
     for (let k = 0; k < D.length / 6; k++) {
       const g = Math.floor(D[k * 6 + 3] / 30) * 92821 + Math.floor(D[k * 6 + 5] / 30);
@@ -66,8 +69,89 @@ export class LifeSim {
     this.y.fill(-1000);
     // how many cars the network can hold in free flow (~25 m a car) — more than that is a traffic jam
     for (let e = 0; e < w.edgeLen.length; e++) if (this.drivable(e)) this.drivableLen += w.edgeLen[e];
-    this.spawnAll();
+    if (prev) this.adopt(prev);
+    else this.spawnAll();
     this.px.set(this.x); this.py.set(this.y); this.pz.set(this.z); this.pyaw.set(this.yaw);
+  }
+
+  // ---------------- persistence across road-graph rebuilds ----------------
+  private edgeGrid: Map<number, number[]> | null = null;
+  /** Nearest point on an edge passing `ok`, within maxD: [edge, s, tangent x, tangent z] or null. */
+  nearestEdge(x: number, z: number, ok: (e: number) => boolean, maxD = 6): [number, number, number, number] | null {
+    const w = this.w, P = w.edgePts;
+    if (!this.edgeGrid) {
+      this.edgeGrid = new Map();
+      for (let e = 0; e < w.edgeLen.length; e++)
+        for (let k = 0; k < w.edgeCount[e]; k++) {
+          const a = (w.edgeStart[e] + k) * 3;
+          const key = Math.floor(P[a] / 16) * 92821 + Math.floor(P[a + 2] / 16);
+          let l = this.edgeGrid.get(key);
+          if (!l) this.edgeGrid.set(key, (l = []));
+          if (l[l.length - 1] !== e) l.push(e);
+        }
+    }
+    let best: [number, number, number, number] | null = null, bd = maxD;
+    const gx = Math.floor(x / 16), gz = Math.floor(z / 16), seen = new Set<number>();
+    for (let a = -1; a <= 1; a++)
+      for (let b = -1; b <= 1; b++)
+        for (const e of this.edgeGrid.get((gx + a) * 92821 + gz + b) ?? []) {
+          if (seen.has(e) || !ok(e)) continue;
+          seen.add(e);
+          const cnt = w.edgeCount[e], step = w.edgeLen[e] / Math.max(1, cnt - 1);
+          for (let k = 0; k + 1 < cnt; k++) {
+            const i0 = (w.edgeStart[e] + k) * 3, i1 = i0 + 3;
+            const dx = P[i1] - P[i0], dz = P[i1 + 2] - P[i0 + 2], L2 = dx * dx + dz * dz || 1;
+            const t = Math.max(0, Math.min(1, ((x - P[i0]) * dx + (z - P[i0 + 2]) * dz) / L2));
+            const d = Math.hypot(P[i0] + dx * t - x, P[i0 + 2] + dz * t - z);
+            if (d < bd) { const l = Math.sqrt(L2); bd = d; best = [e, (k + t) * step, dx / l, dz / l]; }
+          }
+        }
+    return best;
+  }
+  private findDoor(x: number, z: number) {
+    const D = this.w.doors;
+    for (const k of this.doorGrid.get(Math.floor(x / 30) * 92821 + Math.floor(z / 30)) ?? [])
+      if (Math.abs(D[k * 6] - x) < 0.3 && Math.abs(D[k * 6 + 2] - z) < 0.3) return k;
+    return -1;
+  }
+  private adopt(o: LifeSim) {
+    this.tick = o.tick;
+    this.rng = makeRng((this.w.seed ^ (o.tick * 2654435761)) >>> 0);
+    const copy = (i: number) => {
+      for (const k of ['x', 'y', 'z', 'yaw', 'vx', 'vy', 'vz', 'speed', 'anim', 'amt', 'timer', 'dodge', 'tx', 'ty', 'tz', 'fx', 'fy', 'fz', 's', 'phase', 'radius'] as const) this[k][i] = o[k][i];
+      this.side[i] = o.side[i]; this.state[i] = o.state[i]; this.variant[i] = o.variant[i]; this.lights[i] = o.lights[i]; this.leg[i] = o.leg[i];
+      this.active[i] = o.active[i];
+    };
+    // gulls and boats don't ride the road graph: they carry over as they are
+    for (const [a, b] of [RANGES.gulls, RANGES.boats]) for (let i = a; i < b; i++) copy(i);
+    // cars and walkers: keep their variants always (a slot is a person/car), their pose when a
+    // road of the right kind is still under them
+    for (const [a, b, car] of [[RANGES.cars[0], RANGES.cars[1], true], [RANGES.peds[0], RANGES.peds[1], false]] as const)
+      for (let i = a; i < b; i++) {
+        this.variant[i] = o.variant[i];
+        if (!o.active[i]) continue;
+        copy(i);
+        const st = o.state[i];
+        if (!car && st === ST.BEACH) continue; // on the sand, no road needed
+        if (!car && (st === ST.TO_DOOR || st === ST.FROM_DOOR || st === ST.INSIDE)) {
+          const od = o.door[i], d = od >= 0 ? this.findDoor(o.w.doors[od * 6], o.w.doors[od * 6 + 2]) : -1;
+          if (d >= 0) { this.door[i] = d; continue; }
+          if (st === ST.INSIDE) { this.active[i] = 0; this.y[i] = -1000; continue; } // unseen either way
+          if (st === ST.FROM_DOOR) { this.leg[i] = 1; continue; } // straight back to the pavement
+          this.state[i] = ST.WALK; // TO_DOOR lost its door: carry on down the street
+        }
+        const ne = this.nearestEdge(o.x[i], o.z[i], car ? (e) => this.drivable(e) : (e) => this.walkable(e), car ? 6 : 16); // walkers keep to the sidewalk, well off the centre line
+        if (!ne) {
+          // the road it was on is gone (a tile unloaded far away) — only then does it leave
+          this.active[i] = 0; this.y[i] = -1000; continue;
+        }
+        const [e, sAlong, tx, tz] = ne;
+        const fx = -Math.sin(o.yaw[i]), fz = -Math.cos(o.yaw[i]);
+        let dir = fx * tx + fz * tz >= 0 ? 1 : -1;
+        if (car && this.oneway(e)) dir = 1;
+        this.placeOnEdge(i, e, dir, sAlong);
+        if (st === ST.PAUSE && !car) this.state[i] = ST.PAUSE;
+      }
   }
 
   setEnv(e: Partial<LifeEnv>) { Object.assign(this.env, e); }

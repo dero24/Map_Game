@@ -1,4 +1,6 @@
-// Side tuning panel (lil-gui). Every knob persists to localStorage so a look can be dialed in and kept.
+// Side tuning panel (lil-gui), hidden by default (` toggles it). Only knobs the player actually
+// changed persist to localStorage (a diff against the shipped defaults), so improved defaults
+// always reach everyone who hasn't overridden that one knob.
 import GUI from 'lil-gui';
 import { postParams } from '../render/post';
 import { shadowParams } from '../render/shadows';
@@ -12,12 +14,15 @@ export const timeParams = { realTime: true, hour: 18.5, speed: 60, dayOfYear: 0 
 export const weatherParams = { cloud: 0.35, seaFog: 0.0, haze: 0.35, wind: 0.5, autoWeather: true };
 export const debugParams = { rawScene: false, showStats: false, lightScale: 1 };
 
-let STORE = 'world.panel.v1';
+let STORE = 'world.panel.v3';
 type Bag = Record<string, unknown>;
 const bags: Record<string, Bag> = { post: postParams, shadow: shadowParams, walk: walkParams, time: timeParams, weather: weatherParams, debug: debugParams, life: lifeParams, audio: audioParams };
+const DEFAULTS = JSON.parse(JSON.stringify(bags)) as Record<string, Bag>;
+const U_KEYS = ['uPigment', 'uPigmentScale', 'uShadowStrength'] as const;
+const U_DEFAULTS = Object.fromEntries(U_KEYS.map((k) => [k, U[k].value as number]));
 
 export function loadSettings(region = 'world') {
-  STORE = `${region}.panel.v1`;
+  STORE = `${region}.panel.v3`; // v3: diffs only; older full snapshots are retired
   try {
     const saved = JSON.parse(localStorage.getItem(STORE) ?? '{}') as Record<string, Bag>;
     for (const [k, bag] of Object.entries(bags)) if (saved[k]) for (const [p, v] of Object.entries(saved[k])) if (p in bag && typeof v === typeof bag[p]) bag[p] = v;
@@ -25,9 +30,15 @@ export function loadSettings(region = 'world') {
   } catch { /* fresh start */ }
 }
 function save() {
+  const out: Record<string, Bag> = {};
+  for (const [k, bag] of Object.entries(bags)) {
+    const d: Bag = {};
+    for (const [p, v] of Object.entries(bag)) if (!(k === 'walk' && p === 'fly') && JSON.stringify(v) !== JSON.stringify(DEFAULTS[k]?.[p])) d[p] = v;
+    if (Object.keys(d).length) out[k] = d;
+  }
   const u: Record<string, number> = {};
-  for (const k of ['uPigment', 'uPigmentScale', 'uShadowStrength'] as const) u[k] = U[k].value;
-  localStorage.setItem(STORE, JSON.stringify({ ...bags, uniforms: u, walk: { ...walkParams, fly: false } }));
+  for (const k of U_KEYS) if (U[k].value !== U_DEFAULTS[k]) u[k] = U[k].value;
+  try { localStorage.setItem(STORE, JSON.stringify({ ...out, uniforms: u })); } catch { /* storage off */ }
 }
 
 export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: number) => void; onRespawn: () => void; onResetExplore: () => void }, region: { name: string; tz: string; respawn?: string }) {
@@ -108,5 +119,8 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   l.close();
   wa.close();
   m.close();
+  // the game ships tuned: the panel is a developer tool, hidden until ` (backquote) opens it
+  gui.hide();
+  window.addEventListener('keydown', (e) => { if (e.code === 'Backquote') gui._hidden ? gui.show() : gui.hide(); });
   return gui;
 }

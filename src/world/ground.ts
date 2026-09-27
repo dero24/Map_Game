@@ -158,6 +158,8 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
         // saturate (tropics) or darken/cool (boreal) — painted land cover stays the source.
         float greenness = clamp((alb.g - max(alb.r, alb.b)) * 6.0, 0.0, 1.0);
         float lum0 = dot(alb, vec3(0.3, 0.59, 0.11));
+        // mown lawn stipple: fine value texture where the ground is green (fades with distance)
+        alb *= 1.0 - greenness * (0.07 - 0.1 * vnoise(xz * 6.0)) * (1.0 - smoothstep(25.0, 60.0, length(vWorldPos - (cameraPosition + uWorldOffset))));
         vec3 straw = vec3(lum0 * 1.32, lum0 * 1.12, lum0 * 0.72) * (0.92 + 0.16 * fbm(xz * 0.03 + 7.0));
         alb = mix(alb, straw, uBiome.x * greenness);
         alb = mix(alb, alb * vec3(0.9, 1.08, 0.86), uBiome.y * greenness);
@@ -177,6 +179,24 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
         float wet = smoothstep(1.1, 0.25, h) * step(0.5, T.b + step(T.w, 60.0));
         alb *= mix(1.0, 0.72, wet);
         alb = mix(alb, alb * vec3(0.62, 0.66, 0.6), smoothstep(0.0, -1.0, h));
+        // Ocean beaches read as sand: wind ripples parallel to the shore in the dry band, a broken
+        // wrack line of weed at the last high tide, and a stipple of footprints. All from the
+        // shore distance field and the painted sand colour, so every coast gets its own.
+        {
+          float lumS = dot(alb, vec3(0.3, 0.59, 0.11));
+          float sandy = (1.0 - greenness) * smoothstep(0.28, 0.4, lumS) * step(alb.b, alb.r) * (1.0 - step(250.0, T.a)) * step(0.5, T.g);
+          if (sandy > 0.0) {
+            vec2 gN = vec2(terrainAt(xz + vec2(1.5, 0.0)).g - T.g, terrainAt(xz + vec2(0.0, 1.5)).g - T.g);
+            vec2 sN = gN / max(length(gN), 1e-3);
+            float dry = smoothstep(13.0, 18.0, T.g) * (1.0 - smoothstep(55.0, 70.0, T.g));
+            float rip = sin(dot(xz, sN) * 2.4 + fbm(xz * 0.2) * 4.0);
+            alb *= 1.0 + 0.045 * rip * dry * sandy;
+            float wrack = smoothstep(8.0, 9.5, T.g) * (1.0 - smoothstep(12.0, 13.5, T.g)) * step(0.45, vnoise(xz * 0.7 + sN * 3.0));
+            alb = mix(alb, vec3(0.254, 0.195, 0.111), 0.35 * wrack * sandy);
+            float steps = step(0.82, vnoise(xz * 7.0)) * smoothstep(12.0, 20.0, T.g) * (1.0 - smoothstep(70.0, 110.0, T.g));
+            alb *= 1.0 - 0.07 * steps * sandy;
+          }
+        }
         alb = pigment(alb, vWorldPos);
         float sh = shadowAt(vWorldPos, N);
         vec3 col = paintLight(alb, N, vWorldPos, sh, 1.0);

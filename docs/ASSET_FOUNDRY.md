@@ -96,6 +96,11 @@ for plants you grow and the workbench); animals < 1,600; cars about 1,800.
     - butterflies over gardens in summer;
     - fireflies on summer nights.
   - Small animals are drawn 1.3–2× life size, an illustrator's licence: at painting scale a true-size squirrel dissolves into the grass.
+- **People** (`people.ts`): one jointed body for every walker and resident (hips, knees,
+  shoulders; ~1.4k vertices), varied per instance on the GPU: skin, hair and trouser palettes,
+  five hairstyles (the unworn ones collapse), shorts and short sleeves by the region's warmth
+  (climate × season). Gait: thighs swing about the hip, the knee folds on the forward swing, arms
+  counter-swing; standing people shift their weight. A whole crowd is one instanced draw.
 - **Furniture** (`furniture.ts`):
   - five mailbox styles, North American curbs only;
   - summer beaches (umbrellas, towels, chairs) around the lifeguard stands;
@@ -123,6 +128,12 @@ packet (**Shift+R** picks another) on open ground a step ahead:
 3. **Library.** A `…Lib(type, v)` through `cached()`. Tile builders `.clone()` it, because pack transfers the buffers.
 4. **Placement.** Keyed on real data or habitat. The variant comes from `variantAt(x, z, n)` and the mix from a region/climate table. Name the InstancedMesh `family:type[:variant]`, so the spotting log, commissions and hints can find it.
 5. **Workbench.** Add a row to `src/tools/kitViewer.ts` and check it at `/kit.html` (painted toggle, seeds, growth slider).
+
+## Almanac cards
+
+Every family doubles as a page of the Almanac (`src/ui/commissions.ts`, `cardArt.ts`): the same
+recipe that builds a model in the world renders its field-guide card, so a new family is
+collectible the moment it exists.
 
 ## Next
 

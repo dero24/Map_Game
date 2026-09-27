@@ -213,6 +213,19 @@ class StreetIndex {
       }
     }
   }
+  /** Is a mapped driveway / service way within R of (x,z)? (then the lot already has its drive) */
+  minorNear(x: number, z: number, R: number) {
+    for (let gx = Math.floor((x - R) / 25); gx <= Math.floor((x + R) / 25); gx++)
+      for (let gz = Math.floor((z - R) / 25); gz <= Math.floor((z + R) / 25); gz++)
+        for (const id of this.grid.get(gx * 92821 + gz) ?? []) {
+          const [ax, az, bx, bz, minor] = this.segs[id];
+          if (!minor) continue;
+          const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+          const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)) : 0;
+          if (Math.hypot(ax + dx * t - x, az + dz * t - z) < R) return true;
+        }
+    return false;
+  }
   // [x, z, score distance, width, is-minor]
   nearest(x: number, z: number, R = 50, majorOnly = false): [number, number, number, number, number] | null {
     let best: [number, number, number, number, number] | null = null;
@@ -265,6 +278,8 @@ export interface Door { x: number; z: number; y: number; nx: number; nz: number;
 export interface Colliders { walls: [P2, P2, number, number][]; decks: Deck[] }
 export interface SignSpec { x: number; z: number; y: number; tx: number; tz: number; nx: number; nz: number; w: number; h: number; text: string; style: 'shop' | 'number'; color: number }
 export interface Mailbox { x: number; z: number; yaw: number }
+/** A generated driveway's parking spot (house end), for a lot the map gives no drive. */
+export interface Drive { x: number; z: number; yaw: number }
 
 interface Ctx {
   b: Builder;
@@ -275,6 +290,7 @@ interface Ctx {
   signs: SignSpec[];
   mail: Mailbox[];
   walks: number[];
+  drives: Drive[];
 }
 interface BInfo { ring: P2[]; base: number; floor0: number; raise: number; eave: number; kind: string; seed: number; id: number; fo: number; roofCol: THREE.Color; roofMat?: number; addr?: string; name?: string; bi: number }
 
@@ -614,6 +630,28 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
       if (B.kind === 'house' && dl > edge + 3) { // every house with a walk to the street gets a curbside box (props.ts picks the style, NA only)
         const mx = st[0] + (ddx / dl) * (edge + 0.5) + (-ddz / dl) * 0.9, mz = st[1] + (ddz / dl) * (edge + 0.5) + (ddx / dl) * 0.9;
         if (!C.rings.hit(mx, mz, B.ring)) C.mail.push({ x: mx, z: mz, yaw: Math.atan2(-ddx, -ddz) });
+        // Lot dressing: most North American houses have a drive beside the walk. Where the map
+        // has none (no service way near the door), lay a 2.9 m strip to the street 6 m to one side
+        // and park a car at its house end (props.ts) — only if the strip is clear of every house.
+        if (activeStyle().region === 'na' && r(0xd71e) < 0.62 && Math.abs(ringArea(B.ring)) < 280 && !C.streets.minorNear(fx, fz, 14)) {
+          const ux = ddx / dl, uz = ddz / dl, px = -uz, pz = ux;
+          for (const side of r(0xd7) < 0.5 ? [-1, 1] : [1, -1]) {
+            const off = 6.0 * side;
+            const hx = fx + px * off - ux * 0.5, hz = fz + pz * off - uz * 0.5; // house end, at the front line
+            const sx = ex + px * off, sz = ez + pz * off;
+            const L = Math.hypot(hx - sx, hz - sz);
+            if (L < 9) break; // room for a car between the house and the sidewalk
+            let clear = true;
+            for (let k = 0; k <= 8 && clear; k++) {
+              const f = k / 8, x = hx + (sx - hx) * f, z = hz + (sz - hz) * f;
+              for (const w of [-1.6, 0, 1.6]) if (C.rings.hit(x + px * w, z + pz * w, B.ring) || C.rings.hit(x + px * w, z + pz * w, [])) clear = false;
+            }
+            if (!clear) continue;
+            C.walks.push(hx, hz, sx, sz, 2.9);
+            C.drives.push({ x: hx - ux * 3.0, z: hz - uz * 3.0, yaw: Math.atan2(ux, uz) });
+            break;
+          }
+        }
       }
     }
   }
@@ -950,7 +988,8 @@ export interface BuildingsResult {
   colliders: Colliders;
   signs: SignSpec[];
   mailboxes: Mailbox[];
-  walks: number[]; // x0 z0 x1 z1 width per front walk
+  drives: Drive[];
+  walks: number[]; // x0 z0 x1 z1 width per front walk (and generated drives, 2.9 m)
   pilings: { x: number; z: number; ang: number }[];
 }
 
@@ -988,7 +1027,7 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
   const doors: Door[] = [];
   const colliders: Colliders = { walls: [], decks: [] };
   const rings = new RingGrid();
-  const signs: SignSpec[] = [], mailboxes: Mailbox[] = [], walks: number[] = [], pilings: BuildingsResult['pilings'] = [];
+  const signs: SignSpec[] = [], mailboxes: Mailbox[] = [], drives: Drive[] = [], walks: number[] = [], pilings: BuildingsResult['pilings'] = [];
   const near = (x: number, z: number, m: number) => x > S.x0 - m && x < S.x1 + m && z > S.z0 - m && z < S.z1 + m;
 
   // Unpack + tidy all outlines first (the porch/stair clearance test needs the neighbours).
@@ -1227,7 +1266,7 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     if (inSlice && !bd.lod && bd.k !== 'shed' && inZone) {
       const wall = pickDoorWall(ring, seed, bd.k, streets, entrances);
       if (wall) {
-        const C: Ctx = { b, col: colliders, streets, rings, world, signs, mail: mailboxes, walks };
+        const C: Ctx = { b, col: colliders, streets, rings, world, signs, mail: mailboxes, walks, drives };
         const B: BInfo = { ring, base, floor0, raise, eave: wallTop, kind: bd.k, seed, id, fo, roofCol, roofMat: rc.roofMat === ROOFMAT.tile ? ROOFMAT.metal : rc.roofMat, addr: bd.ad, name: bd.n, bi: footprints.length - 1 };
         const porch = bd.k === 'house' && raise === 0 && r2 < 0.5 && porchFits(C, B, wall);
         const d = buildEntrance(C, B, wall, porch);
@@ -1260,7 +1299,7 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     m.layers.enable(1);
     group.add(m);
   }
-  return { group, footprints, ctxRings, lanterns, material, doors, colliders, signs, mailboxes, walks, pilings };
+  return { group, footprints, ctxRings, lanterns, material, doors, colliders, signs, mailboxes, drives, walks, pilings };
 }
 
 // The building you're visiting: its door stands open and its windows become real openings (a short
@@ -1659,6 +1698,9 @@ export function buildingMaterial() {
         alb = pigment(alb, vWorldPos);
         float sh = shadowAt(vWorldPos, N);
         vec3 col = paintLight(alb, N, vWorldPos, sh, ao);
+        // roofs face the sky, so the blue sky fill tints every grey shingle teal; take most of
+        // that chroma back out (a touch warm, like sunlit asphalt shingle)
+        if (part > 0.5 && part < 1.5) { float rl = dot(col, vec3(0.2126, 0.7152, 0.0722)); col = mix(col, rl * vec3(1.04, 1.0, 0.94), 0.4 * (1.0 - uNight)); }
         col += glow * uWindowColor * (0.15 + 1.25 * uNight);
         col = mix(col, winCol, winMask);
         gl_FragColor = vec4(applyFog(col, vWorldPos), 1.0);

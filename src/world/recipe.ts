@@ -50,6 +50,9 @@ export function roofGamut(c: number): number {
   let s = d < 1e-6 ? 0 : d / (1 - Math.abs(2 * l - 1));
   const warm = hdeg < 45 || hdeg > 330; // reds, terracotta, browns
   s = Math.min(s, warm ? 0.42 : hdeg < 75 ? 0.22 : 0.1);
+  // greens, teals and slate blues never survive: they read teal under a blue sky fill, so they
+  // become warm greys (asphalt shingle) — real green roofs are rare enough to lose
+  if (hdeg >= 75 && hdeg <= 260) { hdeg = 35; s = Math.min(s, 0.04); }
   const L = Math.max(0.16, Math.min(0.58, l));
   const q = L < 0.5 ? L * (1 + s) : L + s - L * s, p = 2 * L - q;
   const hk = hdeg / 360;
@@ -67,7 +70,7 @@ export function recipeFor(bd: Building, st: RegionStyle): Recipe {
   if (bd.k === 'church' && bd.fc == null) facade = 0xf4f1ea;
   if (bd.k === 'lighthouse' && bd.fc == null) facade = 0x9a7b62;
   const flat = bd.roof === 'flat';
-  const roof = bd.rc != null ? roofGamut(bd.rc) : (flat ? st.flatRoof : st.roof)[Math.floor(r2 * (flat ? st.flatRoof.length : st.roof.length))];
+  const roof = roofGamut(bd.rc ?? (flat ? st.flatRoof : st.roof)[Math.floor(r2 * (flat ? st.flatRoof.length : st.roof.length))]);
 
   // Siding: brick-coloured walls are brick; otherwise the regional habit by building kind.
   const rs = h(s, 0x51d1);

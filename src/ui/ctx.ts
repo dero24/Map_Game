@@ -28,6 +28,9 @@ export interface GameCtx {
   env: () => { night: number; golden: number; fog: number; oceanDist: number };
   placeLabel: () => string; // what the HUD says right now
   locality: () => string; // the town you're in (arrival cards), '' if unknown
+  region: () => string; // its county / state line ("Monmouth County, New Jersey"), '' if unknown
+  /** A small watercolour card picture of a foundry model (Almanac cards), as a data URL. */
+  cardArt: (family: string, type: string, pencil?: boolean) => string;
   toast: (m: string) => void;
   teleport: (lat: number, lon: number) => Promise<void>;
   sound: (kind: 'brush' | 'shutter' | 'chime' | 'page') => void;

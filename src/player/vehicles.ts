@@ -21,6 +21,7 @@ export type VKind = 'car' | 'boat' | 'plane';
 
 interface Veh {
   kind: VKind;
+  color?: number;
   model: string; // the asset kit type (sedan, pickup, console, seaplane …)
   gearY: number; // plane: height of the gear above the origin
   obj: THREE.Group;
@@ -40,7 +41,11 @@ const SPECS = {
   plane: { reach: 7.5, camDist: 15, camH: 4.2, look: 1.4 },
 } as const;
 const CAR_COLORS = [0xf2f2ee, 0xb9bcc0, 0x26282c, 0x5a5e64, 0x2b3f63, 0x9c2a26, 0x3d5a46, 0xcdbf9e, 0x7a8894];
-const MAX_KEPT = 6; // parked player vehicles left around the world (oldest recycled)
+const MAX_KEPT = 24; // parked player vehicles left around the world (oldest recycled)
+// Where you left things survives the session: the rides you parked (by real lat/lon) and the
+// driveway cars you drove off in (tile-instance keys are deterministic, so they stay gone).
+const STORE = 'map-game.vehicles.v1';
+interface Saved { taken: string[]; kept: { kind: VKind; model: string; lat: number; lon: number; yaw: number; color?: number }[] }
 
 // Paint the white (tintable) parts of a vertex-coloured model.
 function tint(g: THREE.BufferGeometry, hex: number) {
@@ -95,6 +100,7 @@ export class Vehicles {
       tiles: () => Iterable<{ spec: { id: string }; group: THREE.Group }>;
       driveLeft: boolean;
       enabled: () => boolean; // false while menus/journal/intro are up
+      geo?: { toLatLon: (x: number, z: number) => [number, number]; fromLatLon: (lat: number, lon: number) => [number, number] };
     },
   ) {
     this.group.name = 'player-vehicles';
@@ -114,6 +120,28 @@ export class Vehicles {
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
+    this.restore();
+  }
+
+  // ---------------- persistence ----------------
+  private restore() {
+    const g = this.o.geo;
+    if (!g) return;
+    try {
+      const d = JSON.parse(localStorage.getItem(STORE) ?? 'null') as Saved | null;
+      if (!d) return;
+      for (const k of d.taken ?? []) this.taken.add(k);
+      for (const v of d.kept ?? []) {
+        const [x, z] = g.fromLatLon(v.lat, v.lon);
+        if (Number.isFinite(x) && Number.isFinite(z)) this.make(v.kind, x, z, v.yaw, v.color, v.model);
+      }
+    } catch { /* storage off or corrupt: start fresh */ }
+  }
+  private persist() {
+    const g = this.o.geo;
+    if (!g) return;
+    const kept = this.list.map((v) => { const [lat, lon] = g.toLatLon(v.x, v.z); return { kind: v.kind, model: v.model, lat, lon, yaw: v.yaw, color: v.color }; });
+    try { localStorage.setItem(STORE, JSON.stringify({ taken: [...this.taken].slice(-400), kept } satisfies Saved)); } catch { /* ignore */ }
   }
 
   get driving() { return this.active !== null; }
@@ -178,7 +206,7 @@ export class Vehicles {
     obj.traverse((m) => m.layers.enable(1));
     this.group.add(obj);
     const y = kind === 'boat' ? 0 : this.o.walk.surfaceAt(x, z);
-    const v: Veh = { kind, model: model!, gearY, obj, prop, x, y, z, yaw, pitch: 0, roll: 0, v: 0, steer: 0, throttle: 0, feet: y, airborne: false };
+    const v: Veh = { kind, color: kind === 'car' ? c : undefined, model: model!, gearY, obj, prop, x, y, z, yaw, pitch: 0, roll: 0, v: 0, steer: 0, throttle: 0, feet: y, airborne: false };
     this.list.push(v);
     // keep the world tidy: recycle the oldest parked player vehicle
     while (this.list.length > MAX_KEPT) {
@@ -187,6 +215,7 @@ export class Vehicles {
       this.remove(old);
     }
     this.pose(v);
+    this.persist();
     return v;
   }
   private remove(v: Veh) {
@@ -227,7 +256,7 @@ export class Vehicles {
 
   // ---------------- enter / exit ----------------
   private toggle() {
-    if (this.active) return this.exit();
+    if (this.active) { this.exit(); this.persist(); return; }
     const w = this.o.walker;
     let best: Veh | null = null, bd = Infinity;
     for (const v of this.list) {
@@ -244,6 +273,7 @@ export class Vehicles {
     }
     if (!best) return;
     this.enter(best);
+    this.persist();
   }
   private enter(v: Veh) {
     if (walkParams.fly) walkParams.fly = false;
@@ -388,7 +418,9 @@ export class Vehicles {
   private axis(pos: string[], neg: string[]) { return (pos.some((c) => this.k(c)) ? 1 : 0) - (neg.some((c) => this.k(c)) ? 1 : 0); }
 
   /** Advance the ridden vehicle and the camera. Returns false when on foot (walker drives the camera). */
+  private saveT = 10;
   update(dt: number, cam: THREE.PerspectiveCamera): boolean {
+    if (this.active && (this.saveT -= dt) <= 0) { this.saveT = 10; this.persist(); }
     for (const v of this.list) if (v.prop) v.prop.rotation.z += dt * (6 + (v === this.active ? v.throttle * 60 : 0));
     const v = this.active;
     if (!v) return false;

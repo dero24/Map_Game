@@ -220,3 +220,112 @@ unchanged, and there is no relief loop (relief builds wait with no timer).
 **Visual check** (same poses, on vs off): Sea Bright and Denver both read truer (flat
 Ocean Ave blocks, raised 9 m post-Sandy houses, Denver-square hips, flat alley garages).
 A design review with screenshots is still owed for the next visual round.
+
+---
+
+### 2026-09-27 — AAA look + play review, rounds 1–5 (Sea Bright → Monmouth Beach, default settings) — PASS 8.5
+Reviewer persona: a Nintendo EAD / Rockstar North art, design and engineering lead. The bar is
+"Sea Bright and Monmouth Beach look amazing and play fun, and it scales to 48 states". The
+harness is `tools/review-shots.js`: 16 fixed poses in three montages, including a streamed Long
+Branch street at night, people up close, street trees up close and the beach at eye level.
+
+**Round 1 — 6/10, NOT PASSED.** Four of the problems broke the illusion on their own:
+- neon grass taller than the camera;
+- a radial fan in the water;
+- a muddy shadow plan;
+- box people.
+
+The key finding was that the "moving blotches" came from the turbulence *formula*: it was a
+screen-anchored field applied per channel, which tinted white sand. Its strength wasn't the
+cause. Must-fixes, all applied:
+1. World-anchored, luminance-only pigment turbulence (0.22).
+2. Mown lawns in towns (built cells / non-wild cover); meadow only in open country; greens
+   desaturated ×0.7.
+3. Grass writes depth plus alpha 0; the composite masks ink by scene alpha.
+4. Water strokes in two world-fixed frames.
+5. A hue-shift shadow glaze (value kept), a tighter terminator, less and greyer sky fill;
+   exposure 0.9 and saturation 1.12.
+6. Depth-adaptive Kuwahara.
+7. Crown-sphere normals and underside AO for trees.
+8. People: `src/assets/people.ts`.
+
+**Round 2 — 7/10, NOT PASSED.** Must-fixes, all applied:
+1. Ground albedo at real reflectance.
+2. Crowns shaded by their sphere field, not their own lobes; ellipsoid `blob` normals.
+3. Street trees: broadleaf in built cells, and no model whose crown starts above 56% of its
+   height.
+4. Lawn texture (denser, tinted toward the wash, a mown stipple).
+5. Sand ripples, wrack line and footprints from the shore distance field.
+6. The capture waits for streaming (the aerial had lost its town).
+
+Should-fixes also applied:
+- the roof gamut;
+- skin palette at 0.72;
+- idle sway;
+- interior daylight falloff;
+- **lot dressing**: generated drives with parked cars, plus picket fences, for NA houses.
+
+**Round 3 — 7.5/10, NOT PASSED.** The hero region now reads as a real place (the Monmouth Beach
+street, house fronts, the aerial, the streamed night). Must-fixes, all applied:
+1. Car close-ups: recessed rims, round treads, wheel arches, a softer bevel, inset glass.
+2. Roofs: gamut 75–260° → warm grey, plus a daytime desaturation in the roof shader.
+3. Lamp pools: `max(albedo, 0.3)`.
+4. Pine and round tree silhouettes.
+5. **The Almanac v1**, the hour-to-hour home: cards per family, first-seen town and date, town
+   stamps, a new atlas tab.
+
+**Round 4 — 8/10, NOT PASSED** ("close, finite"). Roofs fixed, the arrival frame clear, people
+read. Still blocking, all applied in the same session:
+- Streamed lamp pools were clamped by *absolute* height. They are now relative to the local
+  ground (`uLampBaseY`).
+- Pine is three overlapping tiers of tufts, with a top lobe that swallows the upper tier.
+- The squirrel's tail is one continuous curled plume; the deer has a forward neck and
+  thigh-plus-cannon legs.
+- Card art goes through a watercolour plate: Kuwahara, rim pooling, a ragged wet edge, a pencil
+  ground line.
+
+The reviewer judged the Almanac right as the spine, with three changes needed to scale:
+1. Collect by *painting*, not proximity.
+2. Add place cards from real data so it never runs out.
+3. Detect by what's in view.
+
+v1.1 (applied): spotting makes a **pencil** card, and a painting with the subject in frame
+colours it in. **Place cards** come from named POIs and buildings; your painting becomes the
+card. One stamp per town.
+
+**User direction folded in:**
+- "Paint as you explore" keeps the bloom only near you; `sketchAmt` fades out by 160 m, so the
+  horizon is always finished watercolour. The atlas keeps pencil for unvisited places.
+- Traffic and walkers persist across road-graph rebuilds (`LifeSim.adopt`), and parked player
+  vehicles and taken driveway cars persist across sessions.
+
+**Round 5 — 8.5/10, PASS (hero region cleared for scale-out).** Every round-4 item is visible
+in the same poses:
+- streamed night lamps (the clamp was absolute height against DEM ground, a bug class that
+  would have hit every inland town);
+- the pine is one mass;
+- painted plates and pencil cards;
+- paint-to-complete plus place cards (one painting coloured 4 place cards and a car);
+- a finished far world with pencil kept in the atlas;
+- life persistence (522 of 524 agents kept).
+
+Owed evidence: the post-fix squirrel and deer cards. Delivered in `shots/almanac-cards3.jpg`:
+the tail is attached and curls over the back, the deer has its forward neck.
+
+**Carried forward as the opening checks of the next round (P0 on the backlog):**
+1. Night amber-mud. Pools narrowed to 13 m with a `pow(1.6)` falloff and a stricter night-glaze
+   exemption (applied); the rhythm still needs verifying in frames 3 and 13.
+2. Frames 2, 5 and 6 unchanged since round 1:
+   - Ocean Ave downtown needs wares, café tables and parked cars;
+   - interiors need sun pools and foundry furniture.
+   The user asked for restaurant, house and office interiors. **The region passes on streets,
+   beach, night and loop, not on interiors.**
+3. Tree silhouettes at 5–10 m: vertex-noise displacement on the outer lobes.
+4. Frame 14 harness pick is flaky: pin a walker within 6 m facing the camera.
+
+**Scale-out order (amended at PASS):**
+1. Boot GPU benchmark and quality tiers.
+2. A streamed-parity harness on 3 random US towns per round.
+3. Almanac regional sets plus place cards from streamed POIs.
+4. Local Plates, plus the restaurant, café and home interior pass.
+5. Hero region 02, desert Southwest.

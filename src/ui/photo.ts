@@ -118,6 +118,8 @@ export class PhotoMode {
     if (!img || !thumb) return this.g.toast('the paint would not dry — try again');
     const p: Page = { id: `pg-${Date.now().toString(36)}`, t: Date.now(), lat, lon, yaw: this.g.walker.yaw, place, when, commission: done?.title, img, thumb };
     await savePage(p);
+    const painted = this.com.paintFrame(p.id);
+    if (painted.length) setTimeout(() => this.g.toast(`almanac: painted in — ${painted.slice(0, 3).join(', ')}${painted.length > 3 ? ` and ${painted.length - 3} more` : ''}`), done ? 2600 : 1800);
     if (done) {
       this.com.complete(done, p.id);
       this.g.sound('chime');

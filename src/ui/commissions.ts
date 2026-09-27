@@ -8,6 +8,11 @@ import { loadState, saveState, type BookState } from './book';
 import { CAR_TYPES, BOAT_TYPES, PLANE_TYPES } from '../assets/kit';
 import { modelName } from '../player/vehicles';
 import { CRITTERS, CRITTER_NAME } from '../assets/fauna';
+import { TREE_KINDS, PLANT_SPECIES, SPECIES } from '../assets/flora';
+
+// Almanac names for the foundry's tree genomes (the genome is a growth habit; the name is the
+// street-level read of it)
+export const TREE_NAME: Record<string, string> = { round: 'shade tree', oak: 'oak', shrub: 'flowering shrub', pine: 'pitch pine', spruce: 'spruce', palm: 'palm', birch: 'birch' };
 
 type Active = BookState['active'][number];
 const ACTIVE = 3;
@@ -16,8 +21,14 @@ const FAMILY: Record<string, { label: string; all: string[] }> = {
   boat: { label: 'boat', all: BOAT_TYPES },
   plane: { label: 'plane', all: PLANE_TYPES },
   wildlife: { label: 'animal', all: CRITTERS },
+  tree: { label: 'tree', all: TREE_KINDS },
+  flower: { label: 'garden plant', all: PLANT_SPECIES },
 };
-const niceName = (t: string) => CRITTER_NAME[t as keyof typeof CRITTER_NAME] ?? modelName(t);
+export const FAMILIES = FAMILY;
+// POI kinds that aren't worth a card (utilities, parking, generic tags)
+const DULL = new Set(['toilets', 'parking', 'wastewater_plant', 'pumping_station', 'monitoring_station', 'tyres', 'car_wash', 'yes', 'apartment', 'military', 'laundry', 'car_repair', 'bicycle_repair_station', 'social_facility']);
+export const niceName = (t: string, family = '') =>
+  family === 'tree' ? TREE_NAME[t] ?? t : family === 'flower' ? SPECIES[t as keyof typeof SPECIES]?.label ?? t : CRITTER_NAME[t as keyof typeof CRITTER_NAME] ?? modelName(t);
 const art = (s: string) => (/^[aeiou]/i.test(s) || /^SUV/.test(s) ? 'an' : 'a');
 const hash = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return (h >>> 0) / 4294967296; };
 
@@ -39,7 +50,11 @@ export class Commissions {
   }
   private save() { this.dirty = true; }
 
+  private stampT = 3;
+  /** A new town stamp (the atlas shows them; toasts announce them). */
+  onStamp: ((town: string, region: string) => void) | null = null;
   update(dt: number) {
+    if ((this.stampT -= dt) <= 0) { this.stampT = 4; this.stamp(); }
     if ((this.genT -= dt) <= 0) { this.genT = 8; this.generate(); }
     if ((this.spotT -= dt) <= 0) { this.spotT = 0.5; this.spot(); }
     if ((this.nearT -= dt) <= 0) { this.nearT = 1; this.nudge(); }
@@ -216,20 +231,102 @@ export class Commissions {
   private spot() {
     const w = this.g.walker;
     const hit = (family: string, type: string) => {
+      const F = FAMILY[family];
+      if (!F || !F.all.includes(type)) return;
       const list = (this.state.spotted[family] ??= []);
       if (list.includes(type)) return;
       list.push(type);
-      this.save();
-      const F = FAMILY[family];
-      const nm = niceName(type);
-      this.g.toast(`spotted ${art(nm)} ${nm} — ${list.length} of ${F.all.length} ${F.label} ${family === 'wildlife' ? 'kinds' : 'types'}`);
+      // the Almanac card remembers where and when
+      this.record(`${family}:${type}`);
+      const nm = niceName(type, family);
+      this.g.toast(`almanac: ${nm} sketched in pencil — paint one to finish the card (${list.length} of ${F.all.length} ${F.label}s)`);
       this.g.sound('page');
     };
-    for (const [prefix, family] of [['parked-cars:', 'car'], ['life-car:', 'car'], ['moored-boats:', 'boat'], ['life-boat:', 'boat'], ['ride-car:', 'car'], ['ride-boat:', 'boat'], ['ride-plane:', 'plane'], ['critter:', 'wildlife']] as const)
-      for (const p of this.g.instances(prefix, w.x, w.z, family === 'boat' ? 60 : family === 'wildlife' ? 35 : 30)) {
-        const n = this.g.toNdc(p.x, p.y + (family === 'wildlife' ? 0.2 : 0.8), p.z);
+    for (const [prefix, family] of [['parked-cars:', 'car'], ['life-car:', 'car'], ['moored-boats:', 'boat'], ['life-boat:', 'boat'], ['ride-car:', 'car'], ['ride-boat:', 'boat'], ['ride-plane:', 'plane'], ['critter:', 'wildlife'], ['trees:', 'tree'], ['garden:', 'flower'], ['plant:', 'flower']] as const)
+      for (const p of this.g.instances(prefix, w.x, w.z, family === 'boat' ? 60 : family === 'wildlife' ? 35 : family === 'tree' ? 30 : family === 'flower' ? 20 : 30)) {
+        const n = this.g.toNdc(p.x, p.y + (family === 'wildlife' ? 0.2 : family === 'tree' ? 3 : family === 'flower' ? 0.5 : 0.8), p.z);
         if (n.z < 1 && Math.abs(n.x) < 0.9 && Math.abs(n.y) < 0.9) hit(family, p.name.split(':')[1].split('+')[0]);
       }
+  }
+  private record(key: string, extra: Partial<import('./book').Seen> = {}) {
+    const seen = (this.state.seen ??= {});
+    if (seen[key]) return seen[key];
+    const w = this.g.walker;
+    const [lat, lon] = this.g.toLatLon(w.x, w.z);
+    seen[key] = { t: Date.now(), lat, lon, town: this.g.locality(), region: this.g.region(), painted: false, ...extra };
+    this.save();
+    return seen[key];
+  }
+  /** Named places near you (baked POIs + named streamed buildings): the Almanac's place cards —
+   *  unique to every town, so the book never runs out. */
+  private places(r: number) {
+    const w = this.g.walker, out: { key: string; name: string; kind: string; x: number; z: number }[] = [];
+    for (const p of this.g.json.pois ?? []) if (!DULL.has(p.kind) && Math.abs(p.x - w.x) < r && Math.abs(p.z - w.z) < r) out.push({ key: `place:${p.name.toLowerCase()}`, name: p.name, kind: p.kind.replace(/_/g, ' '), x: p.x, z: p.z });
+    for (const f of this.g.footprints()) {
+      if (!f.name || !['church', 'lighthouse', 'commercial', 'large', 'civic', 'school'].includes(f.kind)) continue;
+      const key = `place:${f.name.toLowerCase()}`;
+      if (out.some((o) => o.key === key)) continue; // the same place mapped as a POI and a building
+      const [x, z] = f.ring[0];
+      if (Math.abs(x - w.x) < r && Math.abs(z - w.z) < r) out.push({ key, name: f.name, kind: f.kind === 'commercial' ? 'shop' : f.kind === 'large' ? 'building' : f.kind, x, z });
+    }
+    return out;
+  }
+  private inView(x: number, y: number, z: number, m = 0.9) { const n = this.g.toNdc(x, y, z); return n.z < 1 && Math.abs(n.x) < m && Math.abs(n.y) < m; }
+  /** A painting was just made: everything recognisable in the middle of the frame gets its card
+   *  coloured in (and places get your painting as their card). Returns what was painted. */
+  paintFrame(page: string): string[] {
+    const w = this.g.walker, done: string[] = [];
+    for (const [prefix, family, r] of [['parked-cars:', 'car', 45], ['life-car:', 'car', 45], ['moored-boats:', 'boat', 90], ['life-boat:', 'boat', 120], ['ride-car:', 'car', 40], ['ride-boat:', 'boat', 60], ['ride-plane:', 'plane', 80], ['critter:', 'wildlife', 30], ['trees:', 'tree', 40], ['garden:', 'flower', 18], ['plant:', 'flower', 18]] as const)
+      for (const p of this.g.instances(prefix, w.x, w.z, r)) {
+        if (!this.inView(p.x, p.y + (family === 'tree' ? 3 : 0.6), p.z, 0.7)) continue;
+        const type = p.name.split(':')[1].split('+')[0];
+        if (!FAMILY[family]?.all.includes(type)) continue;
+        const key = `${family}:${type}`;
+        const list = (this.state.spotted[family] ??= []);
+        if (!list.includes(type)) list.push(type);
+        const s = this.record(key);
+        if (!s.painted) { s.painted = true; s.page = page; done.push(niceName(type, family)); }
+      }
+    for (const pl of this.places(220)) {
+      if (!this.inView(pl.x, this.g.terrain.heightAt(pl.x, pl.z) + 4, pl.z, 0.75)) continue;
+      const s = this.record(pl.key, { name: pl.name, kind: pl.kind });
+      if (!s.painted) { s.painted = true; s.page = page; done.push(pl.name); }
+    }
+    if (done.length) this.save();
+    return done;
+  }
+  /** Stamp the town you're in (reverse geocoded; offline the region's own name stands in). */
+  private stamp() {
+    // place cards in pencil for named places you walk right up to
+    for (const pl of this.places(70)) {
+      if ((this.state.seen ?? {})[pl.key]) continue;
+      const w = this.g.walker;
+      if (Math.hypot(pl.x - w.x, pl.z - w.z) > 60 || !this.inView(pl.x, this.g.terrain.heightAt(pl.x, pl.z) + 4, pl.z)) continue;
+      this.record(pl.key, { name: pl.name, kind: pl.kind });
+      this.g.toast(`almanac: ${pl.name} — a new place card (paint it to finish)`);
+      this.g.sound('page');
+    }
+    const town = this.g.locality(), region = this.g.region();
+    if (!town) return;
+    const k = town.toLowerCase(); // one stamp per town (the offline fallback region must not add a twin)
+    const st = (this.state.stamps ??= {});
+    for (const [kk, v] of Object.entries(st)) if (kk.startsWith(`${town}|`)) { delete st[kk]; st[k] = v; } // older town|region keys
+    if (st[k]) { if (region && /County|Parish|Borough|, /.test(region) && st[k].region !== region) { st[k].region = region; this.save(); } return; }
+    st[k] = { t: Date.now(), town, region };
+    this.save();
+    this.onStamp?.(town, region);
+  }
+  /** Place cards found so far (newest first). */
+  placeCards() {
+    return Object.entries(this.state.seen ?? {}).filter(([k]) => k.startsWith('place:')).map(([key, s]) => ({ key, ...s })).sort((a, b) => b.t - a.t);
+  }
+  /** Almanac progress: every entry, whether it's been seen, and where. */
+  almanac() {
+    const seen = this.state.seen ?? {};
+    return Object.entries(FAMILY).map(([family, F]) => ({
+      family, label: F.label,
+      entries: F.all.map((type) => ({ type, name: niceName(type, family), seen: seen[`${family}:${type}`] ?? ((this.state.spotted[family] ?? []).includes(type) ? { t: 0, lat: 0, lon: 0, town: '', region: '' } : null) })),
+    }));
   }
   spottedSummary() {
     return Object.entries(FAMILY).map(([k, F]) => ({ family: k, label: F.label, seen: this.state.spotted[k] ?? [], all: F.all }));

@@ -11,11 +11,14 @@ import type { WalkWorld } from '../player/collision';
 import { activeStyle } from './styles';
 
 const CELL = 20;
+const DESAT = 0.7;
+// ESA WorldCover classes where wild (unmown) grass can stand: grassland, wetland, mangrove, moss
+const WILD = new Set([30, 90, 95, 100]);
 const RADIUS = 72; // metres of grass around the walker (fades out over the last ~25 m)
 const PER_FRAME = 3; // cells built per frame
 
-// Lush, saturated fresh greens (the NMS-dreamy read, still real grass) per climate — the painted
-// foliage palette is deliberately muted; ground cover is where colour can sing.
+// Fresh greens per climate. They are desaturated ~30% at use (DESAT) so the grass shares the
+// painted world's chroma budget: saturated blades read as a separate game pasted on top.
 const LUSH: Record<string, number[]> = {
   temperate: [0x6fae3a, 0x5d9e34, 0x7fbf45, 0x4f8f2f, 0x8cc152, 0x66a83c],
   continental: [0x5f9e36, 0x4f8c30, 0x74b041, 0x6aa53a],
@@ -66,6 +69,8 @@ function tuftGeo() {
 function grassMaterial() {
   return paintMaterial({
     side: THREE.DoubleSide,
+    // Blades write depth (so they sort) and alpha 0: the post pass reads scene alpha as a
+    // "foliage" mask, so the ink never scribbles over blades and Kuwahara softens them.
     vertex: /* glsl */ `
       attribute vec3 color;
       varying float vT;
@@ -102,7 +107,8 @@ function grassMaterial() {
       void main() {
         vec3 N = normalize(vNormalW);
         // dark, damp base → sunlit tip; the instance tint carries the region's green (or a flower)
-        vec3 alb = vTint * mix(0.42, 1.15, vT);
+        // roots sink into the lawn wash (ground.ts lawn colour), tips carry the tint
+        vec3 alb = mix(vec3(0.30, 0.34, 0.18), vTint, smoothstep(0.0, 0.55, vT)) * mix(0.75, 1.1, vT);
         alb *= 0.9 + 0.2 * vnoise(vWorldPos.xz * 1.7);
         alb = pigment(alb, vWorldPos);
         float sh = shadowAt(vWorldPos, N);
@@ -110,8 +116,8 @@ function grassMaterial() {
         // back-lit tips: looking toward the sun, the blades glow (the dreamy read)
         vec3 V = normalize(vWorldPos - (cameraPosition + uWorldOffset));
         float back = pow(max(dot(V, uSunDir), 0.0), 3.0) * vT * vT;
-        col += alb * uKeyColor * back * (0.9 * sh + 0.1) * (1.0 - uNight);
-        gl_FragColor = vec4(applyFog(col, vWorldPos), 1.0);
+        col += alb * uKeyColor * back * (0.5 * sh + 0.1) * (1.0 - uNight);
+        gl_FragColor = vec4(applyFog(col, vWorldPos), 0.0);
       }`,
   });
 }
@@ -215,7 +221,7 @@ export class GrassField {
       return false;
     };
     const [dry, lush, cold] = st.biome;
-    const greens = (LUSH[st.climate] ?? LUSH.temperate).map((h) => new THREE.Color(h));
+    const greens = (LUSH[st.climate] ?? LUSH.temperate).map((h) => { const c = new THREE.Color(h), hsl = { h: 0, s: 0, l: 0 }; c.getHSL(hsl); return c.setHSL(hsl.h, hsl.s * DESAT, hsl.l); });
     const straw = new THREE.Color(0xc2a86a);
     const flowers = [0xf4f1ea, 0xe8c547, 0xc8584f, 0x9a86c8, 0xf0a7b8].map((h) => new THREE.Color(h));
     const step = 0.62 / Math.sqrt(Math.max(0.2, this.density * (1 + lush * 0.4) * (1 - dry * 0.55)));
@@ -225,11 +231,18 @@ export class GrassField {
       const i = Math.min(M.res - 1, Math.max(0, Math.floor(((x - x0) / CELL) * M.res))), j = Math.min(M.res - 1, Math.max(0, Math.floor(((z - z0) / CELL) * M.res)));
       return M.data[j * M.res + i] === 1;
     };
+    // Towns are mown: a cell with a street, a building within 25 m or built-up land cover only
+    // grows lawn. Meadow (mid/tall) grass needs open country and a wild land-cover class.
+    const mx = x0 + CELL / 2, mz = z0 + CELL / 2;
+    const built = segs.length > 0 || t.coverAt(mx, mz) === 50 || walk.blocked(mx, mz, 25);
+    // a lawn reads as a texture, not countable tufts: denser, and tinted toward the lawn wash
+    const lstep = built ? step * 0.8 : step;
+    const lawnWash = new THREE.Color(0xa6b27a);
     const mats: THREE.Matrix4[] = [], cols: THREE.Color[] = [];
     const q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), s = new THREE.Vector3(), p = new THREE.Vector3();
-    for (let gz = z0; gz < z0 + CELL; gz += step)
-      for (let gx = x0; gx < x0 + CELL; gx += step) {
-        const x = gx + hash(gx, gz, 2) * step, z = gz + hash(gx, gz, 3) * step;
+    for (let gz = z0; gz < z0 + CELL; gz += lstep)
+      for (let gx = x0; gx < x0 + CELL; gx += lstep) {
+        const x = gx + hash(gx, gz, 2) * lstep, z = gz + hash(gx, gz, 3) * lstep;
         // open land only
         if (t.sdfAt(x, z) < 4 || t.oceanDistAt(x, z) < 70) continue; // shore, sand, water
         const cov = t.coverAt(x, z);
@@ -238,14 +251,14 @@ export class GrassField {
         if (!open(x, z) || nearRoad(x, z)) continue;
         // patchiness: meadow vs mown lawn vs bare-ish; lawns hug the houses
         const meadow = vn(x * 0.045, z * 0.045) * 0.7 + vn(x * 0.13 + 9, z * 0.13) * 0.3;
-        const nearHouse = walk.blocked(x, z, 7);
+        const nearHouse = built || !WILD.has(cov) || walk.blocked(x, z, 7);
         // coverage: near-continuous; patchiness comes from height, not bare gaps
-        if (hash(x, z, 4) > (nearHouse ? 0.92 : 0.8 + meadow * 0.2) - dry * 0.4) continue;
+        if (hash(x, z, 4) > (nearHouse ? 0.97 : 0.8 + meadow * 0.2) - dry * 0.4) continue;
         // three height tiers (short / mid / tall): open ground is roughly half tall in lush places,
         // meadow patches taller still; lawns by the houses stay mown
         const roll = hash(x, z, 5);
         const tallP = (0.3 + meadow * 0.45) * (1 + lush * 0.3) * (1 - dry * 0.5);
-        const tier = nearHouse ? 0.2 + meadow * 0.14 : roll < tallP ? 1.0 + hash(x, z, 13) * 0.75 : roll < tallP + 0.3 ? 0.55 + hash(x, z, 13) * 0.35 : 0.25 + hash(x, z, 13) * 0.25;
+        const tier = nearHouse ? 0.14 + hash(x, z, 13) * 0.16 : roll < tallP ? 0.6 + hash(x, z, 13) * 0.45 : roll < tallP + 0.3 ? 0.55 + hash(x, z, 13) * 0.35 : 0.25 + hash(x, z, 13) * 0.25;
         const hgt = Math.max(0.08, tier * (0.85 + hash(x, z, 14) * 0.3));
         // lawn tufts splay wide and low (a carpet); meadow clumps stand tighter
         const wid = nearHouse ? 0.75 + hash(x, z, 6) * 0.35 : 0.8 + hash(x, z, 6) * 0.6;
@@ -260,11 +273,13 @@ export class GrassField {
           c.lerp(straw, Math.min(1, dry * 0.85 + (hgt > 0.9 && hash(x, z, 12) < 0.25 ? 0.25 : 0) + hash(x, z, 11) * 0.06));
           c.multiplyScalar((1 - cold * 0.2) * (1 + lush * 0.12));
           c.offsetHSL(0, 0.04, nearHouse ? 0.03 : 0); // mown lawns read a touch brighter
+          if (nearHouse) c.lerp(lawnWash, 0.35);
         }
         cols.push(c);
       }
     if (!mats.length) return null;
     const m = new THREE.InstancedMesh(this.geo, this.mat, mats.length);
+    m.renderOrder = 5;
     mats.forEach((mm, i) => { m.setMatrixAt(i, mm); m.setColorAt(i, cols[i]); });
     m.frustumCulled = false; // cells are small; the shader fade handles distance
     return m;

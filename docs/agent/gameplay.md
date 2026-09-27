@@ -49,7 +49,9 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   - `kit.ts`: cars (+ gear), boats, planes, rocks;
   - `flora.ts`: 7 tree species × 3 variants (`treeMeta` gives real dims), 12 garden species with growth stages, `plantMix`, `inBloom`;
   - `fauna.ts`: 7 animals on one jointed body plan + `critterMaterial`;
+  - `people.ts`: one jointed person (~1.4k verts) for walkers and residents. Skin, hair and trouser palettes, 5 hairstyles, shorts/sleeves by `warmthFor(climate, month)` — all chosen per instance in the shader (`PEOPLE` define in `creatureMaterial`, marker vertex colours `MARK`), so a crowd is one draw;
   - `furniture.ts`: mailboxes, beach set, picnic table, car gear + `gearFor`.
+- Lot dressing (NA): `buildings.ts` lays a generated drive (a 2.9 m strip in `walks`) beside the front walk where the map has no service way near the door, and emits `drives`; `props.ts` parks a car at the house end (never on paved ground or the sidewalk strip). Doors also get hedges or `fence:picket` runs.
 - Conventions:
   - Non-indexed; vertex `color` (white = tint by instance colour); `aPart` channels: 0 body, 1/2 fore/hind limbs, 3 lights/glow, 4 tail lights, 5 tail, 6 head, 7 wings, 8 blossom. Animals also carry `aPivot`.
   - Front toward −z; origin on the ground or waterline.
@@ -71,8 +73,9 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   32×32-cell blocks. It survives re-anchoring, teleports and region changes. Blocks persist to
   IndexedDB (`map-game-explore`).
 - A walker-centred R8 texture window (4 km, 8 m texels → `U.uExplore` / `U.uExploreBox`) feeds
-  the post composite, which draws unvisited ground as graphite hatching on paper and blooms colour
-  in with a noisy wet edge (`postParams.sketch`, panel "paint as you explore", `?sketch=0`).
+  the post composite, which paints unvisited ground as a paler, slightly desaturated first wash and
+  deepens it with a noisy wet edge as you arrive (`postParams.sketch`, `?sketch=0`). Never a
+  pencil sketch: the world always reads as painted.
 - Capture mode keeps regression shots fully painted unless `?sketch=1`.
 - Reveal radius grows with eye height (`revealRadius`), so flying paints wide.
   `paintedBefore(x,z)` reads the saved block, which is how an arrival card knows a first visit.
@@ -89,11 +92,18 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   stored via `book.ts` (IndexedDB `map-game-sketchbook`).
 - `commissions.ts`: three active offers, generated from what's really near (named footprints, POIs,
   moored boat types) plus scenes (sea at golden hour, fog, sunrise, lamps, rooftops). `judge()`
-  checks the camera frame and conditions at shoot time. It also keeps the spotting log.
-- `atlas.ts` (M, or G to jump straight to search) has four pages:
+  checks the camera frame and conditions at shoot time. It also keeps the spotting log and the
+  **Almanac**: every family (cars, boats, planes, wildlife, trees, garden plants) is a set of cards;
+  a card records where and when it was first seen (`state.seen`), and each town you reach gives
+  a stamp (`state.stamps`, from `ctx.locality()` / `ctx.region()`). New families only need an
+  entry in `FAMILY` and a mesh-name prefix in `spot()`.
+- `cardArt.ts`: an Almanac card picture for any foundry model — rendered once to a 256 px target,
+  finished as a watercolour plate on a 2D canvas, cached (`ctx.cardArt(family, type)`).
+- `atlas.ts` (M, or G to jump straight to search) has five pages:
   - Map (`mapview.ts`): pencil for unvisited, paint where explored; pins; drag, zoom, click to walk.
   - Sketchbook, with a lightbox (walk back / download / remove).
   - Commissions and the spotting log.
+  - Almanac: stamps, progress in the current county, and the card grid.
   - Journal: keys, stats and found places (`journal.ts` now renders only this page).
 - `geo.ts`: Photon (komoot) geocoder for search and reverse lookup. It is cached, reverse lookups
   are throttled to one every 4 s, and it falls back to local streets, buildings and POIs when

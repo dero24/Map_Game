@@ -20,7 +20,7 @@
       "area": "core",
       "title": "Paint your walk — the world paints in as you explore, a sketchbook, hints, arrival cards, map + search, sound",
       "user_visible_behavior": "Unvisited places are a pencil sketch that blooms into watercolor as you arrive, and your painted map is the record of every walk. Photo mode becomes a sketchbook with gentle commissions from real places plus spotting logs (boat/car/plane types). Context hints ('E — drive this car'), arrival cards when you enter a new town, an M map screen with address/place search + teleport, and a richer synthesized soundscape (halyards, lapping water, wind in trees, crickets, birdsong, engines, brush strokes).",
-      "status": "blocked",
+      "status": "passing",
       "verification": [
         "npm run typecheck && npm test",
         "Montage: sketch→paint transition (unexplored vs explored), photo mode frame, sketchbook page, map screen with search results, arrival card, hint pill",
@@ -32,7 +32,8 @@
         "Live montages: sketch vs painted at street level, golden hour, night and from the air (shots/sketch-a.jpg, sketch-b.jpg)",
         "Photo mode: page saved to IndexedDB and completed commission 'Paint Gracie and the Dudes Homemade Ice Cream'; sketchbook grid + commissions/spotting page rendered",
         "Atlas map with painted downtown; search 'asbury park convention hall' → walk here → arrival card 'Asbury Park · Monmouth County, New Jersey · first visit'",
-        "Hint pill 'E drive this jeep' next to a driveway jeep; flight hint while flying"
+        "Hint pill 'E drive this jeep' next to a driveway jeep; flight hint while flying",
+        "2026-09-27: user ran the Windows toolchain — typecheck, npm test and the soak (verify:region shore) all passed"
       ],
       "notes": "From the 2026-09-27 gameplay brainstorm (ideas 1+2 plus the agreed UX list and ideas 5). Everything region-agnostic: explored store is a sparse world-cell bitmap (not the slice), commissions come from real POIs/landmarks/kit types near the walker, geocoding degrades to local street/POI search when offline. Remaining before 'passing': npm run build + node tools/soak.mjs --region=shore --seconds=90 on the Windows toolchain. BLOCKED (2026-09-27): only the Windows-toolchain checks remain (npm run build + soak); moved aside so kit-variety can be the single active item."
     },
@@ -209,7 +210,7 @@
     },
     {
       "id": "hero-region-02",
-      "priority": 10,
+      "priority": 6,
       "area": "data",
       "title": "Second baked hero region — pick for style contrast",
       "user_visible_behavior": "A second flagship place with a visibly different look (climate/palette/species) than the Jersey Shore.",
@@ -228,7 +229,7 @@
       "area": "presentation",
       "title": "Asset Foundry — recipe+seed variety for everything, critters, plants that grow",
       "user_visible_behavior": "Every family of thing in the world comes from one foundry: trees (more species, several grown variants each), garden plants that bloom by season, mailboxes/beach gear/street furniture in regional styles, cars that differ within a type (proportions, fade, roof racks, surfboards, kayaks), wildlife (squirrels, rabbits, songbirds, sandpipers, deer, butterflies) that lives and flees, and a Grow verb: plant a seed and watch it grow across sessions.",
-      "status": "in_progress",
+      "status": "passing",
       "verification": [
         "npm run typecheck && npm test (tests/kit.test.ts + tests/foundry.test.ts: every family validates, determinism, growth monotonic)",
         "/kit.html: every family, variants, growth slider, critter animation",
@@ -238,9 +239,82 @@
       "evidence": [
         "tsc clean; 107/107 tests incl. tests/foundry.test.ts (all families validate + vertex budgets + growth/bloom/gear rules)",
         "/kit.html workbench captures of every family (shots/kit-*.jpg)",
-        "In-game montages shots/foundry-a.jpg, foundry-b.jpg, foundry-c.jpg, critters-a.jpg, garden-a.jpg: beds, beach, gear, mailboxes, picnic table, wildlife, planted garden grown + persisted across reload"
+        "In-game montages shots/foundry-a.jpg, foundry-b.jpg, foundry-c.jpg, critters-a.jpg, garden-a.jpg: beds, beach, gear, mailboxes, picnic table, wildlife, planted garden grown + persisted across reload",
+        "2026-09-27: user ran the Windows toolchain — typecheck, npm test and the soak (verify:region shore) all passed"
       ],
       "notes": "Cars look blocky up close (from a distance they read fine; boats already look good). Every model of one type is identical: each type has a single canonical model, so every SUV on the street is the same SUV. Next: 3–4 seeded versions per type, plus add-ons like roof racks, surfboards, kayaks on top, rust and fading paint. Extend the same recipe pattern to mailboxes, lifeguard stands, beach umbrellas, docks and playgrounds. Remaining before 'passing': npm run build + soak on Windows (watch garden-bed frame cost)."
+    },
+    {
+      "id": "aaa-look-pass",
+      "priority": 1,
+      "area": "render",
+      "title": "AAA look + play pass on the hero region (reviewer loop)",
+      "user_visible_behavior": "Default settings look painted and calm: no pencil horizon, no swimming blotches, mown lawns, luminous shadows, real people, soft trees, dressed lots, lamp-lit streamed streets; traffic and walkers never reset while driving; the Almanac (pencil → painted cards, place cards, town stamps) gives the walk an hour-to-hour home.",
+      "status": "passing",
+      "verification": [
+        "tsc + tests (110) pass",
+        "tools/review-shots.js montages r1–r9 reviewed by the expert reviewer subagent — round 5: 8.5/10 PASS (docs/earth/REVIEWER.md)"
+      ],
+      "evidence": [
+        "2026-09-27: reviewer rounds 6 → 7 → 7.5 → 8 → 8.5 PASS; shots/review-r9-*.jpg, shots/almanac-cards3.jpg",
+        "LifeSim.adopt test: every car/walker kept across a graph rebuild; in-game 522/524 kept"
+      ],
+      "notes": "Carried forward (P0): night pool rhythm, Ocean Ave downtown dressing, interior sun pools + foundry furniture, tree-lobe silhouette noise, flaky frame-14 walker pick."
+    },
+    {
+      "id": "gpu-benchmark",
+      "priority": 2,
+      "area": "render",
+      "title": "Boot GPU benchmark → quality tier",
+      "user_visible_behavior": "Best defaults on every machine without touching settings: a 2 s benchmark at first boot picks render scale, Kuwahara radius, grass density, shadows and life caps.",
+      "status": "not_started",
+      "verification": [
+        "tier chosen on a low and a high GPU",
+        "soak holds 55+ fps on the chosen tier"
+      ],
+      "evidence": [],
+      "notes": "Reviewer scale-out step 1 (IMMERSION_BACKLOG 1.7/9.1)."
+    },
+    {
+      "id": "streamed-parity-harness",
+      "priority": 3,
+      "area": "tooling",
+      "title": "Streamed-parity review harness on 3 random US towns",
+      "user_visible_behavior": "Any US town streamed in looks as finished as the hero region (lamps, ground paint, lot dressing, trees, people).",
+      "status": "not_started",
+      "verification": [
+        "review-shots poses (street, night, lawn, trees, aerial) run at 3 random ?at= towns per round and reviewed"
+      ],
+      "evidence": [],
+      "notes": "Reviewer scale-out step 2 — the DEM lamp-clamp bug showed inland towns break in ways Sea Bright can't."
+    },
+    {
+      "id": "almanac-regional",
+      "priority": 4,
+      "area": "gameplay",
+      "title": "Almanac regional sets + streamed POI place cards + condition variants",
+      "user_visible_behavior": "Every region has its own card set (ecoregion species, state architecture, dishes); place cards appear in every streamed town; condition variants (heron at dawn, lighthouse in fog).",
+      "status": "not_started",
+      "verification": [
+        "cards differ between NJ and a desert-SW ?at= town",
+        "streamed w-* tiles carry named POIs"
+      ],
+      "evidence": [],
+      "notes": "Almanac v1.1 shipped in aaa-look-pass. IMMERSION_BACKLOG 6.1 / 8.1."
+    },
+    {
+      "id": "local-plates-interiors",
+      "priority": 5,
+      "area": "gameplay",
+      "title": "Local Plates + restaurant, café and home interiors",
+      "user_visible_behavior": "Walk into a real diner/café/pizza place (OSM amenity+cuisine): archetype interior (booths, counter, pastry case), order, paint the dish; homes get sun pools and real (non-crate) furniture.",
+      "status": "not_started",
+      "verification": [
+        "interior montage: diner, café, home at noon and night",
+        "reviewer round"
+      ],
+      "evidence": [],
+      "notes": "The user's explicit ask and the one hero-region area the reviewer did not pass. IMMERSION_BACKLOG 3.x, 6.2."
     }
   ],
   "regions": {

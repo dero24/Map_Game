@@ -32,6 +32,7 @@ export const U = {
   uShadowStrength: { value: 0.8 },
   uLampMap: { value: null as THREE.Texture | null },
   uLampBox: { value: new THREE.Vector4(0, 0, 1, 1) },
+  uLampBaseY: { value: 0 }, // ground height around the walker: lamp pools light the street, not roofs
   // Paint-as-you-explore window (src/world/explore.ts): R8 paint amount per 8 m texel, box = x0 z0 1/w 1/h.
   uExplore: { value: null as THREE.Texture | null },
   uExploreBox: { value: new THREE.Vector4(0, 0, 1 / 4096, 1 / 4096) },
@@ -84,6 +85,7 @@ uniform mat4 uShadowMatrix;
 uniform float uShadowOn, uShadowTexel, uShadowStrength;
 uniform sampler2D uLampMap;
 uniform vec4 uLampBox;
+uniform float uLampBaseY;
 uniform vec3 uLampColor;
 uniform float uLampPower, uPigment, uPigmentScale, uWind;
 uniform vec4 uBiome;
@@ -132,8 +134,10 @@ float lampAt(vec3 wpos) {
   if (uLampPower <= 0.001) return 0.0;
   vec2 uv = (wpos.xz - uLampBox.xy) * uLampBox.zw;
   if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
-  float h = clamp(1.0 - max(wpos.y - 1.5, 0.0) / 9.0, 0.0, 1.0);
-  return texture2D(uLampMap, uv).r * uLampPower * h;
+  // relative to the local ground, not sea level: streamed towns sit on real (DEM) terrain, and
+  // an absolute clamp blacked out every pool more than ~10 m above the sea
+  float h = clamp(1.0 - max(wpos.y - uLampBaseY - 1.5, 0.0) / 9.0, 0.0, 1.0);
+  return pow(texture2D(uLampMap, uv).r, 1.6) * uLampPower * h; // a tight heart, dark gaps between poles
 }
 
 // Pigment turbulence (Bousseau et al.): density variation anchored to world space.
@@ -148,12 +152,17 @@ vec3 pigment(vec3 c, vec3 wpos) {
 vec3 paintLight(vec3 albedo, vec3 N, vec3 wpos, float shadow, float ao) {
   float ndl = dot(N, uKeyDir);
   float lowSun = 1.0 - smoothstep(0.05, 0.45, uKeyDir.y);
-  float wrap = 0.3 + 0.25 * lowSun * step(0.7, N.y);
+  float wrap = 0.15 + 0.25 * lowSun * step(0.7, N.y);
   float diff = smoothstep(-wrap, 0.55, ndl) * shadow;
   vec3 hemi = mix(uAmbGround, uAmbSky, N.y * 0.5 + 0.5);
   vec3 lit = albedo * (uKeyColor * diff + hemi * ao);
-  lit = mix(lit, lit * uShadowTint * 1.8, (1.0 - diff) * uShadowTintAmt);
-  lit += albedo * uLampColor * lampAt(wpos);
+  // shadows are a transparent cool glaze: shift the hue toward the shadow tint but keep the value
+  // (multiplying by a dark tint is what painters call mud)
+  float lt = dot(uShadowTint, vec3(0.2126, 0.7152, 0.0722));
+  vec3 glaze = mix(vec3(1.0), uShadowTint / max(lt, 1e-3), 0.4);
+  lit = mix(lit, lit * glaze, (1.0 - diff) * uShadowTintAmt);
+  // a lamp pool is painted as light, not albedo × light (dark asphalt would halve every pool)
+  lit += max(albedo, vec3(0.3)) * uLampColor * lampAt(wpos);
   return lit;
 }
 

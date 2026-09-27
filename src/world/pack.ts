@@ -24,7 +24,7 @@ export type PMat =
   | { t: 'wire' }
   | { t: 'signs' }
   | { t: 'halo'; size: number; color: number }
-  | { t: 'prop'; o: { wind?: boolean; bob?: boolean; foliage?: boolean; emissive?: number; emissiveNight?: boolean } }
+  | { t: 'prop'; o: { wind?: boolean; bob?: boolean; foliage?: boolean; emissive?: number; emissiveNight?: boolean; crown?: [number, number] } }
   | { t: 'gnd' }; // region ground material (shared; set via setGndMaterial at boot)
 
 export interface PObj {
@@ -171,6 +171,7 @@ export function matTag(m: THREE.Material): PMat {
         wind: !!d.WIND, bob: !!d.BOB, foliage: !!d.FOLIAGE,
         emissive: d.EMISSIVE ? (u.uEmissive.value as THREE.Color).getHex() : undefined,
         emissiveNight: u.uEmNight?.value === 1,
+        ...(d.FOLIAGE && u.uCrown && u.uCrown.value.y > 0 ? { crown: [u.uCrown.value.x, u.uCrown.value.y] as [number, number] } : {}),
       },
     };
   }

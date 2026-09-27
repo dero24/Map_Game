@@ -38,9 +38,10 @@ export function critterGeometry(kind: CritterKind): THREE.BufferGeometry {
     parts.push(still(blob(S * 0.5, 3, { lump: 0.08, squash: 1 }).scale(bs[0], bs[1], bs[2]).translate(0, bodyY, 0), coat));
     parts.push(still(blob(S * 0.3, 4, { lump: 0.05, detail: 0 }).scale(bs[0] * 1.2, 0.5, bs[2]).translate(0, bodyY - S * (kind === 'deer' ? 0.1 : 0.14), -S * 0.02), belly));
     // head on a neck (deer), or straight on the shoulders
-    const neck = V3(0, bodyY + (kind === 'deer' ? 0.35 : S * 0.12), -S * 0.42);
+    // a deer carries its neck forward (~25° off vertical), not straight up like a llama
+    const neck = V3(0, bodyY + (kind === 'deer' ? 0.24 : S * 0.12), -S * 0.42);
     const hr = sq ? 0.055 : rb ? 0.075 : 0.2;
-    const head = V3(0, neck.y + (kind === 'deer' ? 0.32 : 0.02), neck.z - (kind === 'deer' ? 0.18 : 0.04));
+    const head = V3(0, neck.y + (kind === 'deer' ? 0.26 : 0.02), neck.z - (kind === 'deer' ? 0.32 : 0.04));
     if (kind === 'deer') parts.push(jointed(limb(V3(0, bodyY + 0.1, -S * 0.38), head, 0.13, 0.09, 6), coat, P.skull, neck));
     parts.push(jointed(blob(hr, 5, { lump: 0.05, detail: 1 }).scale(0.85, 0.85, kind === 'deer' ? 1.5 : 1.15).translate(head.x, head.y, head.z), coat, P.skull, neck));
     parts.push(jointed(new THREE.SphereGeometry(hr * 0.35, 5, 4).translate(0, head.y - hr * 0.15, head.z - hr * (kind === 'deer' ? 1.55 : 1.05)), 0x2a2622, P.skull, neck)); // nose
@@ -54,19 +55,31 @@ export function critterGeometry(kind: CritterKind): THREE.BufferGeometry {
       const lr = sq ? 0.014 : rb ? 0.02 : 0.045;
       const fz = -S * 0.3, hz = S * 0.3;
       const fx = s * S * (kind === 'deer' ? 0.09 : 0.17), hx = s * S * (rb ? 0.2 : kind === 'deer' ? 0.1 : 0.18);
-      parts.push(jointed(limb(V3(fx, bodyY, fz), V3(fx, 0, fz - (sq ? 0.01 : 0)), lr * 1.3, lr, 5), kind === 'deer' ? 0x7a5c40 : coat, P.fore, V3(fx, bodyY, fz)));
+      if (kind === 'deer') {
+        // a muscled forearm down to the knee, then a slim cannon bone to the hoof
+        const knee = V3(fx, legH * 0.52, fz - 0.02);
+        parts.push(jointed(limb(V3(fx, bodyY, fz), knee, 0.085, 0.045, 5), coat, P.fore, V3(fx, bodyY, fz)));
+        parts.push(jointed(limb(knee, V3(fx, 0, fz), 0.035, 0.026, 5), 0x7a5c40, P.fore, V3(fx, bodyY, fz)));
+      } else parts.push(jointed(limb(V3(fx, bodyY, fz), V3(fx, 0, fz - (sq ? 0.01 : 0)), lr * 1.3, lr, 5), coat, P.fore, V3(fx, bodyY, fz)));
       const hip = V3(hx, bodyY + (rb ? 0.02 : 0), hz);
       if (rb || sq) {
         // folded haunch: a thigh blob plus a long foot along the ground
         parts.push(jointed(blob(S * (rb ? 0.2 : 0.17), 9, { detail: 0, lump: 0.05 }).translate(hip.x, hip.y - S * 0.08, hip.z), coat, P.hind, hip));
         parts.push(jointed(card(lr * 3, S * 0.36, 0, 1).rotateY(Math.PI).translate(hip.x, 0.012, hip.z + S * 0.12), coat, P.hind, hip));
-      } else parts.push(jointed(limb(hip, V3(hx, 0, hz + 0.05), lr * 1.4, lr, 5), 0x7a5c40, P.hind, hip));
+      } else {
+        // a deep haunch to the hock (set back), then the slim lower leg
+        const hock = V3(hx, legH * 0.5, hz + 0.12);
+        parts.push(jointed(limb(hip, hock, 0.11, 0.045, 5), coat, P.hind, hip));
+        parts.push(jointed(limb(hock, V3(hx, 0, hz + 0.05), 0.035, 0.026, 5), 0x7a5c40, P.hind, hip));
+      }
     }
     // tails: squirrel = a tall bushy S of blobs, rabbit = a cotton puff, deer = a white flag
     const tb = V3(0, bodyY + S * 0.05, S * 0.48);
     if (sq) {
-      const pts = [V3(0, 0.02, 0.06), V3(0, 0.13, 0.1), V3(0, 0.24, 0.07), V3(0, 0.3, 0.0)];
-      pts.forEach((q, i) => parts.push(jointed(blob(0.055 - i * 0.004, 20 + i, { detail: 0, lump: 0.4 }).translate(tb.x + q.x, tb.y + q.y, tb.z + q.z), 0x9a948c, P.tail, tb)));
+      // one continuous bushy plume rising from the rump and curling forward over the back:
+      // seven overlapping puffs along an S (each overlaps the next by half), no gaps
+      const pts = [V3(0, 0.0, 0.01), V3(0, 0.05, 0.05), V3(0, 0.11, 0.06), V3(0, 0.16, 0.035), V3(0, 0.19, -0.01)];
+      pts.forEach((q, i) => parts.push(jointed(blob(0.058 - i * 0.003, 20 + i, { detail: 0, lump: 0.1 }).scale(0.75, 0.9, 1.05).translate(tb.x + q.x, tb.y + q.y, tb.z + q.z), 0x9a948c, P.tail, tb)));
     } else if (rb) parts.push(jointed(blob(0.045, 21, { detail: 0 }).translate(tb.x, tb.y + 0.02, tb.z + 0.02), 0xf2eee6, P.tail, tb));
     else parts.push(jointed(card(0.12, 0.22, -0.3, 2).rotateX(-2.3).translate(tb.x, tb.y, tb.z), 0xf2eee6, P.tail, tb));
     if (kind === 'deer') parts.push(jointed(blob(0.1, 22, { detail: 0 }).scale(1, 0.6, 1.2).translate(0, bodyY + 0.02, S * 0.46), 0xf2eee6, P.tail, tb)); // rump patch

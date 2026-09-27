@@ -11,12 +11,12 @@ export const postParams = {
   renderScale: 1,
   kuwaharaRadius: 5,
   kuwaharaSharpness: 8,
-  exposure: 1.0,
-  saturation: 1.05,
-  wobble: 1.0,
+  exposure: 0.9,
+  saturation: 1.12,
+  wobble: 0.55,
   edgeDarkening: 0.9,
-  pigmentTurbulence: 0.35,
-  granulation: 0.45,
+  pigmentTurbulence: 0.22, // world-anchored + luminance-only (never slides with the camera, never tints white)
+  granulation: 0.3,
   paperTexture: 0.7,
   ink: 0.55,
   inkDistance: 350,
@@ -24,7 +24,7 @@ export const postParams = {
   vignette: 0.55,
   boilFps: 0,
   nightWash: 0.55,
-  sketch: true, // paint as you explore: unvisited places stay a pencil underdrawing
+  sketch: true, // paint as you explore: unvisited places are a paler first wash that deepens as you arrive
   paperColor: '#f8f4ea',
   inkColor: '#2e2a3a',
 };
@@ -85,23 +85,30 @@ export class WatercolorPost {
     this.mKuw = pass(
       /* glsl */ `
       ${TONEMAP}
-      uniform sampler2D tColor;
+      uniform sampler2D tColor, tDepth;
       uniform vec2 uTexel;
-      uniform float uRadius, uQ;
+      uniform float uRadius, uQ, uNear, uFar;
       varying vec2 vUv;
       #define MAXR 7
+      float linZ(float d) { float z = d * 2.0 - 1.0; return 2.0 * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }
       void main() {
         vec4 m[8]; vec3 s[8];
         for (int k = 0; k < 8; k++) { m[k] = vec4(0.0); s[k] = vec3(0.0); }
-        float zeta = 2.0 / uRadius;
+        // depth-adaptive: keep detail at the focal distance (clapboard, sash bars, furniture),
+        // broad washes behind it; foliage (scene alpha 0) a little crisper so blades don't boil
+        vec4 c0 = textureLod(tColor, vUv, 0.0);
+        float rad = uRadius * mix(0.4, 1.0, smoothstep(4.0, 45.0, linZ(textureLod(tDepth, vUv, 0.0).r)));
+        if (c0.a < 0.5) rad *= 0.6;
+        rad = max(rad, 1.25);
+        float zeta = 2.0 / rad;
         float zc = 0.58;
         float sinz = sin(zc);
         float eta = (zeta + cos(zc)) / (sinz * sinz);
         float w[8];
-        int R = min(int(ceil(uRadius)), MAXR);
+        int R = min(int(ceil(rad)), MAXR);
         for (int j = -R; j <= R; j++) {
           for (int i = -R; i <= R; i++) {
-            vec2 v = vec2(float(i), float(j)) / uRadius;
+            vec2 v = vec2(float(i), float(j)) / rad;
             if (dot(v, v) > 1.0) continue;
             vec3 c = tonemap(textureLod(tColor, vUv + vec2(float(i), float(j)) * uTexel, 0.0).rgb);
             float sum = 0.0, z, vxx, vyy;
@@ -131,7 +138,7 @@ export class WatercolorPost {
         }
         gl_FragColor = vec4(o.rgb / max(o.w, 1e-5), 1.0);
       }`,
-      { tColor: { value: null }, uTexel: { value: new THREE.Vector2() }, uRadius: { value: 5 }, uQ: { value: 8 }, uExposure: { value: 1 } },
+      { tColor: { value: null }, tDepth: { value: null }, uTexel: { value: new THREE.Vector2() }, uRadius: { value: 5 }, uQ: { value: 8 }, uExposure: { value: 1 }, uNear: { value: 0.1 }, uFar: { value: 1000 } },
     );
 
     this.mDown = pass(
@@ -173,15 +180,6 @@ export class WatercolorPost {
       uniform mat4 uInvProj, uCamWorld;
       uniform vec3 uWorldOff;
       varying vec2 vUv;
-      // one pencil stroke family: parallel lines at angle a, spacing sp px, broken into dashes
-      float hatch(vec2 q, float a, float sp, float w) {
-        vec2 d = vec2(cos(a), sin(a)), t = vec2(-d.y, d.x);
-        float s = dot(q, d) + (vnoise(q * 0.015) - 0.5) * 7.0;
-        float along = dot(q, t);
-        float l = 1.0 - smoothstep(w * 0.5, w * 0.5 + 0.9, abs(fract(s / sp) - 0.5) * sp);
-        float dash = smoothstep(0.22, 0.5, vnoise(vec2(along * 0.035, floor(s / sp) * 7.3)));
-        return l * dash;
-      }
       float linZ(float d) { float z = d * 2.0 - 1.0; return 2.0 * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }
       vec3 toSrgb(vec3 c) { return mix(c * 12.92, 1.055 * pow(max(c, 0.0), vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
       float paperH(vec2 px) {
@@ -213,39 +211,43 @@ export class WatercolorPost {
         float lum = dot(c, vec3(0.299, 0.587, 0.114));
         c = mix(vec3(lum), c, uSat);
 
-        // pigment turbulence (low-frequency density variation) + granulation in paper valleys
-        float turb = fbm(nuv * 2.2 + 3.1 + bt * 0.37) - 0.5;
-        c = c - (c - c * c) * turb * uTurb * 2.2;
-        float p = paperH(px);
-        c = c - (c - c * c) * (0.55 - p) * uGran * 1.6;
-
-        // paint as you explore: where you haven't been, the page is still a pencil underdrawing;
-        // colour blooms in (noisy wet edge, pigment pooling at the rim) as you arrive.
-        float sketchAmt = 0.0;
+        // where this pixel is in the world (floating origin undone)
         float dS = texture2D(tDepth, uv).r;
-        if (uSketch > 0.001 && dS < 0.99999) {
-          vec4 vp = uInvProj * vec4(uv * 2.0 - 1.0, dS * 2.0 - 1.0, 1.0);
-          vec3 wp = (uCamWorld * vec4(vp.xyz / vp.w, 1.0)).xyz + uWorldOff;
+        bool geo = dS < 0.99999;
+        vec4 vp = uInvProj * vec4(uv * 2.0 - 1.0, dS * 2.0 - 1.0, 1.0);
+        vec3 wp = (uCamWorld * vec4(vp.xyz / vp.w, 1.0)).xyz + uWorldOff;
+
+        // pigment turbulence (low-frequency density variation) + granulation in paper valleys.
+        // Density lives on the subject (world space; walls get variation from height too), so it
+        // never slides over the scene as you walk; the sky keeps a view-anchored field. Both only
+        // change value, never hue: per-channel (c - c²) turned near-white sand pink and yellow.
+        vec2 wq = wp.xz + wp.y * vec2(0.7, -0.5);
+        float turb = (geo ? fbm(wq * 0.045) : fbm(nuv * 2.2 + 3.1 + bt * 0.37)) - 0.5;
+        float p = paperH(px);
+        float L0 = dot(c, vec3(0.299, 0.587, 0.114));
+        float dL = (L0 - L0 * L0) * (turb * uTurb * 2.2 + (0.55 - p) * uGran * 1.6);
+        c *= clamp((L0 - dL) / max(L0, 1e-3), 0.0, 2.0);
+
+        // paint as you explore: close by, where you haven't walked yet, the colour is still a first,
+        // paler wash (a little desaturated, lifted toward the paper); it deepens with a soft wet
+        // edge as you arrive. Subtle on purpose — the world always reads as painted, never a sketch.
+        float sketchAmt = 0.0;
+        if (uSketch > 0.001 && geo) {
           vec2 eu = (wp.xz - uExploreBox.xy) * uExploreBox.zw;
           float e = (eu.x > 0.0 && eu.y > 0.0 && eu.x < 1.0 && eu.y < 1.0) ? texture2D(tExplore, eu).r : 0.0;
-          float n = fbm(wp.xz * 0.03) - 0.5 + (vnoise(wp.xz * 0.35 + wp.y) - 0.5) * 0.3;
-          float rev = smoothstep(0.34, 0.66, e + n * 0.5);
-          sketchAmt = (1.0 - rev) * uSketch;
-          float rim = rev * (1.0 - rev) * 4.0 * uSketch;
-          c = mix(c, c * c * 1.15, rim * 0.35); // pigment pooled where the wash stopped spreading
+          float n = fbm(wp.xz * 0.03) - 0.5;
+          float rev = smoothstep(0.3, 0.7, e + n * 0.35);
+          // Only near you: the bloom is the moment of arriving, so the first wash lives in a ring
+          // just past your reveal radius and fades out by ~160 m. Far away the world is always
+          // finished watercolour (a paler horizon read as "not loaded"); the atlas map is where
+          // unvisited stays pencil.
+          float camD = length(wp - (uCamWorld[3].xyz + uWorldOff));
+          sketchAmt = (1.0 - rev) * uSketch * (1.0 - smoothstep(60.0, 160.0, camD));
           if (sketchAmt > 0.001) {
             float L = dot(c, vec3(0.299, 0.587, 0.114));
-            float tone = 1.0 - smoothstep(0.12, 0.92, L);
-            vec2 hq = nuv * uRes.y; // view-anchored, like the paper noise
-            float g = hatch(hq, 0.8, 6.5, 1.1) * smoothstep(0.3, 0.5, tone);
-            g = max(g, hatch(hq, -0.55, 5.5, 1.0) * smoothstep(0.55, 0.72, tone));
-            g = max(g, hatch(hq, 0.12, 4.5, 1.0) * smoothstep(0.78, 0.92, tone));
-            // distance lightens the drawing (a lighter hand for what's far away)
-            g *= (0.55 + 0.45 * p) * (1.0 - 0.55 * smoothstep(250.0, 1400.0, linZ(dS)));
-            vec3 graphite = vec3(0.33, 0.32, 0.37);
-            vec3 sk = mix(vec3(0.965, 0.95, 0.915), graphite, g * 0.55 + tone * 0.1);
-            sk = mix(sk, c, 0.1); // the faintest colour note, like a first wash
-            c = mix(c, sk, sketchAmt);
+            vec3 first = mix(vec3(L), c, 0.62);             // a first wash: less saturated…
+            first = mix(first, vec3(0.965, 0.95, 0.915), 0.14); // …and lighter, more paper showing
+            c = mix(c, first, sketchAmt);
           }
         }
 
@@ -264,10 +266,14 @@ export class WatercolorPost {
         float lumE = length(texture2D(tPaint, uv + jit + vec2(o.x, 0.0)).rgb - texture2D(tPaint, uv + jit - vec2(o.x, 0.0)).rgb)
                    + length(texture2D(tPaint, uv + jit + vec2(0.0, o.y)).rgb - texture2D(tPaint, uv + jit - vec2(0.0, o.y)).rgb);
         inkE = max(inkE, smoothstep(0.18, 0.45, lumE) * 0.45);
+        // foliage (grass writes alpha 0) never gets ink: a thousand outlined blades read as scribble
+        float gm = min(min(texture2D(tScene, uv + jit + vec2(-o.x, 0.0)).a, texture2D(tScene, uv + jit + vec2(o.x, 0.0)).a),
+                       min(texture2D(tScene, uv + jit + vec2(0.0, -o.y)).a, texture2D(tScene, uv + jit + vec2(0.0, o.y)).a));
+        inkE *= smoothstep(0.05, 0.5, min(gm, texture2D(tScene, uv + jit).a));
         float brk = smoothstep(0.25, 0.6, vnoise(px * 0.045 + bt * 3.0));
         float fade = 1.0 - smoothstep(uInkDist * 0.35, uInkDist, z0);
         float bright = smoothstep(0.75, 0.95, dot(c, vec3(0.33)));
-        c = mix(c, uInkColor, clamp(inkE * brk * fade * uInk * (1.0 - bright) * (1.0 + sketchAmt * 0.6), 0.0, 0.85));
+        c = mix(c, uInkColor, clamp(inkE * brk * fade * uInk * (1.0 - bright), 0.0, 0.85));
 
         // wet bloom around lamps and lit windows
         vec3 g = max(blurHdr * uExposure - 1.3, 0.0);
@@ -275,7 +281,8 @@ export class WatercolorPost {
 
         // glazes: indigo by night, a whisper of warm sienna at golden hour
         // warm light (windows, lamps) is left out of the night glaze, like reserved paper
-        float warmth = smoothstep(0.05, 0.3, c.r - c.b) * smoothstep(0.25, 0.6, dot(c, vec3(0.33)));
+        // only genuinely bright warm light (windows, lamp hearts) is exempt — a dim amber street keeps its indigo night
+        float warmth = smoothstep(0.05, 0.3, c.r - c.b) * smoothstep(0.4, 0.75, dot(c, vec3(0.33)));
         c = mix(c, c * uNightTint, uNightWash * uNight * (1.0 - warmth * 0.85));
         c = mix(c, c * uWarm, uGolden * 0.25);
 
@@ -360,6 +367,9 @@ export class WatercolorPost {
     k.uRadius.value = Math.max(1.5, Math.min(7, P.kuwaharaRadius * (this.h / 1080)));
     k.uQ.value = P.kuwaharaSharpness;
     k.uExposure.value = P.exposure;
+    k.tDepth.value = this.sceneRT.depthTexture;
+    k.uNear.value = camera.near;
+    k.uFar.value = camera.far;
     this.draw(this.mKuw, this.kuwRT);
     // small blur of the abstracted image, for thin wet edges
     const hw = this.kuwRT.width, hh = this.kuwRT.height;
