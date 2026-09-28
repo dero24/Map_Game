@@ -28,6 +28,8 @@ import { RANK, STOP_BACK, unpackJunctions, vkey } from './traffic';
 
 /** A street keeps no graph node where only a footway meets it within this far of a junction: the
  *  widest setback (12 m) and the stop line behind it, plus room to brake from a main road's speed. */
+/** How much kerb a parked car takes: none, parallel, angled bays (kerbside.ts: centred w/2 − 1.15 / w/2 − 2.5). */
+const KERB_W = [0, 2.3, 5.0];
 const FOOT_SPLIT = 12 + STOP_BACK + 16;
 
 // ---------------- worker init data ----------------
@@ -146,7 +148,7 @@ export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, do
     if (!nodeId.has(k)) { nodeId.set(k, nodeId.size); nodeXZ.push(x, z); }
     return nodeId.get(k)!;
   };
-  const pts: number[] = [], start: number[] = [], count: number[] = [], lens: number[] = [], info: number[] = [], ends: number[] = [];
+  const pts: number[] = [], start: number[] = [], count: number[] = [], lens: number[] = [], info: number[] = [], ends: number[] = [], kerb: number[] = [];
   const seen = new Set<string>();
   // Tunnel portals: the ends a tunnel piece shares with a street in the open. A car goes down
   // into the ground from there (8% a metre, to 9 m under) and is out of sight until it climbs out.
@@ -181,6 +183,10 @@ export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, do
     count.push(n);
     lens.push(L);
     info.push(RANK[r.c], r.w, r.ow ? 1 : 0, under ? 0 : 1); // (nobody walks a tunnel)
+    // the kerb the parked cars take, where kerbside.ts parks them (parallel 2.3 m, angled bays 5 m):
+    // the moving lanes are laid out between them
+    const parks = !!r.pk && !r.lod && !r.br && !r.tu && r.w >= 10;
+    kerb.push(parks ? KERB_W[r.pk! & 3] : 0, parks ? KERB_W[(r.pk! >> 2) & 3] : 0);
     ends.push(node(p[0][0], p[0][1]), node(p[p.length - 1][0], p[p.length - 1][1]));
   }
   // Frontage: shops along each street piece (commercial doors within 25 m of it). People walk
@@ -236,6 +242,7 @@ export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, do
     edgeCount: new Int32Array(count),
     edgeLen: new Float32Array(lens),
     edgeInfo: new Float32Array(info),
+    edgeKerb: new Float32Array(kerb),
     edgeNodes: new Int32Array(ends),
     nodeEdgeStart: deg,
     nodeEdges: adj,

@@ -586,14 +586,20 @@ export class LifeSim {
   }
 
   // ---------------- per-kind updates ----------------
+  // The travelled way between the parked cars: its width, and its middle off the street's centreline
+  // (+ right of the edge's own direction).
+  private band(e: number) { const K = this.w.edgeKerb; return K ? this.width(e) - K[e * 2] - K[e * 2 + 1] : this.width(e); }
+  private mid(e: number) { const K = this.w.edgeKerb; return K ? (K[e * 2] - K[e * 2 + 1]) / 2 : 0; }
   // A wide one-way (an avenue) has lanes: a car keeps to one, and only follows cars in it.
-  private laneOf(i: number, e: number) { return this.oneway(e) && this.width(e) >= 7 ? this.variant[i] & 1 : 0; }
+  private laneOf(i: number, e: number) { return this.oneway(e) && this.band(e) >= 6 ? this.variant[i] & 1 : 0; }
   private updateCarPose(i: number, dt: number) {
     const e = this.edge[i];
     this.sample(e, this.s[i], this.tmp);
     const d = this.dir[i];
     const tx = this.tmp[3] * d, tz = this.tmp[4] * d;
-    const lane = this.oneway(e) ? (this.width(e) >= 7 ? (this.laneOf(i, e) ? 1 : -1) * this.width(e) / 4 : 0) : Math.min(this.width(e) / 4 + 0.2, 2.0);
+    // (lanes between the parked cars: a one-way's two share the band; a two-way keeps right of its middle)
+    const B = this.band(e);
+    const lane = d * this.mid(e) + (this.oneway(e) ? (B >= 6 ? (this.laneOf(i, e) ? 1 : -1) * B / 4 : 0) : Math.min(B / 4 + 0.2, 2.0));
     // right-hand traffic: right of travel = (-tz, tx)
     this.x[i] = this.tmp[0] - tz * lane;
     this.z[i] = this.tmp[2] + tx * lane;

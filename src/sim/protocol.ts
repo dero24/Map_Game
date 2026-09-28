@@ -76,6 +76,7 @@ export interface LifeInit {
   doors: Float32Array; // per door: x, y, z (threshold), fx, fy, fz (front / foot of the steps)
   rhythm?: Rhythm; // the shape of the place's day (lifeSim.desired); 'shore' when absent
   edgeShops?: Float32Array; // per edge: shop doors along it (pedestrians gather where the shops are)
+  edgeKerb?: Float32Array; // per edge: [left, right] metres of kerb the parked cars take (kerbside.ts), left/right of the edge's own direction
   // Junction control (src/sim/traffic.ts), from the tiles' own analysis:
   armCtl?: Uint8Array; // per edge end [e*2 + 0|1]: CTL for a car arriving at that end's node
   nodeKey?: Float32Array; // per node: signal phase key

@@ -477,3 +477,49 @@ describe('tunnel portals', () => {
     for (const [a, b] of walls) for (const [, z] of [a, b]) expect(Math.abs(z)).toBeGreaterThan(7);
   });
 });
+
+describe('lanes between the parked cars', () => {
+  // A 10.9 m street (6.5 m of carriageway, a parked lane each side: kerbside.ts parks where the
+  // map — or the default — says), one-way and two-way; every space taken. No moving car's box may
+  // ever touch a parked car's.
+  const base: LifeBase = { seed: 3, bounds: [-400, -400, 400, 400], beachPts: new Float32Array(0), waterGrid: new Uint8Array(1), waterG: [0, 0, 8, 1, 1], downtown: [-200, -200, 200, 200], seaward: [1, 0] };
+  const walk = { outdoorSurfaceAt: () => 0 } as unknown as Parameters<typeof buildLifeInit>[2];
+  const L = 4.4, Wd = 1.8;
+  const box = (x: number, z: number, yaw: number) => {
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+    return [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([a, b]) => [x + fx * a * L / 2 - fz * b * Wd / 2, z + fz * a * L / 2 + fx * b * Wd / 2]);
+  };
+  const overlap = (A: number[][], B: number[][]) => {
+    for (const P of [A, B])
+      for (let i = 0; i < 4; i++) {
+        const [x0, z0] = P[i], [x1, z1] = P[(i + 1) % 4], nx = z1 - z0, nz = x0 - x1;
+        const pa = A.map(([x, z]) => x * nx + z * nz), pb = B.map(([x, z]) => x * nx + z * nz);
+        if (Math.max(...pa) <= Math.min(...pb) || Math.max(...pb) <= Math.min(...pa)) return false;
+      }
+    return true;
+  };
+  for (const [name, ow, pk] of [['one-way', 1, 1 + 4], ['two-way', 0, 1 + 4], ['one-way, angled bays one side', 1, 2 + 4]] as const) {
+    it(`a ${name} street: the moving cars keep clear of the parked ones`, async () => {
+      const { kerbSpaces } = await import('../src/world/kerbside');
+      const st: Road = { ...road('residential', pk & 2 ? 13.6 : 10.9, [[-300, 0], [300, 0]], ow ? 1 : undefined), pk };
+      const parked = kerbSpaces([st], [st], [], { left: false, built: () => 1, all: true }).map((k) => box(k.x, k.z, k.yaw));
+      expect(parked.length).toBeGreaterThan(40);
+      const init = buildLifeInit(base, [st], walk, [], []);
+      const sim = new LifeSim(init);
+      const [c0, c1] = RANGES.cars;
+      let checked = 0, hits = 0;
+      for (let t = 0; t < 40; t += 0.1) {
+        sim.setEnv({ playerX: 0, playerZ: 60, hour: 12, night: 0, density: 1, wind: 0, clock: t });
+        sim.step(0.1);
+        for (let i = c0; i < c1; i++) {
+          if (!sim.active[i] || sim.y[i] < -500 || Math.abs(sim.x[i]) > 280) continue;
+          checked++;
+          const b = box(sim.x[i], sim.z[i], sim.yaw[i]);
+          if (parked.some((p) => Math.abs(p[0][0] - sim.x[i]) < 8 && overlap(b, p))) hits++;
+        }
+      }
+      expect(checked).toBeGreaterThan(200);
+      expect(hits).toBe(0);
+    });
+  }
+});

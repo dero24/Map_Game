@@ -737,7 +737,8 @@
       "verification": [
         "tests/traffic.test.ts mapped crosswalks: no approach split within 34 m of a junction (a mid-block crossing still joins); a 3×3 grid with a crosswalk on every arm, 3 busy minutes: 0 overlapping cars (was 8,053 pair-ticks)",
         "tests/kerbside.test.ts one car to a space: a bend's inside kerb, a lot drawn up to the street",
-        "Live on Queen Anne's real cells (v): __CAROBB__ 35 overlapping pairs → 1 (moving 31 → 1, parked 4 → 0); __CARPROBE__ 5,677 overlapping pair-ticks → 4–16, no car stopped for good; reviewer round 8b: 'the crosswalk-stub fix is proven'"
+        "Live on Queen Anne's real cells (v): __CAROBB__ 35 overlapping pairs → 1 (moving 31 → 1, parked 4 → 0); __CARPROBE__ 5,677 overlapping pair-ticks → 4–16, no car stopped for good; reviewer round 8b: 'the crosswalk-stub fix is proven'",
+        "tests/traffic.test.ts 'lanes between the parked cars': one-way, two-way and angled-bay streets with every space taken, 40 s of traffic, no moving box touching a parked one (4,115 and 1,544 hits without the fix)"
       ],
       "evidence": [
         "src/sim/life.ts buildLifeInit (FOOT_SPLIT)",
@@ -745,7 +746,7 @@
         "src/world/kerbside.ts oneToASpace",
         "tools/grade-audit.js __CARPROBE__"
       ],
-      "notes": "Residual: an offset jog (two T-junctions 7.8 m apart) acts as two stops — see traffic-flow. Live again (round 8b code): __CAROBB__ 2 moving pairs in 20 s, but 66 moving-vs-parked pairs, all on wide one-way streets with kerb parking (lanes at ±w/4 into the parking lanes) — fixed next."
+      "notes": "Residual: an offset jog (two T-junctions 7.8 m apart) acts as two stops — see traffic-flow. Live again (round 8b code): __CAROBB__ 2 moving pairs in 20 s, but 66 moving-vs-parked pairs, all on wide one-way streets with kerb parking (lanes at ±w/4 into the parking lanes) — fixed the same session: lanes between the parked cars (edgeKerb), 68 → 4 pairs (1 moving-vs-parked)."
     },
     {
       "id": "traffic-flow",

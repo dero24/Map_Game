@@ -130,10 +130,16 @@ market hall, cuts as places (rockeries, hedges, stairs to the lots), asserts tha
       lights 6%, priority arms 8%, stop signs 4%, all-way 3%, open corners 1%.
     - Next is the queues: discharge at green, and the demand model — traffic by street class
       entering at the ring's edge (R.26).
-  - **Found live:** `__CAROBB__` shows moving cars through parked ones (66 pairs in 20 s), all on
-    wide one-way streets with kerb parking (West Queen Anne Driveway, 10.9 m, parked both sides at
-    ±4.3 m). A one-way's two lanes sit at ±w/4 = ±2.7 m, into the parking lanes. Fixed next: lanes
-    between the parked cars.
+  - **Found live and fixed: moving cars through parked ones.** `__CAROBB__` counted 66 such pairs
+    in 20 s, all on wide one-way streets with kerb parking (West Queen Anne Driveway: 10.9 m,
+    parked both sides at ±4.3 m). A one-way's two lanes sat at ±w/4 = ±2.7 m, into the parking
+    lanes.
+    - The life graph now carries the kerb the parked cars take (`edgeKerb`, from the same rules
+      kerbside.ts parks by: parallel 2.3 m, angled bays 5 m). Lanes are laid out in the band
+      between them: a one-way's two lanes share it; a two-way keeps right of its middle.
+    - Live: 68 → 4 pairs (1 moving-vs-parked, 3 moving).
+    - `tests/traffic.test.ts`: a one-way, a two-way and a one-way with angled bays, every space
+      taken, 40 s of traffic, no box touching a parked car. Without the fix: 4,115 and 1,544 hits.
 - **Cuts as places** (must-fix 3, `retaining.ts`): a retaining wall is built the way Seattle
   builds them — a rockery where the cut is low (up to ~3 m, most of them): basalt boulders in
   courses on a face leaning back into the hill, dark joints, moss on some lower stones; else poured
