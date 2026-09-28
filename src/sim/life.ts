@@ -38,6 +38,7 @@ export interface LifeBase {
   waterG: [number, number, number, number, number];
   downtown: [number, number, number, number];
   seaward: [number, number];
+  rhythm?: import('./protocol').Rhythm;
 }
 
 export function buildLifeBase(world: World, walk: WalkWorld): LifeBase {

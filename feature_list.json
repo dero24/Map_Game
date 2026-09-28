@@ -354,6 +354,24 @@
         "shots/review-r17-e.jpg"
       ],
       "notes": "Next: animals crossing roads (and road kill avoidance by AI traffic), dogs on leads with walkers, gulls stealing chips."
+    },
+    {
+      "id": "regional-cast-and-uses",
+      "priority": 3,
+      "area": "gameplay",
+      "title": "Scaling pass: regional wildlife cast, language-neutral business uses, street rhythms, furniture budgets",
+      "user_visible_behavior": "Each climate has its own animals (desert: coyote, jackrabbit, roadrunner, quail, ground squirrel, mule deer; north woods: snowshoe hare; tropics: ibis); shops and cafés are recognised from map tags in any language; towns keep their own daily rhythm.",
+      "status": "passing",
+      "verification": [
+        "tests: critters (desert cast, coyote hunt, burrow, winter hare), uses, realTile business join, lifeSim rhythms, decor budgets",
+        "streamed desert town ?at=32.2290,-110.9618",
+        "shots/review-r18-f*.jpg"
+      ],
+      "evidence": [
+        "126 tests pass",
+        "arid/adobe stream spawned coyote, ground squirrel, jackrabbit, quail, hawk"
+      ],
+      "notes": "Worker redeploy needed for v7 tiles (business nodes). Other continents fall back to NA climate casts until they get faunaMix rows."
     }
   ],
   "regions": {

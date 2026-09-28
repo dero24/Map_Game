@@ -111,6 +111,22 @@ describe('osmToTile — buildings', () => {
     expect(t.buildings.find((b) => b.own === 0)).toBeTruthy(); // the garage is margin context
   });
 
+  it('a business node inside a building names it and says what it is used for', () => {
+    const [lat, lon] = P.unproject(509, 509);
+    const t = osmToTile(osm(
+      way(301, { building: 'yes' }, sq(500, 500, 18), true),
+      { type: 'node', id: 302, lat, lon, tags: { name: 'Café Luna', amenity: 'cafe' } },
+      way(303, { building: 'retail', shop: 'bakery', name: 'Panadería Sol' }, sq(560, 500, 14), true),
+      way(304, { building: 'yes' }, sq(620, 500, 14), true),
+    ), OPTS);
+    const at = (x: number) => t.buildings.find((b) => Math.abs(b.r[0] / 10 - x) < 20)!;
+    expect(at(500).n).toBe('Café Luna');
+    expect(at(500).u).toBe('cafe');
+    expect(at(500).k).toBe('commercial'); // a café in a house-sized footprint is a storefront
+    expect(at(560).u).toBe('bakery');
+    expect(at(620).u).toBeUndefined();
+  });
+
   it('gives every building exactly one owner across neighbouring cells', () => {
     const east = osmToTile(osm(way(30, { building: 'yes' }, sq(1040, 100, 20), true)), OPTS);
     const west = osmToTile(osm(way(30, { building: 'yes' }, sq(1040, 100, 20), true)), { ...OPTS, id: '1_0', box: { x0: 1024, z0: 0, x1: 2048, z1: 1024 } });

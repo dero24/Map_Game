@@ -2,6 +2,68 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-27 (m) — Scaling pass: furniture budgets, a regional wildlife cast, language-neutral business uses, regional street rhythms
+
+The user asked whether this is being built for scale with the asset generator. The honest
+answer named four gaps; this session closes them before a second region opens.
+
+- **Furniture budgets** (`decor.ts`, `tests/foundry.test.ts`)
+  - Each piece is tested: valid, non-indexed, grounded, within its declared footprint, and under a
+    vertex budget.
+  - Rounded boxes dropped from 2 bevel segments to 1, and radii under 1.5 cm are plain boxes.
+  - Per-piece vertex counts, before → after:
+    - sofa 9288 → 3528;
+    - chair 5832 → 1224;
+    - shelves 31500 → 1260;
+    - ceiling fan 2256 → 816.
+  - A 30-table café now costs roughly a fifth of what it did.
+  - `ni()` replaces `toNonIndexed()` on geometry that is already non-indexed (the console spam).
+  - Shelf stock no longer overhangs the unit.
+- **A regional wildlife cast** (`fauna.ts`, `critters.ts`)
+  - Behaviour belongs to a *role*: climber, burrower, grazer, songbird, shorebird, browser,
+    predator, raptor, butterfly, firefly.
+  - `faunaMix(region, climate)` picks the species for each role, like `plantMix` / `carMix`.
+  - Eight new species, each a table row over the two body plans: coyote, black-tailed jackrabbit,
+    snowshoe hare (white in winter), ground squirrel (dives down its burrow), mule deer, greater
+    roadrunner, quail (topknot), white ibis (curved bill).
+  - Deer habitat includes open shrubland where there are no woods; ground animals use `field()`,
+    which covers lawn, meadow, shrub, crops and bare desert.
+  - Predators and prey match by role, so a coyote hunts a jackrabbit exactly as the fox hunts a
+    rabbit.
+  - Empty species meshes are hidden, so there are no empty draws.
+  - Verified streaming a desert town (`?at=32.2290,-110.9618`, style `arid/adobe`): coyote,
+    ground squirrel, jackrabbit, quail and hawk spawn there; no fox, rabbit or firefly.
+- **Business uses without language**
+  - `Building.u` now carries OSM's amenity / shop / office / craft value.
+  - The bake reads it from the building's tags or a POI inside it.
+  - Real-lite tiles read it from the building's tags or from a named business node inside the
+    outline. The node also names the building, and a house-sized footprint becomes a storefront.
+  - The worker's Overpass query fetches those nodes. The tile cache is bumped to `t/v7` / `&v=7`.
+    **The worker needs a redeploy** before streamed towns carry names and uses.
+  - `useOf(name, tag)` reads the tag first (the same words in every country), then a small
+    en/es/fr/it/de/pt name vocabulary. The brand-name list is gone.
+  - `Footprint.use` and `Door.use` carry the value to terraces, interiors and the harness.
+- **Street rhythms by place** (`protocol.ts` `rhythmFor`, `lifeSim.desired`)
+  - *shore*: the beach town, unchanged.
+  - *town*: commute, lunch, errands, evening stroll, and never empty mid-morning.
+  - *desert*: busy early and after sunset, with a midday lull.
+- **Harness**: montage **f**, the regional cast lined up on a lawn (`shots/review-r18-f*.jpg`).
+
+Verified:
+- `tsc` is clean and **126 tests** pass. New tests cover:
+  - decor budgets and footprints (3);
+  - the desert cast, a coyote hunting a jackrabbit, the burrow dive, the winter snowshoe (3);
+  - the business-node join into buildings (1);
+  - uses: tags first, multilingual names (3);
+  - street rhythms per place (1).
+- Montage r18 e/f; a desert town streamed live.
+- `npm run build` needs the user's Windows toolchain. The session's Linux VM can't load the
+  Windows rolldown binaries.
+
+Next: redeploy the tile worker, then run a streamed-parity harness pass in Tucson (storefronts,
+interiors, terraces from real OSM businesses). After that the tree-silhouette pass, and Almanac
+regional sets (cards filtered by `faunaMix`).
+
 ## 2026-09-27 (l) — Downtown life, furnished interiors, walker proportions, a wildlife ecosystem, cars that hit people
 
 This session came from user feedback:

@@ -72,4 +72,10 @@ export interface LifeInit {
   downtown: [number, number, number, number]; // bias box for pedestrians (where the shops are)
   seaward: [number, number]; // unit direction from the beach out to sea (gulls wheel over the surf)
   doors: Float32Array; // per door: x, y, z (threshold), fx, fy, fz (front / foot of the steps)
+  rhythm?: Rhythm; // the shape of the place's day (lifeSim.desired); 'shore' when absent
 }
+/** The daily rhythm of a place's streets: a beach town (the crowd builds toward the afternoon
+ *  beach), an ordinary town (commute, lunch, errands, evening stroll) or a hot-country town
+ *  (busy early and after sunset, a midday lull). Chosen from climate + coast (rhythmFor). */
+export type Rhythm = 'shore' | 'town' | 'desert';
+export const rhythmFor = (climate: string, coastal: boolean): Rhythm => (coastal ? 'shore' : climate === 'arid' ? 'desert' : 'town');

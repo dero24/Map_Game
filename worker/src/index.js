@@ -97,7 +97,7 @@ async function tile(request, env, ctx, url, cx, cz) {
   if (hit) return hit;
   // v4: fills gained per-road rng + land masks + interior clamp — bump the object key
   // so stale tile payloads can't be served past the edge TTL.
-  const okey = `t/v6/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
+  const okey = `t/v7/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
   const bucket = env.TILES ?? null; // binding may be absent under `wrangler dev` before the bucket exists
   if (bucket) {
     try {
@@ -168,6 +168,9 @@ async function coldTileNow(env, okey, cx, cz, box, origin) {
   way["waterway"="riverbank"];
   node["natural"="tree"];
   node["amenity"="bench"];
+  node["name"]["amenity"~"^(cafe|restaurant|fast_food|bar|pub|biergarten|ice_cream|bank|pharmacy|post_office|library|nightclub)$"];
+  node["name"]["shop"];
+  node["name"]["office"];
   way["leisure"~"^(park|pitch|playground|garden|recreation_ground)$"];
   way["landuse"~"^(forest|farmland|meadow|reservoir|cemetery|basin|quarry|landfill|grass)$"];
   relation["leisure"~"^(park|pitch|playground|garden|recreation_ground)$"];

@@ -651,7 +651,7 @@ export class Interiors {
     const nSlab = cuts.length - 1;
     const rooms: Room[] = [];
     // the ground floor follows the business the map names (uses.ts); unnamed shops roll
-    const use = fp.kind === 'commercial' ? useOf(fp.name) : 'unknown';
+    const use = fp.kind === 'commercial' ? useOf(fp.name, fp.use) : 'unknown';
     const ground = use === 'cafe' ? 'cafe' : use === 'restaurant' || use === 'bar' ? 'diner' : use === 'office' || use === 'civic' ? 'office' : use === 'grocery' ? 'shop'
       : use === 'unknown' ? (rng.float() < 0.25 ? 'cafe' : rng.float() < 0.3 ? 'diner' : 'shop') : 'shop';
     const doorSlab = Math.max(0, cuts.findIndex((c, i) => i < nSlab && P.ud >= c - 0.6 && P.ud <= cuts[i + 1] + 0.6));

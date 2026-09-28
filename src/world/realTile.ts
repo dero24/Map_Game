@@ -302,9 +302,21 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
     (t.leisure && /^(park|pitch|playground|garden|recreation_ground)$/.test(t.leisure)) ||
     (t.landuse && /^(forest|farmland|meadow|reservoir|cemetery|basin|quarry|landfill|grass)$/.test(t.landuse));
 
+  // Named businesses mapped as nodes inside a building outline (the usual OSM way to map a shop):
+  // they name the building and say what it's used for, in OSM's own language-neutral values.
+  const poiNodes: { x: number; z: number; name: string; use: string }[] = [];
+  const useTag = (t: Record<string, string>) => {
+    const u = t.amenity ?? t.shop ?? t.office ?? t.craft;
+    return u && u !== 'yes' && u !== 'bench' && u !== 'place_of_worship' ? u : undefined;
+  };
   for (const e of els) {
     const t = e.tags ?? {};
     if (e.type === 'node') {
+      const use = t.name ? useTag(t) : undefined;
+      if (use && e.lat != null && e.lon != null) {
+        const [x, z] = P.project(e.lat, e.lon);
+        if (inB(x, z, margin)) poiNodes.push({ x, z, name: t.name, use });
+      }
       // Point furniture — same tag→class the bake emits; props.ts consumes these.
       const pc = t.natural === 'tree' ? 'tree' : t.amenity === 'bench' ? 'bench' : null;
       if (pc && e.lat != null && e.lon != null) {
@@ -381,6 +393,8 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         const minH = t.min_height ? parseFloat(t.min_height) : t['building:min_level'] ? parseFloat(t['building:min_level']) * 3 : null;
         if (minH && isFinite(minH)) b.mh = +minH.toFixed(1);
         if (t.name) b.n = t.name;
+        const use = useTag(t);
+        if (use) b.u = use;
         if (t['addr:housenumber'] && t['addr:street']) b.ad = `${t['addr:housenumber']} ${t['addr:street']}`;
         buildings.push(b);
       }
@@ -487,6 +501,28 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
   // shouldn't read as empty. When owner building density is very low relative to
   // fillable road mileage, seed deterministic lots beside those roads. They're real
   // content for the tile (cached in R2): every visitor sees the same fill.
+  // join the business nodes to the building they sit in (first one wins; a shop in a house
+  // footprint makes it a storefront)
+  if (poiNodes.length) {
+    const boxes = buildings.map((b) => {
+      let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+      for (let i = 0; i + 1 < b.r.length; i += 2) { x0 = Math.min(x0, b.r[i]); x1 = Math.max(x1, b.r[i]); z0 = Math.min(z0, b.r[i + 1]); z1 = Math.max(z1, b.r[i + 1]); }
+      return [x0 / 10, z0 / 10, x1 / 10, z1 / 10];
+    });
+    for (const n of poiNodes) {
+      for (let i = 0; i < buildings.length; i++) {
+        const [x0, z0, x1, z1] = boxes[i], b = buildings[i];
+        if (n.x < x0 || n.x > x1 || n.z < z0 || n.z > z1) continue;
+        const ring: P2[] = [];
+        for (let k = 0; k + 1 < b.r.length; k += 2) ring.push([b.r[k] / 10, b.r[k + 1] / 10]);
+        if (!pointInRing(n.x, n.z, ring)) continue;
+        if (!b.u) b.u = n.use;
+        if (!b.n) b.n = n.name;
+        if (b.k === 'house') b.k = 'commercial';
+        break;
+      }
+    }
+  }
   {
     const FILLABLE = new Set(['residential', 'unclassified', 'tertiary', 'secondary', 'living_street']);
     let ownRoadM = 0;

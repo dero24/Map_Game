@@ -9,11 +9,82 @@ import * as THREE from 'three';
 import { P, part, merge, limb, blob, card, cached } from './core';
 import { paintMaterial } from '../render/shared';
 
-export type CritterKind = 'squirrel' | 'rabbit' | 'songbird' | 'sandpiper' | 'deer' | 'butterfly' | 'firefly' | 'fox' | 'hawk';
-export const CRITTERS: CritterKind[] = ['squirrel', 'rabbit', 'songbird', 'sandpiper', 'deer', 'butterfly', 'firefly', 'fox', 'hawk'];
-export const CRITTER_NAME: Record<CritterKind, string> = { squirrel: 'squirrel', rabbit: 'rabbit', songbird: 'songbird', sandpiper: 'sandpiper', deer: 'white-tailed deer', butterfly: 'butterfly', firefly: 'firefly', fox: 'red fox', hawk: 'red-tailed hawk' };
+export type CritterKind =
+  | 'squirrel' | 'rabbit' | 'songbird' | 'sandpiper' | 'deer' | 'butterfly' | 'firefly' | 'fox' | 'hawk'
+  | 'coyote' | 'jackrabbit' | 'snowshoe' | 'groundSquirrel' | 'muleDeer' | 'roadrunner' | 'quail' | 'ibis';
+export const CRITTERS: CritterKind[] = ['squirrel', 'rabbit', 'songbird', 'sandpiper', 'deer', 'butterfly', 'firefly', 'fox', 'hawk', 'coyote', 'jackrabbit', 'snowshoe', 'groundSquirrel', 'muleDeer', 'roadrunner', 'quail', 'ibis'];
+export const CRITTER_NAME: Record<CritterKind, string> = {
+  squirrel: 'squirrel', rabbit: 'rabbit', songbird: 'songbird', sandpiper: 'sandpiper', deer: 'white-tailed deer', butterfly: 'butterfly', firefly: 'firefly', fox: 'red fox', hawk: 'red-tailed hawk',
+  coyote: 'coyote', jackrabbit: 'black-tailed jackrabbit', snowshoe: 'snowshoe hare', groundSquirrel: 'ground squirrel', muleDeer: 'mule deer', roadrunner: 'greater roadrunner', quail: 'quail', ibis: 'white ibis',
+};
+
+/** Ecological roles: the sim (sim/critters.ts) gives each role its habitat and behaviour; the
+ *  species that fills a role comes from the place (faunaMix) — a desert's grazer is a jackrabbit
+ *  (and a roadrunner), a north-woods one a snowshoe hare. New species = a table row, not new code. */
+export type CritterRole = 'climber' | 'burrower' | 'grazer' | 'songbird' | 'shorebird' | 'browser' | 'butterfly' | 'firefly' | 'predator' | 'raptor';
+export const ROLES: CritterRole[] = ['climber', 'burrower', 'grazer', 'songbird', 'shorebird', 'browser', 'butterfly', 'firefly', 'predator', 'raptor'];
+export const ROLE: Record<CritterKind, CritterRole> = {
+  squirrel: 'climber', groundSquirrel: 'burrower', rabbit: 'grazer', jackrabbit: 'grazer', snowshoe: 'grazer', roadrunner: 'grazer',
+  songbird: 'songbird', quail: 'songbird', sandpiper: 'shorebird', ibis: 'shorebird', deer: 'browser', muleDeer: 'browser',
+  butterfly: 'butterfly', firefly: 'firefly', fox: 'predator', coyote: 'predator', hawk: 'raptor',
+};
+export type FaunaMix = Partial<Record<CritterRole, [CritterKind, number][]>>;
+// Species per role by climate (Köppen-ish, the same key the plant and car mixes use). North
+// American species first — the lower 48 is the goal; other continents fall back to the closest
+// climate's cast until they get their own rows.
+const FAUNA: Record<string, FaunaMix> = {
+  temperate: { climber: [['squirrel', 1]], grazer: [['rabbit', 1]], songbird: [['songbird', 1]], shorebird: [['sandpiper', 1]], browser: [['deer', 1]], predator: [['fox', 1], ['coyote', 0.25]], raptor: [['hawk', 1]], butterfly: [['butterfly', 1]], firefly: [['firefly', 1]] },
+  continental: { climber: [['squirrel', 1]], burrower: [['groundSquirrel', 1]], grazer: [['rabbit', 1], ['jackrabbit', 0.3]], songbird: [['songbird', 1]], shorebird: [['sandpiper', 1]], browser: [['deer', 1], ['muleDeer', 0.3]], predator: [['coyote', 1], ['fox', 0.7]], raptor: [['hawk', 1]], butterfly: [['butterfly', 1]], firefly: [['firefly', 1]] },
+  boreal: { climber: [['squirrel', 1]], grazer: [['snowshoe', 1]], songbird: [['songbird', 1]], shorebird: [['sandpiper', 1]], browser: [['deer', 1]], predator: [['fox', 1], ['coyote', 0.5]], raptor: [['hawk', 1]], butterfly: [['butterfly', 0.6]] },
+  polar: { grazer: [['snowshoe', 1]], predator: [['fox', 1]], shorebird: [['sandpiper', 0.5]] },
+  arid: { climber: [['squirrel', 0.15]], burrower: [['groundSquirrel', 1]], grazer: [['jackrabbit', 1], ['roadrunner', 0.35]], songbird: [['quail', 1], ['songbird', 0.4]], shorebird: [['sandpiper', 0.4]], browser: [['muleDeer', 1]], predator: [['coyote', 1]], raptor: [['hawk', 1]], butterfly: [['butterfly', 0.5]] },
+  mediterranean: { climber: [['squirrel', 1]], burrower: [['groundSquirrel', 0.7]], grazer: [['rabbit', 1], ['jackrabbit', 0.3]], songbird: [['songbird', 1], ['quail', 0.6]], shorebird: [['sandpiper', 1]], browser: [['muleDeer', 1]], predator: [['coyote', 1], ['fox', 0.3]], raptor: [['hawk', 1]], butterfly: [['butterfly', 1]] },
+  tropical: { climber: [['squirrel', 1]], grazer: [['rabbit', 1]], songbird: [['songbird', 1]], shorebird: [['sandpiper', 1], ['ibis', 1]], browser: [['deer', 0.6]], predator: [['fox', 0.5]], raptor: [['hawk', 1]], butterfly: [['butterfly', 1.3]], firefly: [['firefly', 0.6]] },
+};
+/** The species cast for a place: role → weighted species (a role missing from the mix simply doesn't appear). */
+export function faunaMix(region: string, climate: string): FaunaMix {
+  void region; // continents get their own rows here as they come online
+  return FAUNA[climate] ?? FAUNA.temperate;
+}
 
 const V3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+
+// Four-legged species as parameters over the four base builds (squirrel, rabbit, deer, fox):
+// overall scale, coat / belly, leg-stocking and tail-tip colours, ear size, tail fullness.
+interface Quad { base: 'squirrel' | 'rabbit' | 'deer' | 'fox'; k?: number; coat?: number; belly?: number; stock?: number; tailTip?: number; ear?: number; earC?: number; plume?: number }
+const QUAD: Partial<Record<CritterKind, Quad>> = {
+  squirrel: { base: 'squirrel' }, rabbit: { base: 'rabbit' }, deer: { base: 'deer' }, fox: { base: 'fox' },
+  // a coyote: the fox plan a third bigger, grizzled tan-grey, tan legs, big ears, a black-tipped brush
+  coyote: { base: 'fox', k: 1.3, coat: 0x9c8c74, belly: 0xe2d8c4, stock: 0x8a7658, tailTip: 0x2a2622, ear: 1.25, earC: 0x8a7a64 },
+  // a jackrabbit: rangy, sandy, with the enormous ears
+  jackrabbit: { base: 'rabbit', k: 1.25, coat: 0xa8906a, ear: 1.5 },
+  // a snowshoe hare: coat is TINT — the sim paints it brown in summer and white in winter
+  snowshoe: { base: 'rabbit', k: 1.15, coat: 0xffffff, belly: 0xf2eee6, ear: 0.9 },
+  // a ground squirrel: sandy, a thin tail (it bolts down a burrow, not up a tree)
+  groundSquirrel: { base: 'squirrel', k: 1.1, coat: 0xa08462, plume: 0.55 },
+  // a mule deer: greyer, and the mule ears
+  muleDeer: { base: 'deer', k: 1.05, coat: 0x8f7f6c, ear: 1.4 },
+};
+// Birds: the bird plan with its colours, legs, bill and body plan, scaled up from songbird size.
+interface Bird { coat: number; belly: number; legC: number; beakC: number; legH: number; beakL: number; plan?: BirdPlan; k?: number }
+const BIRD: Partial<Record<CritterKind, Bird>> = {
+  songbird: { coat: 0xffffff, belly: 0xe4d6c0, legC: 0x6a5040, beakC: 0xd8a040, legH: 0.025, beakL: 0.022 }, // TINT coat, painted per bird
+  sandpiper: { coat: 0xa89a86, belly: 0xf2eee6, legC: 0x3a3530, beakC: 0x2a2622, legH: 0.06, beakL: 0.05 },
+  // slim, broad-winged, the red tail
+  hawk: { coat: 0x5a4232, belly: 0xeee2cc, legC: 0x3a2f28, beakC: 0xd8a040, legH: 0.025, beakL: 0.014, k: 3.3, plan: { wing: [0.07, 0.15], tail: [0.08, 0.07], head: [0.03, -0.085], tailC: 0xb5502e, body: [0.58, 0.6, 1.5], band: 0x5a4232, fingers: 4 } },
+  // long-legged, streaky, a long tail cocked up and a shaggy crest
+  roadrunner: { coat: 0x6e5a44, belly: 0xd8ccb4, legC: 0x7a8a9a, beakC: 0x2a2622, legH: 0.045, beakL: 0.03, k: 2.3, plan: { body: [0.7, 0.7, 1.35], tail: [0.03, 0.17], crest: 0x3a3028, head: [0.05, -0.08] } },
+  // plump and grey with a forward-curling topknot
+  quail: { coat: 0x7a7a82, belly: 0xc8b08a, legC: 0x6a5a4a, beakC: 0x2a2622, legH: 0.018, beakL: 0.012, k: 1.6, plan: { body: [1.05, 0.95, 1.05], tail: [0.04, 0.035], crest: 0x2a2622, head: [0.04, -0.065] } },
+  // white, long red legs, the long down-curved bill
+  ibis: { coat: 0xf4f2ee, belly: 0xf4f2ee, legC: 0xd86a4a, beakC: 0xd86a4a, legH: 0.1, beakL: 0.1, k: 2.4, plan: { body: [0.75, 0.75, 1.3], curve: 0.55, head: [0.06, -0.075] } },
+};
+const scaleGeo = (g: THREE.BufferGeometry, k: number) => {
+  if (k === 1) return g;
+  for (const a of ['position', 'aPivot']) { const at = g.getAttribute(a); for (let i = 0; i < at.count; i++) at.setXYZ(i, at.getX(i) * k, at.getY(i) * k, at.getZ(i) * k); }
+  g.computeBoundingBox();
+  return g;
+};
 // a part that swings about `pivot`
 function jointed(g: THREE.BufferGeometry, hex: number, id: number, pivot: THREE.Vector3) {
   const p = part(g, hex, id);
@@ -47,7 +118,7 @@ function broadWing(chord: number, span: number, side: number) {
   return g;
 }
 
-interface BirdPlan { wing?: [number, number]; tail?: [number, number]; head?: [number, number]; tailC?: number; body?: [number, number, number]; band?: number; fingers?: number }
+interface BirdPlan { wing?: [number, number]; tail?: [number, number]; head?: [number, number]; tailC?: number; body?: [number, number, number]; band?: number; fingers?: number; crest?: number; curve?: number }
 function birdGeometry(coat: number, belly: number, legC: number, beakC: number, legH: number, beakL = 0.022, o: BirdPlan = {}): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
   const by = legH + 0.045;
@@ -59,9 +130,17 @@ function birdGeometry(coat: number, belly: number, legC: number, beakC: number, 
   const neck = V3(0, by + 0.02, -0.05);
   const [hy, hz] = o.head ?? [0.045, -0.07];
   parts.push(jointed(blob(0.032, 32, { detail: 0, lump: 0.04 }).translate(0, by + hy, hz), coat, P.skull, neck));
-  const beak = new THREE.ConeGeometry(0.008, beakL, 4).rotateX(-Math.PI / 2);
-  if (hooked) beak.rotateX(0.5); // a raptor's short down-hooked bill
-  parts.push(jointed(beak.translate(0, by + hy - 0.005 - (hooked ? 0.004 : 0), hz - 0.025 - beakL / 2), beakC, P.skull, neck));
+  if (o.curve) {
+    // a long bill curving down from its base (an ibis): hinge the cone at the face and bend it
+    const bill = new THREE.ConeGeometry(0.007, beakL, 4).rotateX(-Math.PI / 2).translate(0, 0, -beakL / 2).rotateX(-o.curve);
+    parts.push(jointed(bill.translate(0, by + hy - 0.005, hz - 0.025), beakC, P.skull, neck));
+  } else {
+    const beak = new THREE.ConeGeometry(0.008, beakL, 4).rotateX(-Math.PI / 2);
+    if (hooked) beak.rotateX(0.5); // a raptor's short down-hooked bill
+    parts.push(jointed(beak.translate(0, by + hy - 0.005 - (hooked ? 0.004 : 0), hz - 0.025 - beakL / 2), beakC, P.skull, neck));
+  }
+  // a crest / topknot, curling forward off the crown
+  if (o.crest !== undefined) parts.push(jointed(new THREE.ConeGeometry(0.009, 0.035, 4).rotateX(-0.6).translate(0, by + hy + 0.045, hz - 0.004), o.crest, P.skull, neck));
   const [tw, tl] = o.tail ?? [0.05, 0.07];
   parts.push(still(card(tw, tl, -0.05, 1).translate(0, by + 0.01, 0.04), o.tailC ?? coat, P.tail));
   for (const s of [-1, 1]) {
@@ -85,49 +164,45 @@ function birdGeometry(coat: number, belly: number, legC: number, beakC: number, 
 
 /** Build one animal (front toward −z, feet at y = 0). Colours: TINT-free — each species has its own coat. */
 export function critterGeometry(kind: CritterKind): THREE.BufferGeometry {
-  if (kind === 'hawk') {
-    // a raptor: the bird plan at ~3× songbird size, broad brown wings, pale breast, hooked beak
-    const g = birdGeometry(0x5a4232, 0xeee2cc, 0x3a2f28, 0xd8a040, 0.025, 0.014, { wing: [0.07, 0.15], tail: [0.08, 0.07], head: [0.03, -0.085], tailC: 0xb5502e, body: [0.58, 0.6, 1.5], band: 0x5a4232, fingers: 4 }); // slim, broad-winged, the red tail
-    const k = 3.3;
-    for (const a of ['position', 'aPivot']) { const at = g.getAttribute(a); for (let i = 0; i < at.count; i++) at.setXYZ(i, at.getX(i) * k, at.getY(i) * k, at.getZ(i) * k); }
-    g.computeBoundingBox();
-    return g;
-  }
+  const B = BIRD[kind];
+  if (B) return scaleGeo(birdGeometry(B.coat, B.belly, B.legC, B.beakC, B.legH, B.beakL, B.plan), B.k ?? 1);
   const parts: THREE.BufferGeometry[] = [];
-  if (kind === 'squirrel' || kind === 'rabbit' || kind === 'deer' || kind === 'fox') {
-    const sq = kind === 'squirrel', rb = kind === 'rabbit', fx0 = kind === 'fox';
+  const Q = QUAD[kind];
+  if (Q) {
+    const base = Q.base, sq = base === 'squirrel', rb = base === 'rabbit', fx0 = base === 'fox', dr = base === 'deer';
     const S = sq ? 0.2 : rb ? 0.3 : fx0 ? 0.62 : 1.55; // body length
-    const coat = sq ? 0x8a8580 : rb ? 0x8f7a62 : fx0 ? 0xc4622d : 0x9a7654;
-    const belly = sq ? 0xe8e2d6 : rb ? 0xe2d8c8 : 0xe4dccc;
+    const coat = Q.coat ?? (sq ? 0x8a8580 : rb ? 0x8f7a62 : fx0 ? 0xc4622d : 0x9a7654);
+    const belly = Q.belly ?? (sq ? 0xe8e2d6 : rb ? 0xe2d8c8 : 0xe4dccc);
+    const stock = Q.stock ?? 0x2e2420, tailTip = Q.tailTip ?? 0xf2eee6;
     const legH = sq ? 0.07 : rb ? 0.1 : fx0 ? 0.26 : 0.85;
     const bodyY = legH + S * (sq ? 0.2 : rb ? 0.22 : 0.18);
-    const bs = kind === 'deer' ? [0.34, 0.42, 0.88] : fx0 ? [0.42, 0.46, 0.95] : [0.62, 0.62, 1];
+    const bs = dr ? [0.34, 0.42, 0.88] : fx0 ? [0.42, 0.46, 0.95] : [0.62, 0.62, 1];
     parts.push(still(blob(S * 0.5, 3, { lump: fx0 ? 0.04 : 0.08, squash: 1 }).scale(bs[0], bs[1], bs[2]).translate(0, bodyY, 0), coat));
-    parts.push(still(blob(S * 0.3, 4, { lump: 0.05, detail: 0 }).scale(bs[0] * 1.2, 0.5, bs[2]).translate(0, bodyY - S * (kind === 'deer' ? 0.1 : 0.14), -S * 0.02), belly));
+    parts.push(still(blob(S * 0.3, 4, { lump: 0.05, detail: 0 }).scale(bs[0] * 1.2, 0.5, bs[2]).translate(0, bodyY - S * (dr ? 0.1 : 0.14), -S * 0.02), belly));
     // head on a neck (deer), or straight on the shoulders
     // a deer carries its neck forward (~25° off vertical), not straight up like a llama
-    const neck = V3(0, bodyY + (kind === 'deer' ? 0.24 : S * 0.12), -S * 0.42);
+    const neck = V3(0, bodyY + (dr ? 0.24 : S * 0.12), -S * 0.42);
     const hr = sq ? 0.055 : rb ? 0.075 : fx0 ? 0.1 : 0.2;
-    const head = V3(0, neck.y + (kind === 'deer' ? 0.26 : fx0 ? 0.07 : 0.02), neck.z - (kind === 'deer' ? 0.32 : fx0 ? 0.09 : 0.04));
+    const head = V3(0, neck.y + (dr ? 0.26 : fx0 ? 0.07 : 0.02), neck.z - (dr ? 0.32 : fx0 ? 0.09 : 0.04));
     if (fx0) {
       // the fox holds its head up on a short ruffed neck, white bib at the throat
       parts.push(jointed(limb(V3(0, bodyY + 0.02, -S * 0.36), head, 0.075, 0.06, 5), coat, P.skull, neck));
       parts.push(jointed(blob(0.06, 27, { detail: 0 }).scale(0.9, 1.1, 0.7).translate(0, bodyY + 0.02, -S * 0.46), 0xf2eee6, P.skull, neck));
     }
-    if (kind === 'deer') parts.push(jointed(limb(V3(0, bodyY + 0.1, -S * 0.38), head, 0.13, 0.09, 6), coat, P.skull, neck));
-    parts.push(jointed(blob(hr, 5, { lump: 0.05, detail: 1 }).scale(0.85, 0.85, kind === 'deer' ? 1.5 : 1.15).translate(head.x, head.y, head.z), coat, P.skull, neck));
-    parts.push(jointed(new THREE.SphereGeometry(hr * 0.35, 5, 4).translate(0, head.y - hr * (fx0 ? 0.25 : 0.15), head.z - hr * (kind === 'deer' ? 1.55 : fx0 ? 1.85 : 1.05)), 0x2a2622, P.skull, neck)); // nose
+    if (dr) parts.push(jointed(limb(V3(0, bodyY + 0.1, -S * 0.38), head, 0.13, 0.09, 6), coat, P.skull, neck));
+    parts.push(jointed(blob(hr, 5, { lump: 0.05, detail: 1 }).scale(0.85, 0.85, dr ? 1.5 : 1.15).translate(head.x, head.y, head.z), coat, P.skull, neck));
+    parts.push(jointed(new THREE.SphereGeometry(hr * 0.35, 5, 4).translate(0, head.y - hr * (fx0 ? 0.25 : 0.15), head.z - hr * (dr ? 1.55 : fx0 ? 1.85 : 1.05)), 0x2a2622, P.skull, neck)); // nose
     for (const s of [-1, 1]) {
       // ears: rabbits long, squirrels tufted, deer broad
-      const eh = rb ? 0.14 : sq ? 0.035 : fx0 ? 0.1 : 0.16, ew = rb ? 0.03 : sq ? 0.018 : fx0 ? 0.045 : 0.07;
+      const eh = (rb ? 0.14 : sq ? 0.035 : fx0 ? 0.1 : 0.16) * (Q.ear ?? 1), ew = (rb ? 0.03 : sq ? 0.018 : fx0 ? 0.045 : 0.07) * Math.sqrt(Q.ear ?? 1);
       const ear = new THREE.ConeGeometry(ew, eh, 5).rotateZ(-s * (rb ? 0.15 : fx0 ? 0.3 : 0.5)).translate(s * hr * 0.55, head.y + hr * 0.7 + eh / 2, head.z + hr * 0.2);
-      parts.push(jointed(ear, fx0 ? 0x3a2a22 : coat, P.skull, neck)); // a fox's ears are black-backed
+      parts.push(jointed(ear, Q.earC ?? (fx0 ? 0x3a2a22 : coat), P.skull, neck)); // a fox's ears are black-backed
       parts.push(jointed(new THREE.SphereGeometry(hr * 0.13, 4, 3).translate(s * hr * 0.55, head.y + hr * 0.25, head.z - hr * 0.6), 0x1a1614, P.skull, neck)); // eyes
       // legs: fore at the shoulder, hind at the hip
       const lr = sq ? 0.014 : rb ? 0.02 : fx0 ? 0.026 : 0.045;
       const fz = -S * 0.3, hz = S * 0.3;
-      const fx = s * S * (kind === 'deer' ? 0.09 : 0.17), hx = s * S * (rb ? 0.2 : kind === 'deer' ? 0.1 : 0.18);
-      if (kind === 'deer') {
+      const fx = s * S * (dr ? 0.09 : 0.17), hx = s * S * (rb ? 0.2 : dr ? 0.1 : 0.18);
+      if (dr) {
         // a muscled forearm down to the knee, then a slim cannon bone to the hoof
         const knee = V3(fx, legH * 0.52, fz - 0.02);
         parts.push(jointed(limb(V3(fx, bodyY, fz), knee, 0.085, 0.045, 5), coat, P.fore, V3(fx, bodyY, fz)));
@@ -136,7 +211,7 @@ export function critterGeometry(kind: CritterKind): THREE.BufferGeometry {
         // russet to the elbow, then black stockings
         const elbow = V3(fx, legH * 0.55, fz);
         parts.push(jointed(limb(V3(fx, bodyY, fz), elbow, lr * 1.9, lr * 1.3, 4), coat, P.fore, V3(fx, bodyY, fz)));
-        parts.push(jointed(limb(elbow, V3(fx, 0, fz - 0.015), lr * 1.2, lr, 4), 0x2e2420, P.fore, V3(fx, bodyY, fz)));
+        parts.push(jointed(limb(elbow, V3(fx, 0, fz - 0.015), lr * 1.2, lr, 4), stock, P.fore, V3(fx, bodyY, fz)));
       } else parts.push(jointed(limb(V3(fx, bodyY, fz), V3(fx, 0, fz - (sq ? 0.01 : 0)), lr * 1.3, lr, 5), coat, P.fore, V3(fx, bodyY, fz)));
       const hip = V3(hx, bodyY + (rb ? 0.02 : 0), hz);
       if (rb || sq) {
@@ -146,7 +221,7 @@ export function critterGeometry(kind: CritterKind): THREE.BufferGeometry {
       } else if (fx0) {
         const hock = V3(hx, legH * 0.45, hz + 0.05);
         parts.push(jointed(limb(hip, hock, lr * 2.6, lr * 1.3, 4), coat, P.hind, hip)); // a full haunch
-        parts.push(jointed(limb(hock, V3(hx, 0, hz + 0.02), lr * 1.2, lr, 4), 0x2e2420, P.hind, hip));
+        parts.push(jointed(limb(hock, V3(hx, 0, hz + 0.02), lr * 1.2, lr, 4), stock, P.hind, hip));
       }
       else {
         // a deep haunch to the hock (set back), then the slim lower leg
@@ -161,24 +236,21 @@ export function critterGeometry(kind: CritterKind): THREE.BufferGeometry {
       // one continuous bushy plume rising from the rump and curling forward over the back:
       // seven overlapping puffs along an S (each overlaps the next by half), no gaps
       const pts = [V3(0, 0.0, 0.01), V3(0, 0.05, 0.05), V3(0, 0.11, 0.06), V3(0, 0.16, 0.035), V3(0, 0.19, -0.01)];
-      pts.forEach((q, i) => parts.push(jointed(blob(0.058 - i * 0.003, 20 + i, { detail: 0, lump: 0.1 }).scale(0.75, 0.9, 1.05).translate(tb.x + q.x, tb.y + q.y, tb.z + q.z), 0x9a948c, P.tail, tb)));
+      const pl = Q.plume ?? 1;
+      pts.forEach((q, i) => parts.push(jointed(blob((0.058 - i * 0.003) * pl, 20 + i, { detail: 0, lump: 0.1 }).scale(0.75, 0.9, 1.05).translate(tb.x + q.x, tb.y + q.y, tb.z + q.z), Q.coat !== undefined ? coat : 0x9a948c, P.tail, tb)));
     } else if (rb) parts.push(jointed(blob(0.045, 21, { detail: 0 }).translate(tb.x, tb.y + 0.02, tb.z + 0.02), 0xf2eee6, P.tail, tb));
     else if (fx0) {
       // the brush: long, low and full, with a white tip
       // (carried low: drooping ~20° from the rump, swaying with the trot via the tail joint)
       [V3(0, -0.04, 0.1), V3(0, -0.1, 0.21), V3(0, -0.15, 0.31)].forEach((q, i) => parts.push(jointed(blob(0.075 - i * 0.008, 23 + i, { detail: 0, lump: 0.12 }).scale(0.8, 0.8, 1.3).rotateX(0.35).translate(tb.x + q.x, tb.y + q.y, tb.z + q.z), coat, P.tail, tb)));
-      parts.push(jointed(blob(0.05, 26, { detail: 0 }).translate(tb.x, tb.y - 0.19, tb.z + 0.39), 0xf2eee6, P.tail, tb));
+      parts.push(jointed(blob(0.05, 26, { detail: 0 }).translate(tb.x, tb.y - 0.19, tb.z + 0.39), tailTip, P.tail, tb));
     }
     else parts.push(jointed(card(0.12, 0.22, -0.3, 2).rotateX(-2.3).translate(tb.x, tb.y, tb.z), 0xf2eee6, P.tail, tb));
-    if (kind === 'deer') parts.push(jointed(blob(0.1, 22, { detail: 0 }).scale(1, 0.6, 1.2).translate(0, bodyY + 0.02, S * 0.46), 0xf2eee6, P.tail, tb)); // rump patch
+    if (dr) parts.push(jointed(blob(0.1, 22, { detail: 0 }).scale(1, 0.6, 1.2).translate(0, bodyY + 0.02, S * 0.46), 0xf2eee6, P.tail, tb)); // rump patch
     if (fx0) {
       parts.push(jointed(new THREE.ConeGeometry(hr * 0.5, hr * 1.2, 6).rotateX(-Math.PI / 2).translate(0, head.y - hr * 0.2, head.z - hr * 1.25), coat, P.skull, neck)); // the fox's long snout
       parts.push(jointed(new THREE.ConeGeometry(hr * 0.36, hr * 1.0, 5).rotateX(-Math.PI / 2).translate(0, head.y - hr * 0.42, head.z - hr * 1.1), 0xf2eee6, P.skull, neck)); // white muzzle below
     }
-  } else if (kind === 'songbird' || kind === 'sandpiper') {
-    const sp = kind === 'sandpiper';
-    // songbirds: TINT coat, painted per bird
-    return birdGeometry(sp ? 0xa89a86 : 0xffffff, sp ? 0xf2eee6 : 0xe4d6c0, sp ? 0x3a3530 : 0x6a5040, sp ? 0x2a2622 : 0xd8a040, sp ? 0.06 : 0.025, sp ? 0.05 : 0.022);
   } else if (kind === 'butterfly') {
     parts.push(still(new THREE.CylinderGeometry(0.004, 0.003, 0.035, 4).rotateX(Math.PI / 2), 0x2a2622));
     for (const s of [-1, 1]) {
@@ -190,17 +262,19 @@ export function critterGeometry(kind: CritterKind): THREE.BufferGeometry {
     parts.push(still(new THREE.SphereGeometry(0.012, 5, 4).scale(0.8, 0.7, 1.3), 0x2a2622));
     parts.push(jointed(new THREE.SphereGeometry(0.018, 6, 5).translate(0, 0, 0.012), 0xfff2a0, P.head, V3(0, 0, 0)));
   }
-  return merge(parts);
+  return scaleGeo(merge(parts), Q?.k ?? 1);
 }
 export const critterLib = (k: CritterKind) => cached(`critter:${k}`, () => critterGeometry(k));
 
 // Per-species animation constants: x hind-leg phase offset (bound 0.5π, walk π), y tail swing,
 // z wing flap, w head bob.
 // Limb swing amplitude (radians at full gait) per species.
-export const LIMB: Record<CritterKind, number> = { squirrel: 0.9, rabbit: 0.85, songbird: 0.4, sandpiper: 0.55, deer: 0.38, butterfly: 0, firefly: 0, fox: 0.7, hawk: 0.3 };
+export const LIMB: Record<CritterKind, number> = { squirrel: 0.9, rabbit: 0.85, songbird: 0.4, sandpiper: 0.55, deer: 0.38, butterfly: 0, firefly: 0, fox: 0.7, hawk: 0.3, coyote: 0.65, jackrabbit: 0.9, snowshoe: 0.85, groundSquirrel: 0.9, muleDeer: 0.38, roadrunner: 0.75, quail: 0.5, ibis: 0.45 };
 export const GAIT: Record<CritterKind, [number, number, number, number]> = {
   squirrel: [0.5, 0.5, 0, 0.25], rabbit: [0.3, 0.2, 0, 0.2], songbird: [0, 0.3, 1.2, 0.5], sandpiper: [3.14, 0.2, 1.1, 0.35],
   deer: [3.14, 0.4, 0, 0.12], butterfly: [0, 0, 1.3, 0], firefly: [0, 0, 0, 0], fox: [3.14, 0.45, 0, 0.2], hawk: [0, 0.2, 0.55, 0.3],
+  coyote: [3.14, 0.35, 0, 0.2], jackrabbit: [0.3, 0.2, 0, 0.2], snowshoe: [0.3, 0.2, 0, 0.2], groundSquirrel: [0.5, 0.3, 0, 0.3], muleDeer: [3.14, 0.4, 0, 0.12],
+  roadrunner: [3.14, 0.5, 1.1, 0.3], quail: [3.14, 0.2, 1.3, 0.5], ibis: [3.14, 0.2, 1.0, 0.4],
 };
 
 /** Painted material for critters: vertex-animated joints driven by the instanced aAnim (phase, amount, pose). */

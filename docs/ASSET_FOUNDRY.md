@@ -84,7 +84,8 @@ for plants you grow and the workbench); animals < 1,600; cars about 1,800.
   - Each species has a climate weighting (`plantMix`) and a bloom season (`inBloom`, flipped in the southern hemisphere).
   - Growth stages 0–7 go from sprout, to leafing out, to blossoms opening from about 60% grown.
   - World beds line the house fronts on open ground only.
-- **Fauna** (`fauna.ts` + `sim/critters.ts`): squirrel, rabbit, songbird, sandpiper, deer, butterfly, firefly, red fox and red-tailed hawk, all on one body plan. Birds share `birdGeometry(coat, belly, legs, beak, legH, beakL)`; the hawk is that plan at 3.3× with a hooked bill and soars (`uFlap`: slow beats by amount, a shallow dihedral, folded in a stoop).
+- **Fauna** (`fauna.ts` + `sim/critters.ts`): 17 species on two body plans. Four-legged species are rows in `QUAD` over four base builds (squirrel, rabbit, deer, fox) — scale, coat / belly / stocking / tail-tip colours, ear size, tail fullness: coyote, black-tailed jackrabbit, snowshoe hare (TINT coat: brown in summer, white in winter), ground squirrel, mule deer. Birds are rows in `BIRD` over `birdGeometry` — colours, legs, bill length and curve, crest, tail, wing plan, scale: songbird, sandpiper, red-tailed hawk (3.3×, broad fingered wings, soars via `uFlap`), greater roadrunner, quail, white ibis. **A new species is a table row.**
+  - **Roles and the regional cast.** Behaviour belongs to a role (`ROLE`: climber, burrower, grazer, songbird, shorebird, browser, predator, raptor, butterfly, firefly); `faunaMix(region, climate)` says which species fill each role in a place — the same key the plant and car mixes use. Temperate: squirrel, rabbit, songbird, sandpiper, white-tailed deer, red fox. Arid: ground squirrel, jackrabbit + roadrunner, quail, mule deer, coyote, no fireflies. Boreal: snowshoe hare. Tropical: + white ibis. Other continents fall back to their climate's North American cast until they get rows.
   - Limbs, tail, head and wings carry `aPart` plus an `aPivot` joint.
   - `critterMaterial` swings them in the vertex shader from a per-instance `aAnim` (gait phase, amount, pose), with per-species gait offsets (bound vs walk) and limb amplitude.
   - Behaviour comes from habitat:
@@ -98,6 +99,7 @@ for plants you grow and the workbench); animals < 1,600; cars about 1,800.
     - a fox on lawns and wood edges at dusk and night;
     - a hawk circling a thermal by day.
   - They form one ecosystem: the fox stalks (a slow creep) and pounces; the hawk stoops on animals in the open; prey freeze a beat (shorter for the watchful — per-animal vigilance) then flee the fox, the stoop, the walker or a moving car (the faster it comes, the sooner they go); an alarm spreads through a flock or warren and to other small prey nearby. Tested in `tests/critters.test.ts`.
+  - Budgets: every species < 1600 verts (`tests/foundry.test.ts` walks `CRITTERS`).
   - Small animals are drawn 1.3–2× life size, an illustrator's licence: at painting scale a true-size squirrel dissolves into the grass.
 - **People** (`people.ts`): one jointed body for every walker and resident (hips, knees,
   shoulders; ~1.4k vertices), varied per instance on the GPU: skin, hair and trouser palettes,

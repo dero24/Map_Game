@@ -15,9 +15,11 @@ type Parts = DecorPart[];
 
 // (RoundedBoxGeometry is already non-indexed: calling toNonIndexed() on it only floods the console)
 const ni = (g: THREE.BufferGeometry) => (g.index ? g.toNonIndexed() : g);
+// Rounded boxes cost 324 verts (one bevel segment); below ~1.5 cm the round never reads at
+// room scale, so small parts (slats, stock on shelves, rails) are plain 36-vert boxes.
 const rbox = (w: number, h: number, d: number, r: number, x: number, y: number, z: number) =>
-  ni(new RoundedBoxGeometry(Math.max(w, 2 * r + 0.001), Math.max(h, 2 * r + 0.001), Math.max(d, 2 * r + 0.001), 2, r)).translate(x, y + h / 2, z);
-const cyl = (r0: number, r1: number, h: number, x: number, y: number, z: number, segs = 8) => new THREE.CylinderGeometry(r1, r0, h, segs).toNonIndexed().translate(x, y + h / 2, z);
+  (r <= 0.015 ? ni(new THREE.BoxGeometry(w, h, d)) : ni(new RoundedBoxGeometry(Math.max(w, 2 * r + 0.001), Math.max(h, 2 * r + 0.001), Math.max(d, 2 * r + 0.001), 1, r))).translate(x, y + h / 2, z);
+const cyl = (r0: number, r1: number, h: number, x: number, y: number, z: number, segs = 8) => ni(new THREE.CylinderGeometry(r1, r0, h, segs)).translate(x, y + h / 2, z);
 const lighten = (hex: number, t: number) => new THREE.Color(hex).lerp(new THREE.Color(0xffffff), t).getHex();
 const darken = (hex: number, t: number) => new THREE.Color(hex).multiplyScalar(1 - t).getHex();
 const P = (g: THREE.BufferGeometry, mat: DecorMat, hex: number): DecorPart => ({ g, mat, hex });
@@ -118,7 +120,7 @@ export function chair(hex: number, cushion?: number): Parts {
 export function bistroChair(hex: number): Parts {
   const out: Parts = [P(cyl(0.2, 0.2, 0.035, 0, 0.44, 0, 14), 'wood', hex)];
   for (const [x, z] of [[-0.14, -0.14], [0.14, -0.14], [-0.14, 0.14], [0.14, 0.14]]) out.push(P(cyl(0.012, 0.012, 0.44, x, 0, z, 5), 'metal', 0x2e2c2a));
-  const hoop = new THREE.TorusGeometry(0.18, 0.012, 5, 12, Math.PI).toNonIndexed();
+  const hoop = ni(new THREE.TorusGeometry(0.18, 0.012, 5, 12, Math.PI));
   hoop.translate(0, 0.62, 0.17);
   out.push(P(hoop, 'metal', 0x2e2c2a));
   for (const s of [-1, 1]) out.push(P(cyl(0.012, 0.012, 0.2, s * 0.18, 0.46, 0.17, 5), 'metal', 0x2e2c2a));
@@ -133,9 +135,9 @@ export function officeChair(fab: number): Parts {
   ];
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * Math.PI * 2;
-    const arm = new THREE.BoxGeometry(0.03, 0.03, 0.28).toNonIndexed().translate(0, 0.07, 0.14).rotateY(a);
+    const arm = ni(new THREE.BoxGeometry(0.03, 0.03, 0.28)).translate(0, 0.07, 0.14).rotateY(a);
     out.push(P(arm, 'metal', 0x2a2b2e));
-    out.push(P(new THREE.SphereGeometry(0.025, 5, 4).toNonIndexed().translate(Math.sin(a) * 0.28, 0.025, Math.cos(a) * 0.28), 'metal', 0x1c1d20));
+    out.push(P(ni(new THREE.SphereGeometry(0.025, 5, 4)).translate(Math.sin(a) * 0.28, 0.025, Math.cos(a) * 0.28), 'metal', 0x1c1d20));
   }
   return out;
 }
@@ -153,7 +155,7 @@ export function monitor(): Parts {
 /** A lamp with a turned shade. `floor` = a standard lamp, else a table lamp (sits at y = 0). */
 export function lamp(floor: boolean, shade = 0xfff1d0): Parts {
   const h = floor ? 1.5 : 0.48;
-  const sh = new THREE.LatheGeometry([new THREE.Vector2(floor ? 0.2 : 0.15, 0), new THREE.Vector2(floor ? 0.14 : 0.1, floor ? 0.3 : 0.2)], 12).toNonIndexed();
+  const sh = ni(new THREE.LatheGeometry([new THREE.Vector2(floor ? 0.2 : 0.15, 0), new THREE.Vector2(floor ? 0.14 : 0.1, floor ? 0.3 : 0.2)], 12));
   sh.translate(0, h - (floor ? 0.3 : 0.2), 0);
   return [
     P(cyl(floor ? 0.14 : 0.08, floor ? 0.12 : 0.06, 0.03, 0, 0, 0, 12), 'metal', 0x3a3530),
@@ -172,7 +174,7 @@ export function counter(w: number, d: number, wood: number, withCase = true): Pa
   if (withCase) {
     const cw = Math.min(1.4, w * 0.45);
     out.push(P(rbox(cw, 0.36, d * 0.8, 0.12, -w / 2 + cw / 2 + 0.15, 1.03, -0.02), 'glass', 0xcfe0e4));
-    for (let i = 0; i < 6; i++) out.push(P(new THREE.SphereGeometry(0.055, 7, 5).toNonIndexed().scale(1, 0.6, 1).translate(-w / 2 + 0.28 + i * (cw - 0.26) / 5, 1.07, -0.02 + ((i % 2) - 0.5) * 0.14), 'porcelain', [0xd9a45b, 0xc46a4a, 0xf1dcb0, 0x7a4a2e][i % 4]));
+    for (let i = 0; i < 6; i++) out.push(P(ni(new THREE.SphereGeometry(0.055, 7, 5)).scale(1, 0.6, 1).translate(-w / 2 + 0.28 + i * (cw - 0.26) / 5, 1.07, -0.02 + ((i % 2) - 0.5) * 0.14), 'porcelain', [0xd9a45b, 0xc46a4a, 0xf1dcb0, 0x7a4a2e][i % 4]));
   }
   return out;
 }
@@ -184,10 +186,10 @@ export function ceilingFan(blade: number, metal = 0xd8d2c4): Parts {
     P(cyl(0.015, 0.015, 0.22, 0, 0.23, 0, 6), 'metal', metal),
     P(cyl(0.06, 0.05, 0.03, 0, 0.42, 0, 10), 'metal', metal), // ceiling canopy
     P(cyl(0.11, 0.09, 0.1, 0, 0.13, 0, 12), 'metal', metal), // motor
-    P(new THREE.SphereGeometry(0.075, 10, 6).toNonIndexed().scale(1, 0.8, 1).translate(0, 0.08, 0), 'glow', 0xfff1d0),
+    P(ni(new THREE.SphereGeometry(0.075, 10, 6)).scale(1, 0.8, 1).translate(0, 0.08, 0), 'glow', 0xfff1d0),
   ];
   for (let k = 0; k < 5; k++) {
-    const g = ni(new RoundedBoxGeometry(0.5, 0.012, 0.13, 1, 0.005)).rotateX(0.18).translate(0.36, 0.17, 0).rotateY((k / 5) * Math.PI * 2);
+    const g = ni(new THREE.BoxGeometry(0.5, 0.012, 0.13)).rotateX(0.18).translate(0.36, 0.17, 0).rotateY((k / 5) * Math.PI * 2);
     out.push(P(g, 'wood', blade));
   }
   return out;
@@ -225,7 +227,7 @@ export function shelves(w: number, d: number, h: number, wood: number, stock: nu
     out.push(P(rbox(w, 0.025, d, 0.008, 0, y, 0), 'wood', darken(wood, 0.1)));
     let x = -w / 2 + 0.04;
     while (x < w / 2 - 0.1) {
-      const iw = 0.07 + rnd() * 0.12, ih = 0.12 + rnd() * 0.2;
+      const iw = Math.min(0.07 + rnd() * 0.12, w / 2 - 0.03 - x), ih = 0.12 + rnd() * 0.2; // never past the unit's end
       if (rnd() > 0.12) out.push(P(rbox(iw, ih, d * 0.7, 0.012, x + iw / 2, y + 0.025, -0.02), 'solid', stock[Math.floor(rnd() * stock.length)]));
       x += iw + 0.015;
     }
@@ -236,12 +238,12 @@ export function shelves(w: number, d: number, h: number, wood: number, stock: nu
 /** A potted plant: a turned pot and a few leafy masses. */
 export function pottedPlant(big: boolean, leaf = 0x5f8a45, pot = 0xa86a4a): Parts {
   const r = big ? 0.2 : 0.12, h = big ? 0.38 : 0.2;
-  const potG = new THREE.LatheGeometry([new THREE.Vector2(r * 0.7, 0), new THREE.Vector2(r, h), new THREE.Vector2(r * 1.05, h)], 10).toNonIndexed();
+  const potG = ni(new THREE.LatheGeometry([new THREE.Vector2(r * 0.7, 0), new THREE.Vector2(r, h), new THREE.Vector2(r * 1.05, h)], 10));
   const out: Parts = [P(potG, 'porcelain', pot)];
   const n = big ? 5 : 3;
   for (let i = 0; i < n; i++) {
     const a = i * 2.4, rr = r * (big ? 1.5 : 1.2) * (0.8 + (i % 3) * 0.12);
-    out.push(P(new THREE.IcosahedronGeometry(rr, 1).toNonIndexed().scale(1, 1.3, 1).translate(Math.cos(a) * r * 0.5, h + rr * (0.8 + i * (big ? 0.35 : 0.2)), Math.sin(a) * r * 0.5), 'fabric', i % 2 ? leaf : darken(leaf, 0.12)));
+    out.push(P(ni(new THREE.IcosahedronGeometry(rr, 1)).scale(1, 1.3, 1).translate(Math.cos(a) * r * 0.5, h + rr * (0.8 + i * (big ? 0.35 : 0.2)), Math.sin(a) * r * 0.5), 'fabric', i % 2 ? leaf : darken(leaf, 0.12)));
   }
   return out;
 }
@@ -255,7 +257,7 @@ export function cafeSet(topHex: number, chairHex: number, parasol: number | null
   }
   if (parasol !== null) {
     out.push(P(cyl(0.02, 0.02, 2.2, 0, 0.74, 0, 6), 'metal', 0xe9e4d6));
-    const canopy = new THREE.ConeGeometry(1.25, 0.42, 8, 1, true).toNonIndexed().translate(0, 2.55, 0);
+    const canopy = ni(new THREE.ConeGeometry(1.25, 0.42, 8, 1, true)).translate(0, 2.55, 0);
     out.push(P(canopy, 'fabric', parasol));
   }
   return out;

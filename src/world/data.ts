@@ -19,6 +19,7 @@ export interface Building {
   s: number;
   lod?: 1;
   n?: string; // name (from OSM / a POI inside)
+  u?: string; // what it's used for: the OSM amenity / shop / office / craft value (language-neutral, uses.ts)
   fc?: number; // real facade colour 0xRRGGBB (tags / materials)
   rc?: number; // real roof colour 0xRRGGBB (tags / materials / aerial imagery)
   fl?: number; // mapped number of floors

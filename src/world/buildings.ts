@@ -20,6 +20,7 @@ export interface Footprint {
   floor0: number; // ground-floor level, absolute
   raise: number; // height of the pilings (0 = on a foundation)
   name?: string;
+  use?: string; // OSM amenity / shop / office value (uses.ts)
   addr?: string;
   kind: string;
   eave: number; // eave - base (wall-UV space)
@@ -274,7 +275,7 @@ class RingGrid {
 
 // ---------------- doors, steps, porches ----------------
 // x,z,y: threshold just outside; wx,wz: centre of the opening in the wall; fx,fy,fz: foot of the steps.
-export interface Door { x: number; z: number; y: number; nx: number; nz: number; fx: number; fz: number; fy: number; b: number; w: number; h: number; wx: number; wz: number; col: number; street?: string; porch?: boolean; kind?: string; name?: string }
+export interface Door { x: number; z: number; y: number; nx: number; nz: number; fx: number; fz: number; fy: number; b: number; w: number; h: number; wx: number; wz: number; col: number; street?: string; porch?: boolean; kind?: string; name?: string; use?: string }
 export interface Colliders { walls: [P2, P2, number, number][]; decks: Deck[] }
 export interface SignSpec { x: number; z: number; y: number; tx: number; tz: number; nx: number; nz: number; w: number; h: number; text: string; style: 'shop' | 'number'; color: number }
 export interface Mailbox { x: number; z: number; yaw: number }
@@ -292,7 +293,7 @@ interface Ctx {
   walks: number[];
   drives: Drive[];
 }
-interface BInfo { ring: P2[]; base: number; floor0: number; raise: number; eave: number; kind: string; seed: number; id: number; fo: number; roofCol: THREE.Color; roofMat?: number; addr?: string; name?: string; bi: number }
+interface BInfo { ring: P2[]; base: number; floor0: number; raise: number; eave: number; kind: string; seed: number; id: number; fo: number; roofCol: THREE.Color; roofMat?: number; addr?: string; name?: string; use?: string; bi: number }
 
 const deckLine = (pts: P2[], hw: number, heightAt: (s: number) => number, profile?: Deck['profile']): Deck => {
   const cum = [0];
@@ -655,7 +656,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
       }
     }
   }
-  return { x: cx + nx * 0.2, z: cz + nz * 0.2, y: floorY, nx, nz, fx, fz, fy, b: B.bi, w: wide, h: tall, wx: cx, wz: cz, col: doorHex, street, porch: porch && B.raise <= 0.5, kind: B.kind, name: B.name };
+  return { x: cx + nx * 0.2, z: cz + nz * 0.2, y: floorY, nx, nz, fx, fz, fy, b: B.bi, w: wide, h: tall, wx: cx, wz: cz, col: doorHex, street, porch: porch && B.raise <= 0.5, kind: B.kind, name: B.name, use: B.use };
 }
 
 // Is there room for a porch on this wall (no neighbours, not onto the street)?
@@ -1261,13 +1262,13 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
       }
     }
 
-    const fp: Footprint = { ring, base, top: wallTop, floor0, raise, name: bd.n, addr: bd.ad, kind: bd.k, eave: wallTop - base, seed: r1, id, pitched: !!roofG };
+    const fp: Footprint = { ring, base, top: wallTop, floor0, raise, name: bd.n, use: bd.u, addr: bd.ad, kind: bd.k, eave: wallTop - base, seed: r1, id, pitched: !!roofG };
     if (inZone) footprints.push(fp);
     if (inSlice && !bd.lod && bd.k !== 'shed' && inZone) {
       const wall = pickDoorWall(ring, seed, bd.k, streets, entrances);
       if (wall) {
         const C: Ctx = { b, col: colliders, streets, rings, world, signs, mail: mailboxes, walks, drives };
-        const B: BInfo = { ring, base, floor0, raise, eave: wallTop, kind: bd.k, seed, id, fo, roofCol, roofMat: rc.roofMat === ROOFMAT.tile ? ROOFMAT.metal : rc.roofMat, addr: bd.ad, name: bd.n, bi: footprints.length - 1 };
+        const B: BInfo = { ring, base, floor0, raise, eave: wallTop, kind: bd.k, seed, id, fo, roofCol, roofMat: rc.roofMat === ROOFMAT.tile ? ROOFMAT.metal : rc.roofMat, addr: bd.ad, name: bd.n, use: bd.u, bi: footprints.length - 1 };
         const porch = bd.k === 'house' && raise === 0 && r2 < 0.5 && porchFits(C, B, wall);
         const d = buildEntrance(C, B, wall, porch);
         if (deco && rc.chimney === 2) sideChimney(b, deco, wall.i);

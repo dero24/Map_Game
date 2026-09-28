@@ -420,11 +420,22 @@ export class LifeSim {
   // ---------------- density by time of day ----------------
   private desired(kind: 'car' | 'ped') {
     const h = this.env.hour, d = this.env.density;
-    // a shore town's day: pre-dawn trickle, morning rush, the beach crowd builds toward mid-afternoon,
-    // dinner-and-stroll bump after eight, then the streets empty out
+    // the place's day (protocol.ts Rhythm). A shore town: pre-dawn trickle, morning rush, the beach
+    // crowd builds toward mid-afternoon, dinner-and-stroll bump after eight, then the streets empty
     const bell = (c: number, w: number) => Math.max(0, 1 - ((h - c) / w) ** 2);
     let f: number;
-    if (kind === 'car') {
+    const rhythm = this.w.rhythm ?? 'shore';
+    if (rhythm === 'town') {
+      // commute, lunch, errands after work, an evening stroll
+      f = kind === 'car'
+        ? 0.1 + 0.25 * bell(13.5, 6.5) + 0.5 * bell(8, 1.6) + 0.3 * bell(12.5, 2) + 0.55 * bell(17.3, 2) + 0.2 * bell(20, 2)
+        : 0.06 + 0.3 * bell(13.5, 6.5) + 0.35 * bell(8.2, 1.8) + 0.4 * bell(12.5, 1.8) + 0.45 * bell(16.5, 2.5) + 0.3 * bell(19.5, 2);
+    } else if (rhythm === 'desert') {
+      // busy in the cool of the morning and after sunset, a midday lull in the heat
+      f = kind === 'car'
+        ? 0.1 + 0.2 * bell(13.5, 6.5) + 0.5 * bell(7.8, 1.8) + 0.5 * bell(17.5, 2) + 0.35 * bell(20.5, 2)
+        : 0.05 + 0.12 * bell(13.5, 6.5) + 0.55 * bell(7.8, 2) + 0.7 * bell(19.8, 2.2);
+    } else if (kind === 'car') {
       f = 0.1 + 0.45 * bell(8.3, 2.2) + 0.55 * bell(15, 4.5) + 0.35 * bell(19, 2.5);
     } else {
       // (+ a coffee-run morning and a lunch hour: downtown is never empty 8 am – 8 pm)

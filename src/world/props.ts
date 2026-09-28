@@ -930,7 +930,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       for (const q of world.json.pois ?? []) poiKind.set(q.name.toLowerCase(), q.kind);
       const warm = look.climate !== 'boreal' && look.climate !== 'polar';
       for (const d of extras.doors) {
-        if (d.kind !== 'commercial' || !terraceUse(useOf(d.name, d.name ? poiKind.get(d.name.toLowerCase()) : undefined))) continue;
+        if (d.kind !== 'commercial' || !terraceUse(useOf(d.name, d.use ?? (d.name ? poiKind.get(d.name.toLowerCase()) : undefined)))) continue;
         const tx = -d.nz, tz = d.nx;
         const h0 = hash01(Math.floor(d.wx * 13) ^ Math.floor(d.wz * 7));
         let n = 0;

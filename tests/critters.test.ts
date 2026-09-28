@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { Critters, type CritterEnv } from '../src/sim/critters';
+import { faunaMix } from '../src/assets/fauna';
 import type { Terrain } from '../src/world/data';
 import type { WalkWorld } from '../src/player/collision';
 
@@ -42,7 +43,7 @@ describe('Critters ecosystem', () => {
     run(c2, 20, env());
     expect(c2.eco.hunts).toBeGreaterThanOrEqual(1);
     expect(!!r2.dead).toBe(false);
-    expect(c2.eco.fox).toBeGreaterThanOrEqual(1); // it saw the fox coming
+    expect(c2.eco.predator).toBeGreaterThanOrEqual(1); // it saw the fox coming
   });
 
   it('a fox gives the walker a wide berth', () => {
@@ -60,7 +61,44 @@ describe('Critters ecosystem', () => {
     list(c).push(h, ...birds);
     run(c, 60, env({ hour: 12, night: 0 }));
     expect(c.eco.hunts).toBeGreaterThanOrEqual(1);
-    expect(c.eco.hawk).toBeGreaterThanOrEqual(1);
+    expect(c.eco.raptor).toBeGreaterThanOrEqual(1);
     expect(h.y as number).toBeGreaterThan(5); // back up on the thermal (or still climbing)
+  });
+
+  it('the cast comes from the place: a desert walk meets desert animals only', () => {
+    const c = new Critters(terrain, walk);
+    const kinds = new Set<string>();
+    for (const hour of [7, 12, 18.5, 23]) {
+      const e = env({ climate: 'arid', region: 'na', hour, night: hour > 21 ? 0.9 : 0.1 });
+      for (let t = 0; t < 400; t++) { c.update(0.05, 0, 0, e); for (const o of list(c)) kinds.add(o.kind as string); }
+    }
+    const desert = new Set(Object.values(faunaMix('na', 'arid')).flat().map(([k]) => k));
+    for (const k of kinds) expect(desert.has(k as never), k).toBe(true);
+    expect(kinds.has('fox') || kinds.has('firefly') || kinds.has('rabbit')).toBe(false);
+    expect(kinds.has('jackrabbit') || kinds.has('groundSquirrel') || kinds.has('quail')).toBe(true);
+  });
+
+  it('a coyote hunts a desert jackrabbit; a startled ground squirrel dives down its burrow', () => {
+    const c = new Critters(terrain, walk);
+    const r = animal('jackrabbit', 0, 0, { vig: 0, t: 30 }), k = animal('coyote', 9, 0, { t: 0 });
+    list(c).push(r, k);
+    let caught = false;
+    for (let i = 0; i < 400 && !caught; i++) { run(c, 0.05, env({ climate: 'arid' })); caught = !!r.dead; }
+    expect(c.eco.hunts).toBeGreaterThanOrEqual(1);
+    expect(caught).toBe(true);
+    const c2 = new Critters(terrain, walk);
+    const g = animal('groundSquirrel', 0, 5);
+    list(c2).push(g);
+    run(c2, 4, env({ climate: 'arid', hour: 12, night: 0 }), 0, 0);
+    expect(list(c2).includes(g)).toBe(false); // gone below
+  });
+
+  it('snowshoe hares turn white in winter', () => {
+    const c = new Critters(terrain, walk);
+    const e = env({ climate: 'boreal', month: 1, hour: 18.5 });
+    for (let t = 0; t < 600; t++) c.update(0.05, 0, 0, e);
+    const hares = list(c).filter((o) => o.kind === 'snowshoe');
+    expect(hares.length).toBeGreaterThan(0);
+    for (const h of hares) expect((h.c as THREE.Color).getHex()).toBe(0xf2f0ea);
   });
 });

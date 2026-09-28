@@ -173,4 +173,17 @@ describe('LifeSim', () => {
     // a slow roll or a car going the other way hits nobody
     expect(sim.bump(sim.x[i] - 1, sim.z[i], 1.5, 0)).toBe(0);
   });
+
+  it('each kind of place keeps its own day: beach afternoons, town errands, desert evenings', () => {
+    const at = (rhythm: 'shore' | 'town' | 'desert', hour: number) => {
+      const sim = new LifeSim({ ...town(), rhythm });
+      sim.setEnv({ playerX: 200, playerZ: 200, hour, night: 0, density: 1, wind: 0.5 });
+      return (sim as unknown as { desired(k: 'ped' | 'car'): number }).desired('ped');
+    };
+    expect(at('shore', 15)).toBeGreaterThan(at('shore', 10)); // the beach crowd builds
+    expect(at('desert', 12.5)).toBeLessThan(at('desert', 8)); // the midday lull in the heat
+    expect(at('desert', 12.5)).toBeLessThan(at('desert', 20)); // and life after sunset
+    expect(at('town', 10)).toBeGreaterThan(at('town', 3) * 3); // an ordinary town isn't empty mid-morning
+    expect(at('town', 12.5)).toBeGreaterThan(at('desert', 12.5));
+  });
 });

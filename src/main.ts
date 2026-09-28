@@ -25,6 +25,7 @@ import { Arrival } from './ui/arrival';
 import type { GameCtx } from './ui/ctx';
 import { modelName } from './player/vehicles';
 import { Critters } from './sim/critters';
+import { rhythmFor } from './sim/protocol';
 import { Garden } from './ui/garden';
 import { SPECIES } from './assets/flora';
 import { Interiors, type Plan } from './world/interiors';
@@ -359,6 +360,7 @@ async function main() {
   { const prev = stream.onTile; stream.onTile = (a) => { prev?.(a); vehicles.onTile(a); }; } // re-hide taken driveway cars on remount
 
   const lifeBase = buildLifeBase(paintWorld, walk);
+  lifeBase.rhythm = rhythmFor(regionLook.climate, lifeBase.beachPts.length > 0); // the shape of this place's day
   const life = new LifeClient(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors));
   worldRoot.add(life.group);
   lifeDirty = false; // init already covers the loaded ring
@@ -902,7 +904,7 @@ async function main() {
     movers.length = 0;
     for (const m of life.movers) movers.push(m);
     if (rideMoving-- > 0) movers.push(rideMover);
-    critters.update(dt, walker.x, walker.z, { hour: timeParams.hour, night: U.uNight.value, month, south, wind: weather.wind, camFwd: fwd, trees: (x, z, r) => within(nearTrees, x, z, r), gardens: (x, z, r) => within(nearGardens, x, z, r), movers });
+    critters.update(dt, walker.x, walker.z, { hour: timeParams.hour, night: U.uNight.value, month, south, wind: weather.wind, region: regionLook.region, climate: regionLook.climate, camFwd: fwd, trees: (x, z, r) => within(nearTrees, x, z, r), gardens: (x, z, r) => within(nearGardens, x, z, r), movers });
     garden.update(dt, month, south);
     frames++;
     if (frames === 3) (window as unknown as Record<string, unknown>).__READY__ = true;

@@ -7,10 +7,15 @@
 // car — and an alarm spreads through a flock or warren. Habitat comes from the world itself (trees, land cover, the ocean
 // edge, gardens) so every region grows its own — no per-town lists. A light main-thread sim: a
 // few dozen animals within ~90 m, one instanced draw per species (fauna.ts).
+//
+// Behaviour belongs to a *role* (climber, burrower, grazer, songbird, shorebird, browser,
+// predator, raptor, butterfly, firefly); which species fills each role comes from the place
+// (fauna.ts faunaMix: climate → cast), so a desert walk meets jackrabbits, quail, a roadrunner
+// and a coyote with no new behaviour code.
 import * as THREE from 'three';
 import type { Terrain } from '../world/data';
 import type { WalkWorld } from '../player/collision';
-import { CRITTERS, critterLib, critterMaterial, type CritterKind } from '../assets/fauna';
+import { CRITTERS, ROLE, ROLES, critterLib, critterMaterial, faunaMix, type CritterKind, type CritterRole } from '../assets/fauna';
 
 // Small animals are drawn a little larger than life (×1.3–2): at painting scale a true-size
 // squirrel dissolves into the grass wash — the same licence an illustrator takes.
@@ -25,10 +30,19 @@ const SPEC: Record<CritterKind, Spec> = {
   firefly: { cap: 30, walk: 0.4, flee: 0.4, fleeR: 0, gaitHz: 0, scale: [0.9, 1.1], colors: [0xffffff] },
   fox: { cap: 2, walk: 1.3, flee: 7.5, fleeR: 16, gaitHz: 1.5, scale: [1.0, 1.15], colors: [0xffffff] },
   hawk: { cap: 1, walk: 9, flee: 18, fleeR: 0, gaitHz: 0.4, scale: [1.1, 1.25], colors: [0xffffff] },
+  coyote: { cap: 2, walk: 1.4, flee: 8, fleeR: 22, gaitHz: 1.3, scale: [1.0, 1.1], colors: [0xffffff] },
+  jackrabbit: { cap: 6, walk: 1.2, flee: 9, fleeR: 12, gaitHz: 1.2, scale: [1.1, 1.25], colors: [0xffffff] },
+  snowshoe: { cap: 6, walk: 1.0, flee: 7.5, fleeR: 9, gaitHz: 1.3, scale: [1.1, 1.3], colors: [0x8a6e52] }, // (winter white is set at spawn)
+  groundSquirrel: { cap: 8, walk: 1.4, flee: 5, fleeR: 7, gaitHz: 1.8, scale: [1.3, 1.5], colors: [0xffffff] },
+  muleDeer: { cap: 3, walk: 1.0, flee: 8, fleeR: 28, gaitHz: 0.9, scale: [0.85, 1.05], colors: [0xffffff] },
+  roadrunner: { cap: 2, walk: 1.8, flee: 6.5, fleeR: 9, gaitHz: 3.2, scale: [1.35, 1.5], colors: [0xffffff] },
+  quail: { cap: 12, walk: 0.7, flee: 5, fleeR: 6, gaitHz: 3.5, scale: [1.6, 1.8], colors: [0xffffff] },
+  ibis: { cap: 6, walk: 0.8, flee: 3.5, fleeR: 10, gaitHz: 2, scale: [1.1, 1.25], colors: [0xffffff] },
 };
-// who hunts whom (only animals on the ground can be taken)
-const PREY: Partial<Record<CritterKind, CritterKind[]>> = { fox: ['rabbit', 'squirrel', 'songbird'], hawk: ['rabbit', 'squirrel', 'songbird'] };
-const HUNTED = new Set<CritterKind>(['rabbit', 'squirrel', 'songbird', 'sandpiper']);
+// who hunts whom, by role (only animals on the ground can be taken)
+const PREY: Partial<Record<CritterRole, CritterRole[]>> = { predator: ['grazer', 'climber', 'songbird', 'burrower'], raptor: ['grazer', 'climber', 'songbird', 'burrower'] };
+const HUNTED = new Set<CritterRole>(['grazer', 'climber', 'songbird', 'shorebird', 'burrower']);
+const R = (c: { kind: CritterKind }) => ROLE[c.kind];
 /** A moving thing animals give way to: traffic and the player's vehicle (x, z, velocity). */
 export interface Mover { x: number; z: number; vx: number; vz: number }
 
@@ -46,6 +60,7 @@ interface Critter {
 }
 export interface CritterEnv {
   hour: number; night: number; month: number; wind: number; south: boolean;
+  region?: string; climate?: string; // the place's cast (faunaMix); temperate North America when absent
   camFwd: THREE.Vector3;
   trees: (x: number, z: number, r: number) => { x: number; z: number }[];
   gardens: (x: number, z: number, r: number) => { x: number; z: number }[];
@@ -64,10 +79,12 @@ export class Critters {
   private v = new THREE.Vector3();
   private sv = new THREE.Vector3();
   enabled = true;
-  onEvent: ((kind: CritterKind, what: 'flee' | 'flush', pan: number, dist: number) => void) | null = null;
+  /** A sound cue: the sound family (squirrel chatter, a flush of wings, a deer's snort) — not the species. */
+  onEvent: ((sound: string, what: 'flee' | 'flush', pan: number, dist: number) => void) | null = null;
+  private sound(c: Critter) { const r = R(c); return r === 'climber' || r === 'burrower' ? 'squirrel' : r === 'browser' ? 'deer' : r === 'shorebird' ? 'sandpiper' : r === 'songbird' ? 'songbird' : c.kind; }
   stats: Record<string, number> = {};
   /** Ecosystem tallies since load (hunts started, catches, scares by source) — for the review harness and tests. */
-  readonly eco = { hunts: 0, caught: 0, walker: 0, car: 0, fox: 0, hawk: 0, alarm: 0 };
+  readonly eco = { hunts: 0, caught: 0, walker: 0, car: 0, predator: 0, raptor: 0, alarm: 0 };
 
   constructor(private terrain: Terrain, private walk: WalkWorld) {
     this.group.name = 'critters';
@@ -95,25 +112,30 @@ export class Critters {
   private ground(x: number, z: number) { return Math.max(this.terrain.heightAt(x, z), 0); }
   private open(x: number, z: number, r = 0.6) { return this.terrain.sdfAt(x, z) > 2 && this.walk.buildingAt(x, z) < 0 && !this.walk.blocked(x, z, r); }
   private lawn(x: number, z: number) { const c = this.terrain.coverAt(x, z); return (c === 30 || c === 10 || c === 20) && this.terrain.oceanDistAt(x, z) > 60 && this.open(x, z, 1.2); }
+  // open country for grazers, burrowers and ground birds: lawns, meadow, shrub, crops, desert
+  private field(x: number, z: number) { const c = this.terrain.coverAt(x, z); return (c === 30 || c === 10 || c === 20 || c === 40 || c === 60) && this.terrain.oceanDistAt(x, z) > 60 && this.open(x, z, 1.2); }
   private shore(x: number, z: number) { const s = this.terrain.sdfAt(x, z); return this.terrain.oceanDistAt(x, z) < 45 && s > 0.5 && s < 14; }
-  private want(k: CritterKind, env: CritterEnv) {
+  private mix(env: CritterEnv) { return faunaMix(env.region ?? 'na', env.climate ?? 'temperate'); }
+  private want(k: CritterRole, env: CritterEnv) {
+    if (!this.mix(env)[k]?.length) return 0; // the place has no species for this role
     const h = env.hour, day = env.night < 0.35;
     const warm = (env.south ? ((env.month + 5) % 12) + 1 : env.month);
     const summer = warm >= 5 && warm <= 9;
     const dawnDusk = (h > 5 && h < 9.5) || (h > 16.5 && h < 20.5);
     switch (k) {
-      case 'squirrel': return day ? 6 : 0;
-      case 'rabbit': return dawnDusk ? 4 : day ? 1 : 0;
+      case 'climber': return day ? 6 : 0;
+      case 'burrower': return day ? 5 : 0;
+      case 'grazer': return dawnDusk ? 4 : day ? 1 : 0;
       case 'songbird': return day ? (h < 10 ? 8 : 5) : 0;
-      case 'sandpiper': return day ? 10 : 0;
-      case 'deer': return dawnDusk ? 2 : 0;
+      case 'shorebird': return day ? 10 : 0;
+      case 'browser': return dawnDusk ? 2 : 0;
       case 'butterfly': return day && summer && env.wind < 0.75 ? 8 : 0;
       case 'firefly': return env.night > 0.6 && warm >= 6 && warm <= 8 ? 26 : 0;
-      case 'fox': return dawnDusk ? 2 : env.night > 0.5 ? 1 : 0;
-      case 'hawk': return day && h > 8 && h < 17.5 ? 1 : 0;
+      case 'predator': return dawnDusk ? 2 : env.night > 0.5 ? 1 : 0;
+      case 'raptor': return day && h > 8 && h < 17.5 ? 1 : 0;
     }
   }
-  private place(k: CritterKind, wx: number, wz: number, env: CritterEnv): Omit<Critter, 'kind' | 'seed' | 'c' | 's'> | null {
+  private place(k: CritterRole, wx: number, wz: number, env: CritterEnv): Omit<Critter, 'kind' | 'seed' | 'c' | 's'> | null {
     const near = k === 'butterfly' || k === 'firefly';
     for (let tries = 0; tries < 8; tries++) {
       const a = this.rnd() * Math.PI * 2;
@@ -121,9 +143,9 @@ export class Critters {
       let x = wx + Math.sin(a) * d, z = wz + Math.cos(a) * d;
       // don't pop into existence in plain view (unless far or tiny)
       const f = env.camFwd;
-      if (!near && k !== 'hawk' && d < 38 && (Math.sin(a) * f.x + Math.cos(a) * f.z) > 0.25) continue;
+      if (!near && k !== 'raptor' && d < 38 && (Math.sin(a) * f.x + Math.cos(a) * f.z) > 0.25) continue;
       let home: { x: number; z: number } | undefined;
-      if (k === 'squirrel') {
+      if (k === 'climber') {
         const t = env.trees(x, z, 14);
         if (!t.length) continue;
         home = t[Math.floor(this.rnd() * t.length)];
@@ -131,21 +153,23 @@ export class Critters {
         x = home.x + Math.sin(ra) * (1.5 + this.rnd() * 3);
         z = home.z + Math.cos(ra) * (1.5 + this.rnd() * 3);
         if (!this.open(x, z, 0.3)) continue;
-      } else if (k === 'rabbit' || k === 'songbird') {
-        if (!this.lawn(x, z)) continue;
-      } else if (k === 'sandpiper') {
+      } else if (k === 'grazer' || k === 'songbird' || k === 'burrower') {
+        if (!this.field(x, z)) continue;
+      } else if (k === 'shorebird') {
         if (!this.shore(x, z)) continue;
-      } else if (k === 'deer') {
-        if (this.terrain.coverAt(x, z) !== 10 || !this.open(x, z, 3) || env.trees(x, z, 12).length < 3) continue;
+      } else if (k === 'browser') {
+        // the wood's edge — or, where there are no woods, open shrubland (mule deer in the desert)
+        const cv = this.terrain.coverAt(x, z);
+        if (!this.open(x, z, 3) || !((cv === 10 && env.trees(x, z, 12).length >= 3) || cv === 20)) continue;
       } else if (k === 'butterfly') {
         const gd = env.gardens(x, z, 20);
         if (gd.length) { const g = gd[Math.floor(this.rnd() * gd.length)]; x = g.x; z = g.z; }
         else if (!this.lawn(x, z)) continue;
       } else if (k === 'firefly') {
         if (!this.lawn(x, z) && this.terrain.coverAt(x, z) !== 10) continue;
-      } else if (k === 'fox') {
-        if (!(this.lawn(x, z) || (this.terrain.coverAt(x, z) === 10 && this.open(x, z, 1)))) continue;
-      } else if (k === 'hawk') {
+      } else if (k === 'predator') {
+        if (!(this.field(x, z) || (this.terrain.coverAt(x, z) === 10 && this.open(x, z, 1)))) continue;
+      } else if (k === 'raptor') {
         // circles a thermal over open ground, 55–75 m up: at that range the silhouette is the read
         const y = this.ground(x, z) + 55 + this.rnd() * 20;
         return { x, y, z, yaw: this.rnd() * 6.28, pitch: 0, state: 'soar', t: 4 + this.rnd() * 6, tx: x, tz: z, ty: y, home: { x: wx + Math.sin(a) * d * 0.7, z: wz + Math.cos(a) * d * 0.7 }, phase: this.rnd(), amt: 0 };
@@ -158,24 +182,39 @@ export class Critters {
 
   // ---------------- tick ----------------
   update(dt: number, wx: number, wz: number, env: CritterEnv) {
-    const count: Record<string, number> = {};
-    for (const c of this.list) count[c.kind] = (count[c.kind] ?? 0) + 1;
+    const count: Record<string, number> = {}, roleCount: Record<string, number> = {};
+    for (const c of this.list) { count[c.kind] = (count[c.kind] ?? 0) + 1; roleCount[R(c)] = (roleCount[R(c)] ?? 0) + 1; }
     if (this.enabled && (this.spawnT -= dt) <= 0) {
       this.spawnT = 0.6;
-      for (const k of CRITTERS) {
-        const want = Math.min(SPEC[k].cap, this.want(k, env));
-        if ((count[k] ?? 0) >= want) continue;
-        const p = this.place(k, wx, wz, env);
+      const mix = this.mix(env);
+      for (const role of ROLES) {
+        const cast = mix[role];
+        if (!cast?.length) continue;
+        const cap = Math.max(...cast.map(([sp]) => SPEC[sp].cap));
+        const want = Math.min(cap, this.want(role, env));
+        if ((roleCount[role] ?? 0) >= want) continue;
+        // which of the place's species fills this slot (weighted)
+        let r = this.rnd() * cast.reduce((a, [, w]) => a + w, 0), k = cast[0][0];
+        for (const [sp, w] of cast) { if ((r -= w) <= 0) { k = sp; break; } }
+        if ((count[k] ?? 0) >= SPEC[k].cap) continue;
+        const p = this.place(role, wx, wz, env);
         if (!p) continue;
         const S = SPEC[k];
-        this.list.push({ ...p, kind: k, seed: this.seed, s: S.scale[0] + this.rnd() * (S.scale[1] - S.scale[0]), c: new THREE.Color(S.colors[Math.floor(this.rnd() * S.colors.length)]), vig: this.rnd() });
+        const c = new THREE.Color(S.colors[Math.floor(this.rnd() * S.colors.length)]);
+        if (k === 'snowshoe') {
+          // a snowshoe hare is white from late autumn to spring
+          const m = env.south ? ((env.month + 5) % 12) + 1 : env.month;
+          if (m >= 11 || m <= 4) c.set(0xf2f0ea);
+        }
+        this.list.push({ ...p, kind: k, seed: this.seed, s: S.scale[0] + this.rnd() * (S.scale[1] - S.scale[0]), c, vig: this.rnd() });
         count[k] = (count[k] ?? 0) + 1;
+        roleCount[role] = (roleCount[role] ?? 0) + 1;
       }
     }
     for (let i = this.list.length - 1; i >= 0; i--) {
       const c = this.list[i];
       const d = Math.hypot(c.x - wx, c.z - wz);
-      const gone = c.dead || d > 95 || (!this.enabled) || (this.want(c.kind, env) === 0 && d > 30) || (c.state === 'fly' && c.t <= 0) || (c.state === 'perch' && c.t <= 0 && d > 18);
+      const gone = c.dead || d > 95 || (!this.enabled) || (this.want(R(c), env) === 0 && d > 30) || (c.state === 'fly' && c.t <= 0) || (c.state === 'perch' && c.t <= 0 && d > 18);
       if (gone) { this.list.splice(i, 1); continue; }
       this.step(c, dt, wx, wz, d, env);
     }
@@ -193,7 +232,7 @@ export class Critters {
     }
     if (c.state === 'idle' || c.state === 'move' || c.state === 'stalk') {
       const th = this.threat(c, wx, wz, d, env);
-      if (th && (th.src === 'fox' || th.src === 'hawk')) {
+      if (th && (th.src === 'predator' || th.src === 'raptor')) {
         // a predator: a heartbeat of freezing first — the watchful go at once, the dozy a beat late
         if (c.alarm === undefined) { this.eco[th.src]++; c.alarm = 0.25 + (1 - (c.vig ?? 0.5)) * 0.55; c.fx = th.x; c.fz = th.z; }
       } else if (th) { this.eco[th.src]++; this.startle(c, th.x, th.z, wx, wz, d, env); }
@@ -202,16 +241,16 @@ export class Critters {
     switch (c.state) {
       case 'idle':
         c.amt = Math.max(0, c.amt - dt * 4);
-        if (c.t <= 0 && c.kind === 'fox' && this.rnd() < 0.6) {
+        if (c.t <= 0 && R(c) === 'predator' && this.rnd() < 0.6) {
           const p = this.quarry(c, 24);
           if (p) { c.state = 'stalk'; c.prey = p; c.t = 14; this.eco.hunts++; break; }
         }
         if (c.t <= 0) {
           for (let k = 0; k < 4; k++) {
-            const a = this.rnd() * 6.28, r = 2 + this.rnd() * (c.kind === 'deer' ? 8 : 5);
+            const a = this.rnd() * 6.28, r = 2 + this.rnd() * (R(c) === 'browser' ? 8 : 5);
             const tx = c.x + Math.sin(a) * r, tz = c.z + Math.cos(a) * r;
             if (!this.open(tx, tz, 0.2)) continue;
-            if (c.kind === 'sandpiper' && !this.shore(tx, tz)) continue;
+            if (R(c) === 'shorebird' && !this.shore(tx, tz)) continue;
             c.tx = tx; c.tz = tz; c.state = 'move'; c.t = 6; break;
           }
           if (c.state === 'idle') c.t = 1 + this.rnd() * 2;
@@ -221,13 +260,14 @@ export class Critters {
         speed = c.state === 'flee' ? S.flee : S.walk;
         const dx = c.tx - c.x, dz = c.tz - c.z, L = Math.hypot(dx, dz);
         if (L < 0.3 || c.t <= 0) {
-          if (c.state === 'flee' && c.kind === 'squirrel' && c.home && L < 0.6) { c.state = 'climb'; c.t = 1.4; c.ty = c.y + 3 + this.rnd() * 2.5; break; }
-          if (c.state === 'flee' && c.kind === 'sandpiper' && d < S.fleeR) { c.state = 'fly'; c.t = 3; break; }
+          if (c.state === 'flee' && R(c) === 'climber' && c.home && L < 0.6) { c.state = 'climb'; c.t = 1.4; c.ty = c.y + 3 + this.rnd() * 2.5; break; }
+          if (c.state === 'flee' && R(c) === 'shorebird' && d < S.fleeR) { c.state = 'fly'; c.t = 3; break; }
+          if (c.state === 'flee' && R(c) === 'burrower') { c.dead = true; break; } // down its burrow
           c.state = 'idle'; c.t = 0.8 + this.rnd() * 3; break;
         }
         const step = Math.min(L, speed * dt);
         const nx = c.x + (dx / L) * step, nz = c.z + (dz / L) * step;
-        if (!this.open(nx, nz, 0.15) && !(c.kind === 'squirrel' && c.state === 'flee')) { c.state = 'idle'; c.t = 0.4; break; }
+        if (!this.open(nx, nz, 0.15) && !(R(c) === 'climber' && c.state === 'flee')) { c.state = 'idle'; c.t = 0.4; break; }
         c.x = nx; c.z = nz;
         c.yaw = Math.atan2(-dx, -dz);
         c.y = this.ground(c.x, c.z);
@@ -319,10 +359,10 @@ export class Critters {
         const fx = Math.sin(tt * 0.7 + c.phase * 9) + Math.sin(tt * 1.9) * 0.4, fz = Math.cos(tt * 0.6 + c.phase * 5) + Math.cos(tt * 1.7) * 0.4;
         c.x += fx * S.walk * dt; c.z += fz * S.walk * dt;
         const base = this.ground(c.x, c.z);
-        const target = base + (c.kind === 'butterfly' ? 0.7 + 0.5 * Math.sin(tt * 1.3 + c.phase) : 0.8 + 0.8 * Math.sin(tt * 0.5 + c.phase * 7));
+        const target = base + (R(c) === 'butterfly' ? 0.7 + 0.5 * Math.sin(tt * 1.3 + c.phase) : 0.8 + 0.8 * Math.sin(tt * 0.5 + c.phase * 7));
         c.y += (target - c.y) * Math.min(1, dt * 2);
         c.yaw = Math.atan2(-fx, -fz);
-        if (Math.hypot(c.x - wx, c.z - wz) > 40 && !env.gardens(c.x, c.z, 25).length && c.kind === 'butterfly') c.t = Math.min(c.t, 0);
+        if (Math.hypot(c.x - wx, c.z - wz) > 40 && !env.gardens(c.x, c.z, 25).length && R(c) === 'butterfly') c.t = Math.min(c.t, 0);
         break;
       }
     }
@@ -332,10 +372,10 @@ export class Critters {
   private grounded(c: Critter) { return !c.dead && (c.state === 'idle' || c.state === 'move' || c.state === 'flee'); }
 
   private quarry(h: Critter, r: number) {
-    const kinds = PREY[h.kind]!;
+    const roles = PREY[R(h)] ?? [];
     let best: Critter | undefined, bd = r;
     for (const o of this.list) {
-      if (o === h || !kinds.includes(o.kind) || !this.grounded(o)) continue;
+      if (o === h || !roles.includes(R(o)) || !this.grounded(o)) continue;
       const dd = Math.hypot(o.x - h.x, o.z - h.z);
       if (dd < bd) { bd = dd; best = o; }
     }
@@ -349,7 +389,7 @@ export class Critters {
   }
 
   /** The nearest thing this animal minds right now, or null. */
-  private threat(c: Critter, wx: number, wz: number, d: number, env: CritterEnv): { x: number; z: number; src: 'walker' | 'car' | 'fox' | 'hawk' } | null {
+  private threat(c: Critter, wx: number, wz: number, d: number, env: CritterEnv): { x: number; z: number; src: 'walker' | 'car' | 'predator' | 'raptor' } | null {
     const S = SPEC[c.kind];
     if (!S.fleeR) return null;
     if (d < S.fleeR) return { x: wx, z: wz, src: 'walker' };
@@ -361,16 +401,16 @@ export class Critters {
       const r = Math.min(32, S.fleeR * 0.7 + sp * 0.9);
       if (dd < r && (dx * m.vx + dz * m.vz > -2 * sp || dd < r * 0.4)) return { x: m.x, z: m.z, src: 'car' };
     }
-    if (!HUNTED.has(c.kind)) return null;
+    if (!HUNTED.has(R(c))) return null;
     for (const o of this.list) {
       if (o.dead) continue;
-      if (o.kind === 'fox') {
+      if (R(o) === 'predator') {
         const dd = Math.hypot(o.x - c.x, o.z - c.z);
         // a creeping fox is seen late (by the watchful ones); a trotting or sprinting one early
         const r = o.state === 'stalk' ? S.fleeR * (0.3 + 0.55 * (c.vig ?? 0.5)) : S.fleeR * 1.3;
-        if (dd < r) return { x: o.x, z: o.z, src: 'fox' };
-      } else if (o.kind === 'hawk' && o.state === 'stoop') {
-        if (Math.hypot(o.x - c.x, o.z - c.z) < 12 + (c.vig ?? 0.5) * 8 && o.y - c.y < 18) return { x: o.x, z: o.z, src: 'hawk' };
+        if (dd < r) return { x: o.x, z: o.z, src: 'predator' };
+      } else if (R(o) === 'raptor' && o.state === 'stoop') {
+        if (Math.hypot(o.x - c.x, o.z - c.z) < 12 + (c.vig ?? 0.5) * 8 && o.y - c.y < 18) return { x: o.x, z: o.z, src: 'raptor' };
       }
     }
     return null;
@@ -381,20 +421,23 @@ export class Critters {
     c.fx = fx; c.fz = fz; c.prey = undefined;
     const pan = Math.max(-1, Math.min(1, ((c.x - wx) * env.camFwd.z - (c.z - wz) * env.camFwd.x) / Math.max(1, d)));
     const heard = d < 45;
-    if (c.kind === 'songbird') { c.state = 'fly'; c.t = 3.5; if (heard) this.onEvent?.(c.kind, 'flush', pan, d); }
-    else if (c.kind === 'squirrel' && c.home && Math.hypot(c.home.x - c.x, c.home.z - c.z) < 14) { c.state = 'flee'; c.tx = c.home.x; c.tz = c.home.z; c.t = 4; if (heard) this.onEvent?.(c.kind, 'flee', pan, d); }
+    const role = R(c);
+    if (role === 'songbird') { c.state = 'fly'; c.t = 3.5; if (heard) this.onEvent?.(this.sound(c), 'flush', pan, d); }
+    else if (role === 'climber' && c.home && Math.hypot(c.home.x - c.x, c.home.z - c.z) < 14) { c.state = 'flee'; c.tx = c.home.x; c.tz = c.home.z; c.t = 4; if (heard) this.onEvent?.(this.sound(c), 'flee', pan, d); }
     else {
       c.state = 'flee';
-      c.t = c.kind === 'deer' || c.kind === 'fox' ? 5 : 1.6;
+      c.t = role === 'browser' || role === 'predator' ? 5 : 1.6;
+      // a burrower dashes a few metres to its hole; everything else runs well clear
+      const run = role === 'burrower' ? 4 + this.rnd() * 4 : 40;
       const a = Math.atan2(c.x - fx, c.z - fz) + (this.rnd() - 0.5) * 0.9;
-      c.tx = c.x + Math.sin(a) * 40; c.tz = c.z + Math.cos(a) * 40;
-      if (heard && (c.kind === 'sandpiper' || c.kind === 'deer')) this.onEvent?.(c.kind, c.kind === 'deer' ? 'flee' : 'flush', pan, d);
+      c.tx = c.x + Math.sin(a) * run; c.tz = c.z + Math.cos(a) * run;
+      if (heard && (role === 'shorebird' || role === 'browser' || role === 'burrower')) this.onEvent?.(this.sound(c), role === 'shorebird' ? 'flush' : 'flee', pan, d);
     }
     // contagion: the same kind within ~10 m follows a beat later; other small prey within 5 m hear it too
     for (const o of this.list) {
       if (o === c || o.dead || o.alarm !== undefined || !(o.state === 'idle' || o.state === 'move')) continue;
       const dd = Math.hypot(o.x - c.x, o.z - c.z);
-      if ((o.kind === c.kind && dd < 10) || (HUNTED.has(o.kind) && HUNTED.has(c.kind) && dd < 5)) { o.alarm = 0.12 + this.rnd() * 0.4 + dd * 0.03; o.fx = fx; o.fz = fz; }
+      if ((o.kind === c.kind && dd < 10) || (HUNTED.has(R(o)) && HUNTED.has(role) && dd < 5)) { o.alarm = 0.12 + this.rnd() * 0.4 + dd * 0.03; o.fx = fx; o.fz = fz; }
     }
   }
 
@@ -417,11 +460,13 @@ export class Critters {
       this.mat4.compose(this.v.set(x, c.y, z), this.q, this.sv.setScalar(c.s));
       M.m.setMatrixAt(i, this.mat4);
       M.m.setColorAt(i, c.c);
-      const pose = c.kind === 'firefly' ? 3 : c.state === 'fly' || c.kind === 'butterfly' || c.kind === 'hawk' ? 2 : c.amt !== 0 ? 1 : 0;
+      const role = R(c);
+      const pose = role === 'firefly' ? 3 : c.state === 'fly' || role === 'butterfly' || role === 'raptor' ? 2 : c.amt !== 0 ? 1 : 0;
       M.anim.setXYZ(i, c.phase, c.amt, pose);
     }
     for (const [k, M] of this.meshes) {
       M.m.count = per.get(k) ?? 0;
+      M.m.visible = M.m.count > 0; // most of the cast is absent in any one place: no empty draws
       M.m.instanceMatrix.needsUpdate = true;
       if (M.m.instanceColor) M.m.instanceColor.needsUpdate = true;
       M.anim.needsUpdate = true;

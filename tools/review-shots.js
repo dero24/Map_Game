@@ -126,7 +126,7 @@ window.__REVIEW__ = async (tag = 'r', opts = {}) => {
     let best = null, bd = Infinity;
     for (const P of G.plans.values()) {
       const f = G.stream.fpByKey.get(P.fp);
-      if (!f || f.kind !== 'commercial' || !want.includes(useOf(f.name))) continue;
+      if (!f || f.kind !== 'commercial' || !want.includes(useOf(f.name, f.use))) continue;
       const d = Math.hypot(P.door.x - s.x, P.door.z - s.z);
       if (d < bd) (bd = d), (best = P);
     }
@@ -200,7 +200,23 @@ window.__REVIEW__ = async (tag = 'r', opts = {}) => {
     for (const [k, c] of hits) if (c / n > 0.25) return k;
     return null;
   };
-  for (const L of [A, B, C, D4, E]) for (const it of L) {
+  // F: the regional cast — each new species on the lawn, close (the Almanac's foundry models)
+  const pair = (a, b, hour) => async () => {
+    set(hour);
+    const Lc = G.critters.list;
+    for (let i = Lc.length - 1; i >= 0; i--) if (Lc[i].lineup) Lc.splice(i, 1); // the last pair walks off stage
+    crit(a, lawn.x - 0.9, lawn.z, { lineup: true });
+    crit(b, lawn.x + 0.9, lawn.z + 0.4, { lineup: true, yaw: 2.2 });
+    look({ x: lawn.x, y: Math.max(0, G.world.terrain.heightAt(lawn.x, lawn.z)) + 0.35, z: lawn.z }, 3.6, 0.6, 2.4, -0.08);
+    await wait(600);
+  };
+  const F = [
+    { label: '25 coyote + black-tailed jackrabbit', fn: pair('coyote', 'jackrabbit', 17.5) },
+    { label: '26 roadrunner + quail', fn: pair('roadrunner', 'quail', 10) },
+    { label: '27 mule deer + ground squirrel', fn: pair('muleDeer', 'groundSquirrel', 16) },
+    { label: '28 white ibis + snowshoe hare', fn: pair('ibis', 'snowshoe', 11) },
+  ];
+  for (const L of [A, B, C, D4, E, F]) for (const it of L) {
     const f = it.fn, label = it.label;
     it.fn = async () => {
       clearInterval(track); track = 0; await f(); await wait(400); await idle();
@@ -220,9 +236,9 @@ window.__REVIEW__ = async (tag = 'r', opts = {}) => {
     };
   }
   const settle = opts.settle ?? 45;
-  // opts.only: which montages, e.g. 'ab', 'd', 'de' (default: all five)
-  const want = (k) => (opts.only ?? 'abcde').includes(k);
-  const sets = [['a', A], ['b', B], ['c', C], ['d', D4], ['e', E]];
+  // opts.only: which montages, e.g. 'ab', 'd', 'de' (default: all six)
+  const want = (k) => (opts.only ?? 'abcdef').includes(k);
+  const sets = [['a', A], ['b', B], ['c', C], ['d', D4], ['e', E], ['f', F]];
   // warm-up: the first capture after a fresh load can come back blank (paper) — throw one away
   // (it's always the arrival pose: pose it once and let the stream + post chain settle first)
   if (want('a')) { await A[0].fn(); await wait(4000); }

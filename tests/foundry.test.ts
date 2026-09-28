@@ -5,6 +5,7 @@ import { CRITTERS, critterGeometry } from '../src/assets/fauna';
 import { MAILBOXES, mailboxGeometry, gearGeometry, gearFor, CAR_GEAR, umbrellaGeometry, picnicTableGeometry } from '../src/assets/furniture';
 import { fibCount, fibSphere, hashf, variantAt } from '../src/assets/core';
 import { personGeometry, HAIRSTYLES, MARK, warmthFor } from '../src/assets/people';
+import * as D from '../src/assets/decor';
 
 const bb = (g: THREE.BufferGeometry) => (g.computeBoundingBox(), g.boundingBox!);
 const verts = (g: THREE.BufferGeometry) => g.getAttribute('position').count;
@@ -119,5 +120,64 @@ describe('people', () => {
     expect(warmthFor('tropical', 7)).toBeGreaterThan(warmthFor('continental', 1));
     expect(warmthFor('temperate', 7)).toBeGreaterThan(warmthFor('temperate', 1));
     expect(warmthFor('temperate', 1, true)).toBeGreaterThan(warmthFor('temperate', 1));
+  });
+});
+
+describe('decor (interior + terrace furniture)', () => {
+  const W = 0x8a6242, F = 0x9c6a5a;
+  // [pieces, vertex budget, declared footprint w × d (or null), floor-standing?]
+  const cases: [string, D.DecorPart[], number, [number, number] | null, boolean][] = [
+    ['sofa', D.sofa(2, 0.9, F), 4000, [2, 0.9], true],
+    ['armchair', D.armchair(0.8, 0.8, F), 2400, [0.8, 0.8], true],
+    ['bed', D.bed(1.6, 2.0, F, W), 3000, [1.6, 2.0], true],
+    ['table', D.table(1.2, 0.8, 0.75, W), 600, [1.2, 0.8], true],
+    ['roundTable', D.roundTable(0.35, 0.74, 0xf1ede4), 600, [0.7, 0.7], true],
+    ['chair', D.chair(W, F), 1500, null, true],
+    ['bistroChair', D.bistroChair(0x2a2622), 1200, null, true],
+    ['officeChair', D.officeChair(0x3a3b3e), 1600, null, true],
+    ['monitor', D.monitor(), 400, null, true],
+    ['floor lamp', D.lamp(true), 400, null, true],
+    ['counter', D.counter(3, 0.65, W), 2600, [3, 0.65], true],
+    ['ceilingFan', D.ceilingFan(W), 1200, null, false],
+    ['chestBench', D.chestBench(1, 0.42, W, F), 1200, [1, 0.42], true],
+    ['booth', D.booth(1.25, 0x9c2a26, 0xe9e2d0), 2000, [1.25, 2.2], true],
+    ['shelves', D.shelves(1.2, 0.4, 1.8, W, [0xc46a4a, 0x7fa0b8], 7), 2000, [1.2, 0.4], true],
+    ['pottedPlant', D.pottedPlant(true), 1500, null, true],
+    ['cafeSet', D.cafeSet(0xf1ede4, 0x2a2622, 0x2f4a6a), 2600, null, true],
+  ];
+  it('every piece is valid, grounded, within its footprint and its vertex budget', () => {
+    for (const [name, parts, budget, fp, floor] of cases) {
+      let n = 0;
+      const b = new THREE.Box3();
+      for (const p of parts) {
+        expect(p.g.index, name).toBeNull(); // non-indexed, like every foundry part
+        expect(p.g.getAttribute('normal'), name).toBeTruthy();
+        expect(finite(p.g), name).toBe(true);
+        n += verts(p.g);
+        b.union(bb(p.g));
+      }
+      expect(n, name).toBeLessThan(budget);
+      if (floor) expect(b.min.y, name).toBeGreaterThan(-0.011);
+      else expect(b.max.y, name).toBeLessThan(0.5); // a ceiling fan hangs down from its canopy at 0.45
+      if (fp) {
+        expect(b.max.x - b.min.x, name).toBeLessThan(fp[0] + 0.1);
+        expect(b.max.z - b.min.z, name).toBeLessThan(fp[1] + 0.1);
+      }
+    }
+  });
+  it('stock is deterministic by seed and differs between seeds', () => {
+    const pos = (seed: number) => D.mergeDecor(D.shelves(1.2, 0.4, 1.8, W, [0xc46a4a, 0x7fa0b8], seed)).getAttribute('position').array;
+    expect(Array.from(pos(7))).toEqual(Array.from(pos(7)));
+    expect(Array.from(pos(7))).not.toEqual(Array.from(pos(8)));
+  });
+  it('a café set seats two across its table; mergeDecor bakes vertex colour', () => {
+    const set = D.cafeSet(0xf1ede4, 0x2a2622, null);
+    const g = D.mergeDecor(set);
+    expect(g.getAttribute('color').count).toBe(verts(g));
+    expect(verts(g)).toBe(set.reduce((a, p) => a + verts(p.g), 0));
+    // chairs sit either side of the table (the set spans ≥ 1 m across, but stays compact in depth)
+    const b = bb(g);
+    expect(b.max.x - b.min.x).toBeGreaterThan(1.0);
+    expect(verts(D.mergeDecor(D.cafeSet(0xf1ede4, 0x2a2622, 0x2f4a6a)))).toBeGreaterThan(verts(g)); // + parasol
   });
 });

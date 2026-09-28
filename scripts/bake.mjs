@@ -292,6 +292,9 @@ for (const row of overture.rows) {
     if (!inS) b.lod = 1;
     const nm = tags.name ?? named[0]?.name;
     if (nm) b.n = nm;
+    // what it's used for, in OSM's own language-neutral values (uses.ts): the building's tags, else a POI inside
+    const use = tags.amenity ?? tags.shop ?? tags.office ?? tags.craft ?? named.find((p) => p.kind !== 'place')?.kind;
+    if (use && use !== 'yes' && use !== 'place_of_worship') b.u = use;
     if (inS) {
       let ad = tags['addr:housenumber'] && tags['addr:street'] ? `${tags['addr:housenumber']} ${tags['addr:street']}` : null;
       if (!ad) ad = addrPts.find((p) => Math.abs(p.x - cx) < 40 && Math.abs(p.z - cz) < 40 && pointInRing(p.x, p.z, ring))?.a ?? null;
