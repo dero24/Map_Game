@@ -73,6 +73,7 @@ function grassMaterial() {
     // "foliage" mask, so the ink never scribbles over blades and Kuwahara softens them.
     vertex: /* glsl */ `
       attribute vec3 color;
+      uniform float uSnow;
       varying float vT;
       varying vec3 vTint;
       varying float vFade;
@@ -88,7 +89,9 @@ function grassMaterial() {
         // fade with distance by shrinking (no alpha sorting, no pop)
         float d = length(origin + uWorldOffset - (cameraPosition + uWorldOffset));
         vFade = 1.0 - smoothstep(${(RADIUS - 28).toFixed(1)}, ${(RADIUS - 4).toFixed(1)}, d);
-        p.y *= vFade;
+        // under snow the tufts go (the ground shader paints the snow): a dusting leaves the tall
+        // ones poking through
+        p.y *= vFade * (1.0 - smoothstep(0.15, 0.7, uSnow));
         vec4 wp = m * vec4(p, 1.0);
         // wind: tips sway, bases stay put; gusts roll across the field
         float ph = dot(origin.xz + uWorldOffset.xz, vec2(0.13, 0.09));

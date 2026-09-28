@@ -65,8 +65,21 @@ export function personGeometry() {
   parts.push(mark(lim(v(0, 1.42), v(0, 1.52), 0.052, 0.048), MARK.skin, 0)); // neck
   parts.push(mark(new THREE.SphereGeometry(1, 7, 5).scale(0.1, 0.12, 0.11).translate(0, 1.6, 0), MARK.skin, 0)); // head
   parts.push(mark(box(0.03, 0.04, 0.03, 0, 1.585, -0.11), MARK.skin, 0)); // nose: gives the face a direction
-  // hairstyles
-  const cap = (id: number, sy = 0.13, segs = 7) => mark(new THREE.SphereGeometry(1, segs, 3, 0, Math.PI * 2, 0, Math.PI * 0.56).scale(0.109, sy, 0.12).translate(0, 1.605, 0.01), MARK.hair, id);
+  // a face: eyes, brows (in the hair colour) and a mouth — flat cards just proud of the head, so a
+  // face reads up close (a café table, a doorway) and costs thirty vertices
+  const card = (w: number, h: number, x: number, y: number, z: number) => new THREE.PlaneGeometry(w, h).rotateY(Math.PI).translate(x, y, z);
+  for (const s of [1, -1]) {
+    parts.push(part(card(0.026, 0.018, 0.036 * s, 1.617, -0.1045), 0x1d1a18, 0)); // eye
+    parts.push(mark(card(0.036, 0.009, 0.037 * s, 1.643, -0.1035), MARK.hair, 0)); // brow
+  }
+  parts.push(part(card(0.042, 0.011, 0, 1.553, -0.1045), 0x8a3f3a, 0)); // mouth
+  // hairstyles: a crown over the top, and the back and sides down to the nape — open at the front,
+  // so the hairline sits above the brows instead of a helmet over the eyes
+  const cap = (id: number, sy = 0.13, segs = 7) => {
+    const crown = new THREE.SphereGeometry(1, segs, 2, 0, Math.PI * 2, 0, Math.PI * 0.34);
+    const back = new THREE.SphereGeometry(1, segs, 2, Math.PI * 1.5 + 0.6, Math.PI * 2 - 1.2, Math.PI * 0.34, Math.PI * 0.22);
+    return mark(merge([crown, back].map((g) => g.toNonIndexed())).scale(0.109, sy, 0.12).translate(0, 1.605, 0.01), MARK.hair, id);
+  };
   parts.push(cap(HAIR_PART0)); // shared by short, long and bun
   parts.push(mark(box(0.2, 0.27, 0.07, 0, 1.49, 0.08), MARK.hair, HAIR_PART0 + 1)); // long
   parts.push(mark(new THREE.SphereGeometry(0.054, 5, 3).translate(0, 1.675, 0.105), MARK.hair, HAIR_PART0 + 2)); // bun

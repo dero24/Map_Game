@@ -226,7 +226,7 @@ function roadRibbons(roads: Road[], terrain: { heightAt(x: number, z: number): n
   geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   geo.setIndex(idx);
-  const m = new THREE.Mesh(geo, propMaterial());
+  const m = new THREE.Mesh(geo, propMaterial({ paved: true }));
   return m;
 }
 

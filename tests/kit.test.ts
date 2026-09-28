@@ -18,6 +18,19 @@ describe('asset kit', () => {
       expect(b.max.y).toBeLessThan(2.4);
     }
   });
+  it('cars: the kerbside lite kit keeps the silhouette and its lamps at about a third of the vertices', () => {
+    for (const t of CAR_TYPES) {
+      const r = carRecipe(t, 1), full = carGeometry(r), lite = carGeometry(r, true), a = box(full), b = box(lite);
+      expect(finite(lite)).toBe(true);
+      expect(lite.getAttribute('position').count).toBeLessThan(900);
+      expect(lite.getAttribute('position').count * 2.5).toBeLessThan(full.getAttribute('position').count);
+      expect(Math.abs(b.min.y)).toBeLessThan(0.05);
+      expect(Math.abs(b.max.y - a.max.y)).toBeLessThan(0.08); // (the full body carries a bevel)
+      expect(Math.abs(b.max.z - b.min.z - (a.max.z - a.min.z))).toBeLessThan(0.3);
+      const parts = new Set(Array.from(lite.getAttribute('aPart').array as Float32Array));
+      expect(parts.has(3) && parts.has(4)).toBe(true); // head and tail lamps still light at night
+    }
+  });
   it('cars: recipes are deterministic', () => {
     expect(carRecipe('suv', 3)).toEqual(carRecipe('suv', 3));
   });

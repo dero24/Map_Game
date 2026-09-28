@@ -411,3 +411,19 @@ reference photos (`docs/earth/PLACE_REFERENCES.md`). Score = "would a local reco
   palms (want Washingtonia fan palms), the Catalinas too faint and low (z10 DEM, thinner desert
   haze), no overhead wires (they must survive the brush), fresh grey asphalt, no zero-setback
   barrio facades, empty streets, a bar that reads as a ballroom.
+- **Tucson round 3 — 6/10** (E 7th St — the harness drifted off 4th Ave; poses are pinned by
+  name since). Right: kerb parking makes the streets inhabited; the golden-hour frame (brick
+  rows with porches, acorn lamps, wooden poles, cars on both kerbs) reads like Armory Park; fan
+  palms read as palms. Worse: a 6 m shop apron plus paved blocks turned front lots into a white
+  concrete plain (→ 3.5 m apron, mapped lots striped and parked); the nearest lite car read as a
+  black toy box (→ a per-car level of detail). Open: wires between poles, parking lots, tree
+  species by ecoregion, horizon ridges, worn asphalt + zero-setback barrio fronts.
+- **Tucson round 4 — 6.5/10** (4th Ave, pinned). Improved: wires finally read (a blocked pole
+  used to end the wire run), dense believable kerb parking, surface lots with stalls and cars
+  (the aerial reads as a real US city), the apron plain gone, mesquite/palo verde tints, lamp
+  heads at night. Flagged: the carriageway looks pale at eye level (it was the mid-sidewalk
+  framing — the sidewalk runs down the middle of the frame; the road is grey from above);
+  close cars still lite-kit boxes (the 30 m full-kit tier landed after this capture). Open:
+  road surface wear everywhere (cracks + patches queued), interiors as ballrooms (third flag —
+  partitions + scaled bar furniture landed), horizon mountains unchanged for three rounds
+  (clarity + blue-violet aerial perspective landed; ridge detail still open).

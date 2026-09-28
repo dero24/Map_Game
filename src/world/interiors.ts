@@ -150,10 +150,13 @@ export function planInterior(fpKey: string, fp: Footprint, door: Door, seed: num
   }
   const ceilTop = kind === 'church' ? topY - 0.1 : Math.min(topY - 0.05, floor0 + levels * floorH);
 
-  // Cross walls with a doorway in each segment (none in shops' ground floor or the church).
+  // Cross walls with a doorway in each segment (none in shops' ground floor or the church). A
+  // long bar, café or restaurant is a customer room with back-of-house behind a wall, not a
+  // ballroom: over 20 m, one or two cross walls (the shader paints three rooms a storey at most).
   const parts: Plan['parts'] = [];
-  if (kind !== 'church' && kind !== 'commercial') {
-    const n = L > 13 ? 3 : L > 7.5 ? 2 : 1;
+  const foodDrink = kind === 'commercial' && /^(bar|cafe|restaurant|unknown)$/.test(useOf(fp.name, fp.use));
+  if ((kind !== 'church' && kind !== 'commercial') || (foodDrink && L > 20)) {
+    const n = kind === 'commercial' ? (L > 34 ? 3 : 2) : L > 13 ? 3 : L > 7.5 ? 2 : 1;
     for (let j = 1; j < n; j++) {
       const s = -L / 2 + (j / n) * L + rng.range(-0.7, 0.7);
       if (flights.some((f) => s > f.u0 - 1.2 && s < f.u1 + 1.2)) continue;
@@ -270,6 +273,8 @@ export class Interiors {
   readonly fabU = { value: new THREE.Color() };
   private mat: THREE.ShaderMaterial;
   private npcMat = creatureMaterial({ LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1 });
+  // residents in chairs, on sofas, in booths and on bar stools sit (INDOOR: they don't leave at dusk)
+  private npcSeatMat = creatureMaterial({ LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1, SEATED: 1, INDOOR: 1 });
   private npcGeo = pedGeo();
   private lights: Light[] = [];
   private failed = new Set<string>();
@@ -282,7 +287,7 @@ export class Interiors {
   constructor(private walk: WalkWorld) {
     this.group.name = 'interiors';
     this.mat = interiorMaterial(this);
-    this.npcGeo.setAttribute('aAnim', new THREE.InstancedBufferAttribute(new Float32Array(12), 3));
+    this.npcGeo.setAttribute('aAnim', new THREE.InstancedBufferAttribute(new Float32Array(NPC_MAX * 3), 3));
   }
 
   // Tile streaming registers each enterable footprint under a unique key ("tile:idx"); unloading a tile
@@ -654,7 +659,7 @@ export class Interiors {
     const rooms: Room[] = [];
     // the ground floor follows the business the map names (uses.ts); unnamed shops roll
     const use = fp.kind === 'commercial' ? useOf(fp.name, fp.use) : 'unknown';
-    const ground = use === 'cafe' ? 'cafe' : use === 'restaurant' || use === 'bar' ? 'diner' : use === 'office' || use === 'civic' ? 'office' : use === 'grocery' ? 'shop'
+    const ground = use === 'cafe' ? 'cafe' : use === 'bar' ? 'bar' : use === 'restaurant' ? 'diner' : use === 'office' || use === 'civic' ? 'office' : use === 'grocery' ? 'shop'
       : use === 'unknown' ? (rng.float() < 0.25 ? 'cafe' : rng.float() < 0.3 ? 'diner' : 'shop') : 'shop';
     const doorSlab = Math.max(0, cuts.findIndex((c, i) => i < nSlab && P.ud >= c - 0.6 && P.ud <= cuts[i + 1] + 0.6));
     for (let k = 0; k < P.levels; k++)
@@ -663,7 +668,7 @@ export class Interiors {
         let role: string;
         const dist = Math.abs(r - doorSlab);
         if (fp.kind === 'church') role = 'church';
-        else if (fp.kind === 'commercial') role = k === 0 ? ground : rng.float() < 0.5 ? 'office' : 'living';
+        else if (fp.kind === 'commercial') role = k === 0 ? (r === doorSlab ? ground : dist === 1 && ground !== 'shop' && ground !== 'office' ? 'kitchen' : 'office') : rng.float() < 0.5 ? 'office' : 'living';
         else if (fp.kind === 'large') role = k === 0 ? 'lobby' : ['living', 'bedroom', 'kitchen'][(r + k) % 3];
         else if (P.levels === 1) role = nSlab === 1 ? 'great' : r === doorSlab ? 'living' : ['kitchen', 'bedroom', 'bath', 'bedroom'][Math.min(3, dist - 1)];
         else if (k === 0) role = nSlab === 1 ? 'great' : r === doorSlab ? 'living' : dist === 1 ? 'kitchen' : 'dining';
@@ -777,7 +782,8 @@ export class Interiors {
       return false;
     };
 
-    const npcSpots: [number, number, number, number][] = [];
+    // [u, v, floor y, yaw, seat height (0 = standing: at a counter, behind a bar, at the altar)]
+    const npcSpots: [number, number, number, number, number?][] = [];
     const lights: Light[] = [];
     const tallSpots: [number, number, number, number, number][] = []; // wall strips taken by tall pieces / art
     const glowAt = (u: number, v: number, y: number, w: number) => { const p = toW(P, u, v); lights.push({ x: p[0], y, z: p[1], w }); };
@@ -887,7 +893,7 @@ export class Interiors {
       const living = (withKitchen: boolean) => {
         place(R, 2.1, 0.92, sideA, rng, (a, b, c, d, side) => {
           sofa(a, b, c, d, side, y, fab);
-          npcSpots.push([(a + b) / 2, (c + d) / 2, y, side > 0 ? 0 : Math.PI]);
+          npcSpots.push([(a + b) / 2, (c + d) / 2, y, side > 0 ? 0 : Math.PI, 0.42]);
           const vt = side > 0 ? c - 1.35 : d + 0.85;
           if (free(a + 0.4, b - 0.4, vt, vt + 0.5, R.level)) {
             table(a + 0.45, b - 0.45, vt, vt + 0.5, y, 0.42, wood);
@@ -914,7 +920,7 @@ export class Interiors {
           // an armchair turned toward the room, a standard lamp at its shoulder
           facing(D.armchair(0.8, 0.8, FABRIC[(FABRIC.indexOf(fab) + 4) % FABRIC.length]), (a + b) / 2, (c + d) / 2, y, [1, 0]);
           lamp(b + 0.2, (c + d) / 2, y, 1.55);
-          npcSpots.push([(a + b) / 2, (c + d) / 2, y, Math.PI / 2]);
+          npcSpots.push([(a + b) / 2, (c + d) / 2, y, Math.PI / 2, 0.42]);
         });
         if (withKitchen) kitchenRun(R, y, -sideA);
         wallArt(R, y, 2);
@@ -969,7 +975,7 @@ export class Interiors {
           box((a + b) / 2 - 0.12, (a + b) / 2 + 0.12, (c + d) / 2 - 0.12, (c + d) / 2 + 0.12, y + 0.76, y + 0.86, [0x7fa0b8, 0xe0a33b, 0xf1ede4][Math.floor(rng.float() * 3)], IP.porcelain);
           for (let i = 0; i < n; i++) box(a + (b - a) * ((i + 0.5) / n) - 0.12, a + (b - a) * ((i + 0.5) / n) + 0.12, c + 0.08, c + 0.3, y + 0.76, y + 0.77, 0xf6f4ee, IP.porcelain);
           claim(a - 0.6, b + 0.6, c - 0.6, d + 0.6, R.level);
-          npcSpots.push([(a + b) / 2, c - 0.3, y, 0]);
+          npcSpots.push([(a + b) / 2, c - 0.3, y, 0, 0.45]);
         });
       };
       switch (R.role) {
@@ -1008,7 +1014,7 @@ export class Interiors {
               claim(uu, uu + 0.45, hv[0], hv[1], R.level);
             }
             rug(a - 0.4, b + 0.4, side > 0 ? c - 0.8 : d - 0.4, side > 0 ? c + 0.4 : d + 0.8, y);
-            npcSpots.push([(a + b) / 2, (c + d) / 2, y + 0.3, side > 0 ? 0 : Math.PI]);
+            npcSpots.push([(a + b) / 2, (c + d) / 2, y, side > 0 ? 0 : Math.PI, 0.45]);
           });
           place(R, 1.2, 0.5, -sideA, rng, (a, b, c, d, side, wallV) => dresser(a, b, c, d, side, wallV, y, wood, true), true);
           place(R, 1.1, 0.6, -sideA, rng, (a, b, c, d) => { box(a, b, c, d, y, y + 2.05, wood, IP.wood); box((a + b) / 2 - 0.005, (a + b) / 2 + 0.005, c - 0.005, d + 0.005, y + 0.1, y + 1.95, new THREE.Color(wood).multiplyScalar(0.7)); }, true);
@@ -1109,10 +1115,49 @@ export class Interiors {
               pendant(uc, vc, t);
               if (lit++ < 3) glowAt(uc, vc, ceil - 0.9, 0.6);
               claim(a - 0.8, b + 0.8, c - (four ? 0.8 : 0), d + (four ? 0.8 : 0), R.level);
-              if (t < 2) npcSpots.push([uc - r, vc, y, -Math.PI / 2]);
+              if (t < 4) npcSpots.push([uc - r, vc, y, -Math.PI / 2, 0.45]);
             });
           }
           wallArt(R, y, Math.max(2, Math.min(6, Math.floor((R.u1 - R.u0) / 3))));
+          break;
+        }
+        case 'bar': {
+          // a bar: the long counter on the back wall with a stool every 0.65 m, a back bar of
+          // bottles on lit shelves, high-tops with two stools down the room, a warm low light
+          const back = P.vd > 0 ? -1 : 1;
+          const barArea = roomArea(R);
+          place(R, Math.min(barArea > 90 ? 10 : 6, (R.u1 - R.u0) * 0.75), 0.7, back, rng, (a, b, c, d, side, wallV) => {
+            fit(D.counter(b - a, d - c, 0x3a2a20, false), a, b, c, d, y, side);
+            const vs = side > 0 ? c - 0.42 : d + 0.42;
+            for (let uu = a + 0.35; uu < b - 0.25; uu += 0.65) piece(D.roundTable(0.18, 0.78, 0x2a2622), uu, vs, y, [1, 0], [0, 1]);
+            // back bar: three lit shelves of bottles in amber, green and clear glass
+            for (const sy of [1.05, 1.45, 1.85]) {
+              box(a + 0.1, b - 0.1, wallV - side * 0.26, wallV, y + sy, y + sy + 0.03, 0x3a2a20, IP.wood);
+              for (let uu = a + 0.2; uu < b - 0.2; uu += 0.09 + rng.float() * 0.06)
+                box(uu, uu + 0.07, wallV - side * 0.2, wallV - side * 0.12, y + sy + 0.03, y + sy + 0.22 + rng.float() * 0.1, [0x8a5a2a, 0x3f6a3a, 0xd9d2c0, 0x6a3a2a][Math.floor(rng.float() * 4)], IP.porcelain);
+            }
+            glowAt((a + b) / 2, wallV - side * 0.3, y + 2.2, 1.0);
+            npcSpots.push([(a + b) / 2, side > 0 ? d + 0.35 : c - 0.35, y, side > 0 ? -Math.PI / 2 : Math.PI / 2]);
+          }, true);
+          // a pool table or two in a big room (felt, a dark rail, a hanging lamp over it)
+          for (let t = 0; t < Math.min(2, Math.floor(barArea / 70)); t++)
+            placeFree(R, 2.9, 1.9, rng, (a, b, c, d) => {
+              const uc = (a + b) / 2, vc = (c + d) / 2;
+              box(uc - 1.25, uc + 1.25, vc - 0.7, vc + 0.7, y + 0.66, y + 0.8, 0x3a2a20, IP.wood);
+              box(uc - 1.12, uc + 1.12, vc - 0.57, vc + 0.57, y + 0.8, y + 0.815, 0x2f6a45, IP.fabric);
+              for (const [du, dv] of [[-1.05, -0.5], [1.05, -0.5], [-1.05, 0.5], [1.05, 0.5]]) box(uc + du - 0.07, uc + du + 0.07, vc + dv - 0.07, vc + dv + 0.07, y, y + 0.66, 0x2a1e18, IP.wood);
+              glowAt(uc, vc, y + 1.7, 0.8);
+            });
+          for (let t = 0; t < Math.max(2, Math.min(24, Math.floor(barArea / 9))); t++)
+            placeFree(R, 1.3, 1.3, rng, (a, b, c, d) => {
+              const uc = (a + b) / 2, vc = (c + d) / 2;
+              piece(D.roundTable(0.36, 1.05, 0x3a2a20), uc, vc, y, [1, 0], [0, 1]);
+              piece(D.roundTable(0.17, 0.76, 0x2a2622), uc - 0.55, vc, y, [1, 0], [0, 1]);
+              piece(D.roundTable(0.17, 0.76, 0x2a2622), uc + 0.55, vc, y, [1, 0], [0, 1]);
+              if (t < 4) npcSpots.push([uc - 0.55, vc, y, -Math.PI / 2, 0.76]);
+              if (t < 3) glowAt(uc, vc, y + 2.4, 0.4);
+            });
+          wallArt(R, y, 3);
           break;
         }
         case 'diner': {
@@ -1126,7 +1171,7 @@ export class Interiors {
             place(R, 1.25, 2.1, t < 5 ? sideA : -sideA, rng, (a, b, c, d, side) => {
               piece(D.booth(b - a, vinyl, topC), (a + b) / 2, (c + d) / 2, y, [1, 0], [0, 1]);
               for (let i = 0; i < 2; i++) box((a + b) / 2 - 0.35 + i * 0.5, (a + b) / 2 - 0.15 + i * 0.5, (c + d) / 2 - 0.12, (c + d) / 2 + 0.08, y + 0.74, y + 0.76, 0xf6f4ee, IP.porcelain);
-              if (t < 2) npcSpots.push([(a + b) / 2, (c + d) / 2 + side * 0.72, y, side > 0 ? Math.PI : 0]);
+              if (t < 4) npcSpots.push([(a + b) / 2, (c + d) / 2 + side * 0.72, y, side > 0 ? Math.PI : 0, 0.45]);
             });
           place(R, Math.min(3.4, (R.u1 - R.u0) * 0.5), 0.62, sideA, rng, (a, b, c, d, side, wallV) => {
             fit(D.counter(b - a, d - c, wood, false), a, b, c, d, y, side);
@@ -1154,7 +1199,7 @@ export class Interiors {
               table(a, b, c, d, y, 0.75, wood);
               fit(D.monitor(), (a + b) / 2 - 0.3, (a + b) / 2 + 0.3, c + 0.1, d - 0.1, y + 0.75, side);
               facing(D.officeChair([0x3a3b3e, 0x2f4a5a, 0x5a3a3a][t % 3]), (a + b) / 2, side > 0 ? c - 0.35 : d + 0.35, y, [0, side > 0 ? 1 : -1]);
-              if (t === 0) npcSpots.push([(a + b) / 2, side > 0 ? c - 0.35 : d + 0.35, y, side > 0 ? 0 : Math.PI]);
+              if (t < 2) npcSpots.push([(a + b) / 2, side > 0 ? c - 0.35 : d + 0.35, y, side > 0 ? 0 : Math.PI, 0.47]);
             });
           place(R, 0.9, 0.5, sideA, rng, (a, b, c, d) => box(a, b, c, d, y, y + 1.3, 0x8d9296), true);
           placeFree(R, 0.5, 0.5, rng, (a, b, c, d) => plant((a + b) / 2, (c + d) / 2, y, true));
@@ -1200,7 +1245,7 @@ export class Interiors {
       if (R.role === 'church') continue;
       const area = roomArea(R);
       const extra = Math.min(10, Math.floor(area / 8));
-      const homey = R.role !== 'shop' && R.role !== 'cafe' && R.role !== 'office' && R.role !== 'diner';
+      const homey = R.role !== 'shop' && R.role !== 'cafe' && R.role !== 'office' && R.role !== 'diner' && R.role !== 'bar';
       // the end walls: a sideboard with things on it, a tall bookcase, a chest under a picture
       if (homey) {
         placeEnd(R, 1.4, 0.45, rng, (a, b, c, d) => {
@@ -1233,7 +1278,7 @@ export class Interiors {
           // an armchair turned toward the room's middle
           const uc = (a + b) / 2, vc = (c + d) / 2, face: [number, number] = rng.float() < 0.5 ? [1, 0] : [-1, 0];
           facing(D.armchair(0.8, 0.8, FABRIC[Math.floor(rng.float() * FABRIC.length)]), uc, vc, y, face);
-          npcSpots.push([uc, vc, y, 0]);
+          npcSpots.push([uc, vc, y, face[0] > 0 ? Math.PI / 2 : -Math.PI / 2, 0.42]);
         });
         else if (pick < 0.72 && homey) place(R, 1.0, 0.4, rng.float() < 0.5 ? 1 : -1, rng, (a, b, c, d) => {
           box(a, b, c, d, y, y + 1.2, wood, IP.wood);
@@ -1250,29 +1295,49 @@ export class Interiors {
     yield; // all geometry accumulated — assemble
     const group = new THREE.Group();
     group.add(new THREE.Mesh(m.geometry(), this.mat));
-    const n = Math.min(4, npcSpots.length, 1 + Math.floor(rng.float() * 3));
+    // how many: a few at home; a business has its staff and a room of customers
+    const busy = fp.kind === 'commercial' || fp.kind === 'church';
+    const n = Math.min(NPC_MAX, npcSpots.length, busy ? 2 + Math.floor(rng.float() * 6) : 1 + Math.floor(rng.float() * 3));
     if (n > 0) {
-      const im = new THREE.InstancedMesh(this.npcGeo, this.npcMat, n);
       const SH = [0xe8d8b0, 0x5b7fa6, 0xc4553f, 0x6e8c5a, 0xe0a33b, 0x7a5b8c, 0xf2efe6, 0x3f6f78];
+      const stand: [THREE.Matrix4, THREE.Color][] = [], sit: [THREE.Matrix4, THREE.Color][] = [];
       const used = new Set<number>();
+      const ang = Math.atan2(P.uz, P.ux);
       for (let i = 0; i < n; i++) {
         let k = Math.floor(rng.float() * npcSpots.length);
-        for (let t = 0; t < 5 && used.has(k); t++) k = Math.floor(rng.float() * npcSpots.length);
+        for (let t = 0; t < 8 && used.has(k); t++) k = Math.floor(rng.float() * npcSpots.length);
+        if (used.has(k)) continue;
         used.add(k);
-        const [u, v, y, yaw] = npcSpots[k];
+        const [u, v, y, yaw, seat] = npcSpots[k];
         const w = toW(P, u, v);
-        const ang = Math.atan2(P.uz, P.ux);
-        im.setMatrixAt(i, new THREE.Matrix4().compose(V3(w[0], y, w[1]), new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), -ang + yaw + rng.range(-0.4, 0.4)), V3(1, 1, 1)));
-        im.setColorAt(i, new THREE.Color(SH[Math.floor(rng.float() * SH.length)]));
+        const col = new THREE.Color(SH[Math.floor(rng.float() * SH.length)]);
+        const q = new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), -ang + yaw + (seat ? rng.range(-0.15, 0.15) : rng.range(-0.4, 0.4)));
+        // seated: the pose puts the hips 0.45 m up — raise it to the seat (a bar stool is 0.76)
+        if (seat) sit.push([new THREE.Matrix4().compose(V3(w[0], y + seat - 0.45, w[1]), q, V3(1, 1, 1)), col]);
+        else {
+          stand.push([new THREE.Matrix4().compose(V3(w[0], y, w[1]), q, V3(1, 1, 1)), col]);
+          // a standing resident at home often has company: a second person a step away, facing them
+          if (!busy && i === 0 && rng.float() < 0.5) {
+            const fwd = -ang + yaw, fx = -Math.sin(fwd), fz = -Math.cos(fwd);
+            const q2 = new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), fwd + Math.PI + rng.range(-0.2, 0.2));
+            stand.push([new THREE.Matrix4().compose(V3(w[0] + fx * 1.05, y, w[1] + fz * 1.05), q2, V3(1, 1, 1)), new THREE.Color(SH[Math.floor(rng.float() * SH.length)])]);
+          }
+        }
       }
-      im.frustumCulled = false;
-      group.add(im);
+      for (const [list, mat] of [[stand, this.npcMat], [sit, this.npcSeatMat]] as const) {
+        if (!list.length) continue;
+        const im = new THREE.InstancedMesh(this.npcGeo, mat, Math.min(NPC_MAX, list.length));
+        list.slice(0, NPC_MAX).forEach(([m4, c], i) => { im.setMatrixAt(i, m4); im.setColorAt(i, c); });
+        im.frustumCulled = false;
+        group.add(im);
+      }
     }
     this.lights = lights;
     return group;
   }
 }
 
+const NPC_MAX = 12; // residents an interior shows at once (the shared ped geometry's aAnim covers this many)
 const ringSign = (r: P2[]) => {
   let a = 0;
   for (let i = 0; i < r.length; i++) {

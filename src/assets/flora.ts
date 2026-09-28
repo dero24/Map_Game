@@ -15,8 +15,8 @@ const BARK = 0x6b5a48, BARK_DARK = 0x5d4a3a, BIRCH = 0xe4dfd2, PALM = 0x8a7458, 
 
 // ================================================================ trees
 // Index order matches the region style table's `trees` weights (styles.ts) and the old kinds.
-export type TreeKind = 'round' | 'oak' | 'shrub' | 'pine' | 'spruce' | 'palm' | 'birch' | 'mesquite';
-export const TREE_KINDS: TreeKind[] = ['round', 'oak', 'shrub', 'pine', 'spruce', 'palm', 'birch', 'mesquite'];
+export type TreeKind = 'round' | 'oak' | 'shrub' | 'pine' | 'spruce' | 'palm' | 'birch' | 'mesquite' | 'fanpalm';
+export const TREE_KINDS: TreeKind[] = ['round', 'oak', 'shrub', 'pine', 'spruce', 'palm', 'birch', 'mesquite', 'fanpalm'];
 export const TREE_VARIANTS = 3;
 export interface TreeMeta { h: number; crownR: number; crownBottom: number; trunkR: number }
 
@@ -169,15 +169,42 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
       wood.push(part(limb(V3(0, -0.3, 0), knee, trunkR, trunkR * 0.75, 5), barkC), part(limb(knee, tip, trunkR * 0.75, trunkR * 0.35, 4), barkC));
       crowns.push(tip);
     }
-    // canopy: a few flattened, sparse clouds over each limb tip plus one over the middle
+    // canopy: small, irregular, loosely stacked clouds over each limb tip (an airy, uneven
+    // crown with sky through it — not a flat umbrella), one lifted a little higher per limb
     for (let i = 0; i < crowns.length; i++) {
       const c = crowns[i];
-      for (let k = 0; k < 2; k++) {
-        const a = k * Math.PI + i;
-        lobe((verde ? 1.25 : 1.45) + r.float() * 0.3, V3(c.x + Math.cos(a) * 0.9, c.y + 0.9 + j(0.25), c.z + Math.sin(a) * 0.9), 500 + v * 23 + i * 3 + k, 0.42, 0);
+      const n = 3 + (i % 2);
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2 + i * GOLDEN + j(0.4);
+        const rr = 0.8 + r.float() * 0.7;
+        // smaller, rounder, spread wider: a feathery, broken canopy (flat, fat lobes read as an
+        // acacia umbrella)
+        lobe((verde ? 0.7 : 0.82) + r.float() * 0.3, V3(c.x + Math.cos(a) * rr, c.y + 0.5 + j(0.7) + (k === 0 ? 0.6 : 0), c.z + Math.sin(a) * rr), 500 + v * 23 + i * 5 + k, 0.74, 0);
       }
     }
-    lobe(verde ? 1.6 : 1.9, V3(j(0.4), 4.9, j(0.4)), 520 + v, 0.4, 0);
+    lobe(verde ? 0.9 : 1.05, V3(j(0.5), 4.9 + j(0.3), j(0.5)), 520 + v, 0.72, 0);
+  } else if (kind === 'fanpalm') {
+    // Washingtonia: a tall, straight, slim trunk, a compact round head of fan fronds, and the
+    // skirt of dead brown fronds hanging under it — the palm of desert and California streets
+    trunkR = 0.24;
+    const H = 9.4 + r.float() * 2.0;
+    const lean = V3(j(0.35), 0, j(0.35));
+    const top = V3(lean.x, H, lean.z);
+    wood.push(part(limb(V3(0, -0.3, 0), top, trunkR * 1.25, trunkR * 0.8, 7), 0x7a6a58));
+    // the skirt: a hanging shell of thatch, widest at the top (street palms are kept trimmed short)
+    const skirt = lathe([[0.001, -1.25], [0.5, -1.22], [0.6, -0.5], [0.48, -0.02], [0.001, 0]], 9);
+    wood.push(part(skirt.translate(top.x, top.y - 0.15, top.z), 0x8a7552));
+    // the head: broad fan fronds splayed out on long stalks — a ~4 m crown, not a knob
+    const n = 16;
+    for (let i = 0; i < n; i++) {
+      const a = i * GOLDEN, up = 0.75 - (i / n) * 1.35;
+      const fr = card(1.5, 2.1 + r.float() * 0.45, 0.42, 2);
+      fr.rotateX(-up);
+      fr.rotateY(a);
+      fr.translate(top.x, top.y + 0.15, top.z);
+      leaf.push(fr);
+    }
+    lobe(0.55, V3(top.x, top.y + 0.3, top.z), 540 + v, 0.9);
   }
 
   const leafGeo = merge(leaf.map((g) => part(g, TINT)));

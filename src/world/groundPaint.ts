@@ -4,6 +4,15 @@
 // repaints around the walker so paint at your feet is ~15 cm/px.
 import * as THREE from 'three';
 import type { World, TerrainLayer, Road, Area, WorldJson } from './data';
+import { activeStyle } from './styles';
+import { lotLayout, type LotLayout } from './lots';
+
+// a lot's stall layout, computed once per prepared outline
+const LOTS = new WeakMap<object, LotLayout | null>();
+const lotOf = (a: { item: Area; pts: [number, number][][] }) => {
+  if (!LOTS.has(a)) LOTS.set(a, a.pts[0] && a.item.o.length ? lotLayout(a.pts[0]) : null);
+  return LOTS.get(a)!;
+};
 
 // ESA WorldCover class -> ground wash (sRGB). Water cells = sea/river bed.
 // Values sit near real-world reflectance (asphalt ~0.1, concrete ~0.35, dry sand ~0.4 linear):
@@ -92,13 +101,24 @@ class Painter {
   // Streamed tiles (real-lite / synth — everything past the bake) paint too: their roads and
   // footprints join while mounted, so sidewalks, curbs, markings, walks and contact shadows
   // continue wherever the world does.
-  private tiles = new Map<string, { roads: Prepared<Road>[]; foot: Prepared<number>[]; box: [number, number, number, number] }>();
-  setTile(id: string, roads: Road[], rings: [number, number][][], box: [number, number, number, number]) {
+  private tiles = new Map<string, { roads: Prepared<Road>[]; foot: Prepared<number>[]; front: Prepared<number>[]; areas: Prepared<Area>[]; box: [number, number, number, number] }>();
+  // `fronts` flags the storefronts (shops, apartments over shops): their ground is paved.
+  setTile(id: string, roads: Road[], rings: [number, number][][], box: [number, number, number, number], fronts: boolean[] = [], areas: Area[] = []) {
+    const foot = rings.map((r, i) => prep(i, [r.flatMap(([x, z]) => [x * 10, z * 10])]));
     this.tiles.set(id, {
       roads: roads.filter((r) => !r.br).map((r) => prep(r, [r.p])),
-      foot: rings.map((r, i) => prep(i, [r.flatMap(([x, z]) => [x * 10, z * 10])])),
+      foot,
+      front: foot.filter((_, i) => fronts[i]),
+      areas: areas.filter((a) => AREA_FILL[a.c]).map((a) => prep(a, [...a.o, ...a.i])),
       box,
     });
+  }
+  private areasIn(x0: number, z0: number, x1: number, z1: number): Prepared<Area>[] {
+    if (!this.tiles.size) return this.areas;
+    const extra: Prepared<Area>[] = [];
+    for (const t of this.tiles.values()) if (t.box[2] > x0 - 50 && t.box[0] < x1 + 50 && t.box[3] > z0 - 50 && t.box[1] < z1 + 50) extra.push(...t.areas);
+    if (!extra.length) return this.areas;
+    return [...this.areas, ...extra].sort((a, b) => AREA_ORDER.indexOf(a.item.c) - AREA_ORDER.indexOf(b.item.c));
   }
   dropTile(id: string) { this.tiles.delete(id); }
   private roadsIn(x0: number, z0: number, x1: number, z1: number): Prepared<Road>[] {
@@ -108,15 +128,22 @@ class Painter {
     if (!extra.length) return this.roads;
     return [...this.roads, ...extra].sort((a, b) => (ROAD_RANK[a.item.c] ?? 1) - (ROAD_RANK[b.item.c] ?? 1));
   }
+  private frontIn(x0: number, z0: number, x1: number, z1: number): Prepared<number>[] {
+    const out: Prepared<number>[] = [];
+    for (const t of this.tiles.values()) if (t.box[2] > x0 - 50 && t.box[0] < x1 + 50 && t.box[3] > z0 - 50 && t.box[1] < z1 + 50) out.push(...t.front);
+    return out;
+  }
   private footIn(x0: number, z0: number, x1: number, z1: number): Prepared<number>[] {
     if (!this.tiles.size) return this.foot;
     const out = [...this.foot];
     for (const t of this.tiles.values()) if (t.box[2] > x0 - 50 && t.box[0] < x1 + 50 && t.box[3] > z0 - 50 && t.box[1] < z1 + 50) out.push(...t.foot);
     return out;
   }
+  private bakedRoads = new Set<Prepared<Road>>();
   constructor(json: WorldJson, walks: number[] = []) {
     this.areas = json.areas.filter((a) => AREA_FILL[a.c]).sort((a, b) => AREA_ORDER.indexOf(a.c) - AREA_ORDER.indexOf(b.c)).map((a) => prep(a, [...a.o, ...a.i]));
     this.roads = json.roads.filter((r) => !r.br).sort((a, b) => (ROAD_RANK[a.c] ?? 1) - (ROAD_RANK[b.c] ?? 1)).map((r) => prep(r, [r.p]));
+    this.bakedRoads = new Set(this.roads);
     this.foot = json.buildings.filter((b) => !b.lod).map((b, i) => prep(i, [b.r]));
     this.walks = [];
     this.addWalks(walks);
@@ -128,8 +155,33 @@ class Painter {
 
   paint(ctx: CanvasRenderingContext2D, x0: number, z0: number, x1: number, z1: number, pxPerM: number, level: 0 | 1 | 2) {
     const detail = level >= 1;
+    // Dense blocks are paved: where footprints cover over 45 % of a 40 m cell (a city block, not a
+    // suburb) — or a third of the 120 m around it, so the strips between a city's buildings and its
+    // kerbs pave too — the ground is concrete and flagstone, not lawn; the grass field
+    // (grassMask) then stays off it. Painted under the areas: a park in the city stays a park.
+    if (detail) {
+      const C = 40, cov = new Map<string, number>();
+      for (const f of this.footIn(x0, z0, x1, z1)) {
+        if (!overlaps(f, x0, z0, x1, z1, 100)) continue;
+        const r = f.pts[0];
+        let a = 0, cx = 0, cz = 0;
+        for (let i = 0, j = r.length - 1; i < r.length; j = i++) (a += (r[j][0] - r[i][0]) * (r[j][1] + r[i][1])), (cx += r[i][0]), (cz += r[i][1]);
+        const k = `${Math.floor(cx / r.length / C)},${Math.floor(cz / r.length / C)}`;
+        cov.set(k, (cov.get(k) ?? 0) + Math.abs(a / 2));
+      }
+      ctx.fillStyle = '#b1ab9d';
+      for (let i = Math.floor(x0 / C) - 1; i <= Math.floor(x1 / C) + 1; i++)
+        for (let j = Math.floor(z0 / C) - 1; j <= Math.floor(z1 / C) + 1; j++) {
+          const own = cov.get(`${i},${j}`) ?? 0;
+          let n = 0;
+          for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) n += cov.get(`${i + di},${j + dj}`) ?? 0;
+          if (own < C * C * 0.45 && n < 9 * C * C * 0.33) continue;
+          ctx.fillRect(i * C - 6, j * C - 6, C + 12, C + 12);
+        }
+    }
     // Areas
-    for (const a of this.areas) {
+    const areas = this.areasIn(x0, z0, x1, z1);
+    for (const a of areas) {
       if ((a.item.lod && level > 0) || !overlaps(a, x0, z0, x1, z1)) continue;
       ctx.beginPath();
       for (const r of a.pts) pathOf(ctx, r, true);
@@ -144,24 +196,35 @@ class Painter {
       }
     }
     ctx.globalAlpha = 1;
-    // Dense blocks are paved: where footprints cover over 45 % of a 40 m cell (a city block, not a
-    // suburb), the ground between the buildings is concrete and flagstone, not lawn — the grass
-    // field (grassMask) then stays off it too.
-    if (detail) {
-      const C = 40, cov = new Map<string, number>();
-      for (const f of this.footIn(x0, z0, x1, z1)) {
-        if (!overlaps(f, x0, z0, x1, z1, 60)) continue;
-        const r = f.pts[0];
-        let a = 0, cx = 0, cz = 0;
-        for (let i = 0, j = r.length - 1; i < r.length; j = i++) (a += (r[j][0] - r[i][0]) * (r[j][1] + r[i][1])), (cx += r[i][0]), (cz += r[i][1]);
-        const k = `${Math.floor(cx / r.length / C)},${Math.floor(cz / r.length / C)}`;
-        cov.set(k, (cov.get(k) ?? 0) + Math.abs(a / 2));
+    // Parking lots: the stall lines (lots.ts — the same layout props.ts parks the cars in)
+    if (level === 2) {
+      ctx.strokeStyle = '#e9e6dc';
+      ctx.lineWidth = 0.12;
+      ctx.lineCap = 'butt';
+      ctx.globalAlpha = 0.85;
+      for (const a of areas) {
+        if (a.item.c !== 'parking' || !overlaps(a, x0, z0, x1, z1, 5)) continue;
+        const L = lotOf(a);
+        if (!L) continue;
+        ctx.beginPath();
+        for (let i = 0; i + 3 < L.lines.length; i += 4) (ctx.moveTo(L.lines[i], L.lines[i + 1]), ctx.lineTo(L.lines[i + 2], L.lines[i + 3]));
+        ctx.stroke();
       }
-      ctx.fillStyle = '#b1ab9d';
-      for (const [k, a] of cov) {
-        if (a < C * C * 0.45) continue;
-        const [i, j] = k.split(',').map(Number);
-        ctx.fillRect(i * C - 6, j * C - 6, C + 12, C + 12);
+      ctx.globalAlpha = 1;
+    }
+    if (detail) {
+      // Storefronts stand on pavement: a shop's frontage is sidewalk right up to the glass, never a
+      // strip of lawn or desert between the kerb and the door (mapped roads are centre lines at a
+      // lanes-derived width, so parking lanes and wide sidewalks would otherwise read as yard).
+      // Streamed tiles only — the baked shore keeps its surveyed walks.
+      ctx.strokeStyle = '#b3ad9f';
+      ctx.lineWidth = 7; // 3.5 m: a sidewalk's width; deeper set-backs are the lots (mapped parking)
+      ctx.lineJoin = 'round';
+      for (const f of this.frontIn(x0, z0, x1, z1)) {
+        if (!overlaps(f, x0, z0, x1, z1, 10)) continue;
+        ctx.beginPath();
+        pathOf(ctx, f.pts[0], true);
+        ctx.stroke();
       }
     }
     // Contact shadows / foundations under buildings (grounds the houses in the wash).
@@ -215,10 +278,14 @@ class Painter {
         ctx.stroke();
       }
     // Pavement, edge-darkened like a wash drying at its rim.
+    const arid = activeStyle().climate === 'arid', region = activeStyle().region;
     for (const { item: r, pts } of list) {
       const rank = ROAD_RANK[r.c] ?? 1;
       const minor = MINOR.has(r.c);
-      const base = r.sw ? '#b8b2a4' : minor ? '#bdb5a3' : rank >= 5 ? '#55575b' : rank >= 2 ? '#606265' : '#6f6d68';
+      // desert sun bleaches asphalt to a warm pale grey
+      // bike lanes are asphalt, painted by habit (green in North America, red-brown in Europe);
+      // a pale path colour read as a sidewalk down the middle of the avenue
+      const base = r.c === 'cycleway' ? (region === 'na' ? '#687a62' : region === 'eu' ? '#8a5e52' : '#6a6c6e') : r.sw ? '#b8b2a4' : minor ? '#bdb5a3' : arid ? (rank >= 5 ? '#6f6b64' : rank >= 2 ? '#78736b' : '#817b72') : rank >= 5 ? '#55575b' : rank >= 2 ? '#606265' : '#6f6d68';
       ctx.beginPath();
       pathOf(ctx, pts[0]);
       ctx.strokeStyle = base;
@@ -226,7 +293,7 @@ class Painter {
       ctx.stroke();
       if (!minor && detail) {
         ctx.globalAlpha = 0.3;
-        ctx.strokeStyle = rank >= 5 ? '#6a6c70' : '#76787b';
+        ctx.strokeStyle = arid ? '#8a857c' : rank >= 5 ? '#6a6c70' : '#76787b';
         ctx.lineWidth = r.w * 0.72;
         ctx.stroke();
         ctx.globalAlpha = 1;
@@ -259,12 +326,71 @@ class Painter {
       ctx.globalAlpha = 1;
     }
     if (level === 2) this.crosswalks(ctx, list);
+    if (level === 2) this.wear(ctx, list.filter((r) => !this.bakedRoads.has(r)), arid); // streamed streets (the baked shore keeps its look)
     ctx.lineCap = 'round';
   }
 
   // Ladder crosswalks where a main road (tertiary and up) meets another carriageway: white bars
   // across each approach, just outside the junction. Junctions are nodes the roads share (OSM
   // joins streets at a common node; the 0.1 m ints make those exact).
+  // Worn asphalt: hairline cracks wandering along and across the lanes, and darker sealed patches
+  // — the texture of an American street, heavier where the sun bakes it. Seeded by position, so
+  // every visit finds the same cracks.
+  private wear(ctx: CanvasRenderingContext2D, list: Prepared<Road>[], arid: boolean) {
+    const hash = (x: number, z: number, k: number) => {
+      let h = (Math.floor(x * 2.3) * 73856093) ^ (Math.floor(z * 2.9) * 19349663) ^ (k * 83492791);
+      h = Math.imul(h ^ (h >>> 13), 0x5bd1e995);
+      return ((h ^ (h >>> 15)) >>> 0) / 4294967296;
+    };
+    const crackP = arid ? 0.4 : 0.2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const { item: r, pts } of list) {
+      const rank = ROAD_RANK[r.c] ?? 1;
+      if (rank < 1 || r.sw || MINOR.has(r.c) || r.w < 4) continue;
+      const p = pts[0];
+      for (let i = 0; i + 1 < p.length; i++) {
+        const [ax, az] = p[i], [bx, bz] = p[i + 1], L = Math.hypot(bx - ax, bz - az);
+        if (L < 1) continue;
+        const tx = (bx - ax) / L, tz = (bz - az) / L, nx = -tz, nz = tx;
+        for (let s = 2; s < L - 1; s += 5) {
+          const cx = ax + tx * s, cz = az + tz * s, h = hash(cx, cz, 1);
+          if (h < crackP) {
+            // a crack: three to five kinked segments, starting somewhere across the lane
+            let x = cx + nx * (hash(cx, cz, 2) - 0.5) * (r.w - 1.2), z = cz + nz * (hash(cx, cz, 2) - 0.5) * (r.w - 1.2);
+            const across = hash(cx, cz, 3) < 0.35;
+            ctx.beginPath();
+            ctx.moveTo(x, z);
+            const n = 3 + Math.floor(hash(cx, cz, 4) * 3);
+            for (let k = 0; k < n; k++) {
+              const a = (hash(cx + k, cz, 5) - 0.5) * 1.2, l = 0.35 + hash(cx, cz + k, 6) * 0.7;
+              const dx = across ? nx : tx, dz = across ? nz : tz;
+              x += (dx * Math.cos(a) - dz * Math.sin(a)) * l;
+              z += (dz * Math.cos(a) + dx * Math.sin(a)) * l;
+              ctx.lineTo(x, z);
+            }
+            ctx.strokeStyle = 'rgba(38,36,33,0.5)';
+            ctx.lineWidth = 0.05;
+            ctx.stroke();
+          }
+          if (h > 1 - crackP * 0.18) {
+            // a sealed patch: a darker rectangle squared to the road
+            const pl = 1.2 + hash(cx, cz, 7) * 1.6, pw = 0.8 + hash(cx, cz, 8) * 0.9, o = (hash(cx, cz, 9) - 0.5) * Math.max(0, r.w - pw - 1);
+            const ox = cx + nx * o, oz = cz + nz * o;
+            ctx.beginPath();
+            ctx.moveTo(ox - tx * pl / 2 - nx * pw / 2, oz - tz * pl / 2 - nz * pw / 2);
+            ctx.lineTo(ox + tx * pl / 2 - nx * pw / 2, oz + tz * pl / 2 - nz * pw / 2);
+            ctx.lineTo(ox + tx * pl / 2 + nx * pw / 2, oz + tz * pl / 2 + nz * pw / 2);
+            ctx.lineTo(ox - tx * pl / 2 + nx * pw / 2, oz - tz * pl / 2 + nz * pw / 2);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(30,29,28,0.16)';
+            ctx.fill();
+          }
+        }
+      }
+    }
+  }
+
   private crosswalks(ctx: CanvasRenderingContext2D, list: Prepared<Road>[]) {
     const at = new Map<string, { r: Road; p: P[]; i: number }[]>();
     for (const { item: r, pts } of list) {
@@ -282,6 +408,10 @@ class Painter {
     ctx.globalAlpha = 0.88;
     for (const legs of at.values()) {
       if (legs.length < 2 || new Set(legs.map((l) => l.r)).size < 2) continue;
+      // a junction has three arms or more (a way passing through counts two, one ending there one):
+      // two arms is just a street whose way is split there (a tag change mid-block) — no crossing
+      const arms = legs.reduce((n, l) => n + (l.i > 0 && l.i < l.p.length - 1 ? 2 : 1), 0);
+      if (arms < 3) continue;
       if (!legs.some((l) => (ROAD_RANK[l.r.c] ?? 1) >= 3)) continue;
       const wMax = Math.max(...legs.map((l) => l.r.w));
       for (const { r, p, i } of legs) {
@@ -316,7 +446,7 @@ export interface GroundPaint {
   detail: DetailGround;
   mid: DetailGround;
   addWalks: (walks: number[]) => void;
-  setTile: (id: string, roads: Road[], rings: [number, number][][], box: [number, number, number, number]) => void;
+  setTile: (id: string, roads: Road[], rings: [number, number][][], box: [number, number, number, number], fronts?: boolean[], areas?: Area[]) => void;
   dropTile: (id: string) => void;
   /** Where the painted ground is open (unpainted land or a green wash) inside a square — the
    *  grass field grows only there, so it can never sit on a painted sidewalk, walk, lot or beach. */
@@ -445,7 +575,7 @@ export function paintGround(world: World, maxTex: number, walks: number[] = []):
   return {
     slice: makeTex(sc), backdrop: makeTex(bc), sliceCanvas: sc, detail, mid, grassMask,
     addWalks: (w: number[]) => painter.addWalks(w),
-    setTile: (id, roads, rings, box) => { painter.setTile(id, roads, rings, box); detail.touch(box); mid.touch(box); },
+    setTile: (id, roads, rings, box, fronts, areas) => { painter.setTile(id, roads, rings, box, fronts, areas); detail.touch(box); mid.touch(box); },
     dropTile: (id) => painter.dropTile(id),
   };
 }

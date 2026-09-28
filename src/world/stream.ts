@@ -3,7 +3,7 @@
 // mounted cheaply: packed objects rebuilt into scene meshes, collision ops replayed inside a
 // WalkWorld scope, interiors registered under "tile:idx" keys. Unload removes all three cleanly.
 import * as THREE from 'three';
-import { loadTile, loadTileTerrain, type AtlasManifest, type Box, type LayerLayout, type Road, type TileJson, type TileSpec, type Terrain, TerrainLayer } from './data';
+import { loadTile, loadTileTerrain, type Area, type AtlasManifest, type Box, type LayerLayout, type Road, type TileJson, type TileSpec, type Terrain, TerrainLayer } from './data';
 import { fetchDem, demLayer, setDemBase, raceNull } from './dem';
 import { cachedFetchJson, manifestFingerprint } from './cache';
 import type { Door, Footprint } from './buildings';
@@ -20,7 +20,7 @@ import { activeStyle } from './styles';
 const LOAD_R = 1500; // keep tiles this close (3×3 cells and then some)
 const DROP_R = 2400; // drop tiles beyond this
 const COARSE_R = 8000; // silhouette ring: lite builds (meshes only) out to the horizon
-const W_CONC = 3; // real-lite (tile service) builds in flight at once
+const W_CONC = 4; // real-lite (tile service) builds in flight at once (the service caches in R2; Overpass slots are per endpoint)
 const LAMP_WIN = 2048; // m — the night light-map window around the walker
 const COARSE_BUDGET = 4; // max outstanding lite builds — they're lowest priority
 const ID_STRIDE = 1 << 12; // building-id space per tile (window-fade keys, <2^24 total; synth cells raise the ord count)
@@ -36,6 +36,8 @@ export interface TileArt {
   poles: unknown[];
   churches: [number, number][];
   primRoads: Road[];
+  areas: Area[];
+  kerb?: Float32Array; // parked cars for kerbCars.ts
   flat?: boolean; // mounted without data still in flight (late DEM or LiDAR) — a relief rebuild will replace it
 }
 
@@ -146,9 +148,9 @@ export class TileStream {
       if (!w) {
         const c = this.man.cell;
         // file is an absolute URL — the tile worker fetches it directly (no base prefix).
-        // &v=10 — the edge Cache API keys on the full URL; bumping alongside the
-        // worker's R2 key (t/v10) retires stale tile payloads.
-        const file = this.tilesBase === 'direct' ? `direct:${key}` : `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}&v=10`;
+        // &v=13 — the edge Cache API keys on the full URL; bumping alongside the
+        // worker's R2 key (t/v13) retires stale tile payloads.
+        const file = this.tilesBase === 'direct' ? `direct:${key}` : `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}&v=13`;
         w = { id: 'w' + key, box: { x0: cx * c, z0: cz * c, x1: cx * c + c, z1: cz * c + c }, lod: 0, file, world: 1 };
         this.worldSpecs.set(key, w);
       }
@@ -198,6 +200,8 @@ export class TileStream {
   get poles() { this.sync(); return this._poles; }
   get churches() { this.sync(); return this._churches; }
   get primRoads() { this.sync(); return this._primRoads; }
+  /** The coarse ring's mounted cells (display-only lite builds). */
+  get coarseSpecs(): TileSpec[] { return [...this.coarseLoaded.values()].map((c) => c.spec); }
   get busy() { return this.fetching.size > 0 || this.buildQueue.length > 0 || this.coarseFetching.size > 0 || this.coarseQueue.length > 0; }
   // Fired once a detail tile is fully mounted (visual + collision). main.ts uses it to
   // re-settle the walker when a real tile replaces the synth placeholder underfoot.
@@ -578,6 +582,8 @@ export class TileStream {
         poles: tile.poles,
         churches: tile.fps.filter((f) => f.kind === 'church').map((f) => f.ring[0] as [number, number]),
         primRoads: tile.roads,
+        areas: tile.areas ?? [],
+        kerb: tile.kerb,
         flat: !!tile.late,
       });
       if (tile.late) this.relieve(spec);

@@ -98,6 +98,8 @@ export class Vehicles {
       toast: (m: string) => void;
       roads: () => Road[];
       tiles: () => Iterable<{ spec: { id: string }; group: THREE.Group }>;
+      /** the city's kerb and lot cars (kerbCars.ts): drivable too */
+      kerb?: { find(x: number, z: number, r: number): { key: string; x: number; z: number; yaw: number; color: number; model: string; d: number } | null; refresh(): void; skip: (key: string) => boolean };
       driveLeft: boolean;
       enabled: () => boolean; // false while menus/journal/intro are up
       geo?: { toLatLon: (x: number, z: number) => [number, number]; fromLatLon: (lat: number, lon: number) => [number, number] };
@@ -105,6 +107,7 @@ export class Vehicles {
   ) {
     this.group.name = 'player-vehicles';
     o.root.add(this.group);
+    if (o.kerb) o.kerb.skip = (key) => this.taken.has(key); // a kerb car you drove off stays gone
     this.hud = document.createElement('div');
     this.hud.id = 'vehud';
     Object.assign(this.hud.style, { position: 'fixed', left: '50%', bottom: '18px', transform: 'translateX(-50%)', padding: '6px 14px', borderRadius: '14px', background: 'rgba(245,239,225,0.82)', color: '#3a3346', font: '14px Georgia, serif', pointerEvents: 'none', display: 'none', zIndex: '20', whiteSpace: 'nowrap' });
@@ -229,7 +232,7 @@ export class Vehicles {
   // Driveway cars baked into tiles (props.ts names their InstancedMesh 'parked-cars'): the one you
   // take is hidden (and stays hidden across tile reloads) and becomes your car.
   private parkedNear(x: number, z: number, r: number) {
-    let best: { key: string; im: THREE.InstancedMesh; i: number; x: number; z: number; yaw: number; color: number; model: string; d: number } | null = null;
+    let best: { key: string; im?: THREE.InstancedMesh; i: number; x: number; z: number; yaw: number; color: number; model: string; d: number } | null = null;
     const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(), e = new THREE.Euler(), c = new THREE.Color();
     for (const t of this.o.tiles()) {
       for (const im of parkedMeshes(t.group)) for (let i = 0; i < im.count; i++) {
@@ -245,6 +248,9 @@ export class Vehicles {
         }
       }
     }
+    // …and the kerb and lot cars (kerbCars.ts records, not tile meshes)
+    const k = this.o.kerb?.find(x, z, best ? best.d : r);
+    if (k) best = { ...k, i: -1 };
     return best;
   }
   private hideInstance(im: THREE.InstancedMesh, i: number) {
@@ -269,7 +275,8 @@ export class Vehicles {
       const pk = this.parkedNear(w.x, w.z, SPECS.car.reach + 0.6);
       if (pk) {
         this.taken.add(pk.key);
-        this.hideInstance(pk.im, pk.i);
+        if (pk.im) this.hideInstance(pk.im, pk.i);
+        else this.o.kerb?.refresh();
         best = this.make('car', pk.x, pk.z, pk.yaw, pk.color, pk.model);
       }
     }

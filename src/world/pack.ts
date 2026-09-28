@@ -8,7 +8,7 @@ import type { Deck, DeckProfile, Floors, WalkWorld } from '../player/collision';
 import { WalkWorld as WalkWorldImpl } from '../player/collision';
 import type { Footprint, Door } from './buildings';
 import type { Plan } from './interiors';
-import type { LayerLayout, Road } from './data';
+import type { Area, LayerLayout, Road } from './data';
 import { buildingMaterial } from './buildings';
 import { propMaterial } from '../render/propMaterial';
 import { creatureMaterial } from '../render/creature';
@@ -26,7 +26,7 @@ export type PMat =
   | { t: 'signs' }
   | { t: 'halo'; size: number; color: number }
   | { t: 'people'; seated: boolean }
-  | { t: 'prop'; o: { wind?: boolean; bob?: boolean; foliage?: boolean; emissive?: number; emissiveNight?: boolean; crown?: [number, number] } }
+  | { t: 'prop'; o: { wind?: boolean; bob?: boolean; foliage?: boolean; decid?: boolean; paved?: boolean; emissive?: number; emissiveNight?: boolean; crown?: [number, number] } }
   | { t: 'gnd' }; // region ground material (shared; set via setGndMaterial at boot)
 
 export interface PObj {
@@ -65,6 +65,8 @@ export interface BuiltTile {
   towers: number[]; // flat xyz — bascule tower tops
   plans: { i: number; p: Plan }[]; // i = footprint index
   roads: Road[]; // prim (own-only) roads for the life sim
+  areas?: Area[]; // prim (own-only) areas — the ground paint's parks, lots, pitches
+  kerb?: Float32Array; // parked kerb + lot cars as records (kerbCars.ts KERB_STRIDE)
   poles: { x: number; z: number; cx: number; cz: number }[];
   atlas?: ImageBitmap; // street-sign atlas
   lampPts?: number[]; // street-lamp pool centres (x,z pairs) — the stream paints the light map
@@ -171,7 +173,7 @@ export function matTag(m: THREE.Material): PMat {
     return {
       t: 'prop',
       o: {
-        wind: !!d.WIND, bob: !!d.BOB, foliage: !!d.FOLIAGE,
+        wind: !!d.WIND, bob: !!d.BOB, foliage: !!d.FOLIAGE, ...(d.DECID ? { decid: true } : {}), ...(d.PAVED ? { paved: true } : {}),
         emissive: d.EMISSIVE ? (u.uEmissive.value as THREE.Color).getHex() : undefined,
         emissiveNight: u.uEmNight?.value === 1,
         ...(d.FOLIAGE && u.uCrown && u.uCrown.value.y > 0 ? { crown: [u.uCrown.value.x, u.uCrown.value.y] as [number, number] } : {}),

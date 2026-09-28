@@ -5,11 +5,16 @@ import { paintMaterial } from './shared';
 // crown: [centre height, radius] in the geometry's own metres (treeMeta). With it, a tree's
 // foliage shades as one lit volume with a darker underside (the BOTW/Ghibli read) instead of
 // evenly lit balls on a stick; bark keeps its own normals.
-export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number] } = {}) {
+// decid: a broadleaf crown — its leaves colour in autumn and fall in winter (season.ts uLeafFall /
+// uAutumn); conifers and palms keep theirs.
+// paved: street ribbons — snow is ploughed off the asphalt (slushy tracks) and lies on the walks.
+export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean } = {}) {
   const defines: Record<string, number> = {};
   if (opts.wind) defines.WIND = 1;
   if (opts.bob) defines.BOB = 1;
   if (opts.foliage) defines.FOLIAGE = 1;
+  if (opts.decid) defines.DECID = 1;
+  if (opts.paved) defines.PAVED = 1;
   if (opts.emissive) defines.EMISSIVE = 1;
   return paintMaterial({
     defines,
@@ -20,6 +25,7 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
       varying vec3 vLocal;
       varying float vAO;
       varying float vLeafy;
+      varying float vTree;
       uniform vec2 uCrown;
       void main() {
         vec3 p = position;
@@ -28,6 +34,7 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
         vLocal = position;
         mat4 m = worldMat();
         vec3 origin = (m * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+        vTree = fract(sin(dot(origin.xz + uWorldOffset.xz, vec2(12.9898, 78.233))) * 43758.5453);
         #ifdef WIND
           float sway = max(p.y - 1.5, 0.0) * 0.012 * (0.4 + uWind);
           p.x += sin(uTime * 1.3 + origin.x * 0.21 + origin.z * 0.17) * sway;
@@ -72,12 +79,29 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
       varying vec3 vLocal;
       varying float vAO;
       varying float vLeafy;
+      varying float vTree;
       uniform vec2 uCrown;
       void main() {
         vec3 N = normalize(vNormalW);
         vec3 alb = vColor;
         #ifdef FOLIAGE
           alb *= 0.72 + 0.5 * fbm3(vWorldPos * 0.9);
+        #endif
+        #ifdef DECID
+          if (vLeafy > 0.5) {
+            // leaves go clump by clump (each tree on its own schedule), the last ones thin and high
+            float clump = vnoise3(vWorldPos * 1.1) * 0.75 + vTree * 0.25;
+            if (clump < uLeafFall * 1.05 - 0.02) discard;
+            // autumn: each tree its own colour — yellow, orange, red — mixed through the crown
+            vec3 fall = vTree < 0.4 ? vec3(0.78, 0.55, 0.08) : vTree < 0.75 ? vec3(0.8, 0.3, 0.06) : vec3(0.6, 0.1, 0.07);
+            fall = mix(fall, vec3(0.72, 0.5, 0.1), 0.35 * vnoise3(vWorldPos * 0.7));
+            alb = mix(alb, fall * (0.8 + 0.4 * fbm3(vWorldPos * 0.9)), uAutumn * smoothstep(0.1, 0.5, vTree + 0.3));
+          }
+        #endif
+        #ifdef PAVED
+          alb = snowOn(alb, N, vWorldPos, mix(0.3, 1.0, smoothstep(0.3, 0.5, dot(alb, vec3(0.3, 0.59, 0.11)))));
+        #else
+          alb = snowOn(alb, N, vWorldPos, 0.9); // car roofs, bench seats, conifer tops
         #endif
         alb = pigment(alb, vWorldPos);
         // a crown is shaded by its sphere field + underside AO, not by its own low-poly lobes

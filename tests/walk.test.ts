@@ -55,6 +55,11 @@ describe('walking into buildings', () => {
     expect(w.surfaceAt(0, -10, 0.5)).toBeCloseTo(0.5);
   });
 
+  it('street life walks the open-air surface, never an upper floor', () => {
+    expect(w.surfaceAt(0, 0)).toBeGreaterThan(3); // the highest floor under the point
+    expect(w.outdoorSurfaceAt(0, 0)).toBeLessThan(0.6); // the ground outside the same point
+  });
+
   it('climbs the stairs by walking, and walks back down them', () => {
     const dir = Math.sign(F.topU - F.bottomU);
     const [sx, sz] = at(F.bottomU - dir * 0.6), [tx, tz] = at(F.topU + dir * 0.5);

@@ -3,7 +3,8 @@
 import * as THREE from 'three';
 import { U } from './shared';
 
-export const shadowParams = { enabled: true, size: 2048, extent: 170, depth: 900 };
+// depth: how far up the sun's ray casters count — 1.4 km, so a tower's low-sun shadow reaches the street
+export const shadowParams = { enabled: true, size: 2048, extent: 170, depth: 1400 };
 
 export class SunShadows {
   private rt: THREE.WebGLRenderTarget;

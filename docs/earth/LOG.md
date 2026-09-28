@@ -2,6 +2,147 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-27 (o) — Place parity round 3: parked cities (kerbs, lots, a car LOD), seasons (snow, bare trees, autumn), a new default look, the Rumson double-terrain fix
+
+Acting on the reviewer's round 2 (NYC 6/10, Tucson 5/10) and three asks from Robby: the look
+chosen by side-by-side comparison (keeping the old default), snowy and other regions, and the
+Rumson glitch. Reviewer after this round: **Tucson 6 → 6.5/10**.
+
+- **Rumson double terrain — fixed everywhere** (`ground.ts`, `main.ts streamedGround`): the coarse
+  backdrop raises its wooded cells 11 m as a far-forest canopy. Beside the bake (Rumson) that
+  raised sheet was still drawn where detail tiles had mounted — a second, unwalkable hillside
+  burying houses. A per-1024 m-cell mask over the backdrop now drops the canopy bump (and its
+  leaf colour) wherever a detail tile is mounted, and discards the backdrop altogether where a
+  streamed cell (or a coarse streamed cell) brings its own ground chunk. Verified at the same
+  Rumson spot: trunks meet the lawn, no plateau.
+- **No buildings in the river** (`buildings.ts`): the LiDAR pass adds buildings the map doesn't
+  have — and over water those are bridges, barges and cranes (Sea Bright's old Rumson bridge came
+  back as a row of flat blocks in the Shrewsbury). Unmapped survey finds whose centre or 40 % of
+  whose outline is over water are dropped; mapped buildings over water (piers, boathouses) stay.
+- **Walkers on invisible stairs — fixed** (`collision.ts outdoorSurfaceAt`, `life.ts`): street-life
+  paths took the walk surface's highest candidate, so a sidewalk way clipping a footprint put its
+  walkers on the top floor, striding through the air along the shopfronts. Life paths now sample
+  the open-air surface (ground + decks: bridges and piers still carry traffic, floors never).
+- **People with faces, sitting and talking** (`people.ts`, `creature.ts`, `interiors.ts`): eyes,
+  brows (in the hair colour) and a mouth on every person (30 vertices; the hair is open at the
+  front now, not a helmet over the eyes). Residents sit where the room has a seat — sofas,
+  armchairs, dining chairs, booths, office chairs, bar stools (a SEATED+INDOOR variant) — and
+  stand only at counters, bars and altars; a standing resident at home often has company facing
+  them; businesses hold staff plus a room of customers (up to 12). Everyone talks with their
+  hands now and then, and nods.
+- **A skyline that stays** (`skyline.ts`): a cell's far towers now hide only once its real tile has
+  mounted — hiding them within 900 m made Manhattan melt away as you flew in faster than its
+  tiles streamed. Real-lite fetches run 4 at a time (was 3).
+- **Seasons** (`season.ts`, pure + 5 tests): a coarse climatology — January mean from latitude,
+  climate class and elevation (6 °C/km), an annual swing by climate (the North American east
+  coast's continental cold, the Pacific Northwest's marine winters), a two-week lag — gives
+  snow cover, broadleaf leaf fall, autumn colour and the far snowline for any place and day.
+  Shaders: `snowOn` (shared.ts) whitens whatever faces the sky in world-anchored drifts —
+  ground (ploughed asphalt keeps slushy tracks), roofs, sills, car roofs, conifer tops; grass
+  tufts sink under it; broadleaf crowns (`propMaterial` DECID: round, oak, birch, shrub) drop
+  clump by clump and colour yellow/orange/red per tree in autumn; the horizon's snowline
+  follows the season (rebuilt when it moves 250 m). The date: the panel's **day of year**
+  (0 = today), `?day=N` or `?date=YYYY-MM-DD` — the sun, the season, critters, gardens and the
+  summer soundscape all follow the world's date now, not the machine's. Weather: **snow**
+  (−1 = the season's own).
+- **Look default: 'watercolor HD'** (`post.ts`): chosen side by side on Tucson (morning street,
+  golden hour, horizon) against the Sep 27 default and the other presets — the same wash at a
+  finer brush (paint detail 0.82, Kuwahara radius 4, sharpness 10.5) over a sharper frame, less
+  paper and wobble, a light teal-shade/warm-light grade and vibrance 0.2. The old default is
+  kept verbatim as the preset **'classic (Sep 27 default)'** (and 'classic half-res' for the
+  look before the paint-detail knob); the full record is `docs/earth/LOOK_DEFAULTS.md`. The
+  comparison harness: `__PLACE__(tag, { looks: [...], frames })` → `shots/looks-<tag>.jpg`.
+
+- **Desert** (`flora.ts`, `props.ts`, `horizon.ts`, `groundPaint.ts`, `interiors.ts`)
+  - a Washingtonia fan palm (kind 8: straight slim trunk, compact fan head, the skirt of dead
+    fronds) replaces the coconut palm on dry coasts and in desert towns; coconut palms stay
+    tropical;
+  - mesquite / palo verde crowns are small irregular clouds with sky through them, not a flat
+    umbrella;
+  - the horizon reads Terrarium z10 (~130 m a pixel) to 70 km, and dry air hazes less (arid
+    0.45×, Mediterranean / polar 0.7×) — desert ranges stand sharp and violet;
+  - sun-bleached warm asphalt in arid climates;
+  - a bar archetype (back bar of bottles on lit shelves, a stool-lined counter, high-tops,
+    warm low light) instead of the diner layout.
+- **Wires** (`props.ts` `wireMaterial`/`wireGeometry`): overhead wires are screen-space ribbons
+  at their real projected width but never under 1.6 px, so the brush pass can't erase them —
+  the criss-crossed sky of an American street reads again.
+- **Streetcars**: OSM `railway=tram|light_rail` (not in tunnels) → contact wire on bracket-arm
+  poles every 30 m (Tucson's Sun Link on 4th Ave).
+- **Cities**
+  - the life bubble (`lifeSim.recycle`): walkers > 600 m and cars > 900 m away recycle into the
+    ring just out of sight (90–450 m / 110–650 m), so a city's crowd is where the player is;
+  - tree pits (granite kerb, dark soil) with street trees every ~9 m and litter bins on dense-core
+    side streets (none within 6 m of a mapped tree);
+  - mapped `lanes` set carriageway width (3.2 m a lane + 1 m) when no `width` is tagged;
+    cycleways paint as asphalt lanes (green in North America, red-brown in Europe), not a pale
+    path down the avenue;
+  - storefront street floors on 88 % of avenue rows (was 75 %);
+  - the shadow camera reaches 1.4 km up the sun's ray (was 900 m), so towers' low-sun shadows
+    land in the street.
+- **Storefront frontage** (`groundPaint.ts`, `Footprint.front`): shops and apartments over shops
+  stand on a 3.5 m paved apron in streamed tiles (a sidewalk's width; deeper set-backs are the
+  mapped lots — the reviewer found 6 m turned front lots into a white concrete plain).
+- **Fan palm crown** after the first look: sixteen broad fronds on long stalks (a ~4 m crown), a
+  short trimmed skirt — it read as a knob on a pole. **Mesquite** crowns smaller, rounder lobes
+  spread wider (they read as acacia umbrellas), and the desert legumes keep their own foliage
+  whatever the regional greens: mesquite dusty grey-green, palo verde thin yellow-green.
+- **Street wires**: a pole blocked by a porch or sign slides up to 8 m along the kerb, or is
+  skipped with the wires spanning on to the next — it used to end the run, so whole streets had
+  poles and no wires; ribbons never under 2 px (1.6 halved to under a pixel in the montages).
+- **Auto quality** (`main.ts`): the crisper look defaults (paint detail 0.6, full screen
+  resolution) step down once, ten seconds into a walk, on a GPU averaging over 25 ms a frame —
+  never overriding a value the player set in the Look panel (`userKeys`). A stopgap until the
+  boot benchmark (backlog 1.7).
+- **Street parking** (`realTile.parkSide`, `Road.pk`, props.ts): OSM parking in either scheme
+  (`parking:<side>` + orientation, or `parking:lane:<side>`) widens an untagged carriageway by a
+  parked lane (2.2 m; angled bays 4.8 m) and lines that kerb with cars facing the traffic; in
+  North America a town street (residential → secondary) parks both kerbs unless mapped otherwise.
+  Occupancy follows built cover (most spaces downtown, a car every few houses in the suburbs,
+  none on a country road); never within 10 m of a junction, 15 ft of a hydrant, or in a bus
+  stop. Kerbside cars use a new lite car (kit.ts `carLiteLib`: no bevels, axle drums, lamp bars —
+  and they are drivable like the driveway cars.
+- **A level of detail for parked cars** (`kerbCars.ts`): props hand kerb and lot cars over as
+  records (`BuiltTile.kerb`), and one manager draws every tile's — the cars within 110 m in a lite
+  kit (kit.ts `carLiteLib`: one bevel step, axle drums under simple arches, lamp bars; ~700
+  vertices against ~2,100), everything else out to 1.4 km as a two-block proxy (`carFarLib`, 72
+  vertices, scaled to the type), refilled as the walker moves. A Manhattan tile's thousands of
+  parked cars cost about a dozen draw calls; vehicles.ts finds them to drive off in (by key, so a
+  taken car stays gone).
+- **Parks, lots and pitches in streamed tiles** (`realTile` `LAND_CLASS`, `BuiltTile.areas` →
+  `groundPaint.setTile`): the bake's land classes (parking, parks and lawns, woods, scrub,
+  pitches and playgrounds, pools, golf, marinas, plazas) now reach real-lite tiles — before, the
+  streamed world painted no parks at all. Surface **parking lots** get a stall layout (`lots.ts`:
+  rows along the lot's longest edge, 2.7 × 5.5 m stalls, 7 m aisles) — the ground paint stripes
+  it and props park cars in it at 30–75 % by built cover. Shared by both sides, so lines and cars
+  always agree.
+- **Bus stops**: OSM `highway=bus_stop` → a pole with a plate in the region's transit colours
+  and a timetable case at the kerb; `shelter=yes` adds a glass-and-steel shelter with a bench.
+- **Rails and trolley wires**: streetcar lines get their rails set in the street (two steel strips
+  at standard gauge); roads tagged `trolley_wire` get a pair of wires over each direction's lane
+  on kerbside bracket poles (Seattle, San Francisco, Dayton).
+- **Paved city ground** (`groundPaint.ts`): a 40 m cell also paves when a third of the 120 m
+  around it is built over, so the strips between a city's buildings and its kerbs pave too; the
+  paving is painted under the areas, so a park in the city stays a park.
+- **Life bubble, tighter**: walkers recycle past 330 m into 60–260 m (was 600 → 90–450), cars past
+  600 m into 100–450 m — the NYC montage had its whole crowd a few hundred metres off.
+- **Interiors that aren't ballrooms** (`interiors.ts`): a bar, café or restaurant over 20 m long
+  gets one or two cross walls — the customer room at the door, a kitchen and back office behind;
+  a big bar gets a longer counter (to 10 m), up to 24 high-tops and one or two pool tables.
+- **Horizon air** (`horizon.ts`): the ring takes the local haze by the air's clarity (desert air
+  carries far) and distant ranges go a deep blue-violet under the sky's tone, not a pale band.
+- **Crosswalks only at real junctions** (three arms or more): a street whose way is split
+  mid-block (a tag change) no longer paints a ladder there.
+- **Worn asphalt** on streamed streets: hairline cracks and sealed patches, heavier in arid
+  climates (the baked shore keeps its look).
+- Harness (`tools/place-shots.js`): `opts.main` / `opts.resi` pin a round to named streets (rounds
+  compare like for like); the kerb frames stand mid-sidewalk; the interior frame faces the middle
+  of the room.
+- Tile cache `t/v13` / `&v=13` / `DIRECT_V 13` (tram lines, parking, bus stops, trolley wires, land
+  areas) — the worker needs a redeploy.
+- Verified: typecheck (check config + the device's tsconfig) and 149 tests; montages `shots/place-tucson.jpg` (r4), `shots/place-nyc.jpg` (r3b), `shots/place-burlington-jan.jpg`, `shots/looks-tucson.jpg`. `npm run build` not run here (no build on this machine) — run it before pushing.
+- Next: parked-car LOD for driveway cars and trees (the same manager pattern); a snowbank ridge along ploughed kerbs; mountains with ridge detail (z11 near 40 km); zero-setback barrio fronts; interiors furnished by floor area for every archetype; Seattle and Miami rounds.
+
 ## 2026-09-27 (n) — Hometowns that look like themselves: skyscrapers, row houses, mountains on the horizon, city sound, looks you can tune
 
 The ask: compare Sea Bright / Monmouth Beach / Tucson (and a big city) against real photos so a

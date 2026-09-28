@@ -381,37 +381,56 @@
       "priority": 2,
       "area": "world",
       "title": "Place parity: hometowns that look like themselves (towers, rows, horizons, street furniture, sound)",
-      "user_visible_behavior": "Streamed cities stand at their real heights with setbacks, glass or masonry towers, water tanks and fire escapes; row houses are brick with flat roofs in North American cities; mountains stand on the horizon and towers on the skyline; signals, hydrants, subway entrances, crosswalks and main-street lamps come from the map; cities sound like cities and deserts like deserts; houses are clad by subregion.",
+      "user_visible_behavior": "Streamed cities stand at their real heights with setbacks, glass or masonry towers, water tanks and fire escapes; row houses are brick with flat roofs in North American cities; mountains stand on the horizon and towers on the skyline; signals, hydrants, subway entrances, crosswalks and main-street lamps come from the map; cities sound like cities and deserts like deserts; houses are clad by subregion; American streets are parked nose to tail (kerbs and striped lots, a per-car level of detail); parks, lots and pitches paint in streamed towns; bus stops, streetcar rails and trolleybus wires come from the map; the date brings its season — snow, bare trees, autumn colour, a moving snowline.",
       "status": "in_progress",
       "verification": [
-        "tests: realTile (heights, parts, rows, storefront floors), styles (tower facades, NA subregion cladding)",
-        "tools/place-shots.js __PLACE__('nyc' | 'tucson') -> shots/place-*.jpg vs docs/earth/PLACE_REFERENCES.md",
-        "reviewer place-parity rounds (NYC round 1: 5/10)"
+        "tests: realTile (heights, parts, rows, storefront floors, street parking, bus stops), styles, lots (stall layout), kerbCars (LOD tiers, drive-off lookup), season (normals, snow, leaves, snowline), kit (lite car budget), pack (DECID/PAVED survive the pack)",
+        "tools/place-shots.js __PLACE__(tag, { main, resi }) -> shots/place-*.jpg vs docs/earth/PLACE_REFERENCES.md; __PLACE__(tag, { looks }) -> shots/looks-*.jpg",
+        "reviewer place-parity rounds: NYC 5 -> 6/10, Tucson 5 -> 6 -> 6.5/10"
       ],
       "evidence": [
-        "135 tests pass",
-        "shots/place-nyc.jpg",
-        "shots/place-tucson.jpg",
-        "shots/horizon-test.jpg"
+        "148 tests pass (check config); device tsconfig typecheck clean",
+        "shots/place-tucson.jpg (round 4)",
+        "shots/place-nyc.jpg (round 3b)",
+        "shots/place-burlington-jan.jpg",
+        "shots/looks-tucson.jpg"
       ],
-      "notes": "Tile cache v10 — the worker needs a redeploy. Open: canyon light, buses, tree pits, road width + parking lanes, desert plants."
+      "notes": "Tile cache v13 — the worker needs a redeploy. Open: ridge detail on far mountains, zero-setback barrio fronts, buses on route=bus, snowbanks, interiors furnished by floor area everywhere, Seattle + Miami rounds."
     },
     {
       "id": "tunable-looks",
       "priority": 3,
       "area": "render",
-      "title": "Tunable looks: paint detail, HiDPI, vibrance + colour grade, look presets",
-      "user_visible_behavior": "The ` panel opens with a Look section: watercolor (default), fine detail, vivid painted (sci-fi), storybook soft; paint detail, full screen resolution, vibrance, colour grade.",
+      "title": "Tunable looks + a chosen default: paint detail, HiDPI, vibrance + colour grade, look presets",
+      "user_visible_behavior": "The ` panel opens with a Look section; the default is 'watercolor HD' (chosen side by side on real places); the Sep 27 default is kept as 'classic (Sep 27 default)'; others: watercolor, fine detail, vivid painted (sci-fi), storybook soft, classic half-res.",
       "status": "passing",
       "verification": [
-        "panel Look presets apply and persist",
-        "paint pass at 0.6 of the frame by default (was 0.5)"
+        "__PLACE__('tucson', { looks }) -> shots/looks-tucson.jpg compared frame by frame",
+        "panel Look presets apply and persist (diffs only — a new default reaches players who never touched the knob)"
       ],
       "evidence": [
-        "post.ts LOOKS",
-        "panel.ts Look folder"
+        "post.ts postParams (watercolor HD) + LOOKS",
+        "docs/earth/LOOK_DEFAULTS.md",
+        "shots/looks-tucson.jpg"
       ],
-      "notes": "The player tunes; the favourite becomes the shipped default."
+      "notes": "The player tunes; tell Claude which knobs to lock and they become the shipped default."
+    },
+    {
+      "id": "seasons",
+      "priority": 2,
+      "area": "world",
+      "title": "Seasons: snow, bare trees, autumn colour and the snowline follow the date",
+      "user_visible_behavior": "Pick a day of the year (panel, ?day=N or ?date=YYYY-MM-DD): a northern town in January is under snow with ploughed streets, bare maples and snow-topped conifers; October colours the leaves; the far mountains whiten with the season.",
+      "status": "passing",
+      "verification": [
+        "tests/season.test.ts: January normals within a few degrees for NYC, Boston, Seattle, Tucson, Miami, Atlanta, Minneapolis; snow/leaf/autumn/snowline by place and date",
+        "__PLACE__('burlington-jan') on ?day=25"
+      ],
+      "evidence": [
+        "src/world/season.ts",
+        "shots/place-burlington-jan.jpg"
+      ],
+      "notes": "Climatology, not weather: no storms or thaws yet. Snowbanks along ploughed kerbs are open."
     }
   ],
   "regions": {

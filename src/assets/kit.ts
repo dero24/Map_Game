@@ -60,7 +60,10 @@ function validateCar(c: CarRecipe): CarRecipe {
   c.roof = Math.max(c.belt + 0.3, c.roof);
   return c;
 }
-export function carGeometry(c: CarRecipe): THREE.BufferGeometry {
+/** `lite`: the kerbside version (a street's worth of parked cars per tile) — one bevel step, an
+ *  axle drum for wheels under simple arches, lamp bars, no grille or mirrors: the same silhouette,
+ *  glass and night lamps at about a third of the vertices. */
+export function carGeometry(c: CarRecipe, lite = false): THREE.BufferGeometry {
   const { L, W, wheelR: R, belt, roof } = c;
   const zf = -L / 2, zr = L / 2; // bow −z
   const sill = R * 0.95;
@@ -74,14 +77,14 @@ export function carGeometry(c: CarRecipe): THREE.BufferGeometry {
   // keeps its size and the bumpers stay proud of it
   const k = (L / 2 - 0.04) / (L / 2);
   const lowerIn = lower.map(([z, y]): [number, number] => [z * k, y < 0.5 ? y + 0.04 : y - 0.04]);
-  const parts: THREE.BufferGeometry[] = [part(profile(lowerIn, W, 0.1, 2), TINT)];
+  const parts: THREE.BufferGeometry[] = [part(lite ? profile(lowerIn, W, 0.07, 1) : profile(lowerIn, W, 0.1, 2), TINT)];
   // greenhouse: glass trapezoid from windshield base to the back of the cabin, roof slab on top
   const zw = zf + c.hood; // windshield base
   const zrear = c.rear === 'box' || c.rear === 'hatch' ? zr - 0.08 : zr - c.deck - 0.12;
   const zRoof0 = zw + c.windshield, zRoof1 = Math.max(zRoof0 + 0.4, zrear - c.rearGlass);
   const glass: [number, number][] = [[zw, belt - 0.02], [zRoof0, roof - 0.06], [zRoof1, roof - 0.06], [zrear, belt - 0.02]];
-  parts.push(part(profile(glass, W - 0.24, 0.03), 0x2a3440)); // glass set in from the body side
-  parts.push(part(profile([[zRoof0 - 0.05, roof - 0.07], [zRoof0 + 0.05, roof], [zRoof1 - 0.05, roof], [zRoof1 + 0.05, roof - 0.07]], W - 0.1, 0.03), TINT));
+  parts.push(part(profile(glass, W - 0.24, lite ? 0 : 0.03), 0x2a3440)); // glass set in from the body side
+  parts.push(part(profile([[zRoof0 - 0.05, roof - 0.07], [zRoof0 + 0.05, roof], [zRoof1 - 0.05, roof], [zRoof1 + 0.05, roof - 0.07]], W - 0.1, lite ? 0 : 0.03), TINT));
   // pillars between front and rear side windows (a B-pillar keeps it from reading as a bubble)
   const bz = (zRoof0 + zRoof1) / 2;
   parts.push(part(box(W - 0.1, roof - belt - 0.06, 0.12, 0, (roof + belt) / 2, bz), TINT));
@@ -93,20 +96,33 @@ export function carGeometry(c: CarRecipe): THREE.BufferGeometry {
     parts.push(part(box(W - 0.1, 0.45, 0.08, 0, belt + 0.2, zr - 0.06), TINT));
   }
   if (c.type === 'jeep') {
-    parts.push(part(new THREE.CylinderGeometry(0.36, 0.36, 0.25, 12).rotateX(Math.PI / 2).translate(0, belt, zr + 0.15), 0x1d1e21)); // spare
+    parts.push(part(new THREE.CylinderGeometry(0.36, 0.36, 0.25, lite ? 8 : 12).rotateX(Math.PI / 2).translate(0, belt, zr + 0.15), 0x1d1e21)); // spare
     parts.push(part(box(W + 0.18, 0.08, 1.0, 0, sill + 0.35, zf + 0.6), 0x2c2d30)); // flared fenders
     parts.push(part(box(W + 0.18, 0.08, 1.0, 0, sill + 0.35, zr - 0.6), 0x2c2d30));
   }
   // bumpers, grille, lights, mirrors
   parts.push(part(box(W + 0.02, 0.2, 0.18, 0, 0.36, zf + 0.06), 0x2c2d30), part(box(W + 0.02, 0.2, 0.18, 0, 0.36, zr - 0.06), 0x2c2d30));
-  parts.push(part(box(W * 0.46, 0.14, 0.04, 0, noseY - 0.2, zf - 0.005), 0x1f2226));
-  for (const s of [-1, 1]) {
-    parts.push(part(box(0.3, 0.12, 0.05, s * (W / 2 - 0.26), noseY - 0.14, zf - 0.01), 0xf6f1da, 3));
-    parts.push(part(box(0.26, 0.12, 0.05, s * (W / 2 - 0.2), belt - 0.22, zr + 0.01), 0x9a1c1c, 4));
-    parts.push(part(box(0.18, 0.1, 0.1, s * (W / 2 + 0.06), belt + 0.08, zw + 0.25), TINT));
-  }
+  if (!lite) parts.push(part(box(W * 0.46, 0.14, 0.04, 0, noseY - 0.2, zf - 0.005), 0x1f2226));
+  if (lite) {
+    // one lamp bar across each end (still tagged, so they light at night)
+    parts.push(part(box(W - 0.3, 0.12, 0.05, 0, noseY - 0.14, zf - 0.01), 0xf6f1da, 3));
+    parts.push(part(box(W - 0.3, 0.12, 0.05, 0, belt - 0.22, zr + 0.01), 0x9a1c1c, 4));
+  } else
+    for (const s of [-1, 1]) {
+      parts.push(part(box(0.3, 0.12, 0.05, s * (W / 2 - 0.26), noseY - 0.14, zf - 0.01), 0xf6f1da, 3));
+      parts.push(part(box(0.26, 0.12, 0.05, s * (W / 2 - 0.2), belt - 0.22, zr + 0.01), 0x9a1c1c, 4));
+      parts.push(part(box(0.18, 0.1, 0.1, s * (W / 2 + 0.06), belt + 0.08, zw + 0.25), TINT));
+    }
   // wheels at the axle positions implied by the overhangs
   const af = zf + Math.min(0.95, L * 0.19), ar = zr - Math.min(1.05, L * 0.21);
+  if (lite) {
+    // an axle-long octagonal drum per axle (its end caps are the tyres) under a dark arch
+    for (const z of [af, ar]) {
+      parts.push(part(new THREE.CylinderGeometry(R, R, W - 0.16, 8).rotateY(Math.PI / 8).rotateZ(Math.PI / 2).translate(0, R, z), 0x1d1e21)); // a flat down: sits on the road
+      for (const s of [-1, 1]) parts.push(part(new THREE.CircleGeometry(R + 0.07, 5, 0, Math.PI).rotateY((s * Math.PI) / 2).translate(s * (W / 2 + 0.004), R, z), 0x151618));
+    }
+    return merge(parts);
+  }
   for (const s of [-1, 1])
     for (const z of [af, ar]) {
       parts.push(...wheel(R, 0.24, s * (W / 2 - 0.1), z));
@@ -346,6 +362,14 @@ export const carLib = (type: CarType, gear?: CarGear | null) =>
     const r = carRecipe(type, 1);
     return gear ? merge([carGeometry(r), gearGeometry(gear, r.roof, r.L, r.W, type.length)]) : carGeometry(r);
   });
+export const carLiteLib = (type: CarType) => cached(`carlite:${type}`, () => carGeometry(carRecipe(type, 1), true));
+/** The far proxy: a unit car (1 m wide, 1 m to the roof, 1 m long; bow −z) — a body block and a
+ *  glass cabin block — scaled per instance to its type's recipe. 72 vertices: a street of them
+ *  150 m away costs what one detailed car does. */
+export const carFarLib = () =>
+  cached('carfar', () => merge([part(box(1, 0.56, 1, 0, 0.3, 0), TINT), part(box(0.86, 0.42, 0.52, 0, 0.78, 0.04), 0x2a3440)]));
+/** A type's proxy scale (width, roof height, length) for carFarLib. */
+export const carFarScale = (type: CarType): [number, number, number] => { const r = carRecipe(type, 1); return [r.W, r.roof, r.L]; };
 export const boatLib = (type: BoatType) => cached('boat:' + type, () => boatGeometry(boatRecipe(type, 1)));
 export const rockLib = (type: RockType, v: number) => cached(`rock:${type}:${v}`, () => rockGeometry(type, v + 1));
 // Street mix (weights). CAR_MIX is the US default; carMix() shifts it by region + climate so the

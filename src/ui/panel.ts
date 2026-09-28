@@ -11,7 +11,7 @@ import { lifeParams } from '../sim/life';
 import { audioParams } from '../audio/ambience';
 
 export const timeParams = { realTime: true, hour: 18.5, speed: 60, dayOfYear: 0 };
-export const weatherParams = { cloud: 0.35, seaFog: 0.0, haze: 0.35, wind: 0.5, autoWeather: true };
+export const weatherParams = { cloud: 0.35, seaFog: 0.0, haze: 0.35, wind: 0.5, autoWeather: true, snow: -1 }; // snow −1 = the season's own (season.ts)
 export const debugParams = { rawScene: false, showStats: false, lightScale: 1 };
 
 let STORE = 'world.panel.v3';
@@ -21,11 +21,14 @@ const DEFAULTS = JSON.parse(JSON.stringify(bags)) as Record<string, Bag>;
 const U_KEYS = ['uPigment', 'uPigmentScale', 'uShadowStrength'] as const;
 const U_DEFAULTS = Object.fromEntries(U_KEYS.map((k) => [k, U[k].value as number]));
 
+/** `bag.key` for every knob the player saved (auto-quality never overrides those). */
+export const userKeys = new Set<string>();
+
 export function loadSettings(region = 'world') {
   STORE = `${region}.panel.v3`; // v3: diffs only; older full snapshots are retired
   try {
     const saved = JSON.parse(localStorage.getItem(STORE) ?? '{}') as Record<string, Bag>;
-    for (const [k, bag] of Object.entries(bags)) if (saved[k]) for (const [p, v] of Object.entries(saved[k])) if (p in bag && typeof v === typeof bag[p]) bag[p] = v;
+    for (const [k, bag] of Object.entries(bags)) if (saved[k]) for (const [p, v] of Object.entries(saved[k])) if (p in bag && typeof v === typeof bag[p]) (bag[p] = v), userKeys.add(`${k}.${p}`);
     if (saved.uniforms) for (const [p, v] of Object.entries(saved.uniforms)) if (p in U && typeof v === 'number') (U as unknown as Record<string, { value: number }>)[p].value = v;
   } catch { /* fresh start */ }
 }
@@ -49,7 +52,7 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   // Look: named presets first (each sets the watercolor knobs below), then the resolution and
   // colour-grade knobs a look is mostly made of. Picking a look saves like any other knob.
   const look = gui.addFolder('Look');
-  const pick = { look: 'watercolor' };
+  const pick = { look: 'watercolor HD' };
   look.add(pick, 'look', Object.keys(LOOKS)).name('preset').onChange((k: string) => {
     Object.assign(postParams, LOOKS[k]);
     hooks.onResize();
@@ -68,6 +71,7 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   t.add(timeParams, 'realTime').name(`real clock (${tzName})`).listen();
   t.add(timeParams, 'hour', 0, 24, 0.01).name('hour').listen().onChange(() => (timeParams.realTime = false));
   t.add(timeParams, 'speed', 0, 3600, 1).name('time speed ×');
+  t.add(timeParams, 'dayOfYear', 0, 366, 1).name('day of year (0 = today)'); // the season follows: snow, bare trees, autumn
   const presets = { sunrise: () => hooks.onPreset(6.9), morning: () => hooks.onPreset(9.5), noon: () => hooks.onPreset(12.9), golden: () => hooks.onPreset(18.35), dusk: () => hooks.onPreset(19.25), night: () => hooks.onPreset(22.5) };
   for (const k of Object.keys(presets)) t.add(presets, k as keyof typeof presets);
 
@@ -77,6 +81,7 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   w.add(weatherParams, 'seaFog', 0, 1, 0.01).name('sea fog').listen();
   w.add(weatherParams, 'haze', 0, 1, 0.01);
   w.add(weatherParams, 'wind', 0, 1.5, 0.01).listen();
+  w.add(weatherParams, 'snow', -1, 1, 0.01).name('snow (−1 = season)');
 
   const life = gui.addFolder('Life & sound');
   life.add(lifeParams, 'enabled').name('townsfolk, cars, gulls');

@@ -1,0 +1,65 @@
+// Seasons: what the date does to a place — snow on the ground, bare branches, autumn colour, the
+// snowline on the far mountains. A pure function of latitude, longitude, the ground's elevation and
+// the day of the year, so every visitor to a town on the same date sees the same season.
+//
+// The model is a coarse climatology, not weather: a January mean temperature from latitude, the
+// climate class and the elevation (6 °C a kilometre), an annual swing by climate, and a two-week
+// lag (snowpack and leaves follow the air). Snow lies where the lagged mean is near freezing;
+// broadleaf trees drop their leaves below ~11 °C and colour on the way down in autumn.
+import { climateAt, naSub, worldRegion, type Climate } from './styles';
+
+export interface Season {
+  /** 0..1 snow cover on the ground and roofs */
+  snow: number;
+  /** 0..1 share of a broadleaf crown's leaves that are down */
+  leafFall: number;
+  /** 0..1 autumn colour in the leaves still up */
+  autumn: number;
+  /** elevation (m) above which the far mountains are white */
+  snowline: number;
+  /** the lagged mean air temperature (°C) at the given elevation — for tests and tuning */
+  temp: number;
+}
+
+const ADJ: Record<Climate, number> = { temperate: 0, continental: -6, boreal: -9, polar: -12, arid: 2, mediterranean: 3, tropical: 2 };
+const SWING: Record<Climate, number> = { temperate: 20, continental: 28, boreal: 32, polar: 25, arid: 18, mediterranean: 12, tropical: 8 };
+
+/** January mean (°C) at sea level and the annual swing for a place. */
+export function climateNormals(lat: number, lon: number): { jan: number; swing: number } {
+  const c = climateAt(lat, lon);
+  let jan = 27 - 0.85 * Math.max(0, Math.abs(lat) - 15) + ADJ[c], swing = SWING[c];
+  if (worldRegion(lat, lon) === 'na') {
+    const sub = naSub(lat, lon);
+    // the Pacific Northwest's mild marine winters; the continental cold of the East's coast
+    if (sub === 'pnw') (jan += 5), (swing = 13);
+    else if (lon > -100 && c === 'temperate') (jan -= 4), (swing = 24);
+  }
+  return { jan, swing };
+}
+
+/** Mean air temperature on day `doy` (1..366) at `elev` metres. */
+export function meanTemp(lat: number, lon: number, elev: number, doy: number): number {
+  const { jan, swing } = climateNormals(lat, lon);
+  const d = lat < 0 ? doy + 182.5 : doy; // the southern year is half a turn round
+  return jan - 6 * Math.max(0, elev) / 1000 + (swing * (1 - Math.cos((2 * Math.PI * (d - 20)) / 365.25))) / 2;
+}
+
+export function seasonAt(lat: number, lon: number, elev: number, doy: number): Season {
+  const T = meanTemp(lat, lon, elev, doy - 12); // snowpack and leaves lag the air by a fortnight
+  const snow = Math.min(1, Math.max(0, (2 - T) / 6));
+  const leafFall = Math.min(1, Math.max(0, (11 - T) / 4));
+  // colour turns on the way down (the cooling half of the year), peaking near 13 °C
+  const d = lat < 0 ? doy + 182.5 : doy;
+  const cooling = Math.sin((2 * Math.PI * (d - 20)) / 365.25) < 0;
+  const autumn = cooling ? Math.min(1, Math.max(0, 1 - Math.abs(T - 13) / 5)) * (1 - 0.5 * leafFall) : 0;
+  // the far mountains: white where the (unlagged-enough) mean at that height is below −2 °C
+  const sea = meanTemp(lat, lon, 0, doy - 12);
+  const snowline = Math.max(250, ((sea + 2) / 6.5) * 1000);
+  return { snow, leafFall, autumn, snowline, temp: T };
+}
+
+/** Day of the year (1..366) of a timestamp, in UTC. */
+export function dayOfYear(ms: number): number {
+  const d = new Date(ms), start = Date.UTC(d.getUTCFullYear(), 0, 1);
+  return Math.floor((ms - start) / 86400000) + 1;
+}

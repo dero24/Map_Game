@@ -68,8 +68,10 @@ export async function buildTile(tj: TileJson, terrain: Terrain, spec: TileSpec, 
     towers: structures.towers.flatMap((v) => [v.x, v.y, v.z]),
     plans,
     roads: pj.roads,
+    areas: pj.areas,
     poles: signs.poles,
     atlas: await canvasBitmap(signs.atlas),
     lampPts: props.lampPts,
+    kerb: props.kerb.length ? props.kerb : undefined,
   };
 }

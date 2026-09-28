@@ -8,6 +8,7 @@
 // semantics mirror scripts/lib/tiles.mjs partitionEntities: entities within the 48 m
 // margin emit for context; `own: 0` marks the ones a neighbour cell owns.
 import type { Area, Box, Building, Line, Point, Road, TileJson } from './data';
+import { worldRegion } from './styles';
 
 export interface LatLon { lat: number; lon: number }
 export interface OsmNode { lat: number; lon: number }
@@ -333,11 +334,38 @@ const roofMaterialColour = (v: unknown) => (v ? ROOF_MAT[String(v).toLowerCase()
 // ---------------- tag tables (port of scripts/bake.mjs) ----------------
 
 const ROAD_W: Record<string, number> = { motorway: 14, trunk: 12, primary: 11, primary_link: 6, secondary: 9, secondary_link: 6, tertiary: 8, tertiary_link: 5, residential: 6.5, unclassified: 6, living_street: 5, service: 4, pedestrian: 5, track: 3, footway: 1.8, path: 1.5, cycleway: 2, steps: 2, bridleway: 2, construction: 5 };
+const PARK_DEFAULT = new Set(['residential', 'unclassified', 'tertiary', 'secondary']);
+// Street parking on one side of a way, in either OSM scheme (`parking:<side>` + orientation, or
+// the older `parking:lane:<side>`): 0 none / not on the carriageway, 1 parallel, 2 angled.
+export function parkSide(t: Record<string, string>, s: 'left' | 'right'): 0 | 1 | 2 {
+  const v = t[`parking:${s}`] ?? t['parking:both'];
+  if (v) {
+    if (v !== 'lane' && v !== 'street_side' && v !== 'half_on_kerb' && v !== 'yes') return 0;
+    const o = t[`parking:${s}:orientation`] ?? t['parking:both:orientation'];
+    return o === 'diagonal' || o === 'perpendicular' ? 2 : 1;
+  }
+  const l = t[`parking:lane:${s}`] ?? t['parking:lane:both'];
+  return l === 'parallel' || l === 'marked' ? 1 : l === 'diagonal' || l === 'perpendicular' ? 2 : 0;
+}
 const ROOF_TAG: Record<string, Building['roof']> = { gabled: 'gable', gable: 'gable', hipped: 'hip', hip: 'hip', 'half-hipped': 'hip', side_hipped: 'hip', pyramidal: 'hip', flat: 'flat', skillion: 'skillion', lean_to: 'skillion', gambrel: 'gable', mansard: 'hip', saltbox: 'gable', dome: 'hip', round: 'hip', onion: 'hip', cone: 'hip', butterfly: 'flat', sawtooth: 'flat' };
 const CLS_COMMERCIAL = new Set(['commercial', 'retail', 'office', 'hotel', 'civic', 'public', 'school', 'fire_station', 'government', 'hospital', 'supermarket', 'restaurant', 'kiosk', 'industrial', 'warehouse', 'college', 'university', 'train_station', 'transportation', 'clinic']);
 const CLS_CHURCH = new Set(['church', 'chapel', 'cathedral', 'temple', 'mosque', 'synagogue', 'religious', 'shrine']);
 const CLS_SHED = new Set(['garage', 'garages', 'shed', 'carport', 'hut', 'cabin', 'boathouse', 'outbuilding', 'roof']);
 
+// (bake.mjs AREA_CLASS, less the ones the query doesn't ask for; water, beach and wetland are WATER_CLASS)
+const LAND_CLASS = (t: Record<string, string>): string | null => {
+  if (t.building) return null;
+  if ((t.amenity === 'parking' && !/^(multi-storey|underground|rooftop)$/.test(t.parking ?? '')) || t.parking === 'surface') return 'parking';
+  if (t.leisure === 'swimming_pool') return 'pool';
+  if (t.natural === 'wood' || t.landuse === 'forest') return 'wood';
+  if (t.natural === 'scrub' || t.natural === 'heath') return 'scrub';
+  if (t.leisure === 'pitch' || t.leisure === 'playground') return 'pitch';
+  if (t.leisure === 'golf_course') return 'golf';
+  if (t.leisure === 'park' || t.leisure === 'garden' || t.landuse === 'grass' || t.landuse === 'recreation_ground' || t.leisure === 'recreation_ground' || t.landuse === 'village_green' || t.landuse === 'meadow' || t.natural === 'grassland' || t.landuse === 'cemetery') return 'grass';
+  if (t.leisure === 'marina') return 'marina';
+  if (t.area === 'yes' && t.highway === 'pedestrian') return 'plaza';
+  return null;
+};
 const WATER_CLASS = (t: Record<string, string>) => {
   if (t.natural === 'water' || t.waterway === 'riverbank' || t.water === 'river') return 'water';
   if (t.natural === 'beach' || t.natural === 'sand') return 'beach';
@@ -366,7 +394,9 @@ export function overpassQuery(bb: { s: number; w: number; n: number; e: number }
   relation["building"];
   way["building:part"];
   relation["building:part"];
-  way["natural"~"^(water|coastline|beach|sand|wetland)$"];
+  way["natural"~"^(water|coastline|beach|sand|wetland|wood|scrub|heath|grassland)$"];
+  way["amenity"="parking"];
+  relation["amenity"="parking"];
   relation["natural"="water"];
   way["waterway"="riverbank"];
   node["natural"="tree"];
@@ -374,6 +404,7 @@ export function overpassQuery(bb: { s: number; w: number; n: number; e: number }
   node["highway"="traffic_signals"];
   node["emergency"="fire_hydrant"];
   node["railway"="subway_entrance"];
+  node["highway"="bus_stop"];
   node["name"]["amenity"~"^(cafe|restaurant|fast_food|bar|pub|biergarten|ice_cream|bank|pharmacy|post_office|library|nightclub)$"];
   node["name"]["shop"];
   node["name"]["office"];
@@ -381,9 +412,9 @@ export function overpassQuery(bb: { s: number; w: number; n: number; e: number }
   way["man_made"~"^(groyne|breakwater|pier)$"];
   way["barrier"~"^(fence|wall|retaining_wall)$"];
   way["power"="line"];
-  way["railway"="rail"];
-  way["leisure"~"^(park|pitch|playground|garden|recreation_ground)$"];
-  way["landuse"~"^(forest|farmland|meadow|reservoir|cemetery|basin|quarry|landfill|grass)$"];
+  way["railway"~"^(rail|tram|light_rail)$"];
+  way["leisure"~"^(park|pitch|playground|garden|recreation_ground|swimming_pool|golf_course|marina)$"];
+  way["landuse"~"^(forest|farmland|meadow|reservoir|cemetery|basin|quarry|landfill|grass|recreation_ground|village_green)$"];
   relation["leisure"~"^(park|pitch|playground|garden|recreation_ground)$"];
   relation["landuse"~"^(forest|farmland|meadow|reservoir|cemetery|basin|quarry|landfill|grass)$"];
 );out geom qt;`;
@@ -396,6 +427,9 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
   const S: Box = { x0: box.x0 - margin, z0: box.z0 - margin, x1: box.x1 + margin, z1: box.z1 + margin };
   const inB = (x: number, z: number, m = 0) => x >= box.x0 - m && x <= box.x1 + m && z >= box.z0 - m && z <= box.z1 + m;
   const els = (osm.elements ?? []).slice().sort((a, b) => a.id - b.id); // stable output regardless of server ordering
+  // North American town streets park both kerbs unless mapped otherwise (a 30–36 ft street is a
+  // lane each way between two parked lanes); elsewhere only mapped parking counts
+  const parkByDefault = worldRegion(...P.unproject((box.x0 + box.x1) / 2, (box.z0 + box.z1) / 2)) === 'na';
 
   const q = (v: number) => Math.round(v * 10); // 0.1 m quantization, as baked
   const flat = (pts: P2[]) => pts.flatMap(([x, z]) => [q(x), q(z)]);
@@ -437,6 +471,7 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
   const blockO: P2[][] = []; // landuse/leisure rings fills must not plant on (not rendered — reject masks)
   const blockI: P2[][] = [];
   const BLOCK = (t: Record<string, string>) =>
+    t.amenity === 'parking' ||
     (t.leisure && /^(park|pitch|playground|garden|recreation_ground)$/.test(t.leisure)) ||
     (t.landuse && /^(forest|farmland|meadow|reservoir|cemetery|basin|quarry|landfill|grass)$/.test(t.landuse));
 
@@ -458,7 +493,8 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       // Point furniture — same tag→class the bake emits; props.ts consumes these.
       const pc = t.natural === 'tree' ? 'tree' : t.amenity === 'bench' ? 'bench'
         : t.highway === 'traffic_signals' ? 'signal' : t.emergency === 'fire_hydrant' ? 'hydrant'
-        : t.railway === 'subway_entrance' || (t.railway === 'train_station_entrance' && t.subway === 'yes') ? 'subway' : null;
+        : t.railway === 'subway_entrance' || (t.railway === 'train_station_entrance' && t.subway === 'yes') ? 'subway'
+        : t.highway === 'bus_stop' ? (t.shelter === 'yes' ? 'bus_shelter' : 'bus') : null;
       if (pc && e.lat != null && e.lon != null) {
         const [x, z] = P.project(e.lat, e.lon);
         if (inB(x, z, margin))
@@ -470,8 +506,15 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       const pts = wayPts(e);
       if (pts.length < 2) continue;
       let w = parseFloat(t.width) || ROAD_W[t.highway];
-      if (t.highway === 'primary' && t.lanes) w = Math.max(w, parseInt(t.lanes) * 3.4 + 1.5);
+      // mapped lanes set the carriageway (3.2 m a lane, a metre of gutter) when no width is tagged
+      const lanes = parseInt(t.lanes);
+      if (!t.width && lanes > 0 && ROAD_W[t.highway] >= 6) w = Math.max(w, lanes * 3.2 + 1);
       if (t.footway === 'sidewalk') w = 1.6;
+      // mapped street parking widens the carriageway when no width is tagged (a parked lane is
+      // 2.2 m, angled bays 4.8 m) and lets props line that kerb with cars
+      let pl = parkSide(t, 'left'), pr = parkSide(t, 'right');
+      if (parkByDefault && PARK_DEFAULT.has(t.highway) && !Object.keys(t).some((k) => k.startsWith('parking')) && !t.width && t.bridge !== 'yes' && t.tunnel !== 'yes' && t.area !== 'yes') pl = pr = 1;
+      if (!t.width && ROAD_W[t.highway] >= 5) w += [0, 2.2, 4.8][pl] + [0, 2.2, 4.8][pr];
       const p = flat(pts);
       if (!anyVertex(p, margin)) continue;
       const r: Road = { p, c: t.highway, w: +w.toFixed(1), own: ownV(p) };
@@ -482,7 +525,10 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       if (t.oneway === 'yes') r.ow = 1;
       if (t.footway === 'sidewalk') r.sw = 1;
       if (t.service) r.sv = t.service;
+      if (pl || pr) r.pk = pl + 4 * pr;
       roads.push(r);
+      // trolleybus wires hang over the road itself (Seattle, San Francisco, Dayton)
+      if (t.trolley_wire === 'yes' || t['trolley_wire:forward'] === 'yes' || t['trolley_wire:backward'] === 'yes') lines.push({ c: 'trolley', p, w: r.w, own: r.own });
       continue;
     }
     // Linear structures — the same classes the bake emits (structures.ts / props.ts consume them):
@@ -496,6 +542,7 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         : t.barrier === 'wall' || t.barrier === 'retaining_wall' ? 'wall'
         : t.power === 'line' ? 'power' // transmission: its own tall poles (props.ts); minor lines are the street poles
         : t.railway === 'rail' ? 'rail'
+        : (t.railway === 'tram' || t.railway === 'light_rail') && t.tunnel !== 'yes' && t.layer !== '-1' ? 'tram'
         : null;
       if (lc) {
         const pts = wayPts(e);
@@ -610,6 +657,19 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       if (t.name) a.n = t.name;
       areas.push(a);
       continue;
+    }
+    // Land areas the ground paints (the bake's classes): parks and lawns, woods and scrub, pitches
+    // and playgrounds, pools, golf, marinas, pedestrian plazas — and surface parking lots, which
+    // props.ts stripes and fills with cars (lots.ts)
+    const la = LAND_CLASS(t);
+    if (la) {
+      const rings = areaRings(e);
+      if (!rings) continue;
+      const o = rings.outer.map((ring) => flat(simplify(cleanRing(ring), 0.25))).filter((f) => f.length >= 6);
+      if (!o.length || !o.some((ring) => anyVertex(ring, margin))) continue;
+      const a: Area = { c: la, o, i: rings.inner.map((ring) => flat(simplify(cleanRing(ring), 0.25))).filter((f) => f.length >= 6), own: ownV(o[0]) };
+      if (t.name) a.n = t.name;
+      areas.push(a);
     }
   }
 
@@ -730,7 +790,7 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
     for (const r of roads) if (MAIN.has(r.c)) for (let i = 0; i + 3 < r.p.length; i += 2) segs.push([r.p[i] / 10, r.p[i + 1] / 10, r.p[i + 2] / 10, r.p[i + 3] / 10, r.w]);
     if (segs.length)
       for (const b of buildings) {
-        if (!b.at || b.gf || (b.k !== 'large' && b.k !== 'house') || (b.s >>> 4) % 100 >= 75) continue;
+        if (!b.at || b.gf || (b.k !== 'large' && b.k !== 'house') || (b.s >>> 4) % 100 >= 88) continue;
         let cx = 0, cz = 0;
         const n = b.r.length >> 1;
         for (let i = 0; i < n; i++) (cx += b.r[i * 2] / 10), (cz += b.r[i * 2 + 1] / 10);

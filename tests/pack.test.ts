@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
 import { Terrain, TerrainLayer } from '../src/world/data';
 import { WalkWorld } from '../src/player/collision';
-import { RecWalk, packDeck, unpackDeck, replayOps, matTag, packGroup, buildObject, type BuiltTile } from '../src/world/pack';
+import { RecWalk, packDeck, unpackDeck, replayOps, matTag, matFromTag, packGroup, buildObject, type BuiltTile } from '../src/world/pack';
 import { propMaterial } from '../src/render/propMaterial';
 import { buildingMaterial } from '../src/world/buildings';
 import { wireMaterial, haloMaterial } from '../src/world/props';
@@ -125,6 +125,10 @@ describe('matTag', () => {
     expect(matTag(propMaterial())).toEqual({ t: 'prop', o: { wind: false, bob: false, foliage: false, emissive: undefined, emissiveNight: false } });
     const p = matTag(propMaterial({ wind: true, foliage: true }));
     expect(p).toEqual({ t: 'prop', o: { wind: true, bob: false, foliage: true, emissive: undefined, emissiveNight: false } });
+    // broadleaf crowns keep their seasonal define through the pack
+    const dm = matTag(propMaterial({ wind: true, foliage: true, crown: [4, 2], decid: true }));
+    expect(dm.t === 'prop' && dm.o.decid).toBe(true);
+    expect((matFromTag(dm) as THREE.ShaderMaterial).defines.DECID).toBe(1);
     const e = matTag(propMaterial({ emissive: new THREE.Color(1, 0.72, 0.4), emissiveNight: true }));
     expect(e.t).toBe('prop');
     if (e.t === 'prop') {

@@ -27,7 +27,7 @@ References:
 | Dark navy awnings, hanging signs, shop names | `name`, Building.u → per-building fascia/awning shader, signs.ts | 🟡 |
 | Black acorn lampposts lining the downtown sidewalk; US-flag banners on the lamps in summer | commercial doors along the street → main-street lamp posts (props.ts; acorn in North America); calendar → banners (⬜) | 🟡 |
 | Wooden utility poles with crossarms, transformer cans, **dense overhead wires crossing the street**; cobra-head lights on the poles | road class + region → poles/wires (props) | 🟡 |
-| Continuous parallel parking on both sides | commercial frontage → curbside parking | 🟡 |
+| Continuous parallel parking on both sides | commercial frontage → curbside parking; streamed North American streets park both kerbs (or by OSM `parking:*`), occupancy by built cover — the baked shore's roads don't carry it yet | 🟡 |
 | Crosswalk ladder bars, a "yield to pedestrians" sign in the centre line, red hydrants, yellow kerbs | junctions of a tertiary+ road → ladder crosswalks (groundPaint.ts); OSM `traffic_signals` → signal masts; OSM hydrants; yield signs / kerb paint ⬜ | 🟡 |
 | Double-yellow centre line; wide shoulders | road class → ground paint | ✅ |
 
@@ -59,9 +59,9 @@ References:
 | Barrio row houses **at the sidewalk** with no setback, tall narrow dark-framed windows, stone foundation band | footprint position against the road + style | 🟡 |
 | Mesquite and palo verde (feathery, yellow-green), agave and yucca, gravel yards, **no lawns** | arid climate → `mesquite` / palo verde tree kind (flora.ts); agave, gravel ground ⬜ | 🟡 |
 | Low block or stucco garden walls and wrought iron, **not picket fences** | adobe/stucco family → rendered yard walls, some with iron (props.ts); pickets only where houses wear clapboard | ✅ |
-| Wooden utility poles and overhead wires; sun-bleached, cracked asphalt | region → poles; climate → asphalt tone | 🟡 |
+| Wooden utility poles and overhead wires; sun-bleached, cracked asphalt | region → poles + wires (a blocked pole no longer ends the run); climate → bleached tone, hairline cracks + sealed patches | ✅ |
 | Downtown towers on the skyline (One South Church, the UniSource building) | footprint heights | 🟡 |
-| 4th Ave: storefronts, murals, streetcar tracks with overhead wire, neon at the bars at night | OSM `railway=tram` (⬜), use=bar → neon at night (⬜) | 🟡 |
+| 4th Ave: storefronts, murals, streetcar tracks with overhead wire, neon at the bars at night | OSM `railway=tram` → rails in the street + contact wire on bracket poles; use=bar → neon at night (⬜) | 🟡 |
 
 ## New York, NY — Midtown avenues
 
@@ -73,8 +73,8 @@ References:
 |---|---|---|
 | **Street canyon**: 150–300 m towers both sides, sky a narrow slot | `plausibleHeight` (m/ft, floors) + `building:part` setbacks (realTile.ts, buildings.ts); a far skyline ring past 1.5 km ⬜ | ✅ |
 | Dark glass curtain walls with vertical mullion stripes; limestone / granite / brick towers with punched windows | material, `start_date` era, height → curtain wall (siding 5) or masonry (recipe.ts); penthouses + water tanks | ✅ |
-| Yellow taxis in most of the traffic; buses | built volume → taxi share + regional livery (life.ts); buses from `route=bus` ⬜ | 🟡 |
-| Zebra crosswalks, signal mast arms, bishop's-crook lamps, street trees in pits, trash cans | crosswalks, OSM signals → masts, dense cores → steel masts not wooden poles, paved dense blocks; subway entrances; tree pits, bins ⬜ | 🟡 |
+| Yellow taxis in most of the traffic; buses | built volume → taxi share + regional livery (life.ts); OSM bus stops → sign + shelter; buses from `route=bus` ⬜ | 🟡 |
+| Zebra crosswalks, signal mast arms, bishop's-crook lamps, street trees in pits, trash cans; parked cars nose to tail | crosswalks (junctions only), OSM signals → masts, dense cores → steel masts, paved dense blocks; subway entrances; tree pits + bins; kerb parking with a per-car LOD | ✅ |
 | Ground-floor retail glass, lit signs and screens | Building.u + density | 🟡 |
 | Sound: traffic roar, horns, sirens, crowds | built volume → roar, horns, sirens, crowd, pigeons (ambience.ts) | ✅ |
 
@@ -85,7 +85,7 @@ Reference: [Downtown Seattle street scene](https://commons.wikimedia.org/wiki/Fi
 | Trait | Signal → system | Status |
 |---|---|---|
 | Red-brick high-rises with fire escapes; white terracotta storefront blocks; glass towers behind | heights, materials, era; fire escapes on NA brick walk-ups | 🟡 |
-| Trolleybus overhead wires over the streets | OSM `trolley_wire=yes` / `railway=tram` | ⬜ |
+| Trolleybus overhead wires over the streets | OSM `trolley_wire` on the road → a wire pair over each direction on kerbside bracket poles | 🟡 (untested here) |
 | Steep hills, water (Elliott Bay), Mount Rainier on clear days | DEM near + far ring, water | 🟡 near / ⬜ far |
 | Neon signs; painted wall ads | use=shop/bar + era | ⬜ |
 
@@ -98,6 +98,20 @@ Reference: [Ocean Drive, Art Deco Historic District](https://commons.wikimedia.o
 | White and pastel Art Deco hotels (3–4 storeys, rounded corners, "eyebrow" ledges, turquoise / yellow trim) | tropical climate + style family → deco facade vocabulary | ⬜ |
 | Café terraces along the whole block: bright umbrellas and awnings | Building.u (restaurants) → terraces | 🟡 |
 | Lines of tall coconut palms; yellow kerbs; green bike lane; condo towers beyond | tropical trees; road paint; heights | 🟡 |
+
+## Burlington, VT — a northern town in January (seasons)
+
+Reference: [Church Street Marketplace](https://en.wikipedia.org/wiki/Church_Street_Marketplace) (brick
+Italianate and Queen Anne blocks, a brick-paved pedestrian mall); Burlington's winters: snow on the
+ground most of January, ploughed streets, bare maples, snow on roofs and conifers.
+
+| Trait | Signal → system | Status |
+|---|---|---|
+| Snow on lawns, roofs, sills and parked cars; ploughed streets with slushy tracks | date + latitude + climate + elevation → season.ts snow → `snowOn` on everything facing the sky; paved ribbons keep 30 % | ✅ |
+| Bare maples and oaks; dark conifers with snow on top | season.ts leaf fall → broadleaf crowns (DECID) drop clump by clump; conifers keep theirs | ✅ |
+| Blazing reds and oranges in early October | season.ts autumn colour per tree | 🟡 (tested by model, not yet by montage) |
+| Early sunset, low sun, long shadows | the world's date → the sun | ✅ |
+| Snowbanks along the kerbs | ⬜ | ⬜ |
 
 ---
 

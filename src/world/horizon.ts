@@ -1,7 +1,7 @@
 // The horizon ring: real terrain from just inside the coarse tile ring (~6 km) out to 80 km, so
 // the mountains a place is known by stand on its skyline — the Santa Catalinas over Tucson,
-// Rainier over Seattle, the Watchungs behind a Jersey town. One low-zoom Terrarium read (z9,
-// ~250 m a pixel) becomes a polar mesh drawn right after the sky with no depth, back to front:
+// Rainier over Seattle, the Watchungs behind a Jersey town. One low-zoom Terrarium read (z10,
+// ~130 m a pixel) becomes a polar mesh drawn right after the sky with no depth, back to front:
 // whatever is nearer (the tiles) paints over it, and its own nearer rings paint over its
 // farther ones. Earth curvature drops the far rim; an aerial-perspective wash takes it toward
 // the sky. Rebuilt when you walk more than 5 km from its centre. Deterministic: a pure function
@@ -12,7 +12,7 @@ import { makeProjector, type LatLon } from './realTile';
 import { paintMaterial } from '../render/shared';
 import type { RegionStyle } from './styles';
 
-const R0 = 6000, R1 = 80000, RINGS = 44, SEG = 240, ZOOM = 9;
+const R0 = 6000, R1 = 70000, RINGS = 48, SEG = 288, ZOOM = 10;
 const EARTH = 6371000 * (7 / 6); // standard refraction lengthens the apparent radius
 
 /** Ground tone for the far hills by climate, before haze: forest, scrub, desert, tundra. */
@@ -27,8 +27,9 @@ function toneFor(st: Pick<RegionStyle, 'climate'>): [number, number] {
   }
 }
 
-export function horizonMaterial() {
+export function horizonMaterial(haze = 1) {
   const m = paintMaterial({
+    uniforms: { uHaze: { value: haze } },
     vertex: /* glsl */ `
       attribute vec3 color;
       varying vec3 vCol;
@@ -42,14 +43,18 @@ export function horizonMaterial() {
       }`,
     fragment: /* glsl */ `
       varying vec3 vCol;
+      uniform float uHaze;
       void main() {
         vec3 N = normalize(vNormalW);
         vec3 col = paintLight(pigment(vCol, vWorldPos * 0.05), N, vWorldPos, 1.0, 1.0);
         vec3 v = vWorldPos - (cameraPosition + uWorldOffset);
         float d = length(v);
-        col = applyFog(col, vWorldPos);
-        // aerial perspective: distant ranges go blue-grey toward the sky, never quite vanish
-        col = mix(col, fogColorDir(v / max(d, 1.0)), 0.72 * (1.0 - exp(-d / 42000.0)));
+        // the local haze by the air's clarity (dry desert air carries 100 km), then aerial
+        // perspective: distant ranges go a deep blue-violet under the sky's own tone — a
+        // silhouette that reads as mountains — rather than fading into the pale horizon glow
+        col = mix(col, applyFog(col, vWorldPos), uHaze);
+        vec3 far = fogColorDir(v / max(d, 1.0)) * vec3(0.8, 0.83, 0.98);
+        col = mix(col, far, 0.78 * (0.5 + 0.5 * uHaze) * (1.0 - exp(-d / 38000.0)));
         gl_FragColor = vec4(col, 1.0);
       }`,
     depthWrite: false,
@@ -63,11 +68,22 @@ export class Horizon {
   private cx = Infinity;
   private cz = Infinity;
   private busy = false;
-  private mat = horizonMaterial();
+  private mat: THREE.ShaderMaterial;
   private gen = 0;
+  /** the season's snowline (season.ts); null until the first season read */
+  private snowline: number | null = null;
+  private builtSnow: number | null = null;
 
   constructor(private origin: LatLon, private style: Pick<RegionStyle, 'climate'>, private enabled: boolean) {
     this.group.name = 'horizon';
+    // dry air carries far: desert ranges stand sharp and violet at 30 km, humid ones go pale
+    this.mat = horizonMaterial(style.climate === 'arid' ? 0.45 : style.climate === 'mediterranean' || style.climate === 'polar' ? 0.7 : 1);
+  }
+
+  /** The season's snowline: a move of 250 m or more (a new month, a new date) rebuilds the ring. */
+  setSnowline(m: number) {
+    this.snowline = m;
+    if (this.builtSnow !== null && Math.abs(m - this.builtSnow) > 250 && !this.busy) this.cx = Infinity;
   }
 
   /** Call per frame with the walker's region position; rebuilds off the frame when due. */
@@ -95,7 +111,10 @@ export class Horizon {
     const dLat = (R1 / 111320) * 1.02, dLon = dLat / Math.max(0.2, Math.cos((clat * Math.PI) / 180));
     const at = await demSampler(ZOOM, { s: clat - dLat, n: clat + dLat, w: clon - dLon, e: clon + dLon });
     if (!at) return null;
-    const snow = Math.max(700, 5600 - 75 * Math.abs(clat)); // snowline falls with latitude
+    // the snowline: the season's (season.ts — low in a northern winter, only the high peaks in
+    // summer), or by latitude alone before the first season read
+    const snow = this.snowline ?? Math.max(700, 5600 - 75 * Math.abs(clat));
+    this.builtSnow = snow;
     const [rock, veg] = toneFor(this.style).map((c) => new THREE.Color(c));
     const snowC = new THREE.Color(0xf1f0ec), sea = new THREE.Color(0x7d98a6);
     const radius = (k: number) => R0 * (R1 / R0) ** (k / (RINGS - 1));

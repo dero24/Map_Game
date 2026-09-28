@@ -9,40 +9,50 @@ import { GLSL_NOISE, U } from './shared';
 export const postParams = {
   enabled: true,
   renderScale: 1,
-  kuwaharaRadius: 5,
-  kuwaharaSharpness: 8,
-  exposure: 0.9,
-  saturation: 1.12,
-  wobble: 0.55,
-  edgeDarkening: 0.9,
-  pigmentTurbulence: 0.22, // world-anchored + luminance-only (never slides with the camera, never tints white)
-  granulation: 0.3,
-  paperTexture: 0.7,
-  ink: 0.55,
+  // the default look is 'watercolor HD' (chosen side by side against the Sep 27 default — kept as
+  // the 'classic (Sep 27 default)' preset below — on Tucson's 4th Avenue, morning, golden hour and
+  // the horizon): the same wash painted at a finer brush over a sharper frame, a little richer
+  kuwaharaRadius: 4,
+  kuwaharaSharpness: 10.5,
+  exposure: 0.92,
+  saturation: 1.16,
+  wobble: 0.42,
+  edgeDarkening: 0.85,
+  pigmentTurbulence: 0.2, // world-anchored + luminance-only (never slides with the camera, never tints white)
+  granulation: 0.25,
+  paperTexture: 0.52,
+  ink: 0.52,
   inkDistance: 350,
-  glow: 0.8,
-  vignette: 0.55,
+  glow: 0.92,
+  vignette: 0.45,
   boilFps: 0,
-  nightWash: 0.55,
+  nightWash: 0.5,
   sketch: true, // paint as you explore: unvisited places are a paler first wash that deepens as you arrive
   paperColor: '#f8f4ea',
   inkColor: '#2e2a3a',
   // resolution: the paint (brush) pass runs at this fraction of the frame (0.5 = the old half-res
   // wash; higher = crisper strokes, same brush size on screen); hiDpi renders at the screen's own
   // pixel density (capped 1.5×) instead of CSS pixels
-  paintDetail: 0.6,
+  paintDetail: 0.82,
   hiDpi: true,
   // colour grade: split-tone shadows/lights toward two hues (the vivid painted-sci-fi look) and a
   // vibrance lift that saturates the dull colours more than the bright ones
-  grade: 0,
-  gradeShadow: '#2f6f8f',
-  gradeLight: '#ffb27a',
-  vibrance: 0,
+  grade: 0.2,
+  gradeShadow: '#3f6f8a',
+  gradeLight: '#ffcf9a',
+  vibrance: 0.2,
 };
 
 /** Named looks for the panel's Look menu: each is a set of postParams (the rest stay as they are). */
 export const LOOKS: Record<string, Partial<typeof postParams>> = {
+  // the default as it stood on 2026-09-27, before the look comparisons — kept verbatim so it can
+  // always be restored (and 'classic half-res' is the look before the paint-detail knob existed)
+  'classic (Sep 27 default)': { kuwaharaRadius: 5, kuwaharaSharpness: 8, exposure: 0.9, saturation: 1.12, wobble: 0.55, edgeDarkening: 0.9, pigmentTurbulence: 0.22, granulation: 0.3, paperTexture: 0.7, ink: 0.55, inkDistance: 350, glow: 0.8, vignette: 0.55, nightWash: 0.55, paintDetail: 0.6, hiDpi: true, renderScale: 1, grade: 0, gradeShadow: '#2f6f8f', gradeLight: '#ffb27a', vibrance: 0 },
+  'classic half-res': { kuwaharaRadius: 5, kuwaharaSharpness: 8, exposure: 0.9, saturation: 1.12, wobble: 0.55, edgeDarkening: 0.9, pigmentTurbulence: 0.22, granulation: 0.3, paperTexture: 0.7, ink: 0.55, inkDistance: 350, glow: 0.8, vignette: 0.55, nightWash: 0.55, paintDetail: 0.5, hiDpi: false, renderScale: 1, grade: 0, vibrance: 0 },
   watercolor: { kuwaharaRadius: 5, kuwaharaSharpness: 8, saturation: 1.12, exposure: 0.9, wobble: 0.55, edgeDarkening: 0.9, pigmentTurbulence: 0.22, granulation: 0.3, paperTexture: 0.7, ink: 0.55, glow: 0.8, vignette: 0.55, nightWash: 0.55, paintDetail: 0.6, grade: 0, vibrance: 0 },
+  // the candidate default: the watercolor wash painted at a finer brush over a sharper frame, with a
+  // touch of the colour-graded vibrance of a painted sci-fi world (teal shade, warm light)
+  'watercolor HD': { kuwaharaRadius: 4, kuwaharaSharpness: 10.5, saturation: 1.16, exposure: 0.92, wobble: 0.42, edgeDarkening: 0.85, pigmentTurbulence: 0.2, granulation: 0.25, paperTexture: 0.52, ink: 0.52, glow: 0.92, vignette: 0.45, nightWash: 0.5, paintDetail: 0.82, hiDpi: true, grade: 0.2, vibrance: 0.2, gradeShadow: '#3f6f8a', gradeLight: '#ffcf9a' },
   'fine detail': { kuwaharaRadius: 3.2, kuwaharaSharpness: 12, saturation: 1.12, exposure: 0.92, wobble: 0.35, edgeDarkening: 0.7, pigmentTurbulence: 0.16, granulation: 0.2, paperTexture: 0.45, ink: 0.5, glow: 0.8, vignette: 0.4, nightWash: 0.5, paintDetail: 0.85, grade: 0, vibrance: 0.15 },
   'vivid painted (sci-fi)': { kuwaharaRadius: 3.8, kuwaharaSharpness: 11, saturation: 1.45, exposure: 1.0, wobble: 0.25, edgeDarkening: 0.55, pigmentTurbulence: 0.12, granulation: 0.1, paperTexture: 0.2, ink: 0.32, glow: 1.25, vignette: 0.12, nightWash: 0.35, paintDetail: 0.8, grade: 0.55, vibrance: 0.45, gradeShadow: '#2f6f8f', gradeLight: '#ffb27a' },
   'storybook soft': { kuwaharaRadius: 6.5, kuwaharaSharpness: 6, saturation: 1.0, exposure: 0.95, wobble: 0.9, edgeDarkening: 1.1, pigmentTurbulence: 0.3, granulation: 0.45, paperTexture: 1.0, ink: 0.4, glow: 0.9, vignette: 0.75, nightWash: 0.6, paintDetail: 0.5, grade: 0.15, vibrance: 0, gradeShadow: '#5a6f9a', gradeLight: '#ffd9a0' },
@@ -364,6 +374,7 @@ export class WatercolorPost {
     const s = postParams.renderScale * (postParams.hiDpi ? Math.min(1.5, Math.max(1, globalThis.devicePixelRatio || 1)) : 1);
     const sw = Math.max(4, Math.round(w * s)), sh = Math.max(4, Math.round(h * s));
     this.sceneRT.setSize(sw, sh);
+    U.uViewport.value.set(sw, sh);
     const d = Math.max(0.35, Math.min(1, postParams.paintDetail));
     for (const t of [this.kuwRT, this.hA, this.hB]) t.setSize(Math.max(4, Math.round(sw * d)), Math.max(4, Math.round(sh * d)));
     this.qA.setSize(Math.max(4, Math.round(sw / 4)), Math.max(4, Math.round(sh / 4)));

@@ -120,7 +120,8 @@ export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, do
     for (let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
     if (L < 1) continue;
     const n = Math.max(2, Math.ceil(L / 4) + 1);
-    // uniform resample with heights from the walk surface (so bridge decks carry traffic)
+    // uniform resample with heights from the open-air walk surface (so bridge decks carry traffic,
+    // and a way that clips a building doesn't climb to its roof)
     const cum = [0];
     for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]));
     start.push(pts.length / 3);
@@ -130,7 +131,7 @@ export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, do
       while (k < p.length - 2 && cum[k + 1] < s) k++;
       const t = (s - cum[k]) / Math.max(1e-6, cum[k + 1] - cum[k]);
       const x = p[k][0] + (p[k + 1][0] - p[k][0]) * t, z = p[k][1] + (p[k + 1][1] - p[k][1]) * t;
-      pts.push(x, walk.surfaceAt(x, z), z);
+      pts.push(x, walk.outdoorSurfaceAt(x, z), z);
     }
     count.push(n);
     lens.push(L);

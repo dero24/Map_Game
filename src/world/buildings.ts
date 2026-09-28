@@ -29,6 +29,7 @@ export interface Footprint {
   key?: string; // tile-streaming registry key ("tile:idx")
   door?: number;
   pitched?: boolean;
+  front?: boolean; // a storefront (shop, or apartments over shops): paved to the kerb
 }
 
 export const KIND = { house: 0, shed: 1, commercial: 2, large: 3, church: 4, lighthouse: 5 } as const;
@@ -1144,6 +1145,14 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     for (const p of ring) (cx += p[0]), (cz += p[1]);
     cx /= ring.length;
     cz /= ring.length;
+    // A survey blob the map doesn't know, standing over water, is a bridge, a barge or a crane —
+    // not a building (Sea Bright's old Rumson bridge came back as a row of flat blocks in the
+    // river). Mapped buildings over water are real (piers, boathouses) and stay.
+    if (bd.gen === 'lidar') {
+      let wet = 0;
+      for (const p of ring) if (terrain.sdfAt(p[0], p[1]) < 0) wet++;
+      if (terrain.sdfAt(cx, cz) < 0 || wet >= ring.length * 0.4) return;
+    }
     const key = `${Math.floor(cx / 300)},${Math.floor(cz / 300)}`;
     if (!chunks.has(key)) chunks.set(key, new Builder());
     const b = chunks.get(key)!;
@@ -1382,7 +1391,7 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
       }
     }
 
-    const fp: Footprint = { ring, base, top: wallTop, floor0, raise, name: bd.n, use: bd.u, addr: bd.ad, kind: bd.k, eave: wallTop - base, seed: r1, id, pitched: !!roofG };
+    const fp: Footprint = { ring, base, top: wallTop, floor0, raise, name: bd.n, use: bd.u, addr: bd.ad, kind: bd.k, eave: wallTop - base, seed: r1, id, pitched: !!roofG, front: bd.k === 'commercial' || !!bd.gf || (!!bd.u && bd.k !== 'house' && bd.k !== 'shed') };
     if (!owns) return; // parts belong to their outline's footprint; floating pieces have none
     if (inZone) footprints.push(fp);
     if (inSlice && !bd.lod && bd.k !== 'shed' && inZone) {
@@ -1889,6 +1898,7 @@ export function buildingMaterial() {
           if (!solid && max(fw.x, fw.y) < 0.05) discard;
           if (!solid) alb *= 0.8;
         }
+        alb = snowOn(alb, N, vWorldPos, 1.0); // roofs, sills and porch floors white in a snowy winter
         alb = pigment(alb, vWorldPos);
         float sh = shadowAt(vWorldPos, N);
         vec3 col = paintLight(alb, N, vWorldPos, sh, ao);

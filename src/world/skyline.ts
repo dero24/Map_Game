@@ -40,11 +40,9 @@ export class Skyline {
   /** Per frame: hide cells whose real tile is mounted; re-read when the walker has moved far. */
   update(x: number, z: number, realLoaded: (cellKey: string) => boolean) {
     if (!this.enabled) return;
-    for (const [k, g] of this.cells) {
-      const [i, j] = k.split('_').map(Number);
-      const dx = Math.max(i * this.cell - x, 0, x - (i + 1) * this.cell), dz = Math.max(j * this.cell - z, 0, z - (j + 1) * this.cell);
-      g.visible = !realLoaded(k) && Math.hypot(dx, dz) > 900;
-    }
+    // a cell's towers stay until its real tile has mounted, however close you come — hiding
+    // them by distance made a city melt away as you flew in faster than its tiles streamed
+    for (const [k, g] of this.cells) g.visible = !realLoaded(k);
     if (this.busy || Math.hypot(x - this.cx, z - this.cz) < 4000) return;
     this.busy = true;
     const cx = Math.round(x / 2000) * 2000, cz = Math.round(z / 2000) * 2000;

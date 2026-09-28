@@ -46,16 +46,28 @@ window.__PLACE__ = async (tag = 'place', opts = {}) => {
     return n;
   };
   const best = (score) => segs.reduce((b, s) => { const v = score(s); return v > (b?.v ?? 0) ? { s, v } : b; }, null)?.s;
-  const main = best((s) => near(shops, s, s.w / 2 + 28) / Math.max(1, s.L / 40));
-  const resi = best((s) => (s.c === 'residential' ? near(homes, s, s.w / 2 + 22) / Math.max(1, s.L / 40) : 0));
+  // opts.main / opts.resi pin a round's poses to named streets (so rounds compare like for like);
+  // otherwise the busiest shop street and the most-lived-on residential street nearby
+  const named = (n) => (s) => (n && s.n === n ? 1 : 0);
+  const main = (opts.main && best((s) => named(opts.main)(s) * (1 + near(shops, s, s.w / 2 + 28)) / Math.max(1, s.L / 40))) || best((s) => near(shops, s, s.w / 2 + 28) / Math.max(1, s.L / 40));
+  const resi = (opts.resi && best((s) => named(opts.resi)(s) * (1 + near(homes, s, s.w / 2 + 22)) / Math.max(1, s.L / 40))) || best((s) => (s.c === 'residential' ? near(homes, s, s.w / 2 + 22) / Math.max(1, s.L / 40) : 0));
   // stand at the kerb of a segment, looking along it (or `turn` toward the buildings)
   const kerb = (s, side = 1, turn = 0, back = 0) => {
-    const dx = (s.bx - s.ax) / s.L, dz = (s.bz - s.az) / s.L, nx = -dz * side, nz = dx * side, off = s.w / 2 + 1.0;
-    let px = s.ax + dx * back, pz = s.az + dz * back;
-    // step along the kerb until nothing (a pole, a mast, a parked car) stands within 1.5 m of the lens
-    for (let k = 0; k < 12 && G.walk.blocked(px + nx * off, pz + nz * off, 1.5); k++) (px += dx * 2.5), (pz += dz * 2.5);
+    // mid-sidewalk (2 m behind the kerb line): a row of parked cars at the kerb stays in front of
+    // the lens, not in it
+    const dx = (s.bx - s.ax) / s.L, dz = (s.bz - s.az) / s.L, nx = -dz * side, nz = dx * side;
+    const yaw = Math.atan2(-dx, -dz) + turn * side, fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+    // step along the kerb (and across the sidewalk) until nothing — a pole, a mast, a parked car —
+    // stands at the lens or just in front of it
+    let best = null;
+    for (let k = 0; k < 16 && !best; k++)
+      for (const o of [2.0, 1.2, 2.8]) {
+        const x = s.ax + dx * (back + k * 2.5) + nx * (s.w / 2 + o), z = s.az + dz * (back + k * 2.5) + nz * (s.w / 2 + o);
+        if (!G.walk.blocked(x, z, 1.0) && !G.walk.blocked(x + fx * 2.5, z + fz * 2.5, 1.0)) { best = [x, z]; break; }
+      }
+    best ??= [s.ax + dx * back + nx * (s.w / 2 + 2.0), s.az + dz * back + nz * (s.w / 2 + 2.0)];
     G.walkParams.fly = false;
-    G.walker.place(px + nx * off, pz + nz * off, Math.atan2(-dx, -dz) + turn * side, -0.03);
+    G.walker.place(best[0], best[1], yaw, -0.03);
   };
   const lookAt = (tx, tz, ty, fromX, fromZ, eye) => {
     const g = G.world.terrain.heightAt(fromX, fromZ);
@@ -74,8 +86,14 @@ window.__PLACE__ = async (tag = 'place', opts = {}) => {
     if (!bp) return false;
     const d = bp.door;
     G.walkParams.fly = false;
+    // two and a half steps in, facing the middle of the room (not whatever stands beside the door)
+    const ring = G.stream.fpByKey.get(bp.fp)?.ring ?? [];
+    let cx = 0, cz = 0;
+    for (const [x, z] of ring) (cx += x / ring.length), (cz += z / ring.length);
+    const ix = d.wx - d.nx * 2.6, iz = d.wz - d.nz * 2.6;
+    const yaw = ring.length && Math.hypot(cx - ix, cz - iz) > 1 ? Math.atan2(-(cx - ix), -(cz - iz)) : Math.atan2(d.nx, d.nz) + 0.35;
     for (let k = 0; k < 2; k++) {
-      G.walker.place(d.wx - d.nx * 2.6, d.wz - d.nz * 2.6, Math.atan2(d.nx, d.nz) + 0.35, -0.12, d.y);
+      G.walker.place(ix, iz, yaw, -0.12, d.y);
       for (let i = 0; i < 8; i++) G.interiors.update(G.walker.x, G.walker.z, 0.25, G.walker.feet);
       G.interiors.flush?.();
     }
@@ -134,6 +152,28 @@ window.__PLACE__ = async (tag = 'place', opts = {}) => {
     { label: '8 the horizon', fn: async () => { set(16.5); const h = skyline(); lookAt(x0 + Math.sin(h.yaw) * 1000, z0 + Math.cos(h.yaw) * 1000, h.eye + Math.tan(h.pitch) * 1000, x0, z0, h.eye); F[7].label = `8 the horizon (${h.what})`; await wait(1500); } },
     { label: '9 inside a café / restaurant', fn: async () => { set(13); const r = await interior(['cafe', 'restaurant', 'bar']); if (typeof r === 'string') F[8].label = `9 inside ${r}`; } },
   ];
+  // Look comparison: opts.looks = ['watercolor', 'fine detail', …] renders opts.frames (default: the
+  // morning street, golden hour and the horizon) once per look, a row per look, to
+  // shots/looks-<tag>.jpg — the defaults are chosen side by side on real places, not by eye alone
+  if (opts.looks) {
+    const { LOOKS, postParams } = await import('/src/render/post.ts');
+    const keep = { ...postParams };
+    const pick = opts.frames ?? [0, 2, 7];
+    const L = [];
+    for (const k of opts.looks)
+      for (const i of pick) {
+        const f = F[i];
+        L.push({ label: `${k} — ${f.label}`, fn: async () => { Object.assign(postParams, keep, LOOKS[k] ?? {}); dispatchEvent(new Event('resize')); await f.fn(); await wait(400); await idle(40); } });
+      }
+    await F[pick[0]].fn(); await wait(2000);
+    await window.__MONTAGE__([{ label: 'warm-up', fn: () => {} }], { settle: 20, timers: true, cw: 200, cols: 1 });
+    window.__MONTAGE_CLOSE__?.();
+    const res = await window.__MONTAGE__(L, { settle: opts.settle ?? 40, timers: true, cw: opts.cw ?? 640, cols: pick.length, save: `looks-${tag}.jpg` });
+    window.__MONTAGE_CLOSE__?.();
+    Object.assign(postParams, keep);
+    dispatchEvent(new Event('resize'));
+    return { res, looks: opts.looks, frames: pick.map((i) => F[i].label) };
+  }
   const poses = [];
   for (const it of F) { const f = it.fn; it.fn = async () => { await f(); await wait(400); await idle(40); poses.push({ f: it.label.slice(0, 18), x: Math.round(G.walker.x), z: Math.round(G.walker.z), y: Math.round(G.walker.y), fly: G.walkParams.fly }); }; }
   // warm-up: the first capture after load can come back blank — pose frame 1 and throw one away

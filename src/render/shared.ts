@@ -30,6 +30,7 @@ export const U = {
   uShadowOn: { value: 1 },
   uShadowTexel: { value: 1 / 2048 },
   uShadowStrength: { value: 0.8 },
+  uViewport: { value: new THREE.Vector2(1600, 900) }, // render-target pixels (post.ts setSize)
   uLampMap: { value: null as THREE.Texture | null },
   uLampBox: { value: new THREE.Vector4(0, 0, 1, 1) },
   uLampBaseY: { value: 0 }, // ground height around the walker: lamp pools light the street, not roofs
@@ -44,6 +45,11 @@ export const U = {
   uPigment: { value: 0.22 },
   uPigmentScale: { value: 0.35 },
   uWind: { value: 0.5 },
+  // Season (world/season.ts, set per frame from the date and the place): snow cover on up-facing
+  // ground, roofs and props; the share of broadleaf leaves that are down; autumn colour
+  uSnow: { value: 0 },
+  uLeafFall: { value: 0 },
+  uAutumn: { value: 0 },
   // Phase I biome wash for the ground: x = dryness (greens → straw/ochre), y = lushness,
   // z = cold/dark (boreal/polar greens). Set once per region from styles.ts.
   uBiome: { value: new THREE.Vector4(0, 0, 0, 0) },
@@ -88,6 +94,7 @@ uniform vec4 uLampBox;
 uniform float uLampBaseY;
 uniform vec3 uLampColor;
 uniform float uLampPower, uPigment, uPigmentScale, uWind;
+uniform float uSnow, uLeafFall, uAutumn;
 uniform vec4 uBiome;
 uniform vec4 uSliceBox;
 uniform vec4 uHoleBox, uHoleInfo;
@@ -152,6 +159,17 @@ vec3 pigment(vec3 c, vec3 wpos) {
   float n = fbm3(wpos * uPigmentScale) - 0.5;
   float d = 1.0 + n * uPigment * 2.0;
   return clamp(c - (c - c * c) * (d - 1.0) * 1.6, 0.0, 4.0);
+}
+
+// Snow on whatever faces the sky: patchy as it comes and goes (world-anchored drifts, so it never
+// swims), full at uSnow 1. keep < 1 for surfaces that shed or get cleared (a ploughed road).
+vec3 snowOn(vec3 alb, vec3 N, vec3 wpos, float keep) {
+  if (uSnow < 0.002) return alb;
+  float up = smoothstep(0.3, 0.85, N.y);
+  float n = vnoise(wpos.xz * 0.21) * 0.6 + vnoise(wpos.xz * 1.7) * 0.4;
+  float th = 1.0 - uSnow * keep;
+  float cov = smoothstep(th - 0.07, th + 0.07, n) * up;
+  return mix(alb, vec3(0.86, 0.89, 0.95), cov);
 }
 
 // Two-wash lighting: a light wash where the key light lands, one cool glaze where it doesn't.

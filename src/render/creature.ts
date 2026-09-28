@@ -50,7 +50,9 @@ export function creatureMaterial(defines: Record<string, number>) {
           }
           if (aPart > 4.5 && aPart < 6.5 && p.y < 1.12) { float da = 1.12 - p.y; p.z -= da * 0.9; p.y = 1.12 - da * 0.3; }
           p.y -= 0.42;
+          #ifndef INDOOR
           if (uNight > 0.55) p *= 0.0; // the terrace empties after dark
+          #endif
           amt = 0.0;
         #endif
         #ifdef LEGS
@@ -94,6 +96,18 @@ export function creatureMaterial(defines: Record<string, number>) {
           float ip = ph * 3.7 + float(gl_InstanceID) * 1.3;
           if (aPart > 4.5 && aPart < 6.5) p.z += (1.39 - p.y) * sin(uTime * 1.1 + ip + aPart) * 0.08 * idle;
           p.x += sin(uTime * 0.45 + ip) * 0.025 * idle * clamp(p.y / 1.7, 0.0, 1.0);
+          #ifdef STATIC_PEOPLE
+            // residents are mid-conversation, not waiting: now and then a hand comes up and moves
+            // as they talk (mostly one hand, sometimes both), and the head nods along
+            float talk = smoothstep(0.45, 0.95, sin(uTime * 0.55 + seed * 1.7));
+            if (aPart > 4.5 && aPart < 6.5) {
+              float g = talk * (aPart < 5.5 ? 1.0 : 0.35 + 0.35 * sin(seed)) * (0.75 + 0.25 * sin(uTime * 3.1 + seed));
+              float da = max(0.0, 1.12 - p.y); // the forearm, below the elbow
+              p.z -= da * 1.05 * g;
+              p.y += da * 0.85 * g;
+            }
+            if (p.y > 1.45) p.z -= (p.y - 1.45) * 0.14 * talk * sin(uTime * 2.3 + seed);
+          #endif
         #endif
         mat4 m = worldMat();
         vec4 wp = m * vec4(p, 1.0);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { makeProjector, osmToTile, type OsmDoc, type OsmElement } from '../src/world/realTile';
+import { makeProjector, osmToTile, parkSide, type OsmDoc, type OsmElement } from '../src/world/realTile';
 import type { Box } from '../src/world/data';
 
 const ORIGIN = { lat: 40.362, lon: -73.9755 }; // Sea Bright — same anchor as the bake
@@ -67,7 +67,8 @@ describe('osmToTile — roads', () => {
     expect(t.roads).toHaveLength(3);
     const ocean = t.roads.find((r) => r.n === 'Ocean Avenue')!;
     expect(ocean.c).toBe('residential');
-    expect(ocean.w).toBe(6.5);
+    expect(ocean.w).toBeCloseTo(6.5 + 4.4, 1); // a North American street parks both kerbs by default
+    expect(ocean.pk).toBe(5);
     expect(ocean.ow).toBe(1);
     expect(ocean.own).toBeUndefined();
     const bridge = t.roads.find((r) => r.c === 'secondary')!;
@@ -75,6 +76,35 @@ describe('osmToTile — roads', () => {
     expect(bridge.br).toBe('yes');
     expect(bridge.l).toBe(1);
     expect(t.roads.find((r) => r.c === 'motorway')!.w).toBe(14);
+  });
+  it('mapped street parking (either scheme) widens the carriageway and marks the kerbs', () => {
+    expect(parkSide({ 'parking:both': 'lane' }, 'left')).toBe(1);
+    expect(parkSide({ 'parking:right': 'lane', 'parking:right:orientation': 'diagonal' }, 'right')).toBe(2);
+    expect(parkSide({ 'parking:both': 'no' }, 'right')).toBe(0);
+    expect(parkSide({ 'parking:both': 'separate' }, 'right')).toBe(0);
+    expect(parkSide({ 'parking:lane:both': 'parallel' }, 'left')).toBe(1);
+    expect(parkSide({ 'parking:lane:left': 'perpendicular' }, 'left')).toBe(2);
+    expect(parkSide({ 'parking:lane:left': 'no_stopping' }, 'left')).toBe(0);
+    const t = osmToTile(
+      osm(
+        way(1, { highway: 'tertiary', lanes: '2', 'parking:both': 'lane' }, [[10, 500], [700, 500]]),
+        way(2, { highway: 'residential', 'parking:lane:right': 'parallel', width: '9' }, [[10, 300], [700, 300]]),
+        way(3, { highway: 'residential' }, [[10, 200], [700, 200]]),
+      ),
+      OPTS,
+    );
+    const [a, b, c] = [500, 300, 200].map((z) => t.roads.find((r) => r.p[1] === z * 10)!);
+    expect(a.w).toBeCloseTo(8 + 4.4, 1); // a tertiary carriageway + a parked lane each side
+    expect(a.pk).toBe(1 + 4);
+    expect(b.w).toBe(9); // a tagged width already includes its parking
+    expect(b.pk).toBe(4);
+    expect(c.pk).toBe(5); // North America: both kerbs parked unless mapped otherwise
+    // elsewhere only mapped parking counts
+    const ROME = { lat: 41.9, lon: 12.5 }, PR = makeProjector(ROME);
+    const g = (pts: [number, number][]) => pts.map(([x, z]) => { const [lat, lon] = PR.unproject(x, z); return { lat, lon }; });
+    const eu = osmToTile(osm({ type: 'way', id: 9, tags: { highway: 'residential' }, geometry: g([[10, 200], [700, 200]]) }), { id: '0_0', box: BOX, origin: ROME });
+    expect(eu.roads[0].pk).toBeUndefined();
+    expect(eu.roads[0].w).toBe(6.5);
   });
 });
 
@@ -109,6 +139,18 @@ describe('osmToTile — buildings', () => {
     expect(lvl.h).toBeCloseTo(3 * 3.1 + 1.5, 3);
     expect(lvl.roof).toBe('hip');
     expect(t.buildings.find((b) => b.own === 0)).toBeTruthy(); // the garage is margin context
+  });
+
+  it('street furniture nodes become points: signals, hydrants, subway entrances, bus stops', () => {
+    const node = (id: number, x: number, tags: Record<string, string>): OsmElement => { const [lat, lon] = P.unproject(x, 400); return { type: 'node', id, lat, lon, tags }; };
+    const t = osmToTile(osm(
+      node(1, 100, { highway: 'traffic_signals' }),
+      node(2, 200, { emergency: 'fire_hydrant' }),
+      node(3, 300, { railway: 'subway_entrance' }),
+      node(4, 400, { highway: 'bus_stop', shelter: 'yes' }),
+      node(5, 500, { highway: 'bus_stop' }),
+    ), OPTS);
+    expect(t.points.map((p) => p.c).sort()).toEqual(['bus', 'bus_shelter', 'hydrant', 'signal', 'subway']);
   });
 
   it('a business node inside a building names it and says what it is used for', () => {

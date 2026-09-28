@@ -102,6 +102,28 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
   const S = json.slice, B = json.backdrop;
   const group = new THREE.Group();
   group.name = 'ground';
+  // The coarse backdrop raises its wooded cells 11 m as a far-forest canopy — right for woods on
+  // the horizon, wrong wherever a detail tile is mounted: there the trees are real instances and
+  // the bump stood as a second, unwalkable hillside burying the houses (Rumson, beside the bake).
+  // One texel per 1024 m cell over the backdrop: 128 = a detail tile is here (the canopy bump
+  // drops back to the ground), 255 = a streamed cell with its own ground (synth.ts / realExtras,
+  // DEM heights) is here (the backdrop steps aside altogether).
+  const CC = 1024;
+  const ci0 = Math.floor(B.x0 / CC), cj0 = Math.floor(B.z0 / CC);
+  const cnx = Math.max(1, Math.floor(B.x1 / CC) - ci0 + 1), cnz = Math.max(1, Math.floor(B.z1 / CC) - cj0 + 1);
+  const coverData = new Uint8Array(cnx * cnz);
+  const cover = new THREE.DataTexture(coverData, cnx, cnz, THREE.RedFormat, THREE.UnsignedByteType);
+  cover.magFilter = cover.minFilter = THREE.NearestFilter;
+  cover.needsUpdate = true;
+  group.userData.setDetailCells = (cells: Map<string, 128 | 255>) => {
+    coverData.fill(0);
+    for (const [k, val] of cells) {
+      const [i, j] = k.split('_').map(Number);
+      const u = i - ci0, v = j - cj0;
+      if (u >= 0 && v >= 0 && u < cnx && v < cnz) coverData[v * cnx + u] = Math.max(coverData[v * cnx + u], val);
+    }
+    cover.needsUpdate = true;
+  };
 
   const mat = paintMaterial({
     uniforms: {
@@ -114,19 +136,28 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
       uPaintMBox: { value: paint.mid.box },
       uPaintSBox: { value: new THREE.Vector4(S.x0, S.z0, 1 / (S.x1 - S.x0), 1 / (S.z1 - S.z0)) },
       uPaintBBox: { value: new THREE.Vector4(B.x0, B.z0, 1 / (B.x1 - B.x0), 1 / (B.z1 - B.z0)) },
+      uStreamed: { value: cover },
+      uStreamedBox: { value: new THREE.Vector4(ci0 * CC, cj0 * CC, 1 / (cnx * CC), 1 / (cnz * CC)) },
     },
     vertex: /* glsl */ `
       attribute float aCanopy;
       varying float vCanopy;
+      uniform sampler2D uStreamed;
+      uniform vec4 uStreamedBox;
       void main() {
-        vec4 wp = worldMat() * vec4(position, 1.0);
+        vec3 p = position;
+        vCanopy = 0.0;
+        #ifdef CANOPY
+          // a detail tile is mounted in this cell: its trees are real — the canopy bump (and its
+          // leaf colour) goes, and this is plain ground
+          vec2 sc = (p.xz - uStreamedBox.xy) * uStreamedBox.zw; // positions are region metres
+          float drop = sc.x > 0.0 && sc.y > 0.0 && sc.x < 1.0 && sc.y < 1.0 && texture2D(uStreamed, sc).r > 0.3 ? 1.0 : 0.0;
+          p.y -= aCanopy * 11.0 * drop;
+          vCanopy = aCanopy * (1.0 - drop);
+        #endif
+        vec4 wp = worldMat() * vec4(p, 1.0);
         vWorldPos = wp.xyz + uWorldOffset;
         vNormalW = normal;
-        #ifdef CANOPY
-        vCanopy = aCanopy;
-        #else
-        vCanopy = 0.0;
-        #endif
         gl_Position = projectionMatrix * viewMatrix * wp;
       }`,
     fragment: /* glsl */ `
@@ -134,8 +165,15 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
       uniform sampler2D uPaintS, uPaintB, uPaintD, uPaintM;
       uniform vec4 uPaintSBox, uPaintBBox, uPaintDBox, uPaintMBox;
       varying float vCanopy;
+      uniform sampler2D uStreamed;
+      uniform vec4 uStreamedBox;
       void main() {
         if (inHole(vWorldPos)) discard;
+        #ifdef CANOPY
+          // a streamed cell's own ground is here: the backdrop steps aside
+          vec2 sc = (vWorldPos.xz - uStreamedBox.xy) * uStreamedBox.zw;
+          if (sc.x > 0.0 && sc.y > 0.0 && sc.x < 1.0 && sc.y < 1.0 && texture2D(uStreamed, sc).r > 0.75) discard; // 255 only (128 = canopy drop)
+        #endif
         vec3 N = normalize(vNormalW);
         vec2 xz = vWorldPos.xz;
         vec2 us = (xz - uPaintSBox.xy) * uPaintSBox.zw;
@@ -197,6 +235,9 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
             alb *= 1.0 - 0.07 * steps * sandy;
           }
         }
+        // snow: lawns, yards and sidewalks take it; dark asphalt is ploughed down to slushy tracks
+        float lumG = dot(alb, vec3(0.3, 0.59, 0.11));
+        alb = snowOn(alb, N, vWorldPos, mix(0.35, 1.0, smoothstep(0.12, 0.3, lumG)));
         alb = pigment(alb, vWorldPos);
         float sh = shadowAt(vWorldPos, N);
         vec3 col = paintLight(alb, N, vWorldPos, sh, 1.0);

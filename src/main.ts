@@ -4,6 +4,8 @@ import { cachedFetchJson, initCache, manifestFingerprint } from './world/cache';
 import { TileStream } from './world/stream';
 import { Horizon } from './world/horizon';
 import { Skyline } from './world/skyline';
+import { KerbCars } from './world/kerbCars';
+import { seasonAt, dayOfYear } from './world/season';
 import { setDemBase } from './world/dem';
 import { virtualRegion } from './world/virtual';
 import { paintGround } from './world/groundPaint';
@@ -39,7 +41,7 @@ import { SunShadows } from './render/shadows';
 import { WalkWorld } from './player/collision';
 import { Walker, walkParams } from './player/controller';
 import { celestial, localHour, localToMs, sunPosition } from './core/sun';
-import { buildPanel, loadSettings, timeParams, weatherParams, debugParams } from './ui/panel';
+import { buildPanel, loadSettings, userKeys, timeParams, weatherParams, debugParams } from './ui/panel';
 
 const params = new URLSearchParams(location.search);
 const CAPTURE = params.has('capture');
@@ -225,13 +227,33 @@ async function main() {
   // Grass: tufts grow on open land around the walker (lawns short, open ground tall + lush).
   const grass = new GrassField(world.terrain, walk, () => stream.primRoads, paint.grassMask);
   worldRoot.add(grass.group);
+  // Parked kerb and lot cars: one manager draws every tile's, near cars in the lite kit, far ones
+  // as two-block proxies (kerbCars.ts)
+  const kerbCars = new KerbCars();
+  worldRoot.add(kerbCars.group);
+  // the coarse backdrop's far-forest canopy drops wherever a detail tile is mounted (its trees are
+  // real), and the backdrop steps aside altogether where a streamed cell brought its own ground
+  const streamedGround = () => {
+    const cells = new Map<string, 128 | 255>();
+    const key = (b: { x0: number; z0: number; x1: number; z1: number }) => `${Math.floor((b.x0 + b.x1) / 2 / 1024)}_${Math.floor((b.z0 + b.z1) / 2 / 1024)}`;
+    for (const t of stream.loaded.values()) {
+      const k = key(t.spec.box);
+      if (t.spec.world || t.spec.synth) cells.set(k, 255);
+      else if (!cells.has(k)) cells.set(k, 128);
+    }
+    // the coarse ring's streamed cells bring a ground chunk too (baked coarse cells don't)
+    for (const sp of stream.coarseSpecs) if (sp.world || sp.synth) cells.set(key(sp.box), 255);
+    (groundGroup.userData.setDetailCells as (c: Map<string, 128 | 255>) => void)(cells);
+  };
   stream.onTile = (a) => {
     paint.addWalks(a.walks);
+    kerbCars.add(a.spec.id, a.kerb);
+    streamedGround();
     // J1: streamed tiles (past the bake) paint their streets and footprints into the ground windows
-    if (a.spec.world || a.spec.synth) paint.setTile(a.spec.id, a.primRoads, a.fps.map((f) => f.ring as [number, number][]), [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1]);
+    if (a.spec.world || a.spec.synth) paint.setTile(a.spec.id, a.primRoads, a.fps.map((f) => f.ring as [number, number][]), [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1], a.fps.map((f) => !!f.front), a.areas);
     grass.invalidateBox(a.spec.box);
   };
-  stream.onUnload = (id) => paint.dropTile(id);
+  stream.onUnload = (id) => { paint.dropTile(id); kerbCars.remove(id); queueMicrotask(streamedGround); };
   const plans = stream.plans;
   const bld = {
     get footprints() { return stream.footprints; },
@@ -368,6 +390,7 @@ async function main() {
     walk, terrain: world.terrain, walker, root: worldRoot, toast,
     roads: () => stream.primRoads,
     tiles: () => stream.loaded.values(),
+    kerb: kerbCars,
     driveLeft: regionLook.driveLeft,
     enabled: () => $('intro').classList.contains('hidden') && !atlas.open && !photo.active,
     geo: { toLatLon: (x, z) => toLatLon(json.origin, x, z), fromLatLon: (lat, lon) => fromLatLon(json.origin, lat, lon) },
@@ -454,7 +477,9 @@ async function main() {
   // habitat lookups for the critters: trees + garden beds near the walker, refreshed every 2 s
   let habitatT = 0, nearTrees: { x: number; z: number }[] = [], nearGardens: { x: number; z: number }[] = [];
   const within = (list: { x: number; z: number }[], x: number, z: number, r: number) => list.filter((p) => Math.abs(p.x - x) < r && Math.abs(p.z - z) < r && Math.hypot(p.x - x, p.z - z) < r);
-  const month = new Date().getMonth() + 1, south = json.origin.lat < 0;
+  const south = json.origin.lat < 0;
+  // the world's month (the chosen date, not the machine's): critters, gardens and sound follow it
+  const worldMonth = () => new Date(worldMs).getUTCMonth() + 1;
   const commissions = new Commissions(ctx);
   void commissions.load();
   commissions.onStamp = (town, region) => { toast(`almanac stamp: ${town}${region ? ` · ${region}` : ''}`); ambience?.ui('chime'); };
@@ -501,13 +526,26 @@ async function main() {
   resize();
 
   // World clock: real time in the region's timezone, or a free-running clock set from the panel.
-  let worldMs = Date.now();
+  // The date: today, or a chosen day of the year (panel, or ?day=N / ?date=YYYY-MM-DD) — the sun's
+  // path and the season (snow, bare trees, autumn colour) follow it.
+  {
+    const dq = params.get('date'), nq = params.get('day');
+    if (dq && /^\d{4}-\d{2}-\d{2}$/.test(dq)) timeParams.dayOfYear = dayOfYear(Date.parse(dq + 'T12:00:00Z'));
+    else if (nq !== null && isFinite(+nq)) timeParams.dayOfYear = Math.max(0, Math.min(366, Math.round(+nq)));
+  }
+  const dayShift = () => {
+    const d = timeParams.dayOfYear;
+    if (!(d > 0)) return 0;
+    return Math.round((Date.UTC(new Date().getUTCFullYear(), 0, d, 12) - Date.now()) / 86400000) * 86400000;
+  };
+  const today = () => Date.now() + dayShift();
+  let worldMs = today();
   const setHour = (h: number) => {
     timeParams.realTime = false;
     timeParams.hour = h;
-    worldMs = localToMs(Date.now(), h, tz);
+    worldMs = localToMs(today(), h, tz);
   };
-  if (!timeParams.realTime) worldMs = localToMs(Date.now(), timeParams.hour, tz);
+  if (!timeParams.realTime) worldMs = localToMs(today(), timeParams.hour, tz);
   // Every walk begins at sunrise (today's real sunrise at this place, a few minutes after the
   // disc clears the horizon); the clock then runs on. ?hour=H overrides; capture shots set their own.
   if (!CAPTURE || params.get('hour') !== null) {
@@ -516,7 +554,7 @@ async function main() {
     else {
       let rise = 6.5;
       for (let h = 2; h < 11; h += 0.05)
-        if (sunPosition(localToMs(Date.now(), h, tz), json.origin.lat, json.origin.lon).alt > 0) { rise = h; break; }
+        if (sunPosition(localToMs(today(), h, tz), json.origin.lat, json.origin.lon).alt > 0) { rise = h; break; }
       setHour(rise + 0.2);
     }
   }
@@ -525,6 +563,8 @@ async function main() {
 
   const weather: Weather = { cloud: weatherParams.cloud, seaFog: weatherParams.seaFog, haze: weatherParams.haze, wind: weatherParams.wind };
   let simTime = 0;
+  let seasonT = 0;
+  let groundT = 0;
 
   // ---- shots (capture / debug API) ----
   const shots: Record<string, () => void> = {};
@@ -749,7 +789,7 @@ async function main() {
     for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) v += cityGrid.get((i + di) * 92821 + (j + dj)) ?? 0;
     return Math.max(0, Math.min(1, (v / (9 * 6400) - 4) / 20));
   };
-  const summer = (json.origin.lat < 0 ? [11, 12, 1, 2, 3] : [5, 6, 7, 8, 9]).includes(new Date().getMonth() + 1);
+  const isSummer = () => (json.origin.lat < 0 ? [11, 12, 1, 2, 3] : [5, 6, 7, 8, 9]).includes(worldMonth());
   let lastTileChange = 0;
   stream.onChange = () => {
     lifeDirty = true;
@@ -798,13 +838,46 @@ async function main() {
       if (n === 1 || n % 600 === 0) console.error(`frame error (x${n})`, e);
     }
   };
+  // Auto quality: the crisper defaults (paint detail, full screen resolution) step down once, a
+  // few seconds into the walk, on a GPU that can't hold ~40 fps — unless the player set them in
+  // the panel. (A proper boot benchmark with tiers is the backlog's 1.7.)
+  let qT = 0, qN = 0, qSum = 0, qDone = CAPTURE;
+  const autoQuality = (rawDt: number) => {
+    if (qDone || interiors.indoors) return;
+    qT += rawDt;
+    if (qT < 4) return; // let the first tiles settle
+    qSum += rawDt;
+    qN++;
+    if (qT < 10) return;
+    qDone = true;
+    const ms = (qSum / qN) * 1000;
+    if (ms > 25) {
+      let changed = false;
+      if (!userKeys.has('post.hiDpi') && postParams.hiDpi && devicePixelRatio > 1) (postParams.hiDpi = false), (changed = true);
+      if (!userKeys.has('post.paintDetail') && postParams.paintDetail > 0.5) (postParams.paintDetail = 0.5), (changed = true);
+      if (changed) { resize(); console.info(`auto quality: ${ms.toFixed(1)} ms/frame — paint detail and resolution stepped down`); }
+    }
+  };
   const frame = (now: number) => {
-    const dt = CAPTURE ? 1 / 60 : Math.min(0.1, Math.max(0, (now - last) / 1000));
+    const rawDt = Math.min(0.25, Math.max(0, (now - last) / 1000));
+    const dt = CAPTURE ? 1 / 60 : Math.min(0.1, rawDt);
     last = now;
+    autoQuality(rawDt);
     simTime += dt;
-    if (timeParams.realTime) worldMs = Date.now();
+    if (timeParams.realTime) worldMs = today();
     else worldMs += dt * 1000 * timeParams.speed;
     timeParams.hour = localHour(worldMs, tz);
+    // the season, from the date and where you stand (season.ts); re-read every second or so
+    seasonT -= dt;
+    if (seasonT <= 0) {
+      seasonT = CAPTURE ? 0 : 1;
+      const [lat, lon] = toLatLon(json.origin, walker.x, walker.z);
+      const s = seasonAt(lat, lon, world.terrain.heightAt(walker.x, walker.z), dayOfYear(worldMs));
+      U.uSnow.value = weatherParams.snow >= 0 ? weatherParams.snow : s.snow;
+      U.uLeafFall.value = s.leafFall;
+      U.uAutumn.value = s.autumn;
+      horizon.setSnowline(s.snowline);
+    }
 
     if (weatherParams.autoWeather) {
       const t = worldMs / 3.6e6; // hours
@@ -829,6 +902,9 @@ async function main() {
     camera.position.sub(origin); // walker works in world coords; the renderer works origin-local
     stream.update(walker.x, walker.z);
     horizon.update(walker.x, walker.z);
+    kerbCars.update(walker.x, walker.z);
+    groundT -= dt;
+    if (groundT <= 0) { groundT = 1.5; streamedGround(); } // (coarse mounts have no hook)
     realCells.clear();
     for (const a of stream.loaded.values()) if (!a.spec.synth) realCells.add(`${Math.floor((a.spec.box.x0 + a.spec.box.x1) / 2 / manifest.cell)}_${Math.floor((a.spec.box.z0 + a.spec.box.z1) / 2 / manifest.cell)}`);
     skyline.update(walker.x, walker.z, (k) => realCells.has(k));
@@ -891,7 +967,7 @@ async function main() {
         for (const [ox, oz] of [[0, 0], [20, 0], [-20, 0], [0, 20], [0, -20], [14, 14], [-14, -14], [14, -14], [-14, 14]]) if (world.terrain.coverAt(walker.x + ox, walker.z + oz) === 10) tc++;
         treeCover = tc / 9;
       }
-      ambience.update({ dt, oceanDist, indoors: interiors.indoors, riverDist: Math.max(0, world.terrain.sdfAt(walker.x, walker.z)), wind: weather.wind, night: U.uNight.value, surface, stepped, running: run, life: life.stats, hour: timeParams.hour, churchDist, houses, harbour: harbourD, sails: sailsN, trees: Math.max(treeCover, Math.min(1, houses / 20) * 0.4), ride: vehicles.ride, city: cityAt(walker.x, walker.z), climate: regionLook.climate, summer });
+      ambience.update({ dt, oceanDist, indoors: interiors.indoors, riverDist: Math.max(0, world.terrain.sdfAt(walker.x, walker.z)), wind: weather.wind, night: U.uNight.value, surface, stepped, running: run, life: life.stats, hour: timeParams.hour, churchDist, houses, harbour: harbourD, sails: sailsN, trees: Math.max(treeCover, Math.min(1, houses / 20) * 0.4), ride: vehicles.ride, city: cityAt(walker.x, walker.z), climate: regionLook.climate, summer: isSummer() && U.uSnow.value < 0.1 });
     }
     shadows.update(scene, focus, U.uKeyDir.value);
     post.render(scene, camera, simTime, U.uNight.value, U.uGolden.value, walker.yaw, walker.pitch, debugParams.rawScene);
@@ -941,8 +1017,8 @@ async function main() {
     movers.length = 0;
     for (const m of life.movers) movers.push(m);
     if (rideMoving-- > 0) movers.push(rideMover);
-    critters.update(dt, walker.x, walker.z, { hour: timeParams.hour, night: U.uNight.value, month, south, wind: weather.wind, region: regionLook.region, climate: regionLook.climate, camFwd: fwd, trees: (x, z, r) => within(nearTrees, x, z, r), gardens: (x, z, r) => within(nearGardens, x, z, r), movers });
-    garden.update(dt, month, south);
+    critters.update(dt, walker.x, walker.z, { hour: timeParams.hour, night: U.uNight.value, month: worldMonth(), south, wind: weather.wind, region: regionLook.region, climate: regionLook.climate, camFwd: fwd, trees: (x, z, r) => within(nearTrees, x, z, r), gardens: (x, z, r) => within(nearGardens, x, z, r), movers });
+    garden.update(dt, worldMonth(), south);
     frames++;
     if (frames === 3) (window as unknown as Record<string, unknown>).__READY__ = true;
     (window as unknown as Record<string, unknown>).__RENDER_INFO__ = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, errors: errors.size, frames };

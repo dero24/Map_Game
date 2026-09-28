@@ -205,20 +205,32 @@ export class LifeSim {
   }
   private tmp = new Float32Array(5);
 
-  private pickEdge(filter: (e: number) => boolean, weight: (e: number) => number, farFrom?: [number, number], minDist = 0) {
+  // `maxDist`: prefer edges within this range of farFrom (the life bubble round the walker); after
+  // 60 misses any distance will do, so a sparse map still fills.
+  private pickEdge(filter: (e: number) => boolean, weight: (e: number) => number, farFrom?: [number, number], minDist = 0, maxDist = Infinity) {
     const E = this.w.edgeLen.length;
-    for (let tries = 0; tries < 40; tries++) {
+    for (let tries = 0; tries < 100; tries++) {
       // weighted by length * weight via rejection sampling
       const e = Math.floor(this.rng.float() * E);
       if (!filter(e)) continue;
       if (this.rng.float() > Math.min(1, (this.w.edgeLen[e] / 120) * weight(e))) continue;
       if (farFrom) {
         this.sample(e, this.w.edgeLen[e] * 0.5, this.tmp);
-        if (Math.hypot(this.tmp[0] - farFrom[0], this.tmp[2] - farFrom[1]) < minDist) continue;
+        const d = Math.hypot(this.tmp[0] - farFrom[0], this.tmp[2] - farFrom[1]);
+        if (d < minDist || (tries < 60 && d > maxDist)) continue;
       }
       return e;
     }
     return -1;
+  }
+  // The life bubble: walkers and cars far from the player are recycled a few per tick into the
+  // ring just out of sight (they respawn 60–260 m / 100–450 m away), so the crowd a city's cap
+  // allows is where the player is, not spread thin over every mounted street — past ~300 m a
+  // walker is a few pixels behind a street's worth of buildings anyway.
+  private recycle(range: readonly [number, number], far: number, n: number) {
+    const px = this.env.playerX, pz = this.env.playerZ;
+    for (let i = range[0], k = 0; i < range[1] && k < n; i++)
+      if (this.active[i] && Math.hypot(this.x[i] - px, this.z[i] - pz) > far) { this.active[i] = 0; this.y[i] = -1000; this.snapPrev(i); k++; }
   }
 
   // At the end of an edge, choose the next one leaving `node`.
@@ -316,7 +328,7 @@ export class LifeSim {
   private spawnCar(i: number, far = false) {
     // Never materialize on top of the walker: they need a braking distance in front of them.
     for (let t = 0; t < 6; t++) {
-      const e = this.pickEdge((e) => this.drivable(e), (e) => this.rank(e) * this.rank(e) * 0.3, far ? [this.env.playerX, this.env.playerZ] : undefined, far ? 110 : 0);
+      const e = this.pickEdge((e) => this.drivable(e), (e) => this.rank(e) * this.rank(e) * 0.3, far ? [this.env.playerX, this.env.playerZ] : undefined, far ? 100 : 0, far ? 450 : Infinity);
       if (e < 0) return;
       const dir = this.oneway(e) ? 1 : this.rng.float() < 0.5 ? 1 : -1;
       this.placeOnEdge(i, e, dir, this.rng.float() * this.w.edgeLen[e]);
@@ -355,7 +367,7 @@ export class LifeSim {
       return this.tmp[0] > dx0 && this.tmp[0] < dx1 && this.tmp[2] > dz0 && this.tmp[2] < dz1;
     };
     const shops = this.w.edgeShops;
-    const e = this.pickEdge((e) => this.walkable(e), (e) => Math.max(inDown(e) ? 6 : 0.35, shops ? Math.min(9, 0.35 + shops[e] * 0.9) : 0), far ? [this.env.playerX, this.env.playerZ] : undefined, far ? 90 : 0);
+    const e = this.pickEdge((e) => this.walkable(e), (e) => Math.max(inDown(e) ? 6 : 0.35, shops ? Math.min(9, 0.35 + shops[e] * 0.9) : 0), far ? [this.env.playerX, this.env.playerZ] : undefined, far ? 60 : 0, far ? 260 : Infinity);
     if (e < 0) { this.active[i] = 0; return; }
     this.placeOnEdge(i, e, this.rng.float() < 0.5 ? 1 : -1, this.rng.float() * this.w.edgeLen[e]);
     this.state[i] = ST.WALK;
@@ -812,6 +824,8 @@ export class LifeSim {
     this.stepPeds(dt);
     this.stepBoats(dt);
     if (this.tick % 10 === 0) {
+      this.recycle(RANGES.peds, 330, 6);
+      this.recycle(RANGES.cars, 600, 3);
       this.manage(RANGES.cars, this.desired('car'), (i) => this.spawnCar(i, true), 120);
       this.manage(RANGES.peds, this.desired('ped'), (i) => this.spawnPed(i, true), 100);
     }

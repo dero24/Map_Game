@@ -196,6 +196,16 @@ export class WalkWorld {
 
   private cands: number[] = [];
   // Walking surface. With feetY, picks the highest surface you could step onto (stairs, storeys, decks).
+  /** The open-air surface: the ground and any deck over it (bridges, piers, boardwalks), never a
+   *  building's floors — what street life walks on (a sidewalk way that clips a footprint used to
+   *  put its walkers on the top floor, striding through the air along the shopfronts). */
+  outdoorSurfaceAt(x: number, z: number) {
+    const c = this.cands;
+    c.length = 0;
+    c.push(Math.max(this.terrain.heightAt(x, z), -0.2));
+    this.deckHeights(x, z, c);
+    return Math.max(...c);
+  }
   surfaceAt(x: number, z: number, feetY?: number) {
     const c = this.cands;
     c.length = 0;
