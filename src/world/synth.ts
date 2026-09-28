@@ -4,7 +4,8 @@
 // lots without ever seeing each other, and every client builds the same world forever.
 import * as THREE from 'three';
 import earcut from 'earcut';
-import type { Building, Point, Road, TileJson, TileSpec } from './data';
+import type { Box, Building, Point, Road, TileJson, TileSpec } from './data';
+import type { WaterBody } from './dem';
 import { propMaterial } from '../render/propMaterial';
 import { buildGrid, latticeHeight } from './ground';
 import { MINOR, roadPaint } from './roadPalette';
@@ -208,11 +209,11 @@ export function synthTile(spec: TileSpec, seed: number, terrain: { sdfAt(x: numb
 // both kerbs and the crown — riding the rendered ground (the 8 m lattice, never under it). It
 // used to be two independently draped strips 2 cm apart, asphalt over a wider sidewalk: on
 // bumpy ground the sidewalk won as often as not, and the streets went pale and blotchy.
-export function roadRibbons(roads: Road[], terrain: { heightAt(x: number, z: number): number }) {
+export function roadRibbons(roads: Road[], terrain: { heightAt(x: number, z: number): number }, step = 8) {
   const pos: number[] = [], nrm: number[] = [], col: number[] = [], idx: number[] = [];
   const STEP = 3.5, TOL = 0.04, LIFT = 0.06;
   const hAt = (x: number, z: number) => terrain.heightAt(x, z);
-  const H = (x: number, z: number) => Math.max(hAt(x, z), latticeHeight(hAt, x, z));
+  const H = (x: number, z: number) => Math.max(hAt(x, z), latticeHeight(hAt, x, z, step));
   const st = activeStyle(), arid = st.climate === 'arid';
   const c = new THREE.Color();
   const sec: number[] = []; // one segment's section vertices (x, y, z) × 3 per station
@@ -278,7 +279,56 @@ export function roadRibbons(roads: Road[], terrain: { heightAt(x: number, z: num
 // Real-lite tiles (worker-served OSM data) need the same visuals the bake gets from
 // paint/atlas: a ground chunk, asphalt ribbons along the REAL road centrelines, and
 // water sheets over the tile's water/coast areas (the terrain has no shore data here).
-export function realExtras(tj: TileJson, terrain: { sdfAt(x: number, z: number): number; heightAt(x: number, z: number): number }): THREE.Group {
+const WET: Record<string, [number, number, number]> = { water: [0.32, 0.44, 0.55], wetland: [0.38, 0.45, 0.4], beach: [0.82, 0.75, 0.58] };
+
+/** A ring clipped to a box (Sutherland–Hodgman, one edge of the box at a time). */
+function clipRing(r: [number, number][], b: Box): [number, number][] {
+  let out = r;
+  const edges: [(p: [number, number]) => number][] = [[(p) => p[0] - b.x0], [(p) => b.x1 - p[0]], [(p) => p[1] - b.z0], [(p) => b.z1 - p[1]]];
+  for (const [d] of edges) {
+    const inp = out;
+    out = [];
+    for (let i = 0; i < inp.length; i++) {
+      const a = inp[(i + inp.length - 1) % inp.length], c = inp[i], da = d(a), dc = d(c);
+      if (dc >= 0) {
+        if (da < 0) out.push([a[0] + ((c[0] - a[0]) * da) / (da - dc), a[1] + ((c[1] - a[1]) * da) / (da - dc)]);
+        out.push(c);
+      } else if (da >= 0) out.push([a[0] + ((c[0] - a[0]) * da) / (da - dc), a[1] + ((c[1] - a[1]) * da) / (da - dc)]);
+    }
+    if (out.length < 3) return [];
+  }
+  return out;
+}
+
+/** Flat water sheets for the lakes, ponds and rivers among `bodies`, each at its level and
+ *  clipped to `box` (the sea has none: its ground is cut away and the ocean plane shows). */
+export function waterSheets(bodies: WaterBody[], box: Box): THREE.Group {
+  const g = new THREE.Group(), col = WET.water;
+  for (const w of bodies) {
+    if (w.level === undefined) continue;
+    const outer = clipRing(w.ring, box);
+    if (outer.length < 3) continue;
+    const holes = (w.holes ?? []).map((q) => clipRing(q, box)).filter((q) => q.length >= 3);
+    const rings = [outer, ...holes], flat: number[] = [], hIdx: number[] = [];
+    for (const r of rings) {
+      if (r !== outer) hIdx.push(flat.length / 2);
+      for (const [x, z] of r) flat.push(x, z);
+    }
+    const idx = earcut(flat, hIdx.length ? hIdx : undefined);
+    if (!idx.length) continue;
+    const pos: number[] = [], nrm: number[] = [], cc: number[] = [];
+    for (let i = 0; i < flat.length; i += 2) (pos.push(flat[i], w.level + 0.06, flat[i + 1]), nrm.push(0, 1, 0), cc.push(col[0], col[1], col[2]));
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(cc, 3));
+    geo.setIndex(idx);
+    g.add(new THREE.Mesh(geo, propMaterial()));
+  }
+  return g;
+}
+
+export function realExtras(tj: TileJson, terrain: { sdfAt(x: number, z: number): number; heightAt(x: number, z: number): number }, step = 8, bodies?: WaterBody[]): THREE.Group {
   const box = tj.box;
   const extra = new THREE.Group();
   const unpack = (f: number[]): [number, number][] => {
@@ -286,25 +336,31 @@ export function realExtras(tj: TileJson, terrain: { sdfAt(x: number, z: number):
     for (let i = 0; i + 1 < f.length; i += 2) out.push([f[i] / 10, f[i + 1] / 10]);
     return out;
   };
-  const waters = tj.areas.filter((a) => a.c === 'water' || a.c === 'wetland');
-  const waterRings = waters.flatMap((a) => a.o.map(unpack));
-  const inWater = (x: number, z: number) => waterRings.some((r) => pointInRing(x, z, r));
-  const g = buildGrid({ x0: box.x0, z0: box.z0, x1: box.x1, z1: box.z1, step: 8 }, (x, z) => terrain.heightAt(x, z), (x, z) => terrain.sdfAt(x, z) > -45 && !inWater(x, z));
+  // (an island — a hole in its water — keeps its ground; each ring's box is checked first, a lake's
+  // outline runs to thousands of vertices and the ground asks once a quad)
+  const ringOf = (f: number[]) => { const r = unpack(f); return { r, b: r.reduce((b, [x, z]) => [Math.min(b[0], x), Math.min(b[1], z), Math.max(b[2], x), Math.max(b[3], z)], [Infinity, Infinity, -Infinity, -Infinity]) }; };
+  const inR = (x: number, z: number, q: { r: [number, number][]; b: number[] }) => x >= q.b[0] && x <= q.b[2] && z >= q.b[1] && z <= q.b[3] && pointInRing(x, z, q.r);
+  const wet = tj.areas.filter((a) => a.c === 'water' || a.c === 'wetland').map((a) => ({ o: a.o.map(ringOf), i: a.i.map(ringOf) }));
+  const inWater = (x: number, z: number) => wet.some((w) => w.o.some((q) => inR(x, z, q)) && !w.i.some((q) => inR(x, z, q)));
+  // (a hilly cell's ground is 4 m, fine enough to show its streets' cuts and fills; else 8 m)
+  const g = buildGrid({ x0: box.x0, z0: box.z0, x1: box.x1, z1: box.z1, step }, (x, z) => terrain.heightAt(x, z), (x, z) => terrain.sdfAt(x, z) > -45 && !inWater(x, z));
   if (g.index && g.index.count) {
     const gm = new THREE.Mesh(g, new THREE.ShaderMaterial());
     gm.material.userData.tag = 'gnd';
     extra.add(gm);
   }
-  extra.add(roadRibbons(tj.roads, terrain));
+  extra.add(roadRibbons(tj.roads, terrain, step));
   // Water sheets: flat tinted polygons — a lake or a pond at one level (its shore's lowest
   // ground, where the water stands), not draped over the DEM: near a shore the DEM is a smear
   // between the bluff and the bathymetry (Elliott Bay read +15 m a hundred metres out), and a
   // draped sheet tilted through the air. The sea itself gets no sheet: its ground is cut away
   // (above) and the ocean plane at sea level shows through, waves and all.
-  const WET: Record<string, [number, number, number]> = { water: [0.32, 0.44, 0.55], wetland: [0.38, 0.45, 0.4], beach: [0.82, 0.75, 0.58] };
+  // (the worker hands the cell's water bodies with their levels — the ones its ground was cut to
+  // — and each sheet is clipped to the cell: a lake four cells long is four sheets, not four lakes)
+  if (bodies) extra.add(waterSheets(bodies, box));
   for (const a of tj.areas) {
     const col = WET[a.c];
-    if (!col || a.k === 'sea') continue;
+    if (!col || a.k === 'sea' || (bodies && a.c === 'water')) continue;
     // the level: a low percentile of the shore's ground (a DEM spike on a bank can't lift it)
     let level = 0;
     if (a.c === 'water') {

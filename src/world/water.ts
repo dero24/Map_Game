@@ -12,6 +12,10 @@ export const waterParams = {
   uOceanShallow: { value: new THREE.Color(0x5fa3a0) },
   uRiverDeep: { value: new THREE.Color(0x3d5a5c) },
   uRiverShallow: { value: new THREE.Color(0x7a9a84) },
+  // The open world (?at=): the terrain textures are a flat stand-in (3 m of land everywhere), so
+  // wherever this plane shows — a cell's ground cut away over its sea — it is open, deep sea.
+  // (Read as a shallow wash it was a pale translucent sheet over nothing: "grey concrete".)
+  uOpenSea: { value: 0 },
 };
 
 export function buildWater(tt: TerrainTextures) {
@@ -29,7 +33,7 @@ export function buildWater(tt: TerrainTextures) {
       }`,
     fragment: /* glsl */ `
       ${GLSL_TERRAIN}
-      uniform float uWaveScale, uSurf, uGlitter;
+      uniform float uWaveScale, uSurf, uGlitter, uOpenSea;
       uniform vec3 uOceanDeep, uOceanShallow, uRiverDeep, uRiverShallow;
       float waves(vec2 p, float t, float ocean) {
         // long swell from the east-southeast on the ocean, wind ripples everywhere
@@ -40,6 +44,7 @@ export function buildWater(tt: TerrainTextures) {
         vec2 xz = vWorldPos.xz;
         vec4 T = terrainAt(xz);
         float bed = T.r, sdf = T.g, ocean = T.b;
+        if (uOpenSea > 0.5) { bed = -8.0; sdf = -60.0; ocean = 1.0; }
         float depth = max(0.0, -bed);
         vec3 V = (cameraPosition + uWorldOffset) - vWorldPos;
         float dist = length(V);

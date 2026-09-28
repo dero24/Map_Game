@@ -2,6 +2,69 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-28 (t) — The bay is water from the map, the traffic rides the ground you see, streets graded like a road engineer would
+
+Round 7 (6/10, not passed) ranked six must-fixes; this entry is the first three, plus the cause
+of Robby's "the cars are still going through the roads in Seattle".
+
+- **The cars drove on a different ground than the one drawn** (the real cause). A real cell's
+  worker build carries its own ground — the DEM at 4 m, its streets graded into it, the map's
+  water pressed in — but the main thread kept whichever patch registered first for the cell, and
+  the 16 m stand-in always lands first. So the walker, the moving cars (`LifeClient.ground`), the
+  parked cars' refits and every main-thread height read the stand-in's ungraded 16 m ground while
+  the street you saw was cut into the hill a metre or three away. The real twin's patch now takes
+  over (`stream.ts`, when it is at least as fine: `Terrain.patchPitch`). Measured downtown: the
+  real cells' patches read 4 m after the swap (16 m before it).
+- **Water from the map, never the DEM** (MF1). Stand-in cells (and a real cell's sea) take their
+  water from OpenFreeMap's vector tiles — the OpenMapTiles planet, OSM's water and the coastline
+  already closed into ocean polygons, from a CDN in a fifth of a second (Overpass took 25 s for a
+  four-line query, then stopped answering at all). `mvt.ts` reads the protobuf (no dependency);
+  holes are islands (they stay land); a lake stands at the level the hydro-flattened DEM gives
+  inside it (p30 of its interior nodes — every cell along Lake Washington finds the same 6.4 m),
+  its sheet clipped to the cell; where the vector tiles answer, ground the DEM called sea but the
+  map calls land is land (a seawall no longer eaten by the smear, a town below sea level dry).
+  A real cell wholly out on the bay (no coastline crossing it) was a DEM smear with nine trees on
+  it; its sea is the ocean polygon now. And the virtual region's slice ground — built at startup
+  before any cell knew its water — stood 1–3 m over Elliott Bay as a lawn wherever a cell cut its
+  sea away; it steps aside for streamed cells now, like the backdrop (`ground.ts` SLICE).
+  *Test (the reviewer's):* the four bay cells forced to 504 (`?fail=`): 3,203 wet samples raycast
+  from 400 m, nothing standing on the water but Colman Dock's deck and Lake Union's sheet;
+  `shots/spots-bay-mvt3.jpg`.
+- **Black flecks on the sea** — the sun's glitter came out as a cloud of dirt. The Kuwahara pass
+  divides by its sector weights with a floor of 1e-5; where every sector holds bright dashes the
+  weights are ~1e-13 and the pixel went black. Divided by the true sum now (the plain mean if
+  nothing is left).
+- **Streets graded like a road engineer would** (MF2, `grade.ts`). On top of (s)'s smoothed
+  profiles: a hard grade no stretch may pass whatever the DEM says (8% motorway … 24% residential;
+  a tagged `incline` + 5 points), held by a cone from each junction and a forward/backward pass;
+  junctions a short block apart that the DEM puts further apart in height than the block can
+  climb meet each other halfway (one local step, so a seam still grades the same from both
+  tiles); every junction a round plateau however short the next way; each ground node takes its
+  target from the nearest point of each street (an average of every 4 m piece in reach smeared a
+  profile's knees past its limit) and a street's own corridor outranks a neighbour's shoulder.
+  **Retaining walls** where a street is cut more than 0.6 m into the hill: concrete panels at the
+  back of the sidewalk, facing the street, stained at the foot, never across a crossing street, a
+  path, the steps or a driveway, never where a building stands; walkers meet them as walls.
+  Tests: a 20 m block on a 50% smear (junctions meet halfway, nothing past 25%), a 30 m cliff,
+  honest 18% hills kept, seams identical, walls uphill only with their gaps.
+  *Audit* (`tools/grade-audit.js` `__GRADES__`, the car's own surface — ground or deck — every
+  4 m, only inside real cells): downtown 2,425 ways, 47 over 25%; the rest sit at seams with
+  cells still loading, on Colman Dock's ramps and along I-5's trench and lids (open: trenches).
+- **No trees on structures, and the masts drawn** (MF3, v19 work): broadcast masts, water towers,
+  chimneys and flagpoles from `man_made` (a mast in red-and-white bands with a beacon, scaled to
+  its mapped height); no tree inside a footprint or within 15 m of a mast, chimney or water tower;
+  LiDAR "trees" over 50 m (masts, towers) dropped. `__TREES__` counts trees standing more than
+  3 m up, over 45 m, or inside a footprint: downtown 14,683 trees — 20 up (raised plazas), 14
+  over 45 m (48–50 m "spruces" by the stadiums: light towers the LiDAR read as crowns), 25 in a
+  neighbouring cell's footprint at a seam. Open.
+- **Tile cache v19** (`t/v19`, `&v=19`, `DIRECT_V` 19): **redeploy the tile worker.**
+- Harness: `__GRADES__`, `__CAROBB__` (overlapping cars, moving and parked), `__TREES__`
+  (`tools/grade-audit.js`); `?fail=cx_cz,…` makes a real cell answer as a 504 would.
+- Overpass's three mirrors stopped answering during the session (status pages time out) — only
+  cells the tile service had cached came in. Next: a vector-tile twin (real streets and buildings
+  from the same CDN) in place of the synthetic stand-in, so a cell is real in a second whatever
+  Overpass is doing.
+
 ## 2026-09-28 (s) — Seattle's hills and Pike Place: streets that lie on the ground, cars on four wheels, tunnels under the city, a bay that stays a bay; courts in the parks; the open-data catalogue
 
 Robby: "the cars are still going through roads in Seattle, the roads aren't looking good with the

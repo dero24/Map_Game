@@ -107,7 +107,7 @@ export function raceNull<T>(p: Promise<T>, ms: number): Promise<T | null> {
     .finally(() => clearTimeout(timer!));
 }
 
-export async function fetchDem(cellBox: Box, origin: LatLon): Promise<DemGrid | null> {
+export async function fetchDem(cellBox: Box, origin: LatLon, pitch = PITCH): Promise<DemGrid | null> {
   const P = makeProjector(origin);
   // The patch overhangs its cell by 96 m (6 pitches — the lattice stays global): buildings and
   // props at a cell's edge sample real ground even before the neighbour's patch exists, instead
@@ -117,8 +117,8 @@ export async function fetchDem(cellBox: Box, origin: LatLon): Promise<DemGrid | 
   // TerrainLayer treats samples as cell CENTERS (its bilinear shifts by -0.5), so nodes
   // sit at x0+(i+0.5)*pitch — 64 nodes cover the cell, edges interpolate to the same
   // global lattice as the neighbour's patch (seam-free by construction).
-  const nx = Math.round((box.x1 - box.x0) / PITCH);
-  const nz = Math.round((box.z1 - box.z0) / PITCH);
+  const nx = Math.round((box.x1 - box.x0) / pitch);
+  const nz = Math.round((box.z1 - box.z0) / pitch);
   const work = (async (): Promise<DemGrid | null> => {
     // Tile range covering the box. +z is south / +x east: (x0,z0) is the north-west
     // corner — lat north (mercator y min), lon west (x min).
@@ -156,10 +156,10 @@ export async function fetchDem(cellBox: Box, origin: LatLon): Promise<DemGrid | 
     };
     const heights = new Float32Array(nx * nz);
     for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
-      const h = sample(box.x0 + (i + 0.5) * PITCH, box.z0 + (j + 0.5) * PITCH);
+      const h = sample(box.x0 + (i + 0.5) * pitch, box.z0 + (j + 0.5) * pitch);
       heights[j * nx + i] = h <= -32000 ? 0 : h; // nodata/ocean-floor sentinel -> sea level
     }
-    return { heights, x0: box.x0, z0: box.z0, pitch: PITCH, nx, nz };
+    return { heights, x0: box.x0, z0: box.z0, pitch, nx, nz };
   })();
   return work.catch(() => null);
 }
@@ -171,6 +171,98 @@ export async function fetchDem(cellBox: Box, origin: LatLon): Promise<DemGrid | 
 // and realExtras' `sdfAt > -45` ground paint respects the shoreline. Below-sea-level
 // land (Death Valley, Netherlands) reads as water — rare and placement-only; heights
 // stay true either way.
+/** A body of water in local metres: its outline, its islands (holes that stay land), and the
+ *  level its surface stands at — none for the sea, whose floor drops below the datum. */
+export interface WaterBody { ring: [number, number][]; holes?: [number, number][][]; level?: number }
+
+type Grid = LayerLayout['grid'];
+/** Where a ring crosses the row z (even-odd: inside between each pair), sorted. */
+function crossings(r: [number, number][], z: number): number[] {
+  const xs: number[] = [];
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const [xi, zi] = r[i], [xj, zj] = r[j];
+    if (zi > z !== zj > z) xs.push(xi + ((z - zi) * (xj - xi)) / (zj - zi));
+  }
+  return xs.sort((a, b) => a - b);
+}
+/** Every grid node (a cell centre) inside a body — its ring, not its holes — row by row: a
+ *  lake's outline runs to thousands of vertices and a grid to ninety thousand nodes, so each row
+ *  finds its crossings once instead of each node walking the ring. */
+function eachNodeIn(g: Grid, w: WaterBody, fn: (k: number) => void) {
+  let z0 = Infinity, z1 = -Infinity;
+  for (const [, z] of w.ring) (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z));
+  const holes = (w.holes ?? []).filter((q) => q.length >= 3);
+  const j0 = Math.max(0, Math.ceil((z0 - g.z0) / g.cell - 0.5)), j1 = Math.min(g.h - 1, Math.floor((z1 - g.z0) / g.cell - 0.5));
+  for (let j = j0; j <= j1; j++) {
+    const z = g.z0 + (j + 0.5) * g.cell, xs = crossings(w.ring, z);
+    if (xs.length < 2) continue;
+    const hx = holes.map((q) => crossings(q, z));
+    for (let q = 0; q + 1 < xs.length; q += 2) {
+      const i0 = Math.max(0, Math.ceil((xs[q] - g.x0) / g.cell - 0.5)), i1 = Math.min(g.w - 1, Math.floor((xs[q + 1] - g.x0) / g.cell - 0.5));
+      for (let i = i0; i <= i1; i++) {
+        const x = g.x0 + (i + 0.5) * g.cell;
+        if (hx.some((c) => { let n = 0; for (const cx of c) if (cx < x) n++; else break; return n % 2 === 1; })) continue;
+        fn(j * g.w + i);
+      }
+    }
+  }
+}
+
+/** Water from the map, pressed into a cell's DEM layer (a copy): inside the sea the ground drops
+ *  below the datum (sdf −60 m, oceanD 0, the water flag), inside a lake to its level; an island
+ *  (a hole in its body) stays land. The DEM alone can't be trusted at a shore — a z14 Terrarium
+ *  tile smears the bluff into the bathymetry, and Elliott Bay read +3 to +15 m a hundred metres
+ *  out (a lawn with trees on the water). The sea is tested first: a lake mapped over the sea
+ *  (a marina basin, a dock) is the sea.
+ *    `mapIsTruth` (the map's water is complete here — the vector tiles' ocean): ground the DEM
+ *  called sea (≤ 0.5 m) that the map calls land is land, raised to the half metre — a shore's
+ *  smear no longer eats the seawall, and a town below sea level stands dry. */
+export function waterPatch(layer: { buf: ArrayBuffer; layout: LayerLayout }, bodies: WaterBody[], mapIsTruth = false): { buf: ArrayBuffer; layout: LayerLayout } {
+  const L = layer.layout, g = L.grid, n = g.w * g.h;
+  const buf = layer.buf.slice(0);
+  const h = new Float32Array(buf, L.height.offset, n);
+  const sdf = new Int16Array(buf, L.sdf.offset, n);
+  const flags = new Uint8Array(buf, L.flags.offset, n);
+  const oceanD = new Uint8Array(buf, L.oceanD.offset, n);
+  const level = new Float32Array(n).fill(NaN);
+  const ordered = [...bodies.filter((w) => w.level === undefined), ...bodies.filter((w) => w.level !== undefined)].filter((w) => w.ring.length >= 3);
+  for (const w of ordered) {
+    const lv = w.level === undefined ? -6 : w.level - 0.5;
+    eachNodeIn(g, w, (k) => { if (Number.isNaN(level[k])) level[k] = lv; });
+  }
+  for (let k = 0; k < n; k++) {
+    const lv = level[k];
+    if (Number.isNaN(lv)) {
+      if (mapIsTruth && flags[k] & 1) (flags[k] &= ~1), (sdf[k] = 500), (oceanD[k] = 255), (h[k] = Math.max(h[k], 50));
+      continue;
+    }
+    // the sea floor at a flat 6 m (the ocean plane shows the sea; a 250 m bathymetry trough
+    // beside a seawall hung the shore's ground in curtains), a lake's at its level
+    h[k] = lv < 0 ? lv * 100 : Math.min(h[k], lv * 100);
+    sdf[k] = -600;
+    flags[k] |= 1;
+    if (lv < 0) oceanD[k] = 0;
+  }
+  return { buf, layout: L };
+}
+
+/** The level a lake or river stands at in this cell (m): the DEM inside it, where the survey
+ *  flattened the water to its surface (3DEP is hydro-flattened — one height across a lake, so
+ *  every cell along Lake Washington finds the same 6.4 m), its 30th percentile (a bank's smear
+ *  reaches in from the shore, never down); a water too small to hold six of the grid's nodes
+ *  falls back to the shore's low ground (a 10th percentile of its outline). */
+export function waterLevel(layer: { buf: ArrayBuffer; layout: LayerLayout }, w: WaterBody, heightAt: (x: number, z: number) => number): number {
+  const L = layer.layout, g = L.grid, h = new Float32Array(layer.buf, L.height.offset, g.w * g.h);
+  const inside: number[] = [];
+  eachNodeIn(g, w, (k) => inside.push(h[k] / 100));
+  if (inside.length >= 6) {
+    inside.sort((a, b) => a - b);
+    return Math.max(0, inside[Math.floor(inside.length * 0.3)]);
+  }
+  const hs = w.ring.map(([x, z]) => heightAt(x, z)).sort((a, b) => a - b);
+  return Math.max(0, hs[Math.floor(hs.length * 0.1)] ?? 0);
+}
+
 export function demLayer(d: DemGrid): { buf: ArrayBuffer; layout: LayerLayout } {
   const n = d.nx * d.nz;
   const buf = new ArrayBuffer(n * 4 + n * 2 + n * 3); // height f32 + sdf i16 + cover/flags/oceanD u8

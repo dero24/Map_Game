@@ -1,0 +1,132 @@
+// Grade + traffic audit (the reviewer's MF2 tests, runnable on any streamed town):
+//   on a game page (?at=…&capture=1):  await import('/tools/grade-audit.js');
+//   __GRADES__()   every drivable way in the streamed real cells, its steepest 8 m of ground as
+//                  the walker, the cars and the ribbons see it — none untagged may pass 25%
+//   await __CAROBB__(seconds)   moving and parked cars sampled over time: overlapping footprints
+//                  (oriented boxes, 4.4 × 1.8 m) — must be zero
+// Nothing about a place is written here: the ways and cars are the page's own.
+
+const DRIVE = /^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|living_street|service)(_link)?$/;
+
+window.__GRADES__ = (opts = {}) => {
+  const G = window.__GAME__, T = G.world.terrain;
+  const out = [];
+  // only where real cells are loaded all round (a real cell's edge beside a stand-in or an
+  // unloaded cell is a seam between graded and ungraded ground until the neighbour lands)
+  const boxes = [...G.stream.loaded.values()].filter((t) => t?.spec?.world).map((t) => t.spec.box);
+  const inside = (x, z) => boxes.some((b) => x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1) && [[8, 0], [-8, 0], [0, 8], [0, -8]].every(([dx, dz]) => boxes.some((b) => x + dx > b.x0 && x + dx < b.x1 && z + dz > b.z0 && z + dz < b.z1));
+  for (const r of G.stream.primRoads) {
+    if (!DRIVE.test(r.c) || r.br || r.tu || r.sy || r.lod) continue;
+    let worst = 0, at = null;
+    const p = r.p;
+    // the surface a car on this way rides, every 4 m: the ground, or the deck (a pier, a lid) it
+    // is already on — walk.outdoorNear, as the traffic sim samples it
+    const pts = [];
+    let next = 0, run = 0;
+    for (let i = 0; i + 3 < p.length; i += 2) {
+      const ax = p[i] / 10, az = p[i + 1] / 10, bx = p[i + 2] / 10, bz = p[i + 3] / 10, L = Math.hypot(bx - ax, bz - az);
+      while (next <= run + L) { const t = L ? (next - run) / L : 0; pts.push([ax + (bx - ax) * t, az + (bz - az) * t]); next += 4; }
+      run += L;
+    }
+    let y = pts.length ? G.walk.outdoorSurfaceAt(pts[0][0], pts[0][1]) : 0;
+    const ys = pts.map(([x, z]) => (y = G.walk.outdoorNear(x, z, y)));
+    for (let k = 1; k + 1 < ys.length; k++) {
+      if (!inside(pts[k - 1][0], pts[k - 1][1]) || !inside(pts[k + 1][0], pts[k + 1][1])) continue;
+      const g = Math.abs(ys[k + 1] - ys[k - 1]) / Math.max(1e-3, Math.hypot(pts[k + 1][0] - pts[k - 1][0], pts[k + 1][1] - pts[k - 1][1]));
+      if (g > worst) (worst = g), (at = pts[k]);
+    }
+    out.push({ n: r.n ?? '', c: r.c, ic: r.ic ?? null, g: +worst.toFixed(3), at: at && at.map(Math.round) });
+  }
+  out.sort((a, b) => b.g - a.g);
+  const limit = (w) => (w.ic != null ? Math.max(0.25, w.ic + 0.05) : 0.25);
+  const over = out.filter((w) => w.g > limit(w));
+  const hist = [0.05, 0.1, 0.15, 0.2, 0.25, 1].map((t, i, a) => ({ upTo: t, ways: out.filter((w) => w.g <= t && w.g > (i ? a[i - 1] : -1)).length }));
+  return { ways: out.length, over: over.length, overList: over.slice(0, 20), hist, top: out.slice(0, opts.top ?? 12) };
+};
+
+window.__CAROBB__ = async (seconds = 20) => {
+  const G = window.__GAME__;
+  const { RANGES, S, H } = await import('/src/sim/protocol.ts');
+  const L = 4.4, W = 1.8;
+  const corners = (c) => {
+    const fx = -Math.sin(c.yaw), fz = -Math.cos(c.yaw), rx = -fz, rz = fx;
+    return [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([a, b]) => [c.x + fx * a * L / 2 + rx * b * W / 2, c.z + fz * a * L / 2 + rz * b * W / 2]);
+  };
+  // separating axis test for two oriented rectangles
+  const overlap = (A, B) => {
+    for (const P of [A, B])
+      for (let i = 0; i < 2; i++) {
+        const [x0, z0] = P[i], [x1, z1] = P[i + 1], nx = z1 - z0, nz = x0 - x1;
+        let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
+        for (const [x, z] of A) { const d = x * nx + z * nz; a0 = Math.min(a0, d); a1 = Math.max(a1, d); }
+        for (const [x, z] of B) { const d = x * nx + z * nz; b0 = Math.min(b0, d); b1 = Math.max(b1, d); }
+        if (a1 <= b0 || b1 <= a0) return false;
+      }
+    return true;
+  };
+  const hits = new Map();
+  let frames = 0, seen = 0;
+  const t0 = performance.now();
+  while (performance.now() - t0 < seconds * 1000) {
+    const Lf = G.life, h = Lf.V.header, snap = Lf.V.snaps[h[H.FRONT]], cars = [];
+    for (let i = RANGES.cars[0]; i < RANGES.cars[1]; i++) {
+      const o = i * S.STRIDE;
+      if (snap[o + S.FLAGS] & 1 && snap[o + S.Y] > -500) cars.push({ id: 'm' + i, x: snap[o + S.X], z: snap[o + S.Z], yaw: snap[o + S.YAW] });
+    }
+    // parked cars (kerb and lot records, kerbCars.ts: x, y, z, yaw, …) within 500 m of the walker
+    const wx = G.walker.x ?? G.walker.pos?.x ?? 0, wz = G.walker.z ?? G.walker.pos?.z ?? 0;
+    for (const [id, t] of G.stream.loaded)
+      if (t.kerb) for (let i = 0, k = 0; i + 11 <= t.kerb.length; i += 11, k++) {
+        const x = t.kerb[i], z = t.kerb[i + 2];
+        if (Math.abs(x - wx) < 500 && Math.abs(z - wz) < 500) cars.push({ id: `k${id}:${k}`, x, z, yaw: t.kerb[i + 3] });
+      }
+    seen = Math.max(seen, cars.length);
+    // a 6 m hash: only neighbours are tested
+    const grid = new Map();
+    cars.forEach((c, i) => { const k = Math.floor(c.x / 6) + ',' + Math.floor(c.z / 6); (grid.get(k) ?? grid.set(k, []).get(k)).push(i); });
+    const cs = cars.map(corners);
+    for (let a = 0; a < cars.length; a++) {
+      const gx = Math.floor(cars[a].x / 6), gz = Math.floor(cars[a].z / 6);
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++)
+        for (const b of grid.get(gx + dx + ',' + (gz + dz)) ?? []) {
+          if (b <= a || (cars[a].id[0] === 'k' && cars[b].id[0] === 'k' && frames > 0)) continue; // (parked pairs once)
+          if (overlap(cs[a], cs[b])) {
+            const key = cars[a].id + '|' + cars[b].id;
+            if (!hits.has(key)) hits.set(key, { a: cars[a].id, b: cars[b].id, x: Math.round(cars[a].x), z: Math.round(cars[a].z), d: +Math.hypot(cars[a].x - cars[b].x, cars[a].z - cars[b].z).toFixed(2) });
+          }
+        }
+    }
+    frames++;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  const all = [...hits.values()], kind = (h) => (h.a[0] === 'm' ? 'm' : 'k') + (h.b[0] === 'm' ? 'm' : 'k');
+  return { frames, cars: seen, pairs: all.length, moving: all.filter((h) => kind(h) === 'mm').length, movingParked: all.filter((h) => kind(h) !== 'mm' && kind(h) !== 'kk').length, parked: all.filter((h) => kind(h) === 'kk').length, sample: all.slice(0, 12) };
+};
+
+// Trees (MF3): every instanced tree in the streamed cells — its base against the ground under it
+// (a tree more than 3 m up stands on a roof or floats), its height (nothing over 45 m), and its
+// trunk inside a building footprint (a tree on a structure).
+window.__TREES__ = () => {
+  const G = window.__GAME__, T = G.world.terrain, THREE = G.THREE;
+  const world = G.scene.getObjectByName('world');
+  const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+  let n = 0, maxH = 0;
+  const up = [], tall = [], inside = [];
+  world.traverse((o) => {
+    if (!o.isInstancedMesh || !/^trees:/.test(o.name)) return;
+    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+    const top = o.geometry.boundingBox.max.y;
+    for (let i = 0; i < o.count; i++) {
+      o.getMatrixAt(i, m);
+      m.decompose(p, q, s);
+      n++;
+      const g = T.heightAt(p.x, p.z), h = top * s.y;
+      maxH = Math.max(maxH, h);
+      const rec = { t: o.name, x: Math.round(p.x), z: Math.round(p.z), base: +(p.y - g).toFixed(1), h: +h.toFixed(1) };
+      if (p.y - g > 3) up.push(rec);
+      if (h > 45) tall.push(rec);
+      if (G.walk.buildingAt(p.x, p.z) >= 0) inside.push(rec);
+    }
+  });
+  return { trees: n, maxH: +maxH.toFixed(1), up: up.length, tall: tall.length, inside: inside.length, sample: [...up.slice(0, 5), ...tall.slice(0, 5), ...inside.slice(0, 5)] };
+};

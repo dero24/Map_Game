@@ -1,12 +1,15 @@
 // Worker-side tile build: fetch + decode + mesh + collision for one tile, packed for transfer.
 // Runs the same buildTile pipeline as the main-thread fallback — same output, off the main thread.
 import { Terrain, TerrainLayer, type LayerLayout, type TileJson, type TileSpec } from './data';
-import { cachedFetch, cachedFetchJson, initCache, kvGet, kvPut } from './cache';
+import { cachedFetch, cachedFetchJson, initCache, kvGet, kvPut, FetchError } from './cache';
 import { osmToTile, overpassQuery, makeProjector, type OsmDoc } from './realTile';
 import { buildTile } from './tileBuild';
 import { packGroup, type BuiltTile } from './pack';
-import { synthTile, realExtras } from './synth';
-import { fetchDem, demLayer, setDemBase, raceNull } from './dem';
+import { synthTile, realExtras, waterSheets } from './synth';
+import { fetchDem, demLayer, setDemBase, raceNull, waterPatch, waterLevel, type WaterBody } from './dem';
+import { readMvt, ringArea } from './mvt';
+import { gradeRoads } from './grade';
+import { retainingWalls, retainingColliders } from './retaining';
 import type { SynthResult } from './synth';
 import { setActiveStyle, styleByKey } from './styles';
 import { enrichTile, initLidar, lidarOn, setLidarLog, setLidarPort } from './lidar';
@@ -37,7 +40,7 @@ const demCache = new Map<string, Promise<{ buf: ArrayBuffer; layout: LayerLayout
 // stalls — the player gets the real town either way, never a placeholder for want of a proxy.
 // Results are cached per cell in IndexedDB (kvPut), so a revisit never re-queries Overpass.
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-const DIRECT_V = 18; // keep with the tile service's t/vN (realTile output version)
+const DIRECT_V = 19; // keep with the tile service's t/vN (realTile output version)
 // Overpass rate-limits per IP and per server: one query at a time on each mirror, so the three
 // mirrors carry three cells at once. A mirror that answers 429/504 cools down for its
 // retry-after; a query that fails on one mirror moves on to the next free one.
@@ -56,18 +59,10 @@ function releaseEndpoint(ep: string) {
   epBusy.delete(ep);
   epWait.shift()?.();
 }
-async function directTile(spec: TileSpec): Promise<TileJson> {
-  if (!origin) throw new Error('direct tiles need an origin');
-  const [cx, cz] = spec.id.slice(1).split('_').map(Number);
-  const key = `osm${DIRECT_V}|${origin.lat.toFixed(4)},${origin.lon.toFixed(4)}|${cx}_${cz}`;
-  const hit = await kvGet<TileJson>(key);
-  if (hit) return hit;
-  const say = (msg: string) => ctx.postMessage({ kind: 'log', msg: `[direct ${cx}_${cz}] ${msg}` });
-  const M = 48;
-  const bb = makeProjector(origin).localToBbox({ x0: spec.box.x0 - M, z0: spec.box.z0 - M, x1: spec.box.x1 + M, z1: spec.box.z1 + M });
-  const body = 'data=' + encodeURIComponent(overpassQuery(bb));
+/** One Overpass query through the mirror slots: its JSON, or throw once `tries` attempts failed. */
+async function overpass(body: string, tries = 6): Promise<OsmDoc> {
   let last = 'no endpoint';
-  for (let attempt = 0; attempt < 6; attempt++) {
+  for (let attempt = 0; attempt < tries; attempt++) {
     const slot = await takeEndpoint(), ep = slot.split('#')[0];
     try {
       const r = await fetch(ep, { method: 'POST', body, headers: { 'content-type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(45000) });
@@ -78,10 +73,7 @@ async function directTile(spec: TileSpec): Promise<TileJson> {
       }
       const j = (await r.json()) as OsmDoc & { remark?: string };
       if (typeof j.remark === 'string' && /runtime error|timed out|out of memory|runtime limit/i.test(j.remark)) { last = j.remark; continue; }
-      const tj = osmToTile(j, { id: `${cx}_${cz}`, box: spec.box, origin });
-      say(`ok b${tj.buildings.length} r${tj.roads.length} l${tj.lines.length} via ${new URL(ep).host}`);
-      void kvPut(key, tj);
-      return tj;
+      return j;
     } catch (e) {
       last = `${ep} ${(e as Error)?.message ?? e}`;
       epCool.set(ep, Date.now() + 5000);
@@ -89,10 +81,211 @@ async function directTile(spec: TileSpec): Promise<TileJson> {
       releaseEndpoint(slot);
     }
   }
-  throw new Error('overpass unavailable: ' + last);
+  throw new FetchError('overpass unavailable: ' + last); // (the data's failure, not the worker's: the stream retries the cell)
 }
+const q = (bb: { s: number; w: number; n: number; e: number }) => 'data=' + encodeURIComponent(overpassQuery(bb));
+async function directTile(spec: TileSpec): Promise<TileJson> {
+  if (!origin) throw new Error('direct tiles need an origin');
+  const [cx, cz] = spec.id.slice(1).split('_').map(Number);
+  const key = `osm${DIRECT_V}|${origin.lat.toFixed(4)},${origin.lon.toFixed(4)}|${cx}_${cz}`;
+  const hit = await kvGet<TileJson>(key);
+  if (hit) return hit;
+  const say = (msg: string) => ctx.postMessage({ kind: 'log', msg: `[direct ${cx}_${cz}] ${msg}` });
+  const M = 48, P = makeProjector(origin);
+  const full = { x0: spec.box.x0 - M, z0: spec.box.z0 - M, x1: spec.box.x1 + M, z1: spec.box.z1 + M };
+  let osm: OsmDoc;
+  try {
+    osm = await overpass(q(P.localToBbox(full)), 3);
+  } catch (e) {
+    // A dense downtown cell can outrun the server's time limit (504): ask for it in quarters and
+    // merge — whole ways come back from each quarter they touch, so the union is the same answer.
+    say(`${(e as Error).message} — asking in quarters`);
+    const mx = (full.x0 + full.x1) / 2, mz = (full.z0 + full.z1) / 2;
+    const parts = await Promise.all([[full.x0, full.z0, mx, mz], [mx, full.z0, full.x1, mz], [full.x0, mz, mx, full.z1], [mx, mz, full.x1, full.z1]]
+      .map(([x0, z0, x1, z1]) => overpass(q(P.localToBbox({ x0, z0, x1, z1 })), 4)));
+    const seen = new Set<string>(), elements: NonNullable<OsmDoc['elements']> = [];
+    for (const d of parts) for (const el of d.elements ?? []) { const k = el.type + el.id; if (!seen.has(k)) (seen.add(k), elements.push(el)); }
+    osm = { elements };
+  }
+  const tj = osmToTile(osm, { id: `${cx}_${cz}`, box: spec.box, origin });
+  say(`ok b${tj.buildings.length} r${tj.roads.length} l${tj.lines.length}`);
+  void kvPut(key, tj);
+  return tj;
+}
+
+// ---- water from the map, for the placeholder while a real cell is on its way (or 504'd) ----
+// A light query (coastline, lakes, riverbanks) — the one thing a stand-in must not guess from
+// the DEM, which smears a shore into the sea (Elliott Bay became a lawn with trees). Cached per
+// cell like the tiles; asked only where the DEM says the cell could hold water.
+const waterInflight = new Map<string, Promise<TileJson | null>>();
+function waterTile(spec: TileSpec): Promise<TileJson | null> {
+  const k = spec.id.slice(1);
+  let p = waterInflight.get(k);
+  if (!p) {
+    p = waterTileNow(spec);
+    waterInflight.set(k, p);
+    void p.then((r) => { if (!r) waterInflight.delete(k); }); // (a failure may be retried)
+  }
+  return p;
+}
+async function waterTileNow(spec: TileSpec): Promise<TileJson | null> {
+  if (!origin) return null;
+  const [cx, cz] = spec.id.slice(1).split('_').map(Number);
+  const key = `wat${DIRECT_V}|${origin.lat.toFixed(4)},${origin.lon.toFixed(4)}|${cx}_${cz}`;
+  const hit = await kvGet<TileJson>(key);
+  if (hit) return hit;
+  const M = 48, bb = makeProjector(origin).localToBbox({ x0: spec.box.x0 - M, z0: spec.box.z0 - M, x1: spec.box.x1 + M, z1: spec.box.z1 + M });
+  const body = 'data=' + encodeURIComponent(`[out:json][timeout:15][bbox:${bb.s.toFixed(7)},${bb.w.toFixed(7)},${bb.n.toFixed(7)},${bb.e.toFixed(7)}];(way["natural"="coastline"];way["natural"="water"];relation["natural"="water"];way["waterway"="riverbank"];relation["waterway"="riverbank"];);out geom qt;`);
+  // its own lane (two at a time, the mirrors in turn): a light query mustn't queue behind the
+  // heavy cells that hold the shared slots for tens of seconds
+  while (waterBusy >= 2) await new Promise<void>((r) => waterWait.push(r));
+  waterBusy++;
+  try {
+    let osm: OsmDoc | null = null;
+    for (const ep of OVERPASS) {
+      try {
+        const r = await fetch(ep, { method: 'POST', body, headers: { 'content-type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(15000) });
+        if (!r.ok) continue;
+        const j = (await r.json()) as OsmDoc & { remark?: string };
+        if (typeof j.remark === 'string' && /runtime error|timed out|out of memory|runtime limit/i.test(j.remark)) continue;
+        osm = j;
+        break;
+      } catch { /* the next mirror */ }
+    }
+    if (!osm) return null;
+    const tj = osmToTile(osm, { id: `${cx}_${cz}`, box: spec.box, origin });
+    const slim: TileJson = { ...tj, buildings: [], roads: [], lines: [], points: [], landmarks: [], areas: tj.areas.filter((a) => a.c === 'water') };
+    void kvPut(key, slim);
+    return slim;
+  } catch {
+    return null;
+  } finally {
+    waterBusy--;
+    waterWait.shift()?.();
+  }
+}
+let waterBusy = 0;
+const waterWait: (() => void)[] = [];
+/** Could this cell hold water? Low ground, or a dead-flat stretch (a DEM flattens lakes). */
+function mayBeWet(dem: { buf: ArrayBuffer; layout: LayerLayout }) {
+  const L = dem.layout, n = L.grid.w * L.grid.h, h = new Float32Array(dem.buf, L.height.offset, n);
+  let lo = Infinity;
+  for (let i = 0; i < n; i++) lo = Math.min(lo, h[i]);
+  if (lo <= 3000) return true; // (cm) anything under 30 m
+  let flat = 0;
+  for (let i = 0; i < n; i++) if (h[i] - lo < 10) flat++;
+  return flat > n * 0.08;
+}
+/** A tile's water as bodies (dem.ts): the sea from its coast, each lake, pond and river at the
+ *  level the DEM gives its water, its islands left standing — only those that reach this grid. */
+function waterBodies(dem: { buf: ArrayBuffer; layout: LayerLayout }, tj: TileJson, t: Terrain): WaterBody[] {
+  const g = dem.layout.grid, X1 = g.x0 + g.w * g.cell, Z1 = g.z0 + g.h * g.cell;
+  const unpack = (f: number[]) => { const o: [number, number][] = []; for (let i = 0; i + 1 < f.length; i += 2) o.push([f[i] / 10, f[i + 1] / 10]); return o; };
+  const out: WaterBody[] = [];
+  for (const a of tj.areas) {
+    if (a.c !== 'water') continue;
+    const holes = a.i.map(unpack).filter((r) => r.length >= 3);
+    for (const f of a.o) {
+      const ring = unpack(f);
+      if (ring.length < 3) continue;
+      let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+      for (const [x, z] of ring) (x0 = Math.min(x0, x)), (z0 = Math.min(z0, z)), (x1 = Math.max(x1, x)), (z1 = Math.max(z1, z));
+      if (x1 < g.x0 || x0 > X1 || z1 < g.z0 || z0 > Z1) continue;
+      const w: WaterBody = { ring, holes };
+      if (a.k !== 'sea') w.level = waterLevel(dem, w, (x, z) => t.heightAt(x, z));
+      out.push(w);
+    }
+  }
+  return out;
+}
+
+// ---- water from OpenFreeMap's vector tiles: the stand-in's first source ----
+// OpenFreeMap serves the OpenMapTiles planet (OSM's lakes, ponds and rivers, and the sea from the
+// coastline's water polygons) from a CDN: a fifth of a second a tile, no key, no rate limit —
+// where Overpass took 25 s and more for a four-line water query on a busy afternoon, and 504'd
+// the very cell whose stand-in needed it. Overpass (waterTile) is the fallback. © OpenMapTiles,
+// © OpenStreetMap contributors (the HUD credit).
+const OFM = 'https://tiles.openfreemap.org/planet';
+let ofmTpl: Promise<string | null> | null = null;
+function ofmTemplate(): Promise<string | null> {
+  return (ofmTpl ??= fetch(OFM, { signal: AbortSignal.timeout(8000) })
+    .then((r) => (r.ok ? (r.json() as Promise<{ tiles?: string[] }>) : null))
+    .then((j) => j?.tiles?.[0] ?? null, () => null)
+    .then((t) => { if (!t) ofmTpl = null; return t; }));
+}
+/** One z14 vector tile's water: polygons in local metres (outer ring, then its holes). */
+type WaterPoly = { sea: boolean; rings: [number, number][][] };
+const mvtTiles = new Map<string, Promise<WaterPoly[] | null>>();
+function mvtWaterTile(tpl: string, tx: number, ty: number): Promise<WaterPoly[] | null> {
+  const k = `${tx}_${ty}`;
+  let p = mvtTiles.get(k);
+  if (p) return p;
+  p = (async () => {
+    const r = await fetch(tpl.replace('{z}', '14').replace('{x}', String(tx)).replace('{y}', String(ty)), { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) return null;
+    const P = makeProjector(origin!), Z = 2 ** 14, out: WaterPoly[] = [];
+    for (const L of readMvt(await r.arrayBuffer(), (n) => n === 'water')) {
+      const E = L.extent;
+      const local = ([gx, gy]: [number, number]): [number, number] => {
+        const X = (tx + gx / E) / Z, Y = (ty + gy / E) / Z;
+        return P.project((Math.atan(Math.sinh(Math.PI * (1 - 2 * Y))) * 180) / Math.PI, X * 360 - 180);
+      };
+      for (const f of L.features) {
+        const cls = String(f.tags.class ?? '');
+        // (a pool is a building's; a seasonal pond is dry most of the year; a culvert is underground)
+        if (f.type !== 3 || cls === 'swimming_pool' || +(f.tags.intermittent ?? 0) === 1 || f.tags.brunnel === 'tunnel') continue;
+        let cur: WaterPoly | null = null;
+        for (const ring of f.rings) {
+          const a = ringArea(ring);
+          if (a > 0) out.push((cur = { sea: cls === 'ocean', rings: [ring.map(local)] }));
+          else if (a < 0 && cur) cur.rings.push(ring.map(local));
+        }
+      }
+    }
+    return out;
+  })().catch(() => null);
+  mvtTiles.set(k, p);
+  void p.then((v) => { if (!v) mvtTiles.delete(k); }); // (a failure may be retried)
+  return p;
+}
+/** A cell's water from the vector tiles covering it, as a slim tile (areas only) — or null when
+ *  the CDN can't be reached. Cached per cell like the others. */
+async function mvtWater(spec: TileSpec): Promise<TileJson | null> {
+  if (!origin) return null;
+  const [cx, cz] = spec.id.slice(1).split('_').map(Number);
+  const key = `mvw1|${origin.lat.toFixed(4)},${origin.lon.toFixed(4)}|${cx}_${cz}`;
+  const hit = await kvGet<TileJson>(key);
+  if (hit) return hit;
+  const tpl = await ofmTemplate();
+  if (!tpl) return null;
+  const M = 48, box = { x0: spec.box.x0 - M, z0: spec.box.z0 - M, x1: spec.box.x1 + M, z1: spec.box.z1 + M };
+  const bb = makeProjector(origin).localToBbox(box), Z = 2 ** 14;
+  const tx = (lon: number) => Math.floor(((lon + 180) / 360) * Z);
+  const ty = (lat: number) => { const r = (lat * Math.PI) / 180; return Math.floor(((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * Z); };
+  const jobs: Promise<WaterPoly[] | null>[] = [];
+  for (let x = tx(bb.w); x <= tx(bb.e); x++) for (let y = ty(bb.n); y <= ty(bb.s); y++) jobs.push(mvtWaterTile(tpl, x, y));
+  const tiles = await Promise.all(jobs);
+  if (tiles.some((t) => !t)) return null;
+  const ints = (r: [number, number][]) => r.flatMap(([x, z]) => [Math.round(x * 10), Math.round(z * 10)]);
+  const areas: TileJson['areas'] = [];
+  for (const t of tiles)
+    for (const w of t!) {
+      const [o, ...holes] = w.rings;
+      let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+      for (const [x, z] of o) (x0 = Math.min(x0, x)), (z0 = Math.min(z0, z)), (x1 = Math.max(x1, x)), (z1 = Math.max(z1, z));
+      if (x1 < box.x0 || x0 > box.x1 || z1 < box.z0 || z0 > box.z1) continue; // (the tile's, not this cell's)
+      areas.push({ c: 'water', o: [ints(o)], i: holes.map(ints), ...(w.sea ? { k: 'sea' } : {}) });
+    }
+  const slim: TileJson = { version: 1, id: `${cx}_${cz}`, lod: 0, box: spec.box, slice: box, backdrop: box, origin, buildings: [], roads: [], areas, lines: [], points: [], landmarks: [] };
+  void kvPut(key, slim);
+  return slim;
+}
+
 // The tile service, raced against a stall: after 25 s (or any failure) go direct.
+// ?fail=cx_cz,… (a test hook): those real cells answer as a 504 would, so their stand-ins stay
+const failCells = new Set<string>();
 function worldTile(spec: TileSpec): Promise<TileJson> {
+  if (failCells.has(spec.id.slice(1))) return Promise.reject(new FetchError('overpass unavailable: forced (?fail)'));
   if (spec.file.startsWith('direct:')) return directTile(spec);
   let timer = 0;
   const stall = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error('tile service stalled')), 25000) as unknown as number; });
@@ -106,14 +299,58 @@ const loadBin = () => (binPromise ??= binInit ? Promise.resolve(binInit) : cache
 // DEM results are cached per cell for the session — but only successes: a null (fetch
 // failure, worker hiccup) is forgotten once settled so the next build of that cell (the
 // w-twin, or the main thread's relief rebuild) retries instead of inheriting it forever.
-function demFor(cellKey: string, box: TileSpec['box']) {
-  let p = demCache.get(cellKey);
+function demFor(cellKey: string, box: TileSpec['box'], pitch = 16) {
+  const ck = pitch === 16 ? cellKey : `${cellKey}@${pitch}`;
+  let p = demCache.get(ck);
   if (!p) {
-    p = fetchDem(box, origin!).then((d) => (d ? demLayer(d) : null));
-    demCache.set(cellKey, p);
-    void p.then((d) => { if (!d && demCache.get(cellKey) === p) demCache.delete(cellKey); });
+    p = fetchDem(box, origin!, pitch).then((d) => (d ? demLayer(d) : null));
+    demCache.set(ck, p);
+    void p.then((d) => { if (!d && demCache.get(ck) === p) demCache.delete(ck); });
   }
   return p;
+}
+/** A real cell's streets graded into its ground (grade.ts) — a copy of the layer — and, for a
+ *  detail build, the retaining walls its cuts need (not where a building stands). */
+function gradedDem(dem: { buf: ArrayBuffer; layout: LayerLayout }, tj: TileJson, say: (m: string) => void, walls: boolean) {
+  const L = dem.layout, g = L.grid, n = g.w * g.h;
+  const buf = dem.buf.slice(0), hc = new Float32Array(buf, L.height.offset, n), heights = new Float32Array(n);
+  for (let i = 0; i < n; i++) heights[i] = hc[i] / 100;
+  const rep = gradeRoads({ x0: g.x0, z0: g.z0, pitch: g.cell, nx: g.w, nz: g.h, heights }, tj.roads, (r) => r.ic ?? null, { walls, blocked: walls ? footprintTest(tj) : undefined });
+  for (let i = 0; i < n; i++) hc[i] = heights[i] * 100;
+  if (rep.ways) say(`graded ${rep.ways} streets (${rep.nodes} ground nodes, up to ${rep.maxShift.toFixed(1)} m of cut or fill, ${rep.walls.length / 8} wall panels)`);
+  return { dem: { buf, layout: L }, walls: rep.walls };
+}
+/** Is (x, z) in or within a metre of one of the tile's building footprints? */
+function footprintTest(tj: TileJson) {
+  const B = new Map<string, { r: [number, number][]; bb: number[] }[]>();
+  for (const b of tj.buildings) {
+    const r: [number, number][] = [];
+    for (let i = 0; i + 1 < b.r.length; i += 2) r.push([b.r[i] / 10, b.r[i + 1] / 10]);
+    if (r.length < 3) continue;
+    const bb = r.reduce((q, [x, z]) => [Math.min(q[0], x), Math.min(q[1], z), Math.max(q[2], x), Math.max(q[3], z)], [Infinity, Infinity, -Infinity, -Infinity]);
+    for (let u = Math.floor((bb[0] - 1) / 32); u <= Math.floor((bb[2] + 1) / 32); u++)
+      for (let v = Math.floor((bb[1] - 1) / 32); v <= Math.floor((bb[3] + 1) / 32); v++)
+        (B.get(u + ',' + v) ?? B.set(u + ',' + v, []).get(u + ',' + v)!).push({ r, bb });
+  }
+  const pip = (x: number, z: number, r: [number, number][]) => {
+    let ins = false;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (r[i][1] > z !== r[j][1] > z && x < ((r[j][0] - r[i][0]) * (z - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) ins = !ins;
+    return ins;
+  };
+  return (x: number, z: number) => {
+    for (const f of B.get(Math.floor(x / 32) + ',' + Math.floor(z / 32)) ?? []) {
+      if (x < f.bb[0] - 1 || x > f.bb[2] + 1 || z < f.bb[1] - 1 || z > f.bb[3] + 1) continue;
+      for (const [ox, oz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) if (pip(x + ox, z + oz, f.r)) return true;
+    }
+    return false;
+  };
+}
+/** How much the ground rises and falls in a cell (m) — a hilly cell's ground is built finer. */
+function relief(dem: { buf: ArrayBuffer; layout: LayerLayout }) {
+  const L = dem.layout, n = L.grid.w * L.grid.h, h = new Float32Array(dem.buf, L.height.offset, n);
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < n; i++) (lo = Math.min(lo, h[i])), (hi = Math.max(hi, h[i]));
+  return (hi - lo) / 100;
 }
 
 // `relief`: the main thread already has this synth cell mounted FLAT (its 4 s DEM race
@@ -137,12 +374,18 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   let demP: Promise<{ buf: ArrayBuffer; layout: LayerLayout } | null> | null = null;
   // Cache the UNTIMED grid — the s-twin races it at 4 s; when the w-twin (or a relief
   // rebuild) comes later it awaits the same promise and still gets the real heights.
-  if (demOn && origin && (spec.synth || spec.world)) demP = demFor(cellKey, spec.box);
+  // (a real cell's grid is 4 m — fine enough to carry its graded streets; a placeholder's 16 m)
+  if (demOn && origin && (spec.synth || spec.world)) demP = demFor(cellKey, spec.box, spec.world && !msg.lite ? 4 : 16);
   // Relief rebuilds: a synth cell waits for its DEM, a real cell for its LiDAR (below).
   if (msg.relief && spec.synth) {
     const d = demP ? await demP : null;
     if (!d) return null;
   }
+  // The map's water from the vector tiles (a fifth of a second — cached per cell): a stand-in's
+  // only real knowledge of its shore, and a real cell's sea — OSM's coastline is a line, and a
+  // cell wholly out on the bay has none to close a sea polygon from (Elliott Bay's south cell
+  // was a DEM smear: a lawn under trees); the ocean polygons are the coastline already closed.
+  const mvtP = origin && (spec.synth || spec.world) ? mvtWater(spec) : null;
   // OSM/tile fetch starts first (it's the slow pole); DEM resolves in parallel.
   const tjP: Promise<TileJson> | null = spec.synth
     ? null
@@ -152,14 +395,55 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   // Detail placeholders race the DEM (they exist to be fast; a late patch triggers a relief
   // rebuild). Coarse silhouettes wait up to 20 s: they're distant, never relieved, and a flat one
   // reads as buildings sunk into the hills around it.
-  const dem = demP ? (spec.synth && !msg.relief ? await raceNull(demP, msg.lite ? 20000 : 4000) : await demP) : null;
+  let dem = demP ? (spec.synth && !msg.relief ? await raceNull(demP, msg.lite ? 20000 : 4000) : await demP) : null;
+  let waterLate = false, water: WaterBody[] | undefined, walls: number[] = [];
   if (dem) {
     // The worker keeps its own view; a copy crosses to the main thread for the walker.
     // Registering BEFORE synthTile matters — placeholder lots must sit on real hills.
     terrain.registerPatch(cellKey, new TerrainLayer(dem.buf.slice(0), dem.layout));
+    // a stand-in knows the map's water before it plants a street: the vector tiles' (a fifth of a
+    // second), else — where the DEM says there could be water — Overpass'; a later answer comes
+    // in with a relief rebuild, which waits for it
+    if (spec.synth && mvtP) {
+      const wet = mayBeWet(dem);
+      let wt = await raceNull(mvtP, msg.relief ? 30000 : 5000);
+      const complete = !!wt; // (the vector tiles carry the ocean: their water is the whole answer)
+      if (!wt && wet) wt = await raceNull(waterTile(spec), msg.relief ? 45000 : 6000);
+      if (wt) {
+        water = waterBodies(dem, wt, terrain);
+        if (water.length || complete) {
+          dem = waterPatch(dem, water, complete);
+          terrain.registerPatch(cellKey, new TerrainLayer(dem.buf.slice(0), dem.layout));
+        }
+      } else if (wet && !msg.relief) waterLate = true;
+    }
   }
   const syn: SynthResult | null = spec.synth ? synthTile(spec, seed, terrain) : null;
-  const tj = tjP ? await tjP : syn!.tj;
+  if (syn && water?.length) syn.extra.add(waterSheets(water, spec.box));
+  let tj = tjP ? await tjP : syn!.tj;
+  // a real cell's sea is the vector tiles' (the lakes stay its own OSM's, names and all) — for
+  // the ground, the props, the paint and the walker alike
+  let seaFromMap = false;
+  if (spec.world && mvtP) {
+    const mw = await raceNull(mvtP, msg.lite ? 3000 : 8000);
+    if (mw) {
+      tj = { ...tj, areas: [...tj.areas.filter((a) => a.k !== 'sea'), ...mw.areas.filter((a) => a.k === 'sea')] };
+      seaFromMap = true;
+    }
+  }
+  // a real cell's own water (its coast's sea, its lakes) goes into the ground under it: the sea
+  // below the datum, lakes at their level — for the ground, the trees, the walker and the cars
+  // …and its streets graded into it (grade.ts): no 50% ramp where the DEM smeared a wall
+  if (dem && spec.world) {
+    water = waterBodies(dem, tj, terrain);
+    if (water.length || seaFromMap) dem = waterPatch(dem, water, seaFromMap);
+    if (!msg.lite && dem.layout.grid.cell <= 4) {
+      const gr = gradedDem(dem, tj, (m) => ctx.postMessage({ kind: 'log', msg: `[grade ${cellKey}] ${m}` }), true);
+      dem = gr.dem;
+      walls = gr.walls;
+    }
+    terrain.registerPatch(cellKey, new TerrainLayer(dem.buf.slice(0), dem.layout));
+  }
   // Measured buildings: real footprints get LiDAR ridge/eave/roof shape before the builders
   // run. Lite (LOD) builds only use what's already cached; detail builds wait briefly.
   let lidarLate = false;
@@ -171,7 +455,19 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   const tbuf = spec.terrain && !msg.lite ? await cachedFetch(base + spec.terrain.file) : undefined;
   const tile = await buildTile(tj, terrain, spec, msg.idBase, !!msg.lite);
   if (syn) tile.objs.push(...packGroup(syn.extra));
-  else if (spec.world) tile.objs.push(...packGroup(realExtras(tj, terrain))); // ground + real-street ribbons + water
+  else if (spec.world) tile.objs.push(...packGroup(realExtras(tj, terrain, dem && dem.layout.grid.cell <= 4 && relief(dem) > 6 ? 4 : 8, dem ? water : undefined))); // ground + real-street ribbons + water
+  // (only the panels this cell owns — a wall standing in the neighbour's box is the neighbour's)
+  if (walls.length) {
+    const own: number[] = [], b = spec.box;
+    for (let i = 0; i + 7 < walls.length; i += 8) {
+      const mx = (walls[i] + walls[i + 2]) / 2, mz = (walls[i + 1] + walls[i + 3]) / 2;
+      if (mx >= b.x0 && mx < b.x1 && mz >= b.z0 && mz < b.z1) own.push(...walls.slice(i, i + 8));
+    }
+    if (own.length) {
+      tile.objs.push(...packGroup(retainingWalls(own)));
+      tile.walls.push(...retainingColliders(own));
+    }
+  }
   // A copy ships to the main thread for its patch registry; the worker keeps its own bytes.
   tile.terr = tbuf?.slice(0);
   // dem.buf is shared via demCache (the w-twin build will reuse it) — ship a copy, not
@@ -181,6 +477,7 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   // while the LiDAR read runs) — the stream asks for a relief rebuild and swaps it in.
   else if (demP && spec.synth && !msg.lite) tile.late = 1;
   if (lidarLate && !msg.lite) tile.late = 1;
+  if (waterLate && !msg.lite) tile.late = 1; // (its water still on the way: rebuilt when it lands)
   return tile;
 }
 
@@ -194,6 +491,7 @@ ctx.onmessage = (e: MessageEvent) => {
     if (m.origin) origin = m.origin;
     if (m.dem) demOn = true;
     if (m.baked) bakedCells = m.baked;
+    for (const c of m.fail ?? []) failCells.add(c);
     if (m.demBase) setDemBase(m.demBase);
     if (m.lidar && m.origin) {
       setLidarLog((msg) => ctx.postMessage({ kind: 'log', msg }));

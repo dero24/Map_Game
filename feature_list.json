@@ -497,12 +497,14 @@
       "id": "hill-streets",
       "priority": 1,
       "area": "world",
-      "title": "Streets and cars on hills: painted streets near, true-section ribbons far, cars on four wheels",
-      "user_visible_behavior": "On Seattle's Queen Anne and downtown grades the streets lie on the ground (no pale blotches, no ground poking through), and every car — driving or parked — sits on its four wheels, nose up the hill, rolled to the camber.",
+      "title": "Streets and cars on hills: graded streets, retaining walls, painted streets near, true-section ribbons far, cars on four wheels",
+      "user_visible_behavior": "On Seattle's Queen Anne and downtown grades the streets lie on the ground and are built the way a road engineer would (no 50% ramps where the DEM smeared a bluff; junctions level; retaining walls where a street is cut into the hill), and every car — driving or parked — rides the same ground you see, on its four wheels, nose up the hill.",
       "status": "passing",
       "verification": [
         "tests/tiles.test.ts: ribbons follow a crest, ride over the 8 m lattice in a sag, latticeHeight = the ground mesh",
-        "__SPOTS__ Queen Anne top-down / 300 m out (shots/spots-qa-after.jpg)"
+        "__SPOTS__ Queen Anne top-down / 300 m out (shots/spots-qa-after.jpg)",
+        "tests/grade.test.ts: smeared bluff, arterial limit, honest 18% hill kept, seam determinism, short block between junctions on a 50% smear < 25%, 30 m cliff < 25%, retaining walls uphill only with gaps for crossings, steps and buildings",
+        "tools/grade-audit.js __GRADES__ on downtown Seattle: 2,425 ways, 47 over 25% (seams with loading cells, Colman Dock ramps, I-5 trench/lids)"
       ],
       "evidence": [
         "src/world/synth.ts roadRibbons",
@@ -510,9 +512,12 @@
         "src/world/ground.ts latticeHeight",
         "src/render/propMaterial.ts PAVED",
         "src/sim/life.ts LifeClient.ground",
-        "src/world/kerbCars.ts"
+        "src/world/kerbCars.ts",
+        "src/world/grade.ts",
+        "src/world/retaining.ts",
+        "src/world/stream.ts (the real cell's DEM patch replaces the stand-in's)"
       ],
-      "notes": "Next: road-conforming terrain (graded profiles, cut/fill, retaining walls) for bluffs like Pike Place's."
+      "notes": "(t): the main thread kept the 16 m stand-in's ground under the traffic while the drawn street was graded — fixed. Open: freeway trenches, lids and tunnel portals (I-5, SR 99) need their own cut; eye-level car frames on Queen Anne await Overpass."
     },
     {
       "id": "tunnels-canopies-coasts",
@@ -565,6 +570,47 @@
         "docs/DATA_SOURCES.md"
       ],
       "notes": "The doc's §5 is the work order for R.19."
+    },
+    {
+      "id": "map-water",
+      "priority": 1,
+      "area": "world",
+      "title": "Water from the map, never the DEM: vector-tile sea and lakes for every cell",
+      "user_visible_behavior": "Elliott Bay is water even when a cell's map data fails to load: no lawn, no trees, no town on the bay; islands stay land, lakes lie flat at their real level, the sun's glitter is clean.",
+      "status": "passing",
+      "verification": [
+        "tests/mvt.test.ts: a hand-encoded vector tile decodes (layers, tags, rings, winding); sheets clip to the cell and leave islands dry",
+        "tests/dem.test.ts waterPatch/waterLevel: sea below the datum, islands dry, nodes at cell centres, lake level from the flattened DEM, the map as truth",
+        "?fail=-1_0,-1_-1,-2_0,-2_-1: 3,203 wet samples raycast — nothing on the water but piers and lake sheets; shots/spots-bay-mvt3.jpg"
+      ],
+      "evidence": [
+        "src/world/mvt.ts",
+        "src/world/dem.ts waterPatch/waterLevel",
+        "src/world/tile.worker.ts mvtWater",
+        "src/world/synth.ts waterSheets",
+        "src/world/ground.ts SLICE",
+        "src/render/post.ts (Kuwahara weights)"
+      ],
+      "notes": "OpenFreeMap (OpenMapTiles schema) — credited in the HUD. Next: the vector-tile twin (streets, buildings, land use) in place of the synthetic stand-in."
+    },
+    {
+      "id": "towers-structures",
+      "priority": 2,
+      "area": "world",
+      "title": "Tall structures from the map: masts, water towers, chimneys, flagpoles; no trees on structures",
+      "user_visible_behavior": "Queen Anne's broadcast masts stand in red and white with beacons at night; small towns have their water towers; no tree grows on a roof or up a mast.",
+      "status": "in_progress",
+      "verification": [
+        "tests/foundry.test.ts towers (budgets, unit height)",
+        "tests/realTile.test.ts tall structures",
+        "tools/grade-audit.js __TREES__"
+      ],
+      "evidence": [
+        "src/assets/tower.ts",
+        "src/world/props.ts (towers, onStructure)",
+        "src/world/realTile.ts STRUCT"
+      ],
+      "notes": "Queen Anne frames await Overpass. __TREES__ downtown: 14 LiDAR crowns over 45 m (stadium light towers) and 20 on raised plazas remain."
     }
   ],
   "regions": {

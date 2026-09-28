@@ -156,16 +156,20 @@ export class WatercolorPost {
             for (int k = 0; k < 8; k++) { float wk = w[k] * g; m[k] += vec4(c * wk, wk); s[k] += c * c * wk; }
           }
         }
-        vec4 o = vec4(0.0);
+        vec4 o = vec4(0.0), all = vec4(0.0);
         for (int k = 0; k < 8; k++) {
           if (m[k].w <= 0.0) continue;
+          all += m[k];
           vec3 mean = m[k].rgb / m[k].w;
           vec3 var = abs(s[k] / m[k].w - mean * mean);
           float sig = var.r + var.g + var.b;
           float wk = 1.0 / (1.0 + pow(sig * 1000.0, 0.5 * uQ));
           o += vec4(mean * wk, wk);
         }
-        gl_FragColor = vec4(o.rgb / max(o.w, 1e-5), 1.0);
+        // Every sector busy (the sun's glitter on the sea: bright dashes all round) leaves weights
+        // near 1e-13 — a floor under the divisor painted those pixels black, a cloud of dark flecks
+        // over the bay. Divide by the true sum; with no weight left at all, the plain mean.
+        gl_FragColor = vec4(o.w > 1e-30 ? o.rgb / o.w : all.rgb / max(all.w, 1e-5), 1.0);
       }`,
       { tColor: { value: null }, tDepth: { value: null }, uTexel: { value: new THREE.Vector2() }, uRadius: { value: 5 }, uQ: { value: 8 }, uExposure: { value: 1 }, uNear: { value: 0.1 }, uFar: { value: 1000 } },
     );

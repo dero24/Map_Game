@@ -9,6 +9,7 @@
 // margin emit for context; `own: 0` marks the ones a neighbour cell owns.
 import type { Area, Box, Building, Line, Point, Road, TileJson } from './data';
 import { sportOf } from './sports';
+import { inclineOf } from './grade';
 import { worldRegion } from './styles';
 
 export interface LatLon { lat: number; lon: number }
@@ -336,6 +337,22 @@ const roofMaterialColour = (v: unknown) => (v ? ROOF_MAT[String(v).toLowerCase()
 
 const ROAD_W: Record<string, number> = { motorway: 14, trunk: 12, primary: 11, primary_link: 6, secondary: 9, secondary_link: 6, tertiary: 8, tertiary_link: 5, residential: 6.5, unclassified: 6, living_street: 5, service: 4, pedestrian: 5, track: 3, footway: 1.8, path: 1.5, cycleway: 2, steps: 2, bridleway: 2, construction: 5 };
 const PARK_DEFAULT = new Set(['residential', 'unclassified', 'tertiary', 'secondary']);
+/** Tall structures built from the map's own point (props.ts, assets/tower.ts): a lattice mast (TV,
+ *  radio, phone), a water tower, a chimney, a flagpole — trees never grow within 15 m of them
+ *  (a LiDAR survey reads a mast as a 60 m tree). An observation or bell tower is a building. */
+const STRUCT = (t: Record<string, string>): string | null =>
+  t.man_made === 'mast' || t.man_made === 'communications_tower' || (t.man_made === 'tower' && /communication|transmission|radio|television|antenna|telecom/.test(t['tower:type'] ?? '')) ? 'mast'
+  : t.man_made === 'water_tower' ? 'water_tower'
+  : t.man_made === 'chimney' ? 'chimney'
+  : t.man_made === 'flagpole' ? 'flagpole'
+  : null;
+const structPoint = (c: string, x: number, z: number, t: Record<string, string>, own: boolean): Point => {
+  const p: Point = { c, x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10 };
+  if (!own) p.own = OWN_CTX;
+  const h = parseLen(t.height);
+  if (isFinite(h) && h > 2 && h < 700) p.h = Math.round(h * 10) / 10;
+  return p;
+};
 /** Below ground: tunnel=yes/culvert/flooded… (a building passage or an avalanche gallery is open air),
  *  or mapped location=underground. */
 const UNDERGROUND = (t: Record<string, string>) =>
@@ -416,6 +433,8 @@ export function overpassQuery(bb: { s: number; w: number; n: number; e: number }
   node["highway"~"^(traffic_signals|stop|give_way)$"];
   node["emergency"="fire_hydrant"];
   node["railway"="subway_entrance"];
+  node["man_made"~"^(mast|tower|communications_tower|water_tower|chimney|flagpole)$"];
+  way["man_made"~"^(mast|communications_tower|water_tower|chimney)$"];
   node["highway"="bus_stop"];
   node["name"]["amenity"~"^(cafe|restaurant|fast_food|bar|pub|biergarten|ice_cream|bank|pharmacy|post_office|library|nightclub)$"];
   node["name"]["shop"];
@@ -513,6 +532,11 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         if (inB(x, z, margin))
           points.push({ c: pc, x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10, own: inB(x, z) ? undefined : OWN_CTX });
       }
+      const sc = STRUCT(t);
+      if (sc && e.lat != null && e.lon != null) {
+        const [x, z] = P.project(e.lat, e.lon);
+        if (inB(x, z, margin)) points.push(structPoint(sc, x, z, t, inB(x, z)));
+      }
       continue;
     }
     if (e.type === 'way' && t.highway && t.highway in ROAD_W) {
@@ -541,6 +565,8 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       // street across the blocks above — cars dive into the portal and out of sight. A building
       // passage (an alley under an arcade) is a street at ground level and stays one.
       if (UNDERGROUND(t)) r.tu = 1;
+      const ic = inclineOf(t.incline);
+      if (ic !== null) r.ic = ic;
       if (t.oneway === 'yes') r.ow = 1;
       if (t.footway === 'sidewalk') r.sw = 1;
       if (t.service) r.sv = t.service;
@@ -579,6 +605,20 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
           }
         }
         if (lc !== 'wall' && lc !== 'fence') continue; // a walled yard can also be a landuse area
+      }
+    }
+    // tall structures mapped as an outline (a water tower's legs, a mast's footprint): the tower
+    // is built at its centre (props.ts), not extruded as a building
+    const scw = e.type === 'way' ? STRUCT(t) : null;
+    if (scw && scw !== 'flagpole') {
+      const pts = wayPts(e);
+      if (isClosed(e)) pts.pop(); // (the closing vertex would count twice)
+      if (pts.length >= 3) {
+        let x = 0, z = 0;
+        for (const [px, pz] of pts) (x += px), (z += pz);
+        x /= pts.length; z /= pts.length;
+        if (inB(x, z, margin)) points.push(structPoint(scw, x, z, t, inB(x, z)));
+        continue;
       }
     }
     const isPart = !!t['building:part'] && t['building:part'] !== 'no';

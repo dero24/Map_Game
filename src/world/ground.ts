@@ -182,8 +182,10 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
       uniform vec4 uStreamedBox;
       void main() {
         if (inHole(vWorldPos)) discard;
-        #ifdef CANOPY
-          // a streamed cell's own ground is here: the backdrop steps aside
+        #if defined(CANOPY) || defined(SLICE)
+          // a streamed cell's own ground is here: the backdrop — and a virtual region's slice,
+          // built from the resident terrain before any cell knew its water — steps aside (the
+          // slice stood 1–3 m over Elliott Bay wherever a cell cut its sea away: a lawn)
           vec2 sc = (vWorldPos.xz - uStreamedBox.xy) * uStreamedBox.zw;
           if (sc.x > 0.0 && sc.y > 0.0 && sc.x < 1.0 && sc.y < 1.0 && texture2D(uStreamed, sc).r > 0.75) discard; // 255 only (128 = canopy drop)
         #endif
@@ -262,6 +264,9 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
   canopyMat.defines = { CANOPY: 1 };
   // clone() copies uniform values, not references: re-share the global ones.
   canopyMat.uniforms = mat.uniforms;
+  const sliceMat = mat.clone();
+  sliceMat.defines = { SLICE: 1 };
+  sliceMat.uniforms = mat.uniforms;
 
   // Fine slice terrain, chunked for culling. Skip open water far from shore (the water shader paints it).
   const CH = 400;
@@ -270,7 +275,7 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
     for (let cx = S.x0; cx < S.x1; cx += CH) {
       const g = buildGrid({ x0: cx, z0: cz, x1: Math.min(S.x1, cx + CH), z1: Math.min(S.z1, cz + CH), step: 3 }, heightS, (x, z) => terrain.slice.sdfAt(x, z) > -45);
       if (!g.index || g.index.count === 0) continue;
-      const m = new THREE.Mesh(g, mat);
+      const m = new THREE.Mesh(g, sliceMat);
       m.receiveShadow = true;
       group.add(m);
     }

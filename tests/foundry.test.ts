@@ -8,6 +8,7 @@ import { personGeometry, HAIRSTYLES, MARK, warmthFor } from '../src/assets/peopl
 import { dogLib } from '../src/assets/fauna';
 import * as D from '../src/assets/decor';
 import { SPORT_PIECES, sportGeometry } from '../src/assets/sport';
+import { TOWER_KINDS, towerGeometry } from '../src/assets/tower';
 import { validGeometry } from '../src/assets/core';
 import { courtFrame, diamondFrame, sportOf } from '../src/world/sports';
 
@@ -253,6 +254,17 @@ describe('sport: the courts and fields in the parks', () => {
     expect(d.dx).toBeCloseTo(Math.SQRT1_2, 2); // out along the bisector, to second base
     expect(d.dz).toBeCloseTo(Math.SQRT1_2, 2);
     expect(d.side).toBeCloseTo(27.43, 1);
+  });
+});
+
+describe('towers: the tall things a town is known by', () => {
+  it('each is a valid unit-height model within budget, standing on its foot', () => {
+    for (const k of TOWER_KINDS) {
+      const g = towerGeometry(k);
+      expect(validGeometry(g, { w: 0.7, h: 1.1, d: 0.7 }, 0.01), k).toBe(true);
+      expect(verts(g), k).toBeLessThan(k === 'mast' ? 3000 : 1500);
+      expect(bb(g).max.y, k).toBeGreaterThan(0.97); // scales to the mapped height
+    }
   });
 });
 

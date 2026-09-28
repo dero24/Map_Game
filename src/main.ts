@@ -11,7 +11,7 @@ import { virtualRegion } from './world/virtual';
 import { paintGround } from './world/groundPaint';
 import { buildGround, terrainTextures } from './world/ground';
 import { setGndMaterial } from './world/pack';
-import { buildWater } from './world/water';
+import { buildWater, waterParams } from './world/water';
 import { activeBuilding, type Door, type Footprint } from './world/buildings';
 import { styleFor, setActiveStyle } from './world/styles';
 import { Vehicles } from './player/vehicles';
@@ -196,6 +196,7 @@ async function main() {
   worldRoot.add(groundGroup);
   setGndMaterial(groundGroup.userData.groundMat); // synthetic tiles reuse this material
   worldRoot.add(buildWater(tt));
+  waterParams.uOpenSea.value = VIRTUAL ? 1 : 0; // (the open world's plane is the sea itself)
   const sky = buildSky();
   scene.add(sky);
   U.uSliceBox.value.set(json.slice.x0, json.slice.z0, json.slice.x1, json.slice.z1);

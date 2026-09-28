@@ -484,3 +484,29 @@ describe('canopies', () => {
   });
 });
 
+describe('tall structures from the map', () => {
+  const node = (id: number, tags: Record<string, string>, x: number, z: number): OsmElement => {
+    const [lat, lon] = P.unproject(x, z);
+    return { type: 'node', id, tags, lat, lon } as OsmElement;
+  };
+  it('masts, water towers, chimneys and flagpoles become points with their heights; lookouts stay buildings', () => {
+    const t = osmToTile(osm(
+      node(1, { man_made: 'mast', height: '182' }, 100, 100),
+      node(2, { man_made: 'tower', 'tower:type': 'communication' }, 200, 100),
+      way(3, { man_made: 'water_tower', building: 'yes' }, sq(300, 300, 12), true),
+      node(4, { man_made: 'chimney', height: '60 m' }, 500, 100),
+      node(5, { man_made: 'flagpole' }, 600, 100),
+      way(6, { man_made: 'tower', 'tower:type': 'observation', building: 'yes' }, sq(700, 700, 8), true),
+    ), OPTS);
+    const pt = (c: string) => t.points.filter((p) => p.c === c);
+    expect(pt('mast').length).toBe(2);
+    expect(pt('mast').find((p) => Math.abs(p.x - 100) < 1)!.h).toBe(182);
+    expect(pt('water_tower').length).toBe(1);
+    expect(Math.abs(pt('water_tower')[0].x - 306)).toBeLessThan(1); // at the outline's centre
+    expect(t.buildings.some((b) => Math.abs(b.r[0] / 10 - 300) < 15 && Math.abs(b.r[1] / 10 - 300) < 15)).toBe(false); // not extruded
+    expect(pt('chimney')[0].h).toBe(60);
+    expect(pt('flagpole').length).toBe(1);
+    expect(t.buildings.some((b) => Math.abs(b.r[0] / 10 - 700) < 15)).toBe(true); // an observation tower is a building
+  });
+});
+

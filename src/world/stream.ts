@@ -152,9 +152,9 @@ export class TileStream {
       if (!w) {
         const c = this.man.cell;
         // file is an absolute URL — the tile worker fetches it directly (no base prefix).
-        // &v=18 — the edge Cache API keys on the full URL; bumping alongside the
-        // worker's R2 key (t/v18) retires stale tile payloads.
-        const file = this.tilesBase === 'direct' ? `direct:${key}` : `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}&v=18`;
+        // &v=19 — the edge Cache API keys on the full URL; bumping alongside the
+        // worker's R2 key (t/v19) retires stale tile payloads.
+        const file = this.tilesBase === 'direct' ? `direct:${key}` : `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}&v=19`;
         w = { id: 'w' + key, box: { x0: cx * c, z0: cz * c, x1: cx * c + c, z1: cz * c + c }, lod: 0, file, world: 1 };
         this.worldSpecs.set(key, w);
       }
@@ -445,7 +445,7 @@ export class TileStream {
           console.warn('lidar worker unavailable; measuring on the tile worker', e);
         }
       }
-      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin, origin: this.man.origin, dem: this.demEnabled, demBase: this.tilesBase, style: activeStyle().key, baked: this.man.tiles.map((t) => t.id), lidar: this.lidar, lidarPort }, lidarPort ? [lidarPort] : []);
+      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin, origin: this.man.origin, dem: this.demEnabled, demBase: this.tilesBase, style: activeStyle().key, baked: this.man.tiles.map((t) => t.id), lidar: this.lidar, lidarPort, fail: new URLSearchParams(location.search).get('fail')?.split(',') ?? [] }, lidarPort ? [lidarPort] : []);
       this.worker = w;
     } catch {
       this.workerDead = true;
@@ -569,10 +569,12 @@ export class TileStream {
     if (tile.dem) {
       const cell = spec.id.slice(1); // strip the s/w prefix — DEM patches key on the cell
       let holders = this.demHolders.get(cell);
-      if (!holders) {
-        this.terrain.registerPatch(cell, new TerrainLayer(tile.dem.buf, tile.dem.layout));
-        this.demHolders.set(cell, (holders = new Set()));
-      }
+      // The real cell's ground always takes over from its stand-in's: 4 m, its streets graded, the
+      // map's water pressed in — the stand-in's is a 16 m placeholder. (Kept, it left the walker and
+      // the traffic on ungraded ground while the street you saw was cut into the hill beside them:
+      // "the cars are going through the roads".) A stand-in arriving after its real twin leaves it.
+      if (!holders || (spec.world && tile.dem.layout.grid.cell <= this.terrain.patchPitch(cell))) this.terrain.registerPatch(cell, new TerrainLayer(tile.dem.buf, tile.dem.layout));
+      if (!holders) this.demHolders.set(cell, (holders = new Set()));
       holders.add(spec.id);
     }
     w.beginScope(scope);

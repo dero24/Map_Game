@@ -8,7 +8,7 @@ what we do with it today, and how the whole pipeline scales from one town to the
 Legend for status: ✅ placed from real data today · 🟡 fetched but drawn generically (or only
 partly used) · ❌ not yet fetched · 🧪 procedural stand-in (no real position yet).
 
-Last reviewed 2026-09-28. Licences are summarised, not legal advice — check each source's terms
+Last reviewed 2026-09-28 (t). Licences are summarised, not legal advice — check each source's terms
 before shipping a new one, and keep attribution in the HUD/credits (ODbL requires the
 `© OpenStreetMap contributors` credit to stay visible).
 
@@ -19,6 +19,7 @@ before shipping a new one, and keep attribution in the HUD/credits (ODbL require
 | # | Source | What it gives us | Licence | Resolution / freshness | In use? |
 |---|---|---|---|---|---|
 | 1 | **OpenStreetMap** (Overpass today; planet extracts next) | Every street, path, building outline, land use, park, pitch, parking lot, tree, bench, hydrant, signal, shop… with names and rich tags | ODbL 1.0 (attribution + share-alike on the derived database) | Survey-grade in cities; minutes fresh | ✅ the backbone (`src/world/realTile.ts`, `overpassQuery`) |
+| 1a | **OpenFreeMap** (the OpenMapTiles planet as z0–14 vector tiles, CDN, no key) | OSM already processed: the coastline closed into ocean polygons, water, land use and cover, parks, buildings with heights, streets with class/name/bridge/tunnel, POIs | ODbL data; © OpenMapTiles; free service | Weekly planet builds; a tile in ~0.2 s | ✅ water for every stand-in cell and every real cell's sea (`src/world/mvt.ts`, `tile.worker.ts mvtWater`) — and the natural fallback feeder for whole cells when Overpass is slow or down |
 | 2 | **USGS 3DEP LiDAR** (EPT point clouds on AWS `usgs-lidar-public`) | Measured building heights and roof shapes, tree positions and canopy heights, ground truth under trees | Public domain | ~8+ points/m², most of the US; years vary by county | ✅ heights/trees (`src/world/lidar.ts`, `scripts/lidar-index.mjs`) |
 | 3 | **USGS 3DEP DEM** (1 m and 1/3″ bare earth) | The ground itself: hills, bluffs, river banks | Public domain | 1 m where LiDAR flown, 10 m everywhere | 🟡 via AWS Terrain Tiles (Terrarium PNG, z≤14 ≈ 7–10 m, mixes SRTM/NED/3DEP) — **use z11+ in cities; z9–10 are surface models that include buildings** |
 | 4 | **Overture Maps** (GeoParquet, monthly) | Buildings (OSM + Microsoft ML + Esri community), Places (~60 M POIs from Meta/Microsoft/etc.), transportation, land use/cover, water, addresses, divisions | Buildings/transport/base: ODbL; Places: CDLA-Permissive-2.0; others vary | Monthly releases, global | ❌ — the best way to fill footprints and shops OSM lacks, and the natural source for the planet-scale pipeline (§4) |

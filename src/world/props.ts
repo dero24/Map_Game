@@ -21,6 +21,7 @@ import { creatureMaterial } from '../render/creature';
 import { useOf, terraceUse } from './uses';
 import { analyzeJunctions, packJunctions, signalKey, CTL, type Junction, STOP_BACK } from '../sim/traffic';
 import { sportLib, type SportPiece } from '../assets/sport';
+import { towerLib, TOWER_H, CHIMNEY_BRICK, type TowerKind } from '../assets/tower';
 import { COURT, courtFrame, diamondFrame, type Sport } from './sports';
 
 type P = [number, number];
@@ -549,6 +550,11 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // kinds: 0 round · 1 oak · 2 shrub · 3 pine · 4 spruce · 5 palm · 6 birch · 7 mesquite · 8 fan palm (assets/flora.ts), each in
   // TREE_VARIANTS grown variants; v is position-hashed so neighbouring tiles agree.
   const trees: { m: THREE.Matrix4; c: THREE.Color; k: number; v: number }[] = [];
+  // No tree grows on a structure: inside a building's outline (a tower built after the survey, a
+  // roof garden's planters read as crowns) or within 15 m of a mast, a chimney or a water tower
+  // (a LiDAR survey reads a TV mast as a 60 m tree — Queen Anne grew three 60 m cypresses).
+  const STRUCTS = ctxJson.points.filter((p) => p.c === 'mast' || p.c === 'chimney' || p.c === 'water_tower');
+  const onStructure = (x: number, z: number) => walk.buildingAt(x, z) >= 0 || STRUCTS.some((p) => Math.abs(p.x - x) < 15 && Math.abs(p.z - z) < 15 && Math.hypot(p.x - x, p.z - z) < 15);
   const tropical = look0().climate === 'tropical', aridCoast = look0().climate === 'arid' || look0().climate === 'mediterranean';
   const birchy = look0().climate === 'boreal' || look0().climate === 'continental';
   const desert = look0().climate === 'arid';
@@ -629,7 +635,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       const beachy = terrain.oceanDistAt(jx, jz) < 90;
       const pr = cov === 10 ? 0.85 : beachy ? 0 : cov === 50 ? 0.035 : cov === 30 ? 0.05 : cov === 20 ? 0.3 : 0;
       if (rng.float() > pr * look.treeDensity) continue;
-      if (terrain.sdfAt(jx, jz) < 3 || paved(jx, jz) || walk.blocked(jx, jz, 2.2)) continue;
+      if (terrain.sdfAt(jx, jz) < 3 || paved(jx, jz) || walk.blocked(jx, jz, 2.2) || onStructure(jx, jz)) continue;
       const g = terrain.heightAt(jx, jz);
       // species from the region's weights; coastal cells lean to wind-shaped pines everywhere
       const coastPine = terrain.oceanDistAt(jx, jz) < 500 && look.trees[3] > 0.5 && rng.float() < 0.35;
@@ -657,6 +663,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       z = e.z + (nz / L) * out;
       if (paved(x, z) || walk.blocked(x, z, 2.2)) continue;
     }
+    if (onStructure(x, z)) continue;
     const k = regional(rng.float() < 0.6 ? 0 : 1, x, z), v = variantAt(x, z, TREE_VARIANTS, 11);
     const s = 9 / treeMeta(TREE_KINDS[k], v).h;
     trees.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(s, s, s)), c: new THREE.Color(rng.pick(green)), k, v });
@@ -671,6 +678,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       const h = LT[i + 2] / 10, r = LT[i + 3] / 10;
       if (x < TB.x0 || x >= TB.x1 || z < TB.z0 || z >= TB.z1) continue; // each tree is its own cell's
       if (terrain.sdfAt(x, z) < 1) continue;
+      // taller than any street or park tree in the lower 48 grows: a structure the survey saw
+      if (h > 50) continue;
       if (paved(x, z)) {
         // crown tops over the street: plant the trunk on the verge beneath the edge of it
         const e = roadEdge(x, z);
@@ -681,7 +690,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         z = e.z + (nz / L) * out;
         if (paved(x, z)) continue;
       }
-      if (walk.blocked(x, z, 0.6)) continue;
+      if (walk.blocked(x, z, 0.6) || onStructure(x, z)) continue;
       // species: shrubs are short; a narrow crown for its height reads conifer where the
       // region grows them; otherwise the region's broadleaf mix (oaks for the broad ones)
       const slim = r / h < 0.3;
@@ -1855,6 +1864,35 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       im.layers.enable(1);
       group.add(im);
     }
+  }
+
+  // ---------- tall structures: masts, water towers, chimneys, flagpoles (assets/tower.ts) ----------
+  // Built where the map puts them, to the mapped height (else a typical one), each scaled from
+  // its unit model; a town's water tower in its own colour, a chimney in brick or concrete.
+  {
+    const KIND: Record<string, TowerKind> = { mast: 'mast', water_tower: 'waterTower', chimney: 'chimney', flagpole: 'flagpole' };
+    const byKind = new Map<TowerKind, { m: THREE.Matrix4; c: THREE.Color }[]>();
+    const beacons: THREE.Vector3[] = []; // the red obstruction light atop every mast (a night halo)
+    for (const p of json.points) {
+      const k = KIND[p.c];
+      if (!k || !inSlice(p.x, p.z) || terrain.sdfAt(p.x, p.z) < 0) continue;
+      const h = p.h ?? TOWER_H[k] * (0.8 + hashf(Math.floor(p.x * 7) * 131 + Math.floor(p.z * 3)) * 0.4);
+      const u = hashf(Math.floor(p.x * 13) * 7 + Math.floor(p.z * 11));
+      const c = new THREE.Color(k === 'waterTower' ? [0xe9eef0, 0xcfd9df, 0xb9cbd6, 0xd6dfcf][Math.floor(u * 4)] : k === 'chimney' ? (u < 0.6 ? CHIMNEY_BRICK : 0xb5b0a6) : 0xffffff);
+      (byKind.get(k) ?? byKind.set(k, []).get(k)!).push({ m: new THREE.Matrix4().compose(V(p.x, terrain.heightAt(p.x, p.z) - 0.05, p.z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), u * 6.28), V(h, h, h)), c });
+      // what you walk into: the mast's legs, the chimney's base, the pole (a water tower you walk under)
+      if (k === 'mast') beacons.push(V(p.x, terrain.heightAt(p.x, p.z) + h * 1.003, p.z));
+      const r = k === 'mast' ? 0.012 * h + 0.2 : k === 'chimney' ? 0.045 * h : k === 'flagpole' ? 0.12 : 0;
+      if (r > 0) walk.addLoop([[p.x - r, p.z - r], [p.x + r, p.z - r], [p.x + r, p.z + r], [p.x - r, p.z + r]], -Infinity, terrain.heightAt(p.x, p.z) + h);
+    }
+    for (const [k, list] of byKind) {
+      const im = new THREE.InstancedMesh(towerLib(k).clone(), propMaterial(), list.length);
+      list.forEach((q, i) => { im.setMatrixAt(i, q.m); im.setColorAt(i, q.c); });
+      im.name = `tower:${k}`;
+      im.layers.enable(1);
+      group.add(im);
+    }
+    if (beacons.length) group.add(haloPoints(beacons, 2.2, new THREE.Color(1.0, 0.22, 0.12)));
   }
 
   // ---------- courts and fields: hoops, nets, goals, the backstop and bases ----------

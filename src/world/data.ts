@@ -46,13 +46,15 @@ export interface Building {
 // pk: mapped street parking, left + 4·right (1 parallel, 2 angled). sy: a placeholder street (synth.ts)
 // — unnamed, pencilled on the map — standing in until the real tile arrives.
 /** `tu`: underground (OSM tunnel=yes/culvert/…, not a building passage) — only the life sim's cars
- *  use it (they drive down into the portal and out of sight); nothing paints or furnishes it. */
-export interface Road { p: number[]; c: string; w: number; n?: string; ref?: string; br?: 'yes' | 'movable'; l?: number; ow?: 1; sw?: 1; sv?: string; pk?: number; lod?: 1; own?: number; sy?: 1; tu?: 1 }
+ *  use it (they drive down into the portal and out of sight); nothing paints or furnishes it.
+ *  `ic`: a mapped `incline` (fraction) — grade.ts leaves a street the map says is steep, steep. */
+export interface Road { p: number[]; c: string; w: number; n?: string; ref?: string; br?: 'yes' | 'movable'; l?: number; ow?: 1; sw?: 1; sv?: string; pk?: number; lod?: 1; own?: number; sy?: 1; tu?: 1; ic?: number }
 /** `k`: what a pitch is for (sports.ts Sport, or 'playground'); `sf`: its mapped surface (OSM). */
 export interface Area { c: string; o: number[][]; i: number[][]; n?: string; lod?: 1; own?: number; k?: string; sf?: string }
 /** `ft` (fences): 1 iron railing, 2 chain-link, 3 wood/picket — from OSM fence_type; absent = unknown. */
 export interface Line { c: string; p: number[]; w?: number; br?: 1; own?: number; ft?: number }
-export interface Point { c: string; x: number; z: number; own?: number }
+/** `h`: a mapped height (m) — masts, water towers, chimneys, flagpoles. */
+export interface Point { c: string; x: number; z: number; own?: number; h?: number }
 export interface Poi { name: string; kind: string; x: number; z: number; slice: boolean }
 export interface Landmark { id: string; name: string; x: number; z: number; h: number; ground: number }
 
@@ -146,6 +148,8 @@ export class Terrain {
   baked: Set<string> | null = null;
   constructor(readonly slice: TerrainLayer, readonly backdrop: TerrainLayer) {}
   registerPatch(id: string, L: TerrainLayer) { this.patches.set(id, L); }
+  /** The grid pitch (m) of a registered patch — Infinity when none is. */
+  patchPitch(id: string) { return this.patches.get(id)?.g.cell ?? Infinity; }
   removePatch(id: string) { this.patches.delete(id); }
   private patchFor(x: number, z: number) {
     if (!this.patches.size) return null;
