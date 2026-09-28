@@ -1,7 +1,8 @@
 // Worker-side tile build: fetch + decode + mesh + collision for one tile, packed for transfer.
 // Runs the same buildTile pipeline as the main-thread fallback — same output, off the main thread.
 import { Terrain, TerrainLayer, type LayerLayout, type TileJson, type TileSpec } from './data';
-import { cachedFetch, cachedFetchJson, initCache } from './cache';
+import { cachedFetch, cachedFetchJson, initCache, kvGet, kvPut } from './cache';
+import { osmToTile, overpassQuery, makeProjector, type OsmDoc } from './realTile';
 import { buildTile } from './tileBuild';
 import { packGroup, type BuiltTile } from './pack';
 import { synthTile, realExtras } from './synth';
@@ -30,6 +31,64 @@ let origin: { lat: number; lon: number } | null = null;
 let demOn = false; // H2: fetch Terrarium patches for virtual-region cells
 let bakedCells: string[] = []; // manifest cell ids — never overridden by a neighbour's DEM overhang
 const demCache = new Map<string, Promise<{ buf: ArrayBuffer; layout: LayerLayout } | null>>();
+
+// ---- real-lite, direct: this browser → Overpass → the same osmToTile the tile service runs ----
+// Used when `?tiles=direct` (no service at all) and as the fallback when the service is down or
+// stalls — the player gets the real town either way, never a placeholder for want of a proxy.
+// Results are cached per cell in IndexedDB (kvPut), so a revisit never re-queries Overpass.
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
+const DIRECT_V = 7; // keep with the tile service's t/vN (realTile output version)
+let opSlots = 1; // Overpass rate-limits per IP: one query at a time from a browser (429s otherwise)
+const opWait: (() => void)[] = [];
+async function directTile(spec: TileSpec): Promise<TileJson> {
+  if (!origin) throw new Error('direct tiles need an origin');
+  const [cx, cz] = spec.id.slice(1).split('_').map(Number);
+  const key = `osm${DIRECT_V}|${origin.lat.toFixed(4)},${origin.lon.toFixed(4)}|${cx}_${cz}`;
+  const hit = await kvGet<TileJson>(key);
+  if (hit) return hit;
+  const say = (msg: string) => ctx.postMessage({ kind: 'log', msg: `[direct ${cx}_${cz}] ${msg}` });
+  if (opSlots <= 0) await new Promise<void>((r) => opWait.push(r));
+  else opSlots--;
+  try {
+    const M = 48;
+    const bb = makeProjector(origin).localToBbox({ x0: spec.box.x0 - M, z0: spec.box.z0 - M, x1: spec.box.x1 + M, z1: spec.box.z1 + M });
+    const body = 'data=' + encodeURIComponent(overpassQuery(bb));
+    let last = 'no endpoint';
+    for (const ep of [OVERPASS[0], OVERPASS[0], ...OVERPASS.slice(1), OVERPASS[0]]) {
+      try {
+        const r = await fetch(ep, { method: 'POST', body, headers: { 'content-type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(45000) });
+        if (!r.ok) {
+          last = `${ep} ${r.status}`;
+          // 429: our slot isn't free yet — wait as asked (the main server is worth waiting for)
+          if (r.status === 429 || r.status === 504) await new Promise((res) => setTimeout(res, Math.min(15, +(r.headers.get('retry-after') ?? 4) || 4) * 1000));
+          continue;
+        }
+        const j = (await r.json()) as OsmDoc & { remark?: string };
+        if (typeof j.remark === 'string' && /runtime error|timed out|out of memory|runtime limit/i.test(j.remark)) { last = j.remark; continue; }
+        const tj = osmToTile(j, { id: `${cx}_${cz}`, box: spec.box, origin });
+        say(`ok b${tj.buildings.length} r${tj.roads.length} l${tj.lines.length}`);
+        void kvPut(key, tj);
+        return tj;
+      } catch (e) {
+        last = `${ep} ${(e as Error)?.message ?? e}`;
+      }
+    }
+    throw new Error('overpass unavailable: ' + last);
+  } finally {
+    const next = opWait.shift();
+    if (next) next();
+    else opSlots++;
+  }
+}
+// The tile service, raced against a stall: after 25 s (or any failure) go direct.
+function worldTile(spec: TileSpec): Promise<TileJson> {
+  if (spec.file.startsWith('direct:')) return directTile(spec);
+  let timer = 0;
+  const stall = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error('tile service stalled')), 25000) as unknown as number; });
+  return Promise.race([cachedFetchJson(spec.file) as Promise<TileJson>, stall])
+    .catch(() => directTile(spec))
+    .finally(() => clearTimeout(timer));
+}
 
 const loadBin = () => (binPromise ??= binInit ? Promise.resolve(binInit) : cachedFetch(base + 'terrain.bin'));
 
@@ -77,7 +136,7 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   const tjP: Promise<TileJson> | null = spec.synth
     ? null
     : spec.world
-      ? (cachedFetchJson(spec.file) as Promise<TileJson>) // real-lite: absolute tile-service URL
+      ? worldTile(spec) // real-lite: the tile service, else straight from Overpass
       : (cachedFetchJson(base + spec.file) as Promise<TileJson>);
   // Detail placeholders race the DEM (they exist to be fast; a late patch triggers a relief
   // rebuild). Coarse silhouettes wait up to 20 s: they're distant, never relieved, and a flat one

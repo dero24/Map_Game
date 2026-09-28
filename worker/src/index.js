@@ -10,7 +10,7 @@
 // Free-tier reality check: Workers free = 100k req/day + 10 ms CPU; Overpass politely =
 // ~100 uncached queries/day for a proxied service. R2 is what makes this viable — cache
 // hits never touch Overpass (empty cells are cached too: they are valid data, not failures).
-import { osmToTile, makeProjector } from '../../src/world/realTile';
+import { osmToTile, makeProjector, overpassQuery } from '../../src/world/realTile';
 
 const CELL = 1024; // game cells, metres (region-local frame anchored at olat/olon)
 const MARGIN = 48; // context ring, same as the bake's TILE_MARGIN
@@ -159,23 +159,7 @@ async function coldTile(env, okey, cx, cz, box, origin) {
 }
 async function coldTileNow(env, okey, cx, cz, box, origin) {
   const bb = makeProjector(origin).localToBbox({ x0: box.x0 - MARGIN, z0: box.z0 - MARGIN, x1: box.x1 + MARGIN, z1: box.z1 + MARGIN });
-  const query = `[out:json][timeout:25][bbox:${bb.s.toFixed(7)},${bb.w.toFixed(7)},${bb.n.toFixed(7)},${bb.e.toFixed(7)}];(
-  way["highway"];
-  way["building"];
-  relation["building"];
-  way["natural"~"^(water|coastline|beach|sand|wetland)$"];
-  relation["natural"="water"];
-  way["waterway"="riverbank"];
-  node["natural"="tree"];
-  node["amenity"="bench"];
-  node["name"]["amenity"~"^(cafe|restaurant|fast_food|bar|pub|biergarten|ice_cream|bank|pharmacy|post_office|library|nightclub)$"];
-  node["name"]["shop"];
-  node["name"]["office"];
-  way["leisure"~"^(park|pitch|playground|garden|recreation_ground)$"];
-  way["landuse"~"^(forest|farmland|meadow|reservoir|cemetery|basin|quarry|landfill|grass)$"];
-  relation["leisure"~"^(park|pitch|playground|garden|recreation_ground)$"];
-  relation["landuse"~"^(forest|farmland|meadow|reservoir|cemetery|basin|quarry|landfill|grass)$"];
-);out geom qt;`;
+  const query = overpassQuery(bb); // shared with the in-browser direct path (realTile.ts)
   const endpoints = (env.OVERPASS_ENDPOINTS ? env.OVERPASS_ENDPOINTS.split(',').map((s) => s.trim()).filter(Boolean) : DEFAULT_ENDPOINTS);
   let osm = null;
   let lastErr = 'no endpoints';

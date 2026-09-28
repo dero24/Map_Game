@@ -41,7 +41,10 @@ async function demTile(tx: number, ty: number): Promise<Float32Array | null> {
     while (inflight >= 4) await new Promise<void>((r) => queue.push(r));
     inflight++;
     try {
-      const r = await fetch(`${demBase}/dem/${Z}/${((tx % N) + N) % N}/${ty}.png`, { signal: AbortSignal.timeout(10000) });
+      const tx0 = ((tx % N) + N) % N;
+      // 'direct' (no tile service): Terrarium straight from its public bucket (CORS-enabled)
+      const url = demBase === 'direct' ? `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${Z}/${tx0}/${ty}.png` : `${demBase}/dem/${Z}/${tx0}/${ty}.png`;
+      const r = await fetch(url, { signal: AbortSignal.timeout(10000), mode: 'cors' });
       if (!r.ok) return null;
       const bmp = await createImageBitmap(await r.blob());
       const w = bmp.width, hh = bmp.height; // close() zeroes these — read dims first

@@ -52,6 +52,8 @@ const TILES_PARAM = params.get('tiles');
 // Overpass once, then served from R2/edge to everyone. Production uses it by default;
 // localhost prefers a running `wrangler dev` and falls back to it.
 const DEPLOYED_TILES = 'https://map-game-tiles.map-game-tiles.workers.dev';
+// `?tiles=direct`: no service — each browser asks Overpass itself (tile.worker.ts directTile);
+// the service path also falls back to direct when it stalls.
 let TILES = TILES_PARAM === 'off' ? '' : TILES_PARAM ?? (LOCAL ? '' : DEPLOYED_TILES);
 async function probeLocalTiles(): Promise<string> {
   // The dev server proxies /__tiles → whichever port `wrangler dev` took (vite.config.ts).

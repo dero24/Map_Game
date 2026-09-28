@@ -127,6 +127,23 @@ describe('osmToTile — buildings', () => {
     expect(at(620).u).toBeUndefined();
   });
 
+  it('emits the linear structures a place is known by: seawalls, jetties, fences, power lines', () => {
+    const t = osmToTile(osm(
+      way(401, { barrier: 'wall', wall: 'seawall', name: 'Sea Bright–Monmouth Beach Seawall' }, [[100, 100], [100, 400]]),
+      way(402, { man_made: 'groyne' }, [[120, 200], [180, 200]]),
+      way(403, { barrier: 'fence' }, [[300, 300], [330, 300]]),
+      way(404, { power: 'line' }, [[400, 100], [400, 900]]),
+      way(405, { highway: 'residential' }, [[500, 100], [500, 900]]),
+    ), OPTS);
+    const cls = t.lines.map((l) => l.c).sort();
+    expect(cls).toEqual(['fence', 'groyne', 'power', 'seawall']);
+  });
+  it('the Overpass query asks for everything the transform reads', async () => {
+    const { overpassQuery } = await import('../src/world/realTile');
+    const q = overpassQuery({ s: 40.3, w: -74, n: 40.31, e: -73.99 });
+    for (const k of ['"building"', '"highway"', '"shop"', 'seawall', 'groyne', '"power"', '"fence|wall|retaining_wall"', 'out geom']) expect(q.includes(k.replace(/^"|"$/g, '')), k).toBe(true);
+  });
+
   it('gives every building exactly one owner across neighbouring cells', () => {
     const east = osmToTile(osm(way(30, { building: 'yes' }, sq(1040, 100, 20), true)), OPTS);
     const west = osmToTile(osm(way(30, { building: 'yes' }, sq(1040, 100, 20), true)), { ...OPTS, id: '1_0', box: { x0: 1024, z0: 0, x1: 2048, z1: 1024 } });

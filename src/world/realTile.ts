@@ -252,6 +252,34 @@ export interface RealTileOpts {
 
 const OWN_CTX = 0;
 
+/** The Overpass query for one cell (bbox in degrees): everything osmToTile reads. Shared by the
+ *  Cloudflare tile service and the in-browser direct path (tile.worker.ts), so both feeders
+ *  emit identical tiles. Keep in step with osmToTile when it learns a new tag. */
+export function overpassQuery(bb: { s: number; w: number; n: number; e: number }): string {
+  return `[out:json][timeout:25][bbox:${bb.s.toFixed(7)},${bb.w.toFixed(7)},${bb.n.toFixed(7)},${bb.e.toFixed(7)}];(
+  way["highway"];
+  way["building"];
+  relation["building"];
+  way["natural"~"^(water|coastline|beach|sand|wetland)$"];
+  relation["natural"="water"];
+  way["waterway"="riverbank"];
+  node["natural"="tree"];
+  node["amenity"="bench"];
+  node["name"]["amenity"~"^(cafe|restaurant|fast_food|bar|pub|biergarten|ice_cream|bank|pharmacy|post_office|library|nightclub)$"];
+  node["name"]["shop"];
+  node["name"]["office"];
+  way["wall"="seawall"];
+  way["man_made"~"^(groyne|breakwater|pier)$"];
+  way["barrier"~"^(fence|wall|retaining_wall)$"];
+  way["power"~"^(line|minor_line)$"];
+  way["railway"="rail"];
+  way["leisure"~"^(park|pitch|playground|garden|recreation_ground)$"];
+  way["landuse"~"^(forest|farmland|meadow|reservoir|cemetery|basin|quarry|landfill|grass)$"];
+  relation["leisure"~"^(park|pitch|playground|garden|recreation_ground)$"];
+  relation["landuse"~"^(forest|farmland|meadow|reservoir|cemetery|basin|quarry|landfill|grass)$"];
+);out geom qt;`;
+}
+
 export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
   const margin = opts.margin ?? 48;
   const box = opts.box;
@@ -344,6 +372,32 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       if (t.service) r.sv = t.service;
       roads.push(r);
       continue;
+    }
+    // Linear structures — the same classes the bake emits (structures.ts / props.ts consume them):
+    // seawalls and jetties, piers, fences and walls, power lines, rail. A hometown is its
+    // seawall, its overhead wires and its back-yard fences as much as its buildings.
+    if (e.type === 'way' && !t.building) {
+      const lc = t.wall === 'seawall' || /seawall/i.test(t.name ?? '') ? 'seawall'
+        : t.man_made === 'groyne' || t.man_made === 'breakwater' ? 'groyne'
+        : t.man_made === 'pier' && !isClosed(e) ? 'pier'
+        : t.barrier === 'fence' ? 'fence'
+        : t.barrier === 'wall' || t.barrier === 'retaining_wall' ? 'wall'
+        : t.power === 'line' || t.power === 'minor_line' ? 'power'
+        : t.railway === 'rail' ? 'rail'
+        : null;
+      if (lc) {
+        const pts = wayPts(e);
+        if (pts.length >= 2) {
+          const p = flat(pts);
+          if (anyVertex(p, margin)) {
+            const l: Line = { c: lc, p, own: ownV(p) };
+            if (t.width && isFinite(parseFloat(t.width))) l.w = parseFloat(t.width);
+            if (t.bridge && t.bridge !== 'no') l.br = 1;
+            lines.push(l);
+          }
+        }
+        if (lc !== 'wall' && lc !== 'fence') continue; // a walled yard can also be a landuse area
+      }
     }
     if (t.building) {
       const rings = areaRings(e);
