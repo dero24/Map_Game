@@ -33,6 +33,26 @@ export class KerbCars {
   private c = new THREE.Color();
   private up = new THREE.Vector3(0, 1, 0);
   private farScale = CAR_TYPES.map((t) => carFarScale(t));
+  /** the open-air surface at (x,z) nearest height y (main: WalkWorld.outdoorNear): the cars within
+   *  NEAR_R stand on their four wheels on a hill — pitched up the grade, rolled to the camber —
+   *  instead of level on the one spot under their middle */
+  ground: ((x: number, z: number, y: number) => number) | null = null;
+  private tq = new THREE.Quaternion();
+  private xAxis = new THREE.Vector3(1, 0, 0);
+  private zAxis = new THREE.Vector3(0, 0, 1);
+  private pose(x: number, y: number, z: number, yaw: number, tilt: boolean) {
+    this.q.setFromAxisAngle(this.up, yaw);
+    this.p.set(x, y, z);
+    const g = this.ground;
+    if (!g || !tilt) return;
+    // wheels at ±1.4 m along, ±0.8 m across (the kit sedan's axles and track)
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+    const yf = g(x + fx * 1.4, z + fz * 1.4, y), yb = g(x - fx * 1.4, z - fz * 1.4, y);
+    const yr = g(x + rx * 0.8, z + rz * 0.8, y), yl = g(x - rx * 0.8, z - rz * 0.8, y);
+    this.q.multiply(this.tq.setFromAxisAngle(this.zAxis, Math.atan2(yr - yl, 1.6)));
+    this.q.multiply(this.tq.setFromAxisAngle(this.xAxis, Math.atan2(yf - yb, 2.8)));
+    this.p.y = (yf + yb + yr + yl) / 4 + 0.04;
+  }
 
   constructor() {
     this.group.name = 'kerb-cars';
@@ -88,8 +108,7 @@ export class KerbCars {
         if (r2 > F2) continue;
         const t = d[i + 4];
         if (this.skip(`${id}:kerb:${k}`)) continue;
-        this.q.setFromAxisAngle(this.up, d[i + 3]);
-        this.p.set(d[i], d[i + 1], d[i + 2]);
+        this.pose(d[i], d[i + 1], d[i + 2], d[i + 3], r2 < N2);
         this.c.setRGB(d[i + 5], d[i + 6], d[i + 7]);
         if (r2 < U2 && fullN[t] < FULL_CAP) {
           this.s.set(d[i + 8], d[i + 9], d[i + 10]);

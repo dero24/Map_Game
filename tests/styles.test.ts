@@ -108,4 +108,11 @@ describe('street-name blades', () => {
     expect(signName('Saint Johns Boulevard')).toBe('St Johns Blvd');
     expect(signName('Rumson Road (County Route 520)')).toBe('Rumson Rd');
   });
+  it('the Pacific Northwest is conifer country, lush; its climate twin in the East is not', () => {
+    const pnw = regionStyle(47.6284, -122.3567), ne = regionStyle(40.36, -73.97);
+    expect(pnw.sub).toBe('pnw');
+    expect(pnw.trees[4] + pnw.trees[3]).toBeGreaterThan(pnw.trees[0] + pnw.trees[1]); // fir and cedar over broadleaf
+    expect(ne.trees[4] + ne.trees[3]).toBeLessThan(ne.trees[0] + ne.trees[1]);
+    expect(pnw.biome[1]).toBeGreaterThan(0); // lush
+  });
 });

@@ -27,7 +27,7 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
   if (opts.paved) defines.PAVED = 1;
   if (opts.signal) defines.SIGNAL = 1;
   if (opts.emissive) defines.EMISSIVE = 1;
-  return paintMaterial({
+  const mat = paintMaterial({
     defines,
     uniforms: { uEmissive: { value: opts.emissive ?? new THREE.Color(0) }, uEmNight: { value: opts.emissiveNight ? 1 : 0 }, uCrown: { value: new THREE.Vector2(...(opts.crown ?? [3, 0])) } },
     vertex: /* glsl */ `
@@ -113,7 +113,18 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
       varying float vTree;
       varying float vSig;
       uniform vec2 uCrown;
+      #ifdef PAVED
+      uniform vec4 uDetailBox;
+      #endif
       void main() {
+        #ifdef PAVED
+          // near the walker the painted ground carries the street (lanes, kerbs, sidewalks,
+          // crossings, all exactly on the ground): the far ribbon steps aside, dissolving across
+          // the painted window's rim as the paint fades in (the ground shader's own ramp)
+          vec2 ud = (vWorldPos.xz - uDetailBox.xy) * uDetailBox.zw;
+          vec2 ue = min(ud, 1.0 - ud);
+          if (smoothstep(0.0, 0.08, min(ue.x, ue.y)) > fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))))) discard;
+        #endif
         vec3 N = normalize(vNormalW);
         vec3 alb = vColor;
         #ifdef SIGNAL
@@ -165,6 +176,15 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
         gl_FragColor = vec4(applyFog(col, vWorldPos), 1.0);
       }`,
   });
+  if (opts.paved) {
+    // the far ribbons lie 6 cm over the ground: a kilometre out that is under one step of the depth
+    // buffer, and ground and street would flicker through each other — pull the street forward a
+    // few steps (constant in depth units, so metres far away and a hair up close)
+    mat.polygonOffset = true;
+    mat.polygonOffsetFactor = -1;
+    mat.polygonOffsetUnits = -4;
+  }
+  return mat;
 }
 
 // Merge simple geometries after baking a per-geometry vertex color.

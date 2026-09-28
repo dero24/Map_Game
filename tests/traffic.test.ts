@@ -278,3 +278,26 @@ describe('a busy grid of streets, three minutes of it', () => {
     expect(longest).toBeLessThan(150);
   });
 });
+
+describe('tunnels: the cars dive under the blocks, nobody walks there', () => {
+  it('a tunnel piece goes down from its portal, is not walkable, and its surface street is untouched', () => {
+    const base: LifeBase = { seed: 3, bounds: [-900, -900, 900, 900], beachPts: new Float32Array(0), waterGrid: new Uint8Array(1), waterG: [0, 0, 8, 1, 1], downtown: [-100, -100, 100, 100], seaward: [1, 0] };
+    const walk = { outdoorSurfaceAt: () => 20 } as unknown as Parameters<typeof buildLifeInit>[2];
+    // a street in the open from x = -300 to 0, then the tunnel on to x = 400 (road() takes decimetres)
+    const street = { p: [-3000, 0, 0, 0], c: 'primary', w: 11 } as Road;
+    const tunnel = { p: [0, 0, 4000, 0], c: 'primary', w: 11, tu: 1 } as Road;
+    const init = buildLifeInit(base, [street], walk, [], [], [tunnel]);
+    expect(init.edgeLen.length).toBe(2);
+    let te = -1;
+    for (let e = 0; e < 2; e++) if (init.edgeInfo[e * 4 + 3] < 0.5) te = e;
+    expect(te).toBeGreaterThanOrEqual(0); // the tunnel is the one nobody walks
+    const c = init.edgeCount[te], s0 = init.edgeStart[te], P = init.edgePts;
+    const ys = Array.from({ length: c }, (_, j) => P[(s0 + j) * 3 + 1]);
+    const xs = Array.from({ length: c }, (_, j) => P[(s0 + j) * 3]);
+    const atPortal = ys[xs[0] < xs[c - 1] ? 0 : c - 1], deepest = Math.min(...ys);
+    expect(atPortal).toBeCloseTo(20, 1); // level with the street at the portal
+    expect(deepest).toBeLessThan(20 - 8); // and well under the blocks further on
+    const se = 1 - te;
+    for (let j = 0; j < init.edgeCount[se]; j++) expect(P[(init.edgeStart[se] + j) * 3 + 1]).toBe(20);
+  });
+});

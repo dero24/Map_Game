@@ -127,3 +127,63 @@ describe('terrainPack', () => {
     expect([...h.slice(0, 4)]).toEqual([180, 190, 200, 210]);
   });
 });
+
+describe('street ribbons on hills', () => {
+  it('follow a crest in short stations, and stay one quad a side on the flat', async () => {
+    const { roadRibbons } = await import('../src/world/synth');
+    const THREE = await import('three');
+    const road = { p: [0, 0, 1200, 0], c: 'residential', w: 8 } as unknown as Parameters<typeof roadRibbons>[0][number];
+    const hill = { heightAt: (x: number) => 30 + 6 * (1 - ((x - 60) / 60) ** 2) }; // a 6 m crest over a 120 m block
+    const check = (t: { heightAt(x: number, z: number): number }) => {
+      const g = roadRibbons([road], t).geometry, P = g.getAttribute('position'), I = g.getIndex()!;
+      let off = 0, down = 0;
+      const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+      for (let k = 0; k < I.count; k += 3) {
+        a.fromBufferAttribute(P, I.getX(k)); b.fromBufferAttribute(P, I.getX(k + 1)); c.fromBufferAttribute(P, I.getX(k + 2));
+        if (new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a)).y <= 0) down++;
+        off = Math.max(off, Math.abs((a.y + b.y + c.y) / 3 - 0.06 - t.heightAt((a.x + b.x + c.x) / 3, (a.z + b.z + c.z) / 3)));
+      }
+      return { verts: P.count, off, down };
+    };
+    const h = check(hill), f = check({ heightAt: () => 5 });
+    expect(h.off).toBeLessThan(0.1); // on the crest, not buried under it (a flat quad sat 6 m low)
+    expect(h.down).toBe(0);
+    expect(f.verts).toBe(6); // flat: one section a end — both kerbs and the crown
+    expect(f.down).toBe(0);
+  });
+  it('ride over the rendered ground in a sag, where the 8 m lattice sits above the DEM', async () => {
+    const { roadRibbons } = await import('../src/world/synth');
+    const { latticeHeight } = await import('../src/world/ground');
+    const THREE = await import('three');
+    // a hollow across the street and along it: the lattice's chords sit above the true ground
+    const sag = { heightAt: (x: number, z: number) => 30 + 8 * ((x - 64) / 64) ** 2 + 2 * ((z - 3) / 12) ** 2 };
+    const road = { p: [40, 30, 1240, 30], c: 'tertiary', w: 10 } as unknown as Parameters<typeof roadRibbons>[0][number];
+    const g = roadRibbons([road], sag).geometry, P = g.getAttribute('position'), I = g.getIndex()!;
+    const hAt = (x: number, z: number) => sag.heightAt(x, z);
+    let worst = Infinity;
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    for (let k = 0; k < I.count; k += 3) {
+      a.fromBufferAttribute(P, I.getX(k)); b.fromBufferAttribute(P, I.getX(k + 1)); c.fromBufferAttribute(P, I.getX(k + 2));
+      for (const [wa, wb] of [[1 / 3, 1 / 3], [0.8, 0.1], [0.1, 0.8], [0.1, 0.1]]) {
+        const x = a.x * wa + b.x * wb + c.x * (1 - wa - wb), z = a.z * wa + b.z * wb + c.z * (1 - wa - wb), y = a.y * wa + b.y * wb + c.y * (1 - wa - wb);
+        worst = Math.min(worst, y - latticeHeight(hAt, x, z));
+      }
+    }
+    expect(worst).toBeGreaterThan(0.02); // never under the ground mesh the tile draws
+  });
+  it('the lattice height is the ground grid itself', async () => {
+    const { latticeHeight, buildGrid } = await import('../src/world/ground');
+    const hAt = (x: number, z: number) => Math.sin(x * 0.05) * 4 + Math.cos(z * 0.07) * 3 + x * 0.02;
+    const g = buildGrid({ x0: 0, z0: 0, x1: 64, z1: 64, step: 8 }, hAt, () => true);
+    const P = g.getAttribute('position'), I = g.getIndex()!;
+    const THREE = await import('three');
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+    let err = 0;
+    for (let k = 0; k < I.count; k += 3) {
+      a.fromBufferAttribute(P, I.getX(k)); b.fromBufferAttribute(P, I.getX(k + 1)); c.fromBufferAttribute(P, I.getX(k + 2));
+      const x = (a.x + b.x + c.x) / 3, z = (a.z + b.z + c.z) / 3, y = (a.y + b.y + c.y) / 3;
+      err = Math.max(err, Math.abs(latticeHeight(hAt, x, z) - y));
+    }
+    expect(err).toBeLessThan(1e-4);
+  });
+});

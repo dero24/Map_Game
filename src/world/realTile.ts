@@ -8,6 +8,7 @@
 // semantics mirror scripts/lib/tiles.mjs partitionEntities: entities within the 48 m
 // margin emit for context; `own: 0` marks the ones a neighbour cell owns.
 import type { Area, Box, Building, Line, Point, Road, TileJson } from './data';
+import { sportOf } from './sports';
 import { worldRegion } from './styles';
 
 export interface LatLon { lat: number; lon: number }
@@ -335,6 +336,10 @@ const roofMaterialColour = (v: unknown) => (v ? ROOF_MAT[String(v).toLowerCase()
 
 const ROAD_W: Record<string, number> = { motorway: 14, trunk: 12, primary: 11, primary_link: 6, secondary: 9, secondary_link: 6, tertiary: 8, tertiary_link: 5, residential: 6.5, unclassified: 6, living_street: 5, service: 4, pedestrian: 5, track: 3, footway: 1.8, path: 1.5, cycleway: 2, steps: 2, bridleway: 2, construction: 5 };
 const PARK_DEFAULT = new Set(['residential', 'unclassified', 'tertiary', 'secondary']);
+/** Below ground: tunnel=yes/culvert/flooded… (a building passage or an avalanche gallery is open air),
+ *  or mapped location=underground. */
+const UNDERGROUND = (t: Record<string, string>) =>
+  (!!t.tunnel && t.tunnel !== 'no' && t.tunnel !== 'building_passage' && t.tunnel !== 'avalanche_protector') || t.location === 'underground';
 // OSM fence_type → Line.ft: 1 iron railing, 2 chain-link, 3 timber (picket, rail, board)
 const FENCE_TYPE: Record<string, number> = {
   railing: 1, metal: 1, metal_bars: 1, bars: 1, wrought_iron: 1, guard_rail: 1, pole: 1,
@@ -369,6 +374,7 @@ const LAND_CLASS = (t: Record<string, string>): string | null => {
   if (t.leisure === 'golf_course') return 'golf';
   if (t.leisure === 'park' || t.leisure === 'garden' || t.landuse === 'grass' || t.landuse === 'recreation_ground' || t.leisure === 'recreation_ground' || t.landuse === 'village_green' || t.landuse === 'meadow' || t.natural === 'grassland' || t.landuse === 'cemetery') return 'grass';
   if (t.leisure === 'marina') return 'marina';
+  if (t.man_made === 'pier') return 'pier'; // a pier's deck mapped as an area (Seattle's are concrete, a boardwalk timber)
   if (t.area === 'yes' && t.highway === 'pedestrian') return 'plaza';
   return null;
 };
@@ -510,6 +516,8 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       continue;
     }
     if (e.type === 'way' && t.highway && t.highway in ROAD_W) {
+      // indoor corridors mapped as footways (a mall, a market arcade) are the building's inside
+      if (t.indoor === 'yes' || t.indoor === 'corridor') continue;
       const pts = wayPts(e);
       if (pts.length < 2) continue;
       let w = parseFloat(t.width) || ROAD_W[t.highway];
@@ -529,6 +537,10 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       if (t.ref) r.ref = t.ref;
       if (t.bridge && t.bridge !== 'no') r.br = t['bridge:movable'] || t.bridge === 'movable' ? 'movable' : 'yes';
       if (t.layer) r.l = parseInt(t.layer) || 0;
+      // underground (Seattle's SR 99 bored tunnel, Boston's Big Dig, the Hudson crossings): not a
+      // street across the blocks above — cars dive into the portal and out of sight. A building
+      // passage (an alley under an arcade) is a street at ground level and stays one.
+      if (UNDERGROUND(t)) r.tu = 1;
       if (t.oneway === 'yes') r.ow = 1;
       if (t.footway === 'sidewalk') r.sw = 1;
       if (t.service) r.sv = t.service;
@@ -548,7 +560,7 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         : t.barrier === 'fence' ? 'fence'
         : t.barrier === 'wall' || t.barrier === 'retaining_wall' ? 'wall'
         : t.power === 'line' ? 'power' // transmission: its own tall poles (props.ts); minor lines are the street poles
-        : t.railway === 'rail' ? 'rail'
+        : t.railway === 'rail' && !UNDERGROUND(t) ? 'rail'
         : (t.railway === 'tram' || t.railway === 'light_rail') && t.tunnel !== 'yes' && t.layer !== '-1' ? 'tram'
         : null;
       if (lc) {
@@ -642,6 +654,18 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         // a low min_height is pilings
         if (minH > 6) (b.lf = +minH.toFixed(1)), (b.h = +Math.max(1, h - minH).toFixed(1));
         else if (minH > 0.5) b.mh = +minH.toFixed(1);
+        // a canopy — a filling station's, a market's covered walk, a carport — is an open roof on
+        // posts, not a shed standing in the street: its underside at the mapped min_height (or a
+        // little under the mapped height), else a big one at a lorry's clearance, a small one lower
+        if (bt === 'roof' || bt === 'carport') {
+          const clear = minH > 0.5 ? minH : isFinite(tagH) && tagH > 2.6 ? Math.max(2.4, tagH - 0.6) : bt === 'carport' ? 2.4 : area > 120 ? 4.4 : 3.0;
+          b.lf = +clear.toFixed(1);
+          b.h = 0.6;
+          b.cn = 1;
+          b.roof = 'flat';
+          delete b.mh;
+          if (b.fc == null) b.fc = 0xe9e6df;
+        }
         if (t.name) b.n = t.name;
         const use = useTag(t);
         if (use) b.u = use;
@@ -680,6 +704,13 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       if (!o.length || !o.some((ring) => anyVertex(ring, margin))) continue;
       const a: Area = { c: la, o, i: rings.inner.map((ring) => flat(simplify(cleanRing(ring), 0.25))).filter((f) => f.length >= 6), own: ownV(o[0]) };
       if (t.name) a.n = t.name;
+      // a pitch says what it's for (a basketball court, a block of tennis courts, a diamond) and
+      // what it's surfaced with — the paint draws its lines, props.ts its hoops, nets and goals
+      if (la === 'pitch') {
+        const sp = t.leisure === 'playground' ? 'playground' : sportOf(t.sport);
+        if (sp) a.k = sp;
+      }
+      if ((la === 'pitch' || la === 'pier') && t.surface) a.sf = String(t.surface).slice(0, 16);
       areas.push(a);
     }
   }
@@ -715,47 +746,81 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       }
       return out;
     };
+    // Where the segment from inside point P to outside point Q crosses the boundary — exactly on
+    // an edge (τ reads the edge from the coordinate).
+    const cross = (P: P2, Q: P2): P2 => {
+      const dx = Q[0] - P[0], dz = Q[1] - P[1];
+      let t = 1;
+      if (Q[0] > cb.x1) t = Math.min(t, (cb.x1 - P[0]) / dx);
+      if (Q[0] < cb.x0) t = Math.min(t, (cb.x0 - P[0]) / dx);
+      if (Q[1] > cb.z1) t = Math.min(t, (cb.z1 - P[1]) / dz);
+      if (Q[1] < cb.z0) t = Math.min(t, (cb.z0 - P[1]) / dz);
+      t = Math.max(0, Math.min(1, t));
+      let x = Math.max(cb.x0, Math.min(cb.x1, P[0] + dx * t)), z = Math.max(cb.z0, Math.min(cb.z1, P[1] + dz * t));
+      const gap = [x - cb.x0, cb.x1 - x, z - cb.z0, cb.z1 - z], m = gap.indexOf(Math.min(...gap));
+      if (m === 0) x = cb.x0;
+      else if (m === 1) x = cb.x1;
+      else if (m === 2) z = cb.z0;
+      else z = cb.z1;
+      return [x, z];
+    };
+    // Every stretch of coast through the cell, from the point it comes in over the boundary to the
+    // point it leaves (a way's end inside the cell is an unfinished coast: skipped). Overpass
+    // hands whole ways, so the neighbours outside are there to cross against.
+    const runs: { body: P2[]; ta: number; tb: number }[] = [];
     for (const chain of assembleChains(parts)) {
-      // Keep only the sub-chains inside the boundary (coast ways can run for many km),
-      // recording whether each end is a real boundary crossing or just the way's end.
-      const runs: { frag: P2[]; startOpen: boolean; endOpen: boolean }[] = [];
       let run: P2[] = [];
-      let startOpen = false;
+      let entry: P2 | null = null;
       for (let i = 0; i < chain.length; i++) {
         const p = chain[i];
         if (inB(p[0], p[1], margin)) {
-          if (!run.length) startOpen = i > 0;
+          if (!run.length) entry = i > 0 ? cross(p, chain[i - 1]) : null;
           run.push(p);
         } else if (run.length) {
-          runs.push({ frag: run, startOpen, endOpen: true });
+          if (entry) {
+            const exit = cross(run[run.length - 1], p);
+            runs.push({ body: [entry, ...run, exit], ta: tau(entry), tb: tau(exit) });
+          }
           run = [];
         }
       }
-      if (run.length) runs.push({ frag: run, startOpen, endOpen: false });
-      for (const { frag, startOpen: so, endOpen: eo } of runs) {
-        if (frag.length < 2 || !so || !eo) continue;
-        // A closed loop inside the box is an island (land, not water) — skip it.
-        if (Math.hypot(frag[0][0] - frag.at(-1)![0], frag[0][1] - frag.at(-1)![1]) < 1) continue;
-        // Both ends crossed the boundary — project them onto the nearest edge.
-        const snap = (p: P2): P2 => [Math.max(cb.x0, Math.min(cb.x1, p[0])), Math.max(cb.z0, Math.min(cb.z1, p[1]))];
-        const a = snap(frag[0]), b = snap(frag.at(-1)!);
-        const body: P2[] = [a, ...frag.slice(1, -1), b];
-        // Water sits right of the direction of travel: a probe just right of the mid
-        // segment decides which of the two boundary arcs closes over the sea.
-        const mi = Math.max(0, Math.floor(body.length / 2) - 1);
-        const dx = body[mi + 1][0] - body[mi][0], dz = body[mi + 1][1] - body[mi][1];
-        const dl = Math.hypot(dx, dz) || 1;
-        const probe: P2 = [
-          Math.max(cb.x0 + 1, Math.min(cb.x1 - 1, (body[mi][0] + body[mi + 1][0]) / 2 + (-dz / dl) * 15)),
-          Math.max(cb.z0 + 1, Math.min(cb.z1 - 1, (body[mi][1] + body[mi + 1][1]) / 2 + (dx / dl) * 15)),
-        ];
-        const ta = tau(a), tb = tau(b);
-        const ringF: P2[] = [...body, ...arc(tb, ta, 1)];
-        const ringB: P2[] = [...body, ...arc(tb, ta, -1)];
-        const ring = pointInRing(probe[0], probe[1], ringF) ? ringF : ringB;
-        const f = flat(simplify(cleanRing(ring), 0.25));
-        if (f.length >= 6 && anyVertex(f, margin)) areas.push({ c: 'water', o: [f], i: [], own: ownV(f) });
+    }
+    // Water lies right of the coast's direction, and the boundary walked in rising τ (clockwise on
+    // a north-up map) keeps it on the right too: from each stretch's exit, walk on to the next
+    // stretch's entry, follow that, … until back at the start — one sea polygon, with every
+    // headland and pier the coast wraps left out of it. (Closing each stretch on its own flooded
+    // Pike Place Market: a pier's outline poking into the cell claimed the whole cell as bay.)
+    const used = new Set<number>();
+    for (let s0 = 0; s0 < runs.length; s0++) {
+      if (used.has(s0)) continue;
+      const ring: P2[] = [];
+      let cur = s0, closed = false;
+      for (let guard = 0; guard <= runs.length; guard++) {
+        used.add(cur);
+        ring.push(...runs[cur].body);
+        // the next boundary point clockwise from this exit must be an entry (else the coast is broken)
+        let next = -1, best = Infinity, exitFirst = false;
+        for (let j = 0; j < runs.length; j++) {
+          let d = runs[j].ta - runs[cur].tb;
+          if (d < 0) d += 4;
+          if (d < best) (best = d), (next = j);
+        }
+        for (let j = 0; j < runs.length; j++) {
+          if (j === cur) continue;
+          let d = runs[j].tb - runs[cur].tb;
+          if (d < 0) d += 4;
+          if (d > 1e-9 && d < best) exitFirst = true;
+        }
+        if (next < 0 || exitFirst) break;
+        ring.push(...arc(runs[cur].tb, runs[next].ta, 1));
+        if (next === s0) { closed = true; break; }
+        if (used.has(next)) break;
+        cur = next;
       }
+      if (!closed) continue;
+      const f = flat(simplify(cleanRing(ring), 0.25));
+      // (k 'sea': no sheet of its own — the ocean plane at sea level shows through; realExtras)
+      if (f.length >= 6 && anyVertex(f, margin)) areas.push({ c: 'water', o: [f], i: [], own: ownV(f), k: 'sea' });
     }
   }
 

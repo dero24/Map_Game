@@ -6,6 +6,8 @@ import * as THREE from 'three';
 import type { World, TerrainLayer, Road, Area, WorldJson } from './data';
 import { activeStyle } from './styles';
 import { lotLayout, type LotLayout } from './lots';
+import { MINOR, ROAD_RANK, roadPaint } from './roadPalette';
+import { COURT, courtFrame, diamondFrame, surfacePaint, type Sport } from './sports';
 
 // a lot's stall layout, computed once per prepared outline
 const LOTS = new WeakMap<object, LotLayout | null>();
@@ -29,12 +31,6 @@ const AREA_FILL: Record<string, string> = {
   bare: '#cbbb93', pier: '#9c8466',
 };
 const AREA_ORDER = ['wood', 'scrub', 'wetland', 'grass', 'golf', 'commercial', 'bare', 'beach', 'pitch', 'marina', 'parking', 'plaza', 'pier', 'pool'];
-const ROAD_RANK: Record<string, number> = {
-  path: 0, footway: 0, cycleway: 0, steps: 0, bridleway: 0, track: 0, service: 1, pedestrian: 1, living_street: 2,
-  unclassified: 2, residential: 2, construction: 2, tertiary_link: 3, tertiary: 3, secondary_link: 3, secondary: 4,
-  primary_link: 4, primary: 5, trunk: 5, motorway: 6,
-};
-const MINOR = new Set(['path', 'footway', 'cycleway', 'steps', 'bridleway', 'track']);
 
 type P = [number, number];
 interface Prepared<T> { item: T; pts: P[][]; x0: number; z0: number; x1: number; z1: number }
@@ -54,6 +50,98 @@ function pathOf(ctx: CanvasRenderingContext2D, p: P[], close = false) {
   ctx.moveTo(p[0][0], p[0][1]);
   for (let i = 1; i < p.length; i++) ctx.lineTo(p[i][0], p[i][1]);
   if (close) ctx.closePath();
+}
+// A mapped court or field in its own paint (sports.ts: the same fit props.ts stands the hoops,
+// nets and goals in): the run-off, the playing surface and — `lw` > 0, the fine window — its lines.
+function paintCourt(ctx: CanvasRenderingContext2D, ring: P[], sport: Sport, sf: string | undefined, lw: number) {
+  const C = COURT[sport], own = surfacePaint(sf);
+  ctx.save();
+  ctx.lineWidth = lw;
+  ctx.strokeStyle = C.lines;
+  const circle = (u: number, v: number, r: number, a0 = 0, a1 = Math.PI * 2) => { ctx.moveTo(u + r * Math.cos(a0), v + r * Math.sin(a0)); ctx.arc(u, v, r, a0, a1); };
+  const seg = (u0: number, v0: number, u1: number, v1: number) => { ctx.moveTo(u0, v0); ctx.lineTo(u1, v1); };
+  if (sport === 'baseball' || sport === 'softball') {
+    // the diamond frame: p along the first-base line, q along the third, home at the origin
+    const d = diamondFrame(ring, sport), r2 = Math.SQRT1_2, s = d.side, k = s / 27.43;
+    ctx.transform((d.dx + d.dz) * r2, (d.dz - d.dx) * r2, (d.dx - d.dz) * r2, (d.dx + d.dz) * r2, d.hx, d.hz);
+    const dirt = sf === 'grass' || sf === 'artificial_turf' ? own! : '#b88c60', grass = own && sf !== 'dirt' ? own : C.court, m = 0.475 * s;
+    ctx.fillStyle = dirt;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, d.foul, d.foul); ctx.clip();
+    ctx.beginPath(); ctx.arc(m, m, 29 * k, 0, Math.PI * 2); ctx.fill(); // the skinned infield round the mound
+    ctx.restore();
+    ctx.fillStyle = grass;
+    ctx.fillRect(1.2 * k, 1.2 * k, s - 2.4 * k, s - 2.4 * k); // the infield grass inside the base paths
+    ctx.fillStyle = dirt;
+    ctx.beginPath(); ctx.arc(m, m, 2.74 * k, 0, Math.PI * 2); ctx.arc(0, 0, 3.96 * k, 0, Math.PI * 2); ctx.fill(); // mound, home circle
+    if (lw) { ctx.beginPath(); seg(0, 0, d.foul, 0); seg(0, 0, 0, d.foul); ctx.stroke(); }
+    ctx.restore();
+    return;
+  }
+  const f = courtFrame(ring, sport);
+  const hard = sport === 'basketball' || sport === 'tennis' || sport === 'pickleball';
+  const plain = sf === 'asphalt' || sf === 'concrete' || sf === 'paved';
+  if (hard) {
+    ctx.fillStyle = own ?? C.apron; // the run-off: the whole mapped block
+    ctx.beginPath(); pathOf(ctx, ring, true); ctx.fill();
+  } else if (own) {
+    ctx.fillStyle = own;
+    ctx.beginPath(); pathOf(ctx, ring, true); ctx.fill();
+  }
+  ctx.transform(f.ux, f.uz, -f.uz, f.ux, f.cx, f.cz); // (u along the courts, v across)
+  const L = f.L, W = f.W;
+  for (let i = 0; i < f.n; i++) {
+    const v0 = (i - (f.n - 1) / 2) * f.step;
+    if (hard || sport === 'volleyball') {
+      ctx.fillStyle = hard && plain ? own! : C.court;
+      ctx.fillRect(-L / 2, v0 - W / 2, L, W);
+    }
+    if (!lw) continue;
+    ctx.beginPath();
+    ctx.rect(-L / 2, v0 - W / 2, L, W);
+    if (sport === 'basketball') {
+      const s = W / 15;
+      if (!f.half) { seg(0, v0 - W / 2, 0, v0 + W / 2); circle(0, v0, 1.8 * s); }
+      for (const e of f.half ? [1] : [-1, 1]) {
+        const bu = (e * L) / 2, ft = bu - e * 5.8 * s, bk = bu - e * 1.575 * s;
+        ctx.rect(Math.min(bu, ft), v0 - 2.45 * s, 5.8 * s, 4.9 * s); // the key
+        circle(ft, v0, 1.8 * s); // the free-throw circle
+        // the three-point line: straight from the baseline 0.9 m in from each side, then the arc
+        const R = 6.75 * s, sv = 6.6 * s, du = Math.sqrt(Math.max(0, R * R - sv * sv)), cu = bk - e * du;
+        seg(bu, v0 - sv, cu, v0 - sv); seg(bu, v0 + sv, cu, v0 + sv);
+        const th = Math.atan2(sv, du);
+        if (e > 0) { ctx.moveTo(cu, v0 - sv); ctx.arc(bk, v0, R, -Math.PI + th, Math.PI - th, true); }
+        else { ctx.moveTo(cu, v0 - sv); ctx.arc(bk, v0, R, -th, th, false); }
+      }
+    } else if (sport === 'tennis') {
+      const s = W / 10.97, sw = 4.115 * s, sl = 6.4 * s;
+      seg(-L / 2, v0 - sw, L / 2, v0 - sw); seg(-L / 2, v0 + sw, L / 2, v0 + sw); // singles sidelines
+      seg(-sl, v0 - sw, -sl, v0 + sw); seg(sl, v0 - sw, sl, v0 + sw); // service lines
+      seg(-sl, v0, sl, v0); // centre service line
+      seg(-L / 2, v0, -L / 2 + 0.3 * s, v0); seg(L / 2, v0, L / 2 - 0.3 * s, v0); // centre marks
+    } else if (sport === 'pickleball') {
+      const s = W / 6.1, nv = 2.13 * s;
+      seg(-nv, v0 - W / 2, -nv, v0 + W / 2); seg(nv, v0 - W / 2, nv, v0 + W / 2); // the kitchen
+      seg(nv, v0, L / 2, v0); seg(-L / 2, v0, -nv, v0);
+    } else if (sport === 'volleyball') {
+      const s = W / 9;
+      seg(0, v0 - W / 2, 0, v0 + W / 2); seg(-3 * s, v0 - W / 2, -3 * s, v0 + W / 2); seg(3 * s, v0 - W / 2, 3 * s, v0 + W / 2);
+    } else if (sport === 'soccer') {
+      const s = L / 100;
+      seg(0, v0 - W / 2, 0, v0 + W / 2);
+      circle(0, v0, 9.15 * s);
+      for (const e of [-1, 1]) {
+        const bu = (e * L) / 2, pa = bu - e * 16.5 * s, ga = bu - e * 5.5 * s, spot = bu - e * 11 * s;
+        ctx.rect(Math.min(bu, pa), v0 - 20.16 * s, 16.5 * s, 40.32 * s); // the penalty area
+        ctx.rect(Math.min(bu, ga), v0 - 9.16 * s, 5.5 * s, 18.32 * s); // the goal area
+        const th = Math.acos(5.5 / 9.15);
+        if (e > 0) circle(spot, v0, 9.15 * s, Math.PI - th, Math.PI + th);
+        else circle(spot, v0, 9.15 * s, -th, th);
+      }
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 // Offset polyline by d meters (left of travel direction in x-east/z-south frame).
 function offsetLine(p: P[], d: number): P[] {
@@ -96,15 +184,17 @@ function coverImage(L: TerrainLayer) {
 class Painter {
   areas: Prepared<Area>[];
   roads: Prepared<Road>[];
-  foot: Prepared<number>[];
+  foot: Prepared<number>[]; // (item: how much the footprint counts toward paving its block)
   walks: Prepared<number>[];
   // Streamed tiles (real-lite / synth — everything past the bake) paint too: their roads and
   // footprints join while mounted, so sidewalks, curbs, markings, walks and contact shadows
   // continue wherever the world does.
   private tiles = new Map<string, { roads: Prepared<Road>[]; foot: Prepared<number>[]; front: Prepared<number>[]; areas: Prepared<Area>[]; box: [number, number, number, number] }>();
   // `fronts` flags the storefronts (shops, apartments over shops): their ground is paved.
-  setTile(id: string, roads: Road[], rings: [number, number][][], box: [number, number, number, number], fronts: boolean[] = [], areas: Area[] = []) {
-    const foot = rings.map((r, i) => prep(i, [r.flatMap(([x, z]) => [x * 10, z * 10])]));
+  /** `weights`: how much of each footprint counts toward paving its block — a house on its lot
+   *  leaves yards (0.45), a city building fills its lot (1). */
+  setTile(id: string, roads: Road[], rings: [number, number][][], box: [number, number, number, number], fronts: boolean[] = [], areas: Area[] = [], weights: number[] = []) {
+    const foot = rings.map((r, i) => prep(weights[i] ?? 1, [r.flatMap(([x, z]) => [x * 10, z * 10])]));
     this.tiles.set(id, {
       roads: roads.filter((r) => !r.br).map((r) => prep(r, [r.p])),
       foot,
@@ -144,7 +234,7 @@ class Painter {
     this.areas = json.areas.filter((a) => AREA_FILL[a.c]).sort((a, b) => AREA_ORDER.indexOf(a.c) - AREA_ORDER.indexOf(b.c)).map((a) => prep(a, [...a.o, ...a.i]));
     this.roads = json.roads.filter((r) => !r.br).sort((a, b) => (ROAD_RANK[a.c] ?? 1) - (ROAD_RANK[b.c] ?? 1)).map((r) => prep(r, [r.p]));
     this.bakedRoads = new Set(this.roads);
-    this.foot = json.buildings.filter((b) => !b.lod).map((b, i) => prep(i, [b.r]));
+    this.foot = json.buildings.filter((b) => !b.lod).map((b) => prep(1, [b.r])); // (item: the paving weight — the bake keeps its look)
     this.walks = [];
     this.addWalks(walks);
   }
@@ -167,7 +257,9 @@ class Painter {
         let a = 0, cx = 0, cz = 0;
         for (let i = 0, j = r.length - 1; i < r.length; j = i++) (a += (r[j][0] - r[i][0]) * (r[j][1] + r[i][1])), (cx += r[i][0]), (cz += r[i][1]);
         const k = `${Math.floor(cx / r.length / C)},${Math.floor(cz / r.length / C)}`;
-        cov.set(k, (cov.get(k) ?? 0) + Math.abs(a / 2));
+        // (a house's footprint counts for under half: a street of houses on their lots is lawns
+        // and gardens — Queen Anne paved over read as a car park)
+        cov.set(k, (cov.get(k) ?? 0) + Math.abs(a / 2) * f.item);
       }
       ctx.fillStyle = '#b1ab9d';
       for (let i = Math.floor(x0 / C) - 1; i <= Math.floor(x1 / C) + 1; i++)
@@ -185,16 +277,27 @@ class Painter {
       if ((a.item.lod && level > 0) || !overlaps(a, x0, z0, x1, z1)) continue;
       ctx.beginPath();
       for (const r of a.pts) pathOf(ctx, r, true);
-      ctx.fillStyle = AREA_FILL[a.item.c];
+      // a pier's deck, a playground's woodchips or rubber: the mapped surface's colour where it says
+      ctx.fillStyle = ((a.item.c === 'pier' || a.item.k === 'playground') && surfacePaint(a.item.sf)) || AREA_FILL[a.item.c];
       ctx.globalAlpha = a.item.c === 'wood' ? 0.75 : 0.92;
       ctx.fill('evenodd');
-      if (a.item.c === 'pool' || a.item.c === 'pitch') {
+      if (a.item.c === 'pool' || (a.item.c === 'pitch' && !a.item.k)) {
         ctx.globalAlpha = 0.9;
         ctx.strokeStyle = '#f2efe6';
         ctx.lineWidth = a.item.c === 'pool' ? 0.8 : 0.25;
         ctx.stroke();
       }
     }
+    ctx.globalAlpha = 1;
+    // Courts and fields (sports.ts): a pitch that says its sport gets its own surface, and in the
+    // fine window its lines — fitted exactly where props.ts stands the hoops, nets and goals
+    if (level >= 1)
+      for (const a of areas) {
+        const k = a.item.k;
+        if (a.item.c !== 'pitch' || !k || k === 'playground' || k === 'american_football' || !overlaps(a, x0, z0, x1, z1)) continue;
+        ctx.globalAlpha = 0.95;
+        paintCourt(ctx, a.pts[0], k as Sport, a.item.sf, level === 2 ? Math.max(0.1, 0.9 / pxPerM) : 0);
+      }
     ctx.globalAlpha = 1;
     // Parking lots: the stall lines (lots.ts — the same layout props.ts parks the cars in)
     if (level === 2) {
@@ -282,10 +385,9 @@ class Painter {
     for (const { item: r, pts } of list) {
       const rank = ROAD_RANK[r.c] ?? 1;
       const minor = MINOR.has(r.c);
-      // desert sun bleaches asphalt to a warm pale grey
-      // bike lanes are asphalt, painted by habit (green in North America, red-brown in Europe);
-      // a pale path colour read as a sidewalk down the middle of the avenue
-      const base = r.c === 'cycleway' ? (region === 'na' ? '#687a62' : region === 'eu' ? '#8a5e52' : '#6a6c6e') : r.sw ? '#b8b2a4' : minor ? '#bdb5a3' : arid ? (rank >= 5 ? '#6f6b64' : rank >= 2 ? '#78736b' : '#817b72') : rank >= 5 ? '#55575b' : rank >= 2 ? '#606265' : '#6f6d68';
+      // (roadPalette.ts: bleached desert asphalt, painted bike lanes, pale paths — shared with the
+      // far ribbons so the hand-off at the window's edge doesn't show)
+      const base = roadPaint(r, region, arid);
       ctx.beginPath();
       pathOf(ctx, pts[0]);
       ctx.strokeStyle = base;
@@ -446,7 +548,7 @@ export interface GroundPaint {
   detail: DetailGround;
   mid: DetailGround;
   addWalks: (walks: number[]) => void;
-  setTile: (id: string, roads: Road[], rings: [number, number][][], box: [number, number, number, number], fronts?: boolean[], areas?: Area[]) => void;
+  setTile: (id: string, roads: Road[], rings: [number, number][][], box: [number, number, number, number], fronts?: boolean[], areas?: Area[], weights?: number[]) => void;
   dropTile: (id: string) => void;
   /** Where the painted ground is open (unpainted land or a green wash) inside a square — the
    *  grass field grows only there, so it can never sit on a painted sidewalk, walk, lot or beach. */
@@ -575,7 +677,7 @@ export function paintGround(world: World, maxTex: number, walks: number[] = []):
   return {
     slice: makeTex(sc), backdrop: makeTex(bc), sliceCanvas: sc, detail, mid, grassMask,
     addWalks: (w: number[]) => painter.addWalks(w),
-    setTile: (id, roads, rings, box, fronts, areas) => { painter.setTile(id, roads, rings, box, fronts, areas); detail.touch(box); mid.touch(box); },
+    setTile: (id, roads, rings, box, fronts, areas, weights) => { painter.setTile(id, roads, rings, box, fronts, areas, weights); detail.touch(box); mid.touch(box); },
     dropTile: (id) => painter.dropTile(id),
   };
 }

@@ -492,6 +492,79 @@
         "src/world/season.ts (bloom)"
       ],
       "notes": "Next: live oak, sycamore, dogwood, cedar; leaf cards with real phyllotaxis at close range; potted plants (R.6)."
+    },
+    {
+      "id": "hill-streets",
+      "priority": 1,
+      "area": "world",
+      "title": "Streets and cars on hills: painted streets near, true-section ribbons far, cars on four wheels",
+      "user_visible_behavior": "On Seattle's Queen Anne and downtown grades the streets lie on the ground (no pale blotches, no ground poking through), and every car — driving or parked — sits on its four wheels, nose up the hill, rolled to the camber.",
+      "status": "passing",
+      "verification": [
+        "tests/tiles.test.ts: ribbons follow a crest, ride over the 8 m lattice in a sag, latticeHeight = the ground mesh",
+        "__SPOTS__ Queen Anne top-down / 300 m out (shots/spots-qa-after.jpg)"
+      ],
+      "evidence": [
+        "src/world/synth.ts roadRibbons",
+        "src/world/roadPalette.ts",
+        "src/world/ground.ts latticeHeight",
+        "src/render/propMaterial.ts PAVED",
+        "src/sim/life.ts LifeClient.ground",
+        "src/world/kerbCars.ts"
+      ],
+      "notes": "Next: road-conforming terrain (graded profiles, cut/fill, retaining walls) for bluffs like Pike Place's."
+    },
+    {
+      "id": "tunnels-canopies-coasts",
+      "priority": 1,
+      "area": "world",
+      "title": "What's under, over and beside the street: tunnels, canopies, coastlines",
+      "user_visible_behavior": "SR 99's tunnel isn't a motorway across downtown — cars dive into the portal and vanish; a filling station's canopy is an open roof on posts you can walk under; Elliott Bay is water right up to the piers and Pike Place Market has its ground.",
+      "status": "passing",
+      "verification": [
+        "tests/realTile.test.ts: tunnel/building passage/indoor/rail, canopies, coast with a pier loop, coast turning inside the cell",
+        "tests/traffic.test.ts: a tunnel dives from its portal and nobody walks it"
+      ],
+      "evidence": [
+        "src/world/realTile.ts (UNDERGROUND, canopy, coastline walk)",
+        "src/world/tileBuild.ts",
+        "src/sim/life.ts buildLifeInit tunnels",
+        "src/world/buildings.ts canopy posts"
+      ],
+      "notes": "Tile cache v18 — redeploy the tile worker. The sea gets no water sheet of its own (the ocean plane shows through where its ground is cut); lakes are flat at their shore's low ground; mapped pier decks are areas in their surface colour."
+    },
+    {
+      "id": "courts-and-fields",
+      "priority": 1,
+      "area": "world",
+      "title": "Courts and fields from the map: lines and gear by sport",
+      "user_visible_behavior": "A mapped basketball court has its key, arcs and two hoops (a half court one); tennis, pickleball and volleyball courts their lines and nets (a block of courts each its own); soccer fields their boxes and goals (kids' goals on small fields); diamonds their infield, mound, bases and backstop.",
+      "status": "passing",
+      "verification": [
+        "tests/foundry.test.ts sport: every piece valid, grounded, in budget; sport tags; court fits (one, four side by side, half court); home plate at a fan's point"
+      ],
+      "evidence": [
+        "src/world/sports.ts",
+        "src/assets/sport.ts",
+        "src/world/groundPaint.ts paintCourt",
+        "src/world/props.ts courts and fields"
+      ],
+      "notes": "American football, skate parks and playground equipment are next (docs/DATA_SOURCES.md §2.3)."
+    },
+    {
+      "id": "open-data-catalogue",
+      "priority": 1,
+      "area": "docs",
+      "title": "The open-data catalogue: sources, every neighbourhood feature, the scale plan",
+      "user_visible_behavior": "docs/DATA_SOURCES.md (and the claude.ai project copy) lists the best open source for everything the game places, the exact OSM tags, what's placed today, the fallback ladder and the offline cell pipeline.",
+      "status": "passing",
+      "verification": [
+        "reviewed against the code's live sources (overpassQuery, dem.ts, lidar-index, fetch-imagery, fetch-worldcover, geo.ts)"
+      ],
+      "evidence": [
+        "docs/DATA_SOURCES.md"
+      ],
+      "notes": "The doc's §5 is the work order for R.19."
     }
   ],
   "regions": {

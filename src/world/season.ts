@@ -46,6 +46,13 @@ export function meanTemp(lat: number, lon: number, elev: number, doy: number): n
   return jan - 6 * Math.max(0, elev) / 1000 + (swing * (1 - Math.cos((2 * Math.PI * (d - 20)) / 365.25))) / 2;
 }
 
+/** Hours of daylight at a latitude on a day of the year (sunrise to sunset, no refraction). */
+export function dayLength(lat: number, doy: number): number {
+  const decl = (-23.44 * Math.cos(((2 * Math.PI) / 365.25) * (doy + 10)) * Math.PI) / 180;
+  const c = Math.max(-1, Math.min(1, -Math.tan((lat * Math.PI) / 180) * Math.tan(decl)));
+  return (2 * ((Math.acos(c) * 180) / Math.PI)) / 15;
+}
+
 export function seasonAt(lat: number, lon: number, elev: number, doy: number): Season {
   const T = meanTemp(lat, lon, elev, doy - 12); // snowpack and leaves lag the air by a fortnight
   const snow = Math.min(1, Math.max(0, (2 - T) / 6));
@@ -53,7 +60,10 @@ export function seasonAt(lat: number, lon: number, elev: number, doy: number): S
   // colour turns on the way down (the cooling half of the year), peaking near 13 °C
   const d = lat < 0 ? doy + 182.5 : doy;
   const cooling = Math.sin((2 * Math.PI * (d - 20)) / 365.25) < 0;
-  const autumn = cooling ? Math.min(1, Math.max(0, 1 - Math.abs(T - 13) / 5)) * (1 - 0.5 * leafFall) : 0;
+  // …and only once the days shorten: trees read the night as well as the cold. A mild marine
+  // autumn (Seattle's September is ~15 °C) waits for October's short days; the tropics never turn.
+  const photo = Math.min(1, Math.max(0, (11.9 - dayLength(lat, doy)) / 1.3));
+  const autumn = cooling ? Math.min(photo, Math.min(1, Math.max(0, 1 - Math.abs(T - 13) / 5))) * (1 - 0.5 * leafFall) : 0;
   // (the unlagged air: blossom opens with the first warm weeks, before the canopy has filled)
   const Ta = meanTemp(lat, lon, elev, doy);
   const bloom = !cooling ? Math.min(1, Math.max(0, 1 - Math.abs(Ta - 11.5) / 3.5)) : 0;

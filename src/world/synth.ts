@@ -6,7 +6,8 @@ import * as THREE from 'three';
 import earcut from 'earcut';
 import type { Building, Point, Road, TileJson, TileSpec } from './data';
 import { propMaterial } from '../render/propMaterial';
-import { buildGrid } from './ground';
+import { buildGrid, latticeHeight } from './ground';
+import { MINOR, roadPaint } from './roadPalette';
 import { pointInRing } from './realTile';
 import { activeStyle } from './styles';
 
@@ -198,29 +199,71 @@ export function synthTile(spec: TileSpec, seed: number, terrain: { sdfAt(x: numb
   return { tj, extra };
 }
 
-// Asphalt + sidewalk ribbons hugging the terrain — the synth world's visible streets.
-function roadRibbons(roads: Road[], terrain: { heightAt(x: number, z: number): number }) {
+// The streets past the painted window: an asphalt ribbon along every real (or pencilled) street,
+// in the painted ground's own colour (roadPalette.ts), so a road still reads as a road a kilometre
+// out. Near the walker the painted ground carries the street — lanes, kerbs, sidewalks, crossings
+// — and the ribbon steps aside (propMaterial PAVED discards inside the detail window).
+//   Hills: the ribbon follows the ground in stations a few metres apart wherever a straight quad
+// would stray from it (a Seattle block climbs 20 m), and each station is a real cross-section —
+// both kerbs and the crown — riding the rendered ground (the 8 m lattice, never under it). It
+// used to be two independently draped strips 2 cm apart, asphalt over a wider sidewalk: on
+// bumpy ground the sidewalk won as often as not, and the streets went pale and blotchy.
+export function roadRibbons(roads: Road[], terrain: { heightAt(x: number, z: number): number }) {
   const pos: number[] = [], nrm: number[] = [], col: number[] = [], idx: number[] = [];
-  const push = (cx: number, cz: number, ux: number, uz: number, nx: number, nz: number, hw: number, r: number, gg: number, b: number, y = 0.07) => {
-    const at = (sx: number, sz: number) => { const x = cx + sx, z = cz + sz; pos.push(x, terrain.heightAt(x, z) + y, z); nrm.push(0, 1, 0); col.push(r, gg, b); };
-    const base = pos.length / 3;
-    at(-ux - nx * hw, -uz - nz * hw); at(ux - nx * hw, uz - nz * hw); at(ux + nx * hw, uz + nz * hw); at(-ux + nx * hw, -uz + nz * hw);
-    idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
-  };
+  const STEP = 3.5, TOL = 0.04, LIFT = 0.06;
+  const hAt = (x: number, z: number) => terrain.heightAt(x, z);
+  const H = (x: number, z: number) => Math.max(hAt(x, z), latticeHeight(hAt, x, z));
+  const st = activeStyle(), arid = st.climate === 'arid';
+  const c = new THREE.Color();
+  const sec: number[] = []; // one segment's section vertices (x, y, z) × 3 per station
   for (const rd of roads) {
-    if (rd.own === 0) continue;
-    const p = rd.p;
+    // mapped sidewalks and paths are the painted ground's (a pale line a kilometre out is noise);
+    // bridges are their decks
+    if (rd.own === 0 || rd.sw || rd.br || rd.tu || MINOR.has(rd.c)) continue;
+    c.set(roadPaint(rd, st.region, arid));
+    const p = rd.p, hw = rd.w / 2;
     for (let i = 0; i + 3 < p.length; i += 2) {
       const ax = p[i] / 10, az = p[i + 1] / 10, bx = p[i + 2] / 10, bz = p[i + 3] / 10;
       const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
       if (len < 1.5) continue;
       const ux = dx / len, uz = dz / len, nx = -uz, nz = ux;
-      const cx = (ax + bx) / 2, cz = (az + bz) / 2, hl = len / 2 + 0.6;
-      // N-S and E-W ribbons sit at different heights so crossings layer instead of z-fighting.
-      const ew = Math.abs(dx) > Math.abs(dz);
-      const yAsp = ew ? 0.085 : 0.075, ySw = ew ? 0.065 : 0.055;
-      push(cx, cz, ux * hl, uz * hl, nx, nz, rd.w / 2 + 1.6, 0.72, 0.69, 0.62, ySw); // sidewalks poke past the kerb
-      push(cx, cz, ux * hl, uz * hl, nx, nz, rd.w / 2, 0.23, 0.22, 0.21, yAsp);
+      // extended 0.6 m past each end so bends close over
+      const sx = ax - ux * 0.6, sz = az - uz * 0.6, ex = bx + ux * 0.6, ez = bz + uz * 0.6, L = len + 1.2;
+      // does the ground along it (both kerbs and the crown) stray from a straight line? stations
+      let n = 1;
+      if (L > STEP * 1.5) {
+        let dev = 0;
+        for (const o of [-hw, 0, hw]) {
+          const h0 = H(sx + nx * o, sz + nz * o), h1 = H(ex + nx * o, ez + nz * o);
+          for (let t = 0.25; t < 1; t += 0.25) dev = Math.max(dev, Math.abs(H(sx + (ex - sx) * t + nx * o, sz + (ez - sz) * t + nz * o) - (h0 + (h1 - h0) * t)));
+        }
+        if (dev > TOL) n = Math.min(64, Math.ceil(L / STEP));
+      }
+      sec.length = 0;
+      for (let k = 0; k <= n; k++) {
+        const t = k / n, cx = sx + (ex - sx) * t, cz = sz + (ez - sz) * t;
+        for (const o of [-hw, 0, hw]) { const x = cx + nx * o, z = cz + nz * o; sec.push(x, H(x, z) + LIFT, z); }
+      }
+      const base = pos.length / 3;
+      for (let k = 0; k <= n; k++)
+        for (let s = 0; s < 3; s++) {
+          const o = (k * 3 + s) * 3;
+          pos.push(sec[o], sec[o + 1], sec[o + 2]);
+          // the normal from the section's own slope: along the street and across it
+          const kp = Math.min(n, k + 1), km = Math.max(0, k - 1), sp = Math.min(2, s + 1), sm = Math.max(0, s - 1);
+          const a0 = (km * 3 + s) * 3, a1 = (kp * 3 + s) * 3, c0 = (k * 3 + sm) * 3, c1 = (k * 3 + sp) * 3;
+          const tx = sec[a1] - sec[a0], ty = sec[a1 + 1] - sec[a0 + 1], tz = sec[a1 + 2] - sec[a0 + 2];
+          const qx = sec[c1] - sec[c0], qy = sec[c1 + 1] - sec[c0 + 1], qz = sec[c1 + 2] - sec[c0 + 2];
+          let mx = ty * qz - tz * qy, my = tz * qx - tx * qz, mz = tx * qy - ty * qx;
+          if (my < 0) (mx = -mx), (my = -my), (mz = -mz);
+          const ml = Math.hypot(mx, my, mz) || 1;
+          nrm.push(mx / ml, my / ml, mz / ml);
+          col.push(c.r, c.g, c.b);
+        }
+      for (let k = 1; k <= n; k++) {
+        const q = base + (k - 1) * 3; // previous station: q (one kerb), q+1 (crown), q+2 (the other)
+        idx.push(q, q + 4, q + 3, q, q + 1, q + 4, q + 1, q + 5, q + 4, q + 1, q + 2, q + 5); // facing up
+      }
     }
   }
   const geo = new THREE.BufferGeometry();
@@ -253,12 +296,23 @@ export function realExtras(tj: TileJson, terrain: { sdfAt(x: number, z: number):
     extra.add(gm);
   }
   extra.add(roadRibbons(tj.roads, terrain));
-  // Water sheets: flat tinted polygons hugging the ground. The watercolor post-pass
-  // softens them toward the painted look; sdf/ocean shading arrives with real DEM (H2).
+  // Water sheets: flat tinted polygons — a lake or a pond at one level (its shore's lowest
+  // ground, where the water stands), not draped over the DEM: near a shore the DEM is a smear
+  // between the bluff and the bathymetry (Elliott Bay read +15 m a hundred metres out), and a
+  // draped sheet tilted through the air. The sea itself gets no sheet: its ground is cut away
+  // (above) and the ocean plane at sea level shows through, waves and all.
   const WET: Record<string, [number, number, number]> = { water: [0.32, 0.44, 0.55], wetland: [0.38, 0.45, 0.4], beach: [0.82, 0.75, 0.58] };
   for (const a of tj.areas) {
     const col = WET[a.c];
-    if (!col) continue;
+    if (!col || a.k === 'sea') continue;
+    // the level: a low percentile of the shore's ground (a DEM spike on a bank can't lift it)
+    let level = 0;
+    if (a.c === 'water') {
+      const hs: number[] = [];
+      for (const r of a.o) for (let i = 0; i + 1 < r.length; i += 2) hs.push(terrain.heightAt(r[i] / 10, r[i + 1] / 10));
+      hs.sort((p, q) => p - q);
+      level = Math.max(0, hs[Math.floor(hs.length * 0.1)] ?? 0);
+    }
     const outers = a.o.map(unpack).filter((r) => r.length >= 3);
     const inners = a.i.map(unpack).filter((r) => r.length >= 3);
     for (const pts of outers) {
@@ -271,7 +325,7 @@ export function realExtras(tj: TileJson, terrain: { sdfAt(x: number, z: number):
       const pos: number[] = [], nrm: number[] = [], cc: number[] = [];
       for (const ring of rings)
         for (const [x, z] of ring) {
-          pos.push(x, terrain.heightAt(x, z) + 0.06, z);
+          pos.push(x, (a.c === 'water' ? level : terrain.heightAt(x, z)) + 0.06, z);
           nrm.push(0, 1, 0);
           cc.push(col[0], col[1], col[2]);
         }

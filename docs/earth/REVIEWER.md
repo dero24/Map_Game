@@ -438,3 +438,77 @@ reference photos (`docs/earth/PLACE_REFERENCES.md`). Score = "would a local reco
   road surface wear everywhere (cracks + patches queued), interiors as ballrooms (third flag —
   partitions + scaled bar furniture landed), horizon mountains unchanged for three rounds
   (clarity + blue-violet aerial perspective landed; ridge detail still open).
+
+### 2026-09-28 — Round 7: Seattle hills, Pike Place, tunnels, coasts, courts (s)
+
+**Verdict: NOT PASSED — 6/10 on streamed Seattle.** *"The streets climb now — but Elliott Bay is a
+lawn and Pike Place is still off camera."* The engineering is right, and qa-rib is model evidence.
+But Robby's complaints are proven only from 70 m up (hills), only on a slope that doesn't exist
+(cars), or not at all (Pike Place).
+
+**Landed:** Queen Anne's streets are continuous asphalt (qa-after 1 vs qa-rib 1); qa-after 2 is the
+best Seattle aerial yet; cars pitch on four wheels (pike2 5; in sea-before 2 they were buried to the
+axle); the market cell has ground and Western Ave is a street (pike2 6; pike 6 was a groundless
+void); no tower vanishes flying into Manhattan (fly-nyc1); willows read as willows.
+
+**Reads fake / broken:** Elliott Bay is a park — the market's postcard view is 500 m of lawn (bay
+1, pike2 3–4), from above a green diamond with trees standing on water (bay 2). The car pitch in
+pike2 5 is correct on a 50% "ski slope" Seattle doesn't have (streets top out near 20%). Trees on
+structures: one on a skyscraper roof (pike2 4), a tower-tall green column (bay 2), three ~60 m
+cypresses crowning Queen Anne (qa-after 2 — likely its broadcast masts). No eye-level Pike Place;
+from above it reads as a car park with nobody walking (pike2 2). Small artefacts: a dog-sized
+squirrel climbing a metre off its trunk (street-q3 5), 1 m stair-steps through the sidewalk paint
+(pike2 6). Harness failures beyond the known roof/house misses: an empty 60 m hall (sea-before 5),
+cars at the lens (qa-close 1, pike 3), poplar and magnolia shot inside a willow, a blocked horizon
+(place 8); tunnels, canopies and courts unphotographed.
+
+**Must-fix (ranked):**
+1. **Water can't become lawn** (bay 1–2). A 504'd cell falls back to synth, which trusts a DEM
+   reading +3..+15 m over water; trees use yet another mask. Land/water from map data, never the
+   DEM; split and retry 504s, never cache the stand-in. *Test:* force a 504 on the bay cell —
+   bay 1–2 ≥95% water, nothing standing on it.
+2. **Road grade conditioning** (pike2 5) — the real cause of "cars through roads": a 7–10 m DEM
+   smears bluffs and walls and the roads drape over it. Smoothed per-way profile clamped by road
+   class unless `incline` is tagged; ways meeting at a junction agree on its height; cut/fill the
+   corridor, walls where Δh > 0.6 m. *Test:* max grade per drivable way printed, none untagged over
+   25%; a car at eye level cresting and dipping on Queen Anne Ave N, tyres touching; zero
+   intersecting car OBBs; no ribbon drawn over far tyres.
+3. **No trees on structures** (pike2 4, bay 2, qa-after 2): tree base on bare earth; reject
+   candidates inside footprints or within 15 m of `man_made=mast/tower`; clamp height by species;
+   draw the masts. *Test:* no tree more than 3 m above the ground or over 45 m tall; qa-after 2
+   shows masts.
+4. **Pike Place at eye level, reading as a market** (pike2 2): from tags, not names — shops under
+   `building=roof` arcades or `amenity=marketplace` → stalls, awnings, crates, vendors, crowds;
+   `surface=brick/sett` → paint; kerb parking only where `parking:*`/access allow. *Test:* pinned
+   frames under the arcade (≥15 people), along Pike Place (≤4 parked cars per 60 m, walkers in the
+   carriageway), and of the bay view.
+5. **Evidence for every claim:** run the round-6 occluder assert in every spot harness, plus
+   inside/on-roof asserts; every pose names a subject filling ≥5% of the frame. *Test:* pinned
+   frames of a car mid-dive at the SR 99 portal (vanishing without a portal face or trench reads as
+   sinking through asphalt), a fuel canopy, basketball, tennis and a diamond, Queen Anne uphill and
+   downhill at eye level — zero harness failures.
+6. **Tree crowns at 5–10 m** (four rounds old): faceted flat lobes, the cherry's tabletop
+   underside, top tufts floating off the fastigiate columns (trees-p3). *Test:* frames at 5, 8,
+   10 m with no straight silhouette edge longer than 15% of the crown width, no sky gaps.
+
+**Should-fix:** the sea reads as grey concrete (bay 2) — Puget Sound green-steel, ripples, wakes,
+foam at the seawall; ~80% parking occupancy with mapped clearances (hydrants, crossings,
+driveways, bus stops); pin a `tourism=viewpoint` pose where Rainier (95 km) must read; ballroom
+interiors, fourth flag (big floorplates need a lobby and retail bays); the oak is a median
+lollipop, the maple the round tree recoloured, no late-September colour; stair-step paint edges
+(pike2 6) and dark car shapes floating over downtown (pike2 4).
+
+**Gameplay / UX ideas:** hill driving with weight (rollback on hill starts, engine load, curbed
+wheels when parked, air off crests); every `highway=steps` a walkable flight with a step count and
+an Almanac stamp (the waterfront-to-market climb first); `tourism=viewpoint` at golden hour eases
+the camera onto the skyline and Rainier and offers "paint this"; walk-on ferries across the Sound
+on their GTFS timetable; market stalls that sell things you carry and give away; pickup games on
+mapped courts by the hour that you can join for a shot.
+
+**On the data catalogue:** thin on ground, which is where this round failed — add static land
+polygons (the coast fallback), NOAA CUDEM topobathy, 3DEP 1 m bare earth in metros (rasterise
+EPT class-2 ground along roads), and the tags `barrier=retaining_wall`, `embankment`, `cutting`,
+`incline`, `natural=cliff`. Move the offline pipeline from #7 to #1 for metros — one 504 turned a
+bay into a park; until then a PMTiles basemap on R2 (e.g. Protomaps) beats synth as the fallback.
+Keep street furniture first but fold in steps, retaining walls and parking clearances; tint the
+harness top-downs by provenance so "exactly where" can be audited.

@@ -2,6 +2,74 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-28 (s) — Seattle's hills and Pike Place: streets that lie on the ground, cars on four wheels, tunnels under the city, a bay that stays a bay; courts in the parks; the open-data catalogue
+
+Robby: "the cars are still going through roads in Seattle, the roads aren't looking good with the
+hills, and Pike Market too" — and: list every neighbourhood feature and the best open source for
+it, so we know exactly where everything goes, at scale.
+
+- **Streets on hills** (R.16). The far street ribbons were two strips draped separately 2 cm
+  apart, asphalt over a wider sidewalk: on bumpy ground the sidewalk won as often as not, and
+  Seattle's streets went pale and blotchy (measured: the ribbon's own sidewalk colour covering
+  its asphalt; hiding the ribbons showed the painted streets underneath were right). Now the
+  painted ground carries the street near the walker (lanes, kerbs, sidewalks, crossings, exactly
+  on the ground) and the ribbon steps aside inside the paint's fine window (`propMaterial` PAVED
+  dissolves over the same ramp the paint fades in). Past it, the ribbon is asphalt only, in the
+  paint's own colour (`roadPalette.ts`, shared), each station a real cross-section (both kerbs and
+  the crown) riding the rendered ground — the 8 m lattice the tile's ground is built on
+  (`ground.ts latticeHeight`), never the raw DEM under it — with a depth offset that holds a
+  kilometre out. Tests: a crest, a sag under the lattice, the lattice = the ground mesh.
+- **Cars on four wheels** (R.16): moving cars (`LifeClient`) and parked ones within 110 m
+  (`kerbCars.ts`) pitch up the grade and roll to the camber from the ground under their wheels
+  (±1.4 m along, ±0.8 m across), not level on the one spot under their middle — no more bonnets
+  buried in Queen Anne. The height comes from the open-air surface nearest the car
+  (`WalkWorld.outdoorNear`), so a street under a bridge keeps its cars.
+- **Tunnels** (`realTile` `tu`): SR 99's bored tunnel was drawn as a motorway across downtown and
+  the waterfront, cars driving it through the blocks (so were Boston's Big Dig and the Hudson
+  crossings). A tunnel is now split off at the one build choke point (`tileBuild.ts`): nothing
+  paints, furnishes, parks along or faces a door to it; only the car graph gets it, dropping 9 m
+  under the portal at 8 % so a car drives down into the ground and out of sight (hidden once
+  under), and nobody walks it. Building passages stay streets. Indoor corridors mapped as
+  footways and tunnelled rail are dropped.
+- **Canopies** (`building=roof`, `carport`): a filling station's canopy, a market's covered walk,
+  a platform roof were solid sheds standing in the street. Now an open roof at the right
+  clearance (mapped `min_height`, or just under a mapped `height`, else 4.4 m for a big one, 3 m
+  for a walkway, 2.4 m for a carport) on posts every ~7 m round its edge, walkable underneath.
+- **The bay stays a bay** (`realTile` coastline): each stretch of coast was closed against the
+  cell on its own, from ends projected onto the edge with a clamp that did nothing to a point
+  inside — a pier's outline poking into the cell from the north claimed the whole cell as bay,
+  so Pike Place Market's tile lost its ground, and the rest of Elliott Bay was lawn with trees.
+  Now every stretch is cut exactly where it crosses the cell edge and the stretches are walked
+  clockwise into one sea polygon (the same rule OSM's coastline tools use), headlands and piers
+  left dry. Tests: Seattle's shape (a shore and a pier loop), a coast turning inside the cell.
+  The sea gets no water sheet of its own any more — its ground is cut away and the ocean plane
+  shows at sea level; a lake is a flat sheet at its shore's low ground (the DEM near a shore is a
+  smear between the bluff and the bathymetry — Elliott Bay read +15 m a hundred metres out — and
+  the draped sheets tilted through the air). Mapped pier decks are areas in their surface's
+  colour (Seattle's concrete piers were lawn with trees).
+- **Courts and fields** (`sports.ts`, `assets/sport.ts`): a mapped pitch keeps its `sport` and
+  `surface`; the ground paints the court (run-off, playing surface, and in the fine window its
+  real lines — keys and three-point arcs, singles and service lines, the kitchen, penalty boxes
+  and arcs; a diamond's skinned infield, grass, mound and foul lines) and props stand the gear
+  exactly on those lines: hoops on gooseneck posts (a half court gets one), tennis / pickleball /
+  volleyball nets, full-size or kids' goals, a backstop and bases. A block of four tennis courts
+  mapped as one polygon gets four courts. New foundry family with validation and budgets.
+- **The open-data catalogue** (`docs/DATA_SOURCES.md`, also in the claude.ai project): the best
+  open source for every kind of thing in the US (OSM, 3DEP LiDAR/DEM, Overture, NAIP, NLCD,
+  canopy height, city tree inventories, GTFS, GBFS, HPMS traffic counts, Census/LODES, NHD, AIS,
+  PAD-US, Mapillary…), a feature-by-feature catalogue with the exact OSM tags and what the game
+  does with each today, the fallback ladder (mapped → measured → inferred → procedural), and the
+  plan to scale past Overpass: cut our own cells offline from the OSM extract + Overture, enrich
+  each once (LiDAR, NAIP, trees, transit, traffic), serve from R2.
+- Also since (r): Seattle's ground was beige sand everywhere (the open world's flat layer said
+  "ocean 0 m away"); a marine autumn now waits for the short days (Seattle turns in late October,
+  not September); the PNW and the mountains get their conifers; house footprints count less than
+  shops toward a block's paving.
+- **Tile cache v18** (`t/v18`, `&v=18`, `DIRECT_V` 18) — tunnels, courts, coasts, canopies, pier decks:
+  **redeploy the tile worker**.
+- Harness: `tools/spot-shots.js` (`__SPOTS__`): look at real places by latitude/longitude — on the
+  sidewalk of the nearest real street, from the air, or beside the steepest-driving car nearby.
+
 ## 2026-09-28 (r) — NYC's towers stop vanishing; no more streets named "synth"
 
 - **Why the towers vanished** (R.17), measured in-page by raycasting every skyline tower top

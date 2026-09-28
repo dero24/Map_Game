@@ -7,6 +7,9 @@ import { fibCount, fibSphere, hashf, variantAt } from '../src/assets/core';
 import { personGeometry, HAIRSTYLES, MARK, warmthFor } from '../src/assets/people';
 import { dogLib } from '../src/assets/fauna';
 import * as D from '../src/assets/decor';
+import { SPORT_PIECES, sportGeometry } from '../src/assets/sport';
+import { validGeometry } from '../src/assets/core';
+import { courtFrame, diamondFrame, sportOf } from '../src/world/sports';
 
 const bb = (g: THREE.BufferGeometry) => (g.computeBoundingBox(), g.boundingBox!);
 const verts = (g: THREE.BufferGeometry) => g.getAttribute('position').count;
@@ -202,3 +205,54 @@ describe('decor (interior + terrace furniture)', () => {
     expect(verts(D.mergeDecor(D.cafeSet(0xf1ede4, 0x2a2622, 0x2f4a6a)))).toBeGreaterThan(verts(g)); // + parasol
   });
 });
+
+describe('sport: the courts and fields in the parks', () => {
+  it('every piece is valid, grounded and within budget; the rim is at regulation height', () => {
+    for (const k of SPORT_PIECES)
+      for (const v of k === 'bases' ? [0, 1] : [0]) {
+        const g = sportGeometry(k, v);
+        expect(validGeometry(g, { w: 45, h: 7, d: 45 }), k).toBe(true);
+        expect(verts(g), k).toBeLessThan(k === 'backstop' ? 1500 : 900); // (five fence bays and a hood)
+      }
+    const rim = bb(sportGeometry('hoop'));
+    expect(rim.max.y).toBeGreaterThan(3.8); // the board's top
+    expect(rim.max.y).toBeLessThan(4.1);
+    const tn = bb(sportGeometry('tennisNet')).max.x;
+    expect(tn).toBeGreaterThan(6.35); // posts 0.914 m outside the doubles lines (and their footings)
+    expect(tn).toBeLessThan(6.6);
+  });
+  it('reads the sport off the map', () => {
+    expect(sportOf('basketball')).toBe('basketball');
+    expect(sportOf('multi;tennis;basketball')).toBe('tennis');
+    expect(sportOf('beachvolleyball')).toBe('volleyball');
+    expect(sportOf('equestrian')).toBeNull();
+    expect(sportOf(undefined)).toBeNull();
+  });
+  it('fits the courts into their mapped outline: one court, a row of four, a half court', () => {
+    const rect = (w: number, l: number): [number, number][] => [[0, 0], [l, 0], [l, w], [0, w]];
+    const one = courtFrame(rect(18.3, 36.6), 'tennis'); // a court with its run-off, length along x
+    expect(one.n).toBe(1);
+    expect(Math.abs(one.ux)).toBeCloseTo(1, 3);
+    expect(one.L).toBeCloseTo(23.77, 1);
+    const four = courtFrame(rect(36.6, 73.2), 'tennis'); // four side by side: the long side is ACROSS them
+    expect(four.n).toBe(4);
+    expect(Math.abs(four.uz)).toBeCloseTo(1, 3); // their length runs along z
+    const half = courtFrame(rect(15.2, 14), 'basketball');
+    expect(half.half).toBe(true);
+    const full = courtFrame(rect(17, 31), 'basketball');
+    expect(full.half).toBe(false);
+    expect(full.L).toBeCloseTo(28, 1);
+  });
+  it('finds home plate at the point of a mapped fan', () => {
+    // a quarter-circle field: home at (0, 0), foul lines along +x and +z, the arc between
+    const fan: [number, number][] = [[0, 0], [100, 0]];
+    for (let a = 0.1; a < Math.PI / 2; a += 0.1) fan.push([Math.cos(a) * 100, Math.sin(a) * 100]);
+    fan.push([0, 100]);
+    const d = diamondFrame(fan, 'baseball');
+    expect(Math.hypot(d.hx, d.hz)).toBeLessThan(0.01);
+    expect(d.dx).toBeCloseTo(Math.SQRT1_2, 2); // out along the bisector, to second base
+    expect(d.dz).toBeCloseTo(Math.SQRT1_2, 2);
+    expect(d.side).toBeCloseTo(27.43, 1);
+  });
+});
+

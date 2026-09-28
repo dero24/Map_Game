@@ -10,7 +10,11 @@ import { planInterior } from './interiors';
 import { RecWalk, packGroup, packDeck, type BuiltTile } from './pack';
 import { canvasBitmap } from './canvas';
 
-export async function buildTile(tj: TileJson, terrain: Terrain, spec: TileSpec, idBase: number, lite = false): Promise<BuiltTile> {
+export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec, idBase: number, lite = false): Promise<BuiltTile> {
+  // Tunnels leave here: no builder paints, furnishes, parks along, faces a door to or grows grass
+  // round a road under the ground — only the life sim's cars take them (BuiltTile.tun)
+  const tunnels = tj0.roads.filter((r) => r.tu);
+  const tj: TileJson = tunnels.length ? { ...tj0, roads: tj0.roads.filter((r) => !r.tu) } : tj0;
   const world: World = { json: tj as unknown as WorldJson, terrain };
   const w = new RecWalk(terrain, tj.backdrop);
   const bld = buildBuildings(world, idBase, lite);
@@ -68,6 +72,7 @@ export async function buildTile(tj: TileJson, terrain: Terrain, spec: TileSpec, 
     towers: structures.towers.flatMap((v) => [v.x, v.y, v.z]),
     plans,
     roads: pj.roads,
+    ...(tunnels.length ? { tun: prim(tunnels) } : {}),
     areas: pj.areas,
     poles: signs.poles,
     atlas: await canvasBitmap(signs.atlas),

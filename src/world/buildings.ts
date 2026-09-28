@@ -1336,16 +1336,16 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
       b.setInfo(id, kindI, PART.roof, 0);
       b.setColor(roofCol);
       flatCap(b, ring, top);
-      if (lifted && lift > 2.5) {
-        // the underside of an overhang / skybridge you can look up at
+      if (lifted && (lift > 2.5 || bd.cn)) {
+        // the underside of an overhang / skybridge / canopy you can look up at
         b.setInfo(id, kindI, PART.trim, 0);
         b.setColor(facade.clone().multiplyScalar(0.72));
         flatCap(b, ring, wallY0, DOWN);
       }
       // towers read by their tops from blocks away — built at every detail level
       if (!part && top - base > 16) towerTop(b, ring, top, top - base, id, kindI, rc, facade, seed);
-      if (detail) decorateFlat(b, ring, top, id, kindI, bTrim, rowNA || ((bd.k === 'commercial' || bd.k === 'large') && hash01(seed ^ 0xc0c0) < 0.65));
-      if (detail && (bd.k === 'large' || bd.k === 'commercial')) {
+      if (detail && !bd.cn) decorateFlat(b, ring, top, id, kindI, bTrim, rowNA || ((bd.k === 'commercial' || bd.k === 'large') && hash01(seed ^ 0xc0c0) < 0.65));
+      if (detail && !bd.cn && (bd.k === 'large' || bd.k === 'commercial')) {
         const n = 1 + Math.floor(r3 * 3);
         b.setInfo(id, kindI, PART.trim, 0);
         b.setColor(lin(0xb5b3ad));
@@ -1391,6 +1391,25 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
       }
     }
 
+    // a canopy (realTile: OSM building=roof, carport) stands open on posts round its edge, one
+    // every ~7 m set in from the eave, from the ground under each up to its underside
+    if (bd.cn && lifted && inZone) {
+      b.setInfo(id, kindI, PART.trim, fo);
+      b.setColor(lin(0x8d8983));
+      for (let i = 0; i < ring.length; i++) {
+        const p = ring[i], q = ring[(i + 1) % ring.length];
+        const L = Math.hypot(q[0] - p[0], q[1] - p[1]);
+        if (L < 1) continue;
+        const k = Math.max(1, Math.round(L / 7)), ang = Math.atan2(q[1] - p[1], q[0] - p[0]);
+        const inx = (-(q[1] - p[1]) / L) * 0.45, inz = ((q[0] - p[0]) / L) * 0.45;
+        for (let j = 0; j < k; j++) {
+          const t = (j + (k > 1 ? 0 : 0.5)) / k;
+          const x = p[0] + (q[0] - p[0]) * t + inx, z = p[1] + (q[1] - p[1]) * t + inz;
+          box(b, x, z, ang, 0.3, 0.3, terrain.heightAt(x, z) - 0.2, base + 0.3 + lift);
+          if (detail) pilings.push({ x, z, ang });
+        }
+      }
+    }
     const fp: Footprint = { ring, base, top: wallTop, floor0, raise, name: bd.n, use: bd.u, addr: bd.ad, kind: bd.k, eave: wallTop - base, seed: r1, id, pitched: !!roofG, front: bd.k === 'commercial' || !!bd.gf || (!!bd.u && bd.k !== 'house' && bd.k !== 'shed') };
     if (!owns) return; // parts belong to their outline's footprint; floating pieces have none
     if (inZone) footprints.push(fp);

@@ -331,6 +331,35 @@ describe('osmToTile — water', () => {
     expect(inside(900, 512)).toBe(true); // east of the shore = sea
     expect(inside(100, 512)).toBe(false); // west = land
   });
+  const waterAt = (t: ReturnType<typeof osmToTile>, x: number, z: number) =>
+    t.areas.filter((a) => a.c === 'water').some((a) => {
+      const ring: [number, number][] = [];
+      for (let i = 0; i + 1 < a.o[0].length; i += 2) ring.push([a.o[0][i] / 10, a.o[0][i + 1] / 10]);
+      let ins = false;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const [xi, zi] = ring[i], [xj, zj] = ring[j];
+        if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) ins = !ins;
+      }
+      return ins;
+    });
+  it('a waterfront with a pier the coast wraps: one bay, the town and the pier dry (Seattle)', () => {
+    // the shore runs south down x = 600 with the bay to the west (water right of the way when
+    // heading south); a pier's outline dips into the cell from the north at x ≈ 200–260 and goes
+    // back out — the coast around it (land = the pier, on the left)
+    const shore = way(70, { natural: 'coastline' }, [[600, -300], [600, 400], [640, 800], [640, 1400]]);
+    const pier = way(71, { natural: 'coastline' }, [[200, -300], [200, 120], [260, 120], [260, -300]]);
+    const t = osmToTile(osm(shore, pier), OPTS);
+    expect(waterAt(t, 400, 500)).toBe(true); // the bay
+    expect(waterAt(t, 100, 800)).toBe(true);
+    expect(waterAt(t, 800, 500)).toBe(false); // the town east of the shore
+    expect(waterAt(t, 230, 50)).toBe(false); // the pier
+  });
+  it('a coast that turns inside the cell still closes on its wet side', () => {
+    // in from the north edge, round a headland, out through the east edge; sea to the right
+    const t = osmToTile(osm(way(72, { natural: 'coastline' }, [[300, -200], [300, 500], [500, 700], [1300, 700]])), OPTS);
+    expect(waterAt(t, 150, 900)).toBe(true); // south-west: the sea side
+    expect(waterAt(t, 700, 300)).toBe(false); // the headland
+  });
 });
 
 describe('osmToTile — determinism + provenance', () => {
@@ -419,3 +448,39 @@ describe('osmToTile — hybrid fill (H3)', () => {
     expect(south).toBeGreaterThan(10);
   });
 });
+
+describe('what lies under the ground stays there', () => {
+  it('a tunnel is marked underground, a building passage is not, indoor corridors and tunnelled rail drop out', () => {
+    const t = osmToTile(osm(
+      way(1, { highway: 'motorway', tunnel: 'yes', layer: '-8' }, [[10, 100], [900, 100]]),
+      way(2, { highway: 'service', tunnel: 'building_passage' }, [[10, 300], [900, 300]]),
+      way(3, { highway: 'footway', indoor: 'yes' }, [[10, 500], [900, 500]]),
+      way(4, { railway: 'rail', tunnel: 'yes' }, [[10, 700], [900, 700]]),
+      way(5, { railway: 'rail' }, [[10, 800], [900, 800]]),
+    ), OPTS);
+    const byClass = (c: string) => t.roads.filter((r) => r.c === c);
+    expect(byClass('motorway')[0].tu).toBe(1);
+    expect(byClass('service')[0].tu).toBeUndefined();
+    expect(byClass('footway').length).toBe(0);
+    expect(t.lines.filter((l) => l.c === 'rail').length).toBe(1);
+  });
+});
+
+describe('canopies', () => {
+  it('a building=roof is an open roof up on posts, not a shed in the street', () => {
+    const t = osmToTile(osm(
+      way(1, { building: 'roof' }, sq(100, 100, 20), true), // a filling station's: 400 m²
+      way(2, { building: 'roof', height: '3.5' }, sq(300, 100, 4), true), // a covered walk, mapped height
+      way(3, { building: 'carport' }, sq(500, 100, 6), true),
+      way(4, { building: 'garage' }, sq(700, 100, 6), true),
+    ), OPTS);
+    const at = (x: number) => t.buildings.find((b) => Math.abs(b.r[0] / 10 - x) < 30)!;
+    expect(at(100).cn).toBe(1);
+    expect(at(100).lf).toBeGreaterThan(4); // a lorry's clearance under the big one
+    expect(at(100).h).toBeLessThan(1);
+    expect(at(300).lf).toBeCloseTo(2.9, 1); // just under its mapped height
+    expect(at(500).cn).toBe(1);
+    expect(at(700).cn).toBeUndefined(); // a garage is a garage
+  });
+});
+

@@ -56,7 +56,9 @@ export function virtualRegion(at: [number, number]): VirtualRegion {
     sdf: 400, // +40 m inside land; no water carved out (H2 DEM supplies real shores)
     cover: 30, // WorldCover grassland — reads as ground green, not a forest canopy
     flags: 0,
-    oceanD: 0,
+    // far from any ocean until the DEM says otherwise: 0 here read every open-world town as
+    // beach (the ground paint washed Seattle's yards sand-coloured, groundPaint coverImage)
+    oceanD: 255,
   });
   const layer = new TerrainLayer(bin, layout);
   const terrain = new Terrain(layer, layer);

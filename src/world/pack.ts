@@ -65,6 +65,7 @@ export interface BuiltTile {
   towers: number[]; // flat xyz — bascule tower tops
   plans: { i: number; p: Plan }[]; // i = footprint index
   roads: Road[]; // prim (own-only) roads for the life sim
+  tun?: Road[]; // prim tunnels (Road.tu): the life sim's cars only
   areas?: Area[]; // prim (own-only) areas — the ground paint's parks, lots, pitches
   kerb?: Float32Array; // parked kerb + lot cars as records (kerbCars.ts KERB_STRIDE)
   junc?: Float32Array; // the tile's junctions and who stops where (src/sim/traffic.ts packJunctions)

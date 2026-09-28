@@ -51,4 +51,12 @@ describe('seasons', () => {
     expect(nj(JUL)).toBe(0);
     expect(nj(JAN)).toBe(0);
   });
+  it('a marine autumn waits for the short days; the tropics never turn', async () => {
+    const { dayLength } = await import('../src/world/season');
+    expect(dayLength(47.6, 172)).toBeGreaterThan(15.5); // Seattle midsummer
+    expect(Math.abs(dayLength(40, 265) - 12)).toBeLessThan(0.25); // the equinox, everywhere
+    expect(seasonAt(47.63, -122.36, 90, 271).autumn).toBeLessThan(0.4); // Seattle, late September
+    expect(seasonAt(47.63, -122.36, 90, 295).autumn).toBeGreaterThan(0.4); // …late October
+    expect(seasonAt(25.78, -80.13, 2, NOV).autumn).toBe(0); // Miami
+  });
 });

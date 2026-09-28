@@ -28,6 +28,7 @@ export interface Building {
   // inside one outline. The outline keeps the footprint, door and name; the parts are the shape.
   pt?: 1; // a building:part (no door or footprint of its own; drawn from lf up to lf + h)
   lf?: number; // lift: the part's bottom above the ground (m) — setbacks, overhangs, skybridges
+  cn?: 1; // a canopy (OSM building=roof / carport): an open roof, lf up, on posts round its edge
   po?: number; // index of the outline this part belongs to (same tile) — shares its id and look
   hp?: 1; // an outline its parts fully draw: footprint, door and name only, no walls or roof
   gf?: 1; // a storefront street floor under apartments (a shop mapped inside, or a row on a main road)
@@ -44,8 +45,11 @@ export interface Building {
 }
 // pk: mapped street parking, left + 4·right (1 parallel, 2 angled). sy: a placeholder street (synth.ts)
 // — unnamed, pencilled on the map — standing in until the real tile arrives.
-export interface Road { p: number[]; c: string; w: number; n?: string; ref?: string; br?: 'yes' | 'movable'; l?: number; ow?: 1; sw?: 1; sv?: string; pk?: number; lod?: 1; own?: number; sy?: 1 }
-export interface Area { c: string; o: number[][]; i: number[][]; n?: string; lod?: 1; own?: number }
+/** `tu`: underground (OSM tunnel=yes/culvert/…, not a building passage) — only the life sim's cars
+ *  use it (they drive down into the portal and out of sight); nothing paints or furnishes it. */
+export interface Road { p: number[]; c: string; w: number; n?: string; ref?: string; br?: 'yes' | 'movable'; l?: number; ow?: 1; sw?: 1; sv?: string; pk?: number; lod?: 1; own?: number; sy?: 1; tu?: 1 }
+/** `k`: what a pitch is for (sports.ts Sport, or 'playground'); `sf`: its mapped surface (OSM). */
+export interface Area { c: string; o: number[][]; i: number[][]; n?: string; lod?: 1; own?: number; k?: string; sf?: string }
 /** `ft` (fences): 1 iron railing, 2 chain-link, 3 wood/picket — from OSM fence_type; absent = unknown. */
 export interface Line { c: string; p: number[]; w?: number; br?: 1; own?: number; ft?: number }
 export interface Point { c: string; x: number; z: number; own?: number }

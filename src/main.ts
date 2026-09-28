@@ -192,6 +192,7 @@ async function main() {
   worldRoot.name = 'world';
   scene.add(worldRoot);
   const groundGroup = buildGround(world, paint, tt);
+  U.uDetailBox.value = paint.detail.box; // (the far street ribbons step aside where the paint is fine)
   worldRoot.add(groundGroup);
   setGndMaterial(groundGroup.userData.groundMat); // synthetic tiles reuse this material
   worldRoot.add(buildWater(tt));
@@ -230,6 +231,7 @@ async function main() {
   // Parked kerb and lot cars: one manager draws every tile's, near cars in the lite kit, far ones
   // as two-block proxies (kerbCars.ts)
   const kerbCars = new KerbCars();
+  kerbCars.ground = (x, z, y) => walk.outdoorNear(x, z, y);
   worldRoot.add(kerbCars.group);
   // the coarse backdrop's far-forest canopy drops wherever a detail tile is mounted (its trees are
   // real), and the backdrop steps aside altogether where a streamed cell brought its own ground
@@ -250,7 +252,7 @@ async function main() {
     kerbCars.add(a.spec.id, a.kerb);
     streamedGround();
     // J1: streamed tiles (past the bake) paint their streets and footprints into the ground windows
-    if (a.spec.world || a.spec.synth) paint.setTile(a.spec.id, a.primRoads, a.fps.map((f) => f.ring as [number, number][]), [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1], a.fps.map((f) => !!f.front), a.areas);
+    if (a.spec.world || a.spec.synth) paint.setTile(a.spec.id, a.primRoads, a.fps.map((f) => f.ring as [number, number][]), [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1], a.fps.map((f) => !!f.front), a.areas, a.fps.map((f) => (f.kind === 'house' || f.kind === 'shed' ? 0.45 : 1)));
     grass.invalidateBox(a.spec.box);
   };
   stream.onUnload = (id) => { paint.dropTile(id); kerbCars.remove(id); queueMicrotask(streamedGround); };
@@ -418,7 +420,8 @@ async function main() {
 
   const lifeBase = buildLifeBase(paintWorld, walk);
   lifeBase.rhythm = rhythmFor(regionLook.climate, lifeBase.beachPts.length > 0); // the shape of this place's day
-  const life = new LifeClient(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors, stream.junctions));
+  const life = new LifeClient(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors, stream.junctions, stream.tunnels));
+  life.ground = (x, z, y) => walk.outdoorNear(x, z, y);
   worldRoot.add(life.group);
   lifeDirty = false; // init already covers the loaded ring
 
@@ -725,7 +728,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream, vehicles, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, setHour, teleport: teleportTo, get spawn() { return spawn; }, at: atPos };
+  (window as unknown as Record<string, unknown>).__GAME__ = { walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream, vehicles, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, setHour, teleport: teleportTo, get spawn() { return spawn; }, at: atPos };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);
@@ -959,7 +962,7 @@ async function main() {
     if (!walkParams.fly || walker.y - walker.feet < 60) grass.update(walker.x, walker.z);
     if (lifeDirty && (!stream.busy || now - lastTileChange > 4000)) {
       lifeDirty = false; // clear first: a failed reinit must not throw every frame
-      try { life.reinit(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors, stream.junctions)); }
+      try { life.reinit(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors, stream.junctions, stream.tunnels)); }
       catch (e) { console.warn('life reinit failed', e); }
     }
     const tp = performance.now();

@@ -201,6 +201,14 @@ const VEG: Record<Climate, Pick<RegionStyle, 'trees' | 'treeDensity' | 'greens' 
   tropical: { trees: [6, 1.5, 3, 0.2, 0], treeDensity: 1.25, greens: [0x3f7a2e, 0x4a8a34, 0x2f6a2a, 0x5a9a3a, 0x3a6e30], biome: [0, 0.6, 0, 0] },
 };
 
+// Subregions whose woods aren't their climate's: the Pacific Northwest — Douglas fir and cedar
+// (the spruce and pine kinds) among bigleaf maples, dense, dark and lush even in late summer;
+// the Mountain West's pines, spruce and aspen.
+const SUB_VEG: Record<string, Partial<Pick<RegionStyle, 'trees' | 'treeDensity' | 'greens' | 'biome'>>> = {
+  pnw: { trees: [3, 0.8, 1, 1.6, 4.5], treeDensity: 1.25, greens: [0x3d6632, 0x4a7539, 0x33582e, 0x56803e, 0x2f4f2c, 0x5f8a44], biome: [0, 0.35, 0.05, 0] },
+  mountain: { trees: [1.5, 0.3, 2, 3.5, 3], treeDensity: 0.8 },
+};
+
 const cache = new Map<string, RegionStyle>();
 
 /** The full style for a meta.style key (`climate/family/L|R`), or null if malformed. */
@@ -209,7 +217,7 @@ export function styleByKey(key: string): RegionStyle | null {
   if (hit) return hit;
   const [c, f, side, reg, sub] = key.split('/');
   if (!(c in VEG) || !(f in PAL)) return null;
-  const s: RegionStyle = { key, climate: c as Climate, family: f as Family, region: (reg as WorldRegion) || 'na', sub: sub ?? '', driveLeft: side === 'L', ...PAL[f as Family], ...VEG[c as Climate] };
+  const s: RegionStyle = { key, climate: c as Climate, family: f as Family, region: (reg as WorldRegion) || 'na', sub: sub ?? '', driveLeft: side === 'L', ...PAL[f as Family], ...VEG[c as Climate], ...(SUB_VEG[sub ?? ''] ?? {}) };
   cache.set(key, s);
   return s;
 }

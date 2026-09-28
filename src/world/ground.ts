@@ -53,6 +53,19 @@ vec4 terrainAt(vec2 xz) {
 
 export interface GridSpec { x0: number; z0: number; x1: number; z1: number; step: number }
 
+/** The height of a buildGrid mesh at (x,z), for a grid on the global `step` lattice (a streamed
+ *  tile's ground: box corners on multiples of 8 m) — the same two triangles per cell (a–c–b under
+ *  the b–c diagonal, b–c–d over it). Whatever lies on the ground (the far road ribbons) rides this
+ *  rather than the raw DEM between the lattice points, so a sag can't lift the ground through it. */
+export function latticeHeight(heightFn: (x: number, z: number) => number, x: number, z: number, step = 8) {
+  const fx = x / step, fz = z / step, i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j;
+  const x0 = i * step, z0 = j * step, x1 = x0 + step, z1 = z0 + step;
+  const b = heightFn(x1, z0), c = heightFn(x0, z1);
+  if (u + v <= 1) { const a = heightFn(x0, z0); return a + (b - a) * u + (c - a) * v; }
+  const d = heightFn(x1, z1);
+  return d + (c - d) * (1 - u) + (b - d) * (1 - v);
+}
+
 export function buildGrid(spec: GridSpec, heightFn: (x: number, z: number) => number, keepQuad: (x: number, z: number, h: number[]) => boolean, extra?: (x: number, z: number) => number) {
   const nx = Math.ceil((spec.x1 - spec.x0) / spec.step) + 1;
   const nz = Math.ceil((spec.z1 - spec.z0) / spec.step) + 1;

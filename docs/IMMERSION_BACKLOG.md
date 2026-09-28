@@ -269,9 +269,12 @@ Reference photos + per-place trait tables: `docs/earth/PLACE_REFERENCES.md`. Har
 | R.13 | Cars need detail: headlights / tail lights (lit at night), grilles, mirrors, window frames, plates, varied wheels | ⬜ | P1 |
 | R.14 | Bridges: decks with real thickness, piers, railings, trusses / arches by type (OSM `bridge:structure`), approach ramps | ⬜ | P1 |
 | R.15 | Crosswalks where people stop for cars (they walk through cars now) and cars stop for people on the walk phase | ✅ (q) kerb → painted crosswalk → kerb, the walk phase / real gaps, cars wait behind the crosswalk — 0 walker-in-car ticks in the busy grid | **P0** |
-| R.16 | Seattle's hills: roads broken on steep terrain → roads graded along their length (profile smoothing), terrain cut/fill under them, retaining walls where the grade breaks | ⬜ | **P0** |
+| R.16 | Seattle's hills: roads broken on steep terrain → roads graded along their length (profile smoothing), terrain cut/fill under them, retaining walls where the grade breaks | 🟡 (s) streets painted on the ground near you, far ribbons are real cross-sections riding the rendered ground (were pale and blotchy); cars moving and parked pitch and roll on four wheels; tunnels (SR 99) no longer drawn across the blocks. Next: road-conforming terrain (graded profile, cut/fill, retaining walls) for bluffs and cuttings | **P0** |
 | R.17 | NYC: towers disappear when flying at them (skyline hand-off to detail tiles) — still seen | ✅ (r) skyline stood on a surface-model DEM (towers 30–40 m too tall until their tile swapped in); towers straddling a cell edge lost their shaft; stale LiDAR shrank new towers — all fixed, tile cache v15 | P0 |
 | R.18 | The expert reviewer judges everything Robby judges: driving feel, parked-car drive-off, traffic, animals, swimming, persistence, variety, water traffic, plants, bridges, crossings, hills, map search, streaming — every round, across regions | ✅ (brief updated) | P0 |
+| R.19 | (2026-09-28) Use the best open data; an exhaustive list of neighbourhood features (parking lots, basketball courts, parks, …) with where each comes from, so everything is placed exactly, at scale | 🟡 (s) `docs/DATA_SOURCES.md` (sources ranked, the feature catalogue with OSM tags and status, the fallback ladder, the offline cell pipeline); courts and fields placed from `sport` with real lines and gear. Next (the doc's §5 order): street-furniture nodes, mapped crossings and lamps, playground equipment, tree species from tags and city inventories, unmapped lots from imagery, GTFS | **P0** |
+| R.20 | Pike Place Market looks wrong | 🟡 (s) its tile had no ground (a pier's coast outline flooded the cell), the SR 99 tunnel was drawn over the waterfront, canopies were sheds in the street, indoor corridors were paths — all fixed. Next: the bluff's levels (Western Ave under the market, the Hillclimb steps), brick and sett street surfaces, market stalls from `amenity=marketplace` | **P0** |
+| R.21 | Cars "going through the roads" in Seattle | ✅ (s) pitched and rolled on four wheels; cars in tunnels out of sight; kerb cars tilt too | **P0** |
 
 ## 11. The big ideas (Robby, 2026-09-27) — what makes this game unlike any other
 
@@ -289,7 +292,7 @@ Reference photos + per-place trait tables: `docs/earth/PLACE_REFERENCES.md`. Har
 Reviewer round 6 (8/10 on the expanded scope) had all its must-fixes applied the same
 session. Round 7 confirms them, and the tree silhouette (1.11c) is its first must-fix.
 
-1. **Redeploy the tile worker** (v14) — every streamed town then gets parts, rows, signals,
+1. **Redeploy the tile worker** (v17: tunnels, courts, coasts, canopies) — every streamed town then gets parts, rows, signals,
    parking, bus stops, parks and lots from the shared R2 cache instead of the browser's Overpass
    queue (and Manhattan stops being a small town while it loads).
 1a. Robby's play-test P0s (§10): real data when the tile service is down (R.3), crossings (R.15),

@@ -83,9 +83,9 @@ export function buildLifeBase(world: World, walk: WalkWorld): LifeBase {
   return { seed: 20260923, bounds: [S0.x0 - PAD, S0.z0 - PAD, S0.x1 + PAD, S0.z1 + PAD], beachPts: new Float32Array(beach), waterGrid: water, waterG: [S0.x0, S0.z0, cell, gw, gh], downtown, seaward };
 }
 
-export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, doors: Door[], junc: Float32Array[] = []): LifeInit {
+export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, doors: Door[], junc: Float32Array[] = [], tunnels: Road[] = []): LifeInit {
   const key = vkey; // the same vertex key the junction analysis uses
-  const ways = roads
+  const ways = [...roads, ...tunnels]
     .filter((r) => !r.lod && r.own !== 0 && r.c in RANK && r.c !== 'steps')
     .map((r) => {
       const p: [number, number][] = [];
@@ -116,6 +116,10 @@ export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, do
   };
   const pts: number[] = [], start: number[] = [], count: number[] = [], lens: number[] = [], info: number[] = [], ends: number[] = [];
   const seen = new Set<string>();
+  // Tunnel portals: the ends a tunnel piece shares with a street in the open. A car goes down
+  // into the ground from there (8% a metre, to 9 m under) and is out of sight until it climbs out.
+  const open = new Set<string>();
+  for (const { r, p } of pieces) if (!r.tu) (open.add(key(p[0][0], p[0][1])), open.add(key(p[p.length - 1][0], p[p.length - 1][1])));
   for (const { r, p } of pieces) {
     let L = 0;
     for (let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
@@ -132,17 +136,19 @@ export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, do
     const cum = [0];
     for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]));
     start.push(pts.length / 3);
+    const under = !!r.tu, pa = under && open.has(ka), pb = under && open.has(kb);
     let k = 0;
     for (let j = 0; j < n; j++) {
       const s = (j / (n - 1)) * L;
       while (k < p.length - 2 && cum[k + 1] < s) k++;
       const t = (s - cum[k]) / Math.max(1e-6, cum[k + 1] - cum[k]);
       const x = p[k][0] + (p[k + 1][0] - p[k][0]) * t, z = p[k][1] + (p[k + 1][1] - p[k][1]) * t;
-      pts.push(x, walk.outdoorSurfaceAt(x, z), z);
+      const deep = under ? Math.min(9, 0.08 * Math.min(pa ? s : Infinity, pb ? L - s : Infinity)) : 0;
+      pts.push(x, walk.outdoorSurfaceAt(x, z) - deep, z);
     }
     count.push(n);
     lens.push(L);
-    info.push(RANK[r.c], r.w, r.ow ? 1 : 0, 1);
+    info.push(RANK[r.c], r.w, r.ow ? 1 : 0, under ? 0 : 1); // (nobody walks a tunnel)
     ends.push(node(p[0][0], p[0][1]), node(p[p.length - 1][0], p[p.length - 1][1]));
   }
   // Frontage: shops along each street piece (commercial doors within 25 m of it). People walk
@@ -486,17 +492,40 @@ export class LifeClient {
           if (amt >= 0 && dist < 70) { st.gullsNear++; if (dist < st.gullDist) { st.gullDist = dist; st.gullPan = pan(x, z); } }
           roll = amt >= 0 ? -d * 2.5 : 0;
         } else if (kind === 1) {
+          // down a tunnel portal: out of sight (the sim drives it on under the blocks)
+          const gc = this.ground ? this.ground(x, z, y) : y;
+          if (y < gc - 1) {
+            for (const mm of g.meshes) mm.setMatrixAt(li, this.zeroM);
+            for (const gm of this.gear.values()) gm.setMatrixAt(li, this.zeroM);
+            continue;
+          }
           if (variant >= 10) { sx = 1.06; sy = 1.22; sz = 1.04; }
           if (dist < st.nearestCar) { st.nearestCar = dist; st.carPan = pan(x, z); st.carSpeed = amt; }
           if (dist < 100 && amt > 2 && this.nMovers < 48) {
             const m = this.movers[this.nMovers] ?? (this.movers[this.nMovers] = { x: 0, z: 0, vx: 0, vz: 0 });
             m.x = x; m.z = z; m.vx = -Math.sin(yaw) * amt; m.vz = -Math.cos(yaw) * amt; this.nMovers++;
           }
+          // the body rides the road under its four wheels: pitched up a grade, rolled on a camber
+          // (a flat car on an 18% Seattle street buried its bonnet in the hill and hung its boot
+          // in the air). Wheels at ±1.4 m along, ±0.8 m across — the kit's sedan axles and track.
+          if (this.ground && dist < 420 && y > gc - 0.4) {
+            const gr = this.ground, hb = 1.4, cfx = -Math.sin(yaw), cfz = -Math.cos(yaw);
+            const yf = gr(x + cfx * hb, z + cfz * hb, y), yb = gr(x - cfx * hb, z - cfz * hb, y);
+            pitch = Math.atan2(yf - yb, hb * 2);
+            let yc = (yf + yb) / 2;
+            if (dist < 160) {
+              const ht = 0.8, crx = Math.cos(yaw), crz = -Math.sin(yaw);
+              const yr = gr(x + crx * ht, z + crz * ht, y), yl = gr(x - crx * ht, z - crz * ht, y);
+              roll = Math.atan2(yr - yl, ht * 2);
+              yc = (2 * yc + yr + yl) / 4;
+            }
+            y = yc + 0.06; // (the asphalt ribbons ride a few centimetres over the ground)
+          }
           if (lights) {
-            const hx = x - Math.sin(yaw) * 2.3, hz = z - Math.cos(yaw) * 2.3;
+            const hx = x - Math.sin(yaw) * 2.3, hz = z - Math.cos(yaw) * 2.3, hy = y + 0.76 + Math.sin(pitch) * 2.3;
             const rx = Math.cos(yaw) * 0.62, rz = -Math.sin(yaw) * 0.62;
-            heads.setXYZ(hk++, hx + rx, y + 0.76, hz + rz);
-            heads.setXYZ(hk++, hx - rx, y + 0.76, hz - rz);
+            heads.setXYZ(hk++, hx + rx, hy, hz + rz);
+            heads.setXYZ(hk++, hx - rx, hy, hz - rz);
           }
           g.mesh.setColorAt(li, this.tmpC.set(taxi ? TAXI_PAINT(activeStyle().region) : CAR_COLORS[variant % 10 % CAR_COLORS.length]));
           // the kit's vans / SUVs are their own models; each car breathes a little within its type
@@ -576,6 +605,9 @@ export class LifeClient {
   taxiShare = 0;
   /** crowd multiplier for the place (main: 1 in town, up to ~2.6 among towers) */
   crowd = 1;
+  /** the open-air surface at (x,z) nearest height y (main: WalkWorld.outdoorNear) — cars pitch
+   *  and roll to it; null keeps them level on the sim's centreline height */
+  ground: ((x: number, z: number, y: number) => number) | null = null;
   private tmpQ = new THREE.Quaternion();
   private fwdAxis = new THREE.Vector3(0, 0, 1);
   private sideAxis = new THREE.Vector3(1, 0, 0);

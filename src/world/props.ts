@@ -20,6 +20,8 @@ import { personGeometry } from '../assets/people';
 import { creatureMaterial } from '../render/creature';
 import { useOf, terraceUse } from './uses';
 import { analyzeJunctions, packJunctions, signalKey, CTL, type Junction, STOP_BACK } from '../sim/traffic';
+import { sportLib, type SportPiece } from '../assets/sport';
+import { COURT, courtFrame, diamondFrame, type Sport } from './sports';
 
 type P = [number, number];
 const unpackPts = (f: number[]): P[] => {
@@ -1850,6 +1852,76 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       const im = new THREE.InstancedMesh(beachLib('picnic').clone(), propMaterial(), tables.length);
       im.name = 'picnic:table';
       tables.forEach((q, i) => { im.setMatrixAt(i, q.m); im.setColorAt(i, q.c); });
+      im.layers.enable(1);
+      group.add(im);
+    }
+  }
+
+  // ---------- courts and fields: hoops, nets, goals, the backstop and bases ----------
+  // Each mapped pitch that says its sport (realTile Area.k) gets its gear where the painted lines
+  // put it (sports.ts courtFrame / diamondFrame — the same fit the ground paint draws).
+  {
+    const place = new Map<string, THREE.Matrix4[]>();
+    const put = (piece: string, x: number, z: number, fx: number, fz: number) => {
+      if (!inSlice(x, z)) return;
+      (place.get(piece) ?? place.set(piece, []).get(piece)!).push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(fx, fz)), V(1, 1, 1)));
+    };
+    const post = (x: number, z: number, r: number, h: number) => walk.addLoop([[x - r, z - r], [x + r, z - r], [x + r, z + r], [x - r, z + r]], -Infinity, terrain.heightAt(x, z) + h);
+    for (const a of json.areas) {
+      const k = a.k as Sport | 'playground' | undefined;
+      if (a.c !== 'pitch' || !k || k === 'playground' || k === 'skateboard' || k === 'american_football') continue;
+      const ring = a.o?.[0];
+      if (!ring || ring.length < 8) continue;
+      const pts = unpackPts(ring);
+      if (k === 'baseball' || k === 'softball') {
+        const d = diamondFrame(pts, k);
+        put('backstop', d.hx, d.hz, d.dx, d.dz);
+        put(d.little ? 'bases:1' : 'bases:0', d.hx, d.hz, d.dx, d.dz);
+        // the backstop's fence: walls along its panels (backstop recipe: R 8 m round home)
+        const bx = -d.dx, bz = -d.dz;
+        for (let i = 0; i < 5; i++) {
+          const a0 = ((i / 5 - 0.5) * Math.PI * 0.62), a1 = (((i + 1) / 5 - 0.5) * Math.PI * 0.62);
+          const P = (t: number): P => [d.hx + (bx * Math.cos(t) - bz * Math.sin(t)) * 8, d.hz + (bx * Math.sin(t) + bz * Math.cos(t)) * 8];
+          walk.addWall(P(a0), P(a1));
+        }
+        continue;
+      }
+      const f = courtFrame(pts, k);
+      const C = COURT[k];
+      const at = (u: number, v: number): P => [f.cx + f.ux * u - f.uz * v, f.cz + f.uz * u + f.ux * v];
+      for (let i = 0; i < f.n; i++) {
+        const v0 = (i - (f.n - 1) / 2) * f.step;
+        if (k === 'basketball') {
+          // a half court (mapped shorter than two keys) has one hoop, at its far end
+          const ends = f.half ? [1] : [-1, 1];
+          for (const e of ends) {
+            const [x, z] = at(e * (f.L / 2), v0);
+            put('hoop', x, z, -e * f.ux, -e * f.uz);
+            const [px, pz] = at(e * (f.L / 2 + 1.0), v0);
+            post(px, pz, 0.12, 3.3);
+          }
+        } else if (k === 'tennis' || k === 'pickleball' || k === 'volleyball') {
+          const [x, z] = at(0, v0);
+          put(k === 'tennis' ? 'tennisNet' : k === 'pickleball' ? 'pickleNet' : 'volleyNet', x, z, f.ux, f.uz);
+          const hw = (k === 'tennis' ? 12.8 : k === 'pickleball' ? 6.7 : 10) / 2;
+          for (const s of [-1, 1]) { const [qx, qz] = at(0, v0 + s * hw); post(qx, qz, 0.06, 1.2); }
+          walk.addWall(at(0, v0 - hw), at(0, v0 + hw));
+        } else if (k === 'soccer') {
+          const kids = f.L < C.L * 0.7;
+          for (const e of [-1, 1]) {
+            const [x, z] = at(e * (f.L / 2), v0);
+            put(kids ? 'kidsGoal' : 'goal', x, z, -e * f.ux, -e * f.uz);
+            const gw = (kids ? 5.5 : 7.32) / 2;
+            for (const s of [-1, 1]) { const [qx, qz] = at(e * (f.L / 2), v0 + s * gw); post(qx, qz, 0.07, 2.4); }
+          }
+        }
+      }
+    }
+    for (const [key, mats] of place) {
+      const [piece, v] = key.split(':') as [SportPiece, string | undefined];
+      const im = new THREE.InstancedMesh(sportLib(piece, v ? +v : 0).clone(), propMaterial(), mats.length);
+      mats.forEach((m, i) => im.setMatrixAt(i, m));
+      im.name = `sport:${piece}`;
       im.layers.enable(1);
       group.add(im);
     }

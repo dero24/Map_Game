@@ -227,6 +227,17 @@ export class WalkWorld {
     this.deckHeights(x, z, c);
     return Math.max(...c);
   }
+  /** The open-air surface nearest height y: the ground, or the deck a car or walker is already on
+   *  (a street passing under a bridge keeps its traffic on the street, not up on the deck). */
+  outdoorNear(x: number, z: number, y: number) {
+    const c = this.cands;
+    c.length = 0;
+    c.push(Math.max(this.terrain.heightAt(x, z), -0.2));
+    this.deckHeights(x, z, c);
+    let best = c[0];
+    for (const h of c) if (Math.abs(h - y) < Math.abs(best - y)) best = h;
+    return best;
+  }
   surfaceAt(x: number, z: number, feetY?: number) {
     const c = this.cands;
     c.length = 0;
