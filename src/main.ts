@@ -12,6 +12,7 @@ import { paintGround } from './world/groundPaint';
 import { buildGround, terrainTextures } from './world/ground';
 import { setGndMaterial } from './world/pack';
 import { buildWater, waterParams } from './world/water';
+import { Wakes } from './world/wakes';
 import { activeBuilding, type Door, type Footprint } from './world/buildings';
 import { styleFor, setActiveStyle } from './world/styles';
 import { Vehicles } from './player/vehicles';
@@ -26,6 +27,7 @@ import { PhotoMode } from './ui/photo';
 import { Commissions } from './ui/commissions';
 import { makeCardArt } from './ui/cardArt';
 import { Hints } from './ui/hints';
+import { peaksAround, sightsFrom, compassWord, type Peak } from './world/peaks';
 import { Arrival } from './ui/arrival';
 import type { GameCtx } from './ui/ctx';
 import { modelName } from './player/vehicles';
@@ -196,7 +198,16 @@ async function main() {
   worldRoot.add(groundGroup);
   setGndMaterial(groundGroup.userData.groundMat); // synthetic tiles reuse this material
   worldRoot.add(buildWater(tt));
+  const wakes = new Wakes(); // (every boat under way draws its V on the water)
+  worldRoot.add(wakes.mesh);
   waterParams.uOpenSea.value = VIRTUAL ? 1 : 0; // (the open world's plane is the sea itself)
+  { // the region's water: Puget Sound's green-steel, the Keys' turquoise, the Gulf's olive
+    const w = regionLook.water;
+    waterParams.uOceanDeep.value.setHex(w.deep);
+    waterParams.uOceanShallow.value.setHex(w.shallow);
+    waterParams.uRiverDeep.value.setHex(w.riverDeep);
+    waterParams.uRiverShallow.value.setHex(w.riverShallow);
+  }
   const sky = buildSky();
   scene.add(sky);
   U.uSliceBox.value.set(json.slice.x0, json.slice.z0, json.slice.x1, json.slice.z1);
@@ -233,6 +244,7 @@ async function main() {
   // as two-block proxies (kerbCars.ts)
   const kerbCars = new KerbCars();
   kerbCars.ground = (x, z, y) => walk.outdoorNear(x, z, y);
+  kerbCars.height = (x, z) => world.terrain.heightAt(x, z);
   worldRoot.add(kerbCars.group);
   // the coarse backdrop's far-forest canopy drops wherever a detail tile is mounted (its trees are
   // real), and the backdrop steps aside altogether where a streamed cell brought its own ground
@@ -250,10 +262,10 @@ async function main() {
   };
   stream.onTile = (a) => {
     paint.addWalks(a.walks);
-    kerbCars.add(a.spec.id, a.kerb);
+    kerbCars.add(a.spec.id, a.kerb, [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1]);
     streamedGround();
     // J1: streamed tiles (past the bake) paint their streets and footprints into the ground windows
-    if (a.spec.world || a.spec.synth) paint.setTile(a.spec.id, a.primRoads, a.fps.map((f) => f.ring as [number, number][]), [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1], a.fps.map((f) => !!f.front), a.areas, a.fps.map((f) => (f.kind === 'house' || f.kind === 'shed' ? 0.45 : 1)));
+    if (a.spec.world || a.spec.synth) paint.setTile(a.spec.id, a.primRoads, a.fps.map((f) => f.ring as [number, number][]), [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1], a.fps.map((f) => !!f.front), a.areas, a.fps.map((f) => (f.kind === 'house' || f.kind === 'shed' ? 0.45 : 1)), a.xing);
     grass.invalidateBox(a.spec.box);
   };
   stream.onUnload = (id) => { paint.dropTile(id); kerbCars.remove(id); queueMicrotask(streamedGround); };
@@ -526,6 +538,39 @@ async function main() {
     for (const t of commissions.targets()) if (Math.hypot(t.x - walker.x, t.z - walker.z) < 60) return { key: 'P', text: `✧ ${t.title.replace(/^Paint /, 'paint ')}`, pri: 7 };
     return null;
   });
+  // Viewpoints (tourism=viewpoint): the view named — the summit it looks at, how far and which way
+  // (peaks.ts: OpenFreeMap's named peaks round you) — and P turns you to it before you paint it
+  let peaks: Peak[] = [], peaksAt: [number, number] | null = null, peaksBusy = false, peaksRetry = 0;
+  const viewHere = () => {
+    if (vehicles.driving || walkParams.fly) return null;
+    let best: { x: number; z: number; b: number; d: number } | null = null;
+    for (const a of stream.loaded.values())
+      for (let i = 0; a.vp && i + 2 < a.vp.length; i += 3) {
+        const d = Math.hypot(a.vp[i] - walker.x, a.vp[i + 1] - walker.z);
+        if (d < 25 && (!best || d < best.d)) best = { x: a.vp[i], z: a.vp[i + 1], b: a.vp[i + 2], d };
+      }
+    if (!best) return null;
+    const [lat, lon] = toLatLon(json.origin, walker.x, walker.z);
+    const [s] = sightsFrom(peaks, lat, lon, walker.y, best.b >= 0 ? best.b : null); // (walker.y: the eye)
+    return { vp: best, sight: s ?? null };
+  };
+  hints.add(() => {
+    const v = viewHere();
+    if (!v) return null;
+    const s = v.sight;
+    return { key: 'P', text: s ? `the view: ${s.name}, ${Math.round(s.km)} km to the ${compassWord(s.bearing)} — paint it` : 'a viewpoint — paint the view', pri: 6 };
+  });
+  hints.add(() => {
+    // (the peak list follows you: fetched here, again after 40 km)
+    if (!peaksBusy && VIRTUAL && simTime > peaksRetry && (!peaksAt || Math.hypot(walker.x - peaksAt[0], walker.z - peaksAt[1]) > 40000)) {
+      peaksBusy = true;
+      const at: [number, number] = [walker.x, walker.z];
+      const [lat, lon] = toLatLon(json.origin, walker.x, walker.z);
+      // (no answer — offline, the CDN down — tries again in a minute, not after 40 km)
+      void peaksAround(lat, lon).then((p) => { if (p) (peaks = p), (peaksAt = at); else peaksRetry = simTime + 60; }).finally(() => { peaksBusy = false; });
+    }
+    return null;
+  });
   hints.add(() => (walkParams.fly && !vehicles.driving ? { key: 'F', text: 'land · Space / C up and down · wheel for speed', pri: 3, once: 'fly' } : null));
   hints.add(() => (!vehicles.driving && !walkParams.fly && (world.terrain.oceanDistAt(walker.x, walker.z) < 70 || world.terrain.sdfAt(walker.x, walker.z) < 25) ? { key: 'B', text: 'call a boat', pri: 2, once: 'boat' } : null));
   hints.add(() => (simTime > 12 ? { key: 'M', text: 'your map, sketchbook & commissions', pri: 1, once: 'atlas' } : null));
@@ -780,7 +825,13 @@ async function main() {
     if (e.code === 'KeyT') setHour((localHour(worldMs, tz) + 1) % 24);
     if ((e.target as HTMLElement)?.closest?.('input,textarea')) return;
     const playing = $('intro').classList.contains('hidden');
-    if (e.code === 'KeyP' && playing && !atlas.open && !vehicles.driving) photo.toggle();
+    if (e.code === 'KeyP' && playing && !atlas.open && !vehicles.driving) {
+      // at a viewpoint, face its view first: the summit it names, else the way the map says it looks
+      const v = !photo.active ? viewHere() : null;
+      const b = v?.sight?.bearing ?? (v && v.vp.b >= 0 ? v.vp.b : null);
+      if (b !== null && b !== undefined) walker.place(walker.x, walker.z, (-b * Math.PI) / 180, v?.sight ? Math.min(0.12, v.sight.angle + 0.01) : 0.02, walker.y - walkParams.eyeHeight);
+      photo.toggle();
+    }
     if (e.code === 'KeyM' && playing) { if (photo.active) photo.toggle(false); atlas.toggle(); }
     if (e.code === 'KeyG' && playing && !atlas.open) { if (photo.active) photo.toggle(false); atlas.focusSearch(); }
     if (e.code === 'KeyR' && playing && !atlas.open && !photo.active && !vehicles.driving && !e.repeat) { if (e.shiftKey) garden.cycle(); else garden.plant(); }
@@ -927,6 +978,7 @@ async function main() {
       U.uSnow.value = weatherParams.snow >= 0 ? weatherParams.snow : s.snow;
       U.uLeafFall.value = s.leafFall;
       U.uAutumn.value = s.autumn;
+      U.uTurn.value = s.turn;
       U.uBloom.value = s.bloom;
       horizon.setSnowline(s.snowline);
     }
@@ -958,7 +1010,7 @@ async function main() {
     groundT -= dt;
     if (groundT <= 0) { groundT = 1.5; streamedGround(); } // (coarse mounts have no hook)
     realCells.clear();
-    for (const a of stream.loaded.values()) if (!a.spec.synth) realCells.add(`${Math.floor((a.spec.box.x0 + a.spec.box.x1) / 2 / manifest.cell)}_${Math.floor((a.spec.box.z0 + a.spec.box.z1) / 2 / manifest.cell)}`);
+    for (const a of stream.loaded.values()) if (!a.spec.synth || a.vec) realCells.add(`${Math.floor((a.spec.box.x0 + a.spec.box.x1) / 2 / manifest.cell)}_${Math.floor((a.spec.box.z0 + a.spec.box.z1) / 2 / manifest.cell)}`);
     skyline.update(walker.x, walker.z, (k) => realCells.has(k));
     if (!walkParams.fly || walker.y - walker.feet < 60) grass.update(walker.x, walker.z);
     if (lifeDirty && (!stream.busy || now - lastTileChange > 4000)) {
@@ -977,6 +1029,7 @@ async function main() {
     interiors.update(walker.x, walker.z, dt, walker.feet);
     perf.interior = Math.max(perf.interior, performance.now() - ti);
     life.update(now, walker, { night: U.uNight.value, hour: timeParams.hour, wind: weather.wind, clock: simTime });
+    { const ride = vehicles.wake; wakes.update(now / 1000, ride ? [...life.boats, ride] : life.boats); }
     if (ambience) {
       const run = walker.pressed('ShiftLeft') || walker.pressed('ShiftRight');
       const stride = interiors.onStairs ? 0.3 : run ? 1.1 : 0.75;

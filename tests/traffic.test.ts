@@ -53,6 +53,23 @@ describe('junction control: the rule of the road', () => {
     expect(armAt(J, 0, -1).ctl).toBe(CTL.GO);
   });
 
+  it('where the map marks its signs, a corner it leaves unmarked is open: no sign, give way', () => {
+    // two stop signs mapped at the crossroads 150 m east: this map marks its signs
+    const roads = [road('residential', 6.5, [[-100, 0], [0, 0], [150, 0], [250, 0]]), road('residential', 6.5, [[0, -100], [0, 0], [0, 100]]), road('residential', 6.5, [[150, -100], [150, 0], [150, 100]])];
+    const signs: Point[] = [{ c: 'stop', x: 151, z: 9 }, { c: 'stop', x: 149, z: -9 }];
+    const js = analyzeJunctions(roads, signs, true);
+    const here = js.find((J) => J.x === 0)!, there = js.find((J) => J.x === 150)!;
+    expect(here.arms.every((m) => m.ctl === CTL.OPEN)).toBe(true);
+    expect(armAt(there, 0, 1).ctl).toBe(CTL.STOP); // (the mapped ones as mapped)
+    expect(armAt(there, 1, 0).ctl).toBe(CTL.GO);
+    // a street meeting a main road gives way, unsigned
+    const [T] = analyzeJunctions(cross('primary', 11, 'residential', 6.5), [{ c: 'stop', x: 200, z: 9 }, { c: 'yield', x: 200, z: -9 }], true);
+    expect(armAt(T, 0, 1).ctl).toBe(CTL.OPEN);
+    expect(armAt(T, 1, 0).ctl).toBe(CTL.GO);
+    // where the map marks no signs at all, the rule of the road fills them in
+    expect(analyzeJunctions(roads, [], true).find((J) => J.x === 0)!.arms.every((m) => m.ctl === CTL.ALL_STOP)).toBe(true);
+  });
+
   it('a one-way leaving the junction carries no arriving traffic', () => {
     const [J] = analyzeJunctions([road('residential', 6.5, [[-100, 0], [0, 0], [100, 0]]), road('residential', 6.5, [[0, 0], [0, 100]], 1)], [], true);
     expect(armAt(J, 0, 1).inb).toBe(false);
@@ -215,6 +232,51 @@ describe('junction control: the traffic obeys it', () => {
     expect(sim.edge[c]).not.toBe(ce); // and then drove on
   });
 
+  it('an open corner: a lone car rolls through; two at once take turns, the one on the right first', () => {
+    const roads = cross('residential', 6.5, 'residential', 6.5, 150);
+    const signs: Point[] = [{ c: 'stop', x: 140, z: 150 }, { c: 'yield', x: 150, z: 140 }]; // marked round here, not at this corner
+    const Js = analyzeJunctions(roads, signs, true);
+    expect(Js[0].arms.every((m) => m.ctl === CTL.OPEN)).toBe(true);
+    const init = buildLifeInit(base, roads, walk, [], [packJunctions(Js)]);
+    const edgeFrom = (x0: number, z0: number, x1: number, z1: number) => {
+      for (let k = 0; k < init.edgeLen.length; k++) {
+        const a = init.edgeStart[k] * 3, b = (init.edgeStart[k] + init.edgeCount[k] - 1) * 3, P = init.edgePts;
+        if (Math.hypot(P[a] - x0, P[a + 2] - z0) < 0.1 && Math.hypot(P[b] - x1, P[b + 2] - z1) < 0.1) return k;
+      }
+      return -1;
+    };
+    const north = edgeFrom(0, -150, 0, 0), east = edgeFrom(0, 0, 150, 0);
+    const setup = (both: boolean) => {
+      const sim = new LifeSim(init);
+      for (const [a, b] of [RANGES.cars, RANGES.peds]) for (let i = a; i < b; i++) { sim.active[i] = 0; sim.y[i] = -1000; }
+      const A = RANGES.cars[0], B = A + 1;
+      // A comes south down the north arm, B west along the east arm: both 40 m out at 8 m/s
+      sim.active[A] = 1; sim.edge[A] = north; sim.dir[A] = 1; sim.s[A] = 150 - 40; sim.speed[A] = 8;
+      if (both) { sim.active[B] = 1; sim.edge[B] = east; sim.dir[B] = -1; sim.s[B] = 40; sim.speed[B] = 8; }
+      return { sim, A, B };
+    };
+    const drive = (sim: LifeSim, f: (t: number) => void) => { for (let t = 0; t < 20; t += 0.05) { sim.setEnv({ playerX: 60, playerZ: 60, hour: 12, night: 0, density: 0, wind: 0, clock: t }); sim.step(0.05); f(t); } };
+    // alone: slows for the corner, looks, rolls through without stopping
+    const one = setup(false);
+    let slowest = 99;
+    drive(one.sim, () => { if (one.sim.edge[one.A] === north) slowest = Math.min(slowest, one.sim.speed[one.A]); });
+    expect(one.sim.edge[one.A]).not.toBe(north);
+    expect(slowest).toBeGreaterThan(3);
+    // together: B has A on its right and gives way; A goes first; they never touch
+    const two = setup(true);
+    let aOut = -1, bIn = -1, closest = 99;
+    drive(two.sim, (t) => {
+      const { sim, A, B } = two;
+      if (aOut < 0 && sim.edge[A] !== north) aOut = t;
+      if (bIn < 0 && sim.edge[B] === east && sim.s[B] < 11 / 2 - 0.5) bIn = t; // (into the box)
+      if (bIn < 0 && sim.edge[B] !== east) bIn = t;
+      closest = Math.min(closest, Math.hypot(sim.x[A] - sim.x[B], sim.z[A] - sim.z[B]));
+    });
+    expect(aOut).toBeGreaterThan(0);
+    expect(bIn).toBeGreaterThan(aOut);
+    expect(closest).toBeGreaterThan(3);
+  });
+
   it('comes to a full stop at a stop sign, then pulls out', () => {
     const { sim, c, e } = scene(cross('primary', 11, 'residential', 6.5));
     let stopped = false;
@@ -279,6 +341,104 @@ describe('a busy grid of streets, three minutes of it', () => {
   });
 });
 
+describe('nothing pops into view', () => {
+  it('cars appear and vanish only where the walker is not looking', () => {
+    const line = (c: string, w: number, fixed: number, ns: boolean) => road(c, w, [-250, -150, 0, 150, 250].map((t) => (ns ? [fixed, t] : [t, fixed]) as [number, number]));
+    const roads = [line('primary', 11, 0, false), line('residential', 6.5, -150, false), line('residential', 6.5, 150, false), line('secondary', 9, 0, true), line('residential', 6.5, -150, true), line('residential', 6.5, 150, true)];
+    const base: LifeBase = { seed: 5, bounds: [-400, -400, 400, 400], beachPts: new Float32Array(0), waterGrid: new Uint8Array(1), waterG: [0, 0, 8, 1, 1], downtown: [-200, -200, 200, 200], seaward: [1, 0] };
+    const init = buildLifeInit(base, roads, { outdoorSurfaceAt: () => 0 } as unknown as Parameters<typeof buildLifeInit>[2], [], [packJunctions(analyzeJunctions(roads, [], true))]);
+    const sim = new LifeSim(init);
+    const [c0, c1] = RANGES.cars, was = new Uint8Array(c1);
+    let popped = 0, changes = 0;
+    for (let t = 0; t < 120; t += 0.05) {
+      const yaw = -Math.PI / 2 + 0.6 * Math.sin(t / 20); // looking east along the main road, turning a little
+      // (the crowd swells and thins with the slider: cars come and go all the time)
+      sim.setEnv({ playerX: -200, playerZ: 10, hour: 12, night: 0, density: 1 + Math.sin(t / 7), wind: 0, clock: t, playerYaw: yaw });
+      sim.step(0.05);
+      for (let c = c0; c < c1; c++) {
+        if (t > 5 && sim.active[c] !== was[c]) {
+          changes++;
+          const x = sim.active[c] ? sim.x[c] : sim.px[c], z = sim.active[c] ? sim.z[c] : sim.pz[c], dx = x + 200, dz = z - 10, d = Math.hypot(dx, dz);
+          if (d < 260 && (dx * -Math.sin(yaw) + dz * -Math.cos(yaw)) / d > 0.45) popped++;
+        }
+        was[c] = sim.active[c];
+      }
+    }
+    expect(changes).toBeGreaterThan(20);
+    expect(popped).toBe(0);
+  });
+});
+
+describe('mapped crosswalks (Seattle maps one on every arm of every junction)', () => {
+  const base: LifeBase = { seed: 11, bounds: [-400, -400, 400, 400], beachPts: new Float32Array(0), waterGrid: new Uint8Array(1), waterG: [0, 0, 8, 1, 1], downtown: [-200, -200, 200, 200], seaward: [1, 0] };
+  const walk = { outdoorSurfaceAt: () => 0 } as unknown as Parameters<typeof buildLifeInit>[2];
+  const J = [-150, 0, 150];
+  // the busy grid again, each street carrying a vertex `xw` out on every arm of every junction with
+  // a crossing footway through it (and one mid-block crossing, 60 m along the main road)
+  const grid = (xw: number) => {
+    const line = (c: string, w: number, fixed: number, ns: boolean) => {
+      const ts = [-250, ...J.flatMap((t) => [t - xw, t, t + xw]), 250];
+      if (c === 'primary') ts.splice(ts.indexOf(0 + xw) + 1, 0, 60);
+      return road(c, w, ts.map((t) => (ns ? [fixed, t] : [t, fixed]) as [number, number]));
+    };
+    const roads = [
+      line('primary', 11, 0, false), line('residential', 6.5, -150, false), line('residential', 6.5, 150, false),
+      line('secondary', 9, 0, true), line('residential', 6.5, -150, true), line('residential', 6.5, 150, true),
+    ];
+    for (const x of J) for (const z of J)
+      for (const [dx, dz] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+        const cx = x + dx * xw, cz = z + dz * xw; // across the arm, through its vertex
+        roads.push(road('footway', 2, [[cx - dz * 8, cz - dx * 8], [cx, cz], [cx + dz * 8, cz + dx * 8]]));
+      }
+    roads.push(road('footway', 2, [[60, -8], [60, 0], [60, 8]]));
+    return roads;
+  };
+  const obb = (sim: LifeSim, i: number, j: number) => {
+    const box = (c: number) => { const fx = -Math.sin(sim.yaw[c]), fz = -Math.cos(sim.yaw[c]); return [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([a, b]) => [sim.x[c] + fx * a * 2.2 - fz * b * 0.9, sim.z[c] + fz * a * 2.2 + fx * b * 0.9]); };
+    const A = box(i), B = box(j);
+    for (const P of [A, B])
+      for (let k = 0; k < 2; k++) {
+        const nx = P[k + 1][1] - P[k][1], nz = P[k][0] - P[k + 1][0];
+        const pa = A.map(([x, z]) => x * nx + z * nz), pb = B.map(([x, z]) => x * nx + z * nz);
+        if (Math.max(...pa) <= Math.min(...pb) || Math.max(...pb) <= Math.min(...pa)) return false;
+      }
+    return true;
+  };
+
+  it('a crossing near a junction leaves its approach whole; one mid-block still joins the street', () => {
+    const roads = grid(7);
+    const init = buildLifeInit(base, roads, walk, [], [packJunctions(analyzeJunctions(roads, [], true))]);
+    let shortest = Infinity, mid = false;
+    for (let e = 0; e < init.edgeLen.length; e++) {
+      if (init.edgeInfo[e * 4] < 2) continue;
+      shortest = Math.min(shortest, init.edgeLen[e]);
+      for (const end of [0, 1]) { const n = init.edgeNodes[e * 2 + end]; if (Math.hypot(init.nodeXZ![n * 2] - 60, init.nodeXZ![n * 2 + 1]) < 0.1) mid = true; }
+    }
+    expect(shortest).toBeGreaterThan(50); // (was 7 m: every arm a stub inside the junction's box)
+    expect(mid).toBe(true);
+  });
+
+  it('three busy minutes: cars stop at the lines, and no two ever overlap', () => {
+    const roads = grid(7);
+    const init = buildLifeInit(base, roads, walk, [], [packJunctions(analyzeJunctions(roads, [], true))]);
+    const sim = new LifeSim(init);
+    const [c0, c1] = RANGES.cars;
+    let overlaps = 0, cars = 0;
+    for (let t = 0; t < 180; t += 0.05) {
+      sim.setEnv({ playerX: 10, playerZ: 10, hour: 12, night: 0, density: 1, wind: 0, clock: t });
+      sim.step(0.05);
+      if (t < 10) continue;
+      for (let c = c0; c < c1; c++) {
+        if (!sim.active[c]) continue;
+        cars++;
+        for (let d = c + 1; d < c1; d++) if (sim.active[d] && Math.abs(sim.x[d] - sim.x[c]) < 5 && Math.abs(sim.z[d] - sim.z[c]) < 5 && obb(sim, c, d)) overlaps++;
+      }
+    }
+    expect(cars / 3400).toBeGreaterThan(30);
+    expect(overlaps).toBe(0); // (8,000 overlapping pair-ticks before: nobody stopped at a junction)
+  });
+});
+
 describe('tunnels: the cars dive under the blocks, nobody walks there', () => {
   it('a tunnel piece goes down from its portal, is not walkable, and its surface street is untouched', () => {
     const base: LifeBase = { seed: 3, bounds: [-900, -900, 900, 900], beachPts: new Float32Array(0), waterGrid: new Uint8Array(1), waterG: [0, 0, 8, 1, 1], downtown: [-100, -100, 100, 100], seaward: [1, 0] };
@@ -299,5 +459,21 @@ describe('tunnels: the cars dive under the blocks, nobody walks there', () => {
     expect(deepest).toBeLessThan(20 - 8); // and well under the blocks further on
     const se = 1 - te;
     for (let j = 0; j < init.edgeCount[se]; j++) expect(P[(init.edgeStart[se] + j) * 3 + 1]).toBe(20);
+  });
+});
+
+describe('tunnel portals', () => {
+  it('finds the mouth where a tunnel meets a street, facing out along it', async () => {
+    const { findPortals, portalMeshes } = await import('../src/world/portals');
+    const road = (pts: [number, number][], extra: Record<string, unknown> = {}) => ({ p: pts.flatMap(([x, z]) => [x * 10, z * 10]), c: 'motorway', w: 14, ...extra }) as never;
+    const ports = findPortals([road([[0, 0], [100, 0]]), road([[100, 0], [400, 0]], { tu: 1 }), road([[400, 0], [500, 0]])]);
+    expect(ports.length).toBe(2);
+    const west = ports.find((p) => p.x === 100)!;
+    expect(west.ux).toBeCloseTo(1, 6); // into the tunnel, eastward
+    const { group, walls } = portalMeshes(ports, () => 12);
+    expect(group.children.length).toBe(1);
+    expect(walls.length).toBe(4);
+    // the opening leaves the carriageway clear: the piers stand outside it
+    for (const [a, b] of walls) for (const [, z] of [a, b]) expect(Math.abs(z)).toBeGreaterThan(7);
   });
 });

@@ -167,6 +167,11 @@ export class Vehicles {
     return pk ? { kind: 'car', model: pk.model } : null;
   }
   get activeKind(): VKind | null { return this.active?.kind ?? null; }
+  /** The boat you're riding, as a wake source (wakes.ts) — null ashore, driving or flying. */
+  get wake(): { id: number; x: number; z: number; yaw: number; v: number; stern: number; beam: number } | null {
+    const v = this.active;
+    return v && v.kind === 'boat' ? { id: -1, x: v.x, z: v.z, yaw: v.yaw, v: v.v, stern: 2.6, beam: 2.2 } : null;
+  }
 
   // ---------------- world queries ----------------
   private water(x: number, z: number) {
@@ -480,7 +485,11 @@ export class Vehicles {
     const vmax = boost ? 38 : 24;
     if (thr > 0) v.v += (v.v < -0.3 ? 14 : boost ? 9 : 6) * dt;
     else if (thr < 0) v.v -= (v.v > 0.3 ? 14 : 4) * dt;
-    else v.v -= Math.sign(v.v) * Math.min(Math.abs(v.v), (2.2 + Math.abs(v.v) * 0.05) * dt);
+    else v.v -= Math.sign(v.v) * Math.min(Math.abs(v.v), (1.6 + Math.abs(v.v) * 0.05) * dt);
+    // the hill: a climb takes speed off, a descent coasts on, and stopped on a steep grade with
+    // nothing pressed the car creeps back (a gentle one holds: the gearbox's creep, the brakes)
+    const pull = 9.8 * Math.sin(v.pitch);
+    if (thr !== 0 || Math.abs(v.v) > 0.3 || Math.abs(v.pitch) > 0.15) v.v -= pull * 0.8 * dt;
     v.v = Math.max(-7, Math.min(vmax, v.v));
     const st = this.axis(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight']);
     v.steer += (st - v.steer) * Math.min(1, dt * 5);

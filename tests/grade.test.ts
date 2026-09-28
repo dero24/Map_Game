@@ -103,6 +103,25 @@ describe('road grading', () => {
     expect(along.some((w) => Math.abs(mid(w) - 700) < 2)).toBe(false); // a gap for the steps
     expect(along.some((w) => mid(w) > 302 && mid(w) < 328)).toBe(false); // the house is its own wall
   });
+  it('a street climbing a hill through a grid of cross streets has no knee at the junctions', () => {
+    // Queen Anne: a 30% hillside, a street straight up it, cross streets every 70 m. Each crossing is
+    // a flat band a cross street wide; the climb must happen between the bands — at the band's
+    // edge the ground once caught up with the capped profile in a few metres (a 50% knee: the car
+    // on the grade pitched like a ski jump)
+    const worstOn = (slope: number) => {
+      const g = grid((x) => x * slope);
+      // (the map's crossings share their node)
+      const xs = [300, 370, 440, 510, 580, 650, 720];
+      const roads = [road([[100, 500], ...xs.map((x): [number, number] => [x, 500]), [900, 500]], 'residential', 11)];
+      for (const x of xs) roads.push(road([[x, 300], [x, 500], [x, 700]], 'residential', 11));
+      gradeRoads(g, roads);
+      let worst = 0;
+      for (let x = 220; x < 780; x += 2) worst = Math.max(worst, Math.abs(at(g, x + 2, 500) - at(g, x - 2, 500)) / 4);
+      return worst;
+    };
+    expect(worstOn(0.18)).toBeLessThan(0.25); // (18% between the bands' flats: ~22% where it climbs)
+    expect(worstOn(0.22)).toBeLessThan(0.3); // (steeper than a street is built: evenly over, never a step)
+  });
   it('reads incline tags', () => {
     expect(inclineOf('15%')).toBeCloseTo(0.15);
     expect(inclineOf('-8.5 %')).toBeCloseTo(0.085);

@@ -27,6 +27,7 @@ function tick() {
     density: h[H.DENSITY] / 100,
     wind: h[H.WIND] / 1000,
     clock: h[H.CLOCK] / 100,
+    playerYaw: h[H.PLAYER_YAW] / 1000,
   });
   const dt = 1 / SIM_HZ;
   sim.step(dt);
@@ -74,5 +75,6 @@ ctx.onmessage = (e: MessageEvent) => {
   } else if (d.kind === 'env' && mode === 'copy') {
     V.header.set((d.header as Int32Array).subarray(H.PLAYER_X, H.WIND + 1), H.PLAYER_X);
     V.header[H.CLOCK] = (d.header as Int32Array)[H.CLOCK];
+    V.header[H.PLAYER_YAW] = (d.header as Int32Array)[H.PLAYER_YAW];
   }
 };

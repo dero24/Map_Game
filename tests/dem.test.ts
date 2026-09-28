@@ -108,3 +108,19 @@ describe('waterPatch with the map as truth', () => {
     expect(new TerrainLayer(truth.buf, truth.layout).sdfAt(40, 88)).toBeGreaterThan(0);
   });
 });
+
+describe('waterPatch below the datum', () => {
+  it('a basin below sea level is dry land at the datum, its lake a lake there too (the open world\'s one ocean plane)', () => {
+    const h = new Array(100).fill(-60);
+    const d = demLayer({ heights: Float32Array.from(h), x0: 0, z0: 0, pitch: 16, nx: 10, nz: 10 });
+    const sq: [number, number][] = [[30, 30], [130, 30], [130, 130], [30, 130]];
+    const lvl = waterLevel(d, { ring: sq }, () => -60);
+    expect(lvl).toBe(0);
+    const w = waterPatch(d, [{ ring: sq, level: lvl }], true);
+    const L = new TerrainLayer(w.buf, w.layout);
+    expect(L.heightAt(72, 72)).toBeLessThan(0.5); // the lake's bed under its surface
+    expect(L.oceanDistAt(72, 72)).toBeGreaterThan(0); // (a lake, not the sea)
+    expect(L.heightAt(8, 8)).toBeCloseTo(0.5, 1); // its shore dry, just above the plane
+    expect(L.flags[0] & 1).toBe(0);
+  });
+});

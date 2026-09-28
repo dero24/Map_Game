@@ -12,8 +12,24 @@ export const MINOR = new Set(['path', 'footway', 'cycleway', 'steps', 'bridleway
 /** A street's pavement colour (sRGB hex). Desert sun bleaches asphalt to a warm pale grey; bike
  *  lanes are asphalt painted by habit (green in North America, red-brown in Europe); paths and
  *  mapped sidewalks are pale. */
-export function roadPaint(r: { c: string; sw?: 1 }, region: string, arid: boolean): string {
+/** The colour of a street's mapped surface other than asphalt, or null. */
+export function streetSurface(sf: string | undefined): string | null {
+  if (!sf) return null;
+  if (/^(brick|bricks|paving_stones:brick|clay)$/.test(sf)) return '#8b5a47';
+  if (/^(paving_stones|concrete:plates|concrete:lanes)$/.test(sf)) return '#8c8378';
+  if (/^(sett|cobblestone|unhewn_cobblestone|cobblestone:flattened|stone)$/.test(sf)) return '#6f6a63';
+  if (/^(concrete)$/.test(sf)) return '#8e8c86';
+  if (/^(wood|metal)$/.test(sf)) return '#7a5d42';
+  if (/^(gravel|fine_gravel|compacted|pebblestone|shells)$/.test(sf)) return '#a39884';
+  if (/^(unpaved|dirt|earth|ground|mud|sand|grass)$/.test(sf)) return '#8c7a5e';
+  return null;
+}
+
+export function roadPaint(r: { c: string; sw?: 1; sf?: string }, region: string, arid: boolean): string {
   const rank = ROAD_RANK[r.c] ?? 1;
+  const own = streetSurface(r.sf);
+  // (a concrete or paved walk stays the pale walk it is — only a street's concrete goes grey)
+  if (own && !r.sw) return MINOR.has(r.c) && /^(concrete|paving_stones|concrete:plates|concrete:lanes)$/.test(r.sf!) ? '#bab4a7' : own;
   if (r.c === 'cycleway') return region === 'na' ? '#687a62' : region === 'eu' ? '#8a5e52' : '#6a6c6e';
   if (r.sw) return '#b8b2a4';
   if (MINOR.has(r.c)) return '#bdb5a3';

@@ -115,4 +115,17 @@ describe('street-name blades', () => {
     expect(ne.trees[4] + ne.trees[3]).toBeLessThan(ne.trees[0] + ne.trees[1]);
     expect(pnw.biome[1]).toBeGreaterThan(0); // lush
   });
+  it('every coast wears its own water: the shore keeps its Atlantic, the Sound is green-steel, the Keys turquoise', () => {
+    const nj = regionStyle(40.362, -73.9755), sea = regionStyle(47.61, -122.33), keys = regionStyle(24.55, -81.78), gulf = regionStyle(29.95, -90.07);
+    expect(nj.water).toEqual({ deep: 0x2c4f6e, shallow: 0x5fa3a0, riverDeep: 0x3d5a5c, riverShallow: 0x7a9a84 }); // unchanged
+    const rgb = (h: number) => [(h >> 16) & 255, (h >> 8) & 255, h & 255];
+    const [r, g, b] = rgb(sea.water.deep);
+    expect(g).toBeGreaterThanOrEqual(b); // green-steel: never bluer than it is green
+    expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThan(40); // …and greyed, not a lagoon
+    const [kr, kg, kb] = rgb(keys.water.shallow);
+    expect(kg).toBeGreaterThan(kr + 80); // turquoise over sand
+    expect(kb).toBeGreaterThan(kr + 80);
+    expect(gulf.water).not.toEqual(nj.water); // the Gulf's marsh-fed olive
+    expect(styleByKey(sea.key)!.water).toEqual(sea.water); // (meta.style keys carry it)
+  });
 });

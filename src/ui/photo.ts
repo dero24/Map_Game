@@ -54,8 +54,9 @@ export class PhotoMode {
   private status() {
     const h = this.g.hour(), hh = Math.floor(h), mm = Math.floor((h - hh) * 60);
     const a = this.com.judge();
-    this.info.innerHTML = `${this.g.placeLabel()} · ${((hh + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'am' : 'pm'} · ${Math.round(50 / Math.tan((walkParams.fov * Math.PI) / 360) / 1.73)} mm`
-      + (a ? `<br><span class="ok">✧ ${a.title} — in frame</span>` : '');
+    // (the place label is the map's own text — a street, a town — escaped)
+    this.info.innerHTML = `${esc(this.g.placeLabel())} · ${((hh + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'am' : 'pm'} · ${Math.round(50 / Math.tan((walkParams.fov * Math.PI) / 360) / 1.73)} mm`
+      + (a ? `<br><span class="ok">✧ ${esc(a.title)} — in frame</span>` : '');
   }
 
   /** Call right after the frame is drawn: the WebGL canvas still holds this frame's pixels. */
@@ -129,3 +130,4 @@ export class PhotoMode {
     this.status();
   }
 }
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);

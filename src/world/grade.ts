@@ -150,6 +150,11 @@ export function gradeRoads(g: GradeGrid, roads: Road[], incline: (r: Road) => nu
   };
   const walls: number[] = [];
   const acc = new Float64Array(g.nx * g.nz), wsum = new Float64Array(g.nx * g.nz), wmax = new Float32Array(g.nx * g.nz);
+  // (a node on a street's carriageway takes the carriageways' heights alone, one on a sidewalk the
+  // corridors': a crossing street's sidewalk band or fading shoulder no longer drags the next
+  // street's climb flat and piles the difference into a step just past the crossing)
+  const accW = new Float64Array(g.nx * g.nz), wsumW = new Float32Array(g.nx * g.nz);
+  const accC = new Float64Array(g.nx * g.nz), wsumC = new Float32Array(g.nx * g.nz);
   // per way, each node takes the target at its nearest point on the way (one answer a way, not
   // an average of every 4 m piece within reach — that smeared the profile's knees past its limit)
   const bestD = new Float32Array(g.nx * g.nz).fill(Infinity), bestT = new Float32Array(g.nx * g.nz);
@@ -200,10 +205,14 @@ export function gradeRoads(g: GradeGrid, roads: Road[], incline: (r: Road) => nu
     const blend = box(box(wide, rb), rb);
     const z = new Float64Array(n);
     for (let k = 0; k < n; k++) z[k] = smallE[k + pad] + (bigE[k + pad] - smallE[k + pad]) * Math.min(1, blend[k + pad]);
-    // meet each shared node at its agreed height, easing in over 20 m
+    // meet each shared node at its agreed height, easing in over 20 m — and hold it flat across
+    // the crossing's band (the cross streets' corridor): the climb happens between the bands. A
+    // profile climbing at its limit straight through a band had the crossing's flat ground under
+    // it, and the ground caught up in the few metres past the band's edge (a 36–50% knee at every
+    // crossing of a steep hill — the car on the grade pitched like a ski jump)
     const pins = new Map<number, number>();
     for (let i = 0; i < w.p.length; i++) {
-      const ph = plateau.get(key(w.p[i][0], w.p[i][1]));
+      const nk = key(w.p[i][0], w.p[i][1]), ph = plateau.get(nk);
       if (ph === undefined) continue;
       for (let k = 0; k < n; k++) {
         const d = Math.abs(ss[k] - cum[i]);
@@ -211,6 +220,8 @@ export function gradeRoads(g: GradeGrid, roads: Road[], incline: (r: Road) => nu
         const t = 1 - d / 20;
         z[k] += (ph - z[k]) * t * t * (3 - 2 * t);
       }
+      const half = (count.get(nk)?.hw ?? 0) + 0.5; // (the crossing's carriageway: its sidewalks are the climbing street's)
+      for (let k = 0; k < n; k++) if (Math.abs(ss[k] - cum[i]) <= half) pins.set(k, ph);
       pins.set(Math.max(0, Math.min(n - 1, Math.round(cum[i] / ds))), ph);
     }
     // …and nowhere steeper than a car can climb: between its junctions (pinned) the profile keeps
@@ -218,6 +229,16 @@ export function gradeRoads(g: GradeGrid, roads: Road[], incline: (r: Road) => nu
     // even grade between them), then a forward and a backward pass hold every 4 m step to it
     const G = w.hard, pk = [...pins.keys()].sort((a, b) => a - b);
     for (const [k, v] of pins) z[k] = v;
+    // (each stretch's limit: the class's hard grade — or, where two pins ask more than it allows,
+    // the even grade between them, so the passes below spread the excess evenly instead of
+    // piling it into one step at the pin)
+    const cap = new Float64Array(n).fill(G);
+    for (let q = 0; q + 1 < pk.length; q++) {
+      const a = pk[q], b = pk[q + 1];
+      if (b - a < 1) continue;
+      const need = Math.abs(pins.get(b)! - pins.get(a)!) / (ss[b] - ss[a]);
+      if (need > G) for (let k = a; k <= b; k++) cap[k] = Math.max(cap[k], need * 1.001);
+    }
     if (pk.length) {
       for (let k = 0; k < n; k++) {
         if (pins.has(k)) continue;
@@ -234,8 +255,8 @@ export function gradeRoads(g: GradeGrid, roads: Road[], incline: (r: Road) => nu
       }
     }
     for (let it = 0; it < 3; it++) {
-      for (let k = 1; k < n; k++) if (!pins.has(k)) z[k] = Math.max(z[k - 1] - G * ds, Math.min(z[k - 1] + G * ds, z[k]));
-      for (let k = n - 2; k >= 0; k--) if (!pins.has(k)) z[k] = Math.max(z[k + 1] - G * ds, Math.min(z[k + 1] + G * ds, z[k]));
+      for (let k = 1; k < n; k++) if (!pins.has(k)) z[k] = Math.max(z[k - 1] - cap[k] * ds, Math.min(z[k - 1] + cap[k] * ds, z[k]));
+      for (let k = n - 2; k >= 0; k--) if (!pins.has(k)) z[k] = Math.max(z[k + 1] - cap[k] * ds, Math.min(z[k + 1] + cap[k] * ds, z[k]));
     }
     // the street and its sidewalks at the profile, shoulders easing back to the natural ground
     // (past the way's own ends the next street, or nothing, decides — no round cap)
@@ -309,6 +330,8 @@ export function gradeRoads(g: GradeGrid, roads: Road[], incline: (r: Road) => nu
       const w3 = wt * wt * wt;
       acc[kk] += w3 * target;
       wsum[kk] += w3;
+      if (d <= w.r.w / 2) (accW[kk] += target), (wsumW[kk] += 1);
+      else if (wt >= 1) (accC[kk] += target), (wsumC[kk] += 1);
       if (wt > wmax[kk]) wmax[kk] = wt;
     }
     touched.length = 0;
@@ -316,7 +339,8 @@ export function gradeRoads(g: GradeGrid, roads: Road[], incline: (r: Road) => nu
   let nodes = 0, maxShift = 0;
   for (let k = 0; k < acc.length; k++) {
     if (!wsum[k]) continue;
-    const h = H0[k] + (acc[k] / wsum[k] - H0[k]) * wmax[k];
+    const t = wsumW[k] ? accW[k] / wsumW[k] : wsumC[k] ? accC[k] / wsumC[k] : acc[k] / wsum[k];
+    const h = H0[k] + (t - H0[k]) * wmax[k];
     maxShift = Math.max(maxShift, Math.abs(h - H0[k]));
     g.heights[k] = h;
     nodes++;

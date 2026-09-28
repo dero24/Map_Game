@@ -512,3 +512,116 @@ EPT class-2 ground along roads), and the tags `barrier=retaining_wall`, `embankm
 bay into a park; until then a PMTiles basemap on R2 (e.g. Protomaps) beats synth as the fallback.
 Keep street furniture first but fold in steps, retaining walls and parking clearances; tint the
 harness top-downs by provenance so "exactly where" can be audited.
+
+### 2026-09-28 — Round 8: Seattle on the vector twin — bay and Needle land, market and hill don't (v)
+
+**Verdict: NOT PASSED — 6.5/10 on streamed Seattle.** *"Elliott Bay is finally water and the Needle is on
+the postcard — but walk to Pike Place and you get an empty lane with a wall in your face."* Every frame is a
+vector twin (Overpass unreachable). The floor held; eye level didn't.
+
+**Landed:** the bay is water on the fallback path (city 3, final 6, market 4); a real postcard — the Needle in
+front of downtown with Rainier ~11° to its right at its true height (kerry-zoom 1); from the air a city
+(continuous streets, full kerbs, autumn trees — qa 6; zebra ladders and a pier — final 3; blocks paved to the
+building line — final 5); no ribbon over tyres on a cross-slope (qa 3); Pike Place's brick-and-pastel
+frontage (final 1); Sea Bright holds.
+
+**Reads fake / broken — engine:** Pike Place an empty asphalt lane (final 1–2 ≈ market 1–2: the stall fix
+changed nothing on camera; nothing from 55 m either); final 9 a pile-up (the wagon pitched far steeper than the
+SUV beside it); 3rd & Pike road and sidewalk one grey, the kerb a white line, no crosswalk, bus or crowd
+(final 4); **no daylight saving** (`virtual.ts` `Etc/GMT+8`): "18:20 golden" put the sun at −5° instead of
++4.9° — every `?at=` region an hour late all summer; Rainier's ice darker than its sky; past ~3 km the city a
+sand plain with ghost towers (kerry-zoom 2). **Harness / pose:** QA Ave N climbs only 5–11% on camera (the
+Counterbalance is ~18%); the occluder assert is one centre ray (walls at ~1 m, a lamp mast, the viewer at
+0.5 m, kerb cars at the lens all pass); the subject check ignores occlusion and the frustum (no Hillclimb,
+portal, boat or moving car in their frames; "2 m behind the viewer" was ~15 m); pike 1–2 landed on Western
+Ave; Steinbrueck all lawn; (v)'s "22 boats" = one faint wake and an empty sea.
+
+**Round 7 must-fixes:** MF1 **closed** (twins). MF2 **partly** (grading, walls, portals built; a steep
+eye-level crest, a clean final 9, a re-run of (t)'s 47 ways over 25% and `__CAROBB__` missing). MF3 **partly**
+(no roof trees seen; masts unshot, `__TREES__` not zero). MF4 **open** (final 1–3). MF5 **partly** (asserts
+blind). MF6 **open**, fifth round (final 4's tree at ~7 m is stacked flat slabs).
+
+**Must-fix (ranked):**
+1. **Pike Place a market from what the twin keeps** — the marketplace POI plus POI density lines the
+   street's frontage with stalls both sides; crowds; a market-paving prior; cars at walking pace; the
+   Hillclimb a visible flight. *Test:* lens mid-street at the Corner Market NW and SE: ≥ 8 stalls, ≥ 15
+   people; the Hillclimb's foot showing ≥ 10 m of rise.
+2. **The steep hill at eye level, roads that read as roads, cars clean on them.** *Test:* a road-crown pose
+   on the Counterbalance (QA Ave N, W Roy–W Galer) looking south: the kerb 50 m ahead ≥ 8° below eye level,
+   the Needle past the crest; a kerb face and a lighter sidewalk; a frozen, unoccluded moving car on four
+   tyres; `__GRADES__` (untagged > 25%) and `__CAROBB__` both 0 on the twins.
+3. **Asserts that see** — an id-buffer pass: the subject's visible pixels ≥ 5%; nothing within 2.5 m over 5%
+   of the frame, nothing within 4 m over 15%; freeze the sim; street poses on the building line or the road
+   crown; fails stamped on the sheet. *Test:* every frame named here re-shot, zero fails.
+4. **The far city** — ground coloured by OMT landuse; z13 buildings or landuse blocks at a height prior;
+   towers opaque. *Test:* kerry-zoom 2 re-shot, ≥ 70% urban ground past 3 km, no sand hue.
+5. **The clock and the postcard** — the IANA zone from a lat/lon lookup; Rainier's ice lit above its sky,
+   alpenglow at sunset. *Test:* sun +4.9° ± 0.5° at Kerry Park 18:20 on 28 Sep, frame lit gold; summit ≥ sky
+   +10% at 15:30.
+6. **Crowns at 5–10 m.** *Test:* final 4's tree and a PNW conifer at 5, 8 and 10 m, no straight silhouette
+   edge over 15% of the crown width, no stacked-disc columns.
+
+**Should-fix:** Manhattan's cedar water tanks on Seattle roofs (final 3, 8 — `towerTop`: only where mapped);
+the playground kit (posts overshoot the deck, the slide misses it, it stands on beach sand at a seawall —
+pike 5); downtown crowds by POI and stop density; Steinbrueck shot from the rail at −10°; a wake at eye
+level with its boat in frame; tower tops from the twin's building parts; Sea Bright re-shot after the paving
+change.
+
+**Gameplay / UX ideas:** "The Mountain is out" — each viewpoint's DEM viewshed to named peaks; on a clear
+day the HUD calls it, a Rainier painting a rare card (Hood from Portland by the same rule). Stairways
+(`highway=steps`, hundreds in Seattle) as an Almanac set, and a Hillclimb time trial from the ferry dock to
+the fish stalls. Curb your wheels (Washington law): park steep without turning them and the car creeps into
+the junction (the creep is built) — a ticket or a chase. Stall trades from the POIs inside: the fishmonger
+throws you one to catch; the florist's bouquet is yours to give. NOAA tides move the waterline, pilings and
+foam ~3.5 m on schedule. GTFS queues at 3rd & Pike; ride the trolleybus up the Counterbalance.
+
+**On the twin:** the right floor; what it loses is exactly the eye-level grammar. Infer from POI density and
+class, never names — then own the tiles: a Planetiler profile of the state extract that keeps the tags the
+game reads, served from R2.
+
+**Same-session follow-up (v):** MF5-clock fixed — the open world takes its US zone with summer time
+(`tz.ts`, 26 cities tested; Kerry Park is America/Los_Angeles). MF1-market: shared streets within 60 m of a
+market hall get stalls down both sides and park no cars (`props.ts`). MF6: spruce whorls overlap to a leader;
+the rim dissolve bites lobe sides only. Rainier: glaciers and rock from OpenFreeMap landcover, max-filtered
+ring. Open: the Counterbalance frame and grade audit on the twins, the id-buffer asserts, the far city, the
+round tree's slabs at 7 m, the water tanks, the playground kit.
+
+
+**Round 8b (same session) — verdict update: 7/10 on streamed Seattle, NOT PASSED.** *"Pike Place opened
+and the cars stopped crashing — now they barely move."*
+- **Closed / moved:** MF1 **mostly closed** — market2 1–2 meet the count (stalls, crowd) on car-free
+  brick; the Hillclimb still unshot. MF2 **moved** — the kerb 50 m ahead 11.5° below eye passes,
+  counter2 1 reads as a real brow; the crosswalk-stub fix is proven (overlapping pairs 35 → 1,
+  pair-ticks 5,677 → 4–16); still open: `__GRADES__` 60, `__CAROBB__` 1, no frame pins a moving car on
+  the grade. MF3 **open** — a shopper's back at arm's length fills ~10% of market2 2; the Needle frame
+  (counter2 2) has a street tree where the Needle should be; "queued, not fused" (counter2 5) shows no
+  queue; counter 4's wall 1.4 m from the lens passed (only counter 6 flagged). MF5 **half** — the clock
+  is fixed, the postcard lost: Kerry Park 18:20 is a lawn and a horizon within ~5% of the sky's
+  brightness — no city, no Needle, no Rainier, no shadows (at +4.9° they'd run 12× an object's height);
+  the gold is a grade, not a low sun. MF4 **open** (not shot). MF6 **open**, sixth round — the spruce
+  reads now, broadleaf crowns still faceted (counter2 1, 4).
+- **Still reads fake:** stalls against a long windowless brick wall (market2 1, left) instead of a hall
+  open to the street; from 45 m the awnings are one rainbow of identical shapes at a fixed pitch beside
+  a Manhattan water tank (market2 3); the Counterbalance's west sidewalk a blank grey plane filling a
+  quarter of counter 4.
+- **Next must-fix (ranked):**
+  1. **Traffic that flows** — 61% of cars stopped at a 1.9 m/s mean is gridlock; most Seattle
+     side-street corners are uncontrolled or traffic circles, arterials have priority. Control from the
+     tags, not all-way stops everywhere; merge junctions within 12 m; never spawn a car in view.
+     *Test:* Queen Anne 150 s: 0 overlapping pair-ticks, ≤ 25% of cars stopped, arterial speed between
+     junctions ≥ 8 m/s; a car driving up QA Ave N stops only at mapped controls, pinned mid-slope on
+     four tyres.
+  2. **Open the hall** — the claimed building opens to the street as an arcade with stalls inside and
+     its name on a sign; shopfronts opposite; stall goods from the POIs. *Test:* lens mid-street: the
+     hall's inside visible, ≥ 3 kinds of goods, no blank frontage over 15 m, Post Alley brick, the
+     Hillclimb showing ≥ 10 m of rise.
+  3. **Cuts as places** — any cut over 1 m a capped rockery or concrete wall with a hedge on top and a
+     stair to each lot; bridges keep their deck heights. *Test:* counter 4 and 6 re-shot;
+     `__GRADES__` 0.
+  4. **Asserts that see** — id-buffer subjects; viewpoint poses at the rail. *Test:* Kerry Park 18:20
+     with the Needle ≥ 5% of pixels, the skyline ≥ 15% darker than the sky behind it, shadows on the
+     lawn; counter2 2 and 5 re-shot, fails stamped on the sheet.
+- **Gameplay idea — the Queen Anne road test:** the sim now decides whose turn it is at every junction,
+  so it can grade the player by the same rules — full stops, turn order, not blocking the box, wheels
+  curbed when parked. A hill start on the Counterbalance with a car queued behind: roll back and you tap
+  it. Pass for a licence stamp; roll a stop in front of a patrol car and it pulls you over.

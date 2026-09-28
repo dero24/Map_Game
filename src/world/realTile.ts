@@ -353,6 +353,93 @@ const structPoint = (c: string, x: number, z: number, t: Record<string, string>,
   if (isFinite(h) && h > 2 && h < 700) p.h = Math.round(h * 10) / 10;
   return p;
 };
+// A mapped tree's kind (flora.ts TreeKind, `:v` a grown variant) from its genus — `genus`, the
+// first word of `species`/`taxon`, else the common name — so a street of London planes, a row of
+// red maples or a bigleaf maple in a ravine is that tree. `conifer`: needle-leaved, species unknown
+// (the region's pine or fir).
+const GENUS: Record<string, string> = {
+  acer: 'maple', liquidambar: 'maple', quercus: 'oak', prunus: 'cherry', malus: 'cherry', pyrus: 'cherry', cercis: 'cherry',
+  cornus: 'cherry', crataegus: 'cherry', amelanchier: 'cherry', sorbus: 'cherry', lagerstroemia: 'cherry', magnolia: 'magnolia',
+  ulmus: 'elm', zelkova: 'elm', celtis: 'elm', populus: 'poplar', cupressus: 'poplar', salix: 'willow', betula: 'birch',
+  alnus: 'birch', pinus: 'pine', picea: 'spruce', abies: 'spruce', pseudotsuga: 'spruce', tsuga: 'spruce', thuja: 'spruce',
+  cedrus: 'spruce', sequoia: 'spruce', sequoiadendron: 'spruce', chamaecyparis: 'spruce', calocedrus: 'spruce', juniperus: 'shrub',
+  washingtonia: 'fanpalm', sabal: 'palm', phoenix: 'palm', cocos: 'palm', syagrus: 'palm', roystonea: 'palm', prosopis: 'mesquite',
+  parkinsonia: 'mesquite:2', olneya: 'mesquite', platanus: 'round', tilia: 'round', fraxinus: 'round', gleditsia: 'round',
+  carpinus: 'round', fagus: 'round', aesculus: 'round', liriodendron: 'round', catalpa: 'round', gingko: 'round', ginkgo: 'round',
+  arbutus: 'round', robinia: 'round', sophora: 'round', styphnolobium: 'round', nyssa: 'maple', pistacia: 'round', koelreuteria: 'round',
+};
+const COMMON: [RegExp, string][] = [
+  [/bigleaf maple/, 'maple:2'], [/maple|sweetgum/, 'maple'], [/oak/, 'oak'], [/cherry|plum|crabapple|pear|redbud|dogwood|hawthorn|serviceberry|crape/, 'cherry'],
+  [/magnolia/, 'magnolia'], [/elm|zelkova|hackberry/, 'elm'], [/poplar|cypress/, 'poplar'], [/willow/, 'willow'], [/birch|alder|aspen/, 'birch'],
+  [/pine/, 'pine'], [/spruce|fir\b|hemlock|cedar|redwood|sequoia/, 'spruce'], [/palo verde/, 'mesquite:2'], [/mesquite/, 'mesquite'],
+  [/fan palm|washingtonia/, 'fanpalm'], [/palm/, 'palm'], [/plane|linden|lime|ash|locust|beech|hornbeam|chestnut|tulip|ginkgo|madrone/, 'round'],
+];
+export function treeKindOf(t: Record<string, string>): string | null {
+  const latin = (t.genus ?? (t.species ?? t.taxon ?? '').split(/\s+/)[0] ?? '').toLowerCase();
+  const sp = `${t.species ?? t.taxon ?? ''}`.toLowerCase();
+  if (sp.startsWith('acer macrophyllum')) return 'maple:2';
+  if (GENUS[latin]) return GENUS[latin];
+  const common = `${t['species:en'] ?? ''} ${t['taxon:en'] ?? ''} ${t['genus:en'] ?? ''}`.toLowerCase();
+  for (const [re, k] of COMMON) if (re.test(common)) return k;
+  if (t.leaf_type === 'needleleaved') return 'conifer';
+  return null;
+}
+
+/** Street furniture mapped as a node → its Point class, or null. The small things that make a
+ *  street read as surveyed rather than dressed, each where the map puts it (props.ts builds them;
+ *  a crossing is also paint and a kerb kept clear):
+ *    xing / xing_l / xing_u — a crossing: marked with ladder or zebra bars / with two lines / unmarked
+ *    lamp · bin · postbox · bikerack · drinking · bollard · meter (a parking pay station) ·
+ *    viewpoint (`tourism=viewpoint`: a coin-op viewer, and the game offers you the view) */
+export function furnitureClass(t: Record<string, string>): string | null {
+  if (t.highway === 'crossing') {
+    const m = t['crossing:markings'], c = t.crossing;
+    if (m ? m === 'no' : c === 'unmarked' || c === 'no' || c === 'informal') return 'xing_u';
+    return m && /^(lines|dashes|dots)/.test(m) ? 'xing_l' : 'xing';
+  }
+  // (a lamp hung on a wire over the street or fixed to a wall is not a mast on the ground)
+  if (t.highway === 'street_lamp') return /^(suspen|wire|catenary|wall|ceiling)/.test(t.support ?? t.lamp_mount ?? '') ? null : 'lamp';
+  if (t.amenity === 'waste_basket') return 'bin';
+  if (t.amenity === 'post_box') return 'postbox';
+  if (t.amenity === 'bicycle_parking') return /^(shed|building|lockers|floor|informal)$/.test(t.bicycle_parking ?? '') || t.covered === 'yes' ? null : 'bikerack';
+  if (t.amenity === 'drinking_water') return 'drinking';
+  if (t.barrier === 'bollard') return 'bollard';
+  if (t.amenity === 'vending_machine' && /parking_tickets/.test(t.vending ?? '')) return 'meter';
+  if (t.tourism === 'viewpoint') return 'viewpoint';
+  return null;
+}
+/** A playground piece's kind (assets/play.ts PlayKind) from its OSM `playground=*` value. */
+export function playKindOf(v: string | undefined): string | null {
+  if (!v) return null;
+  if (/^(swing|basketswing|baby_swing|tire_swing|tyre_swing|nest_swing)$/.test(v)) return 'swing';
+  if (/^(slide|tube_slide)$/.test(v)) return 'slide';
+  if (/^(structure|playhouse|tower|castle|ship|pirate_ship)$/.test(v)) return 'structure';
+  if (/^(seesaw)$/.test(v)) return 'seesaw';
+  if (/^(springy|spring_rider|springboard)$/.test(v)) return 'springy';
+  if (/^(roundabout|merry_go_round|merrygoround|aerialrotator)$/.test(v)) return 'roundabout';
+  if (/^(sandpit|sandbox|sand)$/.test(v)) return 'sandpit';
+  if (/^(climbingframe|climbing_frame|climbingwall|climbing_wall|climbing_net|monkey_bars|horizontal_bar|dome)$/.test(v)) return 'climbingframe';
+  return null;
+}
+const COMPASS: Record<string, number> = { N: 0, NNE: 22.5, NE: 45, ENE: 67.5, E: 90, ESE: 112.5, SE: 135, SSE: 157.5, S: 180, SSW: 202.5, SW: 225, WSW: 247.5, W: 270, WNW: 292.5, NW: 315, NNW: 337.5 };
+/** A viewpoint's `direction` as a compass bearing (degrees): a number, a cardinal point, or the middle
+ *  of a range ("90-180", "NE-SE"); null when it doesn't say (or looks all round). */
+export function viewBearing(v: string | undefined): number | null {
+  if (!v) return null;
+  const raw = (x: string) => { const q = x.trim().toUpperCase(); return q in COMPASS ? COMPASS[q] : /^-?\d+(\.\d+)?$/.test(q) ? parseFloat(q) : null; };
+  const norm = (b: number) => ((b % 360) + 360) % 360;
+  // (a range: "90-180", "NE-SE" — no lookbehind: older Safari can't parse one)
+  const m = /^\s*(-?[\w.]+)\s*-\s*([\w.]+)\s*$/.exec(v);
+  if (m) {
+    const a = raw(m[1]), b = raw(m[2]);
+    if (a === null || b === null) return null;
+    let d = b - a;
+    if (d <= 0) d += 360;
+    return d >= 350 ? null : norm(a + d / 2); // (a range all the way round looks every way)
+  }
+  const one = raw(v);
+  return one === null ? null : norm(one);
+}
 /** Below ground: tunnel=yes/culvert/flooded… (a building passage or an avalanche gallery is open air),
  *  or mapped location=underground. */
 const UNDERGROUND = (t: Record<string, string>) =>
@@ -430,7 +517,12 @@ export function overpassQuery(bb: { s: number; w: number; n: number; e: number }
   way["waterway"="riverbank"];
   node["natural"="tree"];
   node["amenity"="bench"];
-  node["highway"~"^(traffic_signals|stop|give_way)$"];
+  node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp)$"];
+  node["amenity"~"^(waste_basket|post_box|bicycle_parking|drinking_water|vending_machine)$"];
+  node["barrier"="bollard"];
+  node["tourism"="viewpoint"];
+  node["playground"];
+  way["playground"];
   node["emergency"="fire_hydrant"];
   node["railway"="subway_entrance"];
   node["man_made"~"^(mast|tower|communications_tower|water_tower|chimney|flagpole)$"];
@@ -526,18 +618,51 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         : t.highway === 'traffic_signals' ? 'signal' : t.emergency === 'fire_hydrant' ? 'hydrant'
         : t.highway === 'stop' ? (t.stop === 'all' ? 'stop_all' : 'stop') : t.highway === 'give_way' ? 'yield'
         : t.railway === 'subway_entrance' || (t.railway === 'train_station_entrance' && t.subway === 'yes') ? 'subway'
-        : t.highway === 'bus_stop' ? (t.shelter === 'yes' ? 'bus_shelter' : 'bus') : null;
+        : t.highway === 'bus_stop' ? (t.shelter === 'yes' ? 'bus_shelter' : 'bus') : furnitureClass(t);
       if (pc && e.lat != null && e.lon != null) {
         const [x, z] = P.project(e.lat, e.lon);
-        if (inB(x, z, margin))
-          points.push({ c: pc, x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10, own: inB(x, z) ? undefined : OWN_CTX });
+        if (inB(x, z, margin)) {
+          const pt: Point = { c: pc, x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10, own: inB(x, z) ? undefined : OWN_CTX };
+          if (pc === 'viewpoint') {
+            const b = viewBearing(t.direction);
+            if (b !== null) pt.d = b;
+          }
+          if (pc === 'tree') {
+            // (its species, and its mapped height where it has one)
+            const k = treeKindOf(t), th = parseLen(t.height);
+            if (k) pt.sp = k;
+            if (isFinite(th) && th >= 2 && th <= 70) pt.h = Math.round(th * 10) / 10;
+          }
+          points.push(pt);
+        }
       }
       const sc = STRUCT(t);
       if (sc && e.lat != null && e.lon != null) {
         const [x, z] = P.project(e.lat, e.lon);
         if (inB(x, z, margin)) points.push(structPoint(sc, x, z, t, inB(x, z)));
       }
+      const pk = playKindOf(t.playground);
+      if (pk && e.lat != null && e.lon != null) {
+        const [x, z] = P.project(e.lat, e.lon);
+        if (inB(x, z, margin)) points.push({ c: 'play', sp: pk, x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10, own: inB(x, z) ? undefined : OWN_CTX });
+      }
       continue;
+    }
+    // a playground piece mapped as a way (a slide drawn down its chute, a sandpit's outline): a
+    // point at its middle, turned along its longest side
+    if (e.type === 'way' && t.playground && !t.highway && !t.building) {
+      const pk = playKindOf(t.playground), pts = wayPts(e);
+      if (pk && pts.length >= 2) {
+        const closed = isClosed(e), q = closed ? pts.slice(0, -1) : pts;
+        const x = q.reduce((a, p) => a + p[0], 0) / q.length, z = q.reduce((a, p) => a + p[1], 0) / q.length;
+        let bl = 0, d = 0;
+        for (let i = 0; i + 1 < pts.length; i++) {
+          const dx = pts[i + 1][0] - pts[i][0], dz = pts[i + 1][1] - pts[i][1], l = Math.hypot(dx, dz);
+          if (l > bl) (bl = l), (d = (((Math.atan2(dx, -dz) * 180) / Math.PI) + 360) % 360);
+        }
+        if (inB(x, z, margin)) points.push({ c: 'play', sp: pk, d: Math.round(d), x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10, own: inB(x, z) ? undefined : OWN_CTX });
+      }
+      if (!t.leisure && !t.landuse && !t.natural && !t.amenity) continue; // (a mapped sandpit's sand is still painted)
     }
     if (e.type === 'way' && t.highway && t.highway in ROAD_W) {
       // indoor corridors mapped as footways (a mall, a market arcade) are the building's inside
@@ -571,6 +696,12 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       if (t.footway === 'sidewalk') r.sw = 1;
       if (t.service) r.sv = t.service;
       if (pl || pr) r.pk = pl + 4 * pr;
+      // (a street paved other than in asphalt: Pike Place's bricks, Boston's cobbles, a gravel lane)
+      const sf = String(t.surface ?? '').toLowerCase();
+      if (sf && !/^(asphalt|paved)$/.test(sf)) r.sf = sf.slice(0, 20);
+      // (a flight of steps: how many, where the map counted them)
+      const sc = parseInt(t.step_count);
+      if (t.highway === 'steps' && sc >= 2 && sc < 400) r.sc = sc;
       roads.push(r);
       // trolleybus wires hang over the road itself (Seattle, San Francisco, Dayton)
       if (t.trolley_wire === 'yes' || t['trolley_wire:forward'] === 'yes' || t['trolley_wire:backward'] === 'yes') lines.push({ c: 'trolley', p, w: r.w, own: r.own });
@@ -869,8 +1000,9 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
   // shouldn't read as empty. When owner building density is very low relative to
   // fillable road mileage, seed deterministic lots beside those roads. They're real
   // content for the tile (cached in R2): every visitor sees the same fill.
-  // join the business nodes to the building they sit in (first one wins; a shop in a house
-  // footprint makes it a storefront)
+  // join the business nodes to the building they sit in (first one wins — but a market is the
+  // whole building, over the stalls, bars and diners mapped inside it; a shop in a house footprint
+  // makes it a storefront)
   if (poiNodes.length) {
     const boxes = buildings.map((b) => {
       let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
@@ -884,8 +1016,9 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         const ring: P2[] = [];
         for (let k = 0; k + 1 < b.r.length; k += 2) ring.push([b.r[k] / 10, b.r[k + 1] / 10]);
         if (!pointInRing(n.x, n.z, ring)) continue;
-        if (!b.u) b.u = n.use;
-        if (!b.n) b.n = n.name;
+        const hall = n.use === 'marketplace' && b.u !== 'marketplace';
+        if (!b.u || hall) b.u = n.use;
+        if (!b.n || hall) b.n = n.name;
         if (b.k === 'house') b.k = 'commercial';
         else if (b.k === 'large') b.gf = 1; // apartments over a shop: the street floor is a storefront
         break;

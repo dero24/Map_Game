@@ -24,7 +24,11 @@ const ROOF = Object.fromEntries(CAR_TYPES.map((t) => [t, carRecipe(t, 1).roof]))
 
 export const lifeParams = { density: 1, enabled: true };
 
-import { RANK, unpackJunctions, vkey } from './traffic';
+import { RANK, STOP_BACK, unpackJunctions, vkey } from './traffic';
+
+/** A street keeps no graph node where only a footway meets it within this far of a junction: the
+ *  widest setback (12 m) and the stop line behind it, plus room to brake from a main road's speed. */
+const FOOT_SPLIT = 12 + STOP_BACK + 16;
 
 // ---------------- worker init data ----------------
 // The slice-scoped parts of the sim world (beach, water, downtown, seaward) are static per region —
@@ -92,15 +96,43 @@ export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, do
       for (let i = 0; i + 1 < r.p.length; i += 2) p.push([r.p[i] / 10, r.p[i + 1] / 10]);
       return { r, p };
     });
-  // Split ways wherever they share a vertex with another way, so intersections become graph nodes.
-  const use = new Map<string, number>();
-  for (const w of ways) for (const [x, z] of w.p) use.set(key(x, z), (use.get(key(x, z)) ?? 0) + 1);
+  // Split ways wherever they share a vertex with another way, so intersections become graph nodes —
+  // except a street where only a footway meets it near a junction (a mapped crosswalk, a path at
+  // the corner): a car's approach must run unbroken past the junction's stop line, or it arrives
+  // on a 5 m stub already "in the box" and skips the lights, the stop sign and the queue beyond
+  // (Seattle maps a crossing on every arm of every junction — 70% of its junction arms were
+  // stubs, and its traffic drove through itself). The crossing still joins its two halves there.
+  const use = new Map<string, number>(), arms = new Map<string, number>();
+  for (const w of ways)
+    for (let i = 0; i < w.p.length; i++) {
+      const k = key(w.p[i][0], w.p[i][1]);
+      use.set(k, (use.get(k) ?? 0) + 1);
+      if ((RANK[w.r.c] ?? 0) >= 2) arms.set(k, (arms.get(k) ?? 0) + (i === 0 || i === w.p.length - 1 ? 1 : 2));
+    }
+  const drives = new Map<string, number>(); // drivable ways through each vertex
+  for (const w of ways) if ((RANK[w.r.c] ?? 0) >= 2) for (const [x, z] of w.p) drives.set(key(x, z), (drives.get(key(x, z)) ?? 0) + 1);
   const pieces: { r: (typeof ways)[number]['r']; p: [number, number][] }[] = [];
   for (const w of ways) {
+    const car = (RANK[w.r.c] ?? 0) >= 2;
+    // along this street, how far each vertex is from the nearest junction (≥ 3 drivable arms)
+    let near: Float32Array | null = null;
+    if (car) {
+      near = new Float32Array(w.p.length).fill(Infinity);
+      for (const dir of [1, -1]) {
+        let run = Infinity;
+        for (let n = 0; n < w.p.length; n++) {
+          const i = dir > 0 ? n : w.p.length - 1 - n;
+          if (n) run += Math.hypot(w.p[i][0] - w.p[i - dir][0], w.p[i][1] - w.p[i - dir][1]);
+          if ((arms.get(key(w.p[i][0], w.p[i][1])) ?? 0) >= 3) run = 0;
+          near[i] = Math.min(near[i], run);
+        }
+      }
+    }
     let cur: [number, number][] = [w.p[0]];
     for (let i = 1; i < w.p.length; i++) {
       cur.push(w.p[i]);
-      if (i < w.p.length - 1 && (use.get(key(w.p[i][0], w.p[i][1])) ?? 0) > 1) {
+      const k = key(w.p[i][0], w.p[i][1]);
+      if (i < w.p.length - 1 && (use.get(k) ?? 0) > 1 && (!car || (drives.get(k) ?? 0) > 1 || near![i] >= FOOT_SPLIT)) {
         pieces.push({ r: w.r, p: cur });
         cur = [w.p[i]];
       }
@@ -383,6 +415,9 @@ export class LifeClient {
   /** Moving traffic near the player this frame (x, z, velocity) — the critters give way to it. */
   readonly movers: { x: number; z: number; vx: number; vz: number }[] = [];
   private nMovers = 0;
+  /** The boats under way this frame (wakes.ts): slot, place, heading, speed from the last tick's move. */
+  readonly boats: { id: number; x: number; z: number; yaw: number; v: number; stern: number; beam: number }[] = [];
+  private nBoats = 0;
   /** The road graph changed (tiles streamed in or out): hand the worker the new graph. Its agents
    *  carry over by position (LifeSim.adopt), so traffic and walkers never reset. */
   reinit(init: LifeInit) {
@@ -409,6 +444,7 @@ export class LifeClient {
         this.V = views(this.buf);
         this.V.header.set(hdr.subarray(H.PLAYER_X, H.WIND + 1), H.PLAYER_X);
         this.V.header[H.CLOCK] = hdr[H.CLOCK];
+        this.V.header[H.PLAYER_YAW] = hdr[H.PLAYER_YAW];
         this.worker.postMessage({ kind: 'return', buf: old }, [old]);
       };
     }
@@ -441,6 +477,7 @@ export class LifeClient {
     const hdr = [Math.round(player.x * 100), Math.round(player.z * 100), Math.round(env.night * 1000), Math.round(env.hour * 100), Math.round(lifeParams.density * this.crowd * 100), Math.round(env.wind * 1000)];
     h[H.PLAYER_X] = hdr[0]; h[H.PLAYER_Z] = hdr[1]; h[H.NIGHT] = hdr[2]; h[H.HOUR] = hdr[3]; h[H.DENSITY] = hdr[4]; h[H.WIND] = hdr[5];
     h[H.CLOCK] = Math.round((env.clock ?? now / 1000) * 100) | 0;
+    h[H.PLAYER_YAW] = Math.round((((player.yaw % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI) * 1000);
     if (!this.sab && this.envFrame++ % 3 === 0) this.worker.postMessage({ kind: 'env', header: h.slice() });
 
     const tick = Atomics.load(h, H.TICK);
@@ -451,6 +488,7 @@ export class LifeClient {
     const st = this.stats;
     st.nearestCar = 1e9; st.gullsNear = 0; st.gullDist = 1e9; st.pedsNear = 0;
     this.nMovers = 0;
+    this.nBoats = 0;
     st.active = h[H.ACTIVE];
     st.simMs = h[H.SIM_US] / 1000;
     const heads = this.headPts.geometry.attributes.position as THREE.BufferAttribute;
@@ -544,6 +582,12 @@ export class LifeClient {
           g.mesh.setColorAt(li, this.tmpC.set(SHIRTS[variant % SHIRTS.length]));
         } else {
           const t = snap[o + S.ANIM];
+          // (under way or lying to a mooring: the speed is the last tick's own move)
+          const bv = Math.hypot(snap[o + S.X] - snap[o + S.PX], snap[o + S.Z] - snap[o + S.PZ]) * SIM_HZ;
+          if (bv > 0.5 && this.nBoats < CAPS.boats) {
+            const b = this.boats[this.nBoats] ?? (this.boats[this.nBoats] = { id: 0, x: 0, z: 0, yaw: 0, v: 0, stern: 3.4, beam: 2.6 });
+            b.id = i; b.x = x; b.z = z; b.yaw = yaw; b.v = bv; this.nBoats++;
+          }
           y = Math.sin(t * 1.3 + i) * 0.12;
           roll = Math.sin(t * 0.9 + i * 2) * 0.05;
           if (lights) heads.setXYZ(hk++, x, 2.3, z);
@@ -593,6 +637,7 @@ export class LifeClient {
     this.leads.geometry.setDrawRange(0, this.nDogs * 2);
     lp.needsUpdate = true;
     this.movers.length = this.nMovers;
+    this.boats.length = this.nBoats;
   }
   private tmpC = new THREE.Color();
   private zeroM = new THREE.Matrix4().makeScale(0, 0, 0);

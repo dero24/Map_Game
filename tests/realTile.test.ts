@@ -152,6 +152,28 @@ describe('osmToTile — buildings', () => {
     ), OPTS);
     expect(t.points.map((p) => p.c).sort()).toEqual(['bus', 'bus_shelter', 'hydrant', 'signal', 'subway']);
   });
+  it('and the small things, each where it is: crossings by their markings, lamps, bins, post boxes, racks, fountains, bollards, pay stations', () => {
+    const node = (id: number, x: number, tags: Record<string, string>): OsmElement => { const [lat, lon] = P.unproject(x, 420); return { type: 'node', id, lat, lon, tags }; };
+    const t = osmToTile(osm(
+      node(11, 100, { highway: 'crossing', crossing: 'marked' }),
+      node(12, 120, { highway: 'crossing', 'crossing:markings': 'lines' }),
+      node(13, 140, { highway: 'crossing', crossing: 'unmarked' }),
+      node(14, 160, { highway: 'crossing', crossing: 'traffic_signals', 'crossing:markings': 'no' }),
+      node(15, 180, { highway: 'crossing' }),
+      node(16, 200, { highway: 'street_lamp' }),
+      node(17, 220, { amenity: 'waste_basket' }),
+      node(18, 240, { amenity: 'post_box' }),
+      node(19, 260, { amenity: 'bicycle_parking', bicycle_parking: 'stands' }),
+      node(20, 280, { amenity: 'bicycle_parking', bicycle_parking: 'shed' }),
+      node(21, 300, { amenity: 'drinking_water' }),
+      node(22, 320, { barrier: 'bollard' }),
+      node(23, 340, { amenity: 'vending_machine', vending: 'parking_tickets' }),
+      node(24, 360, { amenity: 'vending_machine', vending: 'drinks' }),
+    ), OPTS);
+    const at = (x: number) => t.points.find((p) => Math.abs(p.x - x) < 1)?.c;
+    expect([100, 120, 140, 160, 180].map(at)).toEqual(['xing', 'xing_l', 'xing_u', 'xing_u', 'xing']);
+    expect([200, 220, 240, 260, 280, 300, 320, 340, 360].map(at)).toEqual(['lamp', 'bin', 'postbox', 'bikerack', undefined, 'drinking', 'bollard', 'meter', undefined]);
+  });
 
   it('a business node inside a building names it and says what it is used for', () => {
     const [lat, lon] = P.unproject(509, 509);
@@ -167,6 +189,18 @@ describe('osmToTile — buildings', () => {
     expect(at(500).k).toBe('commercial'); // a café in a house-sized footprint is a storefront
     expect(at(560).u).toBe('bakery');
     expect(at(620).u).toBeUndefined();
+  });
+
+  it('a market is its whole building, whatever else is mapped inside it first', () => {
+    const [la1, lo1] = P.unproject(505, 505), [la2, lo2] = P.unproject(512, 512);
+    const t = osmToTile(osm(
+      way(311, { building: 'yes' }, sq(500, 500, 30), true),
+      { type: 'node', id: 312, lat: la1, lon: lo1, tags: { name: 'Market Diner', amenity: 'restaurant' } },
+      { type: 'node', id: 313, lat: la2, lon: lo2, tags: { name: 'Sanitary Public Market', amenity: 'marketplace' } },
+    ), OPTS);
+    const b = t.buildings.find((q) => Math.abs(q.r[0] / 10 - 500) < 40)!;
+    expect(b.u).toBe('marketplace');
+    expect(b.n).toBe('Sanitary Public Market');
   });
 
   it('emits the linear structures a place is known by: seawalls, jetties, fences, power lines', () => {
@@ -193,7 +227,7 @@ describe('osmToTile — buildings', () => {
   it('the Overpass query asks for everything the transform reads', async () => {
     const { overpassQuery } = await import('../src/world/realTile');
     const q = overpassQuery({ s: 40.3, w: -74, n: 40.31, e: -73.99 });
-    for (const k of ['"building"', '"highway"', '"shop"', 'seawall', 'groyne', '"power"', '"fence|wall|retaining_wall"', 'out geom']) expect(q.includes(k.replace(/^"|"$/g, '')), k).toBe(true);
+    for (const k of ['"building"', '"highway"', '"shop"', 'seawall', 'groyne', '"power"', '"fence|wall|retaining_wall"', 'crossing|street_lamp', 'waste_basket|post_box|bicycle_parking', '"bollard"', 'out geom']) expect(q.includes(k.replace(/^"|"$/g, '')), k).toBe(true);
   });
 
   it('gives every building exactly one owner across neighbouring cells', () => {
@@ -510,3 +544,39 @@ describe('tall structures from the map', () => {
   });
 });
 
+
+describe('street surfaces', () => {
+  it('keeps a paved-stone or unpaved surface on the street, not asphalt', () => {
+    const tj = osmToTile(osm(
+      way(1, { highway: 'living_street', name: 'Pike Place', surface: 'paving_stones' }, [[100, 100], [400, 100]]),
+      way(2, { highway: 'residential', surface: 'asphalt' }, [[100, 200], [400, 200]]),
+      way(3, { highway: 'track', surface: 'gravel' }, [[100, 300], [400, 300]]),
+    ), OPTS);
+    const by = (n: number) => tj.roads.find((r) => Math.abs(r.p[1] / 10 - n) < 1)!;
+    expect(by(100).sf).toBe('paving_stones');
+    expect(by(200).sf).toBeUndefined();
+    expect(by(300).sf).toBe('gravel');
+  });
+});
+
+describe('mapped trees keep their species', () => {
+  it('reads the genus, the Latin name or the common one; the bigleaf maple and palo verde are their own', async () => {
+    const { treeKindOf } = await import('../src/world/realTile');
+    expect(treeKindOf({ genus: 'Acer' })).toBe('maple');
+    expect(treeKindOf({ species: 'Acer macrophyllum' })).toBe('maple:2');
+    expect(treeKindOf({ species: 'Quercus rubra' })).toBe('oak');
+    expect(treeKindOf({ taxon: 'Platanus x acerifolia' })).toBe('round');
+    expect(treeKindOf({ 'species:en': 'Kwanzan Flowering Cherry' })).toBe('cherry');
+    expect(treeKindOf({ 'species:en': 'Douglas-fir' })).toBe('spruce');
+    expect(treeKindOf({ genus: 'Parkinsonia' })).toBe('mesquite:2');
+    expect(treeKindOf({ genus: 'Washingtonia' })).toBe('fanpalm');
+    expect(treeKindOf({ leaf_type: 'needleleaved' })).toBe('conifer');
+    expect(treeKindOf({ leaf_type: 'broadleaved' })).toBeNull();
+    expect(treeKindOf({})).toBeNull();
+  });
+  it('a tree node carries its kind and its mapped height', () => {
+    const [lat, lon] = P.unproject(300, 300);
+    const t = osmToTile(osm({ type: 'node', id: 901, lat, lon, tags: { natural: 'tree', genus: 'Acer', height: '14 m' } }), OPTS);
+    expect([t.points[0].c, t.points[0].sp, t.points[0].h]).toEqual(['tree', 'maple', 14]);
+  });
+});

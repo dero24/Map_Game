@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { paintMaterial } from '../render/shared';
 import { GLSL_TERRAIN, type TerrainTextures } from './ground';
+import { SHORE_W } from './shore';
 
 export const waterParams = {
   uWaveScale: { value: 1 },
@@ -18,17 +19,52 @@ export const waterParams = {
   uOpenSea: { value: 0 },
 };
 
+let lakeMat: THREE.ShaderMaterial | null = null;
+/** The water shader for a lake's flat sheet (a streamed cell's lake, reservoir, pond or river
+ *  area, laid at its own level by synth.ts waterSheets): fresh water's colours, wind ripples, the
+ *  sky in it — no swell, no surf. Built with the sea at boot; null before, when the packer falls
+ *  back to the sheet's flat colour. */
+export function lakeMaterial(): THREE.ShaderMaterial | null { return lakeMat; }
+
+let shoreMat: THREE.ShaderMaterial | null = null;
+/** The foam along a streamed cell's coast (shore.ts shoreStrip): the lace at the waterline and the
+ *  wash just off it, from each vertex's distance to the shore; transparent elsewhere. */
+export function shoreMaterial(): THREE.ShaderMaterial | null { return shoreMat; }
+
 export function buildWater(tt: TerrainTextures) {
   const geo = new THREE.PlaneGeometry(60000, 60000, 1, 1);
   geo.rotateX(-Math.PI / 2);
-  const mat = paintMaterial({
+  const mat = waterMaterial(tt, {});
+  lakeMat = waterMaterial(tt, { LAKE: 1 });
+  shoreMat = waterMaterial(tt, { SHORE: SHORE_W.toFixed(1) });
+  shoreMat.depthWrite = false;
+  // (a few centimetres over the sea plane or the lake's ground is under one step of the depth
+  // buffer a few hundred metres out: pulled forward a few steps, like the far street ribbons)
+  for (const m of [lakeMat, shoreMat]) (m.polygonOffset = true), (m.polygonOffsetFactor = -1), (m.polygonOffsetUnits = -4);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = 'water';
+  mesh.renderOrder = 5;
+  mesh.frustumCulled = false;
+  return mesh;
+}
+
+function waterMaterial(tt: TerrainTextures, defines: Record<string, number | string>) {
+  return paintMaterial({
     uniforms: { ...tt, ...waterParams },
+    defines,
     transparent: true,
     vertex: /* glsl */ `
+      #ifdef SHORE
+      attribute float aShore;
+      varying float vShore;
+      #endif
       void main() {
         vec4 wp = worldMat() * vec4(position, 1.0);
         vWorldPos = wp.xyz + uWorldOffset;
         vNormalW = vec3(0.0, 1.0, 0.0);
+        #ifdef SHORE
+        vShore = aShore;
+        #endif
         gl_Position = projectionMatrix * viewMatrix * wp;
       }`,
     fragment: /* glsl */ `
@@ -40,11 +76,33 @@ export function buildWater(tt: TerrainTextures) {
         float swell = sin(dot(p, vec2(0.035, 0.012)) + t * 0.9) * ocean;
         return swell * 0.6 + fbm(p * 0.12 + vec2(t * 0.06, t * 0.03)) + 0.5 * vnoise(p * 0.5 - vec2(t * 0.2, 0.0));
       }
+      #ifdef SHORE
+      varying float vShore;
+      #endif
       void main() {
         vec2 xz = vWorldPos.xz;
+      #ifdef SHORE
+        {
+          // the coast's own foam: the lace where the water laps the land, breaking up and re-forming,
+          // a second fainter line of backwash, and small wash bands rolling in over the last metres
+          float s = vShore, t = uTime;
+          float lace = smoothstep(3.2, 0.0, s + sin(t * 0.7 + xz.y * 0.03 + xz.x * 0.02) * 1.6);
+          lace *= smoothstep(0.3, 0.62, vnoise(xz * 0.8 + t * 0.3));
+          float back = smoothstep(1.2, 0.0, abs(s - 4.5 - sin(t * 0.45 + xz.x * 0.05) * 1.5)) * smoothstep(0.45, 0.75, vnoise(xz * 0.6 - t * 0.2)) * 0.5;
+          float wash = smoothstep(0.86, 0.98, sin(s * 0.9 - t * 1.1 + fbm(xz * 0.05 + t * 0.05) * 4.0)) * smoothstep(SHORE, 3.0, s) * 0.35;
+          float foam = max(lace, max(back, wash)) * uSurf;
+          vec3 foamCol = vec3(0.95, 0.95, 0.92) * (uAmbSky * 0.9 + uKeyColor * 0.5 * max(uKeyDir.y, 0.0) + uLampColor * 0.05);
+          gl_FragColor = vec4(applyFog(foamCol, vWorldPos), clamp(foam, 0.0, 0.85) * smoothstep(SHORE, SHORE - 3.0, s));
+          return;
+        }
+      #endif
         vec4 T = terrainAt(xz);
         float bed = T.r, sdf = T.g, ocean = T.b;
+      #ifdef LAKE
+        bed = -8.0; sdf = -60.0; ocean = 0.0; // (a lake sheet: fresh, deep, calm, at its own level)
+      #else
         if (uOpenSea > 0.5) { bed = -8.0; sdf = -60.0; ocean = 1.0; }
+      #endif
         float depth = max(0.0, -bed);
         vec3 V = (cameraPosition + uWorldOffset) - vWorldPos;
         float dist = length(V);
@@ -100,12 +158,13 @@ export function buildWater(tt: TerrainTextures) {
         alpha = max(alpha, clamp(fres * 1.2, 0.0, 1.0));
         alpha = max(alpha, foam);
         alpha *= smoothstep(-0.05, 0.12, depth + 0.1);
+      #ifndef LAKE
+        // the open world's plane is the sea only as far as the streamed cells reach (their ground
+        // stands over it where there's land); past them the horizon ring's own terrain and water
+        // show — the plane drawn over that would sink every low far shore under a flat sea
+        if (uOpenSea > 0.5) alpha *= 1.0 - smoothstep(6800.0, 7800.0, dist);
+      #endif
         gl_FragColor = vec4(applyFog(col, vWorldPos), alpha);
       }`,
   });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.name = 'water';
-  mesh.renderOrder = 5;
-  mesh.frustumCulled = false;
-  return mesh;
 }

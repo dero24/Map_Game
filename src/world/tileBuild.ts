@@ -9,6 +9,8 @@ import { buildProps } from './props';
 import { planInterior } from './interiors';
 import { RecWalk, packGroup, packDeck, type BuiltTile } from './pack';
 import { canvasBitmap } from './canvas';
+import { crossingPaint } from './kerbside';
+import { buildStairs } from './stairs';
 
 export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec, idBase: number, lite = false): Promise<BuiltTile> {
   // Tunnels leave here: no builder paints, furnishes, parks along, faces a door to or grows grass
@@ -52,6 +54,9 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
   const structures = buildStructures(world2, w);
   const signs = buildSigns(world, bld.signs, w); // full json: intersection signs need context roads
   const props = buildProps(world2, w, structures.pierSegs, { mailboxes: bld.mailboxes, drives: bld.drives, doors: bld.doors, ctx: tj as unknown as WorldJson, box: spec.box });
+  const stairs = buildStairs(pj.roads, (x, z) => terrain.heightAt(x, z), w); // (every highway=steps a flight you climb)
+  const xing = crossingPaint(tj.roads, pj.points); // (the tile's own crossings, on any street round them)
+  const vp = pj.points.filter((p) => p.c === 'viewpoint').flatMap((p) => [p.x, p.z, p.d ?? -1]);
   const plans: BuiltTile['plans'] = [];
   bld.footprints.forEach((f, i) => {
     if (f.door === undefined || f.kind === 'lighthouse') return;
@@ -60,7 +65,7 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
   return {
     id: spec.id,
     lod: spec.lod,
-    objs: [...packGroup(bld.group), ...packGroup(structures.group), ...packGroup(signs.mesh), ...packGroup(props.group)],
+    objs: [...packGroup(bld.group), ...packGroup(structures.group), ...packGroup(signs.mesh), ...packGroup(props.group), ...packGroup(stairs)],
     ops: w.ops,
     fps: bld.footprints,
     doors: bld.doors,
@@ -79,5 +84,7 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
     lampPts: props.lampPts,
     kerb: props.kerb.length ? props.kerb : undefined,
     junc: props.junc.length ? props.junc : undefined,
+    ...(xing.length ? { xing } : {}),
+    ...(vp.length ? { vp } : {}),
   };
 }

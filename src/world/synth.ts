@@ -323,7 +323,14 @@ export function waterSheets(bodies: WaterBody[], box: Box): THREE.Group {
     geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
     geo.setAttribute('color', new THREE.Float32BufferAttribute(cc, 3));
     geo.setIndex(idx);
-    g.add(new THREE.Mesh(geo, propMaterial()));
+    // the water shader at the sheet's level (pack.ts rebuilds the tag as water.ts lakeMaterial):
+    // ripples and the sky in it, like the sea's — a flat colour only before the sea is built
+    const m = propMaterial();
+    m.userData.tag = 'lake';
+    const mesh = new THREE.Mesh(geo, m);
+    mesh.name = 'lake';
+    mesh.renderOrder = 5;
+    g.add(mesh);
   }
   return g;
 }

@@ -6,8 +6,9 @@ import * as THREE from 'three';
 import type { World, TerrainLayer, Road, Area, WorldJson } from './data';
 import { activeStyle } from './styles';
 import { lotLayout, type LotLayout } from './lots';
-import { MINOR, ROAD_RANK, roadPaint } from './roadPalette';
+import { MINOR, ROAD_RANK, roadPaint, streetSurface } from './roadPalette';
 import { COURT, courtFrame, diamondFrame, surfacePaint, type Sport } from './sports';
+import { makeCanvas } from './canvas';
 
 // a lot's stall layout, computed once per prepared outline
 const LOTS = new WeakMap<object, LotLayout | null>();
@@ -181,7 +182,34 @@ function coverImage(L: TerrainLayer) {
   return c;
 }
 
-class Painter {
+// Paving units as canvas patterns, 4 m a tile (the paint's fine window is ~7 px a metre: a brick is
+// a pixel or two, so what reads is each unit's own shade between lighter joints).
+const pavePatterns = new Map<string, CanvasPattern | null>();
+export function pavePattern(ctx: CanvasRenderingContext2D, kind: 'brick' | 'sett' | 'slab'): CanvasPattern | null {
+  if (pavePatterns.has(kind)) return pavePatterns.get(kind)!;
+  const N = 128, M = N / 4; // px a tile, px a metre
+  const c = makeCanvas(N, N), g = c.getContext('2d') as CanvasRenderingContext2D | null;
+  if (!g || typeof DOMMatrix === 'undefined') { pavePatterns.set(kind, null); return null; }
+  const joint = kind === 'brick' ? '#c2ab98' : kind === 'sett' ? '#a39d93' : '#b9b2a6';
+  g.fillStyle = joint;
+  g.fillRect(0, 0, N, N);
+  const tone = (i: number, j: number) => { const h = Math.sin(i * 12.9898 + j * 78.233) * 43758.5453; return h - Math.floor(h); };
+  const base = kind === 'brick' ? [139, 90, 71] : kind === 'sett' ? [111, 106, 99] : [140, 131, 120];
+  const [bw, bh, gap] = kind === 'brick' ? [0.45 * M, 0.22 * M, 1.4] : kind === 'sett' ? [0.3 * M, 0.3 * M, 1.8] : [0.9 * M, 0.6 * M, 1.2];
+  for (let j = 0; j * bh < N; j++)
+    for (let i = -1; i * bw < N; i++) {
+      const off = kind === 'sett' ? (j % 2) * bw * 0.35 : (j % 2) * bw * 0.5; // (running bond; setts in staggered rows)
+      const t = 0.82 + 0.3 * tone(i, j);
+      g.fillStyle = `rgb(${Math.round(base[0] * t)},${Math.round(base[1] * t)},${Math.round(base[2] * t)})`;
+      g.fillRect(i * bw + off + gap / 2, j * bh + gap / 2, bw - gap, bh - gap);
+    }
+  const pat = ctx.createPattern(c as CanvasImageSource, 'repeat');
+  pat?.setTransform(new DOMMatrix().scale(1 / M));
+  pavePatterns.set(kind, pat);
+  return pat;
+}
+
+export class Painter {
   areas: Prepared<Area>[];
   roads: Prepared<Road>[];
   foot: Prepared<number>[]; // (item: how much the footprint counts toward paving its block)
@@ -189,11 +217,12 @@ class Painter {
   // Streamed tiles (real-lite / synth — everything past the bake) paint too: their roads and
   // footprints join while mounted, so sidewalks, curbs, markings, walks and contact shadows
   // continue wherever the world does.
-  private tiles = new Map<string, { roads: Prepared<Road>[]; foot: Prepared<number>[]; front: Prepared<number>[]; areas: Prepared<Area>[]; box: [number, number, number, number] }>();
+  private tiles = new Map<string, { roads: Prepared<Road>[]; foot: Prepared<number>[]; front: Prepared<number>[]; areas: Prepared<Area>[]; box: [number, number, number, number]; xing: number[] }>();
   // `fronts` flags the storefronts (shops, apartments over shops): their ground is paved.
   /** `weights`: how much of each footprint counts toward paving its block — a house on its lot
    *  leaves yards (0.45), a city building fills its lot (1). */
-  setTile(id: string, roads: Road[], rings: [number, number][][], box: [number, number, number, number], fronts: boolean[] = [], areas: Area[] = [], weights: number[] = []) {
+  /** `xing`: the tile's mapped crossings (kerbside.ts crossingPaint — x, z, ux, uz, w, style). */
+  setTile(id: string, roads: Road[], rings: [number, number][][], box: [number, number, number, number], fronts: boolean[] = [], areas: Area[] = [], weights: number[] = [], xing: number[] = []) {
     const foot = rings.map((r, i) => prep(weights[i] ?? 1, [r.flatMap(([x, z]) => [x * 10, z * 10])]));
     this.tiles.set(id, {
       roads: roads.filter((r) => !r.br).map((r) => prep(r, [r.p])),
@@ -201,7 +230,15 @@ class Painter {
       front: foot.filter((_, i) => fronts[i]),
       areas: areas.filter((a) => AREA_FILL[a.c]).map((a) => prep(a, [...a.o, ...a.i])),
       box,
+      xing,
     });
+  }
+  private xingIn(x0: number, z0: number, x1: number, z1: number): number[] {
+    const out: number[] = [];
+    for (const t of this.tiles.values())
+      if (t.xing.length && t.box[2] > x0 - 50 && t.box[0] < x1 + 50 && t.box[3] > z0 - 50 && t.box[1] < z1 + 50)
+        for (let i = 0; i + 5 < t.xing.length; i += 6) if (t.xing[i] > x0 - 30 && t.xing[i] < x1 + 30 && t.xing[i + 1] > z0 - 30 && t.xing[i + 1] < z1 + 30) out.push(...t.xing.slice(i, i + 6));
+    return out;
   }
   private areasIn(x0: number, z0: number, x1: number, z1: number): Prepared<Area>[] {
     if (!this.tiles.size) return this.areas;
@@ -245,31 +282,51 @@ class Painter {
 
   paint(ctx: CanvasRenderingContext2D, x0: number, z0: number, x1: number, z1: number, pxPerM: number, level: 0 | 1 | 2) {
     const detail = level >= 1;
-    // Dense blocks are paved: where footprints cover over 45 % of a 40 m cell (a city block, not a
-    // suburb) — or a third of the 120 m around it, so the strips between a city's buildings and its
-    // kerbs pave too — the ground is concrete and flagstone, not lawn; the grass field
-    // (grassMask) then stays off it. Painted under the areas: a park in the city stays a park.
+    // Dense blocks are paved: where footprints cover a quarter of the ground within 60 m of a
+    // building (a city block, not a suburb), the ground round it is concrete and flagstone out to
+    // 8–14 m (the denser, the wider), so the gaps between a city's buildings and the strips to its
+    // kerbs pave, not lawn; the grass field (grassMask) then stays off it. Paved round the buildings
+    // themselves, each judged by the ground round its own middle: 40 m cells north-up laid lawn in
+    // stair-steps through any grid that isn't (Seattle's is turned 32°). Under the areas: a city
+    // park stays a park.
     if (detail) {
-      const C = 40, cov = new Map<string, number>();
+      const C = 40, R = 60, cells = new Map<string, [number, number, number][]>(), near: [Prepared<number>, number, number, number][] = [];
       for (const f of this.footIn(x0, z0, x1, z1)) {
         if (!overlaps(f, x0, z0, x1, z1, 100)) continue;
         const r = f.pts[0];
         let a = 0, cx = 0, cz = 0;
         for (let i = 0, j = r.length - 1; i < r.length; j = i++) (a += (r[j][0] - r[i][0]) * (r[j][1] + r[i][1])), (cx += r[i][0]), (cz += r[i][1]);
-        const k = `${Math.floor(cx / r.length / C)},${Math.floor(cz / r.length / C)}`;
+        cx /= r.length;
+        cz /= r.length;
+        const k = `${Math.floor(cx / C)},${Math.floor(cz / C)}`;
         // (a house's footprint counts for under half: a street of houses on their lots is lawns
         // and gardens — Queen Anne paved over read as a car park)
-        cov.set(k, (cov.get(k) ?? 0) + Math.abs(a / 2) * f.item);
+        if (!cells.has(k)) cells.set(k, []);
+        cells.get(k)!.push([cx, cz, Math.abs(a / 2) * f.item]);
+        if (overlaps(f, x0, z0, x1, z1, 16)) near.push([f, cx, cz, Math.abs(a / 2) * f.item]);
       }
-      ctx.fillStyle = '#b1ab9d';
-      for (let i = Math.floor(x0 / C) - 1; i <= Math.floor(x1 / C) + 1; i++)
-        for (let j = Math.floor(z0 / C) - 1; j <= Math.floor(z1 / C) + 1; j++) {
-          const own = cov.get(`${i},${j}`) ?? 0;
-          let n = 0;
-          for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) n += cov.get(`${i + di},${j + dj}`) ?? 0;
-          if (own < C * C * 0.45 && n < 9 * C * C * 0.33) continue;
-          ctx.fillRect(i * C - 6, j * C - 6, C + 12, C + 12);
-        }
+      // (one path a width band: a single stroke paints the union once, however many aprons overlap)
+      const bands: Prepared<number>[][] = [[], [], []];
+      for (const [f, cx, cz, own] of near) {
+        let n = 0;
+        for (let i = Math.floor((cx - R) / C); i <= Math.floor((cx + R) / C); i++)
+          for (let j = Math.floor((cz - R) / C); j <= Math.floor((cz + R) / C); j++)
+            for (const [bx, bz, ba] of cells.get(`${i},${j}`) ?? []) if ((bx - cx) ** 2 + (bz - cz) ** 2 < R * R) n += ba;
+        // (a quarter of the ground round it built on — or one big building, a store or a block of
+        // flats, on its own: its apron is paved whatever stands next to it)
+        const d = Math.max(n / (Math.PI * R * R * 0.25), own / 900);
+        if (d >= 1) bands[d < 1.3 ? 0 : d < 1.7 ? 1 : 2].push(f);
+      }
+      ctx.fillStyle = ctx.strokeStyle = '#b1ab9d';
+      ctx.lineJoin = 'round';
+      bands.forEach((fs, b) => {
+        if (!fs.length) return;
+        ctx.beginPath();
+        for (const f of fs) pathOf(ctx, f.pts[0], true);
+        ctx.lineWidth = 2 * (8 + b * 3);
+        ctx.fill('nonzero');
+        ctx.stroke();
+      });
     }
     // Areas
     const areas = this.areasIn(x0, z0, x1, z1);
@@ -393,12 +450,32 @@ class Painter {
       ctx.strokeStyle = base;
       ctx.lineWidth = Math.max(r.w, minW);
       ctx.stroke();
-      if (!minor && detail) {
+      const paved = streetSurface((r as { sf?: string }).sf);
+      if (!minor && detail && !paved) {
         ctx.globalAlpha = 0.3;
         ctx.strokeStyle = arid ? '#8a857c' : rank >= 5 ? '#6a6c70' : '#76787b';
         ctx.lineWidth = r.w * 0.72;
         ctx.stroke();
         ctx.globalAlpha = 1;
+      }
+      // brick, sett and flags: the street laid in its units — bricks in running bond, granite setts,
+      // big slabs — each a shade of its own between pale mortar joints (a texture of the surface at
+      // the paint's resolution, not a line drawing)
+      const sfv = (r as { sf?: string }).sf ?? '';
+      if (paved && detail && level === 2 && /brick|sett|cobble|paving_stones|stone|clay/.test(sfv)) {
+        const kind = /brick|clay/.test(sfv) ? 'brick' : /sett|cobble|stone/.test(sfv) ? 'sett' : 'slab';
+        const pat = pavePattern(ctx, kind);
+        if (pat) {
+          ctx.save();
+          ctx.globalAlpha = kind === 'slab' ? 0.4 : 0.55;
+          ctx.strokeStyle = pat;
+          ctx.lineWidth = Math.max(r.w, minW);
+          ctx.lineCap = 'butt';
+          ctx.beginPath();
+          pathOf(ctx, pts[0]);
+          ctx.stroke();
+          ctx.restore();
+        }
       }
     }
     if (!detail) return;
@@ -427,7 +504,7 @@ class Painter {
       }
       ctx.globalAlpha = 1;
     }
-    if (level === 2) this.crosswalks(ctx, list);
+    if (level === 2) this.crosswalks(ctx, list, this.xingIn(x0, z0, x1, z1));
     if (level === 2) this.wear(ctx, list.filter((r) => !this.bakedRoads.has(r)), arid); // streamed streets (the baked shore keeps its look)
     ctx.lineCap = 'round';
   }
@@ -493,7 +570,36 @@ class Painter {
     }
   }
 
-  private crosswalks(ctx: CanvasRenderingContext2D, list: Prepared<Road>[]) {
+  private crosswalks(ctx: CanvasRenderingContext2D, list: Prepared<Road>[], xing: number[]) {
+    // the mapped ones first, exactly where the map puts them: ladder bars along the traffic, or the
+    // two transverse lines of a `crossing:markings=lines` (an unmarked crossing paints nothing)
+    const bar = (cx: number, cz: number, ux: number, uz: number, len: number, wid: number) => {
+      const qx = -uz, qz = ux;
+      ctx.beginPath();
+      ctx.moveTo(cx - ux * len / 2 - qx * wid / 2, cz - uz * len / 2 - qz * wid / 2);
+      ctx.lineTo(cx + ux * len / 2 - qx * wid / 2, cz + uz * len / 2 - qz * wid / 2);
+      ctx.lineTo(cx + ux * len / 2 + qx * wid / 2, cz + uz * len / 2 + qz * wid / 2);
+      ctx.lineTo(cx - ux * len / 2 + qx * wid / 2, cz - uz * len / 2 + qz * wid / 2);
+      ctx.closePath();
+      ctx.fill();
+    };
+    ctx.fillStyle = '#eeebe2';
+    ctx.globalAlpha = 0.88;
+    for (let i = 0; i + 5 < xing.length; i += 6) {
+      const [x, z, ux, uz, w, style] = xing.slice(i, i + 6), qx = -uz, qz = ux;
+      if (style === 1) for (let s = -w / 2 + 0.55; s <= w / 2 - 0.5; s += 1.1) bar(x + qx * s, z + qz * s, ux, uz, 3, 0.54);
+      else if (style === 2) for (const d of [-1.5, 1.5]) bar(x + ux * d, z + uz * d, qx, qz, w - 0.4, 0.3);
+    }
+    ctx.globalAlpha = 1;
+    // (a mapped crossing on this arm: on its street — parallel, near its centre line — and within a
+    // crosswalk's reach along it; the perpendicular arms of the same junction keep their own)
+    const mapped = (x: number, z: number, ux: number, uz: number, w: number) => {
+      for (let i = 0; i + 5 < xing.length; i += 6) {
+        const mx = xing[i] - x, mz = xing[i + 1] - z;
+        if (Math.abs(mx * ux + mz * uz) < 7 && Math.abs(-mx * uz + mz * ux) < Math.max(3, w / 2 + 1) && Math.abs(xing[i + 2] * ux + xing[i + 3] * uz) > 0.7) return true;
+      }
+      return false;
+    };
     const at = new Map<string, { r: Road; p: P[]; i: number }[]>();
     for (const { item: r, pts } of list) {
       const rank = ROAD_RANK[r.c] ?? 1;
@@ -524,6 +630,7 @@ class Painter {
           if (L < d0 + 4) continue; // too short a stub to carry a crossing
           const ux = dx / L, uz = dz / L, qx = -uz, qz = ux;
           const cx = nx0 + ux * (d0 + 1.5), cz = nz0 + uz * (d0 + 1.5);
+          if (mapped(cx, cz, ux, uz, r.w)) continue; // (the map says what's painted on this arm)
           for (let sft = -r.w / 2 + 0.55; sft <= r.w / 2 - 0.5; sft += 1.1) {
             const bx = cx + qx * sft, bz = cz + qz * sft;
             ctx.beginPath();
@@ -548,7 +655,7 @@ export interface GroundPaint {
   detail: DetailGround;
   mid: DetailGround;
   addWalks: (walks: number[]) => void;
-  setTile: (id: string, roads: Road[], rings: [number, number][][], box: [number, number, number, number], fronts?: boolean[], areas?: Area[], weights?: number[]) => void;
+  setTile: (id: string, roads: Road[], rings: [number, number][][], box: [number, number, number, number], fronts?: boolean[], areas?: Area[], weights?: number[], xing?: number[]) => void;
   dropTile: (id: string) => void;
   /** Where the painted ground is open (unpainted land or a green wash) inside a square — the
    *  grass field grows only there, so it can never sit on a painted sidewalk, walk, lot or beach. */
@@ -677,7 +784,7 @@ export function paintGround(world: World, maxTex: number, walks: number[] = []):
   return {
     slice: makeTex(sc), backdrop: makeTex(bc), sliceCanvas: sc, detail, mid, grassMask,
     addWalks: (w: number[]) => painter.addWalks(w),
-    setTile: (id, roads, rings, box, fronts, areas, weights) => { painter.setTile(id, roads, rings, box, fronts, areas, weights); detail.touch(box); mid.touch(box); },
+    setTile: (id, roads, rings, box, fronts, areas, weights, xing) => { painter.setTile(id, roads, rings, box, fronts, areas, weights, xing); detail.touch(box); mid.touch(box); },
     dropTile: (id) => painter.dropTile(id),
   };
 }

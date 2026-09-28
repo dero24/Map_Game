@@ -14,6 +14,7 @@ import { propMaterial } from '../render/propMaterial';
 import { creatureMaterial } from '../render/creature';
 import { wireMaterial, haloMaterial } from './props';
 import { signMaterial } from './signs';
+import { lakeMaterial, shoreMaterial } from './water';
 
 type P2 = [number, number];
 
@@ -26,8 +27,10 @@ export type PMat =
   | { t: 'signs' }
   | { t: 'halo'; size: number; color: number }
   | { t: 'people'; seated: boolean }
-  | { t: 'prop'; o: { wind?: boolean; bob?: boolean; foliage?: boolean; decid?: boolean; paved?: boolean; signal?: boolean; emissive?: number; emissiveNight?: boolean; crown?: [number, number] } }
-  | { t: 'gnd' }; // region ground material (shared; set via setGndMaterial at boot)
+  | { t: 'prop'; o: { wind?: boolean; bob?: boolean; foliage?: boolean; decid?: boolean; paved?: boolean; signal?: boolean; emissive?: number; emissiveNight?: boolean; crown?: [number, number]; fallHue?: number; blossom?: boolean; weep?: boolean } }
+  | { t: 'gnd' } // region ground material (shared; set via setGndMaterial at boot)
+  | { t: 'lake' } // a lake's sheet: the water shader at its own level (water.ts lakeMaterial)
+  | { t: 'shore' }; // a coast's foam strip (shore.ts, water.ts shoreMaterial)
 
 export interface PObj {
   k: 'mesh' | 'inst' | 'pts' | 'lines';
@@ -75,6 +78,9 @@ export interface BuiltTile {
   terr?: ArrayBuffer; // the tile's terrain pack, for the main thread's patch registry
   dem?: { buf: ArrayBuffer; layout: LayerLayout }; // H2: Terrarium patch for virtual cells — registered under the cell key
   late?: 1; // built without data still in flight (flat for a late DEM, mapped priors for a late LiDAR read) — relief rebuild wanted
+  vec?: 1; // a stand-in built from the vector tiles (vectorTile.ts): real streets and buildings — the skyline steps aside
+  xing?: number[]; // the tile's mapped crossings for the ground paint (kerbside.ts crossingPaint): x, z, ux, uz, w, style
+  vp?: number[]; // its viewpoints (tourism=viewpoint): x, z, bearing (° — −1: the map doesn't say)
 }
 
 // ---------------- decks ----------------
@@ -176,6 +182,8 @@ export function matTag(m: THREE.Material): PMat {
       t: 'prop',
       o: {
         wind: !!d.WIND, bob: !!d.BOB, foliage: !!d.FOLIAGE, ...(d.DECID ? { decid: true } : {}), ...(d.PAVED ? { paved: true } : {}), ...(d.SIGNAL ? { signal: true } : {}),
+        // (a species' autumn, a cherry's blossom, a willow's sway: the tree shader's own defines)
+        ...(d.FALL_HUE ? { fallHue: +d.FALL_HUE } : {}), ...(d.BLOSSOM ? { blossom: true } : {}), ...(d.WEEP ? { weep: true } : {}),
         emissive: d.EMISSIVE ? (u.uEmissive.value as THREE.Color).getHex() : undefined,
         emissiveNight: u.uEmNight?.value === 1,
         ...(d.FOLIAGE && u.uCrown && u.uCrown.value.y > 0 ? { crown: [u.uCrown.value.x, u.uCrown.value.y] as [number, number] } : {}),
@@ -196,6 +204,8 @@ export function matFromTag(t: PMat, atlas?: THREE.Texture): THREE.Material {
     case 'signs': return signMaterial(atlas!);
     case 'halo': return haloMaterial(t.size, new THREE.Color(t.color));
     case 'gnd': return gndMat ?? propMaterial();
+    case 'lake': return lakeMaterial() ?? propMaterial(); // (before boot: the sheet's flat colour)
+    case 'shore': return shoreMaterial() ?? new THREE.MeshBasicMaterial({ visible: false });
     case 'people': return creatureMaterial({ LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1, ...(t.seated ? { SEATED: 1 } : {}) });
     case 'prop':
       return propMaterial({ ...t.o, emissive: t.o.emissive !== undefined ? new THREE.Color(t.o.emissive) : undefined });

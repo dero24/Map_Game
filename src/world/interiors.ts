@@ -154,13 +154,23 @@ export function planInterior(fpKey: string, fp: Footprint, door: Door, seed: num
   // long bar, café or restaurant is a customer room with back-of-house behind a wall, not a
   // ballroom: over 20 m, one or two cross walls (the shader paints three rooms a storey at most).
   const parts: Plan['parts'] = [];
-  const foodDrink = kind === 'commercial' && /^(bar|cafe|restaurant|unknown)$/.test(useOf(fp.name, fp.use));
-  if ((kind !== 'church' && kind !== 'commercial') || (foodDrink && L > 20)) {
-    const n = kind === 'commercial' ? (L > 34 ? 3 : 2) : L > 13 ? 3 : L > 7.5 ? 2 : 1;
+  const use0 = useOf(fp.name, fp.use);
+  const foodDrink = kind === 'commercial' && /^(bar|cafe|restaurant|unknown)$/.test(use0);
+  // A big floorplate is never one hall: an office, a civic building or an apartment block's
+  // ground floor is a lobby at the door with rooms off it every ~10 m (a store stays an open
+  // floor of shelving aisles; a bar or café a customer room with back-of-house behind it).
+  const bigFloor = L > 22 && L * W > 450;
+  const bays = Math.max(2, Math.min(7, Math.round(L / 10)));
+  const n = kind === 'church' ? 1
+    : kind === 'commercial' ? (foodDrink && L > 20 ? (L > 34 ? 3 : 2) : bigFloor && (use0 === 'office' || use0 === 'civic') ? bays : 1)
+      : bigFloor ? Math.max(3, bays) : L > 13 ? 3 : L > 7.5 ? 2 : 1;
+  if (n > 1) {
+    const clear = (s: number) => !flights.some((f) => s > f.u0 - 1.2 && s < f.u1 + 1.2) && Math.abs(s - ud) >= 1.3;
     for (let j = 1; j < n; j++) {
-      const s = -L / 2 + (j / n) * L + rng.range(-0.7, 0.7);
-      if (flights.some((f) => s > f.u0 - 1.2 && s < f.u1 + 1.2)) continue;
-      if (Math.abs(s - ud) < 1.3) continue;
+      const s0 = -L / 2 + (j / n) * L + rng.range(-0.7, 0.7);
+      // (a big floor's wall steps aside for the stairs or the door rather than leaving a hall)
+      const s = bigFloor ? [0, 1.8, -1.8, 3.6, -3.6].map((o) => s0 + o).find((q) => clear(q) && Math.abs(q) < L / 2 - 2.5 && !parts.some((p) => Math.abs(p.u - q) < 3)) : clear(s0) ? s0 : undefined;
+      if (s === undefined) continue;
       const segs: { lo: number; hi: number; gap: number }[] = [];
       for (const [lo, hi] of LP.spans(s)) if (hi - lo > 1.8) segs.push({ lo, hi, gap: rng.range(lo + 0.75, hi - 0.75) });
       if (segs.length) parts.push({ u: s, segs });
@@ -267,9 +277,11 @@ export class Interiors {
   readonly levelsU = { value: new THREE.Vector4() }; // floor0, floorH, door x, door z
   readonly dimsU = { value: new THREE.Vector2(6, 4) }; // half length, half width of the footprint frame
   readonly doorU = { value: new THREE.Vector4() }; // door y, half width, height, -
-  readonly cutsU = { value: new THREE.Vector4() }; // cut1, cut2, count, -
-  readonly roomAU = { value: Array.from({ length: 24 }, () => new THREE.Vector4(0.9, 0.88, 0.82, 0)) }; // wall rgb, style
-  readonly roomBU = { value: Array.from({ length: 24 }, () => new THREE.Vector4(0.5, 0.36, 0.24, 0)) }; // floor rgb, type
+  readonly cutsU = { value: new THREE.Vector4() }; // cuts 1–4 between a storey's rooms (along u)
+  readonly cuts2U = { value: new THREE.Vector4() }; // cuts 5–6, the room count, -
+  // (8 storeys × 7 rooms: a big floor is a lobby and rooms off it, each its own paint and floor)
+  readonly roomAU = { value: Array.from({ length: 56 }, () => new THREE.Vector4(0.9, 0.88, 0.82, 0)) }; // wall rgb, style
+  readonly roomBU = { value: Array.from({ length: 56 }, () => new THREE.Vector4(0.5, 0.36, 0.24, 0)) }; // floor rgb, type
   readonly fabU = { value: new THREE.Color() };
   private mat: THREE.ShaderMaterial;
   private npcMat = creatureMaterial({ LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1 });
@@ -686,18 +698,20 @@ export class Interiors {
         let role: string;
         const dist = Math.abs(r - doorSlab);
         if (fp.kind === 'church') role = 'church';
-        else if (fp.kind === 'commercial') role = k === 0 ? (r === doorSlab ? ground : dist === 1 && ground !== 'shop' && ground !== 'office' ? 'kitchen' : 'office') : rng.float() < 0.5 ? 'office' : 'living';
-        else if (fp.kind === 'large') role = k === 0 ? 'lobby' : ['living', 'bedroom', 'kitchen'][(r + k) % 3];
+        else if (fp.kind === 'commercial') role = k === 0 ? (r === doorSlab ? (ground === 'office' && nSlab > 2 ? 'lobby' : ground) : dist === 1 && ground !== 'shop' && ground !== 'office' ? 'kitchen' : 'office') : rng.float() < 0.5 ? 'office' : 'living';
+        // (an apartment block: the lobby at the door, flats off it and up the stairs)
+        else if (fp.kind === 'large') role = k === 0 && (r === doorSlab || nSlab < 3) ? 'lobby' : ['living', 'bedroom', 'kitchen'][(r + k) % 3];
         else if (P.levels === 1) role = nSlab === 1 ? 'great' : r === doorSlab ? 'living' : ['kitchen', 'bedroom', 'bath', 'bedroom'][Math.min(3, dist - 1)];
         else if (k === 0) role = nSlab === 1 ? 'great' : r === doorSlab ? 'living' : dist === 1 ? 'kitchen' : 'dining';
         else role = r === nSlab - 1 && nSlab > 1 ? 'bath' : 'bedroom';
         rooms.push({ u0, u1, role, level: k, slab: r });
       }
     // per-room wall paint + wallpaper style and floor finish (the shader looks them up by slab and storey)
-    this.cutsU.value.set(cuts[1] ?? 99, cuts[2] ?? 99, nSlab, 0);
+    this.cutsU.value.set(cuts[1] ?? 99, cuts[2] ?? 99, cuts[3] ?? 99, cuts[4] ?? 99);
+    this.cuts2U.value.set(cuts[5] ?? 99, cuts[6] ?? 99, nSlab, 0);
     const col = new THREE.Color();
     for (const R of rooms) {
-      const i = Math.min(7, R.level) * 3 + Math.min(2, R.slab);
+      const i = Math.min(7, R.level) * 7 + Math.min(6, R.slab);
       const paint = WALL_PAINT[Math.floor(rng.float() * WALL_PAINT.length)];
       const style = R.role === 'bath' || R.role === 'kitchen' ? 4 : R.role === 'church' || R.role === 'shop' || R.role === 'cafe' ? 5 : [0, 1, 1, 2, 3][Math.floor(rng.float() * 5)];
       col.set(paint);
@@ -902,6 +916,7 @@ export class Interiors {
       }
     };
 
+    let podsLeft = 12; // (a building's open-plan desks, all storeys together)
     for (const R of rooms) {
       yield; // one room's furniture done
       const y = fl(R.level);
@@ -1234,7 +1249,7 @@ export class Interiors {
           wallArt(R, y, 2);
           break;
         }
-        case 'office':
+        case 'office': {
           for (let t = 0; t < 3; t++)
             place(R, 1.4, 0.7, t % 2 ? sideA : -sideA, rng, (a, b, c, d, side) => {
               table(a, b, c, d, y, 0.75, wood);
@@ -1242,10 +1257,33 @@ export class Interiors {
               facing(D.officeChair([0x3a3b3e, 0x2f4a5a, 0x5a3a3a][t % 3]), (a + b) / 2, side > 0 ? c - 0.35 : d + 0.35, y, [0, side > 0 ? 1 : -1]);
               if (t < 2) npcSpots.push([(a + b) / 2, side > 0 ? c - 0.35 : d + 0.35, y, yawTo(0, side), 0.5]);
             });
+          // an open floor fills with pods of four desks (a big office is desks, not a dance floor) —
+          // plain boxes, a few hundred vertices a pod, and a dozen pods a building at most
+          const pods = Math.min(6, Math.floor(roomArea(R) / 28), podsLeft);
+          for (let t = 0; t < pods; t++)
+            placeFree(R, 2.9, 2.6, rng, (a, b, c, d) => {
+              podsLeft--;
+              const uc = (a + b) / 2, vc = (c + d) / 2;
+              for (const [du, dv] of [[-0.72, -0.4], [0.72, -0.4], [-0.72, 0.4], [0.72, 0.4]]) {
+                const out = dv > 0 ? 1 : -1, cv = vc + dv + out * 0.55, seat = [0x3a3b3e, 0x2f4a5a, 0x5a3a3a][(t + (du > 0 ? 1 : 0)) % 3];
+                box(uc + du - 0.7, uc + du + 0.7, vc + dv - 0.35, vc + dv + 0.35, y + 0.71, y + 0.74, 0xd8d2c4, IP.wood); // the desk top
+                box(uc + du - 0.68, uc + du - 0.64, vc + dv - 0.3, vc + dv + 0.3, y, y + 0.71, 0x8d9296); // its legs
+                box(uc + du + 0.64, uc + du + 0.68, vc + dv - 0.3, vc + dv + 0.3, y, y + 0.71, 0x8d9296);
+                box(uc + du - 0.26, uc + du + 0.26, vc + dv - out * 0.12 - 0.02, vc + dv - out * 0.12 + 0.02, y + 0.84, y + 1.14, 0x22252a, IP.glass); // the screen, facing its chair
+                box(uc + du - 0.03, uc + du + 0.03, vc + dv - out * 0.12 - 0.02, vc + dv - out * 0.12 + 0.02, y + 0.74, y + 0.84, 0x3a3b3e); // its stand
+                box(uc + du - 0.24, uc + du + 0.24, cv - 0.22, cv + 0.22, y + 0.44, y + 0.52, seat, IP.fabric); // the chair: seat, back, post
+                box(uc + du - 0.22, uc + du + 0.22, cv + out * 0.2 - 0.03, cv + out * 0.2 + 0.03, y + 0.52, y + 1.0, seat, IP.fabric);
+                box(uc + du - 0.03, uc + du + 0.03, cv - 0.03, cv + 0.03, y + 0.05, y + 0.44, 0x2a2b2e);
+              }
+              box(uc - 1.42, uc + 1.42, vc - 0.03, vc + 0.03, y + 0.74, y + 1.12, 0x9fb3a5, IP.fabric); // the low screen down the middle
+              if (t < 3) npcSpots.push([uc - 0.72, vc - 0.95, y, yawTo(0, 1), 0.5]);
+              claim(a - 0.6, b + 0.6, c - 0.9, d + 0.9, R.level);
+            });
           place(R, 0.9, 0.5, sideA, rng, (a, b, c, d) => box(a, b, c, d, y, y + 1.3, 0x8d9296), true);
           placeFree(R, 0.5, 0.5, rng, (a, b, c, d) => plant((a + b) / 2, (c + d) / 2, y, true));
           wallArt(R, y, 1);
           break;
+        }
         case 'church': {
           const dir = P.ud > 0 ? -1 : 1; // altar at the far end from the door
           const alt = dir > 0 ? R.u1 - 1.5 : R.u0 + 0.5;
@@ -1270,6 +1308,16 @@ export class Interiors {
           break;
         }
         case 'lobby':
+          // a big lobby: seating groups round low tables and planters in proportion to its floor
+          for (let t = 0; t < Math.min(4, Math.floor(roomArea(R) / 60)); t++)
+            placeFree(R, 3.2, 2.6, rng, (a, b, c, d) => {
+              const uc = (a + b) / 2, vc = (c + d) / 2;
+              table(uc - 0.5, uc + 0.5, vc - 0.3, vc + 0.3, y, 0.42, wood);
+              facing(D.armchair(0.8, 0.8, fab), uc - 1.05, vc, y, [1, 0]);
+              facing(D.armchair(0.8, 0.8, fab), uc + 1.05, vc, y, [-1, 0]);
+              plant(uc, vc - 1.0, y, true);
+              if (t < 2) npcSpots.push([uc - 1.0, vc, y, yawTo(1, 0), 0.45]);
+            });
           place(R, 2.1, 0.9, sideA, rng, (a, b, c, d, side) => sofa(a, b, c, d, side, y, fab));
           place(R, 1.8, 0.7, -sideA, rng, (a, b, c, d, side) => { box(a, b, c, d, y, y + 1.05, wood, IP.wood); box(a - 0.03, b + 0.03, c - 0.03, d + 0.03, y + 1.05, y + 1.09, 0x3a3530); npcSpots.push([(a + b) / 2, side > 0 ? c - 0.4 : d + 0.4, y, yawTo(0, side)]); });
           place(R, 1.4, 0.3, sideA, rng, (a, _b, c, d) => { for (let r = 0; r < 5; r++) for (let i = 0; i < 6; i++) box(a + i * 0.23 + 0.01, a + (i + 1) * 0.23 - 0.01, c, d, y + 0.8 + r * 0.22, y + 0.99 + r * 0.22, 0xb89468, IP.wood); }, true);
@@ -1412,7 +1460,7 @@ function ringDist(r: P2[], x: number, z: number) {
 function interiorMaterial(I: Interiors) {
   return paintMaterial({
     uniforms: {
-      uLights: I.lightsU, uFrame: I.frameU, uDims: I.dimsU, uLevels: I.levelsU, uDoor: I.doorU, uCuts: I.cutsU,
+      uLights: I.lightsU, uFrame: I.frameU, uDims: I.dimsU, uLevels: I.levelsU, uDoor: I.doorU, uCuts: I.cutsU, uCuts2: I.cuts2U,
       uRoomA: I.roomAU, uRoomB: I.roomBU, uFab: I.fabU, uWindowColor: { value: lin(0xffc27a) },
     },
     vertex: /* glsl */ `
@@ -1433,9 +1481,9 @@ function interiorMaterial(I: Interiors) {
       }`,
     fragment: /* glsl */ `
       uniform vec4 uLights[8];
-      uniform vec4 uFrame, uLevels, uDoor, uCuts;
+      uniform vec4 uFrame, uLevels, uDoor, uCuts, uCuts2;
       uniform vec2 uDims;
-      uniform vec4 uRoomA[24], uRoomB[24];
+      uniform vec4 uRoomA[56], uRoomB[56];
       uniform vec3 uWindowColor, uFab;
       varying vec3 vColor;
       varying vec4 vWall;
@@ -1471,9 +1519,15 @@ function interiorMaterial(I: Interiors) {
         float pu = dot(rel, ua), pv = dot(rel, va);
         // which room am I in? (faces sample a hand's width into the room they look at)
         float pus = pu + dot(N.xz, ua) * 0.12;
-        float slab = uCuts.z < 1.5 ? 0.0 : (pus < uCuts.x ? 0.0 : (uCuts.z < 2.5 || pus < uCuts.y ? 1.0 : 2.0));
+        float slab = 0.0, nr = uCuts2.z; // (the cuts are in order: the last one passed is the room)
+        if (nr > 1.5 && pus >= uCuts.x) slab = 1.0;
+        if (nr > 2.5 && pus >= uCuts.y) slab = 2.0;
+        if (nr > 3.5 && pus >= uCuts.z) slab = 3.0;
+        if (nr > 4.5 && pus >= uCuts.w) slab = 4.0;
+        if (nr > 5.5 && pus >= uCuts2.x) slab = 5.0;
+        if (nr > 6.5 && pus >= uCuts2.y) slab = 6.0;
         float lvl = clamp(floor((vWorldPos.y - f0 + 0.05) / fH), 0.0, 7.0);
-        int ri = int(lvl * 3.0 + slab);
+        int ri = int(lvl * 7.0 + slab);
         vec4 RA = uRoomA[ri], RB = uRoomB[ri];
         if (part < 0.5 || (part > 5.5 && part < 6.5)) {
           alb = RA.rgb;

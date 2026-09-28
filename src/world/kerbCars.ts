@@ -20,6 +20,8 @@ export class KerbCars {
   /** vehicles.ts: keys of cars the player drove off in */
   skip: (key: string) => boolean = () => false;
   private tiles = new Map<string, Float32Array>();
+  // the live ground under each far car, looked up once and kept until a tile mounts near it
+  private hy = new Map<string, { h: Float32Array; box: [number, number, number, number] }>();
   private full: THREE.InstancedMesh[] = [];
   private near: THREE.InstancedMesh[] = [];
   private far: THREE.InstancedMesh;
@@ -37,14 +39,24 @@ export class KerbCars {
    *  NEAR_R stand on their four wheels on a hill — pitched up the grade, rolled to the camber —
    *  instead of level on the one spot under their middle */
   ground: ((x: number, z: number, y: number) => number) | null = null;
+  /** the live ground height (main: Terrain.heightAt): the cars past NEAR_R stand on it too — a record's
+   *  y is the ground its tile was built on, and a stand-in's DEM, a graded street or a later
+   *  neighbour's patch can each have moved it (cars hung over downtown, or sank to the roof) */
+  height: ((x: number, z: number) => number) | null = null;
   private tq = new THREE.Quaternion();
   private xAxis = new THREE.Vector3(1, 0, 0);
   private zAxis = new THREE.Vector3(0, 0, 1);
-  private pose(x: number, y: number, z: number, yaw: number, tilt: boolean) {
+  private pose(x: number, y: number, z: number, yaw: number, tilt: boolean, hy?: Float32Array, k = 0) {
     this.q.setFromAxisAngle(this.up, yaw);
     this.p.set(x, y, z);
     const g = this.ground;
-    if (!g || !tilt) return;
+    if (!g || !tilt) {
+      if (this.height && hy) {
+        if (Number.isNaN(hy[k])) hy[k] = this.height(x, z);
+        this.p.y = hy[k] + 0.04;
+      }
+      return;
+    }
     // wheels at ±1.4 m along, ±0.8 m across (the kit sedan's axles and track)
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
     const yf = g(x + fx * 1.4, z + fz * 1.4, y), yb = g(x - fx * 1.4, z - fz * 1.4, y);
@@ -83,12 +95,19 @@ export class KerbCars {
     this.group.add(this.far);
   }
 
-  add(id: string, data: Float32Array | undefined) {
+  /** A tile's cars; `box` (x0, z0, x1, z1) is the ground it mounted — the far cars standing on or
+   *  near it look their ground up again (a real cell's graded ground replacing a stand-in's). */
+  add(id: string, data: Float32Array | undefined, box?: [number, number, number, number]) {
+    if (box) for (const e of this.hy.values()) if (e.box[0] < box[2] + 64 && e.box[2] > box[0] - 64 && e.box[1] < box[3] + 64 && e.box[3] > box[1] - 64) e.h.fill(NaN);
     if (!data || !data.length) return;
     this.tiles.set(id, data);
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (let i = 0; i + KERB_STRIDE <= data.length; i += KERB_STRIDE) (x0 = Math.min(x0, data[i])), (x1 = Math.max(x1, data[i])), (z0 = Math.min(z0, data[i + 2])), (z1 = Math.max(z1, data[i + 2]));
+    this.hy.set(id, { h: new Float32Array(data.length / KERB_STRIDE).fill(NaN), box: [x0, z0, x1, z1] });
     this.dirty = true;
   }
   remove(id: string) {
+    this.hy.delete(id);
     if (this.tiles.delete(id)) this.dirty = true;
   }
   refresh() { this.dirty = true; }
@@ -103,12 +122,15 @@ export class KerbCars {
     let farN = 0;
     const U2 = FULL_R * FULL_R, N2 = NEAR_R * NEAR_R, F2 = FAR_R * FAR_R;
     for (const [id, d] of this.tiles) {
+      const hy = this.hy.get(id)?.h;
       for (let i = 0, k = 0; i + KERB_STRIDE <= d.length; i += KERB_STRIDE, k++) {
         const dx = d[i] - x, dz = d[i + 2] - z, r2 = dx * dx + dz * dz;
         if (r2 > F2) continue;
         const t = d[i + 4];
+        // (only a car that will be drawn is posed: the far ring holds tens of thousands)
+        if (!(r2 < U2 && fullN[t] < FULL_CAP) && !(r2 < N2 && nearN[t] < NEAR_CAP) && farN >= FAR_CAP) continue;
         if (this.skip(`${id}:kerb:${k}`)) continue;
-        this.pose(d[i], d[i + 1], d[i + 2], d[i + 3], r2 < N2);
+        this.pose(d[i], d[i + 1], d[i + 2], d[i + 3], r2 < N2, hy, k);
         this.c.setRGB(d[i + 5], d[i + 6], d[i + 7]);
         if (r2 < U2 && fullN[t] < FULL_CAP) {
           this.s.set(d[i + 8], d[i + 9], d[i + 10]);

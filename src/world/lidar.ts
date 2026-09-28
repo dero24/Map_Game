@@ -116,6 +116,24 @@ function applyNew(tj: TileJson, box: Box, ck: string, rec: Rec) {
     return !covered(x / (b.r.length / 2) / 10, z / (b.r.length / 2) / 10);
   });
   const [clat, clon] = ck.split(',').map(Number);
+  // (the survey's "unmapped" list was found against whichever build of this cell asked first —
+  // the vector-tile stand-in, or a snapshot older than today's map: a block standing where this
+  // tile has a mapped footprint is that footprint, not a second building)
+  const mapped = new Map<string, number[][]>();
+  for (const b of tj.buildings) {
+    if (b.gen) continue;
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (let i = 0; i + 1 < b.r.length; i += 2) (x0 = Math.min(x0, b.r[i])), (x1 = Math.max(x1, b.r[i])), (z0 = Math.min(z0, b.r[i + 1])), (z1 = Math.max(z1, b.r[i + 1]));
+    for (let u = Math.floor(x0 / 320); u <= Math.floor(x1 / 320); u++) for (let v = Math.floor(z0 / 320); v <= Math.floor(z1 / 320); v++) (mapped.get(u + ',' + v) ?? mapped.set(u + ',' + v, []).get(u + ',' + v)!).push(b.r);
+  }
+  const inMapped = (x: number, z: number) => {
+    for (const r of mapped.get(Math.floor(x / 320) + ',' + Math.floor(z / 320)) ?? []) {
+      let ins = false;
+      for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) if (r[i + 1] > z !== r[j + 1] > z && x < ((r[j] - r[i]) * (z - r[i + 1])) / (r[j + 1] - r[i + 1]) + r[i]) ins = !ins;
+      if (ins) return true;
+    }
+    return false;
+  };
   for (const nb of rec.nb) {
     const r: number[] = [];
     let sx = 0, sz = 0;
@@ -125,6 +143,7 @@ function applyNew(tj: TileJson, box: Box, ck: string, rec: Rec) {
       (sx += x), (sz += z);
     }
     const n = nb.r.length / 2;
+    if (inMapped(Math.round((sx / n) * 10), Math.round((sz / n) * 10))) continue;
     let area = 0;
     for (let i = 0, j = n - 1; i < n; j = i++) area += (r[2 * j] / 10) * (r[2 * i + 1] / 10) - (r[2 * i] / 10) * (r[2 * j + 1] / 10);
     area = Math.abs(area) / 2;

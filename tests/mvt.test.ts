@@ -101,3 +101,27 @@ describe('waterSheets', () => {
     expect(area).toBeCloseTo(100 * 100 - 20 * 20, 0);
   });
 });
+
+describe('readMvt values', () => {
+  it('reads a negative int64 (a tunnel\'s layer -1) exactly', async () => {
+    const { encodeTile } = await import('./helpers/mvtEncode');
+    // the encoder writes non-negative ints as uint; hand-roll a layer with an int_value of -1
+    const varint = (v: bigint, o: number[]) => { let x = BigInt.asUintN(64, v); while (x >= 0x80n) { o.push(Number(x & 0x7fn) | 0x80); x >>= 7n; } o.push(Number(x)); };
+    const val: number[] = [0x20]; // field 4 (int_value), wire 0
+    varint(-1n, val);
+    const base = encodeTile([{ name: 'transportation', features: [{ type: 2, tags: { class: 'minor', layer: 7 }, geom: [[[0, 0], [10, 0]]] }] }]);
+    const ls = readMvt(base, () => true);
+    expect(ls[0].features[0].tags.layer).toBe(7);
+    // decode the hand-rolled value through a one-key layer
+    const layer: number[] = [];
+    const push = (f: number, w: number, bytes: number[]) => { layer.push((f << 3) | w); if (w === 2) layer.push(bytes.length); layer.push(...bytes); };
+    push(1, 2, [...new TextEncoder().encode('t')]);
+    const feat = [0x12, 2, 0, 0, 0x18, 2, 0x22, 6, 9, 0, 0, 10, 20, 0];
+    push(2, 2, feat);
+    push(3, 2, [...new TextEncoder().encode('layer')]);
+    push(4, 2, val);
+    const tile = [0x1a, layer.length, ...layer];
+    const got = readMvt(new Uint8Array(tile), () => true)[0].features[0].tags.layer;
+    expect(got).toBe(-1);
+  });
+});

@@ -110,8 +110,10 @@ export class Journal {
       list.innerHTML = this.pois
         .slice()
         .sort((p, q) => Number(this.found.has(q.name)) - Number(this.found.has(p.name)))
-        .map((p) => (this.found.has(p.name) ? `<li class="found">${p.name}</li>` : `<li class="unknown">? ? ?</li>`))
+        .map((p) => (this.found.has(p.name) ? `<li class="found">${esc(p.name)}</li>` : `<li class="unknown">? ? ?</li>`))
         .join('');
     }
   }
 }
+// (a place's name is the map's own text)
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);

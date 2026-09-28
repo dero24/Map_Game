@@ -9,6 +9,8 @@
 export interface MvtFeature { type: number; tags: Record<string, string | number | boolean>; rings: [number, number][][] }
 export interface MvtLayer { name: string; extent: number; features: MvtFeature[] }
 
+const UTF8 = new TextDecoder();
+
 class Pbf {
   pos = 0;
   constructor(readonly buf: Uint8Array) {}
@@ -16,6 +18,17 @@ class Pbf {
     let v = 0, s = 0, b = 0;
     do { b = this.buf[this.pos++]; v += (b & 0x7f) * 2 ** s; s += 7; } while (b & 0x80 && s < 70);
     return v;
+  }
+  /** A two's-complement int64 (a negative takes ten bytes): exact for |v| < 2^53. */
+  int64(): number {
+    const start = this.pos;
+    let n = 0;
+    while (this.buf[this.pos + n] & 0x80 && n < 10) n++;
+    if (n < 9) return this.varint(); // (non-negative, and exact)
+    let v = 0n, s = 0n;
+    for (let i = 0; i <= n; i++) { v |= BigInt(this.buf[start + i] & 0x7f) << s; s += 7n; }
+    this.pos = start + n + 1;
+    return Number(BigInt.asIntN(64, v));
   }
   skip(wire: number) {
     if (wire === 0) this.varint();
@@ -25,7 +38,7 @@ class Pbf {
     else throw new Error('mvt: wire type ' + wire);
   }
   bytes(): Uint8Array { const n = this.varint(), b = this.buf.subarray(this.pos, this.pos + n); this.pos += n; return b; }
-  string(): string { return new TextDecoder().decode(this.bytes()); }
+  string(): string { return UTF8.decode(this.bytes()); }
   packed(): number[] { const end = this.varint() + this.pos, out: number[] = []; while (this.pos < end) out.push(this.varint()); return out; }
 }
 
@@ -37,7 +50,8 @@ function value(b: Uint8Array): string | number | boolean {
     if (f === 1) v = p.string();
     else if (f === 2) { v = new DataView(b.buffer, b.byteOffset + p.pos, 4).getFloat32(0, true); p.pos += 4; }
     else if (f === 3) { v = new DataView(b.buffer, b.byteOffset + p.pos, 8).getFloat64(0, true); p.pos += 8; }
-    else if (f === 4 || f === 5) v = p.varint();
+    else if (f === 4) v = p.int64();
+    else if (f === 5) v = p.varint();
     else if (f === 6) { const z = p.varint(); v = z % 2 ? -(z + 1) / 2 : z / 2; }
     else if (f === 7) v = !!p.varint();
     else p.skip(w);
@@ -53,19 +67,21 @@ export function readMvt(data: ArrayBuffer | Uint8Array, want: (name: string) => 
     const t = tile.varint();
     if (t >> 3 !== 3 || (t & 7) !== 2) { tile.skip(t & 7); continue; }
     const lb = tile.bytes(), L = new Pbf(lb);
-    // a first pass for the name, keys, values and extent; features decoded once we know we want them
+    // a first pass collects the raw pieces; keys and values are decoded only for a layer we want
+    // (a tile's POI layer carries tens of thousands of names in every language)
     let name = '', extent = 4096;
-    const keys: string[] = [], vals: (string | number | boolean)[] = [], feats: Uint8Array[] = [];
+    const rawK: Uint8Array[] = [], rawV: Uint8Array[] = [], feats: Uint8Array[] = [];
     while (L.pos < lb.length) {
       const lt = L.varint(), f = lt >> 3;
       if (f === 1) name = L.string();
       else if (f === 2) feats.push(L.bytes());
-      else if (f === 3) keys.push(L.string());
-      else if (f === 4) vals.push(value(L.bytes()));
+      else if (f === 3) rawK.push(L.bytes());
+      else if (f === 4) rawV.push(L.bytes());
       else if (f === 5) extent = L.varint();
       else L.skip(lt & 7);
     }
     if (!want(name)) continue;
+    const keys = rawK.map((b) => UTF8.decode(b)), vals = rawV.map(value);
     const features: MvtFeature[] = [];
     for (const fb of feats) {
       const F = new Pbf(fb);

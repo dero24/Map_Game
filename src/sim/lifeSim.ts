@@ -4,7 +4,7 @@ import { makeRng, type Rng } from '../core/rng';
 import { CAPS, RANGES, S, type LifeInit } from './protocol';
 import { CTL, STOP_BACK, signalState } from './traffic';
 
-export interface LifeEnv { playerX: number; playerZ: number; night: number; hour: number; density: number; wind: number; clock: number }
+export interface LifeEnv { playerX: number; playerZ: number; night: number; hour: number; density: number; wind: number; clock: number; playerYaw?: number }
 
 const ST = { WALK: 0, PAUSE: 1, BEACH: 2, FLY: 3, STAND: 4, LAND: 5, TO_DOOR: 6, INSIDE: 7, FROM_DOOR: 8, DOWN: 9, CHAT: 10, CROSS: 11 } as const;
 /** The renderer's `amt` for a walker stopped to talk (creature.ts: the talking gesture). */
@@ -48,7 +48,8 @@ export class LifeSim {
   // junctions: the edge a car will take next (chosen on the approach so it can look across), the
   // node whose stop sign it has already stopped at, how long it has waited; who is in each box
   nxtE: Int32Array; private nxtD: Int8Array; private stopDone: Int32Array; private waitT: Float32Array; private holdT: Float32Array;
-  private claim: Int32Array; private claimT: Float32Array;
+  private claim: Int32Array; private claimT: Float32Array; private claimAt: Int32Array; 
+  private jroot: Int32Array; private jspan: Float32Array; // junction clusters (a jog: one box)
   // crossings: a walker at a corner plans its way over (kerb to kerb, the target in tx/ty/tz) and
   // which of the junction's arms that line crosses (bit k = the node's k-th edge); who is crossing
   // at each node, so the cars on those arms wait for them
@@ -87,7 +88,18 @@ export class LifeSim {
     this.lead = new Int32Array(n).fill(-1); this.leadGap = new Float32Array(n);
     this.nxtE = new Int32Array(n).fill(-1); this.nxtD = new Int8Array(n); this.stopDone = new Int32Array(n); this.waitT = new Float32Array(n); this.holdT = new Float32Array(n);
     const nNodes = w.nodeEdgeStart.length - 1;
-    this.claim = new Int32Array(Math.max(0, nNodes)).fill(-1); this.claimT = new Float32Array(Math.max(0, nNodes));
+    this.claim = new Int32Array(Math.max(0, nNodes)).fill(-1); this.claimT = new Float32Array(Math.max(0, nNodes)); this.claimAt = new Int32Array(Math.max(0, nNodes));
+    // junctions a short link apart (a jog, a divided road's two carriageways) are one box: a car
+    // in either holds both — as two separate stops they let two cars into the same few metres
+    this.jroot = new Int32Array(Math.max(0, nNodes)); this.jspan = new Float32Array(Math.max(0, nNodes));
+    for (let n = 0; n < nNodes; n++) this.jroot[n] = n;
+    if (w.nodeSet) {
+      const find = (a: number) => { while (this.jroot[a] !== a) a = this.jroot[a] = this.jroot[this.jroot[a]]; return a; };
+      const link = (e: number) => { const a = w.edgeNodes[e * 2], b = w.edgeNodes[e * 2 + 1]; return this.drivable(e) && w.nodeSet![a] > 0 && w.nodeSet![b] > 0 && w.edgeLen[e] < w.nodeSet![a] + w.nodeSet![b] + 2; };
+      for (let e = 0; e < w.edgeLen.length; e++) if (link(e)) { const ra = find(w.edgeNodes[e * 2]), rb = find(w.edgeNodes[e * 2 + 1]); if (ra !== rb) this.jroot[rb] = ra; }
+      for (let n = 0; n < nNodes; n++) this.jroot[n] = find(n);
+      for (let e = 0; e < w.edgeLen.length; e++) if (link(e)) { const r = this.jroot[w.edgeNodes[e * 2]]; this.jspan[r] = Math.max(this.jspan[r], w.edgeLen[e]); }
+    }
     this.xmask = new Int32Array(n); this.xHead = new Int32Array(Math.max(0, nNodes)).fill(-1); this.xNext = new Int32Array(n); this.xp = new Float32Array(n * 4);
     this.bHead = new Int32Array(w.edgeLen.length * 2); this.bNext = new Int32Array(n);
     this.y.fill(-1000);
@@ -161,7 +173,8 @@ export class LifeSim {
         if (!o.active[i]) continue;
         copy(i);
         const st = o.state[i];
-        if (!car && st === ST.BEACH) continue; // on the sand, no road needed
+        // on the sand, no road needed (walking, or stopped a while to look at the sea)
+        if (!car && (st === ST.BEACH || ((st === ST.PAUSE || st === ST.CHAT) && o.edge[i] < 0))) continue;
         if (!car && (st === ST.TO_DOOR || st === ST.FROM_DOOR || st === ST.INSIDE)) {
           const od = o.door[i], d = od >= 0 ? this.findDoor(o.w.doors[od * 6], o.w.doors[od * 6 + 2]) : -1;
           if (d >= 0) { this.door[i] = d; continue; }
@@ -289,9 +302,17 @@ export class LifeSim {
     this.bubble.ped = Math.max(140, Math.min(330, r(this.desired('ped'), 10)));
   }
   private recycle(range: readonly [number, number], far: number, n: number) {
-    const px = this.env.playerX, pz = this.env.playerZ;
+    const px = this.env.playerX, pz = this.env.playerZ, car = range[0] === RANGES.cars[0];
     for (let i = range[0], k = 0; i < range[1] && k < n; i++)
-      if (this.active[i] && this.state[i] !== ST.CHAT && Math.hypot(this.x[i] - px, this.z[i] - pz) > far) { this.active[i] = 0; this.y[i] = -1000; this.snapPrev(i); k++; }
+      if (this.active[i] && this.state[i] !== ST.CHAT && Math.hypot(this.x[i] - px, this.z[i] - pz) > far && !(car && this.inView(this.x[i], this.z[i]))) { this.active[i] = 0; this.y[i] = -1000; this.snapPrev(i); k++; }
+  }
+  /** In front of the walker and near enough to see a car appear or vanish there (a street's
+   *  length): within ~65° of where they face, 260 m. */
+  private inView(x: number, z: number) {
+    const yaw = this.env.playerYaw;
+    if (yaw === undefined) return false;
+    const dx = x - this.env.playerX, dz = z - this.env.playerZ, d = Math.hypot(dx, dz);
+    return d < 260 && d > 1 && (dx * -Math.sin(yaw) + dz * -Math.cos(yaw)) / d > 0.42;
   }
 
   // At the end of an edge, choose the next one leaving `node`.
@@ -394,6 +415,16 @@ export class LifeSim {
     for (let j = RANGES.cars[0]; j < RANGES.cars[1]; j++) if (j !== i && this.active[j] && Math.abs(this.x[j] - this.x[i]) < r && Math.abs(this.z[j] - this.z[i]) < r && Math.hypot(this.x[j] - this.x[i], this.z[j] - this.z[i]) < r) return true;
     return false;
   }
+  /** A car in our lane behind us that couldn't stop short of us if we stopped now (a car spawned
+   *  ten metres in front of one doing 12 m/s was rear-ended the moment the queue ahead held it). */
+  private tailgated(i: number) {
+    for (let j = RANGES.cars[0]; j < RANGES.cars[1]; j++) {
+      if (j === i || !this.active[j] || this.edge[j] !== this.edge[i] || this.dir[j] !== this.dir[i] || this.laneOf(j, this.edge[j]) !== this.laneOf(i, this.edge[i])) continue;
+      const behind = (this.s[i] - this.s[j]) * this.dir[i];
+      if (behind > 0 && behind < 7.5 + (this.speed[j] * this.speed[j]) / 14 + 4) return true;
+    }
+    return false;
+  }
   private spawnCar(i: number, far: boolean | 'init' = false) {
     // Never materialize on top of the walker: they need a braking distance in front of them.
     for (let t = 0; t < 6; t++) {
@@ -410,7 +441,7 @@ export class LifeSim {
       this.updateCarPose(i, 1);
       // and never on top of another car (two cars at the same spot never see each other as
       // "ahead" and drive through the town fused together, four wheels doubled)
-      if (Math.hypot(this.x[i] - this.env.playerX, this.z[i] - this.env.playerZ) > 9 && !this.carNear(i, 9)) break;
+      if (Math.hypot(this.x[i] - this.env.playerX, this.z[i] - this.env.playerZ) > 9 && !this.carNear(i, 9) && !this.tailgated(i) && !(far === true && this.inView(this.x[i], this.z[i]))) break;
       if (t === 5) { this.active[i] = 0; return; }
     }
     this.speed[i] = 6;
@@ -548,8 +579,9 @@ export class LifeSim {
       // fill in quickly when the crowd slider jumps, a few per manage tick
       for (let i = range[0], k = 0; i < range[1] && k < 8; i++) if (!this.active[i]) { spawn(i); if (this.active[i]) k++; }
     } else if (act > want) {
+      const car = range[0] === RANGES.cars[0];
       for (let i = range[1] - 1; i >= range[0]; i--)
-        if (this.active[i] && this.state[i] !== ST.CHAT && Math.hypot(this.x[i] - px, this.z[i] - pz) > farDist) { this.active[i] = 0; this.y[i] = -1000; this.snapPrev(i); break; }
+        if (this.active[i] && this.state[i] !== ST.CHAT && Math.hypot(this.x[i] - px, this.z[i] - pz) > farDist && !(car && this.inView(this.x[i], this.z[i]))) { this.active[i] = 0; this.y[i] = -1000; this.snapPrev(i); break; }
     }
   }
 
@@ -632,20 +664,68 @@ export class LifeSim {
           if (dj > sb + 1) continue; // (not in the box)
           const rx = this.x[j] - nx, rz = this.z[j] - nz;
           const along = rx * ax + rz * az, lat = rx * -az + rz * ax - lane;
-          if (Math.abs(lat) > 2.2 || along < -sb - 1) continue;
-          best = Math.min(best, Math.max(0, dN + along));
+          // (only what is ahead of us: the car queued behind us in our own lane is in the box's
+          // reach too — counted as "right in front", every car at the line waited on its follower
+          // and a signalled junction locked solid)
+          if (Math.abs(lat) > 2.2 || along < -sb - 1 || dN + along < 0.5) continue;
+          best = Math.min(best, dN + along);
         }
     }
     return best;
   }
   /** Another car is in (or just entering) this junction's box. */
   private boxBusy(node: number, i: number, clock: number) {
-    const c = this.claim[node];
+    const r = this.jroot[node], c = this.claim[r];
     if (c < 0 || c === i) return false;
-    const age = clock - this.claimT[node];
+    const age = clock - this.claimT[r], at = this.claimAt[r];
     const xz = this.w.nodeXZ!;
-    const out = Math.hypot(this.x[c] - xz[node * 2], this.z[c] - xz[node * 2 + 1]) > (this.w.nodeSet![node] + STOP_BACK + 1.5);
-    if (!this.active[c] || age > 5 || age < 0 || (out && age > 0.8)) { this.claim[node] = -1; return false; }
+    const out = Math.hypot(this.x[c] - xz[at * 2], this.z[c] - xz[at * 2 + 1]) > (this.w.nodeSet![at] + STOP_BACK + 1.5 + this.jspan[r]);
+    if (!this.active[c] || age > 5 || age < 0 || (out && age > 0.8)) { this.claim[r] = -1; return false; }
+    return true;
+  }
+  /** At an unmarked corner, first come first served: nobody on another arm gets to the box before
+   *  us (a dead heat goes to the one on our right), and nobody is in it coming across. */
+  private firstCome(i: number, e: number, end: number, node: number, dStop: number) {
+    const W = this.w, H = this.bHead, N = this.bNext, sb = W.nodeSet ? W.nodeSet[node] : 0;
+    this.sample(e, end ? W.edgeLen[e] : 0, this.tmp);
+    const d = end ? 1 : -1, ax = this.tmp[3] * d, az = this.tmp[4] * d; // our heading into the node
+    const ti = Math.max(0, dStop) / Math.max(1.5, this.speed[i]);
+    for (let k = W.nodeEdgeStart[node]; k < W.nodeEdgeStart[node + 1]; k++) {
+      const e2 = W.nodeEdges[k];
+      if (e2 === e || !this.drivable(e2)) continue;
+      const end2 = W.edgeNodes[e2 * 2] === node ? 0 : 1, L2 = W.edgeLen[e2];
+      if (W.edgeNodes[e2 * 2 + end2] !== node) continue;
+      for (let j = H[e2 * 2 + end2]; j >= 0; j = N[j]) { // cars on e2 heading into the node
+        if (j === i) continue;
+        const dj = end2 ? L2 - this.s[j] : this.s[j], dsj = dj - sb - STOP_BACK;
+        if (dsj < -0.5) { if (dj > 0.5) return false; continue; } // in the box, coming across
+        if (this.speed[j] < 0.5 && dsj > 3) continue; // waiting further back: a queue, not a rival
+        const tj = dsj / Math.max(1.5, this.speed[j]);
+        if (tj < ti - 0.4) return false;
+        if (tj <= ti + 0.4) {
+          // a dead heat: whoever has the other on their right gives way
+          this.sample(e2, end2 ? L2 : 0, this.tmp);
+          const hx = this.tmp[3] * (end2 ? 1 : -1), hz = this.tmp[4] * (end2 ? 1 : -1);
+          if (-hx * -az + -hz * ax > 0.5) return false; // it comes from our right
+        }
+      }
+    }
+    return true;
+  }
+  /** Nothing about to arrive in this junction's box: every car heading in is stopped, or more
+   *  than 2.5 s (and a couple of metres) out. */
+  private lull(i: number, node: number) {
+    const W = this.w, H = this.bHead, N = this.bNext, sb = W.nodeSet ? W.nodeSet[node] : 0;
+    for (let k = W.nodeEdgeStart[node]; k < W.nodeEdgeStart[node + 1]; k++) {
+      const e2 = W.nodeEdges[k];
+      if (!this.drivable(e2)) continue;
+      const end2 = W.edgeNodes[e2 * 2] === node ? 0 : 1, L2 = W.edgeLen[e2];
+      for (let j = H[e2 * 2 + end2]; j >= 0; j = N[j]) { // cars on e2 heading toward this end
+        if (j === i || this.speed[j] < 0.5) continue;
+        const dj = end2 ? L2 - this.s[j] : this.s[j];
+        if (dj < sb + 2 + this.speed[j] * 2.5) return false;
+      }
+    }
     return true;
   }
   /** After its stop (or on its yield), may this car pull out? The box must be clear, and at a
@@ -775,6 +855,10 @@ export class LifeSim {
         } else if (ctl === CTL.YIELD) {
           if (!this.mayGo(i, node, ctl, clock)) hold = true;
           else target = Math.min(target, Math.sqrt(30 + 6 * Math.max(0, dStop)));
+        } else if (ctl === CTL.OPEN) {
+          // an unmarked corner: slow, look, and go in turn — no stop unless someone's there first
+          if (!this.mayGo(i, node, ctl, clock) || !this.firstCome(i, e, end, node, dStop)) hold = true;
+          else target = Math.min(target, Math.sqrt(22 + 6 * Math.max(0, dStop)));
         } else if (this.boxBusy(node, i, clock)) hold = true; // the main road still lets a car already in the box clear it
         // anyone crossing the street we're on, or the one we're turning into: wait at the line for
         // them to reach the far kerb (looked for from a comfortable braking distance out)
@@ -786,13 +870,15 @@ export class LifeSim {
         if (!hold && nextGap < sb + 9) hold = true;
         // a knot in a weird graph (cars waiting on each other's right of way) eventually just goes
         if (hold && this.speed[i] < 0.3) this.holdT[i] += dt;
-        if (hold && !hard && this.holdT[i] > 25) hold = false;
+        // (…but only into a lull: at a stop sign onto a busy road it pulled out into the next car)
+        if (hold && !hard && this.holdT[i] > 25 && this.lull(i, node)) hold = false;
         if (hold) target = Math.min(target, Math.sqrt(2 * 6 * Math.max(0, dStop - 0.4)));
         else {
           // over the line into the box: claim it (at a signal only a left turn does — the cross
           // traffic is held by the lights)
           const turnL = (ctl === CTL.SIG_A || ctl === CTL.SIG_B) && this.nxtE[i] >= 0 && this.leftTurn(i, e, d0, node);
-          if ((turnL || (ctl !== CTL.SIG_A && ctl !== CTL.SIG_B)) && dStop < 1.5 && this.claim[node] !== i) { this.claim[node] = i; this.claimT[node] = clock; }
+          const jr = this.jroot[node];
+          if ((turnL || (ctl !== CTL.SIG_A && ctl !== CTL.SIG_B)) && dStop < 1.5 && this.claim[jr] !== i) { this.claim[jr] = i; this.claimT[jr] = clock; this.claimAt[jr] = node; }
           if (this.speed[i] > 1) this.holdT[i] = 0;
         }
       }

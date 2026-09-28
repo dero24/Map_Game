@@ -8,7 +8,7 @@ what we do with it today, and how the whole pipeline scales from one town to the
 Legend for status: ✅ placed from real data today · 🟡 fetched but drawn generically (or only
 partly used) · ❌ not yet fetched · 🧪 procedural stand-in (no real position yet).
 
-Last reviewed 2026-09-28 (t). Licences are summarised, not legal advice — check each source's terms
+Last reviewed 2026-09-28 (u). Licences are summarised, not legal advice — check each source's terms
 before shipping a new one, and keep attribution in the HUD/credits (ODbL requires the
 `© OpenStreetMap contributors` credit to stay visible).
 
@@ -19,7 +19,7 @@ before shipping a new one, and keep attribution in the HUD/credits (ODbL require
 | # | Source | What it gives us | Licence | Resolution / freshness | In use? |
 |---|---|---|---|---|---|
 | 1 | **OpenStreetMap** (Overpass today; planet extracts next) | Every street, path, building outline, land use, park, pitch, parking lot, tree, bench, hydrant, signal, shop… with names and rich tags | ODbL 1.0 (attribution + share-alike on the derived database) | Survey-grade in cities; minutes fresh | ✅ the backbone (`src/world/realTile.ts`, `overpassQuery`) |
-| 1a | **OpenFreeMap** (the OpenMapTiles planet as z0–14 vector tiles, CDN, no key) | OSM already processed: the coastline closed into ocean polygons, water, land use and cover, parks, buildings with heights, streets with class/name/bridge/tunnel, POIs | ODbL data; © OpenMapTiles; free service | Weekly planet builds; a tile in ~0.2 s | ✅ water for every stand-in cell and every real cell's sea (`src/world/mvt.ts`, `tile.worker.ts mvtWater`) — and the natural fallback feeder for whole cells when Overpass is slow or down |
+| 1a | **OpenFreeMap** (the OpenMapTiles planet as z0–14 vector tiles, CDN, no key) | OSM already processed: the coastline closed into ocean polygons, water, land use and cover, parks, buildings with heights, streets with class/name/bridge/tunnel, POIs | ODbL data; © OpenMapTiles; free service | Weekly planet builds; a tile in ~0.2 s | ✅ water for every stand-in cell and every real cell's sea (`src/world/mvt.ts`, `tile.worker.ts mvtWater`), and the **vector twin**: a whole cell translated back to OSM tags (`src/world/vectorTile.ts`) when Overpass is slow or down — streets, buildings with heights, land use, water, named shops, bins, post boxes, racks, bollards; not street surfaces, parking or crossing tags, trees |
 | 2 | **USGS 3DEP LiDAR** (EPT point clouds on AWS `usgs-lidar-public`) | Measured building heights and roof shapes, tree positions and canopy heights, ground truth under trees | Public domain | ~8+ points/m², most of the US; years vary by county | ✅ heights/trees (`src/world/lidar.ts`, `scripts/lidar-index.mjs`) |
 | 3 | **USGS 3DEP DEM** (1 m and 1/3″ bare earth) | The ground itself: hills, bluffs, river banks | Public domain | 1 m where LiDAR flown, 10 m everywhere | 🟡 via AWS Terrain Tiles (Terrarium PNG, z≤14 ≈ 7–10 m, mixes SRTM/NED/3DEP) — **use z11+ in cities; z9–10 are surface models that include buildings** |
 | 4 | **Overture Maps** (GeoParquet, monthly) | Buildings (OSM + Microsoft ML + Esri community), Places (~60 M POIs from Meta/Microsoft/etc.), transportation, land use/cover, water, addresses, divisions | Buildings/transport/base: ODbL; Places: CDLA-Permissive-2.0; others vary | Monthly releases, global | ❌ — the best way to fill footprints and shops OSM lacks, and the natural source for the planet-scale pipeline (§4) |
@@ -42,6 +42,8 @@ before shipping a new one, and keep attribution in the HUD/credits (ODbL require
 | 21 | **Wikidata / Wikimedia Commons** | Landmark facts (heights, dates, architects), photos for reference | CC0 / per image | Live | ❌ |
 | 22 | **Open-Meteo** / **NWS api.weather.gov** | Today's real weather at the place | CC BY 4.0 (free API is non-commercial) / public domain | Live | ❌ (weather is simulated) |
 | 23 | **Photon** (komoot, OSM geocoder) | Search: "Space Needle" → coordinates | ODbL data | Live | ✅ (`src/ui/geo.ts`) |
+| 24 | **ESA Ocean Colour CCI** (Forel-Ule index climatology) | The colour of the water on every coast: the scale from indigo ocean to green sounds to brown estuaries | CC BY 4.0 | 4 km monthly composites | 🟡 read by hand into coarse per-climate/per-subregion palettes (`styles.ts WaterLook`: Puget Sound green-steel, the Keys' turquoise, the Gulf's olive) — next: a baked byte grid per coast |
+| 25 | **NOAA CUDEM** (Continuously Updated DEM, topobathy) | Land *and* sea floor at 1/9″ (~3 m) along the coasts: seawalls, beaches, harbour depths | Public domain | Most of the US coast | ❌ — the fix for DEM smears at the waterline and for real shallows under the water shader |
 
 **Not open, so not used:** Google/Apple/Bing imagery and 3D tiles, SafeGraph, Strava Metro,
 Zillow's current data, Esri basemaps. (Google Open Buildings doesn't cover the US.)
@@ -58,9 +60,9 @@ what fills the gap when the map says nothing — always deterministic (seeded by
 | Feature | OSM tags (where it is) | Other sources | Game today | Next |
 |---|---|---|---|---|
 | Streets, lanes, widths | `highway=*`, `lanes`, `width`, `oneway`, `turn:lanes` | TIGER names; HPMS lanes | ✅ painted near, ribbons far; car graph | turn arrows from `turn:lanes` |
-| Street surface | `surface=asphalt/concrete/paving_stones/sett/brick/cobblestone/gravel/unpaved` | Mapillary photos | ❌ all asphalt | brick & sett streets (Pike Place, Boston, Philly) — paint pattern per surface |
+| Street surface | `surface=asphalt/concrete/paving_stones/sett/brick/cobblestone/gravel/unpaved` | Mapillary photos | ✅ each surface its colour; brick and sett courses painted across the street (`roadPalette.ts streetSurface`) | the vector twin only knows paved/unpaved |
 | Sidewalks | `sidewalk=both/left/right/no/separate`, `footway=sidewalk` ways | city sidewalk inventories | 🟡 mapped sidewalks drawn; unmapped inferred from road class | honour `sidewalk=no` (rural roads, many suburbs) |
-| Crosswalks | `highway=crossing` nodes + `crossing=marked/zebra/uncontrolled/traffic_signals`, `crossing:markings=*` | Mapillary detections | 🧪 painted at every junction arm | paint exactly the mapped ones, zebra vs two-line |
+| Crosswalks | `highway=crossing` nodes + `crossing=marked/zebra/uncontrolled/traffic_signals`, `crossing:markings=*` | Mapillary detections | ✅ mapped ones painted where they are, ladder or two lines by their markings, none where unmarked (`kerbside.ts crossingPaint`); the junction's inferred crosswalk steps aside; 🧪 inferred at unmapped junction arms | curb ramps |
 | Kerbs, ramps | `barrier=kerb`, `kerb=lowered/flush/raised`, `tactile_paving` | — | 🧪 painted kerb line | curb ramps at crossings |
 | Traffic signals, stop & yield | `highway=traffic_signals/stop/give_way`, `stop=all` | Mapillary signs | ✅ junction control (`src/sim/traffic.ts`) | — |
 | Traffic calming | `traffic_calming=bump/hump/table/chicane/island` | — | ❌ | cars slow; speed-table paint |
@@ -68,13 +70,13 @@ what fills the gap when the map says nothing — always deterministic (seeded by
 | Bus stops & shelters | `highway=bus_stop` (+ `shelter`, `bench`), `public_transport=platform` | **GTFS stops** | ✅ poles/shelters | buses that stop there on the GTFS timetable |
 | Tram / rail | `railway=tram/light_rail/rail/subway`, `railway=level_crossing`, `railway=subway_entrance` | GTFS, NTAD rail | ✅ track, wires, entrances | trains on the timetable |
 | Bridges | `bridge=yes/viaduct/movable`, `layer`, `bridge:structure` | NBI (National Bridge Inventory, public) for type/length | ✅ decks | truss/arch/suspension looks from `bridge:structure` / NBI |
-| **Tunnels** | `tunnel=yes/culvert`, `layer<0`, `location=underground` | — | ✅ **new**: nothing drawn above ground; cars dive in at the portal and out of sight | portal faces |
+| **Tunnels** | `tunnel=yes/culvert`, `layer<0`, `location=underground` | — | ✅ nothing drawn above ground; a concrete portal face round a dark mouth where the street goes under (`portals.ts`) | a cut trench on the approach |
 | Building passages & covered streets | `tunnel=building_passage`, `covered=yes` | — | ✅ kept at street level | an arch cut in the ground floor |
-| Steps & ramps | `highway=steps` (+ `incline`, `step_count`), `ramp=yes` | — | 🟡 walkable ways | step geometry on slopes |
-| Street lamps | `highway=street_lamp` (+ `lamp_mount`, `light:colour`) | Mapillary; city streetlight layers | 🧪 spaced along kerbs | mapped poles first, spacing fill after |
+| Steps & ramps | `highway=steps` (+ `incline`, `step_count`), `ramp=yes` | — | ✅ a flight of even risers between the ground at its ends (the mapped `step_count` where there is one), handrails, a deck the walkers climb (`stairs.ts`) | landings on long flights; `ramp=yes` beside them |
+| Street lamps | `highway=street_lamp` (+ `lamp_mount`, `light:colour`) | Mapillary; city streetlight layers | ✅ a mast at each mapped lamp, its arm over the nearest street, its pool of light at night; 🧪 the spacing fill steps aside within 18 m | lamp styles from `lamp_mount`/`support` |
 | Utility poles & wires | `power=pole/tower/line/minor_line`, `man_made=utility_pole` | — | ✅ lines; 🧪 street poles | mapped poles |
-| Hydrants | `emergency=fire_hydrant` (+ `fire_hydrant:type`, `colour`) | city hydrant layers | ✅ | colours by city practice from the tag |
-| Bollards, gates, barriers | `barrier=bollard/gate/lift_gate/jersey_barrier/block` | — | ❌ | props + collision |
+| Hydrants | `emergency=fire_hydrant` (+ `fire_hydrant:type`, `colour`) | city hydrant layers | ✅ (and 15 ft of kerb kept clear) | colours by city practice from the tag |
+| Bollards, gates, barriers | `barrier=bollard/gate/lift_gate/jersey_barrier/block` | — | ✅ bollards (prop + collision); ❌ gates, blocks | gates that open |
 | Street name signs | `name` at junctions | TIGER | ✅ junction signs | — |
 | House numbers, mailboxes | `addr:housenumber`, `addr:street` | OpenAddresses, NAD | 🟡 OSM only | number plaques on doors everywhere |
 
@@ -84,9 +86,9 @@ what fills the gap when the map says nothing — always deterministic (seeded by
 |---|---|---|---|---|
 | Surface lots | `amenity=parking` + `parking=surface` (areas), `parking_space=*`, `capacity`, `access` | NAIP / NLCD impervious (unmapped lots) | ✅ striped, filled with cars (`src/world/lots.ts`) | **find unmapped lots**: blank impervious ground next to shops → a lot |
 | Garages / decks | `parking=multi-storey/underground/rooftop`, `building=parking` | — | 🟡 as buildings | open-sided deck look |
-| Street parking | `parking:left/right/both`, `parking:*:orientation` (and the older `parking:lane:*`) | city curb inventories | ✅ kerb cars (`src/world/kerbCars.ts`) | meters from `vending=parking_tickets` |
+| Street parking | `parking:left/right/both`, `parking:*:orientation` (and the older `parking:lane:*`) | city curb inventories | ✅ kerb cars, ~80 % of spaces taken downtown, kept clear of corners, driveways and alley mouths, crosswalks, hydrants and bus zones where the map puts them (`kerbside.ts`, drawn by `kerbCars.ts`); pay stations at `vending=parking_tickets` | time of day: kerbs empty at night downtown, full in the evening on residential streets |
 | Driveways, alleys, aisles | `highway=service` + `service=driveway/alley/parking_aisle` | — | ✅ | — |
-| Bike racks | `amenity=bicycle_parking` (+ `bicycle_parking=stands/wall_loops`, `capacity`) | city rack layers | ❌ | rack prop with a bike or two |
+| Bike racks | `amenity=bicycle_parking` (+ `bicycle_parking=stands/wall_loops`, `capacity`) | city rack layers | ✅ three Sheffield hoops square to the kerb, a bike or two locked on (`assets/street.ts`) | the rack's length from `capacity` |
 | EV chargers | `amenity=charging_station` | AFDC (DOE, public) | ❌ | charger posts at the bays |
 
 ### 2.3 Sports, play and recreation
@@ -101,7 +103,7 @@ what fills the gap when the map says nothing — always deterministic (seeded by
 | Multi-sport, school fields | `sport=multi`, `amenity=school` grounds | 🟡 generic | the lines of each sport listed (`sport=a;b`) |
 | Running tracks | `leisure=track` (+ `sport=running/athletics`) | ❌ | red oval with lanes |
 | Stadiums, grandstands | `leisure=stadium`, `building=grandstand`, `leisure=bleachers` | 🟡 as buildings | stands facing the field |
-| **Playgrounds** | `leisure=playground` (area) + equipment nodes/ways `playground=swing/slide/climbingframe/sandpit/seesaw/springy/roundabout/structure` | 🟡 generic paint (+ procedural pieces) | each mapped piece where it is; kids on them by day |
+| **Playgrounds** | `leisure=playground` (area) + equipment nodes/ways `playground=swing/slide/climbingframe/sandpit/seesaw/springy/roundabout/structure` | ✅ each mapped piece where it is (`assets/play.ts`); an empty mapped playground fitted with a tower, swings and the rest | kids on them by day |
 | Fitness stations | `leisure=fitness_station` (+ `fitness_station=*`) | ❌ | outdoor gym props |
 | Dog parks | `leisure=dog_park` | ❌ | fenced, dogs off the lead |
 | Pools | `leisure=swimming_pool` (+ `access=private` for back yards), `leisure=water_park` | ✅ painted blue | swim in them (backlog R.9) |
@@ -117,7 +119,7 @@ what fills the gap when the map says nothing — always deterministic (seeded by
 | Parks, lawns, gardens | `leisure=park/garden`, `landuse=grass/recreation_ground/village_green` | PAD-US | ✅ | paths, benches, a bandstand from the park's own tags |
 | Community gardens | `landuse=allotments`, `leisure=garden` + `garden:type=community` | — | ❌ | raised beds |
 | Woods, scrub, meadow | `natural=wood`, `landuse=forest`, `natural=scrub/heath/grassland`, `landuse=meadow` | WorldCover, NLCD | ✅ | canopy height from LiDAR / Meta-WRI |
-| **Individual trees** | `natural=tree` (+ `species`, `genus`, `leaf_type`, `leaf_cycle`, `height`, `circumference`, `diameter_crown`) | **city tree inventories, OpenTrees**; LiDAR crowns | ✅ positions; 🟡 species by region mix | species from the tag / the city inventory → the right foundry family per tree |
+| **Individual trees** | `natural=tree` (+ `species`, `genus`, `leaf_type`, `leaf_cycle`, `height`, `circumference`, `diameter_crown`) | **city tree inventories, OpenTrees**; LiDAR crowns | ✅ positions; ✅ species from `genus`/`species`/`taxon`/common names → the foundry family (`realTile.ts treeKindOf`), mapped `height`; a LiDAR crown takes the species of the mapped tree under it; 🟡 unnamed trees by region mix | city inventories where OSM has no species |
 | Tree rows, hedges | `natural=tree_row`, `barrier=hedge` | — | ❌ / 🟡 | rows along the line; clipped hedges |
 | Flower beds, planters | `landuse=flowerbed`, `man_made=planter` | — | ❌ | — |
 | Farmland, orchards, vineyards | `landuse=farmland/orchard/vineyard/farmyard`, `crop=*` | USDA Cropland Data Layer (public, 30 m, yearly) | ✅ farmland | crop by field from the CDL |
@@ -127,7 +129,7 @@ what fills the gap when the map says nothing — always deterministic (seeded by
 
 | Feature | OSM tags | Other | Game today | Next |
 |---|---|---|---|---|
-| Sea, bays, lakes, ponds | `natural=coastline`, `natural=water` + `water=*` | NHD waterbodies | ✅ | depth colour from NOAA charts / CUDEM |
+| Sea, bays, lakes, ponds | `natural=coastline`, `natural=water` + `water=*` | NHD waterbodies; ESA OC-CCI colour | ✅ the sea from the vector tiles' ocean, never the DEM; lakes laid flat at their level and drawn with the water shader (ripples, the sky in them); each coast's own water colour; foam along every streamed coast (`shore.ts`) | depth colour from NOAA charts / CUDEM |
 | Rivers, creeks, ditches | `waterway=river/stream/canal/ditch/drain` (lines, `width`) | **NHDPlus HR** | 🟡 areas only | line waterways at their width, flowing downhill |
 | Fountains | `amenity=fountain` | — | ❌ | animated fountain |
 | Breakwaters, groynes, seawalls | `man_made=breakwater/groyne`, `wall=seawall` | — | ✅ | — |
@@ -143,18 +145,20 @@ what fills the gap when the map says nothing — always deterministic (seeded by
 | Shops, restaurants, offices | `shop=*`, `amenity=*`, `office=*`, `craft=*` nodes and building tags; `opening_hours` | **Overture Places**, All the Places | ✅ signs and interiors by use | open/closed by `opening_hours` and the clock |
 | Entrances | `entrance=main/service/yes` nodes on the outline | — | 🟡 inferred from the street | doors exactly where mapped |
 | Landmarks | `tourism=attraction`, `historic=*`, `man_made=tower/water_tower/chimney/silo/storage_tank/mast/lighthouse`, `amenity=place_of_worship` | Wikidata (heights, dates) | 🟡 lighthouses, churches, towers | water towers, silos, tanks as their own shapes |
-| Markets | `amenity=marketplace` (area/building) | — | ❌ | stalls with awnings along the frontage |
+| Viewpoints and the peaks they look at | `tourism=viewpoint` (+ `direction`); `natural=peak/volcano` + `name`, `ele` (OpenMapTiles `mountain_peak`) | Wikidata | ✅ a coin-op viewer facing the view; the summit named with its distance and direction, P turns you to it (`peaks.ts`) | peak labels on the horizon ring; golden-hour "paint this" commissions |
+| Markets | `amenity=marketplace` (area/building) | — | ✅ stalls under awnings along the street faces, vendors and shoppers (`assets/market.ts`, props.ts) | stalls that sell what you can carry |
 | Schools, hospitals, stations | `amenity=school/hospital/…`, `railway=station` | NCES school locations (public) | 🟡 | school zones: crossing guards, buses at 3 pm |
 
 ### 2.7 Street furniture and small things
 
-`amenity=bench` ✅ · `amenity=waste_basket` ❌ · `amenity=recycling` ❌ · `amenity=post_box` ❌ ·
-`amenity=telephone` ❌ · `amenity=vending_machine` (+ `vending=parking_tickets` meters) ❌ ·
-`amenity=drinking_water` ❌ · `amenity=toilets` ❌ · `amenity=clock` ❌ · `man_made=flagpole` ❌ ·
-`advertising=billboard/column/board` ❌ · `man_made=street_cabinet` ❌ · `man_made=manhole` ❌ ·
-`tourism=information` (+ `information=board/map`) ❌ · `tourism=artwork` / `historic=memorial` ❌ ·
-`amenity=bicycle_rental` (**GBFS** docks) ❌ · `emergency=phone` ❌ · `highway=street_lamp` ❌ ·
-`barrier=bollard` ❌. All are single nodes: one Overpass line each, one foundry prop each — the
+`amenity=bench` ✅ · `amenity=waste_basket` ✅ · `amenity=recycling` ❌ · `amenity=post_box` ✅
+(the US Mail's blue box; a red pillar where they drive on the left) · `amenity=telephone` ❌ ·
+`amenity=vending_machine` + `vending=parking_tickets` ✅ (pay stations) · `amenity=drinking_water` ✅ ·
+`amenity=toilets` ❌ · `amenity=clock` ❌ · `man_made=flagpole` ✅ · `advertising=billboard/column/board` ❌ ·
+`man_made=street_cabinet` ❌ · `man_made=manhole` ❌ · `tourism=information` (+ `information=board/map`) ❌ ·
+`tourism=artwork` / `historic=memorial` ❌ · `amenity=bicycle_rental` (**GBFS** docks) ❌ ·
+`emergency=phone` ❌ · `highway=street_lamp` ✅ · `barrier=bollard` ✅. All are single nodes: one
+Overpass line each, one foundry prop each (`realTile.ts furnitureClass`, `assets/street.ts`) — the
 cheapest big win for "a street that feels mapped".
 
 ### 2.8 People, traffic and time
@@ -223,11 +227,11 @@ a re-cut changes only what the data changed.
 
 ## 5. Order of work (impact per effort)
 
-1. **Street furniture nodes** (§2.7) and **mapped crossings / lamps** — one query line and one
-   foundry prop each; streets immediately read as surveyed.
-2. **Pitches by sport + playground equipment** (§2.3) — the courts and diamonds in every park.
-3. **Street-tree species** (OSM `species`/`genus`, then city inventories) — trees stop looking
-   the same.
+1. ~~**Street furniture nodes** (§2.7) and **mapped crossings / lamps**~~ — done (u): crossings,
+   lamps, bins, post boxes, racks, fountains, bollards, pay stations; parking clearances from them.
+2. ~~**Pitches by sport + playground equipment** (§2.3)~~ — done ((s) courts, (u) playgrounds).
+3. ~~**Street-tree species** (OSM `species`/`genus`)~~ — done (u); city inventories next where OSM
+   has none.
 4. **Unmapped parking lots from imagery/impervious** (backlog R.4).
 5. **GTFS buses and trams** — transit that runs.
 6. **Overture footprints + Places** — the gaps in OSM filled.

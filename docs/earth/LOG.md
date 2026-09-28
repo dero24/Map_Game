@@ -2,6 +2,261 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-28 (v) — Seen in the browser: Seattle from the vector twins; why its traffic drove through itself (a crosswalk on every arm); summer time; stalls down Pike Place; hills without knees; Rainier's ice; Kerry Park's view kept open
+
+Robby's computer came back: all of (u) synced (60 files), the device typecheck is clean, 275 tests
+pass. Overpass was unreachable for most of the session — every mirror timed out from the browser
+even for a one-node query, and the tile service (which asks Overpass from Cloudflare) timed out
+with it, while OpenFreeMap, the OSM API, S3 and photon answered — so every Seattle cell came in as its vector twin
+(14 of 14 on Queen Anne and at the market): real streets, buildings, parks, water, POIs, steps and
+viewpoints, but none of the tags OpenMapTiles drops (a street's brick, a crossing's markings, a
+steps' count, a tree's species). Late in the session Overpass answered again (504s in ~8 s at
+first, then data): Queen Anne reloaded as 14 real cells, tags and all.
+
+- **Paving follows the blocks** (the reviewer's "stair-steps through the sidewalk paint"): dense
+  ground was paved in north-up 40 m squares, so any grid that isn't north-up (Seattle's is turned
+  32°) got lawn in stair-steps through its blocks. Now each building is judged by the ground within
+  60 m of it (a quarter built on — or one big building on its own) and paved round out to 8–14 m,
+  in its own orientation (`groundPaint.ts`; a 2D render of a turned downtown before/after, and
+  `tests/groundPaint.test.ts`: rings are buildings' own outlines, houses keep their lawns).
+- **Wakes** (`wakes.ts`): every boat under way — the life sim's and the one you ride — draws its
+  Kelvin wake behind it along its own track: two broken white arms spreading at 19.5°, faint crests
+  across between them, the churned wash behind the stern, fading as they age (a turning boat's wake
+  curves). Seen from 140 m over Elliott Bay: 22 boats, V wakes on the green-steel sea.
+- **Hills at the wheel** (moved here from (u)'s list): the grade pulls on the car you drive.
+- **Rainier on the skyline, for real**: the ring had it (97 km, 2.1° up) but as a faint bump the
+  haze and a pale sky swallowed. Now (`horizon.ts`, `peaks.ts`): the glaciers and bare rock come
+  from the same OpenFreeMap z8 tiles as the peaks (`landcover` ice / rock — OSM natural=glacier,
+  bare_rock, scree: 211 polygons within 125 km of Seattle), each ring vertex coloured by the share
+  of its own patch they cover; each vertex takes the highest of nine samples across its patch (the
+  summit stood 2.6 or 3.7 km tall depending on where you stood); sunlit snow and ice carry through
+  the haze, and far ranges read a step darker and bluer than the sky's horizon.
+- **A viewpoint's view is kept open** (`views.ts`): the trees in front of a `tourism=viewpoint`
+  (along its `direction`, else down its slope; 110 m out, ±55°) are cut back under the sightline —
+  Kerry Park looked into its own spruces. The coin-op viewer faces the same way.
+- **Spruces are cones, not plates on a pole**: each whorl at least as deep as the gap to the next,
+  a leader closing the tip; and the near-crown rim dissolve (MF6) bites only a lobe's sides (a
+  spruce's flat whorls seen level were all grazing surface and thinned to plates).
+- **A market is its whole building** (`realTile.ts`): a marketplace node inside a building names it
+  and sets its use over the diners and bars mapped inside first (the twin put Pike Place's Sanitary
+  Market and Corner Market under their restaurants). Tile cache **v21** (`t/v21`, `&v=21`,
+  `DIRECT_V` 21): **redeploy the tile worker**.
+- Harness: `__SPOTS__` pins a fair day (the automatic weather drifted between frames); an
+  instanced crowd's hidden slots no longer count as an occluder (NaN-distance hits);
+  `?capture` frames keep running in a hidden pane via `__PUMP__`.
+- A cloud copy of the game for smoke tests when the computer is away (esbuild bundle + static
+  server + headless Chromium/SwiftShader on the Sea Bright bake; vite is blocked in the cloud):
+  boots with no errors, golden hour, aerial and an interior render (scratch, not committed).
+
+**Round 8** (REVIEWER.md): 6.5/10, not passed — the bay is water and the Needle is on the
+postcard, but Pike Place was an empty lane, the clock an hour late, the far city a sand plain,
+crowns still slabs, and the harness's asserts blind. What followed, same session:
+
+- **Summer time** (MF5): the open world kept a longitude zone (`Etc/GMT+8`), so every `?at=` place
+  ran an hour late all summer — "18:20 golden" at Kerry Park had the sun 5° under the horizon.
+  `tz.ts` draws the four US zone lines latitude by latitude (Arizona apart; Mexico and the sea keep
+  their longitude zone) and the browser's tz database does the rest: Seattle is
+  America/Los_Angeles, 18:20 PDT is golden (`tests/tz.test.ts`, 26 cities; the panel names the zone).
+- **Market streets** (MF1): within 60 m of a market hall, the shared streets (residential, living,
+  pedestrian, service, footway) get stalls down both sides every 3 m where there's room, facing the
+  street, and park no cars. Pike Place at the Corner and Sanitary Markets, lens mid-street both
+  ways: stalls both sides, vendors, a crowd (shots/spots-r8-market2.jpg).
+- **Knees in the graded streets** (MF2): each junction pin held only its own node flat, so on a
+  steep grid a 22% street kinked from flat to 36% just past the crossing. Pins now hold the whole
+  crossing band; a stretch between two pins that ask more than the class allows is capped per
+  stretch; the ground target reads the carriageway before the corridor and the shoulder
+  (`grade.ts`; `tests/grade.test.ts`, a Queen Anne–style grid: worst local grade < 25% on an 18%
+  hill, < 30% at 22% — was 36%). `__GRADES__` on Queen Anne: 3,524 ways, 60 over 25% (was 108) —
+  the rest at bridge ends and overpasses (N Northlake Way, N 34th St, 15th Ave W × W Garfield St),
+  service roads, W Wheeler St, one knee left on 2nd Ave W.
+- A LiDAR tree's crown is at most 1.35× as wide as it is tall (was 1.8×: wide flat stacks at 7 m).
+- **The traffic that drove through itself** (Robby's "cars going through the roads"; MF2). With
+  Overpass back, Queen Anne's real cells showed it at once — `__CAROBB__` 35 overlapping pairs,
+  31 of them moving, and a new probe (`__CARPROBE__`: a private copy of the sim on the page's road
+  graph, minutes of traffic in seconds, each overlap classified) 5,677 overlapping pair-ticks in
+  70 s. The cause: Seattle maps a crosswalk on every arm of every junction (a footway crossing
+  the street through a node), and the life graph split streets at every shared vertex — 70% of
+  junction arms (3,016 of ~4,300) were 5–8 m stubs *inside* the junction's box. A car arrived on
+  the stub already "in the box" and skipped the lights, the stop sign and the queue beyond; one
+  edge of look-ahead couldn't brake for a queue two stubs on. Now a street isn't split where only
+  a footway meets it within 34 m of a junction (`life.ts`; the crossing's two halves still join,
+  and a mid-block crossing still joins the street). Then, with junctions obeyed, three more:
+  the box check counted the car queued *behind* in the same lane as "0 m in front", so a car at
+  the line waited on its own follower and signalled junctions locked solid (only cars ahead
+  count now); a car could spawn 9 m in front of one doing 12 m/s and be rear-ended (spawns need
+  braking room behind); the 25-s knot release at a stop sign pulled out into the next car on a
+  busy road (it waits for a lull). Parked cars: a bend's inside kerb, a lot drawn up to the street
+  and unjoined corners put two cars in one space — one car to a space now (`oneToASpace`, box
+  test, first keeps it). **Result on Queen Anne: `__CAROBB__` 35 → 1 (moving 1, parked 0),
+  the probe 5,677 → 4–16 pair-ticks, no car stopped for good.** Tests: a 3×3 grid with a
+  crosswalk on every arm (8,053 overlapping pair-ticks → 0, and no approach split near a
+  junction), a bend's and a lot's doubled spaces. The one residual is an offset "jog" (two
+  T-junctions 7.8 m apart acting as two stops).
+- The Counterbalance (MF2's test): from the crest on the road crown the kerb 50 m ahead is 11.5°
+  below eye level (100 m: 9.8°, 400 m: 8.4° — 57 m of drop), the Needle past the brow
+  (shots/spots-r8-counter2.jpg 1); a 3 m generated retaining wall stands 1.4 m from the west
+  sidewalk where the DEM rises 3 m above the graded street (counter 4 — a pose the assert missed).
+
+**Round 8b** (same session): 7/10, not passed — "Pike Place opened and the cars stopped crashing —
+now they barely move": 61% of Queen Anne's cars stand still at any moment (all-way stops at every
+unmapped residential corner; Seattle's are mostly uncontrolled or traffic circles). Next, ranked:
+traffic that flows (control from the tags, junction clusters merged, no spawn in view), open the
+market hall, cuts as places (rockeries, hedges, stairs to the lots), asserts that see.
+
+- **Traffic that flows, first steps** (must-fix 1 — built and unit-tested after the computer went
+  offline; not yet seen in Seattle):
+  - *Unmarked corners where the map marks its signs* (`traffic.ts`): with stop or give-way signs
+    mapped within ~250 m, a corner with none has none — its arms are OPEN: no sign; slow to ~4.5 m/s,
+    look, first come first served, a dead heat to the car on the right; a minor arm gives way to the
+    main road unsigned. Where the map marks no signs at all the rule of the road is unchanged (Sea
+    Bright maps only its 9 signals: no change there).
+  - *Junctions a short link apart are one box* (a jog, a divided road's two carriageways): a car in
+    either holds both.
+  - *Nothing pops into view*: the walker's facing reaches the life sim (header `PLAYER_YAW`); cars
+    are spawned, recycled and thinned only outside a ~65° cone ahead within 260 m (a test grid: 130
+    pop-ins in two minutes → 0).
+  - Walkers resting on the beach no longer vanish when tiles stream in.
+  - Tried and backed out, with the reasons in the scratch notes: a left-turn pocket on wide streets
+    (followers passing a waiting turner overlapped it), a main road's own stream ignoring each other's
+    box claims (overlaps at corners), traffic thinned by street class (it thinned the town, not the
+    streets round the walker; spreading the ring instead exposed U-turns at dead ends).
+  - **Measured live once the computer was back — and the probe corrected.** `__CARPROBE__` handed
+    the sim its clock once (`setEnv` copies), so the lights never changed and no box claim ever
+    aged. Its "55–65% stopped" (and 82% on Queen Anne at first) was mostly that. With the clock
+    ticking, on Queen Anne's 16 real cells:
+    - 150 s: 0 overlaps, 63% of cars stopped at a given moment, 2.0 m/s mean, the longest wait 56 s;
+    - 300 s: 2 pairs at junctions, 66% stopped, the longest wait 61 s.
+    - No knots. Of the stopped cars, 75% are in queues behind others; the queue heads are red
+      lights 6%, priority arms 8%, stop signs 4%, all-way 3%, open corners 1%.
+    - Next is the queues: discharge at green, and the demand model — traffic by street class
+      entering at the ring's edge (R.26).
+  - **Found live:** `__CAROBB__` shows moving cars through parked ones (66 pairs in 20 s), all on
+    wide one-way streets with kerb parking (West Queen Anne Driveway, 10.9 m, parked both sides at
+    ±4.3 m). A one-way's two lanes sit at ±w/4 = ±2.7 m, into the parking lanes. Fixed next: lanes
+    between the parked cars.
+- **Cuts as places** (must-fix 3, `retaining.ts`): a retaining wall is built the way Seattle
+  builds them — a rockery where the cut is low (up to ~3 m, most of them): basalt boulders in
+  courses on a face leaning back into the hill, dark joints, moss on some lower stones; else poured
+  concrete: panel joints every ~3.3 m, the rain's stain washing up from the foot, a coping. On top
+  a clipped hedge, a pipe rail along concrete over 1.8 m, or the lawn — no more blank grey slab
+  (counter 4). Seen offline through the prop shader (scratch renders); `tests/retaining.test.ts`:
+  runs and kinds, nothing proud of the face or past the ends, a vertex budget, hedges along the
+  top. Next: a stair through the wall to each lot's door (needs the doors in the tile worker).
+- **Asserts that see** (must-fix 4, `tools/spot-shots.js`): once a frame has settled, one extra
+  render through a flat id material measures what the lens actually sees — the subject's visible
+  pixels (≥ 5%, occlusion included), anything within 2.5 m above knee height (≤ 5% of the frame) or
+  within 4 m (≤ 15%) — and a miss is stamped under its frame on the sheet (✗ …). Not yet run live.
+- Tests: 288 pass (crosswalk grid, open corners and turn order, pop-ins, a bend's and a lot's
+  doubled parking spaces, retaining walls). `__CARPROBE__` joins `tools/grade-audit.js`.
+
+## 2026-09-28 (u) — A real cell in a second whatever Overpass does; Pike Place a market; the kerb as the map draws it; water with its own colour and foam; oaks and maples that read
+
+The rest of round 7's must-fixes (MF4–MF6) and most of its should-fixes, built while Robby's
+computer was unreachable: **typecheck + 268 tests pass, nothing below is browser-verified yet**
+(the round-8 captures are the gate).
+
+- **The vector twin** (`vectorTile.ts`). Overpass's mirrors stopped answering, so a cell's
+  stand-in is now its OpenFreeMap vector tiles translated back into the Overpass JSON `osmToTile`
+  reads — real streets with names, classes, bridges, tunnels and layers; buildings with their
+  mapped heights and colours; parks, woods, pitches, water; named shops; bins, post boxes, racks,
+  bollards — then built exactly as a real cell (its sea, its graded streets, its LiDAR). Undone
+  from the tiles: ways cut at tile edges (stitched on the same edge line, facing, within a
+  window), buildings in both tiles (kept once, whole when both tiles see them whole), junction
+  nodes simplified off straight streets (streets re-noded where they cross, overshoot or fall
+  short by a snap). Four code-review passes. `DIRECT_V` 20 / `t/v20`.
+- **Pike Place reads as a market** (MF4, from tags): stalls under awnings along the street faces
+  of any `amenity=marketplace` building (and canopies against one) — five trades, a vendor behind
+  each, shoppers in front (`assets/market.ts`); `surface=brick/sett/paving_stones` paints the
+  street in its courses (`streetSurface`).
+- **Evidence** (MF5): every spot pose asserts no occluder within 2.5 m, not inside, not on a roof,
+  its subject filling ≥ 5% (`tools/spot-shots.js` returns `fails`). **Tunnel portals**: a concrete
+  headwall round a dark mouth where a street goes under (`portals.ts`) — SR 99's cars now dive
+  into the dark, not through asphalt.
+- **Crowns at 5–10 m** (MF6): a lobe's grazing rim breaks into leaf-sized bites near the eye;
+  the cherry's underside hangs in clumps; the poplar's tiers overlap to its tip.
+- **Water with its own colour** (styles.ts `WaterLook`, after the Forel-Ule scale satellite
+  ocean-colour maps put on every coast): Puget Sound green-steel, the Keys turquoise over sand,
+  the Gulf's marsh-fed olive, boreal and glacial waters; the NJ shore keeps its Atlantic.
+  **Lakes are water**: their sheets use the water shader (ripples, the sky in them) instead of a
+  flat colour. **Foam on every streamed coast** (`shore.ts`): each sea node's distance to the land
+  from the cell's own patch; a strip of lace at the waterline, backwash and wash (the reviewer's
+  "foam at the seawall").
+- **Street furniture exactly where the map puts it** (`furnitureClass`, `assets/street.ts`):
+  crossings (painted ladder or two lines by `crossing:markings`, nothing where unmarked; the
+  junction's inferred crosswalk steps aside), street lamps (a mast at each, arm over the street,
+  the spaced-out lamps step aside), bins, post boxes (blue box / red pillar), bike racks with a
+  bike or two, drinking fountains, bollards, parking pay stations.
+- **The kerb** (`kerbside.ts`): spaces kept clear of corners, driveway and alley mouths (curb
+  cuts), crosswalks (mapped, or where a footway crosses), hydrants (15 ft, its own kerb) and bus
+  zones; ~80% taken downtown, lots too. Far parked cars stand on the live ground (they hung over
+  downtown where their tile was built on a stand-in's DEM).
+- **Trees that read** (should-fix): the oak a broad, low-forking spreader with a billow at each
+  heavy limb (never a ball on a pole); maples a full egg down near the lawn (sugar, red) or the
+  Northwest's three-stemmed bigleaf (gold in autumn); autumn turns **tree by tree** — the first
+  maples by late September, crowns from the sunlit top — instead of every tree faintly tinted.
+- **Rainier on the skyline**: the horizon ring reached 70 km — Rainier stands 95 km from Kerry
+  Park, so it was never drawn. Now z10 to 60 km and z9 to 125 km; summits see over the haze
+  (the aerial wash thins with height), so snowfields read while their foothills go blue.
+- **Trees keep their mapped species**: `natural=tree` with a `genus`, `species`, `taxon` or common
+  name is that tree (maples, oaks, cherries and crab-apples, London planes, elms, firs and cedars,
+  palms, palo verde…), at its mapped `height`; a LiDAR crown within 3.5 m of a named tree takes its
+  species (the survey measures, the map names). The bigleaf maple grows only in the Northwest.
+- **Big floorplates aren't ballrooms** (the fourth flag): an office, civic building or apartment
+  block over ~450 m² is a lobby at the door and rooms off it every ~10 m (walls step round the
+  stairs and the door; each room its own paint — seven a storey now, not three); open offices fill
+  with desk pods, big lobbies with seating groups. A supermarket stays an open floor of aisles.
+- **Every `highway=steps` a flight you climb** (`stairs.ts`): even risers (~16.5 cm, or the mapped
+  `step_count`) between the ground at its two ends, each tread a solid concrete block into the
+  slope, a handrail on posts either side, and the walker (and the town's walkers) climbing a deck
+  through the middle of each tread — the Pike Street Hillclimb, Queen Anne's stairways. Generated
+  retaining walls step aside where the map already has a wall.
+- **Viewpoints know their view** (`tourism=viewpoint`, `peaks.ts`): a coin-op viewer stands on
+  each, looking along its mapped `direction` (else downhill); the summits round you come by name
+  and height from OpenFreeMap's `mountain_peak` layer (a few z8 tiles, refreshed every 40 km), so
+  standing there says "the view: Mount Rainier, 97 km to the southeast — paint it", and P turns
+  you to the summit before the sketchbook opens (the reviewer's Rainier pose, as gameplay).
+- **Playgrounds** (`assets/play.ts`): swings, slides, play towers, seesaws, spring riders,
+  roundabouts, sandpits and climbing frames where the map puts each (`playground=*`, nodes or
+  ways); a mapped playground the map left empty gets a tower, swings and the rest fitted inside
+  its outline along its longest side, clear of paths and each other.
+- **Brick, sett and flagstone streets** are laid in their units (running bond, staggered setts,
+  slabs — a canvas pattern at the paint's resolution) instead of dotted lines.
+- **Hills at the wheel** (the reviewer's hill-driving idea, `vehicles.ts`, built after the rest,
+  shipped with (v)): the grade under the car pulls on it — a climb takes speed off, a descent
+  coasts on (rolling friction eased to let it), and a car stopped on a street past ~15% with
+  nothing pressed creeps back down it; a gentler one holds.
+- **A code review of all of it** (a separate agent, scripts against the real modules) found and
+  this entry fixes: the pack **dropped the tree shader's defines** — every species' autumn hue,
+  the cherries' blossom and the willows' sway were silently off on every streamed tile since they
+  landed (now carried, with a test); the tile service still keyed R2 `t/v19` (now `t/v20` — v19
+  JSON would have been served forever without species, furniture or crossings); market stalls
+  doubled by a cell edge (each stall is its own cell's); office pods at ~7,700 vertices each
+  (plain boxes now, a dozen a building); far parked cars posed and re-grounded 50–70k times a
+  refill in Manhattan (only drawn cars are posed; their ground is cached until a tile mounts near
+  them); the coast foam and lake sheets z-fighting past ~400 m (polygon offset); lamps hung on
+  wires or walls built as masts in the road (dropped; one mapped in the carriageway steps back to
+  the kerb); autumn colour that turned back at the end of the season (a one-way `turn` progress
+  now, tested monotonic); one mapped crossing hiding three of a junction's four crosswalks (per
+  arm now); a bus stop mapped on the street's own line clearing neither kerb (both now); the open
+  world's sea plane drawn over the horizon ring's far low land (it fades out past the streamed
+  cells — the ring carries the far sea); the DEM tile cache growing forever (LRU of 600).
+  A second pass on the fixes and the new work found and this fixes: a lookbehind regex (older
+  Safari can't parse one — the whole app would not have loaded on iOS ≤ 16.3); map text (a peak's
+  name, a place label, a journal entry) put into the page as markup (now text); playground
+  fitting that could cost seconds of worker time (a way grid, bounded tries, indoor playgrounds
+  skipped); stairs sinking into convex hillsides (treads lifted to the ground, a plinth and side
+  walls on concave ones); swings and climbing frames drawn as ways standing 90° off; a lamp on the
+  street's own line left in the road; autumn snapping green on the 20th of January (it fades with
+  the spring's warmth now, tested continuous all year in three climates); the DEM cache per thread
+  (250 tiles); a failed peak fetch waiting 40 km to retry (a minute now; an empty sky isn't a
+  failure).
+  **Offline evidence**: every touched shader variant (water, lake, shore, 20 tree/prop variants,
+  horizon, interiors — 25 programs) compiles in headless Chromium's WebGL2; the oak, maples,
+  street furniture, stalls and paving rendered offline and looked at (scratch line-ups).
+- Pending on the device: sync, worker `t/v20`, the vector twins on Queen Anne and Pike Place,
+  stalls and brick, walls, `__GRADES__`/`__CAROBB__`/`__TREES__`, portals, crowns, foam, the
+  Kerry Park pose (47.6295, −122.3599, bearing 152), then round 8.
+
 ## 2026-09-28 (t) — The bay is water from the map, the traffic rides the ground you see, streets graded like a road engineer would
 
 Round 7 (6/10, not passed) ranked six must-fixes; this entry is the first three, plus the cause

@@ -58,5 +58,29 @@ describe('seasons', () => {
     expect(seasonAt(47.63, -122.36, 90, 271).autumn).toBeLessThan(0.4); // Seattle, late September
     expect(seasonAt(47.63, -122.36, 90, 295).autumn).toBeGreaterThan(0.4); // …late October
     expect(seasonAt(25.78, -80.13, 2, NOV).autumn).toBe(0); // Miami
+    expect(seasonAt(25.78, -80.13, 2, NOV).turn).toBe(0);
+  });
+  it('the turning only goes one way: from the first colour to the last leaf, then green again in spring', () => {
+    for (const [lat, lon] of [[47.63, -122.36], [44.48, -73.21], [40.76, -73.98]]) {
+      let prev = 0;
+      for (let d = 200; d <= 366; d += 3) {
+        const t = seasonAt(lat, lon, 50, d).turn;
+        expect(t, `${lat} day ${d}`).toBeGreaterThanOrEqual(prev - 1e-9);
+        prev = t;
+      }
+      expect(prev).toBeGreaterThan(0.9); // by the new year, every tree has turned (and dropped)
+      expect(seasonAt(lat, lon, 50, 120).turn).toBe(0); // May: green
+    }
+    // …and after the coldest turn of the year it fades as the spring warms, never all at once
+    for (const [lat, lon] of [[29.76, -95.37], [47.63, -122.36], [-37.81, 144.96]]) {
+      let prev = seasonAt(lat, lon, 20, 1).turn;
+      for (let d = 1; d <= 365; d += 2) {
+        const t = seasonAt(lat, lon, 20, d).turn;
+        expect(Math.abs(t - prev), `${lat} day ${d}`).toBeLessThan(0.25);
+        prev = t;
+      }
+    }
+    expect(seasonAt(47.63, -122.36, 90, 271).turn).toBeGreaterThan(0); // Seattle, late September: the first ones
+    expect(seasonAt(47.63, -122.36, 90, 271).turn).toBeLessThan(0.3);
   });
 });

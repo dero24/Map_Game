@@ -4,6 +4,8 @@
 //                  the walker, the cars and the ribbons see it — none untagged may pass 25%
 //   await __CAROBB__(seconds)   moving and parked cars sampled over time: overlapping footprints
 //                  (oriented boxes, 4.4 × 1.8 m) — must be zero
+//   await __CARPROBE__({ seconds })   the same for moving cars on a private copy of the sim, fast,
+//                  each overlap classified, and whether the traffic flows or knots
 // Nothing about a place is written here: the ways and cars are the page's own.
 
 const DRIVE = /^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|living_street|service)(_link)?$/;
@@ -101,6 +103,65 @@ window.__CAROBB__ = async (seconds = 20) => {
   }
   const all = [...hits.values()], kind = (h) => (h.a[0] === 'm' ? 'm' : 'k') + (h.b[0] === 'm' ? 'm' : 'k');
   return { frames, cars: seen, pairs: all.length, moving: all.filter((h) => kind(h) === 'mm').length, movingParked: all.filter((h) => kind(h) !== 'mm' && kind(h) !== 'kk').length, parked: all.filter((h) => kind(h) === 'kk').length, sample: all.slice(0, 12) };
+};
+
+// The same test, fast and explained: a private LifeSim on the page's road graph, stepped on the
+// main thread (minutes of traffic in seconds), every overlapping pair of moving cars classified —
+// same lane (following failed), opposite lanes, a junction (two arms of one node), unrelated
+// edges, different levels (a bridge over a street) — plus how the traffic flows (a queue is fine,
+// a car stopped for good is a knot). The walker stands `at` (default: 40 m off the nearest street,
+// so no car stops for them).
+//   await __CARPROBE__({ seconds: 150, x, z })
+window.__CARPROBE__ = async (opts = {}) => {
+  const G = window.__GAME__;
+  const { buildLifeBase, buildLifeInit } = await import('/src/sim/life.ts');
+  const { LifeSim } = await import('/src/sim/lifeSim.ts');
+  const { RANGES, SIM_HZ } = await import('/src/sim/protocol.ts');
+  const init = buildLifeInit(buildLifeBase(G.world, G.walk), G.stream.primRoads, G.walk, G.stream.doors, G.stream.junctions, G.stream.tunnels);
+  const sim = new LifeSim(init);
+  const px = opts.x ?? G.walker.x, pz = opts.z ?? G.walker.z;
+  const env = { playerX: px, playerZ: pz, night: 0, hour: opts.hour ?? 14, density: 1, wind: 0.3, clock: 50000 };
+  sim.setEnv(env);
+  const L = 4.4, W = 1.8, NE = init.edgeNodes, [c0, c1] = RANGES.cars;
+  const box = (i) => {
+    const fx = -Math.sin(sim.yaw[i]), fz = -Math.cos(sim.yaw[i]);
+    return [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([a, b]) => [sim.x[i] + fx * a * L / 2 - fz * b * W / 2, sim.z[i] + fz * a * L / 2 + fx * b * W / 2]);
+  };
+  const overlap = (A, B) => {
+    for (const P of [A, B])
+      for (let i = 0; i < 2; i++) {
+        const nx = P[i + 1][1] - P[i][1], nz = P[i][0] - P[i + 1][0];
+        const pa = A.map(([x, z]) => x * nx + z * nz), pb = B.map(([x, z]) => x * nx + z * nz);
+        if (Math.max(...pa) <= Math.min(...pb) || Math.max(...pb) <= Math.min(...pa)) return false;
+      }
+    return true;
+  };
+  const kinds = {}, pairs = new Set(), sample = [], still = new Float32Array(c1);
+  let checks = 0, n = 0, moving = 0, stopped = 0, longest = 0;
+  const steps = Math.round((opts.seconds ?? 150) * SIM_HZ), warm = 20 * SIM_HZ;
+  for (let t = 0; t < steps; t++) {
+    env.clock += 1 / SIM_HZ;
+    sim.setEnv({ clock: env.clock }); // (setEnv copies: without this the lights never changed and no box claim ever aged)
+    sim.step(1 / SIM_HZ);
+    for (let i = c0; i < c1; i++) { still[i] = sim.active[i] && sim.speed[i] < 0.3 ? still[i] + 1 / SIM_HZ : 0; if (t >= warm) longest = Math.max(longest, still[i]); }
+    if (t < warm || t % 5) continue;
+    checks++;
+    const ids = [];
+    for (let i = c0; i < c1; i++) if (sim.active[i] && sim.y[i] > -500) { ids.push(i); n++; moving += sim.speed[i]; if (sim.speed[i] < 0.3) stopped++; }
+    const B = new Map(ids.map((i) => [i, box(i)]));
+    for (let a = 0; a < ids.length; a++)
+      for (let b = a + 1; b < ids.length; b++) {
+        const i = ids[a], j = ids[b];
+        if (Math.abs(sim.x[i] - sim.x[j]) > 5 || Math.abs(sim.z[i] - sim.z[j]) > 5 || !overlap(B.get(i), B.get(j))) continue;
+        const ei = sim.edge[i], ej = sim.edge[j];
+        const k = Math.abs(sim.y[i] - sim.y[j]) > 2.5 ? 'levels' : ei === ej ? (sim.dir[i] === sim.dir[j] ? 'same-lane' : 'opposite') : [NE[ei * 2], NE[ei * 2 + 1]].some((m) => m === NE[ej * 2] || m === NE[ej * 2 + 1]) ? 'junction' : 'unrelated';
+        kinds[k] = (kinds[k] ?? 0) + 1;
+        const key = i + ':' + j;
+        if (!pairs.has(key) && sample.length < 8) sample.push({ t: +(t / SIM_HZ).toFixed(1), k, x: Math.round(sim.x[i]), z: Math.round(sim.z[i]) });
+        pairs.add(key);
+      }
+  }
+  return { cars: +(n / Math.max(1, checks)).toFixed(0), overlapTicks: Object.values(kinds).reduce((a, b) => a + b, 0), pairs: pairs.size, kinds, meanSpeed: +(moving / Math.max(1, n)).toFixed(2), stoppedShare: +(stopped / Math.max(1, n)).toFixed(2), longestStop: +longest.toFixed(0), sample };
 };
 
 // Trees (MF3): every instanced tree in the streamed cells — its base against the ground under it

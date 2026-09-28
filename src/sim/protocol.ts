@@ -26,6 +26,7 @@ export const H = {
   SIM_US: 8, // last tick cost (µs)
   ACTIVE: 9,
   CLOCK: 10, // the shared clock (uTime) in centiseconds — traffic signals run on it
+  PLAYER_YAW: 11, // the way the walker faces (rad * 1000): nothing pops into view
   SIZE: 16,
 } as const;
 

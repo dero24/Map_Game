@@ -6,7 +6,10 @@
 // Mapped control (OSM highway=traffic_signals / stop / give_way, stop=all) wins; unmapped junctions
 // get the rule of the road for their shape and roads: two main roads crossing are signalled; a
 // street meeting a bigger road stops (North America) or gives way (elsewhere); two equal streets
-// crossing are an all-way stop in North America; the stem of a T stops or yields.
+// crossing are an all-way stop in North America; the stem of a T stops or yields. Except where the
+// map marks its signs: with stop and give-way signs mapped round a corner that has none, that corner
+// has none — it's uncontrolled (OPEN: give way, first come), as most of Seattle's side streets are,
+// instead of a stop sign at every corner and a town of cars standing still.
 import type { Point, Road } from '../world/data';
 
 /** Road class → rank (drivable ≥ 2). The life sim's speeds and route choice read the same table. */
@@ -21,7 +24,9 @@ export const RANK: Record<string, number> = {
 export const STOP_BACK = 5.4;
 
 /** What a driver arriving along an arm must do. */
-export const CTL = { GO: 0, STOP: 1, YIELD: 2, SIG_A: 3, SIG_B: 4, ALL_STOP: 5 } as const;
+/** OPEN: an unmarked corner — no sign; give way to whoever has the right of way or is in the box
+ *  first (the rule of an uncontrolled intersection). */
+export const CTL = { GO: 0, STOP: 1, YIELD: 2, SIG_A: 3, SIG_B: 4, ALL_STOP: 5, OPEN: 6 } as const;
 
 /** `inb`: traffic arrives along this arm (false for a one-way leaving the junction). */
 export interface Arm { dx: number; dz: number; rank: number; w: number; ctl: number; inb: boolean }
@@ -55,6 +60,8 @@ float signalState(float group, float t, float key) {
 
 // ---------------- junction analysis ----------------
 export const vkey = (x: number, z: number) => `${Math.round(x * 2)},${Math.round(z * 2)}`;
+/** How far round a corner (in 50 m cells: ~250 m) the map's own signs say it marks them. */
+const MARKED_R = 5;
 const drivable = (r: Road) => !r.lod && (RANK[r.c] ?? 0) >= 2;
 
 /** Every junction (≥ 3 drivable arms) whose centre passes `keep`, with the control on each arm. */
@@ -81,11 +88,20 @@ export function analyzeJunctions(roads: Road[], points: Point[], na: boolean, ke
   }
   const out: Junction[] = [];
   const byCell = new Map<string, Junction[]>();
+  // the signs the map marks (stop, give way, all-way), by 50 m cell: does it mark them round here?
+  const signs = new Map<string, number>();
+  for (const p of points) if (p.c === 'stop' || p.c === 'yield' || p.c === 'stop_all') { const k = `${Math.floor(p.x / 50)},${Math.floor(p.z / 50)}`; signs.set(k, (signs.get(k) ?? 0) + 1); }
+  const marked = (x: number, z: number) => {
+    let n = 0;
+    const cx = Math.floor(x / 50), cz = Math.floor(z / 50);
+    for (let i = -MARKED_R; i <= MARKED_R; i++) for (let j = -MARKED_R; j <= MARKED_R; j++) n += signs.get(`${cx + i},${cz + j}`) ?? 0;
+    return n >= 2;
+  };
   for (const a of at.values()) {
     if (a.arms.length < 3 || !keep(a.x, a.z)) continue;
     const setback = Math.max(3, Math.min(12, Math.max(...a.arms.map((m) => m.w)) / 2 + 1.5));
     const J: Junction = { x: a.x, z: a.z, key: signalKey(a.x, a.z), setback, arms: a.arms, signal: false };
-    ruleOfTheRoad(J, na);
+    ruleOfTheRoad(J, na, signs.size > 0 && marked(a.x, a.z));
     out.push(J);
     const ck = `${Math.floor(a.x / 40)},${Math.floor(a.z / 40)}`;
     (byCell.get(ck) ?? byCell.set(ck, []).get(ck)!).push(J);
@@ -149,9 +165,11 @@ function signalise(J: Junction) {
   for (const m of J.arms) m.ctl = Math.abs(m.dx * main.dx + m.dz * main.dz) > 0.7 ? CTL.SIG_A : CTL.SIG_B;
 }
 
-function ruleOfTheRoad(J: Junction, na: boolean) {
+/** `marked`: the map marks the signs round this corner (two or more within ~250 m), so if it marks
+ *  none here there are none: the minor arms give way unsigned, a crossroads of equals is open. */
+function ruleOfTheRoad(J: Junction, na: boolean, marked = false) {
   const A = axes(J.arms);
-  const minor = na ? CTL.STOP : CTL.YIELD;
+  const minor = marked ? CTL.OPEN : na ? CTL.STOP : CTL.YIELD;
   if (A.length >= 2 && A[0].rank >= 4 && A[1].rank >= 4) return signalise(J); // two main roads cross
   const top = A.filter((x) => x.rank === A[0].rank);
   if (top.length === 1) {
@@ -165,7 +183,7 @@ function ruleOfTheRoad(J: Junction, na: boolean) {
     for (const x of A) for (const m of x.arms) m.ctl = x === through[0] ? CTL.GO : minor;
     return;
   }
-  for (const m of J.arms) m.ctl = na && A[0].rank >= 2 ? CTL.ALL_STOP : CTL.YIELD;
+  for (const m of J.arms) m.ctl = marked ? CTL.OPEN : na && A[0].rank >= 2 ? CTL.ALL_STOP : CTL.YIELD;
 }
 
 // ---------------- packing (tile → main thread → life worker) ----------------

@@ -15,6 +15,9 @@ export interface Season {
   leafFall: number;
   /** 0..1 autumn colour in the leaves still up */
   autumn: number;
+  /** 0..1 how far through its turning the season is — rising from the first colour to the last leaf
+   *  and never back (propMaterial: each tree turns at its own point of it) */
+  turn: number;
   /** 0..1 spring blossom on the flowering trees (cherries): the warming weeks near 11 °C */
   bloom: number;
   /** elevation (m) above which the far mountains are white */
@@ -64,13 +67,23 @@ export function seasonAt(lat: number, lon: number, elev: number, doy: number): S
   // autumn (Seattle's September is ~15 °C) waits for October's short days; the tropics never turn.
   const photo = Math.min(1, Math.max(0, (11.9 - dayLength(lat, doy)) / 1.3));
   const autumn = cooling ? Math.min(photo, Math.min(1, Math.max(0, 1 - Math.abs(T - 13) / 5))) * (1 - 0.5 * leafFall) : 0;
+  // (after the coldest turn of the year the colour doesn't vanish overnight: what the season had
+  // turned at the switch fades as the spring warms by 3 °C — a mild winter's still-coloured crowns
+  // go green with their new leaves, not on the 20th of January)
+  const turnOf = (t: number, ph: number) => Math.min(ph, Math.min(1, Math.max(0, (18 - t) / 7)));
+  let turn = cooling ? turnOf(T, photo) : 0;
+  if (!cooling) {
+    const sw = lat < 0 ? 202.75 : 20; // the day the year stops cooling (d = 20)
+    const Tsw = meanTemp(lat, lon, elev, sw - 12), phsw = Math.min(1, Math.max(0, (11.9 - dayLength(lat, sw)) / 1.3));
+    turn = turnOf(Tsw, phsw) * Math.min(1, Math.max(0, 1 - (T - Tsw) / 3));
+  }
   // (the unlagged air: blossom opens with the first warm weeks, before the canopy has filled)
   const Ta = meanTemp(lat, lon, elev, doy);
   const bloom = !cooling ? Math.min(1, Math.max(0, 1 - Math.abs(Ta - 11.5) / 3.5)) : 0;
   // the far mountains: white where the (unlagged-enough) mean at that height is below −2 °C
   const sea = meanTemp(lat, lon, 0, doy - 12);
   const snowline = Math.max(250, ((sea + 2) / 6.5) * 1000);
-  return { snow, leafFall, autumn, bloom, snowline, temp: T };
+  return { snow, leafFall, autumn, turn, bloom, snowline, temp: T };
 }
 
 /** Day of the year (1..366) of a timestamp, in UTC. */

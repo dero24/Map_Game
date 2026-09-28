@@ -46,7 +46,10 @@ export class Hints {
     if (best?.once) { this.seen[best.once] = (this.seen[best.once] ?? 0) + 1; this.save(); }
     this.since = 0;
     if (!best) { this.el.classList.remove('show'); return; }
-    this.el.innerHTML = (best.key ? `<kbd>${best.key}</kbd> ` : '') + best.text;
+    // (built as nodes, never markup: a hint can carry text from the map — a peak's name)
+    this.el.replaceChildren();
+    if (best.key) { const k = document.createElement('kbd'); k.textContent = best.key; this.el.append(k, ' '); }
+    this.el.append(best.text);
     this.el.classList.add('show');
   }
   private save() { try { localStorage.setItem(SEEN, JSON.stringify(this.seen)); } catch { /* ignore */ } }

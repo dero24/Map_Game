@@ -360,7 +360,7 @@
         "shots/review-r17-d.jpg frames 18 (zoned café: counter, pendants, 2.2 m table pitch) and 19 (house, morning sun pools with muntins)",
         "decor.ts foundry family (incl. ceiling fan, storage bench)"
       ],
-      "notes": "The user's explicit ask and the one hero-region area the reviewer did not pass. IMMERSION_BACKLOG 3.x, 6.2. 2026-09-27: furniture foundry (decor.ts), café/diner/office/shop roles by useOf, interior sun pools. Ordering + painting the dish still to do."
+      "notes": "(u) Big floorplates: a lobby at the door and rooms every ~10 m for offices, civic buildings and apartment blocks (tests/walk.test.ts big floorplates), seven painted rooms a storey, desk pods and lobby seating; supermarkets stay open floors. Frames pending (device offline). The user's explicit ask and the one hero-region area the reviewer did not pass. IMMERSION_BACKLOG 3.x, 6.2. 2026-09-27: furniture foundry (decor.ts), café/diner/office/shop roles by useOf, interior sun pools. Ordering + painting the dish still to do."
     },
     {
       "id": "downtown-life",
@@ -436,7 +436,7 @@
         "shots/looks-tucson.jpg",
         "shots/place-nyc-r3.jpg (round 4: Hudson visible in the far field, aerial above the roofs)"
       ],
-      "notes": "Tile cache v14 (stop/give-way points, fence types) - the worker needs a redeploy. (p): iron railings in dense cores, thinner street-tree trunks, DEM rivers show water in the far field, aerial pose above the roofs. Open: ridge detail on far mountains, zero-setback barrio fronts, buses on route=bus, snowbanks, window pixel mosaics, Seattle + Miami rounds."
+      "notes": "Tile cache v14 (stop/give-way points, fence types) - the worker needs a redeploy. (p): iron railings in dense cores, thinner street-tree trunks, DEM rivers show water in the far field, aerial pose above the roofs. Open: ridge detail on far mountains, zero-setback barrio fronts, buses on route=bus, snowbanks, window pixel mosaics, Seattle + Miami rounds. (u) The horizon ring reaches 125 km (z10 to 60 km, z9 beyond) and summits see over the haze: Rainier (95 km from Kerry Park) was past the old 70 km rim. Pose pending: Kerry Park 47.6295, -122.3599, bearing 152."
     },
     {
       "id": "tunable-looks",
@@ -478,20 +478,23 @@
       "priority": 2,
       "area": "world",
       "title": "Trees by species: maple, weeping willow, elm, poplar/cypress, magnolia, flowering cherry",
-      "user_visible_behavior": "Streets and yards mix round trees and oaks with dense maples (scarlet in October), vase elms under broad domes (gold), columnar poplars, and flowering cherries (pink in April); weeping willows stand by ponds and rivers with curtains that swing in the wind; the South has dark evergreen magnolias; a Mediterranean hill has dark cypresses.",
+      "user_visible_behavior": "Streets and yards mix round trees and oaks with dense maples (scarlet in October), vase elms under broad domes (gold), columnar poplars, and flowering cherries (pink in April); weeping willows stand by ponds and rivers with curtains that swing in the wind; the South has dark evergreen magnolias; a Mediterranean hill has dark cypresses. Oaks spread broad and low from heavy limbs, maples are full eggs down near the lawn (and the Northwest's three-stemmed bigleaf, gold in autumn); autumn turns tree by tree, the first maples by late September. A mapped tree with a genus, species or common name is that tree at its mapped height, and a LiDAR crown under it takes its species.",
       "status": "passing",
       "verification": [
         "tests/foundry.test.ts: every species x variant sane, grounded, deterministic, < 1,500 vertices; willow curtain to near the ground, poplar a column, cherry low and spreading, magnolia to the lawn, elm not a lollipop",
         "tests/season.test.ts: cherries blossom in spring, not in autumn",
-        "tools/tree-shots.js __TREES__ -> shots/trees-p1..3.jpg; __SPECIES__ -> shots/species-seabright.jpg (counts within 600 m of Sea Bright)"
+        "tools/tree-shots.js __TREES__ -> shots/trees-p1..3.jpg; __SPECIES__ -> shots/species-seabright.jpg (counts within 600 m of Sea Bright)",
+        "tests/foundry.test.ts: the oak half again as wide as it is tall, never a lollipop; the maple's crown lower and fuller than the round tree's; the bigleaf broad; fall hues by variant",
+        "tests/realTile.test.ts mapped trees keep their species (genus, Latin, common names; bigleaf maple, palo verde; conifers by leaf type); tests/pack.test.ts: FALL_HUE/BLOSSOM/WEEP survive the pack; tests/season.test.ts: the turning only goes one way"
       ],
       "evidence": [
         "src/assets/flora.ts",
         "src/world/props.ts (broad mix by region, water, LiDAR crown ratio)",
         "src/render/propMaterial.ts (FALL_HUE, BLOSSOM, WEEP)",
-        "src/world/season.ts (bloom)"
+        "src/world/season.ts (bloom)",
+        "src/world/realTile.ts treeKindOf; src/world/props.ts kindOfSp/mappedSpecies; src/world/season.ts turn; src/world/pack.ts matTag"
       ],
-      "notes": "Next: live oak, sycamore, dogwood, cedar; leaf cards with real phyllotaxis at close range; potted plants (R.6)."
+      "notes": "(u) oak and maple reshaped, autumn per tree (propMaterial DECID onset) — built while the device was offline; frames pending. Next: live oak, sycamore, dogwood, cedar; leaf cards with real phyllotaxis at close range; potted plants (R.6)."
     },
     {
       "id": "hill-streets",
@@ -504,7 +507,11 @@
         "tests/tiles.test.ts: ribbons follow a crest, ride over the 8 m lattice in a sag, latticeHeight = the ground mesh",
         "__SPOTS__ Queen Anne top-down / 300 m out (shots/spots-qa-after.jpg)",
         "tests/grade.test.ts: smeared bluff, arterial limit, honest 18% hill kept, seam determinism, short block between junctions on a 50% smear < 25%, 30 m cliff < 25%, retaining walls uphill only with gaps for crossings, steps and buildings",
-        "tools/grade-audit.js __GRADES__ on downtown Seattle: 2,425 ways, 47 over 25% (seams with loading cells, Colman Dock ramps, I-5 trench/lids)"
+        "tools/grade-audit.js __GRADES__ on downtown Seattle: 2,425 ways, 47 over 25% (seams with loading cells, Colman Dock ramps, I-5 trench/lids)",
+        "tests/grade.test.ts: a Queen Anne-style grid with shared junction nodes — worst local grade under 25% on an 18% hill and under 30% at 22% (was 36%: junction pins held only their node flat, the street kinked just past the crossing)",
+        "tools/grade-audit.js __GRADES__ on Queen Anne (v, real cells): 3,524 ways, 60 over 25% (was 108) — the rest at bridge ends and overpasses, service roads, one knee left on 2nd Ave W",
+        "The Counterbalance from its crest on the road crown: the kerb 50 m ahead 11.5° below eye level (reviewer round 8b: passes; shots/spots-r8-counter2.jpg 1)",
+        "tests/retaining.test.ts: a cut's wall built as a rockery (low) or poured concrete (tall), nothing proud of the face or past its ends, a vertex budget, hedges along the top"
       ],
       "evidence": [
         "src/world/synth.ts roadRibbons",
@@ -515,9 +522,11 @@
         "src/world/kerbCars.ts",
         "src/world/grade.ts",
         "src/world/retaining.ts",
-        "src/world/stream.ts (the real cell's DEM patch replaces the stand-in's)"
+        "src/world/stream.ts (the real cell's DEM patch replaces the stand-in's)",
+        "src/world/grade.ts (crossing-band pins, per-stretch caps, carriageway-first ground target)",
+        "src/world/retaining.ts (rockery / concrete, hedge / rail tops)"
       ],
-      "notes": "(t): the main thread kept the 16 m stand-in's ground under the traffic while the drawn street was graded — fixed. Open: freeway trenches, lids and tunnel portals (I-5, SR 99) need their own cut; eye-level car frames on Queen Anne await Overpass."
+      "notes": "(t): the main thread kept the 16 m stand-in's ground under the traffic while the drawn street was graded — fixed. (v): junction knees fixed; the Counterbalance frame passes; retaining walls are rockeries or poured concrete with hedges or rails (round 8b must-fix 3, offline renders only so far). Open: a stair to each lot through the wall; bridge ends and overpasses in the audit."
     },
     {
       "id": "tunnels-canopies-coasts",
@@ -591,7 +600,7 @@
         "src/world/ground.ts SLICE",
         "src/render/post.ts (Kuwahara weights)"
       ],
-      "notes": "OpenFreeMap (OpenMapTiles schema) — credited in the HUD. Next: the vector-tile twin (streets, buildings, land use) in place of the synthetic stand-in."
+      "notes": "OpenFreeMap (OpenMapTiles schema) — credited in the HUD. The vector twin landed (vector-twin)."
     },
     {
       "id": "towers-structures",
@@ -611,6 +620,232 @@
         "src/world/realTile.ts STRUCT"
       ],
       "notes": "Queen Anne frames await Overpass. __TREES__ downtown: 14 LiDAR crowns over 45 m (stadium light towers) and 20 on raised plazas remain."
+    },
+    {
+      "id": "vector-twin",
+      "priority": 1,
+      "area": "world",
+      "title": "The vector twin: a real cell from OpenFreeMap's vector tiles when Overpass is slow or down",
+      "user_visible_behavior": "A streamed cell shows its real streets (names, classes, bridges, tunnels), its buildings at their mapped heights, its parks, water and named shops within a second, graded and watered like any real cell, whatever Overpass is doing; the full OSM tile replaces it when it lands.",
+      "status": "passing",
+      "verification": [
+        "tests/vectorTile.test.ts (30): tag tables, clipping, stitching across tile edges, buildings kept once, re-noding (overshoot/shortfall/snap), names along the length",
+        "tests/mvt.test.ts: int64 values (a tunnel's layer -1)",
+        "Live in the browser (v): all 14 Queen Anne and Pike Place cells came in as twins while Overpass was down (shots/spots-r8-qa.jpg, spots-r8-pike.jpg, spots-r8-city.jpg, spots-r8-final.jpg); reviewer round 8: MF1 closed"
+      ],
+      "evidence": [
+        "src/world/vectorTile.ts",
+        "src/world/mvt.ts",
+        "src/world/tile.worker.ts vectorCell (DIRECT_V 21, t/v21)"
+      ],
+      "notes": "Verified in the browser in (v). The twin keeps no surface, lamp, crossing-marking, step-count or species tags (OpenMapTiles drops them); owning the tiles (a Planetiler profile of the state extract that keeps them, served from R2) is the reviewer's next step. Worker R2 key t/v21 — redeploy."
+    },
+    {
+      "id": "pike-market",
+      "priority": 1,
+      "area": "world",
+      "title": "Markets from the map: stalls, awnings, vendors and crowds; brick and sett streets",
+      "user_visible_behavior": "Under Pike Place's arcades (any amenity=marketplace building or canopy against one) stalls of produce, flowers, fish, bread and crafts stand along the street faces under striped awnings, a vendor behind each and shoppers in front; brick and sett streets are painted in their courses.",
+      "status": "passing",
+      "verification": [
+        "tests/foundry.test.ts market stalls (budgets, awning slope, tint)",
+        "tests/realTile.test.ts street surfaces",
+        "tests/realTile.test.ts: a marketplace node claims its building over the diners mapped inside it",
+        "Live (v), Pike Place from the vector twin: stalls down both sides of the street at the Sanitary and Corner Markets, vendors and a crowd, no parked cars on the market street (shots/spots-r8-market2.jpg frames 1-4)"
+      ],
+      "evidence": [
+        "src/assets/market.ts",
+        "src/world/props.ts (market block)",
+        "src/world/roadPalette.ts streetSurface",
+        "src/world/groundPaint.ts (courses)",
+        "src/world/realTile.ts (marketplace node claims its building)",
+        "src/world/props.ts stallAt + market streets (60 m of a hall, no kerb parking)"
+      ],
+      "notes": "Round 8 MF1 test met: lens mid-street at the Corner Market NW and SE, >= 8 stalls and >= 15 people (market2 1-2; reviewer round 8b: 'mostly closed'). Next (round 8b must-fix 2): open the hall — the claimed building an arcade to the street with stalls inside and its name on a sign, goods from the POIs, no blank frontage over 15 m; the Hillclimb as a visible flight (the twin's steps there run flat along the waterfront); cars at walking pace on market streets; brick needs Overpass's surface tag."
+    },
+    {
+      "id": "street-furniture-nodes",
+      "priority": 1,
+      "area": "world",
+      "title": "Street furniture exactly where the map puts it: crossings, lamps, bins, post boxes, racks, fountains, bollards, pay stations",
+      "user_visible_behavior": "Mapped crossings are painted where they are (ladder bars or two lines by their markings, nothing where unmarked) and the junction's inferred crosswalk steps aside; each mapped street lamp is a mast with its arm over the street and its pool of light; bins, blue post boxes, bike racks with bikes locked on, drinking fountains, bollards and parking pay stations stand on their nodes, facing the street.",
+      "status": "blocked",
+      "verification": [
+        "tests/realTile.test.ts: every class from its tags (crossing markings, racks but not bike sheds, pay stations but not drinks machines); the query asks for them",
+        "tests/kerbside.test.ts crossingPaint: on the street, square to it, with its style",
+        "tests/foundry.test.ts street furniture: valid, grounded, footprint, budgets"
+      ],
+      "evidence": [
+        "src/world/realTile.ts furnitureClass + overpassQuery",
+        "src/assets/street.ts",
+        "src/world/props.ts (mapped lamps, mapped small furniture, mapped bins)",
+        "src/world/kerbside.ts crossingPaint",
+        "src/world/groundPaint.ts crosswalks"
+      ],
+      "notes": "Blocked on frames from real (Overpass) cells: the vector twin keeps no lamps, crossing markings or hydrants, and Overpass was down for most of (v) (it answered again at the end). Test: 3rd & Pike from a real cell — mapped lamps with arms over the street, ladder crossings where marked."
+    },
+    {
+      "id": "kerbside-parking",
+      "priority": 2,
+      "area": "world",
+      "title": "The kerb as the rules draw it: clearances from the map, four in five spaces taken downtown",
+      "user_visible_behavior": "Parked cars leave street corners, driveway and alley mouths, crosswalks, hydrants (15 ft, their own kerb) and bus zones clear; downtown kerbs and lots are four-fifths full, suburbs sparse, country roads empty; far parked cars stand on the ground you see.",
+      "status": "passing",
+      "verification": [
+        "tests/kerbside.test.ts (6): corners, curb cuts, crossings mapped or implied by a footway, hydrant and bus zone on their own kerb only, parking with the traffic (both driving sides), occupancy by density, determinism",
+        "Live (v) on the vector twins: kerbs lined on Queen Anne's side streets and downtown (shots/spots-r8-qa.jpg 4, 6 — reviewer round 8: 'full kerbs'); none along a market street (spots-r8-market2.jpg)"
+      ],
+      "evidence": [
+        "src/world/kerbside.ts",
+        "src/world/props.ts (street parking)",
+        "src/world/kerbCars.ts height"
+      ],
+      "notes": "Hydrant and bus-zone clearances need Overpass's nodes (the twin keeps neither) — unit-tested, not yet seen."
+    },
+    {
+      "id": "water-looks",
+      "priority": 2,
+      "area": "world",
+      "title": "Water with its own colour, lakes that shimmer, foam along every coast",
+      "user_visible_behavior": "Puget Sound is green-steel, the Keys turquoise, the Gulf olive (the NJ shore keeps its Atlantic); lakes ripple and hold the sky like the sea; lace foam runs along every streamed seawall and beach.",
+      "status": "passing",
+      "verification": [
+        "tests/styles.test.ts: the shore's water unchanged, the Sound green-steel, the Keys turquoise, the Gulf different, keys carry it",
+        "tests/shore.test.ts: distance from the land, the strip along the coast only, none for all-land/all-sea/lakes, each cell its own part",
+        "Live (v): Elliott Bay green-steel water on the fallback path (shots/spots-r8-city.jpg 3, spots-r8-final.jpg 6 — reviewer round 8: 'the bay is water')",
+        "Kelvin wakes behind every boat under way (src/world/wakes.ts): 22 boats with V wakes from 140 m over Elliott Bay; the shader compiles (26 programs)"
+      ],
+      "evidence": [
+        "src/world/styles.ts WaterLook",
+        "src/world/water.ts (LAKE, SHORE)",
+        "src/world/shore.ts",
+        "src/world/synth.ts waterSheets (lake tag)",
+        "src/world/pack.ts (lake/shore tags)",
+        "src/world/wakes.ts",
+        "src/sim/life.ts boats",
+        "src/player/vehicles.ts wake"
+      ],
+      "notes": "Next: a baked Forel-Ule grid (ESA OC-CCI) in place of the palettes; lace on lake shores; a wake at eye level with its boat in frame (reviewer should-fix)."
+    },
+    {
+      "id": "traffic-integrity",
+      "priority": 1,
+      "area": "sim",
+      "title": "Traffic that never drives through itself: junction approaches whole, box checks that look ahead, one car to a parking space",
+      "user_visible_behavior": "Where the map draws a crosswalk on every arm of every junction (Seattle, most big US cities) cars still stop at the lines, queue behind each other and take their turn in the box; no moving car overlaps another, and no two parked cars share a space.",
+      "status": "passing",
+      "verification": [
+        "tests/traffic.test.ts mapped crosswalks: no approach split within 34 m of a junction (a mid-block crossing still joins); a 3×3 grid with a crosswalk on every arm, 3 busy minutes: 0 overlapping cars (was 8,053 pair-ticks)",
+        "tests/kerbside.test.ts one car to a space: a bend's inside kerb, a lot drawn up to the street",
+        "Live on Queen Anne's real cells (v): __CAROBB__ 35 overlapping pairs → 1 (moving 31 → 1, parked 4 → 0); __CARPROBE__ 5,677 overlapping pair-ticks → 4–16, no car stopped for good; reviewer round 8b: 'the crosswalk-stub fix is proven'"
+      ],
+      "evidence": [
+        "src/sim/life.ts buildLifeInit (FOOT_SPLIT)",
+        "src/sim/lifeSim.ts boxAhead, tailgated, lull",
+        "src/world/kerbside.ts oneToASpace",
+        "tools/grade-audit.js __CARPROBE__"
+      ],
+      "notes": "Residual: an offset jog (two T-junctions 7.8 m apart) acts as two stops — see traffic-flow. Live again (round 8b code): __CAROBB__ 2 moving pairs in 20 s, but 66 moving-vs-parked pairs, all on wide one-way streets with kerb parking (lanes at ±w/4 into the parking lanes) — fixed next."
+    },
+    {
+      "id": "traffic-flow",
+      "priority": 1,
+      "area": "sim",
+      "title": "Traffic that flows: junction control from the tags, junction clusters as one, no car spawned in view",
+      "user_visible_behavior": "On Queen Anne the side streets' corners are uncontrolled or circles (as mapped) and the arterials have priority, so traffic moves: most cars are rolling at any moment, an arterial runs at speed between its signals, and no car appears out of nowhere in front of you.",
+      "status": "in_progress",
+      "verification": [
+        "tests/traffic.test.ts: where the map marks its signs an unmarked corner is OPEN (no sign), a minor arm gives way unsigned, no signs mapped at all keeps the rule of the road; an open corner: a lone car rolls through (> 3 m/s), two at once take turns (the one on the right first) and never touch; nothing pops into view (130 → 0 on a test grid)",
+        "Live, Queen Anne (16 real cells), __CARPROBE__ with the clock ticking: 150 s 0 overlaps, 63% stopped, 2.0 m/s, longest 56 s; 300 s 2 junction pairs, 66%, 61 s (tools/grade-audit.js: setEnv({ clock }) every step)"
+      ],
+      "evidence": [
+        "src/sim/traffic.ts (CTL.OPEN, marked)",
+        "src/sim/lifeSim.ts (firstCome, junction clusters jroot, inView)",
+        "src/sim/protocol.ts H.PLAYER_YAW",
+        "src/sim/life.ts / ambient.worker.ts (the walker's facing)"
+      ],
+      "notes": "Measured live on Queen Anne's 16 real cells with the probe fixed (it had handed the sim its clock once: the lights never changed and no claim aged — its 55–65% stopped was mostly that): 150 s — 0 overlaps, 63% stopped, 2.0 m/s mean, longest wait 56 s; 300 s — 2 junction pairs, 66%, 61 s. No knots; 75% of stopped cars are queued behind others (heads: red 6%, priority arms 8%, stop 4%, all-way 3%, open 1%). Next: queue discharge at green and the demand model (R.26). Tried and backed out: turn pockets, main-road streams ignoring each other's claims, class-thinned density (see LOG (v))."
+    },
+    {
+      "id": "block-paving",
+      "priority": 2,
+      "area": "render",
+      "title": "Dense blocks paved round their buildings in the grid's own orientation",
+      "user_visible_behavior": "Downtown ground is paved out from each building to the kerb whatever way the street grid is turned (Seattle's is 32° off north) — no lawn in stair-steps through the sidewalks; houses keep their lawns; a lone big building gets its apron.",
+      "status": "passing",
+      "verification": [
+        "tests/groundPaint.test.ts (3): a turned grid paved from building outlines only (no squares), houses unpaved, a lone large building's apron",
+        "Live (v): downtown Seattle from 45 m (shots/spots-r8-final.jpg 5 — reviewer round 8: 'blocks paved to the building line')"
+      ],
+      "evidence": [
+        "src/world/groundPaint.ts (Painter, density bands)"
+      ],
+      "notes": "Sea Bright to be re-shot after the change (baked NJ unchanged by design; the paving runs on streamed tiles)."
+    },
+    {
+      "id": "horizon-landcover",
+      "priority": 2,
+      "area": "world",
+      "title": "Far mountains as the map knows them: glaciers and bare rock on the horizon ring",
+      "user_visible_behavior": "From Kerry Park, Mount Rainier stands at its true height on the skyline with its glaciers white and its rock bare, above a darker, bluer range; the snow carries through the haze.",
+      "status": "passing",
+      "verification": [
+        "tests/peaks.test.ts: ice and rock polygons from the landcover layer, a nunatak hole stays rock",
+        "Live (v): the Needle in front of downtown with Rainier to its right at its true height (shots/spots-r8-kerry-zoom.jpg 1 — reviewer round 8)"
+      ],
+      "evidence": [
+        "src/world/peaks.ts (ofmTile, landcoverAround, coverIndex)",
+        "src/world/horizon.ts (max-filtered ring, ice/rock/snow colours)"
+      ],
+      "notes": "Open (round 8 MF5): Rainier's ice lit above its sky, alpenglow at sunset; more ring resolution toward big relief."
+    },
+    {
+      "id": "viewpoint-views",
+      "priority": 2,
+      "area": "world",
+      "title": "A mapped viewpoint's view kept open",
+      "user_visible_behavior": "At a tourism=viewpoint the trees in front of it (its mapped direction, else downhill) are cut back under the sightline, so the view the map promises is there; the coin-op viewer faces it.",
+      "status": "passing",
+      "verification": [
+        "tests/views.test.ts (2): the direction from the map or the slope; the allowance under the sightline",
+        "Live (v): Kerry Park's postcard open to the Needle and Rainier (shots/spots-r8-kerry.jpg, spots-r8-market2.jpg 5)"
+      ],
+      "evidence": [
+        "src/world/views.ts",
+        "src/world/props.ts (viewpoint corridor, viewer yaw)"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "us-time-zones",
+      "priority": 1,
+      "area": "world",
+      "title": "The clock a place keeps: US time zones with summer time",
+      "user_visible_behavior": "Anywhere in the lower 48 the clock is the place's own zone with daylight saving (Arizona apart), so 18:20 in Seattle on 28 September is golden hour, not dusk; elsewhere the longitude zone.",
+      "status": "passing",
+      "verification": [
+        "tests/tz.test.ts: 26 cities, Mexico excluded, summer time (Seattle 18:20 PDT)",
+        "Live (v): Kerry Park at 18:20 lit gold (shots/spots-r8-market2.jpg 5)"
+      ],
+      "evidence": [
+        "src/world/tz.ts",
+        "src/world/virtual.ts (zoneAt)",
+        "src/ui/panel.ts (zone names)"
+      ],
+      "notes": "Zone lines are smoothed: a town within ~20 km of one may land on the wrong side."
+    },
+    {
+      "id": "harness-asserts-see",
+      "priority": 2,
+      "area": "tools",
+      "title": "Capture asserts that see: the subject's visible pixels and near occluders from an id render",
+      "user_visible_behavior": "Every pinned frame is checked on what the lens actually sees — the subject covering at least 5% of the frame (occlusion included), nothing within 2.5 m over 5% or within 4 m over 15% — and a miss is stamped under the frame on the contact sheet.",
+      "status": "in_progress",
+      "verification": [],
+      "evidence": [
+        "tools/spot-shots.js (idPass, after-hook, fails stamped on the sheet)"
+      ],
+      "notes": "Reviewer round 8b must-fix 4. Written while the computer was offline: run it on Kerry Park 18:20 (the Needle >= 5%) and counter2 2 and 5."
     }
   ],
   "regions": {

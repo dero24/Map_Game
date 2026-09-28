@@ -12,7 +12,7 @@ import { carMix, boatMix, carLib, boatLib, boatRecipe, carRecipe, pickFrom, CAR_
 import type { Mailbox, Door, Drive } from './buildings';
 import { makeCanvas } from './canvas';
 import { activeStyle, pickWeighted } from './styles';
-import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, plantLib, inBloom, SPECIES, STAGES, FALL_HUE, DECIDUOUS, type PlantSpecies } from '../assets/flora';
+import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, plantLib, inBloom, SPECIES, STAGES, fallHueOf, DECIDUOUS, type PlantSpecies } from '../assets/flora';
 import { MAILBOXES, mailboxLib, beachLib, gearFor, type MailboxStyle, type CarGear } from '../assets/furniture';
 import { variantAt, hashf } from '../assets/core';
 import { cafeSet, mergeDecor } from '../assets/decor';
@@ -23,8 +23,18 @@ import { analyzeJunctions, packJunctions, signalKey, CTL, type Junction, STOP_BA
 import { sportLib, type SportPiece } from '../assets/sport';
 import { towerLib, TOWER_H, CHIMNEY_BRICK, type TowerKind } from '../assets/tower';
 import { COURT, courtFrame, diamondFrame, type Sport } from './sports';
+import { stallLib, STALL_VARIANTS, AWNING, STALL_FOOT, type StallKind } from '../assets/market';
+import { kerbSpaces, oneToASpace, OCCUPANCY } from './kerbside';
+import { viewCones, viewDir } from './views';
+import { streetLib, streetPaint, STREET_VARIANTS, type StreetKind } from '../assets/street';
+import { playLib, PLAY_KINDS, PLAY_PAINT, PLAY_FOOT, type PlayKind } from '../assets/play';
 
 type P = [number, number];
+const pointIn = (x: number, z: number, r: P[]) => {
+  let ins = false;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (r[i][1] > z !== r[j][1] > z && x < ((r[j][0] - r[i][0]) * (z - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) ins = !ins;
+  return ins;
+};
 const unpackPts = (f: number[]): P[] => {
   const o: P[] = [];
   for (let i = 0; i + 1 < f.length; i += 2) o.push([f[i] / 10, f[i + 1] / 10]);
@@ -32,6 +42,29 @@ const unpackPts = (f: number[]): P[] => {
 };
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const RANK: Record<string, number> = { residential: 2, unclassified: 2, living_street: 2, tertiary: 3, secondary: 4, primary: 5 };
+
+/** The carriageways (ranked 2+, at grade) with a segment within `pad` m of a point, from a 32 m grid
+ *  of their segments' boxes: a street lookup for each of a downtown's thousands of mapped lamps,
+ *  racks and bollards without walking every street each time. */
+function streetsNear(roads: Road[], pad = 25): (x: number, z: number) => Road[] {
+  const C = 32, grid = new Map<number, Road[]>();
+  const key = (i: number, j: number) => (i + 65536) * 131072 + (j + 65536);
+  for (const r of roads) {
+    if (r.lod || r.br || r.tu || (RANK[r.c] ?? 0) < 2) continue;
+    const seen = new Set<number>();
+    for (let q = 0; q + 3 < r.p.length; q += 2) {
+      const ax = r.p[q] / 10, az = r.p[q + 1] / 10, bx = r.p[q + 2] / 10, bz = r.p[q + 3] / 10;
+      for (let i = Math.floor((Math.min(ax, bx) - pad) / C); i <= Math.floor((Math.max(ax, bx) + pad) / C); i++)
+        for (let j = Math.floor((Math.min(az, bz) - pad) / C); j <= Math.floor((Math.max(az, bz) + pad) / C); j++) {
+          const k = key(i, j);
+          if (seen.has(k)) continue;
+          seen.add(k);
+          (grid.get(k) ?? grid.set(k, []).get(k)!).push(r);
+        }
+    }
+  }
+  return (x, z) => grid.get(key(Math.floor(x / C), Math.floor(z / C))) ?? [];
+}
 
 // Overhead wires as screen-space ribbons: a real wire's projected width (~2.5 cm), but never
 // thinner than 2 px — a one-pixel line vanishes in the brush pass, and the wires criss-crossing
@@ -198,7 +231,7 @@ function hedgeGeo() {
     g.computeVertexNormals();
     parts.push(g.translate((-1.36 + i * 0.68) * 0.86, 0.42, 0).scale(1, 1, 1));
   }
-  hedgeCache = mergeGeometries(parts.map((p) => p.toNonIndexed()));
+  hedgeCache = mergeGeometries(parts); // (icosahedra come unindexed: no copy, no console warning)
   hedgeCache.computeVertexNormals();
   return hedgeCache.clone();
 }
@@ -283,6 +316,11 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   const wire: number[] = [];
   const q = new THREE.Quaternion();
   const roads = json.roads.filter((r) => !r.lod && !r.br && (RANK[r.c] ?? 0) >= 2) as Road[];
+  // Mapped street lamps (`highway=street_lamp`): a mast exactly where the map puts each one, its
+  // arm over the nearest street — and the spaced-out lamps below step aside within 18 m of one
+  // (a street the map lights is lit as mapped, not twice).
+  const allLamps = ctxJson.points.filter((p) => p.c === 'lamp');
+  const lampNear = (x: number, z: number) => allLamps.some((p) => Math.abs(p.x - x) < 18 && Math.abs(p.z - z) < 18);
   for (const r of roads) {
     const rank = RANK[r.c];
     const p = unpackPts(r.p);
@@ -318,7 +356,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
           const off2 = r.w / 2 + 1.2;
           for (const [px, pz, sd] of [[ax + tx * (s - spacing) + nx * off2 * side, az + tz * (s - spacing) + nz * off2 * side, side], [ax + tx * (s - spacing * 1.5) - nx * off2 * side, az + tz * (s - spacing * 1.5) - nz * off2 * side, -side]] as const) {
             if (s - spacing * 1.5 < 0 && sd !== side) continue;
-            if (!inSlice(px, pz, 20) || terrain.sdfAt(px, pz) < 1.5 || walk.blocked(px, pz, 0.6)) continue;
+            if (!inSlice(px, pz, 20) || terrain.sdfAt(px, pz) < 1.5 || walk.blocked(px, pz, 0.6) || lampNear(px, pz)) continue;
             const gp = terrain.heightAt(px, pz), dir = -sd;
             mastMats.push(new THREE.Matrix4().compose(V(px, gp, pz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -ang), V(1, 1, 1)));
             armMats.push(new THREE.Matrix4().compose(V(px, gp, pz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -ang + (dir > 0 ? Math.PI : 0)), V(1, 1, 1)));
@@ -349,7 +387,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         }
         prev = { top, ang };
         // cobra-head lamp on some poles, reaching over the street
-        if (count++ % (rank >= 3 ? 2 : 3) === 0) {
+        if (count++ % (rank >= 3 ? 2 : 3) === 0 && !lampNear(x, z)) {
           const dir = -side;
           // the arm's local +z must point where the head (and its glow + pool) goes: rotating +z by
           // −ang gives (−tz, tx) = −n, so the side toward +n needs the extra half turn
@@ -360,6 +398,40 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         }
       }
       carry = s - L;
+    }
+  }
+  {
+    const near = streetsNear(ctxJson.roads);
+    for (const p of json.points) {
+      if (p.c !== 'lamp' || !inSlice(p.x, p.z) || terrain.sdfAt(p.x, p.z) < 1 || walk.blocked(p.x, p.z, 0.25)) continue;
+      // the arm reaches toward the nearest street's centre line (a park lamp: any way)
+      let best = 20, bw = 0, dx = 0, dz = 1;
+      for (const r of near(p.x, p.z))
+        for (let i = 0; i + 3 < r.p.length; i += 2) {
+          const ax = r.p[i] / 10, az = r.p[i + 1] / 10, sx = r.p[i + 2] / 10 - ax, sz = r.p[i + 3] / 10 - az, L2 = sx * sx + sz * sz || 1;
+          const t = Math.max(0, Math.min(1, ((p.x - ax) * sx + (p.z - az) * sz) / L2));
+          const ex = ax + sx * t - p.x, ez = az + sz * t - p.z, d = Math.hypot(ex, ez);
+          if (d >= best) continue;
+          (best = d), (bw = r.w);
+          if (d > 0.3) (dx = ex / d), (dz = ez / d);
+          else {
+            // (a lamp node on the street's own line: to one kerb, its arm back over the street)
+            const L = Math.sqrt(L2), sd = hash01(Math.floor(p.x * 5) ^ Math.floor(p.z * 3)) < 0.5 ? 1 : -1;
+            (dx = (sz / L) * sd), (dz = (-sx / L) * sd);
+          }
+        }
+      if (best === 20) { const a = hash01(Math.floor(p.x * 7) ^ Math.floor(p.z * 13)) * Math.PI * 2; (dx = Math.sin(a)), (dz = Math.cos(a)); }
+      // (a node a metre into the carriageway — or a width that counts the parking lanes — stands
+      // the mast back on the kerb)
+      const back = best < 20 && best < bw / 2 + 0.3 ? best - bw / 2 - 0.6 : 0;
+      const lx = p.x + dx * back, lz = p.z + dz * back;
+      if (back && (walk.blocked(lx, lz, 0.25) || terrain.sdfAt(lx, lz) < 1)) continue;
+      const g = terrain.heightAt(lx, lz), yaw = Math.atan2(dx, dz);
+      mastMats.push(new THREE.Matrix4().compose(V(lx, g, lz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, 1)));
+      armMats.push(new THREE.Matrix4().compose(V(lx, g, lz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, 1)));
+      lampHeads.push(V(lx + dx * 2.2, g + 8.05, lz + dz * 2.2));
+      lampGround.push([lx + dx * 4.5, lz + dz * 4.5]);
+      walk.addLoop([[lx - 0.16, lz - 0.16], [lx + 0.16, lz - 0.16], [lx + 0.16, lz + 0.16], [lx - 0.16, lz + 0.16]]);
     }
   }
   // Mapped power lines (OSM power=line): the tall wooden H-less poles of a sub-transmission run
@@ -640,7 +712,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       // species from the region's weights; coastal cells lean to wind-shaped pines everywhere
       const coastPine = terrain.oceanDistAt(jx, jz) < 500 && look.trees[3] > 0.5 && rng.float() < 0.35;
       const k = regional(coastPine ? 3 : pickWeighted(look.trees, rng.float()), jx, jz);
-      const v = variantAt(jx, jz, TREE_VARIANTS, 11);
+      let v = variantAt(jx, jz, TREE_VARIANTS, 11);
+      if (k === MAPLE && v === 2 && sub !== 'pnw') v = 0; // (the bigleaf maple is the Northwest's alone)
       const h = k === 2 ? 2.4 + rng.float() * 1.6 : (k >= 3 ? 7 : 8) + rng.float() * 7;
       const s = h / treeMeta(TREE_KINDS[k], v).h;
       const m = new THREE.Matrix4().compose(V(jx, g - 0.2, jz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(s * (0.85 + rng.float() * 0.3), s * (k === 2 ? 1.3 : 1), s * (0.85 + rng.float() * 0.3)));
@@ -649,6 +722,29 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       else if (rng.float() < 0.12) c.lerp(new THREE.Color(0xb59a3e), 0.45); // first hints of autumn
       trees.push({ m, c, k, v });
     }
+  // The map's own species (natural=tree + genus / species / taxon, realTile treeKindOf): a mapped
+  // tree is that tree — and a LiDAR crown within 3.5 m of one takes its species (the survey
+  // measures it, the map names it). The bigleaf maple is the Northwest's alone.
+  const kindOfSp = (sp: string, x: number, z: number): [number, number] => {
+    const [name, vs] = sp.split(':');
+    if (name === 'conifer') return [look.trees[4] > look.trees[3] ? 4 : 3, variantAt(x, z, TREE_VARIANTS, 11)];
+    const k = TREE_KINDS.indexOf(name as (typeof TREE_KINDS)[number]);
+    if (k < 0) return [-1, 0];
+    return [k, vs !== undefined ? +vs % TREE_VARIANTS : name === 'maple' || name === 'mesquite' ? variantAt(x, z, 2, 11) : variantAt(x, z, TREE_VARIANTS, 11)];
+  };
+  const SPC = 8, spGrid = new Map<string, { x: number; z: number; sp: string }[]>();
+  for (const p of ctxJson.points) {
+    if (p.c !== 'tree' || !p.sp) continue;
+    const key = `${Math.floor(p.x / SPC)},${Math.floor(p.z / SPC)}`;
+    (spGrid.get(key) ?? spGrid.set(key, []).get(key)!).push({ x: p.x, z: p.z, sp: p.sp });
+  }
+  const mappedSpecies = (x: number, z: number) => {
+    let best: string | null = null, bd = 3.5;
+    for (let i = Math.floor((x - bd) / SPC); i <= Math.floor((x + bd) / SPC); i++)
+      for (let j = Math.floor((z - bd) / SPC); j <= Math.floor((z + bd) / SPC); j++)
+        for (const q of spGrid.get(`${i},${j}`) ?? []) { const d = Math.hypot(q.x - x, q.z - z); if (d < bd) (bd = d), (best = q.sp); }
+    return best;
+  };
   for (const p of json.points) {
     if (p.c !== 'tree' || !inSlice(p.x, p.z) || lidarCovered(p.x, p.z)) continue;
     let { x, z } = p;
@@ -664,8 +760,10 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       if (paved(x, z) || walk.blocked(x, z, 2.2)) continue;
     }
     if (onStructure(x, z)) continue;
-    const k = regional(rng.float() < 0.6 ? 0 : 1, x, z), v = variantAt(x, z, TREE_VARIANTS, 11);
-    const s = 9 / treeMeta(TREE_KINDS[k], v).h;
+    let [k, v] = p.sp ? kindOfSp(p.sp, x, z) : [-1, 0];
+    if (k < 0) (k = regional(rng.float() < 0.6 ? 0 : 1, x, z)), (v = variantAt(x, z, TREE_VARIANTS, 11));
+    if (k === MAPLE && v === 2 && sub !== 'pnw' && !p.sp?.endsWith(':2')) v = 0;
+    const s = (p.h ?? (k === 2 ? 3 : 9)) / treeMeta(TREE_KINDS[k], v).h;
     trees.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(s, s, s)), c: new THREE.Color(rng.pick(green)), k, v });
   }
 
@@ -709,11 +807,20 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         if (k !== 7 && k !== 8 && k !== 5 && treeMeta(TREE_KINDS[k], v).crownBottom / treeMeta(TREE_KINDS[k], v).h > 0.56) k = regional(r / h > 0.42 ? 1 : 0, x, z, r / h);
         v = variantAt(x, z, TREE_VARIANTS, 11);
       }
+      // …unless the map names the tree the survey measured (a mapped street tree under this crown)
+      const named = h >= 4.2 ? mappedSpecies(x, z) : null;
+      if (named) {
+        const [nk, nv] = kindOfSp(named, x, z);
+        if (nk >= 0) (k = nk), (v = nv);
+      }
+      if (k === MAPLE && v === 2 && sub !== 'pnw' && !named?.endsWith(':2')) v = 0;
       const tm = treeMeta(TREE_KINDS[k], v);
       const mh = tm.h, mr = tm.crownR;
       // crowns never thinner than ~the model's own proportions: a lone 20 m oak measured
-      // at half-height reads narrow, and a stretched-thin model reads as a lollipop
-      const sy = h / mh, sr = Math.max(0.85 * sy, Math.min(1.8 * sy, r / mr));
+      // at half-height reads narrow, and a stretched-thin model reads as a lollipop; nor squashed
+      // much flatter (a crown stretched 1.8× wide turned its lobes into slabs stacked on a pole —
+      // a broad crown is an oak's, chosen above, not a round tree flattened)
+      const sy = h / mh, sr = Math.max(0.85 * sy, Math.min(1.35 * sy, r / mr));
       const m = new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z) - 0.2, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(sr * (0.92 + rng.float() * 0.16), sy, sr * (0.92 + rng.float() * 0.16)));
       const c = new THREE.Color(rng.pick(green));
       if (k === 4) c.lerp(new THREE.Color(0x2e4630), 0.55);
@@ -742,7 +849,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
           if (hq > 0.62 || walk.blocked(x, z, 1.4) || terrain.sdfAt(x, z) < 2) continue;
           if (trees.some((q) => { const e = q.m.elements; return Math.abs(e[12] - x) < 6 && Math.abs(e[14] - z) < 6; })) continue;
           const g = terrain.heightAt(x, z);
-          const k = regional(hq < 0.2 ? 1 : 0, x, z), v = variantAt(x, z, TREE_VARIANTS, 11);
+          const k = regional(hq < 0.2 ? 1 : 0, x, z), v = k === MAPLE ? variantAt(x, z, 2, 11) : variantAt(x, z, TREE_VARIANTS, 11); // (street maples are sugar and red)
           const sc = (7 + hq * 6) / treeMeta(TREE_KINDS[k], v).h;
           trees.push({ m: new THREE.Matrix4().compose(V(x, g - 0.1, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), hq * 40), V(sc * 0.85, sc, sc * 0.85)), c: new THREE.Color(rng.pick(green)), k, v });
           pits.push(new THREE.Matrix4().compose(V(x, g, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(tx, tz)), V(1, 1, 1)));
@@ -779,6 +886,31 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     bins.forEach((m, i) => im.setMatrixAt(i, m));
     im.name = 'street:bins';
     group.add(im);
+  }
+
+  // ---- a viewpoint's view is kept open (every tree source) ----
+  // `tourism=viewpoint` says there is a view here: the crowns in front of it (along its mapped
+  // `direction`, else down its slope) that would rise into the sightline are cut back under it —
+  // a smaller tree where one of 4 m fits, none where it doesn't. Kerry Park looked into its own
+  // spruces.
+  {
+    const vps = viewCones(ctxJson.points, (x, z) => terrain.heightAt(x, z));
+    if (vps.length) {
+      const pos = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+      for (let i = trees.length - 1; i >= 0; i--) {
+        const t = trees[i];
+        const e = t.m.elements;
+        let allow = Infinity;
+        for (const c of vps) allow = Math.min(allow, c.allow(e[12], e[14], e[13]));
+        if (allow === Infinity) continue;
+        t.m.decompose(pos, q, sc);
+        const h = treeMeta(TREE_KINDS[t.k], t.v).h * sc.y;
+        if (h <= allow) continue;
+        if (allow < 4) { trees.splice(i, 1); continue; } // (cut to a shrub at the rail it reads as a blob in the view: gone)
+        sc.multiplyScalar(allow / h);
+        t.m.compose(pos, q, sc);
+      }
+    }
   }
 
   // ---- clearance against buildings (every tree source) ----
@@ -886,7 +1018,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       // palms, magnolias and the desert legumes keep theirs
       const kind = TREE_KINDS[k];
       const decid = DECIDUOUS.has(kind);
-      const im = new THREE.InstancedMesh(treeLib(kind, v).clone(), propMaterial({ wind: true, foliage: true, crown, decid, fallHue: FALL_HUE[kind] ?? 0, blossom: kind === 'cherry', weep: kind === 'willow' }), list.length);
+      const im = new THREE.InstancedMesh(treeLib(kind, v).clone(), propMaterial({ wind: true, foliage: true, crown, decid, fallHue: fallHueOf(kind, v), blossom: kind === 'cherry', weep: kind === 'willow' }), list.length);
       im.name = `trees:${kind}:${v}`;
       // a species' own green over the region's: the desert legumes a dusty grey-green (palo verde a
       // thin yellow-green), the willow a soft yellow-green, the magnolia dark and glossy, the
@@ -1052,64 +1184,30 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     }
   }
   // Street parking (realTile `pk`: left + 4·right; 1 parallel, 2 angled — mapped, or both kerbs
-  // of a North American town street): the kerb lined with cars, a space every 6.3 m (angled
-  // 3 m), facing the traffic on their side. Kept clear of junctions (10 m either side of a node
-  // another street shares), hydrants (15 ft), bus stops and anything already on the kerb. The
-  // cars go out as records (kerbCars.ts draws them with a per-car level of detail); a tile keeps
-  // at most KERB_CAP of them (with the lots' cars below), thinned evenly.
+  // of a North American town street): kerbside.ts finds the spaces — kept clear of corners,
+  // driveways, crosswalks, hydrants and bus zones where the map puts them, four in five taken
+  // downtown — and they're parked here where nothing already stands. The cars go out as records
+  // (kerbCars.ts draws them with a per-car level of detail); a tile keeps at most KERB_CAP of them
+  // (with the lots' cars below), thinned evenly.
   const kerb: number[] = [];
   {
     const KERB_CAP = 8000;
-    const nodeUse = new Map<number, number>();
-    for (const r of ctxJson.roads) {
-      if (r.lod || r.br) continue;
-      for (let i = 0; i + 1 < r.p.length; i += 2) { const k = r.p[i] * 1e6 + r.p[i + 1]; nodeUse.set(k, (nodeUse.get(k) ?? 0) + 1); }
-    }
-    const left = !!look.driveLeft;
-    // no parking within 15 ft of a hydrant, or in a bus stop
-    const noPark = json.points.filter((q) => q.c === 'hydrant' || q.c === 'bus' || q.c === 'bus_shelter').map((q) => [q.x, q.z, q.c === 'hydrant' ? 4.6 : 12] as const);
     const cand: { x: number; z: number; yaw: number; type: CarType; hq: number; corners: P[] }[] = [];
-    for (const r of json.roads) {
-      if (!r.pk || r.lod || r.br || r.w < 10) continue;
-      const p = unpackPts(r.p);
-      // distances along the way of its junction nodes (and its two ends)
-      const cum = [0];
-      for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]));
-      const junc = [0, cum[cum.length - 1]];
-      for (let i = 1; i + 1 < p.length; i++) if ((nodeUse.get(r.p[i * 2] * 1e6 + r.p[i * 2 + 1]) ?? 0) > 1) junc.push(cum[i]);
-      for (const sd of [-1, 1]) {
-        const mode = sd < 0 ? r.pk & 3 : (r.pk >> 2) & 3;
-        if (!mode) continue;
-        const step = mode === 2 ? 3 : 6.3;
-        // which way the cars on this side face: with the traffic beside them
-        const fwd = r.ow ? 1 : (sd > 0) !== left ? 1 : -1;
-        for (let i = 0; i + 1 < p.length; i++) {
-          const [ax, az] = p[i], [bx, bz] = p[i + 1], L = cum[i + 1] - cum[i];
-          if (L < 1) continue;
-          const tx = (bx - ax) / L, tz = (bz - az) / L, nx = -tz * sd, nz = tx * sd; // n: toward this kerb
-          for (let s = Math.ceil((cum[i] + 1) / step) * step; s < cum[i + 1]; s += step) {
-            if (junc.some((j) => Math.abs(j - s) < 10)) continue;
-            const t = s - cum[i], mx = ax + tx * t, mz = az + tz * t;
-            // kerbs fill with the town: most spaces taken downtown, a car every few houses in the
-            // suburbs, none along an empty country road
-            const hq = hashf(Math.floor(mx * 3.1) * 92821 + Math.floor(mz * 4.3));
-            if (hq > 0.7 * Math.min(1, Math.max(0, (built(mx, mz)[0] - 0.03) / 0.2))) continue;
-            const off = r.w / 2 - (mode === 2 ? 2.5 : 1.15);
-            const x = mx + nx * off, z = mz + nz * off;
-            if (!inSlice(x, z) || noPark.some(([qx, qz, r2]) => Math.abs(qx - x) < r2 && Math.abs(qz - z) < r2)) continue;
-            // angled bays: nose in toward the kerb at 55° to the street
-            const a = mode === 2 ? 0.96 : 0;
-            const dx = tx * fwd * Math.cos(a) + nx * Math.sin(a), dz = tz * fwd * Math.cos(a) + nz * Math.sin(a);
-            const yaw = Math.atan2(-dx, -dz);
-            const type = pickFrom(carMix(look.region, look.climate), hashf(Math.floor(x * 3.3) + Math.floor(z * 7.1) * 131));
-            const rc = carRecipe(type, 1), hl = rc.L / 2, hw = rc.W / 2 + 0.05;
-            const cy = Math.cos(yaw), sy = Math.sin(yaw);
-            const corners: P[] = [[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]].map(([u, v]) => [x + u * cy + v * sy, z - u * sy + v * cy]);
-            if (corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.2)) || terrain.sdfAt(x, z) < 2) continue;
-            cand.push({ x, z, yaw, type, hq, corners });
-          }
-        }
-      }
+    // (a market's own streets are its walkers' and its stalls': the shared streets within ~60 m of a
+    // market hall park no cars — the stalls line them further down)
+    const halls = ctxJson.buildings.filter((b) => b.u === 'marketplace' && !b.pt).map((b) => { const r = unpackPts(b.r); return [r.reduce((a, q) => a + q[0], 0) / r.length, r.reduce((a, q) => a + q[1], 0) / r.length] as P; });
+    const marketStreet = (r: Road) => halls.length > 0 && /^(residential|living_street|unclassified)$/.test(r.c) && unpackPts(r.p).some(([x, z], i, q) => {
+      if (i === 0) return halls.some(([hx, hz]) => Math.hypot(hx - x, hz - z) < 60);
+      const [ax, az] = q[i - 1], dx = x - ax, dz = z - az, L2 = dx * dx + dz * dz || 1;
+      return halls.some(([hx, hz]) => { const t = Math.max(0, Math.min(1, ((hx - ax) * dx + (hz - az) * dz) / L2)); return Math.hypot(ax + dx * t - hx, az + dz * t - hz) < 60; });
+    });
+    for (const k of kerbSpaces(json.roads.filter((r) => !marketStreet(r)), ctxJson.roads, ctxJson.points, { left: !!look.driveLeft, built: (x, z) => built(x, z)[0], inSlice })) {
+      const type = pickFrom(carMix(look.region, look.climate), hashf(Math.floor(k.x * 3.3) + Math.floor(k.z * 7.1) * 131));
+      const rc = carRecipe(type, 1), hl = rc.L / 2, hw = rc.W / 2 + 0.05;
+      const cy = Math.cos(k.yaw), sy = Math.sin(k.yaw);
+      const corners: P[] = [[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]].map(([u, v]) => [k.x + u * cy + v * sy, k.z - u * sy + v * cy]);
+      if (corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.2)) || terrain.sdfAt(k.x, k.z) < 2) continue;
+      cand.push({ x: k.x, z: k.z, yaw: k.yaw, type, hq: k.hq, corners });
     }
     // Parking lots (lots.ts, the stalls the ground paint stripes): filled by the town's pulse —
     // a third of the stalls at the edge of town, most of them where the blocks are built up
@@ -1119,7 +1217,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       if (!L) continue;
       for (const st of L.stalls) {
         if (!inSlice(st.x, st.z)) continue;
-        const occ = 0.3 + 0.45 * Math.min(1, Math.max(0, (built(st.x, st.z)[0] - 0.03) / 0.2));
+        const occ = 0.3 + (OCCUPANCY - 0.3) * Math.min(1, Math.max(0, (built(st.x, st.z)[0] - 0.03) / 0.2));
         if (st.hq > occ) continue;
         const type = pickFrom(carMix(look.region, look.climate), hashf(Math.floor(st.x * 3.3) + Math.floor(st.z * 7.1) * 131));
         const rc = carRecipe(type, 1), hl = rc.L / 2, hw = rc.W / 2 + 0.05;
@@ -1132,8 +1230,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     }
     // over the cap: keep the spaces with the lowest hash — an even thinning across the tile
     const keep = cand.length > KERB_CAP ? cand.slice().sort((a, b) => a.hq - b.hq)[KERB_CAP - 1].hq : 1;
-    for (const k of cand) {
-      if (k.hq > keep) continue;
+    for (const k of oneToASpace(cand.filter((k) => k.hq <= keep))) {
       const u3 = hashf(Math.floor(k.x * 13 + k.z * 97));
       const paint = new THREE.Color(CAR[Math.floor(k.hq * 97 + u3 * 31) % CAR.length]).lerp(new THREE.Color(0xd8d4cc), u3 < 0.2 ? 0.12 + u3 : 0);
       kerb.push(k.x, terrain.heightAt(k.x, k.z), k.z, k.yaw, CAR_TYPES.indexOf(k.type), paint.r, paint.g, paint.b, 0.97 + k.hq * 0.06, 0.97 + u3 * 0.06, 0.98); // kerbCars.ts KERB_STRIDE
@@ -1502,6 +1599,60 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     group.add(im);
   }
 
+  // ---------- mapped small furniture: post boxes, bike racks, fountains, bollards, pay stations ----------
+  // (assets/street.ts) Each exactly where the map puts it, turned to face the nearest street; one
+  // mapped on the carriageway itself (a node a metre off, a width that counts the parking lanes)
+  // steps back onto the sidewalk — all but a bollard, which may well stand in the road.
+  {
+    const KIND: Record<string, StreetKind> = { postbox: look.region === 'eu' && look.driveLeft ? 'pillarbox' : 'postbox', bikerack: 'bikerack', drinking: 'drinking', bollard: 'bollard', meter: 'meter', viewpoint: 'viewer' };
+    const HALF: Record<StreetKind, [number, number]> = { postbox: [0.28, 0.26], pillarbox: [0.3, 0.3], bikerack: [1.25, 0.85], drinking: [0.25, 0.25], bollard: [0.12, 0.12], meter: [0.2, 0.16], viewer: [0.25, 0.25] };
+    const near = streetsNear(ctxJson.roads);
+    const byKey = new Map<string, { m: THREE.Matrix4; c: THREE.Color }[]>();
+    for (const p of json.points) {
+      const k = KIND[p.c];
+      if (!k || !inSlice(p.x, p.z) || terrain.sdfAt(p.x, p.z) < 1 || walk.buildingAt(p.x, p.z) >= 0) continue;
+      let x = p.x, z = p.z, best: { d: number; ex: number; ez: number; w: number } | null = null;
+      for (const r of near(x, z))
+        for (let i = 0; i + 3 < r.p.length; i += 2) {
+          const ax = r.p[i] / 10, az = r.p[i + 1] / 10, sx = r.p[i + 2] / 10 - ax, sz = r.p[i + 3] / 10 - az, L2 = sx * sx + sz * sz || 1;
+          const t = Math.max(0, Math.min(1, ((x - ax) * sx + (z - az) * sz) / L2));
+          const ex = ax + sx * t, ez = az + sz * t, d = Math.hypot(ex - x, ez - z);
+          if (d < (best?.d ?? 25)) best = { d, ex, ez, w: r.w };
+        }
+      let dx = 0, dz = 1; // toward the street
+      if (k === 'viewer') {
+        // a viewer looks where the map says the view is (`direction`), else down the slope — the
+        // way the trees in front of it are kept low (views.ts)
+        const vd = viewDir(p, (qx, qz) => terrain.heightAt(qx, qz));
+        if (vd) [dx, dz] = vd;
+        best = null; // (no stepping back off a street: it stands where it's mapped)
+      } else if (best) {
+        const l = best.d || 1;
+        (dx = (best.ex - x) / l), (dz = (best.ez - z) / l);
+        if (best.d < 0.05) (dx = 0), (dz = 1);
+        if (k !== 'bollard' && best.d < best.w / 2 + 0.3) (x = best.ex - dx * (best.w / 2 + 0.7)), (z = best.ez - dz * (best.w / 2 + 0.7));
+      }
+      const yaw = Math.atan2(dx, dz), [hx, hz] = HALF[k], c = Math.cos(yaw), sn = Math.sin(yaw);
+      const corners: P[] = [[-hx, -hz], [hx, -hz], [hx, hz], [-hx, hz]].map(([u, v]) => [x + u * c + v * sn, z - u * sn + v * c]);
+      if (corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.05))) continue;
+      const u = hashf(Math.floor(x * 13) * 7919 + Math.floor(z * 11)), v = Math.floor(u * STREET_VARIANTS);
+      const key = `${k}:${k === 'bikerack' ? v : 0}`;
+      (byKey.get(key) ?? byKey.set(key, []).get(key)!).push({
+        m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, 1)),
+        c: new THREE.Color(streetPaint(k, look.region, hashf(Math.floor(x * 5) + Math.floor(z * 3) * 977))),
+      });
+      walk.addLoop(corners, -Infinity, terrain.heightAt(x, z) + (k === 'meter' ? 1.6 : 1.0));
+    }
+    for (const [key, list] of byKey) {
+      const [k, v] = key.split(':');
+      const im = new THREE.InstancedMesh(streetLib(k as StreetKind, +v).clone(), propMaterial(), list.length);
+      list.forEach((q, i) => { im.setMatrixAt(i, q.m); im.setColorAt(i, q.c); });
+      im.name = `street:${key}`;
+      im.layers.enable(1);
+      group.add(im);
+    }
+  }
+
   // ---------- street furniture: hydrants, benches, bins, planters, front hedges ----------
   {
     // Distance from (x,z) to the nearest carriageway edge — the universal "not in the street"
@@ -1585,12 +1736,13 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       colored(new THREE.CylinderGeometry(0.1, 0.1, 0.06, 6).translate(0, 0.83, 0), 0x3a3d38),
     ]);
     const cans: THREE.Matrix4[] = [], canCol: THREE.Color[] = [];
-    const canAt = (x: number, z: number) => {
-      if (walk.blocked(x, z, 1.2) || !clearOfRoad(x, z, 1.0)) return;
+    const canAt = (x: number, z: number, mapped = false) => {
+      if (mapped ? walk.blocked(x, z, 0.25) || walk.buildingAt(x, z) >= 0 : walk.blocked(x, z, 1.2) || !clearOfRoad(x, z, 1.0)) return;
       cans.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(1, 1, 1)));
       canCol.push(new THREE.Color(rng.pick([0x4a5548, 0x5a6166, 0x3e4a42, 0x6a6e5c])));
       walk.addLoop([[x - 0.2, z - 0.2], [x + 0.2, z - 0.2], [x + 0.2, z + 0.2], [x - 0.2, z + 0.2]], -Infinity, terrain.heightAt(x, z) + 0.85);
     };
+    for (const p of json.points) if (p.c === 'bin' && inSlice(p.x, p.z)) canAt(p.x, p.z, true); // (the map's own, first)
     benches.forEach((m, i) => {
       if (i % 3 !== 0) return;
       const e = m.elements;
@@ -1720,6 +1872,150 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         guests.forEach((_, i) => im.setColorAt(i, new THREE.Color([0xe8d8b0, 0x5b7fa6, 0xc4553f, 0xf2efe6, 0x6e8c5a, 0xe0a33b, 0x7a5b8c][Math.floor(hashf(i * 7919 + Math.floor(S.x0)) * 7)])));
         im.layers.enable(1);
         group.add(im);
+      }
+
+      // Market stalls: a building the map says is a market (`amenity=marketplace` on it) — and a
+      // canopy standing against one, the covered walk of a market arcade — puts its trades out
+      // along every face that looks onto a street or a walk: a trestle under an awning every 3 m,
+      // the vendor behind it, a shopper or two in front by day. From tags, never names.
+      {
+        type R = { r: P[]; cn: boolean };
+        const mk2 = (b: { r: number[] }) => unpackPts(b.r);
+        const markets: R[] = ctxJson.buildings.filter((b) => b.u === 'marketplace' && !b.pt).map((b) => ({ r: mk2(b), cn: false }));
+        if (markets.length) {
+          // canopies touching a market join it (a vertex within 3 m of one)
+          const near = (a: P[], b: P[]) => a.some(([x, z]) => b.some(([x2, z2]) => Math.hypot(x - x2, z - z2) < 3));
+          for (const b of ctxJson.buildings) if (b.cn && markets.some((m) => near(mk2(b), m.r))) markets.push({ r: mk2(b), cn: true });
+          const STREETS = /^(living_street|pedestrian|residential|unclassified|service|tertiary|secondary|primary|footway|path|steps)$/;
+          const nearStreet = (x: number, z: number, d: number) => {
+            for (const r of ctxJson.roads) {
+              if (r.lod || r.tu || !STREETS.test(r.c)) continue;
+              for (let i = 0; i + 3 < r.p.length; i += 2) {
+                const ax = r.p[i] / 10, az = r.p[i + 1] / 10, dx = r.p[i + 2] / 10 - ax, dz = r.p[i + 3] / 10 - az, L2 = dx * dx + dz * dz || 1;
+                if (Math.abs(ax - x) > 150 && Math.abs(ax + dx - x) > 150) continue;
+                const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
+                if (Math.hypot(ax + dx * t - x, az + dz * t - z) < d + r.w / 2) return true;
+              }
+            }
+            return false;
+          };
+          // (a stall may stand on a shared street's edge — a living street, a walk, the market's own
+          // street, where cars crawl down the middle among the shoppers — never in a through road's traffic)
+          const motorClear = (x: number, z: number) => {
+            for (const r of ctxJson.roads) {
+              if (r.lod || r.br || r.tu || !/^(residential|unclassified|tertiary|secondary|primary|trunk|motorway)(_link)?$/.test(r.c)) continue;
+              const clear = /^(residential|unclassified)$/.test(r.c) ? Math.min(r.w / 2 + 0.3, 2.6) : r.w / 2 + 0.3;
+              for (let i = 0; i + 3 < r.p.length; i += 2) {
+                const ax = r.p[i] / 10, az = r.p[i + 1] / 10, dx = r.p[i + 2] / 10 - ax, dz = r.p[i + 3] / 10 - az, L2 = dx * dx + dz * dz || 1;
+                if (Math.abs(ax - x) > 150 && Math.abs(ax + dx - x) > 150) continue;
+                const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
+                if (Math.hypot(ax + dx * t - x, az + dz * t - z) < clear) return false;
+              }
+            }
+            return true;
+          };
+          const byKind = new Map<string, { m: THREE.Matrix4; c: THREE.Color }[]>();
+          const vendors: THREE.Matrix4[] = [], shoppers: THREE.Matrix4[] = [];
+          const seenStall = new Set<string>(), placed: P[] = [];
+          /** A stall at (x, z) with its front toward (fx, fz) — the street — and its back to the
+           *  frontage, if it fits there. */
+          const stallAt = (x: number, z: number, fx: number, fz: number, under: boolean) => {
+            const key = `${Math.round(x)},${Math.round(z)}`;
+            // (each stall is its own cell's: a market by a cell edge is in both tiles' context)
+            const own = extras.box ? x >= extras.box.x0 && x < extras.box.x1 && z >= extras.box.z0 && z < extras.box.z1 : inSlice(x, z, 4);
+            if (seenStall.has(key) || !own || terrain.sdfAt(x, z) < 1 || !motorClear(x, z)) return;
+            if (placed.some(([px, pz]) => Math.abs(px - x) < 2.6 && Math.abs(pz - z) < 2.6 && Math.hypot(px - x, pz - z) < 2.6)) return;
+            const yaw = Math.atan2(-fx, -fz); // the stall's back (+z) to the market, its front to the street
+            const c = Math.cos(yaw), sn = Math.sin(yaw);
+            const foot = STALL_FOOT.map(([lx, lz]) => [x + lx * c + lz * sn, z - lx * sn + lz * c] as P);
+            if (foot.some(([px, pz]) => walk.blocked(px, pz, 0.2) || (!under && walk.buildingAt(px, pz) >= 0))) return;
+            seenStall.add(key);
+            placed.push([x, z]);
+            const y = terrain.heightAt(x, z), u = hashf(Math.floor(x * 3.7) * 7919 + Math.floor(z * 5.3));
+            const kind: StallKind = u < 0.36 ? 'produce' : u < 0.56 ? 'flowers' : u < 0.7 ? 'fish' : u < 0.85 ? 'bakery' : 'crafts';
+            const v = Math.floor(hashf(Math.floor(x * 11) + Math.floor(z * 13) * 31) * STALL_VARIANTS);
+            const kk = `${kind}:${v}`;
+            (byKind.get(kk) ?? byKind.set(kk, []).get(kk)!).push({
+              m: new THREE.Matrix4().compose(V(x, y, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, 1)),
+              c: new THREE.Color(AWNING[Math.floor(hashf(Math.floor(x * 5) * 131 + Math.floor(z * 7)) * AWNING.length)]),
+            });
+            walk.addLoop(foot, -Infinity, y + 0.9);
+            // the vendor behind the table, facing the street
+            const vx = x + 1.2 * sn, vz = z + 1.2 * c;
+            // (a person's front is its −z: at the stall's own yaw it looks out over the table)
+            vendors.push(new THREE.Matrix4().compose(V(vx, terrain.heightAt(vx, vz), vz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, 1)));
+            // a shopper or two at the table, looking at the goods
+            for (const side of [-0.65, 0.7]) {
+              if (hashf(Math.floor(x * 17 + side * 5) * 131 + Math.floor(z * 19)) > 0.62) continue;
+              const sx = x + side * c - 0.55 * sn, sz = z - side * sn - 0.55 * c;
+              if (walk.blocked(sx, sz, 0.3)) continue;
+              shoppers.push(new THREE.Matrix4().compose(V(sx, terrain.heightAt(sx, sz), sz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw + Math.PI + (hashf(Math.floor(sx * 7)) - 0.5) * 0.6), V(1, 1, 1)));
+            }
+          };
+          for (const mkt of markets) {
+            const r = mkt.r;
+            for (let i = 0; i < r.length; i++) {
+              const [ax, az] = r[i], [bx, bz] = r[(i + 1) % r.length], len = Math.hypot(bx - ax, bz - az);
+              if (len < 4) continue;
+              const ux = (bx - ax) / len, uz = (bz - az) / len;
+              let nx = uz, nz = -ux; // (out of the footprint: flipped when half a metre along it is inside)
+              if (pointIn((ax + bx) / 2 + nx * 0.5, (az + bz) / 2 + nz * 0.5, r)) (nx = -nx), (nz = -nz);
+              const mx = (ax + bx) / 2 + nx * 4, mz = (az + bz) / 2 + nz * 4;
+              if (walk.buildingAt(mx, mz) >= 0 && !mkt.cn) continue; // (a wall against the next building)
+              if (!nearStreet(mx, mz, 8)) continue;
+              const n = Math.floor((len - 2) / 3.0);
+              for (let k = 0; k < n; k++) {
+                const along = 1 + 1.5 + k * 3.0 + ((len - 2) - n * 3.0) / 2;
+                // under a canopy the stalls stand beneath it (its middle); against a hall, out front
+                const out = mkt.cn ? -1.2 : 1.6;
+                stallAt(ax + ux * along + nx * out, az + uz * along + nz * out, nx, nz, mkt.cn);
+              }
+            }
+          }
+          // …and the market's streets: the map puts a market on a building, but its trade spills
+          // along the streets round it — the shared streets and walks within ~60 m of a market hall
+          // get stalls down both sides, backs to the frontage, fronts to the street (Pike Place's
+          // stalls line the street, whichever building carries the tag)
+          {
+            const halls: P[] = markets.filter((m) => !m.cn).map((m) => [m.r.reduce((a, q) => a + q[0], 0) / m.r.length, m.r.reduce((a, q) => a + q[1], 0) / m.r.length]);
+            const SHARED = /^(residential|living_street|pedestrian|unclassified|service|footway)$/;
+            for (const rd of ctxJson.roads) {
+              if (rd.lod || rd.br || rd.tu || !SHARED.test(rd.c) || rd.sv === 'driveway' || rd.sv === 'parking_aisle') continue;
+              const pts = unpackPts(rd.p);
+              for (let i = 0; i + 1 < pts.length; i++) {
+                const [ax, az] = pts[i], [bx, bz] = pts[i + 1], len = Math.hypot(bx - ax, bz - az);
+                if (len < 3) continue;
+                const ux = (bx - ax) / len, uz = (bz - az) / len, nx = -uz, nz = ux;
+                for (let t = 1.5; t < len - 1; t += 3) {
+                  const cx = ax + ux * t, cz = az + uz * t;
+                  if (!halls.some(([hx, hz]) => Math.hypot(hx - cx, hz - cz) < 60)) continue;
+                  for (const sd of [1, -1]) {
+                    // on the street's edge: past the lane a car crawls down, short of the frontage
+                    const off = Math.max(2.9, rd.w / 2 + 0.9);
+                    stallAt(cx + nx * off * sd, cz + nz * off * sd, -nx * sd, -nz * sd, false);
+                  }
+                }
+              }
+            }
+          }
+          for (const [kk, list] of byKind) {
+            const [kind, v] = kk.split(':');
+            const im = new THREE.InstancedMesh(stallLib(kind as StallKind, +v).clone(), propMaterial(), list.length);
+            im.name = `market:${kk}`;
+            list.forEach((q, i) => { im.setMatrixAt(i, q.m); im.setColorAt(i, q.c); });
+            im.layers.enable(1);
+            group.add(im);
+          }
+          const people = vendors.concat(shoppers);
+          if (people.length) {
+            const im = new THREE.InstancedMesh(personGeometry(), creatureMaterial({ LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1 }), people.length);
+            im.name = 'market:people';
+            const cols = [0xe8d8b0, 0x5b7fa6, 0xc4553f, 0xf2efe6, 0x6e8c5a, 0xe0a33b, 0x7a5b8c, 0x2f3a4a, 0x9c6b4a];
+            people.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, new THREE.Color(cols[Math.floor(hashf(i * 7919 + Math.floor(S.x0)) * cols.length)])); });
+            im.layers.enable(1);
+            group.add(im);
+          }
+        }
       }
 
       if (pots.length) {
@@ -1861,6 +2157,91 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       const im = new THREE.InstancedMesh(beachLib('picnic').clone(), propMaterial(), tables.length);
       im.name = 'picnic:table';
       tables.forEach((q, i) => { im.setMatrixAt(i, q.m); im.setColorAt(i, q.c); });
+      im.layers.enable(1);
+      group.add(im);
+    }
+  }
+
+  // ---------- playgrounds: the pieces where the map puts them ----------
+  // (`playground=swing/slide/structure/…`, assets/play.ts) — and a mapped playground the map left
+  // empty gets a structure, swings and a spring rider or two, fitted inside its outline along its
+  // longest side, clear of each other (seeded by position: the same playground every visit).
+  {
+    const byKind = new Map<PlayKind, { m: THREE.Matrix4; c: THREE.Color }[]>();
+    const placed: { x: number; z: number; r: number }[] = [];
+    // every way (paths through the playground too) on a grid: a piece keeps off each one
+    const waysGrid = new Map<number, [number, number, number, number, number][]>(), WG = 16, wk = (i: number, j: number) => (i + 65536) * 131072 + (j + 65536);
+    for (const r of ctxJson.roads) {
+      if (r.lod || r.br || r.tu) continue;
+      for (let i = 0; i + 3 < r.p.length; i += 2) {
+        const sg: [number, number, number, number, number] = [r.p[i] / 10, r.p[i + 1] / 10, r.p[i + 2] / 10, r.p[i + 3] / 10, r.w];
+        const pad = r.w / 2 + 3;
+        for (let u = Math.floor((Math.min(sg[0], sg[2]) - pad) / WG); u <= Math.floor((Math.max(sg[0], sg[2]) + pad) / WG); u++)
+          for (let v = Math.floor((Math.min(sg[1], sg[3]) - pad) / WG); v <= Math.floor((Math.max(sg[1], sg[3]) + pad) / WG); v++) (waysGrid.get(wk(u, v)) ?? waysGrid.set(wk(u, v), []).get(wk(u, v))!).push(sg);
+      }
+    }
+    const onWay = (x: number, z: number, r: number) => {
+      for (const [ax, az, bx, bz, w] of waysGrid.get(wk(Math.floor(x / WG), Math.floor(z / WG))) ?? []) {
+        const dx = bx - ax, dz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1)));
+        if (Math.hypot(ax + dx * t - x, az + dz * t - z) < w / 2 + r) return true;
+      }
+      return false;
+    };
+    const put = (k: PlayKind, x: number, z: number, yaw: number, inside?: P[]) => {
+      if (!inSlice(x, z) || terrain.sdfAt(x, z) < 1 || walk.blocked(x, z, 0.3)) return false;
+      const [hx, hz] = PLAY_FOOT[k], c = Math.cos(yaw), sn = Math.sin(yaw);
+      const r = Math.hypot(hx, hz);
+      if (placed.some((q) => Math.hypot(q.x - x, q.z - z) < q.r + r + 1.2)) return false;
+      const corners: P[] = [[-hx, -hz], [hx, -hz], [hx, hz], [-hx, hz]].map(([u, v]) => [x + u * c + v * sn, z - u * sn + v * c]);
+      if (inside && corners.some(([cx, cz]) => !pointIn(cx, cz, inside))) return false;
+      // (a playground's own surface counts as paved: only walls, fences and the ways keep a piece out)
+      if (corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.1)) || onWay(x, z, inside ? r * 0.7 : 0.5)) return false;
+      placed.push({ x, z, r });
+      const y = terrain.heightAt(x, z);
+      (byKind.get(k) ?? byKind.set(k, []).get(k)!).push({
+        m: new THREE.Matrix4().compose(V(x, y, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, 1)),
+        c: new THREE.Color(PLAY_PAINT[Math.floor(hashf(Math.floor(x * 3) * 7919 + Math.floor(z * 5)) * PLAY_PAINT.length)]),
+      });
+      walk.addLoop(corners, -Infinity, y + (k === 'sandpit' || k === 'roundabout' ? 0.35 : 1.2));
+      return true;
+    };
+    for (const p of json.points) {
+      if (p.c !== 'play' || !p.sp || !(PLAY_KINDS as string[]).includes(p.sp)) continue;
+      // (a way's bearing is its longest side: a slide's or a tower's length is its +z, a swing set's
+      // beam and a climbing frame's its x)
+      const along = p.sp === 'swing' || p.sp === 'climbingframe' ? Math.PI / 2 : 0;
+      const yaw = p.d !== undefined ? Math.PI - (p.d * Math.PI) / 180 + along : hashf(Math.floor(p.x * 7) + Math.floor(p.z * 11) * 131) * 6.28;
+      put(p.sp as PlayKind, p.x, p.z, yaw);
+    }
+    const mapped = ctxJson.points.filter((p) => p.c === 'play');
+    for (const a of json.areas) {
+      if (a.c !== 'pitch' || a.k !== 'playground' || !a.o.length) continue;
+      const ring = unpackPts(a.o[0]);
+      let area = 0, bl = 0, ux = 1, uz = 0;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        area += (ring[j][0] - ring[i][0]) * (ring[j][1] + ring[i][1]);
+        const dx = ring[i][0] - ring[j][0], dz = ring[i][1] - ring[j][1], l = Math.hypot(dx, dz);
+        if (l > bl) (bl = l), (ux = dx / l), (uz = dz / l);
+      }
+      area = Math.abs(area) / 2;
+      if (area < 60 || mapped.some((p) => pointIn(p.x, p.z, ring))) continue;
+      // (an indoor or rooftop playground — its middle inside a building — is the building's)
+      const mx = ring.reduce((q, p) => q + p[0], 0) / ring.length, mz = ring.reduce((q, p) => q + p[1], 0) / ring.length;
+      if (walk.buildingAt(mx, mz) >= 0) continue;
+      const want: PlayKind[] = area > 600 ? ['structure', 'swing', 'climbingframe', 'sandpit', 'springy', 'springy', 'seesaw', 'roundabout'] : area > 250 ? ['structure', 'swing', 'sandpit', 'springy', 'springy'] : ['slide', 'swing', 'springy'];
+      let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+      for (const [x, z] of ring) (x0 = Math.min(x0, x)), (z0 = Math.min(z0, z)), (x1 = Math.max(x1, x)), (z1 = Math.max(z1, z));
+      const cand: [number, number, number][] = [];
+      for (let z = z0 + 1.5; z < z1 - 1.5; z += 2.5) for (let x = x0 + 1.5; x < x1 - 1.5; x += 2.5) if (pointIn(x, z, ring)) cand.push([x, z, hashf(Math.floor(x * 3) * 92821 + Math.floor(z * 7))]);
+      cand.sort((p, q) => p[2] - q[2]);
+      const yaw = Math.atan2(ux, uz); // (squared to the playground's longest side)
+      // (a bounded search: 40 spots a piece, the first that fits)
+      for (const k of want) for (const [x, z] of cand.slice(0, 40)) if (put(k, x, z, yaw + (hashf(Math.floor(x) * 31 + Math.floor(z)) < 0.5 ? 0 : Math.PI), ring)) break;
+    }
+    for (const [k, list] of byKind) {
+      const im = new THREE.InstancedMesh(playLib(k).clone(), propMaterial(), list.length);
+      list.forEach((q, i) => { im.setMatrixAt(i, q.m); im.setColorAt(i, q.c); });
+      im.name = `play:${k}`;
       im.layers.enable(1);
       group.add(im);
     }

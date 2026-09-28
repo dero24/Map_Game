@@ -41,6 +41,9 @@ export interface TileArt {
   kerb?: Float32Array; // parked cars for kerbCars.ts
   junc?: Float32Array; // junction control for the life sim (src/sim/traffic.ts)
   flat?: boolean; // mounted without data still in flight (late DEM or LiDAR) — a relief rebuild will replace it
+  vec?: boolean; // a stand-in built from the vector tiles: real streets and buildings (the skyline steps aside)
+  xing?: number[]; // mapped crossings for the ground paint (kerbside.ts crossingPaint)
+  vp?: number[]; // viewpoints: x, z, bearing (−1 unknown)
 }
 
 // `replace`: a relief rebuild of an already-mounted flat cell — swapped in atomically.
@@ -152,9 +155,9 @@ export class TileStream {
       if (!w) {
         const c = this.man.cell;
         // file is an absolute URL — the tile worker fetches it directly (no base prefix).
-        // &v=19 — the edge Cache API keys on the full URL; bumping alongside the
-        // worker's R2 key (t/v19) retires stale tile payloads.
-        const file = this.tilesBase === 'direct' ? `direct:${key}` : `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}&v=19`;
+        // &v=21 — the edge Cache API keys on the full URL; bumping alongside the
+        // worker's R2 key (t/v21) retires stale tile payloads.
+        const file = this.tilesBase === 'direct' ? `direct:${key}` : `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}&v=21`;
         w = { id: 'w' + key, box: { x0: cx * c, z0: cz * c, x1: cx * c + c, z1: cz * c + c }, lod: 0, file, world: 1 };
         this.worldSpecs.set(key, w);
       }
@@ -445,7 +448,7 @@ export class TileStream {
           console.warn('lidar worker unavailable; measuring on the tile worker', e);
         }
       }
-      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin, origin: this.man.origin, dem: this.demEnabled, demBase: this.tilesBase, style: activeStyle().key, baked: this.man.tiles.map((t) => t.id), lidar: this.lidar, lidarPort, fail: new URLSearchParams(location.search).get('fail')?.split(',') ?? [] }, lidarPort ? [lidarPort] : []);
+      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin, origin: this.man.origin, dem: this.demEnabled, demBase: this.tilesBase, style: activeStyle().key, baked: this.man.tiles.map((t) => t.id), lidar: this.lidar, lidarPort, fail: new URLSearchParams(location.search).get('fail')?.split(',') ?? [], vector: new URLSearchParams(location.search).get('vector') !== '0' }, lidarPort ? [lidarPort] : []);
       this.worker = w;
     } catch {
       this.workerDead = true;
@@ -641,6 +644,9 @@ export class TileStream {
         kerb: tile.kerb,
         junc: tile.junc,
         flat: !!tile.late,
+        vec: !!tile.vec,
+        xing: tile.xing,
+        vp: tile.vp,
       });
       if (tile.late) this.relieve(spec);
       else this.relief.delete(spec.id);

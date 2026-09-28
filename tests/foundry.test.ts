@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { TREE_KINDS, TREE_VARIANTS, treeGeometry, PLANT_SPECIES, plantGeometry, plantMix, inBloom, stageOf, STAGES } from '../src/assets/flora';
+import { TREE_KINDS, TREE_VARIANTS, treeGeometry, PLANT_SPECIES, plantGeometry, plantMix, inBloom, stageOf, STAGES, fallHueOf } from '../src/assets/flora';
 import { CRITTERS, critterGeometry } from '../src/assets/fauna';
 import { MAILBOXES, mailboxGeometry, gearGeometry, gearFor, CAR_GEAR, umbrellaGeometry, picnicTableGeometry } from '../src/assets/furniture';
 import { fibCount, fibSphere, hashf, variantAt } from '../src/assets/core';
@@ -9,6 +9,7 @@ import { dogLib } from '../src/assets/fauna';
 import * as D from '../src/assets/decor';
 import { SPORT_PIECES, sportGeometry } from '../src/assets/sport';
 import { TOWER_KINDS, towerGeometry } from '../src/assets/tower';
+import { STALL_KINDS, stallGeometry, STALL_VARIANTS } from '../src/assets/market';
 import { validGeometry } from '../src/assets/core';
 import { courtFrame, diamondFrame, sportOf } from '../src/world/sports';
 
@@ -52,7 +53,19 @@ describe('flora', () => {
       expect(m.crownBottom).toBeLessThan(1.3); // foliage nearly to the lawn
       expect(e.crownBottom / e.h).toBeLessThan(0.56); // (the vase stays a street tree, not a lollipop)
       expect(e.crownR).toBeGreaterThan(3.5);
+      // the oak spreads as wide as it stands tall, a broad dome on heavy limbs — never a ball on a
+      // pole — and the maple is a full egg down near the lawn, where the round tree holds its ball
+      // up on a trunk
+      const o = treeGeometry('oak', v).meta, mp = treeGeometry('maple', v).meta, rd = treeGeometry('round', v).meta;
+      expect((2 * o.crownR) / o.h).toBeGreaterThan(1.0);
+      expect(o.crownR / o.h).toBeGreaterThan(1.4 * (rd.crownR / rd.h));
+      expect(o.crownBottom / o.h).toBeLessThan(0.56);
+      expect(mp.crownBottom).toBeLessThan(rd.crownBottom - 0.5);
+      if (v < 2) expect(mp.crownR / mp.h).toBeGreaterThan(rd.crownR / rd.h);
+      else expect(mp.crownR).toBeGreaterThan(4); // (the bigleaf maple: three stems, a broad open crown)
     }
+    expect(fallHueOf('maple', 0)).toBe(1); // sugar and red maples go scarlet…
+    expect(fallHueOf('maple', 2)).toBe(2); // …the bigleaf gold
   });
   it('variants differ', () => {
     const a = bb(treeGeometry('round', 0).geo), b = bb(treeGeometry('round', 1).geo);
@@ -268,3 +281,75 @@ describe('towers: the tall things a town is known by', () => {
   });
 });
 
+
+describe('market stalls: what makes a market read as one from the street', () => {
+  it('every trade and variant is sane, grounded, under budget, and awning-tinted', () => {
+    for (const k of STALL_KINDS)
+      for (let v = 0; v < STALL_VARIANTS; v++) {
+        const g = stallGeometry(k, v);
+        expect(validGeometry(g, { w: 3.0, h: 2.8, d: 2.2 })).toBe(true);
+        expect(g.getAttribute('position').count).toBeLessThan(1800);
+        // some white (TINT) surfaces: the awning the instance colour paints
+        const c = g.getAttribute('color');
+        let white = 0;
+        for (let i = 0; i < c.count; i++) if (c.getX(i) > 0.99 && c.getY(i) > 0.99 && c.getZ(i) > 0.99) white++;
+        expect(white).toBeGreaterThan(0);
+      }
+  });
+  it('the table stands in front, the awning over it higher at the back', () => {
+    const g = stallGeometry('produce', 0), p = g.getAttribute('position');
+    let backTop = -Infinity, frontTop = -Infinity;
+    for (let i = 0; i < p.count; i++) {
+      if (p.getY(i) < 2) continue;
+      if (p.getZ(i) > 1.2) backTop = Math.max(backTop, p.getY(i));
+      if (p.getZ(i) < 0) frontTop = Math.max(frontTop, p.getY(i));
+    }
+    expect(backTop).toBeGreaterThan(frontTop);
+    expect(frontTop).toBeGreaterThan(2.1); // clear of a shopper's head
+  });
+});
+
+import { STREET_KINDS, STREET_VARIANTS, streetGeometry, streetPaint } from '../src/assets/street';
+describe('street furniture: the small things the map places one by one', () => {
+  // [footprint w × h × d, vertex budget]
+  const SIZE: Record<string, [number, number, number, number]> = {
+    postbox: [0.6, 1.2, 0.6, 400], pillarbox: [0.65, 1.5, 0.65, 800], bikerack: [2.6, 1.0, 1.8, 2000],
+    drinking: [0.55, 1.1, 0.55, 500], bollard: [0.25, 1.1, 0.25, 350], meter: [0.45, 1.65, 0.35, 300], viewer: [0.6, 1.65, 0.6, 1000],
+  };
+  it('every piece and variant is valid, standing on its foot, in its footprint and under budget', () => {
+    for (const k of STREET_KINDS)
+      for (let v = 0; v < STREET_VARIANTS; v++) {
+        const g = streetGeometry(k, v), [w, h, d, budget] = SIZE[k];
+        expect(validGeometry(g, { w, h, d }, 0.01), `${k}:${v}`).toBe(true);
+        expect(verts(g), `${k}:${v}`).toBeLessThan(budget);
+        expect(bb(g).max.y, k).toBeGreaterThan(h * 0.6);
+      }
+  });
+  it('racks hold a varying number of bikes; the paint follows the region', () => {
+    const n = [0, 1, 2].map((v) => verts(streetGeometry('bikerack', v)));
+    expect(new Set(n).size).toBe(3);
+    expect(streetPaint('postbox', 'na')).not.toBe(streetPaint('postbox', 'eu'));
+    expect(streetPaint('bikerack', 'na', 0.1)).not.toBe(streetPaint('bikerack', 'na', 0.5));
+  });
+});
+
+import { PLAY_KINDS, playGeometry, PLAY_FOOT } from '../src/assets/play';
+describe('playgrounds: the pieces a park\'s playground is made of', () => {
+  it('every piece is valid, standing on the ground inside its footprint, painted, under budget', () => {
+    for (const k of PLAY_KINDS) {
+      const g = playGeometry(k), [hx, hz] = PLAY_FOOT[k];
+      expect(validGeometry(g, { w: hx * 2 + 0.3, h: 4.2, d: hz * 2 + 0.3 }, 0.02), k).toBe(true);
+      expect(verts(g), k).toBeLessThan(1500);
+      const c = g.getAttribute('color');
+      let white = 0;
+      for (let i = 0; i < c.count; i++) if (c.getX(i) > 0.99 && c.getY(i) > 0.99 && c.getZ(i) > 0.99) white++;
+      if (k !== 'sandpit') expect(white, k).toBeGreaterThan(0); // (the park's paint)
+    }
+  });
+  it('the slide lands at the front, the swing seats hang at a child\'s height', () => {
+    const b = bb(playGeometry('slide'));
+    expect(b.max.z).toBeGreaterThan(1.6);
+    expect(b.max.y).toBeGreaterThan(2.0);
+    expect(bb(playGeometry('swing')).max.y).toBeGreaterThan(2.2);
+  });
+});

@@ -47,7 +47,8 @@ function save() {
 export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: number) => void; onRespawn: () => void; onResetExplore: () => void }, region: { name: string; tz: string; respawn?: string }) {
   const gui = new GUI({ title: `${region.name} · tuning` });
   gui.onFinishChange(save);
-  const tzName = region.tz.split('/').pop()?.replace(/_/g, ' ') ?? 'local';
+  const ZONES: Record<string, string> = { 'America/Los_Angeles': 'Pacific', 'America/Denver': 'Mountain', 'America/Phoenix': 'Arizona', 'America/Chicago': 'Central', 'America/New_York': 'Eastern' };
+  const tzName = ZONES[region.tz] ?? region.tz.split('/').pop()?.replace(/_/g, ' ') ?? 'local';
 
   // Look: named presets first (each sets the watercolor knobs below), then the resolution and
   // colour-grade knobs a look is mostly made of. Picking a look saves like any other knob.

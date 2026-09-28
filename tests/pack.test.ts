@@ -129,6 +129,13 @@ describe('matTag', () => {
     const dm = matTag(propMaterial({ wind: true, foliage: true, crown: [4, 2], decid: true }));
     expect(dm.t === 'prop' && dm.o.decid).toBe(true);
     expect((matFromTag(dm) as THREE.ShaderMaterial).defines.DECID).toBe(1);
+    // …and its species' autumn, a cherry's blossom and a willow's sway (lost in the pack before)
+    for (const o of [{ fallHue: 2, weep: true }, { fallHue: 1, blossom: true }]) {
+      const back = matFromTag(matTag(propMaterial({ wind: true, foliage: true, crown: [4, 2], decid: true, ...o }))) as THREE.ShaderMaterial;
+      expect(back.defines.FALL_HUE).toBe(o.fallHue);
+      expect(!!back.defines.WEEP).toBe(!!o.weep);
+      expect(!!back.defines.BLOSSOM).toBe(!!o.blossom);
+    }
     const e = matTag(propMaterial({ emissive: new THREE.Color(1, 0.72, 0.4), emissiveNight: true }));
     expect(e.t).toBe('prop');
     if (e.t === 'prop') {
@@ -187,6 +194,18 @@ describe('buildTile', () => {
     expect(JSON.stringify(strip(b))).toBe(JSON.stringify(strip(a)));
     // margin context rings were seeded but not recorded as ops
     expect(a.ops.some((o) => o.o === 'p' && o.r[0][0] > 290)).toBe(false);
+  });
+
+  it('a playground: the mapped piece where it is, an empty one fitted with a structure and swings; a flight of steps', async () => {
+    const tj = JSON.parse(JSON.stringify(tileJson));
+    tj.areas.push({ c: 'pitch', k: 'playground', o: [[m(20), m(180), m(50), m(180), m(50), m(210), m(20), m(210)]], i: [] });
+    tj.points.push({ c: 'play', sp: 'seesaw', x: 220, z: 60 });
+    tj.roads.push({ p: [m(230), m(200), m(240), m(200)], c: 'steps', w: 2 });
+    const t = await buildTile(tj, terrain, spec, 0);
+    const names = t.objs.map((o) => o.n ?? '');
+    expect(names).toContain('play:seesaw');
+    expect(names).toContain('play:structure');
+    expect(names).toContain('play:swing');
   });
 
   it('mounts collision the same way the stream does', () => {

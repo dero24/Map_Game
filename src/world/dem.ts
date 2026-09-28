@@ -37,7 +37,11 @@ async function demTile(tx: number, ty: number, z = Z): Promise<Float32Array | nu
   const n = 2 ** z;
   const k = z === Z ? `${tx}_${ty}` : `${z}/${tx}_${ty}`;
   let p = tileCache.get(k);
-  if (p) return p;
+  if (p) {
+    tileCache.delete(k); // (most recently used last: the oldest go first below)
+    tileCache.set(k, p);
+    return p;
+  }
   p = (async () => {
     while (inflight >= 4) await new Promise<void>((r) => queue.push(r));
     inflight++;
@@ -65,6 +69,8 @@ async function demTile(tx: number, ty: number, z = Z): Promise<Float32Array | nu
     }
   })();
   tileCache.set(k, p);
+  // (a quarter megabyte a tile, per thread: a long drive across the country keeps the last 250)
+  while (tileCache.size > 250) tileCache.delete(tileCache.keys().next().value!);
   // Failures aren't cached — a transient 5xx/timeout must not pin a cell flat for the session.
   void p.then((h) => { if (!h && tileCache.get(k) === p) tileCache.delete(k); });
   return p;
@@ -216,7 +222,7 @@ function eachNodeIn(g: Grid, w: WaterBody, fn: (k: number) => void) {
  *  (a marina basin, a dock) is the sea.
  *    `mapIsTruth` (the map's water is complete here — the vector tiles' ocean): ground the DEM
  *  called sea (≤ 0.5 m) that the map calls land is land, raised to the half metre — a shore's
- *  smear no longer eats the seawall, and a town below sea level stands dry. */
+ *  smear no longer eats the seawall, and a town below the sea stands dry. */
 export function waterPatch(layer: { buf: ArrayBuffer; layout: LayerLayout }, bodies: WaterBody[], mapIsTruth = false): { buf: ArrayBuffer; layout: LayerLayout } {
   const L = layer.layout, g = L.grid, n = g.w * g.h;
   const buf = layer.buf.slice(0);
@@ -224,24 +230,29 @@ export function waterPatch(layer: { buf: ArrayBuffer; layout: LayerLayout }, bod
   const sdf = new Int16Array(buf, L.sdf.offset, n);
   const flags = new Uint8Array(buf, L.flags.offset, n);
   const oceanD = new Uint8Array(buf, L.oceanD.offset, n);
+  // (NaN: dry; +Infinity: the sea; else a lake's bed, level − 0.5 m — a lake below the datum too)
   const level = new Float32Array(n).fill(NaN);
   const ordered = [...bodies.filter((w) => w.level === undefined), ...bodies.filter((w) => w.level !== undefined)].filter((w) => w.ring.length >= 3);
   for (const w of ordered) {
-    const lv = w.level === undefined ? -6 : w.level - 0.5;
+    const lv = w.level === undefined ? Infinity : w.level - 0.5;
     eachNodeIn(g, w, (k) => { if (Number.isNaN(level[k])) level[k] = lv; });
   }
   for (let k = 0; k < n; k++) {
     const lv = level[k];
     if (Number.isNaN(lv)) {
+      // (lifted to the half metre — a shore's smear, and a real basin below the sea too: the open
+      // world's one ocean plane lies at the datum everywhere, and ground under it reads as sea.
+      // Death Valley's floor is a flat plain at the datum until the plane learns where land is.)
       if (mapIsTruth && flags[k] & 1) (flags[k] &= ~1), (sdf[k] = 500), (oceanD[k] = 255), (h[k] = Math.max(h[k], 50));
       continue;
     }
     // the sea floor at a flat 6 m (the ocean plane shows the sea; a 250 m bathymetry trough
-    // beside a seawall hung the shore's ground in curtains), a lake's at its level
-    h[k] = lv < 0 ? lv * 100 : Math.min(h[k], lv * 100);
+    // beside a seawall hung the shore's ground in curtains), a lake's bed under its level
+    const sea = lv === Infinity;
+    h[k] = sea ? -600 : Math.min(h[k], lv * 100);
     sdf[k] = -600;
     flags[k] |= 1;
-    if (lv < 0) oceanD[k] = 0;
+    oceanD[k] = sea ? 0 : 255; // (a lake is fresh water, not the sea — whatever the DEM guessed)
   }
   return { buf, layout: L };
 }
@@ -255,6 +266,8 @@ export function waterLevel(layer: { buf: ArrayBuffer; layout: LayerLayout }, w: 
   const L = layer.layout, g = L.grid, h = new Float32Array(layer.buf, L.height.offset, g.w * g.h);
   const inside: number[] = [];
   eachNodeIn(g, w, (k) => inside.push(h[k] / 100));
+  // (at the datum at the lowest: the open world's ocean plane covers anything under it — the
+  // Salton Sea stands at sea level with its shore, until the plane learns where land is)
   if (inside.length >= 6) {
     inside.sort((a, b) => a - b);
     return Math.max(0, inside[Math.floor(inside.length * 0.3)]);

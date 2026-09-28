@@ -36,7 +36,15 @@ export interface RegionStyle {
   treeDensity: number; // multiplier on the procedural tree scan
   greens: number[]; // canopy palette
   biome: [number, number, number, number]; // ground: dry (0..1), lush, cold/dark, reserved
+  water: WaterLook;
 }
+
+/** The colour of a region's water, sRGB: the sea's deep and shallow washes, and fresh water's
+ *  (rivers, lakes). Read off the Forel-Ule scale — the colour of natural water, 1 indigo … 21 cola,
+ *  that satellite ocean-colour climatologies (ESA OC-CCI) put on every coast: the clear blue of the
+ *  subtropics over white sand, the green-steel of a cold, plankton-rich sound, the olive of
+ *  marsh-fed Gulf water, glacial flour's milky jade. */
+export interface WaterLook { deep: number; shallow: number; riverDeep: number; riverShallow: number }
 
 type Box = [number, number, number, number]; // latMin, latMax, lonMin, lonMax
 const inside = (lat: number, lon: number, b: Box) => lat >= b[0] && lat <= b[1] && lon >= b[2] && lon <= b[3];
@@ -209,6 +217,25 @@ const SUB_VEG: Record<string, Partial<Pick<RegionStyle, 'trees' | 'treeDensity' 
   mountain: { trees: [1.5, 0.3, 2, 3.5, 3], treeDensity: 0.8 },
 };
 
+// Water per climate (temperate is the original shore's Atlantic: baked NJ must not change), then
+// per climate + subregion where the coast's water isn't its climate's.
+const SHORE: WaterLook = { deep: 0x2c4f6e, shallow: 0x5fa3a0, riverDeep: 0x3d5a5c, riverShallow: 0x7a9a84 };
+const WATER: Record<Climate, WaterLook> = {
+  temperate: SHORE,
+  continental: SHORE,
+  boreal: { deep: 0x283f52, shallow: 0x4f7a80, riverDeep: 0x2f4448, riverShallow: 0x5f7a70 }, // dark, tannin-tinged
+  polar: { deep: 0x2a4458, shallow: 0x5f8f98, riverDeep: 0x4f6f78, riverShallow: 0x8fb0b0 }, // glacial flour
+  mediterranean: { deep: 0x234c74, shallow: 0x4f9aa4, riverDeep: 0x3d5a5c, riverShallow: 0x7a9a84 },
+  arid: { deep: 0x245a80, shallow: 0x55a8a8, riverDeep: 0x3f6468, riverShallow: 0x7fa296 }, // desert reservoirs
+  tropical: { deep: 0x1c5a8a, shallow: 0x40b8b4, riverDeep: 0x3f4f3a, riverShallow: 0x7f8a5c }, // turquoise over sand; tea-dark swamps
+};
+const SUB_WATER: Record<string, WaterLook> = {
+  // Puget Sound, the Salish Sea, the Columbia: cold, deep, green with plankton — green-steel, never blue
+  'temperate/pnw': { deep: 0x28423f, shallow: 0x4e6c63, riverDeep: 0x2e4846, riverShallow: 0x5f7f6c },
+  // the Gulf and the Carolina sounds: marsh-fed, silty — olive over grey-green
+  'temperate/south': { deep: 0x33545a, shallow: 0x6f9580, riverDeep: 0x4a5a48, riverShallow: 0x8a9070 },
+};
+
 const cache = new Map<string, RegionStyle>();
 
 /** The full style for a meta.style key (`climate/family/L|R`), or null if malformed. */
@@ -217,7 +244,8 @@ export function styleByKey(key: string): RegionStyle | null {
   if (hit) return hit;
   const [c, f, side, reg, sub] = key.split('/');
   if (!(c in VEG) || !(f in PAL)) return null;
-  const s: RegionStyle = { key, climate: c as Climate, family: f as Family, region: (reg as WorldRegion) || 'na', sub: sub ?? '', driveLeft: side === 'L', ...PAL[f as Family], ...VEG[c as Climate], ...(SUB_VEG[sub ?? ''] ?? {}) };
+  const water = SUB_WATER[`${c}/${sub ?? ''}`] ?? WATER[c as Climate];
+  const s: RegionStyle = { key, climate: c as Climate, family: f as Family, region: (reg as WorldRegion) || 'na', sub: sub ?? '', driveLeft: side === 'L', ...PAL[f as Family], ...VEG[c as Climate], ...(SUB_VEG[sub ?? ''] ?? {}), water };
   cache.set(key, s);
   return s;
 }

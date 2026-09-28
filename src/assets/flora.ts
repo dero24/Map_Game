@@ -19,6 +19,8 @@ export type TreeKind = 'round' | 'oak' | 'shrub' | 'pine' | 'spruce' | 'palm' | 
 export const TREE_KINDS: TreeKind[] = ['round', 'oak', 'shrub', 'pine', 'spruce', 'palm', 'birch', 'mesquite', 'fanpalm', 'maple', 'willow', 'elm', 'poplar', 'magnolia', 'cherry'];
 /** How each broadleaf turns in autumn (propMaterial): 0 mixed, 1 red (maples, cherries), 2 gold. */
 export const FALL_HUE: Partial<Record<TreeKind, number>> = { maple: 1, cherry: 1, willow: 2, elm: 2, poplar: 2, birch: 2 };
+/** How a grown variant turns: the bigleaf maple (maple variant 2) goes gold, not scarlet. */
+export const fallHueOf = (k: TreeKind, v: number) => (k === 'maple' && v === 2 ? 2 : FALL_HUE[k] ?? 0);
 /** Broadleaves that colour and drop their leaves (magnolias and the palms keep theirs). */
 export const DECIDUOUS = new Set<TreeKind>(['round', 'oak', 'birch', 'shrub', 'maple', 'willow', 'elm', 'poplar', 'cherry']);
 export const TREE_VARIANTS = 3;
@@ -33,9 +35,37 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
   const lobe = (rad: number, c: THREE.Vector3, seed: number, squash = 0.85, detail = 1) => leaf.push(blob(rad, seed, { squash, detail }).translate(c.x, c.y, c.z));
   const j = (a: number) => (r.float() * 2 - 1) * a;
 
-  if (kind === 'round' || kind === 'oak' || kind === 'birch') {
-    const oak = kind === 'oak', birch = kind === 'birch';
-    const th = (oak ? 3.6 : birch ? 4.4 : 4.2) + j(0.5);
+  if (kind === 'oak') {
+    // a street or park oak (red, pin, white): a short, thick trunk that forks low into a few heavy
+    // limbs reaching out and up, each ending in its own billow, and over them a broad dome — half
+    // again as wide as it is tall, dark hollows between the billows, the limbs showing under it.
+    // (The old oak was one squashed ball on a pole: a median lollipop.)
+    trunkR = 0.36;
+    const th = 2.5 + j(0.3), lean = V3(j(0.3), 0, j(0.3)), top = V3(lean.x, th, lean.z);
+    leanPer = [lean.x / (th + 0.3), lean.z / (th + 0.3)];
+    wood.push(part(limb(V3(0, -0.3, 0), top, trunkR, trunkR * 0.8, 6), BARK_DARK));
+    const limbs = 4, a0 = r.float() * Math.PI * 2;
+    let rise = 0;
+    for (let i = 0; i < limbs; i++) {
+      const a = a0 + i * GOLDEN + j(0.25), reach = 3.1 + r.float() * 1.0, up = 2.2 + r.float() * 1.0;
+      rise += up / limbs;
+      const knee = V3(lean.x + Math.cos(a) * reach * 0.45, th + up * 0.55, lean.z + Math.sin(a) * reach * 0.45);
+      const tip = V3(lean.x + Math.cos(a) * reach, th + up, lean.z + Math.sin(a) * reach);
+      wood.push(part(limb(top.clone().add(V3(0, -0.35, 0)), knee, trunkR * 0.62, trunkR * 0.42, 4), BARK_DARK), part(limb(knee, tip, trunkR * 0.42, trunkR * 0.16, 4), BARK_DARK));
+      // the billow at the limb's end: a big lobe over the tip, two smaller ones either side of it
+      const ca = Math.cos(a), sa = Math.sin(a);
+      lobe(1.85 + r.float() * 0.35, tip.clone().add(V3(ca * 0.3, 0.7, sa * 0.3)), 120 + v * 17 + i * 3, 0.82, 0);
+      for (const sd of [-1, 1]) lobe(1.35 + r.float() * 0.3, tip.clone().add(V3(-sa * sd * 1.25 + ca * 0.2, -0.45 + j(0.3), ca * sd * 1.25 + sa * 0.2)), 121 + v * 17 + i * 3 + sd, 0.8, 0); // (the rim hangs lower)
+    }
+    // the dome over the billows: a ring of three between the limbs, one broad crown on top
+    for (let k = 0; k < 3; k++) {
+      const a = a0 + GOLDEN * 0.5 + k * ((2 * Math.PI) / 3) + j(0.3);
+      lobe(2.0 + r.float() * 0.3, V3(lean.x + Math.cos(a) * 1.9, th + rise + 1.5, lean.z + Math.sin(a) * 1.9), 110 + v * 7 + k, 0.78, 0);
+    }
+    lobe(2.5 + r.float() * 0.3, V3(lean.x + j(0.5), th + rise + 2.5, lean.z + j(0.5)), 118 + v, 0.72, 0);
+  } else if (kind === 'round' || kind === 'birch') {
+    const oak = false, birch = kind === 'birch';
+    const th = (birch ? 4.4 : 4.2) + j(0.5);
     trunkR = oak ? 0.3 : birch ? 0.14 : 0.22; // a 7 m street tree: a 0.45 m trunk, not a 0.75 m barrel
     const lean = V3(j(0.35), 0, j(0.35));
     const top = V3(lean.x, th, lean.z);
@@ -125,6 +155,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     const H = 9.4 + j(0.6);
     wood.push(part(limb(V3(0, -0.3, 0), V3(0, H - 0.9, 0), trunkR, 0.05, 5), BARK_DARK));
     const tiers = fibCount(r.float(), 3, 3); // 8
+    const gap = (H - 2.6) / (tiers - 1);
     for (let t = 0; t < tiers; t++) {
       const f = t / (tiers - 1);
       const y = 2.0 + f * (H - 2.6);
@@ -132,10 +163,13 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
       const ring = t < 3 ? 3 : t < tiers - 2 ? 2 : 1;
       for (let k = 0; k < ring; k++) {
         const a = k * ((2 * Math.PI) / ring) + t * GOLDEN;
-        const off = ring > 1 ? rad * 0.45 : 0;
-        lobe(rad * (ring > 1 ? 0.72 : 1), V3(Math.cos(a) * off, y, Math.sin(a) * off), 400 + v * 19 + t * 3 + k, 0.62, t === 0 && k === 0 ? 1 : 0);
+        const off = ring > 1 ? rad * 0.45 : 0, rr = rad * (ring > 1 ? 0.72 : 1);
+        // each whorl at least as deep as the gap to the next: a narrowing cone of boughs to the tip,
+        // never plates on a pole (the small upper whorls were 20 cm thin a metre apart)
+        lobe(rr, V3(Math.cos(a) * off, y, Math.sin(a) * off), 400 + v * 19 + t * 3 + k, Math.max(0.62, (0.62 * gap) / rr), t === 0 && k === 0 ? 1 : 0);
       }
     }
+    lobe(0.42, V3(0, H - 0.35, 0), 431 + v, 2.0, 0); // the leader: the spire closing the tip
   } else if (kind === 'palm') {
     trunkR = 0.2;
     const H = 7.5 + j(1.2);
@@ -212,23 +246,40 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     }
     lobe(0.55, V3(top.x, top.y + 0.3, top.z), 540 + v, 0.9);
   } else if (kind === 'maple') {
-    // sugar / red maple: a straight trunk into a dense oval crown a little taller than it is wide,
-    // built of many small lobes — a finer texture than the oak's big clouds
-    trunkR = 0.24;
-    const th = 3.0 + j(0.4), lean = V3(j(0.2), 0, j(0.2)), top = V3(lean.x, th, lean.z);
-    leanPer = [lean.x / (th + 0.3), lean.z / (th + 0.3)];
-    wood.push(part(limb(V3(0, -0.3, 0), top, trunkR, trunkR * 0.6, 6), BARK));
-    const forks = 3 + (v % 2);
-    for (let i = 0; i < forks; i++) {
-      const a = i * GOLDEN + r.float();
-      wood.push(part(limb(top.clone().add(V3(0, -0.4, 0)), top.clone().add(V3(Math.cos(a) * 1.3, 1.9 + j(0.3), Math.sin(a) * 1.3)), trunkR * 0.5, trunkR * 0.22, 4), BARK));
+    if (v === 2) {
+      // bigleaf maple, the Northwest's own: two or three stems leaning out from one base, each
+      // carrying a heavy, uneven billow of huge leaves — broad, open, a tree for a park or a ravine
+      trunkR = 0.3;
+      const stems = 3, a0 = r.float() * Math.PI * 2;
+      for (let i = 0; i < stems; i++) {
+        const a = a0 + i * ((2 * Math.PI) / stems) + j(0.4), ca = Math.cos(a), sa = Math.sin(a);
+        const knee = V3(ca * 0.9, 2.6 + j(0.3), sa * 0.9), tip = V3(ca * (2.6 + r.float() * 0.6), 5.6 + j(0.5), sa * (2.6 + r.float() * 0.6));
+        wood.push(part(limb(V3(ca * 0.15, -0.3, sa * 0.15), knee, trunkR * (i ? 0.8 : 1), trunkR * 0.65, 5), BARK), part(limb(knee, tip, trunkR * 0.6, trunkR * 0.22, 4), BARK));
+        lobe(1.95 + r.float() * 0.3, tip.clone().add(V3(ca * 0.3, 0.7, sa * 0.3)), 610 + v * 17 + i * 3, 0.78, 0);
+        lobe(1.45 + r.float() * 0.25, tip.clone().add(V3(-sa * 1.2 + ca * 0.5, -0.4 + j(0.3), ca * 1.2 + sa * 0.5)), 611 + v * 17 + i * 3, 0.8, 0);
+        lobe(1.35 + r.float() * 0.25, knee.clone().add(V3(ca * 1.3 + sa * 0.6, 0.9, sa * 1.3 - ca * 0.6)), 612 + v * 17 + i * 3, 0.8, 0);
+      }
+      lobe(2.2, V3(j(0.4), 6.6 + j(0.3), j(0.4)), 640 + v, 0.72);
+    } else {
+      // sugar or red maple: a short trunk under a full, dense egg of a crown — widest a third of the
+      // way up, a finer texture of many small lobes, reaching down near the lawn (the round tree is
+      // a ball held up on a tall bare trunk; this is the maple's closed oval)
+      trunkR = 0.26;
+      const th = 2.1 + j(0.3), lean = V3(j(0.2), 0, j(0.2)), top = V3(lean.x, th, lean.z);
+      leanPer = [lean.x / (th + 0.3), lean.z / (th + 0.3)];
+      wood.push(part(limb(V3(0, -0.3, 0), top, trunkR, trunkR * 0.6, 6), BARK));
+      for (let i = 0; i < 4; i++) {
+        const a = i * GOLDEN + r.float();
+        wood.push(part(limb(top.clone().add(V3(0, -0.4, 0)), top.clone().add(V3(Math.cos(a) * 1.5, 2.2 + j(0.3), Math.sin(a) * 1.5)), trunkR * 0.5, trunkR * 0.22, 4), BARK));
+      }
+      const rx = 3.3 + j(0.2), ry = 3.2 + j(0.3), cy = top.y + 3.0, n = 14;
+      for (let i = 0; i < n; i++) {
+        const u = fibSphere(i, n, -0.75, r.float() * 6);
+        const w = rx * (1 - 0.18 * u.y); // (the egg: fuller low, narrower toward the top)
+        lobe(1.2 * taper(i / n, 0.8) * (0.88 + r.float() * 0.24), V3(lean.x + u.x * w * 0.74, cy + u.y * ry * 0.74, lean.z + u.z * w * 0.74), 600 + v * 17 + i, 0.92, 0);
+      }
+      lobe(2.3, V3(lean.x, cy - 0.2, lean.z), 640 + v, 1.05);
     }
-    const rx = 2.4 + j(0.2), ry = 3.0 + j(0.3), cy = top.y + 2.5, n = 13;
-    for (let i = 0; i < n; i++) {
-      const u = fibSphere(i, n, -0.6, r.float() * 6);
-      lobe(1.3 * taper(i / n, 0.75) * (0.85 + r.float() * 0.3), V3(lean.x + u.x * rx * 0.72, cy + u.y * ry * 0.72, lean.z + u.z * rx * 0.72), 600 + v * 17 + i, 0.9, 0);
-    }
-    lobe(2.0, V3(lean.x, cy, lean.z), 640 + v, 1.05);
   } else if (kind === 'willow') {
     // weeping willow: a stout leaning trunk, limbs arching up and out under a rounded dome, and
     // from the dome a curtain of long tresses that bow out and fall to about a metre off the
@@ -297,6 +348,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
       const a = k * (Math.PI / 2) + 0.4 + r.float() * 0.5;
       lobe(1.45 + r.float() * 0.2, V3(lean.x + Math.cos(a) * W * 0.82, H - 1.9 + j(0.3), lean.z + Math.sin(a) * W * 0.82), 780 + v * 7 + k, 0.85, 0);
     }
+
   } else if (kind === 'poplar') {
     // Lombardy poplar (and, dark, the Italian cypress): a narrow column of foliage from low on
     // the trunk to a point — the windbreak row, the formal drive, the Tuscan hill
@@ -307,7 +359,8 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     // reads as one piece, narrowing to the tip
     const tiers = 9;
     for (let t = 0; t < tiers; t++) {
-      const f = t / (tiers - 1), y = 1.6 + f * (H - 2.6), rad = 1.12 * (1 - 0.62 * Math.pow(f, 1.4)) * (0.8 + 0.25 * Math.sin(f * Math.PI));
+      // (tiers close enough near the tip that each overlaps the next — its top used to float off)
+      const f = t / (tiers - 1), y = 1.6 + f * (H - 3.1), rad = 1.12 * (1 - 0.55 * Math.pow(f, 1.4)) * (0.8 + 0.25 * Math.sin(f * Math.PI));
       const k2 = t % 2 ? 1 : 2;
       for (let k = 0; k < k2; k++) {
         const a = t * GOLDEN + k * Math.PI;
@@ -345,6 +398,12 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
       lobe(1.4 + r.float() * 0.25, V3(lean.x + u.x * 2.0, cy + u.y * 1.25, lean.z + u.z * 2.0), 880 + v * 13 + i, 0.9, 0);
     }
     lobe(2.2, V3(lean.x, cy, lean.z), 895 + v, 0.75, 0);
+    // (the underside breaks into clumps hanging between the limbs — from below it read as a
+    // tabletop)
+    for (let k = 0; k < 3; k++) {
+      const a = k * ((2 * Math.PI) / 3) + 0.5 + r.float() * 0.6, rr = 1.3 + r.float() * 0.5;
+      lobe(0.95 + r.float() * 0.2, V3(lean.x + Math.cos(a) * rr, cy - 1.15 - r.float() * 0.25, lean.z + Math.sin(a) * rr), 897 + v * 5 + k, 0.9, 0);
+    }
   }
 
   const leafGeo = merge(leaf.map((g) => part(g, TINT)));

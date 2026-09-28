@@ -39,6 +39,9 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
       varying float vTree;
       varying float vSig;
       uniform vec2 uCrown;
+      #ifdef FOLIAGE
+      varying vec3 vRimN;
+      #endif
       #ifdef SIGNAL
       ${SIGNAL_GLSL}
       #endif
@@ -74,6 +77,7 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
         vWorldPos = wp.xyz + uWorldOffset;
         vNormalW = normalize(mat3(m) * normal);
         #ifdef FOLIAGE
+          vRimN = vNormalW; // (the lobe's own normal, before the crown's light field bends it)
           float leafy = step(0.98, min(color.r, min(color.g, color.b)));
           if (uCrown.y > 0.0) {
             // one spherical light field per crown (slightly flattened), foliage only
@@ -116,7 +120,29 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
       #ifdef PAVED
       uniform vec4 uDetailBox;
       #endif
+      #ifdef FOLIAGE
+      varying vec3 vRimN;
+      #endif
       void main() {
+        #ifdef FOLIAGE
+          // A crown seen from 5–10 m: each low-poly lobe's rim breaks into leaf-sized bites and
+          // holes where it turns away from the eye, so the outline is a ragged edge of leaves, not
+          // a cut facet (and never sky through its heart — only the grazing rim thins). Near only:
+          // far off it would shimmer, and a far crown's outline is small anyway.
+          if (vLeafy > 0.5) {
+            vec3 eye = cameraPosition + uWorldOffset - vWorldPos;
+            float dEye = length(eye), nearF = 1.0 - smoothstep(22.0, 45.0, dEye);
+            if (nearF > 0.0) {
+              vec3 rn = normalize(vRimN);
+              float rim = 1.0 - abs(dot(rn, eye / max(dEye, 1e-3)));
+              float bite = vnoise3(vWorldPos * 3.1) * 0.65 + vnoise3(vWorldPos * 7.7 + 5.0) * 0.35;
+              // (the sides of a lobe only: a spruce's flat whorls seen level are all grazing top and
+              // underside, and bitten there they thinned to plates on a pole)
+              float side = smoothstep(0.05, 0.45, 1.0 - abs(rn.y));
+              if (rim > 0.5 && bite < (rim - 0.5) * 1.7 * nearF * side) discard;
+            }
+          }
+        #endif
         #ifdef PAVED
           // near the walker the painted ground carries the street (lanes, kerbs, sidewalks,
           // crossings, all exactly on the ground): the far ribbon steps aside, dissolving across
@@ -149,7 +175,16 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
               vec3 fall = vTree < 0.4 ? vec3(0.78, 0.55, 0.08) : vTree < 0.75 ? vec3(0.8, 0.3, 0.06) : vec3(0.6, 0.1, 0.07);
               fall = mix(fall, vec3(0.72, 0.5, 0.1), 0.35 * vnoise3(vWorldPos * 0.7));
             #endif
-            alb = mix(alb, fall * (0.8 + 0.4 * fbm3(vWorldPos * 0.9)), uAutumn * smoothstep(0.1, 0.5, vTree + 0.3));
+            // …each on its own schedule: a few early maples by late September, the last oaks into
+            // November (uTurn: the season's progress, never going back), and a crown from its sunlit
+            // top and outside inward — never every tree faintly tinted at once
+            float onset = vTree * 0.85;
+            #if FALL_HUE == 1
+              onset *= 0.7; // (the red and sugar maples lead)
+            #endif
+            float hi = uCrown.y > 0.0 ? smoothstep(uCrown.x - uCrown.y, uCrown.x + uCrown.y, vLocal.y) : 0.5;
+            float turn = smoothstep(onset - 0.02, onset + 0.22, uTurn * 1.25 + 0.14 * (hi - 0.5) + 0.12 * (vnoise3(vWorldPos * 0.8) - 0.5)) * smoothstep(0.0, 0.04, uTurn);
+            alb = mix(alb, fall * (0.8 + 0.4 * fbm3(vWorldPos * 0.9)), turn);
           }
         #endif
         #ifdef BLOSSOM

@@ -148,3 +148,23 @@ describe('raised shore houses', () => {
     expect(w.interiorAt(inn.x, inn.z, inn.feet)).toBeGreaterThanOrEqual(0);
   });
 });
+
+describe('big floorplates', () => {
+  // a 60 x 30 m block, door mid-way along the long north wall
+  const big: [number, number][] = [[-30, -15], [30, -15], [30, 15], [-30, 15]];
+  const bdoor: Door = { ...door, z: -15.2, fz: -16.4, wz: -15 };
+  const mk = (kind: string, use?: string): Footprint => ({ ring: big, base: 0.2, top: 12, floor0: 0.5, raise: 0, kind, use, eave: 11.8, seed: 0.3, id: 7 });
+  it('an office, a civic hall or an apartment block is a lobby with rooms off it every ~10 m, never one hall', () => {
+    for (const f of [mk('commercial', 'office'), mk('commercial', 'townhall'), mk('large')]) {
+      const p = planInterior('t:b', f, bdoor, 99);
+      expect(p.parts.length, f.kind + f.use).toBeGreaterThanOrEqual(3);
+      const us = [-p.L / 2, ...p.parts.map((q) => q.u).sort((a, b) => a - b), p.L / 2];
+      for (let i = 1; i < us.length; i++) expect(us[i] - us[i - 1]).toBeLessThan(22); // no hall longer than two bays
+      for (const q of p.parts) for (const s of q.segs) expect(s.gap).toBeGreaterThan(s.lo); // a doorway in every wall
+    }
+  });
+  it('a supermarket stays an open floor of aisles; a small shop and a house are as they were', () => {
+    expect(planInterior('t:g', mk('commercial', 'supermarket'), bdoor, 99).parts.length).toBe(0);
+    expect(planInterior('t:0', fp, door, 1234).parts.length).toBeLessThanOrEqual(2);
+  });
+});

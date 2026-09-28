@@ -7,6 +7,7 @@
 // elevation lands with the Terrarium DEM in H2 — replace this layer, nothing else changes.
 import { Terrain, TerrainLayer, type AtlasManifest, type Box, type Chunk, type LayerLayout } from './data';
 import { regionStyle } from './styles';
+import { zoneAt } from './tz';
 
 const SLICE_HALF = 512; // region "slice" box — the fine ground mesh extent (kept small: flat)
 const BACKDROP_HALF = 3072; // region "backdrop" box — horizon ground; coarse tiles carry past it
@@ -45,10 +46,10 @@ export interface VirtualRegion { manifest: AtlasManifest; terrain: Terrain; bin:
 export function virtualRegion(at: [number, number]): VirtualRegion {
   const snap = (v: number) => Math.round(v * 64) / 64;
   const origin = { lat: snap(at[0]), lon: snap(at[1]) };
-  // No tz database on the client — longitude zone is honest for anywhere on Earth
-  // (POSIX sign flips: Etc/GMT-N == UTC+N).
-  const zh = Math.round(origin.lon / 15);
-  const tz = zh === 0 ? 'Etc/GMT' : zh > 0 ? `Etc/GMT-${zh}` : `Etc/GMT+${-zh}`;
+  // the clock the place keeps: its US zone with summer time (the browser's tz database does the
+  // rest), else its longitude zone (tz.ts) — the longitude zone alone put every summer hour an
+  // hour late in the lower 48
+  const tz = zoneAt(origin.lat, origin.lon);
   const ns = at[0] >= 0 ? 'N' : 'S', ew = at[1] >= 0 ? 'E' : 'W';
   const backdrop: Box = { x0: -BACKDROP_HALF, z0: -BACKDROP_HALF, x1: BACKDROP_HALF, z1: BACKDROP_HALF };
   const { layout, bin } = flatLayer(backdrop, LAYER_CELL, {
