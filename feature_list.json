@@ -15,6 +15,43 @@
   "history_note": "Completed work is tracked in docs/earth/LOG.md + git log — do not duplicate it here. This file is the forward-looking queue. Ordering rule: git commits beat docs when they disagree.",
   "features": [
     {
+      "id": "people-doing-things",
+      "priority": 1,
+      "area": "gameplay",
+      "title": "People doing things: conversations, window shopping, waiting for the light, staff at work, residents who sit properly",
+      "user_visible_behavior": "Walkers stop to talk face to face (gesturing, nodding) and part together, linger at shop windows, wait at signalled corners for their green; cafes, bars and shops have staff behind the counter with customers waiting and regulars on stools; residents sit on the cushion (not in it), facing their table or room, and a cook has company at the counter; city streets are busy (the crowd gathers round the walker by street density).",
+      "status": "in_progress",
+      "verification": [
+        "tests/lifeSim.test.ts: walkers stop to talk face to face; tests/traffic.test.ts: walkers wait for the light",
+        "shots/life-*.jpg frames 5-10"
+      ],
+      "evidence": [
+        "src/sim/lifeSim.ts (CHAT, window shopping, kerbWait, sizeBubble)",
+        "src/render/creature.ts (SEATED pose, talk gesture for walkers)",
+        "src/world/interiors.ts (yawTo, staff aisles, seat heights)"
+      ],
+      "notes": "Open: greetings/waves, queues, staff who move, residents' routines, dogs, bags, phones, kids; people LOD so the caps can grow."
+    },
+    {
+      "id": "traffic-control",
+      "priority": 1,
+      "area": "gameplay",
+      "title": "Cars follow traffic: signals, stop signs, all-way stops and give-way, from one junction analysis",
+      "user_visible_behavior": "Signalled junctions cycle (the lit lens is the one the traffic obeys); cars stop at the line on red, come to a full stop at stop signs and take turns at all-way stops, give way to the main road, slow for corners, never block a junction; stop and give-way signs stand at every controlled arm; mapped OSM control wins, the rule of the road fills the rest.",
+      "status": "passing",
+      "verification": [
+        "tests/traffic.test.ts: rule of the road (NA all-way / minor stop / signals for two main roads / T stems; EU give-way), mapped signal and stop nodes win, one-way arms, ownership + packing, phase timing (never both green), a car stops on red behind the line and goes on green, full stop at a stop sign then pulls out, walkers wait at the corner",
+        "tools/life-shots.js __LIFE__(tag) -> shots/life-<tag>.jpg (junction from above, lenses, stop sign, night)",
+        "in-page count: Sea Bright ~25 % of cars standing at any moment, queued 8-27 m from junction centres, no growth over a minute"
+      ],
+      "evidence": [
+        "src/sim/traffic.ts",
+        "shots/life-seabright4.jpg",
+        "shots/life-nyc.jpg"
+      ],
+      "notes": "Open: cars yield to walkers on the walk phase, protected lefts, buses on route=bus, parking manoeuvres. Tile cache v14 (stop/give-way points) - redeploy the worker."
+    },
+    {
       "id": "paint-your-walk",
       "priority": 1,
       "area": "core",
@@ -393,9 +430,10 @@
         "shots/place-tucson.jpg (round 4)",
         "shots/place-nyc.jpg (round 3b)",
         "shots/place-burlington-jan.jpg",
-        "shots/looks-tucson.jpg"
+        "shots/looks-tucson.jpg",
+        "shots/place-nyc-r3.jpg (round 4: Hudson visible in the far field, aerial above the roofs)"
       ],
-      "notes": "Tile cache v13 — the worker needs a redeploy. Open: ridge detail on far mountains, zero-setback barrio fronts, buses on route=bus, snowbanks, interiors furnished by floor area everywhere, Seattle + Miami rounds."
+      "notes": "Tile cache v14 (stop/give-way points, fence types) - the worker needs a redeploy. (p): iron railings in dense cores, thinner street-tree trunks, DEM rivers show water in the far field, aerial pose above the roofs. Open: ridge detail on far mountains, zero-setback barrio fronts, buses on route=bus, snowbanks, window pixel mosaics, Seattle + Miami rounds."
     },
     {
       "id": "tunable-looks",
@@ -430,7 +468,7 @@
         "src/world/season.ts",
         "shots/place-burlington-jan.jpg"
       ],
-      "notes": "Climatology, not weather: no storms or thaws yet. Snowbanks along ploughed kerbs are open."
+      "notes": "Climatology, not weather: no storms or thaws yet. (p): ploughed asphalt keeps ~15 % (wet dark tracks), sidewalks shovelled to a patchy path, snow stays blue after dark. Snowbanks along ploughed kerbs are open."
     }
   ],
   "regions": {

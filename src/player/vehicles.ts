@@ -10,7 +10,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { propMaterial, colored } from '../render/propMaterial';
-import { carMix, carLib, boatLib, planeGeometry, planeRecipe, pickFrom, PLANE_TYPES, CAR_TYPES, type CarType, type BoatType, type PlaneType } from '../assets/kit';
+import { carMix, carLib, boatLib, planeGeometry, planeRecipe, pickFrom, carRecipe, PLANE_TYPES, CAR_TYPES, type CarType, type BoatType, type PlaneType } from '../assets/kit';
+import { KERB_STRIDE } from '../world/kerbCars';
 import type { WalkWorld } from './collision';
 import { walkParams, type Walker } from './controller';
 import type { Road, Terrain } from '../world/data';
@@ -257,9 +258,26 @@ export class Vehicles {
     im.setMatrixAt(i, new THREE.Matrix4().makeScale(0, 0, 0));
     im.instanceMatrix.needsUpdate = true;
   }
-  /** Re-hide taken driveway cars when their tile remounts. */
-  onTile(t: { spec: { id: string }; group: THREE.Group }) {
-    for (const im of parkedMeshes(t.group)) for (let i = 0; i < im.count; i++) if (this.taken.has(`${t.spec.id}:${im.name}:${i}`)) this.hideInstance(im, i);
+  /** Re-hide taken driveway cars when their tile remounts — and retire their parking outlines
+   *  (the tile re-registers every parked car's walls when it mounts). */
+  onTile(t: { spec: { id: string }; group: THREE.Group; kerb?: Float32Array }) {
+    const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), e = new THREE.Euler();
+    for (const im of parkedMeshes(t.group)) for (let i = 0; i < im.count; i++) {
+      if (!this.taken.has(`${t.spec.id}:${im.name}:${i}`)) continue;
+      im.getMatrixAt(i, m);
+      m.decompose(p, q, sc);
+      if (sc.x > 0) this.clearSpot(p.x, p.z, e.setFromQuaternion(q, 'YXZ').y, im.name.split(':')[1] ?? 'sedan');
+      this.hideInstance(im, i);
+    }
+    const d = t.kerb;
+    if (d) for (let i = 0, k = 0; i + KERB_STRIDE <= d.length; i += KERB_STRIDE, k++)
+      if (this.taken.has(`${t.spec.id}:kerb:${k}`)) this.clearSpot(d[i], d[i + 2], d[i + 3], CAR_TYPES[d[i + 4]]);
+  }
+  /** A parked car's outline no longer boxes in the car that left it. */
+  private clearSpot(x: number, z: number, yaw: number, model: string) {
+    const type = (model.split('+')[0] || 'sedan') as CarType;
+    const rc = CAR_TYPES.includes(type) ? carRecipe(type, 1) : carRecipe('sedan', 1);
+    this.o.walk.clearFootprint(x, z, yaw, rc.L / 2, rc.W / 2 + 0.05);
   }
 
   // ---------------- enter / exit ----------------
@@ -275,6 +293,7 @@ export class Vehicles {
       const pk = this.parkedNear(w.x, w.z, SPECS.car.reach + 0.6);
       if (pk) {
         this.taken.add(pk.key);
+        this.clearSpot(pk.x, pk.z, pk.yaw, pk.model);
         if (pk.im) this.hideInstance(pk.im, pk.i);
         else this.o.kerb?.refresh();
         best = this.make('car', pk.x, pk.z, pk.yaw, pk.color, pk.model);

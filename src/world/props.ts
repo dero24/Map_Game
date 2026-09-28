@@ -19,6 +19,7 @@ import { cafeSet, mergeDecor } from '../assets/decor';
 import { personGeometry } from '../assets/people';
 import { creatureMaterial } from '../render/creature';
 import { useOf, terraceUse } from './uses';
+import { analyzeJunctions, packJunctions, signalKey, CTL, type Junction } from '../sim/traffic';
 
 type P = [number, number];
 const unpackPts = (f: number[]): P[] => {
@@ -256,6 +257,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // a tree in the road. ctx carries the unfiltered tile json; box bounds the tree scan to
   // this tile's own area so overlapping scan zones never double-spawn the same tree.
   const ctxJson = extras.ctx ?? json;
+  let junctions: Junction[] = [];
   // Cap the mask canvas at the slice + margin: legacy regions hand us box=backdrop, which
   // would otherwise rasterize a ~12 km canvas (hundreds of MB) in the worker.
   const big = { x0: S.x0 - 250, z0: S.z0 - 250, x1: S.x1 + 250, z1: S.z1 + 250 };
@@ -1161,11 +1163,39 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       }
       return best && best.d < (lim ?? 8) ? best : null;
     };
-    const masts: THREE.Matrix4[] = [], hyd: THREE.Matrix4[] = [], subs: THREE.Matrix4[] = [], stops: THREE.Matrix4[] = [], shelters: THREE.Matrix4[] = [];
+    const masts: THREE.Matrix4[] = [], mastData: THREE.Color[] = [], hyd: THREE.Matrix4[] = [], subs: THREE.Matrix4[] = [], stops: THREE.Matrix4[] = [], shelters: THREE.Matrix4[] = [];
+    const stopSigns: THREE.Matrix4[] = [], allWay: THREE.Matrix4[] = [], yieldSigns: THREE.Matrix4[] = [];
     const na = look.region === 'na';
+    // Junction control (src/sim/traffic.ts): the same analysis ships with the tile to the life sim,
+    // so the lit lens and the stop sign are what the traffic actually obeys.
+    const TB2 = extras.box;
+    junctions = analyzeJunctions(ctxJson.roads, ctxJson.points, na, (x, z) => inSlice(x, z) && (!TB2 || (x >= TB2.x0 && x < TB2.x1 && z >= TB2.z0 && z < TB2.z1)));
+    for (const J of junctions) {
+      for (const m of J.arms) {
+        if (!m.inb) continue; // no traffic arrives down a one-way leaving the junction
+        const right = [m.dz, -m.dx]; // kerb side of the traffic arriving along this arm
+        if (m.ctl === CTL.SIG_A || m.ctl === CTL.SIG_B) {
+          // the mast on the far-right corner, its arm over the lanes, the heads facing the arrivals
+          const x = J.x - m.dx * J.setback + right[0] * (m.w / 2 + 1.3), z = J.z - m.dz * J.setback + right[1] * (m.w / 2 + 1.3);
+          if (walk.blocked(x, z, 0.4) || terrain.sdfAt(x, z) < 1) continue;
+          masts.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(-right[0], -right[1])), V(1, 1, na ? Math.min(1.6, (m.w / 2 + 1.3) / 5) : 0.35)));
+          mastData.push(new THREE.Color(J.key, m.ctl === CTL.SIG_B ? 1 : 0, 1));
+          walk.addLoop([[x - 0.18, z - 0.18], [x + 0.18, z - 0.18], [x + 0.18, z + 0.18], [x - 0.18, z + 0.18]]);
+        } else if (m.ctl === CTL.STOP || m.ctl === CTL.ALL_STOP || m.ctl === CTL.YIELD) {
+          // the sign at the stop line, on the kerb to the right, facing the arrivals
+          const x = J.x + m.dx * (J.setback + 0.4) + right[0] * (m.w / 2 + 0.7), z = J.z + m.dz * (J.setback + 0.4) + right[1] * (m.w / 2 + 0.7);
+          if (walk.blocked(x, z, 0.25) || terrain.sdfAt(x, z) < 1) continue;
+          const mt = new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(m.dx, m.dz)), V(1, 1, 1));
+          (m.ctl === CTL.YIELD ? yieldSigns : m.ctl === CTL.ALL_STOP && na ? allWay : stopSigns).push(mt);
+          walk.addLoop([[x - 0.06, z - 0.06], [x + 0.06, z - 0.06], [x + 0.06, z + 0.06], [x - 0.06, z + 0.06]]);
+        }
+      }
+    }
     for (const p of json.points) {
       if (!inSlice(p.x, p.z) || p.own === 0) continue;
       if (p.c === 'signal') {
+        // a signal at a junction is drawn with the junction above; one mid-block (a crosswalk) here
+        if (junctions.some((J) => J.signal && Math.hypot(J.x - p.x, J.z - p.z) < 22)) continue;
         const s = segAt(p.x, p.z);
         if (!s) continue;
         const nx = -s.uz, nz = s.ux;
@@ -1175,6 +1205,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
           if (walk.blocked(x, z, 0.4) || terrain.sdfAt(x, z) < 1) continue;
           const yaw = Math.atan2(-nx * sd, -nz * sd); // local +z (the arm) points back across the road
           masts.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, na ? Math.min(1.6, (s.w / 2 + 1.3) / 5) : 0.35)));
+          mastData.push(new THREE.Color(signalKey(p.x, p.z), 0, 1));
           walk.addLoop([[x - 0.18, z - 0.18], [x + 0.18, z - 0.18], [x + 0.18, z + 0.18], [x - 0.18, z + 0.18]]);
         }
       } else if (p.c === 'hydrant') {
@@ -1229,9 +1260,25 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         colored(new THREE.BoxGeometry(0.1, 0.12, 5).translate(0, 5.95, 2.5), dark),
         ...head(2.8), ...head(4.8),
       ]);
-      const im = new THREE.InstancedMesh(g, propMaterial(), masts.length);
-      masts.forEach((m, i) => im.setMatrixAt(i, m));
+      const im = new THREE.InstancedMesh(g, propMaterial({ signal: true }), masts.length);
+      masts.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, mastData[i]); });
       im.name = 'street:signals';
+      im.layers.enable(1);
+      group.add(im);
+    }
+    // stop / all-way / yield signs: a galvanised post, the plate facing the arrivals (local +z)
+    const signPost = () => colored(new THREE.CylinderGeometry(0.03, 0.03, 2.3, 6).translate(0, 1.15, -0.03), 0x9aa0a2);
+    const octagon = (r: number, y: number, z: number, hex: number) => colored(new THREE.CylinderGeometry(r, r, 0.02, 8).rotateX(Math.PI / 2).rotateZ(Math.PI / 8).translate(0, y, z), hex);
+    const signSets: [THREE.Matrix4[], () => THREE.BufferGeometry[], string][] = [
+      [stopSigns, () => [signPost(), octagon(0.38, 2.15, 0.0, 0xf2efe6), octagon(0.34, 2.15, 0.012, 0xb8392e)], 'street:stop'],
+      [allWay, () => [signPost(), octagon(0.38, 2.15, 0.0, 0xf2efe6), octagon(0.34, 2.15, 0.012, 0xb8392e), colored(new THREE.BoxGeometry(0.5, 0.16, 0.02).translate(0, 1.66, 0.005), 0xb8392e), colored(new THREE.BoxGeometry(0.44, 0.1, 0.01).translate(0, 1.66, 0.018), 0xf2efe6)], 'street:allway'],
+      [yieldSigns, () => [signPost(), colored(new THREE.CylinderGeometry(0.46, 0.46, 0.02, 3).rotateX(Math.PI / 2).translate(0, 2.1, 0.0), 0xb8392e), colored(new THREE.CylinderGeometry(0.3, 0.3, 0.02, 3).rotateX(Math.PI / 2).translate(0, 2.07, 0.012), 0xf2efe6)], 'street:yield'],
+    ];
+    for (const [list, geo, name] of signSets) {
+      if (!list.length) continue;
+      const im = new THREE.InstancedMesh(mergeGeometries(geo()), propMaterial(), list.length);
+      list.forEach((m, i) => im.setMatrixAt(i, m));
+      im.name = name;
       im.layers.enable(1);
       group.add(im);
     }
@@ -1307,39 +1354,73 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     group.add(im);
   }
 
-  // ---------- mapped fences (picket / rail) ----------
+  // ---------- mapped fences: timber post-and-rail, iron railings, chain-link ----------
+  // The map's fence_type decides; untyped, a fence in a dense core is an iron railing (a Midtown
+  // tree pit or church yard), elsewhere the painted post-and-rail of a yard or a field.
   const fm = new THREE.Group();
-  const fencePosts: THREE.Matrix4[] = [], fenceRails: THREE.Matrix4[] = [];
+  const FENCE = {
+    wood: { posts: [] as THREE.Matrix4[], rails: [] as THREE.Matrix4[], step: 2.2, railsY: [0.35, 0.95] },
+    iron: { posts: [] as THREE.Matrix4[], rails: [] as THREE.Matrix4[], step: 2.4, railsY: [0.12, 1.12] },
+    chain: { posts: [] as THREE.Matrix4[], rails: [] as THREE.Matrix4[], step: 3.0, railsY: [0.08, 0.95, 1.78] },
+  };
+  const bayM: THREE.Matrix4[] = []; // iron: one metre of square bars per instance
   for (const l of json.lines) {
     if (l.c !== 'fence') continue;
     const p = unpackPts(l.p);
     if (!p.some(([x, z]) => inSlice(x, z, -20))) continue;
+    const mid = p[Math.floor(p.length / 2)];
+    const kind = l.ft === 1 ? 'iron' : l.ft === 2 ? 'chain' : l.ft === 3 ? 'wood' : urban(mid[0], mid[1]) ? 'iron' : 'wood';
+    const F = FENCE[kind];
     for (let i = 0; i + 1 < p.length; i++) {
       const [ax, az] = p[i], [bx, bz] = p[i + 1];
       const L = Math.hypot(bx - ax, bz - az);
       if (L < 0.2) continue;
       const ang = Math.atan2(bz - az, bx - ax);
-      const n = Math.max(1, Math.round(L / 2.2));
+      const q = new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -ang);
+      const n = Math.max(1, Math.round(L / F.step));
       for (let k = 0; k <= n; k++) {
         const x = ax + ((bx - ax) * k) / n, z = az + ((bz - az) * k) / n;
-        fencePosts.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -ang), V(1, 1, 1)));
+        F.posts.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), q, V(1, 1, 1)));
       }
-      for (const y of [0.35, 0.95]) {
+      for (const y of F.railsY) {
         const mx = (ax + bx) / 2, mz = (az + bz) / 2;
-        fenceRails.push(new THREE.Matrix4().compose(V(mx, terrain.heightAt(mx, mz) + y, mz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -ang), V(L, 1, 1)));
+        F.rails.push(new THREE.Matrix4().compose(V(mx, terrain.heightAt(mx, mz) + y, mz), q, V(L, 1, 1)));
+      }
+      if (kind === 'iron') {
+        const nb = Math.max(1, Math.round(L));
+        for (let k = 0; k < nb; k++) {
+          const t = (k + 0.5) / nb, x = ax + (bx - ax) * t, z = az + (bz - az) * t;
+          bayM.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), q, V(L / nb, 1, 1)));
+        }
       }
       walk.addWall([ax, az], [bx, bz]);
     }
   }
-  if (fencePosts.length) {
-    const post = new THREE.InstancedMesh(colored(new THREE.BoxGeometry(0.1, 1.15, 0.1).translate(0, 0.575, 0), 0xefebe2), propMaterial(), fencePosts.length);
-    fencePosts.forEach((mt, i) => post.setMatrixAt(i, mt));
-    const rail = new THREE.InstancedMesh(colored(new THREE.BoxGeometry(1, 0.07, 0.04), 0xefebe2), propMaterial(), fenceRails.length);
-    fenceRails.forEach((mt, i) => rail.setMatrixAt(i, mt));
+  const fenceParts: [keyof typeof FENCE, THREE.BufferGeometry, THREE.BufferGeometry][] = [
+    ['wood', colored(new THREE.BoxGeometry(0.1, 1.15, 0.1).translate(0, 0.575, 0), 0xefebe2), colored(new THREE.BoxGeometry(1, 0.07, 0.04), 0xefebe2)],
+    ['iron', colored(new THREE.BoxGeometry(0.06, 1.25, 0.06).translate(0, 0.625, 0), 0x232120), colored(new THREE.BoxGeometry(1, 0.035, 0.03), 0x232120)],
+    ['chain', colored(new THREE.CylinderGeometry(0.03, 0.03, 1.85, 6).translate(0, 0.925, 0), 0x9aa0a2), colored(new THREE.BoxGeometry(1, 0.03, 0.03), 0xa9aeb0)],
+  ];
+  for (const [k, postG, railG] of fenceParts) {
+    const F = FENCE[k];
+    if (!F.posts.length) continue;
+    const post = new THREE.InstancedMesh(postG, propMaterial(), F.posts.length);
+    F.posts.forEach((mt, i) => post.setMatrixAt(i, mt));
+    const rail = new THREE.InstancedMesh(railG, propMaterial(), F.rails.length);
+    F.rails.forEach((mt, i) => rail.setMatrixAt(i, mt));
+    post.name = rail.name = `fence:${k}`;
     post.layers.enable(1);
     fm.add(post, rail);
-    group.add(fm);
   }
+  if (bayM.length) {
+    const bars: THREE.BufferGeometry[] = [];
+    for (let u = -0.45; u <= 0.46; u += 0.13) bars.push(new THREE.BoxGeometry(0.018, 1.1, 0.018).translate(u, 0.6, 0));
+    const bay = new THREE.InstancedMesh(colored(mergeGeometries(bars), 0x232120), propMaterial(), bayM.length);
+    bayM.forEach((mt, i) => bay.setMatrixAt(i, mt));
+    bay.name = 'fence:iron';
+    fm.add(bay);
+  }
+  if (fm.children.length) group.add(fm);
 
   // ---------- curbside mailboxes for the houses with a mapped address ----------
   // North American curbs only (elsewhere the post goes through the door); a street mixes styles,
@@ -1745,5 +1826,5 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
 
   const lampPts = lampGround.flat();
   group.add(haloPoints(lampHeads, 1.6, new THREE.Color(1.0, 0.7, 0.38)));
-  return { group, lampHeads, lampPts, kerb: new Float32Array(kerb) };
+  return { group, lampHeads, lampPts, kerb: new Float32Array(kerb), junc: packJunctions(junctions) };
 }

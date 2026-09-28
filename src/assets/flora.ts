@@ -31,7 +31,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
   if (kind === 'round' || kind === 'oak' || kind === 'birch') {
     const oak = kind === 'oak', birch = kind === 'birch';
     const th = (oak ? 3.6 : birch ? 4.4 : 4.2) + j(0.5);
-    trunkR = oak ? 0.38 : birch ? 0.16 : 0.28;
+    trunkR = oak ? 0.3 : birch ? 0.14 : 0.22; // a 7 m street tree: a 0.45 m trunk, not a 0.75 m barrel
     const lean = V3(j(0.35), 0, j(0.35));
     const top = V3(lean.x, th, lean.z);
     const barkC = birch ? BIRCH : BARK;

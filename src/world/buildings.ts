@@ -394,7 +394,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
     b.quad(V(ox - tx * hw, y0, oz - tz * hw), V(ox + tx * hw, y0, oz + tz * hw), V(ox + tx * hw, y1, oz + tz * hw), V(ox - tx * hw, y1, oz - tz * hw), n);
   };
   // apartment-block and shop doors are dark (painted steel, stained wood, glass); a house's door is its colour
-  const doorHex = B.kind === 'commercial' ? 0x26313b : B.kind === 'large' ? [0x1f2226, 0x2e2419, 0x24302a, 0x3a2a20][Math.floor(r(0x51) * 4)] : DOOR_COLORS[Math.floor(r(0x51) * DOOR_COLORS.length)];
+  const doorHex = B.kind === 'commercial' ? 0x26313b : B.kind === 'large' ? [0x2f353c, 0x3d2f22, 0x2f3d34, 0x4a3326][Math.floor(r(0x51) * 4)] : DOOR_COLORS[Math.floor(r(0x51) * DOOR_COLORS.length)];
   const doorCol = lin(doorHex);
   b.setColor(doorCol);
   face(wide / 2, floorY, floorY + tall, 0.02);

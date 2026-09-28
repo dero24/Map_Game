@@ -180,7 +180,9 @@ export function demLayer(d: DemGrid): { buf: ArrayBuffer; layout: LayerLayout } 
   for (let i = 0; i < n; i++) {
     const sea = d.heights[i] <= 0.5;
     f32[i] = d.heights[i] * 100;
-    i16[i] = sea ? -50 : 500; // -5 m offshore / +50 m inland
+    // -60 m offshore (open water: no ground chunk or backdrop is laid over it, so the water
+    // plane shows — a DEM river at 0 m read as a tan plain) / +50 m inland
+    i16[i] = sea ? -600 : 500;
     u8[n * 2 + i] = sea ? 0 : 255; // oceanD: at sea / far
     if (sea) u8[n + i] = 1; // flags bit0: water
   }

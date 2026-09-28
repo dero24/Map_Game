@@ -399,7 +399,7 @@ async function main() {
 
   const lifeBase = buildLifeBase(paintWorld, walk);
   lifeBase.rhythm = rhythmFor(regionLook.climate, lifeBase.beachPts.length > 0); // the shape of this place's day
-  const life = new LifeClient(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors));
+  const life = new LifeClient(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors, stream.junctions));
   worldRoot.add(life.group);
   lifeDirty = false; // init already covers the loaded ring
 
@@ -911,7 +911,7 @@ async function main() {
     if (!walkParams.fly || walker.y - walker.feet < 60) grass.update(walker.x, walker.z);
     if (lifeDirty && (!stream.busy || now - lastTileChange > 4000)) {
       lifeDirty = false; // clear first: a failed reinit must not throw every frame
-      try { life.reinit(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors)); }
+      try { life.reinit(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors, stream.junctions)); }
       catch (e) { console.warn('life reinit failed', e); }
     }
     const tp = performance.now();
@@ -924,7 +924,7 @@ async function main() {
     const ti = performance.now();
     interiors.update(walker.x, walker.z, dt, walker.feet);
     perf.interior = Math.max(perf.interior, performance.now() - ti);
-    life.update(now, walker, { night: U.uNight.value, hour: timeParams.hour, wind: weather.wind });
+    life.update(now, walker, { night: U.uNight.value, hour: timeParams.hour, wind: weather.wind, clock: simTime });
     if (ambience) {
       const run = walker.pressed('ShiftLeft') || walker.pressed('ShiftRight');
       const stride = interiors.onStairs ? 0.3 : run ? 1.1 : 0.75;

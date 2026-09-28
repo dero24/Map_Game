@@ -11,7 +11,10 @@ source, a region/climate table or a foundry family). No hand lists.
 - Sources: this doc merges the AAA design review (docs/earth/REVIEWER.md, 2026-09-27),
   ASSET_FIDELITY.md, ASSET_FOUNDRY.md, CONSTRUCTION.md and OPEN_WORLD.md.
 - Top items are mirrored into `feature_list.json`; this doc is the long list.
-- **Last updated 2026-09-27 (night):** place parity — skyscrapers and building parts, row
+- **Last updated 2026-09-27 (late night, entry (p)):** junction control (signals with lit lenses,
+  stop / all-way / give-way signs, cars that obey them), people who stop to talk, window-shop and
+  wait for the light, staff behind counters, residents who sit properly, city-sized crowds.
+- **Earlier 2026-09-27 (night):** place parity — skyscrapers and building parts, row
   houses with fire escapes, the horizon ring, the skyline ring, city and desert sound, street
   furniture from OSM, North American cladding by subregion, and tunable looks (LOG entry (n),
   `docs/earth/PLACE_REFERENCES.md`). Earlier: `c08c82a`, `8b82dcc`.
@@ -71,7 +74,7 @@ bevels and one or two signature details per object.
 | # | Family / item | Status | Notes |
 |---|---|---|---|
 | 2.1 | **People**: jointed body (~1.72 m adult proportions), knee/arm gait, 5 hairstyles, skin/hair/trouser palettes, clothing by climate × season, seated and knocked-down poses; faces (eyes, brows, mouth; hair open at the front) | ✅ | `src/assets/people.ts`, `render/creature.ts` |
-| 2.1b | People faces 2: expressions (smile, talk), glasses, beards, blinking; noses and ears with shape; a skin-shaded head that isn't a low-poly ball up close | ⬜ P1 | Robby: "faces need more detail" — first pass landed (o) |
+| 2.1b | People faces 2: eye whites + irises (not black bars), a three-band hair crown proud of the skull ✅ (p); expressions (smile, talk), glasses, beards, blinking; noses and ears with shape; a skin-shaded head that isn't a low-poly ball up close | 🟡 P1 | Robby: "faces need more detail" — first pass (o), second (p) |
 | 2.2 | People 2: body types (child, tall, heavy, elderly with cane), bags, dogs on leads, strollers, bikes | ⬜ P1 | per-instance scale + add-on keys |
 | 2.3 | People 3: activity props (surfboard carry, fishing rod, coffee cup, phone, umbrella in rain) chosen from the place | ⬜ P2 | OSM context → activity table |
 | 2.4 | Cars near-LOD: bevelled bodies, wheel arches, mirrors, glazing inset; 3–4 seeded shapes per type | 🟡 P1 | kit.ts; vehicle-polish item |
@@ -79,13 +82,13 @@ bevels and one or two signature details per object.
 | 2.6 | Windows: bigger house sash (0.9×1.5), paired mulled units, fewer blanks, curtains and blinds in the glass | 🟡 P1 | buildings.ts |
 | 2.7 | Storefronts: per-building sign fascia / solid trade-colour awning / rare stripes; signage from OSM `name`; displays lifted into the glass; café terraces with seated guests; curbside parking | 🟡 P1 | wares by `shop=*` still generic |
 | 2.8 | Lot dressing for every house: driveway, parked car, hedge or fence, walk gap, trash cans on collection day | 🟡 P0 | mailboxes, drives + cars, hedges, picket fences ✅; trash day ⬜ |
-| 2.9 | Fences and gates family: picket, split-rail, chain link, privacy, adobe wall, stone wall (by region) | 🟡 P1 | pickets only in clapboard country; rendered yard walls + wrought iron in adobe/stucco towns ✅ |
+| 2.9 | Fences and gates family: picket, split-rail, chain link, privacy, adobe wall, stone wall (by region) | 🟡 P1 | pickets only in clapboard country; rendered yard walls + wrought iron in adobe/stucco towns ✅; mapped fences by OSM `fence_type` (iron railing, chain-link, timber), untyped in dense cores = iron ✅ (p) |
 | 2.10 | Street furniture: benches, bins, bike racks, hydrants, parking meters, bus shelters, newspaper boxes | 🟡 P1 | benches, poles, lamps; OSM hydrants, traffic-signal masts, subway entrances ✅; main-street acorn posts ✅; steel masts in dense cores ✅ |
 | 2.11 | Parking lots: stall striping, cars at ~60% occupancy, cart corrals | ⬜ P0 | fixes the aerial "ghost lots" |
 | 2.12a | Sand surface: shore-parallel ripples, wrack line, footprint stipple (from the shore distance field) | ✅ | ground.ts |
 | 2.12b | Beach props: dune fence, dune grass (not lawn), shells and sea glass, lifeguard stands everywhere | 🟡 P0 | umbrellas, towels, stands ✅ |
 | 2.12c | Shorelines: bulkheads, riprap, seawalls (OSM `man_made=breakwater\|groyne`, `barrier=retaining_wall`), marsh edges with reeds | ⬜ P1 | the Sea Bright seawall is a defining feature |
-| 2.12d | Crosswalks, stop bars, curb ramps in the ground paint | 🟡 P1 | ladder crosswalks at tertiary+ junctions ✅; stop bars, ramps ⬜ |
+| 2.12d | Crosswalks, stop bars, curb ramps in the ground paint | 🟡 P1 | ladder crosswalks at tertiary+ junctions ✅; stop and give-way signs at controlled arms ✅ (p); painted stop bars, ramps ⬜ |
 | 2.13 | Docks, piers, boardwalks, jetties from one recipe | 🟡 P1 | piers exist |
 | 2.14 | Playgrounds, ball fields, courts (OSM `leisure=*`) | ⬜ P2 | |
 | 2.15 | Holiday and seasonal decorations by calendar: July 4 bunting, Halloween pumpkins, Christmas lights | ⬜ P2 | calendar table |
@@ -114,7 +117,7 @@ first), built from the decor family, with table counts scaled by floor area.
 | 3.9 | Bank, post office, town hall, library, school, firehouse, church | counters, PO boxes, stacks, desks, trucks, pews | 🟡 P2 (church pews exist) |
 | 3.10 | Hotel / motel lobby and rooms | desk, key rack, corridors | ⬜ P2 |
 | 3.11 | Homes 2: kitchens with appliances, bathrooms, kids' rooms, basements, attics; decor by region | 🟡 P1 | foundry furniture, fans, benches ✅ |
-| 3.12 | Residents 2: routines (cooking, TV, reading, sleeping), and they leave for work | ⬜ P2 | |
+| 3.12 | Residents 2: sit on the cushion (not in it) facing their table / room ✅ (p); routines (cooking, TV, reading, sleeping), and they leave for work ⬜ | 🟡 P2 | |
 | 3.13 | Interiors reflect time: lights on at dusk, closed shops dark, "Open" signs by `opening_hours` | ⬜ P1 | |
 
 ## 4. Animation & life — P1
@@ -123,14 +126,14 @@ first), built from the decor family, with table counts scaled by floor area.
 |---|---|---|
 | 4.1 | People gait (thigh, knee, arm counter-swing, bob) | ✅ |
 | 4.2 | Idle set: weight shift and arm sway ✅; seated café guests ✅; residents sit on sofas / chairs / booths / stools and talk with their hands ✅; sit on benches and stoops, lean on railings, jog, dog-walk ⬜ | 🟡 P1 |
-| 4.2d | **People doing things and interacting** (Robby, 2026-09-27): street groups that stop and talk (face each other, gesture, laugh, part), greetings and waves as walkers pass, window-shopping at storefronts, queues at a counter, staff who move (bartender pours, cook at the pass, cashier serves), residents who cook / read / watch TV / eat at the table, kids playing in yards, people walking dogs, carrying bags, holding phones; an activity table keyed by place (shop type, time, weather) so it scales | ⬜ P0 | lifeSim states + creature.ts poses + interiors activity spots |
+| 4.2d | **People doing things and interacting** (Robby, 2026-09-27): walkers stop and talk (face to face, gesturing, part together) ✅, window-shop ✅, wait at the corner for the light ✅; staff behind counters (baristas, bartender, shopkeeper) with customers waiting and regulars on stools ✅; residents sit properly and face their table / room, company cooking together ✅ (p); still: greetings and waves as walkers pass, queues, staff who move (pour, serve), residents who cook / read / watch TV, kids playing in yards, dog walkers, bags, phones; an activity table keyed by place (shop type, time, weather) | 🟡 P0 | lifeSim CHAT / window / kerbWait, creature.ts talk gesture, interiors `yawTo` + staff spots |
 | 4.2b | First-person presence: the player's shadow and feet; a hand/brush in photo mode | ⬜ P2 |
 | 4.2c | Night from the street: lit interiors through windows, headlight pools, porch lights | 🟡 P1 |
 | 4.3 | Density by place and time: shore / town / desert day rhythms ✅ (`rhythmFor`); day of week, season ⬜ | 🟡 P1 |
 | 4.4 | Doors open as people enter; car doors; garage doors | ⬜ P2 |
 | 4.5 | Flags, laundry lines, wind chimes, beach umbrellas flutter with the shared wind | ⬜ P2 |
 | 4.6 | Gulls land on posts and roofs; flocks wheel; pelicans skim waves (south) | 🟡 P2 |
-| 4.7 | **Cars follow traffic**: signals cycle (the mapped `traffic_signals` masts exist) and cars obey them, stop signs and all-way stops, yielding at turns, lane discipline on multi-lane roads, parking manoeuvres into the kerb cars' gaps, buses on `route=bus` that stop at the mapped bus stops, school buses in term time | ⬜ P0 | Robby: "cars follow traffic" |
+| 4.7 | **Cars follow traffic**: junction control from one analysis (`sim/traffic.ts`: mapped signals / stop / give-way, else the rule of the road) ✅; two-phase signals with lit lenses ✅; stop signs, all-way stops, give-way ✅; look-ahead across junctions, turn speeds, don't-block-the-box, two lanes on wide one-ways ✅ (p); still: cars yield to walkers on the walk phase, protected left turns, parking manoeuvres into the kerb cars' gaps, buses on `route=bus` stopping at the mapped stops, school buses in term time | 🟡 P0 | Robby: "cars follow traffic" |
 | 4.8 | Wildlife 2 by region: 17 species on two body plans, cast by `faunaMix` (fox, hawk, coyote, jackrabbit, snowshoe hare, ground squirrel, mule deer, roadrunner, quail, ibis …); still to add: herons, egrets, osprey, pelicans, raccoon, armadillo, lizards, moose, elk, bison, gators | 🟡 P1 |
 | 4.8b | **Ecosystem**: predators stalk/pounce and stoop; prey vigilance + alarm contagion; animals give way to traffic | ✅ |
 | 4.8c | **Street physics**: cars knock walkers down (sprawl → sit up → walk back); next: animals crossing roads, AI traffic braking for them | 🟡 P2 |
@@ -228,6 +231,8 @@ Reference photos + per-place trait tables: `docs/earth/PLACE_REFERENCES.md`. Har
 | P.13 | Far mountains with ridge detail (z11 inside 40 km), blue-violet aerial perspective ✅, clear desert air ✅ | 🟡 | P1 |
 | P.14 | Zero-setback barrio fronts (Tucson Barrio Viejo): adobe rows at the sidewalk with a stone band, bright paint, tall narrow doors | ⬜ | P1 |
 | P.15 | No phantom buildings: unmapped LiDAR finds over water dropped ✅; the backdrop canopy no longer buries detail tiles (Rumson) ✅ | ✅ | 2026-09-27 (o) |
+| P.16 | Water in the far field: DEM open water (a river at 0 m) gets no ground chunk, so the water plane shows — Manhattan's Hudson instead of a tan plain ✅; real OSM water in the coarse ring (baked tiles on R2) ⬜ | 🟡 | P1 |
+| P.17 | **City crowds**: the life bubble sizes itself to the street density round the walker (a Midtown block radius ~250 m fills with the car and walker caps; a beach town keeps its half-kilometre) and respawns inside that ring, not across the whole graph ✅ (p); people/car LOD so the caps can grow (9.5) ⬜ | 🟡 | P0 |
 
 ## 9. Tech & performance
 
@@ -245,14 +250,52 @@ Reference photos + per-place trait tables: `docs/earth/PLACE_REFERENCES.md`. Har
 
 ---
 
+## 10. Robby's play-test, 2026-09-27 (late) — bugs and asks, triaged
+
+| # | Item | Status | Priority |
+|---|---|---|---|
+| R.1 | Taking a parked car: it moved ~1 s and stopped — its own parking outline boxed it in → the outline retires when you drive off (and on tile remount) | ✅ (p) | P0 |
+| R.2 | Cars bunching / fused together (doubled wheels) → spawns keep 9 m from any car, dead heats resolved, left turns yield to oncoming traffic, longer all-red | ✅ (p) | P0 |
+| R.3 | "All streets named synth" away from the bake (the tile service was down → synth everywhere) → fall back to direct Overpass when the service is unreachable; map search (Space Needle) landing far from the place | ⬜ | **P0** |
+| R.4 | Neighbourhoods samey and endless → read the ground from data: NAIP aerial colour (lots, lawns, drives, pools, bare earth) and LiDAR ground returns (flat, open, near a road ⇒ a paved lot) instead of one grass tone | ⬜ | **P0** |
+| R.5 | Trees all look the same → more species by ecoregion (weeping willow, sycamore, magnolia, live oak, cottonwood, dogwood, Bradford pear, maple, spruce, cedar), shape variety per tree (Fibonacci branching we already have: vary the angles, lean, crown density), leaf arrangement true to the species | ⬜ | P0 |
+| R.6 | Indoor potted plants look poor → pot families (terracotta, glazed, basket) + species (fiddle-leaf fig, snake plant, monstera, pothos trailing, palm) built from the flora rules | ⬜ | P1 |
+| R.7 | Too many animals in town (parking lots, main street) → habitat-weighted placement: parks, yards, woods, shore; downtown gets pigeons and sparrows only | ⬜ | P0 |
+| R.8 | Squirrels glitched floating above a tree → the climb target used the model's height, not the scaled tree's | ⬜ | P0 |
+| R.9 | Swimming: walk into water and swim (float at the surface, stroke speed, climb out at a shore) | ⬜ | P1 |
+| R.10 | People walking into a house vanish → persistence: visitors appear inside the interior they entered, residents leave and come home | ⬜ | P1 |
+| R.11 | People variety: dog walkers (dogs on leads), joggers, headphones, bags, strollers, bikes, kids, elderly with canes, couples holding hands, delivery riders | ⬜ | **P0** |
+| R.12 | More water traffic: boats of every kind in realistic colours and shapes (fishing, sail, kayak, ferry, tug, barge, jet ski), routes on real channels | ⬜ | P1 |
+| R.13 | Cars need detail: headlights / tail lights (lit at night), grilles, mirrors, window frames, plates, varied wheels | ⬜ | P1 |
+| R.14 | Bridges: decks with real thickness, piers, railings, trusses / arches by type (OSM `bridge:structure`), approach ramps | ⬜ | P1 |
+| R.15 | Crosswalks where people stop for cars (they walk through cars now) and cars stop for people on the walk phase | ⬜ | **P0** |
+| R.16 | Seattle's hills: roads broken on steep terrain → roads graded along their length (profile smoothing), terrain cut/fill under them, retaining walls where the grade breaks | ⬜ | **P0** |
+| R.17 | NYC: towers disappear when flying at them (skyline hand-off to detail tiles) — still seen | ⬜ | P0 |
+| R.18 | The expert reviewer judges everything Robby judges: driving feel, parked-car drive-off, traffic, animals, swimming, persistence, variety, water traffic, plants, bridges, crossings, hills, map search, streaming — every round, across regions | ✅ (brief updated) | P0 |
+
+## 11. The big ideas (Robby, 2026-09-27) — what makes this game unlike any other
+
+| # | Idea | Notes |
+|---|---|---|
+| B.1 | **Physics with weight and consequence**: mass, momentum, friction; things tip, roll, slide, break; cars dent and lose parts; water pushes boats and swimmers | a rigid-body layer under the foundry assets (every asset family declares mass, material, break rules) |
+| B.2 | **Realistic object destruction**: fences splinter, glass shatters, crates break into their parts — from the same recipes that build them (a recipe knows its pieces) | fracture = the foundry's part list, not pre-cut meshes |
+| B.3 | **A flexible animation engine for real-time-created assets**: any procedural body (people, dogs, birds, machines) gets rigging from its recipe — joints from the part graph, gaits from the body plan | people.ts / fauna.ts body plans generalised |
+| B.4 | **130,000 interacting entities in real time**: SoA simulation in workers (the life sim is the seed), spatial hashing, LOD for sim as well as render (far agents tick at 1 Hz), GPU instancing everywhere | the engine budget target |
+| B.5 | **Magic creation**: the player *makes* things — sketch a boat and it floats, grow a bridge, paint a garden that grows — functioning objects from the same asset engine, with the physics above | the watercolor brush is the tool; "paint it and it's real" |
+| B.6 | The whole lower 48 from seed + real data, matching each region's vibe, Sea Bright the gold standard; the asset engine fills the gaps for maximum variety | the rule every item above follows |
+
 ## Build order
 
 Reviewer round 6 (8/10 on the expanded scope) had all its must-fixes applied the same
 session. Round 7 confirms them, and the tree silhouette (1.11c) is its first must-fix.
 
-1. **Redeploy the tile worker** (v13) — every streamed town then gets parts, rows, signals,
+1. **Redeploy the tile worker** (v14) — every streamed town then gets parts, rows, signals,
    parking, bus stops, parks and lots from the shared R2 cache instead of the browser's Overpass
    queue (and Manhattan stops being a small town while it loads).
+1a. Robby's play-test P0s (§10): real data when the tile service is down (R.3), crossings (R.15),
+   Seattle hills (R.16), people variety (R.11), animals by habitat + the floating squirrels (R.7/R.8),
+   ground read from NAIP/LiDAR (R.4), trees by species (R.5); then buses on `route=bus` and
+   people/car LOD so city caps grow.
 1b. **Game-quality review loop** (Robby, 2026-09-27): an expert reviewer (Nintendo / Rockstar
    bar: fun, feel, responsiveness, believability) plays montages of many places each round —
    real-world parity, cars that follow traffic (4.7), people who do things (4.2d), animals,

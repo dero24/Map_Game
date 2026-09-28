@@ -169,7 +169,16 @@ vec3 snowOn(vec3 alb, vec3 N, vec3 wpos, float keep) {
   float n = vnoise(wpos.xz * 0.21) * 0.6 + vnoise(wpos.xz * 1.7) * 0.4;
   float th = 1.0 - uSnow * keep;
   float cov = smoothstep(th - 0.07, th + 0.07, n) * up;
-  return mix(alb, vec3(0.86, 0.89, 0.95), cov);
+  // snow is blue-white; after dark it holds the sky's blue (a warm night wash turned it to sand)
+  return mix(alb, mix(vec3(0.86, 0.89, 0.95), vec3(0.74, 0.81, 0.98), uNight), cov);
+}
+// How much snow a ground colour keeps: lawns and yards all of it; grey pavement is cleared —
+// asphalt ploughed down to wet dark tracks, sidewalks shovelled to a patchy path.
+float snowKeep(vec3 alb) {
+  float lum = dot(alb, vec3(0.3, 0.59, 0.11));
+  float sat = max(alb.r, max(alb.g, alb.b)) - min(alb.r, min(alb.g, alb.b));
+  float paved = 1.0 - smoothstep(0.025, 0.07, sat);
+  return mix(1.0, mix(0.15, 0.55, smoothstep(0.14, 0.3, lum)), paved);
 }
 
 // Two-wash lighting: a light wash where the key light lands, one cool glaze where it doesn't.

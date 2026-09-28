@@ -22,10 +22,7 @@ const ROOF = Object.fromEntries(CAR_TYPES.map((t) => [t, carRecipe(t, 1).roof]))
 
 export const lifeParams = { density: 1, enabled: true };
 
-const RANK: Record<string, number> = {
-  primary: 5, trunk: 5, primary_link: 4, secondary: 4, secondary_link: 3, tertiary: 3, tertiary_link: 3,
-  residential: 2, unclassified: 2, living_street: 2, pedestrian: 1, footway: 0, path: 0,
-};
+import { RANK, unpackJunctions, vkey } from './traffic';
 
 // ---------------- worker init data ----------------
 // The slice-scoped parts of the sim world (beach, water, downtown, seaward) are static per region —
@@ -84,8 +81,8 @@ export function buildLifeBase(world: World, walk: WalkWorld): LifeBase {
   return { seed: 20260923, bounds: [S0.x0 - PAD, S0.z0 - PAD, S0.x1 + PAD, S0.z1 + PAD], beachPts: new Float32Array(beach), waterGrid: water, waterG: [S0.x0, S0.z0, cell, gw, gh], downtown, seaward };
 }
 
-export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, doors: Door[]): LifeInit {
-  const key = (x: number, z: number) => `${Math.round(x * 2)},${Math.round(z * 2)}`;
+export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, doors: Door[], junc: Float32Array[] = []): LifeInit {
+  const key = vkey; // the same vertex key the junction analysis uses
   const ways = roads
     .filter((r) => !r.lod && r.own !== 0 && r.c in RANK && r.c !== 'steps')
     .map((r) => {
@@ -109,9 +106,10 @@ export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, do
     if (cur.length > 1) pieces.push({ r: w.r, p: cur });
   }
   const nodeId = new Map<string, number>();
+  const nodeXZ: number[] = [];
   const node = (x: number, z: number) => {
     const k = key(x, z);
-    if (!nodeId.has(k)) nodeId.set(k, nodeId.size);
+    if (!nodeId.has(k)) { nodeId.set(k, nodeId.size); nodeXZ.push(x, z); }
     return nodeId.get(k)!;
   };
   const pts: number[] = [], start: number[] = [], count: number[] = [], lens: number[] = [], info: number[] = [], ends: number[] = [];
@@ -159,6 +157,28 @@ export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, do
   const adj = new Int32Array(deg[nNodes]);
   for (let e = 0; e < nEdges; e++) for (const nd of [ends[e * 2], ends[e * 2 + 1]]) adj[fill[nd]++] = e;
 
+  // Junction control: each node takes the record of the tile that owns its junction; each arriving
+  // edge end takes the control of the arm it runs along.
+  const armCtl = new Uint8Array(nEdges * 2), nodeKey = new Float32Array(nNodes), nodeSet = new Float32Array(nNodes);
+  for (const f of junc)
+    for (const J of unpackJunctions(f)) {
+      const nd = nodeId.get(key(J.x, J.z));
+      if (nd === undefined) continue;
+      nodeKey[nd] = J.key;
+      nodeSet[nd] = J.setback;
+      for (let k = deg[nd]; k < deg[nd + 1]; k++) {
+        const e = adj[k];
+        for (const end of [0, 1]) {
+          if (ends[e * 2 + end] !== nd) continue;
+          // heading from the node into the edge, ~8 m along
+          const c = count[e], i0 = start[e] + (end ? c - 1 : 0), i1 = start[e] + (end ? Math.max(0, c - 3) : Math.min(c - 1, 2));
+          const dx = pts[i1 * 3] - pts[i0 * 3], dz = pts[i1 * 3 + 2] - pts[i0 * 3 + 2], l = Math.hypot(dx, dz) || 1;
+          let best = 0, bd = -2;
+          for (const m of J.arms) { const d = (m.dx * dx + m.dz * dz) / l; if (d > bd) (bd = d), (best = m.ctl); }
+          if (bd > 0.5) armCtl[e * 2 + end] = best;
+        }
+      }
+    }
   return {
     ...base,
     // base arrays are shared across reinits — fresh copies, since init buffers transfer to the worker
@@ -174,6 +194,8 @@ export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, do
     nodeEdges: adj,
     doors: new Float32Array(doors.flatMap((d) => [d.x, d.y, d.z, d.fx, d.fy, d.fz])),
     edgeShops: new Float32Array(shops),
+    armCtl, nodeKey, nodeSet,
+    nodeXZ: new Float32Array(nodeXZ),
   };
 }
 
@@ -345,16 +367,18 @@ export class LifeClient {
         const hdr = this.V.header.slice();
         this.V = views(this.buf);
         this.V.header.set(hdr.subarray(H.PLAYER_X, H.WIND + 1), H.PLAYER_X);
+        this.V.header[H.CLOCK] = hdr[H.CLOCK];
         this.worker.postMessage({ kind: 'return', buf: old }, [old]);
       };
     }
   }
 
-  update(now: number, player: { x: number; z: number; yaw: number }, env: { night: number; hour: number; wind: number }) {
+  update(now: number, player: { x: number; z: number; yaw: number }, env: { night: number; hour: number; wind: number; clock?: number }) {
     const h = this.V.header;
     this.group.visible = lifeParams.enabled;
     const hdr = [Math.round(player.x * 100), Math.round(player.z * 100), Math.round(env.night * 1000), Math.round(env.hour * 100), Math.round(lifeParams.density * this.crowd * 100), Math.round(env.wind * 1000)];
     h[H.PLAYER_X] = hdr[0]; h[H.PLAYER_Z] = hdr[1]; h[H.NIGHT] = hdr[2]; h[H.HOUR] = hdr[3]; h[H.DENSITY] = hdr[4]; h[H.WIND] = hdr[5];
+    h[H.CLOCK] = Math.round((env.clock ?? now / 1000) * 100) | 0;
     if (!this.sab && this.envFrame++ % 3 === 0) this.worker.postMessage({ kind: 'env', header: h.slice() });
 
     const tick = Atomics.load(h, H.TICK);

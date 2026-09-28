@@ -43,13 +43,18 @@ export function creatureMaterial(defines: Record<string, number>) {
           }
         #endif
         #ifdef SEATED
-          // café guests: thighs forward onto a 0.45 m seat, shins hanging, forearms on the table
+          // sitting on a 0.45 m seat: the seat of the trousers (the pelvis bottom, 0.80 standing)
+          // rests ON the surface and the shoes on the floor — thighs forward and a touch down to
+          // the knee, shins angled a little forward, forearms level (on a table, or holding a
+          // book/phone), the back leaning slightly into the chair. Callers raise the instance by
+          // (seat − 0.45) for other seats (a bar stool, a soft sofa).
           if (aPart > 0.5 && aPart < 2.5) {
-            if (p.y > 0.47) { float dd = 0.87 - p.y; p.z -= dd; p.y = 0.87 - dd * 0.08; }
-            else { p.z -= 0.4; p.y += 0.368; }
+            if (p.y > 0.47) { float dd = 0.87 - p.y; p.z -= dd; p.y = 0.87 - dd * 0.125; }
+            else { p.z -= 0.4 + (0.47 - p.y) * 0.22; p.y += 0.35; }
           }
-          if (aPart > 4.5 && aPart < 6.5 && p.y < 1.12) { float da = 1.12 - p.y; p.z -= da * 0.9; p.y = 1.12 - da * 0.3; }
-          p.y -= 0.42;
+          if (aPart > 4.5 && aPart < 6.5 && p.y < 1.12) { float da = 1.12 - p.y; p.z -= da * 0.92; p.y = 1.12 - da * 0.1; }
+          if (aPart < 0.5 || aPart > 4.5) p.z += max(0.0, p.y - 0.87) * 0.1;
+          p.y -= 0.35;
           #ifndef INDOOR
           if (uNight > 0.55) p *= 0.0; // the terrace empties after dark
           #endif
@@ -57,6 +62,9 @@ export function creatureMaterial(defines: Record<string, number>) {
         #endif
         #ifdef LEGS
           #ifndef STATIC_PEOPLE
+          // stopped to talk to someone (lifeSim CHAT): stand, and gesture like a resident does
+          float chat = 0.0;
+          if (amt < -3.5 && amt > -4.5) { chat = 1.0; amt = 0.0; }
           if (amt < -0.5) {
             // knocked down (lifeSim): −1…−1.9 sprawled on the back, −2.5 sitting up on the ground
             if (amt > -1.999) {
@@ -96,10 +104,16 @@ export function creatureMaterial(defines: Record<string, number>) {
           float ip = ph * 3.7 + float(gl_InstanceID) * 1.3;
           if (aPart > 4.5 && aPart < 6.5) p.z += (1.39 - p.y) * sin(uTime * 1.1 + ip + aPart) * 0.08 * idle;
           p.x += sin(uTime * 0.45 + ip) * 0.025 * idle * clamp(p.y / 1.7, 0.0, 1.0);
+          // residents (and walkers stopped for a chat) are mid-conversation, not waiting: now and
+          // then a hand comes up and moves as they talk (mostly one hand, sometimes both), and the
+          // head nods along
+          #ifdef PEOPLE
           #ifdef STATIC_PEOPLE
-            // residents are mid-conversation, not waiting: now and then a hand comes up and moves
-            // as they talk (mostly one hand, sometimes both), and the head nods along
             float talk = smoothstep(0.45, 0.95, sin(uTime * 0.55 + seed * 1.7));
+          #else
+            float talk = chat * smoothstep(0.2, 0.9, sin(uTime * 0.8 + seed * 1.7));
+          #endif
+          if (talk > 0.0) {
             if (aPart > 4.5 && aPart < 6.5) {
               float g = talk * (aPart < 5.5 ? 1.0 : 0.35 + 0.35 * sin(seed)) * (0.75 + 0.25 * sin(uTime * 3.1 + seed));
               float da = max(0.0, 1.12 - p.y); // the forearm, below the elbow
@@ -107,6 +121,7 @@ export function creatureMaterial(defines: Record<string, number>) {
               p.y += da * 0.85 * g;
             }
             if (p.y > 1.45) p.z -= (p.y - 1.45) * 0.14 * talk * sin(uTime * 2.3 + seed);
+          }
           #endif
         #endif
         mat4 m = worldMat();

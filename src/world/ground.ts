@@ -236,8 +236,7 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
           }
         }
         // snow: lawns, yards and sidewalks take it; dark asphalt is ploughed down to slushy tracks
-        float lumG = dot(alb, vec3(0.3, 0.59, 0.11));
-        alb = snowOn(alb, N, vWorldPos, mix(0.35, 1.0, smoothstep(0.12, 0.3, lumG)));
+        alb = snowOn(alb, N, vWorldPos, snowKeep(alb));
         alb = pigment(alb, vWorldPos);
         float sh = shadowAt(vWorldPos, N);
         vec3 col = paintLight(alb, N, vWorldPos, sh, 1.0);

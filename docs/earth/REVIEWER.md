@@ -15,6 +15,17 @@ A round passes only when the latest verdict has **no open must-fix items**.
 - Scale correctness — road widths, lot sizes, setbacks, building heights vs walkers.
 - Watercolor coherence — synth content should not fight the baked look.
 - Walkability feel — can you keep walking, is the horizon interesting?
+- **Everything Robby judges when he plays (2026-09-27, the standing checklist):** driving feel
+  and taking a parked car; traffic that follows the rules (signals, stop signs, no fused or
+  bunched cars, turns); people doing things (talking, window shopping, waiting for the light,
+  dog walkers, joggers, variety of people) and crossing safely; persistence (someone who walks
+  into a house is in it); animals where animals live (not crowding parking lots), none floating;
+  swimming; water traffic (boat variety, colour, shape); plants and trees by species (willows,
+  leaf arrangement), indoor plants; car detail (lights, grilles); bridges; hills (Seattle's
+  streets); map search landing on the place; real map data everywhere (never "synth" streets in a
+  real town); streaming (towers that don't vanish, no small-town placeholders in a city); and the
+  big goals — physics with weight, destruction, a flexible animation engine, magic creation.
+  Sea Bright is the gold standard; every region must match its own vibe from seed + real data.
 
 ## Verdicts
 

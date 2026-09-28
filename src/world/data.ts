@@ -44,7 +44,8 @@ export interface Building {
 }
 export interface Road { p: number[]; c: string; w: number; n?: string; ref?: string; br?: 'yes' | 'movable'; l?: number; ow?: 1; sw?: 1; sv?: string; pk?: number; lod?: 1; own?: number } // pk: mapped street parking, left + 4·right (1 parallel, 2 angled)
 export interface Area { c: string; o: number[][]; i: number[][]; n?: string; lod?: 1; own?: number }
-export interface Line { c: string; p: number[]; w?: number; br?: 1; own?: number }
+/** `ft` (fences): 1 iron railing, 2 chain-link, 3 wood/picket — from OSM fence_type; absent = unknown. */
+export interface Line { c: string; p: number[]; w?: number; br?: 1; own?: number; ft?: number }
 export interface Point { c: string; x: number; z: number; own?: number }
 export interface Poi { name: string; kind: string; x: number; z: number; slice: boolean }
 export interface Landmark { id: string; name: string; x: number; z: number; h: number; ground: number }

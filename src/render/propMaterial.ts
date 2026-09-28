@@ -1,6 +1,7 @@
 // Generic painted material for props: vertex color (and instance color), optional emissive, wind sway, bobbing.
 import * as THREE from 'three';
 import { paintMaterial } from './shared';
+import { SIGNAL_GLSL } from '../sim/traffic';
 
 // crown: [centre height, radius] in the geometry's own metres (treeMeta). With it, a tree's
 // foliage shades as one lit volume with a darker underside (the BOTW/Ghibli read) instead of
@@ -8,13 +9,17 @@ import { paintMaterial } from './shared';
 // decid: a broadleaf crown — its leaves colour in autumn and fall in winter (season.ts uLeafFall /
 // uAutumn); conifers and palms keep theirs.
 // paved: street ribbons — snow is ploughed off the asphalt (slushy tracks) and lies on the walks.
-export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean } = {}) {
+// signal: traffic-signal masts — the instance colour is DATA (r = the junction's phase key, g = the
+// phase group), and the red / amber / green lens the life sim is obeying right now is lit
+// (src/sim/traffic.ts signalState, on the shared clock uTime).
+export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean; signal?: boolean } = {}) {
   const defines: Record<string, number> = {};
   if (opts.wind) defines.WIND = 1;
   if (opts.bob) defines.BOB = 1;
   if (opts.foliage) defines.FOLIAGE = 1;
   if (opts.decid) defines.DECID = 1;
   if (opts.paved) defines.PAVED = 1;
+  if (opts.signal) defines.SIGNAL = 1;
   if (opts.emissive) defines.EMISSIVE = 1;
   return paintMaterial({
     defines,
@@ -26,10 +31,15 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
       varying float vAO;
       varying float vLeafy;
       varying float vTree;
+      varying float vSig;
       uniform vec2 uCrown;
+      #ifdef SIGNAL
+      ${SIGNAL_GLSL}
+      #endif
       void main() {
         vec3 p = position;
         vAO = 1.0;
+        vSig = 0.0;
         vLeafy = 0.0;
         vLocal = position;
         mat4 m = worldMat();
@@ -69,6 +79,15 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
           // instance colour tints only the white-painted parts (foliage, hulls); trunks keep their brown
           float tintable = step(0.98, min(color.r, min(color.g, color.b)));
           vColor = mix(color, color * instanceColor, tintable);
+          #ifdef SIGNAL
+            // which lens is this vertex (1 red, 2 amber, 3 green), and is it the one lit now
+            float lens = color.r > 2.0 * color.g && color.r > 2.0 * color.b ? 1.0
+              : color.r > color.g && color.g > 1.5 * color.b && color.g > 0.25 ? 2.0
+              : color.g > 1.3 * color.r && color.g > 1.1 * color.b ? 3.0 : 0.0;
+            float st = signalState(instanceColor.g > 0.5 ? 1.0 : 0.0, uTime, instanceColor.r);
+            vSig = lens < 0.5 ? 0.0 : (abs(lens - (3.0 - st)) < 0.5 ? 1.0 : 0.5);
+            vColor = color;
+          #endif
         #endif
         gl_Position = projectionMatrix * viewMatrix * wp;
       }`,
@@ -80,10 +99,14 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
       varying float vAO;
       varying float vLeafy;
       varying float vTree;
+      varying float vSig;
       uniform vec2 uCrown;
       void main() {
         vec3 N = normalize(vNormalW);
         vec3 alb = vColor;
+        #ifdef SIGNAL
+          if (vSig > 0.25) alb = vSig > 0.75 ? min(vec3(1.0), vColor * 1.8 + 0.08) : vColor * 0.2; // a dark lens is near black
+        #endif
         #ifdef FOLIAGE
           alb *= 0.72 + 0.5 * fbm3(vWorldPos * 0.9);
         #endif
@@ -99,7 +122,7 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
           }
         #endif
         #ifdef PAVED
-          alb = snowOn(alb, N, vWorldPos, mix(0.3, 1.0, smoothstep(0.3, 0.5, dot(alb, vec3(0.3, 0.59, 0.11)))));
+          alb = snowOn(alb, N, vWorldPos, snowKeep(alb));
         #else
           alb = snowOn(alb, N, vWorldPos, 0.9); // car roofs, bench seats, conifer tops
         #endif
@@ -111,6 +134,9 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
         vec3 col = paintLight(alb * mix(0.8, 1.0, vAO), N, vWorldPos, sh, vAO);
         #ifdef EMISSIVE
           col += uEmissive * mix(1.0, uLampPower * 3.0, uEmNight);
+        #endif
+        #ifdef SIGNAL
+          if (vSig > 0.75) col += normalize(vColor + 1e-3) * (0.9 + 2.2 * uNight); // the lit lens glows
         #endif
         gl_FragColor = vec4(applyFog(col, vWorldPos), 1.0);
       }`,

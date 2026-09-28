@@ -179,6 +179,16 @@ describe('osmToTile — buildings', () => {
     ), OPTS);
     const cls = t.lines.map((l) => l.c).sort();
     expect(cls).toEqual(['fence', 'groyne', 'power', 'seawall']);
+    expect(t.lines.find((l) => l.c === 'fence')!.ft).toBeUndefined(); // untyped: props decide by density
+  });
+
+  it('carries the fence type: iron railings, chain-link, timber', () => {
+    const t = osmToTile(osm(
+      way(411, { barrier: 'fence', fence_type: 'railing' }, [[300, 300], [330, 300]]),
+      way(412, { barrier: 'fence', fence_type: 'chain_link' }, [[300, 320], [330, 320]]),
+      way(413, { barrier: 'fence', fence_type: 'picket' }, [[300, 340], [330, 340]]),
+    ), OPTS);
+    expect(t.lines.map((l) => l.ft)).toEqual([1, 2, 3]);
   });
   it('the Overpass query asks for everything the transform reads', async () => {
     const { overpassQuery } = await import('../src/world/realTile');

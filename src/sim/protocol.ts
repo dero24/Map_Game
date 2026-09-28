@@ -25,6 +25,7 @@ export const H = {
   WIND: 7, // * 1000
   SIM_US: 8, // last tick cost (µs)
   ACTIVE: 9,
+  CLOCK: 10, // the shared clock (uTime) in centiseconds — traffic signals run on it
   SIZE: 16,
 } as const;
 
@@ -74,6 +75,11 @@ export interface LifeInit {
   doors: Float32Array; // per door: x, y, z (threshold), fx, fy, fz (front / foot of the steps)
   rhythm?: Rhythm; // the shape of the place's day (lifeSim.desired); 'shore' when absent
   edgeShops?: Float32Array; // per edge: shop doors along it (pedestrians gather where the shops are)
+  // Junction control (src/sim/traffic.ts), from the tiles' own analysis:
+  armCtl?: Uint8Array; // per edge end [e*2 + 0|1]: CTL for a car arriving at that end's node
+  nodeKey?: Float32Array; // per node: signal phase key
+  nodeSet?: Float32Array; // per node: stop-line setback from the junction centre (m); 0 = no junction
+  nodeXZ?: Float32Array; // per node: x, z
 }
 /** The daily rhythm of a place's streets: a beach town (the crowd builds toward the afternoon
  *  beach), an ordinary town (commute, lunch, errands, evening stroll) or a hot-country town

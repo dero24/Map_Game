@@ -26,7 +26,7 @@ export type PMat =
   | { t: 'signs' }
   | { t: 'halo'; size: number; color: number }
   | { t: 'people'; seated: boolean }
-  | { t: 'prop'; o: { wind?: boolean; bob?: boolean; foliage?: boolean; decid?: boolean; paved?: boolean; emissive?: number; emissiveNight?: boolean; crown?: [number, number] } }
+  | { t: 'prop'; o: { wind?: boolean; bob?: boolean; foliage?: boolean; decid?: boolean; paved?: boolean; signal?: boolean; emissive?: number; emissiveNight?: boolean; crown?: [number, number] } }
   | { t: 'gnd' }; // region ground material (shared; set via setGndMaterial at boot)
 
 export interface PObj {
@@ -67,6 +67,7 @@ export interface BuiltTile {
   roads: Road[]; // prim (own-only) roads for the life sim
   areas?: Area[]; // prim (own-only) areas — the ground paint's parks, lots, pitches
   kerb?: Float32Array; // parked kerb + lot cars as records (kerbCars.ts KERB_STRIDE)
+  junc?: Float32Array; // the tile's junctions and who stops where (src/sim/traffic.ts packJunctions)
   poles: { x: number; z: number; cx: number; cz: number }[];
   atlas?: ImageBitmap; // street-sign atlas
   lampPts?: number[]; // street-lamp pool centres (x,z pairs) — the stream paints the light map
@@ -173,7 +174,7 @@ export function matTag(m: THREE.Material): PMat {
     return {
       t: 'prop',
       o: {
-        wind: !!d.WIND, bob: !!d.BOB, foliage: !!d.FOLIAGE, ...(d.DECID ? { decid: true } : {}), ...(d.PAVED ? { paved: true } : {}),
+        wind: !!d.WIND, bob: !!d.BOB, foliage: !!d.FOLIAGE, ...(d.DECID ? { decid: true } : {}), ...(d.PAVED ? { paved: true } : {}), ...(d.SIGNAL ? { signal: true } : {}),
         emissive: d.EMISSIVE ? (u.uEmissive.value as THREE.Color).getHex() : undefined,
         emissiveNight: u.uEmNight?.value === 1,
         ...(d.FOLIAGE && u.uCrown && u.uCrown.value.y > 0 ? { crown: [u.uCrown.value.x, u.uCrown.value.y] as [number, number] } : {}),

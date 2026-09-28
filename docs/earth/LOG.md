@@ -2,6 +2,92 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-27 (p) — Traffic that follows the rules, people who do things: junction control, lit signals, stop signs, chats, window shopping, staff at work, residents who sit properly
+
+Acting on the expert (Nintendo/Rockstar-bar) review's top two items — "cars follow traffic" and
+"people doing things" — plus its red flags. One junction analysis feeds both what you see and
+what the traffic does, so the lit lens and the stop sign are what the cars actually obey.
+
+- **Junction control** (`src/sim/traffic.ts`, pure + 12 tests): every junction of ≥ 3 drivable
+  arms, analysed in the tile builder from the real road network, ships with its tile
+  (`BuiltTile.junc` → `stream.junctions` → `buildLifeInit` → per edge-end `armCtl`). Mapped
+  control wins (OSM `highway=traffic_signals / stop / give_way`, `stop=all`; the Overpass query
+  now asks for stop and give-way nodes); unmapped junctions get the rule of the road for their
+  shape: two main roads (secondary+) crossing are signalled; a street meeting a bigger road stops
+  (North America) or gives way (elsewhere); a T's stem stops; equal streets crossing are an
+  all-way stop in North America. Two-phase signals (main road 26 s, cross street 16 s, 3.5 s
+  amber, 1.5 s all-red) keyed by position so neighbours aren't in lockstep, on the shared clock
+  (`uTime` → the life worker's header `CLOCK`).
+- **Cars obey it** (`lifeSim.ts`): a car picks its next edge on the approach and looks across the
+  junction (it follows the car already round the corner); slows for turns (4.8 m/s, 2.5 for a
+  U-turn); stops at the stop line on red, and on amber when it comfortably can; comes to a full
+  stop at a stop sign, then pulls out only when the main road is clear (3.5 s / 8 m) and the box
+  is empty; takes turns at an all-way stop (first to stop claims the box); yields; never enters
+  a box it can't clear; a 25 s jam breaker. Wide one-ways have two lanes and cars only follow cars
+  in their own lane. Verified in Sea Bright: ~25 % of cars standing at any moment, queued 8–27 m
+  from junction centres, the rest moving; no growth over a minute (no gridlock).
+- **What you see** (`props.ts`, `propMaterial` SIGNAL): signal masts at every signalled junction
+  (far-right corner of each approach, the arm over the lanes); the lens the traffic is obeying is
+  lit (instance colour carries the junction key + phase group; the shader runs `signalState` —
+  green bright, the others dark, a glow at night); red octagon stop signs (with an ALL-WAY plaque
+  in North America) and give-way triangles at the stop line of every controlled arm.
+- **People doing things** (`lifeSim.ts`, `creature.ts`): walkers on the same sidewalk stop and
+  talk — face to face at ~1.1 m, gesturing and nodding for 8–26 s, and part together;
+  window-shop (turn to the shop fronts and linger, more on shop streets); wait at a signalled
+  corner for their street's green. Conversations are never cut in half by the life bubble.
+- **Interiors: staff and customers where they'd be** (`interiors.ts`): café, bar and shop
+  counters stand off the back wall with a 0.9 m working aisle — a barista at the espresso
+  machine and one at the pastry case, a bartender, a shopkeeper at the till, each placed first
+  (a business is never unattended) — with a customer waiting at the case / at the till,
+  regulars on bar stools, company across café and high-top tables, a second diner across a big
+  dining table; café tables ~1 per 7 m² (max 16 — the reviewer's 40-table ice-cream shop).
+- **Residents sit properly** (`creature.ts` SEATED, `interiors.ts`): the pose now puts the seat of
+  the trousers ON the surface and the shoes on the floor (it sat the hip joint on the seat: 8 cm
+  into every chair, 19 cm into sofas — "waist-deep, shoes poking out"); thighs slope a touch to
+  the knee, shins angle forward, forearms rest level, the back leans into the chair. Seats are
+  the real surface heights (sofa/armchair 0.47 with give, dining 0.465, bistro 0.475, office 0.5,
+  booth 0.43, stools 0.76–0.78, the foot of the bed 0.52), the sofa sitter is forward of the back
+  cushions so the knees clear the front edge. **Everyone faces the right way**: a `yawTo()`
+  helper replaced hand-written yaws — dining sitters, armchair sitters, booths, office workers
+  and counter staff were facing away from their table/desk/customers.
+- **Faces and hair** (`people.ts`): the black eye bars are whites with a dark iris; the hair
+  crown has three bands and sits 6 % proud of the skull (no bald patch at the temples).
+  1,584 vertices (budget 1,600).
+- **Reviewer red flags**: the open front door is a door (a shop door is a glass leaf in a slim
+  frame with a push bar; a house door has four raised panels and a brass knob) and apartment
+  doors are painted, not black; street-tree trunks are a third thinner (`flora.ts` trunkR: a 7 m
+  street tree had a 0.75 m barrel); mapped fences carry OSM `fence_type` (iron railings,
+  chain-link, timber) and untyped fences in dense cores are iron railings, not white ranch rails;
+  winter: asphalt keeps only ~15 % of the snow (ploughed, wet dark tracks), sidewalks are
+  shovelled to a patchy path, lawns keep it all (`snowKeep` by saturation + value), snow holds the
+  sky's blue after dark instead of reading as sand; open water from the DEM (a river at 0 m) now
+  gets no ground chunk over it, so the water plane shows (Manhattan's far field was a tan plain);
+  the aerial pose climbs above the roofs between it and the street; kerb poses keep 3 m clear.
+- **City crowds** (`lifeSim.sizeBubble`): the life bubble sizes itself to the street density
+  round the walker every 2 s (cars: the cap at ~25 m a car; walkers ~10 m), clamped 200–600 m /
+  140–330 m, and respawns sample the ring itself (a random spot, then an edge through its cell)
+  rather than the whole graph; the first crowd spawns in the bubble. Midtown at 1 pm: cars within
+  150 m 9 → 67, walkers 42 → 127.
+- **Robby's play-test (late)**: taking a parked car no longer stops after a second — its own
+  parking outline boxed it in (`WalkWorld.clearFootprint`, also on tile remount); cars no longer
+  drive fused together — spawns keep 9 m from any car, a dead heat goes to the lower slot, left
+  turns wait for a gap in oncoming traffic (two opposite left turns pass), all-red 2.5 s. The rest
+  of his list is triaged into `docs/IMMERSION_BACKLOG.md` §10 (bugs) and §11 (the big ideas), and
+  the reviewer's brief now carries his whole checklist.
+- **Harness**: `tools/life-shots.js` — `__LIFE__(tag)` → `shots/life-<tag>.jpg`: a signalled
+  junction from above, its lenses from the kerb, a stop sign, the junction at night, a resident
+  in a soft chair and their face, staff behind a counter, a customer at a table, two people
+  stopped to talk, someone waiting at the corner for the light. (Run it with `__PUMP__()` going:
+  a hidden pane stops rAF, and tiles stop mounting.)
+- Tile cache **v14** (`t/v14`, `&v=14`, `DIRECT_V` 14): realTile emits `stop` / `stop_all` /
+  `yield` points and `Line.ft`. **Redeploy the worker.**
+- Verified: typecheck (check config + device tsconfig), 163 tests; montages
+  `shots/life-seabright4.jpg`, `shots/place-nyc-r3.jpg`, `shots/life-nyc.jpg`.
+- Next: buses on `route=bus` stopping at the mapped stops; crosswalk yielding (cars wait for
+  walkers on the walk phase); protected left turns; parking manoeuvres into kerb gaps; people 2
+  (dogs on leads, bags, phones, kids, queues); regional fauna in cities (pigeons, geese,
+  squirrels); weather events; streaming (baked tiles on R2, dense-city placeholders).
+
 ## 2026-09-27 (o) — Place parity round 3: parked cities (kerbs, lots, a car LOD), seasons (snow, bare trees, autumn), a new default look, the Rumson double-terrain fix
 
 Acting on the reviewer's round 2 (NYC 6/10, Tucson 5/10) and three asks from Robby: the look

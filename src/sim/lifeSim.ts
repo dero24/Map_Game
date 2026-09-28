@@ -2,10 +2,13 @@
 // xorshift RNG and a fixed timestep, so a given seed + input sequence always yields the same town.
 import { makeRng, type Rng } from '../core/rng';
 import { CAPS, RANGES, S, type LifeInit } from './protocol';
+import { CTL, signalState } from './traffic';
 
-export interface LifeEnv { playerX: number; playerZ: number; night: number; hour: number; density: number; wind: number }
+export interface LifeEnv { playerX: number; playerZ: number; night: number; hour: number; density: number; wind: number; clock: number }
 
-const ST = { WALK: 0, PAUSE: 1, BEACH: 2, FLY: 3, STAND: 4, LAND: 5, TO_DOOR: 6, INSIDE: 7, FROM_DOOR: 8, DOWN: 9 } as const;
+const ST = { WALK: 0, PAUSE: 1, BEACH: 2, FLY: 3, STAND: 4, LAND: 5, TO_DOOR: 6, INSIDE: 7, FROM_DOOR: 8, DOWN: 9, CHAT: 10 } as const;
+/** The renderer's `amt` for a walker stopped to talk (creature.ts: the talking gesture). */
+export const AMT_CHAT = -4;
 export const PED_STATE = ST;
 const TAU = Math.PI * 2;
 const angLerp = (a: number, b: number, t: number) => {
@@ -17,7 +20,7 @@ export class LifeSim {
   readonly n: number;
   tick = 0;
   private rng: Rng;
-  private env: LifeEnv = { playerX: 0, playerZ: 0, night: 0, hour: 12, density: 1, wind: 0.5 };
+  private env: LifeEnv = { playerX: 0, playerZ: 0, night: 0, hour: 12, density: 1, wind: 0.5, clock: 0 };
   // pose
   x: Float32Array; y: Float32Array; z: Float32Array; yaw: Float32Array;
   px: Float32Array; py: Float32Array; pz: Float32Array; pyaw: Float32Array;
@@ -35,6 +38,10 @@ export class LifeSim {
   // what lets the sim scale: car-following is O(Σ bucket²) instead of O(cars²) per tick.
   lead: Int32Array; leadGap: Float32Array;
   private bHead: Int32Array; private bNext: Int32Array;
+  // junctions: the edge a car will take next (chosen on the approach so it can look across), the
+  // node whose stop sign it has already stopped at, how long it has waited; who is in each box
+  nxtE: Int32Array; private nxtD: Int8Array; private stopDone: Int32Array; private waitT: Float32Array; private holdT: Float32Array;
+  private claim: Int32Array; private claimT: Float32Array;
   private doorGrid = new Map<number, number[]>();
   private drivableLen = 0;
   visits = 0;
@@ -65,6 +72,9 @@ export class LifeSim {
     this.state = new Uint8Array(n); this.active = new Uint8Array(n); this.variant = new Uint8Array(n); this.lights = new Uint8Array(n);
     this.door = new Int32Array(n).fill(-1); this.leg = new Uint8Array(n);
     this.lead = new Int32Array(n).fill(-1); this.leadGap = new Float32Array(n);
+    this.nxtE = new Int32Array(n).fill(-1); this.nxtD = new Int8Array(n); this.stopDone = new Int32Array(n); this.waitT = new Float32Array(n); this.holdT = new Float32Array(n);
+    const nNodes = w.nodeEdgeStart.length - 1;
+    this.claim = new Int32Array(Math.max(0, nNodes)).fill(-1); this.claimT = new Float32Array(Math.max(0, nNodes));
     this.bHead = new Int32Array(w.edgeLen.length * 2); this.bNext = new Int32Array(n);
     this.y.fill(-1000);
     // how many cars the network can hold in free flow (~25 m a car) — more than that is a traffic jam
@@ -76,25 +86,30 @@ export class LifeSim {
 
   // ---------------- persistence across road-graph rebuilds ----------------
   private edgeGrid: Map<number, number[]> | null = null;
+  /** Edges by 16 m cell (built on first use). */
+  private grid() {
+    if (this.edgeGrid) return this.edgeGrid;
+    const w = this.w, P = w.edgePts;
+    this.edgeGrid = new Map();
+    for (let e = 0; e < w.edgeLen.length; e++)
+      for (let k = 0; k < w.edgeCount[e]; k++) {
+        const a = (w.edgeStart[e] + k) * 3;
+        const key = Math.floor(P[a] / 16) * 92821 + Math.floor(P[a + 2] / 16);
+        let l = this.edgeGrid.get(key);
+        if (!l) this.edgeGrid.set(key, (l = []));
+        if (l[l.length - 1] !== e) l.push(e);
+      }
+    return this.edgeGrid;
+  }
   /** Nearest point on an edge passing `ok`, within maxD: [edge, s, tangent x, tangent z] or null. */
   nearestEdge(x: number, z: number, ok: (e: number) => boolean, maxD = 6): [number, number, number, number] | null {
     const w = this.w, P = w.edgePts;
-    if (!this.edgeGrid) {
-      this.edgeGrid = new Map();
-      for (let e = 0; e < w.edgeLen.length; e++)
-        for (let k = 0; k < w.edgeCount[e]; k++) {
-          const a = (w.edgeStart[e] + k) * 3;
-          const key = Math.floor(P[a] / 16) * 92821 + Math.floor(P[a + 2] / 16);
-          let l = this.edgeGrid.get(key);
-          if (!l) this.edgeGrid.set(key, (l = []));
-          if (l[l.length - 1] !== e) l.push(e);
-        }
-    }
+    this.grid();
     let best: [number, number, number, number] | null = null, bd = maxD;
     const gx = Math.floor(x / 16), gz = Math.floor(z / 16), seen = new Set<number>();
     for (let a = -1; a <= 1; a++)
       for (let b = -1; b <= 1; b++)
-        for (const e of this.edgeGrid.get((gx + a) * 92821 + gz + b) ?? []) {
+        for (const e of this.edgeGrid!.get((gx + a) * 92821 + gz + b) ?? []) {
           if (seen.has(e) || !ok(e)) continue;
           seen.add(e);
           const cnt = w.edgeCount[e], step = w.edgeLen[e] / Math.max(1, cnt - 1);
@@ -150,7 +165,7 @@ export class LifeSim {
         let dir = fx * tx + fz * tz >= 0 ? 1 : -1;
         if (car && this.oneway(e)) dir = 1;
         this.placeOnEdge(i, e, dir, sAlong);
-        if (st === ST.PAUSE && !car) this.state[i] = ST.PAUSE;
+        if ((st === ST.PAUSE || st === ST.CHAT) && !car) this.state[i] = ST.PAUSE;
       }
   }
 
@@ -209,6 +224,19 @@ export class LifeSim {
   // 60 misses any distance will do, so a sparse map still fills.
   private pickEdge(filter: (e: number) => boolean, weight: (e: number) => number, farFrom?: [number, number], minDist = 0, maxDist = Infinity) {
     const E = this.w.edgeLen.length;
+    if (farFrom && Number.isFinite(maxDist)) {
+      // sample the ring itself (a random spot in it, then an edge through that spot's cell) — a
+      // uniform draw over a city's whole graph almost never lands in a few-hundred-metre ring
+      const G = this.grid();
+      for (let tries = 0; tries < 60; tries++) {
+        const r = Math.sqrt(minDist * minDist + this.rng.float() * (maxDist * maxDist - minDist * minDist)), a = this.rng.float() * TAU;
+        const l = G.get(Math.floor((farFrom[0] + Math.cos(a) * r) / 16) * 92821 + Math.floor((farFrom[1] + Math.sin(a) * r) / 16));
+        if (!l) continue;
+        const e = l[Math.floor(this.rng.float() * l.length)];
+        if (!filter(e) || this.rng.float() > Math.min(1, weight(e) * 0.5)) continue;
+        return e;
+      }
+    }
     for (let tries = 0; tries < 100; tries++) {
       // weighted by length * weight via rejection sampling
       const e = Math.floor(this.rng.float() * E);
@@ -227,10 +255,28 @@ export class LifeSim {
   // ring just out of sight (they respawn 60–260 m / 100–450 m away), so the crowd a city's cap
   // allows is where the player is, not spread thin over every mounted street — past ~300 m a
   // walker is a few pixels behind a street's worth of buildings anyway.
+  // The bubble's size follows the street density round the walker: the cap fills a Midtown block
+  // radius (~250 m) nose to tail, and a beach town's half-kilometre at its own pace.
+  private bubble = { car: 600, ped: 330 };
+  private mids: Float32Array | null = null;
+  private sizeBubble() {
+    const w = this.w, E = w.edgeLen.length, px = this.env.playerX, pz = this.env.playerZ;
+    if (!this.mids) {
+      this.mids = new Float32Array(E * 2);
+      for (let e = 0; e < E; e++) { this.sample(e, w.edgeLen[e] * 0.5, this.tmp); this.mids[e * 2] = this.tmp[0]; this.mids[e * 2 + 1] = this.tmp[2]; }
+    }
+    const R = 350;
+    let len = 0;
+    for (let e = 0; e < E; e++) if (this.drivable(e) && Math.abs(this.mids[e * 2] - px) < R && Math.abs(this.mids[e * 2 + 1] - pz) < R && Math.hypot(this.mids[e * 2] - px, this.mids[e * 2 + 1] - pz) < R) len += w.edgeLen[e];
+    const rho = Math.max(1e-4, len / (Math.PI * R * R)); // metres of street per m²
+    const r = (n: number, per: number) => Math.sqrt((n * per) / (Math.PI * rho));
+    this.bubble.car = Math.max(200, Math.min(600, r(this.desired('car'), 25)));
+    this.bubble.ped = Math.max(140, Math.min(330, r(this.desired('ped'), 10)));
+  }
   private recycle(range: readonly [number, number], far: number, n: number) {
     const px = this.env.playerX, pz = this.env.playerZ;
     for (let i = range[0], k = 0; i < range[1] && k < n; i++)
-      if (this.active[i] && Math.hypot(this.x[i] - px, this.z[i] - pz) > far) { this.active[i] = 0; this.y[i] = -1000; this.snapPrev(i); k++; }
+      if (this.active[i] && this.state[i] !== ST.CHAT && Math.hypot(this.x[i] - px, this.z[i] - pz) > far) { this.active[i] = 0; this.y[i] = -1000; this.snapPrev(i); k++; }
   }
 
   // At the end of an edge, choose the next one leaving `node`.
@@ -262,6 +308,8 @@ export class LifeSim {
     this.edge[i] = e;
     this.dir[i] = dir;
     this.s[i] = s;
+    this.nxtE[i] = -1;
+    this.waitT[i] = 0;
   }
 
   // ---------------- spawning ----------------
@@ -274,10 +322,11 @@ export class LifeSim {
     for (let i = p0; i < p1; i++) this.variant[i] = Math.floor(this.rng.float() * 10);
     const [b0, b1] = RANGES.boats;
     for (let i = b0; i < b1; i++) this.spawnBoat(i);
-    // initial crowd, anywhere
+    // the initial crowd, in the bubble round the walker (a city is busy the moment you arrive)
+    this.sizeBubble();
     const cars = this.desired('car'), peds = this.desired('ped');
-    for (let i = c0; i < c0 + cars; i++) this.spawnCar(i);
-    for (let i = p0; i < p0 + peds; i++) this.spawnPed(i);
+    for (let i = c0; i < c0 + cars; i++) this.spawnCar(i, 'init');
+    for (let i = p0; i < p0 + peds; i++) this.spawnPed(i, 'init');
   }
 
   private beachPoint(out: number[], near?: [number, number], within = 1e9) {
@@ -325,15 +374,22 @@ export class LifeSim {
     this.anim[i] = this.rng.float() * TAU;
   }
 
-  private spawnCar(i: number, far = false) {
+  /** Another active car within r of car i. */
+  private carNear(i: number, r: number) {
+    for (let j = RANGES.cars[0]; j < RANGES.cars[1]; j++) if (j !== i && this.active[j] && Math.abs(this.x[j] - this.x[i]) < r && Math.abs(this.z[j] - this.z[i]) < r && Math.hypot(this.x[j] - this.x[i], this.z[j] - this.z[i]) < r) return true;
+    return false;
+  }
+  private spawnCar(i: number, far: boolean | 'init' = false) {
     // Never materialize on top of the walker: they need a braking distance in front of them.
     for (let t = 0; t < 6; t++) {
-      const e = this.pickEdge((e) => this.drivable(e), (e) => this.rank(e) * this.rank(e) * 0.3, far ? [this.env.playerX, this.env.playerZ] : undefined, far ? 100 : 0, far ? 450 : Infinity);
+      const e = this.pickEdge((e) => this.drivable(e), (e) => this.rank(e) * this.rank(e) * 0.3, far ? [this.env.playerX, this.env.playerZ] : undefined, far === true ? Math.min(100, this.bubble.car * 0.25) : 0, far ? this.bubble.car * (far === true ? 0.75 : 1) : Infinity);
       if (e < 0) return;
       const dir = this.oneway(e) ? 1 : this.rng.float() < 0.5 ? 1 : -1;
       this.placeOnEdge(i, e, dir, this.rng.float() * this.w.edgeLen[e]);
       this.updateCarPose(i, 1);
-      if (Math.hypot(this.x[i] - this.env.playerX, this.z[i] - this.env.playerZ) > 9) break;
+      // and never on top of another car (two cars at the same spot never see each other as
+      // "ahead" and drive through the town fused together, four wheels doubled)
+      if (Math.hypot(this.x[i] - this.env.playerX, this.z[i] - this.env.playerZ) > 9 && !this.carNear(i, 9)) break;
       if (t === 5) { this.active[i] = 0; return; }
     }
     this.speed[i] = 6;
@@ -342,7 +398,7 @@ export class LifeSim {
     this.snapPrev(i);
   }
 
-  private spawnPed(i: number, far = false) {
+  private spawnPed(i: number, far: boolean | 'init' = false) {
     const [dx0, dz0, dx1, dz1] = this.w.downtown;
     const beach = this.rng.float() < 0.3 && this.w.beachPts.length > 0;
     this.active[i] = 1;
@@ -352,7 +408,7 @@ export class LifeSim {
     if (beach) {
       for (let t = 0; t < 10; t++) {
         this.beachPoint(this.bp);
-        if (!far || Math.hypot(this.bp[0] - this.env.playerX, this.bp[2] - this.env.playerZ) > 100) break;
+        if (far !== true || Math.hypot(this.bp[0] - this.env.playerX, this.bp[2] - this.env.playerZ) > 100) break;
       }
       this.state[i] = ST.BEACH;
       this.x[i] = this.fx[i] = this.bp[0];
@@ -367,7 +423,7 @@ export class LifeSim {
       return this.tmp[0] > dx0 && this.tmp[0] < dx1 && this.tmp[2] > dz0 && this.tmp[2] < dz1;
     };
     const shops = this.w.edgeShops;
-    const e = this.pickEdge((e) => this.walkable(e), (e) => Math.max(inDown(e) ? 6 : 0.35, shops ? Math.min(9, 0.35 + shops[e] * 0.9) : 0), far ? [this.env.playerX, this.env.playerZ] : undefined, far ? 60 : 0, far ? 260 : Infinity);
+    const e = this.pickEdge((e) => this.walkable(e), (e) => Math.max(inDown(e) ? 6 : 0.35, shops ? Math.min(9, 0.35 + shops[e] * 0.9) : 0), far ? [this.env.playerX, this.env.playerZ] : undefined, far === true ? Math.min(60, this.bubble.ped * 0.3) : 0, far ? this.bubble.ped * (far === true ? 0.8 : 1) : Infinity);
     if (e < 0) { this.active[i] = 0; return; }
     this.placeOnEdge(i, e, this.rng.float() < 0.5 ? 1 : -1, this.rng.float() * this.w.edgeLen[e]);
     this.state[i] = ST.WALK;
@@ -468,22 +524,93 @@ export class LifeSim {
       for (let i = range[0], k = 0; i < range[1] && k < 8; i++) if (!this.active[i]) { spawn(i); if (this.active[i]) k++; }
     } else if (act > want) {
       for (let i = range[1] - 1; i >= range[0]; i--)
-        if (this.active[i] && Math.hypot(this.x[i] - px, this.z[i] - pz) > farDist) { this.active[i] = 0; this.y[i] = -1000; this.snapPrev(i); break; }
+        if (this.active[i] && this.state[i] !== ST.CHAT && Math.hypot(this.x[i] - px, this.z[i] - pz) > farDist) { this.active[i] = 0; this.y[i] = -1000; this.snapPrev(i); break; }
     }
   }
 
   // ---------------- per-kind updates ----------------
+  // A wide one-way (an avenue) has lanes: a car keeps to one, and only follows cars in it.
+  private laneOf(i: number, e: number) { return this.oneway(e) && this.width(e) >= 7 ? this.variant[i] & 1 : 0; }
   private updateCarPose(i: number, dt: number) {
     const e = this.edge[i];
     this.sample(e, this.s[i], this.tmp);
     const d = this.dir[i];
     const tx = this.tmp[3] * d, tz = this.tmp[4] * d;
-    const lane = this.oneway(e) ? 0 : Math.min(this.width(e) / 4 + 0.2, 2.0);
+    const lane = this.oneway(e) ? (this.width(e) >= 7 ? (this.laneOf(i, e) ? 1 : -1) * this.width(e) / 4 : 0) : Math.min(this.width(e) / 4 + 0.2, 2.0);
     // right-hand traffic: right of travel = (-tz, tx)
     this.x[i] = this.tmp[0] - tz * lane;
     this.z[i] = this.tmp[2] + tx * lane;
     this.y[i] = this.tmp[1];
     this.yaw[i] = angLerp(this.yaw[i], Math.atan2(-tx, -tz), Math.min(1, dt * 6));
+  }
+
+  /** Is car i's planned move at this junction a left turn (across the oncoming lane)? */
+  private leftTurn(i: number, e: number, d: number, node: number) {
+    this.sample(e, d > 0 ? this.w.edgeLen[e] : 0, this.tmp);
+    const ax = this.tmp[3] * d, az = this.tmp[4] * d;
+    const ne = this.nxtE[i], nd = this.nxtD[i];
+    if (ne === e) return false; // a dead end's U-turn
+    this.sample(ne, nd > 0 ? 0 : this.w.edgeLen[ne], this.tmp);
+    const bx = this.tmp[3] * nd, bz = this.tmp[4] * nd;
+    const dot = ax * bx + az * bz, cross = ax * bz - az * bx; // +x east, +z south: a left turn is cross < 0
+    return dot < 0.8 && cross < -0.35 && node >= 0;
+  }
+  /** Cars coming the other way into this junction, close enough that turning across them isn't safe. */
+  private oncoming(i: number, e: number, d: number, node: number) {
+    const W = this.w, H = this.bHead, N = this.bNext;
+    this.sample(e, d > 0 ? W.edgeLen[e] : 0, this.tmp);
+    const ax = this.tmp[3] * d, az = this.tmp[4] * d; // our heading into the junction
+    for (let k = W.nodeEdgeStart[node]; k < W.nodeEdgeStart[node + 1]; k++) {
+      const e2 = W.nodeEdges[k];
+      if (e2 === e || !this.drivable(e2)) continue;
+      for (const end2 of [0, 1]) {
+        if (W.edgeNodes[e2 * 2 + end2] !== node) continue;
+        const L2 = W.edgeLen[e2];
+        this.sample(e2, end2 ? L2 : 0, this.tmp);
+        const hx = this.tmp[3] * (end2 ? 1 : -1), hz = this.tmp[4] * (end2 ? 1 : -1); // its heading into the junction
+        if (ax * hx + az * hz > -0.7) continue; // not the opposite approach
+        for (let j = H[e2 * 2 + end2]; j >= 0; j = N[j]) {
+          if (j === i) continue;
+          const dj = end2 === 1 ? L2 - this.s[j] : this.s[j];
+          if (!(dj < 10 || (dj < 45 && dj < this.speed[j] * 3.2 + 8 && this.speed[j] > 0.5))) continue;
+          // two left turns from opposite sides pass in front of each other: no conflict
+          if (this.nxtE[j] >= 0 && this.leftTurn(j, e2, end2 === 1 ? 1 : -1, node)) continue;
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  /** Another car is in (or just entering) this junction's box. */
+  private boxBusy(node: number, i: number, clock: number) {
+    const c = this.claim[node];
+    if (c < 0 || c === i) return false;
+    const age = clock - this.claimT[node];
+    const xz = this.w.nodeXZ!;
+    const out = Math.hypot(this.x[c] - xz[node * 2], this.z[c] - xz[node * 2 + 1]) > (this.w.nodeSet![node] + 4);
+    if (!this.active[c] || age > 5 || age < 0 || (out && age > 0.8)) { this.claim[node] = -1; return false; }
+    return true;
+  }
+  /** After its stop (or on its yield), may this car pull out? The box must be clear, and at a
+   *  stop / give-way the main road's traffic must not be close (3.5 s or 8 m out). */
+  private mayGo(i: number, node: number, ctl: number, clock: number) {
+    if (this.boxBusy(node, i, clock)) return false;
+    if (ctl === CTL.ALL_STOP) return true; // all-way: whoever stopped first claims the box first
+    const W = this.w, H = this.bHead, N = this.bNext;
+    for (let k = W.nodeEdgeStart[node]; k < W.nodeEdgeStart[node + 1]; k++) {
+      const e2 = W.nodeEdges[k];
+      if (!this.drivable(e2)) continue;
+      for (const end2 of [0, 1]) {
+        if (W.edgeNodes[e2 * 2 + end2] !== node || (W.armCtl && W.armCtl[e2 * 2 + end2] !== CTL.GO)) continue;
+        const L2 = W.edgeLen[e2];
+        for (let j = H[e2 * 2 + end2]; j >= 0; j = N[j]) { // cars on e2 heading toward this end
+          if (j === i) continue;
+          const dj = end2 === 1 ? L2 - this.s[j] : this.s[j];
+          if (dj < 8 || (dj < 45 && dj < this.speed[j] * 3.5 + 6)) return false;
+        }
+      }
+    }
+    return true;
   }
 
   private stepCars(dt: number) {
@@ -500,17 +627,70 @@ export class LifeSim {
     for (let i = c0; i < c1; i++) {
       this.leadGap[i] = 1e9; this.lead[i] = -1;
       if (!this.active[i]) continue;
+      const li = this.laneOf(i, this.edge[i]);
       for (let j = H[this.edge[i] * 2 + (this.dir[i] > 0 ? 1 : 0)]; j >= 0; j = N[j]) {
-        if (j === i) continue;
+        if (j === i || this.laneOf(j, this.edge[j]) !== li) continue;
         const ahead = (this.s[j] - this.s[i]) * this.dir[i];
-        if (ahead > 0 && ahead < this.leadGap[i]) { this.leadGap[i] = ahead; this.lead[i] = j; }
+        // (a dead heat — two cars at one spot — goes to the lower slot, so one of them yields)
+        if ((ahead > 0 || (ahead === 0 && j < i)) && ahead < this.leadGap[i]) { this.leadGap[i] = ahead; this.lead[i] = j; }
       }
     }
+    const W = this.w, clock = this.env.clock;
     for (let i = c0; i < c1; i++) {
       if (!this.active[i]) continue;
       const e = this.edge[i];
       const r = this.rank(e);
       let target = (r >= 5 ? 12.5 : r >= 3 ? 10 : 7.5) * (0.88 + (this.variant[i] % 5) * 0.04);
+      // ---- the junction ahead: look across it, slow for the turn, obey its control ----
+      const d0 = this.dir[i], L0 = W.edgeLen[e], end = d0 > 0 ? 1 : 0, node = W.edgeNodes[e * 2 + end];
+      const dN = d0 > 0 ? L0 - this.s[i] : this.s[i];
+      const sb = W.nodeSet ? W.nodeSet[node] : 0, dStop = dN - sb;
+      let nextGap = 1e9;
+      if (dN < 45) {
+        if (this.nxtE[i] < 0) { const [ne, nd] = this.nextEdge(node, e, true); this.nxtE[i] = ne; this.nxtD[i] = nd; }
+        const ne = this.nxtE[i], nd = this.nxtD[i], L2 = W.edgeLen[ne], ln = this.laneOf(i, ne);
+        // the car ahead may already be round the corner: follow it across the junction
+        for (let j = H[ne * 2 + (nd > 0 ? 1 : 0)]; j >= 0; j = N[j]) {
+          if (j === i || this.laneOf(j, ne) !== ln) continue;
+          const along = nd > 0 ? this.s[j] : L2 - this.s[j];
+          nextGap = Math.min(nextGap, along);
+          if (dN + along < this.leadGap[i]) { this.leadGap[i] = dN + along; this.lead[i] = j; }
+        }
+        // corners are taken at walking-the-dog speed, not at the limit
+        this.sample(e, d0 > 0 ? L0 : 0, this.tmp);
+        const ax = this.tmp[3] * d0, az = this.tmp[4] * d0;
+        this.sample(ne, nd > 0 ? 0 : L2, this.tmp);
+        const turn = ax * this.tmp[3] * nd + az * this.tmp[4] * nd;
+        if (turn < 0.8) { const vT = turn < -0.3 ? 2.5 : 4.8; target = Math.min(target, Math.sqrt(vT * vT + 2 * 2.5 * Math.max(0, dStop))); }
+      }
+      if (sb > 0 && dStop > -0.5) {
+        const ctl = W.armCtl ? W.armCtl[e * 2 + end] : CTL.GO;
+        let hold = false;
+        // turning left across the oncoming lane: wait for a gap in the traffic coming the other way
+        if ((ctl === CTL.GO || ctl === CTL.SIG_A || ctl === CTL.SIG_B) && this.nxtE[i] >= 0 && dStop < 25 && this.leftTurn(i, e, d0, node) && this.oncoming(i, e, d0, node)) hold = true;
+        if (ctl === CTL.SIG_A || ctl === CTL.SIG_B) {
+          const st = signalState(ctl - CTL.SIG_A, clock, W.nodeKey![node]);
+          // red: stop at the line; amber: stop if it can be done comfortably, else carry on through
+          hold = st === 2 || (st === 1 && dStop > (this.speed[i] * this.speed[i]) / 9 + 1);
+        } else if (ctl === CTL.STOP || ctl === CTL.ALL_STOP) {
+          if (this.stopDone[i] !== node + 1) {
+            hold = true; // a full stop at the line first
+            if (dStop < 3.5 && this.speed[i] < 0.5 && (this.waitT[i] += dt) > 0.9) { this.stopDone[i] = node + 1; this.waitT[i] = 0; }
+          } else hold = !this.mayGo(i, node, ctl, clock);
+        } else if (ctl === CTL.YIELD) {
+          hold = !this.mayGo(i, node, ctl, clock);
+          if (!hold) target = Math.min(target, Math.sqrt(30 + 6 * Math.max(0, dStop)));
+        } else hold = this.boxBusy(node, i, clock); // the main road still lets a car already in the box clear it
+        // don't block the box: the queue past the junction must have room for this car
+        if (!hold && nextGap < 7.5) hold = true;
+        // a jam that won't clear (a knot in a weird graph) eventually just goes
+        if (hold && this.speed[i] < 0.3 && (this.holdT[i] += dt) > 25) hold = false;
+        if (hold) target = Math.min(target, Math.sqrt(2 * 6 * Math.max(0, dStop - 0.4)));
+        else {
+          if (ctl !== CTL.SIG_A && ctl !== CTL.SIG_B && dStop < 1.5 && this.claim[node] !== i) { this.claim[node] = i; this.claimT[node] = clock; }
+          if (this.speed[i] > 1) this.holdT[i] = 0;
+        }
+      }
       // follow the car ahead — brake with the real stopping distance (decel 7)
       const nearest = this.leadGap[i];
       if (nearest < 30) target = Math.min(target, Math.sqrt(2 * 7 * Math.max(0, nearest - 7.5)));
@@ -530,8 +710,8 @@ export class LifeSim {
       if (this.s[i] > L || this.s[i] < 0) {
         const node = this.w.edgeNodes[e * 2 + (this.s[i] > L ? 1 : 0)];
         const over = this.s[i] > L ? this.s[i] - L : -this.s[i];
-        const [ne, nd] = this.nextEdge(node, e, true);
-        this.placeOnEdge(i, ne, nd, nd > 0 ? over : this.w.edgeLen[ne] - over);
+        const [ne, nd] = this.nxtE[i] >= 0 ? [this.nxtE[i], this.nxtD[i]] : this.nextEdge(node, e, true);
+        this.placeOnEdge(i, ne, nd, Math.min(this.w.edgeLen[ne], nd > 0 ? over : this.w.edgeLen[ne] - over));
       }
       this.updateCarPose(i, dt);
       this.anim[i] += this.speed[i] * dt / 0.33; // wheel roll
@@ -593,9 +773,53 @@ export class LifeSim {
     return false;
   }
 
+  // Walkers bucketed by edge (the same head/next lists the cars use, in the peds' own range), so a
+  // walker can find someone on its own stretch of sidewalk to stop and talk to.
+  private pHead = new Int32Array(0);
+  private meet(i: number) {
+    const e = this.edge[i];
+    if (e < 0 || e >= this.pHead.length) return;
+    const my = this.lateral(i);
+    for (let j = this.pHead[e]; j >= 0; j = this.bNext[j]) {
+      if (j === i || this.state[j] !== ST.WALK) continue;
+      const d = Math.hypot(this.x[j] - this.x[i], this.z[j] - this.z[i]);
+      if (d < 0.7 || d > 1.8 || Math.sign(this.lateral(j)) !== Math.sign(my)) continue; // same side of the street
+      // stop and talk, face to face at a talking distance (~1.1 m), for a while
+      const t = this.rng.range(8, 26), mx = (this.x[i] + this.x[j]) / 2, mz = (this.z[i] + this.z[j]) / 2;
+      const ux = (this.x[j] - this.x[i]) / d, uz = (this.z[j] - this.z[i]) / d;
+      this.x[i] = mx - ux * 0.55; this.z[i] = mz - uz * 0.55;
+      this.x[j] = mx + ux * 0.55; this.z[j] = mz + uz * 0.55;
+      for (const [a, b] of [[i, j], [j, i]]) {
+        this.state[a] = ST.CHAT;
+        this.timer[a] = t;
+        this.lead[a] = b; // (a walker's lead slot holds who it is talking to)
+        this.yaw[a] = Math.atan2(-(this.x[b] - this.x[a]), -(this.z[b] - this.z[a]));
+      }
+      return;
+    }
+  }
+  /** Which side of its street a walker is on (the sign of its offset from the centre line). */
+  private lateral(i: number) { return this.side[i] * this.dir[i] + this.dodge[i] * 0.1; }
+  /** At a signalled junction's corner: wait for the walk (this street's green) before crossing. */
+  private kerbWait(i: number) {
+    const W = this.w, e = this.edge[i];
+    if (!W.armCtl || !W.nodeSet) return false;
+    const d = this.dir[i], end = d > 0 ? 1 : 0, node = W.edgeNodes[e * 2 + end], sb = W.nodeSet[node];
+    if (sb <= 0) return false;
+    const ctl = W.armCtl[e * 2 + end];
+    if (ctl !== CTL.SIG_A && ctl !== CTL.SIG_B) return false;
+    const dN = d > 0 ? W.edgeLen[e] - this.s[i] : this.s[i];
+    if (dN > sb + 0.6 || dN < sb - 1.2) return false; // not at the kerb (or already crossing)
+    return signalState(ctl - CTL.SIG_A, this.env.clock, W.nodeKey![node]) !== 0;
+  }
+
   private stepPeds(dt: number) {
     const [p0, p1] = RANGES.peds;
     const { playerX: px, playerZ: pz } = this.env;
+    const E = this.w.edgeLen.length;
+    if (this.pHead.length !== E) this.pHead = new Int32Array(E);
+    this.pHead.fill(-1);
+    for (let i = p0; i < p1; i++) if (this.active[i] && this.state[i] === ST.WALK && this.edge[i] >= 0) { this.bNext[i] = this.pHead[this.edge[i]]; this.pHead[this.edge[i]] = i; }
     for (let i = p0; i < p1; i++) {
       if (!this.active[i]) continue;
       const st = this.state[i];
@@ -607,21 +831,43 @@ export class LifeSim {
       else this.dodge[i] *= 1 - dt * 0.6;
       this.dodge[i] = Math.max(-1.4, Math.min(1.4, this.dodge[i]));
       let moving = 1;
-      if (st === ST.PAUSE) {
+      if (st === ST.PAUSE || st === ST.CHAT) {
         moving = 0;
-        if ((this.timer[i] -= dt) <= 0) this.state[i] = this.edge[i] >= 0 ? ST.WALK : ST.BEACH;
+        const j = this.lead[i];
+        const alone = st === ST.CHAT && (j < 0 || !this.active[j] || this.state[j] !== ST.CHAT || this.lead[j] !== i);
+        if ((this.timer[i] -= dt) <= 0 || alone) {
+          this.state[i] = this.edge[i] >= 0 ? ST.WALK : ST.BEACH;
+          // a conversation ends for both at once
+          if (st === ST.CHAT && !alone) { this.state[j] = this.edge[j] >= 0 ? ST.WALK : ST.BEACH; this.lead[j] = -1; }
+          this.lead[i] = -1;
+        }
       } else if (st === ST.WALK) {
         const e = this.edge[i];
-        this.s[i] += this.speed[i] * dt * this.dir[i];
-        const L = this.w.edgeLen[e];
-        if (this.s[i] > L || this.s[i] < 0) {
-          const node = this.w.edgeNodes[e * 2 + (this.s[i] > L ? 1 : 0)];
-          const [ne, nd] = this.nextEdge(node, e, false);
-          this.placeOnEdge(i, ne, nd, nd > 0 ? 0 : this.w.edgeLen[ne]);
+        if (this.kerbWait(i)) {
+          moving = 0; // waiting at the corner for the light, facing the crossing
+        } else {
+          this.s[i] += this.speed[i] * dt * this.dir[i];
+          const L = this.w.edgeLen[e];
+          if (this.s[i] > L || this.s[i] < 0) {
+            const node = this.w.edgeNodes[e * 2 + (this.s[i] > L ? 1 : 0)];
+            const [ne, nd] = this.nextEdge(node, e, false);
+            this.placeOnEdge(i, ne, nd, nd > 0 ? 0 : this.w.edgeLen[ne]);
+          }
+          this.updatePedPose(i, dt);
         }
-        this.updatePedPose(i, dt);
-        if (this.rng.float() < dt * 0.02) { this.state[i] = ST.PAUSE; this.timer[i] = this.rng.range(2, 9); }
-        else if (this.rng.float() < dt * 0.07) this.tryVisit(i);
+        const shops = this.w.edgeShops ? this.w.edgeShops[this.edge[i]] : 0;
+        if (moving && this.rng.float() < dt * (0.02 + Math.min(0.05, shops * 0.01))) {
+          this.state[i] = ST.PAUSE;
+          this.timer[i] = this.rng.range(2, 9);
+          if (shops > 0.5 && this.rng.float() < 0.7) {
+            // window shopping: turn to the shop fronts and linger
+            this.sample(this.edge[i], this.s[i], this.tmp);
+            const lx = this.x[i] - this.tmp[0], lz = this.z[i] - this.tmp[2];
+            if (Math.hypot(lx, lz) > 0.5) this.yaw[i] = Math.atan2(-lx, -lz);
+            this.timer[i] = this.rng.range(4, 14);
+          }
+        } else if (moving && this.rng.float() < dt * 0.05) this.meet(i);
+        else if (moving && this.rng.float() < dt * 0.07) this.tryVisit(i);
       } else if (st === ST.TO_DOOR || st === ST.FROM_DOOR) {
         const o = this.door[i] * 6, D = this.w.doors;
         let gx: number, gy: number, gz: number;
@@ -698,7 +944,7 @@ export class LifeSim {
       }
       // knocked down: −1…−1.9 sprawled (the fraction is how far into the fall — the renderer tumbles
       // them once), −2.5 sitting up; back to a walk (≥ 0) once the timer runs out
-      this.amt[i] = st === ST.DOWN && this.timer[i] > 0 ? (this.timer[i] > 1.1 ? -1 - Math.min(0.9, Math.max(0, (2.6 - this.timer[i]) / 1.5)) : -2.5) : moving;
+      this.amt[i] = st === ST.DOWN && this.timer[i] > 0 ? (this.timer[i] > 1.1 ? -1 - Math.min(0.9, Math.max(0, (2.6 - this.timer[i]) / 1.5)) : -2.5) : st === ST.CHAT ? AMT_CHAT : moving;
       this.anim[i] += moving * this.speed[i] * dt * 5.2;
     }
   }
@@ -824,8 +1070,9 @@ export class LifeSim {
     this.stepPeds(dt);
     this.stepBoats(dt);
     if (this.tick % 10 === 0) {
-      this.recycle(RANGES.peds, 330, 6);
-      this.recycle(RANGES.cars, 600, 3);
+      if (this.tick % 40 === 0) this.sizeBubble();
+      this.recycle(RANGES.peds, this.bubble.ped, 6);
+      this.recycle(RANGES.cars, this.bubble.car, 5);
       this.manage(RANGES.cars, this.desired('car'), (i) => this.spawnCar(i, true), 120);
       this.manage(RANGES.peds, this.desired('ped'), (i) => this.spawnPed(i, true), 100);
     }

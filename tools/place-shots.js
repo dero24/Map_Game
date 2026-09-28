@@ -63,7 +63,7 @@ window.__PLACE__ = async (tag = 'place', opts = {}) => {
     for (let k = 0; k < 16 && !best; k++)
       for (const o of [2.0, 1.2, 2.8]) {
         const x = s.ax + dx * (back + k * 2.5) + nx * (s.w / 2 + o), z = s.az + dz * (back + k * 2.5) + nz * (s.w / 2 + o);
-        if (!G.walk.blocked(x, z, 1.0) && !G.walk.blocked(x + fx * 2.5, z + fz * 2.5, 1.0)) { best = [x, z]; break; }
+        if (!G.walk.blocked(x, z, 1.0) && !G.walk.blocked(x + fx * 3, z + fz * 3, 1.0)) { best = [x, z]; break; } // 3 m clear in front of the lens
       }
     best ??= [s.ax + dx * back + nx * (s.w / 2 + 2.0), s.az + dz * back + nz * (s.w / 2 + 2.0)];
     G.walkParams.fly = false;
@@ -147,7 +147,18 @@ window.__PLACE__ = async (tag = 'place', opts = {}) => {
     { label: `3 main street at golden hour${lbl(main)}`, fn: async () => { set(await goldenHour()); if (main) kerb(main, -1, Math.PI); await wait(1200); } },
     { label: `4 main street at night${lbl(main)}`, fn: async () => { set(21.5); if (main) kerb(main, 1, 0.15); await wait(1200); } },
     { label: `5 a residential street${lbl(resi)}`, fn: async () => { set(10.5); if (resi) kerb(resi, 1, 0.3); await wait(1200); } },
-    { label: '6 from the air', fn: async () => { set(15); const s = main ?? resi; if (s) { const mx = (s.ax + s.bx) / 2, mz = (s.az + s.bz) / 2, g = G.world.terrain.heightAt(mx, mz); lookAt(mx, mz, g, mx + 110, mz + 110, g + 120); } await wait(1500); } },
+    { label: '6 from the air', fn: async () => {
+      set(15);
+      const s = main ?? resi;
+      if (s) {
+        // above every roof between the lens and the street (in Midtown 120 m is inside a tower)
+        const mx = (s.ax + s.bx) / 2, mz = (s.az + s.bz) / 2, g = G.world.terrain.heightAt(mx, mz);
+        let roof = g;
+        for (const f of fps) { const [cx, cz] = cen(f); for (let t = 0; t <= 1; t += 0.25) if (Math.hypot(cx - (mx + 110 * t), cz - (mz + 110 * t)) < 60) roof = Math.max(roof, f.top); }
+        lookAt(mx, mz, g, mx + 110, mz + 110, Math.max(g + 120, roof + 30));
+      }
+      await wait(1500);
+    } },
     { label: `7 the tallest building (${tallest ? Math.round(tallest.top - tallest.base) + ' m' : '—'})`, fn: async () => { set(14); if (tallest) { const [cx, cz] = cen(tallest), P = tallPose(tallest); lookAt(cx, cz, tallest.base + (tallest.top - tallest.base) * 0.55, P.x, P.z, G.world.terrain.heightAt(P.x, P.z) + 1.7); } await wait(1500); } },
     { label: '8 the horizon', fn: async () => { set(16.5); const h = skyline(); lookAt(x0 + Math.sin(h.yaw) * 1000, z0 + Math.cos(h.yaw) * 1000, h.eye + Math.tan(h.pitch) * 1000, x0, z0, h.eye); F[7].label = `8 the horizon (${h.what})`; await wait(1500); } },
     { label: '9 inside a café / restaurant', fn: async () => { set(13); const r = await interior(['cafe', 'restaurant', 'bar']); if (typeof r === 'string') F[8].label = `9 inside ${r}`; } },

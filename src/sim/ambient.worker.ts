@@ -26,6 +26,7 @@ function tick() {
     hour: h[H.HOUR] / 100,
     density: h[H.DENSITY] / 100,
     wind: h[H.WIND] / 1000,
+    clock: h[H.CLOCK] / 100,
   });
   const dt = 1 / SIM_HZ;
   sim.step(dt);
@@ -72,5 +73,6 @@ ctx.onmessage = (e: MessageEvent) => {
     pool.push(d.buf as ArrayBuffer);
   } else if (d.kind === 'env' && mode === 'copy') {
     V.header.set((d.header as Int32Array).subarray(H.PLAYER_X, H.WIND + 1), H.PLAYER_X);
+    V.header[H.CLOCK] = (d.header as Int32Array)[H.CLOCK];
   }
 };

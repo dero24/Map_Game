@@ -69,16 +69,19 @@ export function personGeometry() {
   // face reads up close (a café table, a doorway) and costs thirty vertices
   const card = (w: number, h: number, x: number, y: number, z: number) => new THREE.PlaneGeometry(w, h).rotateY(Math.PI).translate(x, y, z);
   for (const s of [1, -1]) {
-    parts.push(part(card(0.026, 0.018, 0.036 * s, 1.617, -0.1045), 0x1d1a18, 0)); // eye
+    parts.push(part(card(0.026, 0.013, 0.036 * s, 1.617, -0.1043), 0xeee8de, 0)); // the white of the eye
+    parts.push(part(card(0.012, 0.012, 0.035 * s, 1.617, -0.1049), 0x2a211c, 0)); // iris (a dark dot, not a bar)
     parts.push(mark(card(0.036, 0.009, 0.037 * s, 1.643, -0.1035), MARK.hair, 0)); // brow
   }
   parts.push(part(card(0.042, 0.011, 0, 1.553, -0.1045), 0x8a3f3a, 0)); // mouth
   // hairstyles: a crown over the top, and the back and sides down to the nape — open at the front,
   // so the hairline sits above the brows instead of a helmet over the eyes
+  // (three bands down the crown and 6 % proud of the skull: two bands left flat facets that the
+  // head's own facets poked through — a bald patch at the temples)
   const cap = (id: number, sy = 0.13, segs = 7) => {
-    const crown = new THREE.SphereGeometry(1, segs, 2, 0, Math.PI * 2, 0, Math.PI * 0.34);
+    const crown = new THREE.SphereGeometry(1, segs, 3, 0, Math.PI * 2, 0, Math.PI * 0.34);
     const back = new THREE.SphereGeometry(1, segs, 2, Math.PI * 1.5 + 0.6, Math.PI * 2 - 1.2, Math.PI * 0.34, Math.PI * 0.22);
-    return mark(merge([crown, back].map((g) => g.toNonIndexed())).scale(0.109, sy, 0.12).translate(0, 1.605, 0.01), MARK.hair, id);
+    return mark(merge([crown, back].map((g) => g.toNonIndexed())).scale(0.109 * 1.06, sy * 1.04, 0.12 * 1.06).translate(0, 1.6, 0.008), MARK.hair, id);
   };
   parts.push(cap(HAIR_PART0)); // shared by short, long and bun
   parts.push(mark(box(0.2, 0.27, 0.07, 0, 1.49, 0.08), MARK.hair, HAIR_PART0 + 1)); // long

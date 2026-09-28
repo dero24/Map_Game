@@ -174,6 +174,50 @@ describe('LifeSim', () => {
     expect(sim.bump(sim.x[i] - 1, sim.z[i], 1.5, 0)).toBe(0);
   });
 
+  it('cars never drive fused together (spawned apart, dead heats resolved, following across corners)', () => {
+    const sim = new LifeSim(town());
+    sim.setEnv({ playerX: 200, playerZ: 200, hour: 17.3, night: 0, density: 3, wind: 0.5 });
+    let fused = 0, samples = 0;
+    for (let t = 0; t < 1600; t++) {
+      sim.step(0.05);
+      if (t < 200 || t % 50) continue;
+      samples++;
+      for (let a = RANGES.cars[0]; a < RANGES.cars[1]; a++) {
+        if (!sim.active[a]) continue;
+        for (let b = a + 1; b < RANGES.cars[1]; b++) {
+          if (!sim.active[b]) continue;
+          if (Math.hypot(sim.x[a] - sim.x[b], sim.z[a] - sim.z[b]) < 2.2 && Math.abs(Math.sin(sim.yaw[a] - sim.yaw[b])) < 0.3) fused++;
+        }
+      }
+    }
+    expect(samples).toBeGreaterThan(20);
+    expect(fused).toBe(0);
+  });
+
+  it('walkers stop to talk to each other (face to face, gesturing) and linger at shop windows', () => {
+    const sim = new LifeSim(town());
+    sim.setEnv({ playerX: 200, playerZ: 200, hour: 15, night: 0, density: 1, wind: 0.5 });
+    let chats = 0, pairsFaceToFace = true;
+    for (let t = 0; t < 1200; t++) {
+      sim.step(0.05);
+      if (t % 100) continue;
+      for (let i = RANGES.peds[0]; i < RANGES.peds[1]; i++) {
+        if (!sim.active[i] || sim.state[i] !== PED_STATE.CHAT) continue;
+        chats++;
+        // the one they're talking to stands within a couple of metres, in front of them
+        let partner = false;
+        for (let j = RANGES.peds[0]; j < RANGES.peds[1] && !partner; j++) {
+          if (j === i || sim.state[j] !== PED_STATE.CHAT) continue;
+          const dx = sim.x[j] - sim.x[i], dz = sim.z[j] - sim.z[i], d = Math.hypot(dx, dz);
+          if (d < 2.3 && (-Math.sin(sim.yaw[i]) * dx - Math.cos(sim.yaw[i]) * dz) / d > 0.9) partner = true;
+        }
+        if (!partner) pairsFaceToFace = false;
+      }
+    }
+    expect(chats).toBeGreaterThan(0);
+    expect(pairsFaceToFace).toBe(true);
+  });
+
   it('each kind of place keeps its own day: beach afternoons, town errands, desert evenings', () => {
     const at = (rhythm: 'shore' | 'town' | 'desert', hour: number) => {
       const sim = new LifeSim({ ...town(), rhythm });

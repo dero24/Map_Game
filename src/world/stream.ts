@@ -38,6 +38,7 @@ export interface TileArt {
   primRoads: Road[];
   areas: Area[];
   kerb?: Float32Array; // parked cars for kerbCars.ts
+  junc?: Float32Array; // junction control for the life sim (src/sim/traffic.ts)
   flat?: boolean; // mounted without data still in flight (late DEM or LiDAR) — a relief rebuild will replace it
 }
 
@@ -75,6 +76,7 @@ export class TileStream {
   private _poles: unknown[] = [];
   private _churches: [number, number][] = [];
   private _primRoads: Road[] = [];
+  private _junc: Float32Array[] = [];
   // The tile worker: decode + mesh + collision run off-thread; jobs resolve with a BuiltTile.
   private worker: Worker | null = null;
   private workerDead = false;
@@ -148,9 +150,9 @@ export class TileStream {
       if (!w) {
         const c = this.man.cell;
         // file is an absolute URL — the tile worker fetches it directly (no base prefix).
-        // &v=13 — the edge Cache API keys on the full URL; bumping alongside the
-        // worker's R2 key (t/v13) retires stale tile payloads.
-        const file = this.tilesBase === 'direct' ? `direct:${key}` : `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}&v=13`;
+        // &v=14 — the edge Cache API keys on the full URL; bumping alongside the
+        // worker's R2 key (t/v14) retires stale tile payloads.
+        const file = this.tilesBase === 'direct' ? `direct:${key}` : `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}&v=14`;
         w = { id: 'w' + key, box: { x0: cx * c, z0: cz * c, x1: cx * c + c, z1: cz * c + c }, lod: 0, file, world: 1 };
         this.worldSpecs.set(key, w);
       }
@@ -192,6 +194,7 @@ export class TileStream {
     this._poles = all.flatMap((a) => a.poles);
     this._churches = all.flatMap((a) => a.churches);
     this._primRoads = all.flatMap((a) => a.primRoads);
+    this._junc = all.flatMap((a) => (a.junc ? [a.junc] : []));
     this.dirty = false;
   }
   private sync() { if (this.dirty) this.rebuild(); }
@@ -200,6 +203,8 @@ export class TileStream {
   get poles() { this.sync(); return this._poles; }
   get churches() { this.sync(); return this._churches; }
   get primRoads() { this.sync(); return this._primRoads; }
+  /** Every mounted tile's junction-control records (each junction ships with the tile that owns it). */
+  get junctions() { this.sync(); return this._junc; }
   /** The coarse ring's mounted cells (display-only lite builds). */
   get coarseSpecs(): TileSpec[] { return [...this.coarseLoaded.values()].map((c) => c.spec); }
   get busy() { return this.fetching.size > 0 || this.buildQueue.length > 0 || this.coarseFetching.size > 0 || this.coarseQueue.length > 0; }
@@ -584,6 +589,7 @@ export class TileStream {
         primRoads: tile.roads,
         areas: tile.areas ?? [],
         kerb: tile.kerb,
+        junc: tile.junc,
         flat: !!tile.late,
       });
       if (tile.late) this.relieve(spec);

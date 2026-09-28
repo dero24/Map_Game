@@ -335,6 +335,12 @@ const roofMaterialColour = (v: unknown) => (v ? ROOF_MAT[String(v).toLowerCase()
 
 const ROAD_W: Record<string, number> = { motorway: 14, trunk: 12, primary: 11, primary_link: 6, secondary: 9, secondary_link: 6, tertiary: 8, tertiary_link: 5, residential: 6.5, unclassified: 6, living_street: 5, service: 4, pedestrian: 5, track: 3, footway: 1.8, path: 1.5, cycleway: 2, steps: 2, bridleway: 2, construction: 5 };
 const PARK_DEFAULT = new Set(['residential', 'unclassified', 'tertiary', 'secondary']);
+// OSM fence_type → Line.ft: 1 iron railing, 2 chain-link, 3 timber (picket, rail, board)
+const FENCE_TYPE: Record<string, number> = {
+  railing: 1, metal: 1, metal_bars: 1, bars: 1, wrought_iron: 1, guard_rail: 1, pole: 1,
+  chain_link: 2, wire: 2, mesh: 2, barbed_wire: 2, electric: 2,
+  wood: 3, picket: 3, split_rail: 3, board: 3, panel: 3, wattle: 3, hedge_bank: 3,
+};
 // Street parking on one side of a way, in either OSM scheme (`parking:<side>` + orientation, or
 // the older `parking:lane:<side>`): 0 none / not on the carriageway, 1 parallel, 2 angled.
 export function parkSide(t: Record<string, string>, s: 'left' | 'right'): 0 | 1 | 2 {
@@ -401,7 +407,7 @@ export function overpassQuery(bb: { s: number; w: number; n: number; e: number }
   way["waterway"="riverbank"];
   node["natural"="tree"];
   node["amenity"="bench"];
-  node["highway"="traffic_signals"];
+  node["highway"~"^(traffic_signals|stop|give_way)$"];
   node["emergency"="fire_hydrant"];
   node["railway"="subway_entrance"];
   node["highway"="bus_stop"];
@@ -493,6 +499,7 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       // Point furniture — same tag→class the bake emits; props.ts consumes these.
       const pc = t.natural === 'tree' ? 'tree' : t.amenity === 'bench' ? 'bench'
         : t.highway === 'traffic_signals' ? 'signal' : t.emergency === 'fire_hydrant' ? 'hydrant'
+        : t.highway === 'stop' ? (t.stop === 'all' ? 'stop_all' : 'stop') : t.highway === 'give_way' ? 'yield'
         : t.railway === 'subway_entrance' || (t.railway === 'train_station_entrance' && t.subway === 'yes') ? 'subway'
         : t.highway === 'bus_stop' ? (t.shelter === 'yes' ? 'bus_shelter' : 'bus') : null;
       if (pc && e.lat != null && e.lon != null) {
@@ -552,6 +559,10 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
             const l: Line = { c: lc, p, own: ownV(p) };
             if (t.width && isFinite(parseFloat(t.width))) l.w = parseFloat(t.width);
             if (t.bridge && t.bridge !== 'no') l.br = 1;
+            if (lc === 'fence') {
+              const ft = FENCE_TYPE[t.fence_type ?? ''];
+              if (ft) l.ft = ft;
+            }
             lines.push(l);
           }
         }

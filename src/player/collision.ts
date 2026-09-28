@@ -112,6 +112,27 @@ export class WalkWorld {
   addLoop(pts: P2[], y0 = -Infinity, y1 = Infinity) {
     for (let i = 0; i < pts.length; i++) this.addWall(pts[i], pts[(i + 1) % pts.length], y0, y1);
   }
+  /** Retire the short walls lying inside a (yawed) rectangle — the outline of a parked car the
+   *  player just drove off in (it was boxing its own car in: a second of travel, then a wall).
+   *  Long walls merely passing through (a building's side) stay. Returns how many went. */
+  clearFootprint(x: number, z: number, yaw: number, hl: number, hw: number) {
+    const c = Math.cos(yaw), s = Math.sin(yaw), m = 0.3;
+    const inside = (px: number, pz: number) => {
+      const dx = px - x, dz = pz - z, u = dx * c - dz * s, v = dx * s + dz * c; // into the car's frame (x across, z along)
+      return Math.abs(u) <= hw + m && Math.abs(v) <= hl + m;
+    };
+    let n = 0;
+    const r = Math.hypot(hl, hw) + m;
+    for (let i = Math.floor((x - r) / this.cell); i <= Math.floor((x + r) / this.cell); i++)
+      for (let j = Math.floor((z - r) / this.cell); j <= Math.floor((z + r) / this.cell); j++)
+        for (const id of this.grid.get(i * 73856093 ^ j * 19349663) ?? []) {
+          if (this.segDead[id]) continue;
+          const g = this.segs[id];
+          if (Math.hypot(g[2] - g[0], g[3] - g[1]) > 2 * hl + 2 * m) continue;
+          if (inside(g[0], g[1]) && inside(g[2], g[3])) { this.segDead[id] = 1; n++; }
+        }
+    return n;
+  }
 
   // Register a footprint. `gap` leaves a doorway in the nearest wall; `floors` makes it walkable inside.
   // wallY0: walls only block above this height (raised houses stand on open pilings).
