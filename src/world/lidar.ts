@@ -134,9 +134,9 @@ function applyNew(tj: TileJson, box: Box, ck: string, rec: Rec) {
       k: area < 45 ? 'shed' : h > 20 || area > 2500 ? 'large' : area < 260 ? 'house' : 'commercial',
       gen: 'lidar',
     };
-    if (nb.m.length === 4 && nb.m[3] >= 0.35) apply(b, nb.m);
+    if (nb.m.length === 4 && nb.m[3] >= 0.35) applyMeasure(b, nb.m);
     else if (b.k === 'house' || b.k === 'shed') b.h = Math.max(3, h + 1); // no clean fit (canopy over it): the usual pitched house, ridge a little above the median roof height
-    else apply(b, [h, h, 0, 1]); // a flat block at the measured height
+    else applyMeasure(b, [h, h, 0, 1]); // a flat block at the measured height
     tj.buildings.push(b);
   }
 }
@@ -157,11 +157,15 @@ const measurable = (b: Building) => b.own !== 0 && !b.gen && !b.pt && !b.hp && !
 // Stored fit → Building. Flat: flat (a mapped skillion keeps its slope). Rectangles: the
 // fitted style. Other outlines ('pitched'): the mapped gable/hip style keeps, with the
 // measured eave and ridge; a mapped skillion keeps its shape and takes only the height.
-function apply(b: Building, m: number[]) {
+export function applyMeasure(b: Building, m: number[]) {
   if (m.length < 4 || m[3] < 0.35) return;
   const [h, eav, rs] = m;
   if (h > (b.k === 'house' || b.k === 'shed' ? 40 : 400)) return; // implausible: keep priors
   if (b.hq && b.h >= 20) return; // a mapped tower height beats a roof median (setbacks, spires)
+  // mapped floors say it's a tower and the survey saw something far lower: the survey predates
+  // it (Hudson Yards' towers went up after NYC's 2017 flight) or caught it half-built — keep
+  // the floors (a tower mustn't collapse into a podium the moment its detail tile arrives)
+  if (b.fl && b.fl >= 10 && h < b.h * 0.55) return;
   b.h = Math.max(2.4, h);
   b.ms = 1;
   if (rs === 0 || b.roof === 'skillion') {
@@ -192,7 +196,7 @@ export async function enrichTile(tj: TileJson, box: Box, wait: number | null, fe
   }
   if (rec?.none) return 'none';
   const keys = todo.map(bKey);
-  if (rec) todo.forEach((b, i) => { const m = rec!.m[keys[i]]; if (m) apply(b, m); });
+  if (rec) todo.forEach((b, i) => { const m = rec!.m[keys[i]]; if (m) applyMeasure(b, m); });
   if (rec) applyNew(tj, box, ck, rec), applyTrees(tj, ck, rec);
   const missing = todo.map((b, i) => [b, keys[i]] as const).filter(([, k]) => !rec?.m[k]);
   if (rec?.t && rec.nb && (!missing.length || missing.length <= todo.length * 0.03)) return 'done';
@@ -225,7 +229,7 @@ export async function enrichTile(tj: TileJson, box: Box, wait: number | null, fe
   }
   rec = merge(ck, res);
   if (rec.none) return 'none';
-  todo.forEach((b, i) => { const m = rec!.m[keys[i]]; if (m) apply(b, m); });
+  todo.forEach((b, i) => { const m = rec!.m[keys[i]]; if (m) applyMeasure(b, m); });
   applyNew(tj, box, ck, rec);
   applyTrees(tj, ck, rec);
   if (res.fits.length || res.nb || res.t) {

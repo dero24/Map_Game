@@ -62,13 +62,15 @@ export function synthTile(spec: TileSpec, seed: number, terrain: { sdfAt(x: numb
   const own = (x: number, z: number) => (x >= box.x0 && x < box.x1 && z >= box.z0 && z < box.z1 ? undefined : 0);
 
   // ---- streets: N-S lines x=f(z) and E-W lines z=f(x), emitted per segment ----
-  const emitRoad = (pts: [number, number][], cls: string, w: number, id: number) => {
+  const emitRoad = (pts: [number, number][], cls: string, w: number, _id: number) => {
     // split into land runs; a segment is owned iff its midpoint sits in our box
     let run: [number, number][] = [];
     const flush = () => {
       if (run.length >= 2) {
         const [mx, mz] = run[Math.floor(run.length / 2)];
-        roads.push({ p: ints(run), c: cls, w, own: own(mx, mz), n: `synth-st-${id}` });
+        // (no name: a placeholder street must never pass for a real one — on the map, a sign, the
+        // place label — "all streets named synth")
+        roads.push({ p: ints(run), c: cls, w, own: own(mx, mz), sy: 1 });
       }
       run = [];
     };

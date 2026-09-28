@@ -42,7 +42,9 @@ export interface Building {
   eav?: number; // measured eave height above ground (m) — 3DEP LiDAR (lidar.ts); h is then the ridge
   ms?: 1; // h/roof/eav measured from LiDAR (not mapped priors)
 }
-export interface Road { p: number[]; c: string; w: number; n?: string; ref?: string; br?: 'yes' | 'movable'; l?: number; ow?: 1; sw?: 1; sv?: string; pk?: number; lod?: 1; own?: number } // pk: mapped street parking, left + 4·right (1 parallel, 2 angled)
+// pk: mapped street parking, left + 4·right (1 parallel, 2 angled). sy: a placeholder street (synth.ts)
+// — unnamed, pencilled on the map — standing in until the real tile arrives.
+export interface Road { p: number[]; c: string; w: number; n?: string; ref?: string; br?: 'yes' | 'movable'; l?: number; ow?: 1; sw?: 1; sv?: string; pk?: number; lod?: 1; own?: number; sy?: 1 }
 export interface Area { c: string; o: number[][]; i: number[][]; n?: string; lod?: 1; own?: number }
 /** `ft` (fences): 1 iron railing, 2 chain-link, 3 wood/picket — from OSM fence_type; absent = unknown. */
 export interface Line { c: string; p: number[]; w?: number; br?: 1; own?: number; ft?: number }

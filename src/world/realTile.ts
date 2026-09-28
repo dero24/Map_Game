@@ -840,6 +840,10 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       if (hi >= 0) {
         const host = buildings[hi], H = hosts[hi];
         b.po = hi;
+        // a part belongs to the tile that owns its outline: a tower straddling a cell edge is
+        // drawn whole by one tile (its shaft on the neighbour's side was missing until that tile
+        // streamed in — and the skyline had already handed the tower off)
+        if (host.own !== b.own) { if (host.own === undefined) delete b.own; else b.own = host.own; }
         b.s = host.s;
         b.k = host.k === 'house' || host.k === 'shed' ? 'large' : host.k;
         if (b.fc == null && host.fc != null) b.fc = host.fc;

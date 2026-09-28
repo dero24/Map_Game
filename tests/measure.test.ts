@@ -236,3 +236,22 @@ describe('lidarCore: unmapped buildings', () => {
     expect(loop.length).toBe(6);
   });
 });
+
+describe('what a survey measurement may change', () => {
+  it('keeps mapped tower heights and towers the survey predates; takes it for the rest', async () => {
+    const { applyMeasure } = await import('../src/world/lidar');
+    const b = (o: Record<string, unknown>) => ({ r: [], h: 10, k: 'large', roof: 'flat', s: 0, ...o }) as unknown as Parameters<typeof applyMeasure>[0];
+    const tagged = b({ h: 120, hq: 1 });
+    applyMeasure(tagged, [60, 60, 0, 1]);
+    expect(tagged.h).toBe(120); // a tagged height beats a roof median (setbacks, spires)
+    const newer = b({ h: 132, fl: 40 });
+    applyMeasure(newer, [38, 38, 0, 1]);
+    expect(newer.h).toBe(132); // 40 floors mapped, the flight saw a 38 m stump: it went up after
+    const block = b({ h: 12, fl: 4 });
+    applyMeasure(block, [17.5, 17.5, 0, 1]);
+    expect(block.h).toBeCloseTo(17.5, 5); // a four-storey block measured taller than 3 m a floor
+    const house = b({ h: 9.9, fl: 3, k: 'house', roof: 'gable' });
+    applyMeasure(house, [8.4, 5.6, 1, 0.9]);
+    expect(house.h).toBeCloseTo(8.4, 5);
+  });
+});

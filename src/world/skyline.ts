@@ -79,12 +79,14 @@ export class Skyline {
     this.cells.clear();
     const towers = tj.buildings.filter((b) => !b.pt && b.h + (b.lf ?? 0) >= 30);
     if (!towers.length) return;
-    // ground under each tower from the same low-zoom DEM the horizon uses (towers sit in the
-    // coarse ring, where no detail terrain is loaded)
+    // ground under each tower from a bare-earth DEM (towers sit in the coarse ring, where no
+    // detail terrain is loaded). Not the horizon's zoom 9: zooms 9-10 are SRTM-class surface
+    // models that read a city's roofs as ground — Midtown at ~50 m, not ~20 — and every skyline
+    // tower stood 30–40 m tall until its real tile swapped in, then "vanished" into the city.
     const P = makeProjector(this.origin);
     let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
     for (const b of towers) for (let i = 0; i + 1 < b.r.length; i += 2) (x0 = Math.min(x0, b.r[i] / 10)), (x1 = Math.max(x1, b.r[i] / 10)), (z0 = Math.min(z0, b.r[i + 1] / 10)), (z1 = Math.max(z1, b.r[i + 1] / 10));
-    const at = await demSampler(9, P.localToBbox({ x0: x0 - 500, z0: z0 - 500, x1: x1 + 500, z1: z1 + 500 }));
+    const at = await demSampler(11, P.localToBbox({ x0: x0 - 500, z0: z0 - 500, x1: x1 + 500, z1: z1 + 500 })); // (z11+: bare earth)
     const ground = (x: number, z: number) => { const [lat, lon] = P.unproject(x, z); return at ? at(lat, lon) : 0; };
     const terrain = { heightAt: ground, oceanDistAt: () => 1e4, sdfAt: () => 100, coverAt: () => 50 } as unknown as Terrain;
     const byCell = new Map<string, Building[]>();

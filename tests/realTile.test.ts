@@ -266,6 +266,21 @@ describe('osmToTile — towers and building parts', () => {
     expect(t.buildings.filter((b) => b.at).length).toBeGreaterThan(300);
   });
 
+  it('a tower straddling a cell edge is drawn whole by the tile that owns its outline', () => {
+    // outline centred 19 m inside cell 0_0's east edge; its shaft's centre is across the edge
+    const els = [
+      way(901, { building: 'office', height: '390', name: 'Edge Tower' }, sq(975, 500, 60), true),
+      way(902, { 'building:part': 'yes', height: '40' }, sq(975, 500, 60), true), // podium, full cover
+      way(903, { 'building:part': 'yes', height: '390', min_height: '40' }, sq(1018, 505, 14), true), // the shaft, centre in cell 1_0
+    ];
+    const own = osmToTile(osm(...els), OPTS);
+    const next = osmToTile(osm(...els), { ...OPTS, id: '1_0', box: { x0: 1024, z0: 0, x1: 2048, z1: 1024 } });
+    const shaft = (t: typeof own) => t.buildings.find((b) => b.pt && b.lf === 40)!;
+    expect(own.buildings.find((b) => b.n === 'Edge Tower')!.own).toBeUndefined();
+    expect(shaft(own).own).toBeUndefined(); // drawn here, with its outline
+    expect(shaft(next).own).toBe(0); // the neighbour carries it as context only — never twice
+  });
+
   it('a lone tower part on an unmapped podium leaves the outline as the podium, inset', () => {
     const t = osmToTile(osm(
       way(701, { building: 'yes', height: '150' }, sq(500, 500, 40), true),

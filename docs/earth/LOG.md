@@ -2,6 +2,27 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-28 (r) — NYC's towers stop vanishing; no more streets named "synth"
+
+- **Why the towers vanished** (R.17), measured in-page by raycasting every skyline tower top
+  against the real tile that replaces it: (1) the skyline stood every tower on the zoom-9 DEM,
+  and zooms 9–10 are SRTM-class surface models that read Midtown's roofs as ground (64 m at
+  5th & 38th, 44 m at the Empire State; bare earth is 23 and 15) — every impostor tower stood
+  30–40 m too tall and sank into the city when its tile swapped in. The skyline now reads
+  zoom 11 (bare earth): after the fix most cells match their real tiles within 8 m (median
+  0 m). (2) A tower straddling a cell edge lost its shaft: each building:part was owned by the
+  tile holding its own centroid, so 30 Hudson Yards' outline and podium came with one tile and
+  its 390 m shaft with the next — the skyline handed the tower off when the first tile landed.
+  Parts now belong to the tile that owns their outline (`realTile.ts`; test). (3) A survey that
+  predates a tower no longer shrinks it: a building mapped with 10+ floors keeps its height when
+  the LiDAR saw less than 55 % of it (Hudson Yards went up after NYC's 2017 flight;
+  `applyMeasure`, tests).
+- **Tile cache v15** (`t/v15` in the worker, `&v=15`, `DIRECT_V` 15) for the part ownership —
+  redeploy the tile worker.
+- **Placeholder streets** (R.3): the synth stand-ins were named `synth-st-N` — on the place
+  label, the map, street signs and search. They're unnamed now, and the map pencils them in
+  (dashed, faint) with a note that the real map is still arriving.
+
 ## 2026-09-28 (q) — Crosswalks, dogs and joggers, squirrels on the bark, fewer animals downtown, six new trees
 
 Robby's play-test list (backlog §10), the P0s that live in the sim and the foundry.

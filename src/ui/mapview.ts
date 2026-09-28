@@ -102,9 +102,11 @@ export class MapView {
         if (g.terrain.sdfAt(x, z) < 0) { ctx.fillRect(px, py, ws, ws); cc.fillRect(px, py, ws, ws); }
       }
 
-    // streets
+    // streets (placeholder streets — synth, standing in while the real tile loads — pencilled:
+    // dashed, faint, no colour, and a note that the real map is on its way)
     const roads = g.roads();
     const seen = new Set<string>();
+    let pencilled = 0;
     for (const pass of [0, 1]) {
       for (const r of roads) {
         if (r.lod || r.p.length < 4) continue;
@@ -112,6 +114,19 @@ export class MapView {
         let inView = false;
         for (let i = 0; i + 1 < r.p.length; i += 2) { const x = r.p[i] / 10, z = r.p[i + 1] / 10; if (x > x0 - 50 && x < x1 + 50 && z > z0 - 50 && z < z1 + 50) { inView = true; break; } }
         if (!inView) continue;
+        if (r.sy) {
+          if (pass) continue;
+          pencilled++;
+          ctx.save();
+          ctx.setLineDash([4 * k, 5 * k]);
+          ctx.strokeStyle = `${INK}0.22)`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          for (let i = 0; i + 1 < r.p.length; i += 2) { const [a, b] = this.toScreen(r.p[i] / 10, r.p[i + 1] / 10); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b); }
+          ctx.stroke();
+          ctx.restore();
+          continue;
+        }
         const lw = Math.max(pass ? 1 : 1.2, r.w * s * (pass ? 0.75 : 1));
         const trace = (c: CanvasRenderingContext2D) => {
           c.beginPath();
@@ -200,6 +215,13 @@ export class MapView {
         ctx.fillText(r.n, 0, -3 * k);
         ctx.restore();
       }
+    }
+
+    if (pencilled > 8) {
+      ctx.font = `italic ${Math.round(12 * k)}px Georgia, serif`;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = `${INK}0.55)`;
+      ctx.fillText('pencilled streets: the real map of this place is still arriving', 14 * k, H - 14 * k);
     }
 
     // pins
