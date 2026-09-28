@@ -12,8 +12,14 @@ import { SIGNAL_GLSL } from '../sim/traffic';
 // signal: traffic-signal masts — the instance colour is DATA (r = the junction's phase key, g = the
 // phase group), and the red / amber / green lens the life sim is obeying right now is lit
 // (src/sim/traffic.ts signalState, on the shared clock uTime).
-export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean; signal?: boolean } = {}) {
+// fallHue: how a broadleaf turns (flora.ts FALL_HUE): 1 the maples' reds, 2 gold (willow, elm,
+// poplar, birch); else each tree its own of yellow / orange / red. blossom: the flowering cherry's
+// spring pink (season.ts bloom). weep: a willow's hanging strands swing with the wind.
+export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean; signal?: boolean; fallHue?: number; blossom?: boolean; weep?: boolean } = {}) {
   const defines: Record<string, number> = {};
+  if (opts.weep) defines.WEEP = 1;
+  defines.FALL_HUE = opts.fallHue ?? 0; // (always defined: an undefined macro in #if is a GLSL error)
+  if (opts.blossom) defines.BLOSSOM = 1;
   if (opts.wind) defines.WIND = 1;
   if (opts.bob) defines.BOB = 1;
   if (opts.foliage) defines.FOLIAGE = 1;
@@ -49,6 +55,12 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
           float sway = max(p.y - 1.5, 0.0) * 0.012 * (0.4 + uWind);
           p.x += sin(uTime * 1.3 + origin.x * 0.21 + origin.z * 0.17) * sway;
           p.z += cos(uTime * 1.1 + origin.z * 0.19) * sway * 0.7;
+          #ifdef WEEP
+            // a willow's curtain: the further down a strand, the more it swings
+            float hang = step(0.98, min(color.r, min(color.g, color.b))) * max(0.0, uCrown.x + 0.5 - p.y) * 0.06 * (0.5 + uWind);
+            p.x += sin(uTime * 1.7 + origin.x * 0.3 + p.z * 0.8) * hang;
+            p.z += cos(uTime * 1.5 + origin.z * 0.3 + p.x * 0.8) * hang * 0.8;
+          #endif
         #endif
         #ifdef BOB
           float ph = origin.x * 0.37 + origin.z * 0.23;
@@ -116,10 +128,22 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
             float clump = vnoise3(vWorldPos * 1.1) * 0.75 + vTree * 0.25;
             if (clump < uLeafFall * 1.05 - 0.02) discard;
             // autumn: each tree its own colour — yellow, orange, red — mixed through the crown
-            vec3 fall = vTree < 0.4 ? vec3(0.78, 0.55, 0.08) : vTree < 0.75 ? vec3(0.8, 0.3, 0.06) : vec3(0.6, 0.1, 0.07);
-            fall = mix(fall, vec3(0.72, 0.5, 0.1), 0.35 * vnoise3(vWorldPos * 0.7));
+            #if FALL_HUE == 1
+              vec3 fall = vTree < 0.55 ? vec3(0.76, 0.13, 0.06) : vec3(0.86, 0.36, 0.05); // maple scarlet / flame
+              fall = mix(fall, vec3(0.9, 0.55, 0.1), 0.3 * vnoise3(vWorldPos * 0.7));
+            #elif FALL_HUE == 2
+              vec3 fall = mix(vec3(0.88, 0.7, 0.14), vec3(0.74, 0.52, 0.08), vTree); // gold
+              fall = mix(fall, vec3(0.62, 0.62, 0.2), 0.25 * vnoise3(vWorldPos * 0.7));
+            #else
+              vec3 fall = vTree < 0.4 ? vec3(0.78, 0.55, 0.08) : vTree < 0.75 ? vec3(0.8, 0.3, 0.06) : vec3(0.6, 0.1, 0.07);
+              fall = mix(fall, vec3(0.72, 0.5, 0.1), 0.35 * vnoise3(vWorldPos * 0.7));
+            #endif
             alb = mix(alb, fall * (0.8 + 0.4 * fbm3(vWorldPos * 0.9)), uAutumn * smoothstep(0.1, 0.5, vTree + 0.3));
           }
+        #endif
+        #ifdef BLOSSOM
+          // spring: the crown a cloud of pink, flecked white, clump by clump
+          if (vLeafy > 0.5) alb = mix(alb, mix(vec3(0.96, 0.72, 0.8), vec3(0.98, 0.9, 0.92), vnoise3(vWorldPos * 2.3)) * (0.9 + 0.2 * fbm3(vWorldPos * 1.3)), uBloom * smoothstep(0.2, 0.5, vnoise3(vWorldPos * 1.6) * 0.8 + 0.3));
         #endif
         #ifdef PAVED
           alb = snowOn(alb, N, vWorldPos, snowKeep(alb));

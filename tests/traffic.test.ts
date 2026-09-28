@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { analyzeJunctions, packJunctions, unpackJunctions, signalState, signalKey, SIG_CYCLE, CTL } from '../src/sim/traffic';
 import { buildLifeInit, type LifeBase } from '../src/sim/life';
-import { LifeSim } from '../src/sim/lifeSim';
+import { LifeSim, STOP_BACK } from '../src/sim/lifeSim';
 import { RANGES } from '../src/sim/protocol';
 import type { Road, Point } from '../src/world/data';
 
 const road = (c: string, w: number, pts: [number, number][], ow?: 1): Road => ({ c, w, p: pts.flatMap(([x, z]) => [x * 10, z * 10]), ...(ow ? { ow } : {}) });
-const cross = (a: string, wa: number, b: string, wb: number) => [road(a, wa, [[-100, 0], [0, 0], [100, 0]]), road(b, wb, [[0, -100], [0, 0], [0, 100]])];
+const cross = (a: string, wa: number, b: string, wb: number, L = 100) => [road(a, wa, [[-L, 0], [0, 0], [L, 0]]), road(b, wb, [[0, -L], [0, 0], [0, L]])];
 const armAt = (J: ReturnType<typeof analyzeJunctions>[number], dx: number, dz: number) => J.arms.find((m) => m.dx * dx + m.dz * dz > 0.9)!;
 
 describe('junction control: the rule of the road', () => {
@@ -109,29 +109,110 @@ describe('junction control: the traffic obeys it', () => {
     drive(sim, 0, 20);
     expect(sim.edge[c]).toBe(e);
     expect(sim.speed[c]).toBeLessThan(0.3);
-    expect(sim.z[c]).toBeGreaterThan(11 / 2 + 1.5 - 0.5); // not over the stop line
-    expect(sim.z[c]).toBeLessThan(16);
+    expect(sim.z[c]).toBeGreaterThan(11 / 2 + 1.5 + STOP_BACK - 0.5); // not over the stop line: its bumper short of the crosswalk
+    expect(sim.z[c]).toBeLessThan(11 / 2 + 1.5 + STOP_BACK + 2);
     drive(sim, 20, 45); // the cross street's green comes round
     expect(sim.edge[c]).not.toBe(e);
   });
 
-  it('walkers wait at the corner for their light', () => {
-    const { sim, init } = scene(cross('primary', 11, 'secondary', 9));
-    // a walker on the north arm's sidewalk heading for the junction (the cross street's phase: red first)
-    const p = RANGES.peds[0];
+  // a walker on the north arm's sidewalk, at its corner, whose planned way over crosses the
+  // arms `want` picks (re-rolled until it does: where a walker goes next is its own choice)
+  type X = { xmask: Int32Array; nxtE: Int32Array; state: Uint8Array; leg: Uint8Array; xp: Float32Array };
+  const northArm = (init: ReturnType<typeof buildLifeInit>) => {
     let e = -1, dir = 1;
     for (let k = 0; k < init.edgeLen.length; k++) {
       const a = init.edgeStart[k] * 3, b = (init.edgeStart[k] + init.edgeCount[k] - 1) * 3, P = init.edgePts;
       if (Math.abs(P[a]) < 0.1 && Math.abs(P[b]) < 0.1 && Math.max(P[a + 2], P[b + 2]) > 50) { e = k; dir = P[b + 2] < P[a + 2] ? 1 : -1; }
     }
-    sim.active[p] = 1; sim.edge[p] = e; sim.dir[p] = dir; sim.s[p] = dir > 0 ? init.edgeLen[e] - 20 : 20; sim.speed[p] = 1.4; sim.side[p] = 1; sim.state[p] = 0;
-    drive(sim, 0, 20); // 20 s of red for the cross street
-    const dN = dir > 0 ? init.edgeLen[e] - sim.s[p] : sim.s[p];
-    expect(sim.edge[p]).toBe(e);
-    expect(dN).toBeGreaterThan(11 / 2 + 1.5 - 1.3);
-    expect(dN).toBeLessThan(11 / 2 + 1.5 + 0.7);
-    drive(sim, 20, 45); // the walk comes round
-    expect(sim.edge[p] !== e || Math.abs((dir > 0 ? init.edgeLen[e] - sim.s[p] : sim.s[p]) - dN) > 3).toBe(true);
+    return { e, dir };
+  };
+  /** Bits of the centre node's arms running east-west (the main road in these scenes). */
+  const ewBits = (init: ReturnType<typeof buildLifeInit>) => {
+    let node = -1;
+    for (let n = 0; n < init.nodeXZ!.length / 2; n++) if (Math.hypot(init.nodeXZ![n * 2], init.nodeXZ![n * 2 + 1]) < 0.1) node = n;
+    let m = 0;
+    for (let k = init.nodeEdgeStart[node]; k < init.nodeEdgeStart[node + 1]; k++) {
+      const e = init.nodeEdges[k], a = init.edgeStart[e] * 3, b = (init.edgeStart[e] + init.edgeCount[e] - 1) * 3;
+      if (Math.abs(init.edgePts[a + 2]) < 0.1 && Math.abs(init.edgePts[b + 2]) < 0.1) m |= 1 << (k - init.nodeEdgeStart[node]);
+    }
+    return m;
+  };
+  const atCorner = (sim: LifeSim, init: ReturnType<typeof buildLifeInit>, t0: number, setup: () => void, want: (m: number, st: number) => boolean) => {
+    const { e, dir } = northArm(init), p = RANGES.peds[0], sb = init.nodeSet![init.edgeNodes[e * 2 + (dir > 0 ? 1 : 0)]];
+    const X = sim as unknown as X;
+    for (let k = 0; k < 60; k++) {
+      setup();
+      sim.active[p] = 1; sim.edge[p] = e; sim.dir[p] = dir; sim.s[p] = dir > 0 ? init.edgeLen[e] - sb : sb; sim.speed[p] = 1.3; sim.side[p] = 1; X.state[p] = 0; X.nxtE[p] = -1;
+      sim.setEnv({ playerX: 40, playerZ: 30, hour: 12, night: 0, density: 0, wind: 0, clock: t0 });
+      sim.step(0.05);
+      if (want(X.xmask[p], X.state[p])) return { p, e, dir, sb, X };
+    }
+    throw new Error('no crossing plan over the main road');
+  };
+  // does the walker stand inside a car's footprint?
+  const struck = (sim: LifeSim, p: number, c: number) => {
+    const fx = -Math.sin(sim.yaw[c]), fz = -Math.cos(sim.yaw[c]), dx = sim.x[p] - sim.x[c], dz = sim.z[p] - sim.z[c];
+    return Math.abs(dx * fx + dz * fz) < 2.4 && Math.abs(dx * -fz + dz * fx) < 1.1;
+  };
+
+  it('walkers wait at the corner for their light, at the crosswalk', () => {
+    const { sim, init } = scene(cross('primary', 11, 'secondary', 9));
+    sim.active[RANGES.cars[0]] = 0; sim.y[RANGES.cars[0]] = -1000;
+    const ew = ewBits(init);
+    // their way over crosses the main road, whose green comes first: they wait at its kerb
+    const { p, X } = atCorner(sim, init, 0, () => {}, (m) => (m & ew) !== 0);
+    drive(sim, 0.05, 25);
+    expect(X.state[p]).toBe(11);
+    expect(X.leg[p]).toBe(0);
+    expect(Math.hypot(sim.x[p] - X.xp[p * 4], sim.z[p] - X.xp[p * 4 + 1])).toBeLessThan(0.05);
+    // square across the painted crosswalk, just past the stop line of the street it crosses
+    expect(Math.abs(Math.hypot(X.xp[p * 4] - X.xp[p * 4 + 2], X.xp[p * 4 + 1] - X.xp[p * 4 + 3]) - (11 + 1))).toBeLessThan(0.3);
+    drive(sim, 25, 45); // the main road's red comes round: over they go
+    expect(X.state[p] !== 11 || X.leg[p] > 0).toBe(true);
+  });
+
+  it('at a corner with no light, a walker lets the car coming go by, then crosses behind it', () => {
+    const { sim, c, init } = scene(cross('primary', 11, 'residential', 6.5));
+    const ew = ewBits(init);
+    // the car: on the main road's east arm heading west, 50 m out at 12 m/s
+    let ce = -1;
+    for (let k = 0; k < init.edgeLen.length; k++) { const a = init.edgeStart[k] * 3, P = init.edgePts; if (Math.abs(P[a + 2]) < 0.1 && Math.max(P[a], P[(init.edgeStart[k] + init.edgeCount[k] - 1) * 3]) > 50) ce = k; }
+    const ca = init.edgeStart[ce] * 3, cdir = init.edgePts[ca] > 1 ? 1 : -1; // toward the centre
+    const setCar = () => { sim.active[c] = 1; sim.edge[c] = ce; sim.dir[c] = cdir; sim.s[c] = cdir > 0 ? init.edgeLen[ce] - 50 : 50; sim.speed[c] = 12; };
+    const { p, X } = atCorner(sim, init, 0, setCar, (m) => (m & ew) !== 0);
+    let crossedAt = -1, hit = 0;
+    for (let t = 0.05; t < 20; t += 0.05) {
+      sim.setEnv({ playerX: 40, playerZ: 30, hour: 12, night: 0, density: 0, wind: 0, clock: t });
+      sim.step(0.05);
+      if (crossedAt < 0 && X.state[p] === 11 && X.leg[p] > 0) crossedAt = t;
+      if (struck(sim, p, c)) hit++;
+    }
+    expect(hit).toBe(0);
+    expect(crossedAt).toBeGreaterThan(3); // not in front of it
+    expect(crossedAt).toBeLessThan(10); // but promptly once it's by
+  });
+
+  it('cars wait at the line for someone crossing in front of them', () => {
+    const { sim, c, init } = scene(cross('primary', 11, 'residential', 6.5, 300));
+    const ew = ewBits(init);
+    let ce = -1;
+    for (let k = 0; k < init.edgeLen.length; k++) { const a = init.edgeStart[k] * 3, P = init.edgePts; if (Math.abs(P[a + 2]) < 0.1 && Math.max(P[a], P[(init.edgeStart[k] + init.edgeCount[k] - 1) * 3]) > 50) ce = k; }
+    const ca = init.edgeStart[ce] * 3, cdir = init.edgePts[ca] > 1 ? 1 : -1;
+    // the car is far enough off that the walker sets out — and arrives while they're still crossing
+    const setCar = () => { sim.active[c] = 1; sim.edge[c] = ce; sim.dir[c] = cdir; sim.s[c] = cdir > 0 ? init.edgeLen[ce] - 130 : 130; sim.speed[c] = 12; };
+    const { p, X } = atCorner(sim, init, 0, setCar, (m) => (m & ew) !== 0);
+    let hit = 0, waited = false, crossed = false;
+    for (let t = 0.05; t < 40; t += 0.05) {
+      sim.setEnv({ playerX: 40, playerZ: 30, hour: 12, night: 0, density: 0, wind: 0, clock: t });
+      sim.step(0.05);
+      if (struck(sim, p, c)) hit++;
+      if (X.state[p] === 11 && X.leg[p] === 1) crossed = true;
+      if (X.state[p] === 11 && X.leg[p] === 1 && sim.edge[c] === ce && sim.speed[c] < 0.3) waited = true;
+    }
+    expect(crossed).toBe(true);
+    expect(hit).toBe(0);
+    expect(waited).toBe(true);
+    expect(sim.edge[c]).not.toBe(ce); // and then drove on
   });
 
   it('comes to a full stop at a stop sign, then pulls out', () => {
@@ -140,9 +221,60 @@ describe('junction control: the traffic obeys it', () => {
     for (let t = 0; t < 30 && sim.edge[c] === e; t += 0.05) {
       sim.setEnv({ playerX: 40, playerZ: 30, hour: 12, night: 0, density: 0, wind: 0, clock: t });
       sim.step(0.05);
-      if (sim.speed[c] < 0.3 && sim.z[c] < 12) stopped = true;
+      if (sim.speed[c] < 0.3 && sim.z[c] < 11 / 2 + 1.5 + STOP_BACK + 1) stopped = true;
     }
     expect(stopped).toBe(true);
     expect(sim.edge[c]).not.toBe(e);
+  });
+});
+
+describe('a busy grid of streets, three minutes of it', () => {
+  // three avenues by three streets: a main road, a secondary one (their crossing is signalled), the
+  // rest residential (all-way stops, stop signs onto the bigger roads)
+  const line = (c: string, w: number, fixed: number, ns: boolean) => {
+    const pts: [number, number][] = [];
+    for (const t of [-250, -150, 0, 150, 250]) pts.push(ns ? [fixed, t] : [t, fixed]);
+    return road(c, w, pts);
+  };
+  const roads = [
+    line('primary', 11, 0, false), line('residential', 6.5, -150, false), line('residential', 6.5, 150, false),
+    line('secondary', 9, 0, true), line('residential', 6.5, -150, true), line('residential', 6.5, 150, true),
+  ];
+  const base: LifeBase = { seed: 11, bounds: [-400, -400, 400, 400], beachPts: new Float32Array(0), waterGrid: new Uint8Array(1), waterG: [0, 0, 8, 1, 1], downtown: [-200, -200, 200, 200], seaward: [1, 0] };
+  const walk = { outdoorSurfaceAt: () => 0 } as unknown as Parameters<typeof buildLifeInit>[2];
+
+  it('nobody walks through a car, and no two cars drive fused together', () => {
+    const init = buildLifeInit(base, roads, walk, [], [packJunctions(analyzeJunctions(roads, [], true))]);
+    const sim = new LifeSim(init);
+    let pedHits = 0, fused = 0, crossings = 0, cars = 0, peds = 0, moved = 0, longest = 0;
+    const still = new Float32Array(RANGES.cars[1]);
+    const X = sim as unknown as { state: Uint8Array };
+    const [c0, c1] = RANGES.cars, [p0, p1] = RANGES.peds;
+    for (let t = 0; t < 180; t += 0.05) {
+      sim.setEnv({ playerX: 10, playerZ: 10, hour: 12, night: 0, density: 1, wind: 0, clock: t });
+      sim.step(0.05);
+      if (t < 10) continue;
+      for (let c = c0; c < c1; c++) {
+        still[c] = sim.active[c] && sim.speed[c] < 0.3 ? still[c] + 0.05 : 0;
+        longest = Math.max(longest, still[c]);
+        if (!sim.active[c]) continue;
+        cars++; moved += sim.speed[c];
+        const fx = -Math.sin(sim.yaw[c]), fz = -Math.cos(sim.yaw[c]);
+        for (let p = p0; p < p1; p++) {
+          if (!sim.active[p] || (X.state[p] !== 0 && X.state[p] !== 11) || sim.y[p] < -500) continue;
+          const dx = sim.x[p] - sim.x[c], dz = sim.z[p] - sim.z[c];
+          if (Math.abs(dx * fx + dz * fz) < 2.3 && Math.abs(dx * -fz + dz * fx) < 1.0) pedHits++;
+        }
+        for (let d = c + 1; d < c1; d++) if (sim.active[d] && Math.hypot(sim.x[d] - sim.x[c], sim.z[d] - sim.z[c]) < 2.5) fused++;
+      }
+      for (let p = p0; p < p1; p++) if (sim.active[p]) { peds++; if (X.state[p] === 11) crossings++; }
+    }
+    expect(cars / 3400).toBeGreaterThan(30); // (cars on the road, per tick)
+    expect(crossings).toBeGreaterThan(200); // people do cross
+    expect(pedHits).toBe(0);
+    expect(fused).toBe(0);
+    // and the traffic flows: queues at the lights and the crosswalks, but nobody stuck for good
+    expect(moved / cars).toBeGreaterThan(1);
+    expect(longest).toBeLessThan(150);
   });
 });

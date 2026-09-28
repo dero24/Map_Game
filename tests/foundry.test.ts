@@ -5,6 +5,7 @@ import { CRITTERS, critterGeometry } from '../src/assets/fauna';
 import { MAILBOXES, mailboxGeometry, gearGeometry, gearFor, CAR_GEAR, umbrellaGeometry, picnicTableGeometry } from '../src/assets/furniture';
 import { fibCount, fibSphere, hashf, variantAt } from '../src/assets/core';
 import { personGeometry, HAIRSTYLES, MARK, warmthFor } from '../src/assets/people';
+import { dogLib } from '../src/assets/fauna';
 import * as D from '../src/assets/decor';
 
 const bb = (g: THREE.BufferGeometry) => (g.computeBoundingBox(), g.boundingBox!);
@@ -34,6 +35,19 @@ describe('flora', () => {
       expect(meta.crownBottom).toBeLessThan(meta.h);
       expect(verts(geo)).toBeLessThan(1500);
       expect(verts(treeGeometry(k, v).geo)).toBe(verts(geo));
+    }
+  });
+  it('the broadleaf species read as themselves', () => {
+    for (let v = 0; v < TREE_VARIANTS; v++) {
+      const w = treeGeometry('willow', v).meta, p = treeGeometry('poplar', v).meta, c = treeGeometry('cherry', v).meta, m = treeGeometry('magnolia', v).meta, e = treeGeometry('elm', v).meta;
+      expect(w.crownBottom).toBeLessThan(1.6); // the curtain hangs to near the ground
+      expect(w.crownR).toBeGreaterThan(2.5);
+      expect(p.crownR / p.h).toBeLessThan(0.16); // a column
+      expect(c.h).toBeLessThan(7); // low and spreading
+      expect(c.crownR / c.h).toBeGreaterThan(0.45);
+      expect(m.crownBottom).toBeLessThan(1.3); // foliage nearly to the lawn
+      expect(e.crownBottom / e.h).toBeLessThan(0.56); // (the vase stays a street tree, not a lollipop)
+      expect(e.crownR).toBeGreaterThan(3.5);
     }
   });
   it('variants differ', () => {
@@ -78,6 +92,12 @@ describe('fauna', () => {
     expect(partCount(critterGeometry('songbird'), 7)).toBeGreaterThan(0); // wings
     expect(partCount(critterGeometry('hawk'), 7)).toBeGreaterThan(0); // the hawk soars on the bird plan
     expect(partCount(critterGeometry('fox'), 5)).toBeGreaterThan(0); // the brush
+    // the walkers' dogs: the fox plan, coat tintable, on its feet, a tail that wags
+    const dog = dogLib();
+    expect(finite(dog)).toBe(true);
+    expect(Math.abs(bb(dog).min.y)).toBeLessThan(0.03);
+    expect(verts(dog)).toBeLessThan(1600);
+    expect(partCount(dog, 5)).toBeGreaterThan(0);
     const hb = new THREE.Box3().setFromBufferAttribute(critterGeometry('hawk').getAttribute('position') as THREE.BufferAttribute);
     expect(hb.max.x - hb.min.x).toBeGreaterThan(0.5); // a raptor's wingspan, not a songbird's
   });
@@ -106,9 +126,10 @@ describe('people', () => {
     expect(Math.abs(b.min.y)).toBeLessThan(0.02);
     expect(b.max.y).toBeGreaterThan(1.65);
     expect(b.max.y).toBeLessThan(1.85);
-    expect(verts(g)).toBeLessThan(1600);
+    expect(verts(g)).toBeLessThan(1800); // (headphones joined the wardrobe: 180 vertices)
     for (const id of [1, 2, 5, 6]) expect(partCount(g, id)).toBeGreaterThan(0); // legs and arms swing
     HAIRSTYLES.forEach((_, i) => expect(partCount(g, 9 + i)).toBeGreaterThan(0));
+    expect(partCount(g, 14)).toBeGreaterThan(0); // headphones, worn per person
     const col = g.getAttribute('color');
     for (const m of Object.values(MARK)) {
       let n = 0;

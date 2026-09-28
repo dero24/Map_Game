@@ -43,4 +43,12 @@ describe('seasons', () => {
     expect(dayOfYear(Date.UTC(2026, 0, 1, 12))).toBe(1);
     expect(dayOfYear(Date.UTC(2026, 8, 27, 12))).toBe(270);
   });
+  it('the cherries blossom in spring, not in autumn', () => {
+    const MAY = 125;
+    const nj = (d: number) => seasonAt(40.36, -73.97, 5, d).bloom;
+    expect(Math.max(nj(APR), nj(MAY), nj(95))).toBeGreaterThan(0.5); // New Jersey, April–May
+    expect(nj(OCT)).toBe(0);
+    expect(nj(JUL)).toBe(0);
+    expect(nj(JAN)).toBe(0);
+  });
 });

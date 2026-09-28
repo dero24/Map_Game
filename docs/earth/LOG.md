@@ -2,6 +2,65 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-28 (q) — Crosswalks, dogs and joggers, squirrels on the bark, fewer animals downtown, six new trees
+
+Robby's play-test list (backlog §10), the P0s that live in the sim and the foundry.
+
+- **Crosswalks** (`lifeSim.ts`, R.15): a walker at a junction corner plans the way over — the next
+  street's sidewalk chosen so they cross the fewest streets (people cross once, not diagonally
+  through the box) — and walks round the corner to the kerb at the **painted crosswalk** (the
+  ladder `groundPaint` draws at the setback + 1.2 m), waits there, crosses square to the far kerb
+  (`CROSS` legs 0/1/2), and walks on. At a signal they start only on the walk (the crossed
+  street's red, its first 10 s — then the hand flashes and turning cars get the rest of the
+  green); elsewhere only in a real gap (no car whose way through the junction crosses theirs — a
+  car still deciding counts — could arrive before they're over, none in the box, none turning
+  into their street), with courtesy to a car that has waited 8 s. After 25 s they go at the first
+  gap a car can stop for.
+- **Cars stop for them** (`lifeSim.ts`): the stop line moved back — a waiting car's bumper is just
+  short of the crosswalk (`STOP_BACK` 5.4 m behind the setback; the stop sign now stands there
+  too, `props.ts`) — and a car holds at its line for anyone crossing the street it's on or the one
+  it's turning into (looked for from a comfortable braking distance), and a car already in the box
+  stops short of a crosswalk someone has stepped onto. Cars never spawn inside a junction box or
+  within braking distance of one.
+- **No more fused cars** (R.2): a signal no longer overwrote the left-turn yield (it did — left
+  turners crossed oncoming traffic at every light); the oncoming queue at a green goes first unless
+  the left turner has waited out a whole red, when it takes the box and the queue waits; two lanes
+  merging into one zip (the car in front in the other lane leads); a car rolling into the box from
+  another approach, bound for the same lane, goes first; anyone standing in the box across your
+  lane is in front of you whatever edge the graph put them on; a duplicated way is one edge
+  (`life.ts`); the 25 s jam breaker never overrides a red, a turn across traffic or a crossing.
+  **A 3-minute busy grid** (primary × secondary signal, all-way stops, 46 cars, 343 walkers):
+  0 walker-in-car ticks (was 2,656), 0 fused-car ticks (was 294), no car stuck > 150 s.
+- **People variety** (R.11, part): dog walkers (a dog on a lead trotting ahead — coat by hash —
+  it stops to sniff), joggers (running pose: elbows bent, leaning into a longer stride; they never
+  stop to chat), headphones on one walker in seven and more than half the joggers.
+- **Animals by habitat** (R.7): grazers and burrowers never on pavement (a paved-lot/plaza index
+  from the tiles), squirrels not placed on the paved spot under a street tree, and every species'
+  count scaled down in town (a downtown gets fewer). Sea Bright's busiest junction: 5 squirrels,
+  8 butterflies, 2 songbirds, 1 rabbit within 90 m.
+- **Squirrels on the bark** (R.8): the climb stops at the scaled tree's crown bottom (not the
+  model's height) and the squirrel's feet sit on the trunk's surface at that height — its real
+  radius (tapering), leaning with the tree (`TreeMeta.lean`, instance yaw/scale from
+  `ctx.instances`, which now skips hidden meshes).
+- **Six new trees** (R.5, `flora.ts`): maple (dense oval crown, scarlet in autumn), weeping willow
+  (a dome and a curtain of tresses that swing in the wind — `propMaterial` WEEP — by fresh water),
+  American elm (a vase of limbs under a broad dome, gold in autumn), columnar poplar (a spindle; a
+  dark cypress on a Mediterranean hill), southern magnolia (evergreen, dark, an egg of foliage to
+  the lawn), flowering cherry (low and spreading, pink in April — `season.ts` bloom, BLOSSOM).
+  Picked per spot by region and subregion (maples and elms in the Northeast and Midwest,
+  magnolias in the South, cherries and bigleaf maples in the PNW, poplars in the mountains) and by
+  a LiDAR crown's proportions (slim → poplar, broad → oak/elm); within 600 m of Sea Bright's
+  centre: 334 round, 269 oak, 178 maple, 66 elm, 63 poplar, 34 cherry, 32 willow, 291 pine.
+- **Map search → landmark**: a landmark result (tower, monument, attraction…) lands you on open
+  ground 90–220 m off, facing it (the Space Needle put you at its podium door); `view=1` carries it
+  across a reload.
+- Harnesses: `tools/street-shots.js` (`__STREET__`: crosswalk, dog walker, jogger, squirrels,
+  downtown animal counts), `tools/tree-shots.js` (`__TREES__` studio rows, `__SPECIES__` in-world).
+- Verified: typecheck; 168 tests (container runner) incl. crossing tests (waits at its kerb for the
+  light on the painted crosswalk; lets the car coming go by then crosses; a car waits at the line
+  for someone crossing) and the busy grid; montages `street-q3`, `trees-p1..3`,
+  `species-seabright`.
+
 ## 2026-09-27 (p) — Traffic that follows the rules, people who do things: junction control, lit signals, stop signs, chats, window shopping, staff at work, residents who sit properly
 
 Acting on the expert (Nintendo/Rockstar-bar) review's top two items — "cars follow traffic" and

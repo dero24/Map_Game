@@ -50,6 +50,7 @@ export const U = {
   uSnow: { value: 0 },
   uLeafFall: { value: 0 },
   uAutumn: { value: 0 },
+  uBloom: { value: 0 }, // spring blossom on the flowering trees (season.ts bloom)
   // Phase I biome wash for the ground: x = dryness (greens → straw/ochre), y = lushness,
   // z = cold/dark (boreal/polar greens). Set once per region from styles.ts.
   uBiome: { value: new THREE.Vector4(0, 0, 0, 0) },
@@ -94,7 +95,7 @@ uniform vec4 uLampBox;
 uniform float uLampBaseY;
 uniform vec3 uLampColor;
 uniform float uLampPower, uPigment, uPigmentScale, uWind;
-uniform float uSnow, uLeafFall, uAutumn;
+uniform float uSnow, uLeafFall, uAutumn, uBloom;
 uniform vec4 uBiome;
 uniform vec4 uSliceBox;
 uniform vec4 uHoleBox, uHoleInfo;

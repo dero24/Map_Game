@@ -266,6 +266,13 @@ export function critterGeometry(kind: CritterKind): THREE.BufferGeometry {
 }
 export const critterLib = (k: CritterKind) => cached(`critter:${k}`, () => critterGeometry(k));
 
+// A dog on a lead (life.ts walks it beside its walker): the fox plan a little bigger and
+// stockier, the coat all tintable (white) so the instance colour makes the breed's coat —
+// golden, black, chocolate, grey, cream — with dark eyes and nose. Animated by the fox's gait.
+QUAD['dog' as CritterKind] = { base: 'fox', k: 1.18, coat: 0xffffff, belly: 0xffffff, stock: 0xffffff, tailTip: 0xffffff, ear: 0.85, earC: 0xffffff };
+export const DOG_COATS = [0xd9a860, 0x2a2624, 0x6b4a32, 0xe8dcc4, 0x8a8680, 0xb07040, 0xf2ece0, 0x3a2e28];
+export const dogLib = () => cached('critter:dog', () => critterGeometry('dog' as CritterKind));
+
 // Per-species animation constants: x hind-leg phase offset (bound 0.5π, walk π), y tail swing,
 // z wing flap, w head bob.
 // Limb swing amplitude (radians at full gait) per species.

@@ -15,6 +15,11 @@ export const RANK: Record<string, number> = {
   residential: 2, unclassified: 2, living_street: 2, pedestrian: 1, footway: 0, path: 0,
 };
 
+/** A car waiting at a junction stops with its centre this far behind the setback (the junction's
+ *  kerb line + 1.5 m): its bumper just short of the painted crosswalk, which the walkers use —
+ *  and the stop sign stands at its bumper. */
+export const STOP_BACK = 5.4;
+
 /** What a driver arriving along an arm must do. */
 export const CTL = { GO: 0, STOP: 1, YIELD: 2, SIG_A: 3, SIG_B: 4, ALL_STOP: 5 } as const;
 

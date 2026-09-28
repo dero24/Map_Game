@@ -12,14 +12,14 @@ import { carMix, boatMix, carLib, boatLib, boatRecipe, carRecipe, pickFrom, CAR_
 import type { Mailbox, Door, Drive } from './buildings';
 import { makeCanvas } from './canvas';
 import { activeStyle, pickWeighted } from './styles';
-import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, plantLib, inBloom, SPECIES, STAGES, type PlantSpecies } from '../assets/flora';
+import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, plantLib, inBloom, SPECIES, STAGES, FALL_HUE, DECIDUOUS, type PlantSpecies } from '../assets/flora';
 import { MAILBOXES, mailboxLib, beachLib, gearFor, type MailboxStyle, type CarGear } from '../assets/furniture';
 import { variantAt, hashf } from '../assets/core';
 import { cafeSet, mergeDecor } from '../assets/decor';
 import { personGeometry } from '../assets/people';
 import { creatureMaterial } from '../render/creature';
 import { useOf, terraceUse } from './uses';
-import { analyzeJunctions, packJunctions, signalKey, CTL, type Junction } from '../sim/traffic';
+import { analyzeJunctions, packJunctions, signalKey, CTL, type Junction, STOP_BACK } from '../sim/traffic';
 
 type P = [number, number];
 const unpackPts = (f: number[]): P[] => {
@@ -551,7 +551,29 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   const birchy = look0().climate === 'boreal' || look0().climate === 'continental';
   const desert = look0().climate === 'arid';
   // the region re-reads a broadleaf as its own tree: palms where it's warm by the sea, birches up north
-  const regional = (k: number, x: number, z: number) => {
+  // Past round and oak, the broadleaf mix of the region and the spot: maples and elms up north,
+  // magnolias in the South, cherries in PNW and town yards, columnar poplars (on a Mediterranean
+  // hill, the cypress), willows where fresh water is close. Indices are TREE_KINDS'.
+  const MAPLE = 9, WILLOW = 10, ELM = 11, POPLAR = 12, MAGNOLIA = 13, CHERRY = 14;
+  const clim = look0().climate, sub = look0().sub;
+  const BROAD: [number, number][] =
+    clim === 'mediterranean' ? [[0, 1.6], [1, 2.2], [POPLAR, 1.4], [MAGNOLIA, 0.3]]
+      : clim === 'tropical' ? [[0, 3], [MAGNOLIA, 1]]
+        : clim === 'arid' || clim === 'polar' ? [[0, 1]]
+          : sub === 'south' ? [[0, 2.4], [1, 3], [MAPLE, 1.1], [MAGNOLIA, 1.6], [CHERRY, 0.4], [ELM, 0.5], [POPLAR, 0.2]]
+            : sub === 'pnw' ? [[0, 2], [1, 0.6], [MAPLE, 3], [CHERRY, 0.9], [POPLAR, 0.7], [ELM, 0.3]]
+              : sub === 'mountain' ? [[0, 2], [1, 0.4], [POPLAR, 1.8], [MAPLE, 1]]
+                : sub === 'midwest' ? [[0, 2.5], [1, 2.2], [MAPLE, 2.4], [ELM, 1.4], [CHERRY, 0.3], [POPLAR, 0.6]]
+                  : [[0, 2.5], [1, 2], [MAPLE, 2.6], [ELM, 1.1], [CHERRY, 0.6], [POPLAR, 0.4]]; // the Northeast (and temperate elsewhere)
+  /** `ratio`: a measured crown's radius / height (LiDAR) — slim reads columnar, broad spreading. */
+  const broad = (k: number, x: number, z: number, ratio = 0) => {
+    const u = hashf(Math.floor(x * 1.7) * 104729 + Math.floor(z * 2.3) * 7919 + 17), u2 = hashf(Math.floor(x * 2.9) * 7919 + Math.floor(z * 1.3) * 104729 + 29);
+    if (clim !== 'arid' && clim !== 'polar' && terrain.sdfAt(x, z) < 28 && terrain.oceanDistAt(x, z) > 250 && u < 0.4) return WILLOW; // a bank
+    if (u2 < 0.35) return k; // (the caller's round / oak stands)
+    const ws = BROAD.map(([kk, w]) => w * (!ratio ? 1 : ratio < 0.3 ? (kk === POPLAR ? 6 : kk === ELM || kk === 1 || kk === CHERRY ? 0.2 : 1) : ratio > 0.45 ? (kk === POPLAR || kk === MAGNOLIA ? 0.1 : kk === 1 || kk === ELM ? 1.8 : 1) : 1));
+    return BROAD[pickWeighted(ws, u)][0];
+  };
+  const regional = (k: number, x: number, z: number, ratio = 0) => {
     if (k > 1) return k;
     const u = hashf(Math.floor(x * 3.1) * 7919 + Math.floor(z * 2.7) * 104729);
     // palms by climate: coconut palms in the tropics, Washingtonia fan palms on dry coasts
@@ -560,7 +582,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     // the desert's own shade trees: mesquite and palo verde (a few fan palms in town)
     if (desert) return u < 0.14 ? 8 : 7;
     if (birchy && k === 0 && u < 0.35) return 6;
-    return k;
+    return broad(k, x, z, ratio);
   };
   // When a tile box is provided the scan only walks cells this tile owns — neighbours cover
   // the rest. Without one (legacy single-tile worlds) it covers slice + margin as before.
@@ -666,14 +688,14 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       else if (slim && rng.float() < Math.min(1, conifer * 3)) k = look.trees[4] > look.trees[3] ? 4 : 3;
       else if (!slim && conifer > 0.6 && rng.float() < 0.5) k = look.trees[4] > look.trees[3] ? 4 : 3;
       else k = r / h > 0.42 || rng.float() < look.trees[1] / Math.max(0.01, look.trees[0] + look.trees[1]) ? 1 : 0;
-      k = regional(k, x, z);
+      k = regional(k, x, z, r / h);
       let v = variantAt(x, z, TREE_VARIANTS, 11);
       // In town, silhouette decides: street and yard trees are broadleaf with the crown filling
       // the upper half or more. Conifers only where the region is mostly conifer, and no model
       // whose bare trunk would be stretched into a lollipop by the measured height.
       if (k !== 2 && walk.blocked(x, z, 14)) {
         if ((k === 3 || k === 4) && conifer <= 0.5) k = r / h > 0.42 ? 1 : 0;
-        if (k !== 7 && k !== 8 && k !== 5 && treeMeta(TREE_KINDS[k], v).crownBottom / treeMeta(TREE_KINDS[k], v).h > 0.56) k = regional(r / h > 0.42 ? 1 : 0, x, z);
+        if (k !== 7 && k !== 8 && k !== 5 && treeMeta(TREE_KINDS[k], v).crownBottom / treeMeta(TREE_KINDS[k], v).h > 0.56) k = regional(r / h > 0.42 ? 1 : 0, x, z, r / h);
         v = variantAt(x, z, TREE_VARIANTS, 11);
       }
       const tm = treeMeta(TREE_KINDS[k], v);
@@ -849,14 +871,21 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       if (!list.length) continue;
       const tm = treeMeta(TREE_KINDS[k], v);
       const crown: [number, number] = [tm.crownBottom + 0.85 * tm.crownR, tm.crownR];
-      // broadleaf crowns colour and fall with the season; conifers, palms and the desert legumes keep theirs
-      const decid = ['round', 'oak', 'birch', 'shrub'].includes(TREE_KINDS[k]);
-      const im = new THREE.InstancedMesh(treeLib(TREE_KINDS[k], v).clone(), propMaterial({ wind: true, foliage: true, crown, decid }), list.length);
-      im.name = `trees:${TREE_KINDS[k]}:${v}`;
-      // the desert legumes wear their own foliage whatever the regional greens: mesquite a dusty
-      // grey-green, palo verde (variant 2) a thin yellow-green
-      const own = TREE_KINDS[k] === 'mesquite' ? new THREE.Color(v === 2 ? 0xa3ad55 : 0x7f8a5c) : null;
-      list.forEach((t, i) => { im.setMatrixAt(i, t.m); im.setColorAt(i, own ? own.clone().lerp(t.c, 0.2) : t.c); });
+      // broadleaf crowns colour and fall with the season (each species its own autumn); conifers,
+      // palms, magnolias and the desert legumes keep theirs
+      const kind = TREE_KINDS[k];
+      const decid = DECIDUOUS.has(kind);
+      const im = new THREE.InstancedMesh(treeLib(kind, v).clone(), propMaterial({ wind: true, foliage: true, crown, decid, fallHue: FALL_HUE[kind] ?? 0, blossom: kind === 'cherry', weep: kind === 'willow' }), list.length);
+      im.name = `trees:${kind}:${v}`;
+      // a species' own green over the region's: the desert legumes a dusty grey-green (palo verde a
+      // thin yellow-green), the willow a soft yellow-green, the magnolia dark and glossy, the
+      // cypress-dark poplar of a Mediterranean hill
+      const own = kind === 'mesquite' ? [new THREE.Color(v === 2 ? 0xa3ad55 : 0x7f8a5c), 0.8]
+        : kind === 'willow' ? [new THREE.Color(0xa9b857), 0.6]
+          : kind === 'magnolia' ? [new THREE.Color(0x2c4a2a), 0.6]
+            : kind === 'poplar' ? [new THREE.Color(clim === 'mediterranean' ? 0x2f4a2c : 0x4f6e34), clim === 'mediterranean' ? 0.7 : 0.35]
+              : kind === 'maple' ? [new THREE.Color(0x6b8c3a), 0.3] : null;
+      list.forEach((t, i) => { im.setMatrixAt(i, t.m); im.setColorAt(i, own ? t.c.clone().lerp(own[0] as THREE.Color, own[1] as number) : t.c); });
       im.layers.enable(1);
       im.computeBoundingSphere();
       group.add(im);
@@ -1182,8 +1211,10 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
           mastData.push(new THREE.Color(J.key, m.ctl === CTL.SIG_B ? 1 : 0, 1));
           walk.addLoop([[x - 0.18, z - 0.18], [x + 0.18, z - 0.18], [x + 0.18, z + 0.18], [x - 0.18, z + 0.18]]);
         } else if (m.ctl === CTL.STOP || m.ctl === CTL.ALL_STOP || m.ctl === CTL.YIELD) {
-          // the sign at the stop line, on the kerb to the right, facing the arrivals
-          const x = J.x + m.dx * (J.setback + 0.4) + right[0] * (m.w / 2 + 0.7), z = J.z + m.dz * (J.setback + 0.4) + right[1] * (m.w / 2 + 0.7);
+          // the sign at the stop line (where a stopped car's bumper is, behind the crosswalk), on
+          // the kerb to the right, facing the arrivals
+          const back = J.setback + STOP_BACK - 2.1;
+          const x = J.x + m.dx * back + right[0] * (m.w / 2 + 0.7), z = J.z + m.dz * back + right[1] * (m.w / 2 + 0.7);
           if (walk.blocked(x, z, 0.25) || terrain.sdfAt(x, z) < 1) continue;
           const mt = new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(m.dx, m.dz)), V(1, 1, 1));
           (m.ctl === CTL.YIELD ? yieldSigns : m.ctl === CTL.ALL_STOP && na ? allWay : stopSigns).push(mt);

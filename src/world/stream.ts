@@ -230,6 +230,48 @@ export class TileStream {
     return m;
   }
 
+  /** Shops and offices per 80 m cell — where a town's main street is. */
+  shopGrid() {
+    const m = new Map<number, number>();
+    for (const f of this.footprints)
+      if (f.kind === 'commercial') {
+        const k = Math.floor(f.ring[0][0] / 80) * 92821 + Math.floor(f.ring[0][1] / 80);
+        m.set(k, (m.get(k) ?? 0) + 1);
+      }
+    return m;
+  }
+  /** Paved open ground by 40 m cell: parking lots and plazas (rings) and carriageways (segments
+   *  with their half width) — where wildlife doesn't graze. */
+  pavedIndex() {
+    const idx = new Map<number, ({ ring: [number, number][] } | { seg: [number, number, number, number, number] })[]>();
+    const add = (x0: number, z0: number, x1: number, z1: number, it: { ring: [number, number][] } | { seg: [number, number, number, number, number] }) => {
+      for (let i = Math.floor(x0 / 40); i <= Math.floor(x1 / 40); i++)
+        for (let j = Math.floor(z0 / 40); j <= Math.floor(z1 / 40); j++) {
+          const k = i * 92821 + j;
+          (idx.get(k) ?? idx.set(k, []).get(k)!).push(it);
+        }
+    };
+    for (const a of this.loaded.values()) {
+      for (const ar of a.areas) {
+        if (ar.c !== 'parking' && ar.c !== 'plaza') continue;
+        const o = ar.o[0];
+        if (!o || o.length < 6) continue;
+        const ring: [number, number][] = [];
+        let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+        for (let i = 0; i + 1 < o.length; i += 2) { const x = o[i] / 10, z = o[i + 1] / 10; ring.push([x, z]); x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+        add(x0, z0, x1, z1, { ring });
+      }
+      for (const r of a.primRoads) {
+        if (r.lod || !r.w || ['footway', 'path', 'cycleway', 'steps', 'track', 'bridleway'].includes(r.c)) continue;
+        for (let i = 0; i + 3 < r.p.length; i += 2) {
+          const ax = r.p[i] / 10, az = r.p[i + 1] / 10, bx = r.p[i + 2] / 10, bz = r.p[i + 3] / 10, hw = r.w / 2 + 0.5;
+          add(Math.min(ax, bx) - hw, Math.min(az, bz) - hw, Math.max(ax, bx) + hw, Math.max(az, bz) + hw, { seg: [ax, az, bx, bz, hw] });
+        }
+      }
+    }
+    return idx;
+  }
+
   /** Built volume per 80 m cell (Σ footprint area × height) — how much city stands around you. */
   cityGrid() {
     const m = new Map<number, number>();

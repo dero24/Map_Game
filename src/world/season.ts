@@ -15,6 +15,8 @@ export interface Season {
   leafFall: number;
   /** 0..1 autumn colour in the leaves still up */
   autumn: number;
+  /** 0..1 spring blossom on the flowering trees (cherries): the warming weeks near 11 °C */
+  bloom: number;
   /** elevation (m) above which the far mountains are white */
   snowline: number;
   /** the lagged mean air temperature (°C) at the given elevation — for tests and tuning */
@@ -52,10 +54,13 @@ export function seasonAt(lat: number, lon: number, elev: number, doy: number): S
   const d = lat < 0 ? doy + 182.5 : doy;
   const cooling = Math.sin((2 * Math.PI * (d - 20)) / 365.25) < 0;
   const autumn = cooling ? Math.min(1, Math.max(0, 1 - Math.abs(T - 13) / 5)) * (1 - 0.5 * leafFall) : 0;
+  // (the unlagged air: blossom opens with the first warm weeks, before the canopy has filled)
+  const Ta = meanTemp(lat, lon, elev, doy);
+  const bloom = !cooling ? Math.min(1, Math.max(0, 1 - Math.abs(Ta - 11.5) / 3.5)) : 0;
   // the far mountains: white where the (unlagged-enough) mean at that height is below −2 °C
   const sea = meanTemp(lat, lon, 0, doy - 12);
   const snowline = Math.max(250, ((sea + 2) / 6.5) * 1000);
-  return { snow, leafFall, autumn, snowline, temp: T };
+  return { snow, leafFall, autumn, bloom, snowline, temp: T };
 }
 
 /** Day of the year (1..366) of a timestamp, in UTC. */

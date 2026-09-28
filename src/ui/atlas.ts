@@ -108,9 +108,9 @@ export class Atlas {
     el.classList.remove('hidden');
     el.querySelector('button')!.onclick = go;
   }
-  private go(lat: number, lon: number) {
+  private go(lat: number, lon: number, kind?: string) {
     this.toggle(false);
-    void this.g.teleport(lat, lon);
+    void this.g.teleport(lat, lon, kind);
   }
 
   private localItems() {
@@ -171,7 +171,7 @@ export class Atlas {
     const el = this.$('atlas-pop');
     const cv = this.$('atlas-map');
     const [sx, sy] = far ? [cv.clientWidth / 2, cv.clientHeight / 2] : this.map.toScreen(x, z).map((v) => v / devicePixelRatio);
-    this.pop(sx, sy, `<b>${esc(r.name)}</b><br><span>${esc(r.detail)}</span>${far ? '<br><span>far from here — the world will repaint around you</span>' : ''}`, () => this.go(r.lat, r.lon));
+    this.pop(sx, sy, `<b>${esc(r.name)}</b><br><span>${esc(r.detail)}</span>${far ? '<br><span>far from here — the world will repaint around you</span>' : ''}`, () => this.go(r.lat, r.lon, r.kind));
     el.classList.remove('hidden');
   }
 

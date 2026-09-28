@@ -32,7 +32,7 @@ import { modelName } from './player/vehicles';
 import { Critters } from './sim/critters';
 import { rhythmFor } from './sim/protocol';
 import { Garden } from './ui/garden';
-import { SPECIES } from './assets/flora';
+import { SPECIES, TREE_KINDS, treeMeta } from './assets/flora';
 import { Interiors, type Plan } from './world/interiors';
 import { applyAtmosphere, type Weather } from './world/atmosphere';
 import { U } from './render/shared';
@@ -342,9 +342,26 @@ async function main() {
   await stream.ensureAround(spawn.x, spawn.z);
   if (atPos) teleportLocal(atPos[0], atPos[1]);
 
+  // A landmark (a tower, a monument, an attraction) is arrived at from where it's seen: open
+  // ground ~90–220 m off, facing it and looking a little up — not at its front door, where a
+  // 180 m tower is a wall beside you (the Space Needle search "took me far away from it").
+  const LANDMARK = /tower|attraction|monument|memorial|viewpoint|castle|stadium|lighthouse|landmark|museum|bridge|arena|cathedral|observation/i;
+  const viewpoint = (x: number, z: number) => {
+    for (const D of [120, 160, 90, 220])
+      for (let k = 0; k < 16; k++) {
+        const a = (k / 16) * Math.PI * 2 + 0.3, px = x + Math.sin(a) * D, pz = z + Math.cos(a) * D;
+        if (!walk.walkable(px, pz) || walk.buildingAt(px, pz) >= 0 || walk.blocked(px, pz, 1.2) || world.terrain.sdfAt(px, pz) < 2) continue;
+        spawn = { x: px, z: pz, yaw: Math.atan2(px - x, pz - z), y: undefined };
+        walker.place(px, pz, spawn.yaw, 0.2);
+        return true;
+      }
+    return false;
+  };
+  if (atPos && params.get('view') === '1') viewpoint(atPos[0], atPos[1]);
   // Runtime teleport (G): same door-snap rule, waiting for the neighbourhood to stream in.
-  const teleportTo = async (lat: number, lon: number) => {
+  const teleportTo = async (lat: number, lon: number, kind?: string) => {
     const [x, z] = fromLatLon(json.origin, lat, lon);
+    const landmark = !!kind && LANDMARK.test(kind);
     const b = json.backdrop;
     // One world: anywhere within ~80 km stays in this frame when real tiles can stream there
     // (the local tangent plane is still accurate to centimetres); only farther jumps re-anchor.
@@ -357,12 +374,14 @@ async function main() {
       p.delete('shot');
       p.delete('region');
       p.set('at', `${lat},${lon}`);
+      if (landmark) p.set('view', '1');
+      else p.delete('view');
       location.search = p.toString();
       return;
     }
     toast('walking over…');
     await stream.ensureAround(x, z);
-    teleportLocal(x, z);
+    if (!landmark || !viewpoint(x, z)) teleportLocal(x, z);
   };
   // When a real tile swaps in under the walker, the synth placeholder's collision is
   // tombstoned with it — the player can end up inside a wall. Nudge them clear — but
@@ -416,9 +435,9 @@ async function main() {
     roads: () => (stream.primRoads.length ? [...json.roads, ...stream.primRoads] : json.roads),
     footprints: () => stream.footprints,
     instances: (prefix, x, z, r) => {
-      const out: { x: number; y: number; z: number; name: string }[] = [];
+      const out: { x: number; y: number; z: number; name: string; sy?: number; sx?: number; yaw?: number }[] = [];
       const scan = (m: THREE.Object3D) => {
-        if (!m.name.startsWith(prefix)) return;
+        if (!m.name.startsWith(prefix) || !m.visible) return;
         if ((m as THREE.InstancedMesh).isInstancedMesh) {
           const im = m as THREE.InstancedMesh;
           for (let i = 0; i < im.count; i++) {
@@ -426,7 +445,8 @@ async function main() {
             if (im4.elements[0] === 0 && im4.elements[5] === 0) continue; // hidden / zero-scaled
             ip.setFromMatrixPosition(im4).applyMatrix4(im.matrixWorld);
             const wx = ip.x + origin.x, wz = ip.z + origin.z;
-            if (Math.abs(wx - x) < r && Math.abs(wz - z) < r && Math.hypot(wx - x, wz - z) < r) out.push({ x: wx, y: ip.y, z: wz, name: im.name });
+            const e = im4.elements;
+            if (Math.abs(wx - x) < r && Math.abs(wz - z) < r && Math.hypot(wx - x, wz - z) < r) out.push({ x: wx, y: ip.y, z: wz, name: im.name, sy: Math.hypot(e[4], e[5], e[6]), sx: Math.hypot(e[0], e[1], e[2]), yaw: Math.atan2(e[8], e[10]) });
           }
         } else {
           m.getWorldPosition(ip);
@@ -434,7 +454,7 @@ async function main() {
           if (Math.hypot(wx - x, wz - z) < r) out.push({ x: wx, y: ip.y, z: wz, name: m.name });
         }
       };
-      for (const t of stream.loaded.values()) for (const c of t.group.children) scan(c);
+      for (const t of stream.loaded.values()) if (t.group.visible) for (const c of t.group.children) scan(c);
       for (const c of life.group.children) scan(c);
       for (const c of critters.group.children) scan(c);
       for (const c of garden.group.children) scan(c);
@@ -475,7 +495,7 @@ async function main() {
   garden.onClear = (x, z) => grass.invalidateBox({ x0: x - 3, z0: z - 3, x1: x + 3, z1: z + 3 });
   garden.onBloom = (p) => { toast(`your ${SPECIES[p.sp].label} is in bloom ✿`); ambience?.ui('chime'); };
   // habitat lookups for the critters: trees + garden beds near the walker, refreshed every 2 s
-  let habitatT = 0, nearTrees: { x: number; z: number }[] = [], nearGardens: { x: number; z: number }[] = [];
+  let habitatT = 0, townHere = 0, nearTrees: { x: number; z: number; trunk?: number; r?: number; lean?: [number, number] }[] = [], nearGardens: { x: number; z: number }[] = [];
   const within = (list: { x: number; z: number }[], x: number, z: number, r: number) => list.filter((p) => Math.abs(p.x - x) < r && Math.abs(p.z - z) < r && Math.hypot(p.x - x, p.z - z) < r);
   const south = json.origin.lat < 0;
   // the world's month (the chosen date, not the machine's): critters, gardens and sound follow it
@@ -781,6 +801,31 @@ async function main() {
   let churches = stream.churches;
   let houseGrid = stream.houseGrid();
   let cityGrid = stream.cityGrid();
+  let shopGrid = stream.shopGrid();
+  let pavedIdx = stream.pavedIndex();
+  // Wildlife habitat: a parking lot, a plaza or a street is no place for a rabbit, and a town's
+  // main street (shops round you) keeps only its park squirrels and birds
+  const pavedAt = (x: number, z: number) => {
+    for (const it of pavedIdx.get(Math.floor(x / 40) * 92821 + Math.floor(z / 40)) ?? []) {
+      if ('ring' in it) {
+        const r = it.ring;
+        let c = false;
+        for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (r[i][1] > z !== r[j][1] > z && x < ((r[j][0] - r[i][0]) * (z - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) c = !c;
+        if (c) return true;
+      } else {
+        const [ax, az, bx, bz, hw] = it.seg, dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz || 1;
+        const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
+        if (Math.hypot(ax + dx * t - x, az + dz * t - z) < hw) return true;
+      }
+    }
+    return false;
+  };
+  const townAt = (x: number, z: number) => {
+    const i = Math.floor(x / 80), j = Math.floor(z / 80);
+    let n = 0;
+    for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) n += shopGrid.get((i + di) * 92821 + (j + dj)) ?? 0;
+    return Math.max(cityAt(x, z), Math.min(1, Math.max(0, (n - 3) / 12)));
+  };
   // built volume per ground area over the 3×3 cells around you → 0..1 (a shore main street ~0,
   // a Hell's Kitchen block ~0.4, Midtown 1): the city soundscape's volume
   const cityAt = (x: number, z: number) => {
@@ -797,6 +842,8 @@ async function main() {
     churches = stream.churches;
     houseGrid = stream.houseGrid();
     cityGrid = stream.cityGrid();
+    shopGrid = stream.shopGrid();
+    pavedIdx = stream.pavedIndex();
   };
 
   // ---- loop ----
@@ -876,6 +923,7 @@ async function main() {
       U.uSnow.value = weatherParams.snow >= 0 ? weatherParams.snow : s.snow;
       U.uLeafFall.value = s.leafFall;
       U.uAutumn.value = s.autumn;
+      U.uBloom.value = s.bloom;
       horizon.setSnowline(s.snowline);
     }
 
@@ -1006,10 +1054,20 @@ async function main() {
     // wildlife + garden
     if ((habitatT -= dt) <= 0) {
       habitatT = 2;
-      nearTrees = ctx.instances('trees:', walker.x, walker.z, 130).filter((t) => !t.name.includes(':shrub:'));
+      // each with its trunk height (the model's crown bottom × the instance's height scale): a
+      // squirrel climbs the trunk, it doesn't perch in the sky over a small tree
+      nearTrees = ctx.instances('trees:', walker.x, walker.z, 130).filter((t) => !t.name.includes(':shrub:')).map((t) => {
+        const [, kind, v] = t.name.split(':');
+        const m = (TREE_KINDS as readonly string[]).includes(kind) ? treeMeta(kind as (typeof TREE_KINDS)[number], +v || 0) : null;
+        // the trunk as it stands: how tall to the crown, how thick, and which way it leans (the
+        // model's lean, turned and stretched like the instance) — a squirrel clings to the bark
+        const sx = t.sx ?? 1, sy = t.sy ?? 1, c = Math.cos(t.yaw ?? 0), s = Math.sin(t.yaw ?? 0), [lx, lz] = m?.lean ?? [0, 0];
+        return { x: t.x, z: t.z, trunk: m && t.sy ? m.crownBottom * t.sy : undefined, r: m ? m.trunkR * sx : undefined, lean: [(lx * c + lz * s) * sx / sy, (-lx * s + lz * c) * sx / sy] as [number, number] };
+      });
       nearGardens = [...ctx.instances('garden:', walker.x, walker.z, 130), ...garden.positions().filter((p) => p.g > 0.5)];
       life.coastal = world.terrain.oceanDistAt(walker.x, walker.z) < 5000;
       const cityHere = cityAt(walker.x, walker.z);
+      townHere = townAt(walker.x, walker.z);
       life.taxiShare = Math.max(0, cityHere - 0.2) * 0.45;
       life.crowd = 1 + 1.6 * cityHere; // a Midtown sidewalk is busier than a shore town's
     }
@@ -1017,7 +1075,7 @@ async function main() {
     movers.length = 0;
     for (const m of life.movers) movers.push(m);
     if (rideMoving-- > 0) movers.push(rideMover);
-    critters.update(dt, walker.x, walker.z, { hour: timeParams.hour, night: U.uNight.value, month: worldMonth(), south, wind: weather.wind, region: regionLook.region, climate: regionLook.climate, camFwd: fwd, trees: (x, z, r) => within(nearTrees, x, z, r), gardens: (x, z, r) => within(nearGardens, x, z, r), movers });
+    critters.update(dt, walker.x, walker.z, { hour: timeParams.hour, night: U.uNight.value, month: worldMonth(), south, wind: weather.wind, region: regionLook.region, climate: regionLook.climate, camFwd: fwd, trees: (x, z, r) => within(nearTrees, x, z, r), gardens: (x, z, r) => within(nearGardens, x, z, r), movers, paved: pavedAt, urban: townHere });
     garden.update(dt, worldMonth(), south);
     frames++;
     if (frames === 3) (window as unknown as Record<string, unknown>).__READY__ = true;

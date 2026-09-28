@@ -21,9 +21,11 @@ export const MARK = {
   forearm: [0, 0, 1], // shirt, or skin when in short sleeves
 } as const;
 // Parts: 0 body · 1/2 right/left leg · 5/6 right/left arm · 9 hair (short/long/bun) ·
-// 10 long hair · 11 bun · 12 baseball cap · 13 cropped. The shader collapses what isn't worn.
+// 10 long hair · 11 bun · 12 baseball cap · 13 cropped · 14 headphones. The shader collapses
+// what isn't worn.
 export const HAIRSTYLES = ['short', 'long', 'bun', 'cap', 'cropped'] as const;
 const HAIR_PART0 = 9;
+const PHONES = 14;
 const lim = (a: THREE.Vector3, b: THREE.Vector3, r0: number, r1: number) => {
   // open-ended limbs: every end is buried in a joint, hand, shoe or the torso (saves a third)
   const d = new THREE.Vector3().subVectors(b, a), L = d.length();
@@ -91,6 +93,13 @@ export function personGeometry() {
     part(box(0.17, 0.016, 0.11, 0, 1.632, -0.13), 0xf2efe6, HAIR_PART0 + 3),
   ); // cap (the shader tints it from the trouser palette so caps vary)
   parts.push(cap(HAIR_PART0 + 4, 0.11, 6)); // cropped
+  // headphones (worn by some — more of the joggers — per person in the shader): two cups over
+  // the ears and the band over the crown
+  for (const s of [1, -1]) {
+    parts.push(part(box(0.032, 0.075, 0.064, 0.118 * s, 1.57, 0.005), 0x26262a, PHONES));
+    parts.push(part(box(0.018, 0.11, 0.03, 0.114 * s, 1.645, 0.005), 0x3a3a40, PHONES));
+  }
+  parts.push(part(box(0.22, 0.022, 0.034, 0, 1.735, 0.005), 0x3a3a40, PHONES));
   const g = merge(parts);
   g.computeBoundingSphere();
   return g;
@@ -117,7 +126,10 @@ export const PEOPLE_GLSL_MAIN = /* glsl */ `
     float r1 = pHash(seed), r2 = pHash(seed + 1.7), r3 = pHash(seed + 3.1), r4 = pHash(seed + 5.3), r5 = pHash(seed + 7.9);
     float style = floor(r2 * ${HAIRSTYLES.length}.0);
     // hair parts: 9 base (styles 0–2) · 10 long (1) · 11 bun (2) · 12 cap (3) · 13 cropped (4)
-    if (aPart > ${HAIR_PART0 - 0.5}) {
+    if (aPart > ${PHONES - 0.5}) {
+      // headphones: one in seven, over half the joggers (a runner's amount is > 1)
+      if (pHash(seed + 11.3) > (amt > 1.2 ? 0.55 : 0.14)) p = vec3(0.0, 1.58, 0.0);
+    } else if (aPart > ${HAIR_PART0 - 0.5}) {
       float hp = aPart - ${HAIR_PART0}.0;
       bool worn = hp < 0.5 ? style < 2.5 : abs(hp - style) < 0.5;
       if (!worn) p = vec3(0.0, 1.58, 0.0);

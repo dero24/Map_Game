@@ -1,6 +1,6 @@
 {
   "project": "map_game",
-  "last_updated": "2026-09-27",
+  "last_updated": "2026-09-28",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -19,37 +19,40 @@
       "priority": 1,
       "area": "gameplay",
       "title": "People doing things: conversations, window shopping, waiting for the light, staff at work, residents who sit properly",
-      "user_visible_behavior": "Walkers stop to talk face to face (gesturing, nodding) and part together, linger at shop windows, wait at signalled corners for their green; cafes, bars and shops have staff behind the counter with customers waiting and regulars on stools; residents sit on the cushion (not in it), facing their table or room, and a cook has company at the counter; city streets are busy (the crowd gathers round the walker by street density).",
+      "user_visible_behavior": "Walkers stop to talk face to face (gesturing, nodding) and part together, linger at shop windows, wait at signalled corners for their green; cafes, bars and shops have staff behind the counter with customers waiting and regulars on stools; residents sit on the cushion (not in it), facing their table or room, and a cook has company at the counter; city streets are busy (the crowd gathers round the walker by street density). They cross at the painted crosswalk on the walk or in a real gap (never through a car); some walk dogs on leads, some jog (a running pose), some wear headphones.",
       "status": "in_progress",
       "verification": [
         "tests/lifeSim.test.ts: walkers stop to talk face to face; tests/traffic.test.ts: walkers wait for the light",
-        "shots/life-*.jpg frames 5-10"
+        "shots/life-*.jpg frames 5-10",
+        "tests/traffic.test.ts: waits at its kerb on the crosswalk for the light; tools/street-shots.js __STREET__ -> shots/street-q3.jpg (crosswalk, dog walker, jogger, squirrels, downtown animal counts)"
       ],
       "evidence": [
         "src/sim/lifeSim.ts (CHAT, window shopping, kerbWait, sizeBubble)",
         "src/render/creature.ts (SEATED pose, talk gesture for walkers)",
-        "src/world/interiors.ts (yawTo, staff aisles, seat heights)"
+        "src/world/interiors.ts (yawTo, staff aisles, seat heights)",
+        "src/sim/lifeSim.ts (planCross, crossWait, crossingAt, CROSS legs), src/sim/life.ts (dogs on leads), src/assets/people.ts (headphones)"
       ],
-      "notes": "Open: greetings/waves, queues, staff who move, residents' routines, dogs, bags, phones, kids; people LOD so the caps can grow."
+      "notes": "Open: bags, strollers, bikes, kids, canes, couples; persistence into interiors (R.10); greetings/queues; people LOD so the caps can grow."
     },
     {
       "id": "traffic-control",
       "priority": 1,
       "area": "gameplay",
       "title": "Cars follow traffic: signals, stop signs, all-way stops and give-way, from one junction analysis",
-      "user_visible_behavior": "Signalled junctions cycle (the lit lens is the one the traffic obeys); cars stop at the line on red, come to a full stop at stop signs and take turns at all-way stops, give way to the main road, slow for corners, never block a junction; stop and give-way signs stand at every controlled arm; mapped OSM control wins, the rule of the road fills the rest.",
+      "user_visible_behavior": "Signalled junctions cycle (the lit lens is the one the traffic obeys); cars stop at the line on red, come to a full stop at stop signs and take turns at all-way stops, give way to the main road, slow for corners, never block a junction; stop and give-way signs stand at every controlled arm; mapped OSM control wins, the rule of the road fills the rest. Cars wait behind the crosswalk for anyone crossing their street or the one they turn into; left turns yield to oncoming traffic at lights too; lanes zip at merges; no two cars ever share a spot.",
       "status": "passing",
       "verification": [
         "tests/traffic.test.ts: rule of the road (NA all-way / minor stop / signals for two main roads / T stems; EU give-way), mapped signal and stop nodes win, one-way arms, ownership + packing, phase timing (never both green), a car stops on red behind the line and goes on green, full stop at a stop sign then pulls out, walkers wait at the corner",
         "tools/life-shots.js __LIFE__(tag) -> shots/life-<tag>.jpg (junction from above, lenses, stop sign, night)",
-        "in-page count: Sea Bright ~25 % of cars standing at any moment, queued 8-27 m from junction centres, no growth over a minute"
+        "in-page count: Sea Bright ~25 % of cars standing at any moment, queued 8-27 m from junction centres, no growth over a minute",
+        "tests/traffic.test.ts (q): a walker lets the car coming go by then crosses; a car waits at the line for someone crossing; a 3-minute busy grid has 0 walker-in-car and 0 fused-car ticks and no car stuck > 150 s"
       ],
       "evidence": [
         "src/sim/traffic.ts",
         "shots/life-seabright4.jpg",
         "shots/life-nyc.jpg"
       ],
-      "notes": "Open: cars yield to walkers on the walk phase, protected lefts, buses on route=bus, parking manoeuvres. Tile cache v14 (stop/give-way points) - redeploy the worker."
+      "notes": "Open: protected left phases, buses on route=bus, parking manoeuvres, curved turn paths through the box. Tile cache v14 (stop/give-way points) - redeploy the worker."
     },
     {
       "id": "paint-your-walk",
@@ -469,6 +472,26 @@
         "shots/place-burlington-jan.jpg"
       ],
       "notes": "Climatology, not weather: no storms or thaws yet. (p): ploughed asphalt keeps ~15 % (wet dark tracks), sidewalks shovelled to a patchy path, snow stays blue after dark. Snowbanks along ploughed kerbs are open."
+    },
+    {
+      "id": "tree-species",
+      "priority": 2,
+      "area": "world",
+      "title": "Trees by species: maple, weeping willow, elm, poplar/cypress, magnolia, flowering cherry",
+      "user_visible_behavior": "Streets and yards mix round trees and oaks with dense maples (scarlet in October), vase elms under broad domes (gold), columnar poplars, and flowering cherries (pink in April); weeping willows stand by ponds and rivers with curtains that swing in the wind; the South has dark evergreen magnolias; a Mediterranean hill has dark cypresses.",
+      "status": "passing",
+      "verification": [
+        "tests/foundry.test.ts: every species x variant sane, grounded, deterministic, < 1,500 vertices; willow curtain to near the ground, poplar a column, cherry low and spreading, magnolia to the lawn, elm not a lollipop",
+        "tests/season.test.ts: cherries blossom in spring, not in autumn",
+        "tools/tree-shots.js __TREES__ -> shots/trees-p1..3.jpg; __SPECIES__ -> shots/species-seabright.jpg (counts within 600 m of Sea Bright)"
+      ],
+      "evidence": [
+        "src/assets/flora.ts",
+        "src/world/props.ts (broad mix by region, water, LiDAR crown ratio)",
+        "src/render/propMaterial.ts (FALL_HUE, BLOSSOM, WEEP)",
+        "src/world/season.ts (bloom)"
+      ],
+      "notes": "Next: live oak, sycamore, dogwood, cedar; leaf cards with real phyllotaxis at close range; potted plants (R.6)."
     }
   ],
   "regions": {

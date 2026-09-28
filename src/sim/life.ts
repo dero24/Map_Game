@@ -14,6 +14,8 @@ import { hashf } from '../assets/core';
 import { propMaterial } from '../render/propMaterial';
 import { activeStyle } from '../world/styles';
 import { personLib, warmthFor } from '../assets/people';
+import { dogLib, critterMaterial, DOG_COATS } from '../assets/fauna';
+import { PED } from './lifeSim';
 
 // Moving boats offshore: the working/pleasure mix (skiffs and pontoons stay moored near shore).
 const LIFE_BOATS: BoatType[] = ['console', 'cabin', 'sail', 'lobster', 'skiff'];
@@ -113,10 +115,17 @@ export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, do
     return nodeId.get(k)!;
   };
   const pts: number[] = [], start: number[] = [], count: number[] = [], lens: number[] = [], info: number[] = [], ends: number[] = [];
+  const seen = new Set<string>();
   for (const { r, p } of pieces) {
     let L = 0;
     for (let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
     if (L < 1) continue;
+    // the same street twice (a way mapped twice, a route drawn over its road): one edge, or the
+    // cars on the two copies drive through each other
+    const ka = key(p[0][0], p[0][1]), kb = key(p[p.length - 1][0], p[p.length - 1][1]), mid = p[p.length >> 1];
+    const dup = `${ka < kb ? ka + '|' + kb : kb + '|' + ka}|${Math.round(L)}|${key(mid[0], mid[1])}`;
+    if (seen.has(dup)) continue;
+    seen.add(dup);
     const n = Math.max(2, Math.ceil(L / 4) + 1);
     // uniform resample with heights from the open-air walk surface (so bridge decks carry traffic,
     // and a way that clips a building doesn't climb to its roof)
@@ -235,6 +244,7 @@ import { peopleU, creatureMaterial } from '../render/creature';
 export { peopleU, creatureMaterial };
 
 const CAR_COLORS = [0xf2f2ee, 0xb9bcc0, 0x26282c, 0x5a5e64, 0x2b3f63, 0x9c2a26, 0x3d5a46, 0xcdbf9e];
+const DOG_CAP = 96;
 const SHIRTS = [0xe8d8b0, 0x5b7fa6, 0xc4553f, 0xf2efe6, 0x6e8c5a, 0xe0a33b, 0x7a5b8c, 0x3f6f78, 0xd98a8a, 0x2f3a4a];
 const BOATS = [0xf5f3ee, 0xf5f3ee, 0xe9eef0, 0x2d4a6a, 0xc9d8de, 0x9b3b32];
 
@@ -255,6 +265,10 @@ export class LifeClient {
   private lastTick = -1;
   private tickAt = 0;
   private groups: Group[] = [];
+  private dogs!: THREE.InstancedMesh;
+  private dogAnim!: THREE.InstancedBufferAttribute;
+  private leads!: THREE.LineSegments;
+  private nDogs = 0;
   private headPts: THREE.Points;
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
@@ -315,6 +329,27 @@ export class LifeClient {
       this.gear.set(gname, m);
     }
     make(LIFE_BOATS.map((t) => boatLib(t)), {}, RANGES.boats, 1, () => 0xffffff, LIFE_BOATS.map((t) => `life-boat:${t}`));
+    // dogs out for a walk: one per dog walker, trotting a lead's length ahead and to the side
+    {
+      const geo = dogLib().clone();
+      this.dogAnim = new THREE.InstancedBufferAttribute(new Float32Array(DOG_CAP * 3), 3);
+      this.dogAnim.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute('aAnim', this.dogAnim);
+      this.dogs = new THREE.InstancedMesh(geo, critterMaterial('fox'), DOG_CAP);
+      this.dogs.name = 'life-dog';
+      this.dogs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      this.dogs.frustumCulled = false;
+      this.dogs.layers.enable(1);
+      for (let i = 0; i < DOG_CAP; i++) { this.dogs.setMatrixAt(i, this.zeroM); this.dogs.setColorAt(i, this.tmpC.set(0xffffff)); }
+      this.dogs.count = 0;
+      this.group.add(this.dogs);
+      // the lead: a thin dark line from the walker's hand to the collar
+      const lg = new THREE.BufferGeometry();
+      lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(DOG_CAP * 6), 3));
+      this.leads = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x2a2320 }));
+      this.leads.frustumCulled = false;
+      this.group.add(this.leads);
+    }
 
     // Headlight / masthead halos at night (positions rewritten per frame).
     const hg = new THREE.BufferGeometry();
@@ -373,6 +408,27 @@ export class LifeClient {
     }
   }
 
+  /** The dog of walker i: a lead's length ahead and to the right, trotting when they walk,
+   *  standing (and sniffing) when they stop; its coat is the walker's own pick of the breeds. */
+  private walkDog(i: number, x: number, y: number, z: number, yaw: number, amt: number, anim: number) {
+    const k = this.nDogs++;
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+    const wob = Math.sin(anim * 0.23 + i) * 0.25;
+    const dx = x + fx * 1.25 + rx * (0.55 + wob), dz = z + fz * 1.25 + rz * (0.55 + wob);
+    const dyaw = yaw + wob * 0.6 + (amt > 0.5 ? 0 : Math.sin(anim * 0.05 + i * 3) * 0.8);
+    this.q.setFromAxisAngle(this.up, dyaw);
+    const size = 0.75 + hashf(i * 131) * 0.55; // a terrier to a shepherd
+    this.m.compose(this.p.set(dx, y - 0.08, dz), this.q, this.sc.setScalar(size));
+    this.dogs.setMatrixAt(k, this.m);
+    this.dogs.setColorAt(k, this.tmpC.set(DOG_COATS[Math.floor(hashf(i * 977) * DOG_COATS.length)]));
+    const A = this.dogAnim.array as Float32Array;
+    // gait cycles per metre walked (the walker's phase is 5.2 rad a metre), fast little steps
+    A[k * 3] = anim / 5.2 / (0.55 * size); A[k * 3 + 1] = amt > 0.5 ? 1 : 0; A[k * 3 + 2] = amt > 0.5 ? 1 : 0;
+    const lp = this.leads.geometry.attributes.position as THREE.BufferAttribute;
+    lp.setXYZ(k * 2, x + rx * 0.26 + fx * 0.15, y + 0.86, z + rz * 0.26 + fz * 0.15); // the hand
+    lp.setXYZ(k * 2 + 1, dx - Math.sin(dyaw) * 0.28 * size, y + 0.34 * size, dz - Math.cos(dyaw) * 0.28 * size); // the collar
+  }
+
   update(now: number, player: { x: number; z: number; yaw: number }, env: { night: number; hour: number; wind: number; clock?: number }) {
     const h = this.V.header;
     this.group.visible = lifeParams.enabled;
@@ -398,6 +454,7 @@ export class LifeClient {
       const dx = x - player.x, dz = z - player.z, l = Math.hypot(dx, dz) || 1;
       return (dx * -fz + dz * fx) / l;
     };
+    this.nDogs = 0;
     for (const g of this.groups) {
       const [r0, r1] = g.range;
       const kind = g.range === RANGES.gulls ? 0 : g.range === RANGES.cars ? 1 : g.range === RANGES.peds ? 2 : 3;
@@ -446,6 +503,7 @@ export class LifeClient {
           sx = 0.97 + hashf(i * 7919 + variant) * 0.06; sy = 0.96 + hashf(i * 104729 + variant) * 0.08; sz = 0.97 + hashf(i * 31 + variant * 131) * 0.06;
         } else if (kind === 2) {
           if (dist < 25) st.pedsNear++;
+          if (flags & (PED.DOG << 1) && amt > -0.5 && dist < 220 && this.nDogs < DOG_CAP) this.walkDog(i, x, y, z, yaw, amt, snap[o + S.ANIM]);
           if (amt < -0.5 && amt > -1.999) {
             // knocked down: laid back over ~0.15 s with one log-roll as they slide, then sprawled
             // face-up (the pose itself — knees up, an arm flung out — is in the shader)
@@ -498,6 +556,13 @@ export class LifeClient {
     }
     for (let k = hk; k < heads.count; k++) heads.setXYZ(k, 0, -9999, 0);
     heads.needsUpdate = true;
+    this.dogs.count = this.nDogs;
+    this.dogs.instanceMatrix.needsUpdate = true;
+    if (this.dogs.instanceColor) this.dogs.instanceColor.needsUpdate = true;
+    this.dogAnim.needsUpdate = true;
+    const lp = this.leads.geometry.attributes.position as THREE.BufferAttribute;
+    this.leads.geometry.setDrawRange(0, this.nDogs * 2);
+    lp.needsUpdate = true;
     this.movers.length = this.nMovers;
   }
   private tmpC = new THREE.Color();

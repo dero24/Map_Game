@@ -22,7 +22,7 @@ export interface GameCtx {
   footprints: () => Footprint[];
   /** Visible instances (world coords) of InstancedMeshes named `prefix…` within r of (x,z): tile props,
    *  ambient life and player vehicles ('parked-cars:', 'moored-boats:', 'life-car:', 'ride:' …). */
-  instances: (prefix: string, x: number, z: number, r: number) => { x: number; y: number; z: number; name: string }[];
+  instances: (prefix: string, x: number, z: number, r: number) => { x: number; y: number; z: number; name: string; sy?: number; sx?: number; yaw?: number }[];
   hour: () => number;
   setHour: (h: number) => void;
   env: () => { night: number; golden: number; fog: number; oceanDist: number };
@@ -32,7 +32,9 @@ export interface GameCtx {
   /** A small watercolour card picture of a foundry model (Almanac cards), as a data URL. */
   cardArt: (family: string, type: string, pencil?: boolean) => string;
   toast: (m: string) => void;
-  teleport: (lat: number, lon: number) => Promise<void>;
+  /** `kind`: what the place is (a geocoder's class — tower, attraction, street …): a landmark
+   *  is arrived at from a viewpoint that shows it, not from its front door. */
+  teleport: (lat: number, lon: number, kind?: string) => Promise<void>;
   sound: (kind: 'brush' | 'shutter' | 'chime' | 'page') => void;
   uiOpen: () => boolean; // a modal (atlas / intro) owns the keyboard
   lock: () => void;

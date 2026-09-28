@@ -49,7 +49,7 @@ export interface Mover { x: number; z: number; vx: number; vz: number }
 type State = 'idle' | 'move' | 'flee' | 'climb' | 'perch' | 'fly' | 'drift' | 'stalk' | 'pounce' | 'soar' | 'stoop' | 'rise';
 interface Critter {
   kind: CritterKind; x: number; y: number; z: number; yaw: number; pitch: number;
-  state: State; t: number; tx: number; tz: number; ty: number; home?: { x: number; z: number };
+  state: State; t: number; tx: number; tz: number; ty: number; home?: { x: number; z: number; trunk?: number; r?: number; lean?: [number, number] };
   phase: number; amt: number; s: number; c: THREE.Color; seed: number;
   roll?: number;
   fx?: number; fz?: number;        // where the last scare came from (flee away from it)
@@ -62,9 +62,13 @@ export interface CritterEnv {
   hour: number; night: number; month: number; wind: number; south: boolean;
   region?: string; climate?: string; // the place's cast (faunaMix); temperate North America when absent
   camFwd: THREE.Vector3;
-  trees: (x: number, z: number, r: number) => { x: number; z: number }[];
+  trees: (x: number, z: number, r: number) => { x: number; z: number; trunk?: number; r?: number; lean?: [number, number] }[];
   gardens: (x: number, z: number, r: number) => { x: number; z: number }[];
   movers?: Mover[];
+  /** Paved open ground — parking lots, plazas — where no rabbit grazes (main.ts from the map). */
+  paved?: (x: number, z: number) => boolean;
+  /** 0 (open country) … 1 (a built-up downtown) at the walker: fewer wild animals in town. */
+  urban?: number;
 }
 
 export class Critters {
@@ -111,9 +115,10 @@ export class Critters {
   // ---------------- habitat ----------------
   private ground(x: number, z: number) { return Math.max(this.terrain.heightAt(x, z), 0); }
   private open(x: number, z: number, r = 0.6) { return this.terrain.sdfAt(x, z) > 2 && this.walk.buildingAt(x, z) < 0 && !this.walk.blocked(x, z, r); }
-  private lawn(x: number, z: number) { const c = this.terrain.coverAt(x, z); return (c === 30 || c === 10 || c === 20) && this.terrain.oceanDistAt(x, z) > 60 && this.open(x, z, 1.2); }
-  // open country for grazers, burrowers and ground birds: lawns, meadow, shrub, crops, desert
-  private field(x: number, z: number) { const c = this.terrain.coverAt(x, z); return (c === 30 || c === 10 || c === 20 || c === 40 || c === 60) && this.terrain.oceanDistAt(x, z) > 60 && this.open(x, z, 1.2); }
+  private lawn(x: number, z: number) { const c = this.terrain.coverAt(x, z); return (c === 30 || c === 10 || c === 20) && this.terrain.oceanDistAt(x, z) > 60 && this.open(x, z, 1.2) && !this.paved(x, z); }
+  // open country for grazers, burrowers and ground birds: lawns, meadow, shrub, crops, desert —
+  // never a parking lot or a plaza
+  private field(x: number, z: number) { const c = this.terrain.coverAt(x, z); return (c === 30 || c === 10 || c === 20 || c === 40 || c === 60) && this.terrain.oceanDistAt(x, z) > 60 && this.open(x, z, 1.2) && !this.paved(x, z); }
   private shore(x: number, z: number) { const s = this.terrain.sdfAt(x, z); return this.terrain.oceanDistAt(x, z) < 45 && s > 0.5 && s < 14; }
   private mix(env: CritterEnv) { return faunaMix(env.region ?? 'na', env.climate ?? 'temperate'); }
   private want(k: CritterRole, env: CritterEnv) {
@@ -122,16 +127,18 @@ export class Critters {
     const warm = (env.south ? ((env.month + 5) % 12) + 1 : env.month);
     const summer = warm >= 5 && warm <= 9;
     const dawnDusk = (h > 5 && h < 9.5) || (h > 16.5 && h < 20.5);
+    // a built-up downtown keeps its squirrels in the park trees and little else wild on the ground
+    const town = 1 - 0.85 * Math.min(1, Math.max(0, env.urban ?? 0));
     switch (k) {
-      case 'climber': return day ? 6 : 0;
-      case 'burrower': return day ? 5 : 0;
-      case 'grazer': return dawnDusk ? 4 : day ? 1 : 0;
+      case 'climber': return day ? Math.round(6 * (0.5 + 0.5 * town)) : 0;
+      case 'burrower': return day ? Math.round(5 * town) : 0;
+      case 'grazer': return Math.round((dawnDusk ? 4 : day ? 1 : 0) * town);
       case 'songbird': return day ? (h < 10 ? 8 : 5) : 0;
       case 'shorebird': return day ? 10 : 0;
-      case 'browser': return dawnDusk ? 2 : 0;
+      case 'browser': return dawnDusk && town > 0.6 ? 2 : 0;
       case 'butterfly': return day && summer && env.wind < 0.75 ? 8 : 0;
       case 'firefly': return env.night > 0.6 && warm >= 6 && warm <= 8 ? 26 : 0;
-      case 'predator': return dawnDusk ? 2 : env.night > 0.5 ? 1 : 0;
+      case 'predator': return town < 0.5 ? 0 : dawnDusk ? 2 : env.night > 0.5 ? 1 : 0;
       case 'raptor': return day && h > 8 && h < 17.5 ? 1 : 0;
     }
   }
@@ -144,7 +151,7 @@ export class Critters {
       // don't pop into existence in plain view (unless far or tiny)
       const f = env.camFwd;
       if (!near && k !== 'raptor' && d < 38 && (Math.sin(a) * f.x + Math.cos(a) * f.z) > 0.25) continue;
-      let home: { x: number; z: number } | undefined;
+      let home: { x: number; z: number; trunk?: number; r?: number; lean?: [number, number] } | undefined;
       if (k === 'climber') {
         const t = env.trees(x, z, 14);
         if (!t.length) continue;
@@ -152,7 +159,7 @@ export class Critters {
         const ra = this.rnd() * 6.28;
         x = home.x + Math.sin(ra) * (1.5 + this.rnd() * 3);
         z = home.z + Math.cos(ra) * (1.5 + this.rnd() * 3);
-        if (!this.open(x, z, 0.3)) continue;
+        if (!this.open(x, z, 0.3) || this.paved(x, z)) continue; // on the lawn, not in the street
       } else if (k === 'grazer' || k === 'songbird' || k === 'burrower') {
         if (!this.field(x, z)) continue;
       } else if (k === 'shorebird') {
@@ -181,7 +188,9 @@ export class Critters {
   }
 
   // ---------------- tick ----------------
+  private paved: (x: number, z: number) => boolean = () => false;
   update(dt: number, wx: number, wz: number, env: CritterEnv) {
+    this.paved = env.paved ?? (() => false);
     const count: Record<string, number> = {}, roleCount: Record<string, number> = {};
     for (const c of this.list) { count[c.kind] = (count[c.kind] ?? 0) + 1; roleCount[R(c)] = (roleCount[R(c)] ?? 0) + 1; }
     if (this.enabled && (this.spawnT -= dt) <= 0) {
@@ -260,7 +269,9 @@ export class Critters {
         speed = c.state === 'flee' ? S.flee : S.walk;
         const dx = c.tx - c.x, dz = c.tz - c.z, L = Math.hypot(dx, dz);
         if (L < 0.3 || c.t <= 0) {
-          if (c.state === 'flee' && R(c) === 'climber' && c.home && L < 0.6) { c.state = 'climb'; c.t = 1.4; c.ty = c.y + 3 + this.rnd() * 2.5; break; }
+          // up the trunk — never higher than where the crown starts (a small street tree's trunk
+          // is 2 m; perching 5 m up put squirrels in the sky over it)
+          if (c.state === 'flee' && R(c) === 'climber' && c.home && L < 0.6) { const top = Math.max(1.2, (c.home.trunk ?? 4) * 0.85); c.state = 'climb'; c.t = 1.4; c.ty = this.ground(c.home.x, c.home.z) + Math.min(top, 1.2 + this.rnd() * Math.max(0.3, top - 1.2)); break; }
           if (c.state === 'flee' && R(c) === 'shorebird' && d < S.fleeR) { c.state = 'fly'; c.t = 3; break; }
           if (c.state === 'flee' && R(c) === 'burrower') { c.dead = true; break; } // down its burrow
           c.state = 'idle'; c.t = 0.8 + this.rnd() * 3; break;
@@ -448,11 +459,14 @@ export class Critters {
       const i = per.get(c.kind) ?? 0;
       if (i >= M.m.instanceMatrix.count) continue;
       per.set(c.kind, i + 1);
-      // climbing / perched squirrels face up the trunk, a little out from it
+      // climbing / perched squirrels face up the trunk, feet on the bark: the trunk's surface at
+      // that height (it tapers, and leans with the tree)
       let x = c.x, z = c.z;
       if ((c.state === 'climb' || c.state === 'perch') && c.home) {
         const dx = c.x - c.home.x, dz = c.z - c.home.z, L = Math.hypot(dx, dz) || 1;
-        x = c.home.x + (dx / L) * 0.32; z = c.home.z + (dz / L) * 0.32;
+        const up = Math.max(0, c.y - this.ground(c.home.x, c.home.z)), [lx, lz] = c.home.lean ?? [0, 0];
+        const r = (c.home.r ?? 0.25) * Math.max(0.55, 1 - 0.1 * up) + 0.02;
+        x = c.home.x + lx * up + (dx / L) * r; z = c.home.z + lz * up + (dz / L) * r;
         c.yaw = Math.atan2(dx, dz);
       }
       this.e.set(c.pitch, c.yaw, c.roll ?? 0, 'YXZ');

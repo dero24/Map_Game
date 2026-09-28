@@ -88,6 +88,12 @@ export function creatureMaterial(defines: Record<string, number>) {
           }
           #endif
           float sw = sin(ph) * amt * 0.24; // a walking stride, not a lunge
+          // a runner (lifeSim AMT_RUN): elbows bent up at the sides, leaning into the stride
+          float run = clamp((amt - 1.0) * 2.0, 0.0, 1.0);
+          if (run > 0.0) {
+            if (aPart > 4.5 && aPart < 6.5 && p.y < 1.12) { float da = 1.12 - p.y; p.z -= da * 0.85 * run; p.y += da * 0.75 * run; }
+            if ((aPart < 0.5 || aPart > 4.5) && p.y > 0.87) p.z -= (p.y - 0.87) * 0.14 * run;
+          }
           if (aPart > 0.5 && aPart < 2.5) {
             float side = aPart < 1.5 ? 1.0 : -1.0;
             p.z += (0.87 - p.y) * sw * side;
