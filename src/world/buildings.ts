@@ -9,7 +9,7 @@ import type { Deck } from '../player/collision';
 import { paintMaterial, lin } from '../render/shared';
 import { hash01 } from '../core/rng';
 import { buildRoof, tidyRing, ringArea, offsetRing, type RoofGeom } from './roof';
-import { recipeFor, SIDING, ROOFMAT, type Recipe } from './recipe';
+import { recipeFor, rowStyle, SIDING, ROOFMAT, type Recipe } from './recipe';
 import { activeStyle } from './styles';
 
 type P2 = [number, number];
@@ -392,7 +392,8 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
     const ox = cx + nx * off + tx * du, oz = cz + nz * off + tz * du;
     b.quad(V(ox - tx * hw, y0, oz - tz * hw), V(ox + tx * hw, y0, oz + tz * hw), V(ox + tx * hw, y1, oz + tz * hw), V(ox - tx * hw, y1, oz - tz * hw), n);
   };
-  const doorHex = B.kind === 'commercial' ? 0x26313b : DOOR_COLORS[Math.floor(r(0x51) * DOOR_COLORS.length)];
+  // apartment-block and shop doors are dark (painted steel, stained wood, glass); a house's door is its colour
+  const doorHex = B.kind === 'commercial' ? 0x26313b : B.kind === 'large' ? [0x1f2226, 0x2e2419, 0x24302a, 0x3a2a20][Math.floor(r(0x51) * 4)] : DOOR_COLORS[Math.floor(r(0x51) * DOOR_COLORS.length)];
   const doorCol = lin(doorHex);
   b.setColor(doorCol);
   face(wide / 2, floorY, floorY + tall, 0.02);
@@ -762,6 +763,97 @@ function decorateFlat(b: Builder, ring: P2[], top: number, id: number, kindI: nu
   flatCapRing(b, cor, ring, top + 0.3);
   flatCapRing(b, cor, ring, top - 0.05, DOWN);
 }
+// NA pre-war walk-ups: the black iron fire escape on the street front — a grated platform with
+// railings at every upper floor, a steep stair between them, the drop ladder hanging from the
+// lowest (a storey up, out of reach).
+function fireEscape(b: Builder, ring: P2[], wall: { i: number; u: number; len: number }, floor0: number, top: number, fH: number, id: number, kindI: number) {
+  const F = edgeFrame(ring, wall.i);
+  if (F.len < 7) return;
+  const w = Math.min(4.4, F.len * 0.42);
+  // beside the door, never over it
+  const uc = wall.u < F.len / 2 ? Math.min(F.len - w / 2 - 0.3, wall.u + 1.0 + w / 2) : Math.max(w / 2 + 0.3, wall.u - 1.0 - w / 2);
+  if (uc - w / 2 < 0.2 || uc + w / 2 > F.len - 0.2) return;
+  const D = 1.2, ang = Math.atan2(F.tz, F.tx);
+  const at = (u: number, out: number, y: number) => V(F.p[0] + F.tx * u + F.nx * out, y, F.p[1] + F.tz * u + F.nz * out);
+  b.setInfo(id, kindI, PART.trim, 0);
+  b.setColor(lin(0x262422));
+  let lowest = Infinity;
+  for (let k = 1; ; k++) {
+    const y = floor0 + k * fH;
+    if (y > top - 1.8) break;
+    lowest = Math.min(lowest, y);
+    const c = at(uc, D / 2 + 0.04, 0);
+    box(b, c.x, c.z, ang, w, D, y - 0.07, y, true);
+    const f0 = at(uc - w / 2, D + 0.04, y), f1 = at(uc + w / 2, D + 0.04, y);
+    railPanel(b, f0, f1, 0.95);
+    railPanel(b, at(uc - w / 2, 0.04, y), f0, 0.95);
+    railPanel(b, f1, at(uc + w / 2, 0.04, y), 0.95);
+    if (k > 1) {
+      // the stair from this platform down to the one below, alternating direction
+      const dir = k % 2 ? 1 : -1;
+      beam(b, at(uc - dir * (w / 2 - 0.45), D * 0.55, y), at(uc + dir * (w / 2 - 0.7), D * 0.55, y - fH), 0.55, 0.07);
+    }
+  }
+  if (isFinite(lowest)) {
+    // drop ladder: two stiles and a few rungs under the lowest platform's outer corner
+    const lx = uc + w / 2 - 0.5;
+    for (const du of [-0.22, 0.22]) { const a = at(lx + du, D - 0.1, lowest - 2.1), c = at(lx + du, D - 0.1, lowest); box(b, a.x, a.z, ang, 0.05, 0.05, a.y, c.y); }
+    for (let yy = lowest - 2.0; yy < lowest - 0.1; yy += 0.35) { const m = at(lx, D - 0.1, yy); box(b, m.x, m.z, ang, 0.46, 0.04, yy, yy + 0.04); }
+  }
+}
+
+const inRing = (x: number, z: number, r: P2[]) => {
+  let c = false;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const [xi, zi] = r[i], [xj, zj] = r[j];
+    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) c = !c;
+  }
+  return c;
+};
+// The top of a mid- or high-rise: towers are recognised by their tops from blocks away. A
+// mechanical penthouse on anything over ~10 storeys; on North American masonry mid-rises, the
+// wooden water tank on steel legs (what makes a Manhattan or Chicago roofline read as one).
+function towerTop(b: Builder, ring: P2[], top: number, tall: number, id: number, kindI: number, rc: Recipe, facade: THREE.Color, seed: number) {
+  // frame on the longest wall
+  let bl = 0, bi = 0;
+  for (let i = 0; i < ring.length; i++) { const p = ring[i], q = ring[(i + 1) % ring.length]; const l = Math.hypot(q[0] - p[0], q[1] - p[1]); if (l > bl) (bl = l), (bi = i); }
+  if (bl < 1) return;
+  const p = ring[bi], q = ring[(bi + 1) % ring.length];
+  const ax = (q[0] - p[0]) / bl, az = (q[1] - p[1]) / bl;
+  let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+  for (const [x, z] of ring) {
+    const u = (x - p[0]) * ax + (z - p[1]) * az, v = (x - p[0]) * -az + (z - p[1]) * ax;
+    (u0 = Math.min(u0, u)), (u1 = Math.max(u1, u)), (v0 = Math.min(v0, v)), (v1 = Math.max(v1, v));
+  }
+  const L = u1 - u0, W = v1 - v0;
+  if (Math.abs(ringArea(ring)) < 0.62 * L * W || L < 8 || W < 8) return; // L-shapes etc.: nothing sure to sit on
+  const at = (u: number, v: number): P2 => [p[0] + ax * u - az * v, p[1] + az * u + ax * v];
+  const ang = Math.atan2(az, ax);
+  const r = (k: number) => hash01((seed ^ k) >>> 0);
+  const glass = rc.siding === SIDING.glass;
+  if (tall > 36) {
+    const [mx, mz] = at(u0 + L * (0.4 + r(0x71) * 0.2), v0 + W * (0.4 + r(0x72) * 0.2));
+    const pl = Math.min(34, Math.max(4, L * (0.3 + r(0x73) * 0.2))), pw = Math.min(26, Math.max(4, W * (0.3 + r(0x74) * 0.2)));
+    b.setInfo(id, kindI, PART.trim, 0);
+    b.setColor(glass ? lin(0x8d9296) : facade.clone().multiplyScalar(0.86));
+    box(b, mx, mz, ang, pl, pw, top, top + 3.8 + r(0x75) * 2.6);
+  }
+  const st = activeStyle();
+  if (!glass && st.region === 'na' && (st.climate === 'temperate' || st.climate === 'continental') && tall >= 16 && tall <= 90 && r(0x7a) < 0.32) {
+    const [tx, tz] = at(u0 + L * (0.15 + r(0x7b) * 0.2), v0 + W * (0.2 + r(0x7c) * 0.6));
+    if (!inRing(tx, tz, ring)) return;
+    const R = 1.8 + r(0x7d) * 0.9, leg = 2.2 + r(0x7e) * 1.2, body = 3.6 + r(0x7f) * 1.4;
+    b.setInfo(id, kindI, PART.trim, 0);
+    b.setColor(lin(0x3b3835)); // steel legs + ring beam
+    for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) box(b, tx + dx * R * 0.6, tz + dz * R * 0.6, 0, 0.22, 0.22, top, top + leg);
+    box(b, tx, tz, 0, R * 1.5, R * 1.5, top + leg - 0.15, top + leg + 0.1);
+    b.setColor(lin(r(0x80) < 0.7 ? 0x7d644a : 0x8e8a82)); // cedar staves (a few are steel)
+    const ring2 = prism(b, tx, tz, R, 12, top + leg, top + leg + body);
+    flatCap(b, ring2, top + leg + body);
+    b.setColor(lin(0x2f2c2a));
+    cone(b, tx, tz, R * 1.04, 12, top + leg + body, top + leg + body + R * 0.55);
+  }
+}
 // the band between an outer ring and the wall ring at height y (a ledge / cornice top)
 function flatCapRing(b: Builder, outer: P2[], inner: P2[], y: number, n = UP) {
   for (let i = 0; i < inner.length; i++) {
@@ -1063,19 +1155,34 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     }
     if (!isFinite(gmin)) return;
     const base = Math.max(gmin, 0.2) - 0.3;
+    // building:part (realTile): one piece of a taller building — a setback tier, a crown, a
+    // tower on its podium — standing lf above the ground. Parts share their outline's id (one
+    // look, one door cut); an outline its parts draw (hp) keeps only footprint, door and name.
+    const lift = bd.lf ?? 0, lifted = lift > 1.5, part = !!bd.pt;
+    const owns = !lifted && !(part && bd.po != null); // gets the footprint + door (the walkable building)
     const seed = bd.s;
     const r1 = hash01(seed), r2 = hash01(seed ^ 0x5bd1e995), r3 = hash01(seed ^ 0x27d4eb2f), r5 = hash01(seed ^ 0x165667b1);
     const inSlice = !lite && near(cx, cz, 50); // lite (coarse ring) builds are silhouettes: no detail geometry
     const inZone = near(cx, cz, 270);
     const detail = inSlice && !bd.lod;
     // Every look decision comes from the recipe: pure f(bd.s, region style, real data).
+    // North American rows (walk-ups, brownstones): flat roofs behind a cornice, apartments inside —
+    // unless the survey measured or the map says otherwise (recipe.ts rowStyle)
+    const rowNA = rowStyle(bd, activeStyle());
+    if (rowNA) {
+      if (!bd.rt && !bd.ms) bd.roof = 'flat';
+      if (bd.h >= 9.5) bd.k = 'large';
+    }
     const rc = recipeFor(bd, activeStyle());
     const kindI = KIND[bd.k] ?? 0;
-    const kindS = kindI + rc.siding / 10; // siding code rides in the fraction (the shader's kind tests use ±0.5 bands)
+    // siding code rides in the fraction (the shader's kind tests use ±0.5 bands, so the glass
+    // curtain wall, code 5, sits at .46 — still inside its kind's band, still rounds to 5)
+    // (+0.04: a storefront street floor under apartments — windowAt reads it back; never on glass)
+    const kindS = kindI + (rc.siding === SIDING.glass ? 0.46 : rc.siding / 10 + (bd.gf && (bd.k === 'large' || bd.k === 'house') ? 0.04 : 0));
     const facade = lin(rc.facade);
     const roofCol = lin(rc.roof);
     const bTrim = lin(rc.trim);
-    const id = idBase + bi;
+    const id = idBase + (part && bd.po != null && bd.po >= 0 ? bd.po : bi);
 
     if (bd.roof === 'tower') {
       const r = Math.max(2.2, Math.sqrt(Math.abs(ringArea(ring)) / Math.PI));
@@ -1089,7 +1196,8 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     // Raised on pilings: mapped min_height, else low-lying houses near the water, more likely the taller
     // they stand (a raised two-storey reads ~10 m in the height data, a slab one ~7–8 m).
     let raise = 0;
-    if (bd.mh && bd.mh > 1) raise = Math.min(bd.mh, 4);
+    if (part || lifted) raise = 0;
+    else if (bd.mh && bd.mh > 1) raise = Math.min(bd.mh, 4);
     else if (bd.k === 'house' && inZone && gmax < 3.2 && (terrain.oceanDistAt(cx, cz) < 450 || terrain.sdfAt(cx, cz) < 110)) {
       const p = bd.h >= 10 ? 0.8 : bd.h >= 8 ? 0.42 : bd.h >= 6.5 ? 0.12 : 0;
       if (r3 < p) raise = 2.3 + hash01(seed ^ 0x3c6ef372) * 1.1;
@@ -1099,9 +1207,9 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     const floor0 = Math.min(gmax + found, base + 1.6) + raise;
     const fo = floor0 - base;
     // LiDAR heights stand on the footprint's MEAN ground; mapped ones on its lowest corner
-    const top = base + 0.3 + bd.h + (bd.ms ? (gmax - gmin) / 2 : 0);
+    const top = base + 0.3 + lift + bd.h + (bd.ms ? Math.min(4, (gmax - gmin) / 2) : 0);
     const fH = floorHeight(bd.k);
-    const pitched = bd.roof === 'gable' || bd.roof === 'hip';
+    const pitched = !bd.hp && (bd.roof === 'gable' || bd.roof === 'hip');
     let eave = top, roofG: RoofGeom | null = null;
     let hullTop: ((x: number, z: number) => number) | null = null; // walls rising to meet a hull roof
     let dplan: DormerPlan | null = null;
@@ -1144,7 +1252,7 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
         hullTop = (x, z) => e0 + Math.min(rise, Math.max(0, hullInset(Hr, x, z)) * pe);
       }
     }
-    const skillion = bd.roof === 'skillion' && !roofG;
+    const skillion = !bd.hp && bd.roof === 'skillion' && !roofG;
     let skTop: ((x: number, z: number) => number) | null = null;
     if (skillion) {
       // single slope falling away from the longest wall
@@ -1161,11 +1269,15 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     }
 
     // walls (above the pilings for raised houses)
-    const wallY0 = raise > 0 ? floor0 - 0.3 : base;
+    // (lifted parts start at their own bottom; the wall UV still counts from the ground so the
+    // floors line up across a tower's tiers)
+    const wallY0 = lifted ? base + lift : raise > 0 ? floor0 - 0.3 : base;
     b.setInfo(id, kindS, PART.wall, fo);
     b.setColor(facade);
     let deco: Deco | null = null;
-    if (roofG) {
+    if (bd.hp) {
+      // drawn by its parts
+    } else if (roofG) {
       walls(b, ring, base, wallY0, hullTop ?? eave, eave - base);
       emitRoof(b, roofG, eave, base, roofCol, bTrim, detail, facade, id, kindS, fo, rc.roofMat);
       if (detail) decorate(b, (deco = { ring, cx, cz, base, eave, fo, floor0, raise, id, kindS, roofMat: rc.roofMat, facade, roofCol, trim: bTrim, R: roofG, rc, seed, streets, colliders, rings }), dplan);
@@ -1215,7 +1327,15 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
       b.setInfo(id, kindI, PART.roof, 0);
       b.setColor(roofCol);
       flatCap(b, ring, top);
-      if (detail) decorateFlat(b, ring, top, id, kindI, bTrim, (bd.k === 'commercial' || bd.k === 'large') && hash01(seed ^ 0xc0c0) < 0.65);
+      if (lifted && lift > 2.5) {
+        // the underside of an overhang / skybridge you can look up at
+        b.setInfo(id, kindI, PART.trim, 0);
+        b.setColor(facade.clone().multiplyScalar(0.72));
+        flatCap(b, ring, wallY0, DOWN);
+      }
+      // towers read by their tops from blocks away — built at every detail level
+      if (!part && top - base > 16) towerTop(b, ring, top, top - base, id, kindI, rc, facade, seed);
+      if (detail) decorateFlat(b, ring, top, id, kindI, bTrim, rowNA || ((bd.k === 'commercial' || bd.k === 'large') && hash01(seed ^ 0xc0c0) < 0.65));
       if (detail && (bd.k === 'large' || bd.k === 'commercial')) {
         const n = 1 + Math.floor(r3 * 3);
         b.setInfo(id, kindI, PART.trim, 0);
@@ -1229,7 +1349,7 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     }
     const wallTop = roofG || skTop ? eave : top;
     // foundation plinth (not under pilings — those stand on their own posts)
-    if (detail && raise === 0 && bd.k !== 'shed') plinth(b, ring, base, Math.min(floor0 - 0.03, base + 1.4), id, kindI, lin(rc.siding === SIDING.brick ? 0x8a6a5a : [0xb3aea3, 0xa8a398, 0x9c968b][Math.floor(r5 * 3)]));
+    if (detail && raise === 0 && bd.k !== 'shed' && !bd.hp && !lifted && rc.siding !== SIDING.glass) plinth(b, ring, base, Math.min(floor0 - 0.03, base + 1.4), id, kindI, lin(rc.siding === SIDING.brick ? 0x8a6a5a : [0xb3aea3, 0xa8a398, 0x9c968b][Math.floor(r5 * 3)]));
 
     // pilings, floor underside, and sometimes a lattice skirt
     const lattice = raise > 0 && r5 < 0.3;
@@ -1263,6 +1383,7 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     }
 
     const fp: Footprint = { ring, base, top: wallTop, floor0, raise, name: bd.n, use: bd.u, addr: bd.ad, kind: bd.k, eave: wallTop - base, seed: r1, id, pitched: !!roofG };
+    if (!owns) return; // parts belong to their outline's footprint; floating pieces have none
     if (inZone) footprints.push(fp);
     if (inSlice && !bd.lod && bd.k !== 'shed' && inZone) {
       const wall = pickDoorWall(ring, seed, bd.k, streets, entrances);
@@ -1271,6 +1392,9 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
         const B: BInfo = { ring, base, floor0, raise, eave: wallTop, kind: bd.k, seed, id, fo, roofCol, roofMat: rc.roofMat === ROOFMAT.tile ? ROOFMAT.metal : rc.roofMat, addr: bd.ad, name: bd.n, use: bd.u, bi: footprints.length - 1 };
         const porch = bd.k === 'house' && raise === 0 && r2 < 0.5 && porchFits(C, B, wall);
         const d = buildEntrance(C, B, wall, porch);
+        // the black iron fire escape down the front of a North American brick walk-up
+        if (activeStyle().region === 'na' && rc.siding === SIDING.brick && !roofG && !skTop && (rowNA || bd.k === 'large') && top - base >= 10 && top - base <= 34 && hash01(seed ^ 0xf1e5) < 0.5)
+          fireEscape(b, ring, wall, floor0, top, fH, id, kindI);
         if (deco && rc.chimney === 2) sideChimney(b, deco, wall.i);
         if (rc.bay && !porch && raise === 0) bayWindow(C, B, wall, rc, kindS, facade, roofCol, bTrim);
         fp.door = doors.length;
@@ -1322,6 +1446,8 @@ Win windowAt(float u, float v, float len, float eave, float seed, float kind, fl
   Win w;
   bool dorm = len > 500.0; // dormer fronts carry len + 1000: always glazed (no random blank)
   if (dorm) len -= 1000.0;
+  float kf = fract(kind + 0.001) * 10.0;
+  bool gf = kf - floor(kf + 0.5) > 0.25; // apartments over shops (buildings.ts kindS +0.04)
   bool shop = kind > 1.5 && kind < 2.5;
   bool church = kind > 3.5 && kind < 4.5; // tall round-headed lancets, one tier
   w.arch = church;
@@ -1330,7 +1456,7 @@ Win windowAt(float u, float v, float len, float eave, float seed, float kind, fl
   w.ok = kind < 4.5 && len > 2.0 && vf > 0.0 && v < eave - 0.25;
   w.fi = floor(max(vf, 0.0) / w.floorH);
   w.fv = vf - w.fi * w.floorH;
-  w.store = shop && w.fi < 0.5;
+  w.store = (shop || gf) && w.fi < 0.5;
   float spacing = w.store ? 3.4 : (kind > 2.5 && kind < 3.5 ? 2.2 : church ? 3.4 : 2.7);
   float nWin = max(1.0, floor((len - 0.6) / spacing));
   w.cellW = len / nWin;
@@ -1502,7 +1628,7 @@ export function buildingMaterial() {
           } else if (sid < 3.5) {
             // stucco / render: soft trowel mottling, no lines
             alb *= 0.95 + 0.07 * vnoise(vec2(u, v) * 1.3) + 0.03 * vnoise(vec2(u, v) * 7.0) * fine;
-          } else {
+          } else if (sid < 4.5) {
             // board and batten: raised battens every 0.42 m catch light on one edge
             float bb = fract(u / 0.42);
             float batten = aab(bb - 0.5, 0.045, fw.x / 0.42);
@@ -1515,7 +1641,9 @@ export function buildingMaterial() {
             float blk = max(step(0.93, fract(v / 0.2)), step(0.95, fract(u / 0.4 + step(0.5, fract(v / 0.4)) * 0.5)));
             alb *= 1.0 - 0.14 * blk * fine;
           }
+          bool curtain = sid > 4.5; // glass curtain wall (recipe.ts SIDING.glass): the panes are the wall
           Win W = windowAt(u, v, lenRaw, eave, seed, kind, fo, N);
+          if (curtain && !W.store) W.ok = false; // (a shop floor keeps its storefront glass)
           if (W.ok) {
             // ---- the window asset (painted, low-frequency; details fade before they alias) ----
             float day = 1.0 - uNight;
@@ -1645,6 +1773,38 @@ export function buildingMaterial() {
               }
             }
           }
+          if (curtain && !(W.ok && W.store) && v > fo - 0.02) {
+            // Floor-high panes between slim mullions, an opaque spandrel at every slab, the sky
+            // (or the street, looking down) in the glass by the view angle. Offices light up floor
+            // by floor at night. Sub-pixel detail folds into one averaged tone far away.
+            float cfH = 3.9, mw = 1.5, dayC = 1.0 - uNight;
+            float vf = v - fo;
+            float fl = floor(vf / cfH), fy = vf - fl * cfH;
+            float cu = u / mw, ci = floor(cu), cx2 = (fract(cu) - 0.5) * mw;
+            float farC = smoothstep(0.06, 0.3, max(fw.x, fw.y * 0.5));
+            float sp = aab(fy - 0.45, 0.45, fw.y); // spandrel over the slab
+            float mul = 1.0 - aab(cx2, mw * 0.5 - 0.045, fw.x);
+            float tr = max(aab(fy - 0.9, 0.03, fw.y), aab(fy - cfH + 0.02, 0.025, fw.y));
+            float frame = clamp(max(mul, tr), 0.0, 1.0) * (1.0 - farC);
+            float pane = hash12(vec2(ci + seed * 37.0, fl + seed * 11.0));
+            vec3 Vc = normalize(vWorldPos - (cameraPosition + uWorldOffset));
+            vec3 Rc = reflect(Vc, N);
+            float frc = 0.22 + 0.5 * pow(1.0 - abs(dot(Vc, N)), 2.5);
+            vec3 skyR = mix(uSkyHorizon, uSkyZenith, clamp(Rc.y * 1.4 + 0.15, 0.0, 1.0));
+            skyR = mix(skyR, vec3(dot(skyR, vec3(0.299, 0.587, 0.114))), 0.4); // tinted low-e glass mutes the sky it mirrors
+            float cl = fbm(Rc.xz / max(Rc.y, 0.12) * 0.9 + vec2(seed * 7.0, 0.0));
+            skyR = mix(skyR, vec3(0.94, 0.93, 0.9), smoothstep(0.45, 0.8, cl) * 0.35 * step(0.0, Rc.y));
+            skyR = mix(skyR, vColor * 0.4 + vec3(0.05, 0.05, 0.045), smoothstep(0.02, -0.25, Rc.y)); // street + facades opposite
+            vec3 gl = mix(vColor * 0.38, skyR * (0.9 + (pane - 0.5) * 0.14), frc * (0.45 + 0.55 * dayC));
+            float litC = step(hash12(vec2(floor(u / (mw * 4.0)) + seed * 13.0, fl * 1.7 + seed)), uWindowLit * 1.1);
+            gl += uWindowColor * litC * (0.03 + 0.95 * uNight) * (1.0 - frc * 0.5);
+            vec3 spC = mix(vColor * 0.62, skyR * 0.75, frc * 0.3) * (0.95 + 0.1 * pane);
+            vec3 mulC = fract(seed * 3.7) < 0.55 ? vec3(0.7, 0.72, 0.74) : vec3(0.22, 0.21, 0.2);
+            alb = mix(spC, mulC, frame);
+            float glassM = (1.0 - sp) * (1.0 - frame);
+            winCol = gl;
+            winMask = mix(glassM, 0.72, farC);
+          }
           // small attic window in the gable: casing, four lights, a sill
           if (!tower && v > eave + 0.4 && v < eave + 1.6) {
             float au = u - len * 0.5, av = v - (eave + 1.0);
@@ -1658,11 +1818,11 @@ export function buildingMaterial() {
             alb = mix(alb, ag, ai * (1.0 - abar));
             glow += ai * (1.0 - abar) * step(hash12(vec2(seed * 97.0, N.x)), uWindowLit * 0.6);
           }
-          if (!tower) {
+          if (!tower && !curtain) {
             float trim = max(aab(u - 0.09, 0.09, fw.x), aab(len - u - 0.09, 0.09, fw.x));
             alb = mix(alb, trimCol, trim);
             alb = mix(alb, trimCol, aab(v - (eave - 0.125), 0.125, fw.y)); // frieze board
-          } else {
+          } else if (tower) {
             alb *= 0.9 + 0.1 * step(0.5, fract(v / 0.6));
             float slit = step(abs(fract(u / max(len, 0.1)) - 0.5), 0.06) * step(0.6, fract(v / 5.0)) * step(fract(v / 5.0), 0.85);
             alb = mix(alb, vec3(0.1), slit);

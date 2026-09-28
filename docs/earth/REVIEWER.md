@@ -392,3 +392,22 @@ mapped; awnings aren't in the data.
 **Carried to round 7:** tree crowns at 5–10 m (frame 15, outer-lobe silhouette; now three rounds
 old, so round 7 treats it as a must-fix). A blank first capture of montage **a** after a fresh
 load: a harness warm-up is in and needs confirming.
+
+## Place parity (does it feel like home?) — 2026-09-27
+
+A new track beside the AAA rounds: `tools/place-shots.js` montages judged against real
+reference photos (`docs/earth/PLACE_REFERENCES.md`). Score = "would a local recognise it?".
+
+- **NYC round 1 — 5/10.** Recognisable only from the air and looking up. Gaps: no street life,
+  no continuous storefront band, suburban sidewalk grammar (grass verges), pastel walk-ups with
+  coloured doors and cyan glass, no canyon light; bugs: a black slab in frame 5 (a pole shadow
+  at the lens), the horizon pose inside walls, golden hour rendered as night.
+- **NYC round 2 — 6/10.** Landed: the skyline ring, signal masts, storefront band, lit shops at
+  night, paved sidewalks, restaurant booths on one wall. Open: street life still thin at the
+  pose; low-sun canyon glow (shadow map ±170 m); pale strips inside the carriageway (lane
+  model); tree pits / bins / lamps on side streets; cornices + shop band on every avenue bay.
+- **Tucson round 1 — 5/10.** Right: low flat parapet stucco and brick, terraces with names,
+  gravel verges, tile roofs and spires from the air. Open: savanna-umbrella mesquite and coconut
+  palms (want Washingtonia fan palms), the Catalinas too faint and low (z10 DEM, thinner desert
+  haze), no overhead wires (they must survive the brush), fresh grey asphalt, no zero-setback
+  barrio facades, empty streets, a bar that reads as a ballroom.

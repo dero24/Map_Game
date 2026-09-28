@@ -11,9 +11,10 @@ source, a region/climate table or a foundry family). No hand lists.
 - Sources: this doc merges the AAA design review (docs/earth/REVIEWER.md, 2026-09-27),
   ASSET_FIDELITY.md, ASSET_FOUNDRY.md, CONSTRUCTION.md and OPEN_WORLD.md.
 - Top items are mirrored into `feature_list.json`; this doc is the long list.
-- **Last updated 2026-09-27 (evening):** downtown life, furnished interiors, the wildlife
-  ecosystem and the scaling pass (regional cast, language-neutral business uses, street
-  rhythms, furniture budgets) — commits `c08c82a`, `8b82dcc`.
+- **Last updated 2026-09-27 (night):** place parity — skyscrapers and building parts, row
+  houses with fire escapes, the horizon ring, the skyline ring, city and desert sound, street
+  furniture from OSM, North American cladding by subregion, and tunable looks (LOG entry (n),
+  `docs/earth/PLACE_REFERENCES.md`). Earlier: `c08c82a`, `8b82dcc`.
 
 ---
 
@@ -60,6 +61,7 @@ source, a region/climate table or a foundry family). No hand lists.
 | 1.15 | Tree impostors beyond ~1 km; far-field silhouettes painted | ⬜ P2 | perf plus horizon richness |
 | 1.16 | Horizon and sky painting: layered cloud cards, sun/moon halos, lighthouse beams | 🟡 P2 | |
 | 1.17 | Photo mode: brush size, paper choice, framing, time-lapse | 🟡 P3 | |
+| 1.18 | **Looks you can tune**: paint pass at `paintDetail` (0.6, was half-res), HiDPI, vibrance + split-tone grade; presets watercolor / fine detail / vivid painted (sci-fi) / storybook soft in the ` panel | ✅ | post.ts, panel.ts — the player picks, the best becomes the default |
 
 ## 2. Assets up close (the foundry) — P0/P1
 
@@ -76,17 +78,17 @@ bevels and one or two signature details per object.
 | 2.6 | Windows: bigger house sash (0.9×1.5), paired mulled units, fewer blanks, curtains and blinds in the glass | 🟡 P1 | buildings.ts |
 | 2.7 | Storefronts: per-building sign fascia / solid trade-colour awning / rare stripes; signage from OSM `name`; displays lifted into the glass; café terraces with seated guests; curbside parking | 🟡 P1 | wares by `shop=*` still generic |
 | 2.8 | Lot dressing for every house: driveway, parked car, hedge or fence, walk gap, trash cans on collection day | 🟡 P0 | mailboxes, drives + cars, hedges, picket fences ✅; trash day ⬜ |
-| 2.9 | Fences and gates family: picket, split-rail, chain link, privacy, adobe wall, stone wall (by region) | ⬜ P1 | |
-| 2.10 | Street furniture: benches, bins, bike racks, hydrants, parking meters, bus shelters, newspaper boxes | 🟡 P1 | benches, poles, lamps (fixed arm/lens) |
+| 2.9 | Fences and gates family: picket, split-rail, chain link, privacy, adobe wall, stone wall (by region) | 🟡 P1 | pickets only in clapboard country; rendered yard walls + wrought iron in adobe/stucco towns ✅ |
+| 2.10 | Street furniture: benches, bins, bike racks, hydrants, parking meters, bus shelters, newspaper boxes | 🟡 P1 | benches, poles, lamps; OSM hydrants, traffic-signal masts, subway entrances ✅; main-street acorn posts ✅; steel masts in dense cores ✅ |
 | 2.11 | Parking lots: stall striping, cars at ~60% occupancy, cart corrals | ⬜ P0 | fixes the aerial "ghost lots" |
 | 2.12a | Sand surface: shore-parallel ripples, wrack line, footprint stipple (from the shore distance field) | ✅ | ground.ts |
 | 2.12b | Beach props: dune fence, dune grass (not lawn), shells and sea glass, lifeguard stands everywhere | 🟡 P0 | umbrellas, towels, stands ✅ |
 | 2.12c | Shorelines: bulkheads, riprap, seawalls (OSM `man_made=breakwater\|groyne`, `barrier=retaining_wall`), marsh edges with reeds | ⬜ P1 | the Sea Bright seawall is a defining feature |
-| 2.12d | Crosswalks, stop bars, curb ramps in the ground paint | ⬜ P1 | streets read untended without them |
+| 2.12d | Crosswalks, stop bars, curb ramps in the ground paint | 🟡 P1 | ladder crosswalks at tertiary+ junctions ✅; stop bars, ramps ⬜ |
 | 2.13 | Docks, piers, boardwalks, jetties from one recipe | 🟡 P1 | piers exist |
 | 2.14 | Playgrounds, ball fields, courts (OSM `leisure=*`) | ⬜ P2 | |
 | 2.15 | Holiday and seasonal decorations by calendar: July 4 bunting, Halloween pumpkins, Christmas lights | ⬜ P2 | calendar table |
-| 2.16 | Trees 2: species by ecoregion (live oak + moss, cypress, saguaro, Joshua tree, aspen, redwood, sycamore, cottonwood) | 🟡 P1 | 7 species now |
+| 2.16 | Trees 2: species by ecoregion (live oak + moss, cypress, saguaro, Joshua tree, aspen, redwood, sycamore, cottonwood) | 🟡 P1 | 8 species now (+ mesquite / palo verde in arid climates) |
 | 2.17 | Trees 3: per-branch wind, leaf flutter, fall colour, bare winter form | ⬜ P2 | |
 | 2.18 | Shrubs and groundcover by region: sagebrush, creosote, palmetto, azalea, rhododendron, prairie grasses | 🟡 P1 | plantMix has 12 species |
 | 2.19 | Rocks and minerals by lithology: granite, sandstone, red rock, basalt, limestone, glacial erratics, coquina | 🟡 P1 | rocks exist but are not regional |
@@ -139,7 +141,7 @@ first), built from the decor family, with table counts scaled by floor area.
 | 5.1 | Footsteps by surface: sand, boards, grass, asphalt, tile, carpet, gravel, snow | 🟡 (grass/paved) |
 | 5.2 | Room tone and reverb by room size; door open/close; muffled outdoors when inside | ⬜ P1 |
 | 5.3 | Restaurant chatter, kitchen clatter, café grinder, store beeps (from the interior archetype) | ⬜ P1 |
-| 5.4 | Regional soundscape tables: cicadas (SE), loons (N), coyotes (SW), frogs (wetlands), foghorns (coast) | ⬜ P1 |
+| 5.4 | Regional soundscape tables: cicadas (SE), loons (N), coyotes (SW), frogs (wetlands), foghorns (coast) | 🟡 P1 — the city by built volume (roar, horns, sirens, crowd, pigeons) ✅; desert cicadas + dawn doves ✅; the sea only by the sea ✅ |
 | 5.5 | Weather audio: rain on roofs and on the umbrella, thunder, wind in the pines vs. the palms | 🟡 P2 |
 | 5.6 | Sparse adaptive music: piano/guitar phrases on arrival, at golden hour and when a painting completes | ⬜ P2 |
 | 5.7 | Vehicle audio: engine by type, tyre on wet roads, boat outboards, planes; knockdown thud + "oof" ✅ | 🟡 P2 |
@@ -188,7 +190,7 @@ Each is a table keyed on region, state, ecoregion or climate, read by the system
 
 | # | Item | Status | Priority |
 |---|---|---|---|
-| 8.1 | Streamed (`w-*`) tiles carry landuse, POIs, addresses, opening hours | 🟡 | P0 for Local Plates — named business nodes → `Building.n/u` in realTile (tile cache v7; **needs a worker redeploy**) |
+| 8.1 | Streamed (`w-*`) tiles carry landuse, POIs, addresses, opening hours | 🟡 | P0 for Local Plates — named business nodes, building parts, rows, signals/hydrants (tile cache **v10; needs a worker redeploy**). `?tiles=direct` streams from three Overpass mirrors meanwhile |
 | 8.2 | Ground paint outside the baked slice: walks, drives, lawns, parking stripes | 🟡 | P0 |
 | 8.3 | Per-tile lamp pools on streamed streets at night | ✅ | the clamp was absolute height vs DEM ground; now relative to the local ground (`uLampBaseY`) |
 | 8.3b | **World persistence**: traffic/walkers survive tile streaming (`LifeSim.adopt`); parked player vehicles + taken driveway cars survive sessions | ✅ | next: persist moved props, opened doors, time-of-day routines per agent |
@@ -198,6 +200,26 @@ Each is a table keyed on region, state, ecoregion or climate, read by the system
 | 8.7 | Hero regions 03–05: Gulf coast (live oak + moss, shotgun houses), Mountain West (aspen, A-frames, elk), Midwest farm town (grain elevator, cornfields, Main Street) | ⬜ | P2 |
 | 8.8 | Water bodies: lakes, rivers, reservoirs, marsh — flow direction, reeds, lily pads by region | 🟡 | P2 |
 | 8.9 | Roads: correct widths and markings by class and state; rural shoulders; dirt roads | 🟡 | P2 |
+
+## 8b. Place parity — would someone from here recognise it?
+
+Reference photos + per-place trait tables: `docs/earth/PLACE_REFERENCES.md`. Harness:
+`tools/place-shots.js` (`__PLACE__(tag)`, nine frames anywhere). Reviewer NYC round 1: 5/10.
+
+| # | Item | Status | Priority |
+|---|---|---|---|
+| P.1 | Real heights (m/ft, floors vs height sanity, 830 m cap), OSM `building:part` setbacks | ✅ | |
+| P.2 | Tower facades: glass curtain wall vs masonry by material / era / height; penthouses, water tanks | ✅ | |
+| P.3 | Row buildings (party walls in dense blocks): brick/brownstone, flat roofs + cornices, fire escapes, storefront street floors on avenues | ✅ | North America; Europe keeps pitched terraces |
+| P.4 | Horizon ring: real mountains 6–80 km (Terrarium z9), curvature, haze from local ground | ✅ | |
+| P.5 | Skyline ring: towers ≥ 45 m within 8 km as silhouettes past the detail ring | 🟡 | verify in NYC / Seattle |
+| P.6 | Canyon light: street-level ambient and key reduced by the sky-view factor | ⬜ | P1 |
+| P.7 | Street life by frontage + built volume; taxis; buses from `route=bus` | 🟡 | buses ⬜ |
+| P.8 | Urban sidewalk grammar: paved dense blocks ✅; tree pits, bins, sidewalk sheds, newspaper boxes ⬜ | 🟡 | P1 |
+| P.9 | Road width model: carriageway + parking lanes from `width` / `lanes` / `parking:*` (parked cars on narrow main streets) | ⬜ | P1 |
+| P.10 | House cladding by North American subregion (brick South / Midwest, clapboard Northeast, cedar Northwest) | ✅ | styles.ts `naSub` |
+| P.11 | Hydrants / yield signs / kerb paint by state; US-flag banners on main-street lamps in summer | ⬜ | P2 |
+| P.12 | Agave, yucca, saguaro, gravel yards for the desert | ⬜ | P1 |
 
 ## 9. Tech & performance
 
@@ -220,10 +242,14 @@ Each is a table keyed on region, state, ecoregion or climate, read by the system
 Reviewer round 6 (8/10 on the expanded scope) had all its must-fixes applied the same
 session. Round 7 confirms them, and the tree silhouette (1.11c) is its first must-fix.
 
-1. **Redeploy the tile worker** (v7) → streamed-parity harness in a real desert town (Tucson).
-2. **Tree silhouettes at 5–10 m** (1.11c).
-3. **Boot GPU benchmark + quality tiers** (1.7) and people LOD (9.5).
-4. **Local Plates** (6.2) on the diners and cafés that now exist.
-5. **Almanac regional sets** (6.1) filtered by the place's tables.
-6. **Hero region 02** (desert SW): saguaro, lizards, red rock, xeriscape.
-7. The rest by priority, one feature_list item at a time.
+1. **Redeploy the tile worker** (v10) — every streamed town then gets parts, rows, signals and
+   business uses from the shared R2 cache instead of the browser's Overpass queue.
+2. Place-parity rounds: NYC to 8/10 (canyon light, street life, sidewalk grammar), then
+   Seattle and Miami, then small towns in each NA subregion.
+3. **Tree silhouettes at 5–10 m** (1.11c).
+4. **Boot GPU benchmark + quality tiers** (1.7) and people LOD (9.5) — the looks panel exists,
+   the benchmark picks a default tier.
+5. **Local Plates** (6.2) on the diners and cafés that now exist.
+6. **Almanac regional sets** (6.1) filtered by the place's tables.
+7. **Hero region 02** (desert SW): saguaro, lizards, red rock, xeriscape.
+8. The rest by priority, one feature_list item at a time.

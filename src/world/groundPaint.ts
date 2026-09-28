@@ -144,6 +144,26 @@ class Painter {
       }
     }
     ctx.globalAlpha = 1;
+    // Dense blocks are paved: where footprints cover over 45 % of a 40 m cell (a city block, not a
+    // suburb), the ground between the buildings is concrete and flagstone, not lawn — the grass
+    // field (grassMask) then stays off it too.
+    if (detail) {
+      const C = 40, cov = new Map<string, number>();
+      for (const f of this.footIn(x0, z0, x1, z1)) {
+        if (!overlaps(f, x0, z0, x1, z1, 60)) continue;
+        const r = f.pts[0];
+        let a = 0, cx = 0, cz = 0;
+        for (let i = 0, j = r.length - 1; i < r.length; j = i++) (a += (r[j][0] - r[i][0]) * (r[j][1] + r[i][1])), (cx += r[i][0]), (cz += r[i][1]);
+        const k = `${Math.floor(cx / r.length / C)},${Math.floor(cz / r.length / C)}`;
+        cov.set(k, (cov.get(k) ?? 0) + Math.abs(a / 2));
+      }
+      ctx.fillStyle = '#b1ab9d';
+      for (const [k, a] of cov) {
+        if (a < C * C * 0.45) continue;
+        const [i, j] = k.split(',').map(Number);
+        ctx.fillRect(i * C - 6, j * C - 6, C + 12, C + 12);
+      }
+    }
     // Contact shadows / foundations under buildings (grounds the houses in the wash).
     if (detail) {
       ctx.strokeStyle = 'rgba(70,64,56,0.32)';
@@ -238,7 +258,54 @@ class Painter {
       }
       ctx.globalAlpha = 1;
     }
+    if (level === 2) this.crosswalks(ctx, list);
     ctx.lineCap = 'round';
+  }
+
+  // Ladder crosswalks where a main road (tertiary and up) meets another carriageway: white bars
+  // across each approach, just outside the junction. Junctions are nodes the roads share (OSM
+  // joins streets at a common node; the 0.1 m ints make those exact).
+  private crosswalks(ctx: CanvasRenderingContext2D, list: Prepared<Road>[]) {
+    const at = new Map<string, { r: Road; p: P[]; i: number }[]>();
+    for (const { item: r, pts } of list) {
+      const rank = ROAD_RANK[r.c] ?? 1;
+      if (rank < 2 || r.sw || r.c.endsWith('_link')) continue;
+      const p = pts[0];
+      for (let i = 0; i < p.length; i++) {
+        const k = `${Math.round(p[i][0] * 10)}_${Math.round(p[i][1] * 10)}`;
+        const l = at.get(k);
+        if (l) l.push({ r, p, i });
+        else at.set(k, [{ r, p, i }]);
+      }
+    }
+    ctx.fillStyle = '#eeebe2';
+    ctx.globalAlpha = 0.88;
+    for (const legs of at.values()) {
+      if (legs.length < 2 || new Set(legs.map((l) => l.r)).size < 2) continue;
+      if (!legs.some((l) => (ROAD_RANK[l.r.c] ?? 1) >= 3)) continue;
+      const wMax = Math.max(...legs.map((l) => l.r.w));
+      for (const { r, p, i } of legs) {
+        for (const j of [i - 1, i + 1]) {
+          if (j < 0 || j >= p.length) continue;
+          const [nx0, nz0] = p[i], dx = p[j][0] - nx0, dz = p[j][1] - nz0, L = Math.hypot(dx, dz);
+          const d0 = wMax / 2 + 1.2;
+          if (L < d0 + 4) continue; // too short a stub to carry a crossing
+          const ux = dx / L, uz = dz / L, qx = -uz, qz = ux;
+          const cx = nx0 + ux * (d0 + 1.5), cz = nz0 + uz * (d0 + 1.5);
+          for (let sft = -r.w / 2 + 0.55; sft <= r.w / 2 - 0.5; sft += 1.1) {
+            const bx = cx + qx * sft, bz = cz + qz * sft;
+            ctx.beginPath();
+            ctx.moveTo(bx - ux * 1.5 - qx * 0.27, bz - uz * 1.5 - qz * 0.27);
+            ctx.lineTo(bx + ux * 1.5 - qx * 0.27, bz + uz * 1.5 - qz * 0.27);
+            ctx.lineTo(bx + ux * 1.5 + qx * 0.27, bz + uz * 1.5 + qz * 0.27);
+            ctx.lineTo(bx - ux * 1.5 + qx * 0.27, bz - uz * 1.5 + qz * 0.27);
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
   }
 }
 

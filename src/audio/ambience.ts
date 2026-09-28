@@ -3,6 +3,8 @@
 // night crickets, the hush and clock of a house, doors, church bells on the hour, dogs, porch wind chimes,
 // halyards ringing on moored sailboats and water lapping the pilings, leaves in the wind, birdsong by day,
 // engines for whatever you ride (car / outboard / propeller), and the brush + paper sounds of the sketchbook.
+// Places sound like themselves: the city's roar, crowds, horns, sirens and pigeons grow with the built
+// volume around you; the desert has cicadas on summer days and mourning doves at dawn; the sea stays by the sea.
 import type { LifeStats } from '../sim/life';
 
 export const audioParams = { volume: 0.7, muted: false };
@@ -25,6 +27,9 @@ export interface AudioFrame {
   sails?: number; // moored sailboats within ~80 m (halyards)
   trees?: number; // 0..1 tree cover around you (leaves, birds)
   ride?: { kind: 'car' | 'boat' | 'plane'; v: number; throttle: number; airborne: boolean } | null;
+  city?: number; // 0..1 how built-up the blocks around you are (stream.cityGrid): traffic roar, horns, sirens, crowds
+  climate?: string; // styles.ts climate: the desert's cicadas and doves
+  summer?: boolean; // the warm months where you are (hemisphere-aware)
 }
 
 function noiseBuffer(ctx: AudioContext, seconds: number, color: 'white' | 'pink' | 'brown') {
@@ -77,6 +82,15 @@ export class Ambience {
   private lapT = 1;
   private birdT = 4;
   private leafGain!: GainNode;
+  // the city: a traffic roar that fills the street canyon, a crowd murmur, horns, sirens, pigeons
+  private roarGain!: GainNode;
+  private crowdGain!: GainNode;
+  private hornT = 6;
+  private sirenT = 40;
+  private pigeonT = 8;
+  // the desert: cicadas on summer days, mourning doves in the morning
+  private cicadaGain!: GainNode;
+  private doveT = 6;
   private engine!: { g: GainNode; lp: BiquadFilterNode; o1: OscillatorNode; o2: OscillatorNode; am: GainNode; lfo: OscillatorNode; rush: GainNode };
   private pink!: AudioBuffer;
 
@@ -173,6 +187,62 @@ export class Ambience {
     this.leafGain = ctx.createGain();
     this.leafGain.gain.value = 0;
     loop(pink).connect(lf).connect(this.leafGain).connect(this.master);
+
+    // City roar: tyres and engines off the walls — a low rumble plus a mid band, never silent
+    // among towers. Crowd: babble-band noise breathing on a slow random swell.
+    this.roarGain = ctx.createGain();
+    this.roarGain.gain.value = 0;
+    const rl = ctx.createBiquadFilter();
+    rl.type = 'lowpass';
+    rl.frequency.value = 280;
+    loop(brown).connect(rl).connect(this.roarGain);
+    const rm = ctx.createBiquadFilter();
+    rm.type = 'bandpass';
+    rm.frequency.value = 750;
+    rm.Q.value = 0.6;
+    const rmg = ctx.createGain();
+    rmg.gain.value = 0.35;
+    loop(pink).connect(rm).connect(rmg).connect(this.roarGain);
+    this.roarGain.connect(this.master);
+    this.crowdGain = ctx.createGain();
+    this.crowdGain.gain.value = 0;
+    const cb = ctx.createBiquadFilter();
+    cb.type = 'bandpass';
+    cb.frequency.value = 950;
+    cb.Q.value = 1.3;
+    const cam = ctx.createGain();
+    cam.gain.value = 0.7;
+    const clfo = ctx.createOscillator();
+    clfo.frequency.value = 3.1;
+    const clg = ctx.createGain();
+    clg.gain.value = 0.3;
+    clfo.connect(clg).connect(cam.gain);
+    clfo.start();
+    loop(pink).connect(cb).connect(cam).connect(this.crowdGain).connect(this.master);
+    // Cicadas: a bright noise band chopped ~180 times a second, swelling and fading in waves
+    this.cicadaGain = ctx.createGain();
+    this.cicadaGain.gain.value = 0;
+    const cf = ctx.createBiquadFilter();
+    cf.type = 'bandpass';
+    cf.frequency.value = 5400;
+    cf.Q.value = 2.5;
+    const chop = ctx.createGain();
+    chop.gain.value = 0.5;
+    const co = ctx.createOscillator();
+    co.type = 'square';
+    co.frequency.value = 182;
+    const cg = ctx.createGain();
+    cg.gain.value = 0.5;
+    co.connect(cg).connect(chop.gain);
+    const swellO = ctx.createOscillator();
+    swellO.frequency.value = 0.09;
+    const swellG = ctx.createGain();
+    swellG.gain.value = 0.4;
+    const swell = ctx.createGain();
+    swell.gain.value = 0.6;
+    swellO.connect(swellG).connect(swell.gain);
+    co.start(); swellO.start();
+    loop(pink).connect(cf).connect(chop).connect(swell).connect(this.cicadaGain).connect(this.master);
 
     // Engine: two detuned oscillators through a lowpass, a tremolo for the propeller's chop,
     // and a wind rush that grows with speed. Silent until you ride something.
@@ -434,6 +504,83 @@ export class Ambience {
     }
   }
 
+  // A car horn down the block: one or two blasts of a two-tone horn, softened by distance.
+  private horn(vol: number, pan: number) {
+    const ctx = this.ctx, t0 = ctx.currentTime;
+    const n = Math.random() < 0.6 ? 1 : 2, base = 390 + Math.random() * 80;
+    for (let k = 0; k < n; k++) {
+      const t = t0 + k * (0.3 + Math.random() * 0.15), d = 0.18 + Math.random() * (k ? 0.2 : 0.45);
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 1400 + Math.random() * 900;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vol, t + 0.02);
+      g.gain.setValueAtTime(vol, t + d);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.06);
+      const p = ctx.createStereoPanner();
+      p.pan.value = pan;
+      for (const m of [1, 1.26]) {
+        const o = ctx.createOscillator();
+        o.type = 'square';
+        o.frequency.value = base * m;
+        o.connect(lp);
+        o.start(t);
+        o.stop(t + d + 0.08);
+      }
+      lp.connect(g).connect(p).connect(this.master);
+    }
+  }
+  // A siren passing a few blocks over: the American wail, rising as it nears and fading away.
+  private siren(vol: number) {
+    const ctx = this.ctx, t = ctx.currentTime, dur = 7 + Math.random() * 4;
+    const o = ctx.createOscillator();
+    o.type = 'triangle';
+    for (let k = 0; k * 1.6 < dur; k++) {
+      o.frequency.setValueAtTime(680, t + k * 1.6);
+      o.frequency.linearRampToValueAtTime(1350, t + k * 1.6 + 0.8);
+      o.frequency.linearRampToValueAtTime(680, t + k * 1.6 + 1.6);
+    }
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 1800;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + dur * 0.45);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const p = ctx.createStereoPanner();
+    p.pan.setValueAtTime(Math.random() < 0.5 ? -0.7 : 0.7, t);
+    p.pan.linearRampToValueAtTime(-p.pan.value, t + dur);
+    o.connect(lp).connect(g).connect(p).connect(this.master);
+    o.start(t);
+    o.stop(t + dur + 0.1);
+  }
+  // Soft low cooing: a pigeon on a ledge (fast warble) or a mourning dove at dawn (slow, falling).
+  private coo(vol: number, dove: boolean) {
+    const ctx = this.ctx, t0 = ctx.currentTime, pan = Math.random() * 1.4 - 0.7;
+    const notes = dove ? [[0, 0.35, 470, 520], [0.45, 0.6, 560, 470], [1.2, 0.45, 460, 430], [1.75, 0.45, 450, 420]] : [[0, 0.45, 330, 290], [0.55, 0.3, 310, 280]];
+    for (const [dt, d, f0, f1] of notes) {
+      const t = t0 + dt;
+      const o = ctx.createOscillator();
+      o.frequency.setValueAtTime(f0, t);
+      o.frequency.linearRampToValueAtTime(f1, t + d);
+      const vib = ctx.createOscillator();
+      vib.frequency.value = dove ? 6 : 24;
+      const vg = ctx.createGain();
+      vg.gain.value = dove ? 6 : 18;
+      vib.connect(vg).connect(o.frequency);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vol, t + d * 0.3);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      const p = ctx.createStereoPanner();
+      p.pan.value = pan;
+      o.connect(g).connect(p).connect(this.master);
+      o.start(t); vib.start(t);
+      o.stop(t + d + 0.05); vib.stop(t + d + 0.05);
+    }
+  }
+
   resume() { void this.ctx.resume(); }
 
   private blip(opts: { freq: number; q: number; dur: number; gain: number; pan?: number; type?: BiquadFilterType }) {
@@ -513,7 +660,7 @@ export class Ambience {
 
     // Surf: sets of waves ~9 s apart, with a crash transient on each.
     const muffle = f.indoors ? 0.3 : 1;
-    const near = (Math.exp(-f.oceanDist / 160) * 0.85 + 0.12) * muffle;
+    const near = (Math.exp(-f.oceanDist / 160) * 0.85 + 0.12 * Math.exp(-f.oceanDist / 2500)) * muffle; // inland, no sea at all
     const swell = Math.pow(Math.max(0, Math.sin(this.t * 0.7)), 3) * 0.7 + Math.pow(Math.max(0, Math.sin(this.t * 0.7 + 2.2)), 4) * 0.4;
     set(this.surfGain.gain, near * (0.32 + 0.4 * swell), 0.25);
     set(this.surfFilter.frequency, 380 + 700 * swell * near, 0.3);
@@ -536,18 +683,46 @@ export class Ambience {
       const busy = Math.min(1, L.gullsNear / 12);
       this.gullTimer = (1 - f.night * 0.8) > 0.3 ? 1.5 + Math.random() * (9 - busy * 7) : 20 + Math.random() * 30;
       const vol = L.gullsNear > 0 ? 0.12 * Math.min(1, 25 / (L.gullDist + 5)) + 0.02 : 0.02 * near;
-      if (f.night < 0.8 || Math.random() < 0.1) this.gull(L.gullsNear > 0 ? L.gullPan : Math.random() * 2 - 1, vol);
+      if ((f.night < 0.8 || Math.random() < 0.1) && (L.gullsNear > 0 || f.oceanDist < 4000)) this.gull(L.gullsNear > 0 ? L.gullPan : Math.random() * 2 - 1, vol);
     }
 
     // Distant bell buoy off the beach
     this.bellTimer -= f.dt;
     if (this.bellTimer <= 0) {
       this.bellTimer = 5 + Math.random() * 9;
-      this.bell(0.025 * (0.3 + near));
+      if (f.oceanDist < 3000) this.bell(0.025 * (0.3 + near));
     }
 
-    // Crickets at night, away from the surf
-    set(this.cricketGain.gain, muffle * f.night * 0.022 * Math.min(1, f.oceanDist / 120) * (f.surface === 'sand' ? 0.3 : 1), 1.5);
+    // Crickets at night, away from the surf (and the city)
+    const city = Math.max(0, Math.min(1, f.city ?? 0)), day = 1 - f.night;
+    set(this.cricketGain.gain, muffle * f.night * 0.022 * Math.min(1, f.oceanDist / 120) * (f.surface === 'sand' ? 0.3 : 1) * (1 - city * 0.85), 1.5);
+
+    // The city: the roar never stops among towers (quieter after midnight), a crowd where people
+    // are, horns now and then, a siren every few minutes, pigeons on the ledges by day
+    const late = f.hour >= 1 && f.hour < 5 ? 0.45 : 1;
+    set(this.roarGain.gain, city * 0.1 * late * (f.indoors ? 0.35 : 1) * (0.8 + 0.2 * Math.sin(this.t * 0.23)), 0.8);
+    set(this.crowdGain.gain, city * Math.min(1, L.pedsNear / 18) * 0.045 * (0.3 + 0.7 * day) * muffle, 0.8);
+    if ((this.hornT -= f.dt) <= 0) {
+      this.hornT = 2.5 + Math.random() * 14 / Math.max(0.25, city);
+      if (city > 0.2 && late === 1 && !f.indoors) this.horn(0.012 + 0.018 * city * Math.random(), Math.random() * 1.6 - 0.8);
+    }
+    if ((this.sirenT -= f.dt) <= 0) {
+      this.sirenT = 70 + Math.random() * 170;
+      if (city > 0.45) this.siren(0.014 * city * muffle);
+    }
+    if ((this.pigeonT -= f.dt) <= 0) {
+      this.pigeonT = 6 + Math.random() * 16;
+      if (city > 0.25 && day > 0.6 && !f.indoors) this.coo(0.012, false);
+    }
+    // The desert: cicadas through the heat of a summer day; mourning doves at dawn
+    const desert = f.climate === 'arid';
+    const heat = f.hour > 9 && f.hour < 19.5 ? 1 : 0;
+    set(this.cicadaGain.gain, desert && f.summer ? heat * day * 0.014 * muffle * (1 - city * 0.7) : 0, 2.5);
+    if ((this.doveT -= f.dt) <= 0) {
+      this.doveT = 7 + Math.random() * 18;
+      const dawn = f.hour > 5 && f.hour < 10;
+      if ((desert || f.climate === 'mediterranean') && dawn && !f.indoors && city < 0.6) this.coo(0.014, true);
+    }
 
     // Indoors: room tone and a ticking clock; a door sound as you cross the threshold
     set(this.roomGain.gain, f.indoors ? 0.05 : 0, 0.6);
@@ -603,7 +778,7 @@ export class Ambience {
     if ((this.birdT -= f.dt) <= 0) {
       const morning = f.hour > 5 && f.hour < 10 ? 1 : f.hour >= 10 && f.hour < 18 ? 0.35 : 0;
       this.birdT = 2 + Math.random() * (morning > 0.5 ? 5 : 14);
-      if (!f.indoors && f.night < 0.3 && morning > 0 && (trees > 0.15 || f.houses > 4) && f.oceanDist > 80 && Math.random() < morning + 0.2) this.bird(0.02 * morning * (0.5 + trees));
+      if (!f.indoors && f.night < 0.3 && morning > 0 && (trees > 0.15 || f.houses > 4) && f.oceanDist > 80 && Math.random() < (morning + 0.2) * (1 - city * 0.7)) this.bird(0.02 * morning * (0.5 + trees));
     }
 
     // Engine of whatever you're riding

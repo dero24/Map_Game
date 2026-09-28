@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { loadWorld, loadRegions, loadAtlas, manifestAsWorldJson, fromLatLon, toLatLon, type AtlasManifest, type Terrain, type World, type Road, type WorldJson } from './world/data';
 import { cachedFetchJson, initCache, manifestFingerprint } from './world/cache';
 import { TileStream } from './world/stream';
+import { Horizon } from './world/horizon';
+import { Skyline } from './world/skyline';
+import { setDemBase } from './world/dem';
 import { virtualRegion } from './world/virtual';
 import { paintGround } from './world/groundPaint';
 import { buildGround, terrainTextures } from './world/ground';
@@ -208,6 +211,15 @@ async function main() {
   // Measured buildings from USGS 3DEP LiDAR wherever a survey covers the cell (lidar.ts);
   // `?lidar=0` builds from mapped priors only.
   stream.lidar = params.get('lidar') !== '0';
+  // The horizon ring: real mountains out to 80 km past the tiles (Terrarium z9 through the same
+  // DEM route the cells use). `?horizon=0` turns it off.
+  if (tilesBase) setDemBase(tilesBase);
+  const horizon = new Horizon(manifest.origin, regionLook, !!tilesBase && params.get('horizon') !== '0');
+  worldRoot.add(horizon.group);
+  // …and a city's towers past the detail ring (a skyline you can navigate by). `?skyline=0` off.
+  const skyline = new Skyline(manifest.origin, manifest.cell, !!tilesBase && params.get('skyline') !== '0');
+  worldRoot.add(skyline.group);
+  const realCells = new Set<string>();
   // The localhost auto-default was probed before setup: no worker answered → procedural past the bake.
 
   // Grass: tufts grow on open land around the walker (lawns short, open ground tall + lush).
@@ -335,6 +347,7 @@ async function main() {
   // only when genuinely swallowed: a wall through their position, or inside a solid
   // footprint with no interior. Legit indoor players must not be yanked outside.
   const settleWalker = () => {
+    if (walkParams.fly) return; // flying over a roof isn't being swallowed by it
     // blocked at 0.28 < the walker's 0.35 radius: a wall running *through* their body,
     // not a wall they're legally pressed against.
     const swallowed = walk.blocked(walker.x, walker.z, 0.28) || (walk.buildingAt(walker.x, walker.z) >= 0 && !interiors.indoors && walk.interiorAt(walker.x, walker.z, walker.feet) < 0);
@@ -727,12 +740,23 @@ async function main() {
   // (Rebuilt as tiles stream in/out.)
   let churches = stream.churches;
   let houseGrid = stream.houseGrid();
+  let cityGrid = stream.cityGrid();
+  // built volume per ground area over the 3×3 cells around you → 0..1 (a shore main street ~0,
+  // a Hell's Kitchen block ~0.4, Midtown 1): the city soundscape's volume
+  const cityAt = (x: number, z: number) => {
+    const i = Math.floor(x / 80), j = Math.floor(z / 80);
+    let v = 0;
+    for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) v += cityGrid.get((i + di) * 92821 + (j + dj)) ?? 0;
+    return Math.max(0, Math.min(1, (v / (9 * 6400) - 4) / 20));
+  };
+  const summer = (json.origin.lat < 0 ? [11, 12, 1, 2, 3] : [5, 6, 7, 8, 9]).includes(new Date().getMonth() + 1);
   let lastTileChange = 0;
   stream.onChange = () => {
     lifeDirty = true;
     lastTileChange = performance.now();
     churches = stream.churches;
     houseGrid = stream.houseGrid();
+    cityGrid = stream.cityGrid();
   };
 
   // ---- loop ----
@@ -758,9 +782,13 @@ async function main() {
     worldRoot.position.set(-nx, 0, -nz);
     U.uWorldOffset.value.set(nx, 0, nz);
   };
-  // Schedule the next frame first: one bad frame must never stop the world.
-  const loop = (now: number) => {
-    requestAnimationFrame(loop);
+  // Schedule the next frame first: one bad frame must never stop the world. Each chain has an
+  // id: a harness restarting the loop on timers (__KICK__, for hidden panes where rAF never
+  // fires) retires the old chain instead of running two.
+  let chain = 0;
+  const loop = (id: number) => (now: number) => {
+    if (id !== chain) return;
+    requestAnimationFrame(loop(id));
     try {
       frame(now);
     } catch (e) {
@@ -800,6 +828,10 @@ async function main() {
     if (!vehicles.update(dt, camera)) walker.update(dt, camera);
     camera.position.sub(origin); // walker works in world coords; the renderer works origin-local
     stream.update(walker.x, walker.z);
+    horizon.update(walker.x, walker.z);
+    realCells.clear();
+    for (const a of stream.loaded.values()) if (!a.spec.synth) realCells.add(`${Math.floor((a.spec.box.x0 + a.spec.box.x1) / 2 / manifest.cell)}_${Math.floor((a.spec.box.z0 + a.spec.box.z1) / 2 / manifest.cell)}`);
+    skyline.update(walker.x, walker.z, (k) => realCells.has(k));
     if (!walkParams.fly || walker.y - walker.feet < 60) grass.update(walker.x, walker.z);
     if (lifeDirty && (!stream.busy || now - lastTileChange > 4000)) {
       lifeDirty = false; // clear first: a failed reinit must not throw every frame
@@ -859,7 +891,7 @@ async function main() {
         for (const [ox, oz] of [[0, 0], [20, 0], [-20, 0], [0, 20], [0, -20], [14, 14], [-14, -14], [14, -14], [-14, 14]]) if (world.terrain.coverAt(walker.x + ox, walker.z + oz) === 10) tc++;
         treeCover = tc / 9;
       }
-      ambience.update({ dt, oceanDist, indoors: interiors.indoors, riverDist: Math.max(0, world.terrain.sdfAt(walker.x, walker.z)), wind: weather.wind, night: U.uNight.value, surface, stepped, running: run, life: life.stats, hour: timeParams.hour, churchDist, houses, harbour: harbourD, sails: sailsN, trees: Math.max(treeCover, Math.min(1, houses / 20) * 0.4), ride: vehicles.ride });
+      ambience.update({ dt, oceanDist, indoors: interiors.indoors, riverDist: Math.max(0, world.terrain.sdfAt(walker.x, walker.z)), wind: weather.wind, night: U.uNight.value, surface, stepped, running: run, life: life.stats, hour: timeParams.hour, churchDist, houses, harbour: harbourD, sails: sailsN, trees: Math.max(treeCover, Math.min(1, houses / 20) * 0.4), ride: vehicles.ride, city: cityAt(walker.x, walker.z), climate: regionLook.climate, summer });
     }
     shadows.update(scene, focus, U.uKeyDir.value);
     post.render(scene, camera, simTime, U.uNight.value, U.uGolden.value, walker.yaw, walker.pitch, debugParams.rawScene);
@@ -901,6 +933,9 @@ async function main() {
       nearTrees = ctx.instances('trees:', walker.x, walker.z, 130).filter((t) => !t.name.includes(':shrub:'));
       nearGardens = [...ctx.instances('garden:', walker.x, walker.z, 130), ...garden.positions().filter((p) => p.g > 0.5)];
       life.coastal = world.terrain.oceanDistAt(walker.x, walker.z) < 5000;
+      const cityHere = cityAt(walker.x, walker.z);
+      life.taxiShare = Math.max(0, cityHere - 0.2) * 0.45;
+      life.crowd = 1 + 1.6 * cityHere; // a Midtown sidewalk is busier than a shore town's
     }
     critters.enabled = lifeParams.enabled && !interiors.indoors;
     movers.length = 0;
@@ -912,7 +947,8 @@ async function main() {
     if (frames === 3) (window as unknown as Record<string, unknown>).__READY__ = true;
     (window as unknown as Record<string, unknown>).__RENDER_INFO__ = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, errors: errors.size, frames };
   };
-  requestAnimationFrame(loop);
+  requestAnimationFrame(loop(chain));
+  if (CAPTURE) (window as unknown as Record<string, unknown>).__KICK__ = () => { chain++; loop(chain)(performance.now()); };
   // A lost GPU context would freeze the canvas for good: say so, and recover when the browser allows.
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); toast('the painting smudged — recovering…'); });
   canvas.addEventListener('webglcontextrestored', () => toast('back to the walk'));

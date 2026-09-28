@@ -9,7 +9,7 @@ import { hash01 } from '../core/rng';
 
 // Shader codes (buildings.ts): siding rides in the fraction of vInfo.y (kind + code/10), roof
 // material in vInfo.w on roof faces (walls use that slot for the foundation height).
-export const SIDING = { clapboard: 0, shingle: 1, brick: 2, stucco: 3, batten: 4 } as const;
+export const SIDING = { clapboard: 0, shingle: 1, brick: 2, stucco: 3, batten: 4, glass: 5 } as const;
 export const ROOFMAT = { asphalt: 0, metal: 1, tile: 2, slate: 3, shake: 4 } as const;
 
 export interface Recipe {
@@ -27,6 +27,28 @@ export interface Recipe {
 }
 
 const h = (s: number, k: number) => hash01((s ^ k) >>> 0);
+
+// Towers and urban blocks are stone, brick, concrete and glass whatever the local house paint:
+// seven-plus storeys never wear clapboard. Masonry palettes lean brick where brick is the habit.
+const TOWER: Partial<Record<RegionStyle['family'], number[]>> & { default: number[] } = {
+  brick: [0x9a5a46, 0x8a4f3c, 0xa8674f, 0xc9bfae, 0xd8cdb8, 0x6f4a3c, 0xe4dccb],
+  clapboard: [0xd9d0bf, 0xc8bca6, 0xe4ddd0, 0xbdb8ae, 0xa8674f, 0x8a4f3c, 0x9a948a, 0xefe9dc, 0xb9a88c],
+  default: [0xe9e4d8, 0xd9d0bf, 0xbdb8ae, 0xc8bca6, 0xefe8da, 0xa9a59c, 0xf3efe6],
+};
+// North American pre-war walk-ups and loft blocks: red, brown and buff brick
+const BRICKS = [0x9a5a46, 0x8a4f3c, 0xa8674f, 0x7e4a3a, 0xb07a5c, 0xc9a27e];
+// How much of a North American subregion's housing is brick-clad (the rest siding): Texas and
+// Georgia suburbs are brick ranches, New England is clapboard, the Northwest is cedar and
+// shingle. (The Northeast stays the original clapboard look — the Jersey shore must not change.)
+const BRICK_SHARE: Record<string, number> = { south: 0.55, midwest: 0.35, mountain: 0.22, northeast: 0, pnw: 0.04 };
+const HOUSE_BRICKS = [0x9a5a46, 0xa8674f, 0x8a4f3c, 0xb07a5c, 0xc9a27e, 0x7e4a3a, 0xa87a62, 0xbf8f6e];
+// row-house fronts that aren't brick: brownstone, limestone, grey stone, painted, buff
+const ROWSTONE = [0x7a5a48, 0x6f5040, 0xd9d0bf, 0xbdb8ae, 0xe9e1cf, 0xc9a27e];
+// curtain-wall glass tints (blue-grey, green, grey, silver, bronze-dark)
+const GLASS = [0x55626e, 0x4a5552, 0x656b72, 0x7d858b, 0x3a4048, 0x5f6e78, 0x6f777c, 0x4a4640];
+// by era: the bronze and black boxes of the '60s–'80s; the grey-blue low-e glass of the 2000s
+const GLASS_OLD = [0x3a3530, 0x2e2f33, 0x4a4238, 0x343a3e];
+const GLASS_NEW = [0x6b7a88, 0x7d8a95, 0x5d6b78, 0x8a949b, 0x707c84];
 const pick = <T>(a: readonly T[], r: number) => a[Math.min(a.length - 1, Math.floor(r * a.length))];
 
 // Does a colour read as brick? (reddish-brown, not too light) — lets mapped materials/colours
@@ -61,6 +83,13 @@ export function roofGamut(c: number): number {
   return (Math.round(r * 255) << 16) | (Math.round(g * 255) << 8) | Math.round(b * 255);
 }
 
+/** Does this region read a row building (party walls, dense block) as masonry with a flat roof?
+ *  North American cities do (NYC walk-ups, Philly and Baltimore rowhouses, brownstones); a
+ *  London terrace or an Amsterdam canal house keeps its pitched roof. */
+export function rowStyle(bd: Pick<Building, 'at' | 'k'>, st: Pick<RegionStyle, 'region' | 'family'>) {
+  return !!bd.at && st.region === 'na' && (bd.k === 'house' || bd.k === 'large') && (st.family === 'clapboard' || st.family === 'brick');
+}
+
 export function recipeFor(bd: Building, st: RegionStyle): Recipe {
   const s = bd.s >>> 0;
   const r1 = hash01(s), r2 = hash01((s ^ 0x5bd1e995) >>> 0); // the builder's historic draws — kept so NJ colours don't reshuffle
@@ -72,10 +101,34 @@ export function recipeFor(bd: Building, st: RegionStyle): Recipe {
   const flat = bd.roof === 'flat';
   const roof = roofGamut(bd.rc ?? (flat ? st.flatRoof : st.roof)[Math.floor(r2 * (flat ? st.flatRoof.length : st.roof.length))]);
 
+  // Blocks and towers (flat, 15 m+): masonry or a glass curtain wall. Real data first (mapped
+  // material, era), then height: the taller the tower, the likelier glass; nothing pre-1955 is.
+  const tall = bd.h + (bd.lf ?? 0);
+  const block = (shop || large) && flat && tall >= 15;
+  let glass = false;
+  if (bd.ma) glass = /glass|mirror/.test(bd.ma);
+  else if (block && tall >= 28) {
+    const yr = bd.yr ?? 0;
+    const p = yr && yr < 1955 ? 0 : yr >= 1975 ? 0.8 : tall >= 150 ? 0.7 : tall >= 70 ? 0.45 : 0.16;
+    glass = h(s, 0x61a5) < p;
+  }
+  if (bd.fc == null && block && !glass) {
+    if (tall >= 24) facade = pick(TOWER[st.family] ?? TOWER.default, h(s, 0x70e1));
+    else if (st.region === 'na' && (st.family === 'clapboard' || st.family === 'brick') && h(s, 0x70e2) < 0.4) facade = pick(BRICKS, h(s, 0x70e3));
+  }
+  if (house && bd.fc == null && !bd.at && st.family === 'clapboard' && h(s, 0xb71c) < (BRICK_SHARE[st.sub] ?? 0)) facade = pick(HOUSE_BRICKS, h(s, 0xb71d));
+  if (glass && bd.fc == null) facade = pick(bd.yr && bd.yr < 1990 ? GLASS_OLD : bd.yr && bd.yr >= 2000 ? GLASS_NEW : GLASS, h(s, 0x61a6));
+  // North American row buildings (walk-ups, brownstones, rowhouses — party walls in a dense
+  // block): brick and stone fronts, not the suburb's siding
+  const row = rowStyle(bd, st);
+  if (bd.fc == null && row && !glass) facade = h(s, 0x70e4) < 0.55 ? pick(BRICKS, h(s, 0x70e5)) : pick(ROWSTONE, h(s, 0x70e6));
+
   // Siding: brick-coloured walls are brick; otherwise the regional habit by building kind.
   const rs = h(s, 0x51d1);
   let siding: number;
-  if (brickish(facade)) siding = SIDING.brick;
+  if (glass) siding = SIDING.glass;
+  else if (brickish(facade)) siding = SIDING.brick;
+  else if (block || row) siding = SIDING.stucco; // stone, concrete, render — never wood at this size
   else if (bd.k === 'church' || bd.k === 'lighthouse') siding = st.family === 'clapboard' ? SIDING.clapboard : SIDING.stucco;
   else
     switch (st.family) {
@@ -105,13 +158,13 @@ export function recipeFor(bd: Building, st: RegionStyle): Recipe {
   const trim = siding === SIDING.brick && rt < 0.3 ? pick([0x2f3a33, 0x3a3f46, 0xe9e4d8], rt / 0.3) : rt < 0.08 ? 0xe3dcc8 : st.trim;
 
   const rd = h(s, 0x9d0e);
-  const dormers = house && !flat && bd.h >= 7 && bd.fl == null ? (rd < (st.family === 'clapboard' || st.family === 'brick' ? 0.3 : 0.1) ? 1 + Math.floor(h(s, 0x1dd) * 2.6) : 0) : 0;
+  const dormers = house && !row && !flat && bd.h >= 7 && bd.fl == null ? (rd < (st.family === 'clapboard' || st.family === 'brick' ? 0.3 : 0.1) ? 1 + Math.floor(h(s, 0x1dd) * 2.6) : 0) : 0;
   // dormered 1½-storey houses carry steep roofs (8/12–12/12) — the attic is a real floor
   const basePitch = st.pitch[0] + r2 * (st.pitch[1] - st.pitch[0]);
   const pitch = dormers ? 0.8 + r2 * 0.22 : basePitch;
-  const bay = house && h(s, 0xba7) < (st.family === 'clapboard' || st.family === 'brick' ? 0.22 : 0.06);
+  const bay = house && !row && h(s, 0xba7) < (st.family === 'clapboard' || st.family === 'brick' ? 0.22 : 0.06);
   const downspouts = !flat && (house || shop) && h(s, 0xd05) < 0.8;
   const rc2 = h(s, 0xc41);
-  const chimney: Recipe['chimney'] = house && !flat && st.climate !== 'tropical' && st.climate !== 'arid' ? (rc2 < 0.42 ? 1 : rc2 < 0.62 ? 2 : 0) : 0;
+  const chimney: Recipe['chimney'] = house && !row && !flat && st.climate !== 'tropical' && st.climate !== 'arid' ? (rc2 < 0.42 ? 1 : rc2 < 0.62 ? 2 : 0) : 0;
   return { facade, roof, trim, siding, roofMat, pitch, basePitch, dormers, bay, downspouts, chimney };
 }

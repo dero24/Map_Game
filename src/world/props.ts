@@ -154,6 +154,42 @@ function hedgeGeo() {
   return hedgeCache.clone();
 }
 
+/** Is (x, z) in a dense core — blocks tall and close (footprint cover > 30 %, mean height
+ *  > 16 m over the 3×3 neighbourhood of 80 m cells)? There the wires run underground. */
+export function urbanCore(buildings: { r: number[]; h: number; pt?: 1; lf?: number }[]) {
+  const C = 80, cells = new Map<number, [number, number]>();
+  const key = (i: number, j: number) => i * 73856093 + j;
+  for (const b of buildings) {
+    if (b.pt) continue; // parts are inside their outline — count the building once
+    let a = 0, cx = 0, cz = 0;
+    const r = b.r, n = r.length >> 1;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const xi = r[i * 2] / 10, zi = r[i * 2 + 1] / 10, xj = r[j * 2] / 10, zj = r[j * 2 + 1] / 10;
+      a += (xj - xi) * (zj + zi);
+      cx += xi;
+      cz += zi;
+    }
+    a = Math.abs(a / 2);
+    const k = key(Math.floor(cx / n / C), Math.floor(cz / n / C));
+    const c = cells.get(k) ?? [0, 0];
+    c[0] += a;
+    c[1] += a * (b.h + (b.lf ?? 0));
+    cells.set(k, c);
+  }
+  const memo = new Map<number, boolean>();
+  return (x: number, z: number) => {
+    const i = Math.floor(x / C), j = Math.floor(z / C), k = key(i, j);
+    let v = memo.get(k);
+    if (v === undefined) {
+      let A = 0, AH = 0;
+      for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) { const c = cells.get(key(i + di, j + dj)); if (c) (A += c[0]), (AH += c[1]); }
+      v = A / (9 * C * C) > 0.3 && A > 0 && AH / A > 16;
+      memo.set(k, v);
+    }
+    return v;
+  };
+}
+
 export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P; w: number }[], extras: { mailboxes?: Mailbox[]; drives?: Drive[]; doors?: Door[]; ctx?: WorldJson; box?: Box } = {}) {
   const { json, terrain } = world;
   const S = json.slice; // region slice: lamp-map compositor box
@@ -178,7 +214,12 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   const paved = pavedMask({ json: ctxJson, terrain }, maskZone);
 
   // ---------- utility poles, wires, lamps ----------
+  // Dense cores bury their wires: where blocks stand tall and close (a downtown, not a main
+  // street of two-storey shops), steel streetlight masts line both kerbs instead of wooden
+  // poles. Read from the buildings themselves: 80 m cells of footprint cover and mean height.
+  const urban = urbanCore(ctxJson.buildings);
   const poleMats: THREE.Matrix4[] = [];
+  const mastMats: THREE.Matrix4[] = [];
   const armMats: THREE.Matrix4[] = [];
   const lampHeads: THREE.Vector3[] = [];
   const lampGround: [number, number][] = [];
@@ -207,6 +248,22 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         if (!inSlice(x, z, 20) || terrain.sdfAt(x, z) < 1.5 || walk.blocked(x, z, 0.8)) { prev = null; continue; }
         const g = terrain.heightAt(x, z);
         const ang = Math.atan2(tz, tx);
+        if (urban(x, z)) {
+          // a mast here and one on the far kerb half a span back, each lamp over the street
+          prev = null;
+          const off2 = r.w / 2 + 1.2;
+          for (const [px, pz, sd] of [[ax + tx * (s - spacing) + nx * off2 * side, az + tz * (s - spacing) + nz * off2 * side, side], [ax + tx * (s - spacing * 1.5) - nx * off2 * side, az + tz * (s - spacing * 1.5) - nz * off2 * side, -side]] as const) {
+            if (s - spacing * 1.5 < 0 && sd !== side) continue;
+            if (!inSlice(px, pz, 20) || terrain.sdfAt(px, pz) < 1.5 || walk.blocked(px, pz, 0.6)) continue;
+            const gp = terrain.heightAt(px, pz), dir = -sd;
+            mastMats.push(new THREE.Matrix4().compose(V(px, gp, pz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -ang), V(1, 1, 1)));
+            armMats.push(new THREE.Matrix4().compose(V(px, gp, pz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -ang + (dir > 0 ? Math.PI : 0)), V(1, 1, 1)));
+            lampHeads.push(V(px + nx * dir * 2.2, gp + 8.05, pz + nz * dir * 2.2));
+            lampGround.push([px + nx * dir * 4.5, pz + nz * dir * 4.5]);
+            walk.addLoop([[px - 0.16, pz - 0.16], [px + 0.16, pz - 0.16], [px + 0.16, pz + 0.16], [px - 0.16, pz + 0.16]]);
+          }
+          continue;
+        }
         q.setFromAxisAngle(V(0, 1, 0), -ang);
         poleMats.push(new THREE.Matrix4().compose(V(x, g, z), q, V(1, 1, 1)));
         const top = V(x, g + 9.6, z);
@@ -241,6 +298,62 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       carry = s - L;
     }
   }
+  // Mapped power lines (OSM power=line): the tall wooden H-less poles of a sub-transmission run
+  // — two crossarms, six wires — standing on the line's own nodes (mappers put one at every
+  // pole), subdivided where a mapped span runs long. Distribution lines along streets
+  // (minor_line) are the procedural street poles above.
+  const hvMats: THREE.Matrix4[] = [];
+  for (const l of json.lines) {
+    if (l.c !== 'power') continue;
+    const raw = unpackPts(l.p);
+    const pts: [number, number][] = [];
+    for (let i = 0; i < raw.length; i++) {
+      if (i > 0) {
+        const [ax, az] = raw[i - 1], [bx, bz] = raw[i], L = Math.hypot(bx - ax, bz - az), n = Math.ceil(L / 75);
+        for (let k = 1; k < n; k++) pts.push([ax + ((bx - ax) * k) / n, az + ((bz - az) * k) / n]);
+      }
+      pts.push(raw[i]);
+    }
+    let prev: THREE.Vector3[] | null = null;
+    for (let i = 0; i < pts.length; i++) {
+      const [x, z] = pts[i];
+      if (!inSlice(x, z, 30) || terrain.sdfAt(x, z) < 0.5 || walk.blocked(x, z, 0.5)) { prev = null; continue; }
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+      const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+      const g = terrain.heightAt(x, z);
+      hvMats.push(new THREE.Matrix4().compose(V(x, g, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -ang), V(1, 1, 1)));
+      walk.addLoop([[x - 0.2, z - 0.2], [x + 0.2, z - 0.2], [x + 0.2, z + 0.2], [x - 0.2, z + 0.2]]);
+      const nx = -Math.sin(ang), nz = Math.cos(ang); // across the line
+      const tops = [[-1.45, 14.35], [0, 14.35], [1.45, 14.35], [-1.2, 12.35], [0.6, 12.35], [1.2, 12.35]].map(([o, y]) => V(x + nx * o, g + y, z + nz * o));
+      if (prev) {
+        for (let w = 0; w < tops.length; w++) {
+          const A = prev[w], B = tops[w], span = A.distanceTo(B), sag = 0.018 * span + 0.2;
+          if (span > 140) continue;
+          for (let k = 0; k < 8; k++) {
+            const t0 = k / 8, t1 = (k + 1) / 8, p0 = A.clone().lerp(B, t0), p1 = A.clone().lerp(B, t1);
+            p0.y -= sag * 4 * t0 * (1 - t0);
+            p1.y -= sag * 4 * t1 * (1 - t1);
+            wire.push(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z);
+          }
+        }
+      }
+      prev = tops;
+    }
+  }
+  if (hvMats.length) {
+    const hv = mergeGeometries([
+      colored(new THREE.CylinderGeometry(0.15, 0.22, 15.2, 7).translate(0, 7.6, 0), 0x5a4c3f),
+      colored(new THREE.BoxGeometry(0.14, 0.14, 3.4).translate(0, 14.2, 0), 0x55483c),
+      colored(new THREE.BoxGeometry(0.14, 0.14, 2.9).translate(0, 12.2, 0), 0x55483c),
+      ...[[-1.45, 14.3], [0, 14.3], [1.45, 14.3], [-1.2, 12.3], [0.6, 12.3], [1.2, 12.3]].map(([o, y]) => colored(new THREE.CylinderGeometry(0.06, 0.06, 0.3, 5).translate(0, y + 0.15, o), 0x9fb0a8)),
+    ]);
+    const hvm = new THREE.InstancedMesh(hv, propMaterial(), hvMats.length);
+    hvMats.forEach((m, i) => hvm.setMatrixAt(i, m));
+    hvm.name = 'poles:power-line';
+    hvm.layers.enable(1);
+    group.add(hvm);
+  }
+
   const poleGeo = mergeGeometries([
     colored(new THREE.CylinderGeometry(0.12, 0.17, 10.2, 7).translate(0, 5.1, 0), 0x5e5043),
     colored(new THREE.BoxGeometry(0.12, 0.12, 2.5).translate(0, 9.6, 0), 0x5a4c3f),
@@ -252,6 +365,18 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   poleMats.forEach((m, i) => poles.setMatrixAt(i, m));
   poles.layers.enable(1);
   group.add(poles);
+  if (mastMats.length) {
+    // steel streetlight mast (dark green-grey, fluted base) carrying the same cobra-head arm
+    const mastGeo = mergeGeometries([
+      colored(new THREE.CylinderGeometry(0.09, 0.14, 8.4, 8).translate(0, 4.2, 0), 0x3c4440),
+      colored(new THREE.CylinderGeometry(0.24, 0.28, 0.9, 8).translate(0, 0.45, 0), 0x353b38),
+    ]);
+    const masts = new THREE.InstancedMesh(mastGeo, propMaterial(), mastMats.length);
+    mastMats.forEach((m, i) => masts.setMatrixAt(i, m));
+    masts.name = 'lamp:masts';
+    masts.layers.enable(1);
+    group.add(masts);
+  }
 
   const armGeo = mergeGeometries([
     colored(new THREE.BoxGeometry(0.08, 0.08, 2.2).translate(0, 8.25, 1.1), 0x8d9296),
@@ -277,22 +402,24 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
 
   // Lamp pools: the ground points ship to the stream, which paints one walker-centred light
   // map from every mounted tile's lamps (so pools follow you past the bake too).
-  const lampPts = lampGround.flat();
-  group.add(haloPoints(lampHeads, 1.6, new THREE.Color(1.0, 0.7, 0.38)));
+  // (halos + the pool list are made at the end: main-street posts add lamps further down)
 
   // ---------- trees ----------
   const look0 = () => activeStyle();
   // kinds: 0 round deciduous, 1 tall oak, 2 shrub, 3 pine, 4 spruce
-  // kinds: 0 round · 1 oak · 2 shrub · 3 pine · 4 spruce · 5 palm · 6 birch (assets/flora.ts), each in
+  // kinds: 0 round · 1 oak · 2 shrub · 3 pine · 4 spruce · 5 palm · 6 birch · 7 mesquite (assets/flora.ts), each in
   // TREE_VARIANTS grown variants; v is position-hashed so neighbouring tiles agree.
   const trees: { m: THREE.Matrix4; c: THREE.Color; k: number; v: number }[] = [];
   const tropical = look0().climate === 'tropical', aridCoast = look0().climate === 'arid' || look0().climate === 'mediterranean';
   const birchy = look0().climate === 'boreal' || look0().climate === 'continental';
+  const desert = look0().climate === 'arid';
   // the region re-reads a broadleaf as its own tree: palms where it's warm by the sea, birches up north
   const regional = (k: number, x: number, z: number) => {
     if (k > 1) return k;
     const u = hashf(Math.floor(x * 3.1) * 7919 + Math.floor(z * 2.7) * 104729);
     if ((tropical && u < 0.75) || (aridCoast && terrain.oceanDistAt(x, z) < 1500 && u < 0.4)) return 5;
+    // the desert's own shade trees: mesquite and palo verde (a few ornamental palms in town)
+    if (desert) return u < 0.12 ? 5 : 7;
     if (birchy && k === 0 && u < 0.35) return 6;
     return k;
   };
@@ -407,7 +534,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       // whose bare trunk would be stretched into a lollipop by the measured height.
       if (k !== 2 && walk.blocked(x, z, 14)) {
         if ((k === 3 || k === 4) && conifer <= 0.5) k = r / h > 0.42 ? 1 : 0;
-        if (treeMeta(TREE_KINDS[k], v).crownBottom / treeMeta(TREE_KINDS[k], v).h > 0.56) k = r / h > 0.42 ? 1 : 0;
+        if (k !== 7 && treeMeta(TREE_KINDS[k], v).crownBottom / treeMeta(TREE_KINDS[k], v).h > 0.56) k = regional(r / h > 0.42 ? 1 : 0, x, z);
         v = variantAt(x, z, TREE_VARIANTS, 11);
       }
       const tm = treeMeta(TREE_KINDS[k], v);
@@ -681,6 +808,150 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       walk.addLoop(corners);
     }
   }
+  // Main-street lamps: where shops line the street, ornamental posts on the sidewalk just behind
+  // the kerb — the black acorn-globe post of an American downtown, a lantern post elsewhere —
+  // one every ~18 m of frontage (a grid keeps both sides and neighbouring doors from doubling up).
+  {
+    const acorn = look.region === 'na';
+    const posts: THREE.Matrix4[] = [], seen = new Set<string>();
+    for (const d of extras.doors ?? []) {
+      if (d.kind !== 'commercial') continue;
+      const e = carriageEdge(d.fx, d.fz);
+      if (!e || e.d > e.w / 2 + 12) continue;
+      const ox = d.fx - e.x, oz = d.fz - e.z, ol = Math.hypot(ox, oz) || 1;
+      const ux = ox / ol, uz = oz / ol;
+      const x = e.x + ux * (e.w / 2 + 0.55), z = e.z + uz * (e.w / 2 + 0.55);
+      const k = `${Math.round(x / 18)}_${Math.round(z / 18)}`;
+      if (seen.has(k) || !inSlice(x, z) || walk.blocked(x, z, 0.5) || terrain.sdfAt(x, z) < 1) continue;
+      seen.add(k);
+      const g = terrain.heightAt(x, z);
+      posts.push(new THREE.Matrix4().makeTranslation(x, g, z));
+      lampHeads.push(V(x, g + (acorn ? 4.05 : 3.7), z));
+      lampGround.push([x, z]);
+      walk.addLoop([[x - 0.14, z - 0.14], [x + 0.14, z - 0.14], [x + 0.14, z + 0.14], [x - 0.14, z + 0.14]]);
+    }
+    if (posts.length) {
+      const black = 0x1f2224;
+      const post = mergeGeometries(acorn ? [
+        colored(new THREE.CylinderGeometry(0.2, 0.24, 0.7, 10).translate(0, 0.35, 0), black), // fluted base
+        colored(new THREE.CylinderGeometry(0.07, 0.09, 3.2, 8).translate(0, 2.2, 0), black),
+        colored(new THREE.CylinderGeometry(0.16, 0.12, 0.14, 10).translate(0, 3.8, 0), black), // collar
+        colored(new THREE.ConeGeometry(0.2, 0.24, 10).translate(0, 4.43, 0), black), // finial cap
+      ] : [
+        colored(new THREE.CylinderGeometry(0.16, 0.2, 0.5, 8).translate(0, 0.25, 0), black),
+        colored(new THREE.CylinderGeometry(0.06, 0.08, 3.1, 8).translate(0, 2.0, 0), black),
+        colored(new THREE.ConeGeometry(0.26, 0.2, 4).rotateY(Math.PI / 4).translate(0, 4.05, 0), black), // lantern roof
+      ]);
+      const pm = new THREE.InstancedMesh(post, propMaterial(), posts.length);
+      posts.forEach((m, i) => pm.setMatrixAt(i, m));
+      pm.name = 'lamp:posts';
+      pm.layers.enable(1);
+      group.add(pm);
+      const globe = acorn ? new THREE.SphereGeometry(0.2, 10, 8).scale(1, 1.35, 1).translate(0, 4.08, 0) : new THREE.BoxGeometry(0.3, 0.4, 0.3).translate(0, 3.72, 0);
+      const gm = new THREE.InstancedMesh(colored(globe, 0xfff4dc), propMaterial({ emissive: new THREE.Color(1.0, 0.78, 0.48), emissiveNight: true }), posts.length);
+      posts.forEach((m, i) => gm.setMatrixAt(i, m));
+      gm.name = 'lamp:globes';
+      group.add(gm);
+    }
+  }
+  // Mapped street furniture: traffic-signal masts at signalled junctions (arms over the road,
+  // heads facing the traffic), fire hydrants, subway entrances (a stair well in the sidewalk
+  // behind railings, a globe lamp either side).
+  {
+    const segAt = (x: number, z: number) => {
+      let best: { ux: number; uz: number; w: number; d: number } | null = null;
+      for (const r of ctxJson.roads) {
+        if (r.lod || r.br || !CARRIAGE.has(r.c)) continue;
+        for (let i = 0; i + 3 < r.p.length; i += 2) {
+          const ax = r.p[i] / 10, az = r.p[i + 1] / 10, dx = r.p[i + 2] / 10 - ax, dz = r.p[i + 3] / 10 - az, L = Math.hypot(dx, dz) || 1;
+          const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (L * L)));
+          const d = Math.hypot(x - (ax + dx * t), z - (az + dz * t));
+          if (!best || d < best.d || (d < best.d + 0.5 && r.w > best.w)) best = { ux: dx / L, uz: dz / L, w: r.w, d };
+        }
+      }
+      return best && best.d < 8 ? best : null;
+    };
+    const masts: THREE.Matrix4[] = [], hyd: THREE.Matrix4[] = [], subs: THREE.Matrix4[] = [];
+    const na = look.region === 'na';
+    for (const p of json.points) {
+      if (!inSlice(p.x, p.z) || p.own === 0) continue;
+      if (p.c === 'signal') {
+        const s = segAt(p.x, p.z);
+        if (!s) continue;
+        const nx = -s.uz, nz = s.ux;
+        // two masts on opposite corners, each arm reaching over its half of the road
+        for (const sd of [1, -1]) {
+          const x = p.x + nx * sd * (s.w / 2 + 1.3) - s.ux * sd * (s.w / 2 + 2.2), z = p.z + nz * sd * (s.w / 2 + 1.3) - s.uz * sd * (s.w / 2 + 2.2);
+          if (walk.blocked(x, z, 0.4) || terrain.sdfAt(x, z) < 1) continue;
+          const yaw = Math.atan2(-nx * sd, -nz * sd); // local +z (the arm) points back across the road
+          masts.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, na ? Math.min(1.6, (s.w / 2 + 1.3) / 5) : 0.35)));
+          walk.addLoop([[x - 0.18, z - 0.18], [x + 0.18, z - 0.18], [x + 0.18, z + 0.18], [x - 0.18, z + 0.18]]);
+        }
+      } else if (p.c === 'hydrant') {
+        if (walk.blocked(p.x, p.z, 0.3)) continue;
+        hyd.push(new THREE.Matrix4().makeTranslation(p.x, terrain.heightAt(p.x, p.z), p.z));
+        walk.addLoop([[p.x - 0.18, p.z - 0.18], [p.x + 0.18, p.z - 0.18], [p.x + 0.18, p.z + 0.18], [p.x - 0.18, p.z + 0.18]], -Infinity, terrain.heightAt(p.x, p.z) + 0.8);
+      } else if (p.c === 'subway') {
+        const s = segAt(p.x, p.z);
+        const yaw = s ? Math.atan2(s.ux, s.uz) : 0; // the stair runs along the kerb
+        subs.push(new THREE.Matrix4().compose(V(p.x, terrain.heightAt(p.x, p.z), p.z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, 1)));
+        const c = Math.cos(yaw), sn = Math.sin(yaw), corners: P[] = [[-0.9, -2.2], [0.9, -2.2], [0.9, 2.2], [-0.9, 2.2]].map(([u, v]) => [p.x + u * c + v * sn, p.z - u * sn + v * c]);
+        walk.addLoop(corners, -Infinity, terrain.heightAt(p.x, p.z) + 1.0);
+      }
+    }
+    if (masts.length) {
+      const dark = na ? 0x4a4f4c : 0x3a3d40;
+      const head = (z: number) => [
+        colored(new THREE.BoxGeometry(0.3, 1.0, 0.34).translate(0, 5.25, z), 0x1f2224),
+        // lenses on the face the traffic sees (across the arm)
+        colored(new THREE.BoxGeometry(0.05, 0.2, 0.2).translate(0.17, 5.55, z), 0xb8392e),
+        colored(new THREE.BoxGeometry(0.05, 0.2, 0.2).translate(0.17, 5.25, z), 0xd9a43a),
+        colored(new THREE.BoxGeometry(0.05, 0.2, 0.2).translate(0.17, 4.95, z), 0x3f9a62),
+      ];
+      // pole + arm (arm length scales with the road via the instance z-scale; the pole doesn't
+      // stretch visibly — it's thin and the scale is applied along the arm axis only)
+      const g = mergeGeometries([
+        colored(new THREE.CylinderGeometry(0.12, 0.16, 6.2, 8).translate(0, 3.1, 0), dark),
+        colored(new THREE.BoxGeometry(0.1, 0.12, 5).translate(0, 5.95, 2.5), dark),
+        ...head(2.8), ...head(4.8),
+      ]);
+      const im = new THREE.InstancedMesh(g, propMaterial(), masts.length);
+      masts.forEach((m, i) => im.setMatrixAt(i, m));
+      im.name = 'street:signals';
+      im.layers.enable(1);
+      group.add(im);
+    }
+    if (hyd.length) {
+      const g = mergeGeometries([
+        colored(new THREE.CylinderGeometry(0.13, 0.15, 0.62, 8).translate(0, 0.31, 0), na ? 0xb5322a : 0xc9a13a),
+        colored(new THREE.SphereGeometry(0.13, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 0.62, 0), na ? 0xb5322a : 0xc9a13a),
+        colored(new THREE.CylinderGeometry(0.05, 0.05, 0.4, 6).rotateZ(Math.PI / 2).translate(0, 0.42, 0), 0xd8d2c4),
+      ]);
+      const im = new THREE.InstancedMesh(g, propMaterial(), hyd.length);
+      hyd.forEach((m, i) => im.setMatrixAt(i, m));
+      im.name = 'street:hydrants';
+      group.add(im);
+    }
+    if (subs.length) {
+      const rail = 0x2f4a3a;
+      const g = mergeGeometries([
+        colored(new THREE.BoxGeometry(1.7, 0.02, 4.2).translate(0, 0.01, 0), 0x1c1d1f), // the stair well, dark
+        colored(new THREE.BoxGeometry(0.05, 1.0, 4.3).translate(-0.88, 0.5, 0), rail),
+        colored(new THREE.BoxGeometry(0.05, 1.0, 4.3).translate(0.88, 0.5, 0), rail),
+        colored(new THREE.BoxGeometry(1.8, 1.0, 0.05).translate(0, 0.5, 2.15), rail),
+        colored(new THREE.CylinderGeometry(0.035, 0.035, 1.6, 6).translate(-0.88, 1.3, -2.1), rail),
+        colored(new THREE.CylinderGeometry(0.035, 0.035, 1.6, 6).translate(0.88, 1.3, -2.1), rail),
+      ]);
+      const im = new THREE.InstancedMesh(g, propMaterial(), subs.length);
+      subs.forEach((m, i) => im.setMatrixAt(i, m));
+      im.name = 'street:subway';
+      group.add(im);
+      const globe = new THREE.InstancedMesh(colored(mergeGeometries([new THREE.SphereGeometry(0.17, 10, 8).translate(-0.88, 2.2, -2.1), new THREE.SphereGeometry(0.17, 10, 8).translate(0.88, 2.2, -2.1)]), 0x8fd08a), propMaterial({ emissive: new THREE.Color(0.35, 0.9, 0.4), emissiveNight: true }), subs.length);
+      subs.forEach((m, i) => { globe.setMatrixAt(i, m); const e = new THREE.Vector3().setFromMatrixPosition(m); lampHeads.push(V(e.x, e.y + 2.2, e.z)); });
+      globe.name = 'street:subway-globes';
+      group.add(globe);
+    }
+  }
   for (const [key, list] of parked) {
     const [type, gear] = key.split('|') as [CarType, string];
     const im = new THREE.InstancedMesh(carLib(type, (gear || null) as CarGear | null).clone(), propMaterial(), list.length);
@@ -873,6 +1144,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       ]);
       const pots: THREE.Matrix4[] = [];
       const hedgeM: THREE.Matrix4[] = [], hedgeC: THREE.Color[] = [];
+      const yardM: THREE.Matrix4[] = [], yardC: THREE.Color[] = [], ironM: THREE.Matrix4[] = [];
       const picketM: THREE.Matrix4[] = [], picketC: THREE.Color[] = [];
       for (const d of extras.doors) {
         const h0 = hash01(Math.floor(d.wx * 11) ^ Math.floor(d.wz * 17));
@@ -886,8 +1158,13 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
             walk.addLoop([[x - 0.16, z - 0.16], [x + 0.16, z - 0.16], [x + 0.16, z + 0.16], [x - 0.16, z + 0.16]], -Infinity, terrain.heightAt(x, z) + 0.6);
           }
         }
-        const picket = h0 >= 0.6 && h0 < 0.74 && look.region === 'na';
-        if (((h0 > 0.38 && h0 < 0.6) || picket) && !d.porch) {
+        // the front-yard edge by building tradition: picket fences where houses wear clapboard,
+        // low stucco / block walls (some capped with wrought iron) where they're adobe or stucco
+        // and the yards are gravel, clipped hedges elsewhere
+        const masonryYard = look.family === 'adobe' || look.family === 'stucco' || look.climate === 'arid';
+        const picket = h0 >= 0.6 && h0 < 0.74 && look.region === 'na' && look.family === 'clapboard';
+        const yardWall = masonryYard && h0 > 0.38 && h0 < 0.74;
+        if (((h0 > 0.38 && h0 < 0.6) || picket || yardWall) && !d.porch) {
           // Hedge run parallel to the front, split to leave the walk clear. Try the yard line
           // first (6 m out) then hug the foundation (2.4 m) — every point must be off pavement,
           // unblocked and at least 2.4 m inside the road edge so it can't land on a sidewalk.
@@ -900,7 +1177,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
               const ok = (x: number, z: number) => !walk.blocked(x, z, 1) && !paved(x, z) && clearOfRoad(x, z, 2.4);
               if (!ok(hx, hz) || !ok(ax, az) || !ok(bxx, bz2)) continue;
               const mt = new THREE.Matrix4().compose(V(hx, terrain.heightAt(hx, hz), hz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(tz, tx)), V(1, 1, 1));
-              if (picket) { picketM.push(mt); picketC.push(new THREE.Color([0xf2efe6, 0xeae5d8, 0xdcd4c2][Math.floor(h0 * 1000) % 3])); }
+              if (yardWall) { yardM.push(mt); yardC.push(new THREE.Color(look.facadeHouse[Math.floor(h0 * 7919) % look.facadeHouse.length]).multiplyScalar(0.92)); if (h0 > 0.6) ironM.push(mt); }
+              else if (picket) { picketM.push(mt); picketC.push(new THREE.Color([0xf2efe6, 0xeae5d8, 0xdcd4c2][Math.floor(h0 * 1000) % 3])); }
               else { hedgeM.push(mt); hedgeC.push(new THREE.Color(rng.pick(green)).lerp(new THREE.Color(0x2e4630), 0.15)); }
               walk.addWall([ax, az], [bxx, bz2], -Infinity, terrain.heightAt(hx, hz) + 0.95);
               placed++;
@@ -988,6 +1266,28 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         picketM.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, picketC[i]); });
         im.layers.enable(1);
         group.add(im);
+      }
+      if (yardM.length) {
+        // a 3.2 m run of rendered wall with a projecting cap
+        const wall = mergeGeometries([
+          colored(new THREE.BoxGeometry(3.2, 0.95, 0.24).translate(0, 0.475, 0), 0xffffff),
+          colored(new THREE.BoxGeometry(3.26, 0.07, 0.32).translate(0, 0.985, 0), 0xf2ede4),
+        ]);
+        const im = new THREE.InstancedMesh(wall, propMaterial(), yardM.length);
+        im.name = 'fence:yardwall';
+        yardM.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, yardC[i]); });
+        im.layers.enable(1);
+        group.add(im);
+        if (ironM.length) {
+          // wrought-iron railing along the top: square bars every 0.12 m and a top rail
+          const bars: THREE.BufferGeometry[] = [];
+          for (let u = -1.55; u <= 1.56; u += 0.12) bars.push(new THREE.BoxGeometry(0.025, 0.55, 0.025).translate(u, 1.3, 0));
+          bars.push(new THREE.BoxGeometry(3.2, 0.04, 0.04).translate(0, 1.58, 0));
+          const iron = new THREE.InstancedMesh(colored(mergeGeometries(bars), 0x232120), propMaterial(), ironM.length);
+          iron.name = 'fence:iron';
+          ironM.forEach((m, i) => iron.setMatrixAt(i, m));
+          group.add(iron);
+        }
       }
       if (hedgeM.length) {
         const im = new THREE.InstancedMesh(colored(hedgeGeo(), 0xffffff), propMaterial({ foliage: true }), hedgeM.length);
@@ -1098,5 +1398,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     }
   }
 
+  const lampPts = lampGround.flat();
+  group.add(haloPoints(lampHeads, 1.6, new THREE.Color(1.0, 0.7, 0.38)));
   return { group, lampHeads, lampPts };
 }

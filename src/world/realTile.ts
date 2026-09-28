@@ -183,6 +183,110 @@ function obb(r: P2[]) {
   return { ang: best!.ang, len: best!.u1 - best!.u0, wid: best!.v1 - best!.v0, area: best!.area };
 }
 
+/** A length tag in metres: "120", "120 m", "394 ft", "394'", "12'6\"". NaN when unreadable. */
+export function parseLen(v: unknown): number {
+  if (v == null) return NaN;
+  const s = String(v).trim().toLowerCase().replace(',', '.');
+  const ft = /^(\d+(?:\.\d+)?)\s*(?:ft|feet|foot|')\s*(?:(\d+(?:\.\d+)?)\s*(?:in|inch|inches|"|''))?$/.exec(s);
+  if (ft) return parseFloat(ft[1]) * 0.3048 + (ft[2] ? parseFloat(ft[2]) * 0.0254 : 0);
+  const f = parseFloat(s);
+  return isFinite(f) ? f : NaN;
+}
+
+/** Metres per storey: office and apartment towers have taller floors than houses. */
+export const storeyH = (floors: number) => (floors > 10 ? 3.7 : 3.1);
+
+/** A plausible height for a mapped building (keep in sync with scripts/bake.mjs). Real towers keep
+ *  their height — Midtown's canyon is the point — but a unit slip (feet typed as metres) or a typo
+ *  can't turn a shed into a skyscraper: the floor count wins when the two disagree wildly, and an
+ *  unverified tower needs a tower's footprint. Parts (spires, crowns) are exempt from the footprint
+ *  test. NaN `h` = no height tag. */
+export function plausibleHeight(h: number, floors: number | null, area: number, part = false): number {
+  if (floors && floors > 0) {
+    const est = floors * storeyH(floors) + 1.5;
+    if (!isFinite(h) || h > est * 2 + 20 || h < floors * 1.8) h = est;
+  } else if (isFinite(h) && h > 100 && area < 120 && !part) h = 40;
+  return isFinite(h) ? Math.min(h, 830) : NaN;
+}
+
+/** The inward offset of a ring by d metres (mitred, capped): lets an outline sit just inside the
+ *  parts that share its walls instead of z-fighting with them. */
+export function insetRing(r: P2[], d: number): P2[] {
+  const s = ringArea(r) > 0 ? 1 : -1;
+  const n = r.length;
+  return r.map((p, i) => {
+    const a = r[(i + n - 1) % n], b = r[(i + 1) % n];
+    const e1 = [p[0] - a[0], p[1] - a[1]], e2 = [b[0] - p[0], b[1] - p[1]];
+    const l1 = Math.hypot(e1[0], e1[1]) || 1, l2 = Math.hypot(e2[0], e2[1]) || 1;
+    // inward normals (ringArea > 0 winding): (-dz, dx)·s points inside
+    const n1 = [(-e1[1] / l1) * s, (e1[0] / l1) * s], n2 = [(-e2[1] / l2) * s, (e2[0] / l2) * s];
+    const mx = n1[0] + n2[0], mz = n1[1] + n2[1], ml = Math.hypot(mx, mz);
+    if (ml < 1e-6) return [p[0] + n1[0] * d, p[1] + n1[1] * d] as P2;
+    const k = Math.min(3, 1 / Math.max(0.2, (mx * n1[0] + mz * n1[1]) / ml)); // miter length, capped
+    return [p[0] + (mx / ml) * d * k, p[1] + (mz / ml) * d * k] as P2;
+  });
+}
+
+/** Flags dense attached buildings `at: 1` (see osmToTile). Exported for tests. */
+export function markRows(buildings: Building[]) {
+  type E = { ax: number; az: number; bx: number; bz: number; dx: number; dz: number; L: number; bi: number };
+  const G = 20, grid = new Map<number, E[]>();
+  const gk = (i: number, j: number) => i * 92821 + j;
+  const cover = new Map<number, number>(); // 80 m cells: footprint area
+  const edges: E[][] = buildings.map((b, bi) => {
+    const out: E[] = [];
+    if (b.gen || b.pt) return out;
+    const n = b.r.length >> 1;
+    let a = 0, cx = 0, cz = 0;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n, ax = b.r[i * 2] / 10, az = b.r[i * 2 + 1] / 10, bx = b.r[j * 2] / 10, bz = b.r[j * 2 + 1] / 10;
+      a += (ax - bx) * (az + bz);
+      cx += ax;
+      cz += az;
+      const L = Math.hypot(bx - ax, bz - az);
+      if (L < 1) continue;
+      const e: E = { ax, az, bx, bz, dx: (bx - ax) / L, dz: (bz - az) / L, L, bi };
+      out.push(e);
+      for (let gi = Math.floor((Math.min(ax, bx) - 1) / G); gi <= Math.floor((Math.max(ax, bx) + 1) / G); gi++)
+        for (let gj = Math.floor((Math.min(az, bz) - 1) / G); gj <= Math.floor((Math.max(az, bz) + 1) / G); gj++) {
+          const l = grid.get(gk(gi, gj));
+          if (l) l.push(e);
+          else grid.set(gk(gi, gj), [e]);
+        }
+    }
+    const ck = gk(Math.floor(cx / n / 80), Math.floor(cz / n / 80));
+    cover.set(ck, (cover.get(ck) ?? 0) + Math.abs(a / 2));
+    return out;
+  });
+  const dense = (x: number, z: number) => {
+    const i = Math.floor(x / 80), j = Math.floor(z / 80);
+    let A = 0;
+    for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) A += cover.get(gk(i + di, j + dj)) ?? 0;
+    return A / (9 * 6400) >= 0.4;
+  };
+  buildings.forEach((b, bi) => {
+    const es = edges[bi];
+    if (!es.length) return;
+    let per = 0, shared = 0, cx = 0, cz = 0;
+    for (const e of es) {
+      per += e.L;
+      cx += e.ax;
+      cz += e.az;
+      // sample the wall every metre: a neighbour's parallel wall within 0.6 m is a party wall
+      for (let t = 0.5; t < e.L; t += 1) {
+        const x = e.ax + e.dx * t, z = e.az + e.dz * t;
+        const cand = grid.get(gk(Math.floor(x / G), Math.floor(z / G))) ?? [];
+        if (cand.some((f) => f.bi !== bi && Math.abs(e.dx * f.dx + e.dz * f.dz) > 0.95 && segDist(x, z, f) < 0.6)) shared++;
+      }
+    }
+    if (shared >= 6 && shared >= per * 0.2 && dense(cx / es.length, cz / es.length)) b.at = 1;
+  });
+}
+function segDist(x: number, z: number, f: { ax: number; az: number; dx: number; dz: number; L: number }) {
+  const t = Math.max(0, Math.min(f.L, (x - f.ax) * f.dx + (z - f.az) * f.dz));
+  return Math.hypot(x - (f.ax + f.dx * t), z - (f.az + f.dz * t));
+}
+
 // Deterministic 32-bit hash (FNV-1a) — building seeds come from the OSM element id.
 export function hashStr(s: string) {
   let h = 2166136261;
@@ -260,18 +364,23 @@ export function overpassQuery(bb: { s: number; w: number; n: number; e: number }
   way["highway"];
   way["building"];
   relation["building"];
+  way["building:part"];
+  relation["building:part"];
   way["natural"~"^(water|coastline|beach|sand|wetland)$"];
   relation["natural"="water"];
   way["waterway"="riverbank"];
   node["natural"="tree"];
   node["amenity"="bench"];
+  node["highway"="traffic_signals"];
+  node["emergency"="fire_hydrant"];
+  node["railway"="subway_entrance"];
   node["name"]["amenity"~"^(cafe|restaurant|fast_food|bar|pub|biergarten|ice_cream|bank|pharmacy|post_office|library|nightclub)$"];
   node["name"]["shop"];
   node["name"]["office"];
   way["wall"="seawall"];
   way["man_made"~"^(groyne|breakwater|pier)$"];
   way["barrier"~"^(fence|wall|retaining_wall)$"];
-  way["power"~"^(line|minor_line)$"];
+  way["power"="line"];
   way["railway"="rail"];
   way["leisure"~"^(park|pitch|playground|garden|recreation_ground)$"];
   way["landuse"~"^(forest|farmland|meadow|reservoir|cemetery|basin|quarry|landfill|grass)$"];
@@ -320,6 +429,7 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
   const ownC = (f: number[]) => (centroidIn(f) ? undefined : OWN_CTX);
 
   const buildings: Building[] = [];
+  const parts: { b: Building; ring: P2[]; area: number }[] = []; // building:part pieces, joined to outlines below
   const roads: Road[] = [];
   const areas: Area[] = [];
   const lines: Line[] = [];
@@ -346,7 +456,9 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         if (inB(x, z, margin)) poiNodes.push({ x, z, name: t.name, use });
       }
       // Point furniture — same tag→class the bake emits; props.ts consumes these.
-      const pc = t.natural === 'tree' ? 'tree' : t.amenity === 'bench' ? 'bench' : null;
+      const pc = t.natural === 'tree' ? 'tree' : t.amenity === 'bench' ? 'bench'
+        : t.highway === 'traffic_signals' ? 'signal' : t.emergency === 'fire_hydrant' ? 'hydrant'
+        : t.railway === 'subway_entrance' || (t.railway === 'train_station_entrance' && t.subway === 'yes') ? 'subway' : null;
       if (pc && e.lat != null && e.lon != null) {
         const [x, z] = P.project(e.lat, e.lon);
         if (inB(x, z, margin))
@@ -382,7 +494,7 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         : t.man_made === 'pier' && !isClosed(e) ? 'pier'
         : t.barrier === 'fence' ? 'fence'
         : t.barrier === 'wall' || t.barrier === 'retaining_wall' ? 'wall'
-        : t.power === 'line' || t.power === 'minor_line' ? 'power'
+        : t.power === 'line' ? 'power' // transmission: its own tall poles (props.ts); minor lines are the street poles
         : t.railway === 'rail' ? 'rail'
         : null;
       if (lc) {
@@ -399,7 +511,8 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         if (lc !== 'wall' && lc !== 'fence') continue; // a walled yard can also be a landuse area
       }
     }
-    if (t.building) {
+    const isPart = !!t['building:part'] && t['building:part'] !== 'no';
+    if (t.building || isPart) {
       const rings = areaRings(e);
       if (!rings) continue;
       const seed = hashStr(`${e.type}/${e.id}`);
@@ -407,45 +520,70 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         let ring = cleanRing(raw);
         if (ring.length < 3) continue;
         const area = Math.abs(ringArea(ring));
-        if (area < 6) continue;
+        if (area < (isPart ? 2 : 6)) continue;
         if (ringArea(ring) < 0) ring.reverse();
         const p = flat(ring);
         if (!anyVertex(p, margin)) continue;
         const o = obb(ring);
-        const kind: Building['k'] =
+        const bt = t.building ?? '';
+        let kind: Building['k'] =
           t.man_made === 'lighthouse' ? 'lighthouse'
-          : CLS_CHURCH.has(t.building) || t.amenity === 'place_of_worship' ? 'church'
-          : CLS_COMMERCIAL.has(t.building) || t.shop || t.office ? 'commercial'
-          : t.building === 'apartments' || area > 700 ? 'large'
-          : area < 32 || CLS_SHED.has(t.building) ? 'shed'
+          : CLS_CHURCH.has(bt) || t.amenity === 'place_of_worship' ? 'church'
+          : CLS_COMMERCIAL.has(bt) || t.shop || t.office ? 'commercial'
+          : bt === 'apartments' || area > 700 ? 'large'
+          : area < 32 || CLS_SHED.has(bt) ? 'shed'
           : 'house';
-        let h = t.height ? parseFloat(t.height) : null;
-        const floors = t['building:levels'] ? parseFloat(t['building:levels']) : null;
-        if (h == null && floors) h = floors * 3.1 + 1.5;
-        if (h == null || !isFinite(h)) {
+        const lv = parseFloat(t['building:levels']);
+        const floors = isFinite(lv) && lv > 0 ? lv : null;
+        const tagH = parseLen(t.height);
+        let h = plausibleHeight(tagH, floors, area, isPart);
+        // bottom of the building above ground (parts: setbacks and overhangs; else pilings)
+        const minLv = parseFloat(t['building:min_level']);
+        let minH = parseLen(t.min_height);
+        if (!isFinite(minH) && isFinite(minLv) && minLv > 0) minH = minLv * storeyH(floors ?? minLv);
+        if (!isFinite(minH) || minH < 0) minH = 0;
+        if (!isFinite(h)) {
           const r = (seed % 1000) / 1000;
           h = kind === 'shed' ? 3 + r : kind === 'large' ? 8 + r * 5 : kind === 'commercial' ? 5.5 + r * 3 : 6.5 + r * 3;
+          if (isPart) h += minH; // an untagged part stands a storey or two above its base
         }
         if (kind === 'lighthouse') h = 21;
-        h = Math.max(kind === 'shed' ? 2.6 : 3.2, Math.min(40, h));
+        // four-plus storeys isn't a house or a shed whatever the tag says (towers mapped building=yes)
+        if ((kind === 'house' || kind === 'shed') && (h >= 15 || (floors ?? 0) >= 4)) kind = 'large';
+        h = Math.max(kind === 'shed' ? 2.6 : 3.2, h);
         const tagRoof = ROOF_TAG[String(t['roof:shape'] ?? '').toLowerCase()];
         const r4 = (seed >>> 8) % 100;
         const roof: Building['roof'] =
           kind === 'lighthouse' ? 'tower'
+          : isPart ? tagRoof ?? 'flat'
           : tagRoof ?? (kind === 'church' ? 'gable'
           : kind === 'house' ? (ring.length > 60 ? 'flat' : o.wid > 18 ? (r4 < 85 ? 'hip' : 'flat') : r4 < 55 ? 'gable' : r4 < 97 ? 'hip' : 'flat') // keep in sync with bake.mjs
           : kind === 'shed' ? (r4 < 50 ? 'gable' : r4 < 75 ? 'skillion' : r4 < 85 ? 'hip' : 'flat')
           : kind === 'commercial' ? (o.wid < 13 && area < 400 && r4 < 45 ? (r4 < 30 ? 'gable' : 'hip') : 'flat')
-          : kind === 'large' ? (o.wid < 16 && r4 < 25 ? 'hip' : 'flat')
+          : kind === 'large' ? (o.wid < 16 && r4 < 25 && h < 20 ? 'hip' : 'flat')
           : 'flat');
         const b: Building = { r: p, h: +h.toFixed(1), k: kind, roof, s: seed, own: ownC(p) };
         const fc = parseColour(t['building:colour']) ?? materialColour(t['building:material']);
         if (fc != null) b.fc = fc;
         const rc = parseColour(t['roof:colour']) ?? roofMaterialColour(t['roof:material']);
         if (rc != null) b.rc = rc;
-        if (floors && isFinite(floors)) b.fl = Math.round(floors);
-        const minH = t.min_height ? parseFloat(t.min_height) : t['building:min_level'] ? parseFloat(t['building:min_level']) * 3 : null;
-        if (minH && isFinite(minH)) b.mh = +minH.toFixed(1);
+        if (floors) b.fl = Math.round(floors);
+        if (tagRoof) b.rt = 1;
+        if (isFinite(tagH) && Math.abs(tagH - h) < 0.5) b.hq = 1;
+        if (t['building:material']) b.ma = String(t['building:material']).toLowerCase().slice(0, 16);
+        const yr = /(\d{4})/.exec(t.start_date ?? t['building:start_date'] ?? '');
+        if (yr && +yr[1] > 1000 && +yr[1] < 2100) b.yr = +yr[1];
+        if (isPart) {
+          // parts carry heights from the ground: the part itself is min_height..height
+          b.pt = 1;
+          if (minH > 0.5) (b.lf = +minH.toFixed(1)), (b.h = +Math.max(1, h - minH).toFixed(1));
+          parts.push({ b, ring, area });
+          continue;
+        }
+        // a building standing well clear of the ground (a skybridge, a canopy over a plaza) floats;
+        // a low min_height is pilings
+        if (minH > 6) (b.lf = +minH.toFixed(1)), (b.h = +Math.max(1, h - minH).toFixed(1));
+        else if (minH > 0.5) b.mh = +minH.toFixed(1);
         if (t.name) b.n = t.name;
         const use = useTag(t);
         if (use) b.u = use;
@@ -573,10 +711,93 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         if (!b.u) b.u = n.use;
         if (!b.n) b.n = n.name;
         if (b.k === 'house') b.k = 'commercial';
+        else if (b.k === 'large') b.gf = 1; // apartments over a shop: the street floor is a storefront
         break;
       }
     }
   }
+  // ---- row buildings: party walls in a dense block ----
+  // A footprint sharing a fifth of its perimeter with neighbours, in a block the buildings
+  // cover 40 %+ of, is a row house / walk-up / terrace. The region decides what that means
+  // (brick and flat roofs in a North American city; buildings.ts + recipe.ts); a townhouse
+  // court among lawns stays itself.
+  markRows(buildings);
+  // Row buildings on a main road (secondary and up) keep shops on the street floor — an avenue of
+  // walk-ups is an unbroken run of storefronts even where the map names none of them.
+  {
+    const MAIN = new Set(['primary', 'secondary', 'trunk']);
+    const segs: number[][] = [];
+    for (const r of roads) if (MAIN.has(r.c)) for (let i = 0; i + 3 < r.p.length; i += 2) segs.push([r.p[i] / 10, r.p[i + 1] / 10, r.p[i + 2] / 10, r.p[i + 3] / 10, r.w]);
+    if (segs.length)
+      for (const b of buildings) {
+        if (!b.at || b.gf || (b.k !== 'large' && b.k !== 'house') || (b.s >>> 4) % 100 >= 75) continue;
+        let cx = 0, cz = 0;
+        const n = b.r.length >> 1;
+        for (let i = 0; i < n; i++) (cx += b.r[i * 2] / 10), (cz += b.r[i * 2 + 1] / 10);
+        cx /= n;
+        cz /= n;
+        if (segs.some(([ax, az, bx, bz, w]) => segDist(cx, cz, { ax, az, dx: (bx - ax) / (Math.hypot(bx - ax, bz - az) || 1), dz: (bz - az) / (Math.hypot(bx - ax, bz - az) || 1), L: Math.hypot(bx - ax, bz - az) }) < w / 2 + 22)) b.gf = 1;
+      }
+  }
+
+  // ---- building parts (Simple 3D Buildings) ----
+  // Each part joins the smallest outline holding its centre: it takes that building's seed (one
+  // look for the whole tower), kind and colours unless it maps its own. An outline whose parts
+  // cover its ground is drawn by them (hp: footprint, door and name only); one they only partly
+  // cover (a tower part on an unmapped podium) stays as the podium, capped under the lifted
+  // parts and pulled a hand's width inside the walls it shares with them.
+  if (parts.length) {
+    const unflat = (f: number[]): P2[] => { const o: P2[] = []; for (let i = 0; i + 1 < f.length; i += 2) o.push([f[i] / 10, f[i + 1] / 10]); return o; };
+    const hosts = buildings.map((b) => {
+      const r = unflat(b.r);
+      let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+      for (const [x, z] of r) (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z));
+      return { r, x0, z0, x1, z1, a: Math.abs(ringArea(r)), ground: 0, top: 0, lift: Infinity };
+    });
+    for (const P of parts) {
+      let cx = 0, cz = 0;
+      for (const [x, z] of P.ring) (cx += x), (cz += z);
+      cx /= P.ring.length;
+      cz /= P.ring.length;
+      let hi = -1;
+      for (let i = 0; i < hosts.length; i++) {
+        const H = hosts[i];
+        if (cx < H.x0 || cx > H.x1 || cz < H.z0 || cz > H.z1 || buildings[i].gen || (hi >= 0 && H.a >= hosts[hi].a)) continue;
+        if (pointInRing(cx, cz, H.r)) hi = i;
+      }
+      const b = P.b;
+      if (hi >= 0) {
+        const host = buildings[hi], H = hosts[hi];
+        b.po = hi;
+        b.s = host.s;
+        b.k = host.k === 'house' || host.k === 'shed' ? 'large' : host.k;
+        if (b.fc == null && host.fc != null) b.fc = host.fc;
+        if (b.rc == null && host.rc != null) b.rc = host.rc;
+        if (b.ma == null && host.ma != null) b.ma = host.ma;
+        if (b.yr == null && host.yr != null) b.yr = host.yr;
+        if (host.at) b.at = 1;
+        if (host.gf && !b.lf) b.gf = 1;
+        const lift = b.lf ?? 0;
+        if (lift <= 1.5) H.ground += P.area;
+        else H.lift = Math.min(H.lift, lift);
+        H.top = Math.max(H.top, lift + b.h);
+      }
+      buildings.push(b);
+    }
+    hosts.forEach((H, i) => {
+      if (!H.top) return;
+      const host = buildings[i];
+      if (H.ground >= H.a * 0.6) host.hp = 1;
+      else {
+        // the outline usually carries the whole tower's height: as a podium it stops under the
+        // lifted parts (or at four storeys when every part stands on the ground)
+        if (host.h >= H.top * 0.8) host.h = +Math.max(3.2, Math.min(host.h, isFinite(H.lift) ? H.lift : 15)).toFixed(1);
+        if (host.roof !== 'flat') host.roof = 'flat';
+        host.r = flat(insetRing(H.r, 0.12));
+      }
+    });
+  }
+
   {
     const FILLABLE = new Set(['residential', 'unclassified', 'tertiary', 'secondary', 'living_street']);
     let ownRoadM = 0;

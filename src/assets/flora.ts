@@ -11,12 +11,12 @@ import { makeRng } from '../core/rng';
 import { TINT, P, part, merge, limb, blob, card, lathe, fibSphere, fibCount, taper, GOLDEN, cached, bounds } from './core';
 
 const V3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-const BARK = 0x6b5a48, BARK_DARK = 0x5d4a3a, BIRCH = 0xe4dfd2, PALM = 0x8a7458;
+const BARK = 0x6b5a48, BARK_DARK = 0x5d4a3a, BIRCH = 0xe4dfd2, PALM = 0x8a7458, MESQ = 0x4f4034, PALOVERDE = 0x8f9c5a;
 
 // ================================================================ trees
 // Index order matches the region style table's `trees` weights (styles.ts) and the old kinds.
-export type TreeKind = 'round' | 'oak' | 'shrub' | 'pine' | 'spruce' | 'palm' | 'birch';
-export const TREE_KINDS: TreeKind[] = ['round', 'oak', 'shrub', 'pine', 'spruce', 'palm', 'birch'];
+export type TreeKind = 'round' | 'oak' | 'shrub' | 'pine' | 'spruce' | 'palm' | 'birch' | 'mesquite';
+export const TREE_KINDS: TreeKind[] = ['round', 'oak', 'shrub', 'pine', 'spruce', 'palm', 'birch', 'mesquite'];
 export const TREE_VARIANTS = 3;
 export interface TreeMeta { h: number; crownR: number; crownBottom: number; trunkR: number }
 
@@ -153,6 +153,31 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
       leaf.push(fr);
     }
     for (let k = 0; k < 3; k++) leaf.push(new THREE.SphereGeometry(0.16, 5, 4).translate(prev.x + Math.cos(k * 2.1) * 0.25, prev.y - 0.25, prev.z + Math.sin(k * 2.1) * 0.25));
+  } else if (kind === 'mesquite') {
+    // desert legume trees (mesquite; variant 2 a palo verde with green bark): two to four
+    // twisting trunks leaning out from one root crown, and a wide, low, airy canopy of thin
+    // flattened clouds with sky between them — the shade trees of the Sonoran street
+    trunkR = 0.2;
+    const verde = v === 2;
+    const barkC = verde ? PALOVERDE : MESQ;
+    const stems = 2 + (v === 1 ? 2 : 1);
+    const crowns: THREE.Vector3[] = [];
+    for (let i = 0; i < stems; i++) {
+      const a = i * GOLDEN + r.float();
+      const knee = V3(Math.cos(a) * 0.7, 1.5 + j(0.3), Math.sin(a) * 0.7);
+      const tip = V3(Math.cos(a) * (2.2 + r.float()), 3.6 + j(0.4), Math.sin(a) * (2.2 + r.float()));
+      wood.push(part(limb(V3(0, -0.3, 0), knee, trunkR, trunkR * 0.75, 5), barkC), part(limb(knee, tip, trunkR * 0.75, trunkR * 0.35, 4), barkC));
+      crowns.push(tip);
+    }
+    // canopy: a few flattened, sparse clouds over each limb tip plus one over the middle
+    for (let i = 0; i < crowns.length; i++) {
+      const c = crowns[i];
+      for (let k = 0; k < 2; k++) {
+        const a = k * Math.PI + i;
+        lobe((verde ? 1.25 : 1.45) + r.float() * 0.3, V3(c.x + Math.cos(a) * 0.9, c.y + 0.9 + j(0.25), c.z + Math.sin(a) * 0.9), 500 + v * 23 + i * 3 + k, 0.42, 0);
+      }
+    }
+    lobe(verde ? 1.6 : 1.9, V3(j(0.4), 4.9, j(0.4)), 520 + v, 0.4, 0);
   }
 
   const leafGeo = merge(leaf.map((g) => part(g, TINT)));

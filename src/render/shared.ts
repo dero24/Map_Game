@@ -130,6 +130,13 @@ float shadowAt(vec3 wpos, vec3 N) {
   return mix(1.0, s, uShadowStrength * edgeFade);
 }
 
+// How much sky a street-level point loses between tall buildings (stream.ts paints the field
+// into the lamp map's green channel): full near the ground, gone ~45 m up.
+float canyonAt(vec3 wpos) {
+  vec2 uv = (wpos.xz - uLampBox.xy) * uLampBox.zw;
+  if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
+  return texture2D(uLampMap, uv).g * (1.0 - smoothstep(0.0, 45.0, wpos.y - uLampBaseY));
+}
 float lampAt(vec3 wpos) {
   if (uLampPower <= 0.001) return 0.0;
   vec2 uv = (wpos.xz - uLampBox.xy) * uLampBox.zw;
@@ -154,7 +161,7 @@ vec3 paintLight(vec3 albedo, vec3 N, vec3 wpos, float shadow, float ao) {
   float lowSun = 1.0 - smoothstep(0.05, 0.45, uKeyDir.y);
   float wrap = 0.15 + 0.25 * lowSun * step(0.7, N.y);
   float diff = smoothstep(-wrap, 0.55, ndl) * shadow;
-  vec3 hemi = mix(uAmbGround, uAmbSky, N.y * 0.5 + 0.5);
+  vec3 hemi = mix(uAmbGround, uAmbSky, N.y * 0.5 + 0.5) * (1.0 - 0.45 * canyonAt(wpos));
   vec3 lit = albedo * (uKeyColor * diff + hemi * ao);
   // shadows are a transparent cool glaze: shift the hue toward the shadow tint but keep the value
   // (multiplying by a dark tint is what painters call mud)
@@ -174,7 +181,8 @@ uniform vec3 uWorldOffset;
 vec3 applyFog(vec3 col, vec3 wpos) {
   vec3 v = wpos - (cameraPosition + uWorldOffset);
   float d = length(v);
-  float h = max(wpos.y, 0.0);
+  // height above the ground you're standing on (not sea level): a mile-high town keeps its haze
+  float h = max(wpos.y - max(uLampBaseY, 0.0), 0.0);
   float dens = uFogDensity * (1.0 + uSeaFog * 12.0 * exp(-h * 0.08)) ;
   float f = 1.0 - exp(-d * dens * exp(-h * uFogFalloff * (1.0 - uSeaFog * 0.7)));
   return mix(col, fogColorDir(v / max(d, 1e-3)), clamp(f, 0.0, 1.0));

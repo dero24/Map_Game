@@ -24,7 +24,7 @@ import { RS, type CellReq, type CellRes } from './lidarCell';
 type LatLon = { lat: number; lon: number };
 // Cache key version: bump when measure/raster/detection logic changes; the index snapshot
 // date is part of the key too, so a regenerated index re-checks cells it once found uncovered.
-const VER = `lidar|v6|${(INDEX as unknown as { made?: string }).made ?? ''}|`;
+const VER = `lidar|v7|${(INDEX as unknown as { made?: string }).made ?? ''}|`;
 
 let on = false;
 let origin: LatLon | null = null;
@@ -150,7 +150,9 @@ function applyTrees(tj: TileJson, ck: string, rec: Rec) {
   tj.trees = unpackTrees(ck, rec.t);
   tj.treeCov = rec.tc;
 }
-const measurable = (b: Building) => b.own !== 0 && !b.gen && b.k !== 'lighthouse' && b.k !== 'church' && b.roof !== 'tower';
+// (building parts and the outlines they draw are mapped in 3D already — the survey's median
+// over a stepped tower would flatten it)
+const measurable = (b: Building) => b.own !== 0 && !b.gen && !b.pt && !b.hp && !b.lf && b.k !== 'lighthouse' && b.k !== 'church' && b.roof !== 'tower';
 
 // Stored fit → Building. Flat: flat (a mapped skillion keeps its slope). Rectangles: the
 // fitted style. Other outlines ('pitched'): the mapped gable/hip style keeps, with the
@@ -159,6 +161,7 @@ function apply(b: Building, m: number[]) {
   if (m.length < 4 || m[3] < 0.35) return;
   const [h, eav, rs] = m;
   if (h > (b.k === 'house' || b.k === 'shed' ? 40 : 400)) return; // implausible: keep priors
+  if (b.hq && b.h >= 20) return; // a mapped tower height beats a roof median (setbacks, spires)
   b.h = Math.max(2.4, h);
   b.ms = 1;
   if (rs === 0 || b.roof === 'skillion') {
@@ -205,7 +208,7 @@ export async function enrichTile(tj: TileJson, box: Box, wait: number | null, fe
   }
   const q: CellReq = {
     ck, box, origin: origin!, cands: cands.map(({ n, y, b }) => ({ n, y, b, r: [] })), ept: index().ept,
-    bld: missing.map(([b, k]) => ({ k, r: b.r, prior: b.roof === 'gable' || b.roof === 'hip' || b.roof === 'flat' ? b.roof : undefined, house: b.k === 'house' })),
+    bld: missing.map(([b, k]) => ({ k, r: b.r, prior: b.roof === 'gable' || b.roof === 'hip' || b.roof === 'flat' ? b.roof : undefined, house: b.k === 'house', hm: b.hq ? b.h : undefined })),
     mapped: tj.buildings.filter((b) => b.gen !== 'fill').map((b) => b.r),
     wantNew: !rec?.nb, wantTrees: !rec?.t,
   };

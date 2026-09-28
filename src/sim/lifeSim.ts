@@ -354,7 +354,8 @@ export class LifeSim {
       this.sample(e, 0, this.tmp);
       return this.tmp[0] > dx0 && this.tmp[0] < dx1 && this.tmp[2] > dz0 && this.tmp[2] < dz1;
     };
-    const e = this.pickEdge((e) => this.walkable(e), (e) => (inDown(e) ? 6 : 0.35), far ? [this.env.playerX, this.env.playerZ] : undefined, far ? 90 : 0);
+    const shops = this.w.edgeShops;
+    const e = this.pickEdge((e) => this.walkable(e), (e) => Math.max(inDown(e) ? 6 : 0.35, shops ? Math.min(9, 0.35 + shops[e] * 0.9) : 0), far ? [this.env.playerX, this.env.playerZ] : undefined, far ? 90 : 0);
     if (e < 0) { this.active[i] = 0; return; }
     this.placeOnEdge(i, e, this.rng.float() < 0.5 ? 1 : -1, this.rng.float() * this.w.edgeLen[e]);
     this.state[i] = ST.WALK;

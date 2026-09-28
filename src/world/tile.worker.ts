@@ -37,9 +37,25 @@ const demCache = new Map<string, Promise<{ buf: ArrayBuffer; layout: LayerLayout
 // stalls — the player gets the real town either way, never a placeholder for want of a proxy.
 // Results are cached per cell in IndexedDB (kvPut), so a revisit never re-queries Overpass.
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-const DIRECT_V = 7; // keep with the tile service's t/vN (realTile output version)
-let opSlots = 1; // Overpass rate-limits per IP: one query at a time from a browser (429s otherwise)
-const opWait: (() => void)[] = [];
+const DIRECT_V = 10; // keep with the tile service's t/vN (realTile output version)
+// Overpass rate-limits per IP and per server: one query at a time on each mirror, so the three
+// mirrors carry three cells at once. A mirror that answers 429/504 cools down for its
+// retry-after; a query that fails on one mirror moves on to the next free one.
+const epBusy = new Set<string>(), epCool = new Map<string, number>();
+const epWait: (() => void)[] = [];
+async function takeEndpoint(): Promise<string> {
+  for (;;) {
+    const now = Date.now();
+    // the main server grants each IP several slots (its /status says 4): use two there
+    const free = [OVERPASS[0] + '#1', ...OVERPASS].find((e) => !epBusy.has(e) && now >= (epCool.get(e.split('#')[0]) ?? 0));
+    if (free) { epBusy.add(free); return free; }
+    await Promise.race([new Promise<void>((r) => epWait.push(r)), new Promise((r) => setTimeout(r, 1500))]);
+  }
+}
+function releaseEndpoint(ep: string) {
+  epBusy.delete(ep);
+  epWait.shift()?.();
+}
 async function directTile(spec: TileSpec): Promise<TileJson> {
   if (!origin) throw new Error('direct tiles need an origin');
   const [cx, cz] = spec.id.slice(1).split('_').map(Number);
@@ -47,38 +63,33 @@ async function directTile(spec: TileSpec): Promise<TileJson> {
   const hit = await kvGet<TileJson>(key);
   if (hit) return hit;
   const say = (msg: string) => ctx.postMessage({ kind: 'log', msg: `[direct ${cx}_${cz}] ${msg}` });
-  if (opSlots <= 0) await new Promise<void>((r) => opWait.push(r));
-  else opSlots--;
-  try {
-    const M = 48;
-    const bb = makeProjector(origin).localToBbox({ x0: spec.box.x0 - M, z0: spec.box.z0 - M, x1: spec.box.x1 + M, z1: spec.box.z1 + M });
-    const body = 'data=' + encodeURIComponent(overpassQuery(bb));
-    let last = 'no endpoint';
-    for (const ep of [OVERPASS[0], OVERPASS[0], ...OVERPASS.slice(1), OVERPASS[0]]) {
-      try {
-        const r = await fetch(ep, { method: 'POST', body, headers: { 'content-type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(45000) });
-        if (!r.ok) {
-          last = `${ep} ${r.status}`;
-          // 429: our slot isn't free yet — wait as asked (the main server is worth waiting for)
-          if (r.status === 429 || r.status === 504) await new Promise((res) => setTimeout(res, Math.min(15, +(r.headers.get('retry-after') ?? 4) || 4) * 1000));
-          continue;
-        }
-        const j = (await r.json()) as OsmDoc & { remark?: string };
-        if (typeof j.remark === 'string' && /runtime error|timed out|out of memory|runtime limit/i.test(j.remark)) { last = j.remark; continue; }
-        const tj = osmToTile(j, { id: `${cx}_${cz}`, box: spec.box, origin });
-        say(`ok b${tj.buildings.length} r${tj.roads.length} l${tj.lines.length}`);
-        void kvPut(key, tj);
-        return tj;
-      } catch (e) {
-        last = `${ep} ${(e as Error)?.message ?? e}`;
+  const M = 48;
+  const bb = makeProjector(origin).localToBbox({ x0: spec.box.x0 - M, z0: spec.box.z0 - M, x1: spec.box.x1 + M, z1: spec.box.z1 + M });
+  const body = 'data=' + encodeURIComponent(overpassQuery(bb));
+  let last = 'no endpoint';
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const slot = await takeEndpoint(), ep = slot.split('#')[0];
+    try {
+      const r = await fetch(ep, { method: 'POST', body, headers: { 'content-type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(45000) });
+      if (!r.ok) {
+        last = `${ep} ${r.status}`;
+        if (r.status === 429 || r.status === 504) epCool.set(ep, Date.now() + Math.min(20, +(r.headers.get('retry-after') ?? 5) || 5) * 1000);
+        continue;
       }
+      const j = (await r.json()) as OsmDoc & { remark?: string };
+      if (typeof j.remark === 'string' && /runtime error|timed out|out of memory|runtime limit/i.test(j.remark)) { last = j.remark; continue; }
+      const tj = osmToTile(j, { id: `${cx}_${cz}`, box: spec.box, origin });
+      say(`ok b${tj.buildings.length} r${tj.roads.length} l${tj.lines.length} via ${new URL(ep).host}`);
+      void kvPut(key, tj);
+      return tj;
+    } catch (e) {
+      last = `${ep} ${(e as Error)?.message ?? e}`;
+      epCool.set(ep, Date.now() + 5000);
+    } finally {
+      releaseEndpoint(slot);
     }
-    throw new Error('overpass unavailable: ' + last);
-  } finally {
-    const next = opWait.shift();
-    if (next) next();
-    else opSlots++;
   }
+  throw new Error('overpass unavailable: ' + last);
 }
 // The tile service, raced against a stall: after 25 s (or any failure) go direct.
 function worldTile(spec: TileSpec): Promise<TileJson> {

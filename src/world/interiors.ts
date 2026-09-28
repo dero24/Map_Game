@@ -108,7 +108,9 @@ export function planInterior(fpKey: string, fp: Footprint, door: Door, seed: num
   const floorH = floorHeight(kind);
   const floor0 = fp.floor0;
   const topY = fp.top;
-  let levels = kind === 'church' ? 1 : Math.max(1, Math.floor((topY - floor0 + 0.2) / floorH));
+  // walk-up floors only: a tower's upper storeys are behind the lift doors (and would be a
+  // hundred stair flights of geometry)
+  let levels = kind === 'church' ? 1 : Math.max(1, Math.min(4, Math.floor((topY - floor0 + 0.2) / floorH)));
   const [ud, vd] = toL(door.wx, door.wz);
   const rng = makeRng(seed ^ 0x51ed);
 
@@ -1118,8 +1120,10 @@ export class Interiors {
           const vinyl = [0x9c2a26, 0x2f4a6a, 0x3d5a46, 0xb5793a][Math.floor(rng.float() * 4)];
           const topC = [0xe9e2d0, 0x8a6242, 0xd9d2c0][Math.floor(rng.float() * 3)];
           const dArea = roomArea(R);
-          for (let t = 0; t < Math.max(4, Math.min(12, Math.floor(dArea / 14))); t++)
-            place(R, 1.25, 2.1, t % 2 ? -sideA : sideA, rng, (a, b, c, d, side) => {
+          // booths line ONE long wall (a few on the other in a big room); the floor between is
+          // freestanding two- and four-tops in loose clusters — never rows of seats facing one way
+          for (let t = 0; t < Math.max(3, Math.min(7, Math.floor(dArea / 18))); t++)
+            place(R, 1.25, 2.1, t < 5 ? sideA : -sideA, rng, (a, b, c, d, side) => {
               piece(D.booth(b - a, vinyl, topC), (a + b) / 2, (c + d) / 2, y, [1, 0], [0, 1]);
               for (let i = 0; i < 2; i++) box((a + b) / 2 - 0.35 + i * 0.5, (a + b) / 2 - 0.15 + i * 0.5, (c + d) / 2 - 0.12, (c + d) / 2 + 0.08, y + 0.74, y + 0.76, 0xf6f4ee, IP.porcelain);
               if (t < 2) npcSpots.push([(a + b) / 2, (c + d) / 2 + side * 0.72, y, side > 0 ? Math.PI : 0]);
@@ -1130,13 +1134,16 @@ export class Interiors {
             for (let uu = a + 0.3; uu < b - 0.2; uu += 0.65) piece(D.roundTable(0.18, 0.74, vinyl), uu, vs, y, [1, 0], [0, 1]);
             box(a + 0.3, b - 0.3, wallV - side * 0.03, wallV, y + 1.6, y + 2.25, 0x2a2e2b, IP.art); // menu board
           }, true);
-          for (let t = 0; t < Math.max(2, Math.min(8, Math.floor(dArea / 16))); t++)
-            placeFree(R, 1.3, 1.3, rng, (a, b, c, d) => {
+          for (let t = 0; t < Math.max(2, Math.min(14, Math.floor(dArea / 9))); t++) {
+            const four = rng.float() < 0.55;
+            placeFree(R, four ? 1.7 : 1.3, four ? 1.7 : 1.3, rng, (a, b, c, d) => {
               const uc = (a + b) / 2, vc = (c + d) / 2;
               table(uc - 0.4, uc + 0.4, vc - 0.4, vc + 0.4, y, 0.75, topC);
               chair(uc, vc - 0.62, [0, 1], y, 0x3a3530);
               chair(uc, vc + 0.62, [0, -1], y, 0x3a3530);
+              if (four) { chair(uc - 0.62, vc, [1, 0], y, 0x3a3530); chair(uc + 0.62, vc, [-1, 0], y, 0x3a3530); }
             });
+          }
           placeFree(R, 0.5, 0.5, rng, (a, b, c, d) => plant((a + b) / 2, (c + d) / 2, y, true));
           wallArt(R, y, 2);
           break;

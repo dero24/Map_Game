@@ -2,7 +2,7 @@
 // changed persist to localStorage (a diff against the shipped defaults), so improved defaults
 // always reach everyone who hasn't overridden that one knob.
 import GUI from 'lil-gui';
-import { postParams } from '../render/post';
+import { postParams, LOOKS } from '../render/post';
 import { shadowParams } from '../render/shadows';
 import { walkParams } from '../player/controller';
 import { waterParams } from '../world/water';
@@ -46,6 +46,24 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   gui.onFinishChange(save);
   const tzName = region.tz.split('/').pop()?.replace(/_/g, ' ') ?? 'local';
 
+  // Look: named presets first (each sets the watercolor knobs below), then the resolution and
+  // colour-grade knobs a look is mostly made of. Picking a look saves like any other knob.
+  const look = gui.addFolder('Look');
+  const pick = { look: 'watercolor' };
+  look.add(pick, 'look', Object.keys(LOOKS)).name('preset').onChange((k: string) => {
+    Object.assign(postParams, LOOKS[k]);
+    hooks.onResize();
+    gui.controllersRecursive().forEach((c) => c.updateDisplay());
+    save();
+  });
+  look.add(postParams, 'paintDetail', 0.35, 1, 0.01).name('paint detail').onFinishChange(hooks.onResize);
+  look.add(postParams, 'hiDpi').name('full screen resolution').onFinishChange(hooks.onResize);
+  look.add(postParams, 'renderScale', 0.5, 1.5, 0.05).name('render scale').onFinishChange(hooks.onResize);
+  look.add(postParams, 'vibrance', -0.5, 1.5, 0.01).name('vibrance');
+  look.add(postParams, 'grade', 0, 1, 0.01).name('colour grade');
+  look.addColor(postParams, 'gradeShadow').name('grade: shadows');
+  look.addColor(postParams, 'gradeLight').name('grade: lights');
+
   const t = gui.addFolder('Time of day');
   t.add(timeParams, 'realTime').name(`real clock (${tzName})`).listen();
   t.add(timeParams, 'hour', 0, 24, 0.01).name('hour').listen().onChange(() => (timeParams.realTime = false));
@@ -88,7 +106,6 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   p.add(postParams, 'boilFps', 0, 12, 1).name('line boil (fps)');
   p.addColor(postParams, 'paperColor').name('paper');
   p.addColor(postParams, 'inkColor').name('ink');
-  p.add(postParams, 'renderScale', 0.5, 1.5, 0.05).name('render scale').onFinishChange(hooks.onResize);
 
   const l = gui.addFolder('Light & shadow');
   l.add(shadowParams, 'enabled').name('shadows');

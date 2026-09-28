@@ -27,6 +27,25 @@ export const postParams = {
   sketch: true, // paint as you explore: unvisited places are a paler first wash that deepens as you arrive
   paperColor: '#f8f4ea',
   inkColor: '#2e2a3a',
+  // resolution: the paint (brush) pass runs at this fraction of the frame (0.5 = the old half-res
+  // wash; higher = crisper strokes, same brush size on screen); hiDpi renders at the screen's own
+  // pixel density (capped 1.5×) instead of CSS pixels
+  paintDetail: 0.6,
+  hiDpi: true,
+  // colour grade: split-tone shadows/lights toward two hues (the vivid painted-sci-fi look) and a
+  // vibrance lift that saturates the dull colours more than the bright ones
+  grade: 0,
+  gradeShadow: '#2f6f8f',
+  gradeLight: '#ffb27a',
+  vibrance: 0,
+};
+
+/** Named looks for the panel's Look menu: each is a set of postParams (the rest stay as they are). */
+export const LOOKS: Record<string, Partial<typeof postParams>> = {
+  watercolor: { kuwaharaRadius: 5, kuwaharaSharpness: 8, saturation: 1.12, exposure: 0.9, wobble: 0.55, edgeDarkening: 0.9, pigmentTurbulence: 0.22, granulation: 0.3, paperTexture: 0.7, ink: 0.55, glow: 0.8, vignette: 0.55, nightWash: 0.55, paintDetail: 0.6, grade: 0, vibrance: 0 },
+  'fine detail': { kuwaharaRadius: 3.2, kuwaharaSharpness: 12, saturation: 1.12, exposure: 0.92, wobble: 0.35, edgeDarkening: 0.7, pigmentTurbulence: 0.16, granulation: 0.2, paperTexture: 0.45, ink: 0.5, glow: 0.8, vignette: 0.4, nightWash: 0.5, paintDetail: 0.85, grade: 0, vibrance: 0.15 },
+  'vivid painted (sci-fi)': { kuwaharaRadius: 3.8, kuwaharaSharpness: 11, saturation: 1.45, exposure: 1.0, wobble: 0.25, edgeDarkening: 0.55, pigmentTurbulence: 0.12, granulation: 0.1, paperTexture: 0.2, ink: 0.32, glow: 1.25, vignette: 0.12, nightWash: 0.35, paintDetail: 0.8, grade: 0.55, vibrance: 0.45, gradeShadow: '#2f6f8f', gradeLight: '#ffb27a' },
+  'storybook soft': { kuwaharaRadius: 6.5, kuwaharaSharpness: 6, saturation: 1.0, exposure: 0.95, wobble: 0.9, edgeDarkening: 1.1, pigmentTurbulence: 0.3, granulation: 0.45, paperTexture: 1.0, ink: 0.4, glow: 0.9, vignette: 0.75, nightWash: 0.6, paintDetail: 0.5, grade: 0.15, vibrance: 0, gradeShadow: '#5a6f9a', gradeLight: '#ffd9a0' },
 };
 
 const TONEMAP = /* glsl */ `
@@ -171,8 +190,8 @@ export class WatercolorPost {
       uniform sampler2D tPaint, tBlur, tDepth, tScene, tEdge;
       uniform vec2 uRes, uNoiseOffset;
       uniform float uNear, uFar, uTime, uBoil;
-      uniform float uWobble, uEdgeDark, uTurb, uGran, uPaper, uInk, uInkDist, uGlow, uVignette, uSat, uNightWash, uNight;
-      uniform vec3 uPaperColor, uInkColor, uNightTint, uWarm;
+      uniform float uWobble, uEdgeDark, uTurb, uGran, uPaper, uInk, uInkDist, uGlow, uVignette, uSat, uNightWash, uNight, uVibrance, uGrade;
+      uniform vec3 uPaperColor, uInkColor, uNightTint, uWarm, uGradeShadow, uGradeLight;
       uniform float uGolden, uRaw;
       uniform sampler2D tExplore;
       uniform vec4 uExploreBox;
@@ -210,6 +229,16 @@ export class WatercolorPost {
         c = toSrgb(c);
         float lum = dot(c, vec3(0.299, 0.587, 0.114));
         c = mix(vec3(lum), c, uSat);
+        // vibrance: lift the muted colours more than the already-saturated ones
+        float chroma = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+        c = mix(vec3(lum), c, 1.0 + uVibrance * (1.0 - smoothstep(0.0, 0.5, chroma)));
+        // split-tone grade: cool the shadows, warm the lights (value kept — hue only)
+        if (uGrade > 0.001) {
+          vec3 tone = mix(uGradeShadow, uGradeLight, smoothstep(0.15, 0.75, lum));
+          vec3 g2 = c * tone / max(dot(tone, vec3(0.299, 0.587, 0.114)), 1e-3);
+          c = mix(c, g2, uGrade * 0.5);
+        }
+        c = clamp(c, 0.0, 1.0);
 
         // where this pixel is in the world (floating origin undone)
         float dS = texture2D(tDepth, uv).r;
@@ -315,6 +344,7 @@ export class WatercolorPost {
         tExplore: U.uExplore, uExploreBox: U.uExploreBox, uSketch: { value: 0 },
         uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() }, uWorldOff: U.uWorldOffset,
         uNightTint: { value: new THREE.Color(0.55, 0.62, 1.0) }, uWarm: { value: new THREE.Color(1.08, 0.97, 0.86) },
+        uVibrance: { value: 0 }, uGrade: { value: 0 }, uGradeShadow: { value: new THREE.Color() }, uGradeLight: { value: new THREE.Color() },
       },
     );
     this.mCopy = pass(
@@ -331,10 +361,11 @@ export class WatercolorPost {
   setSize(w: number, h: number) {
     this.w = w;
     this.h = h;
-    const s = postParams.renderScale;
+    const s = postParams.renderScale * (postParams.hiDpi ? Math.min(1.5, Math.max(1, globalThis.devicePixelRatio || 1)) : 1);
     const sw = Math.max(4, Math.round(w * s)), sh = Math.max(4, Math.round(h * s));
     this.sceneRT.setSize(sw, sh);
-    for (const t of [this.kuwRT, this.hA, this.hB]) t.setSize(Math.max(4, Math.round(sw / 2)), Math.max(4, Math.round(sh / 2)));
+    const d = Math.max(0.35, Math.min(1, postParams.paintDetail));
+    for (const t of [this.kuwRT, this.hA, this.hB]) t.setSize(Math.max(4, Math.round(sw * d)), Math.max(4, Math.round(sh * d)));
     this.qA.setSize(Math.max(4, Math.round(sw / 4)), Math.max(4, Math.round(sh / 4)));
     this.qB.setSize(Math.max(4, Math.round(sw / 4)), Math.max(4, Math.round(sh / 4)));
   }
@@ -361,10 +392,11 @@ export class WatercolorPost {
     }
     const k = this.mKuw.uniforms;
     k.tColor.value = this.sceneRT.texture;
-    k.uTexel.value.set(1 / sw, 1 / sh);
-    // radius is in half-res pixels; sample the full-res source at 2x stride
-    k.uTexel.value.multiplyScalar(2);
-    k.uRadius.value = Math.max(1.5, Math.min(7, P.kuwaharaRadius * (this.h / 1080)));
+    // the paint buffer is paintDetail × the frame: sample the full-res source at 1/detail stride,
+    // and size the brush in paint pixels so it covers the same share of the screen at any detail
+    const kw = this.kuwRT.width, kh = this.kuwRT.height;
+    k.uTexel.value.set(1 / kw, 1 / kh);
+    k.uRadius.value = Math.max(1.5, Math.min(7, P.kuwaharaRadius * (kh / 540)));
     k.uQ.value = P.kuwaharaSharpness;
     k.uExposure.value = P.exposure;
     k.tDepth.value = this.sceneRT.depthTexture;
@@ -417,6 +449,10 @@ export class WatercolorPost {
     c.uGlow.value = P.glow;
     c.uVignette.value = P.vignette;
     c.uSat.value = P.saturation;
+    c.uVibrance.value = P.vibrance;
+    c.uGrade.value = P.grade;
+    c.uGradeShadow.value.set(P.gradeShadow);
+    c.uGradeLight.value.set(P.gradeLight);
     c.uNightWash.value = P.nightWash;
     c.uNight.value = night;
     c.uGolden.value = golden;

@@ -87,6 +87,7 @@ export class TileStream {
   private lampDirty = false;
   private lampCanvas: HTMLCanvasElement | null = null;
   private lampTex: THREE.CanvasTexture | null = null;
+  private canyonCanvas: HTMLCanvasElement | null = null;
   onChange: (() => void) | null = null;
   onTile: ((a: TileArt) => void) | null = null; // fired after a tile mounts (walks -> ground paint)
   onUnload: ((id: string) => void) | null = null; // fired after a detail tile unmounts
@@ -145,9 +146,9 @@ export class TileStream {
       if (!w) {
         const c = this.man.cell;
         // file is an absolute URL — the tile worker fetches it directly (no base prefix).
-        // &v=7 — the edge Cache API keys on the full URL; bumping alongside the
-        // worker's R2 key (t/v7) retires stale tile payloads.
-        const file = this.tilesBase === 'direct' ? `direct:${key}` : `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}&v=7`;
+        // &v=10 — the edge Cache API keys on the full URL; bumping alongside the
+        // worker's R2 key (t/v10) retires stale tile payloads.
+        const file = this.tilesBase === 'direct' ? `direct:${key}` : `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}&v=10`;
         w = { id: 'w' + key, box: { x0: cx * c, z0: cz * c, x1: cx * c + c, z1: cz * c + c }, lod: 0, file, world: 1 };
         this.worldSpecs.set(key, w);
       }
@@ -217,6 +218,19 @@ export class TileStream {
         const k = Math.floor(f.ring[0][0] / 80) * 92821 + Math.floor(f.ring[0][1] / 80);
         m.set(k, (m.get(k) ?? 0) + 1);
       }
+    return m;
+  }
+
+  /** Built volume per 80 m cell (Σ footprint area × height) — how much city stands around you. */
+  cityGrid() {
+    const m = new Map<number, number>();
+    for (const f of this.footprints) {
+      const r = f.ring;
+      let a = 0;
+      for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += (r[j][0] - r[i][0]) * (r[j][1] + r[i][1]);
+      const k = Math.floor(r[0][0] / 80) * 92821 + Math.floor(r[0][1] / 80);
+      m.set(k, (m.get(k) ?? 0) + Math.abs(a / 2) * Math.max(0, f.top - f.base));
+    }
     return m;
   }
 
@@ -623,6 +637,33 @@ export class TileStream {
         ctx.fillStyle = g;
         ctx.fillRect(px - r, pz - r, r * 2, r * 2);
       }
+    // G: the canyon field — footprints weighted by how tall they stand (40 m = full), blurred
+    // to ~25 m: how much sky a street between them loses. paintLight dims the sky fill with it
+    // near the ground (shared.ts canyonAt), so a Midtown street sits in deep shade under a
+    // bright slot of sky while a shore town's stays open.
+    {
+      const cv = (this.canyonCanvas ??= document.createElement('canvas'));
+      cv.width = cv.height = R / 4;
+      const cc = cv.getContext('2d')!;
+      cc.fillStyle = '#000';
+      cc.fillRect(0, 0, R / 4, R / 4);
+      const kk = k / 4;
+      for (const f of this.footprints) {
+        const hgt = f.top - f.base;
+        if (hgt < 9) continue;
+        const r0 = f.ring[0];
+        if (r0[0] < x0 - 100 || r0[1] < z0 - 100 || r0[0] > x0 + size + 100 || r0[1] > z0 + size + 100) continue;
+        cc.fillStyle = `rgb(0,${Math.round(255 * Math.min(1, hgt / 40))},0)`;
+        cc.beginPath();
+        f.ring.forEach(([px, pz], i) => (i ? cc.lineTo((px - x0) * kk, (pz - z0) * kk) : cc.moveTo((px - x0) * kk, (pz - z0) * kk)));
+        cc.closePath();
+        cc.fill();
+      }
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.filter = 'blur(12px)';
+      ctx.drawImage(cv, 0, 0, R, R);
+      ctx.filter = 'none';
+    }
     if (!this.lampTex) {
       this.lampTex = new THREE.CanvasTexture(this.lampCanvas);
       this.lampTex.flipY = false;

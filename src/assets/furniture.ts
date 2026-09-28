@@ -97,9 +97,11 @@ export const beachLib = (k: 'umbrella' | 'chair' | 'towel' | 'picnic', v = 0) =>
   cached(`beach:${k}:${v}`, () => (k === 'umbrella' ? umbrellaGeometry(v) : k === 'chair' ? beachChairGeometry() : k === 'towel' ? towelGeometry() : picnicTableGeometry()));
 
 // ---------------------------------------------------------------- car gear
-export type CarGear = 'rack' | 'surf' | 'kayak' | 'cargo' | 'bike';
-export const CAR_GEAR: CarGear[] = ['rack', 'surf', 'kayak', 'cargo', 'bike'];
-export const GEAR_NAME: Record<CarGear, string> = { rack: 'a roof rack', surf: 'a surfboard', kayak: 'a kayak', cargo: 'a roof box', bike: 'a bike on the back' };
+export type CarGear = 'rack' | 'surf' | 'kayak' | 'cargo' | 'bike' | 'taxi';
+export const CAR_GEAR: CarGear[] = ['rack', 'surf', 'kayak', 'cargo', 'bike', 'taxi'];
+export const GEAR_NAME: Record<CarGear, string> = { rack: 'a roof rack', surf: 'a surfboard', kayak: 'a kayak', cargo: 'a roof box', bike: 'a bike on the back', taxi: 'a taxi light' };
+/** A city's cab livery by world region (styles.ts WorldRegion): the body colour taxis wear. */
+export const TAXI_PAINT = (region: string) => (region === 'na' || region === 'latam' ? 0xf2c230 : region === 'eu' ? 0x1f2022 : 0xf1efe8);
 /** Gear for a car whose roof is `roof` m high, body `L` long, `W` wide (car origin, front −z). */
 export function gearGeometry(g: CarGear, roof: number, L: number, W: number, seed = 0): THREE.BufferGeometry {
   const p: THREE.BufferGeometry[] = [];
@@ -123,6 +125,10 @@ export function gearGeometry(g: CarGear, roof: number, L: number, W: number, see
   } else if (g === 'cargo') {
     bars();
     p.push(part(lathe([[0.001, 0], [0.32, 0.03], [0.36, 0.14], [0.26, 0.3], [0.001, 0.33]], 10).scale(1.2, 1, 2.6).translate(0, roof + 0.08, 0.05), 0x2a2c30));
+  } else if (g === 'taxi') {
+    // the roof light: a lit sign box on a low plinth, across the roof
+    p.push(part(box(0.5, 0.05, 0.22, 0, roof + 0.025, 0.1), 0x2a2c30));
+    p.push(part(box(0.66, 0.2, 0.26, 0, roof + 0.15, 0.1), 0xf8f3dc));
   } else if (g === 'bike') {
     // a bike on a hitch rack at the back
     const z = L / 2 + 0.3, y = 0.55;

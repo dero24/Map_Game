@@ -172,7 +172,7 @@ export async function hagFor(box: Box, cands: LidarProject[], eptBase: string): 
 // ---------- one request ----------
 export interface CellReq {
   ck: string; box: Box; origin: LatLon; cands: LidarProject[]; ept: string;
-  bld: { k: string; r: number[]; prior?: 'gable' | 'hip' | 'flat'; house: boolean }[]; // rings in 0.1 m ints
+  bld: { k: string; r: number[]; prior?: 'gable' | 'hip' | 'flat'; house: boolean; hm?: number }[]; // rings in 0.1 m ints; hm = mapped height (m)
   mapped: number[][]; // mapped (non-guess) footprint rings, 0.1 m ints — masks for detection
   wantNew: boolean; wantTrees: boolean;
 }
@@ -223,15 +223,20 @@ export async function measureCell(q: CellReq): Promise<CellRes> {
   const G = await gp; // throws on network trouble — the caller builds from priors
   if (!G) return { none: 1, fits: [] };
   const out: CellRes = { src: G.src, year: G.year, fits: [], canopy: G.chm ? 'classified' : 'unclassified' };
-  const fresh: [string, number[], boolean][] = q.bld.map((b) => {
+  const fresh: [string, number[], boolean, number | undefined][] = q.bld.map((b) => {
     const m = measureFootprint(ringOf(b.r), (x, z) => hagAt(G, x, z), b.prior);
-    return [b.k, m ? [m.h, m.eav, RS.indexOf(m.rs), m.q] : [], b.house];
+    return [b.k, m ? [m.h, m.eav, RS.indexOf(m.rs), m.q] : [], b.house, b.hm];
   });
   // Vertical units: EPT keeps each survey's Z units, and some 3DEP deliveries are in US
-  // survey feet (the index doesn't say). Houses standing ~25 m tall on median is feet.
-  const hs = fresh.filter(([, m, house]) => house && m.length && m[3] >= 0.35).map(([, m]) => m[0]).sort((a, b) => a - b);
-  const feet = hs.length >= 8 && hs[hs.length >> 1] > 14 ? 0.3048006 : 1;
-  if (feet !== 1) log(`lidar ${ck}: ${G.src} reads as feet (median house ${hs[hs.length >> 1].toFixed(1)}) — scaling`);
+  // survey feet (the index doesn't say). Where heights are mapped (a city's own survey — most
+  // of Manhattan), the measured/mapped ratio says it outright (~3.28 = feet); elsewhere, houses
+  // standing ~25 m tall on median is feet.
+  const med = (a: number[]) => a.sort((x, y) => x - y)[a.length >> 1];
+  const rs = fresh.filter(([, m, , hm]) => hm && hm >= 6 && m.length && m[3] >= 0.35).map(([, m, , hm]) => m[0] / hm!);
+  const hs = fresh.filter(([, m, house]) => house && m.length && m[3] >= 0.35).map(([, m]) => m[0]);
+  const byRatio = rs.length >= 6 ? med(rs) : 0;
+  const feet = byRatio ? (byRatio > 2.4 ? 0.3048006 : 1) : hs.length >= 8 && med(hs) > 14 ? 0.3048006 : 1;
+  if (feet !== 1) log(`lidar ${ck}: ${G.src} reads as feet (${byRatio ? `measured/mapped ${byRatio.toFixed(2)}` : `median house ${med(hs).toFixed(1)}`}) — scaling`);
   for (const [k, m] of fresh) out.fits.push([k, m.length ? [+(m[0] * feet).toFixed(2), +(m[1] * feet).toFixed(2), m[2], +m[3].toFixed(2)] : []]);
   const [clat, clon] = ck.split(',').map(Number);
   const toLL = (x: number, z: number) => {

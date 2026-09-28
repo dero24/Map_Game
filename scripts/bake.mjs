@@ -10,6 +10,16 @@ import { Grid, fillRings, stampSegment, components, signedDistance, edt, bilinea
 import { terrainSampler } from './lib/terrain.mjs';
 import { partitionEntities, tileSpecs, terrainPack, packToBin, TILE_CELL, TILE_MARGIN } from './lib/tiles.mjs';
 
+// A length tag in metres ("120", "394 ft", "12'6\"") — mirror of realTile.ts parseLen.
+const parseLen = (v) => {
+  if (v == null) return null;
+  const t = String(v).trim().toLowerCase().replace(',', '.');
+  const ft = /^(\d+(?:\.\d+)?)\s*(?:ft|feet|foot|')\s*(?:(\d+(?:\.\d+)?)\s*(?:in|inch|inches|"|''))?$/.exec(t);
+  if (ft) return parseFloat(ft[1]) * 0.3048 + (ft[2] ? parseFloat(ft[2]) * 0.0254 : 0);
+  const f = parseFloat(t);
+  return isFinite(f) ? f : null;
+};
+
 const t0 = Date.now();
 const log = (...a) => console.log(`[${((Date.now() - t0) / 1000).toFixed(1)}s]`, ...a);
 mkdirSync(OUT, { recursive: true });
@@ -253,14 +263,19 @@ for (const row of overture.rows) {
     else if (area < 32 || CLS_SHED.has(tags.building) || CLS_SHED.has(cls) || sub === 'outbuilding') kind = 'shed';
     const seed = hashStr(row.id);
     const floors = row.num_floors ?? (tags['building:levels'] ? parseFloat(tags['building:levels']) : null);
-    let h = row.height ?? (tags.height ? parseFloat(tags.height) : null);
-    if (h == null && floors) h = floors * 3.1 + 1.5;
+    // plausible height — mirror of realTile.ts plausibleHeight (real towers keep their height)
+    let h = row.height ?? parseLen(tags.height);
+    if (floors && floors > 0) {
+      const est = floors * (floors > 10 ? 3.7 : 3.1) + 1.5;
+      if (h == null || !isFinite(h) || h > est * 2 + 20 || h < floors * 1.8) h = est;
+    } else if (h != null && isFinite(h) && h > 100 && area < 120) h = 40;
     if (h == null || !isFinite(h)) {
       const r = (seed % 1000) / 1000;
       h = kind === 'shed' ? 3 + r : kind === 'large' ? 8 + r * 5 : kind === 'commercial' ? 5.5 + r * 3 : 6.5 + r * 3;
     }
     if (kind === 'lighthouse') h = tags.name === 'North Tower' ? 22 : 21;
-    h = Math.max(kind === 'shed' ? 2.6 : 3.2, Math.min(40, h));
+    if ((kind === 'house' || kind === 'shed') && (h >= 15 || (floors ?? 0) >= 4)) kind = 'large';
+    h = Math.max(kind === 'shed' ? 2.6 : 3.2, Math.min(830, h));
     // Roof: mapped shape wins; otherwise a style prior by kind + size. Any footprint shape can take a
     // pitched roof — the runtime builds it on the true outline with a straight skeleton.
     const tagRoof = ROOF_TAG[String(tags['roof:shape'] ?? row.roof_shape ?? '').toLowerCase()];
@@ -273,7 +288,7 @@ for (const row of overture.rows) {
     else if (kind === 'house') roof = ring.length > 60 ? 'flat' : o.wid > 18 ? (r4 < 85 ? 'hip' : 'flat') : r4 < 55 ? 'gable' : r4 < 97 ? 'hip' : 'flat';
     else if (kind === 'shed') roof = r4 < 50 ? 'gable' : r4 < 75 ? 'skillion' : r4 < 85 ? 'hip' : 'flat';
     else if (kind === 'commercial') roof = o.wid < 13 && area < 400 && r4 < 45 ? (r4 < 30 ? 'gable' : 'hip') : 'flat';
-    else if (kind === 'large') roof = o.wid < 16 && r4 < 25 ? 'hip' : 'flat';
+    else if (kind === 'large') roof = o.wid < 16 && r4 < 25 && h < 20 ? 'hip' : 'flat';
     const b = { r: flat(ring), h: +h.toFixed(1), k: kind, roof, s: seed };
     // Real colours: explicit tags / Overture attributes, then materials, then the aerial photo (roofs).
     const fc = parseColour(tags['building:colour']) ?? parseColour(row.facade_color) ?? materialColour(tags['building:material'] ?? row.facade_material);
@@ -381,7 +396,7 @@ for (const e of els) {
   else if (t.man_made === 'pier' && !isClosed(e)) c = 'pier';
   else if (t.barrier === 'fence') c = 'fence';
   else if (t.barrier === 'wall' || t.barrier === 'retaining_wall') c = 'wall';
-  else if (t.power === 'line' || t.power === 'minor_line') c = 'power';
+  else if (t.power === 'line') c = 'power'; // transmission (minor lines = the procedural street poles) — as realTile.ts
   else if (t.railway === 'rail') c = 'rail';
   if (!c) continue;
   const pts = wayPts(e);
@@ -403,6 +418,8 @@ for (const e of els) {
   else if (t.highway === 'street_lamp') c = 'lamp';
   else if (t.amenity === 'bench') c = 'bench';
   else if (t.highway === 'traffic_signals') c = 'signal';
+  else if (t.emergency === 'fire_hydrant') c = 'hydrant';
+  else if (t.railway === 'subway_entrance') c = 'subway';
   else if (t.man_made === 'lighthouse') c = 'lighthouse';
   else if (t.man_made === 'flagpole') c = 'flagpole';
   else if (t.entrance || t.door) c = 'entrance';

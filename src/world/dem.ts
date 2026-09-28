@@ -33,17 +33,18 @@ const queue: (() => void)[] = [];
 let demBase = ''; // tile-service root — /dem/<z>/<x>/<y>.png proxies Terrarium
 export function setDemBase(b: string) { demBase = b.replace(/\/+$/, ''); }
 
-async function demTile(tx: number, ty: number): Promise<Float32Array | null> {
-  const k = `${tx}_${ty}`;
+async function demTile(tx: number, ty: number, z = Z): Promise<Float32Array | null> {
+  const n = 2 ** z;
+  const k = z === Z ? `${tx}_${ty}` : `${z}/${tx}_${ty}`;
   let p = tileCache.get(k);
   if (p) return p;
   p = (async () => {
     while (inflight >= 4) await new Promise<void>((r) => queue.push(r));
     inflight++;
     try {
-      const tx0 = ((tx % N) + N) % N;
+      const tx0 = ((tx % n) + n) % n;
       // 'direct' (no tile service): Terrarium straight from its public bucket (CORS-enabled)
-      const url = demBase === 'direct' ? `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${Z}/${tx0}/${ty}.png` : `${demBase}/dem/${Z}/${tx0}/${ty}.png`;
+      const url = demBase === 'direct' ? `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${tx0}/${ty}.png` : `${demBase}/dem/${z}/${tx0}/${ty}.png`;
       const r = await fetch(url, { signal: AbortSignal.timeout(10000), mode: 'cors' });
       if (!r.ok) return null;
       const bmp = await createImageBitmap(await r.blob());
@@ -69,6 +70,34 @@ async function demTile(tx: number, ty: number): Promise<Float32Array | null> {
   return p;
 }
 
+/** Elevation at any lat/lon from the zoom-z Terrarium tiles covering a lat/lon box (the horizon
+ *  ring reads z9, ~250 m a pixel). Sea floor and nodata read 0. null until the service answers,
+ *  or when any tile is missing (a hole would read as a cliff to the sea). */
+export async function demSampler(z: number, bb: { s: number; w: number; n: number; e: number }): Promise<((lat: number, lon: number) => number) | null> {
+  if (!demBase) return null;
+  const n = 2 ** z;
+  const lx = (lon: number) => ((lon + 180) / 360) * n;
+  const ly = (lat: number) => { const r = (lat * Math.PI) / 180; return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * n; };
+  const x0 = Math.floor(lx(bb.w)), x1 = Math.floor(lx(bb.e)), y0 = Math.floor(ly(bb.n)), y1 = Math.floor(ly(bb.s));
+  const tiles = new Map<string, Float32Array>();
+  const jobs: Promise<void>[] = [];
+  for (let tx = x0; tx <= x1; tx++) for (let ty = y0; ty <= y1; ty++) jobs.push(demTile(tx, ty, z).then((h) => { if (h) tiles.set(`${tx}_${ty}`, h); }));
+  await Promise.all(jobs);
+  if (tiles.size < jobs.length) return null;
+  return (lat: number, lon: number) => {
+    const fx = lx(lon) * 256 - 0.5, fy = ly(lat) * 256 - 0.5;
+    const tx = Math.floor(fx / 256), ty = Math.floor(fy / 256);
+    const t = tiles.get(`${tx}_${ty}`);
+    if (!t) return 0;
+    const px = fx - tx * 256, py = fy - ty * 256;
+    const ix = Math.max(0, Math.min(255, Math.floor(px))), iy = Math.max(0, Math.min(255, Math.floor(py)));
+    const ax = Math.max(0, Math.min(1, px - ix)), ay = Math.max(0, Math.min(1, py - iy));
+    const jx = Math.min(255, ix + 1), jy = Math.min(255, iy + 1);
+    const h = (t[iy * 256 + ix] * (1 - ax) + t[iy * 256 + jx] * ax) * (1 - ay) + (t[jy * 256 + ix] * (1 - ax) + t[jy * 256 + jx] * ax) * ay;
+    return h > 0 ? h : 0;
+  };
+}
+
 // Race helper — callers apply their own budget; the underlying work keeps running and
 // stays cached, so a fast placeholder timeout can't poison its slower real-lite twin.
 export function raceNull<T>(p: Promise<T>, ms: number): Promise<T | null> {
@@ -78,8 +107,13 @@ export function raceNull<T>(p: Promise<T>, ms: number): Promise<T | null> {
     .finally(() => clearTimeout(timer!));
 }
 
-export async function fetchDem(box: Box, origin: LatLon): Promise<DemGrid | null> {
+export async function fetchDem(cellBox: Box, origin: LatLon): Promise<DemGrid | null> {
   const P = makeProjector(origin);
+  // The patch overhangs its cell by 96 m (6 pitches — the lattice stays global): buildings and
+  // props at a cell's edge sample real ground even before the neighbour's patch exists, instead
+  // of the resident terrain's sea-level shelf (a mile-high town's edge houses stood on 0 m).
+  const OVER = 96;
+  const box: Box = { x0: cellBox.x0 - OVER, z0: cellBox.z0 - OVER, x1: cellBox.x1 + OVER, z1: cellBox.z1 + OVER };
   // TerrainLayer treats samples as cell CENTERS (its bilinear shifts by -0.5), so nodes
   // sit at x0+(i+0.5)*pitch — 64 nodes cover the cell, edges interpolate to the same
   // global lattice as the neighbour's patch (seam-free by construction).

@@ -21,6 +21,9 @@ export interface RegionStyle {
   climate: Climate;
   family: Family;
   region: WorldRegion;
+  /** A building-culture subregion within a world region (North America: south / midwest /
+   *  northeast / mountain / pnw) — what houses are clad in there. '' when not refined. */
+  sub: string;
   driveLeft: boolean;
   facadeHouse: number[]; facadeShop: number[]; facadeLarge: number[];
   roof: number[]; flatRoof: number[];
@@ -70,6 +73,18 @@ const LEFT: Box[] = [
   [-48, -9, 112, 179], // Australia + New Zealand
   [-4, 5, 29, 42], // Kenya / Uganda / Tanzania
 ];
+
+/** North American building-culture subregion (coarse boxes, like the climate ones): the brick
+ *  South and Midwest, the clapboard Northeast, the mountain West, the shingle-and-cedar Northwest.
+ *  California and the desert Southwest are already their own families (stucco / adobe). */
+export function naSub(lat: number, lon: number): string {
+  if (lon <= -117 && lat >= 42) return 'pnw';
+  if (lon > -117 && lon <= -104) return 'mountain';
+  if (lat < 36.8 && lon > -104) return 'south';
+  if (lon > -104 && lon < -84.5) return 'midwest';
+  if (lon >= -84.5) return lat < 36.8 ? 'south' : 'northeast';
+  return '';
+}
 
 export function worldRegion(lat: number, lon: number): WorldRegion {
   if (lat > 60 || lat < -60) return 'north';
@@ -192,9 +207,9 @@ const cache = new Map<string, RegionStyle>();
 export function styleByKey(key: string): RegionStyle | null {
   const hit = cache.get(key);
   if (hit) return hit;
-  const [c, f, side, reg] = key.split('/');
+  const [c, f, side, reg, sub] = key.split('/');
   if (!(c in VEG) || !(f in PAL)) return null;
-  const s: RegionStyle = { key, climate: c as Climate, family: f as Family, region: (reg as WorldRegion) || 'na', driveLeft: side === 'L', ...PAL[f as Family], ...VEG[c as Climate] };
+  const s: RegionStyle = { key, climate: c as Climate, family: f as Family, region: (reg as WorldRegion) || 'na', sub: sub ?? '', driveLeft: side === 'L', ...PAL[f as Family], ...VEG[c as Climate] };
   cache.set(key, s);
   return s;
 }
@@ -204,7 +219,8 @@ export function regionStyle(lat: number, lon: number): RegionStyle {
   const region = worldRegion(lat, lon);
   const family = familyOf(climate, region);
   const left = any(lat, lon, LEFT);
-  return styleByKey(`${climate}/${family}/${left ? 'L' : 'R'}/${region}`)!;
+  const sub = region === 'na' ? naSub(lat, lon) : '';
+  return styleByKey(`${climate}/${family}/${left ? 'L' : 'R'}/${region}${sub ? '/' + sub : ''}`)!;
 }
 
 /** meta.style wins (lets a baked region pin its look); else derive from the origin. */

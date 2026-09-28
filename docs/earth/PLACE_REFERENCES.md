@@ -25,10 +25,10 @@ References:
 |---|---|---|
 | A continuous row of 2–4-storey storefronts at the sidewalk: clapboard (pale blue, grey, white), tan brick, a white church steeple | OSM footprints + tags, region style → buildings.ts | 🟡 |
 | Dark navy awnings, hanging signs, shop names | `name`, Building.u → per-building fascia/awning shader, signs.ts | 🟡 |
-| Black acorn lampposts lining the downtown sidewalk; US-flag banners on the lamps in summer | commercial frontage density → main-street lamp family; calendar → banners | ⬜ |
+| Black acorn lampposts lining the downtown sidewalk; US-flag banners on the lamps in summer | commercial doors along the street → main-street lamp posts (props.ts; acorn in North America); calendar → banners (⬜) | 🟡 |
 | Wooden utility poles with crossarms, transformer cans, **dense overhead wires crossing the street**; cobra-head lights on the poles | road class + region → poles/wires (props) | 🟡 |
 | Continuous parallel parking on both sides | commercial frontage → curbside parking | 🟡 |
-| Crosswalk ladder bars, a "yield to pedestrians" sign in the centre line, red hydrants, yellow kerbs | intersections + downtown → ground paint + street furniture | ⬜ |
+| Crosswalk ladder bars, a "yield to pedestrians" sign in the centre line, red hydrants, yellow kerbs | junctions of a tertiary+ road → ladder crosswalks (groundPaint.ts); OSM `traffic_signals` → signal masts; OSM hydrants; yield signs / kerb paint ⬜ | 🟡 |
 | Double-yellow centre line; wide shoulders | road class → ground paint | ✅ |
 
 ## Monmouth Beach, NJ — Ocean Avenue and residential streets
@@ -42,7 +42,7 @@ References:
 | **The seawall**: a 3–4 m rock revetment along the ocean side of Ocean Ave with wooden walkover stairs; you can't see the beach from the road | OSM `wall=seawall` → structures.ts (streamed tiles now carry it too) | 🟡 (height reads low) |
 | White clapboard houses behind low concrete garden walls; the lifesaving-station tower | footprints + style; `barrier=wall` | 🟡 |
 | Mown lawns to the kerb, rows of small street trees | land cover + street-tree rule | 🟡 |
-| A transmission line of tall wooden poles with many wires | OSM `power=line` → pole/wire family | ⬜ (lines now streamed, not drawn) |
+| A transmission line of tall wooden poles with many wires | OSM `power=line` → 15 m poles, two crossarms, six wires (props.ts) | ✅ |
 | Long Branch condo towers on the horizon | footprints with heights beyond the load ring | 🟡 |
 
 ## Tucson, AZ — 4th Avenue and Barrio Viejo
@@ -54,11 +54,11 @@ References:
 
 | Trait | Signal → system | Status |
 |---|---|---|
-| **Mountains on every horizon** (the Santa Catalinas, the Rincons, the Tucson Mountains) | Terrarium DEM, low zoom, ±40 km → far-terrain ring | ⬜ |
+| **Mountains on every horizon** (the Santa Catalinas, the Rincons, the Tucson Mountains) | Terrarium z9 → horizon ring 6–80 km (horizon.ts), haze from the ground you stand on | ✅ |
 | Flat roofs with parapets; stucco and adobe in bright colours (salmon, turquoise, pink, yellow); painted brick | arid climate + adobe family → roofs/palettes | 🟡 |
 | Barrio row houses **at the sidewalk** with no setback, tall narrow dark-framed windows, stone foundation band | footprint position against the road + style | 🟡 |
-| Mesquite and palo verde (feathery, yellow-green), agave and yucca, gravel yards, **no lawns** | climate → tree species + xeriscape ground | 🟡 (palms and tufts, no mesquite) |
-| Low block or stucco garden walls and wrought iron, **not picket fences** | style family → fence type | ⬜ (picket fences appear) |
+| Mesquite and palo verde (feathery, yellow-green), agave and yucca, gravel yards, **no lawns** | arid climate → `mesquite` / palo verde tree kind (flora.ts); agave, gravel ground ⬜ | 🟡 |
+| Low block or stucco garden walls and wrought iron, **not picket fences** | adobe/stucco family → rendered yard walls, some with iron (props.ts); pickets only where houses wear clapboard | ✅ |
 | Wooden utility poles and overhead wires; sun-bleached, cracked asphalt | region → poles; climate → asphalt tone | 🟡 |
 | Downtown towers on the skyline (One South Church, the UniSource building) | footprint heights | 🟡 |
 | 4th Ave: storefronts, murals, streetcar tracks with overhead wire, neon at the bars at night | OSM `railway=tram` (⬜), use=bar → neon at night (⬜) | 🟡 |
@@ -71,12 +71,12 @@ References:
 
 | Trait | Signal → system | Status |
 |---|---|---|
-| **Street canyon**: 150–300 m towers both sides, sky a narrow slot | OSM `height` / `building:levels`, **`building:part`** setbacks | ⬜ (40 m clamp) |
-| Dark glass curtain walls with vertical mullion stripes; limestone / granite / brick towers with punched windows | height + material (`building:material`, era) → tower facade | ⬜ |
-| Yellow taxis in most of the traffic; buses | region + density → car mix | ⬜ |
-| Zebra crosswalks, signal mast arms, bishop's-crook lamps, street trees in pits, trash cans | intersections + density → street furniture | ⬜ |
+| **Street canyon**: 150–300 m towers both sides, sky a narrow slot | `plausibleHeight` (m/ft, floors) + `building:part` setbacks (realTile.ts, buildings.ts); a far skyline ring past 1.5 km ⬜ | ✅ |
+| Dark glass curtain walls with vertical mullion stripes; limestone / granite / brick towers with punched windows | material, `start_date` era, height → curtain wall (siding 5) or masonry (recipe.ts); penthouses + water tanks | ✅ |
+| Yellow taxis in most of the traffic; buses | built volume → taxi share + regional livery (life.ts); buses from `route=bus` ⬜ | 🟡 |
+| Zebra crosswalks, signal mast arms, bishop's-crook lamps, street trees in pits, trash cans | crosswalks, OSM signals → masts, dense cores → steel masts not wooden poles, paved dense blocks; subway entrances; tree pits, bins ⬜ | 🟡 |
 | Ground-floor retail glass, lit signs and screens | Building.u + density | 🟡 |
-| Sound: traffic roar, horns, sirens, crowds | building density → city soundscape | ⬜ |
+| Sound: traffic roar, horns, sirens, crowds | built volume → roar, horns, sirens, crowd, pigeons (ambience.ts) | ✅ |
 
 ## Seattle, WA — downtown
 
@@ -84,7 +84,7 @@ Reference: [Downtown Seattle street scene](https://commons.wikimedia.org/wiki/Fi
 
 | Trait | Signal → system | Status |
 |---|---|---|
-| Red-brick high-rises with fire escapes; white terracotta storefront blocks; glass towers behind | heights, materials, era | ⬜ |
+| Red-brick high-rises with fire escapes; white terracotta storefront blocks; glass towers behind | heights, materials, era; fire escapes on NA brick walk-ups | 🟡 |
 | Trolleybus overhead wires over the streets | OSM `trolley_wire=yes` / `railway=tram` | ⬜ |
 | Steep hills, water (Elliott Bay), Mount Rainier on clear days | DEM near + far ring, water | 🟡 near / ⬜ far |
 | Neon signs; painted wall ads | use=shop/bar + era | ⬜ |
@@ -102,6 +102,12 @@ Reference: [Ocean Drive, Art Deco Historic District](https://commons.wikimedia.o
 ---
 
 ## What the comparisons say (cross-place, ranked by how many hometowns they fix)
+
+Status after 2026-09-27 (n): 1 ✅ horizon ring · 2 ✅ heights and parts · 3 🟡 mapped
+transmission lines drawn, dense cores bury wires · 4 🟡 lamps, crosswalks, signals, hydrants ·
+5 🟡 mesquite, paved city blocks · 6 ✅ yard walls by tradition · 7 ✅ city and desert sound.
+Also: North American house cladding by subregion (brick South and Midwest; styles.ts `naSub`).
+Reviewer, New York round 1: 5/10 — the next gaps are street-level life and canyon light.
 
 1. **Horizons** (DEM far ring): every town with mountains or hills in view.
 2. **Heights and building parts** (skyscrapers, setbacks): every city.

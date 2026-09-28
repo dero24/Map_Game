@@ -71,6 +71,32 @@ describe('recipeFor', () => {
     for (let s = 0; s < 100; s++) if (recipeFor(bd(s * 2654435761, { fc: undefined }), med).siding === SIDING.stucco) stucco++;
     expect(stucco).toBeGreaterThan(70);
   });
+  it('North American houses wear their subregion: brick ranches down South, clapboard up North', () => {
+    const atl = regionStyle(33.75, -84.39), bos = regionStyle(42.36, -71.06), sea = regionStyle(47.61, -122.33);
+    expect(atl.sub).toBe('south');
+    expect(bos.sub).toBe('northeast');
+    expect(sea.sub).toBe('pnw');
+    const brick = (st: typeof atl) => { let n = 0; for (let s = 0; s < 400; s++) if (recipeFor(bd(s * 2654435761), st).siding === SIDING.brick) n++; return n / 400; };
+    expect(brick(atl)).toBeGreaterThan(0.4);
+    expect(brick(bos)).toBeLessThan(0.1);
+  });
+  it('towers are glass or masonry, never clapboard; old ones never glass; mapped glass is glass', () => {
+    const nyc = regionStyle(40.758, -73.9855);
+    const wood: number[] = [SIDING.clapboard, SIDING.shingle, SIDING.batten];
+    let glass = 0;
+    for (let s = 0; s < 300; s++) {
+      const r = recipeFor(bd(s * 2654435761, { k: 'commercial', roof: 'flat', h: 220 }), nyc);
+      expect(wood.includes(r.siding)).toBe(false);
+      if (r.siding === SIDING.glass) glass++;
+      expect(recipeFor(bd(s * 2654435761, { k: 'large', roof: 'flat', h: 120, yr: 1928 }), nyc).siding).not.toBe(SIDING.glass);
+    }
+    expect(glass).toBeGreaterThan(150); // most supertall towers are curtain walls…
+    expect(glass).toBeLessThan(280); // …not all
+    expect(recipeFor(bd(7, { k: 'large', roof: 'flat', h: 30, ma: 'glass' }), nyc).siding).toBe(SIDING.glass);
+    // a tower's parts share its seed and resolve to one facade (podium masonry may differ from the glass shaft)
+    const tier = recipeFor(bd(99, { k: 'commercial', roof: 'flat', h: 140, lf: 60, pt: 1 }), nyc);
+    expect(tier).toEqual(recipeFor(bd(99, { k: 'commercial', roof: 'flat', h: 140, lf: 60, pt: 1 }), nyc));
+  });
 });
 
 import { signName } from '../src/world/signs';

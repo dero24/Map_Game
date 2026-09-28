@@ -24,6 +24,18 @@ export interface Building {
   rc?: number; // real roof colour 0xRRGGBB (tags / materials / aerial imagery)
   fl?: number; // mapped number of floors
   mh?: number; // mapped min_height (m): the building stands on something (pilings)
+  // Simple 3D Buildings (OSM building:part): a tower's setbacks, podium and crown are parts
+  // inside one outline. The outline keeps the footprint, door and name; the parts are the shape.
+  pt?: 1; // a building:part (no door or footprint of its own; drawn from lf up to lf + h)
+  lf?: number; // lift: the part's bottom above the ground (m) — setbacks, overhangs, skybridges
+  po?: number; // index of the outline this part belongs to (same tile) — shares its id and look
+  hp?: 1; // an outline its parts fully draw: footprint, door and name only, no walls or roof
+  gf?: 1; // a storefront street floor under apartments (a shop mapped inside, or a row on a main road)
+  at?: 1; // a row building: party walls in a dense block (row house, walk-up, terrace)
+  rt?: 1; // the roof shape was mapped (roof:shape) — style priors leave it alone
+  hq?: 1; // h came from a mapped height tag (a survey), not floors or a prior
+  ma?: string; // mapped facade material (building:material): glass, brick, stone, concrete…
+  yr?: number; // construction year (start_date): era decides glass curtain wall vs masonry
   ad?: string; // street address
   own?: number; // tile tiles: 0 = margin context (a neighbour tile emits it)
   gen?: 'fill' | 'lidar'; // 'fill': hybrid-fill guess beside a real street (H3); 'lidar': unmapped, found in the survey

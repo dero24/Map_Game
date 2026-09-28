@@ -7,8 +7,8 @@ await import('/tools/inpage-montage.js');
 
 window.__REVIEW__ = async (tag = 'r', opts = {}) => {
   const G = window.__GAME__, T = G.THREE, m = new T.Matrix4(), p = new T.Vector3();
-  window.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16);
-  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  window.__PUMP__(); // frames even in a hidden pane (inpage-montage.js)
+  const wait = window.__WAIT__; // pumped, so hidden-pane timer throttling can't stretch it
   const near = (prefix, x, z, skip = 0) => {
     const all = [];
     G.scene.traverse((o) => {

@@ -152,6 +152,80 @@ describe('osmToTile — buildings', () => {
   });
 });
 
+describe('osmToTile — towers and building parts', () => {
+  it('reads heights in any unit and keeps real towers tall, but not typos', async () => {
+    const { parseLen, plausibleHeight } = await import('../src/world/realTile');
+    expect(parseLen('120')).toBe(120);
+    expect(parseLen('394 ft')).toBeCloseTo(120.09, 1);
+    expect(parseLen('12\'6"')).toBeCloseTo(3.81, 2);
+    expect(Number.isNaN(parseLen('tall'))).toBe(true);
+    expect(plausibleHeight(381, 102, 7000)).toBe(381); // Empire State: its own height
+    expect(plausibleHeight(1250, 102, 7000)).toBeCloseTo(102 * 3.7 + 1.5, 3); // feet typed as metres: the floors win
+    expect(plausibleHeight(200, null, 60)).toBe(40); // a shed-sized footprint isn't a skyscraper
+    expect(plausibleHeight(200, null, 60, true)).toBe(200); // …unless it's a spire part
+    expect(Number.isNaN(plausibleHeight(NaN, null, 500))).toBe(true);
+  });
+
+  it('a mapped skyscraper keeps its height and loses its house-kind prior', () => {
+    const t = osmToTile(osm(way(501, { building: 'yes', height: '180' }, sq(200, 200, 20), true)), OPTS);
+    expect(t.buildings[0].h).toBe(180);
+    expect(t.buildings[0].k).toBe('large'); // 400 m² footprint would read 'house' by area alone
+    expect(t.buildings[0].roof).toBe('flat');
+  });
+
+  it('parts draw the tower: setbacks lift, share the outline seed; the outline keeps the door', () => {
+    const t = osmToTile(osm(
+      way(601, { building: 'office', height: '200', name: 'Tower One', start_date: '1931' }, sq(300, 300, 40), true),
+      way(602, { 'building:part': 'yes', height: '60' }, sq(300, 300, 40), true), // podium, full cover
+      way(603, { 'building:part': 'yes', height: '200', min_height: '60', 'building:material': 'glass' }, sq(310, 310, 20), true), // setback tier
+    ), OPTS);
+    const outline = t.buildings.find((b) => b.n === 'Tower One')!;
+    const oi = t.buildings.indexOf(outline);
+    const ps = t.buildings.filter((b) => b.pt);
+    expect(ps).toHaveLength(2);
+    expect(outline.hp).toBe(1); // drawn by its parts
+    expect(outline.yr).toBe(1931);
+    for (const p of ps) {
+      expect(p.po).toBe(oi);
+      expect(p.s).toBe(outline.s); // one look for the whole tower
+      expect(p.k).toBe('commercial');
+    }
+    const tier = ps.find((p) => p.lf)!;
+    expect(tier.lf).toBe(60);
+    expect(tier.h).toBe(140);
+    expect(tier.ma).toBe('glass');
+    expect(ps.find((p) => !p.lf)!.h).toBe(60);
+  });
+
+  it('marks row buildings: party walls in a dense block, not a house on its lawn', () => {
+    const els: OsmElement[] = [];
+    let id = 800;
+    for (let j = 0; j < 16; j++) for (let i = 0; i < 30; i++) els.push(way(id++, { building: 'yes' }, [[400 + i * 6, 400 + j * 15], [406 + i * 6, 400 + j * 15], [406 + i * 6, 412 + j * 15], [400 + i * 6, 412 + j * 15]], true));
+    els.push(way(id++, { building: 'house' }, sq(60, 60, 12), true));
+    els.push(way(id++, { highway: 'primary', name: 'Main Avenue' }, [[380, 394], [700, 394]]));
+    const t = osmToTile(osm(...els), OPTS);
+    // the row facing the avenue keeps shops on its street floor (most of it); rows behind don't
+    const front = t.buildings.filter((b) => b.at && b.r[1] / 10 < 402), back = t.buildings.filter((b) => b.r[1] / 10 > 470 && b.r[1] / 10 < 600);
+    expect(front.filter((b) => b.gf).length).toBeGreaterThan(front.length * 0.5);
+    expect(back.some((b) => b.gf)).toBe(false);
+    const mid = t.buildings.find((b) => Math.abs(b.r[0] / 10 - (400 + 15 * 6)) < 1 && Math.abs(b.r[1] / 10 - (400 + 8 * 15)) < 13)!;
+    expect(mid.at).toBe(1);
+    expect(t.buildings.find((b) => Math.abs(b.r[0] / 10 - 60) < 13 && Math.abs(b.r[1] / 10 - 60) < 13)!.at).toBeUndefined();
+    expect(t.buildings.filter((b) => b.at).length).toBeGreaterThan(300);
+  });
+
+  it('a lone tower part on an unmapped podium leaves the outline as the podium, inset', () => {
+    const t = osmToTile(osm(
+      way(701, { building: 'yes', height: '150' }, sq(500, 500, 40), true),
+      way(702, { 'building:part': 'yes', height: '150' }, sq(500, 500, 15), true),
+    ), OPTS);
+    const outline = t.buildings.find((b) => !b.pt)!;
+    expect(outline.hp).toBeUndefined();
+    expect(outline.h).toBe(15); // four storeys, not a 150 m block
+    expect(outline.r[0]).toBeGreaterThan(5000); // pulled inside the shared walls (0.1 m units)
+  });
+});
+
 describe('osmToTile — water', () => {
   it('emits natural=water and wetland as areas', () => {
     const t = osmToTile(

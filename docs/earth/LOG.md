@@ -2,6 +2,92 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-27 (n) — Hometowns that look like themselves: skyscrapers, row houses, mountains on the horizon, city sound, looks you can tune
+
+The ask: compare Sea Bright / Monmouth Beach / Tucson (and a big city) against real photos so a
+player's hometown feels familiar, and get skyscrapers + city life right. References and the
+per-place trait table live in `docs/earth/PLACE_REFERENCES.md`; `tools/place-shots.js` poses the
+same nine frames anywhere (`__PLACE__(tag)`). Everything below keys off map data, never a town list.
+
+- **Towers** (`realTile.ts`, `bake.mjs`, `buildings.ts`, `recipe.ts`)
+  - Heights: `parseLen` reads m / ft / 12'6"; `plausibleHeight` keeps real towers (cap 830 m),
+    lets the floor count win over a unit slip, and clamps unverified "towers" on shed-sized
+    footprints. Four-plus storeys is never `house`/`shed`. The 40 m clamp is gone.
+  - OSM `building:part` (Simple 3D Buildings): parts lift by `min_height` (`lf`), share the
+    outline's seed/id/kind/colours (one look, one door cut); an outline its parts cover draws
+    nothing but keeps footprint + door + name (`hp`); a lone tower part leaves the outline as a
+    four-storey podium, inset 12 cm so shared walls don't z-fight. Undersides of overhangs drawn.
+  - Facades: glass curtain wall (siding 5, `.46` in the kind fraction — mullions, spandrels,
+    muted sky reflection, floors lit at night, averaged far away) vs stone/brick with punched
+    windows — by mapped material, era (`start_date`: nothing pre-1955 is glass; bronze/black
+    '60s–'80s tints, grey-blue after 2000) and height. Towers never wear clapboard.
+  - Roofs: mechanical penthouse on 36 m+, a wooden water tank on North American masonry
+    mid-rises (16–90 m).
+  - Interiors cap at four walk-up floors (a 300 m tower was a hundred stair flights).
+  - LiDAR: skips parts and part-drawn outlines; a mapped tower height beats the roof median;
+    feet-vs-metres now read from measured/mapped ratios where heights are mapped (`VER` v7).
+- **Row buildings** (`realTile.markRows`): party walls (≥ 20 % of the perimeter) in a block
+  the footprints cover 40 %+ of → `at`. In North American cities (`recipe.rowStyle`) they are
+  brick / brownstone / limestone with flat roofs and cornices, apartments inside, dark doors,
+  and — on brick walk-ups — a black iron **fire escape** on the street front. Rows on a
+  primary/secondary road (or with a shop node inside) keep a storefront street floor (`gf`,
+  read back in `windowAt` from the kind fraction).
+- **Streets** (`props.ts`, `groundPaint.ts`)
+  - Dense cores (`urbanCore`: 80 m cells, cover > 30 %, mean height > 16 m) bury their wires:
+    steel street-light masts on both kerbs instead of wooden poles.
+  - Main-street lamp posts (black acorn globe in North America, lantern elsewhere) wherever
+    shops front the street.
+  - Ladder crosswalks where a tertiary+ road meets another carriageway.
+  - Dense blocks paint paved ground (no lawn, no grass tufts) between the buildings.
+  - OSM `power=line` draws a sub-transmission run (15 m poles, two crossarms, six wires);
+    minor lines stay the procedural street poles.
+  - Yards by building tradition: pickets only where houses wear clapboard; adobe/stucco towns
+    get low rendered walls, some with wrought iron.
+  - A desert shade tree: `mesquite` (variant 2 = green-barked palo verde) replaces broadleaf in
+    arid climates (foundry kind 7, within budget).
+- **Life + sound**: pedestrians gather along shop frontage (`edgeShops`), the crowd scales with
+  built volume (`crowd`), and a share of dense-core traffic is cabs (`taxi` gear + regional
+  livery). The soundscape now knows the city (traffic roar, horns, sirens, crowd, pigeons by
+  built volume) and the desert (summer cicadas, dawn doves); the sea (surf floor, gulls, bell
+  buoy) stays by the sea.
+- **The skyline** (`skyline.ts`): one Overpass read of every building ≥ 45 m or 14+ storeys
+  within 8 km (through `osmToTile`, cached in IndexedDB) → lite silhouettes per 1024 m cell,
+  hidden as soon as that cell's real tile mounts. The Empire State reads from Hell's Kitchen.
+- **Canyon light**: stream.ts paints a canyon field (footprints × height, blurred) into the
+  lamp map's green channel; `paintLight` dims the sky fill by up to 45 % near street level
+  between tall buildings — deep street shade under a bright slot of sky.
+- **The horizon** (`horizon.ts`): Terrarium z9 → a polar ring from 6 to 80 km drawn right after
+  the sky with no depth (back to front), curvature + refraction, climate tones, snowline by
+  latitude, aerial-perspective haze. Tucson now has the Santa Catalinas on its skyline. Height
+  fog is measured from the ground you stand on (a mile-high town had no haze at all).
+- **Look** (`post.ts`, `panel.ts`): the brush pass runs at `paintDetail` (0.6, was a fixed
+  0.5 half-res) with the same brush size on screen; `hiDpi` renders at the screen's density
+  (≤ 1.5×); vibrance + a split-tone colour grade; four presets (watercolor, fine detail, vivid
+  painted (sci-fi), storybook soft) at the top of the ` panel.
+- **Harness**: hidden panes no longer stall captures — `__PUMP__` drives frames through a
+  MessageChannel and `__KICK__` restarts the game loop on it (capture builds); `__WAIT__` waits
+  on the pump. Place shots wait for real tiles, skip synth streets, find golden hour from the
+  game's own sun, stand where the tallest tower shows, dodge poles at the kerb, and add a
+  horizon frame; per-frame poses come back in the result.
+- **Fixes found on the way**: a DEM patch now overhangs its cell by 96 m (edge buildings in a
+  mile-high town sampled the sea-level resident terrain and stood 370 m tall); the LiDAR
+  ground-slope term is capped at 4 m; a tile mounting under a flying walker no longer yanks
+  them to the ground (`settleWalker`).
+- **Transport**: `?tiles=direct` (browser → Overpass → the same `osmToTile`, IndexedDB cache;
+  two slots on overpass-api.de plus one per mirror, 429s cool a mirror down) and the shared
+  `overpassQuery` (now with building parts, signals, hydrants, subway entrances, transmission
+  lines). Tile cache `t/v10` / `&v=10` / `DIRECT_V 10` — **the worker
+  needs a redeploy**.
+- Reviewer, place parity NYC round 1: **5/10** ("recognisable from the air and looking up; at
+  street level empty and generic"). Acted on: kerb occluders, golden-hour timing, the horizon
+  pose, street life by frontage + volume, storefront street floors on avenues, paved dense
+  blocks, darker era-based glass, dark apartment doors, restaurant layout (booths on one wall,
+  clustered two- and four-tops). Open: canyon light (sky-view factor), signal masts at
+  `traffic_signals`, hydrants/tree pits/subway entrances, buses from `route=bus`, a real-tower
+  skyline ring past the 1.5 km detail ring.
+- Verified: typecheck (check config) + 134 tests; montages `shots/place-nyc.jpg`,
+  `shots/place-tucson.jpg`, `shots/horizon-test.jpg`.
+
 ## 2026-09-27 (m) — Scaling pass: furniture budgets, a regional wildlife cast, language-neutral business uses, regional street rhythms
 
 The user asked whether this is being built for scale with the asset generator. The honest

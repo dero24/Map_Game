@@ -9,7 +9,7 @@ import type { Door } from '../world/buildings';
 import { U, GLSL_NOISE } from '../render/shared';
 import { CAPS, H, RANGES, S, SIM_HZ, layout, views, type LifeInit } from './protocol';
 import { CAR_TYPES, carMix, carLib, boatLib, pickFrom, carRecipe, type BoatType } from '../assets/kit';
-import { gearGeometry, gearFor, type CarGear } from '../assets/furniture';
+import { gearGeometry, gearFor, TAXI_PAINT, type CarGear } from '../assets/furniture';
 import { hashf } from '../assets/core';
 import { propMaterial } from '../render/propMaterial';
 import { activeStyle } from '../world/styles';
@@ -17,7 +17,7 @@ import { personLib, warmthFor } from '../assets/people';
 
 // Moving boats offshore: the working/pleasure mix (skiffs and pontoons stay moored near shore).
 const LIFE_BOATS: BoatType[] = ['console', 'cabin', 'sail', 'lobster', 'skiff'];
-const LIFE_GEAR: CarGear[] = ['rack', 'surf', 'kayak', 'cargo'];
+const LIFE_GEAR: CarGear[] = ['rack', 'surf', 'kayak', 'cargo', 'taxi'];
 const ROOF = Object.fromEntries(CAR_TYPES.map((t) => [t, carRecipe(t, 1).roof])) as Record<(typeof CAR_TYPES)[number], number>;
 
 export const lifeParams = { density: 1, enabled: true };
@@ -137,6 +137,19 @@ export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, do
     info.push(RANK[r.c], r.w, r.ow ? 1 : 0, 1);
     ends.push(node(p[0][0], p[0][1]), node(p[p.length - 1][0], p[p.length - 1][1]));
   }
+  // Frontage: shops along each street piece (commercial doors within 25 m of it). People walk
+  // where the shops are — a Midtown avenue fills, a residential side street stays quiet.
+  const shopGrid = new Map<string, [number, number][]>();
+  for (const d of doors) if (d.kind === 'commercial') { const k = `${Math.floor(d.fx / 50)},${Math.floor(d.fz / 50)}`; (shopGrid.get(k) ?? shopGrid.set(k, []).get(k)!).push([d.fx, d.fz]); }
+  const shops: number[] = [];
+  for (let e = 0; e < start.length; e++) {
+    let n = 0;
+    for (let j = 0; j < count[e]; j += 3) {
+      const x = pts[(start[e] + j) * 3], z = pts[(start[e] + j) * 3 + 2];
+      for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) for (const [sx, sz] of shopGrid.get(`${Math.floor(x / 50) + di},${Math.floor(z / 50) + dj}`) ?? []) if (Math.hypot(sx - x, sz - z) < 25) n++;
+    }
+    shops.push(Math.min(40, n / Math.max(1, Math.ceil(count[e] / 3)) * 3)); // ~doors within reach, per stretch
+  }
   const nNodes = nodeId.size, nEdges = lens.length;
   const deg = new Int32Array(nNodes + 1);
   for (let e = 0; e < nEdges; e++) (deg[ends[e * 2] + 1]++), (deg[ends[e * 2 + 1] + 1]++);
@@ -159,6 +172,7 @@ export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, do
     nodeEdgeStart: deg,
     nodeEdges: adj,
     doors: new Float32Array(doors.flatMap((d) => [d.x, d.y, d.z, d.fx, d.fy, d.fz])),
+    edgeShops: new Float32Array(shops),
   };
 }
 
@@ -338,7 +352,7 @@ export class LifeClient {
   update(now: number, player: { x: number; z: number; yaw: number }, env: { night: number; hour: number; wind: number }) {
     const h = this.V.header;
     this.group.visible = lifeParams.enabled;
-    const hdr = [Math.round(player.x * 100), Math.round(player.z * 100), Math.round(env.night * 1000), Math.round(env.hour * 100), Math.round(lifeParams.density * 100), Math.round(env.wind * 1000)];
+    const hdr = [Math.round(player.x * 100), Math.round(player.z * 100), Math.round(env.night * 1000), Math.round(env.hour * 100), Math.round(lifeParams.density * this.crowd * 100), Math.round(env.wind * 1000)];
     h[H.PLAYER_X] = hdr[0]; h[H.PLAYER_Z] = hdr[1]; h[H.NIGHT] = hdr[2]; h[H.HOUR] = hdr[3]; h[H.DENSITY] = hdr[4]; h[H.WIND] = hdr[5];
     if (!this.sab && this.envFrame++ % 3 === 0) this.worker.postMessage({ kind: 'env', header: h.slice() });
 
@@ -383,6 +397,8 @@ export class LifeClient {
         let sx = g.scale, sy = g.scale, sz = g.scale;
         let roll = 0, pitch = 0, spin = 0;
         const dist = Math.hypot(x - player.x, z - player.z);
+        // a share of a dense core's traffic is cabs (main sets taxiShare from the built volume)
+        const taxi = kind === 1 && this.taxiShare > 0 && hashf(i * 977 + variant * 3) < this.taxiShare;
         if (kind === 0) {
           if (amt < 0) y += 0.2 * g.scale;
           if (amt >= 0 && dist < 70) { st.gullsNear++; if (dist < st.gullDist) { st.gullDist = dist; st.gullPan = pan(x, z); } }
@@ -400,7 +416,7 @@ export class LifeClient {
             heads.setXYZ(hk++, hx + rx, y + 0.76, hz + rz);
             heads.setXYZ(hk++, hx - rx, y + 0.76, hz - rz);
           }
-          g.mesh.setColorAt(li, this.tmpC.set(CAR_COLORS[variant % 10 % CAR_COLORS.length]));
+          g.mesh.setColorAt(li, this.tmpC.set(taxi ? TAXI_PAINT(activeStyle().region) : CAR_COLORS[variant % 10 % CAR_COLORS.length]));
           // the kit's vans / SUVs are their own models; each car breathes a little within its type
           sx = 0.97 + hashf(i * 7919 + variant) * 0.06; sy = 0.96 + hashf(i * 104729 + variant) * 0.08; sz = 0.97 + hashf(i * 31 + variant * 131) * 0.06;
         } else if (kind === 2) {
@@ -430,7 +446,7 @@ export class LifeClient {
           // the agent's model: a stable pick from its variant (cars follow the street mix)
           const pick = kind === 1 ? CAR_TYPES.indexOf(pickFrom(carMix(activeStyle().region, activeStyle().climate), ((variant * 0.618034) % 1 + (i * 0.1234) % 1) % 1)) : (variant + i) % g.meshes.length;
           if (kind === 1) {
-            const gr = gearFor(hashf(i * 613 + variant * 7), this.coastal);
+            const gr = taxi ? 'taxi' : gearFor(hashf(i * 613 + variant * 7), this.coastal);
             const gname = gr === 'bike' ? null : gr;
             for (const [gk, gm] of this.gear) {
               if (gk === gname) gm.setMatrixAt(li, this.gm.multiplyMatrices(this.m, this.gt.makeTranslation(0, ROOF[CAR_TYPES[pick]], 0)));
@@ -466,6 +482,10 @@ export class LifeClient {
   private gt = new THREE.Matrix4();
   /** near the coast, cars carry surfboards and kayaks (main sets this from the walker's position) */
   coastal = true;
+  /** share of passing cars that are taxis — 0 in town, up to ~0.35 among towers */
+  taxiShare = 0;
+  /** crowd multiplier for the place (main: 1 in town, up to ~2.6 among towers) */
+  crowd = 1;
   private tmpQ = new THREE.Quaternion();
   private fwdAxis = new THREE.Vector3(0, 0, 1);
   private sideAxis = new THREE.Vector3(1, 0, 0);

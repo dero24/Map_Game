@@ -5,10 +5,36 @@
 // camera itself. The contact sheet covers the page as an overlay — take ONE screenshot.
 // `__MONTAGE_CLOSE__()` removes it. Mirrors tools/capture.mjs' sheet layout.
 // Occluded/unfocused browser panes stop requestAnimationFrame entirely (the montage then
-// hangs mid-sheet): `{ timers: true }` drives the game loop from setTimeout instead.
+// hangs mid-sheet): `{ timers: true }` drives the game loop from a MessageChannel pump instead.
+// A hidden pane never fires requestAnimationFrame, and throttles timers to ~1/s (then 1/min).
+// MessageChannel messages aren't throttled: pump frames through one at ~60 Hz, and restart the
+// game loop on the pump (__KICK__, capture builds) since its pending rAF would never fire.
+window.__PUMP__ = () => {
+  if (window.__TIMERS__) return;
+  window.__TIMERS__ = true;
+  const q = [], mc = new MessageChannel();
+  let last = 0, pending = false;
+  mc.port1.onmessage = () => {
+    const now = performance.now();
+    if (now - last < 15) return void mc.port2.postMessage(0);
+    last = now;
+    for (const cb of q.splice(0)) { try { cb(now); } catch (e) { console.error(e); } }
+    if (q.length) mc.port2.postMessage(0);
+    else pending = false;
+  };
+  window.requestAnimationFrame = (cb) => { q.push(cb); if (!pending) { pending = true; mc.port2.postMessage(0); } return 0; };
+  window.__KICK__?.();
+};
+// ms of wall time, counted on the frame pump once it runs (plain timers otherwise)
+window.__WAIT__ = (ms) => new Promise((r) => {
+  if (!window.__TIMERS__) return void setTimeout(r, ms);
+  const t0 = performance.now();
+  const f = () => (performance.now() - t0 >= ms ? r() : requestAnimationFrame(f));
+  requestAnimationFrame(f);
+});
 window.__MONTAGE__ = async (items, opts = {}) => {
   const settle = opts.settle ?? 40, cols = Math.min(opts.cols ?? 3, items.length);
-  if (opts.timers) window.requestAnimationFrame = (cb) => setTimeout(() => cb(performance.now()), 16);
+  if (opts.timers) window.__PUMP__();
   const canvas = document.querySelector('canvas');
   const frames = (n) => new Promise((done) => { let i = 0; const t = () => (++i >= n ? done() : requestAnimationFrame(t)); requestAnimationFrame(t); });
   const CW = opts.cw ?? 640, CH = Math.round(CW * canvas.height / canvas.width), PAD = 22;

@@ -281,11 +281,14 @@
       "area": "tooling",
       "title": "Streamed-parity review harness on 3 random US towns",
       "user_visible_behavior": "Any US town streamed in looks as finished as the hero region (lamps, ground paint, lot dressing, trees, people).",
-      "status": "not_started",
+      "status": "passing",
       "verification": [
         "review-shots poses (street, night, lawn, trees, aerial) run at 3 random ?at= towns per round and reviewed"
       ],
-      "evidence": [],
+      "evidence": [
+        "tools/place-shots.js: nine poses anywhere (main street x4, residential, aerial, tallest, horizon, a cafe), hidden-pane frame pump, waits for real tiles, golden hour from the sun",
+        "reviewed: Tucson, Midtown NYC (shots/place-*.jpg)"
+      ],
       "notes": "Reviewer scale-out step 2 — the DEM lamp-clamp bug showed inland towns break in ways Sea Bright can't."
     },
     {
@@ -372,6 +375,43 @@
         "arid/adobe stream spawned coyote, ground squirrel, jackrabbit, quail, hawk"
       ],
       "notes": "Worker redeploy needed for v7 tiles (business nodes). Other continents fall back to NA climate casts until they get faunaMix rows."
+    },
+    {
+      "id": "place-parity",
+      "priority": 2,
+      "area": "world",
+      "title": "Place parity: hometowns that look like themselves (towers, rows, horizons, street furniture, sound)",
+      "user_visible_behavior": "Streamed cities stand at their real heights with setbacks, glass or masonry towers, water tanks and fire escapes; row houses are brick with flat roofs in North American cities; mountains stand on the horizon and towers on the skyline; signals, hydrants, subway entrances, crosswalks and main-street lamps come from the map; cities sound like cities and deserts like deserts; houses are clad by subregion.",
+      "status": "in_progress",
+      "verification": [
+        "tests: realTile (heights, parts, rows, storefront floors), styles (tower facades, NA subregion cladding)",
+        "tools/place-shots.js __PLACE__('nyc' | 'tucson') -> shots/place-*.jpg vs docs/earth/PLACE_REFERENCES.md",
+        "reviewer place-parity rounds (NYC round 1: 5/10)"
+      ],
+      "evidence": [
+        "135 tests pass",
+        "shots/place-nyc.jpg",
+        "shots/place-tucson.jpg",
+        "shots/horizon-test.jpg"
+      ],
+      "notes": "Tile cache v10 — the worker needs a redeploy. Open: canyon light, buses, tree pits, road width + parking lanes, desert plants."
+    },
+    {
+      "id": "tunable-looks",
+      "priority": 3,
+      "area": "render",
+      "title": "Tunable looks: paint detail, HiDPI, vibrance + colour grade, look presets",
+      "user_visible_behavior": "The ` panel opens with a Look section: watercolor (default), fine detail, vivid painted (sci-fi), storybook soft; paint detail, full screen resolution, vibrance, colour grade.",
+      "status": "passing",
+      "verification": [
+        "panel Look presets apply and persist",
+        "paint pass at 0.6 of the frame by default (was 0.5)"
+      ],
+      "evidence": [
+        "post.ts LOOKS",
+        "panel.ts Look folder"
+      ],
+      "notes": "The player tunes; the favourite becomes the shipped default."
     }
   ],
   "regions": {

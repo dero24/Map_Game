@@ -73,6 +73,7 @@ export interface LifeInit {
   seaward: [number, number]; // unit direction from the beach out to sea (gulls wheel over the surf)
   doors: Float32Array; // per door: x, y, z (threshold), fx, fy, fz (front / foot of the steps)
   rhythm?: Rhythm; // the shape of the place's day (lifeSim.desired); 'shore' when absent
+  edgeShops?: Float32Array; // per edge: shop doors along it (pedestrians gather where the shops are)
 }
 /** The daily rhythm of a place's streets: a beach town (the crowd builds toward the afternoon
  *  beach), an ordinary town (commute, lunch, errands, evening stroll) or a hot-country town
