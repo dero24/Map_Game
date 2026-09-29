@@ -2,6 +2,33 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-29 (ac) — Cleaner looks to try, and paint-as-you-walk all the way out
+
+Robby's asks, after his walks round Kerry Park and Liberty Island: a few cleaner, more vibrant
+filters to try beside watercolor HD (which stays the default), and the first version's
+paint-as-you-walk back as an option.
+
+- **Four new Look presets and four new knobs** (panel → Look). The knobs:
+  - `crisp` lays the unbrushed frame back over the paint;
+  - `softGlow` is a mist over the lights, with the bright sky and sunlit faces blooming;
+  - `clarity` is local contrast against the paint's own small blur;
+  - `contrast` is an S-curve.
+  - The presets are `clean vibrant` (saturated, crisp, no paper edge), `clean HD`, `gouache` and
+    `dreamy pastel`. Every preset sets all four knobs, so switching never carries one look's extras
+    into the next. Compared at Kerry Park, 16:00: `shots/looks-kerry3.jpg`.
+- **Paint as you walk, far away too** (panel → Watercolor, off by default).
+  - With it on, every place you haven't been is the pencil underdrawing at any distance: graphite
+    hatching on paper, lighter with distance.
+  - Walking paints it in with a wet edge and pigment pooled at the rim. The sky and the far layer
+    stay painted.
+  - "paint reach as you walk" (20–400 m, 45 by default) sets how far round you paints.
+  - Seen at Kerry Park (`shots/sketchfar.jpg`): downtown is pencil and the park you stand in is
+    painted.
+  - The explore window is 4 km, so past 2 km everything reads unexplored in this mode.
+- Docs: `docs/earth/LOOK_DEFAULTS.md` (the new looks), `docs/agent/rendering.md`.
+
+Tests: 311 pass.
+
 ## 2026-09-29 (ab) — Cuts as places, and a harness that re-poses until it sees
 
 Round 9's must-fixes 4 and 5, on streamed Queen Anne.

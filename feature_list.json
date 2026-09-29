@@ -443,16 +443,18 @@
       "priority": 3,
       "area": "render",
       "title": "Tunable looks + a chosen default: paint detail, HiDPI, vibrance + colour grade, look presets",
-      "user_visible_behavior": "The ` panel opens with a Look section; the default is 'watercolor HD' (chosen side by side on real places); the Sep 27 default is kept as 'classic (Sep 27 default)'; others: watercolor, fine detail, vivid painted (sci-fi), storybook soft, classic half-res.",
+      "user_visible_behavior": "The ` panel opens with a Look section; the default is 'watercolor HD' (chosen side by side on real places); the Sep 27 default is kept as 'classic (Sep 27 default)'; others: watercolor, fine detail, vivid painted (sci-fi), storybook soft, classic half-res, and the cleaner clean vibrant, clean HD, gouache and dreamy pastel (knobs: clean edges, soft glow, clarity, contrast). Watercolor → '…far away too' turns on the pencil underdrawing at every distance you haven't walked.",
       "status": "passing",
       "verification": [
         "__PLACE__('tucson', { looks }) -> shots/looks-tucson.jpg compared frame by frame",
-        "panel Look presets apply and persist (diffs only — a new default reaches players who never touched the knob)"
+        "panel Look presets apply and persist (diffs only — a new default reaches players who never touched the knob)",
+        "(ac) shots/looks-kerry3.jpg: the six looks at Kerry Park 16:00 through the same pose; shots/sketchfar.jpg: sketchFar off / on / after painting 150 m round you"
       ],
       "evidence": [
         "post.ts postParams (watercolor HD) + LOOKS",
         "docs/earth/LOOK_DEFAULTS.md",
-        "shots/looks-tucson.jpg"
+        "shots/looks-tucson.jpg",
+        "post.ts crisp, softGlow, clarity, contrast, sketchFar (hatch), sketchReach; explore.ts revealRadius(h, reach); panel.ts"
       ],
       "notes": "The player tunes; tell Claude which knobs to lock and they become the shipped default."
     },

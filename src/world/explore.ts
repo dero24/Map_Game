@@ -20,9 +20,10 @@ export const mercX = (lon: number) => lon * K;
 export const mercY = (lat: number) => R_EARTH * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
 export const blockKey = (bx: number, by: number) => `${bx},${by}`;
 
-/** Reveal radius (m) for the eye's height above the ground: walking ~45 m, a plane paints wide. */
-export function revealRadius(heightAboveGround: number) {
-  return Math.min(450, 45 + Math.max(0, heightAboveGround - 2) * 0.7);
+/** Reveal radius (m) for the eye's height above the ground: walking `reach` (45 m), a plane paints
+ *  wide. */
+export function revealRadius(heightAboveGround: number, reach = 45) {
+  return Math.min(Math.max(450, reach), reach + Math.max(0, heightAboveGround - 2) * 0.7);
 }
 /** Bloom rate (value/s) for a cell `d` m from the walker inside radius `r`: fast near, slow at the rim. */
 export function bloomRate(d: number, r: number) {
@@ -166,8 +167,9 @@ export class Explore {
     } catch { /* ignore */ }
   }
 
-  /** Paint around the walker and keep the texture window current. `h` = eye height above ground. */
-  update(x: number, z: number, h: number, dt: number) {
+  /** Paint around the walker and keep the texture window current. `h` = eye height above ground;
+   *  `reach` = the radius painted on foot. */
+  update(x: number, z: number, h: number, dt: number, reach = 45) {
     // window: re-centre (snapped to 512 m) when the walker nears its edge
     if (Math.abs(x - (this.winX0 + WIN / 2)) > WIN / 4 || Math.abs(z - (this.winZ0 + WIN / 2)) > WIN / 4) {
       this.winX0 = Math.round(x / 512) * 512 - WIN / 2;
@@ -180,7 +182,7 @@ export class Explore {
     if ((this.tick -= dt) <= 0 && this.enabled) {
       const step = 0.1 - this.tick; // accumulated time since the last paint tick
       this.tick = 0.1;
-      const r = revealRadius(h);
+      const r = revealRadius(h, reach);
       this.paint(x, z, r, Math.min(0.5, step));
       this.fill(x - r - 16, z - r - 16, x + r + 16, z + r + 16);
     }

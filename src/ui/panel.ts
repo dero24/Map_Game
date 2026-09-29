@@ -63,6 +63,10 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   look.add(postParams, 'paintDetail', 0.35, 1, 0.01).name('paint detail').onFinishChange(hooks.onResize);
   look.add(postParams, 'hiDpi').name('full screen resolution').onFinishChange(hooks.onResize);
   look.add(postParams, 'renderScale', 0.5, 1.5, 0.05).name('render scale').onFinishChange(hooks.onResize);
+  look.add(postParams, 'crisp', 0, 1, 0.01).name('clean edges');
+  look.add(postParams, 'softGlow', 0, 1, 0.01).name('soft glow');
+  look.add(postParams, 'clarity', 0, 1, 0.01).name('clarity');
+  look.add(postParams, 'contrast', 0, 1, 0.01).name('contrast');
   look.add(postParams, 'vibrance', -0.5, 1.5, 0.01).name('vibrance');
   look.add(postParams, 'grade', 0, 1, 0.01).name('colour grade');
   look.addColor(postParams, 'gradeShadow').name('grade: shadows');
@@ -93,6 +97,8 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   const p = gui.addFolder('Watercolor');
   p.add(postParams, 'enabled').name('painting on');
   p.add(postParams, 'sketch').name('paint as you explore');
+  p.add(postParams, 'sketchFar').name('…far away too (pencil till you walk it)');
+  p.add(postParams, 'sketchReach', 20, 400, 5).name('paint reach as you walk (m)');
   p.add(postParams, 'kuwaharaRadius', 1, 7, 0.1).name('brush size');
   p.add(postParams, 'kuwaharaSharpness', 1, 16, 0.1).name('brush sharpness');
   p.add(postParams, 'wobble', 0, 3, 0.01).name('hand wobble');

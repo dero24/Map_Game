@@ -28,6 +28,10 @@ export const postParams = {
   boilFps: 0,
   nightWash: 0.5,
   sketch: true, // paint as you explore: unvisited places are a paler first wash that deepens as you arrive
+  // …all the way out (a developer switch, off for now): every place you haven't been — the far
+  // distance too — is a pencil underdrawing on paper, and walking paints it in round you
+  sketchFar: false,
+  sketchReach: 45, // m painted round you on foot (a plane paints wider)
   paperColor: '#f8f4ea',
   inkColor: '#2e2a3a',
   // resolution: the paint (brush) pass runs at this fraction of the frame (0.5 = the old half-res
@@ -41,21 +45,37 @@ export const postParams = {
   gradeShadow: '#3f6f8a',
   gradeLight: '#ffcf9a',
   vibrance: 0.2,
+  // cleaner looks: `crisp` lays the unbrushed frame back over the paint (0 = all brush, 1 = clean
+  // edges and flat colour), `softGlow` blooms the bright sky and sunlit faces into a soft haze
+  crisp: 0,
+  softGlow: 0,
+  // …and `clarity` sharpens the paint's local contrast, `contrast` an S-curve on the whole frame
+  clarity: 0,
+  contrast: 0,
 };
 
 /** Named looks for the panel's Look menu: each is a set of postParams (the rest stay as they are). */
 export const LOOKS: Record<string, Partial<typeof postParams>> = {
   // the default as it stood on 2026-09-27, before the look comparisons — kept verbatim so it can
   // always be restored (and 'classic half-res' is the look before the paint-detail knob existed)
-  'classic (Sep 27 default)': { kuwaharaRadius: 5, kuwaharaSharpness: 8, exposure: 0.9, saturation: 1.12, wobble: 0.55, edgeDarkening: 0.9, pigmentTurbulence: 0.22, granulation: 0.3, paperTexture: 0.7, ink: 0.55, inkDistance: 350, glow: 0.8, vignette: 0.55, nightWash: 0.55, paintDetail: 0.6, hiDpi: true, renderScale: 1, grade: 0, gradeShadow: '#2f6f8f', gradeLight: '#ffb27a', vibrance: 0 },
-  'classic half-res': { kuwaharaRadius: 5, kuwaharaSharpness: 8, exposure: 0.9, saturation: 1.12, wobble: 0.55, edgeDarkening: 0.9, pigmentTurbulence: 0.22, granulation: 0.3, paperTexture: 0.7, ink: 0.55, inkDistance: 350, glow: 0.8, vignette: 0.55, nightWash: 0.55, paintDetail: 0.5, hiDpi: false, renderScale: 1, grade: 0, vibrance: 0 },
-  watercolor: { kuwaharaRadius: 5, kuwaharaSharpness: 8, saturation: 1.12, exposure: 0.9, wobble: 0.55, edgeDarkening: 0.9, pigmentTurbulence: 0.22, granulation: 0.3, paperTexture: 0.7, ink: 0.55, glow: 0.8, vignette: 0.55, nightWash: 0.55, paintDetail: 0.6, grade: 0, vibrance: 0 },
+  'classic (Sep 27 default)': { kuwaharaRadius: 5, kuwaharaSharpness: 8, exposure: 0.9, saturation: 1.12, wobble: 0.55, edgeDarkening: 0.9, pigmentTurbulence: 0.22, granulation: 0.3, paperTexture: 0.7, ink: 0.55, inkDistance: 350, glow: 0.8, vignette: 0.55, nightWash: 0.55, paintDetail: 0.6, hiDpi: true, renderScale: 1, grade: 0, gradeShadow: '#2f6f8f', gradeLight: '#ffb27a', vibrance: 0, crisp: 0, softGlow: 0, clarity: 0, contrast: 0 },
+  'classic half-res': { kuwaharaRadius: 5, kuwaharaSharpness: 8, exposure: 0.9, saturation: 1.12, wobble: 0.55, edgeDarkening: 0.9, pigmentTurbulence: 0.22, granulation: 0.3, paperTexture: 0.7, ink: 0.55, inkDistance: 350, glow: 0.8, vignette: 0.55, nightWash: 0.55, paintDetail: 0.5, hiDpi: false, renderScale: 1, grade: 0, vibrance: 0, crisp: 0, softGlow: 0, clarity: 0, contrast: 0 },
+  watercolor: { kuwaharaRadius: 5, kuwaharaSharpness: 8, saturation: 1.12, exposure: 0.9, wobble: 0.55, edgeDarkening: 0.9, pigmentTurbulence: 0.22, granulation: 0.3, paperTexture: 0.7, ink: 0.55, glow: 0.8, vignette: 0.55, nightWash: 0.55, paintDetail: 0.6, grade: 0, vibrance: 0, crisp: 0, softGlow: 0, clarity: 0, contrast: 0 },
   // the candidate default: the watercolor wash painted at a finer brush over a sharper frame, with a
   // touch of the colour-graded vibrance of a painted sci-fi world (teal shade, warm light)
-  'watercolor HD': { kuwaharaRadius: 4, kuwaharaSharpness: 10.5, saturation: 1.16, exposure: 0.92, wobble: 0.42, edgeDarkening: 0.85, pigmentTurbulence: 0.2, granulation: 0.25, paperTexture: 0.52, ink: 0.52, glow: 0.92, vignette: 0.45, nightWash: 0.5, paintDetail: 0.82, hiDpi: true, grade: 0.2, vibrance: 0.2, gradeShadow: '#3f6f8a', gradeLight: '#ffcf9a' },
-  'fine detail': { kuwaharaRadius: 3.2, kuwaharaSharpness: 12, saturation: 1.12, exposure: 0.92, wobble: 0.35, edgeDarkening: 0.7, pigmentTurbulence: 0.16, granulation: 0.2, paperTexture: 0.45, ink: 0.5, glow: 0.8, vignette: 0.4, nightWash: 0.5, paintDetail: 0.85, grade: 0, vibrance: 0.15 },
-  'vivid painted (sci-fi)': { kuwaharaRadius: 3.8, kuwaharaSharpness: 11, saturation: 1.45, exposure: 1.0, wobble: 0.25, edgeDarkening: 0.55, pigmentTurbulence: 0.12, granulation: 0.1, paperTexture: 0.2, ink: 0.32, glow: 1.25, vignette: 0.12, nightWash: 0.35, paintDetail: 0.8, grade: 0.55, vibrance: 0.45, gradeShadow: '#2f6f8f', gradeLight: '#ffb27a' },
-  'storybook soft': { kuwaharaRadius: 6.5, kuwaharaSharpness: 6, saturation: 1.0, exposure: 0.95, wobble: 0.9, edgeDarkening: 1.1, pigmentTurbulence: 0.3, granulation: 0.45, paperTexture: 1.0, ink: 0.4, glow: 0.9, vignette: 0.75, nightWash: 0.6, paintDetail: 0.5, grade: 0.15, vibrance: 0, gradeShadow: '#5a6f9a', gradeLight: '#ffd9a0' },
+  'watercolor HD': { kuwaharaRadius: 4, kuwaharaSharpness: 10.5, saturation: 1.16, exposure: 0.92, wobble: 0.42, edgeDarkening: 0.85, pigmentTurbulence: 0.2, granulation: 0.25, paperTexture: 0.52, ink: 0.52, glow: 0.92, vignette: 0.45, nightWash: 0.5, paintDetail: 0.82, hiDpi: true, grade: 0.2, vibrance: 0.2, gradeShadow: '#3f6f8a', gradeLight: '#ffcf9a', crisp: 0, softGlow: 0, clarity: 0, contrast: 0 },
+  'fine detail': { kuwaharaRadius: 3.2, kuwaharaSharpness: 12, saturation: 1.12, exposure: 0.92, wobble: 0.35, edgeDarkening: 0.7, pigmentTurbulence: 0.16, granulation: 0.2, paperTexture: 0.45, ink: 0.5, glow: 0.8, vignette: 0.4, nightWash: 0.5, paintDetail: 0.85, grade: 0, vibrance: 0.15, crisp: 0, softGlow: 0, clarity: 0, contrast: 0 },
+  'vivid painted (sci-fi)': { kuwaharaRadius: 3.8, kuwaharaSharpness: 11, saturation: 1.45, exposure: 1.0, wobble: 0.25, edgeDarkening: 0.55, pigmentTurbulence: 0.12, granulation: 0.1, paperTexture: 0.2, ink: 0.32, glow: 1.25, vignette: 0.12, nightWash: 0.35, paintDetail: 0.8, grade: 0.55, vibrance: 0.45, gradeShadow: '#2f6f8f', gradeLight: '#ffb27a', crisp: 0, softGlow: 0, clarity: 0, contrast: 0 },
+  'storybook soft': { kuwaharaRadius: 6.5, kuwaharaSharpness: 6, saturation: 1.0, exposure: 0.95, wobble: 0.9, edgeDarkening: 1.1, pigmentTurbulence: 0.3, granulation: 0.45, paperTexture: 1.0, ink: 0.4, glow: 0.9, vignette: 0.75, nightWash: 0.6, paintDetail: 0.5, grade: 0.15, vibrance: 0, gradeShadow: '#5a6f9a', gradeLight: '#ffd9a0', crisp: 0, softGlow: 0, clarity: 0, contrast: 0 },
+  // cleaner, brighter paint (Robby, 2026-09-28, after a painted sci-fi game's clean first look):
+  // clear saturated colour, crisp edges, a soft glow in the sky and the sunlit faces, no paper
+  'clean vibrant': { kuwaharaRadius: 2.2, kuwaharaSharpness: 12, crisp: 0.6, softGlow: 0.2, clarity: 0.35, contrast: 0.22, saturation: 1.42, vibrance: 0.55, exposure: 1.0, wobble: 0.04, edgeDarkening: 0.25, pigmentTurbulence: 0.04, granulation: 0.02, paperTexture: 0.04, ink: 0.12, inkDistance: 250, glow: 1.1, vignette: 0, nightWash: 0.35, paintDetail: 0.92, hiDpi: true, grade: 0.3, gradeShadow: '#2a7a9e', gradeLight: '#ffd9a8' },
+  // watercolor HD, cleaned: the same wash with less paper and grain and a little of the clean frame
+  'clean HD': { kuwaharaRadius: 3.4, kuwaharaSharpness: 11, crisp: 0.3, softGlow: 0.1, clarity: 0.2, contrast: 0.08, saturation: 1.2, vibrance: 0.3, exposure: 0.94, wobble: 0.2, edgeDarkening: 0.6, pigmentTurbulence: 0.12, granulation: 0.12, paperTexture: 0.25, ink: 0.42, inkDistance: 350, glow: 1.0, vignette: 0.25, nightWash: 0.45, paintDetail: 0.88, hiDpi: true, grade: 0.25, gradeShadow: '#3f6f8a', gradeLight: '#ffcf9a' },
+  // opaque paint: flat, saturated shapes with soft edges, like gouache on a travel poster
+  gouache: { kuwaharaRadius: 5.5, kuwaharaSharpness: 16, crisp: 0, softGlow: 0.05, clarity: 0.15, contrast: 0.12, saturation: 1.3, vibrance: 0.35, exposure: 0.96, wobble: 0.12, edgeDarkening: 0.3, pigmentTurbulence: 0.06, granulation: 0.04, paperTexture: 0.28, ink: 0.22, inkDistance: 350, glow: 0.8, vignette: 0.3, nightWash: 0.45, paintDetail: 0.7, hiDpi: true, grade: 0.3, gradeShadow: '#35607a', gradeLight: '#ffc890' },
+  // soft pastel light: a dreamy bloom over clean colour
+  'dreamy pastel': { kuwaharaRadius: 3, kuwaharaSharpness: 10, crisp: 0.4, softGlow: 0.5, clarity: 0, contrast: 0, saturation: 1.1, vibrance: 0.4, exposure: 1.05, wobble: 0.1, edgeDarkening: 0.35, pigmentTurbulence: 0.06, granulation: 0.04, paperTexture: 0.12, ink: 0.18, inkDistance: 300, glow: 1.2, vignette: 0.12, nightWash: 0.4, paintDetail: 0.9, hiDpi: true, grade: 0.4, gradeShadow: '#6f7fc0', gradeLight: '#ffd0c8' },
 };
 
 const TONEMAP = /* glsl */ `
@@ -215,12 +235,22 @@ export class WatercolorPost {
       uniform float uGolden, uRaw;
       uniform sampler2D tExplore;
       uniform vec4 uExploreBox;
-      uniform float uSketch;
+      uniform float uSketch, uSketchFar, uCrisp, uSoftGlow, uClarity, uContrast;
       uniform sampler2D tGhost, tGhostDepth;
       uniform vec4 uGhost, uBrush, uRipple;
       uniform mat4 uInvProj, uCamWorld;
       uniform vec3 uWorldOff;
       varying vec2 vUv;
+      // one pencil stroke family (the underdrawing, sketchFar): parallel lines at angle a, spacing sp
+      // px, broken into dashes
+      float hatch(vec2 q, float a, float sp, float w) {
+        vec2 d = vec2(cos(a), sin(a)), t = vec2(-d.y, d.x);
+        float s = dot(q, d) + (vnoise(q * 0.015) - 0.5) * 7.0;
+        float along = dot(q, t);
+        float l = 1.0 - smoothstep(w * 0.5, w * 0.5 + 0.9, abs(fract(s / sp) - 0.5) * sp);
+        float dash = smoothstep(0.22, 0.5, vnoise(vec2(along * 0.035, floor(s / sp) * 7.3)));
+        return l * dash;
+      }
       float linZ(float d) { float z = d * 2.0 - 1.0; return 2.0 * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }
       vec3 toSrgb(vec3 c) { return mix(c * 12.92, 1.055 * pow(max(c, 0.0), vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
       float paperH(vec2 px) {
@@ -248,12 +278,19 @@ export class WatercolorPost {
         vec3 sc = tonemap(texture2D(tScene, uv + wob * 0.5).rgb);
         float hi = smoothstep(0.08, 0.3, dot(sc - c, vec3(0.33))) * smoothstep(0.5, 0.85, dot(sc, vec3(0.33)));
         c = mix(c, sc, hi);
+        // the cleaner looks lay the unbrushed frame back over the paint: crisp edges, flat colour
+        c = mix(c, sc, uCrisp);
+        // clarity: the paint's local contrast lifted against its own small blur (clean, crisp forms)
+        c = max(c + (c - bl) * uClarity, 0.0);
         c = toSrgb(c);
         float lum = dot(c, vec3(0.299, 0.587, 0.114));
         c = mix(vec3(lum), c, uSat);
         // vibrance: lift the muted colours more than the already-saturated ones
         float chroma = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
         c = mix(vec3(lum), c, 1.0 + uVibrance * (1.0 - smoothstep(0.0, 0.5, chroma)));
+        // contrast: a gentle S-curve (the cleaner, punchier looks)
+        vec3 cc = clamp(c, 0.0, 1.0);
+        c = mix(c, cc * cc * (3.0 - 2.0 * cc), uContrast);
         // split-tone grade: cool the shadows, warm the lights (value kept — hue only)
         if (uGrade > 0.001) {
           vec3 tone = mix(uGradeShadow, uGradeLight, smoothstep(0.15, 0.75, lum));
@@ -283,7 +320,33 @@ export class WatercolorPost {
         // paler wash (a little desaturated, lifted toward the paper); it deepens with a soft wet
         // edge as you arrive. Subtle on purpose — the world always reads as painted, never a sketch.
         float sketchAmt = 0.0;
-        if (uSketch > 0.001 && geo) {
+        if (uSketch > 0.001 && geo && uSketchFar > 0.5) {
+          // …all the way out (a developer switch): where you haven't been, at any distance, the page
+          // is still a pencil underdrawing; colour blooms in round you as you walk, a wet noisy edge
+          // with pigment pooled at its rim. The sky and the far layer (horizon, far skyline) stay
+          // painted.
+          vec2 eu = (wp.xz - uExploreBox.xy) * uExploreBox.zw;
+          float e = (eu.x > 0.0 && eu.y > 0.0 && eu.x < 1.0 && eu.y < 1.0) ? texture2D(tExplore, eu).r : 0.0;
+          float n = fbm(wp.xz * 0.03) - 0.5 + (vnoise(wp.xz * 0.35 + wp.y) - 0.5) * 0.3;
+          float rev = smoothstep(0.34, 0.66, e + n * 0.5);
+          sketchAmt = (1.0 - rev) * uSketch;
+          float rim = rev * (1.0 - rev) * 4.0 * uSketch;
+          c = mix(c, c * c * 1.15, rim * 0.35);
+          if (sketchAmt > 0.001) {
+            float L = dot(c, vec3(0.299, 0.587, 0.114));
+            float tone = 1.0 - smoothstep(0.12, 0.92, L);
+            vec2 hq = nuv * uRes.y; // view-anchored, like the paper noise
+            float g = hatch(hq, 0.8, 6.5, 1.1) * smoothstep(0.3, 0.5, tone);
+            g = max(g, hatch(hq, -0.55, 5.5, 1.0) * smoothstep(0.55, 0.72, tone));
+            g = max(g, hatch(hq, 0.12, 4.5, 1.0) * smoothstep(0.78, 0.92, tone));
+            // distance lightens the drawing (a lighter hand for what's far away)
+            g *= (0.55 + 0.45 * p) * (1.0 - 0.55 * smoothstep(250.0, 1400.0, linZ(dS)));
+            vec3 graphite = vec3(0.33, 0.32, 0.37);
+            vec3 sk = mix(vec3(0.965, 0.95, 0.915), graphite, g * 0.55 + tone * 0.1);
+            sk = mix(sk, c, 0.1); // the faintest colour note, like a first wash
+            c = mix(c, sk, sketchAmt);
+          }
+        } else if (uSketch > 0.001 && geo) {
           vec2 eu = (wp.xz - uExploreBox.xy) * uExploreBox.zw;
           float e = (eu.x > 0.0 && eu.y > 0.0 && eu.x < 1.0 && eu.y < 1.0) ? texture2D(tExplore, eu).r : 0.0;
           float n = fbm(wp.xz * 0.03) - 0.5;
@@ -365,7 +428,7 @@ export class WatercolorPost {
         float brk = smoothstep(0.25, 0.6, vnoise(px * 0.045 + bt * 3.0));
         float fade = 1.0 - smoothstep(uInkDist * 0.35, uInkDist, z0);
         float bright = smoothstep(0.75, 0.95, dot(c, vec3(0.33)));
-        c = mix(c, uInkColor, clamp(inkE * brk * fade * uInk * (1.0 - bright), 0.0, 0.85));
+        c = mix(c, uInkColor, clamp(inkE * brk * fade * uInk * (1.0 - bright) * (1.0 + sketchAmt * 0.6 * uSketchFar), 0.0, 0.85));
 
         // the sketch's line: graphite, gone over twice by a quick hand, and it boils — redrawn seven
         // times a second, like a drawing that isn't finished yet
@@ -395,6 +458,14 @@ export class WatercolorPost {
         // wet bloom around lamps and lit windows
         vec3 g = max(blurHdr * uExposure - 1.3, 0.0);
         c += toSrgb(min(g * 0.45, vec3(1.0))) * uGlow * (0.25 + 0.75 * uNight);
+        // soft glow (the cleaner looks): a mist over the lights, and the bright sky and sunlit faces
+        // bloom a little past their edges
+        if (uSoftGlow > 0.001) {
+          vec3 bs = toSrgb(tonemap(blurHdr));
+          c = mix(c, max(c, bs), uSoftGlow * 0.25);
+          vec3 hiG = clamp((bs - 0.55) * 2.2, 0.0, 1.0);
+          c = 1.0 - (1.0 - c) * (1.0 - hiG * uSoftGlow * 0.5);
+        }
 
         // glazes: indigo by night, a whisper of warm sienna at golden hour
         // warm light (windows, lamps) is left out of the night glaze, like reserved paper
@@ -429,7 +500,7 @@ export class WatercolorPost {
         uInk: { value: 0.5 }, uInkDist: { value: 300 }, uGlow: { value: 0.8 }, uVignette: { value: 0.5 }, uSat: { value: 1 },
         uNightWash: { value: 0.5 }, uNight: { value: 0 }, uGolden: { value: 0 }, uExposure: { value: 1 }, uRaw: { value: 0 },
         uPaperColor: { value: new THREE.Color() }, uInkColor: { value: new THREE.Color() },
-        tExplore: U.uExplore, uExploreBox: U.uExploreBox, uSketch: { value: 0 },
+        tExplore: U.uExplore, uExploreBox: U.uExploreBox, uSketch: { value: 0 }, uSketchFar: { value: 0 }, uCrisp: { value: 0 }, uSoftGlow: { value: 0 }, uClarity: { value: 0 }, uContrast: { value: 0 },
         tGhost: { value: null }, tGhostDepth: { value: null }, uGhost: U.uGhost, uBrush: U.uBrush, uRipple: U.uRipple,
         uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() }, uWorldOff: U.uWorldOffset,
         uNightTint: { value: new THREE.Color(0.55, 0.62, 1.0) }, uWarm: { value: new THREE.Color(1.08, 0.97, 0.86) },
@@ -565,6 +636,11 @@ export class WatercolorPost {
     c.uExposure.value = P.exposure;
     c.uRaw.value = raw ? 1 : 0;
     c.uSketch.value = P.sketch && U.uExplore.value ? 1 : 0;
+    c.uSketchFar.value = P.sketchFar ? 1 : 0;
+    c.uCrisp.value = P.crisp;
+    c.uSoftGlow.value = P.softGlow;
+    c.uClarity.value = P.clarity;
+    c.uContrast.value = P.contrast;
     (c.uInvProj.value as THREE.Matrix4).copy(camera.projectionMatrixInverse);
     (c.uCamWorld.value as THREE.Matrix4).copy(camera.matrixWorld);
     (c.uPaperColor.value as THREE.Color).set(P.paperColor).convertLinearToSRGB();

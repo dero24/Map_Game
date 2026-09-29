@@ -1133,7 +1133,7 @@ async function main() {
     } else if (paintSince != null) { paintSince = null; paintShown = 0; }
     if (!walkParams.fly) journal.update(walker.x, walker.z, dt);
     explore.enabled = postParams.sketch;
-    explore.update(walker.x, walker.z, camera.position.y - Math.max(world.terrain.heightAt(walker.x, walker.z), 0), dt);
+    explore.update(walker.x, walker.z, camera.position.y - Math.max(world.terrain.heightAt(walker.x, walker.z), 0), dt, postParams.sketchReach);
     if (atlas.open && (journalTimer -= dt) < 0) {
       journalTimer = 0.5;
       const st = explore.stats();

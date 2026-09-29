@@ -42,9 +42,22 @@ or per-region style.
   dashed and the fill fainter. `U.uBrush` pales the world round it; `U.uRipple` rings the water as a
   painted boat settles; `U.uGhost` = (on, line, bleed, harness mask).
 
+## Looks (the panel's Look menu, `post.ts` `LOOKS`)
+
+- A look is a set of `postParams`; picking one saves like any knob. Every look sets the four
+  cleaner-look knobs, so switching never inherits the last look's: `crisp` (the unbrushed frame
+  laid back over the paint), `softGlow` (a mist over the lights + bloom on the bright sky and
+  sunlit faces), `clarity` (the paint's local contrast against its small blur), `contrast` (an
+  S-curve). The default is `watercolor HD`; `clean vibrant`, `clean HD`, `gouache` and `dreamy
+  pastel` are cleaner options to try.
+
 ## Sketch → paint (post composite)
 
 - `post.ts` composite reconstructs world position from depth (`uInvProj`, `uCamWorld`,
   `uWorldOff`) and samples `U.uExplore`. Unexplored pixels become view-anchored graphite hatching
   on paper (three stroke families by tone, lighter with distance), and ink lines get stronger.
   Explored pixels keep the wash, with pigment pooling at the bloom rim. The sky is never sketched.
+- That full underdrawing is now a developer switch (`postParams.sketchFar`, panel → Watercolor →
+  "…far away too"): off, unexplored ground is only a paler first wash within ~160 m. The paint
+  reach round you on foot is `sketchReach` (45 m). The explore window is 4 km, so past 2 km
+  everything reads as unexplored in that mode.

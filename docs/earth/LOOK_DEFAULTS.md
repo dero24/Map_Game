@@ -31,6 +31,32 @@ wash but adds three things:
 | grade / vibrance | 0.2 / 0.2 | 0 / 0 |
 | gradeShadow / gradeLight | #3f6f8a / #ffcf9a | (#2f6f8f / #ffb27a, unused at grade 0) |
 
+## Cleaner looks to try (2026-09-29)
+
+Robby liked the clean, vibrant feel of a bright day on the Hudson and asked for cleaner paint to try
+beside watercolor HD, which stays the default. Four new Look presets use four new knobs:
+
+- **crisp** ("clean edges"): lays the unbrushed frame back over the paint. 0 is all brush; 1 gives
+  clean edges and flat colour.
+- **softGlow** ("soft glow"): a mist over the lights, and the bright sky and sunlit faces bloom a
+  little past their edges.
+- **clarity**: lifts the paint's local contrast against its own small blur.
+- **contrast**: a gentle S-curve on the whole frame.
+
+| Preset | What it is |
+|---|---|
+| clean vibrant | Saturated colour and crisp forms, a soft glow, no paper edge (crisp 0.6, clarity 0.35, contrast 0.22, saturation 1.42, vibrance 0.55, paper 0.04, vignette 0) |
+| clean HD | Watercolor HD with less paper and grain, plus a little of the clean frame (crisp 0.3, clarity 0.2, paper 0.25) |
+| gouache | Opaque, flat, saturated shapes with soft edges (brush 5.5, sharpness 16, contrast 0.12) |
+| dreamy pastel | A pastel bloom over clean colour (soft glow 0.5, exposure 1.05, a lilac and rose grade) |
+
+Compared side by side at Kerry Park, 16:00 (`shots/looks-kerry3.jpg`).
+
+**Paint as you walk, far away too.** This is a developer switch in Watercolor, "…far away too",
+off by default. Every place you haven't been is a pencil underdrawing at any distance, as in the
+first version, and walking paints it in. "paint reach as you walk (m)" sets how far round you
+paints (45 m by default).
+
 ## Getting the old default back
 
 The default as it stood before the comparison is kept verbatim as the Look preset
