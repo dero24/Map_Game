@@ -25,6 +25,8 @@ export type DeckProfile =
 export interface Hole { level: number; ring: P2[] }
 export interface Floors { floor0: number; floorH: number; levels: number; holes?: Hole[]; ground?: boolean }
 
+const DEAD_SEG: Seg = [0, 0, 0, 0, 0, 0];
+
 const inRing = (x: number, z: number, ring: P2[]) => {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -50,6 +52,7 @@ export class WalkWorld {
   // skipped by every query — cheap and correct; a compact() pass can reclaim them later if needed.
   private curScope = 0;
   private segDead: number[] = [];
+  private segFree: number[] = []; // purged wall ids (out of every grid cell), free to reuse
   private polyDead: number[] = [];
   private deckDead: number[] = [];
   private scopeIds = new Map<number, { segs: number[]; polys: number[]; decks: number[] }>();
@@ -58,13 +61,40 @@ export class WalkWorld {
 
   beginScope(id: number) { this.curScope = id; if (!this.scopeIds.has(id)) this.scopeIds.set(id, { segs: [], polys: [], decks: [] }); }
   endScope() { this.curScope = 0; }
-  removeScope(id: number) {
+  /** Register into scope `id` from inside any other (an interior's walls going in mid-frame): the
+   *  open scope is restored afterwards. */
+  withScope<T>(id: number, fn: () => T): T {
+    const prev = this.curScope;
+    this.beginScope(id);
+    try { return fn(); } finally { this.curScope = prev; }
+  }
+  /** Drop scope `id`. `purge`: also take its walls out of the grid and recycle their ids — a scope
+   *  that comes and goes all session (an open building's partitions) would otherwise leave a pile
+   *  of tombstones in the cells it covers. */
+  removeScope(id: number, purge = false) {
     const s = this.scopeIds.get(id);
     if (!s) return;
     for (const i of s.segs) this.segDead[i] = 1;
     for (const i of s.polys) this.polyDead[i] = 1;
     for (const i of s.decks) this.deckDead[i] = 1;
     this.scopeIds.delete(id);
+    if (!purge) return;
+    const cells = new Set<number>();
+    for (const i of s.segs) {
+      const g = this.segs[i];
+      const i0 = Math.floor(Math.min(g[0], g[2]) / this.cell), i1 = Math.floor(Math.max(g[0], g[2]) / this.cell);
+      const j0 = Math.floor(Math.min(g[1], g[3]) / this.cell), j1 = Math.floor(Math.max(g[1], g[3]) / this.cell);
+      for (let a = i0; a <= i1; a++) for (let b = j0; b <= j1; b++) cells.add(a * 73856093 ^ b * 19349663);
+    }
+    const gone = new Set(s.segs);
+    for (const k of cells) {
+      const l = this.grid.get(k);
+      if (!l) continue;
+      const kept = l.filter((q) => !gone.has(q));
+      if (kept.length) this.grid.set(k, kept);
+      else this.grid.delete(k);
+    }
+    for (const i of s.segs) { this.segs[i] = DEAD_SEG; this.segFree.push(i); }
   }
   private track(rec: 'segs' | 'polys' | 'decks', id: number) {
     const s = this.scopeIds.get(this.curScope);
@@ -99,9 +129,10 @@ export class WalkWorld {
 
   // A wall segment; y0..y1 is the band of feet heights it blocks (default: all).
   addWall(a: P2, b: P2, y0 = -Infinity, y1 = Infinity) {
-    const id = this.segs.length;
-    this.segs.push([a[0], a[1], b[0], b[1], y0, y1]);
-    this.segDead.push(0);
+    const seg: Seg = [a[0], a[1], b[0], b[1], y0, y1];
+    const id = this.segFree.length ? this.segFree.pop()! : this.segs.length;
+    if (id === this.segs.length) { this.segs.push(seg); this.segDead.push(0); }
+    else { this.segs[id] = seg; this.segDead[id] = 0; }
     this.track('segs', id);
     const i0 = Math.floor(Math.min(a[0], b[0]) / this.cell), i1 = Math.floor(Math.max(a[0], b[0]) / this.cell);
     const j0 = Math.floor(Math.min(a[1], b[1]) / this.cell), j1 = Math.floor(Math.max(a[1], b[1]) / this.cell);

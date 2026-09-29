@@ -1,7 +1,8 @@
 // Photo mode → a sketchbook. P frames the view (HUD away, viewfinder marks); the wheel zooms, [ and ]
 // nudge the hour, H hides the frame; Space paints the page. A page is the rendered watercolor with a
 // handwritten caption (place · time · commission), stored in the sketchbook (IndexedDB) with where it
-// was painted — the map pins it and "go there" walks you back.
+// was painted — the map pins it and "go there" walks you back. With the far sketch on, a shot also
+// paints everything in frame — the distance too — into the world (ctx.paintView).
 import type { GameCtx } from './ctx';
 import type { Commissions } from './commissions';
 import { savePage, type Page } from './book';
@@ -80,6 +81,10 @@ export class PhotoMode {
     ctx.fillStyle = '#f5efe1';
     ctx.fillRect(0, 0, page.width, page.height);
     ctx.drawImage(src, 0, 0, W, H);
+    // (the far sketch) whatever's in frame — the distance too — blooms into colour in the world,
+    // read from this very frame's depth; the brush sounds as the colour runs out
+    const framed = this.g.paintView().catch(() => null);
+    void framed.then((s) => { if (s?.cells) this.g.sound('brush'); });
     // flash + brush right away (the encode below takes a moment)
     this.flashEl.classList.remove('go');
     void this.flashEl.offsetWidth;
@@ -124,13 +129,17 @@ export class PhotoMode {
     // a coloured card is a kind you can paint anywhere now (ui/brush.ts)
     const yours = this.com.fresh.some((k) => (PAINTABLE as readonly string[]).includes(k.split(':')[0]));
     if (painted.length) setTimeout(() => this.g.toast(`almanac: painted in — ${painted.slice(0, 3).join(', ')}${painted.length > 3 ? ` and ${painted.length - 3} more` : ''}${yours ? ' · yours to paint now: B for your brush' : ''}`), done ? 2600 : 1800);
+    const seen = await framed;
+    const inWorld = seen?.cells ? `painted in what you framed — out to ${far(seen.reach)}` : '';
     if (done) {
       this.com.complete(done, p.id);
       this.g.sound('chime');
       this.g.toast(`✦ commission complete — ${done.title}`);
-    } else this.g.toast('painted into your sketchbook · M to see it');
+      if (inWorld) setTimeout(() => this.g.toast(inWorld), painted.length ? 4600 : 2600);
+    } else this.g.toast(inWorld ? `${inWorld} · M for your sketchbook` : 'painted into your sketchbook · M to see it');
     this.onSaved?.(p);
     this.status();
   }
 }
+const far = (m: number) => (m < 1000 ? `${Math.max(10, Math.round(m / 10) * 10)} m` : `${(m / 1000).toFixed(m < 9950 ? 1 : 0)} km`);
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);

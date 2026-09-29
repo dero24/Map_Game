@@ -37,6 +37,10 @@ export const U = {
   // Paint-as-you-explore window (src/world/explore.ts): R8 paint amount per 8 m texel, box = x0 z0 1/w 1/h.
   uExplore: { value: null as THREE.Texture | null },
   uExploreBox: { value: new THREE.Vector4(0, 0, 1 / 4096, 1 / 4096) },
+  // …and its coarse far window (~32 km, 64 m texels: the painted share of each 64 m cell, and what
+  // photos painted far away), read past the fine one — only by the far sketch (postParams.sketchFar)
+  uExploreFar: { value: null as THREE.Texture | null },
+  uExploreFarBox: { value: new THREE.Vector4(0, 0, 1 / 32768, 1 / 32768) },
   // The painted ground's detail window round the walker (groundPaint.ts DetailGround.box, x0 z0
   // 1/w 1/h; main shares the live Vector4): the far street ribbons step aside inside it.
   uDetailBox: { value: new THREE.Vector4(0, 0, 0, 0) },

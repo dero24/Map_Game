@@ -20,6 +20,43 @@
       <button id="tphoto" class="tbtn" title="paint a view">▣</button>
     </div>
     <div id="fatal" class="hidden"></div>
+    <script>
+      // Boot guard — a classic script, so it runs even where the game's module can't (too new for
+      // this browser to parse, blocked, failed to download): errors from before the game starts are
+      // kept for its report (src/ui/diag.ts adopts them) and shown here if it never does start.
+      (function () {
+        var E = (window.__EARLY__ = { errors: [], owned: false, onError: null });
+        try { // (touch controls, and without a mouse the touch hints, from the first paint)
+          if (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) document.body.classList.add('touch');
+          if (!matchMedia('(any-pointer: fine)').matches) document.body.classList.add('nomouse');
+        } catch (e) {}
+        function show(title) {
+          var f = document.getElementById('fatal');
+          if (!f || E.owned) return;
+          var gl2 = false;
+          try { gl2 = !!document.createElement('canvas').getContext('webgl2'); } catch (e) {}
+          f.textContent = title + '\n\n' + E.errors.slice(0, 8).join('\n') + '\n\nES modules ' + ('noModule' in document.createElement('script') ? 'yes' : 'NO') + ' · WebGL 2 ' + (gl2 ? 'yes' : 'NO') + '\n' + navigator.userAgent;
+          f.className = '';
+        }
+        function add(m) {
+          if (E.errors.length < 40) E.errors.push(m);
+          if (E.onError) E.onError(m);
+          else show('the watercolor walk hit an error while loading:');
+        }
+        window.addEventListener('error', function (e) {
+          var t = e.target;
+          if (t && t !== window && t.tagName) { if (t.tagName === 'SCRIPT' || t.tagName === 'LINK') add('failed to load ' + (t.src || t.href)); return; }
+          add((e.message || 'error') + (e.filename ? ' @' + e.filename.split('/').pop() + ':' + e.lineno : ''));
+        }, true);
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e.reason;
+          add('unhandled rejection: ' + (r && r.message ? r.message : String(r)));
+        });
+        setTimeout(function () {
+          if (!window.__BOOT__) show('the game script has not started after 25 s — blocked, still downloading, or too new for this browser:');
+        }, 25000);
+      })();
+    </script>
     <div id="toast"></div>
     <div id="osm-credit">map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> · ODbL · <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a></div>
     <div id="hint"></div>
@@ -98,6 +135,7 @@
           <b>WASD</b> walk &middot; <b>Mouse</b> look &middot; <b>Shift</b> stroll faster &middot; <b>F</b> fly &middot; <b>E</b> get in/out &middot; <b>B</b> your brush: paint anything you've painted from life &middot; walk through any front door &middot; <b>R</b> plant a seed &middot; <b>M</b> map &amp; sketchbook &middot; <b>G</b> go anywhere &middot;
           <b>T</b> skip an hour &middot; <b>P</b> paint a view &middot; <b>`</b> settings &middot; <b>Esc</b> release mouse
         </p>
+        <p class="keys tkeys">left thumb &middot; walk (push far to stroll faster) &middot; drag &middot; look around &middot; &#9992; fly &middot; &#8962; go anywhere &middot; &#9776; map &amp; sketchbook &middot; &#9635; paint a view &middot; walk through any front door</p>
         <a href="#" id="credits-link">Credits &amp; data attribution</a>
       </div>
     </div>

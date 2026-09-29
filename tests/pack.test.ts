@@ -20,7 +20,7 @@ class StubCtx {
   setTransform() {} beginPath() {} moveTo() {} lineTo() {} stroke() {} fill() {} fillRect() {}
   createRadialGradient() { return { addColorStop() {} }; }
   measureText(t: string) { return { width: t.length * 8 } }; // eslint-disable-line
-  fillText() {}
+  fillText() {} drawImage() {}
   getImageData(_x: number, _y: number, w: number, h: number) { return { data: new Uint8ClampedArray(w * h * 4), width: w, height: h }; }
 }
 class StubCanvas {
@@ -194,6 +194,26 @@ describe('buildTile', () => {
     expect(JSON.stringify(strip(b))).toBe(JSON.stringify(strip(a)));
     // margin context rings were seeded but not recorded as ops
     expect(a.ops.some((o) => o.o === 'p' && o.r[0][0] > 290)).toBe(false);
+  });
+
+  it('ships only the lettered part of the sign atlas, its uvs re-addressed to the crop', async () => {
+    const tj = JSON.parse(JSON.stringify(tileJson));
+    tj.buildings[0].ad = '12 Test St';
+    tj.buildings[1].ad = '14 Test St';
+    const t = await buildTile(tj, terrain, spec, 0);
+    // (a 2048² atlas per tile was 16 MB + mips of mostly-empty texture — ~300 MB for a city ring)
+    expect(t.atlas!.width * t.atlas!.height).toBeLessThanOrEqual(2048 * 64);
+    const signs = t.objs.find((o) => o.m.t === 'signs')!;
+    const uv = signs.at.uv.a;
+    let lettered = 0;
+    for (let i = 0; i + 1 < uv.length; i += 2) {
+      if (uv[i] < 0) { expect(uv[i + 1]).toBe(-1); continue; } // untextured board / pole faces
+      lettered++;
+      expect(uv[i]).toBeLessThanOrEqual(1.0001);
+      expect(uv[i + 1]).toBeLessThanOrEqual(1.0001);
+    }
+    expect(lettered).toBeGreaterThan(0);
+    expect(Math.max(...Array.from(uv).filter((_, i) => i % 2 === 1))).toBeCloseTo(1, 3); // the one row fills the crop's height
   });
 
   it('a playground: the mapped piece where it is, an empty one fitted with a structure and swings; a flight of steps', async () => {

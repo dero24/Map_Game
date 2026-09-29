@@ -516,7 +516,8 @@
         "tests/retaining.test.ts: a cut's wall built as a rockery (low) or poured concrete (tall), nothing proud of the face or past its ends, a vertex budget, hedges along the top",
         "tests/retaining.test.ts: a front walk coming down to a wall gets a flight up its face, walked from the sidewalk up the flight and over the coping onto the lot (beside it the wall still stops you); the flight drawn as its own mesh with no hedge where it comes up",
         "shots/spots-r10-walls.jpg 1–4 (Queen Anne): a 7 m board-formed wall 51% of the frame, a rockery 15.6%, steps up to a lot, a clipped hedge 23%",
-        "tools/grade-audit.js __GRADES__ (ab), Queen Anne x −900..800, z −1500..100: 557 ways, 16 over 25% (12 service; 2nd Ave W 36%, W Blaine St 29%, Warren Ave N 27%, 1st Ave N 26%); city-wide 4,730 ways, 79 over (bridge ends, overpasses, the Ship Canal)"
+        "tools/grade-audit.js __GRADES__ (ab), Queen Anne x −900..800, z −1500..100: 557 ways, 16 over 25% (12 service; 2nd Ave W 36%, W Blaine St 29%, Warren Ave N 27%, 1st Ave N 26%); city-wide 4,730 ways, 79 over (bridge ends, overpasses, the Ship Canal)",
+        "(ad) grade.ts from four live Queen Anne cells (tests/fixtures/grade-hillside.json + 10 cause tests): 19 ways over 25% → 0, worst 0.561 → 0.240; live re-audit pending"
       ],
       "evidence": [
         "src/world/synth.ts roadRibbons",
@@ -532,7 +533,7 @@
         "src/world/retaining.ts (rockery / concrete, hedge / rail tops)",
         "src/world/retaining.ts (board-formed courses, rain streaks, moss, clipped hedges, wallStairs, stairColliders; the steps as 'retaining-steps')"
       ],
-      "notes": "(t): the main thread kept the 16 m stand-in's ground under the traffic while the drawn street was graded — fixed. (v): junction knees fixed; the Counterbalance frame passes. (ab): walls board-formed with stains and moss, clipped hedges, a stair to each lot (round 9 must-fix 5). Open: __GRADES__ 0 — 16 ways over 25% on Queen Anne, bridge ends and overpasses city-wide."
+      "notes": "(t): the main thread kept the 16 m stand-in's ground under the traffic while the drawn street was graded — fixed. (v): junction knees fixed; the Counterbalance frame passes. (ab): walls board-formed with stains and moss, clipped hedges, a stair to each lot (round 9 must-fix 5). Open: __GRADES__ 0 — 16 ways over 25% on Queen Anne, bridge ends and overpasses city-wide. (ad): six causes fixed in the shared grader + a final pass on the surface; live __GRADES__ re-run pending."
     },
     {
       "id": "tunnels-canopies-coasts",
@@ -939,6 +940,67 @@
         "src/render/post.ts (the sketch pass: ghostRT, tGhost/tGhostDepth composite, boiling graphite line, bleed, uBrush paling, uRipple, the uGhost.w harness mask), src/render/propMaterial.ts (wash: paper + strokes, wet → dry via uWash), src/render/shared.ts (uBrush, uGhost, uRipple), src/ui/brush.ts (overlay scene, solve: view/bar/occlusion/hull room, drying: ripple, push-in, settle), src/player/place.ts (Hull), src/assets/kit.ts (boatDims), src/world/wakes.ts (track vertex, transom-wide churn), src/audio/ambience.ts ('settle'), src/player/controller.ts (zoom), tools/brush-check.js"
       ],
       "notes": "Round 9 must-fix 1 done and measured; from must-fix 2 done: one card first, walk in to board, snap where you can step aboard, the helmsman. Open: Rumson's landing lit; three cold players spawn → Rumson dock < 90 s (real phone + desktop). Planes wait for airfields with planes to paint from life."
+    },
+    {
+      "id": "interiors-rooms",
+      "priority": 1,
+      "area": "gameplay",
+      "title": "Interiors at real scale, slice 1 (docs/INTERIORS_PLAN.md): rooms, not halls",
+      "user_visible_behavior": "Walk into a house and you're in a hall with the stair beside it; off it a living room, kitchen, dining room or study and a WC; upstairs a landing, bathroom and bedrooms sized like real ones. Apartment blocks have corridors and flats; offices a core, desk rows by the glass and meeting rooms; shops aisles and a back of house. Every room is reachable, you're never shut in, and the HUD names the room.",
+      "status": "in_progress",
+      "verification": [
+        "tests/interiorLayout.test.ts (14) and tests/interiorBudget.test.ts (14): houses 3–6 rooms a storey in 320/320, bedroom minimums, corridors ≥ 1.5 m, rooms ≤ 38 m², office cores 15–30% and desks within 13.5 m of glass, every room reached from the door, no wall on a window, ≤ 120k vertices, ≤ 60 draws, no build step over 8 ms",
+        "tools/bench-interiors.mts: worst build step 47–1,243 ms → ~1 ms; house 43k → 30k vertices; supermarket 1.1 M → 12k",
+        "LIVE Sea Bright (shots/int-seabright.jpg, shots/tour-seabright-house.jpg): hall + stair, living, kitchen, dining, study; landing, bedroom, bath"
+      ],
+      "evidence": [
+        "src/world/interior/{plan,layout,mesh,furnish}.ts",
+        "src/world/interiors.ts",
+        "src/player/collision.ts (withScope, removeScope purge)",
+        "src/assets/decor.ts (17 new pieces)"
+      ],
+      "notes": "Next: check a Manhattan office and an apartment block live; slice 2 (data in: building/tourism/amenity archetypes, curtain walls), slice 3 (towers, lifts)."
+    },
+    {
+      "id": "phones",
+      "priority": 0,
+      "area": "platform",
+      "title": "The game runs on phones, and says why if it can't",
+      "user_visible_behavior": "On a phone the game picks a lighter quality tier by itself and renders; if anything fails (no WebGL, a shader, no frame, a lost GPU context, a bundle that won't load) the page shows a readable report you can screenshot, and ?diag=1 shows it on demand.",
+      "status": "in_progress",
+      "verification": [
+        "tests/quality.test.ts, tests/diag.test.ts, tests/pack.test.ts (atlas crop)",
+        "tools/mobile-check.mjs (headless, helper agent): Pixel 7 GPU-process peak 1272 → 733–783 MB on the phone tier, world drawn, 0 errors; injected failures each show the report",
+        "LIVE pane at 375×812: the report on ?diag=1 reads 'quality phone (touch screen)', the world drawing"
+      ],
+      "evidence": [
+        "src/render/quality.ts",
+        "src/ui/diag.ts",
+        "index.html (inline guard)",
+        "src/world/signs.ts (cropped atlases)",
+        "src/sim/life.ts (live-slot counts)",
+        "src/world/stream.ts (streamParams)"
+      ],
+      "notes": "Needs a real phone after the next Pages deploy: …/Map_Game/?diag=1."
+    },
+    {
+      "id": "photo-paints-frame",
+      "priority": 2,
+      "area": "gameplay",
+      "title": "In paint-as-you-walk mode, a photo paints everything it frames, even the far distance",
+      "user_visible_behavior": "With Watercolor → '…far away too' on, taking a photo (P, Space) colours in everything visible in the frame — the street, the far shore, the city on the horizon — blooming in over a couple of seconds; it stays painted.",
+      "status": "in_progress",
+      "verification": [
+        "tests/explore.test.ts (+6), tests/seen.test.ts (depth → world points, joins, footprint discs, far cells)",
+        "LIVE Sea Bright: ctx.paintView() from Ocean Ave painted 729 cells out to 1.6 km"
+      ],
+      "evidence": [
+        "src/render/seen.ts",
+        "src/world/explore.ts (far cells, far window, paintSeen)",
+        "src/render/post.ts (readSeen, far window in the sketchFar branch)",
+        "src/ui/photo.ts"
+      ],
+      "notes": "Frames of the before/after still to shoot; the sketchbook page keeps the pencil frame from before the bloom."
     }
   ],
   "regions": {

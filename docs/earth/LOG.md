@@ -2,6 +2,69 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-29 (ad) — Four helpers merged: real rooms, phones, photos that paint, streets that stay drivable
+
+Four helper agents worked offline in their own copies while the main session waited; each came
+back with tests. Merged by three-way merge onto (ac), 380 tests pass, typecheck clean, checked live
+in the pane where noted.
+
+- **Interiors, slice 1 (`docs/INTERIORS_PLAN.md`): rooms, not halls.**
+  - A plan in two stages. The tile worker builds the shell (`interior/plan.ts`: storeys, real
+    stairs, a house's hall, corridors by plate depth, office cores). The rooms are laid out when you
+    walk up (`interior/layout.ts`, a storey a frame).
+  - Houses get a hall to the stair, then living room, kitchen, dining room or study, and a WC; upstairs
+    a bathroom and 2–4 bedrooms (doubles ≥ 11.5 m² and 2.75 m wide). Blocks get corridors and flats.
+    Offices get a core (15–30% of the plate), desk benches within 13.5 m of the glass and meeting
+    rooms. Shops keep aisles with a back of house. Partitions meet the facade only between windows.
+  - Every room is reachable from the front door; the collision world has exactly the drawn walls,
+    and a wall that would land on you leaves a doorway where you stand. The HUD names the room.
+  - Cost: rooms are painted from a room-map texture, and repeated furniture is instanced. Worst
+    build step 47–1,243 ms → about 1 ms; a house is 30k vertices (was 43k), a supermarket 12k (was
+    1.1 M).
+  - Seen live in Sea Bright (`shots/int-seabright.jpg`, `shots/tour-seabright-house.jpg`): a hall
+    with the stair beside it; living room, kitchen, dining room and study; upstairs a landing,
+    bedroom and bath.
+  - Tests: `interiorLayout.test.ts`, `interiorBudget.test.ts` (28).
+  - Not yet: towers past 4 storeys, lifts (slice 3); curtain walls matching the interior (slice 2).
+- **Streets that stay drivable (the `__GRADES__` residuals), fixed in the shared grader
+  (`grade.ts`).** It was built from four Queen Anne cells captured live. Six causes, each with a
+  test that fails on the old grader:
+  - dead ends left on the raw hill;
+  - alley and driveway junctions as flat plateaus on the street;
+  - a lesser way averaged with the greater street's carriageway at its mouth;
+  - a 4 m way reading a neighbour's ground;
+  - shallow-angle joins;
+  - the cap measured along bends instead of the chord a car spans.
+  - A last pass (`holdLimits`) holds every 8 m chord to 99% of the class limit on the final surface.
+  - On the captured cells: 19 ways over 25% → 0; worst 56% → 24%. Steep streets stay steep.
+  - 2nd Ave W at the x = 0 seam was a dead end, not a seam: both cells agree there to 0.0 mm.
+  - Known limits: seams stay consistent only while a way recovers within the 48 m of shared road
+    context. Untagged hills over 27% for 700 m can't all be held (tag `incline`).
+  - No cache bump: grading runs on each build, and the caches hold TileJson.
+- **Phones: why the page was blank, and a report if it ever is again.**
+  - The page never failed under Chrome's phone emulation (0 JS errors; every shader within ES 3.0
+    limits). The likely cause is the phone running out of GPU memory: about 950 MB at desktop
+    settings, 340 MB of it street-sign atlases.
+    - Sign atlases are now cropped to what they hold (textures 546 → 271 MB, every device).
+    - Life instances draw only live slots (2.4 M → 0.45 M triangles).
+  - A phone quality tier and a low tier (`render/quality.ts`) are picked at boot. The phone tier
+    paints at CSS resolution with 1024² shadows and 2048² ground paint, and the tile rings shrink to
+    900/1500/4000 m. It never overrides a saved knob.
+  - A boot report (`ui/diag.ts` in `#fatal`, plus an inline guard in `index.html`) shows the GPU,
+    limits, tier, the first shader log and the first errors. It opens when WebGL fails, a shader
+    fails, the boot throws, no frame is drawn in 15 s, the context is lost, or the bundle can't load
+    — or on `?diag=1`. A crashed visit drops a tier on the next load.
+  - Seen live with the pane at 375×812: "quality phone (touch screen)", the world drawing.
+  - `tools/mobile-check.mjs`: Pages-like serve, device emulation, shader-limit audit.
+  - Needs a real phone: open `…/Map_Game/?diag=1` after the next deploy.
+- **Photos paint what they frame (Robby's idea).** With the far sketch on, a photo paints
+  everything visible in it, near and far: a 256×144 depth readback is unprojected to the ground,
+  each sample paints a disc as wide as its footprint, and it blooms in over ~2 s. Past 2 km it
+  paints 64 m far cells, which a 32 km far window shows. Walks and stats are untouched.
+  - Seen live: a photo on Ocean Ave painted 729 cells out to 1.6 km.
+
+Tests: 380 pass.
+
 ## 2026-09-29 (ac) — Cleaner looks to try, and paint-as-you-walk all the way out
 
 Robby's asks, after his walks round Kerry Park and Liberty Island: a few cleaner, more vibrant

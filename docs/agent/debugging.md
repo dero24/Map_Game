@@ -60,6 +60,38 @@ behaviour.
 - Debug handles on `window.__GAME__`: `explore`, `commissions`, `photo`, `atlas`, `arrival`,
   `hints`.
 
+## Phones: quality tiers + the boot report
+
+- Boot picks a tier (`src/render/quality.ts` `pickTier`): `desktop` = the shipped defaults;
+  `phone` (touch-first, a phone UA, or a small touch screen) = CSS-pixel paint (`hiDpi` off),
+  `paintDetail` 0.6, 1024² shadows, 2048² ground-paint canvases, tile rings 900/1500/4000 m;
+  `low` (a phone with ≤ 3 GB, ≤ 4 cores on Android, max texture ≤ 4096 — or a tab whose last
+  load died on screen) = render scale 0.75, `paintDetail` 0.5, 1024² paint, no shadow pass,
+  rings 750/1300/2500 m.
+  A knob saved in the panel (`userKeys`) always wins. `?quality=desktop|phone|low` forces a tier;
+  `window.__TIER__` says which one ran and what it set.
+- The boot report (`src/ui/diag.ts`, shown in `#fatal`): browser, WebGL version + GPU string,
+  the key limits, float-buffer extensions, the tier, the boot stage, the first shader log and the
+  first JS errors. It opens by itself when WebGL can't start, a shader won't compile, the boot
+  throws, no frame is drawn 15 s after "Begin walking" or frames stop for 15 s while the page is
+  on screen (`?watchdog=<s>` for slow software-GL rigs), every frame fails, or the GPU context is
+  lost and not returned in 4 s. `?diag=1` opens it on demand (ask a phone user for a screenshot).
+  `window.__BOOTDIAG__()` returns it as data.
+- index.html's inline boot guard (a classic script) keeps errors from before the module runs and
+  shows its own short report when the module never starts (a browser too old to parse it, a
+  failed download). A load that died on screen leaves a `sessionStorage` breadcrumb
+  (`mapgame.boot`): the next load says where it stopped and steps one tier down.
+- `npm run build && node tools/mobile-check.mjs --device=pixel7|iphone|desktop [--query=quality=low]`
+  runs all of the below and writes `shots/mobile-<device>.{png,json}`; it exits non-zero on a page
+  error or a shader program over the phone limits.
+- Headless mobile checks: Playwright device descriptors (`Pixel 7`, `iPhone 14`) +
+  `--use-angle=swiftshader --enable-unsafe-swiftshader`, served under a sub-path with no
+  COOP/COEP (like Pages). **Stub `Element.prototype.requestPointerLock`** in those runs: headless
+  Chromium, once it grants pointer lock, sends a synthetic mousemove every frame and its renderer
+  grows ~40 MB/s — it reproduces on a blank page and OOM-kills the tab within minutes (phones
+  have no pointer lock). SwiftShader draws a frame every few seconds on 2 CPUs: poll
+  `__RENDER_INFO__.frames`, click `#start` via `evaluate`, and allow minutes for screenshots.
+
 ## Dev-server + worker quirks
 
 - Dev server is HTTP/1.1: slow `/__tiles` calls starve other same-origin fetches — anything

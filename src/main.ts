@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { loadWorld, loadRegions, loadAtlas, manifestAsWorldJson, fromLatLon, toLatLon, type AtlasManifest, type Terrain, type World, type Road, type WorldJson } from './world/data';
 import { cachedFetchJson, initCache, manifestFingerprint } from './world/cache';
-import { TileStream } from './world/stream';
+import { TileStream, streamParams } from './world/stream';
 import { Horizon } from './world/horizon';
 import { Skyline } from './world/skyline';
 import { KerbCars } from './world/kerbCars';
@@ -41,7 +41,10 @@ import { Interiors, type Plan } from './world/interiors';
 import { applyAtmosphere, type Weather } from './world/atmosphere';
 import { U } from './render/shared';
 import { WatercolorPost, postParams } from './render/post';
-import { SunShadows } from './render/shadows';
+import { skyDepth, unprojectDepth } from './render/seen';
+import { SunShadows, shadowParams } from './render/shadows';
+import { applyTier, autoSteps, deviceInfo, pickTier } from './render/quality';
+import { began, contextLost, contextRestored, diag, diagInit, diagStage, diagTick, errorLine, frameFailed, frameOk, glInfo, glProbe, shaderError, showReport } from './ui/diag';
 import { WalkWorld } from './player/collision';
 import { Walker, walkParams } from './player/controller';
 import { celestial, localHour, localToMs, sunPosition } from './core/sun';
@@ -75,18 +78,13 @@ async function probeLocalTiles(): Promise<string> {
 }
 const $ = (id: string) => document.getElementById(id)!;
 
+// Errors, the GPU's limits, how far the boot got — shown on the page when the world can't be
+// (ui/diag.ts; index.html's boot guard covers the time before this module runs).
+const crashed = diagInit();
+
 async function main() {
   if (TILES_PARAM === null && LOCAL) TILES = await probeLocalTiles();
-  // Surface fatal errors on-screen — on a phone there is no console to open.
-  {
-    const show = (msg: string) => {
-      const f = $('fatal');
-      f.textContent = (f.textContent + msg + '\n').slice(-4000);
-      f.classList.remove('hidden');
-    };
-    window.addEventListener('error', (e) => show(e.message + (e.filename ? ` @${e.filename.split('/').pop()}:${e.lineno}` : '')));
-    window.addEventListener('unhandledrejection', (e) => show('rejection: ' + (e.reason?.message ?? String(e.reason))));
-  }
+  diagStage('regions');
   const regions = await loadRegions();
   // One consistent world: an unknown ?region= (old per-town links) lands in the listed one.
   const asked = params.get('region');
@@ -118,11 +116,29 @@ async function main() {
   const VIRTUAL = !!(atLatLon && TILES && !params.get('region') && (!regions?.length || best >= 2));
   loadSettings(REGION);
   const canvas = $('view') as HTMLCanvasElement;
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: CAPTURE });
+  diagStage('webgl');
+  let renderer: THREE.WebGLRenderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: CAPTURE });
+  } catch (e) {
+    diag.glError = glProbe(e); // (main's catch puts the report up)
+    throw e;
+  }
+  diag.gl = glInfo(renderer.getContext());
+  renderer.debug.onShaderError = shaderError; // a program that won't compile here: say so on the page
   renderer.setPixelRatio(1);
   renderer.autoClear = true;
   renderer.setClearColor(0xd8e0e4, 1);
   const maxTex = renderer.capabilities.maxTextureSize;
+  // Quality tier: a phone gets lighter paint, shadows, ground canvases and tile rings (quality.ts);
+  // one whose last visit here died on screen steps down again. Saved panel knobs always win.
+  const tier = pickTier(deviceInfo(maxTex), { forced: params.get('quality'), crashed: !!crashed });
+  const tierSet = applyTier(tier, { post: postParams, shadow: shadowParams, stream: streamParams }, userKeys);
+  diag.tier = tier.tier;
+  diag.tierWhy = tier.why;
+  (window as unknown as Record<string, unknown>).__TIER__ = { ...tier, set: tierSet };
+  if (tier.tier !== 'desktop') console.info(`quality tier: ${tier.tier} (${tier.why})${tierSet.length ? ' — ' + tierSet.join(', ') : ''}`);
+  diagStage('world', tier.tier);
 
   // Atlas = manifest + terrain + streamed tiles. Regions baked before tiling still work: the manifest
   // is synthesised as a single tile pointing at world.json. Virtual regions are built in code —
@@ -187,8 +203,9 @@ async function main() {
   const camera = new THREE.PerspectiveCamera(walkParams.fov, innerWidth / innerHeight, 0.25, 25000);
   camera.layers.enable(1);
 
+  diagStage('paint');
   const tt = terrainTextures(world);
-  const paint = paintGround(paintWorld, maxTex);
+  const paint = paintGround(paintWorld, Math.min(maxTex, tier.paintTex));
   // Floating origin: everything in region coordinates lives under worldRoot. The render loop
   // shifts worldRoot by -origin so the camera stays near 0; shaders add U.uWorldOffset back
   // where they need true world positions (pigment, shadows, lamp/paint maps, fog distance).
@@ -333,6 +350,9 @@ async function main() {
   const respawn = () => walker.place(spawn.x, spawn.z, spawn.yaw, -0.02, spawn.y);
   const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   if (isTouch) document.body.classList.add('touch');
+  // Pointer lock wants a mouse or trackpad: a phone has none (and headless Chromium, granted one,
+  // floods the page with mousemoves), while a touch-screen laptop still does.
+  const canLock = () => { try { return matchMedia('(any-pointer: fine)').matches; } catch { return !isTouch; } };
   // Doorstep-first placement: on or near a building → step out its front door;
   // on open ground → stand on the spot facing down the nearest street.
   const teleportLocal = (x: number, z: number) => {
@@ -358,7 +378,9 @@ async function main() {
 
   // Bring the spawn neighbourhood online before we build life or prime interiors.
   $('loading').textContent = 'raising the houses…';
+  diagStage('tiles');
   await stream.ensureAround(spawn.x, spawn.z);
+  diagStage('life');
   if (atPos) teleportLocal(atPos[0], atPos[1]);
 
   // A landmark (a tower, a monument, an attraction) is arrived at from where it's seen: open
@@ -509,8 +531,18 @@ async function main() {
     toast,
     teleport: async (lat, lon) => { await teleportTo(lat, lon); arrival.greet(); },
     sound: (k) => ambience?.ui(k),
+    paintView: async () => {
+      if (!postParams.enabled || !postParams.sketch || !postParams.sketchFar) return null;
+      // the frame's depth on a small grid (256 on the long side), unprojected through this frame's
+      // camera — captured now, before the next frame moves it (render/seen.ts)
+      const a = camera.aspect, w = a >= 1 ? 256 : Math.max(16, Math.round(256 * a)), h = a >= 1 ? Math.max(16, Math.round(256 / a)) : 256;
+      const inv = [...camera.projectionMatrixInverse.elements], cw = [...camera.matrixWorld.elements], off = { x: origin.x, y: 0, z: origin.z };
+      const depth = await post.readSeen(w, h, camera.near, camera.far);
+      const g = depth && unprojectDepth(depth, w, h, inv, cw, off, skyDepth(camera.near, camera.far));
+      return g && explore.paintSeenSliced(g, { x: cw[12] + off.x, y: cw[13], z: cw[14] + off.z }, { ground: (x, z) => Math.max(world.terrain.heightAt(x, z), 0) });
+    },
     uiOpen: () => !$('intro').classList.contains('hidden') || atlas.open,
-    lock: () => { if (!isTouch) walker.lock(); },
+    lock: () => { if (canLock()) walker.lock(); },
   };
   // wildlife + your garden (assets/fauna.ts, assets/flora.ts)
   const critters = new Critters(world.terrain, walk);
@@ -604,6 +636,7 @@ async function main() {
 
   const post = new WatercolorPost(renderer);
   const shadows = new SunShadows(renderer);
+  diagStage('compile');
   // Compile every shader now (incl. the interior + NPC materials) so the first front door doesn't hitch.
   const firstPlan = plans.keys().next().value;
   if (firstPlan !== undefined) interiors.prime(firstPlan);
@@ -822,7 +855,8 @@ async function main() {
       const kindName = ({ house: 'a house', commercial: 'a shop', church: 'the church', large: 'an apartment building' } as Record<string, string>)[fp?.kind ?? ''] ?? 'a building';
       const what = fp?.name ?? fp?.addr ?? (P.door.street ? `${kindName} on ${P.door.street}` : kindName);
       const floorName = storey === 0 ? 'ground floor' : storey === P.levels - 1 ? (P.levels > 2 ? 'top floor' : 'upstairs') : `floor ${storey + 1}`;
-      $('place').textContent = `inside ${what}${P.levels > 1 ? ` · ${interiors.onStairs ? 'on the stairs' : floorName}` : ''}`;
+      const room = interiors.onStairs ? null : interiors.roomName(walker.x, walker.z, walker.feet);
+      $('place').textContent = `inside ${what}${P.levels > 1 ? ` · ${interiors.onStairs ? 'on the stairs' : floorName}` : ''}${room ? ` · ${room}` : ''}`;
     } else if (interiors.activePlan) {
       // at someone's front steps: the real address or the shop's name
       const P = interiors.activePlan, fp = stream.fpByKey.get(interiors.activeIndex!);
@@ -837,11 +871,13 @@ async function main() {
   };
 
   // ---- intro ----
-  $('loading').textContent = '';
+  $('loading').textContent = crashed ? 'the last visit here was cut short (out of memory?) — painting lighter this time' : '';
+  diagStage('ready');
   const startBtn = $('start') as HTMLButtonElement;
   startBtn.disabled = false;
-  startBtn.onclick = () => { $('intro').classList.add('hidden'); walker.lock(); startAudio(); arrival.greet(); };
-  canvas.addEventListener('click', () => { if ($('intro').classList.contains('hidden')) { walker.lock(); startAudio(); } });
+  // (ctx.lock: no pointer lock without a mouse or trackpad to capture)
+  startBtn.onclick = () => { $('intro').classList.add('hidden'); document.body.classList.add('walking'); began(); ctx.lock(); startAudio(); arrival.greet(); };
+  canvas.addEventListener('click', () => { if ($('intro').classList.contains('hidden')) { ctx.lock(); startAudio(); } });
   $('credits-link').onclick = (e) => { e.preventDefault(); $('credits').classList.remove('hidden'); };
   $('credits-close').onclick = () => $('credits').classList.add('hidden');
   window.addEventListener('keydown', (e) => {
@@ -871,7 +907,7 @@ async function main() {
   };
   if (CAPTURE) {
     $('intro').classList.add('hidden');
-    document.body.classList.add('postcard');
+    document.body.classList.add('postcard', 'walking');
     const s = params.get('shot');
     if (s && shots[s]) (window as unknown as { __APPLY_SHOT__: (n: string) => void }).__APPLY_SHOT__(s);
   }
@@ -963,12 +999,14 @@ async function main() {
       const n = (errors.get(k) ?? 0) + 1;
       errors.set(k, n);
       if (n === 1 || n % 600 === 0) console.error(`frame error (x${n})`, e);
+      frameFailed(e); // (a phone user sees only a frozen or blank page — ui/diag.ts says why)
     }
   };
-  // Auto quality: the crisper defaults (paint detail, full screen resolution) step down once, a
-  // few seconds into the walk, on a GPU that can't hold ~40 fps — unless the player set them in
-  // the panel. (A proper boot benchmark with tiers is the backlog's 1.7.)
-  let qT = 0, qN = 0, qSum = 0, qDone = CAPTURE;
+  // Auto quality: the crisper defaults (paint detail, full screen resolution) step down a few
+  // seconds into the walk on a GPU that can't hold ~40 fps; still slow after that, the render
+  // scale and the shadow map follow (quality.ts autoSteps) — never a knob the player set in the
+  // panel. The boot tier (quality.ts pickTier) already chose lighter defaults for phones.
+  let qT = 0, qN = 0, qSum = 0, qRound = 0, qDone = CAPTURE;
   const autoQuality = (rawDt: number) => {
     if (qDone || interiors.indoors) return;
     qT += rawDt;
@@ -976,14 +1014,13 @@ async function main() {
     qSum += rawDt;
     qN++;
     if (qT < 10) return;
-    qDone = true;
     const ms = (qSum / qN) * 1000;
-    if (ms > 25) {
-      let changed = false;
-      if (!userKeys.has('post.hiDpi') && postParams.hiDpi && devicePixelRatio > 1) (postParams.hiDpi = false), (changed = true);
-      if (!userKeys.has('post.paintDetail') && postParams.paintDetail > 0.5) (postParams.paintDetail = 0.5), (changed = true);
-      if (changed) { resize(); console.info(`auto quality: ${ms.toFixed(1)} ms/frame — paint detail and resolution stepped down`); }
-    }
+    const steps = autoSteps(ms, qRound, postParams, shadowParams, userKeys, devicePixelRatio);
+    for (const [bag, k, v] of steps) ((bag === 'post' ? postParams : shadowParams) as Record<string, unknown>)[k] = v;
+    if (steps.length) { resize(); console.info(`auto quality: ${ms.toFixed(1)} ms/frame — ${steps.map(([b, k, v]) => `${b}.${k}=${v}`).join(', ')}`); }
+    qRound++;
+    (qT = 0), (qN = 0), (qSum = 0);
+    qDone = !steps.length || qRound >= 2; // (a second round measures the first round's result)
   };
   const frame = (now: number) => {
     const rawDt = Math.min(0.25, Math.max(0, (now - last) / 1000));
@@ -1113,6 +1150,7 @@ async function main() {
     }
     shadows.update(scene, focus, U.uKeyDir.value);
     post.render(scene, camera, simTime, U.uNight.value, U.uGolden.value, walker.yaw, walker.pitch, debugParams.rawScene, brush.overlay);
+    frameOk();
     photo.afterRender(); // Space in photo mode grabs this very frame
 
     if ((hudTimer -= dt) < 0) { hudTimer = 0.4; updateHud(); }
@@ -1133,6 +1171,7 @@ async function main() {
     } else if (paintSince != null) { paintSince = null; paintShown = 0; }
     if (!walkParams.fly) journal.update(walker.x, walker.z, dt);
     explore.enabled = postParams.sketch;
+    explore.far = postParams.sketch && postParams.sketchFar; // (the far window: only the far sketch reads it)
     explore.update(walker.x, walker.z, camera.position.y - Math.max(world.terrain.heightAt(walker.x, walker.z), 0), dt, postParams.sketchReach);
     if (atlas.open && (journalTimer -= dt) < 0) {
       journalTimer = 0.5;
@@ -1178,9 +1217,21 @@ async function main() {
   };
   requestAnimationFrame(loop(chain));
   if (CAPTURE) (window as unknown as Record<string, unknown>).__KICK__ = () => { chain++; loop(chain)(performance.now()); };
-  // A lost GPU context would freeze the canvas for good: say so, and recover when the browser allows.
-  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); toast('the painting smudged — recovering…'); });
-  canvas.addEventListener('webglcontextrestored', () => toast('back to the walk'));
+  // A lost GPU context would freeze the canvas for good: say so, and recover when the browser allows
+  // (and if it doesn't give the context back, diagTick puts the report up).
+  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); contextLost(); toast('the painting smudged — recovering…'); });
+  canvas.addEventListener('webglcontextrestored', () => { contextRestored(); toast('back to the walk'); });
+  // The watchdog: no frame 15 s after Begin walking, or a context never given back → the report.
+  // `?diag=1` opens it once the first frame is up (the GPU's facts, on the phone itself).
+  if (!CAPTURE) {
+    const wd = Number(params.get('watchdog'));
+    if (wd > 0) diag.watchdogS = wd; // (a software-GL test rig draws a frame every few seconds)
+    let asked = params.get('diag') === '1';
+    setInterval(() => {
+      diagTick();
+      if (asked && diag.frames > 0) { asked = false; showReport('on request (?diag=1) — the world is drawing', false); }
+    }, 1000);
+  }
   void gui;
 }
 
@@ -1236,4 +1287,6 @@ function roadPoint(roads: Road[], name: RegExp, x: number, z: number, toward: 'n
 main().catch((e) => {
   console.error(e);
   $('loading').textContent = 'Something smudged: ' + (e as Error).message;
+  diag.errors.push('boot: ' + errorLine(e));
+  showReport(diag.glError ? 'WebGL 2 could not start in this browser' : `the boot stopped at "${diag.stage}": ${errorLine(e)}`);
 });

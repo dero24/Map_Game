@@ -25,9 +25,30 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 
 ## Interiors
 
-- `planInterior` works on any polygon (local-frame spans); stair flights get stairwell holes
-  + height-banded rails (`registerPlan`); the on-demand mesh + per-room paint/floor uniforms
-  live in `interiors.ts`, furniture from the `decor.ts` foundry family.
+- Two stages (docs/INTERIORS_PLAN.md, Slice 1 "rooms, not halls"):
+  - Stage A, `interior/plan.ts` `planInterior` (tile worker, in `BuiltTile`): the shell — storeys,
+    real stairs (domestic riser ≤ 0.196 m, going 0.26; office ≤ 0.178 / 0.28; straight or dogleg)
+    with stairwell holes, a house's hall strip, a block's corridor by depth (none ≤ 9.1 m,
+    single-loaded to 14, double-loaded on the centreline to 24, a ring round a core beyond), an
+    office's core (15–30% of the plate), flats over a shop. `registerPlan` puts the floors, flights,
+    landings and stair walls into the tile's collision scope.
+  - Stage B, `interior/layout.ts` `layoutSteps`/`layoutInterior` (on activation, a storey a step):
+    rooms as rectangles per family (a house's rooms off its hall, a block's flats — hall, bath,
+    kitchen inboard, living room and bedrooms on the facade — off corridor or landing, an office's
+    core pieces, meeting rooms and desk benches, a shop's back of house), walls where rooms of
+    different spaces meet, doors (0.9 into a flat, 0.8 inside, ≥ 0.3 from corners, clear of the
+    stairs), every room reachable from the front door. Partitions only meet the facade between
+    windows (`endOK` mirrors the shader's `windowAt`). `registerLayout` puts exactly the drawn walls
+    into the interior's own collision scope (−7, `WalkWorld.withScope`; dropped with a purge on
+    leaving) — never onto the walker: a wall within 0.45 m of them gets a doorway where they stand.
+  - `interior/mesh.ts` (chunked vertex streams, the shell, stairs, partitions with cased doorways,
+    the room map — a texture of which room each floor/wall point is in, painted per room by the
+    shader — and the instancer: a repeated piece is one InstancedMesh tinted per instance; its
+    white and white-shaded grey parts take the tint) and `interior/furnish.ts` (furniture by room
+    type) build the mesh as generator steps the pump runs ≤ 3.5 ms a frame. Piece keys must fully
+    determine their geometry (the piece cache is shared across builds).
+  - Budgets (`tests/interiorBudget.test.ts`): no step over 8 ms, ≤ 120k vertices (a house 40k),
+    ≤ 60 draws; layout rules in `tests/interiorLayout.test.ts`; `npx tsx tools/bench-interiors.mts`.
 - Ground-floor role follows the business (`useOf`): café (counter, pastry case, bistro sets),
   diner for restaurants/bars (vinyl booths, counter + stools, menu board), office/civic (desks,
   monitors, office chairs), shop for groceries (stocked gondolas).
@@ -83,7 +104,7 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   - `kit.ts`: cars (+ gear), boats, planes, rocks;
   - `flora.ts`: 7 tree species × 3 variants (`treeMeta` gives real dims), 12 garden species with growth stages, `plantMix`, `inBloom`;
   - `fauna.ts`: 9 animals (incl. red fox, red-tailed hawk) on one jointed body plan + `birdGeometry` + `critterMaterial`;
-  - `decor.ts`: the furniture family for interiors and terraces (sofa, armchair, bed, tables, chairs, bistro and office chairs, monitor, lamps, café counter, booth, stocked shelves, plants, ceiling fan, storage bench, `cafeSet`), rounded boxes (one bevel segment; plain boxes under 1.5 cm radius) and tapered legs, merged by `mergeDecor` or placed by `piece()` in `interiors.ts`; per-piece vertex budgets in `tests/foundry.test.ts` (a sofa < 4000, a chair < 1500);
+  - `decor.ts`: the furniture family for interiors and terraces (sofa, armchair, bed, tables, chairs, bistro and office chairs, monitor, lamps, café counter, booth, stocked shelves, plants, ceiling fan, storage bench, `cafeSet`), rounded boxes (one bevel segment; plain boxes under 1.5 cm radius) and tapered legs, merged by `mergeDecor` or instanced by `interior/mesh.ts`, plus the plain-box pieces planned rooms repeat (kitchen run, workstation, door frame and leaf, WC, vanity, bath, wardrobe, dresser, bookcase, gondola, washer, lift doors, mailboxes, racking, range); per-piece vertex budgets in `tests/foundry.test.ts` (a sofa < 4000, a chair < 1500);
   - `people.ts`: one jointed person (~1.4k verts) for walkers and residents. Skin, hair and trouser palettes, 5 hairstyles, shorts/sleeves by `warmthFor(climate, month)` — all chosen per instance in the shader (`PEOPLE` define in `creatureMaterial`, marker vertex colours `MARK`), so a crowd is one draw;
   - `furniture.ts`: mailboxes, beach set, picnic table, car gear + `gearFor`.
 - Lot dressing (NA): `buildings.ts` lays a generated drive (a 2.9 m strip in `walks`) beside the front walk where the map has no service way near the door, and emits `drives`; `props.ts` parks a car at the house end (never on paved ground or the sidewalk strip). Doors also get hedges or `fence:picket` runs.
@@ -114,6 +135,19 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
 - Capture mode keeps regression shots fully painted unless `?sketch=1`.
 - Reveal radius grows with eye height (`revealRadius`), so flying paints wide.
   `paintedBefore(x,z)` reads the saved block, which is how an arrival card knows a first visit.
+- Far cells: 64 m (8×8 fine cells), 32×32 to a block, keyed `f:bx,by` in the same store; each
+  holds what photos painted there and the painted share of its fine cells (kept up as you walk and
+  as blocks load). They feed the far window (`farTexture`, filled only while `explore.far` —
+  main sets it with the far sketch). `valueAt` is walked or photo-painted, so the map shows both.
+- Photos paint what they frame (the far sketch only; `ctx.paintView`, called from photo mode's
+  shot): the frame's depth → world points (`render/seen.ts`) → `paintSeen` / `paintSeenSliced`
+  (a slice a frame, ~4 ms). Each sample paints a disc its footprint wide (at least 1.5 cells);
+  neighbours on one surface (`joined`: a smooth ramp in 1/depth, so ground at a grazing angle —
+  not across a silhouette) are filled between; ground running on into the sky as a plane does
+  continues to the sky cut while the terrain keeps it in sight (the sea to the horizon, not a
+  plateau's hidden far side). Nearer than `SEEN_SPLIT` (2 km) it paints 8 m cells, past it far
+  cells, out to `SEEN_REACH` (15 km, level). It blooms in over ~2 s, near first. Walks and
+  `stats()` are untouched by it.
 
 ## The brush (`src/ui/brush.ts`, `src/player/place.ts`) — `docs/GAME_DESIGN.md`
 
@@ -158,7 +192,9 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   - `ride-car:`, `ride-boat:`, `ride-plane:` (player vehicles)
 - `photo.ts`: P frames the view, Space paints a page (the grab happens in `afterRender()`, right
   after `post.render`, so no `preserveDrawingBuffer` is needed), then a caption is added and it is
-  stored via `book.ts` (IndexedDB `map-game-sketchbook`).
+  stored via `book.ts` (IndexedDB `map-game-sketchbook`). With the far sketch on, the same shot
+  paints everything in frame into the world (`ctx.paintView`; toast "painted in what you framed
+  — out to N km").
 - `commissions.ts`: three active offers, generated from what's really near (named footprints, POIs,
   moored boat types) plus scenes (sea at golden hour, fog, sunrise, lamps, rooftops). `judge()`
   checks the camera frame and conditions at shoot time. It also keeps the spotting log and the

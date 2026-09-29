@@ -182,6 +182,24 @@ describe('decor (interior + terrace furniture)', () => {
     ['shelves', D.shelves(1.2, 0.4, 1.8, W, [0xc46a4a, 0x7fa0b8], 7), 2000, [1.2, 0.4], true],
     ['pottedPlant', D.pottedPlant(true), 1500, null, true],
     ['cafeSet', D.cafeSet(0xf1ede4, 0x2a2622, 0x2f4a6a), 2600, null, true],
+    // the pieces a planned interior repeats (docs/INTERIORS_PLAN.md, Slice 1): plain boxes, instanced by the hundred
+    ['kitchenRun', D.kitchenRun(3.9), 800, [3.9, 0.66], true],
+    ['workstation', D.workstation(), 500, [1.6, 1.4], true],
+    ['doorFrame', D.doorFrame(0.9), 200, [1.06, 0.16], true],
+    ['doorLeaf', D.doorLeaf(0.8), 350, [0.8, 0.14], true],
+    ['toilet', D.toilet(), 500, [0.42, 0.66], true],
+    ['vanity', D.vanity(0.7), 300, [0.72, 0.5], true],
+    ['bathtub', D.bathtub(1.7), 200, [1.7, 0.76], true],
+    ['wardrobe', D.wardrobe(1.1), 250, [1.1, 0.62], true],
+    ['dresser', D.dresser(1.1), 800, [1.1, 0.5], true],
+    ['bookcase', D.bookcase(1.0, 12, [0xc46a4a, 0x7fa0b8]), 2600, [1.0, 0.34], true],
+    ['gondola', D.gondola(1.23, 101, [0xc46a4a, 0x7fa0b8]), 2600, [1.23, 0.9], true],
+    ['washer', D.washer(), 200, [0.6, 0.6], true],
+    ['liftDoors', D.liftDoors(), 250, [1.3, 0.12], true],
+    ['mailboxes', D.mailboxes(1.6), 1000, [1.6, 0.31], true],
+    ['rack', D.rack(2.4), 900, [2.4, 0.6], true],
+    ['range', D.range(), 400, [1.2, 0.8], true],
+    ['ceilingLight', D.ceilingLight(0.6, 0.24, 0.05), 100, [0.6, 0.24], false],
   ];
   it('every piece is valid, grounded, within its footprint and its vertex budget', () => {
     for (const [name, parts, budget, fp, floor] of cases) {
@@ -207,6 +225,15 @@ describe('decor (interior + terrace furniture)', () => {
     const pos = (seed: number) => D.mergeDecor(D.shelves(1.2, 0.4, 1.8, W, [0xc46a4a, 0x7fa0b8], seed)).getAttribute('position').array;
     expect(Array.from(pos(7))).toEqual(Array.from(pos(7)));
     expect(Array.from(pos(7))).not.toEqual(Array.from(pos(8)));
+    // (a bookcase's books and a gondola's stock too — and never past their budgets, whatever the seed)
+    const n = (p: D.DecorPart[]) => p.reduce((a, q) => a + verts(q.g), 0);
+    for (let seed = 0; seed < 64; seed++) {
+      expect(n(D.bookcase(1.0, seed, [0xc46a4a, 0x7fa0b8]))).toBeLessThan(2600);
+      expect(n(D.gondola(1.23, seed, [0xc46a4a, 0x7fa0b8]))).toBeLessThan(2600);
+    }
+    const books = (seed: number) => D.mergeDecor(D.bookcase(1.0, seed, [0xc46a4a, 0x7fa0b8])).getAttribute('position').array;
+    expect(Array.from(books(11))).toEqual(Array.from(books(11)));
+    expect(Array.from(books(11))).not.toEqual(Array.from(books(12)));
   });
   it('a café set seats two across its table; mergeDecor bakes vertex colour', () => {
     const set = D.cafeSet(0xf1ede4, 0x2a2622, null);

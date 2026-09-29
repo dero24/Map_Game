@@ -1,6 +1,6 @@
 # Interiors v2 — rooms, cores and towers that scale with the map
 
-Status: planned, on the back burner (backlog R.31). Written 2026-09-28 from a read of `interiors.ts`, `buildings.ts`, `realTile.ts` and the numbers below.
+Status: Slice 1 (rooms, not halls) built 2026-09-29 — `src/world/interior/{plan,layout,mesh,furnish}.ts`, tests `interiorLayout` and `interiorBudget`; results under the table in §1. Slices 2–5 planned (backlog R.31). Written 2026-09-28 from a read of `interiors.ts`, `buildings.ts`, `realTile.ts` and the numbers below.
 
 Goal: real room scale and variety in every building, bungalow to 40-storey tower, derived from the map data we carry, on a phone budget.
 
@@ -17,6 +17,18 @@ Measured by [`tools/bench-interiors.mts`](../tools/bench-interiors.mts) (`planIn
 | Tower 40×40 m, 150 m | 4/39 | 4 | 596 m² | 286k (22) | 57 ms |
 | Untagged "hotel" 60×18 m | 4/7 | 3 (as a restaurant) | 449 m² | 370k (28) | 210 ms |
 | Supermarket 60×40 m | 1/1 | 1 | 2,400 m² | 1.11 M (84) | 1,198 ms |
+
+After Slice 1 (the same bench, 2026-09-29; the worst step is now CPU time, the median of five builds after a warm-up — the activation's layout, collision and mesh all as pump steps; the old code measured that way: 47–74 ms for the house, apartments, office and tower, 267 ms for the "hotel", 1,243 ms for the supermarket, in 2–3 draws):
+
+| Footprint | Rooms per storey | Largest room | Vertices (MB) | Draws | Worst step |
+|---|---|---|---|---|---|
+| House 12×8 m, 2 storeys | 5, 4 (+ hall, landing) | 34 m² | 30k (2.3) | 17 | 1.0 ms |
+| Houses 9–16 × 7–10 m (40 door spots each) | 3–6 in 320/320 | – | – | – | – |
+| Apartments 45×16 m, 19.5 m | 39–41 (10–11 flats) | 33 m² | 60k (4.6) | 41 | 1.2 ms |
+| Office 60×30 m, 31 m | 11–12 + open plan, 839 desks | 24 m² | 20k (1.5) | 19 | 0.9 ms |
+| Tower 40×40 m, 150 m | 9–10 + open plan, 914 desks | 30 m² | 19k (1.4) | 19 | 0.9 ms |
+| Untagged "hotel" 60×18 m | a shop, then 61 (flats) | 40 m² | 65k (4.9) | 47 | 0.9 ms |
+| Supermarket 60×40 m | sales floor + 6 back rooms | 79 m² | 12k (0.9) | 12 | 0.8 ms |
 
 Causes (`interiors.ts` line numbers unless noted):
 

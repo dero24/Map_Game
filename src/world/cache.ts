@@ -6,13 +6,24 @@
 import { openDB, type IDBPDatabase } from 'idb';
 import type { AtlasManifest } from './data';
 
-let dbp: Promise<IDBPDatabase> | null = null;
+// null = no cache this session: IndexedDB missing, refused (private modes, in-app browsers) or
+// hung (Safari has shipped an open() that never settles) — everything still loads, uncached.
+let dbp: Promise<IDBPDatabase | null> | null = null;
 const db = () =>
-  (dbp ??= openDB('map-game', 1, {
-    upgrade(d) {
-      d.createObjectStore('files');
-    },
-  }));
+  (dbp ??= (async () => {
+    try {
+      if (typeof indexedDB === 'undefined') return null;
+      const open = openDB('map-game', 1, {
+        upgrade(d) {
+          d.createObjectStore('files');
+        },
+      });
+      return await Promise.race([open, new Promise<null>((res) => setTimeout(() => res(null), 5000))]);
+    } catch (e) {
+      console.warn('tile cache unavailable', e);
+      return null;
+    }
+  })());
 
 // A bake fingerprint: any change to tiles, cell, terrain layouts or slice makes every cached
 // payload stale. Small enough to compute once per session.
@@ -57,6 +68,7 @@ export function initCache(base: string, fp: string) {
     // fingerprint, so a stale key can never hit regardless of when this finishes.
     try {
       const d = await db();
+      if (!d) return;
       const keys = (await d.getAllKeys('files')) as string[];
       const tx = d.transaction('files', 'readwrite');
       let n = 0;
@@ -73,11 +85,21 @@ export function initCache(base: string, fp: string) {
 export async function cachedFetch(url: string): Promise<ArrayBuffer> {
   if (!prefix) return get(url);
   const d = await db();
+  if (!d) return get(url);
   const key = prefix + url;
-  const hit = (await d.get('files', key)) as ArrayBuffer | undefined;
+  let hit: ArrayBuffer | undefined;
+  try {
+    hit = (await d.get('files', key)) as ArrayBuffer | undefined;
+  } catch (e) {
+    console.warn('tile cache read failed', e);
+  }
   if (hit) return hit; // a fresh structured clone — safe to transfer/detach downstream
   const buf = await get(url);
-  void d.put('files', buf, key).catch((e) => console.warn('tile cache put failed', e));
+  try {
+    void d.put('files', buf, key).catch((e) => console.warn('tile cache put failed', e));
+  } catch (e) {
+    console.warn('tile cache put failed', e);
+  }
   return buf;
 }
 
@@ -90,14 +112,14 @@ export async function cachedFetchJson(url: string): Promise<unknown> {
 // silent — this is a cache, the caller recomputes.
 export async function kvGet<T>(key: string): Promise<T | undefined> {
   try {
-    return (await (await db()).get('files', key)) as T | undefined;
+    return (await (await db())?.get('files', key)) as T | undefined;
   } catch {
     return undefined;
   }
 }
 export async function kvPut(key: string, v: unknown): Promise<void> {
   try {
-    await (await db()).put('files', v, key);
+    await (await db())?.put('files', v, key);
   } catch (e) {
     console.warn('kv put failed', e);
   }

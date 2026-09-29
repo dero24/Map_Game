@@ -1,0 +1,1069 @@
+// Interiors, Stage B — rooms, walls and doors (docs/INTERIORS_PLAN.md §3). A pure function of the
+// Stage A plan, run on the main thread when a building activates. Every storey is tiled with
+// rectangles by the building's family — a house's hall with living rooms and bedrooms off it, a
+// block's corridor with flats (hall, bath and kitchen inboard, living room and bedrooms on the
+// facade), an office's core with open plan round it, a shop's back of house. Walls go where two
+// rooms of different spaces meet, and only reach the facade between windows; doors (0.9 m into a
+// flat, 0.8 m inside, ≥ 0.3 m from corners) keep clear of the stairs; every room is reachable
+// from the front door, and the collision world gets exactly the walls that are drawn.
+import type { Footprint } from '../buildings';
+import type { WalkWorld } from '../../player/collision';
+import { makeRng, type Rng } from '../../core/rng';
+import { useOf } from '../uses';
+import { endOK, LocalPoly, rectArea, toW, type Band, type Plan, type Rect, type WinModel } from './plan';
+
+export type RoomType =
+  | 'hall' | 'landing' | 'corridor' | 'lobby' | 'stair'
+  | 'living' | 'kitchen' | 'dining' | 'wc' | 'bath' | 'bed' | 'study' | 'utility' | 'closet' | 'store'
+  | 'open' | 'meeting' | 'lift'
+  | 'shop' | 'stock' | 'cafe' | 'bar' | 'diner' | 'galley' | 'church' | 'great';
+
+export interface Room {
+  id: number;
+  r: Rect;
+  type: RoomType;
+  level: number;
+  space: number; // rooms of one space have no walls between them (an open plan, a corridor and its lobby)
+  unit: number; // the flat it belongs to (-1: none)
+  bed?: 1 | 2; // single / double
+}
+/** A partition on storey `level`: along u (ax 0) at v = c, or along v (ax 1) at u = c, from a to b. */
+export interface Wall { level: number; ax: 0 | 1; c: number; a: number; b: number; gaps: [number, number][]; rooms: [number, number] }
+/** A doorway in a wall: centre t along it, width w. `front`: a flat's own front door. */
+export interface Doorway { level: number; ax: 0 | 1; c: number; t: number; w: number; rooms: [number, number]; front?: boolean }
+/** A workstation: its desk centre, facing (0 +u, 1 −u, 2 +v, 3 −v: the way the sitter looks). */
+export interface Desk { u: number; v: number; level: number; face: 0 | 1 | 2 | 3 }
+export interface Layout { rooms: Room[]; walls: Wall[]; doors: Doorway[]; desks: Desk[]; entry: number; trimmed: number }
+
+const EPS = 1e-6;
+const overlap = (a0: number, a1: number, b0: number, b1: number) => Math.min(a1, b1) - Math.max(a0, b0);
+const hitR = (a: Rect, b: Rect, m = 0) => a.u0 < b.u1 + m && a.u1 > b.u0 - m && a.v0 < b.v1 + m && a.v1 > b.v0 - m;
+const grow = (r: Rect, m: number): Rect => ({ u0: r.u0 - m, u1: r.u1 + m, v0: r.v0 - m, v1: r.v1 + m });
+/** r minus s, as up to four rectangles. */
+function minus(r: Rect, s: Rect): Rect[] {
+  if (!hitR(r, s)) return [r];
+  const out: Rect[] = [];
+  if (s.u0 > r.u0 + EPS) out.push({ ...r, u1: s.u0 });
+  if (s.u1 < r.u1 - EPS) out.push({ ...r, u0: s.u1 });
+  const u0 = Math.max(r.u0, s.u0), u1 = Math.min(r.u1, s.u1);
+  if (s.v0 > r.v0 + EPS) out.push({ u0, u1, v0: r.v0, v1: s.v0 });
+  if (s.v1 < r.v1 - EPS) out.push({ u0, u1, v0: s.v1, v1: r.v1 });
+  return out.filter((q) => q.u1 - q.u0 > 0.05 && q.v1 - q.v0 > 0.05);
+}
+/** A rect in (along s on axis ax, depth d on the other axis) coordinates. */
+const RS = (ax: 0 | 1, s0: number, s1: number, d0: number, d1: number): Rect =>
+  ax === 0 ? { u0: Math.min(s0, s1), u1: Math.max(s0, s1), v0: Math.min(d0, d1), v1: Math.max(d0, d1) } : { u0: Math.min(d0, d1), u1: Math.max(d0, d1), v0: Math.min(s0, s1), v1: Math.max(s0, s1) };
+
+interface Link { a: number; b: number; w: number; pref?: number; front?: boolean; wide?: boolean }
+
+class Builder {
+  rooms: Room[] = [];
+  links: Link[] = [];
+  desks: Desk[] = [];
+  private sp = 0;
+  private unitN = 0;
+  readonly LP: LocalPoly;
+  readonly M: WinModel;
+  constructor(readonly P: Plan, readonly fp: Footprint, readonly rng: Rng) {
+    this.LP = new LocalPoly(P.loc);
+    this.M = { kind: P.kind, eave: fp.eave, fo: fp.floor0 - fp.base };
+  }
+  space() { return ++this.sp; }
+  unit() { return this.unitN++; }
+  add(r: Rect, type: RoomType, level: number, o: { space?: number; unit?: number; bed?: 1 | 2 } = {}) {
+    const id = this.rooms.length;
+    this.rooms.push({ id, r: { ...r }, type, level, space: o.space ?? this.space(), unit: o.unit ?? -1, ...(o.bed ? { bed: o.bed } : {}) });
+    return id;
+  }
+  link(a: number, b: number, w = 0.8, o: { pref?: number; front?: boolean; wide?: boolean } = {}) {
+    if (a < 0 || b < 0 || a === b) return;
+    this.links.push({ a, b, w, ...o });
+  }
+  /** Stairs on storey k (flights, landings and the openings that arrive on it), grown by m. */
+  keep(k: number, m = 0.1): Rect[] {
+    const P = this.P, out: Rect[] = [];
+    for (const F of P.flights) if (F.level === k) out.push(grow(F, m));
+    for (const L of P.landings) if (L.level === k) out.push(grow(L, m));
+    for (const H of P.holes) if (H.level === k) out.push(grow(H, m));
+    return out;
+  }
+  /** A wall at `pos` on axis ax (so it runs along the other axis) ending at depth d heading dir:
+   *  clear of the windows on storey k? */
+  cutOK(k: number, ax: 0 | 1, pos: number, d: number, dir: -1 | 1) {
+    return ax === 0 ? endOK(this.LP, this.M, k, pos, d, 0, dir) : endOK(this.LP, this.M, k, d, pos, dir, 0);
+  }
+  /** The position nearest `want` in [lo, hi] (steps of 0.05) where cutOK holds for every end. */
+  cut(k: number, ax: 0 | 1, want: number, lo: number, hi: number, ends: [number, -1 | 1][]): number | null {
+    if (lo > hi + EPS) return null;
+    want = Math.max(lo, Math.min(hi, want));
+    for (let o = 0; o <= hi - lo + 0.051; o += 0.05) {
+      if (want + o <= hi + EPS && this.endsOK(k, ax, want + o, ends)) return want + o;
+      if (o > 0 && want - o >= lo - EPS && this.endsOK(k, ax, want - o, ends)) return want - o;
+    }
+    return null;
+  }
+  private endsOK(k: number, ax: 0 | 1, p: number, ends: [number, -1 | 1][]) {
+    for (const [d, dir] of ends) if (!this.cutOK(k, ax, p, d, dir)) return false;
+    return true;
+  }
+  /** Is side (u0/u1/v0/v1) of rect r on the facade? */
+  onFacade(r: Rect, side: 'u0' | 'u1' | 'v0' | 'v1') {
+    const m = 0.25;
+    const [u, v] = side === 'u0' ? [r.u0 - m, (r.v0 + r.v1) / 2] : side === 'u1' ? [r.u1 + m, (r.v0 + r.v1) / 2] : side === 'v0' ? [(r.u0 + r.u1) / 2, r.v0 - m] : [(r.u0 + r.u1) / 2, r.v1 + m];
+    return !this.LP.inside(u, v);
+  }
+}
+
+// ---------------- houses ----------------
+type Prog = 'living' | 'kitchen' | 'dining' | 'wc' | 'bath' | 'bed' | 'study' | 'utility' | 'closet';
+const BED_D = { a: 11.5, w: 2.75 }, BED_S = { a: 7.5, w: 2.15 };
+const minW = (r: Rect) => Math.min(r.u1 - r.u0, r.v1 - r.v0);
+
+function houseStorey(B: Builder, k: number) {
+  const P = B.P, M = P.main, S = P.strip!, rng = B.rng;
+  const n = P.levels;
+  const lane = P.lane;
+  const laneLow = lane ? lane.v0 + lane.v1 < S.v0 + S.v1 : true;
+  const keep = B.keep(k, 0.12);
+  // a wet room in the hall's back end, behind the stair (a WC under the landing, the bathroom
+  // above it) — tight behind the stair, or a step further back so a room beside it has a door
+  const sType: Prog = n === 1 ? 'bath' : k === 0 ? 'wc' : 'bath';
+  const svcs: (Rect | null)[] = [null];
+  if (lane) {
+    const dog = P.flights.some((F) => F.lo !== undefined && F.lo > 0);
+    const offs = k === 0 || dog ? [0.12, 1.3] : [1.0, 1.5];
+    for (const off of offs) {
+      let u0 = lane.u1 + off;
+      // (with the hall against the outside wall, the wet room's front wall meets it: between windows)
+      const extLo = S.v0 <= M.v0 + 0.01, extHi = S.v1 >= M.v1 - 0.01;
+      if ((laneLow && extLo) || (!laneLow && extHi)) {
+        const c = B.cut(k, 0, u0, u0, u0 + 1.2, [[laneLow ? M.v0 + 0.05 : M.v1 - 0.05, laneLow ? -1 : 1]]);
+        if (c === null) continue;
+        u0 = c;
+      }
+      const len = M.u1 - u0;
+      if (len < (sType === 'wc' ? 1.45 : 2.0)) continue;
+      // its long wall faces the passage: on the back wall's piers, the passage ≥ 0.9 wide
+      const lo = S.v0 + (laneLow ? 0.95 : 0.9), hi = S.v1 - (laneLow ? 0.9 : 0.95);
+      const want = laneLow ? lane.v1 + 0.05 : lane.v0 - 0.05;
+      const x = B.cut(k, 1, want, lo, hi, [[M.u1 - 0.05, 1]]);
+      if (x === null) continue;
+      const r = laneLow ? { u0, u1: M.u1, v0: S.v0, v1: x } : { u0, u1: M.u1, v0: x, v1: S.v1 };
+      if (rectArea(r) >= (sType === 'wc' ? 1.3 : 3.2) && minW(r) >= 0.95) svcs.push(r);
+    }
+  }
+  if (lane) {
+    // a hall grown wide over a sliver of side: the wet room along the passage, beside the stair
+    const passW = laneLow ? S.v1 - lane.v1 : lane.v0 - S.v0;
+    const need = sType === 'wc' ? 1.3 : 3.2;
+    if (passW >= 2.05) {
+      const d = Math.min(1.6, passW - 0.95);
+      const len = Math.max(1.5, need / d);
+      const u0 = lane.u0 + 0.4, u1 = Math.min(lane.u1 + 0.4, u0 + len);
+      if (u1 - u0 >= 1.45 && (u1 - u0) * d >= need) svcs.push(laneLow ? { u0, u1, v0: S.v1 - d, v1: S.v1 } : { u0, u1, v0: S.v0, v1: S.v0 + d });
+    }
+  } else if (n === 1 && M.u1 - M.u0 > 6) {
+    // a single storey: the bathroom closes the hall's far end (its wall between windows where the
+    // hall runs along an outside wall)
+    let u0: number | null = M.u1 - Math.max(2.2, 3.4 / Math.max(0.9, S.v1 - S.v0));
+    const ends: [number, -1 | 1][] = [];
+    if (S.v0 <= M.v0 + 0.01) ends.push([M.v0 + 0.05, -1]);
+    if (S.v1 >= M.v1 - 0.01) ends.push([M.v1 - 0.05, 1]);
+    if (ends.length) u0 = B.cut(k, 0, u0, u0 - 1.4, u0 + 0.4, ends);
+    if (u0 !== null && u0 > M.u0 + 3 && M.u1 - u0 >= 1.8) svcs.push({ u0, u1: M.u1, v0: S.v0, v1: S.v1 });
+  }
+  // the sides of the hall, split into rooms at window-cell boundaries
+  const sides: { r: Rect; low: boolean }[] = [];
+  if (S.v0 - M.v0 > 0.5) sides.push({ r: { u0: M.u0, u1: M.u1, v0: M.v0, v1: S.v0 }, low: true });
+  if (M.v1 - S.v1 > 0.5) sides.push({ r: { u0: M.u0, u1: M.u1, v0: S.v1, v1: M.v1 }, low: false });
+  const splitsOf = (sd: { r: Rect; low: boolean }): Rect[][] => {
+    const r = sd.r, d = sd.low ? M.v0 + 0.05 : M.v1 - 0.05, dir: -1 | 1 = sd.low ? -1 : 1;
+    const len = r.u1 - r.u0;
+    const out: Rect[][] = [[r]];
+    const at = (x: number, lo: number, hi: number) => B.cut(k, 0, x, lo, hi, [[d, dir]]);
+    const seen = new Set<string>();
+    const push = (cs: number[]) => {
+      const key = cs.map((c) => Math.round(c * 10)).join(',');
+      if (seen.has(key)) return;
+      seen.add(key);
+      const b = [r.u0, ...cs, r.u1];
+      out.push(b.slice(0, -1).map((u0, i) => ({ ...r, u0, u1: b[i + 1] })));
+    };
+    for (const f of [0.5, 0.42, 0.58, 0.35, 0.65]) {
+      const c = at(r.u0 + len * f, r.u0 + 2.2, r.u1 - 2.2);
+      if (c !== null) push([c]);
+    }
+    if (len >= 6.0 && r.v1 - r.v0 >= 2.2) {
+      // three rooms; the middle one may be a narrow wet room or study (≥ 1.6 m)
+      for (const [f1, f2] of [[1 / 3, 2 / 3], [0.3, 0.62], [0.38, 0.7], [0.36, 0.6]]) {
+        const c1 = at(r.u0 + len * f1, r.u0 + 2.2, r.u1 - 3.8);
+        if (c1 === null) continue;
+        const c2 = at(Math.max(c1 + 1.6, r.u0 + len * f2), c1 + 1.6, r.u1 - 2.2);
+        if (c2 !== null) push([c1, c2]);
+      }
+    }
+    return out;
+  };
+  const opts = sides.map(splitsOf);
+  const combos: Rect[][][] = sides.length === 0 ? [[]] : sides.length === 1 ? opts[0].map((o) => [o]) : opts[0].flatMap((a) => opts[1].map((b) => [a, b]));
+  type Cand = { rooms: { r: Rect; low: boolean; t: Prog; hall: number }[]; s: number; svc: Rect | null };
+  let best: Cand | null = null;
+  for (const svc of svcs) {
+    const hallRects = svc ? minus(S, svc) : [S];
+    // the hall's edge along a room where a door fits (not along the stair or the wet room)
+    const free = (lowSide: boolean, r: Rect): number => {
+      const v = lowSide ? S.v0 : S.v1;
+      let most = 0;
+      for (const h of hallRects) {
+        if ((lowSide ? Math.abs(h.v0 - v) : Math.abs(h.v1 - v)) > 0.05) continue;
+        let segs: [number, number][] = [[Math.max(h.u0, r.u0) + 0.3, Math.min(h.u1, r.u1) - 0.3]];
+        for (const K of keep) {
+          if (!(K.v0 < v + 0.75 && K.v1 > v - 0.75)) continue;
+          segs = segs.flatMap(([s0, s1]) => (K.u1 <= s0 || K.u0 >= s1 ? [[s0, s1]] : [[s0, K.u0], [K.u1, s1]]) as [number, number][]);
+        }
+        for (const [s0, s1] of segs) most = Math.max(most, s1 - s0);
+      }
+      return most;
+    };
+    // (the same side rectangles recur across combinations: their door stretch once each)
+    const seen = new Map<Rect, number>();
+    const freeOf = (low: boolean, r: Rect) => {
+      let x = seen.get(r);
+      if (x === undefined) seen.set(r, (x = free(low, r)));
+      return x;
+    };
+    for (const combo of combos) {
+      const rs = combo.flatMap((parts, si) => parts.map((r) => ({ r, low: sides[si].low, hall: freeOf(sides[si].low, r) })));
+      const c = assign(rs, k, n, !!svc);
+      const sc = c.s + rng.float() * 0.4;
+      if (!best || sc < best.s) best = { rooms: c.rooms, s: sc, svc };
+    }
+  }
+  const svc = best?.svc ?? null;
+  const hallSpace = B.space();
+  const hallIds = (svc ? minus(S, svc) : [S]).map((r) => B.add(r, k === 0 ? 'hall' : 'landing', k, { space: hallSpace }));
+  let living = -1, kitchen = -1;
+  for (const q of best?.rooms ?? []) {
+    const bed = q.t === 'bed' ? (rectArea(q.r) >= BED_D.a && minW(q.r) >= BED_D.w ? 2 : 1) : undefined;
+    const id = B.add(q.r, q.t, k, bed ? { bed } : {});
+    if (q.t === 'living') living = id;
+    if (q.t === 'kitchen') kitchen = id;
+    const w = q.t === 'living' || q.t === 'kitchen' || q.t === 'dining' ? 0.9 : 0.8;
+    if (q.hall >= 0.8) for (const h of hallIds) B.link(h, id, q.hall >= w ? w : 0.8);
+  }
+  if (svc) {
+    const id = B.add(svc, sType, k);
+    for (const h of hallIds) B.link(h, id, 0.8);
+  }
+  // an open kitchen: a wide opening to the living room when they're side by side
+  if (living >= 0 && kitchen >= 0 && rng.float() < 0.55) B.link(living, kitchen, 1.4, { wide: true });
+  // (rooms the hall can't reach open off a neighbour: the reachability pass adds those doors)
+}
+
+type Slot = { r: Rect; low: boolean; hall: number; a: number };
+/** The best-scoring slot that passes `pred`, taken out of `left`. */
+function take(left: Slot[], pred: (q: Slot) => boolean, score: (q: Slot) => number): Slot | null {
+  let bi = -1, bs = Infinity;
+  for (let i = 0; i < left.length; i++) if (pred(left[i])) { const v = score(left[i]); if (v < bs) (bs = v), (bi = i); }
+  return bi >= 0 ? left.splice(bi, 1)[0] : null;
+}
+const ratio = (r: Rect) => Math.max(r.u1 - r.u0, r.v1 - r.v0) / Math.max(0.1, minW(r));
+const reach = (q: { hall: number }) => q.hall >= 0.8;
+
+/** Give a storey's rooms their program, scored against real proportions. */
+function assign(rs: { r: Rect; low: boolean; hall: number }[], k: number, n: number, service: boolean) {
+  const out: { r: Rect; low: boolean; t: Prog; hall: number }[] = [];
+  let s = 0;
+  const left: Slot[] = rs.map((q) => ({ ...q, a: rectArea(q.r) })).sort((x, y) => y.a - x.a);
+  if (k === 0 || n === 1) {
+    // (in a small house, the best room there is — a tight living room beats none)
+    const liv = take(left, (q) => q.a >= 10 && minW(q.r) >= 2.9, (q) => -q.a * (reach(q) ? 1 : 0.6) + q.r.u0 * 0.4) ?? take(left, (q) => q.a >= 7 && minW(q.r) >= 2.3, (q) => -q.a * (reach(q) ? 1 : 0.6));
+    if (liv) {
+      out.push({ ...liv, t: 'living' });
+      s += liv.a > 42 ? (liv.a - 42) * 0.08 : 0;
+      s += reach(liv) ? 0 : 1.5;
+      if (liv.a < 10 || minW(liv.r) < 2.9) s += 3;
+    } else s += 9;
+    const kit = take(left, (q) => q.a >= 6 && minW(q.r) >= 2.2, (q) => -q.a - q.r.u1 * 0.3);
+    if (kit) out.push({ ...kit, t: 'kitchen' }); else s += 5;
+    if (!service) {
+      if (n > 1) {
+        // a WC in a small room off the hall, else none downstairs
+        const wc = take(left, (q) => q.a >= 1.3 && q.a <= 7 && reach(q), (q) => q.a);
+        if (wc) out.push({ ...wc, t: 'wc' }); else s += 1.2;
+      }
+      if (n === 1) {
+        const ba = take(left, (q) => q.a >= 3.2 && q.a <= 9 && reach(q), (q) => q.a);
+        if (ba) out.push({ ...ba, t: 'bath' }); else s += 5;
+      }
+    }
+  }
+  if (k > 0 || n === 1) {
+    if (!service && k > 0) {
+      const ba = take(left, (q) => q.a >= 3.2 && reach(q), (q) => q.a);
+      if (ba) out.push({ ...ba, t: 'bath' }); else s += 5;
+    }
+    let beds = 0;
+    for (;;) {
+      const b = take(left, (q) => q.a >= BED_S.a && minW(q.r) >= BED_S.w, (q) => (reach(q) ? 0 : 50) - q.a);
+      if (!b) break;
+      out.push({ ...b, t: 'bed' });
+      beds++;
+      if (!reach(b)) s += 2.5;
+    }
+    if (k > 0 && beds === 0) s += 12;
+    else if (k > 0 && beds === 1) s += 2;
+    if (n === 1 && beds === 0) s += 8;
+    else if (n === 1 && beds === 1 && rs.reduce((t, q) => t + rectArea(q.r), 0) > 70) s += 2.5;
+  }
+  // whatever's left: a dining room, a study, a guest bedroom, a utility room or a closet
+  for (const q of left) {
+    const t: Prog = k === 0 && n > 1 && q.a >= 7 && !out.some((o) => o.t === 'dining') ? 'dining'
+      : q.a >= 4.5 && !out.some((o) => o.t === 'study') ? 'study'
+        : q.a >= BED_S.a && minW(q.r) >= BED_S.w ? 'bed'
+          : q.a >= 2 ? 'utility' : 'closet';
+    out.push({ ...q, t });
+    if (t === 'closet') s += 0.5;
+  }
+  const count = out.length + (service ? 1 : 0);
+  if (count < 3) s += 6 * (3 - count);
+  if (count > 6) s += count - 6;
+  for (const q of out) {
+    const rr = ratio(q.r);
+    if (rr > 2.4) s += (rr - 2.4) * 1.2;
+    const qa = rectArea(q.r), lim = q.t === 'kitchen' ? 28 : 30;
+    if (q.t !== 'living' && qa > lim) s += (qa - lim) * 0.12;
+  }
+  return { rooms: out, s };
+}
+
+// ---------------- flats ----------------
+/** Fill a stretch [a, b] of band B with flats; returns their front doors' rooms. */
+function fillBand(B: Builder, k: number, band: Band, a: number, b: number, corrIds: number[], typical: Map<string, number[]>, range?: [number, number]) {
+  const P = B.P;
+  const bd0 = band.ax ? band.r.u0 : band.r.v0, bd1 = band.ax ? band.r.u1 : band.r.v1;
+  const facade = band.side < 0 ? bd1 - 0.05 : bd0 + 0.05, fdir: -1 | 1 = band.side < 0 ? 1 : -1;
+  const s0 = band.ax ? band.r.v0 : band.r.u0, s1 = band.ax ? band.r.v1 : band.r.u1;
+  // unit boundaries: a seeded mix of studios (5.0 m), one-beds (7.2) and two-beds (10.5), the
+  // corner flats the largest, every party wall between windows. Typical storeys share them.
+  const key = `${band.r.u0.toFixed(2)},${band.r.v0.toFixed(2)},${a.toFixed(2)},${b.toFixed(2)},${k === 0 ? 0 : 1}`;
+  let cuts = typical.get(key);
+  if (!cuts) {
+    const rng = makeRng((P.seed ^ Math.round(a * 97) ^ Math.round(bd0 * 131)) >>> 0);
+    cuts = [a];
+    let x = a;
+    const len = b - a;
+    if (band.one || len < 9) cuts.push(b);
+    else {
+      for (let i = 0; x < b - 0.01; i++) {
+        const corner = (x <= s0 + 0.1 && i === 0) || false;
+        const r = rng.float();
+        const w = corner ? 10.5 : r < 0.25 ? 5.0 : r < 0.7 ? 7.2 : 10.5;
+        if (b - x < w + 4.2) { cuts.push(b); break; }
+        const c = B.cut(k, band.ax, x + w, x + Math.max(3.6, w - 0.8), Math.min(b - 3.6, x + w + 0.8), [[facade, fdir]]);
+        if (c === null) { cuts.push(b); break; }
+        cuts.push(c);
+        x = c;
+      }
+      // (the band's last flat is a corner one: grow it over a short neighbour)
+      if (cuts.length > 2 && b >= s1 - 0.1 && cuts[cuts.length - 1] - cuts[cuts.length - 2] < 6) cuts.splice(cuts.length - 2, 1);
+    }
+    typical.set(key, cuts);
+  }
+  for (let i = 0; i + 1 < cuts.length; i++) {
+    const r = RS(band.ax, cuts[i], cuts[i + 1], bd0, bd1);
+    if ((cuts[i + 1] - cuts[i]) < 3.2) {
+      // too narrow for a flat: a store off the corridor
+      const id = B.add(r, 'store', k);
+      for (const c of corrIds) B.link(c, id, 0.9);
+      continue;
+    }
+    flat(B, k, r, band.ax, band.side, corrIds, range);
+  }
+}
+
+/** A flat in rect r, entered from its `side` edge (on the axis across `ax`): hall, bath and kitchen
+ *  inboard; the living room and bedrooms on the facade. `range`: where along the entry edge its
+ *  front door can go (a walk-up's landing ends at the stair). */
+function flat(B: Builder, k: number, r: Rect, ax: 0 | 1, side: -1 | 1, entry: number[], range?: [number, number]) {
+  // (typical storeys share their walls: the same choices on every storey above the ground)
+  const rng = makeRng((B.P.seed ^ Math.round(r.u0 * 131 + r.v0 * 71) ^ (k ? 0x9e37 : 0)) >>> 0);
+  const U = B.unit();
+  const s0 = ax ? r.v0 : r.u0, s1 = ax ? r.v1 : r.u1;
+  const e = side < 0 ? (ax ? r.u0 : r.v0) : ax ? r.u1 : r.v1; // the entry edge (depth coordinate)
+  const f = side < 0 ? (ax ? r.u1 : r.v1) : ax ? r.u0 : r.v0; // the facade edge
+  const dsgn = (f > e ? 1 : -1) as -1 | 1; // depth grows from the entry toward the facade
+  const dep = Math.abs(f - e), w = s1 - s0;
+  const D = (d0: number, d1: number, a0: number, a1: number) => RS(ax, a0, a1, e + dsgn * d0, e + dsgn * d1);
+  const cutOut = (want: number, lo: number, hi: number) => B.cut(k, ax, want, lo, hi, [[f - dsgn * 0.05, dsgn]]);
+  const [ra, rb] = range ? [Math.max(s0, range[0]), Math.min(s1, range[1])] : [s0, s1];
+  // the inboard band (entry side): deeper flats keep rooms within ~8.5 m of the glass
+  // (facade rooms at most ~6.8 m deep: a deep flat's inboard band takes stores and the utility)
+  let di = Math.max(2.4, Math.min(4.6, dep - 6.8, Math.max(dep * 0.34, 2.4)));
+  if (dep - di > 6.8) di = Math.min(dep - 2.6, dep - 6.8);
+  // at the building's ends the inboard wall meets the end facade: between its windows
+  const ends: [number, -1 | 1][] = [];
+  if (B.onFacade(r, ax ? 'v0' : 'u0')) ends.push([s0 + 0.05, -1]);
+  if (B.onFacade(r, ax ? 'v1' : 'u1')) ends.push([s1 - 0.05, 1]);
+  if (ends.length) {
+    const oax: 0 | 1 = ax ? 0 : 1;
+    const want = e + dsgn * di;
+    const c = B.cut(k, oax, want, Math.min(want, e + dsgn * 2.2), Math.max(want, e + dsgn * 2.2), ends) ?? B.cut(k, oax, want, Math.min(want, e + dsgn * 3.6), Math.max(want, e + dsgn * 3.6), ends);
+    if (c !== null) di = Math.abs(c - e);
+  }
+  const doDep = dep - di;
+  if (w < 3.2 || dep < 4.5 || doDep < 2.4 || rb - ra < 1.5) {
+    // a bedsit: one room
+    const id = B.add(r, 'living', k, { unit: U });
+    for (const c of entry) B.link(c, id, 0.9, { front: true, pref: (ra + rb) / 2 });
+    return;
+  }
+  // facade rooms: the living room at one end, bedrooms (≥ 2.75 m: doubles) along the rest, each
+  // wall between the facade's windows
+  const nb = Math.max(0, Math.min(w < 5.6 ? 0 : w < 8.2 ? 1 : w < 11.2 ? 2 : 3, Math.floor((w - 3.4) / 2.8)));
+  const livW = Math.max(3.4, Math.min(38 / doDep, w - nb * 2.8, w * (nb ? 0.42 : 1)));
+  const livLow = rng.float() < 0.5;
+  // (a bedroom is ≥ 2.3 m wide — a double once it's 2.75 — so a party wall can find a pier)
+  const tw: number[] = nb ? (livLow ? [livW, ...Array(nb).fill((w - livW) / nb)] : [...Array(nb).fill((w - livW) / nb), livW]) : [w];
+  const mins = nb ? (livLow ? [3.2, ...Array(nb).fill(2.3)] : [...Array(nb).fill(2.3), 3.2]) : [w];
+  const bounds = [s0];
+  let x = s0;
+  for (let i = 0; i + 1 < tw.length; i++) {
+    const restMin = mins.slice(i + 1).reduce((p, q) => p + q, 0);
+    const lo = x + mins[i], hi = s1 - restMin;
+    // near the target first, then anywhere it can go
+    const c = lo <= hi ? cutOut(x + tw[i], Math.max(lo, x + tw[i] - 0.9), Math.min(hi, x + tw[i] + 0.9)) ?? cutOut(x + tw[i], lo, hi) : null;
+    if (c === null) { tw[i + 1] += tw[i]; mins[i + 1] = Math.max(mins[i + 1], mins[i]); continue; } // (merged)
+    bounds.push(c);
+    x = c;
+  }
+  bounds.push(s1);
+  {
+    // a living room still over 38 m² gives a bedroom up at its far end
+    const li = livLow ? 0 : bounds.length - 2;
+    const lw0 = bounds[li + 1] - bounds[li];
+    if (lw0 * doDep > 38 && lw0 >= 3.4 + 2.3) {
+      const at = livLow ? cutOut(bounds[li] + Math.max(3.4, 30 / doDep), bounds[li] + 3.4, bounds[li + 1] - 2.3) : cutOut(bounds[li + 1] - Math.max(3.4, 30 / doDep), bounds[li] + 2.3, bounds[li + 1] - 3.4);
+      if (at !== null) bounds.splice(li + 1, 0, at);
+    }
+  }
+  const livIdx = livLow ? 0 : bounds.length - 2;
+  const outs = bounds.slice(0, -1).map((b0, i) => ({ a0: b0, a1: bounds[i + 1], t: (i === livIdx ? 'living' : 'bed') as RoomType }));
+  const liv = outs[livIdx];
+  const bedOf = (q: { a0: number; a1: number }) => ((q.a1 - q.a0 >= 2.75 && (q.a1 - q.a0) * doDep >= 11.5 ? 2 : 1) as 1 | 2);
+  const hw = 1.5;
+  const idOf = new Map<{ a0: number; a1: number; t: RoomType }, number>();
+  const want = Math.max(ra, Math.min(rb - hw, (Math.max(liv.a0, ra) + Math.min(liv.a1, rb)) / 2 - hw / 2));
+  const h0 = Math.max(s0, Math.min(s1 - hw, want)), h1 = h0 + hw;
+  const beds = outs.filter((o) => o !== liv);
+  if (beds.length >= 2 && di >= 2.6) {
+    // a flat with a hallway: the hall at the front door, a 1.1 m passage along the bedrooms, the
+    // bath and stores between it and the corridor, the kitchen at the living room's end
+    let sd = 1.1;
+    if (ends.length) {
+      const oax: 0 | 1 = ax ? 0 : 1;
+      const c = B.cut(k, oax, e + dsgn * (di - 1.1), Math.min(e + dsgn * (di - 1.6), e + dsgn * (di - 0.95)), Math.max(e + dsgn * (di - 1.6), e + dsgn * (di - 0.95)), ends);
+      if (c !== null) sd = di - Math.abs(c - e);
+    }
+    const d1 = di - sd;
+    const towardHi = livLow; // the bedrooms lie toward s1 when the living room is at s0
+    const far = towardHi ? s1 : s0;
+    const hallSpace = B.space();
+    const hall = B.add(D(0, di, h0, h1), 'hall', k, { unit: U, space: hallSpace });
+    const pass = towardHi ? B.add(D(d1, di, h1, far), 'hall', k, { unit: U, space: hallSpace }) : B.add(D(d1, di, far, h0), 'hall', k, { unit: U, space: hallSpace });
+    for (const c of entry) B.link(c, hall, 0.9, { front: true, pref: (Math.max(h0, ra) + Math.min(h1, rb)) / 2 });
+    // the entry layer beyond the hall: bath, then utility and closets (≤ 2.6 m each)
+    const layer: [number, number] = towardHi ? [h1, s1] : [s0, h0];
+    const len = layer[1] - layer[0];
+    const bathW = Math.min(2.4, Math.max(1.8, len));
+    const pieces: { a0: number; a1: number; t: RoomType }[] = [];
+    if (len >= 1.7) {
+      const b0 = towardHi ? layer[0] : layer[1] - bathW;
+      pieces.push({ a0: b0, a1: b0 + bathW, t: 'bath' });
+      let x = towardHi ? b0 + bathW : b0;
+      const rest = towardHi ? layer[1] - x : x - layer[0];
+      const n = rest < 1.0 ? 0 : Math.max(1, Math.round(rest / 2.6));
+      for (let i = 0; i < n; i++) {
+        const wd = rest / n;
+        const q = towardHi ? { a0: x, a1: x + wd, t: (wd >= 2.2 ? 'utility' : 'closet') as RoomType } : { a0: x - wd, a1: x, t: (wd >= 2.2 ? 'utility' : 'closet') as RoomType };
+        pieces.push(q);
+        x = towardHi ? x + wd : x - wd;
+      }
+      if (n === 0 && rest > 0.01) { const bq = pieces[0]; if (towardHi) bq.a1 = layer[1]; else bq.a0 = layer[0]; }
+    }
+    for (const q of pieces) {
+      const id = B.add(D(0, d1, q.a0, q.a1), q.t, k, { unit: U });
+      B.link(pass, id, 0.8);
+      B.link(hall, id, 0.8);
+    }
+    // the kitchen: the inboard band at the living room's end, open to it
+    const kit: [number, number] = towardHi ? [s0, h0] : [h1, s1];
+    if (kit[1] - kit[0] >= 1.8) {
+      const id = B.add(D(0, di, kit[0], kit[1]), 'kitchen', k, { unit: U });
+      B.link(hall, id, 0.8);
+      idOf.set(liv, -1);
+      const lid = B.add(D(di, dep, liv.a0, liv.a1), 'living', k, { unit: U });
+      idOf.set(liv, lid);
+      B.link(lid, id, rng.float() < 0.6 ? 1.4 : 0.8, { wide: true });
+    } else {
+      // (no room for it: the hall takes that end, a kitchenette in the living room)
+      if (kit[1] - kit[0] > 0.01) B.add(D(0, di, kit[0], kit[1]), 'hall', k, { unit: U, space: hallSpace });
+      idOf.set(liv, B.add(D(di, dep, liv.a0, liv.a1), 'living', k, { unit: U }));
+    }
+    const lid = idOf.get(liv)!;
+    B.link(hall, lid, 0.9);
+    B.link(pass, lid, 0.9);
+    for (const o of beds) {
+      const id = B.add(D(di, dep, o.a0, o.a1), 'bed', k, { unit: U, bed: bedOf(o) });
+      B.link(pass, id, 0.8);
+      B.link(hall, id, 0.8);
+    }
+    return;
+  }
+  // a small flat: the hall under the living room (its door straight into it), the bath beside it,
+  // the kitchen on its other side toward the living room's end — in a studio too narrow for both,
+  // the hall at one end and the bath beside it (a kitchenette in the living room)
+  const inb: { a0: number; a1: number; t: RoomType }[] = [];
+  let [g0, g1] = [h0, h1];
+  if (h0 - s0 < 1.7 && s1 - h1 < 1.7) {
+    if (ra <= s0 + 0.01 && s1 - s0 - hw >= 1.7) [g0, g1] = [s0, s0 + hw];
+    else if (rb >= s1 - 0.01 && s1 - s0 - hw >= 1.7) [g0, g1] = [s1 - hw, s1];
+  }
+  const lo = [s0, g0], hi = [g1, s1];
+  const bathHi = hi[1] - hi[0] >= 1.7 && (lo[1] - lo[0] < 1.7 || (livLow ? true : hi[1] - hi[0] > lo[1] - lo[0] + 1));
+  const bathPart = bathHi ? hi : lo, kitPart = bathHi ? lo : hi;
+  let hallA0 = g0, hallA1 = g1;
+  if (bathPart[1] - bathPart[0] >= 1.7) {
+    const bw = Math.min(bathPart[1] - bathPart[0], 2.4);
+    const b0 = bathHi ? bathPart[0] : bathPart[1] - bw, b1 = b0 + bw;
+    inb.push({ a0: b0, a1: b1, t: 'bath' });
+    const rest = bathHi ? [b1, bathPart[1]] : [bathPart[0], b0];
+    if (rest[1] - rest[0] >= 1.2) inb.push({ a0: rest[0], a1: rest[1], t: rest[1] - rest[0] >= 2.6 ? 'utility' : 'closet' });
+    else if (rest[1] - rest[0] > 0.01) { const bq = inb[inb.length - 1]; bq.a0 = Math.min(bq.a0, rest[0]); bq.a1 = Math.max(bq.a1, rest[1]); }
+  } else if (bathHi) hallA1 = s1; else hallA0 = s0;
+  if (kitPart[1] - kitPart[0] >= 1.8) inb.push({ a0: kitPart[0], a1: kitPart[1], t: 'kitchen' });
+  else if (kitPart[1] - kitPart[0] > 0.01) { if (bathHi) hallA0 = s0; else hallA1 = s1; }
+  const hallQ = { a0: hallA0, a1: hallA1, t: 'hall' as RoomType };
+  inb.push(hallQ);
+  for (const q of inb) idOf.set(q, B.add(D(0, di, q.a0, q.a1), q.t, k, { unit: U }));
+  for (const q of outs) idOf.set(q, B.add(D(di, dep, q.a0, q.a1), q.t, k, { unit: U, ...(q.t === 'bed' ? { bed: bedOf(q) } : {}) }));
+  const hall = idOf.get(hallQ)!;
+  for (const c of entry) B.link(c, hall, 0.9, { front: true, pref: (Math.max(hallA0, ra) + Math.min(hallA1, rb)) / 2 });
+  const livId = idOf.get(liv)!;
+  // the hall opens into whichever facade room it's under (the living room when it can)
+  for (const o of outs) if (overlap(o.a0, o.a1, hallA0, hallA1) >= 1.4) B.link(hall, idOf.get(o)!, 0.8);
+  for (const q of inb) if (q !== hallQ) {
+    const id = idOf.get(q)!;
+    B.link(hall, id, 0.8);
+    if (q.t === 'kitchen' && overlap(q.a0, q.a1, liv.a0, liv.a1) >= 1.5) B.link(livId, id, rng.float() < 0.6 ? 1.4 : 0.8, { wide: true });
+    // a store or utility room opens off the bedroom behind it
+    if (q.t === 'closet' || q.t === 'utility') for (const o of outs) if (o.t === 'bed' && overlap(o.a0, o.a1, q.a0, q.a1) >= 1.4) B.link(idOf.get(o)!, id, 0.8);
+  }
+  for (const o of outs) if (o !== liv) B.link(livId, idOf.get(o)!, 0.8);
+}
+
+function flatsStorey(B: Builder, k: number, typical: Map<string, number[]>) {
+  const P = B.P;
+  const circ = B.space();
+  const corr = (P.spine ?? []).map((r) => B.add(r, 'corridor', k, { space: circ }));
+  const ground = k === 0;
+  const walkup = (P.bands ?? []).some((b) => b.one);
+  if (walkup) {
+    // the slot at the front door: lobby (ground) / landing, the dogleg at its back
+    const core = P.cores?.[0];
+    const slot = core ? core.room : P.lobby!;
+    corr.push(B.add(slot, ground ? 'lobby' : 'landing', k, { space: circ }));
+  } else {
+    // (over a shop the lobby slot is just part of its band)
+    if (ground && P.lobby && P.arch === 'flats') corr.push(B.add(P.lobby, 'lobby', k, { space: circ }));
+    for (const c of P.cores ?? []) {
+      const id = B.add(c.room, 'stair', k);
+      for (const q of corr) B.link(q, id, 0.9);
+      // (the rest of its slot: a store off the stair room)
+      if (c.slot) for (const r of minus(c.slot, c.room)) B.link(id, B.add(r, 'store', k), 0.8);
+    }
+  }
+  if (P.core) {
+    // the ring's core: stores between its stair rooms, ~6 m long, split down the middle when it's
+    // deep (each half still on the ring)
+    const rest = (P.cores ?? []).reduce<Rect[]>((acc, c) => acc.flatMap((r) => minus(r, c.room)), [P.core]);
+    for (const r of rest) {
+      const along = r.u1 - r.u0 >= r.v1 - r.v0 ? 0 : 1;
+      const len = along ? r.v1 - r.v0 : r.u1 - r.u0, dep = along ? r.u1 - r.u0 : r.v1 - r.v0;
+      const n = Math.max(1, Math.round(len / 6));
+      for (let i = 0; i < n; i++) {
+        const a0 = (along ? r.v0 : r.u0) + (len * i) / n, a1 = (along ? r.v0 : r.u0) + (len * (i + 1)) / n;
+        const d0 = along ? r.u0 : r.v0, halves: [number, number][] = dep > 6 ? [[d0, d0 + dep / 2], [d0 + dep / 2, d0 + dep]] : [[d0, d0 + dep]];
+        for (const [x0, x1] of halves) {
+          const id = B.add(RS(along ? 1 : 0, a0, a1, x0, x1), 'store', k);
+          for (const c of corr) B.link(c, id, 0.9);
+        }
+      }
+    }
+  }
+  (P.bands ?? []).forEach((band) => {
+    const s0 = band.ax ? band.r.v0 : band.r.u0, s1 = band.ax ? band.r.v1 : band.r.u1;
+    // the band's stretches between the lobby and the stair cores
+    let stretch: [number, number][] = [[s0, s1]];
+    const cut = (r: Rect) => {
+      if (!hitR(r, band.r, -0.05)) return;
+      const a = band.ax ? r.v0 : r.u0, b = band.ax ? r.v1 : r.u1;
+      stretch = stretch.flatMap(([x, y]) => (b <= x + EPS || a >= y - EPS ? [[x, y]] : [[x, a], [b, y]]) as [number, number][]).filter(([x, y]) => y - x > 0.3);
+    };
+    if (!walkup) {
+      if (ground && P.lobby && P.arch === 'flats') cut(P.lobby);
+      for (const c of P.cores ?? []) cut(c.slot ?? c.room);
+    }
+    for (const [a, b] of stretch) {
+      if (b - a < 2.4) {
+        const id = B.add(RS(band.ax, a, b, band.ax ? band.r.u0 : band.r.v0, band.ax ? band.r.u1 : band.r.v1), 'store', k);
+        for (const c of corr) B.link(c, id, 0.8);
+        continue;
+      }
+      // the lobby slot on the storeys above: a flat of its own
+      // (a walk-up's flats open onto the landing in front of the stair)
+      const st = walkup ? P.cores?.[0]?.stair : undefined;
+      const slot = walkup ? (P.cores?.[0]?.room ?? P.lobby!) : undefined;
+      fillBand(B, k, band, a, b, corr, typical, slot ? [slot.u0 + 0.1, (st ? st.u0 : slot.u1) - 0.25] : undefined);
+    }
+  });
+}
+
+// ---------------- offices ----------------
+function officeStorey(B: Builder, k: number) {
+  const P = B.P, M = P.main, core = P.core!, rng = B.rng;
+  const open = B.space();
+  const keep = B.keep(k, 0.3);
+  // the core: the stair room, then WCs, a lift lobby and stores along it
+  const along: 0 | 1 = core.u1 - core.u0 >= core.v1 - core.v0 ? 0 : 1;
+  let rest: Rect[] = [core];
+  for (const c of P.cores ?? []) rest = rest.flatMap((r) => minus(r, c.room));
+  const coreIds: number[] = [];
+  for (const c of P.cores ?? []) {
+    // the stair room: a landing band across the core, then the flights' own column — the pockets
+    // either side of the flights are stores off the open plan
+    const r = c.room, s = c.stair;
+    const [ra0, ra1, rc0, rc1] = along ? [r.v0, r.v1, r.u0, r.u1] : [r.u0, r.u1, r.v0, r.v1];
+    const [sa0, sa1, sc0, sc1] = along ? [s.v0, s.v1, s.u0, s.u1] : [s.u0, s.u1, s.v0, s.v1];
+    const lowBand = sa0 - ra0 >= ra1 - sa1;
+    const [b0, b1] = lowBand ? [ra0, sa0] : [sa1, ra1], [k0, k1] = lowBand ? [sa0, ra1] : [ra0, sa1];
+    if (sc0 - 0.1 - rc0 >= 1.5 && rc1 - sc1 - 0.1 >= 1.5 && b1 - b0 >= 1.5) {
+      const ss = B.space();
+      coreIds.push(B.add(RS(along, b0, b1, rc0, rc1), 'stair', k, { space: ss }));
+      B.add(RS(along, k0, k1, sc0 - 0.1, sc1 + 0.1), 'stair', k, { space: ss });
+      coreIds.push(B.add(RS(along, k0, k1, rc0, sc0 - 0.1), 'store', k), B.add(RS(along, k0, k1, sc1 + 0.1, rc1), 'store', k));
+    } else coreIds.push(B.add(r, 'stair', k));
+  }
+  const cd0 = along ? core.u0 : core.v0, cd1 = along ? core.u1 : core.v1, cmid = (cd0 + cd1) / 2;
+  // the rest of the core in 5–6 m pieces: a pair of WCs, a lift lobby, a store, in turn — a deep
+  // core (a tower's) round a lift lobby down its middle, WCs and stores either side of it
+  const kinds: RoomType[] = ['wc', 'lift', 'store', 'lift', 'wc', 'store'];
+  let ki = 0;
+  const deep = cd1 - cd0 > 12;
+  for (const r of rest) {
+    const a0 = along ? r.v0 : r.u0, a1 = along ? r.v1 : r.u1;
+    const n = Math.max(1, deep ? Math.ceil((a1 - a0) / 5.5) : Math.round((a1 - a0) / 5.5));
+    if (deep) {
+      const l0 = cmid - 1.2, l1 = cmid + 1.2;
+      const lob = B.add(RS(along, a0, a1, l0, l1), 'lift', k);
+      coreIds.push(lob);
+      for (let i = 0; i < n; i++) {
+        const x0 = a0 + ((a1 - a0) * i) / n, x1 = a0 + ((a1 - a0) * (i + 1)) / n;
+        for (const [d0, d1] of [[cd0, l0], [l1, cd1]]) {
+          const id = B.add(RS(along, x0, x1, d0, d1), ki++ % 2 ? 'store' : 'wc', k);
+          coreIds.push(id);
+          B.link(lob, id, 0.9);
+        }
+      }
+      continue;
+    }
+    for (let i = 0; i < n; i++) {
+      const x0 = a0 + ((a1 - a0) * i) / n, x1 = a0 + ((a1 - a0) * (i + 1)) / n;
+      const t = kinds[ki++ % kinds.length];
+      // (a deep core's pieces are split across, each still reaching one of its faces)
+      if (cd1 - cd0 > 4.5 && (t === 'wc' || cd1 - cd0 > 9)) {
+        coreIds.push(B.add(RS(along, x0, x1, cd0, cmid), t, k));
+        coreIds.push(B.add(RS(along, x0, x1, cmid, cd1), t === 'wc' ? 'wc' : t === 'lift' ? 'store' : 'lift', k));
+      } else coreIds.push(B.add(RS(along, x0, x1, cd0, cd1), t, k));
+    }
+  }
+  // open plan round the core, less a meeting room or two against it
+  let plan: Rect[] = [
+    { u0: M.u0, u1: core.u0, v0: M.v0, v1: M.v1 },
+    { u0: core.u1, u1: M.u1, v0: M.v0, v1: M.v1 },
+    { u0: core.u0, u1: core.u1, v0: M.v0, v1: core.v0 },
+    { u0: core.u0, u1: core.u1, v0: core.v1, v1: M.v1 },
+  ].filter((r) => r.u1 - r.u0 > 0.3 && r.v1 - r.v0 > 0.3);
+  const meet: Rect[] = [];
+  const nMeet = k === 0 ? 1 : 1 + (rng.float() < 0.5 ? 1 : 0);
+  for (let i = 0; i < nMeet; i++) {
+    // on a long face of the core, clear of its doors' approach
+    const faceLow = rng.float() < 0.5;
+    const d = 3.2, wl = 4.2;
+    const alongC = along ? [core.v0, core.v1] : [core.u0, core.u1];
+    const pos = alongC[0] + 1 + rng.float() * Math.max(0, alongC[1] - alongC[0] - wl - 2);
+    const r = along
+      ? { u0: faceLow ? core.u0 - d : core.u1, u1: faceLow ? core.u0 : core.u1 + d, v0: pos, v1: pos + wl }
+      : { u0: pos, u1: pos + wl, v0: faceLow ? core.v0 - d : core.v1, v1: faceLow ? core.v0 : core.v1 + d };
+    if (r.u0 < M.u0 + 3 || r.u1 > M.u1 - 3 || r.v0 < M.v0 + 3 || r.v1 > M.v1 - 3) continue;
+    if (meet.some((m) => hitR(m, r, 1)) || keep.some((K) => hitR(K, r))) continue;
+    if (k === 0 && Math.abs(r.v0 + r.v1 - 2 * P.vd) < wl + 3) continue;
+    meet.push(r);
+  }
+  for (const m of meet) plan = plan.flatMap((r) => minus(r, m));
+  // the lobby at the front door (the ground storey): part of the open plan, no desks
+  let lobby: Rect | null = null;
+  if (k === 0) {
+    lobby = { u0: M.u0, u1: Math.min(core.u0, M.u0 + 9), v0: Math.max(M.v0, P.vd - 4.5), v1: Math.min(M.v1, P.vd + 4.5) };
+    plan = plan.flatMap((r) => minus(r, lobby!));
+  }
+  const planIds = plan.map((r) => B.add(r, 'open', k, { space: open }));
+  const lobbyId = lobby ? B.add(lobby, 'lobby', k, { space: open }) : -1;
+  const openIds = lobbyId >= 0 ? [...planIds, lobbyId] : planIds;
+  for (const m of meet) {
+    const id = B.add(m, 'meeting', k);
+    for (const o of openIds) B.link(o, id, 0.9);
+  }
+  for (const c of coreIds) for (const o of openIds) B.link(o, c, B.rooms[c].type === 'lift' ? 1.8 : 0.9, B.rooms[c].type === 'lift' ? { wide: true } : {});
+  // desks: benches of back-to-back desks within the open plan, clear of the core's doors, an aisle
+  // round the core and along the glass
+  const clear = [...keep, ...meet.map((m) => grow(m, 0.9)), grow(core, 1.6), ...(lobby ? [grow(lobby, 0.5)] : [])];
+  for (const r of plan) desksIn(B, r, k, clear);
+}
+
+/** Rows of back-to-back desks (1.6 × 0.8 m each, chairs 0.9 m behind) across an open-plan rect. */
+function desksIn(B: Builder, r: Rect, k: number, clear: Rect[]) {
+  const P = B.P, M = P.main;
+  const inner = { u0: r.u0 + (Math.abs(r.u0 - M.u0) < 0.1 ? 0.5 : 0.3), u1: r.u1 - (Math.abs(r.u1 - M.u1) < 0.1 ? 0.5 : 0.3), v0: r.v0 + (Math.abs(r.v0 - M.v0) < 0.1 ? 0.5 : 0.3), v1: r.v1 - (Math.abs(r.v1 - M.v1) < 0.1 ? 0.5 : 0.3) };
+  // benches run perpendicular to the nearest facade (daylight from the side)
+  const du = inner.u1 - inner.u0, dv = inner.v1 - inner.v0;
+  if (du < 2.5 || dv < 2.5) return;
+  const facadeU = Math.min(Math.abs(r.u0 - M.u0), Math.abs(r.u1 - M.u1)) < 0.1, facadeV = Math.min(Math.abs(r.v0 - M.v0), Math.abs(r.v1 - M.v1)) < 0.1;
+  // rows along `ra`: the bench's length axis
+  const ra: 0 | 1 = facadeU && !facadeV ? 0 : facadeV && !facadeU ? 1 : du >= dv ? 0 : 1;
+  const len0 = ra ? inner.v0 : inner.u0, len1 = ra ? inner.v1 : inner.u1;
+  const x0 = ra ? inner.u0 : inner.v0, x1 = ra ? inner.u1 : inner.v1;
+  const pitch = 1.6, rowW = 0.9 + 0.8 + 0.8 + 0.9, aisle = 1.2;
+  for (let x = x0; x + rowW <= x1 + EPS; x += rowW + aisle) {
+    const mid = x + rowW / 2;
+    for (let a = len0; a + pitch <= len1 + EPS; a += pitch) {
+      for (const s of [-1, 1] as const) {
+        const cx = mid + s * 0.4, ca = a + pitch / 2;
+        const box = ra ? { u0: Math.min(cx, cx + s * 1.3) - 0.4, u1: Math.max(cx, cx + s * 1.3) + 0.4, v0: ca - 0.8, v1: ca + 0.8 } : { u0: ca - 0.8, u1: ca + 0.8, v0: Math.min(cx, cx + s * 1.3) - 0.4, v1: Math.max(cx, cx + s * 1.3) + 0.4 };
+        if (clear.some((c) => hitR(c, box))) continue;
+        // the sitter looks across the bench (toward the desk's far edge)
+        const face = (ra ? (s > 0 ? 1 : 0) : s > 0 ? 3 : 2) as 0 | 1 | 2 | 3;
+        B.desks.push(ra ? { u: cx, v: ca, level: k, face } : { u: ca, v: cx, level: k, face });
+      }
+    }
+  }
+}
+
+// ---------------- shops, cafés, restaurants ----------------
+function shopStorey(B: Builder, k: number, kind: 'shop' | 'food') {
+  const P = B.P, M = P.main, rng = B.rng;
+  const use = useOf(B.fp.name, B.fp.use);
+  const depth = M.u1 - M.u0, width = M.v1 - M.v0;
+  const cores = (P.cores ?? []).map((c) => c.room);
+  const coreIds = cores.map((r) => B.add(r, 'stair', k));
+  // back of house along the back wall: 20–25% of a shop, 30–40% of a kitchen
+  const frac = kind === 'food' ? 0.34 : 0.22;
+  const want = M.u1 - Math.max(kind === 'food' ? 2.8 : 2.4, Math.min(kind === 'food' ? 9 : 8, depth * frac));
+  const small = depth * width < (kind === 'food' ? 45 : 35) || depth < 6;
+  let front: Rect = { ...M };
+  const back: Rect[] = [];
+  if (!small) {
+    const c = B.cut(k, 0, want, Math.max(M.u0 + depth * 0.45, want - 2.6), Math.min(M.u1 - 2.2, want + 2.6), [[M.v0 + 0.05, -1], [M.v1 - 0.05, 1]]);
+    if (c !== null) {
+      front = { ...M, u1: c };
+      const bk = { ...M, u0: c };
+      // split the back: a WC at one end (1.6 m), the kitchen or the stock room the rest
+      const wcW = 1.6;
+      const lowWc = rng.float() < 0.5;
+      const x = B.cut(k, 1, lowWc ? M.v0 + wcW : M.v1 - wcW, lowWc ? M.v0 + 1.2 : M.v1 - 4.2, lowWc ? M.v0 + 4.2 : M.v1 - 1.2, [[M.u1 - 0.05, 1]]);
+      if (x !== null && width > 6) {
+        back.push(lowWc ? { ...bk, v1: x } : { ...bk, v0: x });
+        back.push(lowWc ? { ...bk, v0: x } : { ...bk, v1: x });
+      } else back.push(bk);
+    }
+  }
+  const frontRects = cores.reduce<Rect[]>((acc, c) => acc.flatMap((r) => minus(r, c)), [front]);
+  const fs = B.space();
+  const floorType: RoomType = kind === 'shop' ? 'shop' : use === 'cafe' ? 'cafe' : use === 'bar' ? 'bar' : use === 'restaurant' ? 'diner' : rng.float() < 0.45 ? 'cafe' : 'diner';
+  const frontIds = frontRects.map((r) => B.add(r, floorType, k, { space: fs }));
+  const backIds: number[] = [];
+  back.forEach((r, i) => {
+    const parts = cores.reduce<Rect[]>((acc, c) => acc.flatMap((q) => minus(q, c)), [r]);
+    for (const q0 of parts) {
+      const isWc = back.length > 1 && i === 0;
+      // (a wide store's back of house: stock rooms ~10 m across, their walls between the back windows)
+      const pieces: Rect[] = [];
+      let q = q0;
+      while (!isWc && q.v1 - q.v0 > 13) {
+        const c = B.cut(k, 1, q.v0 + 10, q.v0 + 7, q.v1 - 4, [[M.u1 - 0.05, 1]]);
+        if (c === null) break;
+        pieces.push({ ...q, v1: c });
+        q = { ...q, v0: c };
+      }
+      pieces.push(q);
+      for (const pc of pieces) {
+        const t: RoomType = isWc ? 'wc' : kind === 'food' ? 'galley' : 'stock';
+        const id = B.add(pc, t, k);
+        backIds.push(id);
+        for (const f of frontIds) B.link(f, id, isWc ? 0.8 : 0.9);
+      }
+    }
+  });
+  // the back rooms open onto each other too (the WC off the stock room or the kitchen)
+  for (const a of backIds) for (const b of backIds) if (a < b) B.link(a, b, 0.8);
+  for (const c of coreIds) {
+    for (const f of frontIds) B.link(f, c, 0.9);
+    for (const b of backIds) B.link(b, c, 0.9);
+  }
+}
+
+// ---------------- the rest ----------------
+function openStorey(B: Builder, k: number) {
+  const P = B.P, fp = B.fp;
+  const t: RoomType = fp.kind === 'church' ? 'church'
+    : fp.kind === 'house' || fp.kind === 'shed' ? (k === 0 ? 'great' : 'bed')
+      : fp.kind === 'large' ? (k === 0 ? 'lobby' : 'living')
+        : k === 0 ? (useOf(fp.name, fp.use) === 'office' ? 'open' : 'shop') : 'open';
+  // the whole outline is one room: the main rectangle stands for it
+  B.add(P.main, t, k, t === 'bed' ? { bed: 2 } : {});
+}
+
+// ---------------- walls, doors, reachability ----------------
+interface Edge { ax: 0 | 1; c: number; a: number; b: number; i: number; j: number }
+/** Where two rooms of one storey meet: the shared stretch of boundary. */
+function shared(A: Room, Bm: Room): Edge | null {
+  const a = A.r, b = Bm.r, t = 0.02;
+  if (Math.abs(a.u1 - b.u0) < t || Math.abs(b.u1 - a.u0) < t) {
+    const o0 = Math.max(a.v0, b.v0), o1 = Math.min(a.v1, b.v1);
+    if (o1 - o0 > 0.05) return { ax: 1, c: Math.abs(a.u1 - b.u0) < t ? (a.u1 + b.u0) / 2 : (b.u1 + a.u0) / 2, a: o0, b: o1, i: A.id, j: Bm.id };
+  }
+  if (Math.abs(a.v1 - b.v0) < t || Math.abs(b.v1 - a.v0) < t) {
+    const o0 = Math.max(a.u0, b.u0), o1 = Math.min(a.u1, b.u1);
+    if (o1 - o0 > 0.05) return { ax: 0, c: Math.abs(a.v1 - b.v0) < t ? (a.v1 + b.v0) / 2 : (b.v1 + a.v0) / 2, a: o0, b: o1, i: A.id, j: Bm.id };
+  }
+  return null;
+}
+
+/** Can a doorway of width w centred at t on edge e go there: it and a step either side of it clear
+ *  of the stairs (K) and of the doors already in that wall line (near)? */
+function doorFits(K: Rect[], near: (Doorway[] | undefined)[], e: Edge, t: number, w: number) {
+  const u0 = e.ax === 0 ? t - w / 2 : e.c - 0.75, u1 = e.ax === 0 ? t + w / 2 : e.c + 0.75;
+  const v0 = e.ax === 0 ? e.c - 0.75 : t - w / 2, v1 = e.ax === 0 ? e.c + 0.75 : t + w / 2;
+  for (const q of K) if (q.u0 < u1 && q.u1 > u0 && q.v0 < v1 && q.v1 > v0) return false;
+  for (const ds of near) if (ds) for (const d of ds) if (Math.abs(d.c - e.c) < 0.05 && Math.abs(d.t - t) < (d.w + w) / 2 + 0.3) return false;
+  return true;
+}
+
+function* finish(B: Builder): Generator<void, Layout, void> {
+  const P = B.P, rooms = B.rooms, N = rooms.length;
+  const byLevel: Room[][] = Array.from({ length: P.levels }, () => []);
+  for (const r of rooms) byLevel[r.level]?.push(r);
+  // every pair of rooms that meet
+  const edges = new Map<number, Edge>();
+  const key = (i: number, j: number) => (i < j ? i * N + j : j * N + i);
+  for (const lv of byLevel)
+    for (let x = 0; x < lv.length; x++)
+      for (let y = x + 1; y < lv.length; y++) {
+        const e = shared(lv[x], lv[y]);
+        if (e) edges.set(key(e.i, e.j), e);
+      }
+  // doorways, indexed by the wall line they're in (storey, axis, position to 5 cm)
+  const doors: Doorway[] = [];
+  const lines = new Map<number, Doorway[]>();
+  const lineOf = (k: number, ax: 0 | 1, c: number) => (k * 2 + ax) * 1e6 + Math.round(c * 20) + 5e5;
+  const keeps = Array.from({ length: P.levels }, (_, k) => B.keep(k, 0.1));
+  const place = (L: Link): boolean => {
+    const e = edges.get(key(L.a, L.b));
+    if (!e) return false;
+    const A = rooms[L.a], Bm = rooms[L.b];
+    if (A.space === Bm.space) return true; // open to each other
+    const k = A.level, w = L.w;
+    const lo = e.a + 0.3 + w / 2, hi = e.b - 0.3 - w / 2;
+    if (hi < lo - EPS) return false;
+    const want = Math.max(lo, Math.min(hi, L.pref ?? (lo + hi) / 2));
+    const lk = lineOf(k, e.ax, e.c);
+    const near = [lines.get(lk - 1), lines.get(lk), lines.get(lk + 1)];
+    for (let o = 0; o <= hi - lo + 0.051; o += 0.05)
+      for (let sg = 0; sg < (o === 0 ? 1 : 2); sg++) {
+        const t = sg ? want - o : want + o;
+        if (t < lo - EPS || t > hi + EPS || !doorFits(keeps[k], near, e, t, w)) continue;
+        const d: Doorway = { level: k, ax: e.ax, c: e.c, t, w, rooms: [L.a, L.b], ...(L.front ? { front: true } : {}) };
+        doors.push(d);
+        const ln = lines.get(lk);
+        if (ln) ln.push(d); else lines.set(lk, [d]);
+        return true;
+      }
+    return false;
+  };
+  const linked = new Set<number>();
+  for (const L of B.links) {
+    const kk = key(L.a, L.b);
+    if (linked.has(kk)) continue;
+    if (place(L)) linked.add(kk);
+  }
+  yield;
+  // reachability: from the room the front door opens into, through doors, open spaces and stairs
+  const entry = rooms.find((r) => r.level === 0 && r.r.u0 - 0.01 <= P.ud + 0.35 && r.r.u1 + 0.01 >= P.ud + 0.35 && r.r.v0 - 0.01 <= P.vd && r.r.v1 + 0.01 >= P.vd)?.id ?? rooms.findIndex((r) => r.level === 0);
+  const roomAt = (k: number, u: number, v: number) => byLevel[k]?.find((r) => u >= r.r.u0 - 0.01 && u <= r.r.u1 + 0.01 && v >= r.r.v0 - 0.01 && v <= r.r.v1 + 0.01)?.id ?? -1;
+  // (the stairs: the room at a flight's foot and the one at its head — a dogleg's halves both
+  // live in their storeys' core rooms)
+  const climbs: [number, number][] = [];
+  for (const F of P.flights) {
+    const dir = Math.sign(F.topU - F.bottomU) || 1;
+    const c = F.axis ? (F.u0 + F.u1) / 2 : (F.v0 + F.v1) / 2;
+    const foot = F.bottomU - dir * 0.3, head = F.topU + dir * 0.3;
+    const lo = F.lo ?? 0, hi = F.hi ?? 1;
+    if (lo > 0.01 || hi < 0.99) {
+      if (lo < 0.01) climbs.push(F.axis ? [roomAt(F.level, c, foot), roomAt(F.level + 1, c, foot)] : [roomAt(F.level, foot, c), roomAt(F.level + 1, foot, c)]);
+      continue;
+    }
+    climbs.push(F.axis ? [roomAt(F.level, c, foot), roomAt(F.level + 1, c, head)] : [roomAt(F.level, foot, c), roomAt(F.level + 1, head, c)]);
+  }
+  for (let pass = 0; pass < 6; pass++) {
+    const g: number[][] = Array.from({ length: N }, () => []);
+    for (const d of doors) { g[d.rooms[0]].push(d.rooms[1]); g[d.rooms[1]].push(d.rooms[0]); }
+    for (const e of edges.values()) if (rooms[e.i].space === rooms[e.j].space) { g[e.i].push(e.j); g[e.j].push(e.i); }
+    for (const [a, b] of climbs) if (a >= 0 && b >= 0) { g[a].push(b); g[b].push(a); }
+    const seen = new Uint8Array(N);
+    seen[entry] = 1;
+    const q = [entry];
+    while (q.length) { const x = q.pop()!; for (const y of g[x]) if (!seen[y]) { seen[y] = 1; q.push(y); } }
+    const lost = rooms.filter((r) => !seen[r.id]);
+    if (!lost.length) break;
+    let fixed = false;
+    for (const r of lost) {
+      // a door to any reachable neighbour, the narrowest first, then the widest stretch
+      const nb = [...edges.values()].filter((e) => (e.i === r.id && seen[e.j]) || (e.j === r.id && seen[e.i])).sort((x, y) => y.b - y.a - (x.b - x.a));
+      for (const e of nb) {
+        const other = e.i === r.id ? e.j : e.i;
+        for (const w of [0.8, 0.7]) if (place({ a: other, b: r.id, w })) { fixed = true; break; }
+        if (fixed) break;
+      }
+    }
+    if (!fixed) {
+      // nothing to open onto: fold the room into a reachable neighbour's space (no wall between) —
+      // the one it shares the most wall with away from the stairs
+      for (const r of lost) {
+        let best: Edge | null = null, bl = 0.3;
+        for (const e of edges.values()) {
+          if (!((e.i === r.id && seen[e.j]) || (e.j === r.id && seen[e.i]))) continue;
+          let segs: [number, number][] = [[e.a, e.b]];
+          for (const K of keeps[r.level]) {
+            const [k0, k1, c0, c1] = e.ax === 0 ? [K.u0, K.u1, K.v0, K.v1] : [K.v0, K.v1, K.u0, K.u1];
+            if (c0 > e.c + 0.4 || c1 < e.c - 0.4) continue;
+            segs = segs.flatMap(([a, b]) => (k1 <= a || k0 >= b ? [[a, b]] : [[a, k0], [k1, b]]) as [number, number][]);
+          }
+          const l = Math.max(0, ...segs.map(([a, b]) => b - a));
+          if (l > bl) (bl = l), (best = e);
+        }
+        if (best) { r.space = rooms[best.i === r.id ? best.j : best.i].space; fixed = true; }
+      }
+      if (!fixed) break;
+    }
+  }
+  // walls: every meeting of rooms in different spaces, with its doorways
+  const gapsOf = new Map<number, [number, number][]>();
+  for (const d of doors) {
+    const kk = key(d.rooms[0], d.rooms[1]), gp: [number, number] = [d.t - d.w / 2, d.t + d.w / 2];
+    const gs = gapsOf.get(kk);
+    if (gs) gs.push(gp); else gapsOf.set(kk, [gp]);
+  }
+  const walls: Wall[] = [];
+  for (const [kk, e] of edges) {
+    const A = rooms[e.i], Bm = rooms[e.j];
+    if (A.space === Bm.space) continue;
+    const gaps = (gapsOf.get(kk) ?? []).sort((x, y) => x[0] - y[0]);
+    walls.push({ level: A.level, ax: e.ax, c: e.c, a: e.a, b: e.b, gaps, rooms: [e.i, e.j] });
+  }
+  // the last word on windows: a wall end still landing on one stops short of the glass
+  let trimmed = 0;
+  for (const wl of walls)
+    for (const end of [0, 1] as const) {
+      const at = end ? wl.b : wl.a, dir = end ? 1 : -1;
+      const ok = wl.ax === 0 ? endOK(B.LP, B.M, wl.level, at, wl.c, dir, 0, 0) : endOK(B.LP, B.M, wl.level, wl.c, at, 0, dir, 0);
+      if (ok) continue;
+      if (end) wl.b -= 0.4; else wl.a += 0.4;
+      trimmed++;
+    }
+  return { rooms, walls: walls.filter((w) => w.b - w.a > 0.1), doors: doors.filter((d) => rooms[d.rooms[0]].space !== rooms[d.rooms[1]].space), desks: B.desks, entry, trimmed };
+}
+
+// ---------------- annexes: the outline beyond the main rectangle ----------------
+function annexRooms(B: Builder, k: number) {
+  const P = B.P;
+  for (const a of P.annex) {
+    const area = rectArea(a);
+    const fam = k === 0 ? P.arch : P.up;
+    const t: RoomType = fam === 'house' ? (k === 0 ? (area >= 9 ? 'dining' : 'utility') : area >= BED_S.a && minW(a) >= BED_S.w ? 'bed' : 'closet')
+      : fam === 'flats' ? 'store' : fam === 'office' ? 'meeting' : fam === 'shop' ? 'stock' : fam === 'food' ? 'galley' : 'store';
+    const id = B.add(a, t, k, t === 'bed' ? { bed: area >= BED_D.a && minW(a) >= BED_D.w ? 2 : 1 } : {});
+    // it opens off whichever main room it shares the most wall with
+    let best = -1, bl = 0;
+    for (const r of B.rooms) {
+      if (r.level !== k || r.id === id) continue;
+      const e = shared(r, B.rooms[id]);
+      if (e && e.b - e.a > bl && r.type !== 'stair' && r.type !== 'wc' && r.type !== 'bath') (bl = e.b - e.a), (best = r.id);
+    }
+    if (best >= 0) B.link(best, id, bl > 2.5 ? 1.2 : 0.8);
+  }
+}
+
+/** Stage B as steps — a storey at a time, then the walls and doors — so an activation can slice it
+ *  across frames. */
+export function* layoutSteps(P: Plan, fp: Footprint): Generator<void, Layout, void> {
+  const B = new Builder(P, fp, makeRng((P.seed ^ 0x9b1d) >>> 0));
+  const typical = new Map<string, number[]>();
+  for (let k = 0; k < P.levels; k++) {
+    const fam = k === 0 ? P.arch : P.up;
+    if (fam === 'house' && P.strip) houseStorey(B, k);
+    else if (fam === 'flats' && P.bands) flatsStorey(B, k, typical);
+    else if (fam === 'office' && P.core) officeStorey(B, k);
+    else if (fam === 'shop' || fam === 'food') shopStorey(B, k, fam);
+    else openStorey(B, k);
+    annexRooms(B, k);
+    yield;
+  }
+  return yield* finish(B);
+}
+/** Stage B: rooms, walls and doors for every storey of a plan. */
+export function layoutInterior(P: Plan, fp: Footprint): Layout {
+  const g = layoutSteps(P, fp);
+  let r = g.next();
+  while (!r.done) r = g.next();
+  return r.value;
+}
+
+// ---------------- collision ----------------
+/** The layout's walls into the collision world, each on its own storey's height band. `at`: a
+ *  walker already inside — no wall lands on them (one within reach gets a doorway where they
+ *  stand instead). */
+export function registerLayout(walk: WalkWorld, P: Plan, L: Layout, at?: { x: number; z: number; feet: number }) {
+  const f = (k: number) => P.floor0 + k * P.floorH;
+  let atU = 0, atV = 0;
+  if (at) {
+    atU = (at.x - P.cx) * P.ux + (at.z - P.cz) * P.uz;
+    atV = (at.x - P.cx) * P.vx + (at.z - P.cz) * P.vz;
+  }
+  for (const w of L.walls) {
+    const y0 = f(w.level) - 0.5, y1 = f(w.level) + P.floorH - 0.5;
+    let gaps = w.gaps.slice();
+    if (at && at.feet >= y0 && at.feet <= y1) {
+      const along = w.ax === 0 ? atU : atV, across = w.ax === 0 ? atV : atU;
+      if (Math.abs(across - w.c) < 0.45 && along > w.a - 0.45 && along < w.b + 0.45) gaps = [...gaps, [along - 0.55, along + 0.55] as [number, number]].sort((x, y) => x[0] - y[0]);
+    }
+    let s = w.a;
+    const seg = (a: number, b: number) => {
+      if (b - a < 0.02) return;
+      const A = w.ax === 0 ? toW(P, a, w.c) : toW(P, w.c, a), Bp = w.ax === 0 ? toW(P, b, w.c) : toW(P, w.c, b);
+      walk.addWall(A, Bp, y0, y1);
+    };
+    for (const [g0, g1] of gaps) { seg(s, Math.min(w.b, Math.max(s, g0))); s = Math.max(s, g1); }
+    seg(s, w.b);
+  }
+}
+

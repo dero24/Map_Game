@@ -10,6 +10,7 @@
 //   at most a 2×2 tile corner. PNGs are immutable; the worker caches edge + R2.
 import type { Box, LayerLayout } from './data';
 import { makeProjector, type LatLon } from './realTile';
+import { makeCanvas } from './canvas';
 
 const Z = 14;
 const PITCH = 16; // m between samples — 65×65 nodes per cell; enough for walkable hills
@@ -53,8 +54,8 @@ async function demTile(tx: number, ty: number, z = Z): Promise<Float32Array | nu
       if (!r.ok) return null;
       const bmp = await createImageBitmap(await r.blob());
       const w = bmp.width, hh = bmp.height; // close() zeroes these — read dims first
-      const cv = new OffscreenCanvas(w, hh);
-      const g = cv.getContext('2d')!;
+      const cv = makeCanvas(w, hh); // (OffscreenCanvas where there is one: older iOS has none)
+      const g = cv.getContext('2d') as OffscreenCanvasRenderingContext2D;
       g.drawImage(bmp, 0, 0);
       bmp.close();
       const px = g.getImageData(0, 0, w, hh).data;

@@ -18,6 +18,7 @@ docs below; read a topic doc only when the task touches that subsystem.
 | Data pipeline | `npm run fetch -- --region=<id>` → `node scripts/merge-raw.mjs --region=<id>` → `npm run bake -- --region=<id>` |
 | Freeze hunt | `node tools/soak.mjs --region=<id> --seconds=120` |
 | Visual check | `node tools/capture.mjs --shots=<names> [--region=<id>]` → `shots/<region>-montage.jpg` |
+| Phone check | `npm run build && node tools/mobile-check.mjs --device=pixel7\|iphone` — Pages-like serve, device emulation, shader limits audit, boot report (`docs/agent/debugging.md`) |
 | Tile worker (dev) | `cd worker && npx wrangler dev` (ports 8787–8789) |
 | Region gate | `npm run verify:region -- --region=<id> [--soak=90] [--shots=a,b]` |
 

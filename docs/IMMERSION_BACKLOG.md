@@ -11,7 +11,10 @@ source, a region/climate table or a foundry family). No hand lists.
 - Sources: this doc merges the AAA design review (docs/earth/REVIEWER.md, 2026-09-27),
   ASSET_FIDELITY.md, ASSET_FOUNDRY.md, CONSTRUCTION.md and OPEN_WORLD.md.
 - Top items are mirrored into `feature_list.json`; this doc is the long list.
-- **Last updated 2026-09-29 (entry (ab)):** Robby's Seattle reports fixed — the drive hitch (z), doors into
+- **Last updated 2026-09-29 (entry (ad)):** interiors slice 1 (real rooms), phones (memory, tiers,
+  a boot report), photos that paint what they frame, the grade residuals fixed in the shared grader.
+  Next: Robby's city glitches (R.34) and a playtest suite (R.35).
+- **Earlier 2026-09-29 (entry (ab)):** Robby's Seattle reports fixed — the drive hitch (z), doors into
   neighbours and being shut in (aa), the Needle (aa); retaining walls board-formed with clipped hedges and
   a stair to each lot; a harness that re-poses until it sees. Queued: far cities at their real distance
   (R.30), interiors at real scale (R.31).
@@ -293,7 +296,11 @@ Reference photos + per-place trait tables: `docs/earth/PLACE_REFERENCES.md`. Har
 | R.28 | (2026-09-28) "Doorways where other buildings are, and I can't get out" | ✅ (aa) a door only on a wall with open ground outside; long steps go in pieces (no tunnelling through walls, on foot or in a car); teleports skip blocked doors; a once-a-second rescue from a wall through your body | **P0** |
 | R.29 | (2026-09-28) The Space Needle a plain cylinder | ✅ (aa) an outline its lifted parts overhang is drawn by its parts; the skyline ring reads tall parts (tile cache v22 — **needs a worker redeploy**) | P0 |
 | R.30 | (2026-09-28) **Far cities at their real distance**: from Sea Bright's beach on a clear day you see Manhattan (~40 km), "done right and not overdone" — towers past the skyline ring as silhouettes, dropped by the Earth's curve (hidden where the sea bulge covers them), faded by the day's visibility; gone in haze or fog | 🟡 a draft (`farSkyline.ts`: towers ≥ 120 m within 60 km from Overpass, curvature with refraction, extinction from the fog) — review, then seen live from the beach | P1 |
-| R.31 | (2026-09-28) **Interiors at real scale and variety**: big buildings are one open hall; homes need a hall and rooms, apartments corridors and units, towers cores, lifts and floors; rooms sized like real ones (NDSS / London Plan / BCO) and compared with real photos; every archetype from the data (OSM indoor tagging, `building`, `tourism`, `amenity`, `use`) | ⬜ back burner — `docs/INTERIORS_PLAN.md` (measured gaps, target proportions, a two-stage shell/layout planner, a phone budget, five slices) | P1 |
+| R.31 | (2026-09-28) **Interiors at real scale and variety**: big buildings are one open hall; homes need a hall and rooms, apartments corridors and units, towers cores, lifts and floors; rooms sized like real ones (NDSS / London Plan / BCO) and compared with real photos; every archetype from the data (OSM indoor tagging, `building`, `tourism`, `amenity`, `use`) | 🟡 (ad) slice 1 done: hall, rooms and stairs in houses, corridors and flats in blocks, cores and desks in offices, never shut in (`docs/INTERIORS_PLAN.md`) (measured gaps, target proportions, a two-stage shell/layout planner, a phone budget, five slices) | P1 |
+| R.32 | (2026-09-29) GitHub Pages blank on a phone | 🟡 (ad) most likely out of GPU memory (~950 MB at desktop settings) → cropped sign atlases, live-slot life meshes, a phone tier and a low tier, a boot report on the page (`?diag=1`). Needs a real phone after the next deploy | **P0** |
+| R.33 | (2026-09-29) In paint-as-you-walk mode, a photo paints everything it frames, even far away | 🟡 (ad) depth readback → painted discs, far cells, a 32 km far window | P2 |
+| R.34 | (2026-09-29) Glitches in big cities: buildings flicker; doors you can't walk through, a building inside a building; the ground flashing blue/green when flying high | ⬜ in progress — each gets a check in the playtest suite (R.35) | **P0** |
+| R.35 | (2026-09-29) A playtest suite that checks gameplay on any city: every door walkable, no nested or duplicated buildings, walking/driving/flying stable, streaming complete, frame times | ⬜ | **P0** |
 
 ## 11. The big ideas (Robby, 2026-09-27) — what makes this game unlike any other
 

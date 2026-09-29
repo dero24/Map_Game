@@ -4,7 +4,7 @@ import type * as THREE from 'three';
 import type { Walker } from '../player/controller';
 import type { Terrain, WorldJson, Road } from '../world/data';
 import type { Footprint } from '../world/buildings';
-import type { Explore } from '../world/explore';
+import type { Explore, SeenPaint } from '../world/explore';
 
 export interface GameCtx {
   walker: Walker;
@@ -36,6 +36,10 @@ export interface GameCtx {
    *  is arrived at from a viewpoint that shows it, not from its front door. */
   teleport: (lat: number, lon: number, kind?: string) => Promise<void>;
   sound: (kind: 'brush' | 'shutter' | 'chime' | 'page' | 'settle') => void;
+  /** With the far sketch on (postParams.sketchFar): paint everything in this frame — near and far —
+   *  into the explore record; it blooms in over ~2 s. Call right after the frame is drawn (photo
+   *  mode's afterRender). null when the mode is off or the frame couldn't be read. */
+  paintView: () => Promise<SeenPaint | null>;
   uiOpen: () => boolean; // a modal (atlas / intro) owns the keyboard
   lock: () => void;
 }

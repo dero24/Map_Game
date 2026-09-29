@@ -5,6 +5,7 @@
 //            depth ─────────────────────────────────────────────┘
 import * as THREE from 'three';
 import { GLSL_NOISE, U } from './shared';
+import { GLSL_PACK_DEPTH, unpackDepth } from './seen';
 
 export const postParams = {
   enabled: true,
@@ -93,9 +94,14 @@ varying vec2 vUv;
 void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }
 `;
 
+// HDR buffers need a float colour attachment to render into (EXT_color_buffer_half_float, or
+// _float, which every WebGL 2 phone we know of has). Without one a half-float target is an
+// incomplete framebuffer: every pass would draw nothing and the page stay blank — so fall back to
+// 8-bit buffers (highlights clip, the world still shows).
+let rtType: THREE.TextureDataType = THREE.HalfFloatType;
 const makeRT = (w: number, h: number, depth = false) =>
   new THREE.WebGLRenderTarget(w, h, {
-    type: THREE.HalfFloatType,
+    type: rtType,
     minFilter: THREE.LinearFilter,
     magFilter: THREE.LinearFilter,
     depthBuffer: depth,
@@ -116,6 +122,9 @@ export class WatercolorPost {
   // the brush's sketch (ui/brush.ts): drawn in a pass of its own and laid over the painting, so the
   // paint filter never smears its line (made the first time there is one)
   private ghostRT: THREE.WebGLRenderTarget | null = null;
+  // what a photo saw (readSeen): the frame's depth, packed small (made the first time)
+  private seenRT: THREE.WebGLRenderTarget | null = null;
+  private mSeen: THREE.ShaderMaterial | null = null;
   private clearC = new THREE.Color();
   private quad: THREE.Mesh;
   private cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -129,6 +138,9 @@ export class WatercolorPost {
   private h = 1;
 
   constructor(private renderer: THREE.WebGLRenderer) {
+    const ext = renderer.extensions;
+    rtType = ext.has('EXT_color_buffer_half_float') || ext.has('EXT_color_buffer_float') ? THREE.HalfFloatType : THREE.UnsignedByteType;
+    if (rtType !== THREE.HalfFloatType) console.warn('no float colour buffers on this GPU: painting in 8-bit');
     const rt = makeRT;
     this.sceneRT = rt(4, 4, true);
     this.kuwRT = rt(4, 4);
@@ -233,8 +245,8 @@ export class WatercolorPost {
       uniform float uWobble, uEdgeDark, uTurb, uGran, uPaper, uInk, uInkDist, uGlow, uVignette, uSat, uNightWash, uNight, uVibrance, uGrade;
       uniform vec3 uPaperColor, uInkColor, uNightTint, uWarm, uGradeShadow, uGradeLight;
       uniform float uGolden, uRaw;
-      uniform sampler2D tExplore;
-      uniform vec4 uExploreBox;
+      uniform sampler2D tExplore, tExploreFar;
+      uniform vec4 uExploreBox, uExploreFarBox;
       uniform float uSketch, uSketchFar, uCrisp, uSoftGlow, uClarity, uContrast;
       uniform sampler2D tGhost, tGhostDepth;
       uniform vec4 uGhost, uBrush, uRipple;
@@ -324,9 +336,16 @@ export class WatercolorPost {
           // …all the way out (a developer switch): where you haven't been, at any distance, the page
           // is still a pencil underdrawing; colour blooms in round you as you walk, a wet noisy edge
           // with pigment pooled at its rim. The sky and the far layer (horizon, far skyline) stay
-          // painted.
+          // painted. Past the fine window (4 km, 8 m) the far one (~32 km, 64 m) says what's painted
+          // (R what a photo framed, G the share you walked), blended over the fine one's last
+          // ~200 m; inside it, what a photo painted far off shows too.
           vec2 eu = (wp.xz - uExploreBox.xy) * uExploreBox.zw;
-          float e = (eu.x > 0.0 && eu.y > 0.0 && eu.x < 1.0 && eu.y < 1.0) ? texture2D(tExplore, eu).r : 0.0;
+          vec2 fu = (wp.xz - uExploreFarBox.xy) * uExploreFarBox.zw;
+          vec2 ee = min(eu, 1.0 - eu), fe = min(fu, 1.0 - fu);
+          float inFine = smoothstep(0.0, 0.05, min(ee.x, ee.y));
+          vec2 ef = min(fe.x, fe.y) > 0.0 ? texture2D(tExploreFar, fu).rg : vec2(0.0);
+          float e = max(ef.r, ef.g);
+          if (inFine > 0.0) e = mix(e, max(texture2D(tExplore, eu).r, ef.r), inFine);
           float n = fbm(wp.xz * 0.03) - 0.5 + (vnoise(wp.xz * 0.35 + wp.y) - 0.5) * 0.3;
           float rev = smoothstep(0.34, 0.66, e + n * 0.5);
           sketchAmt = (1.0 - rev) * uSketch;
@@ -500,7 +519,7 @@ export class WatercolorPost {
         uInk: { value: 0.5 }, uInkDist: { value: 300 }, uGlow: { value: 0.8 }, uVignette: { value: 0.5 }, uSat: { value: 1 },
         uNightWash: { value: 0.5 }, uNight: { value: 0 }, uGolden: { value: 0 }, uExposure: { value: 1 }, uRaw: { value: 0 },
         uPaperColor: { value: new THREE.Color() }, uInkColor: { value: new THREE.Color() },
-        tExplore: U.uExplore, uExploreBox: U.uExploreBox, uSketch: { value: 0 }, uSketchFar: { value: 0 }, uCrisp: { value: 0 }, uSoftGlow: { value: 0 }, uClarity: { value: 0 }, uContrast: { value: 0 },
+        tExplore: U.uExplore, uExploreBox: U.uExploreBox, tExploreFar: U.uExploreFar, uExploreFarBox: U.uExploreFarBox, uSketch: { value: 0 }, uSketchFar: { value: 0 }, uCrisp: { value: 0 }, uSoftGlow: { value: 0 }, uClarity: { value: 0 }, uContrast: { value: 0 },
         tGhost: { value: null }, tGhostDepth: { value: null }, uGhost: U.uGhost, uBrush: U.uBrush, uRipple: U.uRipple,
         uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() }, uWorldOff: U.uWorldOffset,
         uNightTint: { value: new THREE.Color(0.55, 0.62, 1.0) }, uWarm: { value: new THREE.Color(1.08, 0.97, 0.86) },
@@ -535,6 +554,34 @@ export class WatercolorPost {
     this.quad.material = mat;
     this.renderer.setRenderTarget(target);
     this.renderer.render(this.scene, this.cam);
+  }
+
+  /** The frame just drawn as view depths on a small w×h grid (row 0 = the bottom; 0 = sky), for a
+   *  photo to paint what it saw (render/seen.ts). One tiny pass packs the depth buffer, then an
+   *  async read (no GPU stall). Call right after render(), before the next frame draws. */
+  async readSeen(w: number, h: number, near: number, far: number): Promise<Float32Array | null> {
+    const r = this.renderer;
+    this.mSeen ??= pass(
+      /* glsl */ `uniform sampler2D tDepth; uniform float uNear, uFar; varying vec2 vUv;
+      ${GLSL_PACK_DEPTH}
+      void main() { gl_FragColor = packDepth(texture2D(tDepth, vUv).r); }`,
+      { tDepth: { value: null }, uNear: { value: 0.1 }, uFar: { value: 1000 } },
+    );
+    if (!this.seenRT) this.seenRT = new THREE.WebGLRenderTarget(w, h, { type: THREE.UnsignedByteType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false });
+    else if (this.seenRT.width !== w || this.seenRT.height !== h) this.seenRT.setSize(w, h);
+    const u = this.mSeen.uniforms;
+    u.tDepth.value = this.sceneRT.depthTexture;
+    u.uNear.value = near;
+    u.uFar.value = far;
+    const prev = r.getRenderTarget();
+    const px = new Uint8Array(w * h * 4);
+    let read: Promise<unknown>;
+    try {
+      this.draw(this.mSeen, this.seenRT);
+      read = r.readRenderTargetPixelsAsync(this.seenRT, 0, 0, w, h, px); // (queued now; resolves in a frame or two)
+    } catch { return null; } finally { r.setRenderTarget(prev); }
+    try { await read; } catch { return null; }
+    return unpackDepth(px, near, far);
   }
 
   render(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, night: number, golden: number, yaw: number, pitch: number, raw = false, overlay: THREE.Object3D | null = null) {

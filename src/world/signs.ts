@@ -30,32 +30,55 @@ const FONTS: Record<Font, string> = {
   number: '700 42px Georgia, serif',
 };
 
+// The lettering atlas: texts are laid out in 64 px rows as they're asked for (their uvs are needed
+// at once), measured on a 1×1 canvas, and drawn only at the end into a canvas cut to the rows they
+// fill. A tile used to paint a full 2048² canvas and ship it (and upload it, with mipmaps): 16 MB +
+// 5 MB of mips a tile, mostly empty — ~300 MB of GPU memory over a 14-tile ring, a phone's whole
+// budget — and the worker held a 16 MB canvas per tile built until the collector got to it.
 class Atlas {
-  readonly canvas: AnyCanvas;
-  private ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
+  private measure: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
   private x = 8;
   private y = 0;
   private map = new Map<string, { u0: number; v0: number; u1: number; v1: number; aspect: number }>();
+  private queue: { text: string; font: Font; x: number; y: number; w: number }[] = [];
   constructor(readonly W = 2048, readonly H = 2048, readonly row = 64) {
-    this.canvas = makeCanvas(W, H);
-    this.ctx = this.canvas.getContext('2d')! as OffscreenCanvasRenderingContext2D;
-    this.ctx.textBaseline = 'middle';
+    this.measure = makeCanvas(1, 1).getContext('2d')! as OffscreenCanvasRenderingContext2D;
   }
   get(text: string, font: Font) {
     const k = font + '|' + text;
     const hit = this.map.get(k);
     if (hit) return hit;
-    const c = this.ctx;
+    const c = this.measure;
     c.font = FONTS[font];
     const w = Math.min(this.W - 16, Math.ceil(c.measureText(text).width) + 24);
     if (this.x + w > this.W) (this.x = 8), (this.y += this.row);
     if (this.y + this.row > this.H) return null;
-    c.fillStyle = '#fff';
-    c.fillText(text, this.x + 12, this.y + this.row / 2 + 2, w - 24);
+    this.queue.push({ text, font, x: this.x, y: this.y, w });
     const e = { u0: this.x / this.W, v0: this.y / this.H, u1: (this.x + w) / this.W, v1: (this.y + this.row) / this.H, aspect: w / this.row };
     this.x += w + 8;
     this.map.set(k, e);
     return e;
+  }
+  /** The part of the atlas that holds lettering: [width, height] in px, whole rows, ≥ one row. */
+  used(): [number, number] {
+    const h = this.x > 8 ? this.y + this.row : this.y;
+    const w = h <= this.row ? Math.min(this.W, Math.ceil((this.x + 8) / 64) * 64) : this.W;
+    return [Math.max(64, w), Math.max(this.row, h)];
+  }
+  /** Paint the lettering into a canvas of just the rows it fills; `su`/`sv` re-address the uvs. */
+  paint(): { canvas: AnyCanvas; su: number; sv: number } {
+    const [w, h] = this.used();
+    const canvas = makeCanvas(w, h);
+    const g = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null;
+    if (g) {
+      g.textBaseline = 'middle';
+      g.fillStyle = '#fff';
+      for (const q of this.queue) {
+        g.font = FONTS[q.font];
+        g.fillText(q.text, q.x + 12, q.y + this.row / 2 + 2, q.w - 24);
+      }
+    }
+    return { canvas, su: this.W / w, sv: this.H / h };
   }
 }
 
@@ -86,6 +109,11 @@ class SignMesher {
       if (n.x * mid[0] + n.z * mid[1] < 0) n.negate();
       this.quad(a[0], y0, a[1], b[0], y0, b[1], y1 - y0, n);
     }
+  }
+  /** Re-address the lettering uvs after the atlas was cropped (untextured quads keep −1). */
+  scaleUv(su: number, sv: number) {
+    if (su === 1 && sv === 1) return;
+    for (let i = 0; i + 1 < this.uv.length; i += 2) if (this.uv[i] >= 0) (this.uv[i] *= su), (this.uv[i + 1] *= sv);
   }
   geometry() {
     const g = new THREE.BufferGeometry();
@@ -195,11 +223,13 @@ export function buildSigns(world: World, specs: SignSpec[], walk: WalkWorld) {
     }
   }
 
-  const mat = signMaterial(signTexture(atlas.canvas));
+  const crop = atlas.paint();
+  m.scaleUv(crop.su, crop.sv);
+  const mat = signMaterial(signTexture(crop.canvas));
   const mesh = new THREE.Mesh(m.geometry(), mat);
   mesh.layers.enable(1);
   mesh.name = 'signs';
-  return { mesh, poles, atlas: atlas.canvas };
+  return { mesh, poles, atlas: crop.canvas };
 }
 
 // The atlas texture + painted material for the sign mesh — shared between the in-page build and

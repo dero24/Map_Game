@@ -263,6 +263,191 @@ export function cafeSet(topHex: number, chairHex: number, parasol: number | null
   return out;
 }
 
+// ---- rooms, not halls: the pieces a planned interior repeats (docs/INTERIORS_PLAN.md, Slice 1) ----
+// Each is a handful of plain boxes (36 verts) so a block of flats or an office floor can instance
+// them by the hundred; parts painted white (0xffffff) take the instance's tint.
+const T = 0xffffff;
+const box = (w: number, h: number, d: number, x: number, y: number, z: number) => ni(new THREE.BoxGeometry(w, h, d)).translate(x, y + h / 2, z);
+
+/** A fitted kitchen along a wall, `len` long: base units with a worktop, sink, hob and oven, wall
+ *  units and a hood above, a tall fridge at the end. Cabinet fronts take the tint. */
+export function kitchenRun(len: number, top = 0x4a4540, splash = 0xe9eef0): Parts {
+  const fr = 0.8, run = Math.max(1.2, len - fr - 0.05), x0 = -len / 2;
+  const out: Parts = [
+    P(box(run, 0.08, 0.56, x0 + run / 2, 0, 0.02), 'solid', 0x2e2a26), // plinth
+    P(box(run, 0.8, 0.6, x0 + run / 2, 0.08, 0), 'solid', T), // base units
+    P(box(run + 0.02, 0.04, 0.64, x0 + run / 2, 0.88, -0.01), 'porcelain', top), // worktop
+    P(box(run, 0.53, 0.015, x0 + run / 2, 0.92, 0.3), 'porcelain', splash), // backsplash
+    P(box(run, 0.75, 0.36, x0 + run / 2, 1.45, 0.12), 'solid', T), // wall units
+  ];
+  for (let x = x0 + 0.5; x < x0 + run - 0.1; x += 0.5) out.push(P(box(0.012, 0.66, 0.01, x, 0.14, -0.305), 'solid', 0x8d8a84)); // door joins
+  const sink = x0 + run * 0.35, hob = x0 + run * 0.72;
+  out.push(P(box(0.6, 0.06, 0.4, sink, 0.865, -0.02), 'porcelain', 0x8e969a));
+  out.push(P(box(0.04, 0.28, 0.04, sink, 0.92, 0.2), 'porcelain', 0xc0c4c6));
+  out.push(P(box(0.64, 0.012, 0.56, hob, 0.92, -0.01), 'solid', 0x222326));
+  out.push(P(box(0.6, 0.6, 0.012, hob, 0.15, -0.31), 'glass', 0x2a2b2e)); // oven door
+  out.push(P(box(0.76, 0.1, 0.4, hob, 1.35, 0.1), 'porcelain', 0xb8bcbf)); // hood
+  out.push(P(box(fr, 1.9, 0.62, x0 + run + 0.05 + fr / 2, 0, 0), 'porcelain', 0xe4e5e1)); // fridge
+  out.push(P(box(0.04, 0.7, 0.03, x0 + run + 0.05 + fr - 0.1, 0.9, -0.325), 'metal', 0x8a8e90));
+  return out;
+}
+
+/** An office workstation: a 1.6 × 0.8 m desk, screen and keyboard, and its chair in front (−z).
+ *  The chair's fabric takes the tint. */
+export function workstation(): Parts {
+  return [
+    P(box(1.6, 0.03, 0.8, 0, 0.71, 0), 'wood', 0xd8d2c4),
+    P(box(0.03, 0.71, 0.7, -0.77, 0, 0), 'metal', 0x8d9296),
+    P(box(0.03, 0.71, 0.7, 0.77, 0, 0), 'metal', 0x8d9296),
+    P(box(0.54, 0.32, 0.03, 0, 0.84, 0.2), 'glass', 0x22252a), // screen
+    P(box(0.06, 0.1, 0.06, 0, 0.74, 0.2), 'metal', 0x3a3b3e),
+    P(box(0.44, 0.02, 0.14, 0, 0.74, -0.15), 'solid', 0xe9e9e4), // keyboard
+    P(box(0.48, 0.07, 0.46, 0, 0.44, -0.68), 'fabric', T), // chair: seat, back, stem, base
+    P(box(0.44, 0.48, 0.07, 0, 0.52, -0.9), 'fabric', T),
+    P(box(0.05, 0.4, 0.05, 0, 0.05, -0.68), 'metal', 0x2a2b2e),
+    P(box(0.56, 0.04, 0.56, 0, 0.01, -0.68), 'metal', 0x2a2b2e),
+  ];
+}
+
+/** A doorway's casing, w wide: two jambs and a head, straddling a 0.12 m wall. */
+export function doorFrame(w: number): Parts {
+  return [
+    P(box(0.08, 2.18, 0.16, -w / 2 - 0.04, 0, 0), 'solid', 0xf4f1ea),
+    P(box(0.08, 2.18, 0.16, w / 2 + 0.04, 0, 0), 'solid', 0xf4f1ea),
+    P(box(w + 0.16, 0.1, 0.16, 0, 2.1, 0), 'solid', 0xf4f1ea),
+  ];
+}
+/** A door leaf standing open, hinged at x = 0 and reaching to x = w (panels, a knob); the leaf
+ *  takes the tint. */
+export function doorLeaf(w: number): Parts {
+  const out: Parts = [P(box(w - 0.02, 2.02, 0.04, w / 2, 0.02, 0), 'solid', T)];
+  for (const [y0, y1] of [[0.18, 0.95], [1.15, 1.85]]) for (const s of [-1, 1]) out.push(P(box(w - 0.24, y1 - y0, 0.012, w / 2, y0, s * 0.024), 'solid', 0xe6e2da));
+  for (const s of [-1, 1]) out.push(P(box(0.05, 0.05, 0.05, w - 0.1, 0.95, s * 0.045), 'metal', 0xc9a74a));
+  return out;
+}
+
+/** WC pan with its cistern against the wall (+z). */
+export function toilet(): Parts {
+  return [
+    P(rbox(0.38, 0.4, 0.5, 0.03, 0, 0, -0.07), 'porcelain', 0xf4f3ef),
+    P(rbox(0.4, 0.04, 0.46, 0.015, 0, 0.4, -0.08), 'porcelain', 0xf4f3ef),
+    P(box(0.42, 0.38, 0.18, 0, 0.42, 0.24), 'porcelain', 0xf4f3ef),
+  ];
+}
+/** A vanity: a cabinet (tint) with a basin top and tap, a mirror above on the wall. */
+export function vanity(w: number): Parts {
+  return [
+    P(box(w, 0.8, 0.48, 0, 0.02, 0), 'wood', T),
+    P(box(w + 0.02, 0.04, 0.5, 0, 0.82, 0), 'porcelain', 0xe8e4da),
+    P(box(0.44, 0.02, 0.32, 0, 0.855, -0.02), 'porcelain', 0xd6dde0),
+    P(box(0.03, 0.2, 0.03, 0, 0.86, 0.19), 'porcelain', 0xc0c4c6),
+    P(box(Math.max(0.4, w - 0.2), 0.7, 0.03, 0, 1.05, 0.225), 'glass', 0xc9d6dc),
+  ];
+}
+/** A bathtub `len` long along the wall. */
+export function bathtub(len: number): Parts {
+  return [
+    P(box(len, 0.56, 0.76, 0, 0, 0), 'porcelain', 0xf4f3ef),
+    P(box(len - 0.16, 0.02, 0.6, 0, 0.545, 0), 'porcelain', 0xa9cad3),
+    P(box(0.04, 0.44, 0.04, -len / 2 + 0.1, 0.56, 0.3), 'porcelain', 0xc0c4c6),
+  ];
+}
+/** A wardrobe (tint), its doors' join and two handles. */
+export function wardrobe(w: number): Parts {
+  return [
+    P(box(w, 2.02, 0.58, 0, 0.03, 0), 'wood', T),
+    P(box(0.01, 1.9, 0.012, 0, 0.09, -0.295), 'wood', 0x5a4a3a),
+    P(box(0.02, 0.3, 0.03, -0.06, 1.0, -0.305), 'metal', 0xc9a74a),
+    P(box(0.02, 0.3, 0.03, 0.06, 1.0, -0.305), 'metal', 0xc9a74a),
+  ];
+}
+/** A chest of drawers (tint) with handles and a mirror on the wall above. */
+export function dresser(w: number): Parts {
+  const out: Parts = [P(box(w, 0.8, 0.48, 0, 0.06, 0), 'wood', T), ...legs(w, 0.48, 0.06, 0.04, 0.02, 0x3a2e24)];
+  for (let r = 0; r < 3; r++) {
+    out.push(P(box(w - 0.08, 0.2, 0.01, 0, 0.1 + r * 0.25, -0.245), 'wood', 0xd9d0c0));
+    out.push(P(box(0.12, 0.03, 0.02, 0, 0.19 + r * 0.25, -0.255), 'metal', 0xc9a74a));
+  }
+  out.push(P(box(w - 0.2, 0.75, 0.03, 0, 1.0, 0.225), 'wood', 0x5a4a3a), P(box(w - 0.3, 0.65, 0.01, 0, 1.05, 0.205), 'glass', 0xc9d6dc));
+  return out;
+}
+/** A bookcase (tint) filled by seed. */
+export function bookcase(w: number, seed: number, spines: number[]): Parts {
+  const h = 1.9, d = 0.34;
+  const out: Parts = [P(box(w, h, 0.02, 0, 0, d / 2 - 0.01), 'wood', T), P(box(0.03, h, d, -w / 2 + 0.015, 0, 0), 'wood', T), P(box(0.03, h, d, w / 2 - 0.015, 0, 0), 'wood', T)];
+  let s = seed >>> 0;
+  const rnd = () => ((s = (Math.imul(s ^ (s >>> 15), 2246822519) + 0x9e3779b9) >>> 0) / 4294967296);
+  for (let r = 0; r < 5; r++) {
+    const y = 0.02 + r * 0.42;
+    out.push(P(box(w - 0.06, 0.025, d - 0.02, 0, y, 0), 'wood', T));
+    if (r === 4) break;
+    let x = -w / 2 + 0.05;
+    while (x < w / 2 - 0.12) {
+      const bw = 0.03 + rnd() * 0.05, bh = 0.2 + rnd() * 0.12;
+      if (rnd() > 0.15) out.push(P(box(bw, bh, d - 0.08, x + bw / 2, y + 0.025, 0), 'fabric', spines[Math.floor(rnd() * spines.length)]));
+      x += bw + 0.006;
+    }
+  }
+  return out;
+}
+/** A supermarket gondola module `len` long: shelves both sides, stocked by seed. */
+export function gondola(len: number, seed: number, stock: number[]): Parts {
+  const out: Parts = [P(box(len, 0.1, 0.9, 0, 0, 0), 'solid', 0x9a9690), P(box(len, 1.6, 0.04, 0, 0.1, 0), 'solid', 0xd8d2c4)];
+  let s = seed >>> 0;
+  const rnd = () => ((s = (Math.imul(s ^ (s >>> 15), 2246822519) + 0x9e3779b9) >>> 0) / 4294967296);
+  for (const side of [-1, 1]) {
+    for (let r = 0; r < 4; r++) {
+      const y = 0.12 + r * 0.4;
+      out.push(P(box(len, 0.02, 0.4, 0, y, side * 0.22), 'solid', 0xcfc8b8));
+      let x = -len / 2 + 0.03;
+      while (x < len / 2 - 0.1) {
+        const iw = Math.min(0.1 + rnd() * 0.16, len / 2 - 0.03 - x), ih = 0.14 + rnd() * 0.18;
+        if (rnd() > 0.1) out.push(P(box(iw, ih, 0.3, x + iw / 2, y + 0.02, side * 0.24), 'solid', stock[Math.floor(rnd() * stock.length)]));
+        x += iw + 0.02;
+      }
+    }
+  }
+  return out;
+}
+/** A washing machine. */
+export function washer(): Parts {
+  return [P(box(0.6, 0.85, 0.58, 0, 0, 0), 'porcelain', 0xeeeeea), P(box(0.36, 0.36, 0.02, 0, 0.3, -0.295), 'glass', 0x5a6a78), P(box(0.5, 0.06, 0.02, 0, 0.75, -0.295), 'solid', 0xb8bcbf)];
+}
+/** A bank of lift doors in their steel frame, with the floor indicator. */
+export function liftDoors(): Parts {
+  return [
+    P(box(1.3, 2.3, 0.1, 0, 0, 0), 'metal', 0x8a8e90),
+    P(box(0.54, 2.1, 0.02, -0.28, 0, -0.06), 'metal', 0xb8bcbf),
+    P(box(0.54, 2.1, 0.02, 0.28, 0, -0.06), 'metal', 0xb8bcbf),
+    P(box(0.3, 0.1, 0.02, 0, 2.35, -0.05), 'glow', 0xffb060),
+  ];
+}
+/** A wall of mailboxes. */
+export function mailboxes(w: number): Parts {
+  const out: Parts = [P(box(w, 1.2, 0.3, 0, 0.6, 0), 'metal', 0x8a7f6a)];
+  const n = Math.max(2, Math.floor(w / 0.32));
+  for (let i = 0; i < n; i++) for (let r = 0; r < 4; r++) out.push(P(box(w / n - 0.03, 0.26, 0.01, -w / 2 + (i + 0.5) * (w / n), 0.64 + r * 0.29, -0.155), 'metal', 0xb8ad94));
+  return out;
+}
+/** Steel storage racking for a stock room. */
+export function rack(len: number): Parts {
+  const out: Parts = [];
+  for (const x of [-len / 2 + 0.03, len / 2 - 0.03]) out.push(P(box(0.05, 2.2, 0.6, x, 0, 0), 'metal', 0x3a5a8a));
+  for (let r = 0; r < 4; r++) out.push(P(box(len, 0.04, 0.6, 0, 0.1 + r * 0.6, 0), 'metal', 0xb89468));
+  for (let r = 0; r < 3; r++) for (let i = 0; i < Math.floor(len / 0.6); i++) out.push(P(box(0.45, 0.35, 0.45, -len / 2 + 0.35 + i * 0.6, 0.14 + r * 0.6, 0), 'solid', [0xc8a878, 0xb89460, 0xd8c098][(i + r) % 3]));
+  return out;
+}
+/** A ceiling light: a glowing panel w × d, h deep, hanging from its top (y = h) to its face (y = 0). */
+export function ceilingLight(w: number, d: number, h: number): Parts {
+  return [P(box(w, h, d, 0, 0, 0), 'glow', 0xfff3d0)];
+}
+/** A commercial range: steel body, six burners, a steel splashback. */
+export function range(): Parts {
+  const out: Parts = [P(box(1.2, 0.9, 0.8, 0, 0, 0), 'metal', 0xb8bcbf), P(box(1.2, 0.5, 0.04, 0, 0.9, 0.38), 'metal', 0xc8ccce)];
+  for (let i = 0; i < 6; i++) out.push(P(box(0.24, 0.02, 0.24, -0.4 + (i % 3) * 0.4, 0.9, -0.15 + Math.floor(i / 3) * 0.32), 'solid', 0x222326));
+  return out;
+}
+
 /** Merge a piece into one vertex-coloured geometry (for props outside: café terraces). */
 export function mergeDecor(parts: Parts): THREE.BufferGeometry {
   const gs = parts.map((p) => {

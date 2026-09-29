@@ -17,9 +17,13 @@ import type { WalkWorld } from '../player/collision';
 import { U } from '../render/shared';
 import { activeStyle } from './styles';
 
-const LOAD_R = 1500; // keep tiles this close (3×3 cells and then some)
-const DROP_R = 2400; // drop tiles beyond this
-const COARSE_R = 8000; // silhouette ring: lite builds (meshes only) out to the horizon
+// The rings (m). A phone's quality tier (render/quality.ts) tightens them at boot: every detail
+// tile is tens of MB of vertices and textures, and the silhouette ring to 8 km is hundreds of cells.
+export const streamParams = {
+  loadR: 1500, // keep tiles this close (3×3 cells and then some)
+  dropR: 2400, // drop tiles beyond this
+  coarseR: 8000, // silhouette ring: lite builds (meshes only) out to the horizon
+};
 const W_CONC = 4; // real-lite (tile service) builds in flight at once (the service caches in R2; Overpass slots are per endpoint)
 const LAMP_WIN = 2048; // m — the night light-map window around the walker
 const COARSE_BUDGET = 4; // max outstanding lite builds — they're lowest priority
@@ -314,7 +318,7 @@ export class TileStream {
 
   // Load every tile within r of (x,z) now — used during startup so the spawn area is solid.
   // Covers synthetic cells too, so a teleport/respawn past the bake isn't born in a void.
-  async ensureAround(x: number, z: number, r = LOAD_R) {
+  async ensureAround(x: number, z: number, r = streamParams.loadR) {
     const c = this.man.cell;
     const wanted: TileSpec[] = [];
     for (let cz = Math.floor((z - r) / c); cz <= Math.floor((z + r) / c); cz++)
@@ -336,6 +340,7 @@ export class TileStream {
   // Per-frame: kick fetches for wanted tiles (detail ring first, then the coarse silhouette
   // ring under a small budget), mount at most one finished tile of each tier, drop far ones.
   update(x: number, z: number) {
+    const { loadR: LOAD_R, dropR: DROP_R, coarseR: COARSE_R } = streamParams;
     this.reveal();
     const now = performance.now();
     const gy = Math.max(0, this.terrain.heightAt(x, z));

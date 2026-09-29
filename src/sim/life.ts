@@ -653,6 +653,7 @@ export class LifeClient {
       const [r0, r1] = g.range;
       const kind = g.range === RANGES.gulls ? 0 : g.range === RANGES.cars ? 1 : g.range === RANGES.peds ? 2 : 3;
       const A = g.anim.array as Float32Array;
+      let hi = -1; // the last live slot: the sim fills slots from the bottom, so past it all are empty
       for (let i = r0; i < r1; i++) {
         const o = i * S.STRIDE, li = i - r0;
         const flags = snap[o + S.FLAGS];
@@ -766,12 +767,18 @@ export class LifeClient {
             } else g.meshes[k].setMatrixAt(li, this.zeroM);
           }
         } else g.mesh.setMatrixAt(li, this.m);
+        hi = li;
         const aph = snap[o + S.ANIM];
         A[li * 3] = aph; A[li * 3 + 1] = amt; // walkers pass the knockdown code (< 0) through to the pose shader A[li * 3 + 2] = lights;
         if (kind === 1) A[li * 3 + 1] = 0;
       }
-      if (kind === 1) for (const gm of this.gear.values()) gm.instanceMatrix.needsUpdate = true;
+      // Draw only up to the last live slot: every variant mesh holds every slot (zero-scaled where
+      // it isn't that agent's model), so drawing them all ran the vertex shader for ~2.4 M
+      // triangles of empty cars and walkers a frame — twice, with the shadow pass — mostly slots
+      // no one was in. (A phone's GPU felt that most.)
+      if (kind === 1) for (const gm of this.gear.values()) { gm.count = hi + 1; gm.instanceMatrix.needsUpdate = true; }
       for (const mm of g.meshes) {
+        mm.count = hi + 1;
         mm.instanceMatrix.needsUpdate = true;
         if (mm.instanceColor) mm.instanceColor.needsUpdate = true;
       }

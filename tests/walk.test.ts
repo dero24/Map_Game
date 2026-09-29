@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { WalkWorld } from '../src/player/collision';
 import type { Terrain } from '../src/world/data';
-import { planInterior, registerPlan } from '../src/world/interiors';
+import { planInterior, registerPlan, layoutInterior, registerLayout } from '../src/world/interiors';
 import type { Footprint, Door } from '../src/world/buildings';
 
 // Flat dry land at 0.5 m everywhere.
@@ -27,6 +27,9 @@ describe('walking into buildings', () => {
   const w = new WalkWorld(terrain, bounds);
   const plan = planInterior('t:0', fp, door, 1234);
   registerPlan(w, fp, plan);
+  // (the rooms' partitions go in when the house is walked up to — here, straight away)
+  const layout = layoutInterior(plan, fp);
+  registerLayout(w, plan, layout);
   const F = plan.flights[0];
   const vc = F ? (F.v0 + F.v1) / 2 : 0;
   const at = (u: number, v = vc): [number, number] => [plan.cx + plan.ux * u + plan.vx * v, plan.cz + plan.uz * u + plan.vz * v];
@@ -38,8 +41,14 @@ describe('walking into buildings', () => {
     expect(Math.max(F.u0, F.u1)).toBeLessThanOrEqual(plan.L / 2);
     expect(Math.min(F.v0, F.v1)).toBeGreaterThanOrEqual(-plan.W / 2);
     expect(Math.max(F.v0, F.v1)).toBeLessThanOrEqual(plan.W / 2);
-    for (const p of plan.parts) expect(p.u < F.u0 - 0.3 || p.u > F.u1 + 0.3).toBe(true);
+    // no partition runs across the flight on the storey it climbs from
+    for (const wl of layout.walls.filter((q) => q.level === F.level)) {
+      const [c0, c1, a0, a1] = wl.ax === 0 ? [F.v0, F.v1, F.u0, F.u1] : [F.u0, F.u1, F.v0, F.v1];
+      const across = wl.c > Math.min(c0, c1) + 0.05 && wl.c < Math.max(c0, c1) - 0.05;
+      expect(across && Math.min(wl.b, Math.max(a0, a1)) - Math.max(wl.a, Math.min(a0, a1)) > 0.05).toBe(false);
+    }
     expect(planInterior('t:0', fp, door, 1234)).toEqual(plan); // deterministic
+    expect(layoutInterior(planInterior('t:0', fp, door, 1234), fp)).toEqual(layout);
   });
 
   it('lets you through the front door but not through the wall', () => {
@@ -124,6 +133,23 @@ describe('tile scopes (streamed unload)', () => {
   });
 });
 
+describe('an open building\'s own scope', () => {
+  it('its partitions come and go all session: purged from the grid, their ids reused, nothing else disturbed', () => {
+    const w = new WalkWorld(terrain, bounds);
+    w.beginScope(5); // a tile's wall at x = 0
+    w.addWall([0, -5], [0, 5]);
+    w.endScope();
+    for (let n = 0; n < 3; n++) {
+      w.withScope(-7, () => { w.addWall([3, -5], [3, 5]); w.addWall([6, -5], [6, 5]); });
+      expect(w.touching(3.1, 0, 0.3)).toBe(true);
+      w.removeScope(-7, true);
+      expect(w.touching(3.1, 0, 0.3)).toBe(false);
+      expect(w.touching(0.1, 0, 0.3)).toBe(true);
+    }
+    expect((w as unknown as { segs: unknown[] }).segs.length).toBe(3); // (three walls' worth of ids, not seven)
+  });
+});
+
 describe('raised shore houses', () => {
   const w = new WalkWorld(terrain, bounds);
   const r2: [number, number][] = [[20, -4], [30, -4], [30, 4], [20, 4]];
@@ -150,22 +176,33 @@ describe('raised shore houses', () => {
 });
 
 describe('big floorplates', () => {
-  // a 60 x 30 m block, door mid-way along the long north wall
+  // a 60 x 30 m block, door mid-way along the long north wall. (These used to be one hall cut by
+  // cross walls every ~10 m — Plan.parts; the rooms are laid out now, docs/INTERIORS_PLAN.md §3:
+  // an office's core and open plan, a block's corridor and flats. tests/interiorLayout.test.ts
+  // holds the detailed rules; this keeps the headline.)
   const big: [number, number][] = [[-30, -15], [30, -15], [30, 15], [-30, 15]];
   const bdoor: Door = { ...door, z: -15.2, fz: -16.4, wz: -15 };
   const mk = (kind: string, use?: string): Footprint => ({ ring: big, base: 0.2, top: 12, floor0: 0.5, raise: 0, kind, use, eave: 11.8, seed: 0.3, id: 7 });
-  it('an office, a civic hall or an apartment block is a lobby with rooms off it every ~10 m, never one hall', () => {
+  const area = (r: { u0: number; u1: number; v0: number; v1: number }) => (r.u1 - r.u0) * (r.v1 - r.v0);
+  it('an office, a civic hall or an apartment block is rooms off a core or corridor, never one hall', () => {
     for (const f of [mk('commercial', 'office'), mk('commercial', 'townhall'), mk('large')]) {
       const p = planInterior('t:b', f, bdoor, 99);
-      expect(p.parts.length, f.kind + f.use).toBeGreaterThanOrEqual(3);
-      const us = [-p.L / 2, ...p.parts.map((q) => q.u).sort((a, b) => a - b), p.L / 2];
-      for (let i = 1; i < us.length; i++) expect(us[i] - us[i - 1]).toBeLessThan(22); // no hall longer than two bays
-      for (const q of p.parts) for (const s of q.segs) expect(s.gap).toBeGreaterThan(s.lo); // a doorway in every wall
+      const L = layoutInterior(p, f);
+      for (let k = 0; k < p.levels; k++) expect(L.rooms.filter((r) => r.level === k).length).toBeGreaterThanOrEqual(6);
+      expect(L.walls.length).toBeGreaterThan(10);
+      expect(L.doors.length).toBeGreaterThan(5);
+      // a flat's rooms (not the open plan of an office) stay room-sized
+      const rooms = L.rooms.filter((r) => !['open', 'lobby', 'corridor', 'shop', 'hall', 'landing'].includes(r.type));
+      expect(Math.max(...rooms.map((r) => area(r.r)))).toBeLessThanOrEqual(38);
     }
   });
-  it('a supermarket stays an open floor of aisles; a small shop and a house are as they were', () => {
-    expect(planInterior('t:g', mk('commercial', 'supermarket'), bdoor, 99).parts.length).toBe(0);
-    expect(planInterior('t:0', fp, door, 1234).parts.length).toBeLessThanOrEqual(2);
+  it('a supermarket stays an open floor of aisles; a small house is a hall with rooms off it', () => {
+    const g = mk('commercial', 'supermarket');
+    const Lg = layoutInterior(planInterior('t:g', g, bdoor, 99), g);
+    const sales = Lg.rooms.filter((r) => r.level === 0 && r.type === 'shop').reduce((a, r) => a + area(r.r), 0);
+    expect(sales).toBeGreaterThan(0.6 * 60 * 30);
+    const Lh = layoutInterior(planInterior('t:0', fp, door, 1234), fp);
+    for (const k of [0, 1]) expect(Lh.rooms.filter((r) => r.level === k && !['hall', 'landing'].includes(r.type)).length).toBeGreaterThanOrEqual(3);
   });
 });
 
