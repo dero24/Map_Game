@@ -16,6 +16,8 @@ export class Walker {
   locked = false;
   /** the brush is washing colour in: rubbing it mustn't turn your head (ui/brush.ts) */
   holdLook = false;
+  /** a lift ride is under way: no walking (player/lift.ts) */
+  holdMove = false;
   /** Degrees off the field of view: a brief push-in (the brush, as a painted thing dries). */
   zoom = 0;
   distance = 0;
@@ -145,6 +147,7 @@ export class Walker {
     }
     const analog = Math.min(1, Math.hypot(this.tMove.x, this.tMove.y));
     const run = k.has('ShiftLeft') || k.has('ShiftRight') || analog > 0.85;
+    if (this.holdMove) f = s = 0;
     const len = Math.hypot(f, s);
     const mag = Math.min(1, len); // keys land on integers (mag 1); the stick is analog
     const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw);

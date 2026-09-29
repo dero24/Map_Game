@@ -2,6 +2,77 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-29 (af) — Towers you can ride up, and a test suite that plays the game
+
+Two helper agents worked in their own copies while the main session merged and committed (ae).
+Merged three ways onto (ae); 450 tests pass (one timing test made robust, below); typecheck clean.
+
+- **Interiors, slice 3: towers (`docs/INTERIORS_PLAN.md` §5).**
+  - Every storey exists, from the facade's floor height: a 150 m tower has 39. Only three storeys
+    round the walker are built. The next set builds behind the one you stand in and swaps in whole.
+  - Lifts:
+    - office towers have a bank of cars across the core, with a 3.2 m lift lobby;
+    - blocks of flats have a lift beside the core stair;
+    - ragged outlines get a free-standing shaft.
+  - A real ride: the car's doors open, you step in and turn round, the doors shut, the display
+    counts the floors, and you step out on the storey you chose. About 6–8 s.
+    - Keys: L in a lift lobby opens the floor chooser; ↑↓, W/S, PgUp/PgDn or typing a number picks a
+      floor; L or Enter goes.
+    - Touch: a ⇅ button.
+  - Stairs continue storey to storey in their shaft. Shafts cut every floor and are walled at
+    every height, so you can't fall in.
+  - Offices of 6+ storeys get a double-height lobby: a rail round the void and a gallery along the
+    core.
+  - A tower on a podium has upper storeys only inside its own outline.
+  - Each storey takes its layout, paint, furniture and people from its own seed. They had shifted
+    as you climbed.
+  - Curtain walls use the storeys' floor height, glazed floor to ceiling inside, mullions every
+    1.5 m. Tall offices show desks and ceiling lights behind the glass, lit floor by floor at night.
+  - The HUD reads "floor 24 of 39", and an office tower is no longer "a shop".
+  - Cost:
+    - tower plan 2.0 KB, 0.05 ms;
+    - worst build step 0.6–1.9 ms;
+    - 12–53k vertices built.
+  - `settleWalker` sits out a ride, which walks you through the shaft wall on purpose.
+  - Seen in `shots/mid-montage.jpg`, a Manhattan-like grid of towers served through the real
+    pipeline (offline, the stand-ins are 1–3 storeys): the lobby and mezzanine, the lift and its
+    car, floor 20 by day and night, the stair shaft, a glass tower, the podium, the street at night.
+  - `tests/interiorTower.test.ts` (18), plus tall cases in `interiorBudget` and the lift pieces in
+    `foundry`.
+  - Not yet: plant floors, sky lobbies, lifts in 5–7-storey blocks over shops, real Midtown data.
+- **A suite that plays the game (`tools/playtest.js`, `tools/playtest-core.js`, `tools/playtest.mjs`).**
+  - The new checks run the game's own code in fixed 1/60 s steps, seeded:
+    - `__WALKABOUT__`: street legs and doors, in, up the stairs, out; an A* over the walker's own
+      moves plans each leg.
+    - `__DRIVE__`: takes a parked car with E and drives seeded routes; three-point turns; gets out
+      and back in.
+    - `__TELEPORTS__`: the atlas's "walk here", then the settle.
+    - `__STREAMING__`: the ring covered in time; nothing mounted twice; no ghosts or errors.
+    - `__FRAMES__`: p50/p95/p99 and hitches against desktop and phone budgets.
+    - `__ROADPOSTS__`: posts inside a car street's kerb.
+  - Each check has a self-test that plants the failure it's for; all 25 catch theirs.
+  - `node tools/playtest.mjs --url=… [--at=…] [--only=…] [--quick]` runs it headless and exits
+    non-zero on a failure (`npm run playtest`).
+  - Sea Bright: 846 m walked, 4 buildings in and out, 1 staircase, 477 m driven, 6/6 teleports
+    good, 0 failures. Procedural Midtown: the same, 0 failures.
+- **What the suite found, fixed in shared code:**
+  - A signal mast on the main avenue's centre line stopped every car dead. Street-name poles,
+    hydrants, bins, lamps and 11 mapped power poles stood inside the kerb. Posts now step out past
+    their own kerb, and name poles stand beside the road: 31 → 5 in the lanes within 2 km of the
+    spawn.
+  - Stand-in houses stood across streets (460 of 5,455 in procedural Midtown); a lot that touches
+    a street is now refused.
+  - A teleport with no door near could leave you in the water; it now finds open ground.
+  - A raised house at the kerb (Front Street) ran its stair across the street. Stairs now count a
+    street's carriageway as in the way.
+- **Also:** `interiorBudget`'s 8 ms step budget now takes each step's best of five, not the median.
+  The median still tripped at 8.7–16 ms on a loaded 2-CPU runner, for steps that take ~1 ms alone.
+- Tests: `interiorTower` (18), `playtest` (23), `landing` (3), `kerbposts` (2), `synthLots` (1),
+  `raisedStairs` (+1). The new ones fail on the old code. 450 pass.
+- Open: a lot with no room for a raised house's stair should get its door on another wall.
+  Pilings on Grand Pointe Way overlap the road (road width estimate). A car's nose can reach
+  1.15 m into a wall on a head-on hit. Stand-in lots disagree at a third of shared cell edges.
+
 ## 2026-09-29 (ae) — Playable first: every door opens, no building inside a building, a steadier sky
 
 Robby's glitch list from his city walks: buildings flicker, many doors can't be walked through ("a

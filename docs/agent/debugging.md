@@ -127,14 +127,108 @@ readable), then:
 - `await __ALTITUDE__({ heights, near, frames })`: flies up at the walker and runs `__FLICKER__` at
   each height. `await __FLYOVER__({ h, frames, step, yaw, pitch })` flies a line and posts a
   contact sheet to `shots/fly_<h>.jpg`, with the blue/green flips between frames.
-- `await __PLAYTEST__()` runs overlaps, doors, flicker and altitude, and keeps the report in
-  `window.__PLAYTEST_LAST__`.
+- `__ROADPOSTS__({ R })`: short collision walls (a post, a mast, a hydrant: sides under a metre)
+  standing 60 cm or more inside a car street's kerb. A car stops dead on one.
+
+### Gameplay: walk, drive, teleport, stream, frames
+
+These drive the game's own code: the walker's `update` with its keys held for it (the yaw steered)
+and the interiors it walks past, the rides' `update` and E (`toggle`), `ctx.teleport` (the atlas's
+"walk here") and `settleWalker`, the tile stream. A walk or a drive runs in fixed 1/60 s steps
+without the page's frames in between (a few ms of real time a simulated second), so a seed gives
+the same run on any GPU. Each returns `{ pass, …numbers, fails: [{ kind, at: [x, z, feet], … }] }`
+and puts the walker back.
+
+- `await __WALKABOUT__({ seconds: 300, seed })`: seeded legs along the street graph (one side of
+  the street, 10 m goals) and to doors: to the foot of the steps, 1.5 m in, up the stairs (planned
+  to the foot of the flight, then climbed flight by flight, round a dogleg's landing), back down
+  and out. Paths come from an A* over the walker's own `move` + `surfaceAt` (40 cm lattice; in and
+  out of buildings a node per 1.2 m of height, so a walk can pass under a landing and later cross
+  it); the follower aims only at path points it can walk straight to. Fails on: `nan`; `wall` (a
+  wall within 28 cm at the feet' height); `solid` (in a footprint with no rooms); `under` the
+  lowest surface; `floating`/`sunk` 30 cm off the surface for 0.5 s; `stuck` (a planned path the
+  walker couldn't follow for 4 s, twice); `trapped` (nowhere 3 m away); `noExit` (inside, no way
+  back out, even on a 20 cm lattice); `stairs` (a flight it couldn't climb). `noUp` (no way to the
+  foot of a stair), `shut` and `noWay` are counts, not failures. `trace: true` adds the legs' log.
+- `await __DRIVE__({ seconds: 60, seed })`: stands beside one of the nearest parked or kerb cars
+  and presses E (the developer summons only if none is in reach), drives seeded routes of the car
+  graph (no service ways) by pure pursuit, gets out and back in every 10 s. A new route sets off
+  the way the car is going; when the way on is behind it, it stops and three-point-turns (backing
+  at a walking pace, never into a wall). Fails on: `nan`; `inside` (the
+  centre in a footprint that isn't a raised house's pilings); `clip` (a corner or bumper over 60 cm
+  into one); `flying`/`sinking`; `jump` (more than 1.5 m, or 3× its speed, or 1 m up or down in
+  one step); `offroad` (over 1.5 m past the nearest carriageway's edge for a second while it
+  follows its street: on a street segment of its route, lined up with it, not within 15 m of a
+  corner of the route; after setting off from a driveway, backing off a stall or turning round it's
+  judged again once it's back on the road); `blocked` (stopped dead on its street, lined up, a wall at its bumper:
+  a post or a building in the road); `exit`/`reenter` (E out leaves the walker somewhere bad, or
+  can't get back in). `stalls` and `turns` are counts. `trace: true` logs the pursuit.
+- `await __TELEPORTS__({ n: 6, seed })`: to a door, a street and a random spot in turn, through
+  `ctx.teleport`, then `settleWalker` (called directly: in capture mode its once-a-second turn is
+  60 frames away), a frame, `settleWalker` again. Fails where the walker is left: not walkable, in
+  a wall, in a solid building, under the ground or off the surface, shut in. `landings` lists
+  each one (in rooms or not, facing in or out, how far the settle moved it).
+- `await __STREAMING__({ seconds })`: teleports half to one load ring away, waits for every cell
+  of the ring to be covered (its tile, or a real cell's stand-in) within `seconds` (30; 120 on
+  software GL), flies low across it at 20 m/s for 20 s (the walker's own cell never empty for
+  0.5 s) and waits again. It wraps the stream's own `mount`/`unload`: fails on a copy mounted over
+  a live one (`twice`), a tile group in the world no loaded tile owns (`ghosts`), mount failures,
+  baked or stand-in tiles that failed to load, worker errors (a dead worker, a failed build, an
+  error in `workerLog`), page errors and new frame errors. Data it couldn't fetch (offline, the
+  tile service or Overpass down, rate limits) is counted as `offline`, not failed: stand-ins cover
+  those cells. Counts the frames over 50 and 100 ms meanwhile (`mountHitches`: the 100 ms ones
+  that mounted a tile) without judging them.
+- `await __FRAMES__({ seconds: 8, budget })`: the page's own frames standing, then walking down the
+  street: p50/p95/p99 of the intervals, each frame's work (rAF to the end of the post pass), the
+  frames over 50 and 100 ms, long tasks. Budgets (ms): `desktop` p50 20 · p95 34 · p99 50 · two
+  100 ms hitches a minute; `phone` 34 · 50 · 100 · six; `soft` (SwiftShader, picked by itself)
+  fails only a page that has all but stopped (a median frame over a minute, p99 over two: tens of
+  seconds a frame is normal there after a flight). Or pass your own `{ p50, p95, p99, perMin100 }`.
+- Self-tests: `await __SELFTESTS__({ only })` runs each check against failures planted for it (a
+  walk-world scope of their own, taken out after) and passes when the check fails on every one:
+  - `__WALKABOUT_SELFTEST__`: a ring of walls round the start, a wall landing through the walker,
+    a building with no walls across its path, the feet sunk 2 m or held 1.2 m up, a controller
+    that ignores its keys, NaN, a wall across a flight, the door walled up behind it.
+  - `__DRIVE_SELFTEST__`: a wall-less building ahead of the car, the car held on the verge beside
+    its street, a 4 m jump, the car held 2.5 m up, NaN speed.
+  - `__TELEPORTS_SELFTEST__` (doors hidden, so it lands on the spot): a fenced yard with no gate,
+    a 44 m solid block dropped over the landing, walls every 30 cm over it; standing on the water;
+    2 m under the ground.
+  - `__STREAMING_SELFTEST__`: a second copy of a mounted tile's group, a worker error, a page error
+    (`playtest-planted`: the runner leaves those out), a ring cell unloaded with its rebuilds
+    refused. `__FRAMES_SELFTEST__`: every third frame held up by 2.5× the median frame (≥ 150 ms).
+    `__ROADPOSTS_SELFTEST__`: a lamp-post collider in the middle of the nearest street.
+  - A case whose moment never came (no door to walk in at, no stair, no water near) is `null`
+    ("n/a" in the report), not a miss.
+- `await __PLAYTEST__({ only, skip, quick, selftest, seed, seconds, <check>: false | {…} })` runs
+  the checks (`quick` leaves out flicker, altitude, frames and streaming: the ones that wait on the
+  page's frames), with `selftest: true` the self-tests of those that ran, and keeps the report in
+  `window.__PLAYTEST_LAST__` (`summary`: the verdict in a line). The pure parts (seeded stream,
+  planner, road graph and routes, carriageway index, frame statistics, report text) are
+  `tools/playtest-core.js`, unit-tested in `tests/playtest.test.ts`.
+
+### The runner (`tools/playtest.mjs`)
+
+`node tools/playtest.mjs --url=http://localhost:5173/ [--at=lat,lon] [--only=doors,walkabout,…]
+[--quick] [--selftest] [--seed=N] [--seconds=N] [--opts='{"doors":{"max":300}}'] [--budget=…]
+[--swiftshader] [--headed]` opens the page on `?capture=1`, clicks "Begin walking" if the intro is
+up, waits for `__READY__` (or the boot report, which it prints), imports `/tools/playtest.js`,
+runs `__PLAYTEST__`, prints the report, then the JSON, and writes `shots/playtest-<place>.json`.
+Exit 0 pass, 1 a check failed or the page threw, 2 it couldn't run.
+
+- Playwright: the project's `playwright` or `@playwright/test`, else `../../shot-harness`, else a
+  global install (`--playwright=<dir>` to point elsewhere). With none it says what to install
+  (`npm i -D playwright && npx playwright install chromium`).
+- The GPU: headless Chromium uses the machine's GPU where it can. `--swiftshader` forces software
+  GL (960×540): frames take seconds, the frame budget turns to `soft`, and a full run with
+  self-tests takes 15–30 minutes. A localhost URL nobody answers gets vite started.
 - Without the dev server (a sandbox with no npm registry): bundle `src/main.ts` and the three
   module workers with esbuild (rewrite `new URL('./x.worker.ts', import.meta.url)` to the built
   `.js`), and serve the bundle, `public/` and the repo root with COOP/COEP and a `/__shot` sink.
-  Then drive it with Playwright and SwiftShader. Only the baked region loads offline (no tile
-  worker, Overpass or DEM). Allow ~35 s to `__READY__` and minutes for flights; run long checks in
-  the background and poll their log.
+  Then `--url=` that server with `--swiftshader`. Only the baked region loads offline (no tile
+  worker, Overpass or DEM); elsewhere (`--at=`) the world is procedural stand-ins, still good for
+  walking, driving and streaming. Allow ~45 s to `__READY__`; run long checks in the background
+  and poll their log.
 
 ## Dev-server + worker quirks
 

@@ -945,21 +945,26 @@
       "id": "interiors-rooms",
       "priority": 1,
       "area": "gameplay",
-      "title": "Interiors at real scale, slice 1 (docs/INTERIORS_PLAN.md): rooms, not halls",
-      "user_visible_behavior": "Walk into a house and you're in a hall with the stair beside it; off it a living room, kitchen, dining room or study and a WC; upstairs a landing, bathroom and bedrooms sized like real ones. Apartment blocks have corridors and flats; offices a core, desk rows by the glass and meeting rooms; shops aisles and a back of house. Every room is reachable, you're never shut in, and the HUD names the room.",
+      "title": "Interiors at real scale (docs/INTERIORS_PLAN.md): rooms, not halls; towers you ride up",
+      "user_visible_behavior": "Walk into a house and you're in a hall with the stair beside it; off it a living room, kitchen, dining room or study and a WC; upstairs a landing, bathroom and bedrooms sized like real ones. Apartment blocks have corridors and flats; offices a core, desk rows by the glass and meeting rooms; shops aisles and a back of house. Every room is reachable, you're never shut in, and the HUD names the room. In a tower every storey exists: lifts in the core (L to choose a floor, a real ride with doors and a floor display), stairs in their shafts, a double-height lobby in big offices, glass floor to ceiling in curtain-walled towers, and the HUD says which floor of how many.",
       "status": "in_progress",
       "verification": [
         "tests/interiorLayout.test.ts (14) and tests/interiorBudget.test.ts (14): houses 3–6 rooms a storey in 320/320, bedroom minimums, corridors ≥ 1.5 m, rooms ≤ 38 m², office cores 15–30% and desks within 13.5 m of glass, every room reached from the door, no wall on a window, ≤ 120k vertices, ≤ 60 draws, no build step over 8 ms",
         "tools/bench-interiors.mts: worst build step 47–1,243 ms → ~1 ms; house 43k → 30k vertices; supermarket 1.1 M → 12k",
-        "LIVE Sea Bright (shots/int-seabright.jpg, shots/tour-seabright-house.jpg): hall + stair, living, kitchen, dining, study; landing, bedroom, bath"
+        "LIVE Sea Bright (shots/int-seabright.jpg, shots/tour-seabright-house.jpg): hall + stair, living, kitchen, dining, study; landing, bedroom, bath",
+        "tests/interiorTower.test.ts (18): 39 storeys with lobby and shaft holes, lift 0 → 23 lands at floor0 + 23 × fH, stair 23 → 24 walkable, ≤ 3 storeys / 120k vertices / 60 draws built, podium storey 10 has no floor outside the tower, storeys identical whichever set is built",
+        "Bench: tower plan 2.0 KB / 0.05 ms; worst build step 0.6–1.9 ms; shots/mid-montage.jpg (lobby, lift, floor 20 day and night, stair shaft, glass tower, podium) on a Manhattan-like grid through the real pipeline"
       ],
       "evidence": [
         "src/world/interior/{plan,layout,mesh,furnish}.ts",
         "src/world/interiors.ts",
         "src/player/collision.ts (withScope, removeScope purge)",
-        "src/assets/decor.ts (17 new pieces)"
+        "src/assets/decor.ts (17 new pieces)",
+        "src/player/lift.ts",
+        "src/ui/lift.ts",
+        "src/player/collision.ts (Floors.shafts, tiers)"
       ],
-      "notes": "Next: check a Manhattan office and an apartment block live; slice 2 (data in: building/tourism/amenity archetypes, curtain walls), slice 3 (towers, lifts)."
+      "notes": "Slice 3 (towers) done 2026-09-29 (af). Next: see it in real Midtown; slice 2 (data in: building/tourism/amenity archetypes, party walls), plant floors and sky lobbies, lifts for 5–7-storey blocks over shops."
     },
     {
       "id": "phones",
@@ -1046,18 +1051,22 @@
       "id": "playtest-suite",
       "priority": 0,
       "area": "platform",
-      "title": "Gameplay test suite: doors, nesting, flicker, altitude, flights",
-      "user_visible_behavior": "(Developer) One import runs the play checks in the live game: every door walked into, nested footprints, surfaces fighting, the ground from the air.",
+      "title": "Gameplay test suite: walk, drive, teleport, stream, frames, doors, nesting, flicker, altitude",
+      "user_visible_behavior": "(Developer) One command plays the game headless and fails on a glitch: walks streets and into buildings and up their stairs, drives routes, teleports, streams a ring, times frames, walks into every door, finds nested buildings, surfaces fighting and posts in car lanes.",
       "status": "in_progress",
       "verification": [
-        "__FLICKER_SELFTEST__ detects a planted fight (1.6% of pixels)",
-        "Run headless in the cloud mirror on the baked region (overlaps, doors, flicker, altitude, flyover)"
+        "Self-tests: each check catches its planted failure (walkabout 9, drive 5, teleports 5, streaming 4, frames 1, roadposts 1; flicker 1)",
+        "tests/playtest.test.ts (23): the pure core (seeded rng, A*, road graph, carriageway index, frame stats)",
+        "Headless, cloud mirror: Sea Bright walkabout 846 m / 4 buildings in and out / 1 staircase, drive 477 m, teleports 6/6, streaming 12/12, overlaps 0 nested, doors 0 shut of 80; procedural Midtown the same with 0 failures"
       ],
       "evidence": [
         "tools/playtest.js",
-        "docs/agent/debugging.md"
+        "tools/playtest-core.js",
+        "tools/playtest.mjs",
+        "docs/agent/debugging.md",
+        "src/player/landing.ts"
       ],
-      "notes": "Next: a Manhattan and a Queen Anne run live; wire __PLAYTEST__ into a Playwright tool for CI-style runs."
+      "notes": "Found and fixed: posts in car lanes (props.ts offCarriageway, signs.ts), stand-in houses across streets (synth.ts), teleports into water (landing.ts), a raised house's stair across the street (buildings.ts). Next: run it live on Manhattan and Queen Anne; phone budgets on a real phone."
     }
   ],
   "regions": {

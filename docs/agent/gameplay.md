@@ -61,7 +61,43 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
     type) build the mesh as generator steps the pump runs ≤ 3.5 ms a frame. Piece keys must fully
     determine their geometry (the piece cache is shared across builds).
   - Budgets (`tests/interiorBudget.test.ts`): no step over 8 ms, ≤ 120k vertices (a house 40k),
-    ≤ 60 draws; layout rules in `tests/interiorLayout.test.ts`; `npx tsx tools/bench-interiors.mts`.
+    ≤ 60 draws, a tall building ≤ 3 storeys built; layout rules in `tests/interiorLayout.test.ts`;
+    `npx tsx tools/bench-interiors.mts`.
+- Tall buildings (Slice 3, `tests/interiorTower.test.ts`): plan.ts `tall` — ≥ 5 storeys, or more than
+  12,000 m² of floor. Every storey exists: n = floor((top − floor0 + 0.2) ÷ fH), the facade's window
+  rows (a 150 m office tower: 39).
+  - Stage A stays one storey's worth: stacked stairs (`Stacked.rep`/`every`; `unstack(P, k0, k1)`
+    lays out a window's), lifts (`Plan.lifts`: the shaft rect, its door face, cars, the lobby in front)
+    — an office tower's bank across its core's end nearer the door (a 3.2 m lift lobby across the
+    core, open at both ends, the dogleg beyond; cars = clamp(round(gross ÷ 4,000 m²), 2, 8)), a
+    block's lift beside its core stair, a free-standing shaft on an open plan (`openLift`). An office
+    of ≥ 6 storeys gets a double-height lobby (`Plan.atrium`: a storey-1 hole from the door's wall to
+    a 1.6 m gallery along the core, a rail round it). A tower on a podium: `Footprint.tiers` (lifted
+    building parts, `buildBuildings`) → `Plan.plates` (from which storey each tier's plate holds the
+    rooms; the core fits the top one).
+  - Collision (`registerPlan`): a stacked flight or landing is one deck with `rep` copies
+    (`Deck.rep`/`dy`); stacked stairwells and lift shafts are `Floors.shafts` (no floor from storey
+    `from` to `to`); `Floors.tiers` (a storey only inside its tier's ring) plus the tier's outline as a
+    wall from its first storey; lift shafts walled all round at every height (`floorAt` answers all
+    of it).
+  - Build window (`interiors.ts`): the walker's storey ± 1 (≤ 3) laid out, walled (scopes −7/−8 in
+    turn), meshed and furnished; the next window builds behind the standing one and swaps in whole
+    (`standUp`); past 60% of a flight it re-centres. Each storey draws its layout, paint, furniture
+    and residents from seeds of its own, so it looks the same from any window (no pop on the stairs).
+  - Lifts (`player/lift.ts`, `ui/lift.ts`): L in a lift lobby (`liftAt`) opens a floor chooser (↑↓ or
+    W S, PgUp/PgDn, digits, L/Enter, Esc). The ride is a real one: the nearest car's landing doors
+    slide open (`liftDoor`: the 'liftLeaf' instances, always instanced — `mesh.ts` MOVING), the car
+    stands in the shaft (`showCar`: its body and own doors, its floor a deck in scope −9, its lamp),
+    you step in and turn round, the doors shut, your feet go to floor0 + k × fH and the window
+    re-centres there under them (the ride holds for `ready(k)`), the display counts the floors, the
+    doors open and you step out 1.3 m. `interiors.riding` keeps `settleWalker` off meanwhile; a
+    teleport just ends the ride; a building dropped mid-ride puts you out of the doors on its floor.
+    HUD: "floor 24 of 39".
+  - Facades: a curtain wall's slabs are `windowAt`'s floorH (3.8 m commercial, 3.1 m flats) — the
+    interior's storeys; inside, the glass runs floor to ceiling between mullions every 1.5 m from the
+    wall's start, and partitions meet it on a mullion. Tall commercial blocks (≥ 8 storeys) and every
+    curtain wall map offices behind their glass (`room()`: a suspended ceiling with rows of light
+    panels, desks and screens), lit floor by floor at night.
 - Ground-floor role follows the business (`useOf`): café (counter, pastry case, bistro sets),
   diner for restaurants/bars (vinyl booths, counter + stools, menu board), office/civic (desks,
   monitors, office chairs), shop for groceries (stocked gondolas).
@@ -130,6 +166,12 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
 - Mapped fences get a gate where they cross a door's line within 6 m (`fenceGaps`). They also stop
   short of a stair or deck lower than their top that they cross or run within 80 cm of
   (`deckGaps`). Their walls block only up to their top, so a landing or bridge passes over.
+- Posts keep out of the carriageway (`props.ts` `offCarriageway`): a signal mast, a stop sign, a
+  hydrant, a main-street lamp, a mapped power pole or bin that lands in a street (a node mapped a metre in, a corner rule
+  on a slanting arm) steps out past the kerb on its own side, and out of the next street at a
+  corner; no sidewalk to be found, it isn't placed. A street-name pole stands clear of both streets
+  it names, and beside the road where a street only changes its name (`signs.ts`). A car stopped
+  dead on a post in its lane (`tools/playtest.js` `__ROADPOSTS__`, `__DRIVE__`'s `blocked`).
 - Tall structures (`props.ts`): one mapped inside a standing building's outline stands on its roof
   (`roofUnder`: flat top, or a pitched roof's eaves). It is rooftop-sized (`ROOFTOP_H`) unless the
   map gives a height; a height past the roof counts from the street. Its collider starts at the

@@ -13,6 +13,7 @@
     "fetch": "node scripts/fetch-all.mjs",
     "bake": "node scripts/bake.mjs",
     "shot": "node tools/capture.mjs",
+    "playtest": "node tools/playtest.mjs",
     "init": "node tools/init.mjs",
     "verify:region": "node tools/verify-region.mjs"
   },

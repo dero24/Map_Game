@@ -3,18 +3,23 @@
 // fill, the building's family, its storeys, and everything collision needs before anyone walks in
 // — stairs (straight or dogleg) with their stairwell openings — plus the circulation skeleton the
 // rooms hang off: a house's hall, a block's corridor, lobby and stair cores, an office's core.
-// Stage B (layout.ts) fills in rooms, walls and doors when the building activates.
+// A tall building (≥ 5 storeys) keeps every storey but plans one: its stairs stacked, its lifts'
+// shafts, an office tower's double-height lobby, a tower's tiers over its podium (docs/INTERIORS_PLAN.md
+// Slice 3). Stage B (layout.ts) fills in rooms, walls and doors when the building activates.
 import type { Footprint, Door } from '../buildings';
 import { floorHeight, KIND } from '../buildings';
-import type { WalkWorld } from '../../player/collision';
+import type { WalkWorld, Floors, Shaft } from '../../player/collision';
 import { useOf } from '../uses';
 import { makeRng, type Rng } from '../../core/rng';
 
 export type P2 = [number, number];
 export interface Rect { u0: number; u1: number; v0: number; v1: number }
+/** A tall building's stairs are one storey's, stacked: `rep` more copies of it, one every `every`
+ *  storeys (default 1) up — `unstack` lays them out storey by storey. */
+export interface Stacked { rep?: number; every?: number }
 /** A flight of stairs. Its footprint is the rect; it rises along u (or v with axis 1) from
  *  bottomU to topU (coordinates on that axis), from `lo` to `hi` of a storey (default 0 → 1). */
-export interface Flight {
+export interface Flight extends Stacked {
   u0: number; u1: number; v0: number; v1: number;
   bottomU: number; topU: number;
   level: number; // the storey it rises from
@@ -24,9 +29,36 @@ export interface Flight {
   open?: number; // the side open to the room (a banister): +1 the high cross edge, -1 the low one, 0 walled
 }
 /** A stair landing: a floor at `y` of a storey above `level`. */
-export interface Landing extends Rect { level: number; y: number }
+export interface Landing extends Rect, Stacked { level: number; y: number }
 /** A stairwell: storey `level` has no floor here. */
-export interface Opening extends Rect { level: number }
+export interface Opening extends Rect, Stacked { level: number }
+/** A lift (docs/INTERIORS_PLAN.md §3 "Elevators"): its shaft `r` — walled all round, open (no
+ *  floor) on every storey above the lowest — with `cars` doors in a row on its side `face` (0 u0,
+ *  1 u1, 2 v0, 3 v1), and the lobby in front of them where you call it: the same on every storey. */
+export interface Lift { r: Rect; face: 0 | 1 | 2 | 3; cars: number; lobby: Rect }
+/** A tier's storeys (a tower on its podium): from storey `from` up, the plate is `loc` (local
+ *  frame; `ring` in the world), its rooms fill `main` (and `annex`); `eave`: its wall top − base;
+ *  `glass`: a curtain wall. */
+export interface Plate { from: number; ring: P2[]; loc: P2[]; main: Rect; annex: Rect[]; eave: number; glass?: 1 }
+/** Lift cars: a shaft a car wide (car 2.14 m + walls), and deep (car 1.53 m + doors + walls). */
+export const CAR_W = 2.45, SHAFT_D = 2.2;
+/** Storeys a tall building has at least (it's built a few storeys at a time round the walker). */
+export const TALL = 5;
+/** A lift's landing doors: 1.1 m openings (liftFrame) in the shaft's wall, 2.1 m high. */
+export const LIFT_DOOR = 1.1;
+/** A lift's cars along its door face: the face's line `fc` (a u coordinate on a u face, else a v),
+ *  `row` the axis the doors line up along (1: along v, on a u face), `out` the way out of the shaft
+ *  to its lobby (−1 / +1 on the face's axis), each car's door centre `along` the face, and the
+ *  shaft's depth behind the face. */
+export function liftCars(L: Lift) {
+  const r = L.r, row: 0 | 1 = L.face < 2 ? 1 : 0;
+  const a0 = row ? r.v0 : r.u0, a1 = row ? r.v1 : r.u1, mid = (a0 + a1) / 2;
+  const out: -1 | 1 = L.face === 0 || L.face === 2 ? -1 : 1;
+  const fc = L.face === 0 ? r.u0 : L.face === 1 ? r.u1 : L.face === 2 ? r.v0 : r.v1;
+  const n = Math.max(1, Math.min(L.cars, Math.floor((a1 - a0) / CAR_W + 1e-6)));
+  const along = Array.from({ length: n }, (_, i) => mid + (i - (n - 1) / 2) * CAR_W);
+  return { row, fc, out, along, depth: row ? r.u1 - r.u0 : r.v1 - r.v0 };
+}
 /** A row of rooms or flats along axis `ax` (0: along u, 1: along v), reached from its `side` edge
  *  on the other axis (-1: the low edge, +1: the high edge); the facade is the far edge. */
 export interface Band { r: Rect; ax: 0 | 1; side: -1 | 1; one?: boolean }
@@ -46,7 +78,13 @@ export interface Plan {
   ud: number; vd: number; // door (wall centre) in local coords
   arch: Arch; // the ground storey's family
   up: Arch; // the family of the storeys above it
-  n: number; // storeys by height (levels: the ones built, ≤ 4)
+  n: number; // storeys by height (every one of them exists: levels = n, bar a stair that can't reach them)
+  /** Built a few storeys at a time round the walker (docs/INTERIORS_PLAN.md §3 "Towers"): ≥ 5
+   *  storeys, or more floor than one build may take. Its stairs are stacked (see Stacked). */
+  tall?: 1;
+  lifts?: Lift[];
+  plates?: Plate[]; // the tiers' storeys, lowest first (below the first: the footprint's own)
+  glass?: 1; // a glass curtain wall: its storeys glazed floor to ceiling (buildings.ts), mullions every 1.5 m
   seed: number;
   kind: number; // KIND (the interior walls' window rule)
   main: Rect; // the rectangle the rooms fill
@@ -61,6 +99,9 @@ export interface Plan {
   lobby?: Rect; // flats: the entrance lobby (ground storey)
   cores?: Core[]; // stair cores (flats, offices, the stair up from a shop)
   core?: Rect; // an office's service core, or the core a ring corridor goes round
+  /** An office tower's double-height lobby: storey 1 has no floor over it (a hole), a balustrade
+   *  round its open edges and a gallery along the core up there. */
+  atrium?: Rect;
 }
 
 // ---------------- geometry ----------------
@@ -155,7 +196,7 @@ export class LocalPoly {
 }
 
 // ---------------- the facade's windows (as the interior walls draw them) ----------------
-export interface WinModel { kind: number; eave: number; fo: number }
+export interface WinModel { kind: number; eave: number; fo: number; glass?: boolean }
 /** Window cells on a wall of length `len` at storey fi — the interior walls' windowAt
  *  (buildings.ts GLSL_WINDOWS) with every cell glazed. null: no windows there on that storey. */
 type Wins = { n: number; cellW: number; half: number } | null;
@@ -175,6 +216,9 @@ function windowsOf(len: number, fi: number, M: WinModel): Wins {
   const shop = k > 1.5 && k < 2.5, large = k > 2.5 && k < 3.5, church = k > 3.5;
   const fH = shop ? 3.8 : large ? 3.1 : church ? 60 : 2.9;
   const store = shop && fi === 0;
+  // a curtain wall (buildings.ts): glass from the spandrel to the slab between mullions every
+  // 1.5 m from the wall's start — a partition meets it on a mullion
+  if (M.glass && !store) return fi * fH >= M.eave - M.fo - 0.25 ? null : { n: Math.max(1, Math.ceil(len / 1.5 - 1e-6)), cellW: 1.5, half: 0.55 };
   const spacing = store ? 3.4 : large ? 2.2 : church ? 3.4 : 2.7;
   const n = Math.max(1, Math.floor((len - 0.6) / spacing));
   const cellW = len / n;
@@ -237,28 +281,34 @@ const crossWall = (cw: number[], ax: 0 | 1, a: number, c0: number, c1: number, y
 };
 
 /** A straight flight from storey k: along axis ax, bottom at `a0`, rising in direction dir, across
- *  [c0, c1]; `open` = the side toward the room. The stairwell is the flight's footprint. */
-function straight(C: Ctx, sp: StairSpec, ax: 0 | 1, a0: number, dir: 1 | -1, c0: number, c1: number, k: number, open: number) {
+ *  [c0, c1]; `open` = the side toward the room. The stairwell is the flight's footprint. `rep`
+ *  more of it, one every `every` storeys up (a tall building's). */
+function straight(C: Ctx, sp: StairSpec, ax: 0 | 1, a0: number, dir: 1 | -1, c0: number, c1: number, k: number, open: number, rep = 0, every = 1) {
   const P = C.P, fH = C.fH;
   const a1 = a0 + dir * sp.run;
   const r = R(ax, a0, a1, c0, c1);
-  P.flights.push({ ...r, bottomU: a0, topU: a1, level: k, ...(ax ? { axis: 1 as const } : {}), steps: sp.n, open });
-  P.holes.push({ ...r, level: k + 1 });
-  const base = k * fH, up = base + fH;
-  // sides (banister + wall): block both the hall below and the landing above
-  pushWall(P.cw, ax, a0, a1, c0, base - 0.4, up + 0.6);
-  pushWall(P.cw, ax, a0, a1, c1, base - 0.4, up + 0.6);
-  // bottom end: open below, a rail upstairs (don't fall into the stairwell)
-  crossWall(P.cw, ax, a0, c0, c1, up - 0.4, up + 0.6);
-  // top end: open upstairs, solid below (you can't walk under the high end)
-  crossWall(P.cw, ax, a1, c0, c1, base - 0.4, base + 1.3);
+  const st = rep ? { rep, every } : {};
+  P.flights.push({ ...r, bottomU: a0, topU: a1, level: k, ...(ax ? { axis: 1 as const } : {}), steps: sp.n, open, ...st });
+  P.holes.push({ ...r, level: k + 1, ...st });
+  for (let i = 0; i <= rep; i++) {
+    const base = (k + i * every) * fH, up = base + fH;
+    // sides (banister + wall): block both the hall below and the landing above
+    pushWall(P.cw, ax, a0, a1, c0, base - 0.4, up + 0.6);
+    pushWall(P.cw, ax, a0, a1, c1, base - 0.4, up + 0.6);
+    // bottom end: open below, a rail upstairs (don't fall into the stairwell)
+    crossWall(P.cw, ax, a0, c0, c1, up - 0.4, up + 0.6);
+    // top end: open upstairs, solid below (you can't walk under the high end)
+    crossWall(P.cw, ax, a1, c0, c1, base - 0.4, base + 1.3);
+  }
 }
 
 /** A dogleg from storey k in `core` (along axis ax, entered at `front`, the far end `front + dir·len`):
  *  flight a up lane `laneA` (0: the low cross half) to the half landing at the far end, flight b
  *  back up the other lane, arriving at the front. `bottom`: no dogleg below this one (the space
- *  under flight b's top is walled off); `top`: none above (a rail across lane a's opening). */
-function dogleg(C: Ctx, sp: StairSpec, ax: 0 | 1, front: number, dir: 1 | -1, c0: number, k: number, laneA: 0 | 1, bottom: boolean, top: boolean) {
+ *  under flight b's top is walled off); `top`: none above (a rail across lane a's opening). `rep`:
+ *  the same dogleg on the `rep` storeys above too (a tall building's stair: one stacked storey —
+ *  its walls one tall band, the bottom's and the top's where they are). */
+function dogleg(C: Ctx, sp: StairSpec, ax: 0 | 1, front: number, dir: 1 | -1, c0: number, k: number, laneA: 0 | 1, bottom: boolean, top: boolean, rep = 0) {
   const P = C.P, fH = C.fH;
   const lw = sp.width, na = Math.ceil(sp.n / 2), nb = sp.n - na;
   const runA = (na - 1) * sp.going, len = doglegLen(sp), c1 = c0 + doglegWide(sp);
@@ -266,18 +316,31 @@ function dogleg(C: Ctx, sp: StairSpec, ax: 0 | 1, front: number, dir: 1 | -1, c0
   const lb: [number, number] = laneA === 0 ? [c1 - lw, c1] : [c0, c0 + lw];
   const mid = front + dir * runA, far = front + dir * len;
   const hA = na / sp.n;
-  P.flights.push({ ...R(ax, front, mid, la[0], la[1]), bottomU: front, topU: mid, level: k, ...(ax ? { axis: 1 as const } : {}), lo: 0, hi: hA, steps: na, open: 0 });
-  P.flights.push({ ...R(ax, front, mid, lb[0], lb[1]), bottomU: mid, topU: front, level: k, ...(ax ? { axis: 1 as const } : {}), lo: hA, hi: 1, steps: nb, open: 0 });
-  P.landings.push({ ...R(ax, mid, far, c0, c1), level: k, y: hA });
-  P.holes.push({ ...R(ax, front, far, c0, c1), level: k + 1 });
-  const base = k * fH, up = base + fH;
-  pushWall(P.cw, ax, front, far, c0, base - 0.4, up + 0.6);
-  pushWall(P.cw, ax, front, far, c1, base - 0.4, up + 0.6);
-  crossWall(P.cw, ax, far, c0, c1, base - 0.4, up + 0.6);
-  pushWall(P.cw, ax, front, mid, (c0 + c1) / 2, base - 0.4, up + 0.6); // the spine wall between the flights
+  const st = rep ? { rep } : {};
+  P.flights.push({ ...R(ax, front, mid, la[0], la[1]), bottomU: front, topU: mid, level: k, ...(ax ? { axis: 1 as const } : {}), lo: 0, hi: hA, steps: na, open: 0, ...st });
+  P.flights.push({ ...R(ax, front, mid, lb[0], lb[1]), bottomU: mid, topU: front, level: k, ...(ax ? { axis: 1 as const } : {}), lo: hA, hi: 1, steps: nb, open: 0, ...st });
+  P.landings.push({ ...R(ax, mid, far, c0, c1), level: k, y: hA, ...st });
+  P.holes.push({ ...R(ax, front, far, c0, c1), level: k + 1, ...st });
+  const base = k * fH, up = base + fH, last = up + rep * fH; // (the top copy's upper storey)
+  pushWall(P.cw, ax, front, far, c0, base - 0.4, last + 0.6);
+  pushWall(P.cw, ax, front, far, c1, base - 0.4, last + 0.6);
+  crossWall(P.cw, ax, far, c0, c1, base - 0.4, last + 0.6);
+  pushWall(P.cw, ax, front, mid, (c0 + c1) / 2, base - 0.4, last + 0.6); // the spine wall between the flights
   if (bottom) crossWall(P.cw, ax, front, lb[0], lb[1], base - 0.4, base + 1.3);
-  if (top) crossWall(P.cw, ax, front, la[0], la[1], up - 0.4, up + 0.6);
+  if (top) crossWall(P.cw, ax, front, la[0], la[1], last - 0.4, last + 0.6);
 }
+/** Doglegs up every storey of the plan from storey 0 — a tall building's as one stacked storey. */
+function doglegs(C: Ctx, sp: StairSpec, ax: 0 | 1, front: number, dir: 1 | -1, c0: number, laneA: 0 | 1) {
+  const n = C.P.levels;
+  if (n < 2) return;
+  if (C.P.tall) dogleg(C, sp, ax, front, dir, c0, 0, laneA, true, true, n - 2);
+  else for (let k = 0; k + 1 < n; k++) dogleg(C, sp, ax, front, dir, c0, k, laneA, k === 0, k + 2 === n);
+}
+/** Side `face` (0 u0, 1 u1, 2 v0, 3 v1) of a rect: the one on axis ax toward sgn. */
+const faceOf = (ax: 0 | 1, sgn: 1 | -1): 0 | 1 | 2 | 3 => (ax === 0 ? (sgn < 0 ? 0 : 1) : sgn < 0 ? 2 : 3);
+/** Lift cars a building of `gross` m² of floor wants (docs/INTERIORS_PLAN.md §3: one per 4,000 m²,
+ *  2–24; a bank here holds at most 8). */
+export const carsFor = (gross: number) => Math.max(2, Math.min(8, Math.round(gross / 4000)));
 
 // ---------------- the plate: a rectangle the rooms fill, and the rest ----------------
 function plateOf(LP: LocalPoly, L: number, W: number, ud: number, vd: number): { main: Rect; annex: Rect[] } {
@@ -456,7 +519,7 @@ function planHouse(C: Ctx): boolean {
   } else {
     const wide = doglegWide(sp), c0 = low ? e0 : e1 - wide;
     const f = Math.min(front, M.u1 - 0.14 - 0.2 - doglegLen(sp));
-    for (let k = 0; k + 1 < n; k++) dogleg(C, sp, 0, f, 1, c0, k, low ? 1 : 0, k === 0, k + 2 === n);
+    doglegs(C, sp, 0, f, 1, c0, low ? 1 : 0);
     P.lane = { u0: f, u1: f + doglegLen(sp), v0: c0, v1: c0 + wide };
   }
   return true;
@@ -494,7 +557,13 @@ function planFlats(C: Ctx, lobby: boolean): boolean {
   const D = D1 - D0, len = A1 - A0;
   const sp = stairSpec(C.fH, false);
   const wide = doglegWide(sp), clen = doglegLen(sp), cwide = wide + 0.25;
-  const levels = Array.from({ length: P.levels }, (_, k) => k);
+  // (the storeys whose windows can differ: a tall building's typical storeys all have the first
+  // one's, or none near the eave — so the ground and the first stand for every storey)
+  const levels = Array.from({ length: P.tall ? Math.min(2, P.levels) : P.levels }, (_, k) => k);
+  // a tall block's cores take a lift beside the stair: its shaft against the facade end, the
+  // landing in front of both its lobby
+  const tallLift = !!P.tall;
+  const LIFT = CAR_W + 0.15; // (how much wider a core slot is with its lift)
   // over a shop the corridor starts a storey up (the storefront's windows don't count: the stair
   // room below keeps off the end walls, so no ground-storey wall takes the corridor's line)
   const upper = lobby ? levels : levels.slice(1);
@@ -503,6 +572,7 @@ function planFlats(C: Ctx, lobby: boolean): boolean {
   P.bands = [];
   P.spine = [];
   P.cores = [];
+  P.lifts = [];
   // a wall across band B at `want` (on its axis), meeting the facade at the band's far edge
   const slotWall = (B: Band, want: number, lo: number, hi: number) => {
     const bd0 = B.ax ? B.r.u0 : B.r.v0, bd1 = B.ax ? B.r.u1 : B.r.v1;
@@ -513,16 +583,24 @@ function planFlats(C: Ctx, lobby: boolean): boolean {
   const corrWall = (want: number, lo: number, hi: number) => wallAt(C, oax, want, lo, hi, [[A0 + 0.05, -1], [A1 - 0.05, 1]], upper, 0.05);
   const band = (a0: number, a1: number, d0: number, d1: number, side: -1 | 1): Band => ({ r: R(ax, a0, a1, d0, d1), ax, side });
   // the dogleg in a core room, against the room's facade end, entered from the corridor side
-  const coreIn = (room: Rect, bax: 0 | 1, side: -1 | 1) => {
+  // (with a lift: the dogleg to one side, the lift's shaft to the other, its doors to the corridor)
+  const coreIn = (room: Rect, bax: 0 | 1, side: -1 | 1, lift = false) => {
     const bd0 = bax ? room.u0 : room.v0, bd1 = bax ? room.u1 : room.v1; // depth range across the band
     const s0 = bax ? room.v0 : room.u0, s1 = bax ? room.v1 : room.u1;
     const farEnd = side < 0 ? bd1 - 0.14 : bd0 + 0.14;
     const dir: 1 | -1 = side < 0 ? 1 : -1;
     const front = farEnd - dir * clen;
-    const c0 = (s0 + s1) / 2 - wide / 2;
+    // (the shaft's inner wall meets the facade between its windows, like every wall)
+    const l0 = lift && s1 - s0 >= cwide + LIFT - 1e-6 && Math.abs(bd1 - bd0) >= SHAFT_D + 2.4 ? wallAt(C, bax, s1 - CAR_W, s0 + wide + 0.35, s1 - CAR_W, [side < 0 ? [bd1 - 0.05, 1] : [bd0 + 0.05, -1]], levels, 0.05) : null;
+    const c0 = l0 !== null ? s0 + 0.15 : (s0 + s1) / 2 - wide / 2;
     const dax: 0 | 1 = bax ? 0 : 1;
     P.cores!.push({ room, stair: R(dax, front, farEnd, c0, c0 + wide) });
-    for (let k = 0; k + 1 < P.levels; k++) dogleg(C, sp, dax, front, dir, c0, k, 0, k === 0, k + 2 === P.levels);
+    doglegs(C, sp, dax, front, dir, c0, 0);
+    if (l0 !== null) {
+      // (as deep as the flights beside it: its doors and their foot on one landing)
+      const fac = side < 0 ? bd1 : bd0, back = front;
+      P.lifts!.push({ r: R(dax, back, fac, l0, s1), face: faceOf(dax, (-dir) as 1 | -1), cars: 1, lobby: R(dax, side < 0 ? bd0 : bd1, back, l0, s1) });
+    }
   };
   const fam = lobby && ax === 1 && D <= 9.1 && len <= 26 ? 'walkup' : D <= 14 ? 'single' : D <= 24 || len < 30 ? 'double' : 'ring';
   if (fam === 'walkup') {
@@ -601,13 +679,22 @@ function planFlats(C: Ctx, lobby: boolean): boolean {
     // the ring's core: a stair room at each end, entered from the corridor across that end
     const core = P.core;
     const cs0 = ax ? core.v0 : core.u0, cs1 = ax ? core.v1 : core.u1, cd0 = ax ? core.u0 : core.v0, cd1 = ax ? core.u1 : core.v1;
-    if (cs1 - cs0 < 2 * (clen + 1.4) + 1 || cd1 - cd0 < cwide) return false;
+    // (a tall block's landing is its lift lobby too: 2.1 m deep; a core too short for a stair room
+    // at each end has one, at the end away from the door)
+    const land = tallLift ? 2.1 : 1.4;
+    const two = cs1 - cs0 >= 2 * (clen + land) + 1;
+    if ((!two && cs1 - cs0 < clen + land + 0.6) || cd1 - cd0 < cwide) return false;
     const c0 = (cd0 + cd1) / 2 - wide / 2;
-    for (const end of [-1, 1] as const) {
-      const front = end < 0 ? cs0 + 1.4 : cs1 - 1.4, dir: 1 | -1 = end < 0 ? 1 : -1;
+    const farEnd: -1 | 1 = Math.abs(cs0 - da) > Math.abs(cs1 - da) ? -1 : 1;
+    for (const end of two ? ([-1, 1] as const) : [farEnd]) {
+      const front = end < 0 ? cs0 + land : cs1 - land, dir: 1 | -1 = end < 0 ? 1 : -1;
       const far = front + dir * clen;
       P.cores.push({ room: R(ax, end < 0 ? cs0 : far + 0.1, end < 0 ? far - 0.1 : cs1, cd0, cd1), stair: R(ax, front, far, c0, c0 + wide) });
-      for (let k = 0; k + 1 < P.levels; k++) dogleg(C, sp, ax, front, dir, c0, k, 0, k === 0, k + 2 === P.levels);
+      doglegs(C, sp, ax, front, dir, c0, 0);
+      // a lift in the pocket beside the flights (the pocket its shaft: the core's side its wall),
+      // its doors on the landing
+      const p0 = c0 + wide + 0.15, p1 = cd1;
+      if (tallLift && p1 - p0 >= CAR_W) P.lifts.push({ r: R(ax, front, far - dir * 0.1, p1 - CAR_W, p1), face: faceOf(ax, (-dir) as 1 | -1), cars: 1, lobby: R(ax, end < 0 ? cs0 : cs1, front, p1 - CAR_W, p1) });
     }
     return true;
   }
@@ -615,7 +702,7 @@ function planFlats(C: Ctx, lobby: boolean): boolean {
   // (over a shop: the band farthest from the shop door, so the stair rises from the back)
   const far = (b: Band) => -Math.abs((b.r.u0 + b.r.u1) / 2 - P.ud) - Math.abs((b.r.v0 + b.r.v1) / 2 - P.vd) * 0.1;
   const order = lobby ? (bi >= 0 ? [bi, ...P.bands.map((_, i) => i).filter((i) => i !== bi)] : P.bands.map((_, i) => i)) : P.bands.map((_, i) => i).sort((x, y) => far(P.bands![x]) - far(P.bands![y]));
-  const slotOf = (B: Band, t0: number): [number, number] | null => {
+  const slotOf = (B: Band, t0: number, cwide: number): [number, number] | null => {
     const s0 = B.ax ? B.r.v0 : B.r.u0, s1 = B.ax ? B.r.v1 : B.r.u1;
     const c0 = t0 <= s0 + 0.3 ? s0 : slotWall(B, t0, Math.max(s0 + 2.4, t0 - 1.5), t0 + 1.5);
     if (c0 === null) return null;
@@ -643,35 +730,41 @@ function planFlats(C: Ctx, lobby: boolean): boolean {
         const slot = B.ax ? { u0: bd0, u1: bd1, v0: c0, v1: c1 } : { u0: c0, u1: c1, v0: bd0, v1: bd1 };
         const front = c0 + 1.4, cc = (e0 + e1) / 2 - wide / 2;
         P.cores.push({ room, stair: R(B.ax, front, front + clen, cc, cc + wide), slot });
-        for (let k = 0; k + 1 < P.levels; k++) dogleg(C, sp, B.ax, front, 1, cc, k, 0, k === 0, k + 2 === P.levels);
+        doglegs(C, sp, B.ax, front, 1, cc, 0);
         return true;
       }
     }
     return false;
   }
-  for (const b of order) {
-    const B = P.bands[b];
-    const s0 = B.ax ? B.r.v0 : B.r.u0, s1 = B.ax ? B.r.v1 : B.r.u1;
-    const bd = B.ax ? B.r.u1 - B.r.u0 : B.r.v1 - B.r.v0;
-    if (bd < clen + 1.6 || s1 - s0 < cwide) continue;
-    const lob = P.lobby && b === bi ? (B.ax ? [P.lobby.v0, P.lobby.v1] : [P.lobby.u0, P.lobby.u1]) : null;
-    const tries = lob ? [lob[1], lob[0] - cwide] : lobby ? [near - cwide / 2, s0, s1 - cwide] : [s1 - cwide - 4.5, s0 + 4.5, s1 - cwide - 7, s0 + 7];
-    let got: [number, number] | null = null;
-    for (const t of tries) {
-      if (t < s0 - 1e-6 || t + cwide > s1 + 1e-6) continue;
-      const q = slotOf(B, t);
-      if (q && (!lob || q[1] <= lob[0] + 1e-6 || q[0] >= lob[1] - 1e-6)) { got = q; break; }
+  // (a tall block's cores are wider: the lift beside the stair — or, where no slot that wide
+  // finds its walls between the windows, the stair alone)
+  for (const lift of tallLift ? [true, false] : [false])
+    for (const b of order) {
+      const B = P.bands[b];
+      const s0 = B.ax ? B.r.v0 : B.r.u0, s1 = B.ax ? B.r.v1 : B.r.u1;
+      const bd = B.ax ? B.r.u1 - B.r.u0 : B.r.v1 - B.r.v0;
+      const cw = lift ? cwide + LIFT : cwide;
+      if (bd < clen + 1.6 || s1 - s0 < cw) continue;
+      const lob = P.lobby && b === bi ? (B.ax ? [P.lobby.v0, P.lobby.v1] : [P.lobby.u0, P.lobby.u1]) : null;
+      const tries = lob ? [lob[1], lob[0] - cw] : lobby ? [near - cw / 2, s0, s1 - cw] : [s1 - cw - 4.5, s0 + 4.5, s1 - cw - 7, s0 + 7];
+      let got: [number, number] | null = null;
+      for (const t of tries) {
+        if (t < s0 - 1e-6 || t + cw > s1 + 1e-6) continue;
+        const q = slotOf(B, t, cw);
+        if (q && (!lob || q[1] <= lob[0] + 1e-6 || q[0] >= lob[1] - 1e-6)) { got = q; break; }
+      }
+      if (!got) continue;
+      const room = B.ax ? { ...B.r, v0: got[0], v1: got[1] } : { ...B.r, u0: got[0], u1: got[1] };
+      coreIn(room, B.ax, B.side, lift);
+      if (len > 36) {
+        // (the far core: a second stair, its own lift only in a long block — one at the lobby does)
+        const lift2 = lift && len > 60, cw2 = lift2 ? cw : cwide;
+        const farT = Math.abs(s1 - got[1]) > Math.abs(got[0] - s0) ? s1 - cw2 : s0;
+        const q = slotOf(B, farT, cw2);
+        if (q && (q[1] <= got[0] - 8 || q[0] >= got[1] + 8)) coreIn(B.ax ? { ...B.r, v0: q[0], v1: q[1] } : { ...B.r, u0: q[0], u1: q[1] }, B.ax, B.side, lift2);
+      }
+      return true;
     }
-    if (!got) continue;
-    const room = B.ax ? { ...B.r, v0: got[0], v1: got[1] } : { ...B.r, u0: got[0], u1: got[1] };
-    coreIn(room, B.ax, B.side);
-    if (len > 36) {
-      const farT = Math.abs(s1 - got[1]) > Math.abs(got[0] - s0) ? s1 - cwide : s0;
-      const q = slotOf(B, farT);
-      if (q && (q[1] <= got[0] - 8 || q[0] >= got[1] + 8)) coreIn(B.ax ? { ...B.r, v0: q[0], v1: q[1] } : { ...B.r, u0: q[0], u1: q[1] }, B.ax, B.side);
-    }
-    return true;
-  }
   return false;
 }
 const inRect = (r: Rect, u: number, v: number) => u >= r.u0 - 1e-6 && u <= r.u1 + 1e-6 && v >= r.v0 - 1e-6 && v <= r.v1 + 1e-6;
@@ -680,12 +773,18 @@ const inRect = (r: Rect, u: number, v: number) => u >= r.u0 - 1e-6 && u <= r.u1 
  *  down the middle of a slim one) of 15–30% of the floor, open plan round it to the glass; the
  *  core's stair room at its end away from the front door. */
 function planOffice(C: Ctx): boolean {
-  const P = C.P, M = P.main;
+  const P = C.P;
+  // (a tower on its podium: the core rises through every tier — it's fitted to the top one's plate)
+  const M = P.plates?.length ? P.plates[P.plates.length - 1].main : P.main;
   const Lm = M.u1 - M.u0, Wm = M.v1 - M.v0, area = Lm * Wm;
   const D = Math.min(Lm, Wm);
   if (area < 160 || D < 9) return false;
   const sp = stairSpec(C.fH, true);
-  const slen = doglegLen(sp) + 1.8, swide = doglegWide(sp) + 0.3; // (the stair room: a 1.7 m landing band across the core, then the flights)
+  // the stair room: a 1.7 m landing band across the core, then the flights — in a tall building, the
+  // lift bank, the lift lobby in front of its doors (3.2 m), then the flights
+  const tall = !!P.tall && P.levels > 1;
+  const col = doglegLen(sp) + 0.1, LOB = 3.2;
+  const slen = tall ? SHAFT_D + LOB + col : doglegLen(sp) + 1.8, swide = doglegWide(sp) + 0.3;
   const cu = (M.u0 + M.u1) / 2, cv = (M.v0 + M.v1) / 2;
   const fitCore = (lu: number, lv: number): Rect => ({ u0: cu - lu / 2, u1: cu + lu / 2, v0: cv - lv / 2, v1: cv + lv / 2 });
   let core: Rect;
@@ -705,22 +804,95 @@ function planOffice(C: Ctx): boolean {
   }
   const frac = rectArea(core) / area;
   if (frac < 0.15 || frac > 0.3 || core.u0 < M.u0 + 3.5 || core.v0 < M.v0 + 3.5) return false;
+  // (and within the plates under it: a podium's rectangle holds its tower's core)
+  if (P.plates?.length && ![P.main, ...P.plates.map((p) => p.main)].every((m) => core.u0 >= m.u0 + 3 && core.u1 <= m.u1 - 3 && core.v0 >= m.v0 + 3 && core.v1 <= m.v1 - 3)) return false;
   P.core = core;
   P.cores = [];
+  P.lifts = [];
   if (P.levels > 1) {
     const along: 0 | 1 = core.u1 - core.u0 >= core.v1 - core.v0 ? 0 : 1;
     const A0 = along ? core.v0 : core.u0, A1 = along ? core.v1 : core.u1;
     const c0 = along ? core.u0 : core.v0, c1 = along ? core.u1 : core.v1;
     const doorA = along ? P.vd : P.ud;
+    const wide = doglegWide(sp), cc = (c0 + c1) / 2 - wide / 2;
+    if (tall) {
+      // a tower's core, from its end nearer the front door: the lift bank (its cars side by side
+      // across the core), the lift lobby in front of their doors — across the core, open to the
+      // floor at both ends — and the stair rising from the lobby's far side; WCs and stores beyond
+      const end: 1 | -1 = Math.abs(A0 - doorA) <= Math.abs(A1 - doorA) ? -1 : 1;
+      const at = (d: number) => (end < 0 ? A0 + d : A1 - d), dir = (-end) as 1 | -1;
+      const cars = Math.max(1, Math.min(carsFor(area * P.levels), Math.floor((c1 - c0 - 0.3) / CAR_W)));
+      P.lifts.push({ r: R(along, at(0), at(SHAFT_D), c0, c1), face: faceOf(along, dir), cars, lobby: R(along, at(SHAFT_D), at(SHAFT_D + LOB), c0, c1) });
+      const front = at(SHAFT_D + LOB + 0.05);
+      P.cores.push({ room: R(along, at(SHAFT_D), at(slen), c0, c1), stair: R(along, front, front + dir * doglegLen(sp), cc, cc + wide) });
+      doglegs(C, sp, along, front, dir, cc, 0);
+      if (P.levels >= 6) atrium(C, core);
+      return true;
+    }
     const far: 1 | -1 = Math.abs(A1 - doorA) >= Math.abs(A0 - doorA) ? 1 : -1;
     const room = far > 0 ? R(along, A1 - slen, A1, c0, c1) : R(along, A0, A0 + slen, c0, c1);
     const farEnd = far > 0 ? A1 - 0.1 : A0 + 0.1, dir: 1 | -1 = far > 0 ? 1 : -1;
     const front = farEnd - dir * doglegLen(sp);
-    const wide = doglegWide(sp), cc = (c0 + c1) / 2 - wide / 2;
     P.cores.push({ room, stair: R(along, front, farEnd, cc, cc + wide) });
-    for (let k = 0; k + 1 < P.levels; k++) dogleg(C, sp, along, front, dir, cc, k, 0, k === 0, k + 2 === P.levels);
+    doglegs(C, sp, along, front, dir, cc, 0);
   }
   return true;
+}
+
+/** An office tower's double-height lobby (docs/INTERIORS_PLAN.md §3: offices of six storeys or
+ *  more; CTBUH: 2 storeys, 7.6 m): storey 1 has no floor over the entrance lobby — from the front
+ *  door's wall to a 1.6 m gallery along the core — and a balustrade round the void's open edges up
+ *  there. (Layout keeps storey 1's desks off it; interiors.ts draws the rail and the slab's edge.) */
+function atrium(C: Ctx, core: Rect) {
+  const P = C.P, M = P.main, GAL = 1.6;
+  const r: Rect = { u0: M.u0, u1: core.u0 - GAL, v0: Math.max(M.v0, Math.min(P.vd - 4.5, core.v0)), v1: Math.min(M.v1, Math.max(P.vd + 4.5, core.v1)) };
+  if (r.u1 - r.u0 < 4 || r.v1 - r.v0 < 4) return;
+  // (storey 1 on a tier's plate that doesn't hold it: none)
+  const M1 = mainAt(P, 1);
+  if (r.u0 < M1.u0 - 0.01 || r.u1 > M1.u1 + 0.01 || r.v0 < M1.v0 - 0.01 || r.v1 > M1.v1 + 0.01) return;
+  P.atrium = r;
+  P.holes.push({ ...r, level: 1 });
+  // the balustrade, 1.1 m high on storey 1's floor (the facade closes the door's side)
+  const y0 = C.fH - 0.4, y1 = C.fH + 1.1;
+  if (r.v0 > M.v0 + 0.05) pushWall(P.cw, 0, r.u0, r.u1, r.v0, y0, y1);
+  if (r.v1 < M.v1 - 0.05) pushWall(P.cw, 0, r.u0, r.u1, r.v1, y0, y1);
+  crossWall(P.cw, 0, r.u1, r.v0, r.v1, y0, y1);
+}
+/** The open edges of an atrium (not on the facade): [u, v] → [u, v] each, along its rail. */
+export function atriumEdges(P: Plan): [number, number, number, number][] {
+  const A = P.atrium, M = P.main;
+  if (!A) return [];
+  const out: [number, number, number, number][] = [];
+  if (A.v0 > M.v0 + 0.05) out.push([A.u0 + 0.14, A.v0, A.u1, A.v0]);
+  out.push([A.u1, A.v0, A.u1, A.v1]);
+  if (A.v1 < M.v1 - 0.05) out.push([A.u1, A.v1, A.u0 + 0.14, A.v1]);
+  return out;
+}
+
+/** A tall building on the open plan (an outline the room planner doesn't take) still has its lift:
+ *  a shaft stood clear of the facade (1.2 m round it), the stairs and the front door, as near the
+ *  plate's middle as it goes, its doors onto the open floor with 2.4 m of lobby in front of them.
+ *  (Positions go out from the middle a metre at a time: the first that fits is the one.) */
+function openLift(C: Ctx) {
+  const P = C.P, LP = C.LP, M = P.main;
+  const cars = Math.abs(polyArea(P.loc)) * P.levels > 16000 ? 2 : 1;
+  const hit = (a: Rect, b: Rect) => a.u0 < b.u1 && a.u1 > b.u0 && a.v0 < b.v1 && a.v1 > b.v0;
+  const keep: Rect[] = [...P.flights.map((F) => ({ u0: F.u0 - 1.3, u1: F.u1 + 1.3, v0: F.v0 - 1.3, v1: F.v1 + 1.3 })), { u0: P.ud - 0.5, u1: P.ud + 3.5, v0: P.vd - 2.5, v1: P.vd + 2.5 }];
+  const cu = (M.u0 + M.u1) / 2, cv = (M.v0 + M.v1) / 2;
+  const spots: [number, number, number][] = [];
+  for (let u = Math.ceil(M.u0 + 2); u <= M.u1 - 2; u++) for (let v = Math.ceil(M.v0 + 2); v <= M.v1 - 2; v++) spots.push([Math.hypot(u - cu, v - cv), u, v]);
+  spots.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
+  for (const [, u, v] of spots)
+    for (const face of [0, 1, 2, 3] as const) {
+      // the car row runs along the door face: a u face's along v
+      const w = cars * CAR_W, [du, dv] = face < 2 ? [SHAFT_D, w] : [w, SHAFT_D];
+      const r = { u0: u - du / 2, u1: u + du / 2, v0: v - dv / 2, v1: v + dv / 2 };
+      const lobby = face === 0 ? { ...r, u0: r.u0 - 2.4, u1: r.u0 } : face === 1 ? { ...r, u0: r.u1, u1: r.u1 + 2.4 } : face === 2 ? { ...r, v0: r.v0 - 2.4, v1: r.v0 } : { ...r, v0: r.v1, v1: r.v1 + 2.4 };
+      if (keep.some((q) => hit(q, r) || hit(q, lobby))) continue;
+      if (!LP.rectIn(r.u0 - 1.2, r.u1 + 1.2, r.v0 - 1.2, r.v1 + 1.2, 0.02) || !LP.rectIn(lobby.u0, lobby.u1, lobby.v0, lobby.v1, 0.3)) continue;
+      P.lifts = [{ r, face, cars, lobby }];
+      return;
+    }
 }
 
 /** Legacy stairs for outlines the room planner doesn't take (and a church): a straight run hugging a
@@ -758,6 +930,11 @@ function planOpen(C: Ctx) {
   if (!A) levels = 1;
   else if (!B) levels = Math.min(levels, 2);
   P.levels = levels;
+  if (P.tall && levels > 2) {
+    // (a tall one's: slot A's flight stacked on every other storey from the ground, B's from the first)
+    for (const [s, k0] of [[A!, 0], [B!, 1]] as const) straight(C, sp, 0, s.bottomU, s.topU > s.bottomU ? 1 : -1, s.v0, s.v1, k0, s.open, Math.floor((levels - 2 - k0) / 2), 2);
+    return;
+  }
   for (let k = 0; k + 1 < levels; k++) {
     const s = (k % 2 ? B : A)!;
     straight(C, sp, 0, s.bottomU, s.topU > s.bottomU ? 1 : -1, s.v0, s.v1, k, s.open);
@@ -796,27 +973,46 @@ export function planInterior(fpKey: string, fp: Footprint, door: Door, seed: num
   const kindS = fp.kind;
   const floorH = floorHeight(kindS);
   const floor0 = fp.floor0;
-  const topY = fp.top;
-  const n = kindS === 'church' ? 1 : Math.max(1, Math.floor((topY - floor0 + 0.2) / floorH));
-  // walk-up floors only: a tower's upper storeys are behind the lift doors (Slice 3) — and no more
-  // than ~12,000 m² of floor in all (a vast plate builds fewer storeys: the vertex budget)
-  const levels = Math.min(4, n, Math.max(1, Math.floor(12000 / Math.max(1, Math.abs(polyArea(loc))))));
+  // every storey by height (n = floor((top − floor0) ÷ fH), the facade's window rows) — a tall
+  // building's too: it's built a few storeys at a time round the walker (Interiors), so a
+  // 60-storey tower costs what a small building does. Storeys up the tiers on it (a tower on its
+  // podium) stand inside them: plates.
+  const storeys = (top: number) => (kindS === 'church' ? 1 : Math.max(1, Math.floor((top - floor0 + 0.2) / floorH)));
+  const area = Math.max(1, Math.abs(polyArea(loc)));
   const [ud, vd] = toL(door.wx, door.wz);
+  const plates = kindS === 'commercial' || kindS === 'large' ? platesOf(fp, loc, toL, storeys, L, W, ud, vd) : [];
   const rng = makeRng(seed ^ 0x51ed);
   const kind = KIND[kindS as keyof typeof KIND] ?? 0;
   const { main, annex } = plateOf(LP, L, W, ud, vd);
   const use = kindS === 'commercial' ? useOf(fp.name, fp.use) : 'unknown';
   const P: Plan = {
-    fp: fpKey, door, cx, cz, ux, uz, vx, vz, L, W, loc, floor0, floorH, levels, ceilTop: 0, flights: [], ud, vd,
-    arch: 'open', up: 'open', n, seed: seed >>> 0, kind, main, annex, holes: [], landings: [], cw: [],
+    fp: fpKey, door, cx, cz, ux, uz, vx, vz, L, W, loc, floor0, floorH, levels: 1, ceilTop: 0, flights: [], ud, vd,
+    arch: 'open', up: 'open', n: 1, seed: seed >>> 0, kind, main, annex, holes: [], landings: [], cw: [],
   };
-  const C: Ctx = { P, LP, M: { kind, eave: fp.eave, fo: fp.floor0 - fp.base }, rng, fH: floorH };
+  let levels = 1, topY = fp.top;
+  /** The storeys, from the top down: with the tiers' plates or without. */
+  const shape = (withPlates: boolean) => {
+    const pl = withPlates ? plates : [];
+    topY = pl.length ? Math.max(fp.top, ...(fp.tiers ?? []).slice(0, pl.length).map((t) => t.top)) : fp.top;
+    P.n = levels = P.levels = storeys(topY);
+    if (pl.length) P.plates = pl; else delete P.plates;
+    if (levels >= TALL || levels * area > 12000) P.tall = 1; else delete P.tall;
+  };
+  shape(plates.length > 0);
+  if (fp.glass) P.glass = 1;
+  const C: Ctx = { P, LP, M: { kind, eave: fp.eave, fo: fp.floor0 - fp.base, glass: !!fp.glass }, rng, fH: floorH };
   // how much of the outline the rectangles cover; a ragged one keeps the open plan
-  const cover = (rectArea(main) + annex.reduce((s, a) => s + rectArea(a), 0)) / Math.max(1, Math.abs(polyArea(loc)));
+  const cover = (rectArea(main) + annex.reduce((s, a) => s + rectArea(a), 0)) / area;
   const doorIn = Math.abs(ud - main.u0) < 0.6 && vd > main.v0 + 0.4 && vd < main.v1 - 0.4;
   const roomy = cover > 0.72 && ring.length <= 40 && doorIn;
-  const reset = () => { P.flights.length = 0; P.holes.length = 0; P.landings.length = 0; P.cw.length = 0; P.levels = levels; P.cores = undefined; P.core = undefined; P.bands = undefined; P.spine = undefined; P.lobby = undefined; };
-  if (kindS === 'church') P.arch = P.up = 'church';
+  const reset = () => { P.flights.length = 0; P.holes.length = 0; P.landings.length = 0; P.cw.length = 0; P.levels = levels; P.cores = undefined; P.core = undefined; P.bands = undefined; P.spine = undefined; P.lobby = undefined; P.lifts = undefined; P.atrium = undefined; };
+  // a tower on a podium: an office core rising through every tier (else only the podium's storeys)
+  if (plates.length) {
+    P.arch = P.up = 'office';
+    if (!roomy || !planOffice(C)) { reset(); P.arch = P.up = 'open'; shape(false); }
+  }
+  if (P.plates) { /* a tower on its podium: planned */ }
+  else if (kindS === 'church') P.arch = P.up = 'church';
   else if (roomy && (kindS === 'house' || kindS === 'shed')) {
     P.arch = P.up = 'house';
     planHouse(C);
@@ -825,6 +1021,8 @@ export function planInterior(fpKey: string, fp: Footprint, door: Door, seed: num
     if (!planFlats(C, true)) { reset(); P.arch = P.up = 'open'; }
   } else if (roomy && kindS === 'commercial') {
     P.arch = use === 'office' || use === 'civic' ? 'office' : use === 'cafe' || use === 'bar' || use === 'restaurant' ? 'food' : 'shop';
+    // (a commercial tower is an office tower, its ground floor the lobby — whatever's on the corner)
+    if (P.tall && levels >= 8) P.arch = 'office';
     if (P.arch === 'office') {
       P.up = 'office';
       if (!planOffice(C)) { reset(); P.arch = P.up = 'open'; }
@@ -840,29 +1038,110 @@ export function planInterior(fpKey: string, fp: Footprint, door: Door, seed: num
   }
   // an outline the room planner doesn't take (or storeys it found no stair for): the open plan,
   // with a straight stair along a wall
-  if (P.arch === 'open' || (P.up === 'open' && P.levels > 1)) planOpen(C);
+  if (P.arch === 'open' || (P.up === 'open' && P.levels > 1)) {
+    planOpen(C);
+    if (P.tall && P.levels > 2 && !P.lifts?.length) openLift(C);
+  }
   P.ceilTop = kindS === 'church' ? topY - 0.1 : Math.min(topY - 0.05, floor0 + P.levels * floorH);
   return P;
 }
 
+/** The tiers a footprint carries, as plates: each from the storey its bottom stands at (on the one
+ *  below's roof), inside the outline, a storey tall at least; the first that isn't ends them. */
+function platesOf(fp: Footprint, loc: P2[], toL: (x: number, z: number) => P2, storeys: (top: number) => number, L: number, W: number, ud: number, vd: number): Plate[] {
+  const out: Plate[] = [];
+  const LPo = new LocalPoly(loc);
+  let below = storeys(fp.top); // storeys standing so far
+  // (on the outline counts as inside it: a tier often shares a facade with the podium)
+  const near = (u: number, v: number) => {
+    const p = LPo.p;
+    for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+      const [ax, az] = p[j], [bx, bz] = p[i], dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz || 1;
+      const s = Math.max(0, Math.min(1, ((u - ax) * dx + (v - az) * dz) / l2));
+      if (Math.hypot(ax + dx * s - u, az + dz * s - v) < 0.6) return true;
+    }
+    return false;
+  };
+  for (const t of fp.tiers ?? []) {
+    const tl = t.ring.map(([x, z]) => toL(x, z));
+    if (tl.length < 3 || !tl.every(([u, v]) => LPo.inside(u, v) || near(u, v))) break;
+    const from = Math.max(1, Math.floor((t.lo - fp.floor0 + 0.2) / floorHeight(fp.kind)));
+    if (from > below || storeys(t.top) <= Math.max(from, below)) break;
+    const LP = new LocalPoly(tl);
+    const { main, annex } = plateOf(LP, L, W, ud, vd);
+    // (the plate's grid is the frame's: an edge falling mid-cell can overhang the tier's outline —
+    // pull it back in)
+    let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+    for (const [u, v] of tl) (u0 = Math.min(u0, u)), (u1 = Math.max(u1, u)), (v0 = Math.min(v0, v)), (v1 = Math.max(v1, v));
+    main.u0 = Math.max(main.u0, u0); main.u1 = Math.min(main.u1, u1); main.v0 = Math.max(main.v0, v0); main.v1 = Math.min(main.v1, v1);
+    for (let i = 0; i < 12 && !LP.rectIn(main.u0, main.u1, main.v0, main.v1, 0.005); i++) (main.u0 += 0.1), (main.u1 -= 0.1), (main.v0 += 0.1), (main.v1 -= 0.1);
+    if (rectArea(main) < 60) break;
+    out.push({ from: Math.max(from, below), ring: t.ring, loc: tl, main, annex, eave: t.top - fp.base, ...(t.glass ? { glass: 1 as const } : {}) });
+    below = storeys(t.top);
+  }
+  return out;
+}
+
 export const toW = (P: Plan, u: number, v: number): P2 => [P.cx + P.ux * u + P.vx * v, P.cz + P.uz * u + P.vz * v];
+
+/** A plan's local rect as a world ring. */
+export const ringOf = (P: Plan, r: Rect): P2[] => [toW(P, r.u0, r.v0), toW(P, r.u1, r.v0), toW(P, r.u1, r.v1), toW(P, r.u0, r.v1)];
+/** The plate storey k stands on: a tier's (a tower's storeys), or null for the footprint's own. */
+export const plateAt = (P: Plan, k: number): Plate | null => {
+  let out: Plate | null = null;
+  for (const p of P.plates ?? []) if (p.from <= k) out = p;
+  return out;
+};
+/** The rectangle storey k's rooms fill. */
+export const mainAt = (P: Plan, k: number) => plateAt(P, k)?.main ?? P.main;
+/** The storey a height is on (the nearest floor at or below it, within a step), 0 … levels − 1. */
+export const storeyAt = (P: Plan, y: number) => Math.max(0, Math.min(P.levels - 1, Math.round((y - P.floor0) / P.floorH)));
+
+/** The plan with its stacked stairs laid out storey by storey — the ones on storeys k0 − 1 …
+ *  k1 + 1 (a tall building's build window, and the storeys either side of it). A plan with no
+ *  stack comes back as it is. */
+export function unstack(P: Plan, k0 = 0, k1 = P.levels - 1): Plan {
+  const stacked = (x: Stacked) => !!x.rep;
+  if (!P.flights.some(stacked) && !P.landings.some(stacked) && !P.holes.some(stacked)) return P;
+  const ex = <T extends Stacked & { level: number }>(a: T[]): T[] => {
+    const out: T[] = [];
+    for (const x of a) {
+      const { rep, every, ...one } = x;
+      for (let i = 0; i <= (rep ?? 0); i++) {
+        const level = x.level + i * (every ?? 1);
+        if (level >= k0 - 1 && level <= k1 + 1) out.push({ ...one, level } as T);
+      }
+    }
+    return out;
+  };
+  return { ...P, flights: ex(P.flights), landings: ex(P.landings), holes: ex(P.holes) };
+}
 
 // Permanent collision / walk surfaces for a plan: the doorway, the storeys with their stairwell
 // openings, and the stairs (decks, sides, rails). The rooms' walls come with the layout (Stage B).
+// A tall building's stacked stairs go in as one stack each — a deck with copies up the storeys, a
+// shaft through the floors — and its lifts' shafts are walled all round, open all the way down:
+// you can't step (or fall) into one. A tower's storeys above its podium stand inside its tier.
 export function registerPlan(walk: WalkWorld, fp: Footprint, P: Plan) {
   const d = P.door;
   const f = (k: number) => P.floor0 + k * P.floorH;
-  const rw = (r: Rect) => [toW(P, r.u0, r.v0), toW(P, r.u1, r.v0), toW(P, r.u1, r.v1), toW(P, r.u0, r.v1)];
-  const holes = P.holes.filter((h) => h.level < P.levels).map((h) => ({ level: h.level, ring: rw(h) }));
+  const holes = P.holes.filter((h) => h.level < P.levels && !h.rep).map((h) => ({ level: h.level, ring: ringOf(P, h) }));
+  const shafts: Shaft[] = P.holes.filter((h) => h.rep).map((h) => ({ ring: ringOf(P, h), from: h.level, to: Math.min(P.levels - 1, h.level + h.rep! * (h.every ?? 1)), ...(h.every && h.every > 1 ? { every: h.every } : {}) }));
+  for (const L of P.lifts ?? []) shafts.push({ ring: ringOf(P, L.r), from: 1, to: P.levels - 1 });
+  const tiers = (P.plates ?? []).map((p) => ({ from: p.from, ring: p.ring }));
   const raised = fp.raise > 0.5;
-  const pid = walk.addPolygon(fp.ring, { floor0: P.floor0, floorH: P.floorH, levels: P.levels, holes, ground: raised }, { x: d.wx, z: d.wz, w: d.w }, raised ? P.floor0 - 0.6 : -Infinity);
+  const floors: Floors = { floor0: P.floor0, floorH: P.floorH, levels: P.levels, holes, ground: raised };
+  if (shafts.length) floors.shafts = shafts;
+  if (tiers.length) floors.tiers = tiers;
+  const pid = walk.addPolygon(fp.ring, floors, { x: d.wx, z: d.wz, w: d.w }, raised ? P.floor0 - 0.6 : -Infinity);
+  const stack = (x: Stacked) => (x.rep ? { rep: x.rep, dy: (x.every ?? 1) * P.floorH } : {});
   for (const F of P.flights) {
     const run = Math.abs(F.topU - F.bottomU);
     const lo = F.lo ?? 0, hi = F.hi ?? 1;
     const base = f(F.level) + lo * P.floorH, rise = (hi - lo) * P.floorH;
     const c = F.axis ? (F.u0 + F.u1) / 2 : (F.v0 + F.v1) / 2, half = (F.axis ? F.u1 - F.u0 : F.v1 - F.v0) / 2 - 0.05;
     const A = F.axis ? toW(P, c, F.bottomU) : toW(P, F.bottomU, c), B = F.axis ? toW(P, c, F.topU) : toW(P, F.topU, c);
-    walk.addDeck({ pts: [A, B], cum: [0, run], halfWidth: half, heightAt: (s) => base + (Math.min(run, Math.max(0, s)) / run) * rise, profile: { k: 'ramp', y0: base, y1: base + rise, total: run } });
+    walk.addDeck({ pts: [A, B], cum: [0, run], halfWidth: half, heightAt: (s) => base + (Math.min(run, Math.max(0, s)) / run) * rise, profile: { k: 'ramp', y0: base, y1: base + rise, total: run }, ...stack(F) });
   }
   for (const Lg of P.landings) {
     // (a deck is a capsule round its line: the line stops half its width short of each end)
@@ -872,9 +1151,19 @@ export function registerPlan(walk: WalkWorld, fp: Footprint, P: Plan) {
     const a0 = (along ? Lg.u0 : Lg.v0) + half, a1 = Math.max(a0 + 0.01, (along ? Lg.u1 : Lg.v1) - half);
     const A = along ? toW(P, a0, c) : toW(P, c, a0), B = along ? toW(P, a1, c) : toW(P, c, a1);
     const l = Math.hypot(B[0] - A[0], B[1] - A[1]);
-    walk.addDeck({ pts: [A, B], cum: [0, l], halfWidth: half, heightAt: () => y, profile: { k: 'const', y } });
+    walk.addDeck({ pts: [A, B], cum: [0, l], halfWidth: half, heightAt: () => y, profile: { k: 'const', y }, ...stack(Lg) });
   }
   const cw = P.cw;
   for (let i = 0; i + 5 < cw.length; i += 6) walk.addWall(toW(P, cw[i], cw[i + 1]), toW(P, cw[i + 2], cw[i + 3]), P.floor0 + cw[i + 4], P.floor0 + cw[i + 5]);
+  // the lifts' shafts, every storey (their doors are shut: you ride, you don't climb in)
+  const yTop = P.floor0 + P.levels * P.floorH + 1;
+  for (const L of P.lifts ?? []) {
+    const r = ringOf(P, L.r);
+    for (let i = 0; i < 4; i++) walk.addWall(r[i], r[(i + 1) % 4], P.floor0 - 0.5, yTop);
+  }
+  // a tier's outline, from its first storey up: no stepping off a tower's floor into the air over the podium roof
+  (P.plates ?? []).forEach((p) => {
+    for (let i = 0; i < p.ring.length; i++) walk.addWall(p.ring[i], p.ring[(i + 1) % p.ring.length], f(p.from) - 0.5, yTop);
+  });
   return pid;
 }

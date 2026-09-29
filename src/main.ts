@@ -38,7 +38,9 @@ import { Critters } from './sim/critters';
 import { rhythmFor, type LifeInit } from './sim/protocol';
 import { Garden } from './ui/garden';
 import { SPECIES, TREE_KINDS, treeMeta } from './assets/flora';
-import { Interiors, type Plan } from './world/interiors';
+import { Interiors, planInterior, registerPlan, type Plan } from './world/interiors';
+import { LiftRide } from './player/lift';
+import { LiftUI } from './ui/lift';
 import { applyAtmosphere, type Weather } from './world/atmosphere';
 import { U } from './render/shared';
 import { WatercolorPost, postParams } from './render/post';
@@ -47,6 +49,7 @@ import { SunShadows, shadowParams } from './render/shadows';
 import { applyTier, autoSteps, deviceInfo, pickTier } from './render/quality';
 import { began, contextLost, contextRestored, diag, diagInit, diagStage, diagTick, errorLine, frameFailed, frameOk, glInfo, glProbe, shaderError, showReport } from './ui/diag';
 import { WalkWorld } from './player/collision';
+import { landingAt } from './player/landing';
 import { Walker, walkParams } from './player/controller';
 import { celestial, localHour, localToMs, sunPosition } from './core/sun';
 import { buildPanel, loadSettings, userKeys, timeParams, weatherParams, debugParams } from './ui/panel';
@@ -354,24 +357,18 @@ async function main() {
   // Pointer lock wants a mouse or trackpad: a phone has none (and headless Chromium, granted one,
   // floods the page with mousemoves), while a touch-screen laptop still does.
   const canLock = () => { try { return matchMedia('(any-pointer: fine)').matches; } catch { return !isTouch; } };
-  // Doorstep-first placement: on or near a building → step out its front door;
-  // on open ground → stand on the spot facing down the nearest street.
+  // Doorstep-first placement (player/landing.ts): near a building → just inside its front door;
+  // elsewhere → the nearest open ground (never the water, a roof or a hedge: tools/playtest.js
+  // __TELEPORTS__ found 6 of 8 random map picks round the shore standing on the water, unable to
+  // take a step), facing down the nearest street.
   const teleportLocal = (x: number, z: number) => {
-    let best: Door | null = null, bd = 40 * 40;
-    for (const d of stream.doors) {
-      const dd = (d.wx - x) ** 2 + (d.wz - z) ** 2;
-      // (never a door you couldn't step out of: its outside another building or a wall)
-      if (dd < bd && walk.buildingAt(d.wx + d.nx * 0.8, d.wz + d.nz * 0.8) < 0 && !walk.touching(d.wx + d.nx * 0.8, d.wz + d.nz * 0.8, 0.32)) {
-        bd = dd;
-        best = d;
-      }
-    }
-    if (best) spawn = { x: best.wx - best.nx * 2.2, z: best.wz - best.nz * 2.2, yaw: Math.atan2(best.nx, best.nz), y: best.y };
+    const at = landingAt(walk, stream.doors, x, z);
+    if (at.door) spawn = { x: at.x, z: at.z, yaw: at.yaw!, y: at.y };
     else {
       // Manifest roads plus whatever tiles have mounted (synth/remote) — in the virtual
       // world the manifest list is empty and a yaw-0 spawn would face nowhere.
-      const near = roadPoint([...json.roads, ...stream.primRoads], /./, x, z, 'north');
-      spawn = { x, z, yaw: isFinite(near.d) ? near.yaw : 0, y: undefined };
+      const near = roadPoint([...json.roads, ...stream.primRoads], /./, at.x, at.z, 'north');
+      spawn = { x: at.x, z: at.z, yaw: isFinite(near.d) ? near.yaw : 0, y: undefined };
     }
     respawn();
   };
@@ -431,6 +428,7 @@ async function main() {
   // footprint with no interior. Legit indoor players must not be yanked outside.
   const settleWalker = () => {
     if (walkParams.fly) return; // flying over a roof isn't being swallowed by it
+    if (interiors.riding) return; // (a lift ride walks you through its shaft's wall on purpose)
     // a wall at 0.28 < the walker's 0.32 radius: running *through* their body, not one they're
     // legally pressed against (at their feet's height: a stair rail upstairs doesn't count) — or
     // standing inside a solid footprint (no rooms, no pilings to walk between). (It was `blocked`,
@@ -591,6 +589,15 @@ async function main() {
     const P = interiors.activePlan;
     if (!P || interiors.indoors || vehicles.driving) return null;
     return Math.hypot(P.door.fx - walker.x, P.door.fz - walker.z) < 3.5 ? { text: 'walk through the door to go inside', pri: 5 } : null;
+  });
+  // a tall building's lifts (player/lift.ts): L in a lift lobby, a floor, a ride in the car, another storey
+  const ride = new LiftRide(interiors, walk, walker);
+  ride.onArrive = () => ambience?.ui('chime');
+  const liftUI = new LiftUI(ride, () => $('intro').classList.contains('hidden') && !atlas.open && !photo.active && !vehicles.driving && !brush.active && !walkParams.fly);
+  hints.add(() => {
+    if (ride.busy) return null;
+    const h = ride.here();
+    return h ? { key: 'L', text: `call the lift — you're on ${h.storey ? `floor ${h.storey + 1}` : 'the ground floor'} of ${h.n}`, pri: 8 } : null;
   });
   hints.add(() => {
     for (const t of commissions.targets()) if (Math.hypot(t.x - walker.x, t.z - walker.z) < 60) return { key: 'P', text: `✧ ${t.title.replace(/^Paint /, 'paint ')}`, pri: 7 };
@@ -832,7 +839,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream, vehicles, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, get spawn() { return spawn; }, at: atPos };
+  (window as unknown as Record<string, unknown>).__GAME__ = { walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, lift: ride, planInterior, registerPlan, plans, bld, life, stream, vehicles, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, streamParams, get spawn() { return spawn; }, at: atPos };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);
@@ -853,9 +860,11 @@ async function main() {
       const fp = stream.fpByKey.get(interiors.activeIndex!);
       const P = interiors.activePlan;
       const storey = Math.max(0, Math.round((walker.feet - P.floor0) / P.floorH));
-      const kindName = ({ house: 'a house', commercial: 'a shop', church: 'the church', large: 'an apartment building' } as Record<string, string>)[fp?.kind ?? ''] ?? 'a building';
+      // (an office tower is no shop: its plan says what it is)
+      const kindName = P.arch === 'office' && fp?.kind === 'commercial' ? (P.tall && P.levels >= 8 ? 'an office tower' : 'an office building') : ({ house: 'a house', commercial: 'a shop', church: 'the church', large: P.tall && P.levels >= 8 ? 'an apartment tower' : 'an apartment building' } as Record<string, string>)[fp?.kind ?? ''] ?? 'a building';
       const what = fp?.name ?? fp?.addr ?? (P.door.street ? `${kindName} on ${P.door.street}` : kindName);
-      const floorName = storey === 0 ? 'ground floor' : storey === P.levels - 1 ? (P.levels > 2 ? 'top floor' : 'upstairs') : `floor ${storey + 1}`;
+      // (a tall building's: which of how many — the lift's chooser counts them the same way)
+      const floorName = P.tall ? (storey === 0 ? `ground floor of ${P.levels}` : `floor ${storey + 1} of ${P.levels}`) : storey === 0 ? 'ground floor' : storey === P.levels - 1 ? (P.levels > 2 ? 'top floor' : 'upstairs') : `floor ${storey + 1}`;
       const room = interiors.onStairs ? null : interiors.roomName(walker.x, walker.z, walker.feet);
       $('place').textContent = `inside ${what}${P.levels > 1 ? ` · ${interiors.onStairs ? 'on the stairs' : floorName}` : ''}${room ? ` · ${room}` : ''}`;
     } else if (interiors.activePlan) {
@@ -1108,6 +1117,7 @@ async function main() {
     focus.set(camera.position.x + fwd.x * 60, walker.y - walkParams.eyeHeight, camera.position.z + fwd.z * 60);
     const ti = performance.now();
     interiors.update(walker.x, walker.z, dt, walker.feet, !vehicles.driving && !walkParams.fly);
+    liftUI.update(dt);
     if ((settleT -= dt) <= 0) { settleT = 1; if (!vehicles.driving) settleWalker(); }
     perf.interior = Math.max(perf.interior, performance.now() - ti);
     life.update(now, walker, { night: U.uNight.value, hour: timeParams.hour, wind: weather.wind, clock: simTime });

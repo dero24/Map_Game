@@ -64,7 +64,7 @@ export function synthTile(spec: TileSpec, seed: number, terrain: { sdfAt(x: numb
   const own = (x: number, z: number) => (x >= box.x0 && x < box.x1 && z >= box.z0 && z < box.z1 ? undefined : 0);
 
   // ---- streets: N-S lines x=f(z) and E-W lines z=f(x), emitted per segment ----
-  const emitRoad = (pts: [number, number][], cls: string, w: number, _id: number) => {
+  const emitRoad = (pts: [number, number][], cls: string, w: number, into: Road[]) => {
     // split into land runs; a segment is owned iff its midpoint sits in our box
     let run: [number, number][] = [];
     const flush = () => {
@@ -72,7 +72,7 @@ export function synthTile(spec: TileSpec, seed: number, terrain: { sdfAt(x: numb
         const [mx, mz] = run[Math.floor(run.length / 2)];
         // (no name: a placeholder street must never pass for a real one — on the map, a sign, the
         // place label — "all streets named synth")
-        roads.push({ p: ints(run), c: cls, w, own: own(mx, mz), sy: 1 });
+        into.push({ p: ints(run), c: cls, w, own: own(mx, mz), sy: 1 });
       }
       run = [];
     };
@@ -82,28 +82,63 @@ export function synthTile(spec: TileSpec, seed: number, terrain: { sdfAt(x: numb
     }
     flush();
   };
-
+  const streets = (iuA: number, iuB: number, ivA: number, ivB: number, into: Road[]) => {
+    for (let iu = iuA; iu <= iuB; iu++)
+      for (let iv = ivA; iv <= ivB; iv++) {
+        const mz = (iv + 0.5) * PITCH;
+        if (!segOn(nsX(iu, mz, seed), mz, iu, iv, seed, iu % 4 === 0)) continue;
+        const pts: [number, number][] = [];
+        for (let z = iv * PITCH; z <= (iv + 1) * PITCH; z += 18) pts.push([nsX(iu, z, seed), z]);
+        emitRoad(pts, iu % 4 === 0 ? 'secondary' : 'residential', ROAD_W, into);
+      }
+    for (let iv = ivA; iv <= ivB; iv++)
+      for (let iu = iuA; iu <= iuB; iu++) {
+        const mx = (iu + 0.5) * PITCH;
+        if (!segOn(mx, ewZ(iv, mx, seed), iu, iv, seed, iv % 4 === 0)) continue;
+        const pts: [number, number][] = [];
+        for (let x = iu * PITCH; x <= (iu + 1) * PITCH; x += 18) pts.push([x, ewZ(iv, x, seed)]);
+        emitRoad(pts, iv % 4 === 0 ? 'secondary' : 'residential', ROAD_W, into);
+      }
+  };
   const iu0 = Math.floor((box.x0 - 140) / PITCH), iu1 = Math.floor(box.x1 / PITCH);
   const iv0 = Math.floor((box.z0 - 140) / PITCH), iv1 = Math.floor(box.z1 / PITCH);
-  let roadId = 0;
-  for (let iu = iu0; iu <= iu1; iu++)
-    for (let iv = iv0; iv <= iv1; iv++) {
-      const mz = (iv + 0.5) * PITCH;
-      if (!segOn(nsX(iu, mz, seed), mz, iu, iv, seed, iu % 4 === 0)) continue;
-      const pts: [number, number][] = [];
-      for (let z = iv * PITCH; z <= (iv + 1) * PITCH; z += 18) pts.push([nsX(iu, z, seed), z]);
-      emitRoad(pts, iu % 4 === 0 ? 'secondary' : 'residential', ROAD_W, roadId++);
-    }
-  for (let iv = iv0; iv <= iv1; iv++)
-    for (let iu = iu0; iu <= iu1; iu++) {
-      const mx = (iu + 0.5) * PITCH;
-      if (!segOn(mx, ewZ(iv, mx, seed), iu, iv, seed, iv % 4 === 0)) continue;
-      const pts: [number, number][] = [];
-      for (let x = iu * PITCH; x <= (iu + 1) * PITCH; x += 18) pts.push([x, ewZ(iv, x, seed)]);
-      emitRoad(pts, iv % 4 === 0 ? 'secondary' : 'residential', ROAD_W, roadId++);
-    }
+  streets(iu0, iu1, iv0, iv1, roads);
 
   // ---- buildings: lots along each owned/margin road, centres owned by their tile ----
+  // No lot stands in a street. Each is set back from the street it fronts, which never saw the
+  // cross street at a corner or the bend of a wavy one: 8% of the stand-ins' houses stood across
+  // the lanes (tools/playtest.js __ROADPOSTS__ found their pilings on the centre lines).
+  // (one more street all round than the tile emits: a lot in the margin is kept or dropped the
+  // same way by its own tile and by its neighbour)
+  const around: Road[] = [];
+  streets(iu0 - 1, iu1 + 1, iv0 - 1, iv1 + 1, around);
+  const SC = 16, segCells = new Map<number, number[][]>();
+  for (const rd of around)
+    for (let i = 0; i + 3 < rd.p.length; i += 2) {
+      const sg = [rd.p[i] / 10, rd.p[i + 1] / 10, rd.p[i + 2] / 10, rd.p[i + 3] / 10, rd.w / 2 + 0.5];
+      for (let u = Math.floor((Math.min(sg[0], sg[2]) - sg[4]) / SC); u <= Math.floor((Math.max(sg[0], sg[2]) + sg[4]) / SC); u++)
+        for (let v = Math.floor((Math.min(sg[1], sg[3]) - sg[4]) / SC); v <= Math.floor((Math.max(sg[1], sg[3]) + sg[4]) / SC); v++) {
+          const k = u * 100003 + v;
+          (segCells.get(k) ?? segCells.set(k, []).get(k)!).push(sg);
+        }
+    }
+  const inStreet = (x: number, z: number) => {
+    for (const sg of segCells.get(Math.floor(x / SC) * 100003 + Math.floor(z / SC)) ?? []) {
+      const ex = sg[2] - sg[0], ez = sg[3] - sg[1], L2 = ex * ex + ez * ez || 1, t = Math.max(0, Math.min(1, ((x - sg[0]) * ex + (z - sg[1]) * ez) / L2));
+      if (Math.hypot(sg[0] + ex * t - x, sg[1] + ez * t - z) < sg[4]) return true;
+    }
+    return false;
+  };
+  // (its outline, and its inside every 2 m: a street crossing it between the corners)
+  const onStreet = (ring: [number, number][]) => {
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (const [x, z] of ring) {
+      if (inStreet(x, z)) return true;
+      (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z));
+    }
+    for (let x = x0 + 1; x < x1; x += 2) for (let z = z0 + 1; z < z1; z += 2) if (pointInRing(x, z, ring) && inStreet(x, z)) return true;
+    return false;
+  };
   const nearRoad = (x: number, z: number) => {
     const iu = Math.round((x - 26 * Math.sin(z * 0.006 + vh(Math.round(x / PITCH), 777, seed) * 6.28)) / PITCH);
     const iv = Math.round((z - 26 * Math.sin(x * 0.006 + vh(911, Math.round(z / PITCH), seed) * 6.28)) / PITCH);
@@ -125,6 +160,7 @@ export function synthTile(spec: TileSpec, seed: number, terrain: { sdfAt(x: numb
     const rr = Math.max(L, W * 1.6) * 0.62;
     if (lots.some((o) => Math.hypot(o.x - cx, o.z - cz) < o.r + rr)) return;
     if (!ring.every(([x, z]) => land(x, z))) return; // corner lots can't hang over water
+    if (onStreet(ring)) return;
     lots.push({ x: cx, z: cz, r: rr });
     const mix = activeStyle().roofMix; // regional roof habit (gable / hip / rest flat)
     const rv = vh(id, 11, seed);

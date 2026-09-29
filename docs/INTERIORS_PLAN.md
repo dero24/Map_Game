@@ -1,6 +1,6 @@
 # Interiors v2 — rooms, cores and towers that scale with the map
 
-Status: Slice 1 (rooms, not halls) built 2026-09-29 — `src/world/interior/{plan,layout,mesh,furnish}.ts`, tests `interiorLayout` and `interiorBudget`; results under the table in §1. Slices 2–5 planned (backlog R.31). Written 2026-09-28 from a read of `interiors.ts`, `buildings.ts`, `realTile.ts` and the numbers below.
+Status: Slice 1 (rooms, not halls) built 2026-09-29 — `src/world/interior/{plan,layout,mesh,furnish}.ts`, tests `interiorLayout` and `interiorBudget`; results under the table in §1. Slice 3 (towers) built 2026-09-29 — `player/lift.ts`, `ui/lift.ts`, test `interiorTower`; results under Slice 3 in §5. Slices 2, 4 and 5 planned (backlog R.31). Written 2026-09-28 from a read of `interiors.ts`, `buildings.ts`, `realTile.ts` and the numbers below.
 
 Goal: real room scale and variety in every building, bungalow to 40-storey tower, derived from the map data we carry, on a phone budget.
 
@@ -209,6 +209,27 @@ Instanced: furniture, residents, lift doors; merged: shell, partitions, stairs. 
 - **Files:** `interiors.ts` (build window, lifts); `collision.ts` (`Floors.shafts`); `controller.ts`, `main.ts` (lift key, fade, HUD); `buildings.ts` (curtain fH = `windowAt` fH, office facade); `decor.ts` (lift doors, turnstile, desk).
 - **Tests** (40×40 m, 150 m tower): n = 39 with lobby and shaft holes; lift 0 → 23 lands feet at floor0 + 23 × fH; stair 23 → 24 walkable; ≤ 3 storeys, ≤ 120k vertices built; on a 60×60 m, 20 m podium, storey 10 has no floor outside the tower.
 - **Visual:** Midtown (`?at=40.7536,-73.9832`) and the Loop (`?at=41.8789,-87.6359`): lobby, lift lobby, floor 20, stair shaft, and night.
+- **Built 2026-09-29** (`interior/{plan,layout,mesh,furnish}.ts`, `interiors.ts`, `player/{collision,controller,lift}.ts`, `ui/lift.ts`, `main.ts`, `buildings.ts`, `decor.ts`; `tests/interiorTower.test.ts`):
+  - **Storeys:** every one exists, n from the facade's fH (the 40×40 m, 150 m tower: 39); tall (≥ 5 storeys, or > 12,000 m² of floor) builds a window of ≤ 3 round the walker. Stage A stays one storey's worth: the stair is one stacked dogleg (`rep`), the tower's plan ≤ 2 KB.
+  - **Cores and lifts:** an office tower's lift bank across its core's end nearer the door (a 3.2 m lift lobby open to the floor at both ends, the dogleg beyond; cars = clamp(round(gross ÷ 4,000 m²), 2, 8)); a block's lift beside its core stair; on an open plan (a ragged outline) a free-standing shaft 1.2 m clear of the facade. Offices of ≥ 6 storeys: a double-height lobby (a storey-1 hole from the door's wall to a 1.6 m gallery along the core, a rail round it, pendants).
+  - **Podiums:** `Footprint.tiers` (lifted building parts, derived in `buildBuildings` — no TileJson change) → `Plan.plates`; `Floors.tiers` keeps a tier's storeys inside its outline, which is walled from its first storey up.
+  - **The ride** is a real one rather than the fade (§6 left it open): the car's doors slide open, you step in and turn round, they shut, the display counts the floors while your feet go to floor0 + k × fH and the window re-centres there, the doors open, you step out (~6–8 s). L, not E (E is get in/out).
+  - **Seeds by storey:** layout, paint, furniture and residents per storey, so re-centring on the stairs changes nothing you can see.
+  - **Facade:** curtain slabs at `windowAt`'s fH; tall commercial blocks and curtain walls map offices behind the glass (ceiling light rows, desks, screens), lit floor by floor at night.
+  - **Numbers** (`tools/bench-interiors.mts`, Node 22, CPU time, with another browser on the machine; a build is ≤ 3 storeys):
+
+    | Case | Storeys built | Vertices | Draws | Worst step | Stage A |
+    |---|---|---|---|---|---|
+    | Tower 40×40 m, 150 m, at the door | 0–1 of 39 | 15.7k | 22 | 0.8 ms | 0.05 ms, 2.0 KB |
+    | … on floor 24 | 22–24 | 14.9k | 18 | 0.6 ms | |
+    | Flats tower 30×30 m, 90 m, floor 21 | 19–21 of 28 | 53.3k | 42 | 1.3 ms | 0.3 ms, 1.9 KB |
+    | Podium 60×60 m + tower to 150 m, floor 11 | 9–11 of 39 | 12.1k | 16 | 1.1 ms | 0.4 ms, 2.5 KB |
+    | Apartments 45×16 m (6 storeys: now tall) | 0–1 | 48.4k | 42 | 1.9 ms | 0.3 ms |
+    | Office 60×30 m (8 storeys, atrium) | 0–1 | 16.2k | 21 | 1.6 ms | 0.1 ms |
+
+    A ride's window builds under the car's shut doors (the pump at 14 ms a frame then); walking the stairs, it builds at 3.5 ms a frame behind the standing one and swaps in whole.
+  - **Visual:** the container reaches neither Overpass nor the tile service, and the offline stand-ins are one to three storeys, so the check ran on a stand-in district of towers served as real-lite tiles through the whole pipeline (`scratch/tow/midtown-tiles.mjs`, `?at=40.7536,-73.9832&tiles=…`): lobby, the lift's doors on the car, riding, floor 20, the stair, the mezzanine, night inside and out, a glass tower's floor, the podium tower.
+  - **Not done:** plant floors (and the lift skipping them), sky lobbies, scissor stairs; a lift in a 5–7-storey block over shops (a walk-up); the Loop shots; real-data shots.
 
 **Slice 4 — Deeper archetypes.**
 

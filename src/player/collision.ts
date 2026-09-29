@@ -16,6 +16,9 @@ export interface Deck {
   // The height profile, when the builder knows it — lets the tile stream ship the deck across a
   // worker boundary exactly instead of sampling heightAt.
   profile?: DeckProfile;
+  /** A stack (a tower's stair, one flight a storey): `rep` more copies, each `dy` higher. */
+  rep?: number;
+  dy?: number;
 }
 export type DeckProfile =
   | { k: 'const'; y: number }
@@ -23,7 +26,25 @@ export type DeckProfile =
   | { k: 'arch'; hA: number; hB: number; peak: number; total: number };
 // Stairwell opening: storey `level` has no floor inside `ring`.
 export interface Hole { level: number; ring: P2[] }
-export interface Floors { floor0: number; floorH: number; levels: number; holes?: Hole[]; ground?: boolean }
+/** A shaft through the storeys (a lift's, a tower's stack of stairwells): storeys `from` … `to`
+ *  (every `every`th of them) have no floor inside `ring`. */
+export interface Shaft { ring: P2[]; from: number; to: number; every?: number }
+/** A tier (a tower standing on its podium): storeys from `from` up exist only inside `ring` —
+ *  the tier with the highest `from` at or below a storey is the one that bounds it. */
+export interface Tier { from: number; ring: P2[] }
+export interface Floors { floor0: number; floorH: number; levels: number; holes?: Hole[]; shafts?: Shaft[]; tiers?: Tier[]; ground?: boolean }
+/** Is there floor on storey k of `f` at (x, z) — no stairwell, no shaft, inside its tier? (The
+ *  point is known to be inside the building's outline.) */
+export function floorAt(f: Floors, k: number, x: number, z: number) {
+  if (f.holes?.some((h) => h.level === k && inRing(x, z, h.ring))) return false;
+  if (f.shafts?.some((s) => k >= s.from && k <= s.to && (k - s.from) % (s.every ?? 1) === 0 && inRing(x, z, s.ring))) return false;
+  if (f.tiers?.length) {
+    let t: Tier | null = null;
+    for (const q of f.tiers) if (q.from <= k && (!t || q.from > t.from)) t = q;
+    if (t && !inRing(x, z, t.ring)) return false;
+  }
+  return true;
+}
 
 const DEAD_SEG: Seg = [0, 0, 0, 0, 0, 0];
 
@@ -238,7 +259,12 @@ export class WalkWorld {
         if (l2 < 1e-6) continue;
         const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2));
         const ex = ax + dx * t - x, ez = az + dz * t - z;
-        if (ex * ex + ez * ez <= d.halfWidth * d.halfWidth) { out.push(d.heightAt(d.cum[i] + Math.sqrt(l2) * t)); return; }
+        if (ex * ex + ez * ez <= d.halfWidth * d.halfWidth) {
+          const h = d.heightAt(d.cum[i] + Math.sqrt(l2) * t);
+          out.push(h);
+          for (let r = 1; r <= (d.rep ?? 0); r++) out.push(h + r * d.dy!);
+          return;
+        }
       }
     };
     for (const id of this.deckGrid.get(Math.floor(x / 50) * 92821 + Math.floor(z / 50)) ?? []) if (!this.deckDead[id]) test(this.decks[id]);
@@ -287,10 +313,7 @@ export class WalkWorld {
     const b = this.buildingAt(x, z);
     const f = b >= 0 ? this.floors[b] : null;
     if (f) {
-      for (let k = 0; k < f.levels; k++) {
-        if (f.holes?.some((h) => h.level === k && inRing(x, z, h.ring))) continue;
-        c.push(f.floor0 + k * f.floorH);
-      }
+      for (let k = 0; k < f.levels; k++) if (floorAt(f, k, x, z)) c.push(f.floor0 + k * f.floorH);
       if (f.ground || !c.length) c.push(Math.max(this.terrain.heightAt(x, z), -0.2));
     } else c.push(Math.max(this.terrain.heightAt(x, z), -0.2));
     this.deckHeights(x, z, c);

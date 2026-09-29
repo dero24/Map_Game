@@ -31,6 +31,12 @@ export interface Footprint {
   door?: number;
   pitched?: boolean;
   front?: boolean; // a storefront (shop, or apartments over shops): paved to the kerb
+  /** The tiers standing on it (building:part pieces lifted onto this building — a tower on its
+   *  podium, a wedding cake's setbacks): outline, bottom and top (absolute). Its storeys go on up
+   *  inside them (interior/plan.ts plates). */
+  tiers?: { ring: P2[]; lo: number; top: number; glass?: 1 }[];
+  /** A glass curtain wall (recipe SIDING.glass): glazed floor to ceiling, inside as out. */
+  glass?: 1;
 }
 
 export const KIND = { house: 0, shed: 1, commercial: 2, large: 3, church: 4, lighthouse: 5 } as const;
@@ -461,16 +467,21 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
     // half-flights along the wall, the second outside the first, a landing between). Straight
     // out toward the street only when the wall is too short even for that — on the shore's
     // tight lots a straight flight lands on the sidewalk.
-    // Each shape is taken where its flight stands in the open — nothing else's footprint under it
-    // or on the metre of ground past its foot you step off onto. On the shore's tight lots the side
-    // wrap ran its stair down the 40 cm between two houses (inside the neighbour), or landed it
-    // against a shed: the door above was shut. In order — along the wall, round the side, a
+    // Each shape is taken where its flight stands in the open — no other footprint and no street's
+    // carriageway under it or on the metre of ground past its foot you step off onto. On the shore's
+    // tight lots the side wrap ran its stair down the 40 cm between two houses (inside the
+    // neighbour), or landed it against a shed, and a house at the kerb ran it across the street: the
+    // door above was shut, or cars drove into it. In order — along the wall, round the side, a
     // switchback, straight out — the first in the open; none: the one least in the way.
+    const inStreet = (x: number, z: number) => { const r = C.streets.nearest(x, z, 12, true); return !!r && r[2] < r[3] / 2; };
     const hits = (x0: number, z0: number, dx: number, dz: number, L: number) => {
       const px = -dz, pz = dx, n = Math.max(1, Math.ceil(L / 0.5));
       let k = 0;
       for (let i = 0; i <= n; i++)
-        for (const w of [-sw / 2, 0, sw / 2]) if (C.rings.hit(x0 + dx * ((L * i) / n) + px * w, z0 + dz * ((L * i) / n) + pz * w, B.ring)) k++;
+        for (const w of [-sw / 2, 0, sw / 2]) {
+          const x = x0 + dx * ((L * i) / n) + px * w, z = z0 + dz * ((L * i) / n) + pz * w;
+          if (C.rings.hit(x, z, B.ring) || inStreet(x, z)) k++;
+        }
       return k;
     };
     type SideWrap = { cx: number; cz: number; dx: number; dz: number; sx: number; sz: number };
@@ -499,7 +510,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
         if (sx * tx * d + sz * tz * d < 0) (sx = -sx), (sz = -sz); // outward from the side wall
         const cu = d > 0 ? len : 0;
         let hit = hits(c[0] + sx * outA, c[1] + sz * outA, dx, dz, total + 1) + hits(c[0] + sx * (outA + sw), c[1] + sz * (outA + sw), dx, dz, total + 1);
-        for (const e of [0.3, sw / 2, sw + 0.1]) for (const o2 of [0.2, D / 2, D - 0.2]) { const [x, z] = at(cu + d * e, o2); if (C.rings.hit(x, z, B.ring)) hit++; }
+        for (const e of [0.3, sw / 2, sw + 0.1]) for (const o2 of [0.2, D / 2, D - 0.2]) { const [x, z] = at(cu + d * e, o2); if (C.rings.hit(x, z, B.ring) || inStreet(x, z)) hit++; }
         shapes.push({ k: 'side', d, hit, side: { cx: c[0], cz: c[1], dx, dz, sx, sz } });
       }
     }
@@ -1191,6 +1202,7 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
   const colliders: Colliders = { walls: [], decks: [] };
   const rings = new RingGrid();
   const signs: SignSpec[] = [], mailboxes: Mailbox[] = [], drives: Drive[] = [], walks: number[] = [], pilings: BuildingsResult['pilings'] = [];
+  const tiersOf = new Map<number, NonNullable<Footprint['tiers']>>(); // building id → the tiers lifted onto it
   const near = (x: number, z: number, m: number) => x > S.x0 - m && x < S.x1 + m && z > S.z0 - m && z < S.z1 + m;
 
   // Unpack + tidy all outlines first (the porch/stair clearance test needs the neighbours).
@@ -1484,7 +1496,14 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
         }
       }
     }
-    const fp: Footprint = { ring, base, top: wallTop, floor0, raise, name: bd.n, use: bd.u, addr: bd.ad, kind: bd.k, eave: wallTop - base, seed: r1, id, pitched: !!roofG, front: bd.k === 'commercial' || !!bd.gf || (!!bd.u && bd.k !== 'house' && bd.k !== 'shed') };
+    const fp: Footprint = { ring, base, top: wallTop, floor0, raise, name: bd.n, use: bd.u, addr: bd.ad, kind: bd.k, eave: wallTop - base, seed: r1, id, pitched: !!roofG, front: bd.k === 'commercial' || !!bd.gf || (!!bd.u && bd.k !== 'house' && bd.k !== 'shed'), ...(rc.siding === SIDING.glass ? { glass: 1 as const } : {}) };
+    // a tier of a taller building (its part, lifted onto the outline or the tier under it): its
+    // storeys are the building's too, up inside it
+    if (lifted && part && bd.po != null && bd.po >= 0 && !bd.cn) {
+      const l = tiersOf.get(id);
+      const t = { ring, lo: base + 0.3 + lift, top: wallTop, ...(fp.glass ? { glass: 1 as const } : {}) };
+      if (l) l.push(t); else tiersOf.set(id, [t]);
+    }
     if (!owns) return; // parts belong to their outline's footprint; floating pieces have none
     if (inZone) footprints.push(fp);
     if (inSlice && !bd.lod && bd.k !== 'shed' && inZone) {
@@ -1504,6 +1523,8 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
       }
     }
   });
+  // (lowest first: a wedding cake's tiers in the order you climb them)
+  for (const f of footprints) { const t = tiersOf.get(f.id); if (t) f.tiers = t.sort((a, b) => a.lo - b.lo); }
 
   // Lighthouses mapped only as points (e.g. Sandy Hook) + explicit skyline landmarks.
   const sh = new Builder();
@@ -1618,15 +1639,22 @@ export function buildingMaterial() {
 
       // Interior mapping: ray-trace a box room behind each window pane (no geometry).
       // Room space: x along the wall (centred on the window cell), y up from the floor, z into the building.
-      vec3 room(vec3 T, vec3 N, float cu, float fv, float cellW, float floorH, float rh, float rh2, float lit, bool store) {
+      // An office (a tall commercial block's storeys, a curtain wall's): a suspended ceiling with rows
+      // of light panels (they carry a tower's lit floors at night), desks and their screens facing the
+      // glass, the core's wall behind; behind a curtain wall it's one open floor (cellW > 100: no side
+      // walls), and above the ceiling the dark plenum band.
+      vec3 room(vec3 T, vec3 N, float cu, float fv, float cellW, float floorH, float rh, float rh2, float lit, bool store, bool office) {
         vec3 V = normalize(vWorldPos - (cameraPosition + uWorldOffset));
         vec3 d = vec3(dot(V, T), V.y, max(-dot(V, N), 0.04));
-        float hw = cellW * 0.5;
-        float depth = store ? 7.0 : 3.0 + rh * 2.5;
+        vec3 dayL = uAmbSky * 0.6 + uKeyColor * 0.1;
+        float ceilH = office ? min(floorH - 0.55, 3.0) : floorH;
+        if (office && fv > ceilH) return vec3(0.045, 0.045, 0.05) * (dayL + 0.2);
+        float hw = office && cellW > 100.0 ? 60.0 : cellW * 0.5;
+        float depth = store ? 7.0 : office ? (cellW > 100.0 ? 9.0 + rh * 4.0 : 5.0 + rh * 3.0) : 3.0 + rh * 2.5;
         vec3 o = vec3(cu, fv, 0.0);
         float dx = abs(d.x) > 1e-4 ? d.x : 1e-4;
         float tx = (sign(dx) * hw - o.x) / dx;
-        float ty = d.y > 0.0 ? (floorH - o.y) / max(d.y, 1e-4) : -o.y / min(d.y, -1e-4);
+        float ty = d.y > 0.0 ? (ceilH - o.y) / max(d.y, 1e-4) : -o.y / min(d.y, -1e-4);
         float tz = depth / d.z;
         float t = min(tx, min(ty, tz));
         vec3 p = o + d * t;
@@ -1640,11 +1668,19 @@ export function buildingMaterial() {
           float t2 = 1.45 / d.z; vec3 q2 = o + d * t2;
           float cellG = floor(q2.x * 3.0);
           if (disp == 0 && t2 < t && q2.y > 1.08 && q2.y < 1.08 + 0.6 * (0.5 + hash12(vec2(cellG, rh * 7.0))) && abs(q2.x) < hw * 0.8 && hash12(vec2(cellG, rh2 * 5.0)) > 0.3) { t = t2; p = q2; disp = 2; }
+        } else if (office) {
+          // a bench of desks 1.8 m in, their screens toward the glass (1.6 m a desk)
+          float t3 = 1.8 / d.z; vec3 q3 = o + d * t3;
+          if (t3 < t && q3.y > 0.8 && q3.y < 1.16 && fract(q3.x / 1.6 + rh * 3.0) < 0.3) { t = t3; p = q3; disp = 3; }
+          else if (t3 < t && q3.y > 0.0 && q3.y < 0.75 && fract(q3.x / 1.6 + rh * 3.0 + 0.5) < 0.9) { t = t3; p = q3; disp = 4; }
         }
-        vec3 wallC = mix(mix(vec3(0.88, 0.82, 0.7), vec3(0.64, 0.74, 0.76), step(0.5, rh)), vec3(0.8, 0.68, 0.66), step(0.8, rh));
-        vec3 floorC = mix(vec3(0.46, 0.33, 0.22), vec3(0.62, 0.6, 0.56), step(0.6, rh2));
+        vec3 wallC = office ? mix(vec3(0.84, 0.83, 0.8), vec3(0.72, 0.74, 0.76), step(0.55, rh)) : mix(mix(vec3(0.88, 0.82, 0.7), vec3(0.64, 0.74, 0.76), step(0.5, rh)), vec3(0.8, 0.68, 0.66), step(0.8, rh));
+        vec3 floorC = office ? vec3(0.4, 0.42, 0.45) : mix(vec3(0.46, 0.33, 0.22), vec3(0.62, 0.6, 0.56), step(0.6, rh2));
+        float panel = 0.0; // an office ceiling's light panel (lit up at night)
         vec3 c;
-        if (disp == 1) c = mix(vec3(0.45, 0.32, 0.22), vec3(0.62, 0.52, 0.4), step(1.02, p.y)) * 1.15;
+        if (disp == 3) c = vec3(0.07, 0.08, 0.1) + vec3(0.1, 0.16, 0.24) * lit * uNight;
+        else if (disp == 4) c = p.y > 0.7 ? vec3(0.86, 0.85, 0.82) : vec3(0.5, 0.52, 0.55);
+        else if (disp == 1) c = mix(vec3(0.45, 0.32, 0.22), vec3(0.62, 0.52, 0.4), step(1.02, p.y)) * 1.15;
         else if (disp == 2) {
           vec3 g1 = mix(vec3(0.82, 0.38, 0.3), vec3(0.32, 0.5, 0.68), hash12(vec2(floor(p.x * 3.0), rh)));
           c = mix(g1, vec3(0.93, 0.88, 0.76), step(0.6, hash12(vec2(floor(p.x * 6.0), floor(p.y * 5.0))))) * 1.3; // spot-lit
@@ -1666,13 +1702,18 @@ export function buildingMaterial() {
             float head = step(length(vec2(p.x - px, p.y - 1.6)), 0.13);
             c = mix(c, vec3(0.16, 0.14, 0.16), max(body, head));
           }
-        } else if (t == ty) c = d.y > 0.0 ? vec3(0.93, 0.91, 0.86) : floorC;
+        } else if (t == ty && d.y > 0.0) {
+          c = office ? vec3(0.88, 0.88, 0.86) : vec3(0.93, 0.91, 0.86);
+          // rows of light panels across the office, every 2.4 m in from the glass
+          if (office) panel = step(fract((p.z + 0.9) / 2.4), 0.26) * step(fract(p.x / 1.5 + 0.2), 0.62);
+        } else if (t == ty) c = floorC;
         else c = wallC * 0.8;
         float fall = 1.0 - clamp(p.z / depth, 0.0, 1.0) * 0.5;
-        vec3 dayL = uAmbSky * 0.6 + uKeyColor * 0.1;
         float lampSpot = smoothstep(2.5, 0.0, length(vec2(p.x, p.z - depth * 0.4)));
-        vec3 L = dayL * (1.0 - uNight * 0.9) + uWindowColor * lit * (1.1 + 0.9 * lampSpot);
-        return c * L * fall;
+        // (an office's light is the panels': cooler, even, the whole floor)
+        vec3 L = office ? dayL * (1.0 - uNight * 0.9) + mix(uWindowColor, vec3(0.86, 0.92, 1.0), 0.55) * lit * 1.25
+                        : dayL * (1.0 - uNight * 0.9) + uWindowColor * lit * (1.1 + 0.9 * lampSpot);
+        return c * L * fall + panel * (vec3(0.5) * (1.0 - uNight) + vec3(1.5, 1.55, 1.6) * lit * uNight);
       }
 
       void main() {
@@ -1830,7 +1871,9 @@ export function buildingMaterial() {
               if (lod < 0.999 && dot(vTan, vTan) > 0.5) {
                 vec3 T = normalize(vec3(vTan.x, 0.0, vTan.y));
                 float h3 = hash12(vec2(W.h1 * 31.0, W.h2 * 17.0));
-                vec3 rc = room(T, N, W.cu, W.fv, W.cellW, W.floorH, W.h1, h3, lit, W.store);
+                // (a tall commercial block's storeys are offices inside: interior/plan.ts, ≥ 8 storeys)
+                bool office = !W.store && kind > 1.5 && kind < 2.5 && eave - fo > 30.0;
+                vec3 rc = room(T, N, W.cu, W.fv, W.cellW, W.floorH, W.h1, h3, lit, W.store, office);
                 // rooms read darker than the street in daylight — that's what makes glass read as glass
                 inside = mix(body, rc * mix(1.0, 0.5, day), (W.store ? 0.42 : 0.4) * (1.0 - lod));
               }
@@ -1878,8 +1921,9 @@ export function buildingMaterial() {
           if (curtain && !(W.ok && W.store) && v > fo - 0.02) {
             // Floor-high panes between slim mullions, an opaque spandrel at every slab, the sky
             // (or the street, looking down) in the glass by the view angle. Offices light up floor
-            // by floor at night. Sub-pixel detail folds into one averaged tone far away.
-            float cfH = 3.9, mw = 1.5, dayC = 1.0 - uNight;
+            // by floor at night. Sub-pixel detail folds into one averaged tone far away. (The slabs
+            // are the interior's storeys: windowAt's floorH, the plan's fH — interior/plan.ts.)
+            float cfH = W.floorH, mw = 1.5, dayC = 1.0 - uNight;
             float vf = v - fo;
             float fl = floor(vf / cfH), fy = vf - fl * cfH;
             float cu = u / mw, ci = floor(cu), cx2 = (fract(cu) - 0.5) * mw;
@@ -1897,9 +1941,18 @@ export function buildingMaterial() {
             float cl = fbm(Rc.xz / max(Rc.y, 0.12) * 0.9 + vec2(seed * 7.0, 0.0));
             skyR = mix(skyR, vec3(0.94, 0.93, 0.9), smoothstep(0.45, 0.8, cl) * 0.35 * step(0.0, Rc.y));
             skyR = mix(skyR, vColor * 0.4 + vec3(0.05, 0.05, 0.045), smoothstep(0.02, -0.25, Rc.y)); // street + facades opposite
-            vec3 gl = mix(vColor * 0.38, skyR * (0.9 + (pane - 0.5) * 0.14), frc * (0.45 + 0.55 * dayC));
             float litC = step(hash12(vec2(floor(u / (mw * 4.0)) + seed * 13.0, fl * 1.7 + seed)), uWindowLit * 1.1);
-            gl += uWindowColor * litC * (0.03 + 0.95 * uNight) * (1.0 - frc * 0.5);
+            // the open office floor behind the glass up close: its ceiling's light rows, its desks
+            // (a lit floor's glow carries it from afar)
+            vec3 bodyC = vColor * 0.38;
+            float nearC = (1.0 - farC) * step(0.5, dot(vTan, vTan));
+            if (nearC > 0.001) {
+              vec3 Tc = normalize(vec3(vTan.x, 0.0, vTan.y));
+              vec3 rcC = room(Tc, N, u, fy, 1000.0, cfH, fract(seed * 5.3 + fl * 0.37), hash12(vec2(fl, seed * 7.0)), litC, false, true);
+              bodyC = mix(bodyC, rcC * mix(1.0, 0.55, dayC), 0.55 * nearC);
+            }
+            vec3 gl = mix(bodyC, skyR * (0.9 + (pane - 0.5) * 0.14), frc * (0.45 + 0.55 * dayC));
+            gl += uWindowColor * litC * (0.03 + 0.95 * uNight) * (1.0 - frc * 0.5) * (1.0 - 0.6 * nearC);
             vec3 spC = mix(vColor * 0.62, skyR * 0.75, frc * 0.3) * (0.95 + 0.1 * pane);
             vec3 mulC = fract(seed * 3.7) < 0.55 ? vec3(0.7, 0.72, 0.74) : vec3(0.22, 0.21, 0.2);
             alb = mix(spC, mulC, frame);

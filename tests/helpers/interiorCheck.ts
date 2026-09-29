@@ -4,7 +4,7 @@
 import { WalkWorld } from '../../src/player/collision';
 import type { Terrain } from '../../src/world/data';
 import type { Footprint, Door } from '../../src/world/buildings';
-import { planInterior, registerPlan, toW, endOK, LocalPoly, wallWindows, onWindow, type Plan } from '../../src/world/interior/plan';
+import { planInterior, registerPlan, toW, endOK, LocalPoly, wallWindows, onWindow, unstack, type Plan } from '../../src/world/interior/plan';
 import { layoutInterior, registerLayout, type Layout, type Room } from '../../src/world/interior/layout';
 
 export type P2 = [number, number];
@@ -13,6 +13,9 @@ export const rect = (L: number, W: number): P2[] => [[-L / 2, -W / 2], [L / 2, -
 export const fpOf = (ring: P2[], kind: string, top: number, use?: string, seed = 0.3, id = 7): Footprint => ({ ring, base: 0.2, top, floor0: 0.5, raise: 0, kind, use, eave: top - 0.2, seed, id });
 /** A door in the north wall (z = −W/2) at x, `w` wide. */
 export const doorN = (W: number, x = 0.3, w = 1): Door => ({ x, z: -W / 2 - 0.2, y: 0.5, nx: 0, nz: -1, fx: x, fz: -W / 2 - 1.4, fy: 0.5, b: 0, w, h: 2.15, wx: x, wz: -W / 2, col: 0 });
+
+/** A lift's shaft and a double-height lobby's void: nobody's rooms (no floor, no door, nothing in them). */
+export const nobodys = (r: Room) => r.type === 'shaft' || r.type === 'void';
 
 export interface Built { fp: Footprint; P: Plan; L: Layout; w: WalkWorld }
 export function build(fp: Footprint, door: Door, seed = 99): Built {
@@ -29,8 +32,9 @@ export function build(fp: Footprint, door: Door, seed = 99): Built {
  *  rarely lines up with a 0.8 m doorway the way a player steers through one, so each doorway and
  *  each flight is also tried as a straight walk from a step before it to a step past it — still
  *  through the collision world, never around it. Returns the rooms reached and the points visited. */
-export function flood(b: Built, step = 0.35, from?: [number, number, number]) {
-  const { P, w, fp } = b;
+export function flood(b: Built, step = 0.35, from?: [number, number, number], feet?: [number, number]) {
+  const { w, fp } = b;
+  const P = unstack(b.P); // (a tall building's stairs: every storey's flight)
   const d = P.door;
   const ring = fp.ring;
   const inside = (x: number, z: number) => {
@@ -95,6 +99,7 @@ export function flood(b: Built, step = 0.35, from?: [number, number, number]) {
   while (q.length) {
     const [x, z, ft] = q.pop()!;
     pts.push([x, z, ft]);
+    if (feet && (ft < feet[0] || ft > feet[1])) continue; // (a tall building's storeys built: the flood stays on them)
     for (const [dx, dz] of dirs) {
       const [nx, nz] = w.move(x, z, dx, dz, 0.32, ft);
       if (Math.hypot(nx - x, nz - z) < step * 0.3) continue;
@@ -120,6 +125,7 @@ export function flood(b: Built, step = 0.35, from?: [number, number, number]) {
   for (const [x, z, ft] of pts) {
     const u = (x - P.cx) * P.ux + (z - P.cz) * P.uz, v = (x - P.cx) * P.vx + (z - P.cz) * P.vz;
     for (const r of b.L.rooms) {
+      if (nobodys(r)) continue; // (a lift's shaft: walled all round; an atrium's void: no floor)
       if (reached.has(r.id) || Math.abs(ft - f(r.level)) > 0.3) continue;
       if (u > r.r.u0 + 0.05 && u < r.r.u1 - 0.05 && v > r.r.v0 + 0.05 && v < r.r.v1 - 0.05) reached.add(r.id);
     }
@@ -131,7 +137,8 @@ export function flood(b: Built, step = 0.35, from?: [number, number, number]) {
  *  space a wall takes and any spot off the floor — each must lie within reach of a flooded point.
  *  (A pocket there is somewhere a walker could be shut in.) */
 export function pockets(b: Built, pts: [number, number, number][], grid = 0.7, reach = 0.75) {
-  const { P, w } = b;
+  const { w } = b;
+  const P = unstack(b.P);
   const f = (k: number) => P.floor0 + k * P.floorH;
   const cell = new Map<string, [number, number, number][]>();
   const ck = (x: number, z: number, k: number) => `${Math.floor(x / reach)},${Math.floor(z / reach)},${k}`;
@@ -142,7 +149,7 @@ export function pockets(b: Built, pts: [number, number, number][], grid = 0.7, r
     const l = cell.get(key);
     if (l) l.push(p); else cell.set(key, [p]);
   }
-  const stairs = [...P.flights, ...P.landings, ...P.holes];
+  const stairs = [...P.flights, ...P.landings, ...P.holes, ...(P.lifts ?? []).map((L) => L.r)];
   const out: string[] = [];
   const M = P.main;
   for (let k = 0; k < P.levels; k++)
@@ -164,7 +171,7 @@ export function pockets(b: Built, pts: [number, number, number][], grid = 0.7, r
 export function wallsOnWindows(b: Built) {
   const { P, L, fp } = b;
   const LP = new LocalPoly(P.loc);
-  const M = { kind: P.kind, eave: fp.eave, fo: fp.floor0 - fp.base };
+  const M = { kind: P.kind, eave: fp.eave, fo: fp.floor0 - fp.base, glass: !!P.glass };
   const bad: [number, number][] = [];
   L.walls.forEach((wl, i) => {
     for (const [end, dir] of [[wl.a, -1], [wl.b, 1]] as const) {
@@ -178,7 +185,7 @@ export function wallsOnWindows(b: Built) {
  *  lies on it (the along-edge distance must clear the window's frame by the wall's half thickness). */
 export function wallsOnWindows2(b: Built) {
   const { P, L, fp } = b;
-  const M = { kind: P.kind, eave: fp.eave, fo: fp.floor0 - fp.base };
+  const M = { kind: P.kind, eave: fp.eave, fo: fp.floor0 - fp.base, glass: !!P.glass };
   const bad: string[] = [];
   const loc = P.loc;
   for (const wl of L.walls) {

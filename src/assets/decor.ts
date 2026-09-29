@@ -422,6 +422,77 @@ export function liftDoors(): Parts {
     P(box(0.3, 0.1, 0.02, 0, 2.35, -0.05), 'glow', 0xffb060),
   ];
 }
+/** A tall building's lift door on its landing (Slice 3): the steel frame round an opening `w` wide
+ *  and 2.1 m high cut in the shaft's wall (jambs, head, a threshold plate), the floor indicator
+ *  over it. The leaves are their own pieces (liftLeaf), sliding in the wall's plane 0.11 m behind the
+ *  frame's centre (+z): a ride opens them. */
+export function liftFrame(w = 1.1): Parts {
+  return [
+    P(box(0.1, 2.2, 0.08, -w / 2 - 0.05, 0, 0), 'metal', 0x8a8e90),
+    P(box(0.1, 2.2, 0.08, w / 2 + 0.05, 0, 0), 'metal', 0x8a8e90),
+    P(box(w + 0.2, 0.12, 0.08, 0, 2.1, 0), 'metal', 0x8a8e90),
+    P(box(w + 0.2, 0.012, 0.22, 0, 0, 0.03), 'metal', 0xa9adb0),
+    P(box(0.34, 0.1, 0.02, 0, 2.34, -0.03), 'glow', 0xffb060),
+  ];
+}
+/** One leaf of a lift door (brushed steel, a shade lighter at its meeting edge), w wide, 2.1 m. */
+export function liftLeaf(w = 0.56): Parts {
+  return [P(box(w, 2.1, 0.03, 0, 0, 0), 'metal', 0xb8bcbf), P(box(0.02, 2.1, 0.034, w / 2 - 0.012, 0, 0), 'metal', 0xd4d7d9)];
+}
+/** A lift car's inside, w × d inside and 2.4 m high, its doorway (1.1 m) on the front (−z): the
+ *  floor, the walls (a steel lower half, a warm wood upper), the lit ceiling panel, a handrail round
+ *  the back and sides, the button panel beside the door and the floor display over it. */
+export function liftCar(w = 2.1, d = 1.6): Parts {
+  const H = 2.4, t = 0.04, door = 1.1, out: Parts = [];
+  out.push(P(box(w, 0.015, d, 0, 0, 0), 'solid', 0x5c5750)); // the floor
+  for (const [x, z, sw, sd] of [[0, d / 2, w, t], [-w / 2, 0, t, d], [w / 2, 0, t, d]] as const) {
+    out.push(P(box(sw, 1.0, sd, x, 0, z), 'metal', 0x9ea3a6));
+    out.push(P(box(sw, H - 1.0, sd, x, 1.0, z), 'wood', 0xa38b6d));
+  }
+  // the front, either side of the doorway, and over it
+  const fw = (w - door) / 2;
+  for (const s of [-1, 1]) out.push(P(box(fw, H, t, s * (door / 2 + fw / 2), 0, -d / 2), 'metal', 0x9ea3a6));
+  out.push(P(box(door, H - 2.1, t, 0, 2.1, -d / 2), 'metal', 0x9ea3a6));
+  out.push(P(box(w, 0.03, d, 0, H, 0), 'solid', 0xe8e4da)); // the ceiling
+  out.push(P(box(w * 0.7, 0.02, d * 0.6, 0, H - 0.02, 0), 'glow', 0xfff3d8)); // its light panel
+  // the handrail, 0.9 m up, round the back and the sides
+  out.push(P(box(w - 0.2, 0.04, 0.04, 0, 0.88, d / 2 - 0.07), 'metal', 0xd4d7d9));
+  for (const s of [-1, 1]) out.push(P(box(0.04, 0.04, d - 0.4, s * (w / 2 - 0.07), 0.88, 0.05), 'metal', 0xd4d7d9));
+  // the button panel on the front wall's inside, the floor display over the door
+  out.push(P(box(0.2, 0.5, 0.02, door / 2 + fw / 2, 0.95, -d / 2 + 0.03), 'metal', 0xc8ccce));
+  for (let i = 0; i < 6; i++) out.push(P(box(0.035, 0.035, 0.01, door / 2 + fw / 2 + (i % 2 ? 0.04 : -0.04), 1.05 + Math.floor(i / 2) * 0.1, -d / 2 + 0.045), 'glow', 0xffd890));
+  out.push(P(box(0.3, 0.09, 0.015, 0, 2.2, -d / 2 + 0.03), 'glow', 0xff9a50));
+  return out;
+}
+/** A lift's call panel: a steel plate with its up and down buttons (they glow), on the wall at 1 m. */
+export function liftButton(): Parts {
+  return [P(box(0.12, 0.26, 0.02, 0, 1.0, 0), 'metal', 0xb8bcbf), P(box(0.04, 0.04, 0.012, 0, 1.16, -0.014), 'glow', 0xffd890), P(box(0.04, 0.04, 0.012, 0, 1.06, -0.014), 'glow', 0xffd890)];
+}
+/** A lobby turnstile: a waist-high steel cabinet with a glass wing (the gate) reaching across the
+ *  lane to its right; lanes 0.9 m apart. Front toward −z (the way through is along z). */
+export function turnstile(): Parts {
+  return [
+    P(box(0.22, 0.98, 1.2, -0.34, 0, 0), 'metal', 0xb8bcbf),
+    P(box(0.26, 0.03, 1.24, -0.34, 0.98, 0), 'solid', 0x2c2e33), // the top, a reader glowing on it
+    P(box(0.1, 0.012, 0.1, -0.34, 1.01, -0.4), 'glow', 0x9fd6b0),
+    P(box(0.5, 0.62, 0.02, 0.02, 0.36, 0.1), 'glass', 0xc9d6dc), // the wing
+  ];
+}
+/** A security desk: a long counter (tint), a darker top, a screen for the guard behind it (+z). */
+export function securityDesk(w: number): Parts {
+  return [
+    P(box(w, 1.06, 0.62, 0, 0, 0), 'wood', T),
+    P(box(w + 0.06, 0.04, 0.7, 0, 1.06, 0), 'solid', 0x2c2e33),
+    P(box(w - 0.1, 0.72, 0.03, 0, 0.02, 0.2), 'solid', 0x8d9296), // (the low worktop's front, the guard's side)
+    P(box(0.5, 0.32, 0.03, -w * 0.25, 1.1, 0.2), 'glass', 0x22252a),
+  ];
+}
+/** A building's directory board on the wall: a dark panel of tenant lines under a lit head. */
+export function directory(): Parts {
+  const out: Parts = [P(box(1.1, 1.4, 0.05, 0, 0.9, 0), 'solid', 0x2a2d33), P(box(1.0, 0.12, 0.012, 0, 2.12, -0.03), 'glow', 0xfff1d0)];
+  for (let r = 0; r < 8; r++) out.push(P(box(0.8 - (r % 3) * 0.14, 0.03, 0.01, -0.05, 1.0 + r * 0.14, -0.03), 'solid', 0xd8d2c4));
+  return out;
+}
 /** A wall of mailboxes. */
 export function mailboxes(w: number): Parts {
   const out: Parts = [P(box(w, 1.2, 0.3, 0, 0.6, 0), 'metal', 0x8a7f6a)];

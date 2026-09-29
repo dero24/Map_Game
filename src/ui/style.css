@@ -131,6 +131,16 @@ body.atlas-open .lil-gui, body.atlas-open #hud, body.atlas-open #toast { display
 .keymap td:first-child { font-weight: bold; white-space: nowrap; color: #5a4c78; width: 40%; }
 #hud .hint { font-size: 12px; opacity: 0.55; margin-top: 4px; }
 
+/* ---- the lift (ui/lift.ts): its floor chooser, then the car's display while you ride ---- */
+#lift { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); padding: 10px 16px 8px; background: rgba(245, 239, 225, 0.95); border: 1px solid rgba(58, 51, 70, 0.25);
+  border-radius: 6px; box-shadow: 0 2px 14px rgba(40, 30, 60, 0.15); z-index: 30; text-align: center; white-space: nowrap; }
+#lift button { font-family: inherit; font-size: 17px; margin: 0 3px; padding: 4px 11px; background: #3a3346; color: #f7f2e6; border: none; border-radius: 3px; cursor: pointer; }
+#lift .lift-floor { display: inline-block; min-width: 190px; font-size: 21px; font-style: italic; }
+#lift .lift-keys { font-size: 12px; opacity: 0.6; margin-top: 5px; }
+body.nomouse #lift .lift-keys { display: none; }
+#lift.riding { padding: 6px 14px 5px; background: rgba(28, 26, 30, 0.82); color: #ffb060; border-color: rgba(255, 176, 96, 0.3); }
+#lift.riding .lift-floor { min-width: 0; font-style: normal; letter-spacing: 0.04em; }
+
 /* ODbL attribution — always on while the world streams OpenStreetMap-derived tiles. */
 #osm-credit { position: fixed; right: 18px; bottom: 12px; font-size: 10.5px; opacity: 0.5; pointer-events: none; text-shadow: 0 0 6px rgba(245, 239, 225, 0.9); }
 #osm-credit a { color: inherit; pointer-events: auto; }

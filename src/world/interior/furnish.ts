@@ -8,7 +8,7 @@ import * as D from '../../assets/decor';
 import type { Footprint } from '../buildings';
 import { useOf } from '../uses';
 import type { Rng } from '../../core/rng';
-import { LocalPoly, wallWindows, type Plan, type Rect, type WinModel } from './plan';
+import { LocalPoly, wallWindows, liftCars, LIFT_DOOR, type Plan, type Rect, type WinModel } from './plan';
 import type { Layout, Room } from './layout';
 import { Draw, Instancer, IP, WOOD, type LeafSpot, type Mesher, type P2 } from './mesh';
 
@@ -36,6 +36,7 @@ export const axFacing = (face: P2): P2 => [-face[1], face[0]];
 export class Furnisher {
   readonly d: Draw;
   readonly LP: LocalPoly;
+  private plates: { from: number; LP: LocalPoly; M: WinModel }[];
   readonly M: WinModel;
   lights: Light[] = [];
   npcs: NpcSpot[] = [];
@@ -44,10 +45,13 @@ export class Furnisher {
   readonly use: ReturnType<typeof useOf>;
   readonly wood: number;
   readonly doorHex: number;
-  constructor(readonly P: Plan, readonly fp: Footprint, readonly L: Layout, readonly m: Mesher, readonly inst: Instancer, readonly rng: Rng, leaves: LeafSpot[], readonly ceil: (k: number) => number) {
+  /** (`rng`: a tall building's is reseeded room by room — interiors.ts — so each storey's
+   *  furniture is its own, whichever storeys are built with it) */
+  constructor(readonly P: Plan, readonly fp: Footprint, readonly L: Layout, readonly m: Mesher, readonly inst: Instancer, public rng: Rng, leaves: LeafSpot[], readonly ceil: (k: number) => number) {
     this.d = new Draw(P, m);
     this.LP = new LocalPoly(P.loc);
-    this.M = { kind: P.kind, eave: fp.eave, fo: fp.floor0 - fp.base };
+    this.M = { kind: P.kind, eave: fp.eave, fo: fp.floor0 - fp.base, glass: !!P.glass };
+    this.plates = (P.plates ?? []).map((p) => ({ from: p.from, LP: new LocalPoly(p.loc), M: { ...this.M, eave: p.eave, glass: !!p.glass } }));
     this.use = fp.kind === 'commercial' ? useOf(fp.name, fp.use) : 'unknown';
     this.wood = WOOD[Math.floor(rng.float() * WOOD.length)];
     this.doorHex = rng.float() < 0.6 ? 0xf2efe6 : this.wood;
@@ -82,7 +86,13 @@ export class Furnisher {
     this.keepOut[0]?.push({ u0: P.ud - 0.2, u1: P.ud + 1.7, v0: P.vd - 1.2, v1: P.vd + 1.2 });
   }
   f(k: number) { return this.P.floor0 + k * this.P.floorH; }
+  /** Storey k's outline and window model: the footprint's, or its tier's (a tower's storeys). */
+  lp(k: number) { let o = this.LP; for (const p of this.plates) if (p.from <= k) o = p.LP; return o; }
+  wm(k: number) { let o = this.M; for (const p of this.plates) if (p.from <= k) o = p.M; return o; }
   claim(k: number, r: Rect) { this.claims[k]?.push(r); }
+  /** A tall building's lift doors on the storeys built: each car's two leaves, as instances of the
+   *  'liftLeaf' piece (a ride slides them: interiors.ts liftDoor). */
+  liftLeaves: { lift: number; car: number; level: number; side: -1 | 1; idx: number }[] = [];
   freeAt(k: number, r: Rect) {
     for (const K of this.keepOut[k] ?? []) if (hitR(K, r)) return false;
     for (const K of this.claims[k] ?? []) if (hitR(K, r)) return false;
@@ -98,7 +108,7 @@ export class Furnisher {
       const at = R.r[key], o: -1 | 1 = key[1] === '1' ? 1 : -1;
       const lo = run === 0 ? R.r.u0 : R.r.v0, hi = run === 0 ? R.r.u1 : R.r.v1;
       const mid = (lo + hi) / 2;
-      const ext = !this.LP.inside(run === 0 ? mid : at + o * 0.25, run === 0 ? at + o * 0.25 : mid);
+      const ext = !this.lp(R.level).inside(run === 0 ? mid : at + o * 0.25, run === 0 ? at + o * 0.25 : mid);
       const solid: [number, number][] = [], doors: [number, number][] = [];
       if (ext) {
         solid.push([lo, hi]);
@@ -139,11 +149,12 @@ export class Furnisher {
     if (!S.ext) return false;
     const mid = (s0 + s1) / 2, half = (s1 - s0) / 2;
     const [u, v] = S.run === 0 ? [mid, S.at - S.out * 0.5] : [S.at - S.out * 0.5, mid];
-    const h = this.LP.hit(u, v, S.run === 0 ? 0 : S.out, S.run === 0 ? S.out : 0);
+    const LP = this.lp(k);
+    const h = LP.hit(u, v, S.run === 0 ? 0 : S.out, S.run === 0 ? S.out : 0);
     if (!h || h.t > 2) return false;
-    const a = this.LP.p[h.i], b = this.LP.p[(h.i + 1) % this.LP.p.length];
+    const a = LP.p[h.i], b = LP.p[(h.i + 1) % LP.p.length];
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    const W = wallWindows(len, k, this.M);
+    const W = wallWindows(len, k, this.wm(k));
     if (!W) return false;
     const along = h.s * len;
     for (let i = 0; i < W.n; i++) if (Math.abs(along - (i + 0.5) * W.cellW) < W.half + half + 0.08) return true;
@@ -177,13 +188,13 @@ export class Furnisher {
     for (let t = 0; t < tries; t++) {
       const u0 = r0.u0 + m + this.rng.float() * Math.max(0, r0.u1 - r0.u0 - w - 2 * m), v0 = r0.v0 + m + this.rng.float() * Math.max(0, r0.v1 - r0.v0 - dep - 2 * m);
       const r = { u0, u1: u0 + w, v0, v1: v0 + dep };
-      if (!inside(r0, r, 0.1) || !this.LP.rectIn(r.u0, r.u1, r.v0, r.v1, 0.05) || !this.freeAt(R.level, r)) continue;
+      if (!inside(r0, r, 0.1) || !this.lp(R.level).rectIn(r.u0, r.u1, r.v0, r.v1, 0.05) || !this.freeAt(R.level, r)) continue;
       return { r, uc: u0 + w / 2, vc: v0 + dep / 2, ax: [1, 0], s0: u0, s1: u0 + w };
     }
     return null;
   }
   /** A repeated piece (instanced), its x along ax. */
-  put(key: string, make: () => D.DecorPart[], uc: number, vc: number, y: number, ax: P2, tint = 0xffffff) { this.inst.put(key, make, uc, vc, y, ax, tint); }
+  put(key: string, make: () => D.DecorPart[], uc: number, vc: number, y: number, ax: P2, tint = 0xffffff) { return this.inst.put(key, make, uc, vc, y, ax, tint); }
 }
 const inside = (outer: Rect, r: Rect, m = 0.02) => r.u0 >= outer.u0 - m && r.u1 <= outer.u1 + m && r.v0 >= outer.v0 - m && r.v1 <= outer.v1 + m;
 
@@ -191,10 +202,54 @@ const inside = (outer: Rect, r: Rect, m = 0.02) => r.u0 >= outer.u0 - m && r.u1 
 const yawTo = (du: number, dv: number) => Math.atan2(-du, -dv);
 const q = (x: number, s = 0.1) => Math.round(x / s) * s;
 
+/** A tall building's lifts on storey k: each car's landing doors in the opening in its shaft's
+ *  face — the frame, and the two leaves (their own pieces: a ride slides them, and they're noted in
+ *  F.liftLeaves) — the call panel beside them (the lobby in front is whichever room it is: a
+ *  tower's lift lobby, a block's stair landing, the open floor). */
+export function furnishLifts(F: Furnisher, k: number) {
+  const P = F.P, y = F.f(k);
+  (P.lifts ?? []).forEach((L, li) => {
+    const { row, fc, out, along } = liftCars(L);
+    // (the pieces' backs to the shaft: the wall on the lobby's side facing it)
+    const ax = axFor(L.face === 0 ? 'u1' : L.face === 1 ? 'u0' : L.face === 2 ? 'v1' : 'v0');
+    const at = (s: number, cc: number): P2 => (row ? [cc, s] : [s, cc]);
+    along.forEach((s, i) => {
+      const [u, v] = at(s, fc + out * 0.11);
+      F.put('liftFrame', () => D.liftFrame(LIFT_DOOR), u, v, y, ax);
+      for (const side of [-1, 1] as const) {
+        const [lu, lv] = at(s + side * 0.28, fc);
+        F.liftLeaves.push({ lift: li, car: i, level: k, side, idx: F.put('liftLeaf', () => D.liftLeaf(0.56), lu, lv, y, ax) });
+      }
+    });
+    const a0 = row ? L.r.v0 : L.r.u0, a1 = row ? L.r.v1 : L.r.u1;
+    const s0 = along[0] - 0.85, s1 = along[along.length - 1] + 0.85;
+    const sb = s0 > a0 + 0.1 ? s0 : s1 < a1 - 0.1 ? s1 : along.length > 1 ? (along[0] + along[1]) / 2 : null;
+    if (sb !== null) { const [u, v] = at(sb, fc + out * 0.07); F.put('liftButton', () => D.liftButton(), u, v, y, ax); }
+    // (the way out of the doors stays clear)
+    const c1 = fc + out * 1.4;
+    F.claim(k, row ? { u0: Math.min(fc, c1), u1: Math.max(fc, c1), v0: a0, v1: a1 } : { u0: a0, u1: a1, v0: Math.min(fc, c1), v1: Math.max(fc, c1) });
+  });
+}
+
 /** Furnish one room (a generator: yields between batches in a big one). */
 export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void> {
   const P = F.P, rng = F.rng, d = F.d, k = R.level;
+  if (R.type === 'shaft') return; // (a lift's: nothing in it, nobody sees it)
   const y = F.f(k), cy = F.ceil(k);
+  if (R.type === 'void') {
+    // a tower's double-height lobby: big lamps hanging from storey 1's ceiling over the void, their
+    // light down the lobby's upper walls and the atrium's (a lamp lights its own storey's height)
+    const du = R.r.u1 - R.r.u0, dv = R.r.v1 - R.r.v0;
+    const nu = Math.max(1, Math.min(3, Math.round(du / 7))), nv = Math.max(1, Math.min(3, Math.round(dv / 7)));
+    for (let i = 0; i < nu; i++)
+      for (let j = 0; j < nv; j++) {
+        const u = R.r.u0 + (du * (i + 0.5)) / nu, v = R.r.v0 + (dv * (j + 0.5)) / nv, hy = y + 1.9;
+        F.put('pendant', () => D.ceilingLight(0.9, 0.9, 0.16), u, v, hy, [1, 0]);
+        d.box(u - 0.012, u + 0.012, v - 0.012, v + 0.012, hy + 0.16, cy, 0x3a3a3c);
+        F.glow(u, v, hy + 0.1, 1.6);
+      }
+    return;
+  }
   const S = F.sides(R);
   const area = (R.r.u1 - R.r.u0) * (R.r.v1 - R.r.v0);
   const fab = F.pick(FABRIC), wood = rng.float() < 0.5 ? F.wood : F.pick(WOOD);
@@ -204,6 +259,7 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
   // ---- light: a ceiling fan in a beach house's rooms, else a glowing dish (none over the stairs) ----
   const lightAt = (u: number, v: number, fan: boolean, w = 1) => {
     if (P.holes.some((H) => H.level === k && hitR(grow(H, 0.3), { u0: u, u1: u, v0: v, v1: v })) || P.flights.some((G) => G.level === k && hitR(G, { u0: u, u1: u, v0: v, v1: v }))) return;
+    if (k === 0 && P.atrium && hitR(grow(P.atrium, 0.3), { u0: u, u1: u, v0: v, v1: v })) return; // (the double-height lobby's own lamps hang from storey 1)
     if (fan) F.put(`fan:${WOOD.indexOf(F.wood)}`, () => D.ceilingFan(F.wood), u, v, cy - 0.45, [1, 0]);
     else F.put('dish', () => D.ceilingLight(0.4, 0.4, 0.1), u, v, cy - 0.12, [1, 0]);
     F.glow(u, v, cy - 0.35, w);
@@ -415,7 +471,47 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
     }
     if (rng.float() < 0.5) wallArt(1);
   };
+  const towerLobby = () => {
+    // a tower's ground floor: a row of turnstiles 2.2 m out from its core, across the way to the
+    // lift lobby, the security desk beside them facing the door, the directory on the core's face
+    const core = P.core!, Lb = P.lifts![0].lobby;
+    const face = core.u0, meets = Math.abs(Lb.u0 - core.u0) < 0.1;
+    const cv = meets ? (Lb.v0 + Lb.v1) / 2 : (core.v0 + core.v1) / 2;
+    const n = Math.max(2, Math.min(6, Math.round((meets ? Lb.v1 - Lb.v0 : 3.6) / 0.9)));
+    const tu = face - 2.2;
+    if (tu - 0.7 < R.r.u0 + 1.5) return false;
+    const row = { u0: tu - 0.65, u1: tu + 0.65, v0: cv - (n * 0.9) / 2 - 0.1, v1: cv + (n * 0.9) / 2 + 0.1 };
+    if (!inside(R.r, row)) return false;
+    for (let i = 0; i < n; i++) F.put('turnstile', () => D.turnstile(), tu, cv + (i + 0.5 - n / 2) * 0.9, y, [0, -1]);
+    F.claim(k, grow(row, 0.3));
+    // (the desk on the side with more lobby, if there's room for it)
+    for (const sg of [1, -1]) {
+      const dv = sg > 0 ? row.v1 + 1.6 : row.v0 - 1.6;
+      const dr = { u0: tu - 0.4, u1: tu + 0.4, v0: dv - 1.25, v1: dv + 1.25 };
+      if (!inside(R.r, grow(dr, 0.2)) || !F.freeAt(k, dr)) continue;
+      F.put('securityDesk', () => D.securityDesk(2.4), tu, dv, y, [0, -1], F.wood);
+      F.claim(k, grow(dr, 0.3));
+      F.npcs.push([tu + 0.75, dv, y, yawTo(-1, 0), 0, 1]);
+      break;
+    }
+    const dp = F.against(R, S, 1.1, 0.08, { keys: ['u1'], tall: true });
+    if (dp) { F.claim(k, dp.r); F.put('directory', () => D.directory(), dp.uc, dp.vc, y, dp.ax); }
+    return true;
+  };
   const lobby = () => {
+    if (P.lifts?.length && P.core && k === 0 && towerLobby()) {
+      for (let t = 0; t < Math.min(3, Math.floor(area / 60)); t++) {
+        const gp = F.anywhere(R, 3.0, 1.2, 0.8);
+        if (!gp) break;
+        F.claim(k, gp.r);
+        table({ u0: gp.uc - 0.5, u1: gp.uc + 0.5, v0: gp.vc - 0.3, v1: gp.vc + 0.3 }, 0.42, wood);
+        F.put('armchair', () => D.armchair(0.8, 0.8, 0xffffff), gp.uc - 1.05, gp.vc, y, axFacing([1, 0]), fab);
+        F.put('armchair', () => D.armchair(0.8, 0.8, 0xffffff), gp.uc + 1.05, gp.vc, y, axFacing([-1, 0]), fab);
+        if (t === 0) F.npcs.push([gp.uc - 1.0, gp.vc, y, yawTo(1, 0), 0.45]);
+      }
+      for (let i = 0; i < 4; i++) { const pl = F.anywhere(R, 0.5, 0.5, 0.2); if (pl) { F.claim(k, pl.r); plant(pl.uc, pl.vc, true); } }
+      return;
+    }
     if (F.fp.kind === 'large') {
       const mp = F.against(R, S, 1.6, 0.32, { tall: true });
       if (mp) { F.claim(k, mp.r); F.put('mail', () => D.mailboxes(1.6), mp.uc, mp.vc, y, mp.ax); }
@@ -500,6 +596,8 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
     if (sc && sc.side) F.wbox(sc.side, sc.s0, sc.s1, 0.0, 0.05, y + 1.0, y + 1.8, 0x1c1d22, IP.glass);
   };
   const lift = () => {
+    // (a tall building's lifts are real: furnishLifts puts their doors on their shafts)
+    if (P.lifts?.length) return;
     // the lift doors on its back wall, facing the floor
     const lp = F.against(R, S, 1.3, 0.12, { noExt: true, tall: true });
     if (lp) F.put('lift', () => D.liftDoors(), lp.uc, lp.vc, y, lp.ax);
@@ -544,7 +642,7 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
         // a cross aisle every ~12 m of run
         if (run >= 9) { run = 0; u += 1.6; if (u + mod > u1) break; }
         const g = { u0: u, u1: u + mod, v0: v - 0.05, v1: v + 0.95 };
-        if (!F.freeAt(k, g) || !F.LP.rectIn(g.u0, g.u1, g.v0, g.v1, 0.1)) { run = 0; continue; }
+        if (!F.freeAt(k, g) || !F.lp(k).rectIn(g.u0, g.u1, g.v0, g.v1, 0.1)) { run = 0; continue; }
         F.claim(k, g);
         const vi = (Math.floor(u * 3.1) + Math.floor(v * 1.7)) & 3;
         F.put(`gondola:${grocery ? 'g' : 's'}${vi}`, () => D.gondola(mod - 0.02, 101 + vi, stock), u + mod / 2, v + 0.45, y, [1, 0]);
@@ -699,7 +797,7 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
       for (const [v0, v1] of [[R.r.v0 + 0.5, vm - 0.7], [vm + 0.7, R.r.v1 - 0.5]]) {
         if (v1 - v0 < 1) continue;
         const pr = { u0: u, u1: u + 0.45, v0, v1 };
-        if (!F.freeAt(k, pr) || !F.LP.rectIn(u, u + 0.45, v0, v1, 0.05)) continue;
+        if (!F.freeAt(k, pr) || !F.lp(k).rectIn(u, u + 0.45, v0, v1, 0.05)) continue;
         d.box(u, u + 0.45, v0, v1, y + 0.4, y + 0.46, 0x6f4b33, IP.wood);
         d.box(dir > 0 ? u : u + 0.37, dir > 0 ? u + 0.08 : u + 0.45, v0, v1, y, y + 0.95, 0x6f4b33, IP.wood);
         d.box(u + 0.05, u + 0.4, v0, v0 + 0.06, y, y + 0.46, 0x6f4b33, IP.wood);

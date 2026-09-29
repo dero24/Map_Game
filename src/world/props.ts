@@ -109,6 +109,41 @@ function streetsNear(roads: Road[], pad = 25): (x: number, z: number) => Road[] 
   return (x, z) => grid.get(key(Math.floor(x / C), Math.floor(z / C))) ?? [];
 }
 
+/** Every way a car drives (at grade): the carriageways a post must keep out of. */
+const CARRIAGEWAY = new Set(['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'residential', 'unclassified', 'living_street']);
+/** The carriageways with a segment within 25 m of a point (streetsNear's grid, every class a car
+ *  drives on, links too). */
+export function carriagewaysNear(roads: Road[]): (x: number, z: number) => Road[] {
+  return streetsNear(roads.filter((r) => CARRIAGEWAY.has(r.c.replace(/_link$/, ''))).map((r) => ({ ...r, c: 'residential' })));
+}
+
+/** A post (a signal mast, a stop sign, a hydrant, a pole) that the map or a corner rule puts in a
+ *  carriageway steps out onto the sidewalk: `r` + 30 cm past the kerb, on its own side of the
+ *  street — then out of the next street too, at a corner. Null when there's no sidewalk to find
+ *  (the middle of a junction). A car stops dead on a post in its lane, and traffic drives through
+ *  it (tools/playtest.js __ROADPOSTS__ found a signal mast on a main road's centre line). */
+export function offCarriageway(near: (x: number, z: number) => Road[], x: number, z: number, r: number): P | null {
+  for (let k = 0; k < 4; k++) {
+    let best: { out: number; qx: number; qz: number; ux: number; uz: number; w: number } | null = null;
+    for (const rd of near(x, z))
+      for (let i = 0; i + 3 < rd.p.length; i += 2) {
+        const ax = rd.p[i] / 10, az = rd.p[i + 1] / 10, sx = rd.p[i + 2] / 10 - ax, sz = rd.p[i + 3] / 10 - az, L2 = sx * sx + sz * sz;
+        if (L2 < 1e-6) continue;
+        const t = Math.max(0, Math.min(1, ((x - ax) * sx + (z - az) * sz) / L2));
+        const qx = ax + sx * t, qz = az + sz * t, out = Math.hypot(x - qx, z - qz) - rd.w / 2;
+        if (out < r && (!best || out < best.out)) { const L = Math.sqrt(L2); best = { out, qx, qz, ux: sx / L, uz: sz / L, w: rd.w }; }
+      }
+    if (!best) return [x, z];
+    let nx = x - best.qx, nz = z - best.qz;
+    const l = Math.hypot(nx, nz);
+    if (l > 0.05) (nx /= l), (nz /= l);
+    else (nx = -best.uz), (nz = best.ux); // (on the line itself: its left side, a stable choice)
+    x = best.qx + nx * (best.w / 2 + r + 0.3);
+    z = best.qz + nz * (best.w / 2 + r + 0.3);
+  }
+  return null;
+}
+
 // Overhead wires as screen-space ribbons: a real wire's projected width (~2.5 cm), but never
 // thinner than 2 px — a one-pixel line vanishes in the brush pass, and the wires criss-crossing
 // the sky are what an American street looks like. Each segment is a quad of 4 corners carrying
@@ -340,6 +375,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // a tree in the road. ctx carries the unfiltered tile json; box bounds the tree scan to
   // this tile's own area so overlapping scan zones never double-spawn the same tree.
   const ctxJson = extras.ctx ?? json;
+  const kerbNear = carriagewaysNear(ctxJson.roads); // (posts step out of the carriageways: offCarriageway)
   let junctions: Junction[] = [];
   // Cap the mask canvas at the slice + margin: legacy regions hand us box=backdrop, which
   // would otherwise rasterize a ~12 km canvas (hundreds of MB) in the worker.
@@ -499,7 +535,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     }
     let prev: THREE.Vector3[] | null = null;
     for (let i = 0; i < pts.length; i++) {
-      const [x, z] = pts[i];
+      const q = offCarriageway(kerbNear, pts[i][0], pts[i][1], 0.2); // (a node mapped a metre into the street)
+      if (!q) { prev = null; continue; }
+      const [x, z] = q;
       if (!inSlice(x, z, 30) || terrain.sdfAt(x, z) < 0.5 || walk.blocked(x, z, 0.5)) { prev = null; continue; }
       const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
       const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
@@ -1304,7 +1342,10 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       if (!e || e.d > e.w / 2 + 12) continue;
       const ox = d.fx - e.x, oz = d.fz - e.z, ol = Math.hypot(ox, oz) || 1;
       const ux = ox / ol, uz = oz / ol;
-      const x = e.x + ux * (e.w / 2 + 0.55), z = e.z + uz * (e.w / 2 + 0.55);
+      // (a corner shop's: behind this street's kerb can be in the side street — then its kerb)
+      const q = offCarriageway(kerbNear, e.x + ux * (e.w / 2 + 0.55), e.z + uz * (e.w / 2 + 0.55), 0.14);
+      if (!q) continue;
+      const [x, z] = q;
       const k = `${Math.round(x / 18)}_${Math.round(z / 18)}`;
       if (seen.has(k) || !inSlice(x, z) || walk.blocked(x, z, 0.5) || terrain.sdfAt(x, z) < 1) continue;
       seen.add(k);
@@ -1368,7 +1409,10 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         const right = [m.dz, -m.dx]; // kerb side of the traffic arriving along this arm
         if (m.ctl === CTL.SIG_A || m.ctl === CTL.SIG_B) {
           // the mast on the far-right corner, its arm over the lanes, the heads facing the arrivals
-          const x = J.x - m.dx * J.setback + right[0] * (m.w / 2 + 1.3), z = J.z - m.dz * J.setback + right[1] * (m.w / 2 + 1.3);
+          // (an arm meeting the main road at a slant puts that corner in the main road: the kerb)
+          const q = offCarriageway(kerbNear, J.x - m.dx * J.setback + right[0] * (m.w / 2 + 1.3), J.z - m.dz * J.setback + right[1] * (m.w / 2 + 1.3), 0.18);
+          if (!q) continue;
+          const [x, z] = q;
           if (walk.blocked(x, z, 0.4) || terrain.sdfAt(x, z) < 1) continue;
           masts.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(-right[0], -right[1])), V(1, 1, na ? Math.min(1.6, (m.w / 2 + 1.3) / 5) : 0.35)));
           mastData.push(new THREE.Color(J.key, m.ctl === CTL.SIG_B ? 1 : 0, 1));
@@ -1377,7 +1421,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
           // the sign at the stop line (where a stopped car's bumper is, behind the crosswalk), on
           // the kerb to the right, facing the arrivals
           const back = J.setback + STOP_BACK - 2.1;
-          const x = J.x + m.dx * back + right[0] * (m.w / 2 + 0.7), z = J.z + m.dz * back + right[1] * (m.w / 2 + 0.7);
+          const q = offCarriageway(kerbNear, J.x + m.dx * back + right[0] * (m.w / 2 + 0.7), J.z + m.dz * back + right[1] * (m.w / 2 + 0.7), 0.06);
+          if (!q) continue;
+          const [x, z] = q;
           if (walk.blocked(x, z, 0.25) || terrain.sdfAt(x, z) < 1) continue;
           const mt = new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(m.dx, m.dz)), V(1, 1, 1));
           (m.ctl === CTL.YIELD ? yieldSigns : m.ctl === CTL.ALL_STOP && na ? allWay : stopSigns).push(mt);
@@ -1395,7 +1441,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         const nx = -s.uz, nz = s.ux;
         // two masts on opposite corners, each arm reaching over its half of the road
         for (const sd of [1, -1]) {
-          const x = p.x + nx * sd * (s.w / 2 + 1.3) - s.ux * sd * (s.w / 2 + 2.2), z = p.z + nz * sd * (s.w / 2 + 1.3) - s.uz * sd * (s.w / 2 + 2.2);
+          const q = offCarriageway(kerbNear, p.x + nx * sd * (s.w / 2 + 1.3) - s.ux * sd * (s.w / 2 + 2.2), p.z + nz * sd * (s.w / 2 + 1.3) - s.uz * sd * (s.w / 2 + 2.2), 0.18);
+          if (!q) continue;
+          const [x, z] = q;
           if (walk.blocked(x, z, 0.4) || terrain.sdfAt(x, z) < 1) continue;
           const yaw = Math.atan2(-nx * sd, -nz * sd); // local +z (the arm) points back across the road
           masts.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, na ? Math.min(1.6, (s.w / 2 + 1.3) / 5) : 0.35)));
@@ -1403,9 +1451,11 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
           walk.addLoop([[x - 0.18, z - 0.18], [x + 0.18, z - 0.18], [x + 0.18, z + 0.18], [x - 0.18, z + 0.18]]);
         }
       } else if (p.c === 'hydrant') {
-        if (walk.blocked(p.x, p.z, 0.3)) continue;
-        hyd.push(new THREE.Matrix4().makeTranslation(p.x, terrain.heightAt(p.x, p.z), p.z));
-        walk.addLoop([[p.x - 0.18, p.z - 0.18], [p.x + 0.18, p.z - 0.18], [p.x + 0.18, p.z + 0.18], [p.x - 0.18, p.z + 0.18]], -Infinity, terrain.heightAt(p.x, p.z) + 0.8);
+        const q = offCarriageway(kerbNear, p.x, p.z, 0.18); // (on the sidewalk, however near the street's line it's mapped)
+        if (!q || walk.blocked(q[0], q[1], 0.3)) continue;
+        const [x, z] = q;
+        hyd.push(new THREE.Matrix4().makeTranslation(x, terrain.heightAt(x, z), z));
+        walk.addLoop([[x - 0.18, z - 0.18], [x + 0.18, z - 0.18], [x + 0.18, z + 0.18], [x - 0.18, z + 0.18]], -Infinity, terrain.heightAt(x, z) + 0.8);
       } else if (p.c === 'bus' || p.c === 'bus_shelter') {
         // the stop stands on the sidewalk just behind the kerb, whatever side of it OSM put the node
         const s = segAt(p.x, p.z, 25);
@@ -1846,6 +1896,11 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     ]);
     const cans: THREE.Matrix4[] = [], canCol: THREE.Color[] = [];
     const canAt = (x: number, z: number, mapped = false) => {
+      if (mapped) {
+        const q = offCarriageway(kerbNear, x, z, 0.2); // (a mapped bin a metre into the street: the kerb)
+        if (!q) return;
+        [x, z] = q;
+      }
       if (mapped ? walk.blocked(x, z, 0.25) || walk.buildingAt(x, z) >= 0 : walk.blocked(x, z, 1.2) || !clearOfRoad(x, z, 1.0)) return;
       cans.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(1, 1, 1)));
       canCol.push(new THREE.Color(rng.pick([0x4a5548, 0x5a6166, 0x3e4a42, 0x6a6e5c])));

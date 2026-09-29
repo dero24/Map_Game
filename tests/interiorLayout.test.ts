@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { WalkWorld } from '../src/player/collision';
 import { planInterior, registerPlan, rectArea } from '../src/world/interior/plan';
 import { layoutInterior, registerLayout } from '../src/world/interior/layout';
-import { build, flood, pockets, wallsOnWindows, wallsOnWindows2, realRooms, area, minWidth, rect, fpOf, doorN, terrain, toW, type Built } from './helpers/interiorCheck';
+import { build, flood, pockets, nobodys, wallsOnWindows, wallsOnWindows2, realRooms, area, minWidth, rect, fpOf, doorN, terrain, toW, type Built } from './helpers/interiorCheck';
 import type { Footprint, Door } from '../src/world/buildings';
 
 // Slice 1 of docs/INTERIORS_PLAN.md — "rooms, not halls": the layout rules a planned interior
@@ -27,7 +27,7 @@ const get = (name: string) => {
   return b;
 };
 /** Circulation and open floor: not "rooms" for the size rules. */
-const CIRC = new Set(['hall', 'landing', 'corridor', 'lobby', 'stair', 'lift', 'open', 'shop', 'cafe', 'bar', 'diner', 'church', 'great']);
+const CIRC = new Set(['hall', 'landing', 'corridor', 'lobby', 'stair', 'lift', 'open', 'shop', 'cafe', 'bar', 'diner', 'church', 'great', 'void']);
 const SLOW = 60000; // (a flood fill of a big building takes a few seconds)
 
 describe('a slab of flats', () => {
@@ -51,7 +51,7 @@ describe('a slab of flats', () => {
     const b = get('slab');
     const { reached, out } = flood(b, 0.5);
     expect(out).toBe(true);
-    expect(b.L.rooms.filter((r) => !reached.has(r.id)).map((r) => `${r.type}@${r.level}`)).toEqual([]);
+    expect(b.L.rooms.filter((r) => !nobodys(r) && !reached.has(r.id)).map((r) => `${r.type}@${r.level}`)).toEqual([]);
   }, SLOW);
   it('a narrow walk-up has no corridor: its flats open off the stair landing', () => {
     const b = get('walkup');
@@ -83,7 +83,7 @@ describe('an office floor', () => {
   it('every room of an office is reachable on foot, up its core stair', () => {
     const b = get('office');
     const { reached } = flood(b, 0.5);
-    expect(b.L.rooms.filter((r) => !reached.has(r.id)).map((r) => `${r.type}@${r.level}`)).toEqual([]);
+    expect(b.L.rooms.filter((r) => !nobodys(r) && !reached.has(r.id)).map((r) => `${r.type}@${r.level}`)).toEqual([]);
   }, SLOW);
 });
 
@@ -166,7 +166,7 @@ describe('every building', () => {
       const b = get(name);
       const { reached, pts, out } = flood(b, name === 'mixed' || name === 'market' ? 0.5 : 0.35);
       expect(out).toBe(true);
-      expect(b.L.rooms.filter((r) => !reached.has(r.id)).map((r) => `${name} ${r.type}@${r.level}`)).toEqual([]);
+      expect(b.L.rooms.filter((r) => !nobodys(r) && !reached.has(r.id)).map((r) => `${name} ${r.type}@${r.level}`)).toEqual([]);
       expect(pockets(b, pts).map((s) => `${name} ${s}`)).toEqual([]);
     }
   }, SLOW);

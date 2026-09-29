@@ -17,14 +17,18 @@ const rect = (L: number, W: number): P2[] => [[-L / 2, -W / 2], [L / 2, -W / 2],
 const fp = (L: number, W: number, kind: string, top: number, use?: string): Footprint => ({ ring: rect(L, W), base: 0.2, top, floor0: 0.5, raise: 0, kind, use, eave: top - 0.2, seed: 0.3, id: 7 });
 const door = (W: number, x = 0.3, w = 1): Door => ({ x, z: -W / 2 - 0.2, y: 0.5, nx: 0, nz: -1, fx: x, fz: -W / 2 - 1.4, fy: 0.5, b: 0, w, h: 2.15, wx: x, wz: -W / 2, col: 0 });
 /** Circulation and open floor: not counted as rooms. */
-const CIRC = new Set(['hall', 'landing', 'corridor', 'lobby', 'stair', 'lift', 'open', 'shop', 'cafe', 'bar', 'diner', 'church', 'great']);
+const CIRC = new Set(['hall', 'landing', 'corridor', 'lobby', 'stair', 'lift', 'open', 'shop', 'cafe', 'bar', 'diner', 'church', 'great', 'void']);
 const area = (r: { u0: number; u1: number; v0: number; v1: number }) => (r.u1 - r.u0) * (r.v1 - r.v0);
 
-const cases: [string, Footprint, Door][] = [
+// (a tall building — ≥ 5 storeys — is built three storeys at a time round the walker: k says which)
+const cases: [string, Footprint, Door, number?][] = [
   ['house 12x8, 2 storeys', fp(12, 8, 'house', 6.7), door(8, -2)],
   ['apartments 45x16, 19.5 m', fp(45, 16, 'large', 19.5), door(16)],
   ['office 60x30, 31 m', fp(60, 30, 'commercial', 31, 'office'), door(30, 0.3, 1.8)],
   ['tower 40x40, 150 m', fp(40, 40, 'commercial', 150, 'office'), door(40, 0.3, 1.8)],
+  ['tower 40x40, 150 m, floor 24', fp(40, 40, 'commercial', 150, 'office'), door(40, 0.3, 1.8), 23],
+  ['flats tower 30x30, 90 m, floor 21', fp(30, 30, 'large', 90), door(30), 20],
+  ['podium 60x60 + tower, floor 11', { ...fp(60, 60, 'commercial', 20, 'office'), tiers: [{ ring: rect(30, 30), lo: 20.2, top: 150 }] }, door(60, 0.3, 1.8), 10],
   ['"hotel" 60x18, 30 m (no tag)', fp(60, 18, 'commercial', 30), door(18, 0.3, 1.8)],
   ['supermarket 60x40', fp(60, 40, 'commercial', 7, 'supermarket'), door(40, 0.3, 1.8)],
 ];
@@ -50,7 +54,7 @@ for (const [L, W] of [[9, 7], [12, 8], [14, 9], [16, 10]]) {
 }
 
 // 2. plans + activations: a warm-up build, then three timed ones
-for (const [name, f, d] of cases) {
+for (const [name, f, d, k = 0] of cases) {
   const runs: number[][] = [];
   let tPlan = 0, total = 0, last: { I: Interiors; plan: ReturnType<typeof planInterior>; obj: THREE.Object3D } | null = null;
   for (let pass = 0; pass < 6; pass++) {
@@ -60,7 +64,7 @@ for (const [name, f, d] of cases) {
     tPlan = performance.now() - t0;
     const I = new Interiors(w);
     I.register('b', f, plan, registerPlan(w, f, plan));
-    const gen = I.buildSteps(plan, f);
+    const gen = I.buildSteps(plan, f, k);
     const ms: number[] = [];
     const t1 = performance.now();
     let r: IteratorResult<void, THREE.Object3D>;
@@ -79,11 +83,12 @@ for (const [name, f, d] of cases) {
   const worst = Math.max(...Array.from({ length: n }, (_, i) => runs.map((m) => m[i]).sort((a, b) => a - b)[2]));
   const Ly = I.activeLayout!;
   const st = I.lastStats;
-  const perStorey = Array.from({ length: plan.levels }, (_, lv) => Ly.rooms.filter((q) => q.level === lv && !CIRC.has(q.type)).length);
+  const built = [...new Set(Ly.rooms.map((q) => q.level))].sort((a, b) => a - b);
+  const perStorey = built.map((lv) => Ly.rooms.filter((q) => q.level === lv && !CIRC.has(q.type) && q.type !== 'shaft').length);
   const largest = Math.max(0, ...Ly.rooms.filter((q) => !CIRC.has(q.type)).map((q) => area(q.r)));
   const open = Ly.rooms.filter((q) => ['open', 'shop'].includes(q.type)).reduce((s, q) => s + area(q.r), 0);
   let draws = 0;
   obj.traverse((o) => { if ((o as THREE.Mesh).isMesh) draws++; });
   const byHeight = Math.floor((f.top - f.floor0) / plan.floorH);
-  console.log(`${name.padEnd(30)} ${plan.arch}/${plan.up} storeys ${plan.levels}/${byHeight}  rooms/storey ${perStorey.join(',')}  largest room ${largest.toFixed(0)} m2${open ? ` (open floor ${open.toFixed(0)} m2, ${Ly.desks.length} desks)` : ''}  verts ${st.verts} (${((st.verts * 76) / 1e6).toFixed(1)} MB)  draws ${draws}  instances ${st.instances}  plan ${tPlan.toFixed(2)} ms  build ${total.toFixed(0)} ms / ${n} steps, worst step ${worst.toFixed(1)} ms cpu`);
+  console.log(`${name.padEnd(30)} ${plan.arch}/${plan.up} storeys ${plan.levels}/${byHeight} (built ${built.join(',')})  rooms/storey ${perStorey.join(',')}  largest room ${largest.toFixed(0)} m2${open ? ` (open floor ${open.toFixed(0)} m2, ${Ly.desks.length} desks)` : ''}  verts ${st.verts} (${((st.verts * 76) / 1e6).toFixed(1)} MB)  draws ${draws}  instances ${st.instances}  plan ${tPlan.toFixed(2)} ms  build ${total.toFixed(0)} ms / ${n} steps, worst step ${worst.toFixed(1)} ms cpu`);
 }

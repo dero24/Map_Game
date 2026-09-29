@@ -98,4 +98,16 @@ describe("a raised house's stair stands in the open, and you can climb it to the
     expect(fenceWalls.length).toBeGreaterThan(0);
     for (const o of fenceWalls) expect((o as { y1: number }).y1).toBeLessThan(terrain.heightAt(107, 100) + 1.6);
   });
+
+  it('a house at the kerb never runs its stair across the street, even when the sides are tight', async () => {
+    // the front wall 30 cm from the kerb of an 8 m street; a shed by each side's stair foot
+    const A = { r: rect(100, 100, 108, 114), h: 9, k: 'house', roof: 'gable', s: 3, mh: 3 };
+    const sheds = [{ r: rect(108.3, 107.5, 110, 110), h: 3, k: 'shed', roof: 'flat', s: 6 }, { r: rect(98, 107.5, 99.7, 110), h: 3, k: 'shed', roof: 'flat', s: 7 }];
+    const tj = { ...tileOf([A, ...sheds]), roads: [{ p: [m(20), m(118.3), m(230), m(118.3)], c: 'residential', w: 8, n: 'Front St' }] };
+    const t = await buildTile(tj as never, terrain, { id: '0_0', box: tj.box, lod: 0, file: 'x' }, 0);
+    expect(t.fps.find((f) => f.raise > 2)?.door !== undefined).toBe(true);
+    const flights = t.decks.map(unpackDeck).filter((d) => d.profile?.k === 'ramp');
+    expect(flights.length).toBeGreaterThan(0);
+    for (const d of flights) for (const [, z] of d.pts) expect(Math.abs(z - 118.3)).toBeGreaterThan(4); // (no end of a flight in the carriageway)
+  });
 });

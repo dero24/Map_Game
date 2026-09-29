@@ -6,6 +6,7 @@ import type { SignSpec } from './buildings';
 import type { WalkWorld } from '../player/collision';
 import { paintMaterial } from '../render/shared';
 import { makeCanvas, type AnyCanvas } from './canvas';
+import { carriagewaysNear, offCarriageway } from './props';
 
 const RANK: Record<string, number> = { primary: 5, trunk: 5, secondary: 4, tertiary: 3, residential: 2, unclassified: 2, living_street: 2 };
 // USPS Publication 28 street-suffix abbreviations (the common ones) — blades print these.
@@ -163,6 +164,7 @@ export function buildSigns(world: World, specs: SignSpec[], walk: WalkWorld) {
   }
   const placed: [number, number][] = [];
   const poles: { x: number; z: number; cx: number; cz: number }[] = [];
+  const kerbNear = carriagewaysNear(json.roads);
   const poleCol = 0x6f7478, green = 0x1e6b43;
   for (const nd of nodes.values()) {
     const names = [...new Set(nd.ways.map((w) => w.name))];
@@ -170,11 +172,23 @@ export function buildSigns(world: World, specs: SignSpec[], walk: WalkWorld) {
     if (placed.some(([x, z]) => Math.hypot(x - nd.x, z - nd.z) < 25)) continue;
     const A = nd.ways.find((w) => w.name === names[0])!, B = nd.ways.find((w) => w.name === names[1])!;
     const off = Math.max(A.w, B.w) / 2 + 1.7;
-    let pos: [number, number] | null = null;
+    // On a corner, off both streets' carriageways. Where a street only changes its name along a
+    // straight road, the corner rule's diagonal runs down the road itself (the pole stood on its
+    // centre line — tools/playtest.js __ROADPOSTS__): then it stands beside the road.
+    const clear = (x: number, z: number) => [A, B].every((wy) => Math.abs((x - nd.x) * wy.dz - (z - nd.z) * wy.dx) >= wy.w / 2 + 0.5);
+    const cands: [number, number][] = [];
     for (const [sa, sb] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
       const dx = A.dx * sa + B.dx * sb, dz = A.dz * sa + B.dz * sb, l = Math.hypot(dx, dz);
-      if (l < 0.3) continue;
-      const x = nd.x + (dx / l) * off * 1.1, z = nd.z + (dz / l) * off * 1.1;
+      if (l >= 0.3) cands.push([nd.x + (dx / l) * off * 1.1, nd.z + (dz / l) * off * 1.1]);
+    }
+    for (const sd of [1, -1]) cands.push([nd.x - A.dz * sd * off, nd.z + A.dx * sd * off]);
+    let pos: [number, number] | null = null;
+    for (const [x0, z0] of cands) {
+      if (!clear(x0, z0)) continue;
+      // (a third street through the corner: onto its kerb, if that's still the corner)
+      const q = offCarriageway(kerbNear, x0, z0, 0.08);
+      if (!q || Math.hypot(q[0] - x0, q[1] - z0) > 3) continue;
+      const [x, z] = q;
       if (walk.blocked(x, z, 0.6) || terrain.sdfAt(x, z) < 1) continue;
       pos = [x, z];
       break;

@@ -196,7 +196,8 @@ export class Draw {
 // ---------------- piece geometry: a shared LRU, and the instancer ----------------
 const CACHE = new Map<string, THREE.BufferGeometry>();
 const CACHE_MAX = 64;
-const inUse = new Set<string>();
+// (counted: a tower's next build window takes the same pieces before the standing one lets go)
+const inUse = new Map<string, number>();
 /** Piece geometry in the interior layout (white parts take the instance tint), cached by key. */
 export function pieceGeo(key: string, make: () => D.DecorPart[]): THREE.BufferGeometry {
   let g = CACHE.get(key);
@@ -227,14 +228,18 @@ export function pieceGeo(key: string, make: () => D.DecorPart[]): THREE.BufferGe
 }
 
 interface Rec { key: string; geo: THREE.BufferGeometry; m: number[]; c: number[] }
+/** Pieces that move once they're built (a lift's door leaves: a ride slides them open): always an
+ *  InstancedMesh of their own, never baked into the merged mesh, so their instances can be moved. */
+export const MOVING = new Set(['liftLeaf']);
 /** Repeated pieces: one InstancedMesh per key (≥ 2 of them), a single one baked into the main mesh. */
 export class Instancer {
   private recs = new Map<string, Rec>();
   constructor(readonly P: Plan) {}
-  /** Put piece `key` at local (uc, vc), height y, its x axis along ax (its back, +z, turns with it). */
-  put(key: string, make: () => D.DecorPart[], uc: number, vc: number, y: number, ax: P2, tint = 0xffffff) {
+  /** Put piece `key` at local (uc, vc), height y, its x axis along ax (its back, +z, turns with it).
+   *  Returns its index among the pieces of that key (its instance, once instanced). */
+  put(key: string, make: () => D.DecorPart[], uc: number, vc: number, y: number, ax: P2, tint = 0xffffff): number {
     let r = this.recs.get(key);
-    if (!r) { r = { key, geo: pieceGeo(key, make), m: [], c: [] }; this.recs.set(key, r); inUse.add(key); }
+    if (!r) { r = { key, geo: pieceGeo(key, make), m: [], c: [] }; this.recs.set(key, r); inUse.set(key, (inUse.get(key) ?? 0) + 1); }
     const P = this.P;
     const [px, pz] = toW(P, uc, vc);
     // piece x → ax, piece z → (−ax.v, ax.u): a proper rotation about y
@@ -243,6 +248,18 @@ export class Instancer {
     r.m.push(axw[0], 0, axw[1], 0, 0, 1, 0, 0, azw[0], 0, azw[1], 0, px, y, pz, 1);
     const t = lin3(tint);
     r.c.push(t[0], t[1], t[2]);
+    return r.m.length / 16 - 1;
+  }
+  /** Every piece put so far between heights y0 and y1: key, position (m, to the cm) and tint. */
+  placements(y0 = -Infinity, y1 = Infinity): string[] {
+    const out: string[] = [];
+    const c = (x: number) => Math.round(x * 100);
+    for (const r of this.recs.values())
+      for (let i = 0; i < r.m.length; i += 16) {
+        const y = r.m[i + 13];
+        if (y >= y0 && y < y1) out.push(`${r.key} ${c(r.m[i + 12])} ${c(y)} ${c(r.m[i + 14])} ${c(r.m[i])} ${c(r.m[i + 2])} ${r.c.slice((i / 16) * 3, (i / 16) * 3 + 3).map((x) => x.toFixed(3)).join(',')}`);
+      }
+    return out.sort();
   }
   /** Vertices the pieces so far add (each piece once: an instanced one's are shared). */
   uniqueVerts() {
@@ -251,18 +268,18 @@ export class Instancer {
     return n;
   }
   /** Build the instanced meshes (a step at a time); singles (and the rarest keys past `maxDraws`)
-   *  are baked into `main`. */
-  *finishGen(main: Mesher, mat: THREE.Material, maxDraws: number): Generator<void, { meshes: THREE.InstancedMesh[]; verts: number }, void> {
-    const recs = [...this.recs.values()].sort((a, b) => b.m.length - a.m.length);
+   *  are baked into `main`. (y0, y1: the storeys built — a tower's window — else the building.) */
+  *finishGen(main: Mesher, mat: THREE.Material, maxDraws: number, y0 = this.P.floor0, y1 = this.P.ceilTop): Generator<void, { meshes: THREE.InstancedMesh[]; verts: number }, void> {
+    const recs = [...this.recs.values()].sort((a, b) => Number(MOVING.has(b.key)) - Number(MOVING.has(a.key)) || b.m.length - a.m.length);
     const meshes: THREE.InstancedMesh[] = [];
     let verts = 0, baked = 0, placed = 0;
     const m4 = new THREE.Matrix4();
-    // (every piece is inside the building: its bounding sphere does for each instanced mesh)
-    const P = this.P, hh = (P.ceilTop - P.floor0) / 2;
-    const sphere = new THREE.Sphere(new THREE.Vector3(P.cx, P.floor0 + hh, P.cz), Math.hypot(P.L / 2, P.W / 2, hh) + 1);
+    // (every piece is inside the storeys built: their bounding sphere does for each instanced mesh)
+    const P = this.P, hh = (y1 - y0) / 2;
+    const sphere = new THREE.Sphere(new THREE.Vector3(P.cx, y0 + hh, P.cz), Math.hypot(P.L / 2, P.W / 2, hh) + 1);
     for (const r of recs) {
       const n = r.m.length / 16;
-      if (n >= 2 && meshes.length < maxDraws) {
+      if (MOVING.has(r.key) || (n >= 2 && meshes.length < maxDraws)) {
         const im = new THREE.InstancedMesh(r.geo, mat, n);
         im.instanceMatrix.array.set(r.m);
         im.instanceMatrix.needsUpdate = true;
@@ -280,7 +297,13 @@ export class Instancer {
     return { meshes, verts };
   }
   /** Let the cache evict this interior's pieces again. */
-  release() { for (const k of this.recs.keys()) inUse.delete(k); }
+  release() {
+    for (const k of this.recs.keys()) {
+      const n = (inUse.get(k) ?? 1) - 1;
+      if (n > 0) inUse.set(k, n); else inUse.delete(k);
+    }
+    this.recs.clear();
+  }
 }
 /** Copy a piece geometry into a mesher under matrix m4, tinting its white (and white-shaded grey) vertices. */
 function bake(out: Mesher, g: THREE.BufferGeometry, m4: THREE.Matrix4, tr: number, tg: number, tb: number) {
@@ -318,10 +341,14 @@ export function paintFor(type: Room['type'], rnd: () => number): { wall: number;
 
 export interface RoomMap { map: THREE.DataTexture; pal: THREE.DataTexture; info: THREE.Vector4; dim: THREE.Vector4; texels: number }
 /** Rasterize the layout's rooms per storey into a texture (a palette index per 0.1 m cell), and
- *  the palette (wall rgb + style, floor rgb + finish). Rooms of one space share their paint. */
-export function* roomMapGen(P: Plan, L: Layout, rnd: () => number): Generator<void, RoomMap, void> {
+ *  the palette (wall rgb + style, floor rgb + finish). Rooms of one space share their paint. Storeys
+ *  k0 … k1 (a tower's build window: dim.z says which storey its first row is). `rnd(level)` draws
+ *  the paint of a space first met on that storey (a tall building's: a stream per storey, so a
+ *  storey is painted alike whichever window builds it). An atrium's void takes the paint of the
+ *  lobby it rises from. */
+export function* roomMapGen(P: Plan, L: Layout, rnd: (level: number) => number, k0 = 0, k1 = P.levels - 1): Generator<void, RoomMap, void> {
   let s = 0.1;
-  const levels = Math.max(1, P.levels);
+  const levels = Math.max(1, k1 - k0 + 1);
   // (at most ~0.6M cells: a vast plate gets coarser ones — while half a cell stays under the 0.18 m
   // a wall face's lookup reaches past the wall's line into its room, a face never reads its neighbour)
   while ((P.L / s) * (P.W / s) * levels > 6e5 || P.L / s > 2048 || (P.W / s) * levels > 4096) s *= 1.25;
@@ -330,12 +357,14 @@ export function* roomMapGen(P: Plan, L: Layout, rnd: () => number): Generator<vo
   const pal = new Float32Array(256 * 2 * 4);
   const idx = new Map<number, number>();
   let next = 1, filled = 0;
+  // (the lobby an atrium's void rises from: the void's walls are the lobby's, a storey up)
+  const lobby = L.rooms.find((r) => r.type === 'lobby' && r.level === 0);
   for (const r of L.rooms) {
-    let pi = idx.get(r.space);
+    let pi = r.type === 'void' && lobby ? idx.get(lobby.space) : idx.get(r.space);
     if (pi === undefined) {
       pi = ((next++ - 1) % 255) + 1;
       idx.set(r.space, pi);
-      const p = paintFor(r.type, rnd);
+      const p = paintFor(r.type, () => rnd(r.level));
       const w = lin3(p.wall), f = lin3(p.floor);
       pal.set([w[0], w[1], w[2], p.style], pi * 4);
       pal.set([f[0], f[1], f[2], p.ft], (256 + pi) * 4);
@@ -343,7 +372,8 @@ export function* roomMapGen(P: Plan, L: Layout, rnd: () => number): Generator<vo
     const u0 = -P.L / 2, v0 = -P.W / 2;
     const i0 = Math.max(0, Math.ceil((r.r.u0 - u0) / s - 0.5)), i1 = Math.min(nu - 1, Math.floor((r.r.u1 - u0) / s - 0.5));
     const j0 = Math.max(0, Math.ceil((r.r.v0 - v0) / s - 0.5)), j1 = Math.min(nv - 1, Math.floor((r.r.v1 - v0) / s - 0.5));
-    const base = r.level * nv;
+    if (r.level < k0 || r.level > k1) continue;
+    const base = (r.level - k0) * nv;
     for (let j = j0; j <= j1; j++) data.fill(pi, (base + j) * nu + i0, (base + j) * nu + i1 + 1);
     if ((filled += Math.max(0, (i1 - i0 + 1) * (j1 - j0 + 1))) > 2e5) { filled = 0; yield; }
   }
@@ -374,16 +404,17 @@ export function* roomMapGen(P: Plan, L: Layout, rnd: () => number): Generator<vo
   palT.minFilter = palT.magFilter = THREE.NearestFilter;
   palT.generateMipmaps = false;
   palT.needsUpdate = true;
-  return { map, pal: palT, info: new THREE.Vector4(-P.L / 2, -P.W / 2, 1 / s, nv), dim: new THREE.Vector4(nu, levels, 0, 0), texels: nu * nv * levels };
+  return { map, pal: palT, info: new THREE.Vector4(-P.L / 2, -P.W / 2, 1 / s, nv), dim: new THREE.Vector4(nu, levels, k0, 0), texels: nu * nv * levels };
 }
 
 // ---------------- stairs ----------------
 /** Treads, risers, closed strings, a handrail and balusters on an open side; for a dogleg, its
  *  landing slab and the spine wall between the flights; railings round the stairwells upstairs. */
-export function drawStairs(d: Draw, P: Plan, treadC: number, runner: number | null) {
+export function drawStairs(d: Draw, P: Plan, treadC: number, runner: number | null, k0 = 0, k1 = P.levels - 1) {
   const f = (k: number) => P.floor0 + k * P.floorH;
   const fH = P.floorH;
-  const out: Flight[] = P.flights;
+  // (a tower's: the storeys built — its flights up from each, its landings)
+  const out: Flight[] = P.flights.filter((F) => F.level >= k0 && F.level <= k1);
   for (const F of out) {
     const ax: 0 | 1 = F.axis ? 1 : 0;
     const c0 = ax ? F.u0 : F.v0, c1 = ax ? F.u1 : F.v1;
@@ -428,6 +459,7 @@ export function drawStairs(d: Draw, P: Plan, treadC: number, runner: number | nu
   }
   // dogleg landings, the spine wall between their flights, a rail across the top storey's opening
   for (const Lg of P.landings) {
+    if (Lg.level < k0 || Lg.level > k1) continue;
     const y = f(Lg.level) + Lg.y * fH;
     d.box(Lg.u0, Lg.u1, Lg.v0, Lg.v1, y - 0.2, y, treadC, IP.wood, true);
     const fl = P.flights.filter((F) => F.level === Lg.level && (F.lo ?? 0) < 0.01 && (F.hi ?? 1) < 0.99 && hitR(F, grow(Lg, 0.05)));

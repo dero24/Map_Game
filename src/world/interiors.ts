@@ -6,37 +6,71 @@
 // frames in — and builds its meshes over a few more (interior/mesh.ts, interior/furnish.ts): walls with
 // real window openings, floors, ceilings, stairs, cased doorways with their doors standing open,
 // furniture by room (repeated pieces instanced), lamps, residents. Leaving drops it all.
+//
+// A tall building (plan.ts `tall`: a tower, a long block of flats) has every storey, and is built a
+// window at a time: the walker's storey and the one either side (≤ 3), furnished, round wherever
+// they stand — the next window builds while the standing one stays (its own collision scope), then
+// swaps in whole; climbing a storey re-centres it. Each storey draws its layout, paint, furniture
+// and residents from seeds of its own, so it looks the same from any window. Its lifts (`liftAt`,
+// player/lift.ts) ride you to any storey: the doors slide (`liftDoor`), the car stands in the shaft
+// (`showCar`), and the window re-centres on the new storey while the car's doors are shut.
 import * as THREE from 'three';
 import type { Footprint } from './buildings';
 import { activeBuilding, GLSL_WINDOWS, KIND } from './buildings';
 import type { WalkWorld } from '../player/collision';
 import { paintMaterial, lin, U, HOLE_MAX } from '../render/shared';
-import { makeRng } from '../core/rng';
+import { makeRng, type Rng } from '../core/rng';
 import { pedGeo, creatureMaterial } from '../sim/life';
 import * as D from '../assets/decor';
-import { toW, type Plan, type Rect } from './interior/plan';
+import { toW, unstack, plateAt, storeyAt, ringOf, atriumEdges, liftCars, type Plan, type Rect, type Lift } from './interior/plan';
 import { layoutSteps, registerLayout, type Layout, type Room } from './interior/layout';
-import { Mesher, Draw, Instancer, IP, WOOD, roomMapGen, drawStairs, drawPartitionsGen, type RoomMap } from './interior/mesh';
-import { Furnisher, furnishRoom, FABRIC, type Light } from './interior/furnish';
+import { Mesher, Draw, Instancer, IP, WOOD, roomMapGen, drawStairs, drawPartitionsGen, pieceGeo, type RoomMap } from './interior/mesh';
+import { Furnisher, furnishRoom, furnishLifts, FABRIC, type Light, type NpcSpot } from './interior/furnish';
 
-export { planInterior, registerPlan, LocalPoly, type Plan, type Flight } from './interior/plan';
+export { planInterior, registerPlan, unstack, LocalPoly, type Plan, type Flight, type Lift } from './interior/plan';
 export { layoutInterior, registerLayout, type Layout, type Room } from './interior/layout';
 
 type P2 = [number, number];
-/** The interior's own collision scope (one interior stands open at a time). */
-const SCOPE = -7;
+/** The interior's own collision scopes: the standing build's, and the next window's (one interior
+ *  stands open at a time). */
+const SCOPES = [-7, -8];
+/** The lift car's floor while you ride (player/lift.ts): its own collision scope. */
+const CAR_SCOPE = -9;
+/** A lift car's inside (liftCar): 2.1 m across, 1.6 m deep, standing 0.12 m behind the shaft's face. */
+const CAR = { w: 2.1, d: 1.6, gap: 0.12 };
 const NPC_MAX = 12; // residents an interior shows at once (the shared ped geometry's aAnim covers this many)
 /** Draw calls an interior may take for its instanced pieces (the budget is 60 all told). */
 const MAX_INSTANCED = 44;
 /** Vertices past which no more rooms are furnished (the budget is 120k: a room's worth of margin). */
 const FURNISH_MAX = 110000;
-export interface InteriorStats { verts: number; draws: number; instances: number; texels: number; rooms: number }
+/** A tall building's storey stops furnishing past this many of its own merged vertices (a third of
+ *  the budget, less the shell's: its share whichever window it's built in). */
+const STOREY_MAX = 30000;
+export interface InteriorStats { verts: number; draws: number; instances: number; texels: number; rooms: number; storeys: number }
 const ROOM_NAME: Partial<Record<Room['type'], string>> = {
   hall: 'hall', landing: 'landing', corridor: 'corridor', lobby: 'lobby', living: 'living room', kitchen: 'kitchen',
   dining: 'dining room', bath: 'bathroom', bed: 'bedroom', study: 'study', utility: 'utility room', closet: 'closet',
   store: 'storeroom', open: 'open-plan office', meeting: 'meeting room', lift: 'elevator lobby', shop: 'shop floor',
   stock: 'stockroom', cafe: 'café', bar: 'bar', diner: 'dining room', galley: 'kitchen', church: 'nave', great: 'living room',
 };
+
+/** A build: an activation's, or a tall building's next window. What it made waits here until it
+ *  swaps in (or is dropped unfinished). */
+interface Job {
+  fi: string;
+  k: number; // the storey its window is centred on (−1: the whole building)
+  win: [number, number];
+  scope: number;
+  gen: Generator<void, THREE.Object3D, void>;
+  layout: Layout | null;
+  roomTex: RoomMap | null;
+  inst: Instancer | null;
+  lights: Light[];
+  leaves: Furnisher['liftLeaves'];
+  stats: InteriorStats | null;
+  fab: number;
+  dims: [number, number];
+}
 
 export class Interiors {
   readonly group = new THREE.Group();
@@ -50,12 +84,12 @@ export class Interiors {
   readonly frameU = { value: new THREE.Vector4() }; // cx, cz, ux, uz
   readonly levelsU = { value: new THREE.Vector4() }; // floor0, floorH, door x, door z
   readonly dimsU = { value: new THREE.Vector2(6, 4) }; // half length, half width of the footprint frame
-  readonly doorU = { value: new THREE.Vector4() }; // door y, half width, height, -
+  readonly doorU = { value: new THREE.Vector4() }; // door y, half width, height, curtains (1: homes upstairs)
   // the room map (a palette index per 0.1 m cell of each storey) and its palette: every room its paint
   readonly roomMapU = { value: null as THREE.Texture | null };
   readonly roomPalU = { value: null as THREE.Texture | null };
   readonly roomInfoU = { value: new THREE.Vector4(0, 0, 10, 1) }; // u of cell 0, v of cell 0, cells per m, rows per storey
-  readonly roomDimU = { value: new THREE.Vector4(1, 1, 0, 0) }; // columns, storeys
+  readonly roomDimU = { value: new THREE.Vector4(1, 1, 0, 0) }; // columns, storeys, the first storey's index
   readonly fabU = { value: new THREE.Color() };
   private mat: THREE.ShaderMaterial;
   private npcMat = creatureMaterial({ LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1 });
@@ -64,18 +98,37 @@ export class Interiors {
   private npcGeo = pedGeo();
   private lights: Light[] = [];
   private failed = new Set<string>();
-  private pending: { fi: string; gen: Generator<void, THREE.Object3D, void> } | null = null;
+  private pending: Job | null = null;
   private openAmt = 0;
   private opened = false; // hysteresis state for the facade openings (see update)
   private layout: Layout | null = null;
-  private scoped = false;
+  private scope = 0; // the standing build's collision scope (0: none)
   private roomTex: RoomMap | null = null;
   private inst: Instancer | null = null;
   private at: { x: number; z: number; feet: number } | undefined;
+  /** The standing build's storeys (a tall building's window; the whole building otherwise). */
+  private win: [number, number] | null = null;
+  /** The storey a tall building's window should be centred on (the walker's, with a little
+   *  hysteresis half-way up the stairs; −1: none yet). */
+  private want = -1;
   /** What the last build drew (the bench and the budget test read it). */
-  lastStats: InteriorStats = { verts: 0, draws: 0, instances: 0, texels: 0, rooms: 0 };
+  lastStats: InteriorStats = { verts: 0, draws: 0, instances: 0, texels: 0, rooms: 0, storeys: 0 };
   indoors = false;
   onStairs = false;
+  /** A lift ride's doors are shut: build the next window flat out (player/lift.ts). */
+  hurry = false;
+  /** A lift ride has the walker (stepping into the car, riding, stepping out: player/lift.ts) — they
+   *  cross the shaft's wall on purpose, so nothing may "settle" them out of it meanwhile (main.ts). */
+  riding = false;
+  /** The standing build's lift door leaves (the 'liftLeaf' pieces' InstancedMesh) and each car's two
+   *  on each storey built: instance index and resting place (world x, z). */
+  private leafMesh: THREE.InstancedMesh | null = null;
+  private leafAt = new Map<string, { idx: number; x: number; z: number; side: -1 | 1 }[]>();
+  /** The car being ridden (shown only then): its body and its own two door leaves, where it is,
+   *  its lamp. */
+  private car: THREE.Group | null = null;
+  private carAt: { li: number; car: number; k: number } | null = null;
+  private carLamp: Light | null = null;
 
   constructor(private walk: WalkWorld) {
     this.group.name = 'interiors';
@@ -112,18 +165,25 @@ export class Interiors {
     // Driving or flying past, nobody walks in: no interior builds (a downtown drive passed a
     // door every second and each one assembled a whole interior — the Seattle hitch). One
     // that's assembling drops; one standing open stays until you're well past it.
-    if (!onFoot && this.active !== null && (this.pending || this.openAmt <= 0.001)) {
+    if (!onFoot && this.active !== null && ((this.pending && !this.mesh) || this.openAmt <= 0.001)) {
       const d = this.plans.get(this.active)?.door;
-      if (this.pending || !d || Math.hypot(d.x - x, d.z - z) > 30) this.activate(null);
+      if ((this.pending && !this.mesh) || !d || Math.hypot(d.x - x, d.z - z) > 30) this.activate(null);
     }
-    this.pump();
+    // a tall building's window follows the walker's storey
+    const TP = this.active !== null ? this.plans.get(this.active) : undefined;
+    if (TP?.tall && (this.mesh || this.pending)) {
+      const k = this.storeyFor(TP, feet);
+      if (k !== this.want) this.recentre(k);
+    }
+    this.pump(this.hurry ? 14 : 3.5);
     const inside = this.walk.interiorAt(x, z, feet);
     this.indoors = inside >= 0 && inside === this.walkId(this.active);
     // Windows + door become real openings as you come close: a hysteresis switch (open < 8 m,
     // close > 10 m), only once the interior mesh exists, and a short time-based wash (~0.3 s,
-    // world-anchored noise in the facade shader).
+    // world-anchored noise in the facade shader). (A tall building's next window building behind
+    // the standing one keeps them open.)
     const afp = this.active !== null ? this.fps.get(this.active) : undefined;
-    if (afp && !this.pending && this.mesh) {
+    if (afp && this.mesh) {
       const d = this.indoors ? 0 : ringDist(afp.ring, x, z);
       this.opened = d < (this.opened ? 10 : 8);
     } else this.opened = false;
@@ -164,6 +224,8 @@ export class Interiors {
   get activePlan() { return this.active !== null ? this.plans.get(this.active) ?? null : null; }
   /** The laid-out rooms of the building standing open (null while none is). */
   get activeLayout() { return this.layout; }
+  /** The storeys standing built (a tall building's window; the whole building otherwise). */
+  get built() { return this.win; }
   fpOf(key: string | null) { return key !== null ? this.fps.get(key) : undefined; }
   planOf(key: string | null) { return key !== null ? this.plans.get(key) : undefined; }
   /** The room at a point of the open building (its storey from the feet). */
@@ -171,8 +233,8 @@ export class Interiors {
     const P = this.activePlan, L = this.layout;
     if (!P || !L) return null;
     const u = (x - P.cx) * P.ux + (z - P.cz) * P.uz, v = (x - P.cx) * P.vx + (z - P.cz) * P.vz;
-    const k = Math.max(0, Math.min(P.levels - 1, Math.round((feet - P.floor0) / P.floorH)));
-    return L.rooms.find((r) => r.level === k && u >= r.r.u0 && u <= r.r.u1 && v >= r.r.v0 && v <= r.r.v1) ?? null;
+    const k = storeyAt(P, feet);
+    return L.rooms.find((r) => r.level === k && r.type !== 'shaft' && r.type !== 'void' && u >= r.r.u0 && u <= r.r.u1 && v >= r.r.v0 && v <= r.r.v1) ?? null;
   }
   /** What the HUD calls the room at a point of the open building (null: none, or the stairs). */
   roomName(x: number, z: number, feet: number): string | null {
@@ -181,11 +243,116 @@ export class Interiors {
     const home = this.fpOf(this.active)?.kind === 'house';
     return R.type === 'wc' ? (home ? 'half bath' : 'restroom') : ROOM_NAME[R.type] ?? null;
   }
+  /** The lift whose lobby you're standing in (the open building's, on a storey that stands built,
+   *  off the stairs): which storey you're on, of how many. */
+  liftAt(x: number, z: number, feet: number): { lift: Lift; storey: number; n: number } | null {
+    const P = this.activePlan;
+    if (!P?.lifts?.length || !this.mesh || !this.win || !this.indoors || this.onStairs) return null;
+    const k = storeyAt(P, feet);
+    if (k < this.win[0] || k > this.win[1] || Math.abs(feet - (P.floor0 + k * P.floorH)) > 0.2) return null;
+    const u = (x - P.cx) * P.ux + (z - P.cz) * P.uz, v = (x - P.cx) * P.vx + (z - P.cz) * P.vz;
+    for (const L of P.lifts) {
+      const r = L.lobby;
+      if (u > r.u0 - 0.2 && u < r.u1 + 0.2 && v > r.v0 - 0.2 && v < r.v1 + 0.2) return { lift: L, storey: k, n: P.levels };
+    }
+    return null;
+  }
+  /** Where to stand stepping out of lift `L` (the lobby, in front of its doors), in the world. */
+  liftSpot(L: Lift): P2 {
+    const P = this.activePlan!, r = L.lobby;
+    const [u, v] = L.face === 0 ? [r.u1 - 1.0, (r.v0 + r.v1) / 2] : L.face === 1 ? [r.u0 + 1.0, (r.v0 + r.v1) / 2] : L.face === 2 ? [(r.u0 + r.u1) / 2, r.v1 - 1.0] : [(r.u0 + r.u1) / 2, r.v0 + 1.0];
+    return toW(P, Math.max(r.u0 + 0.4, Math.min(r.u1 - 0.4, u)), Math.max(r.v0 + 0.4, Math.min(r.v1 - 0.4, v)));
+  }
+  /** (tests, debugging) The pieces the standing build put on storey k: key, place, tint. */
+  piecesOn(k: number): string[] {
+    const P = this.inst?.P;
+    return P ? this.inst!.placements(P.floor0 + k * P.floorH - 0.05, P.floor0 + (k + 1) * P.floorH - 0.05) : [];
+  }
+  /** Is storey k standing built — its window centred there, nothing more to build? (A lift ride
+   *  keeps its doors shut until it is.) */
+  ready(k: number) {
+    const P = this.activePlan;
+    return !!P && !!this.mesh && !this.pending && !!this.win && k >= this.win[0] && k <= this.win[1] && (!P.tall || this.want === k);
+  }
+  /** Where car `car` of lift L stands: its middle inside the shaft (`inside`, where a rider stands),
+   *  the middle of its landing doors (`door`), the way out of it (`out`, a unit vector) — world. */
+  carSpot(L: Lift, car: number): { inside: P2; door: P2; out: P2 } {
+    const P = this.activePlan!;
+    const c = liftCars(L), s = c.along[Math.max(0, Math.min(c.along.length - 1, car))];
+    const at = (d: number) => (c.row ? toW(P, c.fc + c.out * d, s) : toW(P, s, c.fc + c.out * d));
+    const [x0, z0] = at(0), [x1, z1] = at(1);
+    return { inside: at(-(CAR.gap + CAR.d / 2)), door: [x0, z0], out: [x1 - x0, z1 - z0] };
+  }
+  /** The car of lift L nearest a point (a caller in its lobby). */
+  carNear(L: Lift, x: number, z: number) {
+    let best = 0, bd = Infinity;
+    liftCars(L).along.forEach((_, i) => { const [dx, dz] = this.carSpot(L, i).door; const d = Math.hypot(dx - x, dz - z); if (d < bd) (bd = d), (best = i); });
+    return best;
+  }
+  /** Slide the landing doors of car `car` of lift `li` on storey k: 0 shut … 1 open (the leaves into
+   *  the wall either side). False when that storey's doors aren't built. */
+  liftDoor(li: number, car: number, k: number, open: number): boolean {
+    const P = this.activePlan, m = this.leafMesh, l = this.leafAt.get(`${li}:${car}:${k}`);
+    if (!P || !m || !l) return false;
+    const c = liftCars(P.lifts![li]);
+    // (along the face, in the world)
+    const ex = c.row ? P.vx : P.ux, ez = c.row ? P.vz : P.uz;
+    const o = Math.max(0, Math.min(1, open)) * 0.55;
+    const a = m.instanceMatrix.array as Float32Array;
+    for (const q of l) {
+      a[q.idx * 16 + 12] = q.x + ex * q.side * o;
+      a[q.idx * 16 + 14] = q.z + ez * q.side * o;
+    }
+    m.instanceMatrix.needsUpdate = true;
+    // (the car's own doors, standing there, go with them)
+    const C = this.carAt;
+    if (this.car && C && C.li === li && C.car === car && C.k === k) this.carDoors(open);
+    return true;
+  }
+  /** The car's own leaves: in its doorway shut, into its front wall either side open. */
+  private carDoors(open: number) {
+    const o = Math.max(0, Math.min(1, open)) * 0.55;
+    this.car?.children.forEach((c, i) => { if (i > 0) c.position.set((i === 1 ? -1 : 1) * (0.28 + o), 0, -CAR.d / 2 + 0.05); });
+  }
+  /** Show the car you ride inside lift li's shaft at car `car`, standing on storey k — its floor in
+   *  the walk world (a deck: the shaft has none of its own), its lamp among the lights — or take it
+   *  away (null). */
+  showCar(at: { li: number; car: number; k: number } | null) {
+    this.walk.removeScope(CAR_SCOPE, true);
+    this.carLamp = null;
+    this.carAt = null;
+    if (this.car) { this.group.remove(this.car); this.car = null; }
+    const P = this.activePlan;
+    if (!at || !P?.lifts?.[at.li]) return;
+    this.carAt = { ...at };
+    const sp = this.carSpot(P.lifts[at.li], at.car);
+    const y = P.floor0 + at.k * P.floorH + 0.01;
+    // (the piece's front, −z, out of the shaft; its x along the face)
+    const ax: P2 = [-sp.out[1], sp.out[0]];
+    const m4 = new THREE.Matrix4().set(ax[0], 0, -sp.out[0], sp.inside[0], 0, 1, 0, y, ax[1], 0, -sp.out[1], sp.inside[1], 0, 0, 0, 1);
+    this.car = new THREE.Group();
+    this.car.name = 'liftCar';
+    this.car.matrixAutoUpdate = false;
+    this.car.matrix.copy(m4);
+    this.car.matrixWorldNeedsUpdate = true;
+    const body = new THREE.Mesh(pieceGeo('liftCar', () => D.liftCar(CAR.w, CAR.d)), this.mat);
+    this.car.add(body);
+    for (let i = 0; i < 2; i++) this.car.add(new THREE.Mesh(pieceGeo('liftLeaf', () => D.liftLeaf(0.56)), this.mat));
+    this.car.traverse((o) => (o.frustumCulled = false));
+    this.carDoors(0);
+    this.group.add(this.car);
+    this.carLamp = { x: sp.inside[0], y: y + 2.2, z: sp.inside[1], w: 1.3 };
+    // its floor: a deck (a capsule round a line across the car, half its depth either side of it)
+    const hw = CAR.d / 2 - 0.05, e = CAR.w / 2 - hw;
+    const A: P2 = [sp.inside[0] - ax[0] * e, sp.inside[1] - ax[1] * e], B: P2 = [sp.inside[0] + ax[0] * e, sp.inside[1] + ax[1] * e];
+    this.walk.withScope(CAR_SCOPE, () => this.walk.addDeck({ pts: [A, B], cum: [0, 2 * e], halfWidth: hw, heightAt: () => y, profile: { k: 'const', y } }));
+    if (this.at) this.pickLights(this.at.x, this.at.feet + 1.4, this.at.z);
+  }
   private walkIds = new Map<string, number>();
   private walkId(fi: string | null) { return fi !== null ? this.walkIds.get(fi) ?? -2 : -2; }
 
   private pickLights(x: number, y: number, z: number) {
-    const ls = this.lights.slice().sort((a, b) => (a.x - x) ** 2 + ((a.y - y) * 2.5) ** 2 + (a.z - z) ** 2 - ((b.x - x) ** 2 + ((b.y - y) * 2.5) ** 2 + (b.z - z) ** 2));
+    const ls = (this.carLamp ? [this.carLamp, ...this.lights] : this.lights.slice()).sort((a, b) => (a.x - x) ** 2 + ((a.y - y) * 2.5) ** 2 + (a.z - z) ** 2 - ((b.x - x) ** 2 + ((b.y - y) * 2.5) ** 2 + (b.z - z) ** 2));
     for (let i = 0; i < 8; i++) {
       const l = ls[i];
       this.lightsU.value[i].set(l?.x ?? 0, l?.y ?? -999, l?.z ?? 0, l?.w ?? 0);
@@ -195,36 +362,85 @@ export class Interiors {
   // Build (or drop) a building's interior right now — used to compile the interior shaders during loading.
   prime(fi: string | null) { this.activate(fi, true); }
 
+  /** A tall building's storey for feet at y: the walker's, held until they're most of the way to
+   *  the next (so the window doesn't flip back and forth on a half landing). */
+  private storeyFor(P: Plan, y: number) {
+    const lv = (y - P.floor0) / P.floorH;
+    const k = this.want >= 0 && Math.abs(lv - this.want) <= 0.6 ? this.want : Math.round(lv);
+    return Math.max(0, Math.min(P.levels - 1, k));
+  }
+  /** The storeys a build centred on storey k takes: a tall building's walker's storey and the one
+   *  either side of it (≤ 3), or the whole building. */
+  private windowOf(P: Plan, k: number): [number, number] {
+    if (!P.tall || k < 0) return [0, P.levels - 1];
+    return [Math.max(0, k - 1), Math.min(P.levels - 1, k + 1)];
+  }
+
   // Interior builds are sliced across frames: activation lands instantly (door and window uniforms
-  // go live, the old interior drops) while a pending generator lays out the rooms (their walls go
-  // into the collision world a few frames in) and assembles the new mesh over ~3.5 ms/frame
-  // slices — the approach walk (target picks ~16 m out) hides it.
+  // go live, the old interior drops) while a pending build lays out the rooms (their walls go into
+  // the collision world a few frames in) and assembles the new mesh over ~3.5 ms/frame slices —
+  // the approach walk (target picks ~16 m out) hides it. A tall building's next window builds the
+  // same way behind the standing one, which it replaces whole when it's done.
   private pump(budget = 3.5) {
-    const p = this.pending;
-    if (!p) return;
+    const job = this.pending;
+    if (!job) return;
     const t0 = performance.now();
+    let mesh: THREE.Object3D;
     try {
-      let r = p.gen.next();
-      while (!r.done && performance.now() - t0 < budget) r = p.gen.next();
+      let r = job.gen.next();
+      while (!r.done && performance.now() - t0 < budget) r = job.gen.next();
       if (!r.done) return;
-      this.mesh = r.value;
-      this.group.add(this.mesh);
+      mesh = r.value;
     } catch (e) {
-      console.warn('interior build failed', p.fi, e);
-      this.failed.add(p.fi);
-      this.mesh = null;
+      console.warn('interior build failed', job.fi, e);
+      this.failed.add(job.fi);
       this.pending = null;
+      this.dropJob(job);
       this.activate(null); // restore terrain cut + door/active uniforms, drop its walls
       return;
     }
     this.pending = null;
+    this.standUp(job, mesh);
   }
 
   // Drain any pending build right now — shots capture after the 0.2 s target loop and must
   // not fire while the interior is still assembling.
   flush() { while (this.pending) this.pump(Infinity); }
 
-  private drop() {
+  /** A finished build takes the stage: the standing one (a tall building's last window) goes —
+   *  its mesh, its walls, its room map, its pieces — and this one's stand in their place. */
+  private standUp(job: Job, mesh: THREE.Object3D) {
+    this.dropStanding();
+    this.mesh = mesh;
+    this.group.add(mesh);
+    this.scope = job.scope;
+    this.layout = job.layout;
+    this.win = job.win;
+    this.roomTex = job.roomTex;
+    this.roomMapU.value = job.roomTex?.map ?? null;
+    this.roomPalU.value = job.roomTex?.pal ?? null;
+    if (job.roomTex) { this.roomInfoU.value.copy(job.roomTex.info); this.roomDimU.value.copy(job.roomTex.dim); }
+    this.inst = job.inst;
+    this.lights = job.lights;
+    // (the lift doors a ride slides: each leaf's instance and its resting place)
+    this.leafAt.clear();
+    this.leafMesh = (mesh.getObjectByName('interior:liftLeaf') as THREE.InstancedMesh | undefined) ?? null;
+    if (this.leafMesh) {
+      const a = this.leafMesh.instanceMatrix.array;
+      for (const q of job.leaves) {
+        const key = `${q.lift}:${q.car}:${q.level}`;
+        const l = this.leafAt.get(key) ?? [];
+        l.push({ idx: q.idx, x: a[q.idx * 16 + 12], z: a[q.idx * 16 + 14], side: q.side });
+        this.leafAt.set(key, l);
+      }
+    }
+    this.fabU.value.set(job.fab);
+    this.dimsU.value.set(job.dims[0], job.dims[1]);
+    if (job.stats) this.lastStats = job.stats;
+    if (this.at) this.pickLights(this.at.x, this.at.feet + 1.4, this.at.z);
+  }
+  /** The standing build goes (its mesh, walls, room map and pieces). */
+  private dropStanding() {
     if (this.mesh) {
       this.group.remove(this.mesh);
       this.mesh.traverse((o) => {
@@ -235,20 +451,51 @@ export class Interiors {
       });
       this.mesh = null;
     }
-    if (this.scoped) { this.walk.removeScope(SCOPE, true); this.scoped = false; }
+    if (this.scope) { this.walk.removeScope(this.scope, true); this.scope = 0; }
     if (this.roomTex) { this.roomTex.map.dispose(); this.roomTex.pal.dispose(); this.roomTex = null; }
     this.roomMapU.value = null;
     this.roomPalU.value = null;
     this.inst?.release();
     this.inst = null;
     this.layout = null;
+    this.win = null;
+    this.leafMesh = null;
+    this.leafAt.clear();
+  }
+  /** An unfinished build goes: whatever it had made (walls in its scope, a room map, pieces). */
+  private dropJob(job: Job) {
+    if (job.scope !== this.scope) this.walk.removeScope(job.scope, true);
+    if (job.roomTex) { job.roomTex.map.dispose(); job.roomTex.pal.dispose(); }
+    job.inst?.release();
+    job.roomTex = null;
+    job.inst = null;
+  }
+  private drop() {
+    if (this.pending) { this.dropJob(this.pending); this.pending = null; }
+    this.showCar(null);
+    this.dropStanding();
+    this.lights = [];
+    this.want = -1;
+  }
+
+  /** A tall building's window re-centres on storey k: the next build starts (one still underway
+   *  for another storey is dropped — the standing window stays up meanwhile). */
+  private recentre(k: number) {
+    const P = this.active !== null ? this.plans.get(this.active) : undefined, fp = this.active !== null ? this.fps.get(this.active) : undefined;
+    if (!P || !fp) return;
+    this.want = k;
+    if (this.pending) { this.dropJob(this.pending); this.pending = null; }
+    this.pending = this.job(this.active!, P, fp, k);
+  }
+  private job(fi: string, P: Plan, fp: Footprint, k: number): Job {
+    const job: Job = { fi, k: P.tall ? k : -1, win: this.windowOf(P, P.tall ? k : -1), scope: SCOPES[0] === this.scope ? SCOPES[1] : SCOPES[0], gen: null!, layout: null, roomTex: null, inst: null, lights: [], leaves: [], stats: null, fab: 0xffffff, dims: [P.L / 2, P.W / 2] };
+    job.gen = this.steps(P, fp, job);
+    return job;
   }
 
   private activate(fi: string | null, sync = false) {
     this.drop();
-    this.pending = null;
     this.active = fi;
-    this.lights = [];
     this.openAmt = 0;
     this.opened = false;
     U.uHoleInfo.value.z = 0;
@@ -274,78 +521,124 @@ export class Interiors {
     activeBuilding.uActiveId.value = fp.id;
     activeBuilding.uOpenDoor.value.set(P.door.wx, P.door.y, P.door.wz, P.door.w / 2);
     activeBuilding.uOpenDoorH.value = P.door.h;
+    // (the building's frame, storeys and door: the same for every window of it)
+    this.frameU.value.set(P.cx, P.cz, P.ux, P.uz);
+    this.dimsU.value.set(P.L / 2, P.W / 2);
+    this.levelsU.value.set(P.floor0, P.levels > 1 ? P.floorH : P.ceilTop - P.floor0, P.door.wx, P.door.wz);
+    this.doorU.value.set(P.door.y, P.door.w / 2, P.door.h, P.up === 'office' ? 0 : 1); // (an office's windows: no curtains)
+    // a tall building builds round the walker's storey (at the door: the ground)
+    const k = P.tall ? this.storeyFor(P, this.at?.feet ?? P.floor0) : -1;
+    this.want = k;
+    const job = this.job(fi, P, fp, k);
     try {
       if (sync) {
-        const g = this.steps(P, fp);
-        let r = g.next();
-        while (!r.done) r = g.next();
-        this.mesh = r.value;
-        this.group.add(this.mesh);
-      } else this.pending = { fi, gen: this.steps(P, fp) };
+        let r = job.gen.next();
+        while (!r.done) r = job.gen.next();
+        this.standUp(job, r.value);
+      } else this.pending = job;
     } catch (e) {
       console.warn('interior build failed', fi, e);
       this.failed.add(fi);
+      this.dropJob(job);
       this.activate(null);
     }
   }
 
-  /** (the bench and the budget test) The whole activation as the steps the pump runs. */
-  buildSteps(P: Plan, fp: Footprint) { return this.steps(P, fp); }
-
-  /** An activation's work, sliced: Stage B a storey at a time, the rooms' walls into the collision
-   *  world (never onto the walker: one within reach gets a doorway where they stand), the mesh. */
-  private *steps(P: Plan, fp: Footprint): Generator<void, THREE.Object3D, void> {
-    const L = yield* layoutSteps(P, fp);
-    yield;
-    this.scoped = true;
-    for (let i = 0; i < L.walls.length; i += 400) {
-      const part = { ...L, walls: L.walls.slice(i, i + 400) };
-      this.walk.withScope(SCOPE, () => registerLayout(this.walk, P, part, this.at));
-      yield;
-    }
-    this.layout = L;
-    return yield* this.buildGen(P, fp, L);
+  /** (the bench and the budget test) The whole activation as the steps the pump runs — a tall
+   *  building's window centred on storey k (the ground by default). */
+  buildSteps(P: Plan, fp: Footprint, k = 0) {
+    const job = this.job(P.fp, P, fp, k);
+    const self = this;
+    return (function* () {
+      const mesh = yield* job.gen;
+      self.standUp(job, mesh);
+      return mesh;
+    })();
   }
 
-  private *buildGen(P: Plan, fp: Footprint, L: Layout): Generator<void, THREE.Object3D, void> {
+  /** An activation's work, sliced: Stage B a storey at a time, the rooms' walls into the collision
+   *  world (never onto the walker: one within reach gets a doorway where they stand), the mesh. A
+   *  tall building's: the storeys of its window only. */
+  private *steps(P: Plan, fp: Footprint, job: Job): Generator<void, THREE.Object3D, void> {
+    const [k0, k1] = job.win;
+    const PW = unstack(P, k0, k1);
+    const L = yield* layoutSteps(PW, fp, job.win);
+    yield;
+    // (the walker's own storey already standing — a window moving up the stairs with them — has
+    // these very walls up already, round them: a doorway where they happen to stand isn't wanted)
+    const ks = storeyAt(P, this.at?.feet ?? P.floor0);
+    const had = !!this.mesh && !!this.win && ks >= this.win[0] && ks <= this.win[1] && this.fps.get(job.fi) === fp;
+    for (let i = 0; i < L.walls.length; i += 400) {
+      const part = { ...L, walls: L.walls.slice(i, i + 400) };
+      this.walk.withScope(job.scope, () => registerLayout(this.walk, PW, part, had ? undefined : this.at));
+      yield;
+    }
+    job.layout = L;
+    return yield* this.buildGen(PW, fp, L, job);
+  }
+
+  private *buildGen(P: Plan, fp: Footprint, L: Layout, job: Job): Generator<void, THREE.Object3D, void> {
     const rng = makeRng(Math.floor(fp.seed * 1e9) ^ 0x1234);
     const m = new Mesher(16384);
     const kind = KIND[fp.kind as keyof typeof KIND] ?? 0;
     m.setInfo(fp.id, kind, fp.floor0 - fp.base);
     const d = new Draw(P, m);
     const inst = new Instancer(P);
-    this.inst = inst;
-    const ring = fp.ring;
-    const s = ringSign(ring);
+    job.inst = inst;
+    const s = ringSign(fp.ring);
+    const [k0, k1] = job.win;
     const f0 = P.floor0, fH = P.floorH, top = P.ceilTop;
     const fl = (k: number) => f0 + k * fH;
     const ceil = (k: number) => (k === P.levels - 1 ? top : fl(k + 1) - 0.02);
-    this.frameU.value.set(P.cx, P.cz, P.ux, P.uz);
-    this.dimsU.value.set(P.L / 2, P.W / 2);
-    this.levelsU.value.set(f0, P.levels > 1 ? fH : top - f0, P.door.wx, P.door.wz);
-    this.doorU.value.set(P.door.y, P.door.w / 2, P.door.h, 0);
-    this.fabU.value.set(FABRIC[Math.floor(rng.float() * FABRIC.length)]);
+    job.fab = FABRIC[Math.floor(rng.float() * FABRIC.length)];
+    // (a tower's storeys stand on a tier's plate: its outline, its eave)
+    const ringAt = (k: number) => plateAt(P, k)?.ring ?? fp.ring;
+    {
+      // daylight falls off from the walls of the storeys built (a tier's are its own)
+      const pl = plateAt(P, Math.round((k0 + k1) / 2));
+      let du = P.L / 2, dv = P.W / 2;
+      if (pl) {
+        du = 0; dv = 0;
+        for (const [u, v] of pl.loc) (du = Math.max(du, Math.abs(u))), (dv = Math.max(dv, Math.abs(v)));
+      }
+      job.dims = [du, dv];
+    }
 
-    // Walls: inner faces of the facade, inset a little; window panes are cut out in the shader.
-    for (let i = 0; i < ring.length; i++) {
-      const p = ring[i], q = ring[(i + 1) % ring.length];
-      const dx = q[0] - p[0], dz = q[1] - p[1], len = Math.hypot(dx, dz);
-      if (len < 0.05) continue;
-      const ox = (dz / len) * s, oz = (-dx / len) * s;
-      const ins = 0.14;
-      const a = [p[0] - ox * ins, p[1] - oz * ins], b = [q[0] - ox * ins, q[1] - oz * ins];
-      m.setOut(ox, oz);
-      m.part(IP.wall).color(0xffffff);
-      const y0 = f0 - 0.02, y1 = top, eave = fp.eave, base = fp.base;
-      m.quad([a[0], y0, a[1]], [b[0], y0, b[1]], [b[0], y1, b[1]], [a[0], y1, a[1]], [-ox, 0, -oz],
-        [[0, y0 - base, len, eave], [len, y0 - base, len, eave], [len, y1 - base, len, eave], [0, y1 - base, len, eave]]);
+    // Walls: inner faces of the facade, inset a little; window panes are cut out in the shader. (A
+    // tower's: its window's storeys, plate by plate.)
+    const bands: [P2[], number, number, number, boolean][] = []; // ring, y0, y1, eave (wall-UV), glass
+    {
+      const cuts = [k0, ...(P.plates ?? []).map((p) => p.from).filter((f) => f > k0 && f <= k1), k1 + 1];
+      for (let i = 0; i + 1 < cuts.length; i++) {
+        const a = cuts[i], b = cuts[i + 1] - 1;
+        const pl = plateAt(P, a);
+        bands.push([ringAt(a), fl(a) - 0.02, ceil(b), pl ? pl.eave : fp.eave, !!(pl ? pl.glass : fp.glass)]);
+      }
+    }
+    for (const [ring, y0, y1, eave, glass] of bands) {
+      // (a curtain wall's siding code rides in the kind's fraction, as on the facade: glazed floor to ceiling)
+      m.setInfo(fp.id, kind + (glass ? 0.46 : 0), fp.floor0 - fp.base);
+      for (let i = 0; i < ring.length; i++) {
+        const p = ring[i], q = ring[(i + 1) % ring.length];
+        const dx = q[0] - p[0], dz = q[1] - p[1], len = Math.hypot(dx, dz);
+        if (len < 0.05) continue;
+        const ox = (dz / len) * s, oz = (-dx / len) * s;
+        const ins = 0.14;
+        const a = [p[0] - ox * ins, p[1] - oz * ins], b = [q[0] - ox * ins, q[1] - oz * ins];
+        m.setOut(ox, oz);
+        m.part(IP.wall).color(0xffffff);
+        const base = fp.base;
+        m.quad([a[0], y0, a[1]], [b[0], y0, b[1]], [b[0], y1, b[1]], [a[0], y1, a[1]], [-ox, 0, -oz],
+          [[0, y0 - base, len, eave], [len, y0 - base, len, eave], [len, y1 - base, len, eave], [0, y1 - base, len, eave]]);
+      }
     }
     m.setOut(0, 0);
+    m.setInfo(fp.id, kind, fp.floor0 - fp.base);
     yield; // facade shell done
 
     // Floors and ceilings for each storey, with the stairwell openings cut out.
-    const holeRing = (r: Rect) => [toW(P, r.u0, r.v0), toW(P, r.u1, r.v0), toW(P, r.u1, r.v1), toW(P, r.u0, r.v1)] as P2[];
-    const ringFlat = (y: number, up: boolean, holes: P2[][], part: number) => {
+    const holeRing = (r: Rect) => ringOf(P, r);
+    const ringFlat = (ring: P2[], y: number, up: boolean, holes: P2[][], part: number) => {
       let idx: number[][];
       try {
         idx = THREE.ShapeUtils.triangulateShape(ring.map((r) => new THREE.Vector2(r[0], r[1])), holes.map((h) => h.map((p) => new THREE.Vector2(p[0], p[1]))));
@@ -355,15 +648,28 @@ export class Interiors {
       const n = [0, up ? 1 : -1, 0];
       for (const [i0, i1, i2] of idx) m.tri([pts[i0][0], y, pts[i0][1]], [pts[i1][0], y, pts[i1][1]], [pts[i2][0], y, pts[i2][1]], n);
     };
-    for (let k = 0; k < P.levels; k++) {
-      ringFlat(fl(k) + 0.01, true, P.holes.filter((H) => H.level === k).map(holeRing), IP.floor);
-      ringFlat(ceil(k), false, P.holes.filter((H) => H.level === k + 1).map(holeRing), IP.ceil);
+    for (let k = k0; k <= k1; k++) {
+      ringFlat(ringAt(k), fl(k) + 0.01, true, P.holes.filter((H) => H.level === k).map(holeRing), IP.floor);
+      ringFlat(ringAt(k), ceil(k), false, P.holes.filter((H) => H.level === k + 1).map(holeRing), IP.ceil);
       yield; // one storey of slab + ceiling
+    }
+    // dark caps where the stairwells run on past the storeys built (a tower's window)
+    m.part(IP.solid).color(0x2a2622);
+    for (const H of P.holes) {
+      const [a, b, c, e] = holeRing(H);
+      if (H.level === k1 + 1 && k1 + 1 < P.levels) { const y = fl(k1 + 1) + 0.05; m.quad([a[0], y, a[1]], [b[0], y, b[1]], [c[0], y, c[1]], [e[0], y, e[1]], [0, -1, 0]); }
+      if (H.level === k0 && k0 > 0) { const y = fl(k0) - 0.3; m.quad([a[0], y, a[1]], [b[0], y, b[1]], [c[0], y, c[1]], [e[0], y, e[1]], [0, 1, 0]); }
     }
 
     // Stairs: treads, risers, strings, rails; a runner on the treads now and then.
     const treadC = WOOD[Math.floor(rng.float() * WOOD.length)];
-    drawStairs(d, P, treadC, rng.float() < 0.45 ? FABRIC[Math.floor(rng.float() * FABRIC.length)] : null);
+    drawStairs(d, P, treadC, rng.float() < 0.45 ? FABRIC[Math.floor(rng.float() * FABRIC.length)] : null, k0, k1);
+    // a double-height lobby: storey 1's slab stops at a fascia round the void, a rail along it
+    if (P.atrium && k0 <= 1 && k1 >= 1)
+      for (const [ua, va, ub, vb] of atriumEdges(P)) {
+        d.panel(ua, va, ub, vb, fl(1) - 0.36, fl(1) + 0.012, 0xe9e5dc, IP.solid);
+        d.rail(ua, va, ub, vb, fl(1), 1.08);
+      }
     yield;
 
     // Partitions with their doorways: casings round each opening, the leaf standing open into the room.
@@ -387,8 +693,8 @@ export class Interiors {
     }
     yield;
 
-    // ---- the front door, standing open inward ----
-    {
+    // ---- the front door, standing open inward (the ground storey built) ----
+    if (k0 === 0) {
       const dr = P.door;
       const tu = (dr.wx - P.cx) * P.ux + (dr.wz - P.cz) * P.uz, tv = (dr.wx - P.cx) * P.vx + (dr.wz - P.cz) * P.vz;
       // wall tangent in local coords: perpendicular to the door normal
@@ -424,82 +730,113 @@ export class Interiors {
       d.box(mat[0] - 0.4, mat[0] + 0.4, mat[1] - 0.3, mat[1] + 0.3, f0 + 0.01, f0 + 0.025, 0x6b5a45, IP.fabric);
     }
 
-    // The room map: each room's wall paint and floor, looked up per pixel.
-    const rm = yield* roomMapGen(P, L, () => rng.float());
-    this.roomTex = rm;
-    this.roomMapU.value = rm.map;
-    this.roomPalU.value = rm.pal;
-    this.roomInfoU.value.copy(rm.info);
-    this.roomDimU.value.copy(rm.dim);
+    // (a tall building is built a few storeys at a time, whichever few: each storey draws its
+    // paint, its furniture and its people from seeds of its own — it looks the same from any window,
+    // so a storey you can see doesn't change as the window moves up the stairs with you)
+    const tallB = !!P.tall;
+    const seedB = Math.floor(fp.seed * 1e9);
+    const storeyRng = (k: number, salt: number) => makeRng((seedB ^ Math.imul(k + 1, 0x2c1b3c6d) ^ salt) >>> 0);
+
+    // The room map: each room's wall paint and floor, looked up per pixel (it goes live when this
+    // build stands up: a tower's standing window keeps painting from its own till then).
+    const paintRng = new Map<number, Rng>();
+    const paint = tallB
+      ? (lv: number) => {
+          let r = paintRng.get(lv);
+          if (!r) paintRng.set(lv, (r = storeyRng(lv, 0x9a17)));
+          return r.float();
+        }
+      : () => rng.float();
+    const rm = yield* roomMapGen(P, L, paint, k0, k1);
+    job.roomTex = rm;
     yield;
 
     // Furniture, room by room (a vast building stops short of the vertex budget: the rooms past it
-    // stay bare)
-    const F = new Furnisher(P, fp, L, m, inst, rng, leaves, ceil);
+    // stay bare — a tall building's storeys each at their own share of it)
+    const F = new Furnisher(P, fp, L, m, inst, tallB ? storeyRng(-1, 0xf0d5) : rng, leaves, ceil);
+    for (let k = k0; k <= k1; k++) furnishLifts(F, k);
+    const nth = new Map<number, number>();
+    let lv = -1, lvBase = 0;
     for (const R of L.rooms) {
       if (m.n + inst.uniqueVerts() > FURNISH_MAX) break;
+      if (tallB) {
+        const i = nth.get(R.level) ?? 0;
+        nth.set(R.level, i + 1);
+        F.rng = storeyRng(R.level, Math.imul(i + 1, 0x68e31da5) ^ 0x5eed);
+        if (R.level !== lv) (lv = R.level), (lvBase = m.n);
+        if (m.n - lvBase > STOREY_MAX) continue;
+      }
       yield* furnishRoom(F, R);
       yield; // one room's furniture done
     }
 
     // Assemble: the merged mesh, one InstancedMesh per repeated piece; then the residents.
     const group = new THREE.Group();
-    const { meshes, verts } = yield* inst.finishGen(m, this.mat, MAX_INSTANCED);
+    const { meshes, verts } = yield* inst.finishGen(m, this.mat, MAX_INSTANCED, fl(k0), ceil(k1));
     yield;
     const main = m.geometries();
     for (const g of main) group.add(new THREE.Mesh(g, this.mat));
     for (const im of meshes) group.add(im);
-    const npcSpots = F.npcs;
     const busy = fp.kind === 'commercial' || fp.kind === 'church';
-    const n = Math.min(NPC_MAX, npcSpots.length, busy ? 2 + Math.floor(rng.float() * 6) : 1 + Math.floor(rng.float() * 3));
-    let npcDraws = 0;
-    if (n > 0) {
-      const SH = [0xe8d8b0, 0x5b7fa6, 0xc4553f, 0x6e8c5a, 0xe0a33b, 0x7a5b8c, 0xf2efe6, 0x3f6f78];
-      const stand: [THREE.Matrix4, THREE.Color][] = [], sit: [THREE.Matrix4, THREE.Color][] = [];
+    const SH = [0xe8d8b0, 0x5b7fa6, 0xc4553f, 0x6e8c5a, 0xe0a33b, 0x7a5b8c, 0xf2efe6, 0x3f6f78];
+    const stand: [THREE.Matrix4, THREE.Color][] = [], sit: [THREE.Matrix4, THREE.Color][] = [];
+    const ang = Math.atan2(P.uz, P.ux);
+    /** Up to n residents on these spots, drawn with r: staff first (a shop is never unattended),
+     *  then customers / residents at random. */
+    const people = (spots: NpcSpot[], r: Rng, n: number) => {
       const used = new Set<number>();
-      const ang = Math.atan2(P.uz, P.ux);
-      const staff = npcSpots.map((sp, k) => (sp[5] ? k : -1)).filter((k) => k >= 0);
+      const staff = spots.map((sp, k) => (sp[5] ? k : -1)).filter((k) => k >= 0);
       for (let i = 0; i < n; i++) {
-        // staff first (a shop is never unattended), then customers / residents at random
-        let k = i < staff.length ? staff[i] : Math.floor(rng.float() * npcSpots.length);
-        for (let t = 0; t < 8 && used.has(k); t++) k = Math.floor(rng.float() * npcSpots.length);
+        let k = i < staff.length ? staff[i] : Math.floor(r.float() * spots.length);
+        for (let t = 0; t < 8 && used.has(k); t++) k = Math.floor(r.float() * spots.length);
         if (used.has(k)) continue;
         used.add(k);
-        const [u, v, y, yaw, seat] = npcSpots[k];
+        const [u, v, y, yaw, seat] = spots[k];
         const w = toW(P, u, v);
-        const col = new THREE.Color(SH[Math.floor(rng.float() * SH.length)]);
-        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -ang + yaw + (seat ? rng.range(-0.15, 0.15) : rng.range(-0.4, 0.4)));
+        const col = new THREE.Color(SH[Math.floor(r.float() * SH.length)]);
+        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -ang + yaw + (seat ? r.range(-0.15, 0.15) : r.range(-0.4, 0.4)));
         // seated: the pose puts the hips 0.45 m up — raise it to the seat (a bar stool is 0.76)
         if (seat) sit.push([new THREE.Matrix4().compose(new THREE.Vector3(w[0], y + seat - 0.45, w[1]), q, new THREE.Vector3(1, 1, 1)), col]);
         else {
           stand.push([new THREE.Matrix4().compose(new THREE.Vector3(w[0], y, w[1]), q, new THREE.Vector3(1, 1, 1)), col]);
           // a standing resident at home often has company: a second person a step away facing
           // them (chatting) — or, when that's the counter, alongside them (cooking together)
-          if (!busy && i === 0 && rng.float() < 0.5) {
+          if (!busy && i === 0 && r.float() < 0.5) {
             const level = Math.round((y - f0) / Math.max(0.1, fH));
             const fu = -Math.sin(yaw), fv = -Math.cos(yaw); // this resident's facing in u/v
             for (const [du, dv, turn] of [[fu * 1.05, fv * 1.05, Math.PI], [-fv * 0.65, fu * 0.65, 0], [fv * 0.65, -fu * 0.65, 0]] as const) {
               const u2 = u + du, v2 = v + dv;
               if (!F.freeAt(level, { u0: u2 - 0.22, u1: u2 + 0.22, v0: v2 - 0.22, v1: v2 + 0.22 })) continue;
               const w2 = toW(P, u2, v2);
-              const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -ang + yaw + turn + rng.range(-0.2, 0.2));
-              stand.push([new THREE.Matrix4().compose(new THREE.Vector3(w2[0], y, w2[1]), q2, new THREE.Vector3(1, 1, 1)), new THREE.Color(SH[Math.floor(rng.float() * SH.length)])]);
+              const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -ang + yaw + turn + r.range(-0.2, 0.2));
+              stand.push([new THREE.Matrix4().compose(new THREE.Vector3(w2[0], y, w2[1]), q2, new THREE.Vector3(1, 1, 1)), new THREE.Color(SH[Math.floor(r.float() * SH.length)])]);
               break;
             }
           }
         }
       }
-      for (const [list, mt] of [[stand, this.npcMat], [sit, this.npcSeatMat]] as const) {
-        if (!list.length) continue;
-        const im = new THREE.InstancedMesh(this.npcGeo, mt, Math.min(NPC_MAX, list.length));
-        list.slice(0, NPC_MAX).forEach(([m4, c], i) => { im.setMatrixAt(i, m4); im.setColorAt(i, c); });
-        im.frustumCulled = false;
-        group.add(im);
-        npcDraws++;
+    };
+    if (tallB) {
+      // (a storey's own few, from its own seed: NPC_MAX shared by the window's storeys)
+      const per = Math.floor(NPC_MAX / 3);
+      for (let k = k0; k <= k1; k++) {
+        const spots = F.npcs.filter((sp) => storeyAt(P, sp[2]) === k);
+        const r = storeyRng(k, 0x9e0);
+        people(spots, r, Math.min(per, spots.length, busy ? 1 + Math.floor(r.float() * 3) : 1 + Math.floor(r.float() * 2)));
       }
+    } else people(F.npcs, rng, Math.min(NPC_MAX, F.npcs.length, busy ? 2 + Math.floor(rng.float() * 6) : 1 + Math.floor(rng.float() * 3)));
+    let npcDraws = 0;
+    for (const [list, mt] of [[stand, this.npcMat], [sit, this.npcSeatMat]] as const) {
+      if (!list.length) continue;
+      const im = new THREE.InstancedMesh(this.npcGeo, mt, Math.min(NPC_MAX, list.length));
+      list.slice(0, NPC_MAX).forEach(([m4, c], i) => { im.setMatrixAt(i, m4); im.setColorAt(i, c); });
+      im.frustumCulled = false;
+      group.add(im);
+      npcDraws++;
     }
-    this.lights = F.lights;
-    this.lastStats = { verts: m.n + verts, draws: main.length + meshes.length + npcDraws, instances: meshes.reduce((a, im) => a + im.count, 0), texels: rm.texels, rooms: L.rooms.length };
+    job.lights = F.lights;
+    job.leaves = F.liftLeaves;
+    job.stats = { verts: m.n + verts, draws: main.length + meshes.length + npcDraws, instances: meshes.reduce((a, im) => a + im.count, 0), texels: rm.texels, rooms: L.rooms.length, storeys: k1 - k0 + 1 };
     return group;
   }
 }
@@ -593,7 +930,8 @@ function interiorMaterial(I: Interiors) {
         // which room am I in? (faces sample a hand's width into the room they look at) — the room
         // map holds a palette index per 0.1 m cell of each storey (interior/mesh.ts roomMap)
         vec2 pr = vec2(pu + dot(N.xz, ua) * 0.12, pv + dot(N.xz, va) * 0.12);
-        float lvl = clamp(floor((vWorldPos.y - f0 + 0.015) / fH), 0.0, uRoomDim.y - 1.0);
+        // (a tower's map holds its build window's storeys: uRoomDim.z is the first one's index)
+        float lvl = clamp(floor((vWorldPos.y - f0 + 0.015) / fH) - uRoomDim.z, 0.0, uRoomDim.y - 1.0);
         ivec2 tc = ivec2(int(clamp(floor((pr.x - uRoomInfo.x) * uRoomInfo.z), 0.0, uRoomDim.x - 1.0)), int(clamp(floor((pr.y - uRoomInfo.y) * uRoomInfo.z), 0.0, uRoomInfo.w - 1.0) + lvl * uRoomInfo.w));
         int ri = int(texelFetch(uRoomMap, tc, 0).r * 255.0 + 0.5);
         vec4 RA = texelFetch(uRoomPal, ivec2(ri, 0), 0), RB = texelFetch(uRoomPal, ivec2(ri, 1), 0);
@@ -603,12 +941,20 @@ function interiorMaterial(I: Interiors) {
           if (part < 0.5) {
             vec3 NO = normalize(vec3(vOut.x, 0.0, vOut.y));
             Win W = windowAt(vWall.x, vWall.y, vWall.z, vWall.w, seedOf(vInfo.x), vInfo.y, vInfo.w, NO);
-            if (W.ok) {
+            float sidW = floor(fract(vInfo.y + 0.001) * 10.0 + 0.5);
+            if (sidW > 4.5 && !W.store && vWall.y > vInfo.w - 0.02) {
+              // a curtain wall (buildings.ts): glass from the spandrel to the next slab, between
+              // mullions every 1.5 m — the same panes the facade draws, cut through to the city
+              float vf = vWall.y - vInfo.w, fy = vf - floor(vf / W.floorH) * W.floorH;
+              float cx2 = (fract(vWall.x / 1.5) - 0.5) * 1.5;
+              if (fy > 0.93 && fy < W.floorH - 0.045 && abs(cx2) < 0.705) discard;
+              if (fy > 0.87) alb = vec3(0.6, 0.62, 0.64); // mullion, sill and head: anodised metal
+            } else if (W.ok) {
               float inner = step(abs(W.cu), W.ww * 0.5 - 0.08) * step(abs(W.cy), W.wh * 0.5 - 0.08) * archIn(W, W.cu, W.cy, 0.08);
               if (inner > 0.5) discard;
               float frame = step(abs(W.cu), W.ww * 0.5 + 0.04) * step(abs(W.cy), W.wh * 0.5 + 0.06);
               // curtains + a valance, pulled to the sides
-              if (!W.store && vInfo.y < 3.5) {
+              if (!W.store && vInfo.y < 3.5 && uDoor.w > 0.5) {
                 float side = step(W.ww * 0.5 + 0.04, abs(W.cu)) * step(abs(W.cu), W.ww * 0.5 + 0.34) * step(-W.wh * 0.5 - 0.2, W.cy) * step(W.cy, W.wh * 0.5 + 0.28);
                 float val = step(abs(W.cu), W.ww * 0.5 + 0.34) * step(W.wh * 0.5 + 0.08, W.cy) * step(W.cy, W.wh * 0.5 + 0.3);
                 float fold = 0.85 + 0.15 * sin(W.cu * 40.0);
