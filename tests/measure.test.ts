@@ -179,6 +179,7 @@ describe('lidarCore: trees', () => {
       if (x > 55 && x < 70 && z > 50 && z < 62) v = 6.5; // unmapped flat roof
       if (x > 50 && x < 62 && z > 8 && z < 18) v = 7 - 0.5 * Math.abs(z - 13); // mapped gable house
       if (Math.abs(x - 70.5) < 0.6 && Math.abs(z - 30.5) < 0.6) v = 9; // pole
+      if (Math.abs(x - 70.5) < 1.1 && Math.abs(z - 70.5) < 1.1) v = 46 - 4 * Math.hypot(x - 70.5, z - 70.5); // a lattice mast
       H[j * g.w + i] = v;
     }
     return H;
@@ -253,5 +254,20 @@ describe('what a survey measurement may change', () => {
     const house = b({ h: 9.9, fl: 3, k: 'house', roof: 'gable' });
     applyMeasure(house, [8.4, 5.6, 1, 0.9]);
     expect(house.h).toBeCloseTo(8.4, 5);
+  });
+});
+
+describe('lidarCore: a mast is not a tree', () => {
+  it('a tall pencil-thin peak (a lattice mast filed as vegetation) is never read as a tree, strict or not', () => {
+    const g = { x0: 0, z0: 0, res: 1, w: 40, h: 40 };
+    const box = { x0: 0, z0: 0, x1: 40, z1: 40 };
+    const H = new Float32Array(g.w * g.h);
+    for (let j = 0; j < g.h; j++) for (let i = 0; i < g.w; i++) {
+      const x = i + 0.5, z = j + 0.5;
+      if (Math.abs(x - 20.5) < 1.1 && Math.abs(z - 20.5) < 1.1) H[j * g.w + i] = 52 - 3 * Math.hypot(x - 20.5, z - 20.5);
+    }
+    const none = new Uint8Array(g.w * g.h);
+    expect(detectTrees(g, H, none, box, false).length).toBe(0);
+    expect(detectTrees(g, H, none, box, true).length).toBe(0);
   });
 });

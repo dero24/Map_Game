@@ -24,7 +24,7 @@ import { RS, type CellReq, type CellRes } from './lidarCell';
 type LatLon = { lat: number; lon: number };
 // Cache key version: bump when measure/raster/detection logic changes; the index snapshot
 // date is part of the key too, so a regenerated index re-checks cells it once found uncovered.
-const VER = `lidar|v7|${(INDEX as unknown as { made?: string }).made ?? ''}|`;
+const VER = `lidar|v8|${(INDEX as unknown as { made?: string }).made ?? ''}|`;
 
 let on = false;
 let origin: LatLon | null = null;

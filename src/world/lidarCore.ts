@@ -411,6 +411,11 @@ export function detectTrees(g: { x0: number; z0: number; res: number; w: number;
       rs += d - 0.5;
     }
     const r = Math.max(1, (rs / DIRS.length) * g.res);
+    // a mast, a light tower, a crane: tall and pencil-thin — surveys file some of them under high
+    // vegetation, and one read as a tree put a 50 m crown in the sky over the town (Robby, Sep 28).
+    // No tree stands that tall on a crown that narrow (a crown's radius is at least ~8% of its
+    // height, a cypress's too), and none reaches 80 m.
+    if ((top > 14 && r < 0.07 * top) || top > 80) continue;
     if (strict) {
       if (r < 1.4 && top > 5) continue; // a pole or a wire span, not a crown
       // a plateau at the top (flat roof, deck, tank) — foliage never sits level to 25 cm

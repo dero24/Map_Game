@@ -754,18 +754,20 @@
       "area": "sim",
       "title": "Traffic that flows: junction control from the tags, junction clusters as one, no car spawned in view",
       "user_visible_behavior": "On Queen Anne the side streets' corners are uncontrolled or circles (as mapped) and the arterials have priority, so traffic moves: most cars are rolling at any moment, an arterial runs at speed between its signals, and no car appears out of nowhere in front of you.",
-      "status": "in_progress",
+      "status": "passing",
       "verification": [
         "tests/traffic.test.ts: where the map marks its signs an unmarked corner is OPEN (no sign), a minor arm gives way unsigned, no signs mapped at all keeps the rule of the road; an open corner: a lone car rolls through (> 3 m/s), two at once take turns (the one on the right first) and never touch; nothing pops into view (130 → 0 on a test grid)",
-        "Live, Queen Anne (16 real cells), __CARPROBE__ with the clock ticking: 150 s 0 overlaps, 63% stopped, 2.0 m/s, longest 56 s; 300 s 2 junction pairs, 66%, 61 s (tools/grade-audit.js: setEnv({ clock }) every step)"
+        "Live, Queen Anne (16 real cells), __CARPROBE__ with the clock ticking: 150 s 0 overlaps, 63% stopped, 2.0 m/s, longest 56 s; 300 s 2 junction pairs, 66%, 61 s (tools/grade-audit.js: setEnv({ clock }) every step)",
+        "Round 9 must-fix 3, live on Queen Anne (12 real cells, __CARPROBE__ 150 s, clock ticking): 14:00 — 40 cars, 8% stopped, 6.9 m/s, longest 37 s, 0 overlaps; 17:30 — 44 cars, 5%, 7.1 m/s, 29 s, 0 (bar ≤ 25%; was 63%, 2.0 m/s). tests/traffic.test.ts: a red-light queue of 8 discharges at 0.61 cars/s (bar 0.4); an arterial > 4× a side street's cars per km; busy grids at 1.6× demand, 0 walkers hit, 0 fused. Bench (scratch/flow.mts, 9×9 Seattle-like grid): rush 62–66% → 27–33% stopped, 0 overlaps in 40+ runs"
       ],
       "evidence": [
         "src/sim/traffic.ts (CTL.OPEN, marked)",
         "src/sim/lifeSim.ts (firstCome, junction clusters jroot, inView)",
         "src/sim/protocol.ts H.PLAYER_YAW",
-        "src/sim/life.ts / ambient.worker.ts (the walker's facing)"
+        "src/sim/life.ts / ambient.worker.ts (the walker's facing)",
+        "src/sim/lifeSim.ts (CARS_PER_KM demand + routing, turnAt curves, crosses/takeBox/hasBox shared box, boxAhead path check, firstCome standstill + head-on left turns, nextV, inRoad/xnow walkers, holdWhy)"
       ],
-      "notes": "Measured live on Queen Anne's 16 real cells with the probe fixed (it had handed the sim its clock once: the lights never changed and no claim aged — its 55–65% stopped was mostly that): 150 s — 0 overlaps, 63% stopped, 2.0 m/s mean, longest wait 56 s; 300 s — 2 junction pairs, 66%, 61 s. No knots; 75% of stopped cars are queued behind others (heads: red 6%, priority arms 8%, stop 4%, all-way 3%, open 1%). Next: queue discharge at green and the demand model (R.26). Tried and backed out: turn pockets, main-road streams ignoring each other's claims, class-thinned density (see LOG (v))."
+      "notes": "Done for round 9. Open: turn pockets on wide arterials (a left-turner still holds the lane behind it); the bench's all-way-stop grids sit at ~30% stopped at rush (realistic)."
     },
     {
       "id": "block-paving",

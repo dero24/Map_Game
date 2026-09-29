@@ -2,6 +2,64 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-28 (y) — Traffic that flows (reviewer round 9, must-fix 3): every street carries its class's traffic, turns ride a curve through the box, cars that don't cross share it
+
+Round 8b measured Queen Anne at 63% of cars stopped (bar: 25%), 2.0 m/s. Most of them were queued
+behind others. A bench in the container reproduced it: a Seattle-like 9×9 grid, 100 m blocks, an
+arterial every third street, the probe's metrics (`scratch/flow.mts`). It found four causes.
+
+- **One density for every street.** One car per 25 m on every street put an arterial's traffic on
+  every side street, and the side streets' stop signs queued it back onto the arterials.
+  - Streets now carry cars by class (`CARS_PER_KM`: residential 5 per km, tertiary 18, secondary
+    34, primary 50, at the day's peak).
+  - Cars spawn by that density. At junctions they mostly keep straight on (4×) and otherwise turn
+    by the traffic each road carries: off an arterial now and then, onto one mostly.
+- **Every way through a junction crossed its middle.** Cars followed the two edges into the node,
+  and a turn jumped lanes there.
+  - A car now rides a curve through the box, from its lane at the box edge to its lane beyond
+    (`turnAt`). Visibly better, and it makes the next fix possible.
+- **One car in the box at a time.** The box holds up to three cars when their curves stay a car's
+  width apart and they leave by different lanes. Opposite approaches go together, and a right
+  turn goes beside a through car (`crosses`, `takeBox`).
+  - Safety, each found by the bench's overlap count and traced tick by tick:
+    - a car claims the box from its point of no return;
+    - a committed car doesn't have second thoughts at its line;
+    - a claim holds while the car is still in the box;
+    - "what's in the box across my way" follows its actual path (`boxAhead`);
+    - at a standstill on every arm, whoever waited longest goes (it had been a four-way lock);
+    - two head-on left turns take turns.
+- **Waiting for the car ahead to be well clear of the box.** That let one car in four seconds
+  through a green. A car moving off beyond is now followed, not waited for: discharge went from
+  one car per 4 s to one per 1.45 s.
+- **Walkers:**
+  - one put down past its corner planned its crossing from the middle of the junction, out in the
+    road;
+  - anyone standing in a carriageway now counts as crossing for the cars (`inRoad`, `xnow`);
+  - cars in the box stop for a walker on their way.
+- Holds are counted by cause for the probes (`LifeSim.holdWhy`).
+
+**Measured.** The bench, rush hour, 0 overlaps in 40+ runs across seeds and rules: 62–66% → 27–33%
+stopped, 1.8 → 5.0 m/s. **Live on Queen Anne (12 real cells, `__CARPROBE__`, clock ticking):**
+
+| | Before | 14:00 | 17:30 |
+|---|---|---|---|
+| Cars stopped | 63% | 8% | 5% |
+| Mean speed | 2.0 m/s | 6.9 m/s | 7.1 m/s |
+| Longest stop | 56 s | 37 s | 29 s |
+| Overlapping pairs | — | 0 | 0 |
+| Cars on the road | — | 40 | 44 |
+
+Tests (`traffic.test.ts`):
+- a queue of eight at a red goes over the line at 0.61 cars/s once it turns green (bar 0.4);
+- an arterial through a grid carries more than 4× a side street's cars per km;
+- the busy grids run at 1.6× their streets' noon traffic, with 0 walkers hit and 0 fused cars.
+
+Also: **"trees" that were masts.** LiDAR surveys file some lattice masts under high vegetation, so a
+50 m "tree" hung over town (Robby's report). A peak whose crown is under 7% of its height, or anything
+over 80 m, is no longer a tree (`detectTrees`; test in `measure.test.ts`; LiDAR cache `v8`).
+
+Tests: 305 pass.
+
 ## 2026-09-28 (x) — Reviewer round 9 on the boat minute: a sketch that reads as a sketch, a wash that goes wet and dries, one card at a time, a boat you walk aboard
 
 Round 9 (`REVIEWER.md`) scored Seattle 7/10 and the boat minute 6/10 as a slice, **not passed**:

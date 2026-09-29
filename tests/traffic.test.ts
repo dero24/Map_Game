@@ -270,7 +270,7 @@ describe('junction control: the traffic obeys it', () => {
       if (aOut < 0 && sim.edge[A] !== north) aOut = t;
       if (bIn < 0 && sim.edge[B] === east && sim.s[B] < 11 / 2 - 0.5) bIn = t; // (into the box)
       if (bIn < 0 && sim.edge[B] !== east) bIn = t;
-      closest = Math.min(closest, Math.hypot(sim.x[A] - sim.x[B], sim.z[A] - sim.z[B]));
+      if (sim.active[A] && sim.active[B]) closest = Math.min(closest, Math.hypot(sim.x[A] - sim.x[B], sim.z[A] - sim.z[B])); // (both still on the road: far off, a car is recycled where it stands)
     });
     expect(aOut).toBeGreaterThan(0);
     expect(bIn).toBeGreaterThan(aOut);
@@ -313,7 +313,8 @@ describe('a busy grid of streets, three minutes of it', () => {
     const X = sim as unknown as { state: Uint8Array };
     const [c0, c1] = RANGES.cars, [p0, p1] = RANGES.peds;
     for (let t = 0; t < 180; t += 0.05) {
-      sim.setEnv({ playerX: 10, playerZ: 10, hour: 12, night: 0, density: 1, wind: 0, clock: t });
+      // (a crowd over what these streets carry at noon — sim.desired, by the class of each street)
+      sim.setEnv({ playerX: 10, playerZ: 10, hour: 12, night: 0, density: 1.6, wind: 0, clock: t });
       sim.step(0.05);
       if (t < 10) continue;
       for (let c = c0; c < c1; c++) {
@@ -331,7 +332,7 @@ describe('a busy grid of streets, three minutes of it', () => {
       }
       for (let p = p0; p < p1; p++) if (sim.active[p]) { peds++; if (X.state[p] === 11) crossings++; }
     }
-    expect(cars / 3400).toBeGreaterThan(30); // (cars on the road, per tick)
+    expect(cars / 3400).toBeGreaterThan(24); // (cars on the road, per tick)
     expect(crossings).toBeGreaterThan(200); // people do cross
     expect(pedHits).toBe(0);
     expect(fused).toBe(0);
@@ -425,7 +426,8 @@ describe('mapped crosswalks (Seattle maps one on every arm of every junction)', 
     const [c0, c1] = RANGES.cars;
     let overlaps = 0, cars = 0;
     for (let t = 0; t < 180; t += 0.05) {
-      sim.setEnv({ playerX: 10, playerZ: 10, hour: 12, night: 0, density: 1, wind: 0, clock: t });
+      // (a crowd over what these streets carry at noon — sim.desired, by the class of each street)
+      sim.setEnv({ playerX: 10, playerZ: 10, hour: 12, night: 0, density: 1.6, wind: 0, clock: t });
       sim.step(0.05);
       if (t < 10) continue;
       for (let c = c0; c < c1; c++) {
@@ -434,7 +436,7 @@ describe('mapped crosswalks (Seattle maps one on every arm of every junction)', 
         for (let d = c + 1; d < c1; d++) if (sim.active[d] && Math.abs(sim.x[d] - sim.x[c]) < 5 && Math.abs(sim.z[d] - sim.z[c]) < 5 && obb(sim, c, d)) overlaps++;
       }
     }
-    expect(cars / 3400).toBeGreaterThan(30);
+    expect(cars / 3400).toBeGreaterThan(24);
     expect(overlaps).toBe(0); // (8,000 overlapping pair-ticks before: nobody stopped at a junction)
   });
 });
@@ -522,4 +524,70 @@ describe('lanes between the parked cars', () => {
       expect(hits).toBe(0);
     });
   }
+});
+
+describe('traffic that flows (reviewer round 9: discharge at green, volume by class)', () => {
+  const base: LifeBase = { seed: 5, bounds: [-500, -500, 500, 500], beachPts: new Float32Array(0), waterGrid: new Uint8Array(1), waterG: [0, 0, 8, 1, 1], downtown: [-100, -100, 100, 100], seaward: [1, 0] };
+  const walk = { outdoorSurfaceAt: () => 0 } as unknown as Parameters<typeof buildLifeInit>[2];
+
+  it('a queue at a red light goes over the line at ≥ 0.4 cars a second once it turns green', () => {
+    const roads = cross('primary', 11, 'secondary', 9, 200);
+    const Js = analyzeJunctions(roads, [], true);
+    expect(Js[0].signal).toBe(true);
+    const init = buildLifeInit(base, roads, walk, [], [packJunctions(Js)]);
+    // the arm from the west (the primary, phase A): the edge ending at the junction
+    let e = -1;
+    for (let k = 0; k < init.edgeLen.length; k++) {
+      const a = init.edgeStart[k] * 3, b = (init.edgeStart[k] + init.edgeCount[k] - 1) * 3, P = init.edgePts;
+      if (Math.abs(P[a] + 200) < 0.1 && Math.abs(P[b]) < 0.1 && Math.abs(P[b + 2]) < 0.1) e = k;
+    }
+    expect(e).toBeGreaterThanOrEqual(0);
+    const L = init.edgeLen[e], sb = init.nodeSet![init.edgeNodes[e * 2 + 1]], line = L - sb - STOP_BACK;
+    const key = init.nodeKey![init.edgeNodes[e * 2 + 1]];
+    // a clock 2 s before phase A turns green
+    let t0 = 0;
+    for (let t = 0; t < SIG_CYCLE; t += 0.05) if (signalState(0, t, key) === 2 && signalState(0, t + 2, key) === 0) { t0 = t; break; }
+    const sim = new LifeSim(init);
+    for (const [a, b] of [RANGES.cars, RANGES.peds]) for (let i = a; i < b; i++) { sim.active[i] = 0; sim.y[i] = -1000; }
+    const N = 8, c0 = RANGES.cars[0];
+    for (let k = 0; k < N; k++) { const i = c0 + k; sim.active[i] = 1; sim.edge[i] = e; sim.dir[i] = 1; sim.s[i] = line - 0.5 - k * 7.6; sim.speed[i] = 0; }
+    const over: number[] = [];
+    let greenAt = -1;
+    for (let t = 0; t < 25; t += 0.05) {
+      sim.setEnv({ playerX: -20, playerZ: 25, hour: 12, night: 0, density: 0, wind: 0, clock: t0 + t }); // (by the queue: far off, a car is recycled)
+      sim.step(0.05);
+      if (greenAt < 0 && signalState(0, t0 + t, key) === 0) greenAt = t;
+      for (let k = 0; k < N; k++) { const i = c0 + k; if (over[k] === undefined && (sim.edge[i] !== e || sim.s[i] > line)) over[k] = t; }
+    }
+    expect(greenAt).toBeGreaterThan(1);
+    expect(over.filter((x) => x !== undefined).length).toBe(N);
+    expect(Math.min(...over)).toBeGreaterThanOrEqual(greenAt - 0.05); // (nobody went on the red)
+    const rate = (N - 1) / (Math.max(...over) - Math.min(...over));
+    expect(rate).toBeGreaterThanOrEqual(0.4);
+  });
+
+  it("an arterial carries many times a side street's traffic", () => {
+    // a main road through a grid of side streets (100 m blocks)
+    const xs = [-400, -300, -200, -100, 0, 100, 200, 300, 400], zs = [-300, -200, -100, 0, 100, 200, 300];
+    const roads = [road('primary', 12, xs.map((x) => [x, 0] as [number, number]))];
+    for (const z of zs) if (z) roads.push(road('residential', 7, xs.map((x) => [x, z] as [number, number])));
+    for (const x of xs) roads.push(road('residential', 7, zs.map((z) => [x, z] as [number, number])));
+    const init = buildLifeInit(base, roads, walk, [], [packJunctions(analyzeJunctions(roads, [], true))]);
+    const sim = new LifeSim(init);
+    let onMain = 0, onSide = 0;
+    const mainLen = 800, sideLen = 6 * 800 + 9 * 600;
+    for (let t = 0; t < 120; t += 0.05) {
+      sim.setEnv({ playerX: 0, playerZ: 20, hour: 17.3, night: 0, density: 1, wind: 0, clock: t });
+      sim.step(0.05);
+      if (t < 20) continue;
+      for (let i = RANGES.cars[0]; i < RANGES.cars[1]; i++) {
+        if (!sim.active[i]) continue;
+        const r = init.edgeInfo[sim.edge[i] * 4];
+        if (r >= 5) onMain++; else onSide++;
+      }
+    }
+    const perKmMain = onMain / mainLen, perKmSide = onSide / sideLen;
+    expect(onMain + onSide).toBeGreaterThan(0);
+    expect(perKmMain / Math.max(1e-9, perKmSide)).toBeGreaterThan(4);
+  });
 });
