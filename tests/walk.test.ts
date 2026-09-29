@@ -168,3 +168,25 @@ describe('big floorplates', () => {
     expect(planInterior('t:0', fp, door, 1234).parts.length).toBeLessThanOrEqual(2);
   });
 });
+
+describe('never through a wall, never shut in', () => {
+  // a solid block with its south face on z = 0 (no door): you stand on the street side, z < 0
+  const block: [number, number][] = [[-10, 0], [10, 0], [10, 8], [-10, 8]];
+  const w = new WalkWorld(terrain, bounds);
+  w.addPolygon(block);
+  it('a long step (a slow frame at a run, a fast car) stops at the wall instead of passing it', () => {
+    // 0.33 m out, then a 0.6 m step: in one piece it landed 0.27 m past the wall's line and was
+    // pushed out on the inside
+    expect(w.move(0, -0.33, 0, 0.6, 0.32)[1]).toBeLessThan(-0.3);
+    // a car (1.05 m) at 38 m/s over a 0.05 s frame
+    expect(w.move(0, -1.1, 0, 1.9, 1.05)[1]).toBeLessThan(-1);
+    expect(w.buildingAt(...w.move(0, -0.33, 0, 0.6, 0.32))).toBe(-1);
+  });
+  it('someone in a building\'s rooms is not "in a wall"; someone in a wall is', () => {
+    const w2 = new WalkWorld(terrain, bounds);
+    registerPlan(w2, fp, planInterior('t:0', fp, door, 1234));
+    expect(w2.blocked(0, 0, 0.28)).toBe(true); // (inside a footprint: `blocked` says so)
+    expect(w2.touching(0, 0, 0.28, 0.5)).toBe(false); // but no wall runs through you
+    expect(w2.touching(3, -3.9, 0.28, 0.5)).toBe(true); // standing in the front wall
+  });
+});

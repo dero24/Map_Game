@@ -325,6 +325,20 @@ describe('osmToTile — towers and building parts', () => {
     expect(outline.h).toBe(15); // four storeys, not a 150 m block
     expect(outline.r[0]).toBeGreaterThan(5000); // pulled inside the shared walls (0.1 m units)
   });
+
+  it('an outline a lifted part overhangs is drawn by its parts (the Space Needle: a saucer over its legs)', () => {
+    // the outline is the saucer's shadow; a slim core stands on the ground, the saucer 140–158 m up
+    const t = osmToTile(osm(
+      way(711, { building: 'yes', man_made: 'tower', 'tower:type': 'observation', height: '184', name: 'Space Needle' }, sq(600, 600, 40), true),
+      way(712, { 'building:part': 'yes', height: '184' }, sq(615, 615, 10), true), // core and spire
+      way(713, { 'building:part': 'yes', height: '158', min_height: '140' }, sq(600, 600, 40), true), // the top house
+    ), OPTS);
+    const outline = t.buildings.find((b) => !b.pt)!;
+    expect(outline.hp).toBe(1); // not a 40 m-wide column up to the saucer
+    const parts = t.buildings.filter((b) => b.pt);
+    expect(parts.length).toBe(2);
+    expect(parts.find((b) => b.lf)!.lf).toBe(140);
+  });
 });
 
 describe('osmToTile — water', () => {

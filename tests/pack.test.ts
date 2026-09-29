@@ -208,6 +208,23 @@ describe('buildTile', () => {
     expect(names).toContain('play:swing');
   });
 
+  it('a door never opens onto another building (a house behind another: its street side is the party wall)', async () => {
+    const tj = JSON.parse(JSON.stringify(tileJson));
+    // touches house 1 along z = 100; Test St runs along z = 130, on house 1's far side
+    tj.buildings.push({ r: [m(100), m(80), m(120), m(80), m(120), m(100), m(100), m(100)], h: 6, k: 'house', roof: 'flat', s: 9 });
+    const t = await buildTile(tj, terrain, spec, 0);
+    const inRing = (x: number, z: number, r: [number, number][]) => {
+      let c = false;
+      for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (r[i][1] > z !== r[j][1] > z && x < ((r[j][0] - r[i][0]) * (z - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) c = !c;
+      return c;
+    };
+    expect(t.doors.length).toBeGreaterThanOrEqual(3); // every house still has a door…
+    for (const d of t.doors) for (const f of t.fps) expect(inRing(d.wx + d.nx * 0.6, d.wz + d.nz * 0.6, f.ring as [number, number][])).toBe(false); // …onto open ground
+    const rear = t.fps.find((f) => f.ring.every(([, z]) => z <= 100.01))!;
+    expect(rear.door !== undefined).toBe(true);
+    expect(t.doors[rear.door!].wz).toBeLessThan(99.5); // not in the shared wall
+  });
+
   it('mounts collision the same way the stream does', () => {
     const w = new WalkWorld(terrain, { x0: -50, z0: -50, x1: 300, z1: 300 });
     replayOps(w, a.ops);

@@ -1052,16 +1052,19 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
   // ---- building parts (Simple 3D Buildings) ----
   // Each part joins the smallest outline holding its centre: it takes that building's seed (one
   // look for the whole tower), kind and colours unless it maps its own. An outline whose parts
-  // cover its ground is drawn by them (hp: footprint, door and name only); one they only partly
-  // cover (a tower part on an unmapped podium) stays as the podium, capped under the lifted
-  // parts and pulled a hand's width inside the walls it shares with them.
+  // cover its ground is drawn by them (hp: footprint, door and name only) — and so is one a
+  // lifted part overhangs (the outline is that part's shadow: the Space Needle's saucer over its
+  // legs, a block on pilotis), as long as something stands on the ground under it. One its parts
+  // only partly cover (a tower part on an unmapped podium) stays as the podium, capped under the
+  // lifted parts and pulled a hand's width inside the walls it shares with them. (The Needle's
+  // saucer-wide outline was kept as a "podium" 140 m tall: the plain cylinder Robby saw.)
   if (parts.length) {
     const unflat = (f: number[]): P2[] => { const o: P2[] = []; for (let i = 0; i + 1 < f.length; i += 2) o.push([f[i] / 10, f[i + 1] / 10]); return o; };
     const hosts = buildings.map((b) => {
       const r = unflat(b.r);
       let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
       for (const [x, z] of r) (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z));
-      return { r, x0, z0, x1, z1, a: Math.abs(ringArea(r)), ground: 0, top: 0, lift: Infinity };
+      return { r, x0, z0, x1, z1, a: Math.abs(ringArea(r)), ground: 0, big: 0, top: 0, lift: Infinity };
     });
     for (const P of parts) {
       let cx = 0, cz = 0;
@@ -1091,6 +1094,7 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         if (host.at) b.at = 1;
         if (host.gf && !b.lf) b.gf = 1;
         const lift = b.lf ?? 0;
+        H.big = Math.max(H.big, P.area);
         if (lift <= 1.5) H.ground += P.area;
         else H.lift = Math.min(H.lift, lift);
         H.top = Math.max(H.top, lift + b.h);
@@ -1100,7 +1104,7 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
     hosts.forEach((H, i) => {
       if (!H.top) return;
       const host = buildings[i];
-      if (H.ground >= H.a * 0.6) host.hp = 1;
+      if (H.ground >= H.a * 0.6 || (H.ground > 0 && H.big >= H.a * 0.6)) host.hp = 1;
       else {
         // the outline usually carries the whole tower's height: as a podium it stops under the
         // lifted parts (or at four storeys when every part stands on the ground)

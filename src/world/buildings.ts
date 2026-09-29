@@ -337,9 +337,41 @@ function stairFlight(C: Ctx, x0: number, z0: number, dx: number, dz: number, sw:
   return { fx: foot.x, fz: foot.z, total };
 }
 
-// Pick the wall that faces the street (or a mapped OSM entrance) for the front door.
-function pickDoorWall(ring: P2[], seed: number, kind: string, streets: StreetIndex, entrances: P2[]) {
-  let best: { i: number; score: number } | null = null;
+/** How wide a building's front door is (buildEntrance). */
+const doorWide = (kind: string) => (kind === 'commercial' ? 1.8 : kind === 'church' ? 2.2 : 1.0);
+
+// The ground outside a door must be open — not another building. A door on a party wall, on the
+// back of the building in front, or on an outline overlapping a neighbour's opens onto that
+// neighbour's wall: nobody can walk in, and whoever lands inside (a teleport to its door, a slow
+// frame through a wall) can't get out (Robby, downtown Seattle). Probed across the opening, from
+// just outside the wall to a stride out.
+function doorOpen(ring: P2[], i: number, u: number, w: number, solid: RingGrid) {
+  const p = ring[i], q = ring[(i + 1) % ring.length], L = Math.hypot(q[0] - p[0], q[1] - p[1]);
+  const tx = (q[0] - p[0]) / L, tz = (q[1] - p[1]) / L, nx = tz, nz = -tx, hw = w / 2 + 0.15;
+  for (const out of [0.45, 1.3, 2.2])
+    for (const du of [-hw, 0, hw]) if (solid.hit(p[0] + tx * (u + du) + nx * out, p[1] + tz * (u + du) + nz * out, ring)) return false;
+  return true;
+}
+
+// Pick the wall that faces the street (or a mapped OSM entrance) for the front door — among the
+// walls whose outside is open (`solid`: the walkable buildings round it). None open: no door (the
+// building stays solid, never a place to be shut in).
+function pickDoorWall(ring: P2[], seed: number, kind: string, streets: StreetIndex, entrances: P2[], solid: RingGrid | null = null) {
+  const w = doorWide(kind);
+  // where along a wall the door goes: the middle for a shop or a church, a seeded spot for the
+  // rest — or, where that spot opens onto a neighbour, the first place along it that doesn't
+  const spot = (i: number, len: number) => {
+    const u0 = kind === 'commercial' || kind === 'church' ? len / 2 : Math.max(1.1, Math.min(len - 1.1, len * (0.28 + 0.44 * hash01(seed ^ 0x9e37))));
+    if (!solid) return u0;
+    const alt = [u0, len / 2, 1.2 + w / 2, len - 1.2 - w / 2];
+    for (let k = 0; k < alt.length; k++) {
+      const u = alt[k];
+      if (k > 0 && (u - w / 2 < 0.3 || u + w / 2 > len - 0.3)) continue; // (a fallback spot must fit the door)
+      if (doorOpen(ring, i, u, w, solid)) return u;
+    }
+    return -1;
+  };
+  let best: { i: number; score: number; u: number } | null = null;
   for (let i = 0; i < ring.length; i++) {
     const p = ring[i], q = ring[(i + 1) % ring.length];
     const dx = q[0] - p[0], dz = q[1] - p[1], len = Math.hypot(dx, dz);
@@ -348,7 +380,7 @@ function pickDoorWall(ring: P2[], seed: number, kind: string, streets: StreetInd
     for (const [ex, ez] of entrances) {
       const t = ((ex - p[0]) * dx + (ez - p[1]) * dz) / (len * len);
       const px = p[0] + dx * t, pz = p[1] + dz * t;
-      if (t > 0.1 && t < 0.9 && Math.hypot(px - ex, pz - ez) < 2.5) return { i, u: t * len, len };
+      if (t > 0.1 && t < 0.9 && Math.hypot(px - ex, pz - ez) < 2.5 && (!solid || doorOpen(ring, i, t * len, w, solid))) return { i, u: t * len, len };
     }
     const mx = (p[0] + q[0]) / 2, mz = (p[1] + q[1]) / 2;
     const r = streets.nearest(mx + nx * 2, mz + nz * 2);
@@ -357,13 +389,13 @@ function pickDoorWall(ring: P2[], seed: number, kind: string, streets: StreetInd
       const ddx = r[0] - mx, ddz = r[1] - mz, dl = Math.hypot(ddx, ddz) || 1;
       score += r[2] - 14 * ((ddx * nx + ddz * nz) / dl);
     } else score += 60;
-    if (!best || score < best.score) best = { i, score };
+    if (best && score >= best.score) continue;
+    const u = spot(i, len);
+    if (u >= 0) best = { i, score, u };
   }
   if (!best) return null;
   const p = ring[best.i], q = ring[(best.i + 1) % ring.length];
-  const len = Math.hypot(q[0] - p[0], q[1] - p[1]);
-  const u = kind === 'commercial' || kind === 'church' ? len / 2 : Math.max(1.1, Math.min(len - 1.1, len * (0.28 + 0.44 * hash01(seed ^ 0x9e37))));
-  return { i: best.i, u, len };
+  return { i: best.i, u: best.u, len: Math.hypot(q[0] - p[0], q[1] - p[1]) };
 }
 
 function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: number }, porch: boolean): Door {
@@ -378,7 +410,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
   const kindI = KIND[B.kind as keyof typeof KIND] ?? 0;
   const floorY = B.floor0;
   const cx = p[0] + tx * u, cz = p[1] + tz * u;
-  const wide = B.kind === 'commercial' ? 1.8 : B.kind === 'church' ? 2.2 : 1.0;
+  const wide = doorWide(B.kind);
   const tall = B.kind === 'church' ? 2.8 : 2.15;
   const trim = lin(TRIM);
   const r = (k: number) => hash01(B.seed ^ k);
@@ -1135,6 +1167,10 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     return t.length >= 3 && ringArea(t) > 4 ? t : null;
   });
   tidy.forEach((r) => { if (r && near(r[0][0], r[0][1], 80)) rings.add(r); });
+  // the walkable buildings — what the walk world gets as solid footprints (not the lifted pieces:
+  // canopies, skybridges; nor the parts an outline is drawn by) — for the doors' open-ground test
+  const solid = new RingGrid();
+  json.buildings.forEach((bd, bi) => { const r = tidy[bi]; if (r && near(r[0][0], r[0][1], 80) && (bd.lf ?? 0) <= 1.5 && !(bd.pt && bd.po != null)) solid.add(r); });
   // Margin-context buildings (own:0): neighbours' shapes, for scratch-walk seeds in the tile worker.
   const ctxRings: P2[][] = json.buildings.map((bd, bi) => (bd.own === 0 ? tidy[bi] : null)).filter((r): r is P2[] => !!r);
 
@@ -1414,7 +1450,7 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     if (!owns) return; // parts belong to their outline's footprint; floating pieces have none
     if (inZone) footprints.push(fp);
     if (inSlice && !bd.lod && bd.k !== 'shed' && inZone) {
-      const wall = pickDoorWall(ring, seed, bd.k, streets, entrances);
+      const wall = pickDoorWall(ring, seed, bd.k, streets, entrances, solid);
       if (wall) {
         const C: Ctx = { b, col: colliders, streets, rings, world, signs, mail: mailboxes, walks, drives };
         const B: BInfo = { ring, base, floor0, raise, eave: wallTop, kind: bd.k, seed, id, fo, roofCol, roofMat: rc.roofMat === ROOFMAT.tile ? ROOFMAT.metal : rc.roofMat, addr: bd.ad, name: bd.n, use: bd.u, bi: footprints.length - 1 };

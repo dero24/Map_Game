@@ -11,6 +11,17 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 - Raised houses (pilings), porches, stoops, railed stairs are in `buildings.ts`; their
   collision goes out as `colliders` (walls with a feet-height band + ramp decks) and is
   registered in `main.ts`.
+- Front doors (`pickDoorWall`) go only on a wall whose outside is open ground. It's probed
+  across the opening from 0.45 to 2.2 m out, against the walkable buildings round it, the tile's
+  margin neighbours included (`doorOpen`, `solid`).
+  - It tries the seeded spot along the wall, then its middle, then near each end.
+  - No wall open: no door and no interior. The building stays solid rather than a room you
+    can't leave (Robby, downtown Seattle: doors on party walls and on the back of the building in
+    front).
+- Building parts (realTile's part join): an outline drawn by its parts (`hp`) when they cover its
+  ground, or when a lifted part overhangs it and something stands under it (the Space Needle's
+  saucer). Otherwise it's a podium, capped under the lifted parts. LiDAR never measures an outline
+  that parts stand on.
 
 ## Interiors
 
@@ -30,7 +41,13 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 
 - `WalkWorld.move(x,z,dx,dz,r,feetY)` — walls may carry a y-band; floors may have holes;
   `ground: true` floors (raised houses) keep the terrain walkable underneath.
-- `interiorAt(x,z,feet)` = the building whose rooms you're in.
+  - A step longer than ¾ of the radius goes in pieces: in one, a slow frame at a run or a fast car
+    landed past a wall's line and was pushed out on the far side, into the building.
+- `interiorAt(x,z,feet)` = the building whose rooms you're in. `touching(x,z,r,feet)` = a wall
+  within r at those feet. That's not `blocked`, which is true anywhere inside a footprint.
+- `settleWalker` (`main.ts`: on every mount, and once a second on foot) steps you clear of a wall
+  through your body or a solid footprint (no rooms, no pilings). An indoor walker stays put.
+  Teleports never pick a door whose outside is a building or a wall.
 
 ## Vehicles
 

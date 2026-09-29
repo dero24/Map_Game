@@ -74,7 +74,12 @@ export class WalkWorld {
   // True if (x,z) is inside a footprint or within r of any wall.
   blocked(x: number, z: number, r: number) {
     if (this.buildingAt(x, z) >= 0) return true;
-    const [nx, nz] = this.move(x, z, 0, 0, r);
+    return this.touching(x, z, r);
+  }
+  /** A wall within r of (x,z) — with feetY, only walls whose height band holds those feet. (Not
+   *  the footprint test: someone standing in a building's rooms isn't "in a wall".) */
+  touching(x: number, z: number, r: number, feetY?: number) {
+    const [nx, nz] = this.move1(x, z, 0, 0, r, feetY);
     return nx !== x || nz !== z;
   }
 
@@ -298,8 +303,17 @@ export class WalkWorld {
   }
 
   // Move a circle from (x,z) by (dx,dz), sliding along walls. With feetY, walls outside their height band
-  // are ignored. Returns the new position.
+  // are ignored. Returns the new position. A step longer than most of the body goes in pieces: in one,
+  // a slow frame (0.1 s at a run is 0.6 m) or a fast car (38 m/s) could land past a wall's line and
+  // be pushed out on its far side — through the wall, into a building with no way out.
   move(x: number, z: number, dx: number, dz: number, r = 0.32, feetY?: number): P2 {
+    const L = Math.hypot(dx, dz), n = L > r * 0.75 ? Math.min(24, Math.ceil(L / (r * 0.75))) : 1;
+    if (n === 1) return this.move1(x, z, dx, dz, r, feetY);
+    let p: P2 = [x, z];
+    for (let k = 0; k < n; k++) p = this.move1(p[0], p[1], dx / n, dz / n, r, feetY);
+    return p;
+  }
+  private move1(x: number, z: number, dx: number, dz: number, r: number, feetY?: number): P2 {
     let nx = x + dx, nz = z + dz;
     if (!isFinite(nx) || !isFinite(nz)) return [x, z];
     if ((dx !== 0 || dz !== 0) && !this.walkable(nx, nz)) {

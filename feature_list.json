@@ -794,6 +794,44 @@
       "notes": "Left: the GPU. The downtown ring draws ~15M triangles in ~1,800 calls a frame. Buildings are 76 bytes a vertex, non-indexed, 1.3M vertices a tile, and rockeries 390k vertices a tile. Next: LOD and lighter vertices, then a phone budget. Collision walls are tombstoned but never compacted over a long drive."
     },
     {
+      "id": "never-shut-in",
+      "priority": 1,
+      "area": "gameplay",
+      "title": "Never shut in a building: doors only onto open ground, no walking through walls",
+      "user_visible_behavior": "Every front door opens onto open ground: never onto a neighbouring building's wall, so a building you go into is always one you can walk out of. A slow frame or a fast car no longer carries you through a wall. If you ever end up inside a solid building, the game steps you out within a second, and it never yanks you out of a room you walked into.",
+      "status": "passing",
+      "verification": [
+        "tests/pack.test.ts: a house built against the back of another: every door's outside lies in no footprint, and the rear house's door isn't in the shared wall (it was: fails without the fix)",
+        "tests/walk.test.ts: a 0.6 m step from 0.33 m and a car's 1.9 m step stop at the wall (in one piece they ended inside); touching vs blocked inside rooms",
+        "Live, 17 cells round Seattle Center: 3 of 9,834 doors open into a building, all synth stand-ins at a real cell's edge"
+      ],
+      "evidence": [
+        "src/world/buildings.ts (doorOpen, pickDoorWall with the solid ring grid, doorWide)",
+        "src/player/collision.ts (move in pieces, touching)",
+        "src/main.ts (teleportLocal skips blocked doors; settleWalker on touching / solid footprint, once a second on foot)"
+      ],
+      "notes": "Synth stand-ins can still put a door onto a real neighbour's building across a cell edge until the real cell lands (they can't know it)."
+    },
+    {
+      "id": "landmark-parts",
+      "priority": 2,
+      "area": "world",
+      "title": "Landmarks drawn by their parts: the Space Needle's saucer on its legs, up close and on the skyline",
+      "user_visible_behavior": "The Space Needle is a slim core with its saucer and halo at the top, not a 40 m-wide column. From across town the skyline ring shows the same shape.",
+      "status": "passing",
+      "verification": [
+        "tests/realTile.test.ts: an outline a lifted part overhangs (the Needle: a saucer over a slim core) is drawn by its parts (hp); the unmapped-podium case is unchanged",
+        "Live, ?tiles=direct at Seattle Center: shots/needle-fix.jpg (140 m, 260 m, 420 m)"
+      ],
+      "evidence": [
+        "src/world/realTile.ts (part join: overhang rule)",
+        "src/world/lidar.ts (no measuring an outline its parts stand on)",
+        "src/world/skyline.ts (tall parts read and kept with their outlines, SKY_V 2)",
+        "DIRECT_V 22, worker t/v22, stream &v=22"
+      ],
+      "notes": "Needs the tile worker redeployed (npx wrangler deploy in worker/). The vector stand-in may still show an outline prism for a moment where OpenMapTiles leaves its hide_3d unset. Colours come from the host's recipe; the landmarks pass should give the Needle its white steel."
+    },
+    {
       "id": "block-paving",
       "priority": 2,
       "area": "render",

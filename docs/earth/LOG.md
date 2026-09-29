@@ -2,6 +2,51 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-28 (aa) — Never shut in a building; the Space Needle stands on its legs again
+
+Two of Robby's reports. Two helper agents read the code while (z) was being finished and found the
+causes. Each fix below was checked against a test that fails without it.
+
+- **"Buildings spawn doorways where other buildings are and I can't get out."**
+  - **Doors onto a neighbour.** `pickDoorWall` scored walls by the street they face and never asked
+    whether the ground outside was open. A building behind another (its street side is the front
+    one's back wall), a party wall, or overlapping outlines got a door onto a neighbour's unbroken
+    wall.
+    - A door now goes only on a wall whose outside is open ground. It's probed across the opening
+      from 0.45 to 2.2 m out, against the walkable buildings round it, margin neighbours included.
+    - It tries the seeded spot, then the middle, then near each end. No open wall: no door, no
+      interior, a solid building.
+    - Test: `pack.test.ts`, a house built against the back of another. Its door had been in the
+      shared wall; now it opens onto open ground.
+  - **Through the wall.** `WalkWorld.move` took each frame's step in one piece. A slow frame at a run
+    (0.6 m) or a boosted car (1.9 m) landed past a wall's line and was pushed out on the inside.
+    Long steps now go in pieces. This was also a car driving through walls.
+  - **Teleports put you 2.2 m inside the nearest door.** They now skip a door whose outside is a
+    building or a wall.
+  - **The rescue.** `settleWalker` now runs once a second on foot, not only on a tile mount. It had
+    used `blocked`, which is true anywhere inside a footprint, so every mount stepped an indoor
+    walker out of the house and someone under a beach house out from its pilings. It now reacts to
+    a wall through your body (`touching`, at your feet's height) or a solid footprint.
+  - Live, 17 cells round Seattle Center: 3 of 9,834 doors open into a building, all on synth
+    stand-ins at a real cell's edge (they can't know the real neighbour; they go when it lands).
+- **The Space Needle a plain cylinder.** OSM maps it as an outline the size of the saucer, with
+  parts: the core and legs from the ground, the top house at 140–158 m.
+  - osmToTile's part join hides an outline only when ground-standing parts cover 60% of it. So the
+    Needle's outline stayed as a "podium" capped under its lowest lifted part: a 40 m-wide column
+    140 m up.
+  - An outline a lifted part overhangs, with something standing under it, is now drawn by its parts
+    (`realTile.test.ts`). LiDAR no longer measures outlines that parts stand on (a measured roof
+    would stretch a podium back into one prism).
+  - The skyline ring now reads tall parts too, and keeps them with their outlines (`SKY_V` 2). From
+    afar the Needle was always its 184 m outline.
+  - Cache keys bumped together: `DIRECT_V` 22, tile service `t/v22` and `&v=22`. **Needs
+    `npx wrangler deploy` in `worker/`.**
+  - Seen live (`?tiles=direct`, `shots/needle-fix.jpg`): a saucer and halo on a slim core, the
+    100-ft level below.
+  - Its colours still come from a brick recipe; the landmarks pass will do its white steel.
+
+Tests: 309 pass.
+
 ## 2026-09-28 (z) — Driving through Seattle without the hitch every couple of seconds
 
 Robby's report: teleport to Seattle, drive around, and the game lags every couple of seconds. A frame

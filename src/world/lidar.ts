@@ -205,7 +205,10 @@ const LATE = Symbol('late');
 // only applies what the cache already knows.
 export async function enrichTile(tj: TileJson, box: Box, wait: number | null, fetchOk = true): Promise<Enrich> {
   if (!lidarOn()) return 'none';
-  const todo = tj.buildings.filter(measurable);
+  // (nor an outline its parts stand on — as a podium it's capped under them; measured, the
+  // survey's roof over the parts would stretch it back up into one prism)
+  const hosts = new Set(tj.buildings.flatMap((b) => (b.pt && b.po != null ? [b.po] : [])));
+  const todo = tj.buildings.filter((b, i) => measurable(b) && !hosts.has(i));
   const ck = cellKeyOf(box);
   let rec = recMem.get(ck);
   if (!rec) {

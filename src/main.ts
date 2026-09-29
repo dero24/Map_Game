@@ -339,7 +339,8 @@ async function main() {
     let best: Door | null = null, bd = 40 * 40;
     for (const d of stream.doors) {
       const dd = (d.wx - x) ** 2 + (d.wz - z) ** 2;
-      if (dd < bd) {
+      // (never a door you couldn't step out of: its outside another building or a wall)
+      if (dd < bd && walk.buildingAt(d.wx + d.nx * 0.8, d.wz + d.nz * 0.8) < 0 && !walk.touching(d.wx + d.nx * 0.8, d.wz + d.nz * 0.8, 0.32)) {
         bd = dd;
         best = d;
       }
@@ -407,9 +408,13 @@ async function main() {
   // footprint with no interior. Legit indoor players must not be yanked outside.
   const settleWalker = () => {
     if (walkParams.fly) return; // flying over a roof isn't being swallowed by it
-    // blocked at 0.28 < the walker's 0.35 radius: a wall running *through* their body,
-    // not a wall they're legally pressed against.
-    const swallowed = walk.blocked(walker.x, walker.z, 0.28) || (walk.buildingAt(walker.x, walker.z) >= 0 && !interiors.indoors && walk.interiorAt(walker.x, walker.z, walker.feet) < 0);
+    // a wall at 0.28 < the walker's 0.32 radius: running *through* their body, not one they're
+    // legally pressed against (at their feet's height: a stair rail upstairs doesn't count) — or
+    // standing inside a solid footprint (no rooms, no pilings to walk between). (It was `blocked`,
+    // true anywhere inside a footprint: every mount stepped an indoor walker out of the house, and
+    // someone between a beach house's pilings out from under it.)
+    const inside = walk.buildingAt(walker.x, walker.z);
+    const swallowed = walk.touching(walker.x, walker.z, 0.28, walker.feet) || (inside >= 0 && walk.floorsOf(inside) === null && !interiors.indoors);
     if (!swallowed) return;
     for (const r of [2.5, 4, 6, 9, 14])
       for (const a of [0, 0.8, -0.8, 1.6, -1.6, 2.4, -2.4, Math.PI]) {
@@ -422,6 +427,7 @@ async function main() {
       }
   };
   stream.onMount = () => { if (!vehicles.driving) settleWalker(); };
+  let settleT = 1; // …and once a second on foot: whatever put you there (a slow frame, a bad door), you're never shut in
   // Rideable vehicles (E enter/exit; you paint your own with the brush, ui/brush.ts) — the walker rides along.
   const vehicles = new Vehicles({
     walk, terrain: world.terrain, walker, root: worldRoot, toast,
@@ -1056,6 +1062,7 @@ async function main() {
     focus.set(camera.position.x + fwd.x * 60, walker.y - walkParams.eyeHeight, camera.position.z + fwd.z * 60);
     const ti = performance.now();
     interiors.update(walker.x, walker.z, dt, walker.feet, !vehicles.driving && !walkParams.fly);
+    if ((settleT -= dt) <= 0) { settleT = 1; if (!vehicles.driving) settleWalker(); }
     perf.interior = Math.max(perf.interior, performance.now() - ti);
     life.update(now, walker, { night: U.uNight.value, hour: timeParams.hour, wind: weather.wind, clock: simTime });
     { const ride = vehicles.wake; wakes.update(now / 1000, ride ? [...life.boats, ride] : life.boats); }
