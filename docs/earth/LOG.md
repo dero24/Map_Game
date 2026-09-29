@@ -2,6 +2,71 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-29 (ae) — Playable first: every door opens, no building inside a building, a steadier sky
+
+Robby's glitch list from his city walks: buildings flicker, many doors can't be walked through ("a
+building in a building" downtown), and flying high the ground flashes blue and green. Also asked
+for: a real gameplay test suite. Every fix is in the shared builders, so it holds for every city.
+
+- **Buildings inside buildings (`nest.ts`, new).** OSM draws many towers as a "wedding cake": each
+  tier a `building:part` from the ground up, nested inside the wider, lower tiers. Drawn as they
+  came, the tiers' walls met in the same planes and flickered, and each tier had a footprint and a
+  door, so you walked in the front door and into the next tier's wall.
+  - Now a building nearly all inside a larger one (≥ 90%) rises from its roof as a part of it, or
+    is hidden if it's no taller. A building mapped twice keeps the first copy. A survey (LiDAR)
+    block across a mapped building goes. Pure and idempotent; margin context is read, never changed.
+  - Manhattan, 3 real cells: 98 nested pairs → 8. All 8 are Grand Central Terminal's 157k m²
+    outline, which only partly overlaps the towers (52–81%).
+- **Where a stand-in meets a real cell (`seams.ts`, new).** Stand-ins cut buildings at their own
+  cell edge, so a building on the seam was drawn twice, flickering where the copies met. The
+  stand-in's copy now hides until its own real tile lands.
+- **The way to a front door stays open.**
+  - While a tile builds, its door approaches (3.2 m out), its own footprints, and now its stairs and
+    landings are keep-outs in the builders' scratch world. Racks, tree pits, hydrants, planters and
+    parked cars stay off them. Only the scratch world holds them; the live world never does.
+  - A door never opens where another building's outline runs across the front.
+  - A yard fence across the front walk gets a gate.
+  - Kerb cars stay off sidewalks too narrow for them.
+  - A mapped flagpole at a door (the Century Association's) stands beside it.
+  - Raised shore houses: the stair takes the first shape whose flight, and the metre you step off
+    onto, stands in the open, in this order: along the wall, round the side (now needing a walkway
+    beside it), switchback, straight out. If none is clear, the least-blocked shape is used. Side
+    stairs had run down the 40 cm between two houses, inside the neighbour.
+  - A mapped fence stops short of a low stair it runs across or alongside. A fence now blocks only
+    up to its top, so a landing or bridge can pass over its line.
+  - What a tile's own buildings put round them (hydrants, front hedges) stays in the tile's own
+    cell. Over the edge are the next tile's doors, which it can't see: a hydrant had stood on a
+    neighbour's bottom step.
+  - The door planters are back, just outside the doorway (the keep-out had removed them).
+  - Measured by walking in: Manhattan, 7 real cells: 14 → 3 of 295 doors blocked (stand-ins 22 →
+    8 of 205). Sea Bright, the whole baked region: 4 of 1,857. Two of the four open onto a building
+    4 m away; one is a raised house on a lot with no room for a stair.
+- **Tall things on roofs stand on the roof.** A mapped water tank, antenna, chimney or flag inside
+  a building's outline now stands on its roof, rooftop-sized unless the map gives a height (a height
+  past the roof counts from the street). Drawn from the street, they had stood in the rooms.
+- **Flying high: the near plane rides the altitude (`render/nearPlane.ts`, new).** At 25 cm, one step of
+  the depth buffer was a metre at 2 km, so shore ground a metre over the sea plane fought it. Now
+  the near plane is 1% of the clearance over the highest ground within 60 m. A step 3 km out is a
+  few centimetres again. The sea plane is also pushed back two depth steps.
+  - Not reproduced in Sea Bright (SwiftShader, 400–3,000 m, with and without the fix). The z-fight
+    arithmetic says this was the cause. Need from Robby: where he saw it.
+- **The gameplay test suite (`tools/playtest.js`).**
+  - `__OVERLAPS__`: nested footprints.
+  - `__DOORS__`: walks the approach to every door near you. If that fails, it floods the ground by
+    the walker's own moves (sliding on walls, climbing 75 cm a step) to find any way in.
+  - `__FLICKER__`: draws the real frame twice, 5 cm apart along the view, and counts pixels that
+    jump well past their neighbourhood's own variation. An id pass couldn't follow the water's and
+    grass's shader-moved vertices. `__FLICKER_SELFTEST__` proves it sees a planted fight (1.6%).
+  - `__ALTITUDE__` flies up and runs the flicker check at each height; `opts.near` and `bare`
+    rerun the old frame for comparison.
+  - `__FLYOVER__`: a contact sheet of a flight.
+  - Diagnostics: `__DOORWHY__`, `__DOORFLOOD__`, `__WALKTRACE__`, `__SEGS__`, `__FLICKERWHO__`,
+    `__REALDIFF__`.
+  - Run headless in the cloud mirror on the baked region: overlaps 0 nested; doors as above; the
+    spawn views and flights at 400/1,500 m flicker-free.
+- Tests: `nest` (6), `seams` (2), `doorway` (5), `raisedStairs` (2), `nearPlane` (4). The door,
+  roof and stair tests were checked to fail on the old code. 399 pass.
+
 ## 2026-09-29 (ad) — Four helpers merged: real rooms, phones, photos that paint, streets that stay drivable
 
 Four helper agents worked offline in their own copies while the main session waited; each came

@@ -11,9 +11,22 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 - Raised houses (pilings), porches, stoops, railed stairs are in `buildings.ts`; their
   collision goes out as `colliders` (walls with a feet-height band + ramp decks) and is
   registered in `main.ts`.
+  - A raised house's stair takes the first shape whose flight, and the metre past its foot, stands
+    clear of every other footprint (`C.rings`). The order is along the wall, round the side, a
+    switchback, then straight out. Round the side also needs a walkway beside the flight, since its
+    foot faces the back. None clear: the least-blocked shape.
+- Buildings inside buildings (`nest.ts`, run first in `buildBuildings`). A standing building
+  ≥ 90% inside a larger one rises from its roof as a part of it (`lf`, `pt`, `po`) or, if no
+  taller, is hidden (`in: 1`: no walls, footprint or door). This covers towers mapped tier by tier
+  from the ground (the wedding cake), a building mapped twice, and a LiDAR block across a mapped
+  one. It is pure and idempotent. Margin context (`own: 0`) is read, never changed.
+- Where a stand-in meets a real cell, the stand-in's copies of the real cell's buildings hide
+  (`seams.ts` `seamDuplicates`, `stream.ts` `reconcileSeams`). Stand-in footprints register in
+  scopes of their own for this.
 - Front doors (`pickDoorWall`) go only on a wall whose outside is open ground. It's probed
-  across the opening from 0.45 to 2.2 m out, against the walkable buildings round it, the tile's
-  margin neighbours included (`doorOpen`, `solid`).
+  across the opening from 0.3 m inside the wall to 2.2 m out, against the walkable buildings round
+  it, the tile's margin neighbours included (`doorOpen`, `solid`). From inside the wall because an
+  outline overlapping the front (a terminal under a tower) stands its wall across the doorway.
   - It tries the seeded spot along the wall, then its middle, then near each end.
   - No wall open: no door and no interior. The building stays solid rather than a room you
     can't leave (Robby, downtown Seattle: doors on party walls and on the back of the building in
@@ -108,6 +121,19 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   - `people.ts`: one jointed person (~1.4k verts) for walkers and residents. Skin, hair and trouser palettes, 5 hairstyles, shorts/sleeves by `warmthFor(climate, month)` — all chosen per instance in the shader (`PEOPLE` define in `creatureMaterial`, marker vertex colours `MARK`), so a crowd is one draw;
   - `furniture.ts`: mailboxes, beach set, picnic table, car gear + `gearFor`.
 - Lot dressing (NA): `buildings.ts` lays a generated drive (a 2.9 m strip in `walks`) beside the front walk where the map has no service way near the door, and emits `drives`; `props.ts` parks a car at the house end (never on paved ground or the sidewalk strip). Doors also get hedges or `fence:picket` runs.
+- Keeping the way in clear while a tile builds (`tileBuild.ts`): the builders' scratch walk holds,
+  unrecorded, the margin buildings' outlines, a 3.2 m apron in front of every door (`doorApron`),
+  the tile's own footprints, and its stairs and landings (`deckKeepOut`, with 1.2 m past a flight's
+  foot). Everything `props.ts` places with `walk.blocked` stays off them. What the tile's own buildings
+  put round them (hydrants from its mailboxes, front hedges) stays in its own cell (`ownGround`),
+  because the next tile's doors aren't in its scratch walk.
+- Mapped fences get a gate where they cross a door's line within 6 m (`fenceGaps`). They also stop
+  short of a stair or deck lower than their top that they cross or run within 80 cm of
+  (`deckGaps`). Their walls block only up to their top, so a landing or bridge passes over.
+- Tall structures (`props.ts`): one mapped inside a standing building's outline stands on its roof
+  (`roofUnder`: flat top, or a pitched roof's eaves). It is rooftop-sized (`ROOFTOP_H`) unless the
+  map gives a height; a height past the roof counts from the street. Its collider starts at the
+  roof. One in a door's way stands beside the door (`clearOfDoors`).
 - Conventions:
   - Non-indexed; vertex `color` (white = tint by instance colour); `aPart` channels: 0 body, 1/2 fore/hind limbs, 3 lights/glow, 4 tail lights, 5 tail, 6 head, 7 wings, 8 blossom. Animals also carry `aPivot`.
   - Front toward −z; origin on the ground or waterline.

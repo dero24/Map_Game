@@ -92,6 +92,50 @@ behaviour.
   have no pointer lock). SwiftShader draws a frame every few seconds on 2 CPUs: poll
   `__RENDER_INFO__.frames`, click `#start` via `evaluate`, and allow minutes for screenshots.
 
+## Play checks (`tools/playtest.js`)
+
+`await import('/tools/playtest.js')` in the running game (any page; `?capture=1` keeps the canvas
+readable), then:
+
+- `__OVERLAPS__({ all })`: footprints standing inside others in the walk world (real cells, or
+  every mounted one with `all`). `nested` should be 0 (nest.ts); what's left is partial overlaps.
+- `__DOORS__({ max, top })`: the nearest `max` front doors, walked in. First the straight
+  approach: from a free spot a step past the foot of the steps, to the doorway, 1.5 m in, and back
+  out. When that fails, a flood decides. It fills the ground in the door's frame (35 cm steps,
+  14 m round) from 14 m out, by the walker's own `move`: sliding on walls, climbing a surface up to
+  75 cm over its feet. A door counts as open if the flood reaches its rooms 70 cm or more past the
+  doorway. Those are counted as `roundabout`: the way in goes round a tree, a hedge's end, a parked
+  car. Stand-in doors are counted apart.
+  - Why one is shut: `__DOORWHY__(x, z)` gives the door, its footprint, a profile along the normal
+    (polygon, surface, blocked) and the walls within 3.5 m. `__DOORFLOOD__(x, z)` says how near the
+    flood got to the foot of the stair and to the door (`__LANE__(i)` lists one lane's cells).
+    `__WALKTRACE__(x0, z0, x1, z1, feet?)` walks a line and names the wall it stopped at, with its
+    height band. `__SEGS__(x, z, R, feet?)` lists the walls round a point.
+- `await __FLICKER__({ frames, jump, limit, near, bare })`: the real frame, drawn twice with the
+  camera 5 cm apart along the view. A pixel counts when its colour jumps past `jump` (40) and past
+  2.5× its own neighbourhood's variation, so edges and textured paint don't count. `worstShare`
+  over `limit` (0.2%) fails.
+  - It must be the real frame. An id pass (`__FLICKERWHO__` still names objects that way) can't
+    follow the water's, grass's and roofs' vertices, which their shaders move. Its sky/water
+    "fights" were artefacts.
+  - Transparent surfaces that don't write depth (foam, wakes) blend rather than fight: leave them
+    out.
+  - `near: 0.25` and `bare: true` redraw with the old fixed near plane and no sea offset, for an
+    A/B. `__FLICKER_SELFTEST__()` plants two slanted sheets 5 mm apart in the sky ahead; the check
+    must fail on them (it reports 1.6%). Two camera-facing quads at the same spot don't fight:
+    their depths round the same way.
+- `await __ALTITUDE__({ heights, near, frames })`: flies up at the walker and runs `__FLICKER__` at
+  each height. `await __FLYOVER__({ h, frames, step, yaw, pitch })` flies a line and posts a
+  contact sheet to `shots/fly_<h>.jpg`, with the blue/green flips between frames.
+- `await __PLAYTEST__()` runs overlaps, doors, flicker and altitude, and keeps the report in
+  `window.__PLAYTEST_LAST__`.
+- Without the dev server (a sandbox with no npm registry): bundle `src/main.ts` and the three
+  module workers with esbuild (rewrite `new URL('./x.worker.ts', import.meta.url)` to the built
+  `.js`), and serve the bundle, `public/` and the repo root with COOP/COEP and a `/__shot` sink.
+  Then drive it with Playwright and SwiftShader. Only the baked region loads offline (no tile
+  worker, Overpass or DEM). Allow ~35 s to `__READY__` and minutes for flights; run long checks in
+  the background and poll their log.
+
 ## Dev-server + worker quirks
 
 - Dev server is HTTP/1.1: slow `/__tiles` calls starve other same-origin fetches — anything

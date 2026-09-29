@@ -41,6 +41,9 @@ export function buildWater(tt: TerrainTextures) {
   // (a few centimetres over the sea plane or the lake's ground is under one step of the depth
   // buffer a few hundred metres out: pulled forward a few steps, like the far street ribbons)
   for (const m of [lakeMat, shoreMat]) (m.polygonOffset = true), (m.polygonOffsetFactor = -1), (m.polygonOffsetUnits = -4);
+  // …and the sea pushed back two: shore ground a hand over it wins the pixel from any height (it
+  // flashed blue and green through the land under a flight; render/nearPlane.ts is the rest)
+  (mat.polygonOffset = true), (mat.polygonOffsetFactor = 1), (mat.polygonOffsetUnits = 2);
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'water';
   mesh.renderOrder = 5;

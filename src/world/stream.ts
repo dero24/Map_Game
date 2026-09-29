@@ -4,6 +4,7 @@
 // WalkWorld scope, interiors registered under "tile:idx" keys. Unload removes all three cleanly.
 import * as THREE from 'three';
 import { loadTile, loadTileTerrain, type Area, type AtlasManifest, type Box, type LayerLayout, type Road, type TileJson, type TileSpec, type Terrain, TerrainLayer } from './data';
+import { seamDuplicates } from './seams';
 import { fetchDem, demLayer, setDemBase, raceNull } from './dem';
 import { cachedFetchJson, manifestFingerprint } from './cache';
 import type { Door, Footprint } from './buildings';
@@ -50,6 +51,10 @@ export interface TileArt {
   vec?: boolean; // a stand-in built from the vector tiles: real streets and buildings (the skyline steps aside)
   xing?: number[]; // mapped crossings for the ground paint (kerbside.ts crossingPaint)
   vp?: number[]; // viewpoints: x, z, bearing (−1 unknown)
+  // a stand-in's footprints each in a collision scope of their own, so the copy of a real
+  // neighbour's building can go on its own (seams.ts); and those gone so far
+  fpScopes?: number[];
+  hidden?: Set<number>;
 }
 
 // `replace`: a relief rebuild of an already-mounted flat cell — swapped in atomically.
@@ -592,7 +597,7 @@ export class TileStream {
     const { spec, tile } = p;
     const scope = this.scopeSeq++;
     const w = this.walk;
-    const keys: string[] = [], fpKeys: string[] = [], fpList: Footprint[] = [];
+    const keys: string[] = [], fpKeys: string[] = [], fpList: Footprint[] = [], fpScopes: number[] = [];
     const tl = tile.terr && spec.terrain ? new TerrainLayer(tile.terr, spec.terrain.layout) : null;
     if (tl) this.terrain.registerPatch(spec.id, tl);
     if (tile.dem) {
@@ -614,24 +619,30 @@ export class TileStream {
       replayOps(w, tile.ops);
       const planByFp = new Map(tile.plans.map((pl) => [pl.i, pl.p]));
       const doors: Door[] = [];
+      const standIn = !!spec.synth;
       tile.fps.forEach((f, i) => {
         fpKeys.push((f.key = `${spec.id}:${i}`));
         fpList.push(f);
         const key = f.key!;
         this.fpByKey.set(key, f);
         const plan = planByFp.get(i);
-        if (!plan) {
-          if (f.raise > 0.5) w.addPolygon(f.ring, { floor0: f.floor0, floorH: 3, levels: 1, ground: true }, null, f.floor0 - 0.6);
-          else w.addPolygon(f.ring);
-          return;
-        }
-        const door = tile.doors[f.door!];
-        this.fpDoor.set(f, door);
-        doors.push(door);
-        const pid = registerPlan(w, f, plan);
-        this.plans.set(key, plan);
-        this.interiors.register(key, f, plan, pid);
-        keys.push(key);
+        const reg = () => {
+          if (!plan) {
+            if (f.raise > 0.5) w.addPolygon(f.ring, { floor0: f.floor0, floorH: 3, levels: 1, ground: true }, null, f.floor0 - 0.6);
+            else w.addPolygon(f.ring);
+            return;
+          }
+          const door = tile.doors[f.door!];
+          this.fpDoor.set(f, door);
+          doors.push(door);
+          const pid = registerPlan(w, f, plan);
+          this.plans.set(key, plan);
+          this.interiors.register(key, f, plan, pid);
+          keys.push(key);
+        };
+        if (!standIn) return reg();
+        const fs = this.scopeSeq++;
+        (fpScopes[i] = fs), w.withScope(fs, reg);
       });
       for (const [a, b, y0, y1] of tile.walls) w.addWall(a, b, y0, y1);
       for (const d of tile.decks) w.addDeck(unpackDeck(d));
@@ -680,7 +691,9 @@ export class TileStream {
         vec: !!tile.vec,
         xing: tile.xing,
         vp: tile.vp,
+        ...(spec.synth ? { fpScopes, hidden: new Set<number>() } : {}),
       });
+      this.reconcileSeams();
       if (tile.late) this.relieve(spec);
       else this.relief.delete(spec.id);
       const t3 = performance.now();
@@ -692,6 +705,7 @@ export class TileStream {
     } catch (e) {
       w.endScope();
       w.removeScope(scope);
+      for (const fs of fpScopes) if (fs !== undefined) w.removeScope(fs);
       if (tl) this.terrain.removePatch(spec.id);
       if (tile.dem) {
         const cell = spec.id.slice(1);
@@ -789,12 +803,62 @@ export class TileStream {
     U.uLampBox.value.set(x0, z0, 1 / size, 1 / size);
   }
 
+  /** A stand-in beside a real cell: its copies of the real cell's buildings go — their collision
+   *  (each footprint's own scope), their interiors and doors, and their walls and roofs (the
+   *  vertices of those building ids pulled out of sight). See seams.ts. */
+  private reconcileSeams() {
+    const reals = [...this.loaded.values()].filter((t) => t.spec.world);
+    if (!reals.length) return;
+    for (const S of this.loaded.values()) {
+      if (!S.spec.synth || !S.fpScopes || !S.hidden) continue;
+      const gone = new Set<number>();
+      for (const R of reals) {
+        const b = S.spec.box, r = R.spec.box;
+        if (b.x0 > r.x1 + 60 || r.x0 > b.x1 + 60 || b.z0 > r.z1 + 60 || r.z0 > b.z1 + 60) continue;
+        const live = S.fps.map((f, i) => ({ f, i })).filter(({ i }) => !S.hidden!.has(i));
+        for (const k of seamDuplicates(live.map(({ f }) => f), R.fps, r)) gone.add(live[k].i);
+      }
+      if (!gone.size) continue;
+      const ids = new Set<number>();
+      for (const i of gone) {
+        const f = S.fps[i];
+        S.hidden.add(i);
+        ids.add(f.id);
+        const fs = S.fpScopes[i];
+        if (fs !== undefined) this.walk.removeScope(fs);
+        if (f.key) {
+          this.interiors.unregister([f.key]);
+          this.plans.delete(f.key);
+          this.fpByKey.delete(f.key);
+          const k = S.keys.indexOf(f.key);
+          if (k >= 0) S.keys.splice(k, 1);
+        }
+        const d = this.fpDoor.get(f);
+        if (d) {
+          this.fpDoor.delete(f);
+          const k = S.doors.indexOf(d);
+          if (k >= 0) S.doors.splice(k, 1);
+        }
+      }
+      S.group.traverse((o) => {
+        const g = (o as THREE.Mesh).geometry;
+        const info = g?.getAttribute?.('aInfo') as THREE.BufferAttribute | undefined, pos = g?.getAttribute?.('position') as THREE.BufferAttribute | undefined;
+        if (!info || !pos) return;
+        let hit = false;
+        for (let v = 0; v < info.count; v++) if (ids.has(info.getX(v))) (pos.setXYZ(v, 0, -1e5, 0), (hit = true));
+        if (hit) pos.needsUpdate = true;
+      });
+      this.markDirty();
+    }
+  }
+
   /** `retire`: leave the tile's meshes on screen and hand them over — a tile taking its place
    *  removes them once it's all showing (reveal). */
   unload(id: string, retire?: THREE.Group[]) {
     const a = this.loaded.get(id);
     if (!a) return;
     this.walk.removeScope(a.scope);
+    for (const fs of a.fpScopes ?? []) if (fs !== undefined) this.walk.removeScope(fs);
     this.terrain.removePatch(id);
     // DEM patch bookkeeping: the patch belongs to the CELL; retire it only when the
     // last mounted twin leaves (an s-unload mid-swap mustn't drop the w-twin's terrain).

@@ -245,6 +245,9 @@ export class WalkWorld {
     return out;
   }
 
+  /** Every deck surface over (x,z): a bridge, a pier, a stair's flight where it passes. */
+  decksAt(x: number, z: number) { return this.deckHeights(x, z, []); }
+
   // Highest deck surface at (x,z), or null.
   deckAt(x: number, z: number): number | null {
     const h = this.deckHeights(x, z, []);

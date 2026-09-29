@@ -11,9 +11,13 @@ source, a region/climate table or a foundry family). No hand lists.
 - Sources: this doc merges the AAA design review (docs/earth/REVIEWER.md, 2026-09-27),
   ASSET_FIDELITY.md, ASSET_FOUNDRY.md, CONSTRUCTION.md and OPEN_WORLD.md.
 - Top items are mirrored into `feature_list.json`; this doc is the long list.
-- **Last updated 2026-09-29 (entry (ad)):** interiors slice 1 (real rooms), phones (memory, tiers,
+- **Last updated 2026-09-29 (entry (ae)):** Robby's city glitches (R.34). Buildings inside buildings
+  are nested or hidden, and seam copies hide. Door approaches are kept clear: 3 of 295 Manhattan
+  doors and 4 of 1,857 Sea Bright doors still blocked. The near plane rides the altitude. The
+  playtest suite (R.35) walks into every door, finds surface fights on the real frame and flies.
+  Next: Robby to say where the blue/green flashing was; a Manhattan and a Queen Anne run live.
+- **Earlier 2026-09-29 (entry (ad)):** interiors slice 1 (real rooms), phones (memory, tiers,
   a boot report), photos that paint what they frame, the grade residuals fixed in the shared grader.
-  Next: Robby's city glitches (R.34) and a playtest suite (R.35).
 - **Earlier 2026-09-29 (entry (ab)):** Robby's Seattle reports fixed — the drive hitch (z), doors into
   neighbours and being shut in (aa), the Needle (aa); retaining walls board-formed with clipped hedges and
   a stair to each lot; a harness that re-poses until it sees. Queued: far cities at their real distance
@@ -299,8 +303,8 @@ Reference photos + per-place trait tables: `docs/earth/PLACE_REFERENCES.md`. Har
 | R.31 | (2026-09-28) **Interiors at real scale and variety**: big buildings are one open hall; homes need a hall and rooms, apartments corridors and units, towers cores, lifts and floors; rooms sized like real ones (NDSS / London Plan / BCO) and compared with real photos; every archetype from the data (OSM indoor tagging, `building`, `tourism`, `amenity`, `use`) | 🟡 (ad) slice 1 done: hall, rooms and stairs in houses, corridors and flats in blocks, cores and desks in offices, never shut in (`docs/INTERIORS_PLAN.md`) (measured gaps, target proportions, a two-stage shell/layout planner, a phone budget, five slices) | P1 |
 | R.32 | (2026-09-29) GitHub Pages blank on a phone | 🟡 (ad) most likely out of GPU memory (~950 MB at desktop settings) → cropped sign atlases, live-slot life meshes, a phone tier and a low tier, a boot report on the page (`?diag=1`). Needs a real phone after the next deploy | **P0** |
 | R.33 | (2026-09-29) In paint-as-you-walk mode, a photo paints everything it frames, even far away | 🟡 (ad) depth readback → painted discs, far cells, a 32 km far window | P2 |
-| R.34 | (2026-09-29) Glitches in big cities: buildings flicker; doors you can't walk through, a building inside a building; the ground flashing blue/green when flying high | ⬜ in progress — each gets a check in the playtest suite (R.35) | **P0** |
-| R.35 | (2026-09-29) A playtest suite that checks gameplay on any city: every door walkable, no nested or duplicated buildings, walking/driving/flying stable, streaming complete, frame times | ⬜ | **P0** |
+| R.34 | (2026-09-29) Glitches in big cities: buildings flicker; doors you can't walk through, a building inside a building; the ground flashing blue/green when flying high | 🟡 (ae) nested/twin/survey buildings stacked or hidden (`nest.ts`), seam copies hidden (`seams.ts`), door approaches kept clear (aprons, stair keep-outs, fence gates, stair shapes by clearance): Manhattan 14 → 3 of 295 doors blocked, Sea Bright 4 of 1,857; the near plane rides the altitude and the sea plane is pushed back (not reproduced in Sea Bright; ask Robby where) | **P0** |
+| R.35 | (2026-09-29) A playtest suite that checks gameplay on any city: every door walkable, no nested or duplicated buildings, walking/driving/flying stable, streaming complete, frame times | 🟡 (ae) `tools/playtest.js`: overlaps, doors (straight, then a flood by the walker's own moves), flicker on the real frame (with a self-test), altitude, flyover sheets, diagnostics; run headless on the baked region. Next: driving, streaming completeness, frame times; a CI-style runner | **P0** |
 
 ## 11. The big ideas (Robby, 2026-09-27) — what makes this game unlike any other
 

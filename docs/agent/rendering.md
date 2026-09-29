@@ -20,6 +20,14 @@ or per-region style.
   (up to ~8.5 M) drift per pixel and every `seedOf(id)` choice shimmers (the old window
   flicker).
 - Local frame: +x east, +z south (north = −z), metres, per-region origin from config.
+- Depth precision: the camera's near plane follows the height (`render/nearPlane.ts`, set in the
+  frame loop every 0.2 s). It is 1% of the clearance over the highest ground in a 120 m square and
+  the sea, 0.25–40 m, in quarter-octave steps. At a fixed 25 cm, a 24-bit depth step was ~1 m at
+  2 km, and low shore ground fought the sea plane from the air. Anything reading depth takes
+  `camera.near` each frame (`post.ts`, `readSeen`); never assume 0.25.
+- Coplanar layers carry a polygon offset, in depth units (constant in steps, so metres far off and a
+  hair up close). Streets, lakes and shore foam are pulled forward (−1/−4); wakes −2/−6; the sea
+  plane is pushed back (+1/+2) under shore ground.
 
 ## Ground paint
 

@@ -31,6 +31,7 @@ export interface Building {
   cn?: 1; // a canopy (OSM building=roof / carport): an open roof, lf up, on posts round its edge
   po?: number; // index of the outline this part belongs to (same tile) — shares its id and look
   hp?: 1; // an outline its parts fully draw: footprint, door and name only, no walls or roof
+  in?: 1; // stands inside another building that draws it (nest.ts): no walls, footprint or door
   gf?: 1; // a storefront street floor under apartments (a shop mapped inside, or a row on a main road)
   at?: 1; // a row building: party walls in a dense block (row house, walk-up, terrace)
   rt?: 1; // the roof shape was mapped (roof:shape) — style priors leave it alone

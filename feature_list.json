@@ -626,7 +626,7 @@
         "src/world/props.ts (towers, onStructure)",
         "src/world/realTile.ts STRUCT"
       ],
-      "notes": "Queen Anne frames await Overpass. __TREES__ downtown: 14 LiDAR crowns over 45 m (stadium light towers) and 20 on raised plazas remain."
+      "notes": "Queen Anne frames await Overpass. __TREES__ downtown: 14 LiDAR crowns over 45 m (stadium light towers) and 20 on raised plazas remain. 2026-09-29 (ae): one mapped inside a building stands on its roof (rooftop-sized unless mapped; a height past the roof counts from the street); a flag at a door stands beside it (tests/doorway.test.ts)."
     },
     {
       "id": "vector-twin",
@@ -1001,6 +1001,63 @@
         "src/ui/photo.ts"
       ],
       "notes": "Frames of the before/after still to shoot; the sketchbook page keeps the pencil frame from before the bloom."
+    },
+    {
+      "id": "city-doors",
+      "priority": 0,
+      "area": "gameplay",
+      "title": "Every front door opens: no building inside a building, nothing across the way in",
+      "user_visible_behavior": "Downtown, a tower mapped tier by tier is one building with one door, never a building standing inside another; twin copies and seam copies are gone (no flickering walls). Walk up to any front door (up a raised shore house's stair, past the fence, the parked cars, the racks and the hydrants) and in.",
+      "status": "in_progress",
+      "verification": [
+        "tests/nest.test.ts (6), tests/seams.test.ts (2), tests/doorway.test.ts (5), tests/raisedStairs.test.ts (2): door, roof and stair tests checked to fail on the old code",
+        "LIVE Manhattan, 7 real cells (__DOORS__): real doors blocked 14 → 3 of 295, stand-ins 22 → 8 of 205; nested pairs 98 → 8 (all Grand Central's partial overlaps)",
+        "Cloud mirror, the whole baked region (tools/playtest.js __DOORS__ with the flood): 4 of 1,857 blocked (was 31 of the nearest 300)"
+      ],
+      "evidence": [
+        "src/world/nest.ts",
+        "src/world/seams.ts",
+        "src/world/stream.ts (reconcileSeams, stand-in footprint scopes)",
+        "src/world/tileBuild.ts (door aprons, own footprints, deck keep-outs in the scratch walk)",
+        "src/world/buildings.ts (doorOpen probes; raised-stair shape by clearance)",
+        "src/world/props.ts (fence gates and deck gaps, banded fences, kerb cars, own-ground props, rooftop structures, flag beside a door)"
+      ],
+      "notes": "Left: Grand Central-type partial overlaps; 3 Manhattan doors; stand-in door quality; lots with no room for a raised house's stair (choose another wall)."
+    },
+    {
+      "id": "altitude-depth",
+      "priority": 1,
+      "area": "rendering",
+      "title": "Flying high, the ground holds still (no blue/green flashing)",
+      "user_visible_behavior": "Fly up over a coast or a city: land and water stay put, however high.",
+      "status": "in_progress",
+      "verification": [
+        "tests/nearPlane.test.ts (4): a depth step under 5 cm straight down and under 20 cm three times as far out at 300–3,000 m (the old fixed near: ~1 m at 2 km)",
+        "Cloud mirror: __ALTITUDE__/__FLYOVER__ over Sea Bright at 400–3,000 m flicker-free (also with the old near plane: not reproduced there)"
+      ],
+      "evidence": [
+        "src/render/nearPlane.ts",
+        "src/main.ts (per-frame near)",
+        "src/world/water.ts (sea polygon offset)"
+      ],
+      "notes": "Robby to say where he saw it (city, height) — then reproduce with __ALTITUDE__ there."
+    },
+    {
+      "id": "playtest-suite",
+      "priority": 0,
+      "area": "platform",
+      "title": "Gameplay test suite: doors, nesting, flicker, altitude, flights",
+      "user_visible_behavior": "(Developer) One import runs the play checks in the live game: every door walked into, nested footprints, surfaces fighting, the ground from the air.",
+      "status": "in_progress",
+      "verification": [
+        "__FLICKER_SELFTEST__ detects a planted fight (1.6% of pixels)",
+        "Run headless in the cloud mirror on the baked region (overlaps, doors, flicker, altitude, flyover)"
+      ],
+      "evidence": [
+        "tools/playtest.js",
+        "docs/agent/debugging.md"
+      ],
+      "notes": "Next: a Manhattan and a Queen Anne run live; wire __PLAYTEST__ into a Playwright tool for CI-style runs."
     }
   ],
   "regions": {

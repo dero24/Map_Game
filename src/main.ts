@@ -12,6 +12,7 @@ import { paintGround } from './world/groundPaint';
 import { buildGround, terrainTextures } from './world/ground';
 import { setGndMaterial } from './world/pack';
 import { buildWater, waterParams } from './world/water';
+import { nearPlane } from './render/nearPlane';
 import { Wakes } from './world/wakes';
 import { activeBuilding, type Door, type Footprint } from './world/buildings';
 import { styleFor, setActiveStyle } from './world/styles';
@@ -976,6 +977,7 @@ async function main() {
   (window as unknown as Record<string, unknown>).__PERF__ = perf;
   const focus = new THREE.Vector3();
   const fwd = new THREE.Vector3();
+  let nearT = 0;
   // Render origin (world coords), re-snapped when the walker strays >1.5 km from it — `origin` above.
   const reanchor = () => {
     const nx = Math.round(walker.x / 512) * 512, nz = Math.round(walker.z / 512) * 512;
@@ -1094,6 +1096,13 @@ async function main() {
     if (paint.detail.update(walker.x, walker.z)) perf.detail = Math.max(perf.detail, performance.now() - tp);
     else if (paint.mid.update(walker.x, walker.z)) perf.detail = Math.max(perf.detail, performance.now() - tp); // at most one window repaint per frame
     sky.position.copy(camera.position);
+    // the near plane rides the height (render/nearPlane.ts): up high, low ground and the sea plane
+    // under it fought for the depth buffer's pixels (the ground flashed blue and green)
+    if ((nearT -= dt) <= 0) {
+      nearT = 0.2;
+      const n = nearPlane(camera.position.y, camera.position.x + origin.x, camera.position.z + origin.z, (x, z) => world.terrain.heightAt(x, z));
+      if (n !== camera.near) { camera.near = n; camera.updateProjectionMatrix(); }
+    }
     camera.updateMatrixWorld();
     camera.getWorldDirection(fwd);
     focus.set(camera.position.x + fwd.x * 60, walker.y - walkParams.eyeHeight, camera.position.z + fwd.z * 60);

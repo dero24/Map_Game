@@ -14,6 +14,9 @@ export type TowerKind = 'mast' | 'waterTower' | 'chimney' | 'flagpole';
 export const TOWER_KINDS: TowerKind[] = ['mast', 'waterTower', 'chimney', 'flagpole'];
 /** Default heights (m) when the map gives none. */
 export const TOWER_H: Record<TowerKind, number> = { mast: 90, waterTower: 36, chimney: 45, flagpole: 12 };
+/** …and for one mapped on a building, standing on its roof: an antenna mast, a city's rooftop
+ *  water tank on its legs, a boiler chimney, a flag. */
+export const ROOFTOP_H: Record<TowerKind, number> = { mast: 12, waterTower: 9, chimney: 7, flagpole: 6 };
 
 /** A triangular lattice mast, 1 m tall (scaled to its height): three legs, a triangle of rails
  *  every segment, one diagonal brace a face a segment, segments banded red and white, a beacon. */

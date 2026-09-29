@@ -2,7 +2,7 @@
 // that paints warm pools on the ground at night), trees from WorldCover, moored boats, lifeguard stands.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { detailBox, type World, type WorldJson, type Road, type Box } from './data';
+import { detailBox, type World, type WorldJson, type Road, type Box, type Building } from './data';
 import type { WalkWorld } from '../player/collision';
 import { propMaterial, colored } from '../render/propMaterial';
 import { lotLayout } from './lots';
@@ -21,7 +21,7 @@ import { creatureMaterial } from '../render/creature';
 import { useOf, terraceUse } from './uses';
 import { analyzeJunctions, packJunctions, signalKey, CTL, type Junction, STOP_BACK } from '../sim/traffic';
 import { sportLib, type SportPiece } from '../assets/sport';
-import { towerLib, TOWER_H, CHIMNEY_BRICK, type TowerKind } from '../assets/tower';
+import { towerLib, TOWER_H, ROOFTOP_H, CHIMNEY_BRICK, type TowerKind } from '../assets/tower';
 import { COURT, courtFrame, diamondFrame, type Sport } from './sports';
 import { stallLib, STALL_VARIANTS, AWNING, STALL_FOOT, type StallKind } from '../assets/market';
 import { kerbSpaces, oneToASpace, OCCUPANCY } from './kerbside';
@@ -41,6 +41,49 @@ const unpackPts = (f: number[]): P[] => {
   return o;
 };
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+
+/** The roof under a point mapped on a building (the tall structures: a rooftop tank, an antenna,
+ *  a flag up top): inside a standing building's outline, the highest roof over it — flat, or a
+ *  pitched one's eaves (the thing rises out of the slope) — as a world height `y` and a height
+ *  above the ground `top`; null on open ground. A tier stacked on the building counts (a mast on
+ *  a tower's crown); an outline its parts draw has no roof of its own. */
+export function roofUnder(json: { buildings: Building[] }, terrain: { heightAt(x: number, z: number): number }) {
+  let rs: { b: Building; ring: P[]; x0: number; z0: number; x1: number; z1: number }[] | null = null;
+  return (x: number, z: number): { y: number; top: number } | null => {
+    rs ??= json.buildings.filter((b) => !b.in && !b.cn && b.r.length >= 6).map((b) => {
+      const ring = unpackPts(b.r);
+      let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+      for (const [px, pz] of ring) (x0 = Math.min(x0, px)), (z0 = Math.min(z0, pz)), (x1 = Math.max(x1, px)), (z1 = Math.max(z1, pz));
+      return { b, ring, x0, z0, x1, z1 };
+    });
+    let stands = false, top = -Infinity, tb: (typeof rs)[number] | null = null;
+    for (const r of rs) {
+      if (x < r.x0 || x > r.x1 || z < r.z0 || z > r.z1 || !pointIn(x, z, r.ring)) continue;
+      if ((r.b.lf ?? 0) <= 1.5) stands = true;
+      const t = (r.b.lf ?? 0) + r.b.h;
+      if (!r.b.hp && t > top) (top = t), (tb = r);
+    }
+    if (!stands || !tb) return null;
+    let g = Infinity;
+    for (const [px, pz] of tb.ring) g = Math.min(g, terrain.heightAt(px, pz));
+    const eave = tb.b.roof === 'flat' ? top : tb.b.eav ?? top - Math.min(4, 0.3 * tb.b.h);
+    return { y: Math.max(g, 0.2) - 0.3 + eave, top: eave }; // (the building's base: buildings.ts)
+  };
+}
+
+/** A spot for a thing `r` round that keeps every door's way in clear (tileBuild doorApron: 3.2 m
+ *  out, the door's width and 35 cm either side): the same spot when it's clear, else beside the
+ *  door on its own side, as far out from the wall. */
+export function clearOfDoors(x: number, z: number, r: number, doors: readonly { wx: number; wz: number; nx: number; nz: number; w: number }[]): P {
+  for (const d of doors) {
+    const dx = x - d.wx, dz = z - d.wz, tx = -d.nz, tz = d.nx;
+    const t = dx * tx + dz * tz, n = dx * d.nx + dz * d.nz, hw = d.w / 2 + 0.35;
+    if (Math.abs(t) >= hw + r || n <= -0.5 || n >= 3.2 + r) continue;
+    const s = t < 0 ? -1 : 1, t2 = s * (hw + r + 0.1), n2 = Math.max(n, r + 0.35);
+    return [d.wx + tx * t2 + d.nx * n2, d.wz + tz * t2 + d.nz * n2];
+  }
+  return [x, z];
+}
 const RANK: Record<string, number> = { residential: 2, unclassified: 2, living_street: 2, tertiary: 3, secondary: 4, primary: 5 };
 
 /** The carriageways (ranked 2+, at grade) with a segment within `pad` m of a point, from a 32 m grid
@@ -285,6 +328,10 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // and real-lite ones — so props render everywhere a tile is mounted at detail).
   const DZ = detailBox(json);
   const inSlice = (x: number, z: number, m = 0) => x > DZ.x0 - m && x < DZ.x1 + m && z > DZ.z0 - m && z < DZ.z1 + m;
+  // the tile's own cell, `m` inside its edge (no box given: anywhere) — for what the tile's own
+  // buildings put round them, which must not stand in a neighbour's doorway it can't see
+  const OB = extras.box;
+  const ownGround = (x: number, z: number, m = 0) => !OB || (x > OB.x0 + m && x < OB.x1 - m && z > OB.z0 + m && z < OB.z1 - m);
   const group = new THREE.Group();
   group.name = 'props';
   const rng = makeRng(7);
@@ -1206,7 +1253,15 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       const rc = carRecipe(type, 1), hl = rc.L / 2, hw = rc.W / 2 + 0.05;
       const cy = Math.cos(k.yaw), sy = Math.sin(k.yaw);
       const corners: P[] = [[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]].map(([u, v]) => [k.x + u * cy + v * sy, k.z - u * sy + v * cy]);
-      if (corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.2)) || terrain.sdfAt(k.x, k.z) < 2) continue;
+      // the whole car clear (not just its corners: a car straddled a doorway's keep-out), and a
+      // sidewalk's width (3 m: a stoop's reach) between it and any building — where the street's
+      // modelled width runs up to the facades the lane is on the sidewalk, and it parked across the
+      // front doors (a neighbour tile's too, whose doors this tile doesn't know)
+      const along: P[] = [];
+      for (const v of [-hl, -hl / 2, 0, hl / 2, hl]) for (const u of [-hw, 0, hw]) along.push([k.x + u * cy + v * sy, k.z - u * sy + v * cy]);
+      const margin: P[] = [];
+      for (const v of [-hl - 0.5, 0, hl + 0.5]) for (const u of [-hw - 3, hw + 3]) margin.push([k.x + u * cy + v * sy, k.z - u * sy + v * cy]);
+      if (along.some(([cx, cz]) => walk.blocked(cx, cz, 0.2)) || margin.some(([cx, cz]) => walk.buildingAt(cx, cz) >= 0) || terrain.sdfAt(k.x, k.z) < 2) continue;
       cand.push({ x: k.x, z: k.z, yaw: k.yaw, type, hq: k.hq, corners });
     }
     // Parking lots (lots.ts, the stalls the ground paint stripes): filled by the town's pulse —
@@ -1502,16 +1557,67 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     iron: { posts: [] as THREE.Matrix4[], rails: [] as THREE.Matrix4[], step: 2.4, railsY: [0.12, 1.12] },
     chain: { posts: [] as THREE.Matrix4[], rails: [] as THREE.Matrix4[], step: 3.0, railsY: [0.08, 0.95, 1.78] },
   };
+  const FENCE_TOP: Record<keyof typeof FENCE, number> = { wood: 1.15, iron: 1.25, chain: 1.85 }; // (the posts' tops: fenceParts)
   const bayM: THREE.Matrix4[] = []; // iron: one metre of square bars per instance
+  // A fence across a door's way in has a gate there: the map draws the fence line through it (the
+  // gate is a node on it, if at all), and a yard fence along the front stood between the walk and
+  // the door. The gap: where the fence crosses the door's line, within 6 m of the wall, 1.4 m wide.
+  const doorsNear = extras.doors ?? [];
+  const fenceGaps = (ax: number, az: number, bx: number, bz: number): [number, number][] => {
+    const out: [number, number][] = [];
+    const sx = bx - ax, sz = bz - az, L = Math.hypot(sx, sz);
+    for (const d of doorsNear) {
+      if (Math.min(Math.abs(d.wx - ax), Math.abs(d.wx - bx)) > L + 8 || Math.min(Math.abs(d.wz - az), Math.abs(d.wz - bz)) > L + 8) continue;
+      // fence line a + t·s against the door's line w + u·n, u in (0, 6]
+      const den = sx * d.nz - sz * d.nx;
+      if (Math.abs(den) < 1e-6) continue;
+      const qx = d.wx - ax, qz = d.wz - az;
+      const t = (qx * d.nz - qz * d.nx) / den, u = (qx * sz - qz * sx) / den;
+      if (u <= 0 || u > 6 || t < -0.1 || t > 1.1) continue;
+      const half = (0.7 + d.w / 2) / Math.max(0.35, Math.abs(den) / L) / L; // (a slanting fence opens wider along itself)
+      out.push([t - half, t + half]);
+    }
+    return out.sort((a, b) => a[0] - b[0]);
+  };
+  // Steps or a deck low over a fence's line: the fence stops short of them (a raised shore house's
+  // stair runs down its side, over the lot-line fence the map draws there — the fence walled off
+  // the flight, and stood through its treads). A bridge or a landing high over it leaves it be.
+  // The spans of a-b (as fractions) by a deck lower than the fence's top, 15 cm clear each side.
+  const deckGaps = (ax: number, az: number, bx: number, bz: number, top: number): [number, number][] => {
+    const L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(L / 0.2)), m = 0.15 / Math.max(L, 1e-6);
+    const out: [number, number][] = [];
+    let open: number | null = null;
+    // (within 80 cm of one too: a fence along a flight's side walls off the way to its foot)
+    const near = [[0, 0], [0.8, 0], [-0.8, 0], [0, 0.8], [0, -0.8]];
+    for (let k = 0; k <= n; k++) {
+      const t = k / n, x = ax + (bx - ax) * t, z = az + (bz - az) * t, g = terrain.heightAt(x, z);
+      const on = near.some(([ox, oz]) => walk.decksAt(x + ox, z + oz).some((h) => h < g + top + 0.3));
+      if (on && open === null) open = Math.max(0, t - 1 / n);
+      if (!on && open !== null) { out.push([open - m, t + m]); open = null; }
+    }
+    if (open !== null) out.push([open - m, 1 + m]);
+    return out;
+  };
   for (const l of json.lines) {
     if (l.c !== 'fence') continue;
-    const p = unpackPts(l.p);
-    if (!p.some(([x, z]) => inSlice(x, z, -20))) continue;
-    const mid = p[Math.floor(p.length / 2)];
+    const p0 = unpackPts(l.p);
+    if (!p0.some(([x, z]) => inSlice(x, z, -20))) continue;
+    const mid = p0[Math.floor(p0.length / 2)];
     const kind = l.ft === 1 ? 'iron' : l.ft === 2 ? 'chain' : l.ft === 3 ? 'wood' : urban(mid[0], mid[1]) ? 'iron' : 'wood';
     const F = FENCE[kind];
-    for (let i = 0; i + 1 < p.length; i++) {
-      const [ax, az] = p[i], [bx, bz] = p[i + 1];
+    // the fence's runs between its gates, and off any steps or landing standing over its line
+    const runs: [number, number][][] = [];
+    for (let i = 0; i + 1 < p0.length; i++) {
+      const [ax, az] = p0[i], [bx, bz] = p0[i + 1];
+      let t0 = 0;
+      const gaps = [...fenceGaps(ax, az, bx, bz), ...deckGaps(ax, az, bx, bz, FENCE_TOP[kind])].sort((a, b) => a[0] - b[0]);
+      for (const [g0, g1] of gaps) {
+        if (g0 > t0) runs.push([[ax + (bx - ax) * t0, az + (bz - az) * t0], [ax + (bx - ax) * g0, az + (bz - az) * g0]]);
+        t0 = Math.max(t0, g1);
+      }
+      if (t0 < 1) runs.push([[ax + (bx - ax) * t0, az + (bz - az) * t0], [bx, bz]]);
+    }
+    for (const [[ax, az], [bx, bz]] of runs) {
       const L = Math.hypot(bx - ax, bz - az);
       if (L < 0.2) continue;
       const ang = Math.atan2(bz - az, bx - ax);
@@ -1532,7 +1638,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
           bayM.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), q, V(L / nb, 1, 1)));
         }
       }
-      walk.addWall([ax, az], [bx, bz]);
+      // (up to its top: a deck, a bridge, a stair's upper flight passes over a fence line)
+      walk.addWall([ax, az], [bx, bz], -Infinity, Math.max(terrain.heightAt(ax, az), terrain.heightAt(bx, bz)) + FENCE_TOP[kind] + 0.1);
     }
   }
   const fenceParts: [keyof typeof FENCE, THREE.BufferGeometry, THREE.BufferGeometry][] = [
@@ -1672,7 +1779,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       if (hash01(Math.floor(b.x * 7) ^ Math.floor(b.z * 13)) > 0.26) continue; // ~1 in 4 curbs
       const a = b.yaw + Math.PI / 2;
       const x = b.x + Math.sin(a) * 4.2, z = b.z + Math.cos(a) * 4.2;
-      if (walk.blocked(x, z, 1.6) || !clearOfRoad(x, z, 0.8)) continue;
+      // (in the tile's own ground: over its edge are the next tile's doors and steps, which this
+      // one doesn't know — a hydrant stood on a neighbour's bottom step)
+      if (!ownGround(x, z, 1.6) || walk.blocked(x, z, 1.6) || !clearOfRoad(x, z, 0.8)) continue;
       hydrants.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), b.yaw), V(1, 1, 1)));
       hydCol.push(new THREE.Color(hash01(Math.floor(x * 5) ^ Math.floor(z * 5)) < 0.8 ? 0xb03024 : 0xd9a52c));
       walk.addLoop([[x - 0.14, z - 0.14], [x + 0.14, z - 0.14], [x + 0.14, z + 0.14], [x - 0.14, z + 0.14]], -Infinity, terrain.heightAt(x, z) + 0.7);
@@ -1770,10 +1879,10 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         const h0 = hash01(Math.floor(d.wx * 11) ^ Math.floor(d.wz * 17));
         const tx = -d.nz, tz = d.nx; // along the house front
         if (h0 < 0.2) {
-          // planter pair tucked beside the door
-          for (const s of h0 < 0.08 ? [-0.85, 0.85] : [h0 < 0.12 ? -0.8 : 0.8]) {
-            const x = d.wx + d.nx * 0.7 + tx * s, z = d.wz + d.nz * 0.7 + tz * s;
-            if (walk.blocked(x, z, 0.8)) continue;
+          // planter pair tucked beside the door (just outside its way in: tileBuild doorApron)
+          for (const s of h0 < 0.08 ? [-1, 1] : [h0 < 0.12 ? -1 : 1]) {
+            const o = s * (d.w / 2 + 0.6), x = d.wx + d.nx * 0.7 + tx * o, z = d.wz + d.nz * 0.7 + tz * o;
+            if (walk.blocked(x, z, 0.22)) continue;
             pots.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion(), V(1, 0.9 + h0, 1)));
             walk.addLoop([[x - 0.16, z - 0.16], [x + 0.16, z - 0.16], [x + 0.16, z + 0.16], [x - 0.16, z + 0.16]], -Infinity, terrain.heightAt(x, z) + 0.6);
           }
@@ -1794,7 +1903,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
             for (const s of [-2.8, 2.8]) {
               const hx = d.wx + d.nx * D + tx * s, hz = d.wz + d.nz * D + tz * s;
               const ax = hx - tx * LEN / 2, az = hz - tz * LEN / 2, bxx = hx + tx * LEN / 2, bz2 = hz + tz * LEN / 2;
-              const ok = (x: number, z: number) => !walk.blocked(x, z, 1) && !paved(x, z) && clearOfRoad(x, z, 2.4);
+              const ok = (x: number, z: number) => ownGround(x, z, 1) && !walk.blocked(x, z, 1) && !paved(x, z) && clearOfRoad(x, z, 2.4);
               if (!ok(hx, hz) || !ok(ax, az) || !ok(bxx, bz2)) continue;
               const mt = new THREE.Matrix4().compose(V(hx, terrain.heightAt(hx, hz), hz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(tz, tx)), V(1, 1, 1));
               if (yardWall) { yardM.push(mt); yardC.push(new THREE.Color(look.facadeHouse[Math.floor(h0 * 7919) % look.facadeHouse.length]).multiplyScalar(0.92)); if (h0 > 0.6) ironM.push(mt); }
@@ -2250,21 +2359,42 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // ---------- tall structures: masts, water towers, chimneys, flagpoles (assets/tower.ts) ----------
   // Built where the map puts them, to the mapped height (else a typical one), each scaled from
   // its unit model; a town's water tower in its own colour, a chimney in brick or concrete.
+  // One mapped on a building stands on its roof — a city's rooftop tank or antenna, a boiler
+  // chimney, a flag up top — rooftop-sized unless the map gives its height (a height past the
+  // roof is from the street: the part above it shows). Drawn from the street, it stood inside the
+  // building: in its rooms, and in its front door. One mapped in a door's way (a flag over the
+  // entrance) stands beside the door: the way in stays clear.
   {
     const KIND: Record<string, TowerKind> = { mast: 'mast', water_tower: 'waterTower', chimney: 'chimney', flagpole: 'flagpole' };
     const byKind = new Map<TowerKind, { m: THREE.Matrix4; c: THREE.Color }[]>();
     const beacons: THREE.Vector3[] = []; // the red obstruction light atop every mast (a night halo)
+    const onRoof = roofUnder(ctxJson, terrain);
     for (const p of json.points) {
       const k = KIND[p.c];
       if (!k || !inSlice(p.x, p.z) || terrain.sdfAt(p.x, p.z) < 0) continue;
-      const h = p.h ?? TOWER_H[k] * (0.8 + hashf(Math.floor(p.x * 7) * 131 + Math.floor(p.z * 3)) * 0.4);
+      const jit = 0.8 + hashf(Math.floor(p.x * 7) * 131 + Math.floor(p.z * 3)) * 0.4;
+      const roof = onRoof(p.x, p.z);
+      let x = p.x, z = p.z, y0 = terrain.heightAt(p.x, p.z), h = p.h ?? TOWER_H[k] * jit;
+      if (roof) {
+        y0 = roof.y;
+        h = p.h == null ? ROOFTOP_H[k] * jit : p.h > roof.top + 2 ? p.h - roof.top : p.h;
+      }
+      const r = k === 'mast' ? 0.012 * h + 0.2 : k === 'chimney' ? 0.045 * h : k === 'flagpole' ? 0.12 : 0;
+      if (!roof) {
+        const at = clearOfDoors(x, z, r, extras.doors ?? []);
+        if (at[0] !== x || at[1] !== z) {
+          [x, z] = at;
+          if (k === 'flagpole' && walk.buildingAt(x, z) >= 0) continue; // (no room beside it either)
+          y0 = terrain.heightAt(x, z);
+        }
+      }
       const u = hashf(Math.floor(p.x * 13) * 7 + Math.floor(p.z * 11));
       const c = new THREE.Color(k === 'waterTower' ? [0xe9eef0, 0xcfd9df, 0xb9cbd6, 0xd6dfcf][Math.floor(u * 4)] : k === 'chimney' ? (u < 0.6 ? CHIMNEY_BRICK : 0xb5b0a6) : 0xffffff);
-      (byKind.get(k) ?? byKind.set(k, []).get(k)!).push({ m: new THREE.Matrix4().compose(V(p.x, terrain.heightAt(p.x, p.z) - 0.05, p.z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), u * 6.28), V(h, h, h)), c });
-      // what you walk into: the mast's legs, the chimney's base, the pole (a water tower you walk under)
-      if (k === 'mast') beacons.push(V(p.x, terrain.heightAt(p.x, p.z) + h * 1.003, p.z));
-      const r = k === 'mast' ? 0.012 * h + 0.2 : k === 'chimney' ? 0.045 * h : k === 'flagpole' ? 0.12 : 0;
-      if (r > 0) walk.addLoop([[p.x - r, p.z - r], [p.x + r, p.z - r], [p.x + r, p.z + r], [p.x - r, p.z + r]], -Infinity, terrain.heightAt(p.x, p.z) + h);
+      (byKind.get(k) ?? byKind.set(k, []).get(k)!).push({ m: new THREE.Matrix4().compose(V(x, y0 - 0.05, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), u * 6.28), V(h, h, h)), c });
+      // what you walk into: the mast's legs, the chimney's base, the pole (a water tower you walk
+      // under) — from its foot up, so one on a roof never walls off the rooms below it
+      if (k === 'mast') beacons.push(V(x, y0 + h * 1.003, z));
+      if (r > 0) walk.addLoop([[x - r, z - r], [x + r, z - r], [x + r, z + r], [x - r, z + r]], roof ? y0 - 0.3 : -Infinity, y0 + h);
     }
     for (const [k, list] of byKind) {
       const im = new THREE.InstancedMesh(towerLib(k).clone(), propMaterial(), list.length);

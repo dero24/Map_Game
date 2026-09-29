@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import earcut from 'earcut';
 import { detailBox, type World, type Building } from './data';
+import { nestBuildings } from './nest';
 import type { Deck } from '../player/collision';
 import { paintMaterial, lin } from '../render/shared';
 import { hash01 } from '../core/rng';
@@ -348,7 +349,9 @@ const doorWide = (kind: string) => (kind === 'commercial' ? 1.8 : kind === 'chur
 function doorOpen(ring: P2[], i: number, u: number, w: number, solid: RingGrid) {
   const p = ring[i], q = ring[(i + 1) % ring.length], L = Math.hypot(q[0] - p[0], q[1] - p[1]);
   const tx = (q[0] - p[0]) / L, tz = (q[1] - p[1]) / L, nx = tz, nz = -tx, hw = w / 2 + 0.15;
-  for (const out of [0.45, 1.3, 2.2])
+  // (from just inside the wall: a building overlapping this one's front — a terminal's outline
+  // running under a tower — stands its wall across the doorway, a hand's breadth out)
+  for (const out of [-0.3, 0.1, 0.45, 1.3, 2.2])
     for (const du of [-hw, 0, hw]) if (solid.hit(p[0] + tx * (u + du) + nx * out, p[1] + tz * (u + du) + nz * out, ring)) return false;
   return true;
 }
@@ -454,20 +457,38 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
     const total = (nSteps - 1) * 0.27;
     const sw = 1.1, D = 1.35;
     const spaceR = len - (u + wide / 2 + 0.45), spaceL = u - wide / 2 - 0.45;
-    const room = Math.max(spaceR, spaceL);
     // Stairs hug the house: one flight along the wall when it fits, else a switchback (two
     // half-flights along the wall, the second outside the first, a landing between). Straight
     // out toward the street only when the wall is too short even for that — on the shore's
     // tight lots a straight flight lands on the sidewalk.
-    const parallel = room >= total + 0.3;
-    let dir = spaceR >= spaceL ? 1 : -1;
+    // Each shape is taken where its flight stands in the open — nothing else's footprint under it
+    // or on the metre of ground past its foot you step off onto. On the shore's tight lots the side
+    // wrap ran its stair down the 40 cm between two houses (inside the neighbour), or landed it
+    // against a shed: the door above was shut. In order — along the wall, round the side, a
+    // switchback, straight out — the first in the open; none: the one least in the way.
+    const hits = (x0: number, z0: number, dx: number, dz: number, L: number) => {
+      const px = -dz, pz = dx, n = Math.max(1, Math.ceil(L / 0.5));
+      let k = 0;
+      for (let i = 0; i <= n; i++)
+        for (const w of [-sw / 2, 0, sw / 2]) if (C.rings.hit(x0 + dx * ((L * i) / n) + px * w, z0 + dz * ((L * i) / n) + pz * w, B.ring)) k++;
+      return k;
+    };
+    type SideWrap = { cx: number; cz: number; dx: number; dz: number; sx: number; sz: number };
+    const space = (d: number) => (d > 0 ? spaceR : spaceL), pref = spaceR >= spaceL ? [1, -1] : [-1, 1];
+    const outA = 0.08 + sw / 2, half = Math.ceil(nSteps / 2);
+    const shapes: { k: 'parallel' | 'side' | 'dogleg' | 'straight'; d: number; hit: number; side?: SideWrap }[] = [];
+    for (const d of pref) {
+      if (space(d) < total + 0.3) continue;
+      const [x0, z0] = at(u + d * (wide / 2 + 0.45), outA);
+      shapes.push({ k: 'parallel', d, hit: hits(x0, z0, tx * d, tz * d, total + 1) });
+    }
     // Side-wrap: the landing runs to the house corner and the flight goes down along the side
     // wall toward the back — how narrow raised shore houses actually do it (the door on the
-    // street gable, the stair along the side). Needs a convex corner and a long enough side.
-    let side: { cx: number; cz: number; dx: number; dz: number; sx: number; sz: number } | null = null;
-    if (!parallel) {
+    // street gable, the stair along the side). Needs a convex corner and a long enough side, and
+    // a walk beside the flight (its foot is met from the street, not only from the back yards).
+    {
       const R = B.ring, n = R.length;
-      for (const d of dir > 0 ? [1, -1] : [-1, 1]) {
+      for (const d of pref) {
         const c = d > 0 ? R[(wall.i + 1) % n] : R[wall.i];
         const o = d > 0 ? R[(wall.i + 2) % n] : R[(wall.i - 1 + n) % n];
         const sl = Math.hypot(o[0] - c[0], o[1] - c[1]);
@@ -476,12 +497,25 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
         if (dx * nx + dz * nz > -0.7) continue; // the side wall must run back from the street wall
         let sx = -dz, sz = dx;
         if (sx * tx * d + sz * tz * d < 0) (sx = -sx), (sz = -sz); // outward from the side wall
-        side = { cx: c[0], cz: c[1], dx, dz, sx, sz };
-        dir = d;
-        break;
+        const cu = d > 0 ? len : 0;
+        let hit = hits(c[0] + sx * outA, c[1] + sz * outA, dx, dz, total + 1) + hits(c[0] + sx * (outA + sw), c[1] + sz * (outA + sw), dx, dz, total + 1);
+        for (const e of [0.3, sw / 2, sw + 0.1]) for (const o2 of [0.2, D / 2, D - 0.2]) { const [x, z] = at(cu + d * e, o2); if (C.rings.hit(x, z, B.ring)) hit++; }
+        shapes.push({ k: 'side', d, hit, side: { cx: c[0], cz: c[1], dx, dz, sx, sz } });
       }
     }
-    const dogleg = !parallel && !side && room >= Math.ceil(nSteps / 2) * 0.27 + sw + 0.4;
+    for (const d of pref) {
+      if (space(d) < half * 0.27 + sw + 0.4) continue;
+      const lbd = u + d * (wide / 2 + 0.45), uA = lbd + d * (half - 1) * 0.27;
+      const [ax, az] = at(lbd, outA), [bx, bz] = at(uA, 0.08 + sw * 1.5 + 0.12);
+      shapes.push({ k: 'dogleg', d, hit: hits(ax, az, tx * d, tz * d, (half - 1) * 0.27) + hits(bx, bz, -tx * d, -tz * d, Math.max(0.3, (nSteps - half - 1) * 0.27) + 1) });
+    }
+    {
+      const [x0, z0] = at(u, D);
+      shapes.push({ k: 'straight', d: pref[0], hit: hits(x0, z0, nx, nz, total + 1) });
+    }
+    const pick = shapes.find((q) => q.hit === 0) ?? shapes.reduce((a, q) => (q.hit < a.hit ? q : a));
+    const parallel = pick.k === 'parallel', dogleg = pick.k === 'dogleg', side = pick.side ?? null;
+    let dir = pick.d;
     let la: number, lb: number; // landing extent along the wall
     if (side) {
       la = u - dir * (wide / 2 + 0.45);
@@ -1144,6 +1178,9 @@ function hullInset(h: P2[], x: number, z: number) {
 
 export function buildBuildings(world: World, idBase = 0, lite = false): BuildingsResult {
   const { json, terrain } = world;
+  // a wedding-cake tower's tiers, a building mapped twice or inside another: set each on the one it
+  // stands in, or hide it there (nest.ts) — nested footprints flickered and walled in their doors
+  nestBuildings(json.buildings);
   const S = detailBox(json);
   const chunks = new Map<string, Builder>();
   const footprints: Footprint[] = [];
@@ -1158,6 +1195,7 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
 
   // Unpack + tidy all outlines first (the porch/stair clearance test needs the neighbours).
   const tidy: (P2[] | null)[] = json.buildings.map((bd) => {
+    if (bd.in) return null;
     const r: P2[] = [];
     for (let i = 0; i + 1 < bd.r.length; i += 2) r.push([bd.r[i] / 10, bd.r[i + 1] / 10]);
     if (r.length < 3) return null;
