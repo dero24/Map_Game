@@ -242,7 +242,7 @@ export class Commissions {
       this.g.toast(`almanac: ${nm} sketched in pencil — paint one to finish the card (${list.length} of ${F.all.length} ${F.label}s)`);
       this.g.sound('page');
     };
-    for (const [prefix, family] of [['parked-cars:', 'car'], ['life-car:', 'car'], ['moored-boats:', 'boat'], ['life-boat:', 'boat'], ['ride-car:', 'car'], ['ride-boat:', 'boat'], ['ride-plane:', 'plane'], ['critter:', 'wildlife'], ['trees:', 'tree'], ['garden:', 'flower'], ['plant:', 'flower']] as const)
+    for (const [prefix, family] of [['parked-cars:', 'car'], ['kerb-cars:', 'car'], ['life-car:', 'car'], ['moored-boats:', 'boat'], ['life-boat:', 'boat'], ['ride-car:', 'car'], ['ride-boat:', 'boat'], ['ride-plane:', 'plane'], ['critter:', 'wildlife'], ['trees:', 'tree'], ['garden:', 'flower'], ['plant:', 'flower']] as const)
       for (const p of this.g.instances(prefix, w.x, w.z, family === 'boat' ? 60 : family === 'wildlife' ? 35 : family === 'tree' ? 30 : family === 'flower' ? 20 : 30)) {
         const n = this.g.toNdc(p.x, p.y + (family === 'wildlife' ? 0.2 : family === 'tree' ? 3 : family === 'flower' ? 0.5 : 0.8), p.z);
         if (n.z < 1 && Math.abs(n.x) < 0.9 && Math.abs(n.y) < 0.9) hit(family, p.name.split(':')[1].split('+')[0]);
@@ -271,12 +271,24 @@ export class Commissions {
     }
     return out;
   }
+  /** The kinds the last painting coloured in ('boat:skiff' …). */
+  fresh: string[] = [];
+  /** What you can paint (docs/GAME_DESIGN.md §4a): every kind of these families whose card you've
+   *  coloured in — painted from life — newest first. */
+  owned(families: readonly string[]): { family: string; type: string }[] {
+    const seen = this.state.seen ?? {};
+    return Object.entries(seen)
+      .filter(([k, s]) => s.painted && families.includes(k.split(':')[0]) && FAMILY[k.split(':')[0]]?.all.includes(k.split(':')[1]))
+      .sort((a, b) => (b[1].pt ?? b[1].t) - (a[1].pt ?? a[1].t))
+      .map(([k]) => ({ family: k.split(':')[0], type: k.split(':')[1] }));
+  }
   private inView(x: number, y: number, z: number, m = 0.9) { const n = this.g.toNdc(x, y, z); return n.z < 1 && Math.abs(n.x) < m && Math.abs(n.y) < m; }
   /** A painting was just made: everything recognisable in the middle of the frame gets its card
    *  coloured in (and places get your painting as their card). Returns what was painted. */
   paintFrame(page: string): string[] {
     const w = this.g.walker, done: string[] = [];
-    for (const [prefix, family, r] of [['parked-cars:', 'car', 45], ['life-car:', 'car', 45], ['moored-boats:', 'boat', 90], ['life-boat:', 'boat', 120], ['ride-car:', 'car', 40], ['ride-boat:', 'boat', 60], ['ride-plane:', 'plane', 80], ['critter:', 'wildlife', 30], ['trees:', 'tree', 40], ['garden:', 'flower', 18], ['plant:', 'flower', 18]] as const)
+    this.fresh = [];
+    for (const [prefix, family, r] of [['parked-cars:', 'car', 45], ['kerb-cars:', 'car', 45], ['life-car:', 'car', 45], ['moored-boats:', 'boat', 90], ['life-boat:', 'boat', 120], ['ride-car:', 'car', 40], ['ride-boat:', 'boat', 60], ['ride-plane:', 'plane', 80], ['critter:', 'wildlife', 30], ['trees:', 'tree', 40], ['garden:', 'flower', 18], ['plant:', 'flower', 18]] as const)
       for (const p of this.g.instances(prefix, w.x, w.z, r)) {
         if (!this.inView(p.x, p.y + (family === 'tree' ? 3 : 0.6), p.z, 0.7)) continue;
         const type = p.name.split(':')[1].split('+')[0];
@@ -285,7 +297,7 @@ export class Commissions {
         const list = (this.state.spotted[family] ??= []);
         if (!list.includes(type)) list.push(type);
         const s = this.record(key);
-        if (!s.painted) { s.painted = true; s.page = page; done.push(niceName(type, family)); }
+        if (!s.painted) { s.painted = true; s.pt = Date.now(); s.page = page; done.push(niceName(type, family)); this.fresh.push(key); }
       }
     for (const pl of this.places(220)) {
       if (!this.inView(pl.x, this.g.terrain.heightAt(pl.x, pl.z) + 4, pl.z, 0.75)) continue;

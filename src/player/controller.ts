@@ -14,6 +14,8 @@ export class Walker {
   private bobPhase = 0;
   private surfaceY = 0;
   locked = false;
+  /** the brush is washing colour in: rubbing it mustn't turn your head (ui/brush.ts) */
+  holdLook = false;
   distance = 0;
   // Touch: left ~45% of the screen is a floating joystick (analog walk, full push = run),
   // the rest is a look-drag region. The stick UI is injected on first touch.
@@ -36,7 +38,7 @@ export class Walker {
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
     dom.addEventListener('mousemove', (e) => {
-      if (!this.locked) return;
+      if (!this.locked || this.holdLook) return;
       const s = 0.0022 * walkParams.mouseSens;
       this.yaw -= e.movementX * s;
       this.pitch = Math.max(-1.35, Math.min(1.35, this.pitch - e.movementY * s));
@@ -69,7 +71,7 @@ export class Walker {
           this.tMove.y = dy / STICK_R;
           if (this.knob) this.knob.style.transform = `translate(${dx}px, ${dy}px)`;
         } else if (t.identifier === this.tLook.id) {
-          const s = 0.0045;
+          const s = this.holdLook ? 0 : 0.0045;
           this.yaw -= (t.clientX - this.tLook.lx) * s;
           this.pitch = Math.max(-1.35, Math.min(1.35, this.pitch - (t.clientY - this.tLook.ly) * s));
           this.tLook.lx = t.clientX;

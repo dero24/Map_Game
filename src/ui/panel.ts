@@ -12,7 +12,7 @@ import { audioParams } from '../audio/ambience';
 
 export const timeParams = { realTime: true, hour: 18.5, speed: 60, dayOfYear: 0 };
 export const weatherParams = { cloud: 0.35, seaFog: 0.0, haze: 0.35, wind: 0.5, autoWeather: true, snow: -1 }; // snow −1 = the season's own (season.ts)
-export const debugParams = { rawScene: false, showStats: false, lightScale: 1 };
+export const debugParams = { rawScene: false, showStats: false, lightScale: 1, summons: false }; // summons: the developer's free rides (V car, Shift+B boat, N plane)
 
 let STORE = 'world.panel.v3';
 type Bag = Record<string, unknown>;
@@ -136,6 +136,7 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
 
   const d = gui.addFolder('Debug');
   d.add(debugParams, 'rawScene').name('show raw render');
+  d.add(debugParams, 'summons').name('free rides: V car, ⇧B boat, N plane');
   d.add({ reset: hooks.onResetExplore }, 'reset').name('reset explored map');
   d.add({ clear: () => { localStorage.removeItem(STORE); location.reload(); } }, 'clear').name('reset all settings');
   d.close();

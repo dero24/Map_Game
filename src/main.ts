@@ -27,6 +27,7 @@ import { PhotoMode } from './ui/photo';
 import { Commissions } from './ui/commissions';
 import { makeCardArt } from './ui/cardArt';
 import { Hints } from './ui/hints';
+import { Brush } from './ui/brush';
 import { peaksAround, sightsFrom, compassWord, type Peak } from './world/peaks';
 import { Arrival } from './ui/arrival';
 import type { GameCtx } from './ui/ctx';
@@ -419,7 +420,7 @@ async function main() {
       }
   };
   stream.onMount = () => { if (!vehicles.driving) settleWalker(); };
-  // Rideable vehicles (E enter/exit · V car · B boat · N plane) — the walker rides along.
+  // Rideable vehicles (E enter/exit; you paint your own with the brush, ui/brush.ts) — the walker rides along.
   const vehicles = new Vehicles({
     walk, terrain: world.terrain, walker, root: worldRoot, toast,
     roads: () => stream.primRoads,
@@ -427,6 +428,7 @@ async function main() {
     kerb: kerbCars,
     driveLeft: regionLook.driveLeft,
     enabled: () => $('intro').classList.contains('hidden') && !atlas.open && !photo.active,
+    summons: () => debugParams.summons,
     geo: { toLatLon: (x, z) => toLatLon(json.origin, x, z), fromLatLon: (lat, lon) => fromLatLon(json.origin, lat, lon) },
   });
   { const prev = stream.onTile; stream.onTile = (a) => { prev?.(a); vehicles.onTile(a); }; } // re-hide taken driveway cars on remount
@@ -474,6 +476,7 @@ async function main() {
       for (const c of life.group.children) scan(c);
       for (const c of critters.group.children) scan(c);
       for (const c of garden.group.children) scan(c);
+      for (const c of kerbCars.group.children) scan(c);
       if (playerGroup) for (const c of playerGroup.children) scan(c);
       return out;
     },
@@ -525,6 +528,9 @@ async function main() {
   atlas.extraPins = () => garden.positions().map((p) => ({ x: p.x, z: p.z, kind: 'plant' as const, label: SPECIES[p.sp].label }));
   const arrival = new Arrival(ctx, { name: townName, sub: meta?.sub ?? '' });
   const hints = new Hints();
+  // the brush: paint anything you've painted from life, where you aim (docs/GAME_DESIGN.md)
+  const brush = new Brush(ctx, commissions, vehicles, walk, worldRoot, origin, () => $('intro').classList.contains('hidden') && !atlas.open && !photo.active && !vehicles.driving);
+  hints.add(() => brush.hint());
   let brushT = 0;
   explore.onBloom = (n) => { if (n > 3 && brushT <= 0) { brushT = 1.6; ambience?.ui('brush'); } };
   const VERB = { car: 'drive this', boat: 'take the helm of this', plane: 'fly this' } as const;
@@ -572,7 +578,6 @@ async function main() {
     return null;
   });
   hints.add(() => (walkParams.fly && !vehicles.driving ? { key: 'F', text: 'land · Space / C up and down · wheel for speed', pri: 3, once: 'fly' } : null));
-  hints.add(() => (!vehicles.driving && !walkParams.fly && (world.terrain.oceanDistAt(walker.x, walker.z) < 70 || world.terrain.sdfAt(walker.x, walker.z) < 25) ? { key: 'B', text: 'call a boat', pri: 2, once: 'boat' } : null));
   hints.add(() => (simTime > 12 ? { key: 'M', text: 'your map, sketchbook & commissions', pri: 1, once: 'atlas' } : null));
   hints.add(() => (simTime > 70 && !vehicles.driving && !walkParams.fly && world.terrain.coverAt(walker.x, walker.z) === 30 ? { key: 'R', text: `plant a ${SPECIES[garden.nextSpecies].label} here (Shift+R: another seed)`, pri: 1, once: 'plant' } : null));
   hints.add(() => (simTime > 45 ? { key: 'P', text: 'frame a view and paint it into your sketchbook', pri: 1, once: 'photo' } : null));
@@ -774,7 +779,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream, vehicles, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, setHour, teleport: teleportTo, get spawn() { return spawn; }, at: atPos };
+  (window as unknown as Record<string, unknown>).__GAME__ = { walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, plans, bld, life, stream, vehicles, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, get spawn() { return spawn; }, at: atPos };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);
@@ -826,6 +831,7 @@ async function main() {
     if ((e.target as HTMLElement)?.closest?.('input,textarea')) return;
     const playing = $('intro').classList.contains('hidden');
     if (e.code === 'KeyP' && playing && !atlas.open && !vehicles.driving) {
+      brush.toggle(false);
       // at a viewpoint, face its view first: the summit it names, else the way the map says it looks
       const v = !photo.active ? viewHere() : null;
       const b = v?.sight?.bearing ?? (v && v.vp.b >= 0 ? v.vp.b : null);
@@ -834,7 +840,7 @@ async function main() {
     }
     if (e.code === 'KeyM' && playing) { if (photo.active) photo.toggle(false); atlas.toggle(); }
     if (e.code === 'KeyG' && playing && !atlas.open) { if (photo.active) photo.toggle(false); atlas.focusSearch(); }
-    if (e.code === 'KeyR' && playing && !atlas.open && !photo.active && !vehicles.driving && !e.repeat) { if (e.shiftKey) garden.cycle(); else garden.plant(); }
+    if (e.code === 'KeyR' && playing && !atlas.open && !photo.active && !vehicles.driving && !brush.active && !e.repeat) { if (e.shiftKey) garden.cycle(); else garden.plant(); }
     if (e.code === 'Escape' && atlas.open) atlas.toggle(false);
   });
   // Touch buttons (shown by body.touch): fly toggle, go-anywhere search, atlas, photo mode.
@@ -1105,7 +1111,8 @@ async function main() {
     brushT -= dt;
     const blocked = !$('intro').classList.contains('hidden') || atlas.open;
     if (!blocked) commissions.update(dt);
-    hints.update(dt, blocked || photo.active);
+    hints.update(dt, blocked || photo.active || brush.active);
+    brush.update(dt);
     arrival.update(dt, blocked || photo.active);
     atlas.update(dt);
     // wildlife + garden

@@ -6,6 +6,7 @@ import type { GameCtx } from './ctx';
 import type { Commissions } from './commissions';
 import { savePage, type Page } from './book';
 import { walkParams } from '../player/controller';
+import { PAINTABLE } from './brush';
 
 const ZOOM_MIN = 18, ZOOM_MAX = 80;
 
@@ -120,7 +121,9 @@ export class PhotoMode {
     const p: Page = { id: `pg-${Date.now().toString(36)}`, t: Date.now(), lat, lon, yaw: this.g.walker.yaw, place, when, commission: done?.title, img, thumb };
     await savePage(p);
     const painted = this.com.paintFrame(p.id);
-    if (painted.length) setTimeout(() => this.g.toast(`almanac: painted in — ${painted.slice(0, 3).join(', ')}${painted.length > 3 ? ` and ${painted.length - 3} more` : ''}`), done ? 2600 : 1800);
+    // a coloured card is a kind you can paint anywhere now (ui/brush.ts)
+    const yours = this.com.fresh.some((k) => (PAINTABLE as readonly string[]).includes(k.split(':')[0]));
+    if (painted.length) setTimeout(() => this.g.toast(`almanac: painted in — ${painted.slice(0, 3).join(', ')}${painted.length > 3 ? ` and ${painted.length - 3} more` : ''}${yours ? ' · yours to paint now: B for your brush' : ''}`), done ? 2600 : 1800);
     if (done) {
       this.com.complete(done, p.id);
       this.g.sound('chime');

@@ -1,6 +1,7 @@
-// Rideable vehicles — cars, boats and a light plane. Walk up to one and press E; V / B / N summon
-// a car (on the nearest street), a boat (on the nearest open water) or a plane (on the nearest
-// clear run, or in the air if you're flying). The world keeps streaming around whatever you ride:
+// Rideable vehicles — cars, boats and a light plane. Walk up to one and press E. You get your own
+// by painting them (ui/brush.ts: paint the kind from life, then paint it where you aim; the spot
+// rules are player/place.ts); the old free summons — V car, Shift+B boat, N plane — are a
+// developer switch in the panel. The world keeps streaming around whatever you ride:
 // the walker is carried along (streaming, life, HUD and interiors all key off it), and the camera
 // becomes a chase cam you can orbit with the mouse.
 //
@@ -17,6 +18,7 @@ import { walkParams, type Walker } from './controller';
 import type { Road, Terrain } from '../world/data';
 import { activeStyle } from '../world/styles';
 import { GEAR_NAME, type CarGear } from '../assets/furniture';
+import { placeBoat, placeCar, type PlaceWorld, type Spot } from './place';
 
 export type VKind = 'car' | 'boat' | 'plane';
 
@@ -38,7 +40,7 @@ interface Veh {
 
 const SPECS = {
   car: { reach: 4.2, camDist: 7.2, camH: 2.6, look: 1.1 },
-  boat: { reach: 5.5, camDist: 10, camH: 3.4, look: 1.2 },
+  boat: { reach: 7, camDist: 10, camH: 3.4, look: 1.2 }, // (a hull needs 5 m of open water round it: board from the shallows)
   plane: { reach: 7.5, camDist: 15, camH: 4.2, look: 1.4 },
 } as const;
 const CAR_COLORS = [0xf2f2ee, 0xb9bcc0, 0x26282c, 0x5a5e64, 0x2b3f63, 0x9c2a26, 0x3d5a46, 0xcdbf9e, 0x7a8894];
@@ -103,6 +105,8 @@ export class Vehicles {
       kerb?: { find(x: number, z: number, r: number): { key: string; x: number; z: number; yaw: number; color: number; model: string; d: number } | null; refresh(): void; skip: (key: string) => boolean };
       driveLeft: boolean;
       enabled: () => boolean; // false while menus/journal/intro are up
+      /** the developer's free rides (panel switch): V car, Shift+B boat, N plane */
+      summons?: () => boolean;
       geo?: { toLatLon: (x: number, z: number) => [number, number]; fromLatLon: (lat: number, lon: number) => [number, number] };
     },
   ) {
@@ -118,9 +122,10 @@ export class Vehicles {
       this.keys.add(e.code);
       if (e.repeat || !o.enabled()) return;
       if (e.code === 'KeyE') this.toggle();
-      else if (e.code === 'KeyV') this.summon('car');
-      else if (e.code === 'KeyB') this.summon('boat');
-      else if (e.code === 'KeyN') this.summon('plane');
+      else if (e.code === 'KeyV' || e.code === 'KeyN' || (e.code === 'KeyB' && e.shiftKey)) {
+        if (o.summons?.()) this.summon(e.code === 'KeyV' ? 'car' : e.code === 'KeyN' ? 'plane' : 'boat');
+        else if (e.code !== 'KeyB') o.toast('rides are painted now — paint one from life (P), then take out your brush (B)');
+      }
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
@@ -174,6 +179,17 @@ export class Vehicles {
   }
 
   // ---------------- world queries ----------------
+  /** The world as the placement rules see it (player/place.ts). */
+  get placeWorld(): PlaceWorld {
+    return (this.pw ??= {
+      height: (x, z) => this.o.terrain.heightAt(x, z),
+      sdf: (x, z) => this.o.terrain.sdfAt(x, z),
+      building: (x, z) => this.o.walk.buildingAt(x, z),
+      roads: () => this.o.roads(),
+      driveLeft: this.o.driveLeft,
+    });
+  }
+  private pw?: PlaceWorld;
   private water(x: number, z: number) {
     const t = this.o.terrain;
     return t.heightAt(x, z) < -0.45 && t.sdfAt(x, z) < -1.2;
@@ -187,37 +203,59 @@ export class Vehicles {
   }
 
   // ---------------- lifecycle ----------------
-  private make(kind: VKind, x: number, z: number, yaw: number, color?: number, model?: string): Veh {
+  /** A ride's model, painted `color` on its white parts, in `mat`. The brush builds its pencil
+   *  sketch with the very same geometry, so the finished ride takes over from it unseen. */
+  build(kind: VKind, model: string, color: number, seed: number, mat: THREE.Material) {
     const obj = new THREE.Group();
     let prop: THREE.Object3D | undefined;
     let gearY = 0;
-    const c = color ?? CAR_COLORS[(this.seed * 7) % CAR_COLORS.length];
-    const seed = this.seed++;
     if (kind === 'car') {
-      const [base, gear] = (model ?? '').split('+');
-      const m = ((CAR_TYPES as string[]).includes(base) ? base : pickFrom(carMix(activeStyle().region, activeStyle().climate), (seed * 0.618034) % 1)) as CarType;
+      const [base, gear] = model.split('+');
+      const m = ((CAR_TYPES as string[]).includes(base) ? base : 'sedan') as CarType;
       const g = gear && gear in GEAR_NAME ? (gear as CarGear) : null;
       model = g ? `${m}+${g}` : m;
-      obj.add(new THREE.Mesh(tint(carLib(m, g).clone(), c), this.mat));
+      obj.add(new THREE.Mesh(tint(carLib(m, g).clone(), color), mat));
     } else if (kind === 'boat') {
-      const m = (model ?? BOAT_CYCLE[this.boatN++ % BOAT_CYCLE.length]) as BoatType;
-      model = m;
-      obj.add(new THREE.Mesh(tint(boatLib(m).clone(), HULLS[seed % HULLS.length]), this.mat));
+      model = (BOAT_CYCLE as string[]).includes(model) ? model : 'skiff';
+      obj.add(new THREE.Mesh(tint(boatLib(model as BoatType).clone(), color), mat));
     } else {
-      const m = (model ?? PLANE_TYPES[this.planeN++ % PLANE_TYPES.length]) as PlaneType;
-      model = m;
-      const P = planeGeometry(planeRecipe(m, seed));
-      obj.add(new THREE.Mesh(tint(P.geo, 0xf4f1ea), this.mat));
-      prop = new THREE.Mesh(propGeo(), this.mat);
+      model = (PLANE_TYPES as string[]).includes(model) ? model : 'highwing';
+      const P = planeGeometry(planeRecipe(model as PlaneType, seed));
+      obj.add(new THREE.Mesh(tint(P.geo, color), mat));
+      prop = new THREE.Mesh(propGeo(), mat);
       prop.position.copy(P.prop);
       obj.add(prop);
       gearY = P.gearY;
     }
     obj.name = `ride-${kind}:${model}`; // the spotting log + hints read the model off the name
+    return { obj, prop, gearY, model };
+  }
+  /** The paint a ride gets when nobody chose one. */
+  defaultColor(kind: VKind, seed = this.seed) {
+    return kind === 'car' ? CAR_COLORS[(seed * 7) % CAR_COLORS.length] : kind === 'boat' ? HULLS[seed % HULLS.length] : 0xf4f1ea;
+  }
+  get nextSeed() { return this.seed; }
+  /** A painted ride, dry: it's real now, where the brush set it down (and it's saved there). */
+  paint(kind: VKind, model: string, at: Spot, color: number) {
+    const v = this.make(kind, at.x, at.z, at.yaw, color, model);
+    return { kind: v.kind, model: v.model, x: v.x, z: v.z };
+  }
+  private make(kind: VKind, x: number, z: number, yaw: number, color?: number, model?: string): Veh {
+    const seed = this.seed;
+    const c = color ?? this.defaultColor(kind, seed);
+    this.seed++;
+    if (!model) {
+      if (kind === 'car') model = pickFrom(carMix(activeStyle().region, activeStyle().climate), (seed * 0.618034) % 1);
+      else if (kind === 'boat') model = BOAT_CYCLE[this.boatN++ % BOAT_CYCLE.length];
+      else model = PLANE_TYPES[this.planeN++ % PLANE_TYPES.length];
+    }
+    const built = this.build(kind, model, c, seed, this.mat);
+    const { obj, prop, gearY } = built;
+    model = built.model;
     obj.traverse((m) => m.layers.enable(1));
     this.group.add(obj);
     const y = kind === 'boat' ? 0 : this.o.walk.surfaceAt(x, z);
-    const v: Veh = { kind, color: kind === 'car' ? c : undefined, model: model!, gearY, obj, prop, x, y, z, yaw, pitch: 0, roll: 0, v: 0, steer: 0, throttle: 0, feet: y, airborne: false };
+    const v: Veh = { kind, color: c, model, gearY, obj, prop, x, y, z, yaw, pitch: 0, roll: 0, v: 0, steer: 0, throttle: 0, feet: y, airborne: false };
     this.list.push(v);
     // keep the world tidy: recycle the oldest parked player vehicle
     while (this.list.length > MAX_KEPT) {
@@ -369,44 +407,18 @@ export class Vehicles {
     const fx = -Math.sin(w.yaw), fz = -Math.cos(w.yaw);
     if (kind === 'car') {
       // the nearest street lane, pointing the way you're facing
-      let best: { x: number; z: number; yaw: number; d: number } | null = null;
-      for (const r of this.o.roads()) {
-        if (r.lod || r.br || ['footway', 'path', 'cycleway', 'steps', 'pedestrian', 'track'].includes(r.c)) continue;
-        for (let i = 0; i + 3 < r.p.length; i += 2) {
-          const ax = r.p[i] / 10, az = r.p[i + 1] / 10, bx = r.p[i + 2] / 10, bz = r.p[i + 3] / 10;
-          const dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz;
-          if (L2 < 4) continue;
-          const t = Math.max(0, Math.min(1, ((w.x - ax) * dx + (w.z - az) * dz) / L2));
-          const px = ax + dx * t, pz = az + dz * t, d = Math.hypot(px - w.x, pz - w.z);
-          if (d > 90 || (best && d > best.d)) continue;
-          const L = Math.sqrt(L2), ux = dx / L, uz = dz / L, dir = ux * fx + uz * fz >= 0 ? 1 : -1;
-          // keep to the lane: right-hand traffic pulls right of the centreline (left where they drive left)
-          const lane = Math.min(2.2, r.w / 4) * (this.o.driveLeft ? -1 : 1);
-          const x = px + -uz * dir * lane, z = pz + ux * dir * lane;
-          if (this.o.walk.buildingAt(x, z) >= 0) continue;
-          best = { x, z, yaw: Math.atan2(-ux * dir, -uz * dir), d };
-        }
-      }
-      if (!best) return this.o.toast('no street nearby for a car');
-      const car = this.make('car', best.x, best.z, best.yaw);
+      const p = placeCar(this.placeWorld, w.x, w.z, w.yaw, 90);
+      if (!p.ok) return this.o.toast('no street nearby for a car');
+      const car = this.make('car', p.spot.x, p.spot.z, p.spot.yaw);
       return this.o.toast(`${/^[aeiou]|^SUV/i.test(modelName(car.model)) ? 'an' : 'a'} ${modelName(car.model)} pulls up — walk over and press E`);
     }
     if (kind === 'boat') {
-      for (let r = 6; r <= 700; r += 8) {
-        const n = Math.max(8, Math.floor((r * 2 * Math.PI) / 10));
-        for (let k = 0; k < n; k++) {
-          const a = (k / n) * Math.PI * 2 + Math.atan2(fx, fz);
-          const x = w.x + Math.sin(a) * r, z = w.z + Math.cos(a) * r;
-          if (!this.water(x, z) || !this.water(x + 5, z) || !this.water(x - 5, z) || !this.water(x, z + 5) || !this.water(x, z - 5)) continue;
-          // bow away from land: along the terrain's falling slope
-          const gx = this.o.terrain.heightAt(x + 8, z) - this.o.terrain.heightAt(x - 8, z), gz = this.o.terrain.heightAt(x, z + 8) - this.o.terrain.heightAt(x, z - 8);
-          const yaw = Math.hypot(gx, gz) > 1e-3 ? Math.atan2(gx, gz) : w.yaw;
-          const b = this.make('boat', x, z, yaw);
-          const nm = modelName(b.model);
-          return this.o.toast(r < 60 ? `a ${nm} bobs at the water’s edge — press E aboard` : `a ${nm} waits on the water ${Math.round(r)} m away`);
-        }
-      }
-      return this.o.toast('no open water nearby');
+      // the nearest open water with room for a hull, bow off the land
+      const p = placeBoat(this.placeWorld, w.x, w.z, w.yaw, 700);
+      if (!p.ok) return this.o.toast('no open water nearby');
+      const b = this.make('boat', p.spot.x, p.spot.z, p.spot.yaw);
+      const nm = modelName(b.model);
+      return this.o.toast(p.spot.d < 60 ? `a ${nm} bobs at the water’s edge — press E aboard` : `a ${nm} waits on the water ${Math.round(p.spot.d)} m away`);
     }
     // plane: airborne if you're flying; otherwise the nearest clear, flat run ahead of you
     if (walkParams.fly) {

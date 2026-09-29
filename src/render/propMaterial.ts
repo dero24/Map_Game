@@ -15,8 +15,11 @@ import { SIGNAL_GLSL } from '../sim/traffic';
 // fallHue: how a broadleaf turns (flora.ts FALL_HUE): 1 the maples' reds, 2 gold (willow, elm,
 // poplar, birch); else each tree its own of yellow / orange / red. blossom: the flowering cherry's
 // spring pink (season.ts bloom). weep: a willow's hanging strands swing with the wind.
-export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean; signal?: boolean; fallHue?: number; blossom?: boolean; weep?: boolean } = {}) {
+// wash: a thing being painted in by the brush (ui/brush.ts) — pencil on paper until the wash
+// reaches it: uWashAt = (world x, y, z of the first touch, the wash's radius in m; < 0 all pencil).
+export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean; signal?: boolean; fallHue?: number; blossom?: boolean; weep?: boolean; wash?: boolean } = {}) {
   const defines: Record<string, number> = {};
+  if (opts.wash) defines.WASH = 1;
   if (opts.weep) defines.WEEP = 1;
   defines.FALL_HUE = opts.fallHue ?? 0; // (always defined: an undefined macro in #if is a GLSL error)
   if (opts.blossom) defines.BLOSSOM = 1;
@@ -29,7 +32,7 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
   if (opts.emissive) defines.EMISSIVE = 1;
   const mat = paintMaterial({
     defines,
-    uniforms: { uEmissive: { value: opts.emissive ?? new THREE.Color(0) }, uEmNight: { value: opts.emissiveNight ? 1 : 0 }, uCrown: { value: new THREE.Vector2(...(opts.crown ?? [3, 0])) } },
+    uniforms: { uEmissive: { value: opts.emissive ?? new THREE.Color(0) }, uEmNight: { value: opts.emissiveNight ? 1 : 0 }, uCrown: { value: new THREE.Vector2(...(opts.crown ?? [3, 0])) }, uWashAt: { value: new THREE.Vector4(0, 0, 0, -1) } },
     vertex: /* glsl */ `
       attribute vec3 color;
       varying vec3 vColor;
@@ -110,6 +113,7 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
     fragment: /* glsl */ `
       uniform vec3 uEmissive;
       uniform float uEmNight;
+      uniform vec4 uWashAt;
       varying vec3 vColor;
       varying vec3 vLocal;
       varying float vAO;
@@ -207,6 +211,29 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
         #endif
         #ifdef SIGNAL
           if (vSig > 0.75) col += normalize(vColor + 1e-3) * (0.9 + 2.2 * uNight); // the lit lens glows
+        #endif
+        #ifdef WASH
+        {
+          // graphite on paper until the wash arrives: lit like pale card, the side away from the sun
+          // hatched in the thing's own frame (the lines stay on it as you walk round); the colour
+          // spreads from where you touched it with a ragged wet edge, pigment pooling at the rim
+          float dW = length(vWorldPos - uWashAt.xyz);
+          float jag = (vnoise3(vWorldPos * 1.9) - 0.5) * 0.8 + (vnoise3(vWorldPos * 6.3 + 3.0) - 0.5) * 0.3;
+          float front = uWashAt.w + jag * clamp(uWashAt.w, 0.0, 1.0);
+          float lam = clamp(dot(N, uKeyDir), 0.0, 1.0);
+          // strokes a hand would make: one set of diagonals, broken along their length, and a
+          // second set across them only in the deepest shade
+          float hatch = step(0.7, fract(dot(vLocal, vec3(2.3, 2.9, 1.5)))) * step(0.3, vnoise3(vLocal * vec3(0.8, 5.0, 0.8)));
+          float cross = step(0.75, fract(dot(vLocal, vec3(-2.1, 3.1, 1.8)))) * smoothstep(0.3, 0.0, lam);
+          // (and every fold of the model drawn as a line: a flat-shaded model's normal jumps there)
+          float crease = smoothstep(0.2, 0.7, length(fwidth(N)));
+          // (graphite grey, well under a white hull's value: a white boat still reads as colour arriving)
+          vec3 pencil = paintLight(vec3(0.43, 0.445, 0.47) * mix(0.8, 1.0, vAO), N, vWorldPos, sh, vAO) * 0.55;
+          pencil *= (1.0 - 0.42 * hatch * smoothstep(0.7, 0.15, lam) - 0.32 * cross) * (1.0 - 0.55 * crease);
+          float wet = step(dW, front);
+          float pool = wet * (1.0 - smoothstep(0.0, 0.5, front - dW));
+          col = mix(pencil, col * (1.0 - 0.3 * pool), wet);
+        }
         #endif
         gl_FragColor = vec4(applyFog(col, vWorldPos), 1.0);
       }`,

@@ -31,8 +31,9 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 
 ## Vehicles
 
-- `src/player/vehicles.ts` — E enter/exit, V car, B boat, N plane; driveway cars (props'
-  `parked-cars` InstancedMesh) are enterable.
+- `src/player/vehicles.ts` — E enter/exit. Your own rides are painted with the brush (below); driveway
+  cars (props' `parked-cars` InstancedMesh) and kerb cars are enterable. The old free summons (V car,
+  Shift+B boat, N plane) are a developer switch: panel → Debug → free rides.
 - While riding, `Vehicles.update` owns the camera and carries the walker (streaming/life/
   interiors key off it); `walker.update` is skipped.
 
@@ -91,11 +92,33 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
 - Reveal radius grows with eye height (`revealRadius`), so flying paints wide.
   `paintedBefore(x,z)` reads the saved block, which is how an arrival card knows a first visit.
 
+## The brush (`src/ui/brush.ts`, `src/player/place.ts`) — `docs/GAME_DESIGN.md`
+
+- Paint-to-own: a coloured Almanac card (painted from life with P — `Commissions.paintFrame`, which
+  records `pt` and `fresh`) is a kind you can paint: `Commissions.owned(families)`. The families the
+  brush knows are `PAINTABLE` (boat, car; planes once airfields have planes to paint from life).
+- B (✎ on touch) takes it out. Chips: the kinds you own (last used first), the one fitting what you
+  aim at picked for you until you pick by hand (water → boat, a street → car); a pencil chip for a
+  family you don't own yet says where the nearest real one is.
+- Aim: the screen centre (locked mouse), the cursor (unlocked), a tap (touch; it stays put).
+  `cast()` marches the view ray over terrain / water (y = max(h, 0)) and roofs, 160 m.
+- Placement: the pure solvers in `place.ts` (`placeBoat`, `placeCar`) over `Vehicles.placeWorld`;
+  the brush adds `free` (no moored boat within 6.5 m, no car within 4.2 m). The developer summons
+  use the same solvers.
+- The sketch is `Vehicles.build(kind, model, colour, seed, mat)` in `propMaterial({ wash: true })`:
+  pencil until the wash reaches it (`uWashAt` = touch point + radius; < 0 all pencil). A click / a
+  tap on the sketch starts the wash (`WASH_S` 1.7 s; rubbing hurries it up to 3×, and
+  `walker.holdLook` holds the view while you rub); dry → `Vehicles.paint()`, saved with the rides.
+- Keys while it's out: 1–9 / wheel choose, R / Shift+R turn (a car takes the other lane), C colour,
+  Esc / right-click put away. Hints: "P — paint that boat from life" (until you own one), then
+  "B — your brush" (until you've painted once).
+- Harness: `window.__BRUSH__` (open / close / aim(x, z) / choose / paint / state); `__GAME__.brush`.
+
 ## The sketchbook layer (`src/ui/`)
 
 - `ctx.ts` is the only view the UI gets of the game (`GameCtx`, built in `main.ts`).
   `instances(prefix,…)` finds visible kit instances by mesh-name prefix:
-  - `parked-cars:`, `moored-boats:` (tile props)
+  - `parked-cars:`, `moored-boats:` (tile props); `kerb-cars:` (the city's kerb and lot cars)
   - `life-car:`, `life-boat:` (ambient life)
   - `ride-car:`, `ride-boat:`, `ride-plane:` (player vehicles)
 - `photo.ts`: P frames the view, Space paints a page (the grab happens in `afterRender()`, right
@@ -105,7 +128,7 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   moored boat types) plus scenes (sea at golden hour, fog, sunrise, lamps, rooftops). `judge()`
   checks the camera frame and conditions at shoot time. It also keeps the spotting log and the
   **Almanac**: every family (cars, boats, planes, wildlife, trees, garden plants) is a set of cards;
-  a card records where and when it was first seen (`state.seen`), and each town you reach gives
+  a card records where and when it was first seen (`state.seen`) — coloured in once painted from life, when the brush can paint it — and each town you reach gives
   a stamp (`state.stamps`, from `ctx.locality()` / `ctx.region()`). New families only need an
   entry in `FAMILY` and a mesh-name prefix in `spot()`.
 - `cardArt.ts`: an Almanac card picture for any foundry model — rendered once to a 256 px target,

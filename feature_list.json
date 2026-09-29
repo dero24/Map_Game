@@ -847,6 +847,24 @@
         "tools/spot-shots.js (idPass, after-hook, fails stamped on the sheet)"
       ],
       "notes": "Reviewer round 8b must-fix 4. Written while the computer was offline: run it on Kerry Park 18:20 (the Needle >= 5%) and counter2 2 and 5."
+    },
+    {
+      "id": "brush-boat-minute",
+      "priority": 1,
+      "area": "gameplay",
+      "title": "The brush, slice 1 (docs/GAME_DESIGN.md §14): paint a kind from life, then paint one where you aim — the boat minute at Sea Bright",
+      "user_visible_behavior": "Paint a moored skiff (or any boat or car) from life with P and its Almanac card colours in; B takes out the brush: the kinds you own are chips (the one that fits what you aim at first — water a boat, a street a car), a pencil sketch of it snaps to the nearest spot that fits (open water with its bow off the land; the lane going your way), click (tap it, on a phone) and the colour washes in from where you touched it — rub to hurry it — and when it dries it's real, saved where you painted it; E to board. A kind you haven't painted from life is a pencil chip that says where the nearest real one is. V/N no longer summon (a developer switch in the panel keeps them).",
+      "status": "in_progress",
+      "verification": [
+        "tests/place.test.ts (boat: at the aim on open water, bow off the land; from the beach, the nearest water with room; inland, which way the water is; car: in the lane going your way, past a house at the kerb, never on a footpath; compass words)",
+        "tests/brush.test.ts (a painting colours the cards of the kinds in frame and they become paintable; pencil cards and unknown kinds never are; newest first)",
+        "Offline render through the game's watercolour pass: pencil sketch / half washed / finished, skiff and pickup (scratch/glsl/brush.ts)",
+        "LIVE (Robby's computer, Sea Bright marina): P at the moorings coloured 5 boat cards; B → skiff chip first, the sketch 3 m off the aim clear of the moored boats, wash → real (shots/brush-minute-noon.jpg); boarded from the shallows, 12 m/s (shots/brush-sail.jpg); after a reload both painted skiffs where they were left; the two prompts seen. Phone (375×812 touch emulation): ✎ opens it, tap the water moves the sketch, tap the sketch paints it, rubbing hurries it; the bar clear of the buttons, the place name and the map credit"
+      ],
+      "evidence": [
+        "src/player/place.ts, src/ui/brush.ts, src/render/propMaterial.ts (wash), src/player/vehicles.ts (build/paint/defaultColor, summons behind debugParams.summons), src/ui/commissions.ts (owned, fresh, kerb cars paintable), src/ui/photo.ts (the 'yours to paint now' line), src/player/controller.ts (holdLook), src/main.ts, src/ui/panel.ts, index.html"
+      ],
+      "notes": "The reviewer judges the boat minute in round 9 (and Robby's own try: a new player in under 90 s). Planes wait for airfields with planes to paint from life. Open: one painting teaches every boat in the middle of the frame (5 at the marina) — generous on purpose for now (GAME_DESIGN §15)."
     }
   ],
   "regions": {

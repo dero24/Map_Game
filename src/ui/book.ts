@@ -27,6 +27,7 @@ export interface Seen {
   t: number; lat: number; lon: number; town: string; region: string;
   /** Spotting makes a pencil card; painting the subject (photo mode, in frame) colours it in. */
   painted?: boolean;
+  pt?: number; // when it was painted in (a coloured card is a kind you can paint: the newest first)
   page?: string; // the sketchbook page that painted it (place cards show your painting)
   name?: string; kind?: string; // place cards: the real name and category
 }

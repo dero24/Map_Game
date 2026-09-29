@@ -2,6 +2,64 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-28 (w) — The brush, slice 1: paint a thing from life, then paint one where you aim (built while the computer was away)
+
+Robby and I settled the game (`docs/GAME_DESIGN.md`, "Paint It Real"):
+- painting is the verb;
+- what you can paint is earned by painting the real thing from life;
+- every verb works on a phone;
+- you never draw on the 3D world — you aim and it snaps.
+
+Slice 1, the boat minute, was built and tested in the cloud copy:
+
+- **Paint-to-own** (`commissions.ts`):
+  - A coloured Almanac card is a kind you can paint.
+  - A painting records when each card was coloured in (`pt`) and which kinds that frame taught (`fresh`).
+  - The city's kerb cars can be painted from life now too.
+  - The painting's toast adds "yours to paint now: B for your brush".
+- **Placement rules** (`player/place.ts`): pure solvers, shared by the brush and the old summons.
+  - A boat goes on the nearest open water with room for a hull (5 m all round), bow off the land.
+  - A car goes in the lane nearest your aim, facing the way you look, and pulls up past a house built to the kerb.
+  - Never on top of what's already there: a moored boat (6.5 m) or a parked car (4.2 m).
+  - When nothing fits, it says why and which way ("a boat needs open water — the nearest is 300 m east").
+- **The brush** (`ui/brush.ts`): B, or the ✎ button on a phone.
+  - The chips are the kinds you own, last used first. The one that fits what you aim at is picked for you until you pick by hand.
+  - A family you haven't painted from life shows a pencil chip that says where the nearest real one is.
+  - The sketch is the kind's own model in pencil, and it glides to the solved spot.
+  - Controls: R turns it (a car takes the other lane); C or a swatch changes its colour; the wheel or 1–9 picks another kind.
+  - Click (on a phone, tap the sketch) and the colour washes in from where you touched it. Rubbing hurries it, and the view holds still while you rub.
+  - When it dries it's a real ride, saved where you painted it (`vehicles.ts paint()`); E to board.
+  - Harness hook: `__BRUSH__`.
+- **The pencil and the wash** (`propMaterial({ wash: true })`, `uWashAt`):
+  - The sketch is graphite grey, hatched in the model's own frame on the shaded side, cross-hatched in the deepest shade, with its folds drawn.
+  - The colour spreads with a ragged wet edge and pigment pooling at the rim.
+  - Checked offline through the game's own watercolour pass: sketch, half washed, finished. A white hull still reads as colour arriving.
+- **Free rides are a developer switch.** V / Shift+B / N summon only with the panel's "free rides" on; otherwise V and N say how rides are made now.
+- **Boarding** reaches 7 m, because a hull needs 5 m of open water round it.
+- **The intro's key list** now says: B, your brush.
+- **Tests:** 300 pass (place 7, brush 2).
+
+**Verified live once the computer was back** (Sea Bright marina, the browser pane):
+- P at the moorings coloured five boat cards at once (a harbour painting teaches several boats),
+  and the toast said they were yours to paint.
+- B opened the brush over the water with the skiff chip first. The pencil sketch snapped 3 m off
+  the aim, clear of the moored boats. The wash ran from the touch point and the skiff was real
+  (`shots/brush-minute-noon.jpg`: sketch, half washed, dry).
+- Boarded from the shallows 4.6 m off; 12 m/s under way (`shots/brush-sail.jpg`).
+- After a reload, both painted skiffs were where they'd been left.
+- The prompts: "P — paint that boat from life" with no boat owned, then "B — your brush".
+
+**On a phone-sized screen** (touch emulation, 375×812):
+- The ✎ button opens the brush.
+- A tap on the water moves the sketch; a tap on the sketch starts the wash; rubbing hurries it.
+- Fixed there, so the flow works end to end:
+  - Taps anywhere count now; the walking stick only walks when dragged. The left 45% had ignored
+    taps, and so did a sketch standing there.
+  - The bar keeps clear of the button column, hides the place name while you paint, and sits
+    above the map credit.
+
+Next: reviewer round 9 on the boat minute and on Seattle, then the pending list.
+
 ## 2026-09-28 (v) — Seen in the browser: Seattle from the vector twins; why its traffic drove through itself (a crosswalk on every arm); summer time; stalls down Pike Place; hills without knees; Rainier's ice; Kerry Park's view kept open
 
 Robby's computer came back: all of (u) synced (60 files), the device typecheck is clean, 275 tests
