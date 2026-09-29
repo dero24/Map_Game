@@ -770,6 +770,30 @@
       "notes": "Done for round 9. Open: turn pockets on wide arterials (a left-turner still holds the lane behind it); the bench's all-way-stop grids sit at ~30% stopped at rush (realistic)."
     },
     {
+      "id": "drive-hitch",
+      "priority": 1,
+      "area": "perf",
+      "title": "Driving through a city without a hitch every couple of seconds (Robby, Seattle)",
+      "user_visible_behavior": "Teleport to downtown Seattle and drive: new blocks stream in without the game freezing every few seconds. The traffic's streets update a moment later, and a new block appears over a few frames with the old one standing in until it's whole.",
+      "status": "passing",
+      "verification": [
+        "tools/hitch-probe.js __HITCH__ in the pane, downtown Seattle (14 real cells), a car moved 15 m/s for 30 s: longest frame 503 ms (traffic graph rebuilt in one go: 491 ms) → 81–83 ms; grass 1,513 → 172–209 ms per 30 s; mount ~20 ms (collision 12) with the upload spread over ~0.5 s; traffic rebuilt twice with no spike",
+        "scratch/lifeinit/bench.mts: the sliced, integer-keyed rebuild gives a byte-identical LifeInit to the old one (cold, warm, after a ground change, sliced; longest slice ~4 ms); warm 152 → 32 ms on the bench city",
+        "305 tests pass"
+      ],
+      "evidence": [
+        "src/sim/life.ts (lifeInitSteps, VertexTable, shopCounter, height cache on Terrain.genIn / WalkWorld.surfaceGen)",
+        "src/main.ts (sliced life rebuild, ctx.instances tile culling + in-place read, interiors off while driving/flying, roadNear footstep scan)",
+        "src/world/stream.ts (per-tile grids, reveal staging + retire, lamp sprite, lastMount)",
+        "src/world/grass.ts (near-street list, cheap tests first, 3 ms cap)",
+        "src/world/groundPaint.ts (merged lists per tile set, walks per tile)",
+        "src/world/data.ts (Terrain patch memo, genIn)",
+        "src/world/roadBounds.ts",
+        "tools/hitch-probe.js"
+      ],
+      "notes": "Left: the GPU. The downtown ring draws ~15M triangles in ~1,800 calls a frame. Buildings are 76 bytes a vertex, non-indexed, 1.3M vertices a tile, and rockeries 390k vertices a tile. Next: LOD and lighter vertices, then a phone budget. Collision walls are tombstoned but never compacted over a long drive."
+    },
+    {
       "id": "block-paving",
       "priority": 2,
       "area": "render",

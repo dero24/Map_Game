@@ -23,6 +23,8 @@ const COARSE_R = 8000; // silhouette ring: lite builds (meshes only) out to the 
 const W_CONC = 4; // real-lite (tile service) builds in flight at once (the service caches in R2; Overpass slots are per endpoint)
 const LAMP_WIN = 2048; // m — the night light-map window around the walker
 const COARSE_BUDGET = 4; // max outstanding lite builds — they're lowest priority
+const REVEAL_BYTES = 12e6; // vertex data a newly mounted tile shows (so uploads) per frame
+const REVEAL_OBJS = 24; // …and meshes (each small one still costs its buffers and bindings)
 const ID_STRIDE = 1 << 12; // building-id space per tile (window-fade keys, <2^24 total; synth cells raise the ord count)
 
 export interface TileArt {
@@ -53,6 +55,11 @@ const boxDist2 = (b: Box, x: number, z: number) => {
   const dx = Math.max(b.x0 - x, 0, x - b.x1), dz = Math.max(b.z0 - z, 0, z - b.z1);
   return dx * dx + dz * dz;
 };
+
+type PavedItem = { ring: [number, number][] } | { seg: [number, number, number, number, number] };
+type PavedIndex = Map<number, PavedItem[]>;
+interface TileGrids { house: Map<number, number>; shop: Map<number, number>; city: Map<number, number>; paved: PavedIndex }
+const UNPAVED = new Set(['footway', 'path', 'cycleway', 'steps', 'track', 'bridleway']);
 
 const v3s = (flat: number[]) => {
   const out: THREE.Vector3[] = [];
@@ -95,6 +102,14 @@ export class TileStream {
   private lampCz = Infinity;
   private lampDirty = false;
   private lampCanvas: HTMLCanvasElement | null = null;
+  private lampSprite: HTMLCanvasElement | null = null;
+  // A new tile shows a few meshes a frame (REVEAL_BYTES): a downtown tile is ~100 MB of vertices,
+  // and sending it all to the GPU in the frame it mounted stalled that frame 40–60 ms. What it
+  // replaces (its stand-in, its silhouette, its flat first build) stays on screen until it's whole.
+  private reveals: { group: THREE.Group; hidden: THREE.Object3D[]; retire: THREE.Group[] }[] = [];
+  private culled: THREE.Object3D[] = []; // frustum culling off for the frame they appear (see reveal)
+  /** Where the last detail mount's time went, ms (tools/hitch-probe.js, soak). */
+  lastMount: { id: string; collision: number; objects: number; retire: number; hooks: number } | null = null;
   private lampTex: THREE.CanvasTexture | null = null;
   private canyonCanvas: HTMLCanvasElement | null = null;
   onChange: (() => void) | null = null;
@@ -228,70 +243,74 @@ export class TileStream {
   }
   doorOf(fp: Footprint) { return this.fpDoor.get(fp); }
 
-  houseGrid() {
-    const m = new Map<number, number>();
-    for (const f of this.footprints)
-      if (f.kind === 'house') {
-        const k = Math.floor(f.ring[0][0] / 80) * 92821 + Math.floor(f.ring[0][1] / 80);
-        m.set(k, (m.get(k) ?? 0) + 1);
-      }
-    return m;
-  }
-
-  /** Shops and offices per 80 m cell — where a town's main street is. */
-  shopGrid() {
-    const m = new Map<number, number>();
-    for (const f of this.footprints)
-      if (f.kind === 'commercial') {
-        const k = Math.floor(f.ring[0][0] / 80) * 92821 + Math.floor(f.ring[0][1] / 80);
-        m.set(k, (m.get(k) ?? 0) + 1);
-      }
-    return m;
-  }
-  /** Paved open ground by 40 m cell: parking lots and plazas (rings) and carriageways (segments
-   *  with their half width) — where wildlife doesn't graze. */
-  pavedIndex() {
-    const idx = new Map<number, ({ ring: [number, number][] } | { seg: [number, number, number, number, number] })[]>();
-    const add = (x0: number, z0: number, x1: number, z1: number, it: { ring: [number, number][] } | { seg: [number, number, number, number, number] }) => {
+  // The walker's neighbourhood grids (houses, shops, built volume, paved ground) are summed from
+  // each tile's own, worked out once when the tile first counts: rebuilding them from every
+  // footprint and street segment in the ring on each mount was 15–25 ms, several times a
+  // minute on a drive (the Seattle hitch).
+  private grids = new WeakMap<TileArt, TileGrids>();
+  private gridsOf(a: TileArt): TileGrids {
+    let g = this.grids.get(a);
+    if (g) return g;
+    const house = new Map<number, number>(), shop = new Map<number, number>(), city = new Map<number, number>();
+    for (const f of a.fps) {
+      const r = f.ring, k = Math.floor(r[0][0] / 80) * 92821 + Math.floor(r[0][1] / 80);
+      if (f.kind === 'house') house.set(k, (house.get(k) ?? 0) + 1);
+      if (f.kind === 'commercial') shop.set(k, (shop.get(k) ?? 0) + 1);
+      let ar = 0;
+      for (let i = 0, j = r.length - 1; i < r.length; j = i++) ar += (r[j][0] - r[i][0]) * (r[j][1] + r[i][1]);
+      city.set(k, (city.get(k) ?? 0) + Math.abs(ar / 2) * Math.max(0, f.top - f.base));
+    }
+    const paved: PavedIndex = new Map();
+    const add = (x0: number, z0: number, x1: number, z1: number, it: PavedItem) => {
       for (let i = Math.floor(x0 / 40); i <= Math.floor(x1 / 40); i++)
         for (let j = Math.floor(z0 / 40); j <= Math.floor(z1 / 40); j++) {
           const k = i * 92821 + j;
-          (idx.get(k) ?? idx.set(k, []).get(k)!).push(it);
+          (paved.get(k) ?? paved.set(k, []).get(k)!).push(it);
         }
     };
-    for (const a of this.loaded.values()) {
-      for (const ar of a.areas) {
-        if (ar.c !== 'parking' && ar.c !== 'plaza') continue;
-        const o = ar.o[0];
-        if (!o || o.length < 6) continue;
-        const ring: [number, number][] = [];
-        let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
-        for (let i = 0; i + 1 < o.length; i += 2) { const x = o[i] / 10, z = o[i + 1] / 10; ring.push([x, z]); x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
-        add(x0, z0, x1, z1, { ring });
-      }
-      for (const r of a.primRoads) {
-        if (r.lod || !r.w || ['footway', 'path', 'cycleway', 'steps', 'track', 'bridleway'].includes(r.c)) continue;
-        for (let i = 0; i + 3 < r.p.length; i += 2) {
-          const ax = r.p[i] / 10, az = r.p[i + 1] / 10, bx = r.p[i + 2] / 10, bz = r.p[i + 3] / 10, hw = r.w / 2 + 0.5;
-          add(Math.min(ax, bx) - hw, Math.min(az, bz) - hw, Math.max(ax, bx) + hw, Math.max(az, bz) + hw, { seg: [ax, az, bx, bz, hw] });
-        }
+    for (const ar of a.areas) {
+      if (ar.c !== 'parking' && ar.c !== 'plaza') continue;
+      const o = ar.o[0];
+      if (!o || o.length < 6) continue;
+      const ring: [number, number][] = [];
+      let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+      for (let i = 0; i + 1 < o.length; i += 2) { const x = o[i] / 10, z = o[i + 1] / 10; ring.push([x, z]); x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+      add(x0, z0, x1, z1, { ring });
+    }
+    for (const r of a.primRoads) {
+      if (r.lod || !r.w || UNPAVED.has(r.c)) continue;
+      for (let i = 0; i + 3 < r.p.length; i += 2) {
+        const ax = r.p[i] / 10, az = r.p[i + 1] / 10, bx = r.p[i + 2] / 10, bz = r.p[i + 3] / 10, hw = r.w / 2 + 0.5;
+        add(Math.min(ax, bx) - hw, Math.min(az, bz) - hw, Math.max(ax, bx) + hw, Math.max(az, bz) + hw, { seg: [ax, az, bx, bz, hw] });
       }
     }
-    return idx;
+    g = { house, shop, city, paved };
+    this.grids.set(a, g);
+    return g;
   }
-
-  /** Built volume per 80 m cell (Σ footprint area × height) — how much city stands around you. */
-  cityGrid() {
+  private sumGrid(pick: (g: TileGrids) => Map<number, number>) {
     const m = new Map<number, number>();
-    for (const f of this.footprints) {
-      const r = f.ring;
-      let a = 0;
-      for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += (r[j][0] - r[i][0]) * (r[j][1] + r[i][1]);
-      const k = Math.floor(r[0][0] / 80) * 92821 + Math.floor(r[0][1] / 80);
-      m.set(k, (m.get(k) ?? 0) + Math.abs(a / 2) * Math.max(0, f.top - f.base));
-    }
+    for (const a of this.loaded.values()) for (const [k, v] of pick(this.gridsOf(a))) m.set(k, (m.get(k) ?? 0) + v);
     return m;
   }
+  /** Houses per 80 m cell. */
+  houseGrid() { return this.sumGrid((g) => g.house); }
+  /** Shops and offices per 80 m cell — where a town's main street is. */
+  shopGrid() { return this.sumGrid((g) => g.shop); }
+  /** Paved open ground by 40 m cell: parking lots and plazas (rings) and carriageways (segments
+   *  with their half width) — where wildlife doesn't graze. */
+  pavedIndex() {
+    const idx: PavedIndex = new Map();
+    for (const a of this.loaded.values())
+      for (const [k, l] of this.gridsOf(a).paved) {
+        const into = idx.get(k);
+        if (into) for (const it of l) into.push(it);
+        else idx.set(k, l.slice());
+      }
+    return idx;
+  }
+  /** Built volume per 80 m cell (Σ footprint area × height) — how much city stands around you. */
+  cityGrid() { return this.sumGrid((g) => g.city); }
 
   // Load every tile within r of (x,z) now — used during startup so the spawn area is solid.
   // Covers synthetic cells too, so a teleport/respawn past the bake isn't born in a void.
@@ -310,13 +329,14 @@ export class TileStream {
     // stream in behind their synth twins; blocking spawn on Overpass is exactly the
     // cold-remote-tile wait the placeholder exists to avoid.
     const pends = await Promise.all(wanted.map((t) => (t.world ? Promise.resolve(null) : this.fetch(t))));
-    for (const p of pends) this.mount(p);
+    for (const p of pends) this.mount(p, false); // (the spawn's own ground: all at once)
     for (const t of wanted) if (t.world) void this.fetch(t).then((p) => { if (p) { this.queued.add(t.id); this.buildQueue.push(p); } });
   }
 
   // Per-frame: kick fetches for wanted tiles (detail ring first, then the coarse silhouette
   // ring under a small budget), mount at most one finished tile of each tier, drop far ones.
   update(x: number, z: number) {
+    this.reveal();
     const now = performance.now();
     const gy = Math.max(0, this.terrain.heightAt(x, z));
     if (Number.isFinite(gy)) U.uLampBaseY.value = Number.isFinite(U.uLampBaseY.value) ? U.uLampBaseY.value + (gy - U.uLampBaseY.value) * 0.05 : gy;
@@ -552,16 +572,17 @@ export class TileStream {
       .finally(() => this.reliefBusy.delete(id));
   }
 
-  private mount(p: Pending | null) {
+  private mount(p: Pending | null, staged = true) {
     if (!p) return;
     if (p.spec.synth && this.loaded.has('w' + p.spec.id.slice(1))) return; // its real-lite twin already won the cell
+    const retire: THREE.Group[] | undefined = staged ? [] : undefined; // what this tile replaces, on screen until it's whole
     if (p.replace) {
       // Relief swap: only while the flat version is still what's mounted. Unloading first
       // is required (fp/interior keys are `${id}:${i}` — identical across the two builds)
       // and safe: both happen inside this one synchronous call, so no frame ever renders
       // or collides against an empty cell.
       if (!this.loaded.get(p.spec.id)?.flat) return;
-      this.unload(p.spec.id);
+      this.unload(p.spec.id, retire);
     } else if (this.loaded.has(p.spec.id)) return;
     const { spec, tile } = p;
     const scope = this.scopeSeq++;
@@ -580,6 +601,7 @@ export class TileStream {
       if (!holders) this.demHolders.set(cell, (holders = new Set()));
       holders.add(spec.id);
     }
+    const t0 = performance.now();
     w.beginScope(scope);
     try {
       // Builder-emitted collision (bridge/pier decks, poles, fences, parked cars) replays first —
@@ -613,6 +635,7 @@ export class TileStream {
         w.addLoop([[pl.x - c + s, pl.z - s - c], [pl.x + c + s, pl.z + s - c], [pl.x + c - s, pl.z + s + c], [pl.x - c - s, pl.z - s + c]], -Infinity, 2.2 + Math.max(0, this.terrain.heightAt(pl.x, pl.z)));
       }
       w.endScope();
+      const t1 = performance.now();
 
       const group = new THREE.Group();
       group.name = `tile:${spec.id}`;
@@ -620,13 +643,18 @@ export class TileStream {
       for (const o of tile.objs) group.add(buildObject(o, atlasTex));
       group.add(haloPoints(v3s(tile.lanterns), 7, new THREE.Color(1.0, 0.85, 0.55)));
       group.add(haloPoints(v3s(tile.towers), 1.2, new THREE.Color(1.0, 0.75, 0.45)));
-      this.unloadCoarse(spec.id); // seamless upgrade — detail replaces the silhouette only once ready
+      this.unloadCoarse(spec.id, retire); // seamless upgrade — detail replaces the silhouette only once ready
       if (spec.world) {
         // The real tile lands: its synth placeholder (detail or silhouette) retires now.
-        this.unload('s' + spec.id.slice(1));
-        this.unloadCoarse('s' + spec.id.slice(1));
+        this.unload('s' + spec.id.slice(1), retire);
+        this.unloadCoarse('s' + spec.id.slice(1), retire);
       }
+      const t2 = performance.now();
+      const hidden = retire ? group.children.filter((c) => c.visible) : [];
+      for (const c of hidden) c.visible = false;
       this.scene.add(group);
+      if (hidden.length) this.reveals.push({ group, hidden, retire: retire! });
+      else for (const g of retire ?? []) this.dispose(g);
       if (tile.lampPts?.length) {
         this.lampPts.set(spec.id, tile.lampPts);
         this.lampDirty = true;
@@ -650,9 +678,12 @@ export class TileStream {
       });
       if (tile.late) this.relieve(spec);
       else this.relief.delete(spec.id);
+      const t3 = performance.now();
       this.markDirty();
       this.onTile?.(this.loaded.get(spec.id)!);
       this.onMount?.(spec);
+      const t4 = performance.now();
+      this.lastMount = { id: spec.id, collision: t1 - t0, objects: t2 - t1, retire: t3 - t2, hooks: t4 - t3 };
     } catch (e) {
       w.endScope();
       w.removeScope(scope);
@@ -671,7 +702,10 @@ export class TileStream {
       if (g) {
         this.scene.remove(g);
         g.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose?.(); });
+        const i = this.reveals.findIndex((r) => r.group === g);
+        if (i >= 0) this.reveals.splice(i, 1);
       }
+      for (const r of retire ?? []) this.dispose(r);
       console.warn('tile mount failed', spec.id, e);
       this.failed.set(spec.id, performance.now()); // back off — a deterministic failure would otherwise refetch every frame
     }
@@ -694,16 +728,24 @@ export class TileStream {
     ctx.fillRect(0, 0, R, R);
     ctx.globalCompositeOperation = 'lighter';
     const r = 13 * k; // pool, dark, pool: night reads through the rhythm between the poles
+    // one pool, painted once and stamped at every lamp (a gradient object per lamp — a city
+    // ring has thousands — made this repaint a 10–14 ms stall on every mount)
+    const S = Math.ceil(r * 2);
+    if (!this.lampSprite || this.lampSprite.width !== S) {
+      const sp = (this.lampSprite = document.createElement('canvas'));
+      sp.width = sp.height = S;
+      const sc = sp.getContext('2d')!, g = sc.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+      g.addColorStop(0, 'rgba(255,255,255,1)');
+      g.addColorStop(0.35, 'rgba(255,255,255,0.5)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      sc.fillStyle = g;
+      sc.fillRect(0, 0, S, S);
+    }
     for (const pts of this.lampPts.values())
       for (let i = 0; i + 1 < pts.length; i += 2) {
         const px = (pts[i] - x0) * k, pz = (pts[i + 1] - z0) * k;
         if (px < -r || pz < -r || px > R + r || pz > R + r) continue;
-        const g = ctx.createRadialGradient(px, pz, 0, px, pz, r);
-        g.addColorStop(0, 'rgba(255,255,255,1)');
-        g.addColorStop(0.35, 'rgba(255,255,255,0.5)');
-        g.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.fillStyle = g;
-        ctx.fillRect(px - r, pz - r, r * 2, r * 2);
+        ctx.drawImage(this.lampSprite, px - S / 2, pz - S / 2);
       }
     // G: the canyon field — footprints weighted by how tall they stand (40 m = full), blurred
     // to ~25 m: how much sky a street between them loses. paintLight dims the sky fill with it
@@ -742,7 +784,9 @@ export class TileStream {
     U.uLampBox.value.set(x0, z0, 1 / size, 1 / size);
   }
 
-  unload(id: string) {
+  /** `retire`: leave the tile's meshes on screen and hand them over — a tile taking its place
+   *  removes them once it's all showing (reveal). */
+  unload(id: string, retire?: THREE.Group[]) {
     const a = this.loaded.get(id);
     if (!a) return;
     this.walk.removeScope(a.scope);
@@ -760,12 +804,7 @@ export class TileStream {
     this.interiors.unregister(a.keys);
     for (const k of a.keys) this.plans.delete(k);
     for (const f of a.fps) { this.fpByKey.delete(f.key!); this.fpDoor.delete(f); }
-    this.scene.remove(a.group);
-    a.group.traverse((o) => {
-      const m = o as THREE.Mesh;
-      m.geometry?.dispose?.();
-      if ((m as unknown as THREE.InstancedMesh).isInstancedMesh) (m as THREE.InstancedMesh).dispose();
-    });
+    this.retireGroup(a.group, retire);
     if (this.lampPts.delete(id)) this.lampDirty = true;
     this.loaded.delete(id);
     this.onUnload?.(id);
@@ -792,15 +831,53 @@ export class TileStream {
     }
   }
 
-  private unloadCoarse(id: string) {
+  private unloadCoarse(id: string, retire?: THREE.Group[]) {
     const a = this.coarseLoaded.get(id);
     if (!a) return;
-    this.scene.remove(a.group);
-    a.group.traverse((o) => {
+    this.retireGroup(a.group, retire);
+    this.coarseLoaded.delete(id);
+  }
+
+  // A tile's meshes go now, or (`retire`) wait for the tile replacing them. One still revealing
+  // stops: what it was waiting to replace goes with it.
+  private retireGroup(g: THREE.Group, retire?: THREE.Group[]) {
+    const i = this.reveals.findIndex((r) => r.group === g);
+    if (i >= 0) for (const old of this.reveals.splice(i, 1)[0].retire) retire ? retire.push(old) : this.dispose(old);
+    if (retire) retire.push(g);
+    else this.dispose(g);
+  }
+  private dispose(g: THREE.Group) {
+    this.scene.remove(g);
+    g.traverse((o) => {
       const m = o as THREE.Mesh;
       m.geometry?.dispose?.();
       if ((m as unknown as THREE.InstancedMesh).isInstancedMesh) (m as THREE.InstancedMesh).dispose();
     });
-    this.coarseLoaded.delete(id);
+  }
+  // Show the oldest revealing tile's next meshes (REVEAL_BYTES / REVEAL_OBJS of them), each drawn this frame
+  // whether it's in view or not, so its buffers go up now rather than when you turn round; when
+  // it's all showing, what it replaced goes.
+  private reveal() {
+    for (const o of this.culled) o.frustumCulled = true;
+    this.culled.length = 0;
+    const r = this.reveals[0];
+    if (!r) return;
+    let budget = REVEAL_BYTES, n = 0;
+    while (r.hidden.length && budget > 0 && n++ < REVEAL_OBJS) {
+      const o = r.hidden.shift()!;
+      o.visible = true;
+      o.traverse((m) => {
+        const g = (m as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
+        if (g?.attributes) {
+          for (const k in g.attributes) budget -= (g.attributes[k] as THREE.BufferAttribute).array?.byteLength ?? 0;
+          if (g.index) budget -= g.index.array.byteLength;
+        }
+        if ((m as THREE.InstancedMesh).isInstancedMesh) budget -= (m as THREE.InstancedMesh).instanceMatrix.array.byteLength;
+        if (m.frustumCulled) { m.frustumCulled = false; this.culled.push(m); }
+      });
+    }
+    if (r.hidden.length) return;
+    this.reveals.shift();
+    for (const g of r.retire) this.dispose(g);
   }
 }

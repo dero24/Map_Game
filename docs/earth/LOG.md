@@ -2,6 +2,74 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-28 (z) — Driving through Seattle without the hitch every couple of seconds
+
+Robby's report: teleport to Seattle, drive around, and the game lags every couple of seconds. A frame
+probe (`tools/hitch-probe.js`, new) timed every per-frame system while a car crossed downtown at
+15 m/s, and showed what the hitches were.
+
+- **The traffic's road graph was rebuilt in one go on every tile change.** This was the big one:
+  491 ms on the 22,000 roads of a downtown ring, every few seconds on a drive. Half of it was the
+  walk surface under 227,000 road samples. The other half was a string key built for each vertex
+  several times over.
+  - The rebuild is now sliced: it runs about 4 ms a frame (`lifeInitSteps`, pumped in `main.ts`).
+    The sim keeps the old graph until the new one is whole.
+  - Vertices sit in an integer hash table, and shops are counted from a flat grid.
+  - A road piece's heights are kept while its road lives and its terrain cell took no new patch
+    (`Terrain.genIn` / `WalkWorld.surfaceGen`).
+  - Its output is byte-identical to the old build (`scratch/lifeinit/bench.mts`: cold, warm, after
+    a ground change, sliced). A warm rebuild of the bench city dropped from 152 ms to 32 ms.
+- **Instance scans read every tree in the city.** The squirrels' tree list (every 2 s — "every
+  couple of seconds"), the almanac's spotting (every 0.5 s) and the commissions each walked every
+  instance of every loaded tile, a city's hundreds of thousands of trees.
+  - `ctx.instances` now skips tiles the circle can't reach.
+  - It also reads the instance array in place.
+- **A drive-by built interiors.** Every door passed within 16 m assembled a whole interior (69–209 ms
+  spikes). Driving or flying, nothing activates; a build in progress drops.
+- **Grass cells took 9–19 ms each downtown.**
+  - Only the streets near the walker are considered (re-listed every 25 m), and the cheap tests
+    come first (the paint mask, the street strips by box).
+  - Cells are capped at about 3 ms a frame.
+  - The ground painter keeps its merged road, area and footprint lists per set of tiles. It used to
+    re-sort them for every 20 m mask.
+- **Every mount rebuilt the neighbourhood grids** (houses, shops, built volume, paved ground) from
+  every footprint and segment in the ring, 15–25 ms. Each tile's own grid is now worked out once and
+  summed.
+- **A new tile went to the GPU in one frame.** A downtown tile is 100–130 MB of vertices; uploading
+  it was a 40–60 ms render.
+  - A mounted tile now shows 12 MB (or 24 meshes) a frame, each drawn the frame it appears, even
+    off-screen, so its buffers go up then rather than when you turn round.
+  - What it replaces (its stand-in, its silhouette, its flat first build) stays on screen until it's
+    whole (`TileStream.reveal`).
+  - `TileStream.lastMount` says where a mount's time went.
+- Smaller fixes:
+  - the terrain remembers the last cell it was asked about (no key string per height query);
+  - the lamp pools are one painted sprite, stamped;
+  - the footstep surface only looks at streets within reach (`roadBounds.ts`);
+  - front walks go with their tile (they piled up for the whole session, a tile's again on every
+    remount — and a stand-in's stayed painted under the real tile).
+
+**Measured.** Downtown Seattle (14 real cells), a car moved 15 m/s for 30 s, same pane:
+
+| | Before | After |
+|---|---|---|
+| Longest frame | 503 ms (and 432 ms) | 81–83 ms |
+| Frames over 40 ms | 30 | 19–30 |
+| Grass time per 30 s | 1,513 ms | 172–209 ms |
+| Mount | 31–51 ms, plus a 57–68 ms render | ~20 ms (collision 12), upload spread over ~0.5 s |
+
+Traffic rebuilt twice during the drive, with no spike. What's left of the slow frames is the GPU: the
+downtown ring draws ~15 million triangles in ~1,800 calls a frame. Building meshes are 76 bytes a
+vertex, non-indexed, 1.3 million vertices a tile, and the rockeries are 390,000 vertices a tile.
+That's the next performance item: level of detail and lighter vertices, then a phone budget.
+
+Found alongside (queued):
+- the door-placement bug Robby reported (task 67);
+- the Space Needle as a plain cylinder (task 66);
+- collision walls are tombstoned on unmount but never compacted (memory over a long drive).
+
+Tests: 305 pass.
+
 ## 2026-09-28 (y) — Traffic that flows (reviewer round 9, must-fix 3): every street carries its class's traffic, turns ride a curve through the box, cars that don't cross share it
 
 Round 8b measured Queen Anne at 63% of cars stopped (bar: 25%), 2.0 m/s. Most of them were queued

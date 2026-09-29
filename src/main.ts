@@ -17,8 +17,9 @@ import { activeBuilding, type Door, type Footprint } from './world/buildings';
 import { styleFor, setActiveStyle } from './world/styles';
 import { Vehicles } from './player/vehicles';
 import { GrassField } from './world/grass';
+import { roadNear } from './world/roadBounds';
 import { buildSky, skyUniforms } from './world/sky';
-import { LifeClient, buildLifeBase, buildLifeInit, lifeParams } from './sim/life';
+import { LifeClient, buildLifeBase, buildLifeInit, lifeInitSteps, lifeParams } from './sim/life';
 import { Ambience } from './audio/ambience';
 import { Journal } from './ui/journal';
 import { Explore } from './world/explore';
@@ -33,7 +34,7 @@ import { Arrival } from './ui/arrival';
 import type { GameCtx } from './ui/ctx';
 import { modelName } from './player/vehicles';
 import { Critters } from './sim/critters';
-import { rhythmFor } from './sim/protocol';
+import { rhythmFor, type LifeInit } from './sim/protocol';
 import { Garden } from './ui/garden';
 import { SPECIES, TREE_KINDS, treeMeta } from './assets/flora';
 import { Interiors, type Plan } from './world/interiors';
@@ -262,7 +263,7 @@ async function main() {
     (groundGroup.userData.setDetailCells as (c: Map<string, 128 | 255>) => void)(cells);
   };
   stream.onTile = (a) => {
-    paint.addWalks(a.walks);
+    paint.addWalks(a.walks, a.spec.id);
     kerbCars.add(a.spec.id, a.kerb, [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1]);
     streamedGround();
     // J1: streamed tiles (past the bake) paint their streets and footprints into the ground windows
@@ -277,6 +278,7 @@ async function main() {
     doorOf: (f: Footprint) => stream.doorOf(f),
   };
   let lifeDirty = false;
+  let lifeBuild: Generator<void, LifeInit, void> | null = null; // a road-graph rebuild in progress
   let ambience: Ambience | null = null;
   const startAudio = () => {
     try { ambience ??= new Ambience(); ambience.resume(); } catch (e) { console.warn('audio unavailable', e); }
@@ -457,10 +459,16 @@ async function main() {
       const scan = (m: THREE.Object3D) => {
         if (!m.name.startsWith(prefix) || !m.visible) return;
         if ((m as THREE.InstancedMesh).isInstancedMesh) {
-          const im = m as THREE.InstancedMesh;
+          // Read the instance array in place (a city tile holds thousands of trees): only the
+          // ones inside the query square get their full world transform
+          const im = m as THREE.InstancedMesh, a = im.instanceMatrix.array as Float32Array, w = im.matrixWorld.elements;
+          const moved = w[0] !== 1 || w[5] !== 1 || w[10] !== 1 || w[1] !== 0 || w[2] !== 0 || w[4] !== 0 || w[6] !== 0 || w[8] !== 0 || w[9] !== 0;
+          const lx = x - origin.x - w[12], lz = z - origin.z - w[14];
           for (let i = 0; i < im.count; i++) {
+            const o = i * 16;
+            if (a[o] === 0 && a[o + 5] === 0) continue; // hidden / zero-scaled
+            if (!moved && (Math.abs(a[o + 12] - lx) >= r || Math.abs(a[o + 14] - lz) >= r)) continue;
             im.getMatrixAt(i, im4);
-            if (im4.elements[0] === 0 && im4.elements[5] === 0) continue; // hidden / zero-scaled
             ip.setFromMatrixPosition(im4).applyMatrix4(im.matrixWorld);
             const wx = ip.x + origin.x, wz = ip.z + origin.z;
             const e = im4.elements;
@@ -472,7 +480,12 @@ async function main() {
           if (Math.hypot(wx - x, wz - z) < r) out.push({ x: wx, y: ip.y, z: wz, name: m.name });
         }
       };
-      for (const t of stream.loaded.values()) if (t.group.visible) for (const c of t.group.children) scan(c);
+      // only the tiles the circle reaches (their things can sit a little past the cell edge)
+      const reach = (r + 150) ** 2;
+      for (const t of stream.loaded.values()) {
+        const b = t.spec.box, dx = Math.max(b.x0 - x, 0, x - b.x1), dz = Math.max(b.z0 - z, 0, z - b.z1);
+        if (t.group.visible && dx * dx + dz * dz < reach) for (const c of t.group.children) scan(c);
+      }
       for (const c of life.group.children) scan(c);
       for (const c of critters.group.children) scan(c);
       for (const c of garden.group.children) scan(c);
@@ -1019,10 +1032,20 @@ async function main() {
     for (const a of stream.loaded.values()) if (!a.spec.synth || a.vec) realCells.add(`${Math.floor((a.spec.box.x0 + a.spec.box.x1) / 2 / manifest.cell)}_${Math.floor((a.spec.box.z0 + a.spec.box.z1) / 2 / manifest.cell)}`);
     skyline.update(walker.x, walker.z, (k) => realCells.has(k));
     if (!walkParams.fly || walker.y - walker.feet < 60) grass.update(walker.x, walker.z);
-    if (lifeDirty && (!stream.busy || now - lastTileChange > 4000)) {
+    // The traffic's road graph follows the tile set — rebuilt a few ms a frame (life.ts
+    // lifeInitSteps): in one go a city's took half a second, every time a tile mounted on a drive.
+    // The sim keeps the old graph until the new one is whole.
+    if (lifeDirty && !lifeBuild && (!stream.busy || now - lastTileChange > 4000)) {
       lifeDirty = false; // clear first: a failed reinit must not throw every frame
-      try { life.reinit(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors, stream.junctions, stream.tunnels)); }
-      catch (e) { console.warn('life reinit failed', e); }
+      lifeBuild = lifeInitSteps(lifeBase, stream.primRoads, walk, stream.doors, stream.junctions, stream.tunnels);
+    }
+    if (lifeBuild) {
+      const t0 = performance.now();
+      try {
+        let r = lifeBuild.next();
+        while (!r.done && performance.now() - t0 < 4) r = lifeBuild.next();
+        if (r.done) { lifeBuild = null; life.reinit(r.value); }
+      } catch (e) { lifeBuild = null; console.warn('life reinit failed', e); }
     }
     const tp = performance.now();
     if (paint.detail.update(walker.x, walker.z)) perf.detail = Math.max(perf.detail, performance.now() - tp);
@@ -1032,7 +1055,7 @@ async function main() {
     camera.getWorldDirection(fwd);
     focus.set(camera.position.x + fwd.x * 60, walker.y - walkParams.eyeHeight, camera.position.z + fwd.z * 60);
     const ti = performance.now();
-    interiors.update(walker.x, walker.z, dt, walker.feet);
+    interiors.update(walker.x, walker.z, dt, walker.feet, !vehicles.driving && !walkParams.fly);
     perf.interior = Math.max(perf.interior, performance.now() - ti);
     life.update(now, walker, { night: U.uNight.value, hour: timeParams.hour, wind: weather.wind, clock: simTime });
     { const ride = vehicles.wake; wakes.update(now / 1000, ride ? [...life.boats, ride] : life.boats); }
@@ -1052,6 +1075,7 @@ async function main() {
         roadPadD = 1e9;
         for (const r of stream.primRoads) {
           if (r.w > 0 && r.w < 2) continue; // skip bare footway lines — they read as grass paths
+          if (!roadNear(r, walker.x, walker.z, walker.x, walker.z, r.w / 2 + 4)) continue; // (only "within 4 m" matters)
           for (let i = 0; i + 3 < r.p.length; i += 2) {
             const d = segDist(walker.x, walker.z, r.p[i] / 10, r.p[i + 1] / 10, r.p[i + 2] / 10, r.p[i + 3] / 10) - r.w / 2;
             if (d < roadPadD) roadPadD = d;

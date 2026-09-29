@@ -22,6 +22,9 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
   monitors, office chairs), shop for groceries (stocked gondolas).
 - Sun pools: the interior shader traces the sun ray to the outer wall (`uDims`) and lights the
   floor where it passes a window band (0.9–2.25 m, 2.7 m cells).
+- Only on foot: driving or flying (`interiors.update(..., onFoot)`), no interior activates; a build
+  in progress drops, and an open one goes once you're 30 m past its door. A downtown drive used to
+  assemble an interior for every door it passed, with 70–200 ms spikes.
 
 ## Collision
 

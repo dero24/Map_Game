@@ -24,7 +24,7 @@ const ROOF = Object.fromEntries(CAR_TYPES.map((t) => [t, carRecipe(t, 1).roof]))
 
 export const lifeParams = { density: 1, enabled: true };
 
-import { RANK, STOP_BACK, unpackJunctions, vkey } from './traffic';
+import { RANK, STOP_BACK, unpackJunctions } from './traffic';
 
 /** A street keeps no graph node where only a footway meets it within this far of a junction: the
  *  widest setback (12 m) and the stop line behind it, plus room to brake from a main road's speed. */
@@ -90,95 +90,235 @@ export function buildLifeBase(world: World, walk: WalkWorld): LifeBase {
 }
 
 export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, doors: Door[], junc: Float32Array[] = [], tunnels: Road[] = []): LifeInit {
-  const key = vkey; // the same vertex key the junction analysis uses
-  const ways = [...roads, ...tunnels]
-    .filter((r) => !r.lod && r.own !== 0 && r.c in RANK && r.c !== 'steps')
-    .map((r) => {
-      const p: [number, number][] = [];
-      for (let i = 0; i + 1 < r.p.length; i += 2) p.push([r.p[i] / 10, r.p[i + 1] / 10]);
-      return { r, p };
-    });
+  const g = lifeInitSteps(base, roads, walk, doors, junc, tunnels);
+  let r = g.next();
+  while (!r.done) r = g.next();
+  return r.value;
+}
+
+// Road vertices by position — the same 0.5 m rounding as the junction analysis (traffic.ts vkey) —
+// in an open-addressing table on the two integers: a city's loaded ring has ~200k vertices, and
+// the string key built for every one of them (several times over) was most of a rebuild.
+class VertexTable {
+  readonly X: Int32Array;
+  readonly Z: Int32Array;
+  private used: Uint8Array;
+  private mask: number;
+  constructor(n: number) {
+    let cap = 1024;
+    while (cap < n * 2) cap *= 2;
+    this.X = new Int32Array(cap);
+    this.Z = new Int32Array(cap);
+    this.used = new Uint8Array(cap);
+    this.mask = cap - 1;
+  }
+  get capacity() { return this.mask + 1; }
+  private home(X: number, Z: number) {
+    let h = Math.imul(X, 0x9e3779b1) ^ Math.imul(Z + 0x632be5ab, 0x85ebca77);
+    h ^= h >>> 15;
+    return h & this.mask;
+  }
+  /** The slot of the vertex at (x, z), taken if new. */
+  slot(x: number, z: number) {
+    const X = Math.round(x * 2), Z = Math.round(z * 2);
+    let h = this.home(X, Z);
+    while (this.used[h]) {
+      if (this.X[h] === X && this.Z[h] === Z) return h;
+      h = (h + 1) & this.mask;
+    }
+    this.used[h] = 1;
+    this.X[h] = X;
+    this.Z[h] = Z;
+    return h;
+  }
+  /** The slot of the vertex at (x, z), or −1. */
+  find(x: number, z: number) {
+    const X = Math.round(x * 2), Z = Math.round(z * 2);
+    for (let h = this.home(X, Z); this.used[h]; h = (h + 1) & this.mask) if (this.X[h] === X && this.Z[h] === Z) return h;
+    return -1;
+  }
+}
+/** Commercial doors within 25 m of a point: the doors in 50 m cells, looked up by the cell and its
+ *  eight neighbours (a flat grid over the doors' extent — Map lookups on every third sample of
+ *  every street were a tenth of the rebuild). Null when there are none. */
+function shopCounter(doors: Door[]): ((x: number, z: number) => number) | null {
+  let i0 = Infinity, j0 = Infinity, i1 = -Infinity, j1 = -Infinity, n = 0;
+  for (const d of doors) {
+    if (d.kind !== 'commercial') continue;
+    const i = Math.floor(d.fx / 50), j = Math.floor(d.fz / 50);
+    i0 = Math.min(i0, i), i1 = Math.max(i1, i), j0 = Math.min(j0, j), j1 = Math.max(j1, j);
+    n++;
+  }
+  if (!n) return null;
+  const gw = i1 - i0 + 3, gh = j1 - j0 + 3; // (a rim of empty cells: neighbours never fall off)
+  if (gw * gh > 1 << 22) {
+    // doors spread over hundreds of km (never the loaded ring): the plain map
+    const cells = new Map<string, number[]>();
+    for (const d of doors) if (d.kind === 'commercial') { const k = `${Math.floor(d.fx / 50)},${Math.floor(d.fz / 50)}`; (cells.get(k) ?? cells.set(k, []).get(k)!).push(d.fx, d.fz); }
+    return (x, z) => {
+      let c = 0;
+      const ci = Math.floor(x / 50), cj = Math.floor(z / 50);
+      for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) { const l = cells.get(`${ci + di},${cj + dj}`); if (l) for (let m = 0; m < l.length; m += 2) if (Math.hypot(l[m] - x, l[m + 1] - z) < 25) c++; }
+      return c;
+    };
+  }
+  const cell = (d: Door) => (Math.floor(d.fz / 50) - j0 + 1) * gw + (Math.floor(d.fx / 50) - i0 + 1);
+  const at = new Int32Array(gw * gh + 1);
+  for (const d of doors) if (d.kind === 'commercial') at[cell(d) + 1]++;
+  for (let c = 0; c < gw * gh; c++) at[c + 1] += at[c];
+  const fill = at.slice(), xz = new Float64Array(n * 2);
+  for (const d of doors) if (d.kind === 'commercial') { const k = fill[cell(d)]++; xz[k * 2] = d.fx; xz[k * 2 + 1] = d.fz; }
+  return (x, z) => {
+    const ci = Math.floor(x / 50) - i0 + 1, cj = Math.floor(z / 50) - j0 + 1;
+    let c = 0;
+    for (let dj = -1; dj <= 1; dj++) {
+      const j = cj + dj;
+      if (j < 0 || j >= gh) continue;
+      for (let di = -1; di <= 1; di++) {
+        const i = ci + di;
+        if (i < 0 || i >= gw) continue;
+        for (let k = at[j * gw + i], e = at[j * gw + i + 1]; k < e; k++) if (Math.hypot(xz[k * 2] - x, xz[k * 2 + 1] - z) < 25) c++;
+      }
+    }
+    return c;
+  };
+}
+// The walk surface under each edge sample (every ~4 m) is the costly part of a rebuild; a piece's
+// heights are kept while its road lives and the ground under it holds (WalkWorld.surfaceGen: its
+// terrain cell took no new patch). A piece over a cell border is read afresh every time.
+const heightCache = new WeakMap<object, WeakMap<Road, Map<number, { gen: number; h: Float64Array }>>>();
+
+/** The build in slices: it yields every few hundred samples, so a caller can spread a city's
+ *  rebuild over frames (main.ts, ~4 ms a frame) — in one go it was half a second, every time a
+ *  tile mounted on a drive through Seattle. Draining it gives exactly buildLifeInit. */
+export function* lifeInitSteps(base: LifeBase, roads: Road[], walk: WalkWorld, doors: Door[], junc: Float32Array[] = [], tunnels: Road[] = []): Generator<void, LifeInit, void> {
+  let work = 0;
+  // the ways cars and walkers use
+  const ways: Road[] = [];
+  let nv = 0;
+  for (const list of [roads, tunnels])
+    for (const r of list) {
+      if (r.lod || r.own === 0 || !(r.c in RANK) || r.c === 'steps') continue;
+      ways.push(r);
+      nv += r.p.length >> 1;
+    }
+  // their vertices' slots in one table
+  const T = new VertexTable(nv), wk: Int32Array[] = [];
+  for (const r of ways) {
+    const n = r.p.length >> 1, k = new Int32Array(n);
+    for (let i = 0; i < n; i++) k[i] = T.slot(r.p[2 * i] / 10, r.p[2 * i + 1] / 10);
+    wk.push(k);
+    if ((work += n) > 8000) { work = 0; yield; }
+  }
   // Split ways wherever they share a vertex with another way, so intersections become graph nodes —
   // except a street where only a footway meets it near a junction (a mapped crosswalk, a path at
   // the corner): a car's approach must run unbroken past the junction's stop line, or it arrives
   // on a 5 m stub already "in the box" and skips the lights, the stop sign and the queue beyond
   // (Seattle maps a crossing on every arm of every junction — 70% of its junction arms were
   // stubs, and its traffic drove through itself). The crossing still joins its two halves there.
-  const use = new Map<string, number>(), arms = new Map<string, number>();
-  for (const w of ways)
-    for (let i = 0; i < w.p.length; i++) {
-      const k = key(w.p[i][0], w.p[i][1]);
-      use.set(k, (use.get(k) ?? 0) + 1);
-      if ((RANK[w.r.c] ?? 0) >= 2) arms.set(k, (arms.get(k) ?? 0) + (i === 0 || i === w.p.length - 1 ? 1 : 2));
+  const cap = T.capacity;
+  const use = new Int32Array(cap), arms = new Int32Array(cap);
+  const drives = new Int32Array(cap); // drivable ways through each vertex
+  for (let w = 0; w < ways.length; w++) {
+    const k = wk[w], n = k.length, car = (RANK[ways[w].c] ?? 0) >= 2;
+    for (let i = 0; i < n; i++) {
+      use[k[i]]++;
+      if (car) {
+        arms[k[i]] += i === 0 || i === n - 1 ? 1 : 2;
+        drives[k[i]]++;
+      }
     }
-  const drives = new Map<string, number>(); // drivable ways through each vertex
-  for (const w of ways) if ((RANK[w.r.c] ?? 0) >= 2) for (const [x, z] of w.p) drives.set(key(x, z), (drives.get(key(x, z)) ?? 0) + 1);
-  const pieces: { r: (typeof ways)[number]['r']; p: [number, number][] }[] = [];
-  for (const w of ways) {
-    const car = (RANK[w.r.c] ?? 0) >= 2;
+  }
+  yield;
+  // pieces: way, first vertex, last vertex
+  const pw: number[] = [], pa: number[] = [], pb: number[] = [];
+  for (let w = 0; w < ways.length; w++) {
+    const P = ways[w].p, k = wk[w], n = k.length, car = (RANK[ways[w].c] ?? 0) >= 2;
     // along this street, how far each vertex is from the nearest junction (≥ 3 drivable arms)
     let near: Float32Array | null = null;
     if (car) {
-      near = new Float32Array(w.p.length).fill(Infinity);
+      near = new Float32Array(n).fill(Infinity);
       for (const dir of [1, -1]) {
         let run = Infinity;
-        for (let n = 0; n < w.p.length; n++) {
-          const i = dir > 0 ? n : w.p.length - 1 - n;
-          if (n) run += Math.hypot(w.p[i][0] - w.p[i - dir][0], w.p[i][1] - w.p[i - dir][1]);
-          if ((arms.get(key(w.p[i][0], w.p[i][1])) ?? 0) >= 3) run = 0;
+        for (let m = 0; m < n; m++) {
+          const i = dir > 0 ? m : n - 1 - m;
+          if (m) run += Math.hypot(P[2 * i] / 10 - P[2 * (i - dir)] / 10, P[2 * i + 1] / 10 - P[2 * (i - dir) + 1] / 10);
+          if (arms[k[i]] >= 3) run = 0;
           near[i] = Math.min(near[i], run);
         }
       }
     }
-    let cur: [number, number][] = [w.p[0]];
-    for (let i = 1; i < w.p.length; i++) {
-      cur.push(w.p[i]);
-      const k = key(w.p[i][0], w.p[i][1]);
-      if (i < w.p.length - 1 && (use.get(k) ?? 0) > 1 && (!car || (drives.get(k) ?? 0) > 1 || near![i] >= FOOT_SPLIT)) {
-        pieces.push({ r: w.r, p: cur });
-        cur = [w.p[i]];
+    let a = 0;
+    for (let i = 1; i < n - 1; i++)
+      if (use[k[i]] > 1 && (!car || drives[k[i]] > 1 || near![i] >= FOOT_SPLIT)) {
+        pw.push(w), pa.push(a), pb.push(i);
+        a = i;
       }
-    }
-    if (cur.length > 1) pieces.push({ r: w.r, p: cur });
+    if (n - 1 > a) pw.push(w), pa.push(a), pb.push(n - 1);
+    if ((work += n) > 8000) { work = 0; yield; }
   }
-  const nodeId = new Map<string, number>();
+  const nodeOf = new Int32Array(cap).fill(-1); // slot → graph node
   const nodeXZ: number[] = [];
-  const node = (x: number, z: number) => {
-    const k = key(x, z);
-    if (!nodeId.has(k)) { nodeId.set(k, nodeId.size); nodeXZ.push(x, z); }
-    return nodeId.get(k)!;
+  let nNodes = 0;
+  const node = (s: number, x: number, z: number) => {
+    if (nodeOf[s] < 0) { nodeOf[s] = nNodes++; nodeXZ.push(x, z); }
+    return nodeOf[s];
   };
   const pts: number[] = [], start: number[] = [], count: number[] = [], lens: number[] = [], info: number[] = [], ends: number[] = [], kerb: number[] = [];
   const seen = new Set<string>();
   // Tunnel portals: the ends a tunnel piece shares with a street in the open. A car goes down
   // into the ground from there (8% a metre, to 9 m under) and is out of sight until it climbs out.
-  const open = new Set<string>();
-  for (const { r, p } of pieces) if (!r.tu) (open.add(key(p[0][0], p[0][1])), open.add(key(p[p.length - 1][0], p[p.length - 1][1])));
-  for (const { r, p } of pieces) {
-    let L = 0;
-    for (let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+  const open = new Uint8Array(cap);
+  for (let q = 0; q < pw.length; q++) if (!ways[pw[q]].tu) open[wk[pw[q]][pa[q]]] = open[wk[pw[q]][pb[q]]] = 1;
+  let byRoad = heightCache.get(walk);
+  if (!byRoad) heightCache.set(walk, (byRoad = new WeakMap()));
+  const surfaceGen = typeof walk.surfaceGen === 'function' ? walk.surfaceGen : null; // (test stand-ins have none)
+  const cum: number[] = [];
+  for (let q = 0; q < pw.length; q++) {
+    const r = ways[pw[q]], P = r.p, k = wk[pw[q]], a = pa[q], b = pb[q];
+    const X = (i: number) => P[2 * i] / 10, Z = (i: number) => P[2 * i + 1] / 10;
+    cum.length = 0;
+    cum.push(0);
+    for (let i = a + 1; i <= b; i++) cum.push(cum[cum.length - 1] + Math.hypot(X(i) - X(i - 1), Z(i) - Z(i - 1)));
+    const L = cum[cum.length - 1];
     if (L < 1) continue;
     // the same street twice (a way mapped twice, a route drawn over its road): one edge, or the
     // cars on the two copies drive through each other
-    const ka = key(p[0][0], p[0][1]), kb = key(p[p.length - 1][0], p[p.length - 1][1]), mid = p[p.length >> 1];
-    const dup = `${ka < kb ? ka + '|' + kb : kb + '|' + ka}|${Math.round(L)}|${key(mid[0], mid[1])}`;
+    const ka = k[a], kb = k[b];
+    const dup = `${Math.min(ka, kb)}|${Math.max(ka, kb)}|${Math.round(L)}|${k[a + ((b - a + 1) >> 1)]}`;
     if (seen.has(dup)) continue;
     seen.add(dup);
     const n = Math.max(2, Math.ceil(L / 4) + 1);
     // uniform resample with heights from the open-air walk surface (so bridge decks carry traffic,
     // and a way that clips a building doesn't climb to its roof)
-    const cum = [0];
-    for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]));
     start.push(pts.length / 3);
-    const under = !!r.tu, pa = under && open.has(ka), pb = under && open.has(kb);
-    let k = 0;
+    const under = !!r.tu, oa = under && open[ka] === 1, ob = under && open[kb] === 1;
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (let i = a; i <= b; i++) { const x = X(i), z = Z(i); if (x < x0) x0 = x; if (x > x1) x1 = x; if (z < z0) z0 = z; if (z > z1) z1 = z; }
+    const gen = surfaceGen ? surfaceGen.call(walk, x0, z0, x1, z1) : -1;
+    const ck = (a * 16777216 + b) * 4 + (oa ? 2 : 0) + (ob ? 1 : 0);
+    const kept = gen >= 0 ? byRoad.get(r)?.get(ck) : undefined;
+    const hs = kept && kept.gen === gen && kept.h.length === n ? kept.h : null;
+    const fresh = hs ? null : new Float64Array(n);
+    let j0 = 0;
     for (let j = 0; j < n; j++) {
       const s = (j / (n - 1)) * L;
-      while (k < p.length - 2 && cum[k + 1] < s) k++;
-      const t = (s - cum[k]) / Math.max(1e-6, cum[k + 1] - cum[k]);
-      const x = p[k][0] + (p[k + 1][0] - p[k][0]) * t, z = p[k][1] + (p[k + 1][1] - p[k][1]) * t;
-      const deep = under ? Math.min(9, 0.08 * Math.min(pa ? s : Infinity, pb ? L - s : Infinity)) : 0;
-      pts.push(x, walk.outdoorSurfaceAt(x, z) - deep, z);
+      while (j0 < b - a - 1 && cum[j0 + 1] < s) j0++;
+      const t = (s - cum[j0]) / Math.max(1e-6, cum[j0 + 1] - cum[j0]);
+      const x = X(a + j0) + (X(a + j0 + 1) - X(a + j0)) * t, z = Z(a + j0) + (Z(a + j0 + 1) - Z(a + j0)) * t;
+      let y: number;
+      if (hs) y = hs[j];
+      else {
+        const deep = under ? Math.min(9, 0.08 * Math.min(oa ? s : Infinity, ob ? L - s : Infinity)) : 0;
+        y = fresh![j] = walk.outdoorSurfaceAt(x, z) - deep;
+        if ((work += 16) > 8000) { work = 0; yield; }
+      }
+      pts.push(x, y, z);
+    }
+    if (fresh && gen >= 0) {
+      let m = byRoad.get(r);
+      if (!m) byRoad.set(r, (m = new Map()));
+      m.set(ck, { gen, h: fresh });
     }
     count.push(n);
     lens.push(L);
@@ -187,36 +327,35 @@ export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, do
     // the moving lanes are laid out between them
     const parks = !!r.pk && !r.lod && !r.br && !r.tu && r.w >= 10;
     kerb.push(parks ? KERB_W[r.pk! & 3] : 0, parks ? KERB_W[(r.pk! >> 2) & 3] : 0);
-    ends.push(node(p[0][0], p[0][1]), node(p[p.length - 1][0], p[p.length - 1][1]));
+    ends.push(node(ka, X(a), Z(a)), node(kb, X(b), Z(b)));
+    if ((work += n + 8) > 8000) { work = 0; yield; }
   }
   // Frontage: shops along each street piece (commercial doors within 25 m of it). People walk
   // where the shops are — a Midtown avenue fills, a residential side street stays quiet.
-  const shopGrid = new Map<string, [number, number][]>();
-  for (const d of doors) if (d.kind === 'commercial') { const k = `${Math.floor(d.fx / 50)},${Math.floor(d.fz / 50)}`; (shopGrid.get(k) ?? shopGrid.set(k, []).get(k)!).push([d.fx, d.fz]); }
+  const within = shopCounter(doors);
   const shops: number[] = [];
   for (let e = 0; e < start.length; e++) {
     let n = 0;
-    for (let j = 0; j < count[e]; j += 3) {
-      const x = pts[(start[e] + j) * 3], z = pts[(start[e] + j) * 3 + 2];
-      for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) for (const [sx, sz] of shopGrid.get(`${Math.floor(x / 50) + di},${Math.floor(z / 50) + dj}`) ?? []) if (Math.hypot(sx - x, sz - z) < 25) n++;
-    }
+    if (within) for (let j = 0; j < count[e]; j += 3) n += within(pts[(start[e] + j) * 3], pts[(start[e] + j) * 3 + 2]);
     shops.push(Math.min(40, n / Math.max(1, Math.ceil(count[e] / 3)) * 3)); // ~doors within reach, per stretch
+    if ((work += count[e]) > 8000) { work = 0; yield; }
   }
-  const nNodes = nodeId.size, nEdges = lens.length;
+  const nEdges = lens.length;
   const deg = new Int32Array(nNodes + 1);
   for (let e = 0; e < nEdges; e++) (deg[ends[e * 2] + 1]++), (deg[ends[e * 2 + 1] + 1]++);
   for (let i = 0; i < nNodes; i++) deg[i + 1] += deg[i];
   const fill = deg.slice();
   const adj = new Int32Array(deg[nNodes]);
   for (let e = 0; e < nEdges; e++) for (const nd of [ends[e * 2], ends[e * 2 + 1]]) adj[fill[nd]++] = e;
+  yield;
 
   // Junction control: each node takes the record of the tile that owns its junction; each arriving
   // edge end takes the control of the arm it runs along.
   const armCtl = new Uint8Array(nEdges * 2), nodeKey = new Float32Array(nNodes), nodeSet = new Float32Array(nNodes);
-  for (const f of junc)
+  for (const f of junc) {
     for (const J of unpackJunctions(f)) {
-      const nd = nodeId.get(key(J.x, J.z));
-      if (nd === undefined) continue;
+      const sl = T.find(J.x, J.z), nd = sl < 0 ? -1 : nodeOf[sl];
+      if (nd < 0) continue;
       nodeKey[nd] = J.key;
       nodeSet[nd] = J.setback;
       for (let k = deg[nd]; k < deg[nd + 1]; k++) {
@@ -232,6 +371,10 @@ export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, do
         }
       }
     }
+    yield;
+  }
+  const dr = new Float32Array(doors.length * 6);
+  doors.forEach((d, i) => dr.set([d.x, d.y, d.z, d.fx, d.fy, d.fz], i * 6));
   return {
     ...base,
     // base arrays are shared across reinits — fresh copies, since init buffers transfer to the worker
@@ -246,7 +389,7 @@ export function buildLifeInit(base: LifeBase, roads: Road[], walk: WalkWorld, do
     edgeNodes: new Int32Array(ends),
     nodeEdgeStart: deg,
     nodeEdges: adj,
-    doors: new Float32Array(doors.flatMap((d) => [d.x, d.y, d.z, d.fx, d.fy, d.fz])),
+    doors: dr,
     edgeShops: new Float32Array(shops),
     armCtl, nodeKey, nodeSet,
     nodeXZ: new Float32Array(nodeXZ),

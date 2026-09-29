@@ -148,24 +148,44 @@ export class Terrain {
   // neighbour's DEM overhang must never reach in (bake-placed buildings would float or sink).
   baked: Set<string> | null = null;
   constructor(readonly slice: TerrainLayer, readonly backdrop: TerrainLayer) {}
-  registerPatch(id: string, L: TerrainLayer) { this.patches.set(id, L); }
+  // how many times each cell's patch changed: what was read off a cell's ground stays good
+  // while its count holds (life.ts keeps its road heights on it)
+  private gens = new Map<string, number>();
+  registerPatch(id: string, L: TerrainLayer) { this.patches.set(id, L); this.gens.set(id, (this.gens.get(id) ?? 0) + 1); this.memo.cx = NaN; }
   /** The grid pitch (m) of a registered patch — Infinity when none is. */
   patchPitch(id: string) { return this.patches.get(id)?.g.cell ?? Infinity; }
-  removePatch(id: string) { this.patches.delete(id); }
+  removePatch(id: string) { this.patches.delete(id); this.gens.set(id, (this.gens.get(id) ?? 0) + 1); this.memo.cx = NaN; }
+  /** A token for the ground inside this box: it changes when the box's cell takes (or drops) a
+   *  patch. −1 when the box spans cells — nothing read there should be kept. */
+  genIn(x0: number, z0: number, x1: number, z1: number) {
+    const c = this.patchCell, cx = Math.floor(x0 / c), cz = Math.floor(z0 / c);
+    if (Math.floor(x1 / c) !== cx || Math.floor(z1 / c) !== cz) return -1;
+    return this.gens.get(`${cx}_${cz}`) ?? 0;
+  }
+  // The last cell asked about: its patch, whether the bake owns it, its neighbours' patches.
+  // Height queries come in runs over one cell (a grass cell's tufts, a street's samples) and
+  // each used to build its cell's key string, and eight more off a patch's edge.
+  private memo = { cx: NaN, cz: NaN, cell: NaN, baked: null as Set<string> | null, p: undefined as TerrainLayer | undefined, own: false, near: [] as TerrainLayer[] };
   private patchFor(x: number, z: number) {
     if (!this.patches.size) return null;
-    const cx = Math.floor(x / this.patchCell), cz = Math.floor(z / this.patchCell);
-    const p = this.patches.get(`${cx}_${cz}`);
-    if (p && p.contains(x, z)) return p;
-    if (this.baked?.has(`${cx}_${cz}`)) return null;
-    // DEM patches overhang their cell by up to one pitch — near an edge, check the
-    // neighbours too, or a not-yet-loaded cell's rim reads as a flat shelf.
-    for (let ox = -1; ox <= 1; ox++)
-      for (let oz = -1; oz <= 1; oz++) {
-        if (!ox && !oz) continue;
-        const q = this.patches.get(`${cx + ox}_${cz + oz}`);
-        if (q && q.contains(x, z)) return q;
-      }
+    const cx = Math.floor(x / this.patchCell), cz = Math.floor(z / this.patchCell), m = this.memo;
+    if (cx !== m.cx || cz !== m.cz || m.cell !== this.patchCell || m.baked !== this.baked) {
+      m.cx = cx, m.cz = cz, m.cell = this.patchCell, m.baked = this.baked;
+      m.p = this.patches.get(`${cx}_${cz}`);
+      m.own = !!this.baked?.has(`${cx}_${cz}`);
+      // DEM patches overhang their cell by up to one pitch — near an edge, check the
+      // neighbours too, or a not-yet-loaded cell's rim reads as a flat shelf.
+      m.near.length = 0;
+      for (let ox = -1; ox <= 1; ox++)
+        for (let oz = -1; oz <= 1; oz++) {
+          if (!ox && !oz) continue;
+          const q = this.patches.get(`${cx + ox}_${cz + oz}`);
+          if (q) m.near.push(q);
+        }
+    }
+    if (m.p && m.p.contains(x, z)) return m.p;
+    if (m.own) return null; // (the bake's cells keep their own heights)
+    for (const q of m.near) if (q.contains(x, z)) return q;
     return null;
   }
   layer(x: number, z: number) {

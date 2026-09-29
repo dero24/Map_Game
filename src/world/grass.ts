@@ -9,6 +9,7 @@ import { paintMaterial } from '../render/shared';
 import type { Road, Terrain } from './data';
 import type { WalkWorld } from '../player/collision';
 import { activeStyle } from './styles';
+import { roadNear } from './roadBounds';
 
 const CELL = 20;
 const DESAT = 0.7;
@@ -16,6 +17,9 @@ const DESAT = 0.7;
 const WILD = new Set([30, 90, 95, 100]);
 const RADIUS = 72; // metres of grass around the walker (fades out over the last ~25 m)
 const PER_FRAME = 3; // cells built per frame
+const MAIN = new Set(['primary', 'secondary', 'trunk', 'motorway', 'tertiary']);
+const NEAR_MOVE = 25; // m walked before the nearby-streets list is redrawn
+const HW_MAX = 60; // m — more than the widest reach a street's bare strip has from its line (w/2 + 3.8)
 
 // Fresh greens per climate. They are desaturated ~30% at use (DESAT) so the grass shares the
 // painted world's chroma budget: saturated blades read as a separate game pasted on top.
@@ -146,6 +150,12 @@ export class GrassField {
   private mat = grassMaterial();
   private cells = new Map<string, THREE.InstancedMesh | null>();
   private queue: [number, number][] = [];
+  // the streets that can touch a cell around the walker: the ring's 20k roads, sorted once per
+  // 25 m walked (or when the tile set changes) instead of for every cell built
+  private near: Road[] = [];
+  private nearOf: Road[] | null = null;
+  private nearX = Infinity;
+  private nearZ = Infinity;
   enabled = true;
   density = 1; // user/perf knob
 
@@ -190,11 +200,27 @@ export class GrassField {
       }
     for (const [k, m] of this.cells) if (!want.has(k)) { if (m) { this.group.remove(m); m.dispose(); } this.cells.delete(k); }
     this.queue.sort((a, b) => Math.hypot((a[0] + 0.5) * CELL - x, (a[1] + 0.5) * CELL - z) - Math.hypot((b[0] + 0.5) * CELL - x, (b[1] + 0.5) * CELL - z));
+    if (this.queue.length) {
+      const roads = this.roads();
+      if (roads !== this.nearOf || Math.hypot(x - this.nearX, z - this.nearZ) > NEAR_MOVE) {
+        // every cell built from here lies within RADIUS + a cell of the walker, and a road reaches
+        // at most HW_MAX past its line
+        const R = RADIUS + CELL + HW_MAX + NEAR_MOVE;
+        this.near = roads.filter((r) => !r.br && roadNear(r, x - R, z - R, x + R, z + R, 0));
+        this.nearOf = roads;
+        this.nearX = x;
+        this.nearZ = z;
+      }
+    }
+    // nearest first, a few a frame — and never more than ~3 ms of them (a downtown cell asks the
+    // walk world about every tuft; three of them in one frame was a visible stutter at speed)
+    const t0 = performance.now();
     for (let i = 0; i < Math.min(PER_FRAME, this.queue.length); i++) {
       const [cx, cz] = this.queue[i];
       const m = this.build(cx, cz);
       this.cells.set(`${cx}_${cz}`, m);
       if (m) this.group.add(m);
+      if (performance.now() - t0 > 3) break;
     }
   }
 
@@ -203,20 +229,22 @@ export class GrassField {
     const x0 = cx * CELL, z0 = cz * CELL;
     // roads touching this cell (+ margin): the carriageway, sidewalk strip and driveways stay bare
     const segs: number[] = [];
-    for (const r of this.roads()) {
-      if (r.br) continue;
+    for (const r of this.near) {
       // carriageway + the sidewalk strip the ground painter draws (w+3, main roads w+7), for
       // streamed streets the painter mask doesn't know
-      const main = ['primary', 'secondary', 'trunk', 'motorway', 'tertiary'].includes(r.c);
+      const main = MAIN.has(r.c);
       const hw = r.w / 2 + (r.c === 'footway' || r.c === 'path' || r.sw ? 0.5 : r.sv === 'driveway' || r.c === 'service' ? 0.8 : main ? 3.8 : 1.9);
+      if (!roadNear(r, x0, z0, x0 + CELL, z0 + CELL, hw)) continue;
       for (let i = 0; i + 3 < r.p.length; i += 2) {
         const ax = r.p[i] / 10, az = r.p[i + 1] / 10, bx = r.p[i + 2] / 10, bz = r.p[i + 3] / 10;
         if (Math.max(ax, bx) < x0 - hw || Math.min(ax, bx) > x0 + CELL + hw || Math.max(az, bz) < z0 - hw || Math.min(az, bz) > z0 + CELL + hw) continue;
-        segs.push(ax, az, bx, bz, hw);
+        // (with its reach as a box: most tufts are ruled out by four comparisons)
+        segs.push(ax, az, bx, bz, hw, Math.min(ax, bx) - hw, Math.max(ax, bx) + hw, Math.min(az, bz) - hw, Math.max(az, bz) + hw);
       }
     }
     const nearRoad = (x: number, z: number) => {
-      for (let i = 0; i < segs.length; i += 5) {
+      for (let i = 0; i < segs.length; i += 9) {
+        if (x < segs[i + 5] || x > segs[i + 6] || z < segs[i + 7] || z > segs[i + 8]) continue;
         const ax = segs[i], az = segs[i + 1], dx = segs[i + 2] - ax, dz = segs[i + 3] - az, L2 = dx * dx + dz * dz || 1;
         const u = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
         if (Math.hypot(x - ax - dx * u, z - az - dz * u) < segs[i + 4]) return true;
@@ -246,12 +274,13 @@ export class GrassField {
     for (let gz = z0; gz < z0 + CELL; gz += lstep)
       for (let gx = x0; gx < x0 + CELL; gx += lstep) {
         const x = gx + hash(gx, gz, 2) * lstep, z = gz + hash(gx, gz, 3) * lstep;
-        // open land only
+        // open land only (cheapest tests first: in a city most of a cell is paint the mask already
+        // turned down, and asking the walk world about every one of those was a 10–19 ms cell)
+        if (!open(x, z) || nearRoad(x, z)) continue;
         if (t.sdfAt(x, z) < 4 || t.oceanDistAt(x, z) < 70) continue; // shore, sand, water
         const cov = t.coverAt(x, z);
         if (cov === 60 || cov === 70 || cov === 80) continue; // bare, snow/ice, open water
         if (walk.buildingAt(x, z) >= 0 || walk.blocked(x, z, 0.5) || walk.deckAt(x, z) !== null) continue;
-        if (!open(x, z) || nearRoad(x, z)) continue;
         // patchiness: meadow vs mown lawn vs bare-ish; lawns hug the houses
         const meadow = vn(x * 0.045, z * 0.045) * 0.7 + vn(x * 0.13 + 9, z * 0.13) * 0.3;
         const nearHouse = built || !WILD.has(cov) || walk.blocked(x, z, 7);

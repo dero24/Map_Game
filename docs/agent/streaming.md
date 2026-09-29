@@ -12,7 +12,17 @@ terrain/DEM, or the LiDAR measure pipeline.
   and sign intersections).
 - `WalkWorld.beginScope/endScope/removeScope` scopes all collision per tile; interiors
   register under `"tile:idx"` keys and unregister on unload.
-- The ambient-life worker re-inits when the loaded set settles (or after 4 s).
+- The ambient-life worker re-inits when the loaded set settles (or after 4 s). The road graph
+  it gets is built a few ms a frame (`life.ts` `lifeInitSteps`, pumped in `main.ts`): a city
+  ring's rebuild in one go was 0.5 s, every few seconds on a drive.
+- A mounted tile shows 12 MB (or 24 meshes) a frame (`TileStream.reveal`), each drawn the
+  frame it appears, even off-screen, so its buffers go up then. Whatever it replaces — its
+  stand-in twin, its coarse silhouette, a flat first build — is handed over (`retire`) and stays
+  on screen until the new tile is whole. `ensureAround` (spawn) mounts all at once.
+  `TileStream.lastMount` says where the last mount's time went.
+- The walker's neighbourhood grids (`houseGrid`, `shopGrid`, `cityGrid`, `pavedIndex`) are
+  summed from each tile's own, worked out once per tile (they were rebuilt from every footprint
+  and segment in the ring on every mount).
 - Regions without a manifest fall back to a single-tile world.json.
 
 ## Tile worker + packing

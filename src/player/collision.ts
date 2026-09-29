@@ -227,6 +227,10 @@ export class WalkWorld {
     this.deckHeights(x, z, c);
     return Math.max(...c);
   }
+  /** A token for the open-air surface inside a box (Terrain.genIn): read heights there stay good
+   *  while it holds — the box's cell took no new ground (its decks come and go with that same
+   *  tile). −1 when the box spans cells. */
+  surfaceGen(x0: number, z0: number, x1: number, z1: number) { return this.terrain.genIn(x0, z0, x1, z1); }
   /** The open-air surface nearest height y: the ground, or the deck a car or walker is already on
    *  (a street passing under a bridge keeps its traffic on the street, not up on the deck). */
   outdoorNear(x: number, z: number, y: number) {

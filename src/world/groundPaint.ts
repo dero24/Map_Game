@@ -232,6 +232,7 @@ export class Painter {
       box,
       xing,
     });
+    this.merged.clear();
   }
   private xingIn(x0: number, z0: number, x1: number, z1: number): number[] {
     const out: number[] = [];
@@ -240,30 +241,68 @@ export class Painter {
         for (let i = 0; i + 5 < t.xing.length; i += 6) if (t.xing[i] > x0 - 30 && t.xing[i] < x1 + 30 && t.xing[i + 1] > z0 - 30 && t.xing[i + 1] < z1 + 30) out.push(...t.xing.slice(i, i + 6));
     return out;
   }
+  // The lists a window paints from — the bake's own plus every mounted tile's that reaches it —
+  // kept per set of tiles: they were concatenated (and the roads and areas sorted) afresh for
+  // every window, and a grass cell's mask is a window (a 20 m one, a few a frame on a drive).
+  private merged = new Map<string, { roads?: Prepared<Road>[]; areas?: Prepared<Area>[]; foot?: Prepared<number>[]; front?: Prepared<number>[] }>();
+  private near(x0: number, z0: number, x1: number, z1: number) {
+    let key = '';
+    for (const [id, t] of this.tiles) if (t.box[2] > x0 - 50 && t.box[0] < x1 + 50 && t.box[3] > z0 - 50 && t.box[1] < z1 + 50) key += id + ' ';
+    let m = this.merged.get(key);
+    if (!m) {
+      if (this.merged.size > 64) this.merged.clear();
+      this.merged.set(key, (m = {}));
+    }
+    return { key, m };
+  }
+  private tilesOf(key: string) { return key ? key.trim().split(' ').map((id) => this.tiles.get(id)!) : []; }
   private areasIn(x0: number, z0: number, x1: number, z1: number): Prepared<Area>[] {
     if (!this.tiles.size) return this.areas;
-    const extra: Prepared<Area>[] = [];
-    for (const t of this.tiles.values()) if (t.box[2] > x0 - 50 && t.box[0] < x1 + 50 && t.box[3] > z0 - 50 && t.box[1] < z1 + 50) extra.push(...t.areas);
-    if (!extra.length) return this.areas;
-    return [...this.areas, ...extra].sort((a, b) => AREA_ORDER.indexOf(a.item.c) - AREA_ORDER.indexOf(b.item.c));
+    const { key, m } = this.near(x0, z0, x1, z1);
+    if (!m.areas) {
+      const extra: Prepared<Area>[] = [];
+      for (const t of this.tilesOf(key)) extra.push(...t.areas);
+      m.areas = !extra.length ? this.areas : [...this.areas, ...extra].sort((a, b) => AREA_ORDER.indexOf(a.item.c) - AREA_ORDER.indexOf(b.item.c));
+    }
+    return m.areas;
   }
-  dropTile(id: string) { this.tiles.delete(id); }
+  dropTile(id: string) { this.tiles.delete(id); this.tileWalks.delete(id); this.merged.clear(); }
   private roadsIn(x0: number, z0: number, x1: number, z1: number): Prepared<Road>[] {
     if (!this.tiles.size) return this.roads;
-    const extra: Prepared<Road>[] = [];
-    for (const t of this.tiles.values()) if (t.box[2] > x0 - 50 && t.box[0] < x1 + 50 && t.box[3] > z0 - 50 && t.box[1] < z1 + 50) extra.push(...t.roads);
-    if (!extra.length) return this.roads;
-    return [...this.roads, ...extra].sort((a, b) => (ROAD_RANK[a.item.c] ?? 1) - (ROAD_RANK[b.item.c] ?? 1));
+    const { key, m } = this.near(x0, z0, x1, z1);
+    if (!m.roads) {
+      const extra: Prepared<Road>[] = [];
+      for (const t of this.tilesOf(key)) extra.push(...t.roads);
+      m.roads = !extra.length ? this.roads : [...this.roads, ...extra].sort((a, b) => (ROAD_RANK[a.item.c] ?? 1) - (ROAD_RANK[b.item.c] ?? 1));
+    }
+    return m.roads;
   }
   private frontIn(x0: number, z0: number, x1: number, z1: number): Prepared<number>[] {
-    const out: Prepared<number>[] = [];
-    for (const t of this.tiles.values()) if (t.box[2] > x0 - 50 && t.box[0] < x1 + 50 && t.box[3] > z0 - 50 && t.box[1] < z1 + 50) out.push(...t.front);
-    return out;
+    const { key, m } = this.near(x0, z0, x1, z1);
+    if (!m.front) {
+      const out: Prepared<number>[] = [];
+      for (const t of this.tilesOf(key)) out.push(...t.front);
+      m.front = out;
+    }
+    return m.front;
   }
   private footIn(x0: number, z0: number, x1: number, z1: number): Prepared<number>[] {
     if (!this.tiles.size) return this.foot;
-    const out = [...this.foot];
-    for (const t of this.tiles.values()) if (t.box[2] > x0 - 50 && t.box[0] < x1 + 50 && t.box[3] > z0 - 50 && t.box[1] < z1 + 50) out.push(...t.foot);
+    const { key, m } = this.near(x0, z0, x1, z1);
+    if (!m.foot) {
+      const out = [...this.foot];
+      for (const t of this.tilesOf(key)) out.push(...t.foot);
+      m.foot = out;
+    }
+    return m.foot;
+  }
+  // front walks: the bake's, plus each mounted tile's (they go with it — they used to pile up
+  // for the whole session, a tile's again every time it remounted)
+  private tileWalks = new Map<string, { box: [number, number, number, number]; walks: Prepared<number>[] }>();
+  private walksIn(x0: number, z0: number, x1: number, z1: number): Prepared<number>[] {
+    if (!this.tileWalks.size) return this.walks;
+    const out = [...this.walks];
+    for (const t of this.tileWalks.values()) if (t.box[2] > x0 - 10 && t.box[0] < x1 + 10 && t.box[3] > z0 - 10 && t.box[1] < z1 + 10) out.push(...t.walks);
     return out;
   }
   private bakedRoads = new Set<Prepared<Road>>();
@@ -275,9 +314,17 @@ export class Painter {
     this.walks = [];
     this.addWalks(walks);
   }
-  // Front-walk paint arrives per tile as the stream loads them.
-  addWalks(walks: number[]) {
-    for (let i = 0; i + 4 < walks.length; i += 5) this.walks.push(prep(walks[i + 4], [[walks[i], walks[i + 1], walks[i + 2], walks[i + 3]].map((v) => v * 10)]));
+  // Front-walk paint arrives per tile as the stream loads them (`id`: the tile's, dropped with it).
+  addWalks(walks: number[], id?: string) {
+    const list: Prepared<number>[] = [];
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (let i = 0; i + 4 < walks.length; i += 5) {
+      list.push(prep(walks[i + 4], [[walks[i], walks[i + 1], walks[i + 2], walks[i + 3]].map((v) => v * 10)]));
+      x0 = Math.min(x0, walks[i], walks[i + 2]), x1 = Math.max(x1, walks[i], walks[i + 2]), z0 = Math.min(z0, walks[i + 1], walks[i + 3]), z1 = Math.max(z1, walks[i + 1], walks[i + 3]);
+    }
+    if (id === undefined) this.walks.push(...list);
+    else if (list.length) this.tileWalks.set(id, { box: [x0, z0, x1, z1], walks: list });
+    else this.tileWalks.delete(id);
   }
 
   paint(ctx: CanvasRenderingContext2D, x0: number, z0: number, x1: number, z1: number, pxPerM: number, level: 0 | 1 | 2) {
@@ -407,7 +454,7 @@ export class Painter {
     // Front walks from each door to the street (flagstone-pale, under everything else).
     if (detail) {
       ctx.strokeStyle = '#bdb5a3';
-      for (const w of this.walks) {
+      for (const w of this.walksIn(x0, z0, x1, z1)) {
         if (!overlaps(w, x0, z0, x1, z1, 5)) continue;
         ctx.beginPath();
         pathOf(ctx, w.pts[0]);
@@ -654,7 +701,7 @@ export interface GroundPaint {
   sliceCanvas: HTMLCanvasElement;
   detail: DetailGround;
   mid: DetailGround;
-  addWalks: (walks: number[]) => void;
+  addWalks: (walks: number[], id?: string) => void;
   setTile: (id: string, roads: Road[], rings: [number, number][][], box: [number, number, number, number], fronts?: boolean[], areas?: Area[], weights?: number[], xing?: number[]) => void;
   dropTile: (id: string) => void;
   /** Where the painted ground is open (unpainted land or a green wash) inside a square — the
@@ -783,7 +830,7 @@ export function paintGround(world: World, maxTex: number, walks: number[] = []):
   };
   return {
     slice: makeTex(sc), backdrop: makeTex(bc), sliceCanvas: sc, detail, mid, grassMask,
-    addWalks: (w: number[]) => painter.addWalks(w),
+    addWalks: (w: number[], id?: string) => painter.addWalks(w, id),
     setTile: (id, roads, rings, box, fronts, areas, weights, xing) => { painter.setTile(id, roads, rings, box, fronts, areas, weights, xing); detail.touch(box); mid.touch(box); },
     dropTile: (id) => painter.dropTile(id),
   };

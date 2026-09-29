@@ -8,6 +8,17 @@ behaviour.
 - `node tools/soak.mjs --region=<id> --seconds=120` drives the game (doors, stairs, streets,
   flight) and reports stalls/hitches/page errors. The frame loop schedules itself first and
   survives exceptions (counted in `__RENDER_INFO__.errors`).
+- Hitches in a page you can script (the pane, pumped by `__PUMP__` on `?capture=1`):
+  `await import('/tools/hitch-probe.js'); await __HITCH__({ seconds: 30, move: [0, -15] })`.
+  It times every per-frame system `__GAME__` exposes, plus the stream's mount / unload / index
+  rebuilds, the ground paint's hooks and `ctx.instances`. It moves the car you're in (or the walker)
+  at `move` m/s, so new tiles stream in.
+  - It reports the frames over `slow` ms, what took them, what nothing wrapped accounts for
+    (`other`: unwrapped code, GC), and renders that compiled or uploaded (`+prog`, `+geo`, `+tex`).
+  - `deep: true` adds the fine-grained wrappers (walk-world adds, interior registration). They
+    inflate the numbers they measure.
+  - To drive: `V = __GAME__.vehicles; V.summon('car'); V.enter(V.list.at(-1))`.
+  - The car goes through buildings: the probe moves it, bypassing collision.
 
 ## Screenshots / montage
 

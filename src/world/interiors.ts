@@ -326,7 +326,14 @@ export class Interiors {
     if (this.active !== null && !this.plans.has(this.active)) this.activate(null);
   }
 
-  update(x: number, z: number, dt: number, feet = 0) {
+  update(x: number, z: number, dt: number, feet = 0, onFoot = true) {
+    // Driving or flying past, nobody walks in: no interior builds (a downtown drive passed a
+    // door every second and each one assembled a whole interior — the Seattle hitch). One
+    // that's assembling drops; one standing open stays until you're well past it.
+    if (!onFoot && this.active !== null && (this.pending || this.openAmt <= 0.001)) {
+      const d = this.plans.get(this.active)?.door;
+      if (this.pending || !d || Math.hypot(d.x - x, d.z - z) > 30) this.activate(null);
+    }
     this.pump();
     const inside = this.walk.interiorAt(x, z, feet);
     this.indoors = inside >= 0 && inside === this.walkId(this.active);
@@ -352,6 +359,7 @@ export class Interiors {
     if ((this.timer -= dt) > 0) return;
     this.timer = 0.2;
     this.pickLights(x, feet + 1.4, z);
+    if (!onFoot) return;
     let target: string | null = null;
     if (inside >= 0) {
       for (const [fi] of this.plans) if (this.walkId(fi) === inside) { target = fi; break; }
