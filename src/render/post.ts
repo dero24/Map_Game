@@ -73,6 +73,15 @@ varying vec2 vUv;
 void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }
 `;
 
+const makeRT = (w: number, h: number, depth = false) =>
+  new THREE.WebGLRenderTarget(w, h, {
+    type: THREE.HalfFloatType,
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+    depthBuffer: depth,
+    ...(depth ? { depthTexture: new THREE.DepthTexture(w, h, THREE.UnsignedIntType) } : {}),
+  });
+
 function pass(fragment: string, uniforms: Record<string, THREE.IUniform>) {
   return new THREE.ShaderMaterial({ vertexShader: FS_VERT, fragmentShader: fragment, uniforms, depthTest: false, depthWrite: false });
 }
@@ -84,6 +93,10 @@ export class WatercolorPost {
   private hB: THREE.WebGLRenderTarget;
   private qA: THREE.WebGLRenderTarget;
   private qB: THREE.WebGLRenderTarget;
+  // the brush's sketch (ui/brush.ts): drawn in a pass of its own and laid over the painting, so the
+  // paint filter never smears its line (made the first time there is one)
+  private ghostRT: THREE.WebGLRenderTarget | null = null;
+  private clearC = new THREE.Color();
   private quad: THREE.Mesh;
   private cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private scene = new THREE.Scene();
@@ -96,14 +109,7 @@ export class WatercolorPost {
   private h = 1;
 
   constructor(private renderer: THREE.WebGLRenderer) {
-    const rt = (w: number, h: number, depth = false) =>
-      new THREE.WebGLRenderTarget(w, h, {
-        type: THREE.HalfFloatType,
-        minFilter: THREE.LinearFilter,
-        magFilter: THREE.LinearFilter,
-        depthBuffer: depth,
-        ...(depth ? { depthTexture: new THREE.DepthTexture(w, h, THREE.UnsignedIntType) } : {}),
-      });
+    const rt = makeRT;
     this.sceneRT = rt(4, 4, true);
     this.kuwRT = rt(4, 4);
     this.hA = rt(4, 4);
@@ -210,6 +216,8 @@ export class WatercolorPost {
       uniform sampler2D tExplore;
       uniform vec4 uExploreBox;
       uniform float uSketch;
+      uniform sampler2D tGhost, tGhostDepth;
+      uniform vec4 uGhost, uBrush, uRipple;
       uniform mat4 uInvProj, uCamWorld;
       uniform vec3 uWorldOff;
       varying vec2 vUv;
@@ -294,6 +302,47 @@ export class WatercolorPost {
           }
         }
 
+        // the brush: the world pales round the sketch — paper readied for the paint…
+        if (uBrush.w > 0.001 && geo) {
+          float dB = length(wp.xz - uBrush.xy) + (fbm(wp.xz * 0.11) - 0.5) * uBrush.z * 0.4;
+          float pb = uBrush.w * (1.0 - smoothstep(uBrush.z * 0.45, uBrush.z, dB));
+          float Lb = dot(c, vec3(0.299, 0.587, 0.114));
+          c = mix(c, mix(mix(vec3(Lb), c, 0.4), vec3(0.97, 0.955, 0.925), 0.55), pb);
+        }
+        // …and a ring runs out across the water as a painted boat settles into it
+        if (uRipple.w > 0.001 && geo && abs(wp.y) < 0.35) {
+          float dR = length(wp.xz - uRipple.xy);
+          float ring = exp(-pow((dR - uRipple.z) / (0.12 * uRipple.z + 0.25), 2.0))
+                     + 0.6 * exp(-pow((dR - uRipple.z * 0.6) / (0.1 * uRipple.z + 0.2), 2.0));
+          c = mix(c, vec3(0.965, 0.978, 0.985), clamp(ring * uRipple.w * 0.6, 0.0, 0.8));
+        }
+        // the sketch, and the wash on it, over the painting (tGhost: colour, and coverage + 2 where the
+        // paint is wet); fainter wherever something stands in front of it — never lost behind a tree
+        float gOcc = 0.0, gHere = 0.0;
+        if (uGhost.x > 0.5) {
+          vec4 gh = texture2D(tGhost, uv);
+          float gD = texture2D(tGhostDepth, uv).r;
+          gHere = step(gD, 0.99999);
+          gOcc = step(dS + 2e-6, gD) * gHere;
+          float wetG = step(1.5, gh.a);
+          float aG = (gh.a - 2.0 * wetG) * mix(1.0, 0.6, gOcc);
+          // wet paint bleeds a little past the line
+          if (wetG < 0.5 && uGhost.z > 0.001) {
+            vec3 bc = vec3(0.0);
+            float bw = 0.0;
+            float ang = vnoise(px * 0.045) * 6.283, rad = uRes.y * (0.006 + 0.01 * vnoise(px * 0.02 + 3.0));
+            for (int i = 0; i < 6; i++) {
+              float a = ang + float(i) * 1.0472;
+              vec4 s = texture2D(tGhost, uv + vec2(cos(a), sin(a)) * rad / uRes);
+              float w = step(1.5, s.a);
+              bc += s.rgb * w;
+              bw += w;
+            }
+            if (bw > 0.0) c = mix(c, bc / bw, (bw / 6.0) * 0.55 * uGhost.z * (1.0 - aG));
+          }
+          c = mix(c, gh.rgb, aG);
+        }
+
         // ink: Laplacian of 1/z (zero on planes, spikes at creases and silhouettes), broken and wobbly
         vec2 jit = wob * 1.6 + (vec2(vnoise(px * 0.07 + bt), vnoise(px * 0.07 + 9.0 + bt)) - 0.5) * 1.5 / uRes;
         vec2 o = 1.25 / uRes;
@@ -317,6 +366,31 @@ export class WatercolorPost {
         float fade = 1.0 - smoothstep(uInkDist * 0.35, uInkDist, z0);
         float bright = smoothstep(0.75, 0.95, dot(c, vec3(0.33)));
         c = mix(c, uInkColor, clamp(inkE * brk * fade * uInk * (1.0 - bright), 0.0, 0.85));
+
+        // the sketch's line: graphite, gone over twice by a quick hand, and it boils — redrawn seven
+        // times a second, like a drawing that isn't finished yet
+        if (uGhost.x > 0.5 && uGhost.y > 0.001) {
+          float gb = floor(uTime * 7.0), line = 0.0, gmin = 1.0;
+          for (int k = 0; k < 2; k++) {
+            float fk = float(k);
+            vec2 gj = (vec2(vnoise(px * 0.03 + gb * 3.7 + fk * 11.0), vnoise(px * 0.03 + 17.0 + gb * 2.9 + fk * 5.0)) - 0.5) * (3.2 + fk * 2.0) / uRes;
+            vec2 go = (1.7 + 0.6 * fk) / uRes;
+            float g0 = texture2D(tGhostDepth, uv + gj).r;
+            float gl0 = texture2D(tGhostDepth, uv + gj + vec2(-go.x, 0.0)).r, gr0 = texture2D(tGhostDepth, uv + gj + vec2(go.x, 0.0)).r;
+            float gd0 = texture2D(tGhostDepth, uv + gj + vec2(0.0, -go.y)).r, gu0 = texture2D(tGhostDepth, uv + gj + vec2(0.0, go.y)).r;
+            gmin = min(gmin, min(min(g0, gl0), min(min(gr0, gd0), gu0)));
+            float q0 = 1.0 / linZ(g0), ql = 1.0 / linZ(gl0), qr = 1.0 / linZ(gr0), qd = 1.0 / linZ(gd0), qu = 1.0 / linZ(gu0);
+            float gl = abs(ql + qr + qd + qu - 4.0 * q0) / max(max(max(ql, qr), max(qd, qu)), q0);
+            line = max(line, smoothstep(0.03, 0.12, gl) * (1.0 - 0.35 * fk));
+          }
+          line *= mix(0.6, 1.0, smoothstep(0.25, 0.7, p)); // graphite catches on the paper's tooth
+          // behind something: a broken line, so you can still tell where it'll go
+          float occL = step(dS + 2e-6, gmin) * step(gmin, 0.99999);
+          line *= mix(1.0, 0.85 * step(0.4, fract((px.x + px.y) * 0.08)), occL);
+          c = mix(c, vec3(0.2, 0.195, 0.23), clamp(line * uGhost.y, 0.0, 0.95));
+        }
+        // (harness: uGhost.w shows where the sketch is (red) and where it's hidden (green))
+        if (uGhost.w > 0.5) { gl_FragColor = vec4(gHere, gOcc, 0.0, 1.0); return; }
 
         // wet bloom around lamps and lit windows
         vec3 g = max(blurHdr * uExposure - 1.3, 0.0);
@@ -356,6 +430,7 @@ export class WatercolorPost {
         uNightWash: { value: 0.5 }, uNight: { value: 0 }, uGolden: { value: 0 }, uExposure: { value: 1 }, uRaw: { value: 0 },
         uPaperColor: { value: new THREE.Color() }, uInkColor: { value: new THREE.Color() },
         tExplore: U.uExplore, uExploreBox: U.uExploreBox, uSketch: { value: 0 },
+        tGhost: { value: null }, tGhostDepth: { value: null }, uGhost: U.uGhost, uBrush: U.uBrush, uRipple: U.uRipple,
         uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() }, uWorldOff: U.uWorldOffset,
         uNightTint: { value: new THREE.Color(0.55, 0.62, 1.0) }, uWarm: { value: new THREE.Color(1.08, 0.97, 0.86) },
         uVibrance: { value: 0 }, uGrade: { value: 0 }, uGradeShadow: { value: new THREE.Color() }, uGradeLight: { value: new THREE.Color() },
@@ -391,13 +466,27 @@ export class WatercolorPost {
     this.renderer.render(this.scene, this.cam);
   }
 
-  render(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, night: number, golden: number, yaw: number, pitch: number, raw = false) {
+  render(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, night: number, golden: number, yaw: number, pitch: number, raw = false, overlay: THREE.Object3D | null = null) {
     const P = postParams;
     const r = this.renderer;
     r.setRenderTarget(this.sceneRT);
     r.clear();
     r.render(scene, camera);
     const sw = this.sceneRT.width, sh = this.sceneRT.height;
+    // the brush's sketch: its own target (colour + depth), cleared to nothing, same camera
+    const ghost = !!overlay && P.enabled && !raw;
+    U.uGhost.value.x = ghost ? 1 : 0;
+    if (ghost) {
+      if (!this.ghostRT) this.ghostRT = makeRT(sw, sh, true);
+      else if (this.ghostRT.width !== sw || this.ghostRT.height !== sh) this.ghostRT.setSize(sw, sh);
+      r.getClearColor(this.clearC);
+      const a = r.getClearAlpha();
+      r.setRenderTarget(this.ghostRT);
+      r.setClearColor(0x000000, 0);
+      r.clear();
+      r.render(overlay, camera);
+      r.setClearColor(this.clearC, a);
+    }
 
     if (!P.enabled) {
       this.mCopy.uniforms.tColor.value = this.sceneRT.texture;
@@ -446,6 +535,8 @@ export class WatercolorPost {
     c.tEdge.value = this.hA.texture;
     c.tDepth.value = this.sceneRT.depthTexture;
     c.tScene.value = this.sceneRT.texture;
+    c.tGhost.value = ghost ? this.ghostRT!.texture : null;
+    c.tGhostDepth.value = ghost ? this.ghostRT!.depthTexture : null;
     c.uRes.value.set(this.w, this.h);
     c.uNear.value = camera.near;
     c.uFar.value = camera.far;

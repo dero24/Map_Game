@@ -32,17 +32,22 @@ export class Wakes {
   private trails = new Map<number, Trail>();
   private pos: Float32Array;
   private att: Float32Array;
+  private beamA: Float32Array;
   private geo: THREE.BufferGeometry;
   private idx: Uint16Array;
 
   constructor() {
-    const nv = MAX_BOATS * (SAMPLES + 1) * 2;
+    // three vertices a station — port edge, the track, starboard edge — so the track itself is a
+    // vertex line (two per station bent the wash into a zigzag down the middle as the V widened)
+    const nv = MAX_BOATS * (SAMPLES + 1) * 3;
     this.pos = new Float32Array(nv * 3);
     this.att = new Float32Array(nv * 4);
-    this.idx = new Uint16Array(MAX_BOATS * SAMPLES * 6);
+    this.beamA = new Float32Array(nv);
+    this.idx = new Uint16Array(MAX_BOATS * SAMPLES * 12);
     const g = (this.geo = new THREE.BufferGeometry());
     g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
     g.setAttribute('aWake', new THREE.BufferAttribute(this.att, 4).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute('aBeam', new THREE.BufferAttribute(this.beamA, 1).setUsage(THREE.DynamicDrawUsage));
     g.setIndex(new THREE.BufferAttribute(this.idx, 1).setUsage(THREE.DynamicDrawUsage));
     g.setDrawRange(0, 0);
     const m = (this.mesh = new THREE.Mesh(g, wakeMaterial()));
@@ -83,7 +88,7 @@ export class Wakes {
     // build the ribbons: from the stern (the boat's own place, if it's still under way) back
     // along the samples, each station as wide as the V is there
     let v = 0, ii = 0;
-    const P = this.pos, A = this.att, I = this.idx;
+    const P = this.pos, A = this.att, BM = this.beamA, I = this.idx;
     for (const [id, tr] of [...this.trails]) {
       // (a boat gone from the sim or long stopped: its wake ages out where it lies)
       const newest = tr.n ? tr.t[(tr.head + SAMPLES - 1) % SAMPLES] : -Infinity;
@@ -103,7 +108,7 @@ export class Wakes {
       if (pts.length < 2) continue;
       const v0 = v;
       let s = 0;
-      for (let q = 0; q < pts.length && v + 2 <= P.length / 3; q++) {
+      for (let q = 0; q < pts.length && v + 3 <= P.length / 3; q++) {
         const [x, z, age, k] = pts[q];
         if (q) s += Math.hypot(x - pts[q - 1][0], z - pts[q - 1][1]);
         // the track's direction here (toward the boat), its normal to either side
@@ -113,23 +118,28 @@ export class Wakes {
         tx /= L; tz /= L;
         // the V's half-width: the hull's own at the stern, then the Kelvin arms — still spreading
         // slowly where a boat has stopped
-        const w = tr.beam / 2 + KELVIN * s + 0.25 * age;
-        for (const sd of [-1, 1]) {
+        const w = tr.beam / 2 + 0.7 + KELVIN * s + 0.25 * age; // (+ room for the churn's ragged edge)
+        for (const sd of [-1, 0, 1]) {
           P[v * 3] = x - tz * w * sd; P[v * 3 + 1] = tr.y + 0.035; P[v * 3 + 2] = z + tx * w * sd;
           A[v * 4] = sd; A[v * 4 + 1] = w; A[v * 4 + 2] = s; A[v * 4 + 3] = k * Math.exp(-age / 14);
+          BM[v] = tr.beam;
           v++;
         }
         if (q) {
-          const p0 = v - 4;
-          I[ii++] = p0; I[ii++] = p0 + 2; I[ii++] = p0 + 1;
-          I[ii++] = p0 + 1; I[ii++] = p0 + 2; I[ii++] = p0 + 3;
+          const p0 = v - 6; // (the last station's port, track, starboard; then this one's)
+          for (const h of [0, 1]) {
+            const a0 = p0 + h, b0 = p0 + 3 + h;
+            I[ii++] = a0; I[ii++] = b0; I[ii++] = a0 + 1;
+            I[ii++] = a0 + 1; I[ii++] = b0; I[ii++] = b0 + 1;
+          }
         }
       }
-      if (v - v0 < 4) v = v0;
+      if (v - v0 < 6) v = v0;
     }
     const g = this.geo;
     (g.attributes.position as THREE.BufferAttribute).needsUpdate = true;
     (g.attributes.aWake as THREE.BufferAttribute).needsUpdate = true;
+    (g.attributes.aBeam as THREE.BufferAttribute).needsUpdate = true;
     g.index!.needsUpdate = true;
     g.setDrawRange(0, ii);
     this.mesh.visible = ii > 0;
@@ -145,8 +155,11 @@ function wakeMaterial() {
     depthWrite: false,
     vertex: /* glsl */ `
       attribute vec4 aWake;
+      attribute float aBeam;
       varying vec4 vWake;
+      varying float vBeam;
       void main() {
+        vBeam = aBeam;
         vec4 wp = worldMat() * vec4(position, 1.0);
         vWorldPos = wp.xyz + uWorldOffset;
         vNormalW = vec3(0.0, 1.0, 0.0);
@@ -155,25 +168,30 @@ function wakeMaterial() {
       }`,
     fragment: /* glsl */ `
       varying vec4 vWake; // side (-1..1 across), half-width (m), metres behind the stern, strength (faded by age)
+      varying float vBeam; // the hull's beam (m)
       void main() {
         vec2 xz = vWorldPos.xz;
         float t = uTime, side = abs(vWake.x), w = vWake.y, s = vWake.z, k = vWake.w;
         float lat = side * w; // metres off the track
-        // the arms: a broken white lip along each edge of the V (a few metres wide however far the
-        // V has spread), born a hull's length back
+        // the arms: a thin broken white lip along each edge of the V (born a hull's length back),
+        // the paper left bare in short strokes — never a band
         float din = (1.0 - side) * w; // metres in from the V's edge
-        float arm = smoothstep(0.0, 0.7, din) * (1.0 - smoothstep(1.4, 3.2 + s * 0.02, din));
-        arm *= smoothstep(0.3, 0.62, vnoise(xz * 0.75 + vec2(t * 0.12, -t * 0.08)));
-        arm *= smoothstep(1.0, 6.0, s) * (1.0 - smoothstep(55.0, 100.0, s));
+        float arm = smoothstep(0.0, 0.3, din) * (1.0 - smoothstep(0.55, 1.3, din));
+        arm *= smoothstep(0.42, 0.72, vnoise(xz * 0.9 + vec2(t * 0.12, -t * 0.08)));
+        arm *= smoothstep(2.0, 7.0, s) * (1.0 - smoothstep(40.0, 85.0, s));
         // the transverse crests: faint lines across the track between the arms
-        float crest = smoothstep(0.8, 0.97, sin(s * 0.9 - side * side * 2.2 - t * 0.6)) * (1.0 - smoothstep(0.5, 0.85, side));
-        crest *= 0.4 * exp(-s / 35.0) * smoothstep(0.35, 0.6, vnoise(xz * 0.5 + 3.0));
-        // the churned wash straight behind the stern: as wide as the hull, long and slowly spreading
-        float wash = 1.0 - smoothstep(0.0, 0.55 + s * 0.035, lat);
-        wash *= exp(-s / 28.0) * (0.55 + 0.45 * smoothstep(0.2, 0.6, vnoise(xz * 1.3 - t * 0.5)));
-        float foam = max(arm * 0.85, max(crest, wash * 0.9)) * k;
+        float crest = smoothstep(0.85, 0.98, sin(s * 0.9 - side * side * 2.2 - t * 0.6)) * (1.0 - smoothstep(0.5, 0.85, side));
+        crest *= 0.25 * exp(-s / 30.0) * smoothstep(0.4, 0.65, vnoise(xz * 0.5 + 3.0));
+        // the churn straight behind the stern: as wide as the hull, ragged at its edges, broken into
+        // clumps of foam that tumble and thin out over twenty-odd metres
+        float ww = vBeam * 0.5 + s * 0.07;
+        float core = 1.0 - smoothstep(ww * 0.55, ww * 1.1, lat + (vnoise(xz * 0.8 + t * 0.2) - 0.5) * ww * 0.6);
+        float clumps = smoothstep(0.38, 0.78, vnoise(xz * 1.7 - vec2(t * 0.6, t * 0.3)) * 0.65 + vnoise(xz * 4.3 + t * 0.4) * 0.35);
+        float wash = core * mix(0.3, 1.0, clumps) * exp(-s / 22.0);
+        wash *= smoothstep(0.0, 1.4, s + (vnoise(xz * 2.3 + t) - 0.5) * 1.6); // (thrown up off the transom — no ruled edge)
+        float foam = max(arm * 0.8, max(crest, wash * 0.85)) * k;
         vec3 foamCol = vec3(0.95, 0.95, 0.92) * (uAmbSky * 0.9 + uKeyColor * 0.5 * max(uKeyDir.y, 0.0) + uLampColor * 0.05);
-        gl_FragColor = vec4(applyFog(foamCol, vWorldPos), clamp(foam, 0.0, 0.85));
+        gl_FragColor = vec4(applyFog(foamCol, vWorldPos), clamp(foam, 0.0, 0.8));
       }`,
   });
   // (a few centimetres over the water: pulled forward a few depth steps, like the coast's foam)

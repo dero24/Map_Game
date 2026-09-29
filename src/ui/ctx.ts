@@ -35,7 +35,7 @@ export interface GameCtx {
   /** `kind`: what the place is (a geocoder's class — tower, attraction, street …): a landmark
    *  is arrived at from a viewpoint that shows it, not from its front door. */
   teleport: (lat: number, lon: number, kind?: string) => Promise<void>;
-  sound: (kind: 'brush' | 'shutter' | 'chime' | 'page') => void;
+  sound: (kind: 'brush' | 'shutter' | 'chime' | 'page' | 'settle') => void;
   uiOpen: () => boolean; // a modal (atlas / intro) owns the keyboard
   lock: () => void;
 }

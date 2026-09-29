@@ -63,6 +63,12 @@ export const U = {
   uHoleBox: { value: new THREE.Vector4() }, // x0 z0 x1 z1
   uHoleInfo: { value: new THREE.Vector4() }, // vertex count, maxY, enabled, -
   uHolePts: { value: Array.from({ length: HOLE_MAX }, () => new THREE.Vector2()) },
+  // The brush (ui/brush.ts, drawn by post.ts): the world pales round the sketch (x, z, radius m,
+  // amount); the sketch pass (on, line strength, -, -); a ripple ring on the water (x, z, radius m,
+  // strength) as a painted thing dries.
+  uBrush: { value: new THREE.Vector4(0, 0, 1, 0) },
+  uGhost: { value: new THREE.Vector4(0, 0, 0, 0) },
+  uRipple: { value: new THREE.Vector4(0, 0, 0, 0) },
 };
 export type SharedUniforms = typeof U;
 

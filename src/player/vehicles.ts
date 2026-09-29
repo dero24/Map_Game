@@ -11,7 +11,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { propMaterial, colored } from '../render/propMaterial';
-import { carMix, carLib, boatLib, planeGeometry, planeRecipe, pickFrom, carRecipe, PLANE_TYPES, CAR_TYPES, type CarType, type BoatType, type PlaneType } from '../assets/kit';
+import { carMix, carLib, boatLib, boatRecipe, planeGeometry, planeRecipe, pickFrom, carRecipe, PLANE_TYPES, CAR_TYPES, type CarType, type BoatType, type PlaneType } from '../assets/kit';
+import { personLib, MARK } from '../assets/people';
 import { KERB_STRIDE } from '../world/kerbCars';
 import type { WalkWorld } from './collision';
 import { walkParams, type Walker } from './controller';
@@ -49,6 +50,46 @@ const MAX_KEPT = 24; // parked player vehicles left around the world (oldest rec
 // driveway cars you drove off in (tile-instance keys are deterministic, so they stay gone).
 const STORE = 'map-game.vehicles.v1';
 interface Saved { taken: string[]; kept: { kind: VKind; model: string; lat: number; lon: number; yaw: number; color?: number }[] }
+
+// Someone at the helm of the boat you ride (Round 9: "nobody is at the helm"): the crowd's body,
+// one look (short hair, the rest of the wardrobe dropped), seated for a tiller or standing at a
+// console. Built once.
+let helmCache: { sit: THREE.BufferGeometry; stand: THREE.BufferGeometry } | null = null;
+function helmGeometry(sit: boolean) {
+  if (!helmCache) {
+    const src = personLib();
+    const pos = src.getAttribute('position') as THREE.BufferAttribute, col = src.getAttribute('color') as THREE.BufferAttribute, part = src.getAttribute('aPart') as THREE.BufferAttribute;
+    const recolour: [readonly number[], number][] = [[MARK.skin, 0xc68642], [MARK.hair, 0x3b2a1e], [MARK.pants, 0x2e3a52], [MARK.shin, 0x2e3a52], [MARK.forearm, 0xd8cfa8], [[1, 1, 1], 0xd8cfa8]];
+    const make = (seated: boolean) => {
+      const P: number[] = [], C: number[] = [];
+      for (let t = 0; t < pos.count; t += 3) {
+        const id = part.getX(t);
+        if (id >= 10) continue; // (the other hairstyles, the cap, the headphones)
+        for (let k = 0; k < 3; k++) {
+          const i = t + k;
+          let y = pos.getY(i), z = pos.getZ(i);
+          const x = pos.getX(i);
+          if (seated && (id === 1 || id === 2)) {
+            // the thigh swings forward about the hip, the shin hangs from the knee
+            if (y > 0.47) { const d = 0.87 - y; y = 0.87 - 0.03 * (d / 0.4); z -= d; } else { y += 0.4; z -= 0.4; }
+          }
+          if (seated) y -= 0.45;
+          P.push(x, y, z);
+          let r = col.getX(i), g = col.getY(i), b = col.getZ(i);
+          for (const [m, hex] of recolour) if (Math.abs(r - m[0]) < 0.01 && Math.abs(g - m[1]) < 0.01 && Math.abs(b - m[2]) < 0.01) { const c = new THREE.Color(hex); r = c.r; g = c.g; b = c.b; break; }
+          C.push(r, g, b);
+        }
+      }
+      const out = new THREE.BufferGeometry();
+      out.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+      out.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+      out.computeVertexNormals();
+      return out;
+    };
+    helmCache = { sit: make(true), stand: make(false) };
+  }
+  return sit ? helmCache.sit : helmCache.stand;
+}
 
 // Paint the white (tintable) parts of a vertex-coloured model.
 function tint(g: THREE.BufferGeometry, hex: number) {
@@ -89,6 +130,10 @@ export class Vehicles {
   private orbitYaw = 0;
   private orbitPitch = 0;
   private seed = 1;
+  private exitT = -1e9; // (walk-in boarding waits a moment after you step off)
+  private approachT = 0;
+  private settle = new Map<Veh, number>(); // a painted boat dropping onto the water
+  private helm: THREE.Mesh | null = null;
   private boatN = 0;
   private planeN = 0;
 
@@ -238,7 +283,8 @@ export class Vehicles {
   /** A painted ride, dry: it's real now, where the brush set it down (and it's saved there). */
   paint(kind: VKind, model: string, at: Spot, color: number) {
     const v = this.make(kind, at.x, at.z, at.yaw, color, model);
-    return { kind: v.kind, model: v.model, x: v.x, z: v.z };
+    if (kind === 'boat') this.settle.set(v, 1); // (it settles onto the water as the paint dries)
+    return { kind: v.kind, model: v.model, x: v.x, z: v.z, obj: v.obj };
   }
   private make(kind: VKind, x: number, z: number, yaw: number, color?: number, model?: string): Veh {
     const seed = this.seed;
@@ -346,9 +392,21 @@ export class Vehicles {
     this.enter(best);
     this.persist();
   }
+  /** At the helm: seated at a skiff's tiller or a sailboat's, standing at a console or a wheel. */
+  private helmOn(v: Veh) {
+    if (v.kind !== 'boat' || this.helm) return;
+    const sit = v.model === 'skiff' || v.model === 'sail', R = boatRecipe(v.model as BoatType, 1);
+    this.helm = new THREE.Mesh(helmGeometry(sit), this.mat);
+    this.helm.position.set(0, sit ? 0.12 : 0.18, sit ? R.L / 2 - 1.0 : R.L * 0.12);
+    this.helm.name = 'helm';
+    this.helm.layers.enable(1);
+    v.obj.add(this.helm);
+  }
+  private helmOff() { if (this.helm) { this.helm.parent?.remove(this.helm); this.helm = null; } }
   private enter(v: Veh) {
     if (walkParams.fly) walkParams.fly = false;
     this.active = v;
+    this.helmOn(v);
     this.orbitYaw = 0;
     this.orbitPitch = 0;
     this.o.walker.yaw = 0; // walker yaw/pitch become orbit offsets while riding
@@ -361,6 +419,8 @@ export class Vehicles {
     const v = this.active!;
     const w = this.o.walker, walk = this.o.walk;
     this.active = null;
+    this.exitT = performance.now();
+    this.helmOff();
     this.hud.style.display = 'none';
     const back = v.yaw; // restore a sensible look direction
     if (v.kind === 'plane' && v.airborne) {
@@ -387,6 +447,8 @@ export class Vehicles {
     const [x, z] = walk.nearestWalkable(v.x, v.z);
     if (Math.hypot(x - v.x, z - v.z) > 40) {
       this.active = v; // no dry land in reach — stay aboard
+      this.exitT = -1e9;
+      this.helmOn(v);
       this.o.toast('no dry land within reach — head for shore');
       return;
     }
@@ -467,8 +529,19 @@ export class Vehicles {
   update(dt: number, cam: THREE.PerspectiveCamera): boolean {
     if (this.active && (this.saveT -= dt) <= 0) { this.saveT = 10; this.persist(); }
     for (const v of this.list) if (v.prop) v.prop.rotation.z += dt * (6 + (v === this.active ? v.throttle * 60 : 0));
+    // your boats at rest ride the water; a freshly painted one settles onto it
+    const t = performance.now() / 1000;
+    for (const b of this.list) {
+      if (b.kind !== 'boat' || b === this.active) continue;
+      const s = this.settle.get(b) ?? 0;
+      if (s > 0) this.settle.set(b, Math.max(0, s - dt * 1.4));
+      b.y = 0.02 + Math.sin(t * 1.1 + b.x * 0.05) * 0.06 + 0.45 * s * s;
+      b.roll = Math.sin(t * 0.8 + b.z * 0.04) * 0.035 + 0.05 * s * Math.sin(t * 7);
+      b.pitch = Math.sin(t * 0.9 + b.x * 0.07) * 0.018;
+      this.pose(b);
+    }
     const v = this.active;
-    if (!v) return false;
+    if (!v) { this.walkIn(dt); return false; }
     dt = Math.min(dt, 0.05);
     if (v.kind === 'car') this.drive(v, dt);
     else if (v.kind === 'boat') this.sail(v, dt);
@@ -525,6 +598,22 @@ export class Vehicles {
     v.roll += (Math.max(-0.3, Math.min(0.3, tr)) - v.roll) * Math.min(1, dt * 8);
   }
 
+  /** Walk into one of your boats and you're aboard: pressing on toward it from the water's edge,
+   *  within its boarding reach (no key needed — Round 9: "walk in to board"). */
+  private walkIn(dt: number) {
+    const w = this.o.walker;
+    if (walkParams.fly || performance.now() - this.exitT < 2500 || !this.o.enabled()) return void (this.approachT = 0);
+    const fx = -Math.sin(w.yaw), fz = -Math.cos(w.yaw);
+    let target: Veh | null = null;
+    for (const b of this.list) {
+      if (b.kind !== 'boat') continue;
+      const dx = b.x - w.x, dz = b.z - w.z, d = Math.hypot(dx, dz);
+      if (d < SPECS.boat.reach && (dx * fx + dz * fz) / Math.max(d, 1e-3) > 0.75) { target = b; break; }
+    }
+    this.approachT = target && w.pushing ? this.approachT + dt : 0;
+    if (target && this.approachT > 0.35) { this.approachT = 0; this.enter(target); this.persist(); }
+  }
+
   private sail(v: Veh, dt: number) {
     const thr = this.axis(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown']);
     const boost = this.k('ShiftLeft') || this.k('ShiftRight');
@@ -538,9 +627,11 @@ export class Vehicles {
     const nx = v.x - Math.sin(v.yaw) * v.v * dt, nz = v.z - Math.cos(v.yaw) * v.v * dt;
     if (this.water(nx, nz)) (v.x = nx), (v.z = nz);
     else v.v *= -0.25; // run aground gently: bump back off the shore
-    const t = performance.now() / 1000;
-    v.y = 0.05 + Math.sin(t * 1.3 + v.x * 0.05) * 0.12;
-    v.pitch = Math.sin(t * 1.1 + v.z * 0.07) * 0.03 + Math.min(0.08, Math.abs(v.v) * 0.006); // bow lifts under way
+    const t = performance.now() / 1000, sp = Math.abs(v.v);
+    // under way the bow lifts onto the plane (a hump near 8 m/s), then the hull rides up and flatter
+    const hump = Math.exp(-((sp - 8) ** 2) / 8);
+    v.y = 0.05 + Math.sin(t * 1.3 + v.x * 0.05) * 0.12 * (1 - Math.min(0.6, sp / 20)) + Math.min(0.2, Math.max(0, sp - 6) * 0.04);
+    v.pitch = Math.sin(t * 1.1 + v.z * 0.07) * 0.025 + 0.03 * Math.min(1, sp / 6) + 0.07 * hump;
     v.roll = Math.sin(t * 0.9 + v.x * 0.04) * 0.05 - v.steer * Math.min(0.12, Math.abs(v.v) * 0.012);
   }
 

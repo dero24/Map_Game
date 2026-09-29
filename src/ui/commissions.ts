@@ -25,6 +25,10 @@ const FAMILY: Record<string, { label: string; all: string[] }> = {
   flower: { label: 'garden plant', all: PLANT_SPECIES },
 };
 export const FAMILIES = FAMILY;
+/** The families the brush can paint (ui/brush.ts). Planes join once airfields have planes to paint from life. */
+export const PAINTABLE = ['boat', 'car'] as const;
+// Side-on area (m²) of each paintable kind, for how much of a painting it fills
+const SIDE: Record<string, number> = { skiff: 6.5, console: 12, cabin: 25, sail: 20, pontoon: 13, lobster: 33, pickup: 9, van: 10, suv: 8, jeep: 7 };
 // POI kinds that aren't worth a card (utilities, parking, generic tags)
 const DULL = new Set(['toilets', 'parking', 'wastewater_plant', 'pumping_station', 'monitoring_station', 'tyres', 'car_wash', 'yes', 'apartment', 'military', 'laundry', 'car_repair', 'bicycle_repair_station', 'social_facility']);
 export const niceName = (t: string, family = '') =>
@@ -288,6 +292,13 @@ export class Commissions {
   paintFrame(page: string): string[] {
     const w = this.g.walker, done: string[] = [];
     this.fresh = [];
+    // Paintable kinds are taught sparingly (Round 9: "five cards at once is a list, not a gift"):
+    // your first painting teaches the one thing it's of; after that, what's composed — each
+    // filling at least 4% of the frame — three at most. How much a thing fills: its side-on area
+    // over the frame's area at its distance (a zoomed painting reaches further).
+    const cam = this.g.camera, th = Math.tan(((cam.fov ?? 62) * Math.PI) / 360), aspect = cam.aspect || 16 / 9;
+    const fills = new Map<string, number>();
+    const firstCard = this.owned(PAINTABLE).length === 0;
     for (const [prefix, family, r] of [['parked-cars:', 'car', 45], ['kerb-cars:', 'car', 45], ['life-car:', 'car', 45], ['moored-boats:', 'boat', 90], ['life-boat:', 'boat', 120], ['ride-car:', 'car', 40], ['ride-boat:', 'boat', 60], ['ride-plane:', 'plane', 80], ['critter:', 'wildlife', 30], ['trees:', 'tree', 40], ['garden:', 'flower', 18], ['plant:', 'flower', 18]] as const)
       for (const p of this.g.instances(prefix, w.x, w.z, r)) {
         if (!this.inView(p.x, p.y + (family === 'tree' ? 3 : 0.6), p.z, 0.7)) continue;
@@ -296,9 +307,21 @@ export class Commissions {
         const key = `${family}:${type}`;
         const list = (this.state.spotted[family] ??= []);
         if (!list.includes(type)) list.push(type);
+        if ((PAINTABLE as readonly string[]).includes(family)) {
+          const d = Math.max(1, Math.hypot(p.x - w.x, p.y - w.y, p.z - w.z)), frameArea = (2 * d * th) ** 2 * aspect;
+          fills.set(key, Math.max(fills.get(key) ?? 0, (SIDE[type] ?? 6.6) / frameArea));
+          continue;
+        }
         const s = this.record(key);
         if (!s.painted) { s.painted = true; s.pt = Date.now(); s.page = page; done.push(niceName(type, family)); this.fresh.push(key); }
       }
+    const taught = [...fills].filter(([k, f]) => !this.state.seen?.[k]?.painted && f >= (firstCard ? 0.015 : 0.04)).sort((a, b) => b[1] - a[1]).slice(0, firstCard ? 1 : 3);
+    for (const [key] of fills) {
+      const s = this.record(key); // (in pencil at least: you saw it)
+      if (s.painted || !taught.some(([k]) => k === key)) continue;
+      const [family, type] = key.split(':');
+      s.painted = true; s.pt = Date.now(); s.page = page; done.push(niceName(type, family)); this.fresh.push(key);
+    }
     for (const pl of this.places(220)) {
       if (!this.inView(pl.x, this.g.terrain.heightAt(pl.x, pl.z) + 4, pl.z, 0.75)) continue;
       const s = this.record(pl.key, { name: pl.name, kind: pl.kind });

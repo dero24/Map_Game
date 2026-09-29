@@ -32,6 +32,16 @@ or per-region style.
 - `src/world/grass.ts` — player-centred tuft cells, masked by `GroundPaint.grassMask` (grows
   only where the painted ground is open/green). Walks start at today's sunrise (`?hour=`).
 
+## The brush's sketch pass
+
+- `WatercolorPost.render(…, overlay)` draws the brush's scene (ui/brush.ts) into its own target
+  (`ghostRT`: colour + depth, made the first time) after the scene, and the composite lays it over
+  the painting before the ink: rgb display colour, alpha = coverage (+ 2 where the wash is wet, for
+  the bleed past the line). Its outline is the Laplacian of 1/z on its own depth, drawn twice with a
+  7 fps jitter (the boil) and broken by the paper's tooth; where the scene's depth is nearer it's
+  dashed and the fill fainter. `U.uBrush` pales the world round it; `U.uRipple` rings the water as a
+  painted boat settles; `U.uGhost` = (on, line, bleed, harness mask).
+
 ## Sketch → paint (post composite)
 
 - `post.ts` composite reconstructs world position from depth (`uInvProj`, `uCamWorld`,

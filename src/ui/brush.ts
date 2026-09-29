@@ -4,9 +4,11 @@
 // (painted with P); the one that fits what you're aiming at comes first (water: a boat; a street:
 // a car). A pencil sketch of it snaps to the nearest spot that fits (player/place.ts) — you aim,
 // you never draw on the world. Click (on a phone: tap the sketch) and the colour washes in from
-// where you touched it; rub to hurry it. When it dries it's real (vehicles.ts paint()) and it
-// stays where you painted it. A kind you haven't painted from life shows as a pencil chip that
-// says where to find one.
+// where you touched it, wet and rich; rub to hurry it. Then it dries (it's real: vehicles.ts
+// paint()), lightens and settles — a ring on the water, the view leaning in — and it stays where
+// you painted it. A kind you haven't painted from life shows as a pencil chip that says where to
+// find one. The sketch is drawn in a pass of its own over the painting (render/post.ts): paper and
+// a boiling graphite line, the world paling round it, never lost behind whatever stands in front.
 import * as THREE from 'three';
 import type { GameCtx } from './ctx';
 import type { Hint } from './hints';
@@ -14,23 +16,32 @@ import type { Commissions } from './commissions';
 import { modelName, type Vehicles } from '../player/vehicles';
 import type { WalkWorld } from '../player/collision';
 import { propMaterial } from '../render/propMaterial';
-import { placeBoat, placeCar, openWater, compass, type Placement, type Spot } from '../player/place';
+import { U } from '../render/shared';
+import { postParams } from '../render/post';
+import { placeBoat, placeCar, openWater, compass, HULL, type Placement, type Spot } from '../player/place';
+import { boatDims, BOAT_TYPES, type BoatType } from '../assets/kit';
 
-/** The families the brush can paint. (Planes join once airfields have planes to paint from life.) */
-export const PAINTABLE = ['boat', 'car'] as const;
+import { PAINTABLE } from './commissions';
+export { PAINTABLE };
 type Fam = (typeof PAINTABLE)[number];
 /** A chip: a kind you own, or (type '') a family you haven't painted from life yet. */
 interface Kind { family: Fam; type: string }
 type Site = 'water' | 'street' | 'ground';
 
+// Your own colours: a painted thing is bold by default (Round 9: "the default white and green is
+// the moored skiff's livery — the boat isn't yours"), each kind its own of the four, then the classics.
+const BOLD = [0xc8432c, 0x2f5f9e, 0xe2a52a, 0x3f7f52];
 const SWATCHES: Record<Fam, number[]> = {
-  boat: [0xf4f1ea, 0x2d4a6a, 0x9b3b32, 0xd9e4ea, 0x3d5a46, 0xd8a03a],
-  car: [0xf2f2ee, 0x26282c, 0x9c2a26, 0x2b3f63, 0x3d5a46, 0xcdbf9e],
+  boat: [...BOLD, 0xf4f1ea, 0x2a2c30],
+  car: [...BOLD, 0xf2f2ee, 0x26282c],
 };
+const boldFor = (type: string) => { let h = 7; for (let i = 0; i < type.length; i++) h = (h * 31 + type.charCodeAt(i)) >>> 0; return BOLD[h % BOLD.length]; };
 const SAMPLE: Record<Fam, string> = { boat: 'skiff', car: 'sedan' }; // a pencil chip's picture
 const FITS: Record<Site, Fam | null> = { water: 'boat', street: 'car', ground: null };
 const RANGE = 160; // how far the brush reaches (m)
-const WASH_S = 1.7; // an unhurried wash, seconds
+const WASH_S = 1.3; // an unhurried wash, seconds (rubbing: up to three times the pace)…
+const DRY_S = 0.9; // …then it dries: the wet colour lightens into the real thing…
+const FX_S = 1.8; // …as it settles onto the water (a ring runs out) and the view leans in
 const STORE = 'map-game.brush.v1';
 interface Saved { recent: string[]; colors: Record<string, number>; used?: boolean }
 
@@ -38,6 +49,7 @@ const CSS = `
 #brush { position: fixed; left: 50%; bottom: calc(32px + env(safe-area-inset-bottom)); /* (above the map credit: it stays readable) */ transform: translateX(-50%); z-index: 21; display: none; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; color: #3a3346; font-family: Georgia, serif; }
 #brush.on { display: flex; }
 #brush .row { display: flex; gap: 6px; align-items: center; pointer-events: auto; background: rgba(245,239,225,0.88); border: 1px solid rgba(58,51,70,0.2); border-radius: 6px; padding: 6px 8px; max-width: 94vw; overflow-x: auto; box-shadow: 0 2px 14px rgba(40,30,60,0.12); }
+#brush .chips { display: flex; gap: 6px; align-items: center; }
 #brush .chip { display: flex; flex-direction: column; align-items: center; gap: 2px; background: none; border: 1px solid transparent; border-radius: 4px; padding: 3px 4px; font: inherit; font-size: 12px; color: inherit; cursor: pointer; min-width: 66px; }
 #brush .chip img { width: 64px; height: 44px; object-fit: cover; border-radius: 2px; }
 #brush .chip.sel { border-color: rgba(58,51,70,0.55); background: rgba(255,255,255,0.4); }
@@ -51,22 +63,41 @@ const CSS = `
 #brush-dot.on { display: block; }
 body.touch #brush-dot, body.postcard #brush, body.postcard #brush-dot { display: none !important; }
 body.brushing #hud { display: none; }
-/* a phone: the bar keeps clear of the button column on the right, and the words wrap */
-body.touch #brush { left: 8px; right: 76px; bottom: calc(44px + env(safe-area-inset-bottom)); transform: none; align-items: stretch; }
-body.touch #brush .status { white-space: normal; text-align: center; }
-@media (max-width: 640px) { #brush .chip { min-width: 54px; } #brush .chip img { width: 52px; height: 36px; } #brush .status { font-size: 13px; } }
+/* a phone: the bar goes to the top — the walking thumb and the buttons keep the bottom — kept
+   short (one line of chips that scrolls sideways, the colours a line of their own) so the sketch
+   has the rest of the screen */
+body.touch #brush { top: calc(64px + env(safe-area-inset-top)); bottom: auto; left: 8px; right: 8px; transform: none; align-items: stretch; gap: 4px; }
+body.touch #brush .row { flex-wrap: wrap; overflow-x: visible; padding: 4px 6px; row-gap: 2px; }
+body.touch #brush .chips { flex: 1 1 0; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+body.touch #brush .chip { min-width: 50px; padding: 2px 3px; font-size: 11px; }
+body.touch #brush .chip img { width: 46px; height: 30px; }
+body.touch #brush .x { order: 2; }
+body.touch #brush .sws { order: 3; width: 100%; justify-content: center; border-left: none; padding: 3px 0 1px; }
+body.touch #brush .status { white-space: normal; text-align: center; font-size: 13px; padding: 3px 12px; }
+@media (max-width: 640px) { body:not(.touch) #brush .chip { min-width: 54px; } body:not(.touch) #brush .chip img { width: 52px; height: 36px; } #brush .status { font-size: 13px; } }
+/* a phone on its side: the bar is a narrow column at the left, clear of the buttons on the right */
+@media (orientation: landscape) and (max-height: 500px) {
+  body.touch #brush { top: calc(8px + env(safe-area-inset-top)); left: calc(8px + env(safe-area-inset-left)); right: auto; width: 208px; }
+  body.touch #brush .chips { flex-wrap: wrap; overflow-x: visible; }
+}
 `;
 
 export class Brush {
   active = false;
   private kinds: Kind[] = [];
-  private pick = 0;
-  private picked = false; // chosen by hand: stop following the site
+  private view: number[] = []; // the chips shown: the kinds (indices) of the family that fits your aim
+  private viewFam: Fam | null = null;
+  private pick = 0; // (into view)
+  private soundT = 0;
   private turn = 0; // R: a quarter-turn at a time for boats; a car turns to the other lane
   private saved: Saved = { recent: [], colors: {} };
   private ghost: { key: string; obj: THREE.Group; spot: Spot | null; shown: { x: number; z: number; yaw: number } | null } | null = null;
   private mat = propMaterial({ wash: true });
   private washing: { r: number; max: number; rub: number; rate: number; at: THREE.Vector3; kind: Kind; spot: Spot; color: number } | null = null;
+  private drying: { t: number; x: number; z: number; boat: boolean; toast: string; obj: THREE.Object3D; splash: boolean } | null = null;
+  private pale = 0; // how far the world has paled round the sketch
+  /** The sketch pass's scene (post.ts draws it over the painting); its root follows the world's. */
+  readonly scene = new THREE.Scene();
   private why = '';
   private whereT = 0;
   private solveT = 0;
@@ -92,12 +123,12 @@ export class Brush {
     private com: Commissions,
     private veh: Vehicles,
     private walk: WalkWorld,
-    world: THREE.Object3D,
+    private world: THREE.Object3D,
     private origin: THREE.Vector3, // the render origin (main.ts reanchor): render = world − origin
     private enabled: () => boolean, // false in menus, photo mode, a ride
   ) {
     this.root.name = 'brush';
-    world.add(this.root);
+    this.scene.add(this.root);
     try { this.saved = { ...this.saved, ...(JSON.parse(localStorage.getItem(STORE) ?? 'null') ?? {}) }; } catch { /* fresh */ }
     const st = document.createElement('style');
     st.textContent = CSS;
@@ -134,7 +165,7 @@ export class Brush {
     window.addEventListener('wheel', (e) => {
       if (!this.active || (e.target as HTMLElement)?.closest?.('.lil-gui,#brush')) return;
       e.stopImmediatePropagation();
-      if (this.kinds.length) this.choose((this.pick + (e.deltaY > 0 ? 1 : -1) + this.kinds.length) % this.kinds.length);
+      if (this.view.length) this.choose((this.pick + (e.deltaY > 0 ? 1 : -1) + this.view.length) % this.view.length);
     }, { capture: true, passive: true });
     const cv = g.canvas;
     cv.addEventListener('mousedown', (e) => {
@@ -196,12 +227,25 @@ export class Brush {
     owned.sort((a, b) => rank(a) - rank(b)); // (a stable sort: newest-painted order otherwise)
     this.kinds = [...owned];
     for (const f of PAINTABLE) if (!owned.some((k) => k.family === f)) this.kinds.push({ family: f, type: '' });
-    this.pick = Math.min(this.pick, this.kinds.length - 1);
+    this.setView(this.viewFam, true);
+  }
+  /** Show the family that fits what you aim at (water: boats; a street: cars), else them all. */
+  private setView(fam: Fam | null, force = false) {
+    if (!force && fam === this.viewFam) return;
+    this.viewFam = fam;
+    const v = this.kinds.map((_, i) => i).filter((i) => !fam || this.kinds[i].family === fam);
+    this.view = v.length ? v : this.kinds.map((_, i) => i);
+    this.pick = 0;
+    this.whereT = 0;
     this.build();
   }
+  private get cur(): Kind | undefined { return this.kinds[this.view[this.pick]]; }
   private build() {
     this.rowEl.replaceChildren();
-    this.kinds.forEach((k, i) => {
+    const chips = document.createElement('div');
+    chips.className = 'chips';
+    this.rowEl.appendChild(chips);
+    this.view.map((i) => this.kinds[i]).forEach((k, i) => {
       const b = document.createElement('button');
       b.className = `chip${i === this.pick ? ' sel' : ''}${k.type ? '' : ' pencil'}`;
       const img = document.createElement('img');
@@ -211,9 +255,9 @@ export class Brush {
       s.textContent = k.type ? modelName(k.type) : `a ${k.family}?`;
       b.append(img, s);
       b.onclick = () => this.choose(i);
-      this.rowEl.appendChild(b);
+      chips.appendChild(b);
     });
-    const k = this.kinds[this.pick];
+    const k = this.cur;
     if (k?.type) {
       const sws = document.createElement('div');
       sws.className = 'sws';
@@ -235,23 +279,21 @@ export class Brush {
     x.onclick = () => this.toggle(false);
     this.rowEl.appendChild(x);
   }
-  private choose(i: number, byHand = true) {
-    if (i < 0 || i >= this.kinds.length || this.washing) return;
-    if (byHand) this.picked = true;
-    if (i === this.pick) return;
+  private choose(i: number) {
+    if (i < 0 || i >= this.view.length || this.washing || this.drying || i === this.pick) return;
     this.pick = i;
     this.whereT = 0;
     this.build();
   }
-  private color(k: Kind) { return this.saved.colors[`${k.family}:${k.type}`] ?? this.veh.defaultColor(k.family, this.veh.nextSeed); }
+  private color(k: Kind) { return this.saved.colors[`${k.family}:${k.type}`] ?? boldFor(k.type); }
   private setColor(k: Kind, c: number) {
     this.saved.colors[`${k.family}:${k.type}`] = c;
     this.save();
     this.build();
   }
   private cycleColor() {
-    const k = this.kinds[this.pick];
-    if (!k?.type || this.washing) return;
+    const k = this.cur;
+    if (!k?.type || this.washing || this.drying) return;
     const S = SWATCHES[k.family], i = S.indexOf(this.color(k));
     this.setColor(k, S[(i + 1) % S.length]);
   }
@@ -269,11 +311,17 @@ export class Brush {
     this.tap = null;
     this.mouse = null;
     this.washing = null;
+    this.drying = null;
     this.touches.clear();
+    this.pale = 0;
+    U.uBrush.value.w = 0;
+    U.uGhost.value.y = U.uGhost.value.z = 0;
+    U.uRipple.value.w = 0;
+    this.g.walker.zoom = 0;
+    this.mat.uniforms.uWash.value.set(0, 1, 0, 0);
     if (on) {
-      this.picked = false;
       this.turn = 0;
-      this.pick = 0; // (your last painted kind: then the site picks)
+      this.viewFam = null;
       this.refresh();
       this.g.sound('page');
     } else this.dropGhost();
@@ -315,24 +363,83 @@ export class Brush {
     return placeCar(w, x, z, 0, 6).ok ? 'street' : 'ground';
   }
   private solve(k: Kind, x: number, z: number): Placement {
+    // a boat asks for the room its own hull needs: a skiff lies near the bank, a cruiser further out
+    const dims = k.family === 'boat' && (BOAT_TYPES as string[]).includes(k.type) ? boatDims(k.type as BoatType) : null;
+    const hull = dims ? { room: dims.L / 2 + 0.8, depth: dims.draft + 0.15 } : HULL;
     // never on top of what's already there: the moored boats and your rides; the parked cars
-    const R = k.family === 'boat' ? 6.5 : 4.2;
+    const R = k.family === 'boat' ? hull.room + 3.2 : 4.2;
     const near = (k.family === 'boat' ? ['moored-boats:', 'life-boat:', 'ride-boat:'] : ['parked-cars:', 'kerb-cars:', 'life-car:', 'ride-car:'])
       .flatMap((p) => this.g.instances(p, x, z, (k.family === 'boat' ? 40 : 20) + R + 2));
-    const w = { ...this.veh.placeWorld, free: (px: number, pz: number) => !near.some((q) => Math.hypot(q.x - px, q.z - pz) < R) };
-    const yaw = this.g.walker.yaw;
+    const clear = (px: number, pz: number) => !near.some((q) => Math.hypot(q.x - px, q.z - pz) < R);
+    // the sketch where you can see it (Round 9: "never snap it out of view"), clear of the brush's
+    // own bar (a phone's is at the top, or down the side held landscape; a desktop's at the bottom)…
+    const touch = document.body.classList.contains('touch'), bar = this.el.getBoundingClientRect(), xr = touch ? 0.72 : 0.75;
+    const bx0 = (2 * bar.left) / innerWidth - 1 - 0.1, bx1 = (2 * bar.right) / innerWidth - 1 + 0.1;
+    const by0 = 1 - (2 * bar.bottom) / innerHeight - 0.12, by1 = 1 - (2 * bar.top) / innerHeight + 0.12;
+    const seen = (px: number, pz: number) => {
+      const n = this.g.toNdc(px, 0.6, pz);
+      if (n.z >= 1 || Math.abs(n.x) > xr || n.y < -0.7 || n.y > 0.8) return false;
+      return !(bar.width > 0 && n.x > bx0 && n.x < bx1 && n.y > by0 && n.y < by1);
+    };
+    // …and a boat where you can step aboard: footing within its boarding reach (vehicles.ts walkIn)
+    const aboard = (px: number, pz: number) => {
+      for (let r = Math.min(hull.room + 0.3, 6.5); r <= 6.6; r += 1) for (let a = 0; a < 12; a++) {
+        const qx = px + Math.sin((a / 12) * Math.PI * 2) * r, qz = pz + Math.cos((a / 12) * Math.PI * 2) * r;
+        if (this.walk.walkable(qx, qz) && this.walk.buildingAt(qx, qz) < 0) return true;
+      }
+      return false;
+    };
+    // …in front of what's there, not behind it (Round 9: "the ghost goes missing"): on screen, no
+    // nearer boat or car over the heart of it, and no building between you and it…
+    const cam = this.g.camera, cp = cam.position.clone().add(this.origin), th = Math.tan((cam.fov * Math.PI) / 360);
+    const half = (name: string) => { const t = name.slice(name.indexOf(':') + 1); return (BOAT_TYPES as string[]).includes(t) ? boatDims(t as BoatType).L / 2 : k.family === 'boat' ? 3 : 2.3; };
+    const occl = (k.family === 'boat' ? ['moored-boats:', 'life-boat:', 'ride-boat:'] : ['parked-cars:', 'kerb-cars:', 'life-car:', 'ride-car:'])
+      .flatMap((p) => this.g.instances(p, (cp.x + x) / 2, (cp.z + z) / 2, Math.hypot(x - cp.x, z - cp.z) / 2 + 45))
+      .map((q) => ({ x: q.x, z: q.z, r: half(q.name) * 0.85 }));
+    const disc = (px: number, py: number, pz: number, r: number) => {
+      const n = this.g.toNdc(px, py, pz), d = Math.max(1, Math.hypot(px - cp.x, py - cp.y, pz - cp.z));
+      return { X: n.x * cam.aspect, Y: n.y, R: r / d / th, d, front: n.z < 1 };
+    };
+    const gR = dims ? dims.L / 2 : 2.3;
+    const open = (px: number, pz: number, loose = false) => {
+      const G = disc(px, 0.6, pz, gR);
+      for (const q of occl) {
+        const O = disc(q.x, 0.8, q.z, q.r);
+        if (O.front && O.d < G.d - 1 && Math.hypot(O.X - G.X, O.Y - G.Y) < (loose ? O.R * 0.55 : O.R + G.R * 0.4)) return false;
+      }
+      const dx = px - cp.x, dz = pz - cp.z, L = Math.hypot(dx, dz);
+      for (let d = 2; d < L - 3; d += 2.5) if (this.walk.buildingAt(cp.x + (dx / L) * d, cp.z + (dz / L) * d) >= 0) return false;
+      return true;
+    };
+    const w = this.veh.placeWorld, yaw = this.g.walker.yaw;
+    const tries = [
+      (px: number, pz: number) => clear(px, pz) && seen(px, pz) && open(px, pz) && (k.family !== 'boat' || aboard(px, pz)),
+      (px: number, pz: number) => clear(px, pz) && seen(px, pz) && open(px, pz),
+      (px: number, pz: number) => clear(px, pz) && seen(px, pz) && open(px, pz, true), // (at worst, only its edge behind something)
+      (px: number, pz: number) => clear(px, pz) && seen(px, pz),
+    ];
     if (k.family === 'boat') {
-      const p = placeBoat(w, x, z, yaw, 40, 0);
-      if (p.ok) return { ok: true, spot: { ...p.spot, yaw: p.spot.yaw + this.turn } };
+      // near and in the clear first; then near with only an edge hidden; then further out
+      for (const [free, reach] of [[tries[0], 20], [tries[1], 20], [tries[2], 25], [tries[1], 40], [tries[3], 40]] as const) {
+        const p = placeBoat({ ...w, free }, x, z, yaw, reach, 0, hull);
+        if (p.ok) return { ok: true, spot: { ...p.spot, yaw: p.spot.yaw + this.turn } };
+      }
+      // (room for one, just not where you can see it: say where to look, not that there's no water)
+      if (placeBoat({ ...w, free: clear }, x, z, yaw, 40, 0, hull).ok) return { ok: false, why: touch ? 'tap the water where you can see it' : 'aim at the water where you can see it' };
       // (where the water is: a long look, so kept while you sweep the same dry ground)
       if (!this.farWhy || Math.hypot(this.farWhy.x - x, this.farWhy.z - z) > 60) {
-        const q = placeBoat(w, x, z, yaw, 40);
+        const q = placeBoat(w, x, z, yaw, 40, 1500, hull);
         this.farWhy = { x, z, why: q.ok ? 'a boat needs open water' : q.why };
       }
       return { ok: false, why: this.farWhy.why };
     }
     // a car turned round takes the other lane
-    return placeCar(w, x, z, yaw + (Math.cos(this.turn) < 0 ? Math.PI : 0), 20);
+    const cy = yaw + (Math.cos(this.turn) < 0 ? Math.PI : 0);
+    let c = placeCar({ ...w, free: tries[1] }, x, z, cy, 20);
+    if (!c.ok) c = placeCar({ ...w, free: tries[2] }, x, z, cy, 20);
+    if (!c.ok) c = placeCar({ ...w, free: tries[3] }, x, z, cy, 20);
+    if (!c.ok && placeCar({ ...w, free: clear }, x, z, cy, 20).ok) return { ok: false, why: touch ? 'tap the street where you can see it' : 'aim at the street where you can see it' };
+    return c;
   }
   /** Where a kind you haven't painted from life can be found near you. */
   private where(f: Fam) {
@@ -378,8 +485,8 @@ export class Brush {
   }
   /** Start the wash where the brush touches the sketch (the screen point (nx, ny)). */
   private start(nx: number, ny: number, mustHit = false) {
-    const k = this.kinds[this.pick], gh = this.ghost;
-    if (this.washing || !k?.type || !gh?.spot || !gh.obj.visible) return;
+    const k = this.cur, gh = this.ghost;
+    if (this.washing || this.drying || !k?.type || !gh?.spot || !gh.obj.visible) return;
     const hit = this.hitsGhost(nx, ny);
     if (!hit && mustHit) return;
     const box = new THREE.Box3().setFromObject(gh.obj);
@@ -392,6 +499,7 @@ export class Brush {
     this.washing = { r: 0, max: max + 0.9, rub: 0, rate: 0, at, kind: k, spot: { ...gh.spot, x: s.x, z: s.z, yaw: s.yaw }, color: this.color(k) };
     this.g.sound('brush');
   }
+  /** The wash has covered it: it's real now (the sketch pass fades off it as it dries). */
   private dry() {
     const w = this.washing!;
     this.washing = null;
@@ -400,26 +508,64 @@ export class Brush {
     this.saved.recent = [key, ...this.saved.recent.filter((r) => r !== key)].slice(0, 12);
     this.saved.used = true;
     this.save();
+    const boat = w.kind.family === 'boat';
     this.g.sound('chime');
+    // (the bar goes as it dries: nothing between you and it)
+    this.el.classList.remove('on');
+    this.dot.classList.remove('on');
+    document.body.classList.remove('brushing');
+    this.g.walker.holdLook = false;
+    this.held = false;
     const near = Math.hypot(made.x - this.g.walker.x, made.z - this.g.walker.z) < 12;
-    this.g.toast(`your ${modelName(made.model)} is real${near ? ` — E to ${w.kind.family === 'boat' ? 'go aboard' : 'get in'}` : ' — walk over, then E'}`);
-    this.toggle(false);
+    const name = modelName(made.model);
+    this.drying = {
+      t: 0, x: made.x, z: made.z, boat, obj: made.obj, splash: false,
+      toast: boat ? `your ${name} — walk out to it to go aboard` : `your ${name} — ${near ? 'E to get in' : 'walk over, then E'}`,
+    };
   }
 
   // ---------------- per frame ----------------
   update(dt: number) {
     if (!this.active) return;
     if (!this.enabled()) return this.toggle(false);
-    let k = this.kinds[this.pick];
+    this.root.position.copy(this.world.position); // (the floating origin: the sketch's hit tests)
+    this.mat.uniforms.uExposure.value = postParams.exposure;
+    const D = this.drying;
+    if (D) {
+      // drying: the wet colour lightens into the real thing and the sketch lifts off it; a ring runs
+      // out over the water and the view leans in, then eases back
+      D.t += dt;
+      const k = Math.min(1, D.t / DRY_S), sm = (a: number, b: number, x: number) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+      this.mat.uniforms.uWash.value.set(k, 1 - sm(0.25, 1, k), 0, 0);
+      U.uGhost.value.y = 1 - sm(0, 0.6, k);
+      U.uGhost.value.z = 1 - sm(0, 0.5, k);
+      this.pale = 1 - sm(0.2, 1, D.t / FX_S);
+      U.uBrush.value.w = this.pale;
+      // (the wet sketch rides the real thing down as it settles)
+      if (this.ghost) { this.ghost.obj.position.copy(D.obj.position); this.ghost.obj.quaternion.copy(D.obj.quaternion); }
+      if (D.boat && D.t > 0.3) {
+        if (!D.splash) { D.splash = true; this.g.sound('settle'); }
+        const f = Math.min(1, (D.t - 0.3) / (FX_S - 0.3));
+        U.uRipple.value.set(D.x, D.z, 1.5 + 8 * (1 - (1 - f) * (1 - f)), Math.pow(1 - f, 1.3));
+      }
+      this.g.walker.zoom = 6 * (D.t < 0.45 ? 1 - Math.pow(1 - D.t / 0.45, 3) : 1 - sm(0.45, FX_S, D.t));
+      if (D.t > 0.55 && D.toast) { this.g.toast(D.toast); D.toast = ''; }
+      if (D.t >= FX_S) this.toggle(false);
+      return;
+    }
+    let k = this.cur;
     const W = this.washing;
     if (W) {
       // rubbing hurries the wash: up to three times the pace
       W.rate += (Math.min(2, W.rub / Math.max(dt, 1e-3) / 900) - W.rate) * Math.min(1, dt * 8);
       W.rub = 0;
+      if (W.rate > 0.25 && (this.soundT -= dt) <= 0) { this.soundT = 0.38; this.g.sound('brush'); } // (the bristles on the paper while you rub)
       W.r += (dt * W.max * (1 + W.rate)) / WASH_S;
       this.mat.uniforms.uWashAt.value.set(W.at.x, W.at.y, W.at.z, W.r);
+      U.uGhost.value.y = 1;
+      U.uGhost.value.z = 1;
       if (W.r >= W.max) this.dry();
-      else this.statusEl.textContent = this.g.walker.locked || !document.body.classList.contains('touch') ? 'the colour is going in — hold and rub to hurry it' : 'the colour is going in — rub it to hurry it';
+      else this.statusEl.textContent = document.body.classList.contains('touch') ? 'rub it to hurry the colour' : 'hold and rub to hurry the colour';
       return;
     }
     // aim: the centre of the view (locked mouse), under the cursor (unlocked), or where you tapped
@@ -427,20 +573,13 @@ export class Brush {
       this.solveT = 0.12;
       const touch = document.body.classList.contains('touch');
       let hit: { x: number; z: number } | null = null;
-      if (touch) hit = this.tap ?? this.cast(0, -0.1);
+      if (touch) hit = this.tap ?? this.cast(0, -0.2);
       else if (!this.g.walker.locked && this.mouse) hit = this.cast((this.mouse.x / innerWidth) * 2 - 1, -(this.mouse.y / innerHeight) * 2 + 1);
       else hit = this.cast(0, 0);
       this.aim = hit ? { x: hit.x, z: hit.z, site: this.site(hit.x, hit.z) } : null;
-      // follow the site until you choose by hand: the water picks a boat, a street a car
-      if (this.aim && !this.picked) {
-        const fam = FITS[this.aim.site];
-        const cur = this.kinds[this.pick];
-        if (fam && cur?.family !== fam) {
-          const i = this.kinds.findIndex((q) => q.family === fam);
-          if (i >= 0) this.choose(i, false);
-        }
-      }
-      const kk = this.kinds[this.pick];
+      // the chips follow the site: the water shows your boats, a street your cars
+      if (this.aim) this.setView(FITS[this.aim.site]);
+      const kk = this.cur;
       if (!kk) { this.why = 'nothing to paint'; this.dropGhost(); }
       else if (!kk.type) {
         this.dropGhost();
@@ -462,7 +601,7 @@ export class Brush {
     }
     // the sketch glides to its spot
     const gh = this.ghost;
-    k = this.kinds[this.pick];
+    k = this.cur;
     if (gh?.spot && k?.type) {
       const s = gh.spot;
       if (!gh.shown || Math.hypot(gh.shown.x - s.x, gh.shown.z - s.z) > 40) gh.shown = { x: s.x, z: s.z, yaw: s.yaw };
@@ -472,11 +611,25 @@ export class Brush {
       gh.shown.yaw += Math.atan2(Math.sin(s.yaw - gh.shown.yaw), Math.cos(s.yaw - gh.shown.yaw)) * a;
       this.pose(gh.obj, k.family, gh.shown.x, gh.shown.z, gh.shown.yaw);
       this.mat.uniforms.uWashAt.value.set(0, 0, 0, -1);
+      this.mat.uniforms.uWash.value.set(0, 1, 0, 0);
+      U.uBrush.value.set(gh.shown.x, gh.shown.z, k.family === 'boat' ? 18 : 12, U.uBrush.value.w);
     }
+    // the world pales round a sketch that's showing
+    this.pale += ((gh?.spot && gh.obj.visible ? 1 : 0) - this.pale) * Math.min(1, dt * 5);
+    U.uBrush.value.w = this.pale;
+    U.uGhost.value.y = 1;
+    U.uGhost.value.z = 0;
     const touch = document.body.classList.contains('touch');
     this.statusEl.textContent = gh?.spot && gh.obj.visible && k?.type
-      ? touch ? `tap the sketch to paint your ${modelName(k.type)} in · tap elsewhere to move it` : `click to paint your ${modelName(k.type)} in · R turn · C colour · wheel: another · right-click: put away`
+      ? touch ? 'tap the sketch to paint it in' : 'click to paint it in'
       : this.why;
+  }
+
+  /** What the sketch pass draws this frame (null: nothing — post.ts skips the pass). */
+  get overlay(): THREE.Scene | null {
+    if (!(this.active && this.ghost?.obj.visible && (this.ghost.spot || this.drying))) return null;
+    this.root.position.copy(this.world.position); // (the floating origin, as of this frame)
+    return this.scene;
   }
 
   // ---------------- hints (at most two, ever: paint something from life; then your brush) ----------------
@@ -507,9 +660,9 @@ export class Brush {
       open: () => { this.toggle(true); return this.active; },
       close: () => this.toggle(false),
       aim: (x: number, z: number) => { this.tap = { x, z }; this.solveT = 0; },
-      choose: (family: string, type: string) => { const i = this.kinds.findIndex((k) => k.family === family && k.type === type); if (i >= 0) this.choose(i); return i >= 0; },
+      choose: (family: string, type: string) => { const i = this.view.findIndex((j) => this.kinds[j].family === family && this.kinds[j].type === type); if (i >= 0) this.choose(i); return i >= 0; },
       paint: () => { const gh = this.ghost; if (!gh?.spot) return false; const tap = this.tap; this.start(0, 0); this.tap = tap; return !!this.washing; },
-      state: () => ({ active: this.active, kinds: this.kinds.map((k) => `${k.family}:${k.type}`), pick: this.pick, why: this.why, aim: this.aim, spot: this.ghost?.spot ?? null, washing: this.washing ? { r: this.washing.r, max: this.washing.max } : null }),
+      state: () => ({ active: this.active, kinds: this.view.map((i) => `${this.kinds[i].family}:${this.kinds[i].type}`), pick: this.pick, why: this.why, aim: this.aim, spot: this.ghost?.spot ?? null, washing: this.washing ? { r: this.washing.r, max: this.washing.max } : null, drying: this.drying ? +this.drying.t.toFixed(2) : null }),
     };
   }
 }

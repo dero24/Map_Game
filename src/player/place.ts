@@ -25,11 +25,14 @@ export type Placement = { ok: true; spot: Spot } | { ok: false; why: string };
 /** Roads a car is never set down on. */
 export const NOT_FOR_CARS = ['footway', 'path', 'cycleway', 'steps', 'pedestrian', 'track'];
 
-/** Open water, as the boats know it: deep enough and off the shore. */
-export const openWater = (w: PlaceWorld, x: number, z: number) => w.height(x, z) < -0.45 && w.sdf(x, z) < -1.2;
-/** Room for a hull: open water here and 5 m to each side. */
-export const boatRoom = (w: PlaceWorld, x: number, z: number, r = 5) =>
-  openWater(w, x, z) && openWater(w, x + r, z) && openWater(w, x - r, z) && openWater(w, x, z + r) && openWater(w, x, z - r);
+/** Open water, as the boats know it: deep enough (m below the surface) and off the shore. */
+export const openWater = (w: PlaceWorld, x: number, z: number, depth = 0.45) => w.height(x, z) < -depth && w.sdf(x, z) < -1.2;
+/** Room for a hull: open water here and r m to each side (the default fits most boats; a small
+ *  one asks less — a skiff can lie near the bank where you can step aboard). */
+export interface Hull { room: number; depth: number }
+export const HULL: Hull = { room: 5, depth: 0.45 };
+export const boatRoom = (w: PlaceWorld, x: number, z: number, r = HULL.room, depth = HULL.depth) =>
+  openWater(w, x, z, depth) && openWater(w, x + r, z, depth) && openWater(w, x - r, z, depth) && openWater(w, x, z + r, depth) && openWater(w, x, z - r, depth);
 
 /** Bow away from the land: down the terrain's falling slope (the facing you gave, on flat water). */
 export function bowOffLand(w: PlaceWorld, x: number, z: number, facing: number) {
@@ -55,11 +58,11 @@ function* rings(ax: number, az: number, facing: number, r0: number, r1: number, 
   }
 }
 
-/** A boat near where you aimed: the nearest spot with room for a hull, bow off the land. With
+/** A boat near where you aimed: the nearest spot with room for its hull, bow off the land. With
  *  none in reach, it looks out to `far` m to say where the water is (0: don't look). */
-export function placeBoat(w: PlaceWorld, ax: number, az: number, facing: number, reach = 60, far = 1500): Placement {
+export function placeBoat(w: PlaceWorld, ax: number, az: number, facing: number, reach = 60, far = 1500, hull: Hull = HULL): Placement {
   for (const [x, z, d] of rings(ax, az, facing, 0, reach, 3))
-    if (boatRoom(w, x, z) && (!w.free || w.free(x, z))) return { ok: true, spot: { x, z, yaw: bowOffLand(w, x, z, facing), d } };
+    if (boatRoom(w, x, z, hull.room, hull.depth) && (!w.free || w.free(x, z))) return { ok: true, spot: { x, z, yaw: bowOffLand(w, x, z, facing), d } };
   if (far <= reach) return { ok: false, why: 'a boat needs open water' };
   // nothing in reach: say where the water is
   for (const [x, z, d] of rings(ax, az, facing, reach, far, 16))

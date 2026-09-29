@@ -2,6 +2,79 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-28 (x) — Reviewer round 9 on the boat minute: a sketch that reads as a sketch, a wash that goes wet and dries, one card at a time, a boat you walk aboard
+
+Round 9 (`REVIEWER.md`) scored Seattle 7/10 and the boat minute 6/10 as a slice, **not passed**:
+"the sketch looks real, the wash looks like a wipe, and your boat looks like everyone else's."
+Its must-fix 1 is done and measured; most of must-fix 2 too.
+
+- **One card first** (`commissions.ts`). The first painting teaches the single most prominent
+  paintable kind in the frame (at least 1.5% of it). After that, only what's composed: each at
+  least 4% of the frame, at most 3, never one already painted. The rest stay pencil cards.
+- **Your boat is yours** (`brush.ts`). Painted things start in a bold colour (red, blue, ochre or
+  green, one per kind), with the classics after. The chips follow what you aim at (water: your
+  boats; a street: your cars). The status line has one verb.
+- **The sketch pass** (`post.ts`, `propMaterial` wash). The sketch is drawn in its own pass and
+  laid over the painting, so the paint filter never smears it:
+  - translucent paper with hatched graphite strokes;
+  - a doubled graphite outline taken from its own depth, which boils (redrawn 7 times a second)
+    and catches on the paper's tooth;
+  - dashed wherever something stands in front of it;
+  - the world pales round it (`U.uBrush`).
+- **Where it goes** (`brush.ts` solve):
+  - in view and clear of the bar's own rectangle (a phone's at the top, or down the side held
+    landscape);
+  - never under a nearer boat or car on screen, or behind a building;
+  - with the room its own hull needs, so a skiff can lie near the bank where you can step aboard
+    and a cruiser goes further out (`place.ts` `Hull`, `kit.ts` `boatDims`);
+  - near and in the clear first, then near with only an edge hidden, then further out;
+  - with room only out of view, it says "tap the water where you can see it".
+- **The wash goes wet, then dries.**
+  - Wet: darker and richer (saturation ×1.45), pooling at its edge, bleeding past the line, with
+    the bristle sound as you rub (1.3 s unhurried, up to 3× rubbing).
+  - Then it dries (0.9 s): the wet colour lightens into the real boat, which settles onto the
+    water and bobs. A ring runs out across the water (`U.uRipple`), the view leans in 6° and
+    back (`walker.zoom`), a hull-settling slosh and the chime play.
+  - The toast: "your skiff — walk out to it to go aboard".
+- **The payoff.** Someone at the helm (seated at a skiff's tiller, standing at a wheel). Walk into
+  your boat from the water's edge to board it. Moored rides bob. The hull planes at speed. The wake:
+  - the ribbon has a vertex on the track itself (two per station had bent the churn into a zigzag
+    as the V widened);
+  - the churn is as wide as the transom and breaks into clumps of foam; the arms are thin broken
+    strokes (`wakes.ts`);
+  - its beam attribute was never re-uploaded to the GPU, which had made the churn a spike.
+- **The phone bar** is one line of chips that scrolls sideways, with the colours on a line of their
+  own: 131 px tall at 375×812 (it was 251). A phone held landscape gets a narrow column at the left.
+- **Harness:** `tools/brush-check.js` → `__BRUSHCHECK__()`. It measures on the frame itself: the
+  sketch's share of the frame; how much of it is hidden (a mask pass, `U.uGhost.w`); the sketch's
+  visibility sampled through the wash; and ΔE sketch → dry over its own pixels (CIE76 and
+  CIEDE2000).
+
+**Verified live** (Sea Bright marina, noon, the browser pane):
+
+| Reviewer's test | Bar | Phone 375×812 | Pane |
+|---|---|---|---|
+| Sketch share of the frame | ≥ 2% | 3.42% | 3.73% |
+| ΔE76 sketch → dry | ≥ 25 | 49.6 | 44.3 |
+| ΔE2000 sketch → dry | — | 30.6 | 29.1 |
+| Sketch visible through the wash | ≥ 70% | 86.7% | 86.4% |
+
+The hidden 13% is the hull under the water line. Also checked:
+- Walked into the painted skiff from the bank 3.5 m off: aboard in 0.62 s, with the helmsman at
+  the tiller.
+- 12 m/s with a churn as wide as the transom.
+- Shots: `shots/brush-r9-desktop2.jpg` (sketch, wet, drying with the ring, dry),
+  `brush-r9-phone.jpg`, `brush-r9-sail7.jpg`.
+- Tests: 302 pass (place 8, brush 3).
+
+Open from must-fix 2: Rumson's landing lit; three cold players under 90 s (that needs people).
+Next: must-fix 3, traffic that flows.
+
+**Queued (Robby, 2026-09-28):** "really huge trees flying around", which he thinks are cell towers.
+Likely the LiDAR tree finder reads masts as trees, with a crown up at the mast top. Fix: skip tree
+detections at OSM `man_made=mast|tower` (`tower:type=communication`), draw a real mast there, and
+cap thin, very tall returns.
+
 ## 2026-09-28 (w) — The brush, slice 1: paint a thing from life, then paint one where you aim (built while the computer was away)
 
 Robby and I settled the game (`docs/GAME_DESIGN.md`, "Paint It Real"):

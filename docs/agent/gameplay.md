@@ -97,22 +97,34 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
 - Paint-to-own: a coloured Almanac card (painted from life with P — `Commissions.paintFrame`, which
   records `pt` and `fresh`) is a kind you can paint: `Commissions.owned(families)`. The families the
   brush knows are `PAINTABLE` (boat, car; planes once airfields have planes to paint from life).
+  A painting teaches sparingly: the first, the one most prominent kind (≥ 1.5% of the frame); after
+  that only composed ones (≥ 4% each, at most 3, not already painted) — the rest stay pencil.
 - B (✎ on touch) takes it out. Chips: the kinds you own (last used first), the one fitting what you
   aim at picked for you until you pick by hand (water → boat, a street → car); a pencil chip for a
   family you don't own yet says where the nearest real one is.
 - Aim: the screen centre (locked mouse), the cursor (unlocked), a tap (touch; it stays put).
   `cast()` marches the view ray over terrain / water (y = max(h, 0)) and roofs, 160 m.
 - Placement: the pure solvers in `place.ts` (`placeBoat`, `placeCar`) over `Vehicles.placeWorld`;
-  the brush adds `free` (no moored boat within 6.5 m, no car within 4.2 m). The developer summons
-  use the same solvers.
-- The sketch is `Vehicles.build(kind, model, colour, seed, mat)` in `propMaterial({ wash: true })`:
-  pencil until the wash reaches it (`uWashAt` = touch point + radius; < 0 all pencil). A click / a
-  tap on the sketch starts the wash (`WASH_S` 1.7 s; rubbing hurries it up to 3×, and
-  `walker.holdLook` holds the view while you rub); dry → `Vehicles.paint()`, saved with the rides.
+  a boat asks for its own hull's room (`Hull`, from `kit.ts boatDims`: a skiff lies near the bank).
+  The brush's `free` keeps it off what's there (other boats: hull room + 3.2 m; cars 4.2 m), in view
+  and clear of the bar's own rectangle, not under a nearer boat or car on screen nor behind a
+  building, and — a boat — with footing in boarding reach; tried near-and-clear first (20 m), then
+  near with an edge hidden, then out to 40 m. The developer summons use the same solvers.
+- The sketch is `Vehicles.build(kind, model, colour, seed, mat)` in `propMaterial({ wash: true })`,
+  in the brush's own scene (`Brush.scene`/`overlay`), drawn by post.ts's sketch pass over the
+  painting (rendering.md): paper and hatched strokes, a boiling graphite outline, dashed where
+  something's in front, the world paling round it (`U.uBrush`). A click / a tap on the sketch starts
+  the wash from that point (`uWashAt`; `WASH_S` 1.3 s, rubbing up to 3×, `walker.holdLook` holds the
+  view): wet (darker, richer, bleeding) → `Vehicles.paint()` → it dries over `DRY_S` 0.9 s
+  (`uWash`: the sketch lifts off the real boat as it settles), a ripple ring (`U.uRipple`), a 6°
+  push-in (`walker.zoom`), the 'settle' and chime sounds. Painted things start bold (one of four
+  colours per kind). Walk into your boat from the water's edge to board it (`Vehicles.walkIn`).
 - Keys while it's out: 1–9 / wheel choose, R / Shift+R turn (a car takes the other lane), C colour,
   Esc / right-click put away. Hints: "P — paint that boat from life" (until you own one), then
   "B — your brush" (until you've painted once).
-- Harness: `window.__BRUSH__` (open / close / aim(x, z) / choose / paint / state); `__GAME__.brush`.
+- Harness: `window.__BRUSH__` (open / close / aim(x, z) / choose / paint / state); `__GAME__.brush`;
+  `tools/brush-check.js` → `__BRUSHCHECK__()` measures the reviewer's readability bar on the frame
+  (the sketch's share of it, how much is hidden through the wash, ΔE sketch → dry) — debugging.md.
 
 ## The sketchbook layer (`src/ui/`)
 

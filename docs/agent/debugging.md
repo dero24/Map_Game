@@ -28,6 +28,13 @@ behaviour.
   cb(performance.now()), 16)`. Montages with `{save}` land in `shots/`; copy them to a fresh name
   before reading (image reads are cached by path).
 - Sketch look in shots: capture mode is fully painted unless the URL has `&sketch=1`.
+- The brush's readability (reviewer round 9): with the brush out and a sketch showing on a
+  `?capture=1` page, `await import('/tools/brush-check.js'); await __BRUSHCHECK__()` paints it in
+  and returns the sketch's share of the frame, its visible share at the sketch and through the wash
+  (a mask pass: `U.uGhost.w` = 1 draws red where the sketch is, green where it's hidden) and mean ΔE
+  sketch → dry over its pixels (CIE76 + CIEDE2000), with pass flags (≥ 2%, ≥ 70%, ≥ 25). Painted
+  rides persist (`map-game.vehicles.v1` in localStorage) — clear it between runs or they crowd the
+  water the next sketch wants.
 - Debug handles on `window.__GAME__`: `explore`, `commissions`, `photo`, `atlas`, `arrival`,
   `hints`.
 

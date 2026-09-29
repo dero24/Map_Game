@@ -16,6 +16,8 @@ export class Walker {
   locked = false;
   /** the brush is washing colour in: rubbing it mustn't turn your head (ui/brush.ts) */
   holdLook = false;
+  /** Degrees off the field of view: a brief push-in (the brush, as a painted thing dries). */
+  zoom = 0;
   distance = 0;
   // Touch: left ~45% of the screen is a floating joystick (analog walk, full push = run),
   // the rest is a look-drag region. The stick UI is injected on first touch.
@@ -177,12 +179,15 @@ export class Walker {
     }
     cam.position.set(this.x, this.y, this.z);
     cam.rotation.set(this.pitch, this.yaw, Math.sin(this.bobPhase * 0.5) * 0.004 * walkParams.bob, 'YXZ');
-    if (cam.fov !== walkParams.fov) {
-      cam.fov = walkParams.fov;
+    const fov = walkParams.fov - this.zoom;
+    if (cam.fov !== fov) {
+      cam.fov = fov;
       cam.updateProjectionMatrix();
     }
   }
 
   pressed(code: string) { return this.keys.has(code); }
+  /** Walking forward right now — keys or the touch stick pushed up (walk-in boarding, vehicles.ts). */
+  get pushing() { return this.keys.has('KeyW') || this.keys.has('ArrowUp') || this.tMove.y < -0.35; }
   get feet() { return this.surfaceY; }
 }

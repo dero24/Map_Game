@@ -274,8 +274,8 @@ export class Ambience {
   }
 
   // ---- sketchbook + UI sounds ----
-  /** brush: a soft wet stroke · shutter: a longer stroke + paper · chime: two soft bells · page: paper · thud: a body against a bumper. */
-  ui(kind: 'brush' | 'shutter' | 'chime' | 'page' | 'thud') {
+  /** brush: a soft wet stroke · shutter: a longer stroke + paper · chime: two soft bells · page: paper · thud: a body against a bumper · settle: a hull settling into the water. */
+  ui(kind: 'brush' | 'shutter' | 'chime' | 'page' | 'thud' | 'settle') {
     const ctx = this.ctx, t = ctx.currentTime;
     const stroke = (dur: number, f0: number, f1: number, vol: number, delay = 0) => {
       const s = ctx.createBufferSource();
@@ -303,6 +303,7 @@ export class Ambience {
       this.blip({ freq: 110, q: 0.9, dur: 0.22, gain: 0.14, type: 'lowpass' });
       setTimeout(() => { this.blip({ freq: 420, q: 5, dur: 0.2, gain: 0.05 }); this.blip({ freq: 820, q: 6, dur: 0.16, gain: 0.025 }); }, 70);
     }
+    else if (kind === 'settle') { this.lap(0.16); stroke(0.6, 420, 160, 0.05); this.blip({ freq: 140, q: 1.2, dur: 0.3, gain: 0.06, type: 'lowpass' }); }
     else if (kind === 'page') { this.blip({ freq: 4200, q: 0.6, dur: 0.12, gain: 0.03 }); this.blip({ freq: 2600, q: 0.8, dur: 0.18, gain: 0.02 }); }
     else if (kind === 'chime') {
       for (const [f, d] of [[784, 0], [1175, 0.16]]) {

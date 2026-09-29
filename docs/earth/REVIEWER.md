@@ -625,3 +625,33 @@ and the cars stopped crashing — now they barely move."*
   so it can grade the player by the same rules — full stops, turn order, not blocking the box, wheels
   curbed when parked. A hill start on the Counterbalance with a car queued behind: roll back and you tap
   it. Pass for a licence stamp; roll a stop in front of a patrol car and it pulls you over.
+
+## Round 9 — 2026-09-28 — "Wired, not yet magic" — 7/10 on streamed Seattle, NOT PASSED; the boat minute 6/10 as a slice, NOT PASSED (GAME_DESIGN §14)
+
+*"The sketch looks real, the wash looks like a wipe, and your boat looks like everyone else's."*
+
+- **Closed / moved:**
+  - **MF1 traffic: open.** The numbers are honest now: the probe ticks the clock, 0 pair-ticks at 150 s, and moving-vs-parked overlaps fell from 68 to 4 per 20 s. But 63% of cars are stopped (the bar is ≤ 25%) at a 2.0 m/s mean, and three-quarters of those are queued behind other cars. That points to density or discharge, not the signs. No moving car is pinned.
+  - **MF2 hall: open.** Untouched.
+  - **MF3 cuts: moved.** Walls are built, but r9-walls 1 reads as a warehouse side, 2's hedge as faceted boulders, and 3's rockery is ~1% of the frame. No stairs; `__GRADES__` unreported.
+  - **MF4 asserts: moved.** The proximity stamps are honest. The subject check is blind: 3 passes with its subject at ~1%, and 6 with no steps. It stamps instead of re-posing, so 4 of 6 frames fail.
+- **The boat minute:** it works end to end, touch included, and starting the wash where you touch is right. Before showing anyone:
+  - **The sketch reads as a real boat.** It's opaque hatched grey: at ~30 m, a dinghy under a tarp. Make it translucent paper with a boiling graphite line, and pale the world around it.
+  - **The ghost goes missing.** On desktop it's behind a tree slab at the lens; on the phone it's a cut-off slab while the line says "tap the sketch". Never snap it out of view.
+  - **The wash is a wipe.** Sketch to dry is ΔE ≈ 13, lightness only, on ~0.5% of the frame. Go wet first (saturated, bleeding, a brush sound on the rub), then dry at ~2 s: it lightens and settles, with a ripple ring and a push-in.
+  - **The boat isn't yours.** Use a bold first colour; the default white and green is the moored skiff's livery.
+  - **No payoff.** Nobody is at the helm, the wake is a detached stripe, and the boat doesn't plane at 12 m/s. Rumson is neither reached nor signposted.
+  - **Five cards at once is wrong for minute one.** It's a list, not a gift, and scarcity dies at the first marina. Teach one card first; then only what's composed (≥ 4% visible each, at most 3).
+  - **Prompts and chips.** The desktop status line is a third prompt with five verbs, while boarding and Rumson get none. The pale chips offer a pickup over water. On the phone the ribbon covers the move stick and hides the swatches. The 90 s cold run is unmeasured.
+- **Still reads fake (Seattle):**
+  - One walker in six frames.
+  - 1's wall is a blank 5 m plane that only its rail explains.
+  - The crowns are still wrong in 4 (seventh round).
+  - The Manhattan water tank is back in 6.
+- **Next must-fix (ranked):**
+  1. **Sketch, wash and ownership readable on a phone.** *Test:* at 375×812, with the boat ≥ 2% of the frame's pixels, sketch→dry ΔE ≥ 25; the ghost ≥ 70% visible in every brush frame.
+  2. **The minute on its own bar.** Snap where you can step aboard; walk in to board; light Rumson's landing; put the avatar at the tiller; teach one card first. *Test:* three cold players on a real phone and a desktop, spawn to Rumson dock in < 90 s, ≤ 2 prompts counting the status line.
+  3. **Traffic that flows.** Green discharge ≥ 0.4 vehicles/s per lane; density from road-class volumes. *Test:* round 8b's.
+  4. **Asserts that see and re-pose.** *Test:* the six frames re-shot with zero stamps; a sky-facing pose must fail; the boat frames go through the id pass.
+  5. **Cuts as places.** Board-form concrete, stains, moss and coping; clipped hedges; stairs to the lots. *Test:* r9-walls 1 and 3 re-shot with the wall ≥ 15% of the frame; `__GRADES__` 0.
+- **Gameplay idea: paint the past back.** OpenHistoricalMap and OSM's `abandoned:` / `razed:` tags remember ferry landings, piers and streetcar lines. Near the brush they show as pencil already in place, so Span and Line need no aim; own the kind and you can paint them back. The Counterbalance streetcar, counterweighted until 1940, becomes a ride up the real grade.

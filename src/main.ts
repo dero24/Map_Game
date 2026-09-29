@@ -1081,7 +1081,7 @@ async function main() {
       ambience.update({ dt, oceanDist, indoors: interiors.indoors, riverDist: Math.max(0, world.terrain.sdfAt(walker.x, walker.z)), wind: weather.wind, night: U.uNight.value, surface, stepped, running: run, life: life.stats, hour: timeParams.hour, churchDist, houses, harbour: harbourD, sails: sailsN, trees: Math.max(treeCover, Math.min(1, houses / 20) * 0.4), ride: vehicles.ride, city: cityAt(walker.x, walker.z), climate: regionLook.climate, summer: isSummer() && U.uSnow.value < 0.1 });
     }
     shadows.update(scene, focus, U.uKeyDir.value);
-    post.render(scene, camera, simTime, U.uNight.value, U.uGolden.value, walker.yaw, walker.pitch, debugParams.rawScene);
+    post.render(scene, camera, simTime, U.uNight.value, U.uGolden.value, walker.yaw, walker.pitch, debugParams.rawScene, brush.overlay);
     photo.afterRender(); // Space in photo mode grabs this very frame
 
     if ((hudTimer -= dt) < 0) { hudTimer = 0.4; updateHud(); }

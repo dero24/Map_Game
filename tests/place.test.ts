@@ -39,6 +39,16 @@ describe('placing a painted boat', () => {
     expect(placeBoat(w, 5, 0, -Math.PI / 2)).toEqual(p);
   });
 
+  it('a small hull lies nearer the bank than a big one (where you can step aboard)', () => {
+    const skiff = placeBoat(world(), 5, 0, -Math.PI / 2, 60, 0, { room: 3.3, depth: 0.45 });
+    const cruiser = placeBoat(world(), 5, 0, -Math.PI / 2, 60, 0, { room: 6.1, depth: 0.95 });
+    expect(skiff.ok && cruiser.ok).toBe(true);
+    if (!skiff.ok || !cruiser.ok) return;
+    expect(skiff.spot.x).toBeLessThan(cruiser.spot.x);
+    expect(boatRoom(world(), skiff.spot.x, skiff.spot.z, 3.3)).toBe(true);
+    expect(boatRoom(world(), cruiser.spot.x, cruiser.spot.z, 6.1, 0.95)).toBe(true);
+  });
+
   it('far inland says there is no water in reach, and which way it is', () => {
     const p = placeBoat(world(), -300, 0, 0);
     expect(p.ok).toBe(false);

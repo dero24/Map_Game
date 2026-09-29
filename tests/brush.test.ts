@@ -5,8 +5,9 @@ import type { GameCtx } from '../src/ui/ctx';
 
 // Just enough of the game for the Almanac: a moored skiff and a parked pickup in the middle of the
 // frame, nothing else round you.
-const ctx = (things: { x: number; z: number; name: string }[]) => ({
+const ctx = (things: { x: number; z: number; name: string }[], fov = 62) => ({
   walker: { x: 0, z: 0, y: 1.65, yaw: 0 },
+  camera: { fov, aspect: 16 / 9 },
   instances: (prefix: string) => things.filter((t) => t.name.startsWith(prefix)).map((t) => ({ ...t, y: 0 })),
   toNdc: () => new THREE.Vector3(0.1, 0, 0.5),
   toLatLon: () => [40.37, -73.97] as [number, number],
@@ -18,18 +19,36 @@ const ctx = (things: { x: number; z: number; name: string }[]) => ({
 }) as unknown as GameCtx;
 
 describe('paint-to-own (docs/GAME_DESIGN.md §4a)', () => {
-  it('painting a kind from life colours its card, and a coloured card is a kind you can paint', () => {
-    const com = new Commissions(ctx([{ x: 12, z: -20, name: 'moored-boats:skiff' }, { x: -6, z: -15, name: 'kerb-cars:pickup' }]));
+  it('your first painting teaches the one thing it is of; after that, what is composed', () => {
+    // a pickup 6 m off (≈10% of the frame) and a skiff 7 m off (≈5%): the first painting teaches
+    // the pickup alone — the skiff stays a pencil card
+    const com = new Commissions(ctx([{ x: 4, z: -5.5, name: 'moored-boats:skiff' }, { x: -3, z: -5, name: 'kerb-cars:pickup' }]));
     expect(com.owned(['boat', 'car'])).toEqual([]);
-    const painted = com.paintFrame('pg-1');
-    expect(painted.length).toBe(2);
-    expect([...com.fresh].sort()).toEqual(['boat:skiff', 'car:pickup']);
-    const mine = com.owned(['boat', 'car']);
-    expect(mine.map((k) => `${k.family}:${k.type}`).sort()).toEqual(['boat:skiff', 'car:pickup']);
-    expect(com.owned(['boat']).map((k) => k.type)).toEqual(['skiff']);
-    // painting the same things again teaches nothing new
+    expect(com.paintFrame('pg-1').length).toBe(1);
+    expect(com.fresh).toEqual(['car:pickup']);
+    expect(!!com.state.seen?.['boat:skiff']?.painted).toBe(false);
+    expect(com.state.seen?.['boat:skiff']).toBeTruthy(); // (a pencil card: seen)
+    // the second painting: the skiff fills ≥ 4%, so it's taught now
     com.paintFrame('pg-2');
+    expect(com.fresh).toEqual(['boat:skiff']);
+    expect(com.owned(['boat', 'car']).map((k) => `${k.family}:${k.type}`).sort()).toEqual(['boat:skiff', 'car:pickup']);
+    // painting the same things again teaches nothing new
+    com.paintFrame('pg-3');
     expect(com.fresh).toEqual([]);
+  });
+
+  it('a marina painted from the bank teaches at most three, and only what fills the frame — zoom in to reach further', () => {
+    const boats = ['skiff', 'console', 'cabin', 'sail', 'pontoon', 'lobster'].map((t, i) => ({ x: -10 + i * 4, z: -30, name: `moored-boats:${t}` }));
+    const com = new Commissions(ctx([...boats, { x: 1, z: -4, name: 'kerb-cars:sedan' }]));
+    com.paintFrame('pg-1'); // (the sedan close by: the first card)
+    expect(com.fresh).toEqual(['car:sedan']);
+    com.paintFrame('pg-2'); // 30 m out at 62°: none of the boats fills 4%
+    expect(com.fresh).toEqual([]);
+    const zoomed = new Commissions(ctx([...boats, { x: 1, z: -4, name: 'kerb-cars:sedan' }], 20));
+    zoomed.state = com.state;
+    zoomed.paintFrame('pg-3'); // at 20° the biggest three do
+    expect(zoomed.fresh.length).toBe(3);
+    expect(zoomed.fresh.every((k) => k.startsWith('boat:'))).toBe(true);
   });
 
   it('only coloured cards count: seen in pencil is not yet yours, and unknown kinds never are', () => {

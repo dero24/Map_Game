@@ -144,6 +144,8 @@ const BOAT_BASE: Record<BoatType, { L: number; B: number; free: number; draft: n
   pontoon: { L: 7.5, B: 2.6, free: 0.5, draft: 0.35 },
   lobster: { L: 11, B: 3.6, free: 1.2, draft: 1.0 },
 };
+/** A boat type's length, beam, freeboard and draft (m), before the per-boat jitter. */
+export const boatDims = (type: BoatType) => BOAT_BASE[type];
 export function boatRecipe(type: BoatType, seed = 1): BoatRecipe {
   const r = makeRng(seed * 6007 + BOAT_TYPES.indexOf(type) * 7919);
   const b = BOAT_BASE[type];
