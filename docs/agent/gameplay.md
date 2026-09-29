@@ -48,6 +48,9 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 - `settleWalker` (`main.ts`: on every mount, and once a second on foot) steps you clear of a wall
   through your body or a solid footprint (no rooms, no pilings). An indoor walker stays put.
   Teleports never pick a door whose outside is a building or a wall.
+- Stairs up a retaining wall (`retaining.ts` `wallStairs` → `stairColliders`): a ramp deck from
+  the sidewalk to the landing, walls along its open side and past the landing. A retaining wall's
+  own collider stops 0.4 m under its top, so from the landing you step over the coping onto the lot.
 
 ## Vehicles
 

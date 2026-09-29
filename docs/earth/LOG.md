@@ -2,6 +2,54 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-29 (ab) — Cuts as places, and a harness that re-poses until it sees
+
+Round 9's must-fixes 4 and 5, on streamed Queen Anne.
+
+- **Cuts as places (must-fix 5).**
+  - Poured walls are board-formed: a course every ~30 cm, each board a shade off its neighbours.
+    Rain streaks run down from the coping, and one panel in three has moss at its foot.
+  - The hedges on a wall are clipped: rounded boxes 3.4 m long, where they were faceted boulders.
+  - **A stair to each lot.** A house's front walk (under 2.5 m wide) that comes down to a wall 0.7 m
+    or taller gets a flight up the face, running along the sidewalk to a landing where the walk
+    meets the wall (`wallStairs`: 18 cm risers, 28 cm goings).
+    - The rail opens at the landing and no hedge grows there.
+    - The walker climbs it: a ramp deck, with walls on its open side (`stairColliders`).
+    - Test: along the sidewalk, up the flight, over the coping onto the lot. Beside the steps the
+      wall is still a wall.
+    - The steps are their own mesh (`retaining-steps`), so a frame can check it sees them.
+- **Asserts that see, and re-pose (must-fix 4).** `tools/spot-shots.js`:
+  - An id render in two passes. The first draws the world with depth and marks what stands within
+    2.5 m and 4 m of the lens, and how much of the frame is world at all. The second draws only the
+    subject against that depth, so its share counts only where it's the nearest thing.
+  - Checks: the subject ≥ its `fill` (5% by default); nothing within 2.5 m over 5% of the frame or
+    within 4 m over 15%; the world ≥ 20%; nothing at the lens; not inside a building; not on a roof.
+  - A frame that fails is re-posed, not stamped. The harness circles the subject at the distance
+    that frames it, from the bearing asked and then round it, at eye level on open ground. Only
+    what still fails is stamped. `repose: false` keeps a pose as given.
+  - `car: 'parked'` frames a parked car near the spot from its side.
+- **Frames** (`shots/spots-r10-walls.jpg`, 7 poses; no stamps on the six that must pass):
+  1. the 7 m poured wall from its sidewalk: 51% of the frame, the board courses visible;
+  2. a rockery: 15.6%;
+  3. steps up to a lot: 8.1% for the steps alone, with the wall beside them;
+  4. a clipped hedge on a wall: 23%;
+  5. Queen Anne Ave N, parked both sides;
+  6. a parked car on a 27% grade, re-posed to its side at 6 m: 19.5%;
+  7. a pose facing the sky, `repose: false`: fails as it must (subject 0%, world under 20%).
+- **Not met: `__GRADES__` 0.**
+  - Queen Anne (x −900..800, z −1500..100): 557 ways, 16 over 25%. Twelve are service roads. The
+    others are 2nd Ave W (36% at (10, −471)), W Blaine St (29%), Warren Ave N (27%) and 1st Ave N
+    (26%).
+  - City-wide: 4,730 ways, 79 over, most at bridge ends, overpasses and the Ship Canal.
+  - Frame 6's car stands on one of these slopes.
+- **Queued by Robby this session.** These are in the backlog (R.27–R.31), and the far skyline
+  already has a draft.
+  - Distant cities at their real distance: Manhattan from Sea Bright's beach on a clear day.
+  - Interiors at real scale: `docs/INTERIORS_PLAN.md` measures today's gaps (rooms 16–40 m deep,
+    storeys capped at 4, one room a storey in most houses) and plans five slices.
+
+Tests: 311 pass.
+
 ## 2026-09-28 (aa) — Never shut in a building; the Space Needle stands on its legs again
 
 Two of Robby's reports. Two helper agents read the code while (z) was being finished and found the

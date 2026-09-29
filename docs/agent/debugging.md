@@ -38,6 +38,17 @@ behaviour.
   it, emulate a 1600×900 viewport, and set `window.requestAnimationFrame = cb => setTimeout(() =>
   cb(performance.now()), 16)`. Montages with `{save}` land in `shots/`; copy them to a fresh name
   before reading (image reads are cached by path).
+- Any place by lat/lon, checked on what the lens sees (`?at=…&capture=1`):
+  `await import('/tools/spot-shots.js'); await __SPOTS__('tag', [{ lat, lon, bearing, pitch,
+  subject: { lat, lon, h, r, name }, fill }, { car: 'parked', lat, lon }, …])` → `shots/spots-<tag>.jpg`.
+  - An id render checks each frame: the subject's visible share (drawn alone against the world's
+    depth), anything within 2.5 m / 4 m of the lens, how much of the frame is world, the lens not in
+    a wall, a building or on a roof.
+  - A frame that fails is re-posed round its subject until it passes; only what still fails is
+    stamped under it. `repose: false` keeps a pose as given (a frame that must fail, e.g. facing the
+    sky). `window.__SPOTKIT__` pokes one pose by hand.
+  - A subject `name` matches the mesh's own name or a parent's (`retaining-walls`, `retaining-steps`,
+    `player-vehicles`, `trees:`).
 - Sketch look in shots: capture mode is fully painted unless the URL has `&sketch=1`.
 - The brush's readability (reviewer round 9): with the brush out and a sketch showing on a
   `?capture=1` page, `await import('/tools/brush-check.js'); await __BRUSHCHECK__()` paints it in

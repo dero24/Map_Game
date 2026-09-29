@@ -10,7 +10,7 @@ import { fetchDem, demLayer, setDemBase, raceNull, waterPatch, waterLevel, type 
 import { readMvt, ringArea } from './mvt';
 import { vectorToOsm, clipPoly } from './vectorTile';
 import { gradeRoads } from './grade';
-import { retainingWalls, retainingColliders } from './retaining';
+import { retainingWalls, retainingColliders, wallStairs, stairColliders } from './retaining';
 import { findPortals, portalMeshes } from './portals';
 import { shoreGroup } from './shore';
 import type { SynthResult } from './synth';
@@ -604,8 +604,13 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
       if (mx >= b.x0 && mx < b.x1 && mz >= b.z0 && mz < b.z1) own.push(...walls.slice(i, i + 8));
     }
     if (own.length) {
-      tile.objs.push(...packGroup(retainingWalls(own)));
+      // (steps up the face where a house's front walk comes down to it)
+      const stairs = wallStairs(own, tile.walks);
+      tile.objs.push(...packGroup(retainingWalls(own, stairs)));
       tile.walls.push(...retainingColliders(own));
+      const sc = stairColliders(stairs);
+      tile.walls.push(...sc.walls);
+      tile.decks.push(...sc.decks);
     }
   }
   // A copy ships to the main thread for its patch registry; the worker keeps its own bytes.

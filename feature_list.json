@@ -1,6 +1,6 @@
 {
   "project": "map_game",
-  "last_updated": "2026-09-28",
+  "last_updated": "2026-09-29",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -511,7 +511,10 @@
         "tests/grade.test.ts: a Queen Anne-style grid with shared junction nodes — worst local grade under 25% on an 18% hill and under 30% at 22% (was 36%: junction pins held only their node flat, the street kinked just past the crossing)",
         "tools/grade-audit.js __GRADES__ on Queen Anne (v, real cells): 3,524 ways, 60 over 25% (was 108) — the rest at bridge ends and overpasses, service roads, one knee left on 2nd Ave W",
         "The Counterbalance from its crest on the road crown: the kerb 50 m ahead 11.5° below eye level (reviewer round 8b: passes; shots/spots-r8-counter2.jpg 1)",
-        "tests/retaining.test.ts: a cut's wall built as a rockery (low) or poured concrete (tall), nothing proud of the face or past its ends, a vertex budget, hedges along the top"
+        "tests/retaining.test.ts: a cut's wall built as a rockery (low) or poured concrete (tall), nothing proud of the face or past its ends, a vertex budget, hedges along the top",
+        "tests/retaining.test.ts: a front walk coming down to a wall gets a flight up its face, walked from the sidewalk up the flight and over the coping onto the lot (beside it the wall still stops you); the flight drawn as its own mesh with no hedge where it comes up",
+        "shots/spots-r10-walls.jpg 1–4 (Queen Anne): a 7 m board-formed wall 51% of the frame, a rockery 15.6%, steps up to a lot, a clipped hedge 23%",
+        "tools/grade-audit.js __GRADES__ (ab), Queen Anne x −900..800, z −1500..100: 557 ways, 16 over 25% (12 service; 2nd Ave W 36%, W Blaine St 29%, Warren Ave N 27%, 1st Ave N 26%); city-wide 4,730 ways, 79 over (bridge ends, overpasses, the Ship Canal)"
       ],
       "evidence": [
         "src/world/synth.ts roadRibbons",
@@ -524,9 +527,10 @@
         "src/world/retaining.ts",
         "src/world/stream.ts (the real cell's DEM patch replaces the stand-in's)",
         "src/world/grade.ts (crossing-band pins, per-stretch caps, carriageway-first ground target)",
-        "src/world/retaining.ts (rockery / concrete, hedge / rail tops)"
+        "src/world/retaining.ts (rockery / concrete, hedge / rail tops)",
+        "src/world/retaining.ts (board-formed courses, rain streaks, moss, clipped hedges, wallStairs, stairColliders; the steps as 'retaining-steps')"
       ],
-      "notes": "(t): the main thread kept the 16 m stand-in's ground under the traffic while the drawn street was graded — fixed. (v): junction knees fixed; the Counterbalance frame passes; retaining walls are rockeries or poured concrete with hedges or rails (round 8b must-fix 3, offline renders only so far). Open: a stair to each lot through the wall; bridge ends and overpasses in the audit."
+      "notes": "(t): the main thread kept the 16 m stand-in's ground under the traffic while the drawn street was graded — fixed. (v): junction knees fixed; the Counterbalance frame passes. (ab): walls board-formed with stains and moss, clipped hedges, a stair to each lot (round 9 must-fix 5). Open: __GRADES__ 0 — 16 ways over 25% on Queen Anne, bridge ends and overpasses city-wide."
     },
     {
       "id": "tunnels-canopies-coasts",
@@ -904,13 +908,15 @@
       "priority": 2,
       "area": "tools",
       "title": "Capture asserts that see: the subject's visible pixels and near occluders from an id render",
-      "user_visible_behavior": "Every pinned frame is checked on what the lens actually sees — the subject covering at least 5% of the frame (occlusion included), nothing within 2.5 m over 5% or within 4 m over 15% — and a miss is stamped under the frame on the contact sheet.",
+      "user_visible_behavior": "Every pinned frame is checked on what the lens actually sees — the subject covering at least its share of the frame (5% by default, occlusion included), nothing within 2.5 m over 5% or within 4 m over 15%, the world at least 20% of the frame — and a frame that fails is re-posed round its subject until it passes; only what still fails is stamped under the frame on the contact sheet.",
       "status": "in_progress",
-      "verification": [],
-      "evidence": [
-        "tools/spot-shots.js (idPass, after-hook, fails stamped on the sheet)"
+      "verification": [
+        "tools/spot-shots.js on streamed Queen Anne (shots/spots-r10-walls.jpg): 7 poses; the six that must pass pass (a parked car re-posed to its side at 6 m, 19.5% of the frame; the steps to a lot 8.1% as their own mesh); a pose facing the sky with repose:false fails with subject 0% and world under 20%"
       ],
-      "notes": "Reviewer round 8b must-fix 4. Written while the computer was offline: run it on Kerry Park 18:20 (the Needle >= 5%) and counter2 2 and 5."
+      "evidence": [
+        "tools/spot-shots.js (idPass: world pass with near-lens channels + subject pass against its depth; check; repose; carPose; __SPOTKIT__)"
+      ],
+      "notes": "Reviewer round 9 must-fix 4. Open: the boat frames through the id pass (tools/brush-check.js has its own mask pass)."
     },
     {
       "id": "brush-boat-minute",
