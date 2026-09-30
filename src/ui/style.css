@@ -152,9 +152,10 @@ body.nomouse #lift .lift-keys { display: none; }
 #osm-credit a { color: inherit; pointer-events: auto; }
 body.postcard #osm-credit { display: none; }
 
-.lil-gui.root { --background-color: rgba(244, 238, 224, 0.94); --text-color: #3a3346; --title-background-color: #e6dcc6; --title-text-color: #3a3346;
+/* (the theme on every level: lil-gui 0.21 declares its dark defaults on each nested folder too) */
+body .lil-gui { --background-color: rgba(244, 238, 224, 0.94); --text-color: #3a3346; --title-background-color: #e6dcc6; --title-text-color: #3a3346;
   --widget-color: #e2d8c2; --hover-color: #d6cab0; --focus-color: #cfc1a4; --number-color: #5a4c78; --string-color: #6a7a3c; --font-family: Georgia, serif; }
-.lil-gui.root { max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; }
+.lil-gui:is(.root, .lil-root) { max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; }
 .mobile-panel-close { display: none; }
 
 /* touch controls — the layout is the "phone HUD" section below */
@@ -167,8 +168,18 @@ body.touch #photo.bare #photo-bar { display: block; }
 body.touch #photo-bar .keys { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; font-size: 0; }
 body.touch #photo-bar .tonly { min-width: 42px; min-height: 42px; margin: 0; padding: 5px 9px; border-radius: 5px; font-size: 14px; touch-action: manipulation; }
 body.touch #photo-bar #photo-shoot, body.touch #photo-bar #photo-exit { min-width: 66px; }
-body.touch .lil-gui.root { --width: min(330px, calc(100vw - 18px)); position: fixed; top: calc(8px + env(safe-area-inset-top)); right: calc(8px + env(safe-area-inset-right)); left: auto; bottom: calc(8px + env(safe-area-inset-bottom)); width: min(330px, calc(100vw - 18px)); max-height: none; overflow-y: auto; box-shadow: 0 4px 24px rgba(40,30,60,0.24); }
-body.touch .lil-gui.root .mobile-panel-close { display: block; position: fixed; top: calc(9px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right)); z-index: 1200; width: 42px; height: 42px; border: 1px solid rgba(58,51,70,0.3); border-radius: 50%; background: rgba(245,239,225,0.96); color: #3a3346; font: 25px Georgia, serif; touch-action: manipulation; }
+/* the options panel on a phone (lil-gui 0.21's root is .lil-root — the old .root rules never matched,
+   so there was no close button and no scrolling): upright, a sheet across the top that leaves the
+   stick and the corner cluster below it — Get out, Paint — in reach; on its side, down the left */
+body.touch .lil-gui:is(.root, .lil-root) { --width: auto; position: fixed; top: calc(8px + var(--st)); left: calc(8px + var(--sl)); right: calc(8px + var(--sr)); bottom: auto;
+  width: auto; max-height: max(220px, calc(100dvh - 310px - var(--st) - var(--sb))); overflow-y: auto; overscroll-behavior: contain; background: #f4eee0; box-shadow: 0 4px 24px rgba(40,30,60,0.24); border-radius: 8px; }
+body.touch .lil-gui:is(.root, .lil-root) > .lil-title, body.touch .lil-gui:is(.root, .lil-root) > .title { padding-right: 96px; }
+body.touch .lil-gui:is(.root, .lil-root) .mobile-panel-close { display: block; position: fixed; top: calc(12px + var(--st)); right: calc(14px + var(--sr)); z-index: 1200; width: auto; min-width: 84px; height: 40px; margin: 0;
+  padding: 0 14px; border: 1.5px solid rgba(245,239,225,0.75); border-radius: 20px; background: rgba(58,51,70,0.88); color: #f7f2e6; font: 16px Georgia, serif; touch-action: manipulation; }
+@media (orientation: landscape) and (max-height: 500px) {
+  body.touch .lil-gui:is(.root, .lil-root) { right: auto; bottom: calc(8px + var(--sb)); width: min(360px, 52vw); max-height: none; }
+  body.touch .lil-gui:is(.root, .lil-root) .mobile-panel-close { right: auto; left: calc(8px + var(--sl) + min(360px, 52vw) - 96px); }
+}
 /* no mouse (a phone, a tablet): the keyboard hints give way to the touch ones */
 body.nomouse #hud .hint, body.nomouse .card .keys:not(.tkeys) { display: none; }
 .card .tkeys { display: none; }

@@ -2,6 +2,22 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-01 (later) — The options panel on a phone: it closes, and Get out stays in reach
+
+- **Couldn't close it**: lil-gui 0.21 names its root `.lil-root`; style.css still said `.lil-gui.root`,
+  so none of the phone rules matched — no close button, no sizing, no scrolling (and the cream theme
+  never reached the desktop panel either). Selectors now match both; the theme is set on every
+  level (0.21 declares its dark defaults on each nested folder, so a root-only theme left pale text
+  on cream). The close is a "× Close" pill.
+- **No Get out with it open**: `touchActionState` returned nothing while the panel was up, and the
+  panel covered the right edge top to bottom. Now, upright, it's an opaque sheet across the top
+  that always leaves the bottom ~300 px — the stick and the corner cluster — free; on its side it
+  runs down the left, clear of the cluster; and the ride's button stays.
+- **Verified** (real game, Pixel 7 emulation, both ways, by touch): More → Options opens it; the
+  Close pill is the element under the finger; a car summoned with the panel up — Drive reachable,
+  driving, Get out and Boost reachable, got out; Close hides it. hud-audit 140 layouts clean,
+  495 tests, typecheck, build.
+
 ## 2026-10-01 — Phone controls rebuilt: a stick you can see, Paint under your thumb, every button named
 
 - **What a phone showed** (real game, Pixel 7, both ways): six identical unlabelled circles —

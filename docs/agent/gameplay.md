@@ -208,6 +208,10 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
   cluster. On its side the same places, tighter (the bar a row, the cluster smaller). The words in
   hints and toasts are the buttons' own (Paint, Land, Map, Go, More, Boost, Burn…).
   `tools/hud-audit.mjs` checks it (10 phones × both ways × 7 states, every button with its word).
+- The options panel (lil-gui, More → Options) on a phone: an opaque sheet across the top leaving
+  the bottom ~300 px (stick, cluster, Get out) in reach — down the left on its side — with a
+  "× Close" pill. lil-gui 0.21's root is `.lil-root` (style.css matches `.root` too), and its theme
+  vars are set on every `.lil-gui` level.
 
 ## Ambient life + sound
 

@@ -1048,7 +1048,7 @@ async function main() {
   const touchAction = $('touch-action') as HTMLButtonElement;
   const BOARD = { car: 'Drive', boat: 'Board', plane: 'Board', balloon: 'Step in' } as const;
   const touchActionState = () => {
-    if (!playing() || atlas.open || photo.active || brush.active || (gui && !gui._hidden)) return null;
+    if (!playing() || atlas.open || photo.active || brush.active) return null; // (the options panel leaves it in reach: style.css)
     const r = vehicles.ride;
     if (r) return { id: `exit:${r.kind}`, label: (r.kind === 'plane' || r.kind === 'balloon') && r.airborne ? 'Jump out' : 'Get out', aria: `get out of the ${modelName(r.model)}`, still: Math.abs(r.v) < 1 && !r.airborne };
     const e = vehicles.enterable();

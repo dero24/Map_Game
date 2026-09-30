@@ -160,7 +160,7 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   const mobileOptions = document.getElementById('toptions');
   const mobileClose = document.createElement('button');
   mobileClose.className = 'mobile-panel-close';
-  mobileClose.textContent = '×';
+  mobileClose.textContent = '× Close';
   mobileClose.type = 'button';
   mobileClose.setAttribute('aria-label', 'close options and developer tools');
   mobileClose.onclick = () => { gui.hide(); mobileOptions?.setAttribute('aria-expanded', 'false'); };
