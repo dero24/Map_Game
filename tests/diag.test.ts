@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { browserName, clean, crashFrom, errorLine, formatReport, type DiagState } from '../src/ui/diag';
+import { browserName, clean, crashFrom, errorLine, formatReport, lostFrom, NO_WEBGL, type DiagState } from '../src/ui/diag';
 
 const UA = {
   pixel: 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36',
@@ -103,6 +103,30 @@ describe('crashFrom', () => {
     expect(crashFrom({ stage: 'running', tier: 'phone', t: now - 1000, clean: true, n: 0 }, now)).toBeNull();
     expect(crashFrom({ stage: 'tiles', tier: 'phone', t: now - 3 * 3600e3, clean: false, n: 0 }, now)).toBeNull();
     expect(crashFrom({ stage: 'tiles', tier: 'phone', t: now + 60e3, clean: false, n: 0 }, now)).toBeNull();
+  });
+});
+
+describe('lostFrom', () => {
+  const now = 1_700_000_000_000;
+  it('carries a lost GPU context over to the next load in the tab (a phone steps down for it)', () => {
+    expect(lostFrom({ stage: 'running', tier: 'phone', t: now - 20e3, clean: true, n: 0, lost: 2 }, now)).toBe(2);
+    expect(lostFrom({ stage: 'running', tier: 'phone', t: now - 20e3, clean: false, n: 0, lost: 1 }, now)).toBe(1);
+  });
+  it('is nothing without a loss, a record, or a fresh one', () => {
+    expect(lostFrom(null, now)).toBe(0);
+    expect(lostFrom({ stage: 'running', tier: 'phone', t: now - 20e3, clean: true, n: 0 }, now)).toBe(0);
+    expect(lostFrom({ stage: 'running', tier: 'phone', t: now - 2 * 3600e3, clean: true, n: 0, lost: 3 }, now)).toBe(0);
+  });
+  it('says so in the report', () => {
+    expect(formatReport({ ...base(), lostBefore: 2 }, 'on request', 5000, false)).toContain('GPU context was lost ×2');
+  });
+});
+
+describe('NO_WEBGL', () => {
+  it('tells a player whose browser switched WebGL off for the site how to get it back', () => {
+    const r = formatReport({ ...base(), gl: null, glError: 'Error creating WebGL context. — webgl2 unavailable, webgl1 unavailable' }, NO_WEBGL, 3000);
+    expect(r).toContain('could not start');
+    expect(r).toMatch(/close the browser completely/);
   });
 });
 

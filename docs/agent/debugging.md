@@ -70,6 +70,25 @@ behaviour.
   rings 750/1300/2500 m.
   A knob saved in the panel (`userKeys`) always wins. `?quality=desktop|phone|low` forces a tier;
   `window.__TIER__` says which one ran and what it set.
+- A city is what kills a phone (Manhattan filled its GPU; Chrome crashed, then refused the site
+  WebGL). So the phone/low tiers also: keep the detail tiles under `streamParams.budgetMB` of
+  vertex data (200 / 120; `world/budget.ts` admits cells nearest first, the cell you stand in
+  always; the rest keep their silhouettes), build 2 / 1 real tiles at once (`realConc`), purge an
+  unloaded tile's walls from the walk world (`purge`), read a 4 / 3 km skyline, and measure no
+  LiDAR (`?lidar=1` forces it). A PC's are unchanged (no budget, 4 at once, LiDAR, 8 km).
+  `stream.detailBytes` is the budget's measure. Every tile's sign atlas is disposed with it now
+  (it leaked on every unload, all platforms).
+- A lost GPU context on a phone sheds memory at once (budget halved, silhouettes to `dropR`, no
+  shadow pass) and the next load in the tab steps down a tier (`diag.lostBefore`). WebGL that
+  won't start says how to get it back (`NO_WEBGL`: the browser may have blocked the site after a
+  crash — close it completely and reopen).
+- Phones sleep when put away (`ui/lifecycle.ts`, `window.__SLEEP__`): sound suspended, the life
+  worker paused (on a PC too — it ticked on in hidden tabs), held input released. Never under
+  `?capture=1`.
+- A phone lands (✈) only once the cell under it is built (`stream.solidAt`), and on foot waits
+  where it stands until it is: before that its buildings are silhouettes with no walls (a fast
+  flight landed inside a house and walked out through its wall). Tested headless: fly to an
+  unbuilt cell, press ✈, check `walkParams.fly` holds until `solidAt`, then the landing is outside.
 - The boot report (`src/ui/diag.ts`, shown in `#fatal`): browser, WebGL version + GPU string,
   the key limits, float-buffer extensions, the tier, the boot stage, the first shader log and the
   first JS errors. It opens by itself when WebGL can't start, a shader won't compile, the boot

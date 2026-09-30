@@ -561,6 +561,9 @@ export class LifeClient {
   // (Re)start the sim worker with a fresh road graph — called when the streamed tile set changes.
   /** The player's car at (x,z) moving (vx,vz): walkers in its path are knocked down (lifeSim.bump). */
   bump(x: number, z: number, vx: number, vz: number) { this.worker.postMessage({ kind: 'bump', x, z, vx, vz }); }
+  /** The page is asleep (hidden, a phone locked): the sim worker stops ticking until resume(). */
+  pause() { this.worker.postMessage({ kind: 'pause' }); }
+  resume() { this.worker.postMessage({ kind: 'resume' }); }
   onBumped: ((n: number) => void) | null = null;
   /** Moving traffic near the player this frame (x, z, velocity) — the critters give way to it. */
   readonly movers: { x: number; z: number; vx: number; vz: number }[] = [];

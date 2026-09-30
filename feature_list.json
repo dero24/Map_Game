@@ -1,6 +1,6 @@
 {
   "project": "map_game",
-  "last_updated": "2026-09-29",
+  "last_updated": "2026-09-30",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -991,9 +991,16 @@
         "src/ui/photo.ts, src/ui/brush.ts (touch photo tools and brush rotation)",
         "npm run init (47 test files, 450 tests) and npm run build",
         "tools/mobile-check.mjs --device=pixel7|iphone: phone tier, no page/console errors, shader limits within caps",
-        "shots/shore-montage.jpg (Pixel 7 and iPhone touch layouts reviewed)"
+        "shots/shore-montage.jpg (Pixel 7 and iPhone touch layouts reviewed)",
+        "src/ui/lifecycle.ts + tests/lifecycle.test.ts (sleep when hidden: sound, the life worker, held input)",
+        "src/world/budget.ts + tests/budget.test.ts (a phone's detail tiles under a vertex budget, nearest first)",
+        "src/player/vehicles.ts stickAxes + tests/touchControls.test.ts (ride stick dead zones; keys unchanged)",
+        "src/world/stream.ts (sign atlases disposed with their tiles; budget; realConc; wall purge; solidAt)",
+        "src/render/quality.ts (+ tests/quality.test.ts): phone/low tiers — budget 200/120 MB, LiDAR off, 4/3 km skyline",
+        "src/ui/diag.ts lostFrom/NO_WEBGL (+ tests/diag.test.ts): a lost GPU context steps a phone down; how to get WebGL back",
+        "index.html + src/ui/style.css: no page zoom (touch-action; iOS gesture events); src/ui/mapview.ts pinch"
       ],
-      "notes": "Mobile control parity implemented and headless Pixel 7/iPhone checks pass. Local tile-health probes and some map requests fail because the tile worker/Overpass services are unavailable in the emulator. Needs a real phone after the next Pages deploy: …/Map_Game/?diag=1."
+      "notes": "2026-09-30: controls reviewed and fixed (docs/earth/LOG.md); phones sleep when put away; the NYC crash's memory causes fixed (sign-atlas texture leak, walls never reclaimed, LiDAR ~130 MB a Midtown cell, up to 9 dense cells in the ring); a phone lands only once the street below is built. Verified headless in Sea Bright (Pixel 7 emulation): textures flat at 23–25 over 4 round trips (was 24 → 36), walls flat at 106k (was 263k), landing 12.7 m clear of the house it used to land in. Still needs a real phone after the next Pages deploy: …/Map_Game/?diag=1 in Manhattan (the tile service and Overpass are unreachable from the agent sandbox)."
     },
     {
       "id": "photo-paints-frame",

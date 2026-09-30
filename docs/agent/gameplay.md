@@ -130,6 +130,35 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 - While riding, `Vehicles.update` owns the camera and carries the walker (streaming/life/
   interiors key off it); `walker.update` is skipped.
 
+## Touch controls (phones, tablets)
+
+- `body.touch` (a touch screen) shows the touch UI; `body.nomouse` (no fine pointer: a phone or a
+  tablet) makes hints, toasts and the ride HUD name the touch buttons instead of keys — a
+  touch-screen laptop keeps its key names. Both are set in index.html's boot guard.
+- Walker (`player/controller.ts`): the left 45% of the screen is a floating stick (full push =
+  run; flying, 4× speed), the rest drags the look (scaled by the panel's look sensitivity).
+  `releaseTouches()` drops both (a pinch, the page going to sleep). `waitGround` holds walking
+  while the cell underfoot isn't built (main.ts `groundCheck`); `climb` is ▲ ▼ while flying.
+- The dock (`#touchui`): ✈ fly/land (a phone's landing waits for the street below), ⌂ search
+  (focused in the tap, so iOS raises its keyboard), ☰ atlas, ▣ photo (the same as P: the brush
+  away, a viewpoint faced), ✎ brush, ⋯ drawer (plant, next seed, +1 hour, options; any touch on
+  the world closes it, and it closes behind an overlay), ⇅ lift in a lobby.
+- The ride's own button (`#touch-action`, main.ts `touchActionState`): Drive / Board beside a
+  ride, Get out / Jump out in one; a double-tap on the look side does it too, but gets you out
+  only once stopped. `#ride-touch` holds the held buttons: ⇧ boost (car, boat), + − throttle
+  (plane), ▲ ▼ climb/sink (flying on foot). A held button lets go when its finger lifts, it
+  disappears, the window blurs or the page sleeps (`bindHold`, `releaseHolds`).
+- Rides on the stick (`vehicles.ts` `stickAxes`): a 0.1 dead zone for steering/banking and 0.25
+  along the throttle/pitch (a thumb steering sideways never touches the pedals), rescaled. Part
+  way cruises at that share of the top speed and brakes that gently; keys are always ±1, so the
+  keyboard's driving is unchanged. Plane: pull the stick back (down) to climb.
+- Pinch: photo mode zooms (its fingers released from stick and look); the atlas map zooms about
+  the fingers (`mapview.ts`). The page itself never zooms (`touch-action` in style.css; iOS's
+  gesture events stopped in index.html — it ignores `user-scalable=no`).
+- Sleep (`ui/lifecycle.ts`): hidden → sound suspended (phones; a PC tab sounds on), the life
+  worker paused (everywhere), held input released; an iPhone's interrupted audio resumes on the
+  next tap.
+
 ## Ambient life + sound
 
 - Knockdowns: `Vehicles.onMove` → `LifeClient.bump` (throttled ~11 Hz) → worker `lifeSim.bump`: walkers in the car's path go `DOWN` — thrown with the car, slide with friction, lie 3–5 s (rolled on their side by the renderer, `amt −1`), snap back to the nearest walkable edge and walk on. `onBumped` plays a thud.

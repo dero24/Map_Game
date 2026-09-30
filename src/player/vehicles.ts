@@ -99,6 +99,18 @@ function tint(g: THREE.BufferGeometry, hex: number) {
   return g;
 }
 
+// The walking stick as a ride's controls. A thumb steering sideways always wanders a little up or
+// down, and the stick taken straight as the pedals turned that wander into full throttle or the
+// brakes (a plane's nose never settled): a small dead zone round the centre for steering and
+// banking, a wider one along the throttle (a plane's pitch), each rescaled so the rest of the
+// throw is the whole range. Keys don't come through here: they're all the way, as ever.
+const STEER_DZ = 0.1, THROTTLE_DZ = 0.25;
+const deadZone = (v: number, d: number) => { const a = Math.abs(v); return a <= d ? 0 : Math.sign(v) * Math.min(1, (a - d) / (1 - d)); };
+/** The touch stick's pull (−1..1 each way, +y down) as ride inputs: x steers or banks, y the throttle or pitch. */
+export function stickAxes(x: number, y: number) { return { x: deadZone(x, STEER_DZ), y: deadZone(y, THROTTLE_DZ) }; }
+/** A phone or tablet (no mouse to hand): the rides say how the touch controls work, not the keys. */
+const thumbs = () => typeof document !== 'undefined' && document.body.classList.contains('nomouse');
+
 function propGeo() {
   return mergeGeometries([colored(new THREE.BoxGeometry(2.1, 0.14, 0.05), 0x2a2a2c), colored(new THREE.BoxGeometry(0.14, 2.1, 0.05), 0x2a2a2c)]);
 }
@@ -418,7 +430,9 @@ export class Vehicles {
     this.o.walker.yaw = 0; // walker yaw/pitch become orbit offsets while riding
     this.o.walker.pitch = 0;
     this.camInit = false;
-    const hint = v.kind === 'car' ? 'W/S drive · A/D steer · Shift boost · E to get out' : v.kind === 'boat' ? 'W/S throttle · A/D steer · E to get out (near shore)' : 'Shift/C throttle · W/S pitch · A/D bank · E to jump out';
+    const hint = thumbs()
+      ? v.kind === 'car' ? 'the stick drives and steers · hold ⇧ to boost' : v.kind === 'boat' ? 'the stick steers and throttles · hold ⇧ for more' : 'hold + for throttle · pull the stick back to climb'
+      : v.kind === 'car' ? 'W/S drive · A/D steer · Shift boost · E to get out' : v.kind === 'boat' ? 'W/S throttle · A/D steer · E to get out (near shore)' : 'Shift/C throttle · W/S pitch · A/D bank · E to jump out';
     this.o.toast(hint);
   }
   private exit() {
@@ -434,7 +448,7 @@ export class Vehicles {
       w.place(v.x, v.z, back, -0.1);
       walkParams.fly = true;
       w.y = v.y + 1;
-      this.o.toast('you step out into the sky — F to come down');
+      this.o.toast(`you step out into the sky — ${thumbs() ? '✈' : 'F'} to come down`);
       v.v = 0;
       v.airborne = false;
       v.y = this.ground(v.x, v.z) + 1.2;
@@ -478,7 +492,7 @@ export class Vehicles {
       const p = placeCar(this.placeWorld, w.x, w.z, w.yaw, 90);
       if (!p.ok) return this.o.toast('no street nearby for a car');
       const car = this.make('car', p.spot.x, p.spot.z, p.spot.yaw);
-      return this.o.toast(`${/^[aeiou]|^SUV/i.test(modelName(car.model)) ? 'an' : 'a'} ${modelName(car.model)} pulls up — walk over and press E`);
+      return this.o.toast(`${/^[aeiou]|^SUV/i.test(modelName(car.model)) ? 'an' : 'a'} ${modelName(car.model)} pulls up — walk over and ${thumbs() ? 'tap Drive' : 'press E'}`);
     }
     if (kind === 'boat') {
       // the nearest open water with room for a hull, bow off the land
@@ -486,7 +500,7 @@ export class Vehicles {
       if (!p.ok) return this.o.toast('no open water nearby');
       const b = this.make('boat', p.spot.x, p.spot.z, p.spot.yaw);
       const nm = modelName(b.model);
-      return this.o.toast(p.spot.d < 60 ? `a ${nm} bobs at the water’s edge — press E aboard` : `a ${nm} waits on the water ${Math.round(p.spot.d)} m away`);
+      return this.o.toast(p.spot.d < 60 ? `a ${nm} bobs at the water’s edge — ${thumbs() ? 'tap Board' : 'press E aboard'}` : `a ${nm} waits on the water ${Math.round(p.spot.d)} m away`);
     }
     // plane: airborne if you're flying; otherwise the nearest clear, flat run ahead of you
     if (walkParams.fly) {
@@ -496,7 +510,7 @@ export class Vehicles {
       p.v = 45;
       p.throttle = 0.5;
       this.pose(p);
-      return this.o.toast('a plane swings alongside — press E');
+      return this.o.toast(`a plane swings alongside — ${thumbs() ? 'tap Board' : 'press E'}`);
     }
     for (const turn of [0, 0.5, -0.5, 1, -1, 1.6, -1.6, Math.PI]) {
       const yaw = w.yaw + turn, ux = -Math.sin(yaw), uz = -Math.cos(yaw);
@@ -513,7 +527,7 @@ export class Vehicles {
         }
         if (ok) {
           const pl = this.make('plane', sx, sz, yaw);
-          return this.o.toast(`a ${modelName(pl.model)} is waiting on a clear run — press E`);
+          return this.o.toast(`a ${modelName(pl.model)} is waiting on a clear run — ${thumbs() ? 'tap Board' : 'press E'}`);
         }
       }
     }
@@ -523,13 +537,14 @@ export class Vehicles {
     p.v = 48;
     p.throttle = 0.55;
     this.pose(p);
-    this.o.toast('no clear run here — a plane circles overhead; F to fly up, then E');
+    this.o.toast(`no clear run here — a plane circles overhead; ${thumbs() ? '✈ to fly up, then Board' : 'F to fly up, then E'}`);
   }
 
   // ---------------- per-frame ----------------
   private k(c: string) { return this.keys.has(c); }
   private axis(pos: string[], neg: string[]) { return (pos.some((c) => this.k(c)) ? 1 : 0) - (neg.some((c) => this.k(c)) ? 1 : 0); }
   private axisTouch(pos: string[], neg: string[], touch: number) { return Math.max(-1, Math.min(1, this.axis(pos, neg) + touch)); }
+  private get stick() { const a = this.o.walker.touchAxes; return stickAxes(a.x, a.y); }
 
   /** Advance the ridden vehicle and the camera. Returns false when on foot (walker drives the camera). */
   private saveT = 10;
@@ -564,7 +579,7 @@ export class Vehicles {
     this.chase(v, dt, cam);
     const kmh = Math.round(Math.abs(v.v) * 3.6);
     this.hud.style.display = 'block';
-    const touch = document.body.classList.contains('touch');
+    const touch = thumbs();
     this.hud.textContent = v.kind === 'plane'
       ? `✈ ${kmh} km/h · alt ${Math.round(v.y - this.ground(v.x, v.z))} m · throttle ${Math.round(v.throttle * 100)}% · ${touch ? 'stick: pitch / bank · +/−: throttle' : 'E to jump out'}`
       : `${v.kind === 'car' ? '🚗' : '⛵'} ${kmh} km/h · ${touch ? 'left stick: steer / throttle · ⇧: boost' : 'E to get out'}`;
@@ -573,12 +588,14 @@ export class Vehicles {
 
   private drive(v: Veh, dt: number) {
     const walk = this.o.walk;
-    const axes = this.o.walker.touchAxes;
+    const axes = this.stick;
     const thr = this.axisTouch(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown'], -axes.y);
     const boost = this.k('ShiftLeft') || this.k('ShiftRight') || this.touchBoost;
     const vmax = boost ? 38 : 24;
-    if (thr > 0) v.v += (v.v < -0.3 ? 14 : boost ? 9 : 6) * dt;
-    else if (thr < 0) v.v -= (v.v > 0.3 ? 14 : 4) * dt;
+    // (the stick part way: it cruises at that share of the top speed and brakes that gently — a
+    // key is all the way, so the keyboard drives exactly as it always has)
+    if (thr > 0 && (thr >= 1 || v.v < vmax * thr)) v.v += (v.v < -0.3 ? 14 : boost ? 9 : 6) * dt;
+    else if (thr < 0) v.v -= (v.v > 0.3 ? 14 : 4) * -thr * dt;
     else v.v -= Math.sign(v.v) * Math.min(Math.abs(v.v), (1.6 + Math.abs(v.v) * 0.05) * dt);
     // the hill: a climb takes speed off, a descent coasts on, and stopped on a steep grade with
     // nothing pressed the car creeps back (a gentle one holds: the gearbox's creep, the brakes)
@@ -624,11 +641,12 @@ export class Vehicles {
   }
 
   private sail(v: Veh, dt: number) {
-    const axes = this.o.walker.touchAxes;
+    const axes = this.stick;
     const thr = this.axisTouch(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown'], -axes.y);
     const boost = this.k('ShiftLeft') || this.k('ShiftRight') || this.touchBoost;
     const vmax = boost ? 20 : 12;
-    if (thr !== 0) v.v += thr * (thr > 0 ? 3.2 : 2.5) * dt;
+    const cruising = thr > 0 && thr < 1 && v.v >= vmax * thr; // (the stick part way: that share of the top speed)
+    if (thr !== 0 && !cruising) v.v += thr * (thr > 0 ? 3.2 : 2.5) * dt;
     else v.v -= Math.sign(v.v) * Math.min(Math.abs(v.v), 1.1 * dt);
     v.v = Math.max(-4, Math.min(vmax, v.v));
     const st = this.axisTouch(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight'], -axes.x);
@@ -646,7 +664,7 @@ export class Vehicles {
   }
 
   private fly(v: Veh, dt: number) {
-    const axes = this.o.walker.touchAxes;
+    const axes = this.stick;
     const thr = Math.max(-1, Math.min(1, this.axis(['ShiftLeft', 'ShiftRight', 'KeyR'], ['KeyC', 'KeyX']) + this.touchThrottle));
     v.throttle = Math.max(0, Math.min(1, v.throttle + thr * dt * 0.6));
     const pitchIn = this.axisTouch(['KeyS', 'ArrowDown'], ['KeyW', 'ArrowUp'], axes.y); // S = nose up (pull back)

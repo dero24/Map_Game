@@ -45,11 +45,14 @@ export class PhotoMode {
     document.getElementById('photo-hour-back')?.addEventListener('click', () => this.adjustHour(-0.25));
     document.getElementById('photo-hour-forward')?.addEventListener('click', () => this.adjustHour(0.25));
     document.getElementById('photo-frame')?.addEventListener('click', () => this.toggleFrame());
+    // A pinch zooms. Its two fingers are taken off the walking stick and the look drag the moment the
+    // second lands (Walker.releaseTouches), so a zoom never walks or swings the view — and walking
+    // with the stick while you frame stays yours, as WASD always has been.
     const canvas = this.g.canvas;
     canvas.addEventListener('touchstart', (e) => {
       if (!this.active) return;
       for (const t of Array.from(e.changedTouches)) this.pinchIds.add(t.identifier);
-      if (this.pinchIds.size >= 2) { this.pinchDistance = this.distance(e.touches); this.g.walker.holdLook = true; }
+      if (this.pinchIds.size >= 2) { this.pinchDistance = this.distance(e.touches); this.g.walker.releaseTouches(); }
     }, { passive: true });
     canvas.addEventListener('touchmove', (e) => {
       if (!this.active || this.pinchIds.size < 2) return;
@@ -59,7 +62,7 @@ export class PhotoMode {
     }, { passive: true });
     const pinchEnd = (e: TouchEvent) => {
       for (const t of Array.from(e.changedTouches)) this.pinchIds.delete(t.identifier);
-      if (this.pinchIds.size < 2) { this.pinchDistance = 0; this.g.walker.holdLook = false; }
+      if (this.pinchIds.size < 2) this.pinchDistance = 0;
     };
     canvas.addEventListener('touchend', pinchEnd);
     canvas.addEventListener('touchcancel', pinchEnd);
@@ -90,13 +93,11 @@ export class PhotoMode {
   toggle(on = !this.active) {
     if (on === this.active) return;
     this.active = on;
-    this.g.walker.holdMove = on;
     document.body.classList.toggle('postcard', on);
     this.el.classList.toggle('hidden', !on);
     this.el.classList.remove('bare');
     this.pinchIds.clear();
     this.pinchDistance = 0;
-    this.g.walker.holdLook = false;
     const frame = document.getElementById('photo-frame');
     if (frame) { frame.textContent = 'hide frame'; frame.setAttribute('aria-label', 'hide frame'); }
     if (on) { this.fov = walkParams.fov; this.status(); }
@@ -178,7 +179,8 @@ export class PhotoMode {
     const painted = this.com.paintFrame(p.id);
     // a coloured card is a kind you can paint anywhere now (ui/brush.ts)
     const yours = this.com.fresh.some((k) => (PAINTABLE as readonly string[]).includes(k.split(':')[0]));
-    if (painted.length) setTimeout(() => this.g.toast(`almanac: painted in — ${painted.slice(0, 3).join(', ')}${painted.length > 3 ? ` and ${painted.length - 3} more` : ''}${yours ? ' · yours to paint now: B for your brush' : ''}`), done ? 2600 : 1800);
+    const thumbs = document.body.classList.contains('nomouse'); // (a phone names its buttons, not keys)
+    if (painted.length) setTimeout(() => this.g.toast(`almanac: painted in — ${painted.slice(0, 3).join(', ')}${painted.length > 3 ? ` and ${painted.length - 3} more` : ''}${yours ? ` · yours to paint now: ${thumbs ? '✎' : 'B'} for your brush` : ''}`), done ? 2600 : 1800);
     const seen = await framed;
     const inWorld = seen?.cells ? `painted in what you framed — out to ${far(seen.reach)}` : '';
     if (done) {
@@ -186,7 +188,7 @@ export class PhotoMode {
       this.g.sound('chime');
       this.g.toast(`✦ commission complete — ${done.title}`);
       if (inWorld) setTimeout(() => this.g.toast(inWorld), painted.length ? 4600 : 2600);
-    } else this.g.toast(inWorld ? `${inWorld} · M for your sketchbook` : 'painted into your sketchbook · M to see it');
+    } else this.g.toast(inWorld ? `${inWorld} · ${thumbs ? '☰' : 'M'} for your sketchbook` : `painted into your sketchbook · ${thumbs ? '☰' : 'M'} to see it`);
     this.onSaved?.(p);
     this.status();
   }

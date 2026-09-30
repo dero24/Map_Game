@@ -17,6 +17,7 @@ import { registerPlan, type Interiors, type Plan } from './interiors';
 import type { WalkWorld } from '../player/collision';
 import { U } from '../render/shared';
 import { activeStyle } from './styles';
+import { admitCells, type BudgetCell } from './budget';
 
 // The rings (m). A phone's quality tier (render/quality.ts) tightens them at boot: every detail
 // tile is tens of MB of vertices and textures, and the silhouette ring to 8 km is hundreds of cells.
@@ -24,8 +25,28 @@ export const streamParams = {
   loadR: 1500, // keep tiles this close (3×3 cells and then some)
   dropR: 2400, // drop tiles beyond this
   coarseR: 8000, // silhouette ring: lite builds (meshes only) out to the horizon
+  // (these three a phone's tier sets — a PC's are as they always were: no budget, four at once)
+  budgetMB: 0, // the detail tiles' vertex data kept at once, nearest first (world/budget.ts); 0: no cap
+  realConc: 4, // real-lite (tile service) builds in flight at once (the service caches in R2; Overpass slots are per endpoint)
+  purge: false, // an unloaded tile's walls taken out of the walk world, not only marked dead (a long walk's memory)
 };
-const W_CONC = 4; // real-lite (tile service) builds in flight at once (the service caches in R2; Overpass slots are per endpoint)
+// (what a detail tile weighs before its first build: a real city cell, a stand-in, a baked one)
+const EST = { w: 60e6, s: 10e6, b: 20e6 };
+const cellKey = (b: Box, c: number) => `${Math.floor((b.x0 + b.x1) / 2 / c)}_${Math.floor((b.z0 + b.z1) / 2 / c)}`;
+/** Vertex (and instance) data under a group, bytes — what it costs the GPU and the page, each. */
+function vertexBytes(root: THREE.Object3D) {
+  let n = 0;
+  root.traverse((m) => {
+    const g = (m as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
+    if (g?.attributes) {
+      for (const k in g.attributes) n += (g.attributes[k] as THREE.BufferAttribute).array?.byteLength ?? 0;
+      if (g.index) n += g.index.array.byteLength;
+    }
+    const im = m as THREE.InstancedMesh;
+    if (im.isInstancedMesh) n += im.instanceMatrix.array.byteLength + (im.instanceColor?.array.byteLength ?? 0);
+  });
+  return n;
+}
 const LAMP_WIN = 2048; // m — the night light-map window around the walker
 const COARSE_BUDGET = 4; // max outstanding lite builds — they're lowest priority
 const REVEAL_BYTES = 12e6; // vertex data a newly mounted tile shows (so uploads) per frame
@@ -50,6 +71,7 @@ export interface TileArt {
   flat?: boolean; // mounted without data still in flight (late DEM or LiDAR) — a relief rebuild will replace it
   vec?: boolean; // a stand-in built from the vector tiles: real streets and buildings (the skyline steps aside)
   xing?: number[]; // mapped crossings for the ground paint (kerbside.ts crossingPaint)
+  bytes?: number; // its vertex data and sign atlas (a phone's budget: world/budget.ts)
   vp?: number[]; // viewpoints: x, z, bearing (−1 unknown)
   // a stand-in's footprints each in a collision scope of their own, so the copy of a real
   // neighbour's building can go on its own (seams.ts); and those gone so far
@@ -116,6 +138,7 @@ export class TileStream {
   // and sending it all to the GPU in the frame it mounted stalled that frame 40–60 ms. What it
   // replaces (its stand-in, its silhouette, its flat first build) stays on screen until it's whole.
   private reveals: { group: THREE.Group; hidden: THREE.Object3D[]; retire: THREE.Group[] }[] = [];
+  private sizes = new Map<string, number>(); // what each detail tile weighed when it was last built (the budget's estimates)
   private culled: THREE.Object3D[] = []; // frustum culling off for the frame they appear (see reveal)
   /** Where the last detail mount's time went, ms (tools/hitch-probe.js, soak). */
   lastMount: { id: string; collision: number; objects: number; retire: number; hooks: number } | null = null;
@@ -251,6 +274,12 @@ export class TileStream {
     return n;
   }
   doorOf(fp: Footprint) { return this.fpDoor.get(fp); }
+  /** A detail tile stands under (x, z): its walls and footprints are in the walk world. Past the ring
+   *  (a flight faster than a phone builds tiles) the buildings are silhouettes with neither. */
+  solidAt(x: number, z: number) {
+    for (const a of this.loaded.values()) { const b = a.spec.box; if (x >= b.x0 && x < b.x1 && z >= b.z0 && z < b.z1) return true; }
+    return false;
+  }
 
   // The walker's neighbourhood grids (houses, shops, built volume, paved ground) are summed from
   // each tile's own, worked out once when the tile first counts: rebuilding them from every
@@ -339,8 +368,36 @@ export class TileStream {
     // cold-remote-tile wait the placeholder exists to avoid.
     const pends = await Promise.all(wanted.map((t) => (t.world ? Promise.resolve(null) : this.fetch(t))));
     for (const p of pends) this.mount(p, false); // (the spawn's own ground: all at once)
-    for (const t of wanted) if (t.world) void this.fetch(t).then((p) => { if (p) { this.queued.add(t.id); this.buildQueue.push(p); } });
+    // (a phone's budget leaves the real tiles to update(): nearest first, a couple at a time, only
+    // those that fit — a teleport into Midtown had every cell of the ring built at once)
+    if (!streamParams.budgetMB) for (const t of wanted) if (t.world) void this.fetch(t).then((p) => { if (p) { this.queued.add(t.id); this.buildQueue.push(p); } });
   }
+
+  /** (a phone) The detail cells its budget keeps round (x, z), nearest first (world/budget.ts). */
+  private admitted(x: number, z: number, R: number) {
+    const c = this.man.cell;
+    // what a tile not built yet will weigh: the mean of those built here, of its kind
+    const sum = { w: 0, s: 0, b: 0 }, n = { w: 0, s: 0, b: 0 };
+    for (const a of this.loaded.values()) {
+      const k = a.spec.world ? 'w' : a.spec.synth ? 's' : 'b';
+      if (a.bytes) (sum[k] += a.bytes), n[k]++;
+    }
+    const est = (k: 'w' | 's' | 'b') => (n[k] ? sum[k] / n[k] : EST[k]);
+    const cells: BudgetCell[] = [];
+    for (let cz = Math.floor((z - R) / c); cz <= Math.floor((z + R) / c); cz++)
+      for (let cx = Math.floor((x - R) / c); cx <= Math.floor((x + R) / c); cx++) {
+        const t = this.specAt(cx, cz), d2 = boxDist2(t.box, x, z);
+        if (d2 >= R * R) continue;
+        const a = this.loaded.get(t.id), twin = t.world ? 's' + t.id.slice(1) : '';
+        // (a real cell weighs what its real tile will, whatever its stand-in does meanwhile)
+        const bytes = a?.bytes ?? this.sizes.get(t.id) ?? est(t.world ? 'w' : t.synth ? 's' : 'b');
+        const loaded = !!a || this.fetching.has(t.id) || this.queued.has(t.id) || (!!twin && this.loaded.has(twin));
+        cells.push({ key: `${cx}_${cz}`, d: Math.sqrt(d2), bytes, loaded });
+      }
+    return admitCells(cells, streamParams.budgetMB * 1e6);
+  }
+  /** The detail tiles' vertex data now, bytes (the budget's measure; tools read it). */
+  get detailBytes() { let n = 0; for (const a of this.loaded.values()) n += a.bytes ?? 0; return n; }
 
   // Per-frame: kick fetches for wanted tiles (detail ring first, then the coarse silhouette
   // ring under a small budget), mount at most one finished tile of each tier, drop far ones.
@@ -359,11 +416,13 @@ export class TileStream {
     const cx0 = Math.floor((x - COARSE_R) / c), cx1 = Math.floor((x + COARSE_R) / c);
     const cz0 = Math.floor((z - COARSE_R) / c), cz1 = Math.floor((z + COARSE_R) / c);
     const wantW: [number, TileSpec][] = [];
+    // (a phone: the detail cells its budget keeps — a PC keeps every cell of the ring)
+    const admitted = streamParams.budgetMB > 0 ? this.admitted(x, z, LOAD_R) : null;
     for (let cz = cz0; cz <= cz1; cz++)
       for (let cx = cx0; cx <= cx1; cx++) {
         const t = this.specAt(cx, cz);
         const d2 = boxDist2(t.box, x, z);
-        if (d2 < LOAD_R * LOAD_R) {
+        if (d2 < LOAD_R * LOAD_R && (!admitted || admitted.has(`${cx}_${cz}`))) {
           // Real-lite cells stream their synth placeholder twin alongside — it mounts
           // instantly and the worker tile swaps in over it when it lands. Failed real
           // fetches just retry later under the same backoff while the synth holds.
@@ -374,13 +433,18 @@ export class TileStream {
           for (const sp of specs)
             if (!this.loaded.has(sp.id) && !this.fetching.has(sp.id) && !this.queued.has(sp.id) && now - (this.failed.get(sp.id) ?? -30000) > 10000) void this.fetch(sp).then((p) => { if (p) { this.queued.add(sp.id); this.buildQueue.push(p); } });
         } else {
+          // (a cell in the ring past a phone's budget goes back to its silhouette, stand-in and all)
+          if (admitted && d2 < LOAD_R * LOAD_R) {
+            if (this.loaded.has(t.id)) this.unload(t.id);
+            if (t.world) { const sid = 's' + t.id.slice(1); if (this.loaded.has(sid)) this.unload(sid); }
+          }
           if (d2 > DROP_R * DROP_R && this.loaded.has(t.id)) this.unload(t.id);
           if (t.world) { const sid = 's' + t.id.slice(1); if (d2 > DROP_R * DROP_R && this.loaded.has(sid)) this.unload(sid); }
-          // Silhouettes fill the [LOAD_R, COARSE_R) band — without this, cells between
-          // LOAD_R and DROP_R were a dead zone that neither tier ever fetched. They stay
-          // synth even under a tile service: cheap, local, and a distant cell isn't worth
-          // an Overpass query.
-          if (d2 >= LOAD_R * LOAD_R && d2 < COARSE_R * COARSE_R) {
+          // Silhouettes fill the [LOAD_R, COARSE_R) band (and a phone's cells past its budget) —
+          // without this, cells between LOAD_R and DROP_R were a dead zone that neither tier ever
+          // fetched. They stay synth even under a tile service: cheap, local, and a distant cell
+          // isn't worth an Overpass query.
+          if (d2 < COARSE_R * COARSE_R) {
             const cs = t.world ? this.synthSpec(cx, cz) : t;
             if (!this.loaded.has(t.id) && !this.loaded.has(cs.id) && !this.coarseLoaded.has(cs.id) && !this.coarseFetching.has(cs.id) && !this.queued.has('c' + cs.id) && !this.queued.has(cs.id) && this.coarseFetching.size < COARSE_BUDGET && now - (this.failed.get('c' + cs.id) ?? -30000) > 10000) void this.fetchCoarse(cs).then((p) => { if (p) { this.queued.add('c' + cs.id); this.coarseQueue.push(p); } });
           } else if (d2 >= COARSE_R * COARSE_R) {
@@ -395,7 +459,7 @@ export class TileStream {
       for (const id of this.fetching.keys()) if (id[0] === 'w') inflight++;
       wantW.sort((a, b) => a[0] - b[0]);
       for (const [, sp] of wantW) {
-        if (inflight >= W_CONC) break;
+        if (inflight >= streamParams.realConc) break;
         inflight++;
         void this.fetch(sp).then((p) => { if (p) { this.queued.add(sp.id); this.buildQueue.push(p); } });
       }
@@ -408,7 +472,7 @@ export class TileStream {
       this.buildQueue.sort((a, b) => boxDist2(a.spec.box, x, z) - boxDist2(b.spec.box, x, z));
       const p = this.buildQueue.shift()!;
       this.queued.delete(p.spec.id);
-      if (boxDist2(p.spec.box, x, z) < DROP_R * DROP_R) this.mount(p);
+      if (boxDist2(p.spec.box, x, z) < DROP_R * DROP_R && (!admitted || admitted.has(cellKey(p.spec.box, c)))) this.mount(p);
     }
     if (this.coarseQueue.length) {
       this.coarseQueue.sort((a, b) => boxDist2(a.spec.box, x, z) - boxDist2(b.spec.box, x, z));
@@ -656,9 +720,12 @@ export class TileStream {
       const group = new THREE.Group();
       group.name = `tile:${spec.id}`;
       const atlasTex = tile.atlas ? signTexture(tile.atlas) : undefined;
+      group.userData.atlas = atlasTex; // (freed with the tile: dispose)
       for (const o of tile.objs) group.add(buildObject(o, atlasTex));
       group.add(haloPoints(v3s(tile.lanterns), 7, new THREE.Color(1.0, 0.85, 0.55)));
       group.add(haloPoints(v3s(tile.towers), 1.2, new THREE.Color(1.0, 0.75, 0.45)));
+      const bytes = vertexBytes(group) + (tile.atlas ? tile.atlas.width * tile.atlas.height * 4 * 1.33 : 0); // (a phone's budget)
+      this.sizes.set(spec.id, bytes);
       this.unloadCoarse(spec.id, retire); // seamless upgrade — detail replaces the silhouette only once ready
       if (spec.world) {
         // The real tile lands: its synth placeholder (detail or silhouette) retires now.
@@ -691,6 +758,7 @@ export class TileStream {
         vec: !!tile.vec,
         xing: tile.xing,
         vp: tile.vp,
+        bytes,
         ...(spec.synth ? { fpScopes, hidden: new Set<number>() } : {}),
       });
       this.reconcileSeams();
@@ -721,6 +789,7 @@ export class TileStream {
       if (g) {
         this.scene.remove(g);
         g.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose?.(); });
+        (g.userData.atlas as THREE.Texture | undefined)?.dispose();
         const i = this.reveals.findIndex((r) => r.group === g);
         if (i >= 0) this.reveals.splice(i, 1);
       }
@@ -857,8 +926,8 @@ export class TileStream {
   unload(id: string, retire?: THREE.Group[]) {
     const a = this.loaded.get(id);
     if (!a) return;
-    this.walk.removeScope(a.scope);
-    for (const fs of a.fpScopes ?? []) if (fs !== undefined) this.walk.removeScope(fs);
+    this.walk.removeScope(a.scope, streamParams.purge);
+    for (const fs of a.fpScopes ?? []) if (fs !== undefined) this.walk.removeScope(fs, streamParams.purge);
     this.terrain.removePatch(id);
     // DEM patch bookkeeping: the patch belongs to the CELL; retire it only when the
     // last mounted twin leaves (an s-unload mid-swap mustn't drop the w-twin's terrain).
@@ -890,6 +959,7 @@ export class TileStream {
       const group = new THREE.Group();
       group.name = `ctile:${spec.id}`;
       const atlasTex = tile.atlas ? signTexture(tile.atlas) : undefined;
+      group.userData.atlas = atlasTex;
       for (const o of tile.objs) group.add(buildObject(o, atlasTex));
       group.add(haloPoints(v3s(tile.lanterns), 7, new THREE.Color(1.0, 0.85, 0.55)));
       group.add(haloPoints(v3s(tile.towers), 1.2, new THREE.Color(1.0, 0.75, 0.45)));
@@ -922,6 +992,9 @@ export class TileStream {
       m.geometry?.dispose?.();
       if ((m as unknown as THREE.InstancedMesh).isInstancedMesh) (m as THREE.InstancedMesh).dispose();
     });
+    // …and its street-sign atlas: the one texture a tile owns. Left, every tile ever passed kept its
+    // signs in video memory (a phone's, a few round trips into a town, then the city)
+    (g.userData.atlas as THREE.Texture | undefined)?.dispose();
   }
   // Show the oldest revealing tile's next meshes (REVEAL_BYTES / REVEAL_OBJS of them), each drawn this frame
   // whether it's in view or not, so its buffers go up now rather than when you turn round; when

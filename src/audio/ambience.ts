@@ -582,7 +582,11 @@ export class Ambience {
     }
   }
 
-  resume() { void this.ctx.resume(); }
+  resume() { this.ctx.resume().catch(() => { /* not allowed yet (an iPhone after a call or the lock screen): the next tap asks again */ }); }
+  /** Silence while the page sleeps (a phone locked, the app switched away): the whole graph pauses where it is. */
+  suspend() { this.ctx.suspend().catch(() => { /* already closed */ }); }
+  /** Sounding now: false while suspended, or interrupted by the system (iOS). */
+  get running() { return this.ctx.state === 'running'; }
 
   private blip(opts: { freq: number; q: number; dur: number; gain: number; pan?: number; type?: BiquadFilterType }) {
     const ctx = this.ctx;

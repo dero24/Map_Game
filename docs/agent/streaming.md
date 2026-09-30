@@ -20,6 +20,16 @@ terrain/DEM, or the LiDAR measure pipeline.
   stand-in twin, its coarse silhouette, a flat first build — is handed over (`retire`) and stays
   on screen until the new tile is whole. `ensureAround` (spawn) mounts all at once.
   `TileStream.lastMount` says where the last mount's time went.
+- A phone's budget (`streamParams.budgetMB`, set by its quality tier; 0 on a PC = no budget):
+  each detail tile's vertex data is measured when it mounts (`TileArt.bytes`, remembered per id
+  for the next visit), and `world/budget.ts` `admitCells` keeps the ring's cells nearest first
+  while they fit — the cell you stand in (and within 150 m) always; a built cell counts 150 m
+  nearer (no flip-flop). A cell past the budget unloads to its silhouette; queued builds for it
+  are dropped; `ensureAround` leaves real tiles to `update()` (a teleport into Midtown built the
+  whole ring at once). `realConc` caps real builds in flight (4 on a PC). `purge` takes an
+  unloaded tile's walls out of the walk world (otherwise tombstoned for good).
+- `TileStream.dispose` frees a tile's sign atlas with its geometry (`group.userData.atlas`) — it
+  was the one per-tile texture, and it leaked on every unload.
 - The walker's neighbourhood grids (`houseGrid`, `shopGrid`, `cityGrid`, `pavedIndex`) are
   summed from each tile's own, worked out once per tile (they were rebuilt from every footprint
   and segment in the ring on every mount).

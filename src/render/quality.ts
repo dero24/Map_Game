@@ -3,6 +3,11 @@
 // a lighter brush pass, a smaller shadow map, smaller ground-paint canvases and a tighter tile
 // ring — the desktop set asked ~3 GB of RAM + GPU memory of a phone (docs/earth/LOG.md, mobile
 // blank page). A weak phone, or one whose last visit here was killed mid-walk, gets 'low'.
+// A city is what kills a phone (Manhattan: its GPU ran out, Chrome crashed and then refused the
+// site WebGL): so a phone also keeps its detail tiles under a memory budget, nearest first
+// (world/stream.ts), builds one or two real tiles at a time, reclaims the walls of the tiles it
+// leaves, reads a smaller skyline, and measures no LiDAR (decoding a city's survey was hundreds
+// of MB in the tab, and every measured cell was built twice).
 // Knobs the player saved in the panel (panel.ts userKeys) are never overridden.
 //
 // Pure: no DOM at import time — deviceInfo() is the only browser-facing function.
@@ -27,21 +32,27 @@ export interface TierConfig {
   why: string;
   post: { hiDpi?: boolean; renderScale?: number; paintDetail?: number };
   shadow: { size?: number; enabled?: boolean };
-  stream: { loadR: number; dropR: number; coarseR: number };
+  stream: { loadR: number; dropR: number; coarseR: number; budgetMB?: number; realConc?: number; purge?: boolean };
   /** Cap on the ground-paint canvases (groundPaint.ts sizes them min(4096, cap)). */
   paintTex: number;
+  /** Buildings measured from LiDAR (world/lidar.ts). `?lidar=1` / `?lidar=0` overrule it. */
+  lidar: boolean;
+  /** How far out the skyline reads a city's towers, m (world/skyline.ts). */
+  skylineR: number;
 }
 
 const TIERS: Record<Tier, Omit<TierConfig, 'tier' | 'why'>> = {
   // the shipped defaults — nothing changes on a desktop
-  desktop: { post: {}, shadow: {}, stream: { loadR: 1500, dropR: 2400, coarseR: 8000 }, paintTex: 4096 },
+  desktop: { post: {}, shadow: {}, stream: { loadR: 1500, dropR: 2400, coarseR: 8000 }, paintTex: 4096, lidar: true, skylineR: 8000 },
   // CSS-pixel paint (a DPR-3 phone rendered 1.5× its CSS size before), a 60% brush buffer (the
   // Kuwahara radius drops from 7 to ~4 texels: a third of the taps), 1024² shadows, ~half the
-  // detail tiles and a 4 km silhouette ring, 2048² ground paint (a quarter of the slice canvas)
-  phone: { post: { hiDpi: false, paintDetail: 0.6 }, shadow: { size: 1024 }, stream: { loadR: 900, dropR: 1500, coarseR: 4000 }, paintTex: 2048 },
+  // detail tiles and a 4 km silhouette ring, 2048² ground paint (a quarter of the slice canvas).
+  // The ring's detail tiles keep under 200 MB of vertices (a shore town's whole ring is ~110; one
+  // downtown cell can be 100+), two real tiles build at once, and a 4 km skyline
+  phone: { post: { hiDpi: false, paintDetail: 0.6 }, shadow: { size: 1024 }, stream: { loadR: 900, dropR: 1500, coarseR: 4000, budgetMB: 200, realConc: 2, purge: true }, paintTex: 2048, lidar: false, skylineR: 4000 },
   // …and a weak phone (or one whose last visit died): no shadow pass either — every tree, house and
   // car drawn a second time into the shadow map was half the vertex work of a frame
-  low: { post: { hiDpi: false, paintDetail: 0.5, renderScale: 0.75 }, shadow: { size: 1024, enabled: false }, stream: { loadR: 750, dropR: 1300, coarseR: 2500 }, paintTex: 1024 },
+  low: { post: { hiDpi: false, paintDetail: 0.5, renderScale: 0.75 }, shadow: { size: 1024, enabled: false }, stream: { loadR: 750, dropR: 1300, coarseR: 2500, budgetMB: 120, realConc: 1, purge: true }, paintTex: 1024, lidar: false, skylineR: 3000 },
 };
 const ORDER: Tier[] = ['desktop', 'phone', 'low'];
 const ALIAS: Record<string, Tier> = { desktop: 'desktop', high: 'desktop', phone: 'phone', mobile: 'phone', medium: 'phone', low: 'low', safe: 'low' };

@@ -2,6 +2,66 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-30 — Phones: the touch controls reviewed, a game that sleeps when put away, the city that crashed Chrome
+
+- **The touch controls (the entry below), reviewed and fixed.**
+  - Photo mode had stopped WASD walking on a PC (it set `walker.holdMove`), and leaving it let go of
+    a lift ride's hold mid-ride. A pinch now just takes its two fingers off the stick and the look
+    drag (`Walker.releaseTouches`); the stick walks while you frame, as WASD does.
+  - The ride stick had no dead zone: steering sideways wandered into full throttle or the brakes,
+    and a plane's nose never settled. `vehicles.ts` `stickAxes`: 0.1 steer, 0.25 throttle, rescaled;
+    part way cruises at that share of the top speed and brakes that gently. Keys are ±1, so the
+    keyboard drives exactly as before.
+  - A double-tap on the look side could throw you out of a car at speed (two missed taps by the
+    boost button): it gets you out only once stopped. The ride's button says Drive / Board /
+    Get out / Jump out.
+  - Touch "Fly up/down" did nothing unless the stick was pushed too (climbing rides on the movement,
+    as Space/C do on a PC — left as it is there). ▲ ▼ now climb and sink on their own
+    (`walker.climb`) and sit beside the dock while flying, not in a drawer over the view.
+  - The ⋯ drawer never closed: a touch on the world closes it, and it closes behind the map, a
+    photo, the brush or the panel. ▣ does what P does (the brush away, a viewpoint faced). ⌂
+    focuses the search in the tap (the only way an iPhone raises its keyboard). A phone's hints and
+    toasts name its buttons (`body.nomouse`; a touch-screen laptop keeps its key names). Held
+    buttons let go when they disappear, the window blurs or the page sleeps.
+  - The page never zooms (`touch-action`; iOS's gesture events, since iOS ignores
+    `user-scalable=no`): a pinch had zoomed the page, hiding the controls with no way back. The
+    atlas map pinch-zooms instead (`mapview.ts`).
+- **Sleep when put away** (`ui/lifecycle.ts`): hidden → sound suspended (phones; a PC tab sounds
+  on), the life worker paused (everywhere: it ticked at 20 Hz for a page nobody could see), held
+  input released; back on screen it picks up (an iPhone's interrupted sound on the next tap).
+- **Walking out through a wall after a flight (Robby, on a phone).** Reproduced headless: a flight
+  faster than a phone builds tiles lands over a cell of silhouettes — no walls, no footprints — so
+  the search for open ground saw nothing and came down inside a house (dead centre); until its tile
+  came (23 s under SwiftShader) nothing held you in. A phone now hovers ("coming down as the street
+  paints in…") until the cell is built and lands on open ground (12.7 m clear of the same house),
+  and on foot waits where it stands (`stream.solidAt`, main.ts `groundCheck`).
+- **The Manhattan crash.** On a phone Chrome died in NYC, then refused the site WebGL (the red
+  report at the bottom). Found and fixed:
+  - Every tile's sign atlas leaked on unload, on every platform: GPU textures 24 → 36 over four
+    round trips in Sea Bright (the scene holds 19). Now disposed with the tile: 23–25.
+  - Collision walls were tombstoned, never reclaimed: 263k walls (211k dead) after four round
+    trips. A phone purges them now: flat at 106k.
+  - LiDAR in the tab: one Midtown cell (NY_NewYorkCity) measured +130 MB RSS in Node with the game's
+    own `measureCell`, two read at once, and each measured cell built twice. Phones build from the
+    mapped heights (`?lidar=1` forces it).
+  - The phone ring held up to nine 1 km cells, and a downtown cell is ~100 MB of vertices. A
+    200 MB budget (low: 120), nearest first (`world/budget.ts`); Sea Bright's whole ring (97 MB) is
+    untouched. Real builds 2 at a time (low 1), no teleport building the whole ring at once, a 4 km
+    skyline (low 3).
+  - A lost GPU context on a phone sheds memory before it's given back, and the next load in the
+    tab steps down a tier. WebGL that won't start says how to get it back (close the browser and
+    reopen: Chrome blocks a site's WebGL after a GPU crash).
+- Verified: typecheck; 470 tests in 50 files (+ lifecycle, budget, touchControls, and diag/quality
+  cases) passed on an idle machine — three heavy interior/traffic/lot tests time out at 5 s while
+  five SwiftShader browsers hold every core (none imports a changed module but `sim/life.ts`,
+  whose change is two one-line message posts); build. Headless Pixel 7, Sea Bright, phone tier,
+  four 3.5 km round trips: textures 23–25 (was 24 → 36), walls 106k flat (was 263k), renderer
+  peak 1,165 MB (was 1,285), GPU process 881 MB (was 949), 0 page errors. The flight repro and the
+  on-foot wait (stick held: 0 m until the cell was built, then walking) as above.
+- **Not verifiable here:** the tile service, Overpass and OpenFreeMap are blocked from the agent
+  sandbox, so no real Manhattan tiles loaded; the budget was exercised in Sea Bright only. Needs a
+  real phone after the next Pages deploy (Manhattan, `?diag=1`).
+
 ## 2026-09-29 — Mobile control parity
 
 - Kept the existing walking thumbstick behavior intact and reused its axes for vehicles.

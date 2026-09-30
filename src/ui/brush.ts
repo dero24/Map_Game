@@ -530,7 +530,7 @@ export class Brush {
     const name = modelName(made.model);
     this.drying = {
       t: 0, x: made.x, z: made.z, boat, obj: made.obj, splash: false,
-      toast: boat ? `your ${name} — walk out to it to go aboard` : `your ${name} — ${near ? 'E to get in' : 'walk over, then E'}`,
+      toast: boat ? `your ${name} — walk out to it to go aboard` : `your ${name} — ${document.body.classList.contains('nomouse') ? (near ? 'tap Drive to get in' : 'walk over, then tap Drive') : near ? 'E to get in' : 'walk over, then E'}`,
     };
   }
 

@@ -18,8 +18,14 @@ export class Walker {
   holdLook = false;
   /** a lift ride is under way: no walking (player/lift.ts) */
   holdMove = false;
+  /** (a phone) the street under you isn't built yet — its buildings still silhouettes with no walls:
+   *  you wait where you stand until it is (main.ts) */
+  waitGround = false;
   /** Degrees off the field of view: a brief push-in (the brush, as a painted thing dries). */
   zoom = 0;
+  /** The touch ▲ ▼ buttons while flying: +1 climbs, −1 sinks, at the flying speed — with the stick
+   *  idle too (the keyboard's Space and C ride on the movement, as they always have). */
+  climb = 0;
   distance = 0;
   // Touch: left ~45% of the screen is a floating joystick (analog walk, full push = run),
   // the rest is a look-drag region. The stick UI is injected on first touch.
@@ -75,7 +81,7 @@ export class Walker {
           this.tMove.y = dy / STICK_R;
           if (this.knob) this.knob.style.transform = `translate(${dx}px, ${dy}px)`;
         } else if (t.identifier === this.tLook.id) {
-          const s = this.holdLook ? 0 : 0.0045;
+          const s = this.holdLook ? 0 : 0.0045 * walkParams.mouseSens;
           this.yaw -= (t.clientX - this.tLook.lx) * s;
           this.pitch = Math.max(-1.35, Math.min(1.35, this.pitch - (t.clientY - this.tLook.ly) * s));
           this.tLook.lx = t.clientX;
@@ -147,7 +153,7 @@ export class Walker {
     }
     const analog = Math.min(1, Math.hypot(this.tMove.x, this.tMove.y));
     const run = k.has('ShiftLeft') || k.has('ShiftRight') || analog > 0.85;
-    if (this.holdMove) f = s = 0;
+    if (this.holdMove || this.waitGround) f = s = 0;
     const len = Math.hypot(f, s);
     const mag = Math.min(1, len); // keys land on integers (mag 1); the stick is analog
     const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw);
@@ -162,6 +168,7 @@ export class Walker {
       }
       if (k.has('Space')) this.y += sp;
       if (k.has('KeyC')) this.y -= sp;
+      if (this.climb) this.y += this.climb * walkParams.flySpeed * (run ? 4 : 1) * dt;
     } else {
       if (len > 0) {
         const sp = (run ? walkParams.runSpeed : walkParams.speed) * mag * dt;
@@ -190,8 +197,13 @@ export class Walker {
   }
 
   pressed(code: string) { return this.keys.has(code); }
-  /** Touch buttons feed the same held-key path as a keyboard without changing stick movement. */
-  touchKey(code: string, down: boolean) { if (down) this.keys.add(code); else this.keys.delete(code); }
+  /** Let go of the stick and the look drag: a pinch took the fingers over (photo zoom), or the
+   *  page went to sleep mid-drag and the finger's touchend may never come. */
+  releaseTouches() {
+    this.tMove = { id: -1, ox: 0, oy: 0, x: 0, y: 0 };
+    this.tLook = { id: -1, lx: 0, ly: 0 };
+    this.stick?.classList.remove('on');
+  }
   /** Normalized left-stick axes; vehicles reuse the same stick while the walker is aboard. */
   get touchAxes() { return { x: this.tMove.x, y: this.tMove.y }; }
   /** Walking forward right now — keys or the touch stick pushed up (walk-in boarding, vehicles.ts). */

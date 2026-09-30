@@ -67,9 +67,13 @@ export class Atlas {
       this.g.lock();
     }
   }
-  focusSearch() {
+  /** `now`: a tap (⌂) focuses in the tap itself — an iPhone raises its keyboard for no other; G waits
+   *  a beat, or the key's own "g" would land in the box. */
+  focusSearch(now = false) {
     this.toggle(true, 'map');
-    setTimeout(() => (this.$('atlas-search') as HTMLInputElement).focus(), 30);
+    const input = this.$('atlas-search') as HTMLInputElement;
+    if (now) input.focus();
+    else setTimeout(() => input.focus(), 30);
   }
 
   private show(tab: Tab) {
