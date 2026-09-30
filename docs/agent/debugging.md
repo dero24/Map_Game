@@ -112,10 +112,12 @@ behaviour.
   grows ~40 MB/s — it reproduces on a blank page and OOM-kills the tab within minutes (phones
   have no pointer lock). SwiftShader draws a frame every few seconds on 2 CPUs: poll
   `__RENDER_INFO__.frames`, click `#start` via `evaluate`, and allow minutes for screenshots.
-- `npm run build && node tools/hud-audit.mjs [--phones="Pixel 7,iPhone SE"] [--verbose]`: the phone
+- `npm run build && node tools/hud-audit.mjs [--phones="Pixel 7,iPhone SE"] [--verbose] [--shots=shots/hud]`: the phone
   HUD's geometry — the built CSS and markup (the game's module blocked, so no WebGL: about a minute)
-  on 10 phones from a 320-wide SE to a Pro Max, upright and on their side, walking / beside a ride /
-  driving / flying a plane / flying on foot, a long hint and place name up. Every overlapping pair
+  on 10 phones from a 320-wide SE to a Pro Max, upright and on their side, walking / by a lift /
+  beside a ride / driving / flying a plane / flying on foot / in a balloon, a long hint and place
+  name up. Each button is measured with the word under it, and the stick's resting ring counts.
+  `--shots` writes a PNG of every layout (the HUD over a blank page) to look at. Every overlapping pair
   of HUD boxes is listed; exit 1 if any. It sets the states as `syncTouchControls` does and makes
   the ride readout as `vehicles.ts` does — keep those in step. Run it after any change to the touch
   layout (style.css); the montage shows one phone, this shows them all.

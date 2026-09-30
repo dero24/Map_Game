@@ -156,7 +156,8 @@ export class Brush {
     tb.className = 'tbtn';
     tb.title = 'your brush';
     tb.setAttribute('aria-label', 'open your brush');
-    tb.textContent = '✎';
+    tb.dataset.label = 'Brush';
+    tb.innerHTML = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.2 4.6 19.4 9.8 11.3 17.9 6.1 12.7z"/><path d="M6.1 12.7c-2 .4-3.1 2.1-3.3 6.5 4.4-.2 6.1-1.3 6.5-3.3"/><path d="m16.8 2 5.2 5.2"/></svg>';
     tb.onclick = () => { if (this.active || this.enabled()) this.toggle(); };
     (document.getElementById('tphoto') ?? document.getElementById('touchui'))?.after?.(tb);
 
@@ -702,8 +703,9 @@ export class Brush {
       }
     }
     if (!this.hintNear) return null;
-    const [key, text] = this.hintNear.split('|');
-    return key === 'B' ? { key, text, pri: 4, once: 'brush' } : { key, text, pri: 5, once: 'fromlife' };
+    const [k, text] = this.hintNear.split('|');
+    const key = document.body.classList.contains('nomouse') ? (k === 'B' ? 'Brush' : 'Paint') : k; // (a phone names its buttons)
+    return k === 'B' ? { key, text, pri: 4, once: 'brush' } : { key, text, pri: 5, once: 'fromlife' };
   }
 
   /** For the harness: drive the brush without a mouse (tools, the hidden browser pane). */

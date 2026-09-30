@@ -14,12 +14,19 @@
       <div class="hint">M — map &amp; sketchbook · P — paint a view</div>
     </div>
     <div id="touchui">
-      <button id="tfly" class="tbtn" title="fly / land" aria-label="fly or land">✈</button>
-      <button id="tgo" class="tbtn" title="go anywhere" aria-label="search for a place to go">⌂</button>
-      <button id="tmenu" class="tbtn" title="map, sketchbook and journal" aria-label="open map and sketchbook">☰</button>
-      <button id="tphoto" class="tbtn" title="paint a view" aria-label="open photo mode">▣</button>
-      <button id="tmore" class="tbtn" title="more actions" aria-label="more actions" aria-expanded="false">⋯</button>
+      <!-- (docs/agent/gameplay.md "Touch controls": the bar up top for the things you do now and then,
+           the cluster under the right thumb for the things you do all the time — Paint the biggest) -->
+      <div id="tbar">
+        <button id="tgo" class="tbtn" title="go anywhere" aria-label="search for a place to go" data-label="Go"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5.5 5.5"/></svg></button>
+        <button id="tmenu" class="tbtn" title="map, sketchbook and journal" aria-label="open map and sketchbook" data-label="Map"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20z"/><path d="M9 4v13.5M15 6.5V20"/></svg></button>
+        <button id="tmore" class="tbtn" title="more actions" aria-label="more actions" data-label="More" aria-expanded="false"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18.5" cy="12" r="1.2"/></svg></button>
+      </div>
+      <div id="tdock">
+        <button id="tphoto" class="tbtn big" title="paint a view" aria-label="open photo mode" data-label="Paint"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8.5a2 2 0 0 1 2-2h2.2l1.5-2.2h5.6l1.5 2.2h2.2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg></button>
+        <button id="tfly" class="tbtn" title="fly / land" aria-label="fly or land" data-label="Fly"><svg class="ic ic-fly" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3.5 3 11l7.2 2.8L13 21z"/><path d="M10.2 13.8 15 9"/></svg><svg class="ic ic-land" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v11"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4 20h16"/></svg></button>
+      </div>
     </div>
+    <div id="stick-home" aria-hidden="true"><div></div><span>walk</span></div>
     <div id="touch-more" class="hidden" aria-label="more actions">
       <button id="tplant" class="tmenu-btn" title="plant the selected seed">Plant seed</button>
       <button id="tseed" class="tmenu-btn" title="choose the next seed">Next seed</button>
@@ -28,12 +35,12 @@
     </div>
     <button id="touch-action" class="hidden" aria-live="polite"></button>
     <div id="ride-touch" class="hidden" aria-label="ride and flight controls">
-      <button id="tthrottle-down" class="tbtn hidden" title="less throttle" aria-label="less throttle">−</button>
-      <button id="tthrottle-up" class="tbtn hidden" title="more throttle" aria-label="more throttle">+</button>
-      <button id="tfly-up" class="tbtn hidden" title="climb" aria-label="climb">▲</button>
-      <button id="tfly-down" class="tbtn hidden" title="sink" aria-label="sink">▼</button>
-      <button id="trboost" class="tbtn hidden" title="boost" aria-label="boost">⇧</button>
-      <button id="tview" class="tbtn hidden" title="first / third person" aria-label="switch between first and third person">⤢</button>
+      <button id="tthrottle-down" class="tbtn hidden" title="less throttle" aria-label="less throttle" data-label="Slower"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+      <button id="tthrottle-up" class="tbtn hidden" title="more throttle" aria-label="more throttle" data-label="Faster"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button id="tfly-up" class="tbtn hidden" title="climb" aria-label="climb" data-label="Up"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg></button>
+      <button id="tfly-down" class="tbtn hidden" title="sink" aria-label="sink" data-label="Down"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <button id="trboost" class="tbtn big hidden" title="boost" aria-label="boost" data-label="Boost"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12.5 6-6 6 6M6 18.5l6-6 6 6"/></svg></button>
+      <button id="tview" class="tbtn hidden" title="first / third person" aria-label="switch between first and third person" data-label="View"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M4 4l5.5 5.5M20 15v5h-5M20 20l-5.5-5.5"/></svg></button>
     </div>
     <div id="fatal" class="hidden"></div>
     <script>
@@ -167,7 +174,7 @@
           <b>WASD</b> walk &middot; <b>Mouse</b> look &middot; <b>Shift</b> stroll faster &middot; <b>F</b> fly &middot; <b>E</b> get in/out &middot; <b>B</b> your brush: paint anything you've painted from life &middot; walk through any front door &middot; <b>L</b> ride a lift &middot; <b>R</b> plant a seed &middot; <b>M</b> map &amp; sketchbook &middot; <b>G</b> go anywhere &middot;
           <b>T</b> skip an hour &middot; <b>P</b> paint a view &middot; <b>`</b> settings &middot; <b>Esc</b> release mouse
         </p>
-        <p class="keys tkeys">left thumb &middot; walk (push far to stroll faster) &middot; drag &middot; look around &middot; by a car, boat or plane: tap Drive or Board &middot; &#9992; fly &middot; &#8962; go anywhere &middot; &#9776; map &amp; sketchbook &middot; &#9635; paint a view &middot; &#9998; your brush &middot; ⋯ more &middot; walk through any front door</p>
+        <p class="keys tkeys"><b>Left thumb</b> walk (push to the edge to stroll faster) &middot; <b>drag</b> anywhere else to look &middot; <b>Paint</b> frames a view and paints it in &middot; <b>Fly</b> takes off &middot; by a car, boat, plane or balloon: tap <b>Drive</b> / <b>Board</b> &middot; <b>Brush</b> paints what you've painted from life &middot; <b>Map</b> your map &amp; sketchbook &middot; <b>Go</b> anywhere &middot; <b>More</b> seeds, the hour, options &middot; walk through any front door</p>
         <a href="#" id="credits-link">Credits &amp; data attribution</a>
       </div>
     </div>

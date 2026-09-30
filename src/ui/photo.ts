@@ -224,7 +224,7 @@ export class PhotoMode {
       this.g.sound('chime');
       this.g.toast(`✦ commission complete — ${done.title}`);
       if (inWorld) setTimeout(() => this.g.toast(inWorld), painted.length ? 4600 : 2600);
-    } else this.g.toast(inWorld ? `${inWorld} · ${thumbs ? '☰' : 'M'} for your sketchbook` : `painted into your sketchbook · ${thumbs ? '☰' : 'M'} to see it`);
+    } else this.g.toast(inWorld ? `${inWorld} · ${thumbs ? 'Map' : 'M'} for your sketchbook` : `painted into your sketchbook · ${thumbs ? 'Map' : 'M'} to see it`);
     this.onSaved?.(p);
     this.status();
   }

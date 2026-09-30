@@ -976,7 +976,8 @@
       "verification": [
         "tests/quality.test.ts, tests/diag.test.ts, tests/pack.test.ts (atlas crop)",
         "tools/mobile-check.mjs (headless, helper agent): Pixel 7 GPU-process peak 1272 → 733–783 MB on the phone tier, world drawn, 0 errors; injected failures each show the report",
-        "LIVE pane at 375×812: the report on ?diag=1 reads 'quality phone (touch screen)', the world drawing"
+        "LIVE pane at 375×812: the report on ?diag=1 reads 'quality phone (touch screen)', the world drawing",
+        "Touch controls rebuilt (2026-10-01): visible stick that follows the thumb, a Paint-first corner cluster, a Go/Map/More bar, drawn icons with words; tools/hud-audit.mjs 140 layouts (10 phones x both ways x 7 states) no overlaps; real game on Pixel 7 emulation driven by touch: stick walks and follows, Fly -> Land"
       ],
       "evidence": [
         "src/render/quality.ts",

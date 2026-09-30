@@ -169,7 +169,7 @@ export class Commissions {
       const d = this.dist(a);
       if (d < 70 && this.lastNear !== a.id) {
         this.lastNear = a.id;
-        this.g.toast(`✧ ${a.title} — ${document.body.classList.contains('nomouse') ? '▣, frame it, paint' : 'P, frame it, Space'}`);
+        this.g.toast(`✧ ${a.title} — ${document.body.classList.contains('nomouse') ? 'Paint, frame it, paint' : 'P, frame it, Space'}`);
         return;
       }
     }

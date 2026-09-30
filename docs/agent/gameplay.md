@@ -169,18 +169,28 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
   tablet) makes hints, toasts and the ride HUD name the touch buttons instead of keys — a
   touch-screen laptop keeps its key names. Both are set in index.html's boot guard.
 - Walker (`player/controller.ts`): the left 45% of the screen is a floating stick (full push =
-  run; flying, 4× speed), the rest drags the look (scaled by the panel's look sensitivity).
+  run; flying, 4× speed), the rest drags the look (scaled by the panel's look sensitivity). The
+  stick is drawn where it rests (`#stick-home`, labelled "walk" until you've walked with it once —
+  `map-game.stick-taught.v1`), comes to the thumb wherever it lands, and follows a thumb that runs
+  past its rim (the origin drags along) — you never have to lift and find it again.
   `releaseTouches()` drops both (a pinch, the page going to sleep). `waitGround` holds walking
-  while the cell underfoot isn't built (main.ts `groundCheck`); `climb` is ▲ ▼ while flying.
-- The dock (`#touchui`): ✈ fly/land (a phone's landing waits for the street below), ⌂ search
-  (focused in the tap, so iOS raises its keyboard), ☰ atlas, ▣ photo (the same as P: the brush
-  away, a viewpoint faced), ✎ brush, ⋯ drawer (plant, next seed, +1 hour, options; any touch on
-  the world closes it, and it closes behind an overlay), ⇅ lift in a lobby.
-- The ride's own button (`#touch-action`, main.ts `touchActionState`): Drive / Board beside a
-  ride, Get out / Jump out in one; a double-tap on the look side does it too, but gets you out
-  only once stopped. `#ride-touch` holds the held buttons: ⇧ boost (car, boat), + − throttle
-  (plane), ▲ ▼ climb/sink (flying on foot). A held button lets go when its finger lifts, it
-  disappears, the window blurs or the page sleeps (`bindHold`, `releaseHolds`).
+  while the cell underfoot isn't built (main.ts `groundCheck`); `climb` is Up / Down while flying.
+- The buttons (index.html): every one a drawn SVG icon with its word under it (`data-label`, the
+  `::after`; `syncTouchControls` changes the words — Fly/Land, Up/Down or Burn/Vent). Two places:
+  the bar along the top right (`#tbar`: Go — search, focused in the tap so iOS raises its keyboard;
+  Map — the atlas; More — the drawer: plant, next seed, +1 hour, options; any touch on the world
+  closes it) for what you do now and then, and the cluster under the right thumb (`#tdock`, every
+  button placed from one corner anchor by CSS variables `--big --btn --col --row --dock-b`): Paint
+  (72 px, ink — the game's verb; the same as P: the brush away, a viewpoint faced) in the corner,
+  Fly over it, Brush beside it, Lift over the brush in a lobby. A tick of vibration on every press
+  (Android), and each button shrinks under the finger (`.held` while one is held down).
+- The ride's own button (`#touch-action`, main.ts `touchActionState`): Drive / Board / Step in
+  beside a ride, Get out / Jump out in one — an ink pill over the cluster that pops in; a
+  double-tap on the look side does it too, but gets you out only once stopped. `#ride-touch`
+  holds the held buttons, in the cluster's own places: Boost (car, boat — the corner), Faster /
+  Slower (plane), Up / Down (flying on foot; a balloon's Burn / Vent) beside Paint, View over it
+  in a balloon. A held button lets go when its finger lifts, it disappears, the window blurs or
+  the page sleeps (`bindHold`, `releaseHolds`).
 - Rides on the stick (`vehicles.ts` `stickAxes`): a 0.1 dead zone for steering/banking and 0.25
   along the throttle/pitch (a thumb steering sideways never touches the pedals), rescaled. Part
   way cruises at that share of the top speed and brakes that gently; keys are always ±1, so the
@@ -191,14 +201,13 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 - Sleep (`ui/lifecycle.ts`): hidden → sound suspended (phones; a PC tab sounds on), the life
   worker paused (everywhere), held input released; an iPhone's interrupted audio resumes on the
   next tap.
-- The phone HUD (style.css; `body[data-ride]` = car / boat / plane / fly / near, set in
-  `syncTouchControls`): upright, the ride's readout sits in the corner under the dock with its
-  live numbers only (the ride's toast says how to drive), the place name keeps the left half
-  while riding, and the hint ends short of whatever stands beside the dock. On its side, the
-  hint is centred over the place name (over Get out while riding, clear of ▲ ▼ while flying), the
-  readout sits beside the ride's buttons, and the map-data credit runs along the top edge (the
-  bottom has no room for it). A geometry audit (HUD boxes, 10 phone sizes × both ways × 5
-  states) found no overlaps — see docs/earth/LOG.md 2026-09-30.
+- The phone HUD (style.css "the phone HUD"; `body[data-ride]` = car / boat / plane / balloon /
+  fly / near, set in `syncTouchControls`): the place name, then the hint (or a ride's readout —
+  live numbers only — then the hint) read down the top left, clear of the bar; toasts at a
+  quarter height; the map-data credit on one line along the bottom edge, under the stick and the
+  cluster. On its side the same places, tighter (the bar a row, the cluster smaller). The words in
+  hints and toasts are the buttons' own (Paint, Land, Map, Go, More, Boost, Burn…).
+  `tools/hud-audit.mjs` checks it (10 phones × both ways × 7 states, every button with its word).
 
 ## Ambient life + sound
 

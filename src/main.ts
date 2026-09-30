@@ -638,10 +638,10 @@ async function main() {
   hints.add(() => {
     if (ride.busy) return null;
     const h = ride.here();
-    return h ? { key: thumbs() ? '⇅' : 'L', text: `call the lift — you're on ${h.storey ? `floor ${h.storey + 1}` : 'the ground floor'} of ${h.n}`, pri: 8 } : null;
+    return h ? { key: thumbs() ? 'Lift' : 'L', text: `call the lift — you're on ${h.storey ? `floor ${h.storey + 1}` : 'the ground floor'} of ${h.n}`, pri: 8 } : null;
   });
   hints.add(() => {
-    for (const t of commissions.targets()) if (Math.hypot(t.x - walker.x, t.z - walker.z) < 60) return { key: thumbs() ? '▣' : 'P', text: `✧ ${t.title.replace(/^Paint /, 'paint ')}`, pri: 7 };
+    for (const t of commissions.targets()) if (Math.hypot(t.x - walker.x, t.z - walker.z) < 60) return { key: thumbs() ? 'Paint' : 'P', text: `✧ ${t.title.replace(/^Paint /, 'paint ')}`, pri: 7 };
     return null;
   });
   // Viewpoints (tourism=viewpoint): the view named — the summit it looks at, how far and which way
@@ -664,7 +664,7 @@ async function main() {
     const v = viewHere();
     if (!v) return null;
     const s = v.sight;
-    return { key: thumbs() ? '▣' : 'P', text: s ? `the view: ${s.name}, ${Math.round(s.km)} km to the ${compassWord(s.bearing)} — paint it` : 'a viewpoint — paint the view', pri: 6 };
+    return { key: thumbs() ? 'Paint' : 'P', text: s ? `the view: ${s.name}, ${Math.round(s.km)} km to the ${compassWord(s.bearing)} — paint it` : 'a viewpoint — paint the view', pri: 6 };
   });
   hints.add(() => {
     // (the peak list follows you: fetched here, again after 40 km)
@@ -677,12 +677,12 @@ async function main() {
     }
     return null;
   });
-  hints.add(() => (walkParams.fly && !vehicles.driving ? { key: thumbs() ? '✈' : 'F', text: thumbs() ? 'land · hold ▲ ▼ to climb and sink · push the stick far to go faster' : 'land · Space / C up and down · wheel for speed', pri: 3, once: 'fly' } : null));
-  hints.add(() => (vehicles.balloon && !vehicles.balloon.landed ? { key: thumbs() ? '▣' : 'P', text: 'the best seat for a painting — everything in frame, out to the horizon', pri: 4, once: 'balloon' } : null));
-  hints.add(() => (simTime > 12 ? { key: thumbs() ? '☰' : 'M', text: 'your map, sketchbook & commissions', pri: 1, once: 'atlas' } : null));
-  hints.add(() => (simTime > 70 && !vehicles.driving && !walkParams.fly && world.terrain.coverAt(walker.x, walker.z) === 30 ? { key: thumbs() ? '⋯' : 'R', text: `plant a ${SPECIES[garden.nextSpecies].label} here${thumbs() ? '' : ' (Shift+R: another seed)'}`, pri: 1, once: 'plant' } : null));
-  hints.add(() => (simTime > 45 ? { key: thumbs() ? '▣' : 'P', text: 'frame a view and paint it into your sketchbook', pri: 1, once: 'photo' } : null));
-  hints.add(() => (simTime > 100 ? { key: thumbs() ? '⌂' : 'G', text: 'go anywhere — search a town or an address', pri: 1, once: 'go' } : null));
+  hints.add(() => (walkParams.fly && !vehicles.driving ? { key: thumbs() ? 'Land' : 'F', text: thumbs() ? 'hold Up and Down to climb and sink · push the stick far to go faster' : 'land · Space / C up and down · wheel for speed', pri: 3, once: 'fly' } : null));
+  hints.add(() => (vehicles.balloon && !vehicles.balloon.landed ? { key: thumbs() ? 'Paint' : 'P', text: 'the best seat for a painting — everything in frame, out to the horizon', pri: 4, once: 'balloon' } : null));
+  hints.add(() => (simTime > 12 ? { key: thumbs() ? 'Map' : 'M', text: 'your map, sketchbook & commissions', pri: 1, once: 'atlas' } : null));
+  hints.add(() => (simTime > 70 && !vehicles.driving && !walkParams.fly && world.terrain.coverAt(walker.x, walker.z) === 30 ? { key: thumbs() ? 'More' : 'R', text: `plant a ${SPECIES[garden.nextSpecies].label} here${thumbs() ? '' : ' (Shift+R: another seed)'}`, pri: 1, once: 'plant' } : null));
+  hints.add(() => (simTime > 45 ? { key: thumbs() ? 'Paint' : 'P', text: 'frame a view and paint it into your sketchbook', pri: 1, once: 'photo' } : null));
+  hints.add(() => (simTime > 100 ? { key: thumbs() ? 'Go' : 'G', text: 'go anywhere — search a town or an address', pri: 1, once: 'go' } : null));
 
   const post = new WatercolorPost(renderer);
   const shadows = new SunShadows(renderer);
@@ -1015,11 +1015,12 @@ async function main() {
   const bindHold = (id: string, down: () => void, up: () => void) => {
     const button = $(id) as HTMLButtonElement;
     let held = false;
-    const stop = () => { if (!held) return; held = false; up(); };
+    const stop = () => { if (!held) return; held = false; button.classList.remove('held'); up(); };
     button.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       if (held) return;
       held = true;
+      button.classList.add('held');
       try { button.setPointerCapture(e.pointerId); } catch { /* browser does not support capture */ }
       down();
     });
@@ -1041,6 +1042,9 @@ async function main() {
   // The ride's own button beside your thumb: what E does here, by name. A double-tap on the view
   // does it too — getting out only once the ride has stopped (two taps by the boost button at speed
   // are a missed button, not a wish to step out onto the road).
+  // A tap you can feel (Android; an iPhone has no web vibration): a short tick on every button.
+  const tick = (e: Event) => { if ((e.target as HTMLElement)?.closest?.('.tbtn, #touch-action, .tmenu-btn')) try { navigator.vibrate?.(8); } catch { /* not allowed here */ } };
+  for (const id of ['touchui', 'ride-touch', 'touch-action', 'touch-more']) $(id).addEventListener('pointerdown', tick, { passive: true });
   const touchAction = $('touch-action') as HTMLButtonElement;
   const BOARD = { car: 'Drive', boat: 'Board', plane: 'Board', balloon: 'Step in' } as const;
   const touchActionState = () => {
@@ -1074,6 +1078,11 @@ async function main() {
     $('trboost').classList.toggle('hidden', kind !== 'car' && kind !== 'boat');
     for (const id of ['tthrottle-up', 'tthrottle-down']) $(id).classList.toggle('hidden', kind !== 'plane');
     for (const id of ['tfly-up', 'tfly-down']) $(id).classList.toggle('hidden', !climbs);
+    // (each button's word says what it does now: Fly or Land; a balloon's burner and vent)
+    const say = (id: string, word: string) => { const el = $(id); if (el.dataset.label !== word) el.dataset.label = word; };
+    say('tfly', flying ? 'Land' : 'Fly');
+    say('tfly-up', kind === 'balloon' ? 'Burn' : 'Up');
+    say('tfly-down', kind === 'balloon' ? 'Vent' : 'Down');
     // (a button that has gone lets go of whatever it held)
     if (!climbs) for (const stop of releaseFly) stop();
     if (kind !== 'car' && kind !== 'boat') releaseBoost();

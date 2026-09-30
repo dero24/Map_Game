@@ -157,43 +157,22 @@ body.postcard #osm-credit { display: none; }
 .lil-gui.root { max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; }
 .mobile-panel-close { display: none; }
 
-/* touch controls */
-#touchui { position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(84px + env(safe-area-inset-bottom)); display: none; flex-direction: column; gap: 12px; z-index: 40; }
-body.touch.walking #touchui { display: flex; } /* (not over the intro card) */
-#touch-more { position: fixed; right: calc(82px + env(safe-area-inset-right)); bottom: calc(86px + env(safe-area-inset-bottom)); z-index: 43; width: min(272px, calc(100vw - 110px)); display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding: 9px; border: 1px solid rgba(58,51,70,0.22); border-radius: 8px; background: rgba(245,239,225,0.95); box-shadow: 0 3px 18px rgba(40,30,60,0.18); }
+/* touch controls — the layout is the "phone HUD" section below */
 .tmenu-btn { min-height: 44px; padding: 7px 9px; border: 1px solid rgba(58,51,70,0.22); border-radius: 5px; background: rgba(255,255,255,0.5); color: #3a3346; font: 14px Georgia, serif; touch-action: manipulation; }
-#touch-action { position: fixed; right: calc(82px + env(safe-area-inset-right)); bottom: calc(94px + env(safe-area-inset-bottom)); z-index: 42; min-height: 46px; min-width: 112px; padding: 7px 14px; border: 1px solid rgba(58,51,70,0.38); border-radius: 24px; background: rgba(245,239,225,0.94); box-shadow: 0 2px 12px rgba(40,30,60,0.16); color: #3a3346; font: 15px Georgia, serif; touch-action: manipulation; }
-#ride-touch { position: fixed; right: calc(82px + env(safe-area-inset-right)); bottom: calc(90px + env(safe-area-inset-bottom)); z-index: 42; display: flex; gap: 8px; }
-#ride-touch.fly { flex-direction: column; } /* (flying: climb over sink) */
-/* (buttons held down for seconds — boost, throttle, climb — mustn't raise a long-press loupe or menu) */
-.tbtn, .tmenu-btn, #touch-action { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 body.more-open #touch-action { display: none !important; } /* (the open drawer is over it) */
-body.touch.driving #touchui #tfly, body.touch.driving #touchui #tgo, body.touch.driving:not([data-ride="balloon"]) #touchui #tphoto,
-body.touch.driving #touchui #tbrush { display: none !important; }
 body.touch.driving #touch-more #tplant, body.touch.driving #touch-more #tseed, body.touch.driving #touch-more #ttime { display: none !important; }
 body.touch.driving #touch-more #toptions { grid-column: 1 / -1; }
-body.touch.driving #touch-action { bottom: calc(160px + env(safe-area-inset-bottom)); }
-body.touch[data-ride="balloon"] #touch-action { bottom: calc(282px + env(safe-area-inset-bottom)); } /* (over burn, vent and the view) */
-body.touch.driving #osm-credit { z-index: 10; }
-body.touch.postcard #touchui, body.touch.postcard #touch-more, body.touch.postcard #touch-action, body.touch.postcard #ride-touch { display: none !important; }
-body.atlas-open #touchui, body.atlas-open #touch-more, body.atlas-open #touch-action, body.atlas-open #ride-touch { display: none !important; }
 body.touch #photo-bar { bottom: calc(12px + env(safe-area-inset-bottom)); padding: 7px; }
 body.touch #photo.bare #photo-bar { display: block; }
 body.touch #photo-bar .keys { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; font-size: 0; }
 body.touch #photo-bar .tonly { min-width: 42px; min-height: 42px; margin: 0; padding: 5px 9px; border-radius: 5px; font-size: 14px; touch-action: manipulation; }
 body.touch #photo-bar #photo-shoot, body.touch #photo-bar #photo-exit { min-width: 66px; }
-body.touch #vehud { bottom: calc(18px + env(safe-area-inset-bottom)) !important; max-width: 52vw; white-space: normal !important; text-align: center; }
 body.touch .lil-gui.root { --width: min(330px, calc(100vw - 18px)); position: fixed; top: calc(8px + env(safe-area-inset-top)); right: calc(8px + env(safe-area-inset-right)); left: auto; bottom: calc(8px + env(safe-area-inset-bottom)); width: min(330px, calc(100vw - 18px)); max-height: none; overflow-y: auto; box-shadow: 0 4px 24px rgba(40,30,60,0.24); }
 body.touch .lil-gui.root .mobile-panel-close { display: block; position: fixed; top: calc(9px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right)); z-index: 1200; width: 42px; height: 42px; border: 1px solid rgba(58,51,70,0.3); border-radius: 50%; background: rgba(245,239,225,0.96); color: #3a3346; font: 25px Georgia, serif; touch-action: manipulation; }
 /* no mouse (a phone, a tablet): the keyboard hints give way to the touch ones */
 body.nomouse #hud .hint, body.nomouse .card .keys:not(.tkeys) { display: none; }
 .card .tkeys { display: none; }
 body.nomouse .card .tkeys { display: block; }
-.tbtn { width: 54px; height: 54px; border-radius: 50%; border: 1.5px solid rgba(58,51,70,0.45); background: rgba(245,239,225,0.72); font-size: 22px; color: #3a3346; touch-action: none; }
-.tbtn:active { background: rgba(58,51,70,0.85); color: #f7f2e6; }
-#stick { position: fixed; left: 0; top: 0; width: 112px; height: 112px; border-radius: 50%; border: 2px solid rgba(58,51,70,0.4); background: rgba(245,239,225,0.28); display: none; pointer-events: none; z-index: 41; }
-#stick.on { display: block; }
-#stick > div { position: absolute; left: 34px; top: 34px; width: 44px; height: 44px; border-radius: 50%; background: rgba(58,51,70,0.55); }
 /* the boot report (ui/diag.ts, index.html's boot guard): above everything, readable and
    screenshot-able on a phone, selectable to copy */
 #fatal { position: fixed; left: 0; right: 0; bottom: 0; max-height: 70%; overflow: auto; -webkit-overflow-scrolling: touch; background: rgba(90,20,20,0.95); color: #ffe;
@@ -217,61 +196,116 @@ body.nomouse .card .tkeys { display: block; }
   #hint.show { transform: translateY(0); }
   body.touch #photo-info { max-width: calc(100vw - 38px); font-size: 14px; white-space: normal; }
 }
+/* ---- the phone HUD (body.touch) ----
+   Three places, each for one hand's job (docs/agent/gameplay.md "Touch controls"):
+   · the left thumb walks: a stick that rests where it's drawn (#stick-home) and comes to your thumb
+     wherever you put it down in the left of the screen, following it if you run past its rim;
+   · the right thumb looks (a drag anywhere) and does: the cluster in the corner under it — Paint the
+     biggest, Fly over it, the brush beside it, and what you're next to (Board, Step in) over them all;
+     riding, the ride's own buttons take the same places;
+   · the things you do now and then — Go, Map, More — in a bar along the top right, out of the way.
+   The place name, the hint and a ride's readout read down the top left. Every button is a drawn
+   icon with its word under it. (tools/hud-audit.mjs checks every phone, both ways, every state.) */
+:root { --sl: env(safe-area-inset-left); --sr: env(safe-area-inset-right); --st: env(safe-area-inset-top); --sb: env(safe-area-inset-bottom);
+  --dock-b: 33px; --big: 72px; --btn: 56px; --col: 94px; --row: 98px; --pill-gap: 24px; }
+.tbtn { position: relative; box-sizing: border-box; width: var(--btn); height: var(--btn); padding: 0; display: grid; place-items: center; border-radius: 50%;
+  border: 1.5px solid rgba(58,51,70,0.42); background: rgba(245,239,225,0.84); color: #3a3346; box-shadow: 0 2px 10px rgba(40,30,60,0.16);
+  font: 22px Georgia, serif; touch-action: none; transition: transform 0.12s ease-out, background-color 0.12s, color 0.12s; }
+.tbtn .ic { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.tbtn.big { width: var(--big); height: var(--big); }
+.tbtn.big .ic { width: 34px; height: 34px; }
+.tbtn[data-label]::after { content: attr(data-label); position: absolute; top: calc(100% + 3px); left: 50%; transform: translateX(-50%); font: 11px/1.1 Georgia, serif;
+  letter-spacing: 0.02em; color: #3a3346; white-space: nowrap; pointer-events: none; padding: 1px 5px; border-radius: 7px; background: rgba(245,239,225,0.78); }
+.tbtn:active, .tbtn.held { transform: scale(0.9); background: rgba(58,51,70,0.86); color: #f7f2e6; }
+/* (Paint is the game's verb: ink, not paper) */
+#tphoto { background: rgba(58,51,70,0.84); color: #f7f2e6; border-color: rgba(245,239,225,0.75); }
+#tphoto:active { background: rgba(245,239,225,0.92); color: #3a3346; }
+#tfly .ic-land, body[data-ride="fly"] #tfly .ic-fly { display: none; }
+body[data-ride="fly"] #tfly .ic-land { display: block; }
+/* (buttons held down for seconds — boost, throttle, climb — mustn't raise a long-press loupe or menu) */
+.tbtn, .tmenu-btn, #touch-action { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+
+#touchui { display: none; }
+body.touch.walking #touchui { display: block; } /* (not over the intro card) */
+#tbar { position: fixed; top: calc(12px + var(--st)); right: calc(14px + var(--sr)); z-index: 40; display: flex; flex-direction: column; gap: 22px; }
+#tbar .tbtn { --btn: 46px; }
+#tbar .tbtn .ic { width: 22px; height: 22px; }
+/* the corner cluster: every button placed from one anchor, the corner under the right thumb */
+#tdock, #ride-touch { position: fixed; right: calc(16px + var(--sr)); bottom: calc(var(--dock-b) + var(--sb)); width: 1px; height: 1px; z-index: 40; }
+#ride-touch { z-index: 41; }
+#tdock > .tbtn, #ride-touch > .tbtn { position: absolute; }
+#tphoto, #trboost { right: 0; bottom: 0; }
+#tfly, #tview, #tthrottle-up { right: calc((var(--big) - var(--btn)) / 2); bottom: var(--row); }
+#tthrottle-down { right: calc((var(--big) - var(--btn)) / 2); bottom: calc((var(--big) - var(--btn)) / 2); }
+#tbrush, #tfly-down { right: var(--col); bottom: calc((var(--big) - var(--btn)) / 2); }
+#tlift, #tfly-up { right: var(--col); bottom: var(--row); }
+body.touch.driving #tdock #tfly, body.touch.driving #tbar #tgo, body.touch.driving:not([data-ride="balloon"]) #tdock #tphoto,
+body.touch.driving #tdock #tbrush, body.touch[data-ride="fly"] #tdock #tbrush, body.touch.driving #tdock #tlift, body.touch[data-ride="fly"] #tdock #tlift { display: none !important; }
+/* what you're next to, or getting out: a word over the cluster — the one thing to tap */
+#touch-action { position: fixed; right: calc(16px + var(--sr)); bottom: calc(var(--dock-b) + var(--sb) + var(--row) + var(--btn) + var(--pill-gap)); z-index: 42;
+  min-height: 50px; min-width: 120px; padding: 8px 22px; border: 1.5px solid rgba(245,239,225,0.75); border-radius: 26px; background: rgba(58,51,70,0.86);
+  box-shadow: 0 3px 14px rgba(40,30,60,0.24); color: #f7f2e6; font: 17px Georgia, serif; letter-spacing: 0.02em; touch-action: manipulation;
+  animation: pop-in 0.22s ease-out; transition: transform 0.12s ease-out; }
+#touch-action:active { transform: scale(0.94); }
+@keyframes pop-in { from { opacity: 0; transform: translateY(8px) scale(0.9); } }
+body.touch[data-ride="car"] #touch-action, body.touch[data-ride="boat"] #touch-action { bottom: calc(var(--dock-b) + var(--sb) + var(--big) + 26px); }
+/* the ⋯ drawer, down from More */
+#touch-more { position: fixed; top: calc(12px + var(--st)); right: calc(76px + var(--sr)); z-index: 43; width: min(272px, calc(100vw - 100px)); box-sizing: border-box;
+  max-height: calc(100dvh - 24px - var(--st) - var(--sb)); overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding: 9px;
+  border: 1px solid rgba(58,51,70,0.22); border-radius: 8px; background: rgba(245,239,225,0.96); box-shadow: 0 3px 18px rgba(40,30,60,0.18); animation: pop-in 0.18s ease-out; }
+/* the stick: drawn where it rests, until your thumb comes down */
+#stick-home { position: fixed; left: calc(22px + var(--sl)); bottom: calc(var(--dock-b) + var(--sb)); width: 116px; height: 116px; box-sizing: border-box; border-radius: 50%;
+  border: 2px solid rgba(58,51,70,0.3); background: rgba(245,239,225,0.24); display: none; pointer-events: none; z-index: 39; transition: opacity 0.18s; }
+#stick-home > div { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(58,51,70,0.3); }
+#stick-home > span { position: absolute; left: 0; right: 0; bottom: 9px; text-align: center; font: italic 12px Georgia, serif; color: #3a3346; opacity: 0.8;
+  text-shadow: 0 0 4px rgba(245,239,225,1); }
+body.stick-taught #stick-home > span { display: none; }
+body.touch.walking #stick-home { display: block; }
+body.stick-on #stick-home { opacity: 0; }
+#stick { position: fixed; left: 0; top: 0; width: 116px; height: 116px; box-sizing: border-box; border-radius: 50%; border: 2px solid rgba(58,51,70,0.42);
+  background: rgba(245,239,225,0.3); display: none; pointer-events: none; z-index: 41; }
+#stick.on { display: block; }
+#stick > div { position: absolute; left: 33px; top: 33px; width: 46px; height: 46px; border-radius: 50%; background: rgba(58,51,70,0.58); box-shadow: 0 1px 6px rgba(40,30,60,0.25); }
+/* (the world covered — a painting, the map, the brush — the controls step aside) */
+body.touch.postcard #touchui, body.touch.postcard #touch-more, body.touch.postcard #touch-action, body.touch.postcard #ride-touch, body.touch.postcard #stick-home,
+body.atlas-open #touchui, body.atlas-open #touch-more, body.atlas-open #touch-action, body.atlas-open #ride-touch, body.atlas-open #stick-home { display: none !important; }
+/* the top left, read downward: the place, the hint (or a ride's readout, then the hint) */
+body.touch #hud { left: calc(16px + var(--sl)); right: auto; top: calc(10px + var(--st)); bottom: auto; max-width: calc(100vw - 96px - var(--sl) - var(--sr)); }
+body.touch #place { font-size: 19px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.touch #clock { font-size: 13px; }
+body.touch #hint { left: calc(16px + var(--sl)); right: auto; top: calc(60px + var(--st)); bottom: auto; max-width: calc(100vw - 96px - var(--sl) - var(--sr)); box-sizing: border-box;
+  transform: translateY(-6px); white-space: normal; text-align: left; font-size: 13px; line-height: 1.3; padding: 6px 13px; }
+body.touch #hint.show { transform: translateY(0); }
+body.touch #vehud { left: calc(16px + var(--sl)) !important; top: calc(60px + var(--st)); bottom: auto !important; transform: none !important; box-sizing: border-box;
+  max-width: calc(100vw - 96px - var(--sl) - var(--sr)); white-space: normal !important; text-align: left; font-size: 13px !important; }
+body.touch #vehud .vkeys { display: none; } /* (the live numbers only — how to drive came up as you got in) */
+body.touch.driving #hint { top: calc(98px + var(--st)); }
+body.touch[data-ride="plane"] #hint, body.touch[data-ride="balloon"] #hint { top: calc(120px + var(--st)); }
+body.touch #toast { top: calc(26dvh + var(--st)); max-width: calc(100vw - 40px); box-sizing: border-box; white-space: normal; text-align: center; }
+/* (ODbL: the credit along the bottom edge, in the gap under the stick and the cluster — one line) */
+body.touch #osm-credit { left: 50%; right: auto; top: auto; bottom: calc(3px + var(--sb)); transform: translateX(-50%); white-space: nowrap; font-size: min(10px, 2.7vw); z-index: 10; }
+/* A phone on its side: the bar along the top, the cluster lower and tighter (the height is short). */
 @media (orientation: landscape) and (max-height: 500px) {
-  body.touch.walking #touchui { right: calc(8px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); width: 154px; flex-direction: row; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
-  body.touch.walking #touchui .tbtn { width: 46px; height: 46px; }
-  body.touch.walking #touchui #tlift { width: 46px; height: 46px; }
-  #touch-more { right: calc(166px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; }
-  #touch-action { right: calc(166px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); }
-  body.touch.driving #touch-action { bottom: calc(70px + env(safe-area-inset-bottom)); } /* (over the ride's buttons) */
-  body.touch[data-ride="balloon"] #touch-action { bottom: calc(194px + env(safe-area-inset-bottom)); }
-  /* (centred over the place name, clear of the dock, wrapping — pinned at both ends it was squeezed
-     narrower than its own line) */
-  #hint { left: 50%; right: auto; bottom: calc(76px + env(safe-area-inset-bottom)); max-width: calc(100vw - 332px - 2 * env(safe-area-inset-right)); box-sizing: border-box;
-    white-space: normal; text-align: center; transform: translate(-50%, 8px); }
-  #hint.show { transform: translate(-50%, 0); }
-  body.touch.driving #hint { bottom: calc(124px + env(safe-area-inset-bottom)); } /* (over Get out) */
-  body.touch[data-ride="fly"] #hint, body.touch[data-ride="balloon"] #hint { max-width: calc(100vw - 460px - 2 * env(safe-area-inset-right)); } /* (clear of climb / sink) */
-  #ride-touch { right: calc(166px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); }
-  /* (the ride's readout beside its buttons, like a dial by the pedals: the live numbers only — how
-     to drive came up as you got in) */
-  body.touch.driving #vehud { left: auto !important; right: calc(228px + env(safe-area-inset-right)); transform: none !important; max-width: none; box-sizing: border-box; }
-  body.touch[data-ride="plane"] #vehud, body.touch[data-ride="balloon"] #vehud { right: calc(290px + env(safe-area-inset-right)); max-width: max(170px, calc(100vw - 540px)); }
-  body.touch #vehud .vkeys { display: none; }
-  /* (…and the place name ends short of it) */
-  body.touch.driving #place { max-width: calc(100vw - 380px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  body.touch[data-ride="plane"] #place, body.touch[data-ride="balloon"] #place { max-width: calc(100vw - 330px - max(170px, 100vw - 540px)); }
-  /* (the credit line from under the dock to the top edge, all of it readable: along the bottom a
-     phone this size has no room for it beside the place name and a ride's buttons) */
-  body.touch #osm-credit { top: calc(4px + env(safe-area-inset-top)); bottom: auto; right: calc(18px + env(safe-area-inset-right)); }
+  :root { --dock-b: 27px; --big: 64px; --btn: 52px; --col: 82px; --row: 84px; }
+  #tbar { top: calc(8px + var(--st)); flex-direction: row; gap: 14px; }
+  #tbar .tbtn { --btn: 44px; }
+  #touch-more { top: calc(74px + var(--st)); right: calc(14px + var(--sr)); max-height: calc(100dvh - 86px - var(--st) - var(--sb)); }
+  #stick-home, #stick { width: 108px; height: 108px; }
+  #stick > div { left: 29px; top: 29px; }
+  body.touch #hud, body.touch #hint, body.touch #vehud { max-width: calc(100vw - 250px - var(--sl) - var(--sr)); }
+  body.touch #hint { top: calc(52px + var(--st)); }
+  body.touch #vehud { top: calc(52px + var(--st)); }
+  body.touch.driving #hint { top: calc(88px + var(--st)); }
+  body.touch[data-ride="plane"] #hint, body.touch[data-ride="balloon"] #hint { top: calc(106px + var(--st)); }
+  body.touch #toast { top: calc(20dvh + var(--st)); }
   body.touch #photo-bar { max-height: 43dvh; overflow-y: auto; }
   body.touch #photo-info { font-size: 12px; }
 }
-/* (a very small phone on its side, in a balloon's basket: no room for a hint beside burn, vent,
-   the view and Jump out — the hint gives way) */
-@media (orientation: landscape) and (max-height: 500px) and (max-width: 640px) {
-  body.touch[data-ride="balloon"] #hint { display: none; }
-}
-/* A phone held upright: the bottom edge is the place name, the hint over it, the dock, and the
-   ride's own buttons in a second column beside the dock. */
-@media (orientation: portrait) and (max-width: 640px) {
-  /* (the ride's readout in the free corner under the dock, clear of the place name: the live
-     numbers only — how to drive came up as you got in) */
-  body.touch #vehud { left: auto !important; right: calc(16px + env(safe-area-inset-right)); bottom: calc(30px + env(safe-area-inset-bottom)) !important; transform: none !important;
-    max-width: calc(50vw - 24px); box-sizing: border-box; text-align: right; }
-  body.touch #vehud .vkeys { display: none; }
-  body.touch.driving #place { max-width: calc(50vw - 30px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* (the left half is the place's) */
-  /* (climb / sink, boost, throttle or Drive beside the dock: the hint ends short of them) */
-  body.touch[data-ride="fly"] #hint, body.touch[data-ride="balloon"] #hint, body.touch[data-ride="car"] #hint, body.touch[data-ride="boat"] #hint { right: calc(146px + env(safe-area-inset-right)); }
-  body.touch[data-ride="plane"] #hint, body.touch[data-ride="near"] #hint { right: calc(206px + env(safe-area-inset-right)); }
-  /* (a balloon's four numbers in two small lines under the dock, the place name giving way) */
-  body.touch[data-ride="balloon"] #vehud { max-width: calc(60vw - 16px); font-size: 12px !important; }
-  body.touch[data-ride="balloon"] #place { max-width: calc(40vw - 30px); }
-}
-@media (orientation: portrait) and (max-width: 340px) {
-  /* (a plane's three numbers in two lines under the dock, the place name giving way) */
-  body.touch[data-ride="plane"] #vehud { max-width: calc(60vw - 16px); font-size: 12px !important; }
-  body.touch[data-ride="plane"] #place { max-width: calc(40vw - 30px); }
+/* (the shortest phones on their side, under 330 px: the word for what you're next to sits a
+   little closer over the cluster, so it fits under the bar) */
+@media (orientation: landscape) and (max-height: 330px) {
+  :root { --pill-gap: 14px; }
+  #touch-action { min-height: 44px; padding: 5px 20px; }
 }
 
 /* ---- the Almanac ---- */

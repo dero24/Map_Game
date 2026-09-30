@@ -2,6 +2,30 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-01 — Phone controls rebuilt: a stick you can see, Paint under your thumb, every button named
+
+- **What a phone showed** (real game, Pixel 7, both ways): six identical unlabelled circles —
+  ✈ ⌂ ☰ ▣ ✎ ⋯ — stacked down the right edge (a 3 × 2 block in the corner on its side); Paint, the
+  game's verb, looked like everything else; ⌂ read as "home", not "go anywhere"; and the walking
+  stick was invisible until a thumb happened to land in the empty left half.
+- **Now** (index.html, style.css "the phone HUD", controller.ts, main.ts): each hand has one job.
+  The left thumb walks — the stick is drawn where it rests ("walk" in it until you've used it
+  once), comes to your thumb, and follows a thumb that runs past its rim, so you never lift to find
+  it. The right thumb looks and does — a cluster in the corner: Paint (72 px, ink) in the corner,
+  Fly (Land while flying) over it, Brush beside it, Lift in a lobby, and what you're next to (Board /
+  Drive / Step in / Get out) as an ink pill over them that pops in. Riding, the ride's buttons take
+  the same places (Boost in the corner; Faster / Slower; Up / Down — Burn / Vent in a balloon — beside
+  Paint; View over it). Go / Map / More sit along the top right, out of the way. Every button is a
+  drawn icon with its word under it; hints and toasts use those words (Paint, Land, Map, Boost…),
+  and the brush's hint no longer says P and B on a phone. Buttons shrink under the finger (and stay
+  pressed while held), and tick on Android. The place name, the hint and a ride's readout read down
+  the top left; the credit is one line along the bottom.
+- **Verified**: `tools/hud-audit.mjs` (now per button with its word, the stick's ring, and a
+  by-a-lift state; `--shots` writes every layout) — 140 layouts (10 phones × both ways × 7 states),
+  no overlaps. Real game on a Pixel 7 emulation, both ways, driven by touch: the stick walked ~7 m
+  and followed the thumb past its rim, its "walk" cleared, Fly turned to Land and took off.
+  typecheck, 495 tests (interiorTower's 5 s timeout under load passes alone), build.
+
 ## 2026-09-30 (night) — A house on a tile line built once; the shore test on streamed tiles only
 
 - **Tile ownership is half-open** (`scripts/lib/tiles.mjs` `ownsPoint`): a building centred exactly

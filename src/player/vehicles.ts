@@ -492,14 +492,14 @@ export class Vehicles {
     if (v.kind === 'balloon') {
       // in the basket: you look where you were looking (first person — the look is yours)
       this.o.walker.pitch = Math.max(this.o.walker.pitch, 0.15);
-      this.o.toast(thumbs() ? 'hold ▲ to burn and rise, ▼ to vent · let go and it holds its height · the wind steers — pick a layer'
+      this.o.toast(thumbs() ? 'hold Burn to rise, Vent to sink · let go and it holds its height · the wind steers — pick a layer'
         : 'hold Space to burn and rise, C to vent · let go and it holds its height · the wind steers: pick a layer · V the view · E out');
       return;
     }
     this.o.walker.yaw = 0; // walker yaw/pitch become orbit offsets while riding
     this.o.walker.pitch = 0;
     const hint = thumbs()
-      ? v.kind === 'car' ? 'the stick drives and steers · hold ⇧ to boost' : v.kind === 'boat' ? 'the stick steers and throttles · hold ⇧ for more' : 'hold + for throttle · pull the stick back to climb'
+      ? v.kind === 'car' ? 'the stick drives and steers · hold Boost to go faster' : v.kind === 'boat' ? 'the stick steers and throttles · hold Boost for more' : 'hold Faster for throttle · pull the stick back to climb'
       : v.kind === 'car' ? 'W/S drive · A/D steer · Shift boost · E to get out' : v.kind === 'boat' ? 'W/S throttle · A/D steer · E to get out (near shore)' : 'Shift/C throttle · W/S pitch · A/D bank · E to jump out';
     this.o.toast(hint);
   }
@@ -520,7 +520,7 @@ export class Vehicles {
         walkParams.fly = true;
         w.y = v.y + 1;
         v.bs!.hold = v.y;
-        this.o.toast(`you step out into the sky — ${thumbs() ? '✈' : 'F'} to come down`);
+        this.o.toast(`you step out into the sky — ${thumbs() ? 'Land' : 'F'} to come down`);
         return;
       }
     }
@@ -529,7 +529,7 @@ export class Vehicles {
       w.place(v.x, v.z, back, -0.1);
       walkParams.fly = true;
       w.y = v.y + 1;
-      this.o.toast(`you step out into the sky — ${thumbs() ? '✈' : 'F'} to come down`);
+      this.o.toast(`you step out into the sky — ${thumbs() ? 'Land' : 'F'} to come down`);
       v.v = 0;
       v.airborne = false;
       v.y = this.ground(v.x, v.z) + 1.2;
@@ -636,7 +636,7 @@ export class Vehicles {
     p.v = 48;
     p.throttle = 0.55;
     this.pose(p);
-    this.o.toast(`no clear run here — a plane circles overhead; ${thumbs() ? '✈ to fly up, then Board' : 'F to fly up, then E'}`);
+    this.o.toast(`no clear run here — a plane circles overhead; ${thumbs() ? 'Fly up, then Board' : 'F to fly up, then E'}`);
   }
 
   // ---------------- per-frame ----------------
@@ -696,7 +696,7 @@ export class Vehicles {
       : `${v.kind === 'car' ? '🚗' : '⛵'} ${kmh} km/h`;
     const keys = v.kind === 'plane'
       ? ` · ${touch ? 'stick: pitch / bank · +/−: throttle' : 'E to jump out'}`
-      : ` · ${touch ? 'left stick: steer / throttle · ⇧: boost' : 'E to get out'}`;
+      : ` · ${touch ? 'left stick: steer / throttle · Boost: faster' : 'E to get out'}`;
     if (this.hudVal.textContent !== val) this.hudVal.textContent = val;
     if (this.hudKeys.textContent !== keys) this.hudKeys.textContent = keys;
     return true;
