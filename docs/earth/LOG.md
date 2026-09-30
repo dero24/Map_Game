@@ -2,6 +2,17 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-02 (later) — Weather to test against; fog now and then, anywhere
+
+- The owner liked the odd random fog — kept, rarer: drifting fog 'rare, anywhere' (default; about
+  one hour in eleven, lighter than a coast's, plus the coastal morning marine layer), 'coastal
+  mornings' or 'never' (panel Weather → drifting fog).
+- Weather presets (panel Weather → weather preset): clear, fair, hazy summer, marine layer, thick
+  fog, overcast, blustery, snow day, or drifting — checked in the game by choosing each in the
+  panel's own dropdown.
+- tests/interiorTower.test.ts: a 30 s limit (its 39-storey plans take 5–6 s on a slow machine — the
+  "failures" of the last sessions); 501 tests pass.
+
 ## 2026-10-02 — The white wall: fog along the sight line; a phone's view sharper and farther
 
 - **Reported** (a phone over Seattle, 250–300 m up): past ~1 km everything sank into a flat white

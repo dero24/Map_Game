@@ -1286,7 +1286,12 @@ async function main() {
       const morning = 1 - Math.min(1, Math.max(0, (timeParams.hour - 9) / 2)); // (gone by 11)
       const early = timeParams.hour >= 4.5 ? morning : 0;
       const coast = 1 - Math.min(1, Math.max(0, (world.terrain.oceanDistAt(walker.x, walker.z) - 200) / 300)); // (oceanD tops out at 510 m: "inland")
-      weatherParams.seaFog = Math.max(0, Math.sin(t * 0.23 + 0.4) * 0.8 - 0.5) * early * coast;
+      const bank = Math.max(0, Math.sin(t * 0.23 + 0.4) * 0.8 - 0.5); // (a fog bank's hours: ~a fifth of them)
+      const marine = bank * early * coast;
+      // …and now and then, anywhere: a slower gate lets about one bank in three through (~one hour
+      // in eleven), lighter than a coast's — 'rare, anywhere' (the panel's drifting fog)
+      const rare = Math.sin(t * 0.071 + 2.1) > 0.35 ? bank * 0.8 : 0;
+      weatherParams.seaFog = weatherParams.fogMode === 'never' ? 0 : weatherParams.fogMode === 'coastal mornings' ? marine : Math.max(marine, rare);
       weatherParams.wind = 0.45 + 0.3 * Math.sin(t * 0.5);
     }
     const k = Math.min(1, dt * 0.8);

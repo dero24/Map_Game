@@ -30,8 +30,12 @@ or per-region style.
   density along the whole sight line — eye height to the point's (`layerMean`, exact) — not the
   point's own layer taken the whole way: from a hill or a balloon the distant streets were buried
   under a flat white sheet while tower tops rose out of it. At street level eye and point share a
-  layer, so nothing changes there. Auto weather's sea fog is a marine layer: coastal (oceanD <
-  ~500 m), mornings, burned off by 11 (main.ts); never inland.
+  layer, so nothing changes there. Drifting weather's fog (`weatherParams.fogMode`, panel
+  "drifting fog"): 'rare, anywhere' (default — about one hour in eleven, lighter, plus a coast's
+  morning marine layer), 'coastal mornings' (oceanD < ~500 m, burned off by 11) or 'never'.
+- Weather presets (panel Weather → "weather preset", `WEATHER_PRESETS` in ui/panel.ts): clear, fair,
+  hazy summer, marine layer, thick fog, overcast, blustery, snow day — each pins the weather
+  (drifting off); 'drifting' hands it back to the clock. Moving any slider shows 'custom'.
 - Coplanar layers carry a polygon offset, in depth units (constant in steps, so metres far off and a
   hair up close). Streets, lakes and shore foam are pulled forward (−1/−4); wakes −2/−6; the sea
   plane is pushed back (+1/+2) under shore ground.
