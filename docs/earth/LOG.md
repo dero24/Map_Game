@@ -30,7 +30,10 @@ Newest first. One entry per work session: what changed, what was verified, what'
 - **Manhattan on a phone** (headless Pixel 7, phone tier, four hops round Midtown): 0 lost GPU
   contexts, 0 errors, peak renderer 1,006 MB, GPU process 724 MB. The public Overpass servers
   were down (the tile service answered 503 for uncached cells), so the detail tiles were the
-  procedural stand-ins — the real-tile run is still owed.
+  procedural stand-ins — the real-tile run is still owed. Re-run with the cap: the silhouette ring
+  held at 86–89 MB every hop (was 171–190), 0 lost contexts, 0 errors; peak renderer 1,021 MB
+  (JS heap and page textures dominate it now), GPU process 694 MB. The tile service still
+  answered 503 for Midtown at the end of the day.
 
 ## 2026-09-30 (later) — Balloons, painting to the horizon, and the core loop reviewed
 
