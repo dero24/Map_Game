@@ -20,7 +20,9 @@ describe('pickTier', () => {
     for (const d of [PIXEL7, IPHONE, IPAD]) {
       const t = pickTier(d);
       expect(t.tier).toBe('phone');
-      expect(t.post.hiDpi).toBe(false);
+      expect(t.post.hiDpi).toBe(true); // (up to 1.5×: at CSS pixels a phone's paint was a smear)
+      expect(t.post.paintDetail).toBeGreaterThanOrEqual(0.75);
+      expect(t.stream.coarseR).toBeGreaterThanOrEqual(6000); // (the middle distance, not haze)
       expect(t.shadow.size).toBe(1024);
       expect(t.paintTex).toBe(2048);
       expect(t.stream.loadR).toBeLessThan(1500);
@@ -79,12 +81,12 @@ describe('applyTier', () => {
     const post = { hiDpi: true, paintDetail: 0.82, renderScale: 1, exposure: 0.92 };
     const shadow = { size: 2048, enabled: true };
     const stream = { loadR: 1500, dropR: 2400, coarseR: 8000 };
-    const set = applyTier(pickTier(PIXEL7), { post, shadow, stream }, new Set(['post.paintDetail']));
-    expect(post.hiDpi).toBe(false);
+    const set = applyTier(pickTier({ ...PIXEL7, memoryGB: 2 }), { post, shadow, stream }, new Set(['post.paintDetail']));
+    expect(post.hiDpi).toBe(false); // (a weak phone: CSS pixels)
     expect(post.paintDetail).toBe(0.82); // saved in the panel — kept
     expect(post.exposure).toBe(0.92);
     expect(shadow.size).toBe(1024);
-    expect(stream.loadR).toBe(900);
+    expect(stream.loadR).toBe(750);
     expect(set).toContain('post.hiDpi');
     expect(set.includes('post.paintDetail')).toBe(false);
   });

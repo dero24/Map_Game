@@ -2,6 +2,28 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-02 — The white wall: fog along the sight line; a phone's view sharper and farther
+
+- **Reported** (a phone over Seattle, 250–300 m up): past ~1 km everything sank into a flat white
+  sheet, tower tops standing clear of it; with the paint on, a smear.
+- **Why the sheet**: `applyFog` fogged a point by the density of its own layer (thick near the
+  ground, a ~33 m scale) times the whole distance — from a balloon or a hill, the sight line
+  mostly crosses thin air, but distant streets were fogged as if it hugged the ground the whole
+  way. Now the mean density along the sight line, eye height to point height (`layerMean`, exact).
+  At street level eye and point share a layer: Sea Bright's street view before/after identical.
+- **…and the sea fog**: auto weather rolled a sea-fog layer over every town a third of the time
+  (0.30 over inland Seattle when shot). Now a marine layer: coastal (oceanD < ~500 m), mornings,
+  gone by 11.
+- **A phone, sharper and farther** (quality.ts phone tier): hi-DPI paint (≤ 1.5×) and a canvas at
+  that ratio on phones only (setPixelRatio 1 stretched a DPR-3 screen ~3×), paint detail 0.75, a
+  6 km silhouette ring and skyline (under coarseMB). Auto quality now measures once the ring
+  has streamed in (≤ 40 s wait) — measured during the burst, a phone that holds 60 fps after was
+  stepped down for good. (SwiftShader here is slow enough to step down: sharpness is for a real
+  phone to show.)
+- **Evidence**: shots/phone-view-montage.jpg (Pixel 7 emulation, network trusted): Queen Anne at
+  250 m before — a white wall past 1 km; after — the water and the far shore. hud-audit 140 clean;
+  483 tests (interiorTower's 5 s timeouts excluded — they fail on the previous commit here too).
+
 ## 2026-10-01 (night) — Paint-as-you-explore only when picked; the open world's sea without a canvas
 
 - **No bleed**: the far sketch (pencil to the horizon, photos painting the frame) is off unless

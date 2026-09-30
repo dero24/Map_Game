@@ -698,6 +698,9 @@ async function main() {
   renderer.compile(scene, camera);
   if (firstPlan !== undefined) interiors.prime(null);
   const resize = () => {
+    // a phone's canvas at up to 1.5× its CSS pixels when the paint is hi-DPI (at 1× a DPR-3 screen
+    // stretched every painted pixel ~3× — the blur); a PC's stays at 1× (its paint supersamples)
+    renderer.setPixelRatio(tier.tier !== 'desktop' && postParams.hiDpi ? Math.min(1.5, Math.max(1, devicePixelRatio || 1)) * postParams.renderScale : 1);
     renderer.setSize(innerWidth, innerHeight, false);
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
@@ -1231,11 +1234,15 @@ async function main() {
   // seconds into the walk on a GPU that can't hold ~40 fps; still slow after that, the render
   // scale and the shadow map follow (quality.ts autoSteps) — never a knob the player set in the
   // panel. The boot tier (quality.ts pickTier) already chose lighter defaults for phones.
-  let qT = 0, qN = 0, qSum = 0, qRound = 0, qDone = CAPTURE;
+  let qT = 0, qN = 0, qSum = 0, qRound = 0, qDone = CAPTURE, qWait = 0;
   const autoQuality = (rawDt: number) => {
     if (qDone || interiors.indoors) return;
     qT += rawDt;
-    if (qT < 4) return; // let the first tiles settle
+    // let the first tiles settle: the frames while the ring streams in are the slowest a device
+    // will have, and measured then, a phone that holds 60 fps afterwards was marked slow for good
+    qWait += rawDt;
+    if (stream.busy && qWait < 40) { (qT = 0), (qN = 0), (qSum = 0); return; } // (at most 40 s: a city streams on)
+    if (qT < 4) return;
     qSum += rawDt;
     qN++;
     if (qT < 10) return;
@@ -1273,7 +1280,13 @@ async function main() {
     if (weatherParams.autoWeather) {
       const t = worldMs / 3.6e6; // hours
       weatherParams.cloud = 0.3 + 0.3 * Math.sin(t * 0.37 + 1.3) * Math.sin(t * 0.11);
-      weatherParams.seaFog = Math.max(0, Math.sin(t * 0.23 + 0.4) * 0.8 - 0.45);
+      // sea fog as the coast has it: a marine layer some mornings, by the water — burned off by
+      // late morning, never inland (it rolled over every town a third of the time, a white sheet
+      // under the towers on a clear day)
+      const morning = 1 - Math.min(1, Math.max(0, (timeParams.hour - 9) / 2)); // (gone by 11)
+      const early = timeParams.hour >= 4.5 ? morning : 0;
+      const coast = 1 - Math.min(1, Math.max(0, (world.terrain.oceanDistAt(walker.x, walker.z) - 200) / 300)); // (oceanD tops out at 510 m: "inland")
+      weatherParams.seaFog = Math.max(0, Math.sin(t * 0.23 + 0.4) * 0.8 - 0.5) * early * coast;
       weatherParams.wind = 0.45 + 0.3 * Math.sin(t * 0.5);
     }
     const k = Math.min(1, dt * 0.8);

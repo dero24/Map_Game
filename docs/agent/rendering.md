@@ -25,6 +25,13 @@ or per-region style.
   the sea, 0.25–40 m, in quarter-octave steps. At a fixed 25 cm, a 24-bit depth step was ~1 m at
   2 km, and low shore ground fought the sea plane from the air. Anything reading depth takes
   `camera.near` each frame (`post.ts`, `readSeen`); never assume 0.25.
+- Fog (`shared.ts` `applyFog`): density `uFogDensity` (haze), thinning upward with `uFogFalloff`
+  (scale ~33 m) plus a sea-fog term; heights are above the ground where you stand. It is the mean
+  density along the whole sight line — eye height to the point's (`layerMean`, exact) — not the
+  point's own layer taken the whole way: from a hill or a balloon the distant streets were buried
+  under a flat white sheet while tower tops rose out of it. At street level eye and point share a
+  layer, so nothing changes there. Auto weather's sea fog is a marine layer: coastal (oceanD <
+  ~500 m), mornings, burned off by 11 (main.ts); never inland.
 - Coplanar layers carry a polygon offset, in depth units (constant in steps, so metres far off and a
   hair up close). Streets, lakes and shore foam are pulled forward (−1/−4); wakes −2/−6; the sea
   plane is pushed back (+1/+2) under shore ground.

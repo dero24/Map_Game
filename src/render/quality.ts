@@ -49,7 +49,11 @@ const TIERS: Record<Tier, Omit<TierConfig, 'tier' | 'why'>> = {
   // detail tiles and a 4 km silhouette ring, 2048² ground paint (a quarter of the slice canvas).
   // The ring's detail tiles keep under 200 MB of vertices (a shore town's whole ring is ~110; one
   // downtown cell can be 100+), two real tiles build at once, and a 4 km skyline
-  phone: { post: { hiDpi: false, paintDetail: 0.6 }, shadow: { size: 1024 }, stream: { loadR: 900, dropR: 1500, coarseR: 4000, budgetMB: 200, realConc: 2, coarseMB: 90 }, paintTex: 2048, lidar: false, skylineR: 4000 },
+  // (sharper and farther since 2026-10-01: at CSS pixels and 60% paint a phone's view was a smear,
+  // and 4 km of silhouettes left the middle distance to the haze — hi-DPI to 1.5×, 75% paint, a
+  // 6 km ring and skyline; the silhouettes stay under coarseMB, and auto quality steps a slow one
+  // down once the streaming has settled)
+  phone: { post: { hiDpi: true, paintDetail: 0.75 }, shadow: { size: 1024 }, stream: { loadR: 900, dropR: 1500, coarseR: 6000, budgetMB: 200, realConc: 2, coarseMB: 90 }, paintTex: 2048, lidar: false, skylineR: 6000 },
   // …and a weak phone (or one whose last visit died): no shadow pass either — every tree, house and
   // car drawn a second time into the shadow map was half the vertex work of a frame
   low: { post: { hiDpi: false, paintDetail: 0.5, renderScale: 0.75 }, shadow: { size: 1024, enabled: false }, stream: { loadR: 750, dropR: 1300, coarseR: 2500, budgetMB: 120, realConc: 1, coarseMB: 60 }, paintTex: 1024, lidar: false, skylineR: 3000 },
