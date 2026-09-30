@@ -124,6 +124,8 @@ export class Vehicles {
   private group = new THREE.Group();
   private hud: HTMLElement;
   private keys = new Set<string>();
+  private touchBoost = false;
+  private touchThrottle = 0;
   private taken = new Set<string>(); // parked-car instances ('tile:index') the player drove off in
   private camPos = new THREE.Vector3();
   private camInit = false;
@@ -173,7 +175,7 @@ export class Vehicles {
       }
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => this.keys.clear());
+    window.addEventListener('blur', () => { this.keys.clear(); this.touchBoost = false; this.touchThrottle = 0; });
     this.restore();
   }
 
@@ -199,6 +201,10 @@ export class Vehicles {
   }
 
   get driving() { return this.active !== null; }
+  /** The touch interaction button and double-tap use the same eligibility as E. */
+  interact() { if (!this.o.enabled()) return false; this.toggle(); return true; }
+  setTouchBoost(down: boolean) { this.touchBoost = down; }
+  setTouchThrottle(value: number) { this.touchThrottle = Math.max(-1, Math.min(1, value)); }
   /** Each frame a ride moves: (kind, x, y, z, vx, vz). main.ts hands it to life (knockdowns) and critters (they scatter). */
   onMove: ((kind: VKind, x: number, y: number, z: number, vx: number, vz: number) => void) | null = null;
   /** The ride you're in (sound + HUD): kind, model, speed m/s, throttle 0..1. */
@@ -523,6 +529,7 @@ export class Vehicles {
   // ---------------- per-frame ----------------
   private k(c: string) { return this.keys.has(c); }
   private axis(pos: string[], neg: string[]) { return (pos.some((c) => this.k(c)) ? 1 : 0) - (neg.some((c) => this.k(c)) ? 1 : 0); }
+  private axisTouch(pos: string[], neg: string[], touch: number) { return Math.max(-1, Math.min(1, this.axis(pos, neg) + touch)); }
 
   /** Advance the ridden vehicle and the camera. Returns false when on foot (walker drives the camera). */
   private saveT = 10;
@@ -557,16 +564,18 @@ export class Vehicles {
     this.chase(v, dt, cam);
     const kmh = Math.round(Math.abs(v.v) * 3.6);
     this.hud.style.display = 'block';
+    const touch = document.body.classList.contains('touch');
     this.hud.textContent = v.kind === 'plane'
-      ? `✈ ${kmh} km/h · alt ${Math.round(v.y - this.ground(v.x, v.z))} m · throttle ${Math.round(v.throttle * 100)}% · E to jump out`
-      : `${v.kind === 'car' ? '🚗' : '⛵'} ${kmh} km/h · E to get out`;
+      ? `✈ ${kmh} km/h · alt ${Math.round(v.y - this.ground(v.x, v.z))} m · throttle ${Math.round(v.throttle * 100)}% · ${touch ? 'stick: pitch / bank · +/−: throttle' : 'E to jump out'}`
+      : `${v.kind === 'car' ? '🚗' : '⛵'} ${kmh} km/h · ${touch ? 'left stick: steer / throttle · ⇧: boost' : 'E to get out'}`;
     return true;
   }
 
   private drive(v: Veh, dt: number) {
     const walk = this.o.walk;
-    const thr = this.axis(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown']);
-    const boost = this.k('ShiftLeft') || this.k('ShiftRight');
+    const axes = this.o.walker.touchAxes;
+    const thr = this.axisTouch(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown'], -axes.y);
+    const boost = this.k('ShiftLeft') || this.k('ShiftRight') || this.touchBoost;
     const vmax = boost ? 38 : 24;
     if (thr > 0) v.v += (v.v < -0.3 ? 14 : boost ? 9 : 6) * dt;
     else if (thr < 0) v.v -= (v.v > 0.3 ? 14 : 4) * dt;
@@ -576,7 +585,7 @@ export class Vehicles {
     const pull = 9.8 * Math.sin(v.pitch);
     if (thr !== 0 || Math.abs(v.v) > 0.3 || Math.abs(v.pitch) > 0.15) v.v -= pull * 0.8 * dt;
     v.v = Math.max(-7, Math.min(vmax, v.v));
-    const st = this.axis(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight']);
+    const st = this.axisTouch(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight'], -axes.x);
     v.steer += (st - v.steer) * Math.min(1, dt * 5);
     const maxSteer = 0.55 / (1 + Math.abs(v.v) * 0.06);
     v.yaw += (v.v / 2.7) * Math.tan(v.steer * maxSteer) * dt;
@@ -615,13 +624,14 @@ export class Vehicles {
   }
 
   private sail(v: Veh, dt: number) {
-    const thr = this.axis(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown']);
-    const boost = this.k('ShiftLeft') || this.k('ShiftRight');
+    const axes = this.o.walker.touchAxes;
+    const thr = this.axisTouch(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown'], -axes.y);
+    const boost = this.k('ShiftLeft') || this.k('ShiftRight') || this.touchBoost;
     const vmax = boost ? 20 : 12;
     if (thr !== 0) v.v += thr * (thr > 0 ? 3.2 : 2.5) * dt;
     else v.v -= Math.sign(v.v) * Math.min(Math.abs(v.v), 1.1 * dt);
     v.v = Math.max(-4, Math.min(vmax, v.v));
-    const st = this.axis(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight']);
+    const st = this.axisTouch(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight'], -axes.x);
     v.steer += (st - v.steer) * Math.min(1, dt * 3);
     v.yaw += v.steer * (0.22 + Math.min(Math.abs(v.v), 9) * 0.07) * Math.sign(v.v || 1) * dt;
     const nx = v.x - Math.sin(v.yaw) * v.v * dt, nz = v.z - Math.cos(v.yaw) * v.v * dt;
@@ -636,10 +646,11 @@ export class Vehicles {
   }
 
   private fly(v: Veh, dt: number) {
-    const thr = this.axis(['ShiftLeft', 'ShiftRight', 'KeyR'], ['KeyC', 'KeyX']);
+    const axes = this.o.walker.touchAxes;
+    const thr = Math.max(-1, Math.min(1, this.axis(['ShiftLeft', 'ShiftRight', 'KeyR'], ['KeyC', 'KeyX']) + this.touchThrottle));
     v.throttle = Math.max(0, Math.min(1, v.throttle + thr * dt * 0.6));
-    const pitchIn = this.axis(['KeyS', 'ArrowDown'], ['KeyW', 'ArrowUp']); // S = nose up (pull back)
-    const rollIn = this.axis(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight']);
+    const pitchIn = this.axisTouch(['KeyS', 'ArrowDown'], ['KeyW', 'ArrowUp'], axes.y); // S = nose up (pull back)
+    const rollIn = this.axisTouch(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight'], -axes.x);
     const ground = this.ground(v.x, v.z);
     // gear on the ground; a raised nose swings the tail down about the origin, so lift by that
     const gear = v.gearY + 0.05 + Math.max(0, Math.sin(v.pitch)) * 3.4;

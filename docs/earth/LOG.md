@@ -2,6 +2,24 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-29 — Mobile control parity
+
+- Kept the existing walking thumbstick behavior intact and reused its axes for vehicles.
+- Added contextual enter/exit controls plus a deliberate double-tap gesture in the look area
+  when the same interaction is available. Added touch boost and plane throttle controls.
+- Added a More drawer for planting, seed cycling, time skip, and flight controls, plus a mobile
+  Options drawer with developer controls and ride summoning behind the existing debug toggle.
+- Added touch controls for photo zoom, light-time steps, and frame visibility; pinch-to-zoom;
+  brush rotation; and mobile guidance for the existing lift and map controls.
+- Verified with `npm run init` (47 test files, 450 tests), `npm run build`, and Pixel 7/iPhone
+  mobile-check runs. Both device emulations booted in phone quality with shader limits in range
+  and zero page or console errors. Reviewed `shots/shore-montage.jpg`; OSM credit remains visible.
+- Headless emulation is not a physical-device check. Tile-health probes and some map requests
+  could not reach local tile/Overpass services; repeat the real-phone check after Pages deploy.
+- The feature queue had 12 pre-existing `in_progress` items, contrary to its one-active-item
+  invariant. Selected `phones` for this work and returned the other 11 to `not_started`, keeping
+  their notes/evidence, so `npm run init` can validate the queue. No staging, commit, or push.
+
 ## 2026-09-29 (af) — Towers you can ride up, and a test suite that plays the game
 
 Two helper agents worked in their own copies while the main session merged and committed (ae).

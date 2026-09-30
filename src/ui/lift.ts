@@ -38,6 +38,7 @@ export class LiftUI {
     this.tbtn.id = 'tlift';
     this.tbtn.className = 'tbtn hidden';
     this.tbtn.title = 'call the lift';
+    this.tbtn.setAttribute('aria-label', 'call the lift');
     this.tbtn.textContent = '⇅';
     this.tbtn.onclick = () => { if (this.enabled()) ride.call(); };
     document.body.append(this.panel);

@@ -20,7 +20,7 @@
       "area": "gameplay",
       "title": "People doing things: conversations, window shopping, waiting for the light, staff at work, residents who sit properly",
       "user_visible_behavior": "Walkers stop to talk face to face (gesturing, nodding) and part together, linger at shop windows, wait at signalled corners for their green; cafes, bars and shops have staff behind the counter with customers waiting and regulars on stools; residents sit on the cushion (not in it), facing their table or room, and a cook has company at the counter; city streets are busy (the crowd gathers round the walker by street density). They cross at the painted crosswalk on the walk or in a real gap (never through a car); some walk dogs on leads, some jog (a running pose), some wear headphones.",
-      "status": "in_progress",
+      "status": "not_started",
       "verification": [
         "tests/lifeSim.test.ts: walkers stop to talk face to face; tests/traffic.test.ts: walkers wait for the light",
         "shots/life-*.jpg frames 5-10",
@@ -351,7 +351,7 @@
       "area": "gameplay",
       "title": "Local Plates + restaurant, café and home interiors",
       "user_visible_behavior": "Walk into a real diner/café/pizza place (OSM amenity+cuisine): archetype interior (booths, counter, pastry case), order, paint the dish; homes get sun pools and real (non-crate) furniture.",
-      "status": "in_progress",
+      "status": "not_started",
       "verification": [
         "interior montage: diner, café, home at noon and night",
         "reviewer round"
@@ -422,7 +422,7 @@
       "area": "world",
       "title": "Place parity: hometowns that look like themselves (towers, rows, horizons, street furniture, sound)",
       "user_visible_behavior": "Streamed cities stand at their real heights with setbacks, glass or masonry towers, water tanks and fire escapes; row houses are brick with flat roofs in North American cities; mountains stand on the horizon and towers on the skyline; signals, hydrants, subway entrances, crosswalks and main-street lamps come from the map; cities sound like cities and deserts like deserts; houses are clad by subregion; American streets are parked nose to tail (kerbs and striped lots, a per-car level of detail); parks, lots and pitches paint in streamed towns; bus stops, streetcar rails and trolleybus wires come from the map; the date brings its season — snow, bare trees, autumn colour, a moving snowline.",
-      "status": "in_progress",
+      "status": "not_started",
       "verification": [
         "tests: realTile (heights, parts, rows, storefront floors, street parking, bus stops), styles, lots (stall layout), kerbCars (LOD tiers, drive-off lookup), season (normals, snow, leaves, snowline), kit (lite car budget), pack (DECID/PAVED survive the pack)",
         "tools/place-shots.js __PLACE__(tag, { main, resi }) -> shots/place-*.jpg vs docs/earth/PLACE_REFERENCES.md; __PLACE__(tag, { looks }) -> shots/looks-*.jpg",
@@ -615,7 +615,7 @@
       "area": "world",
       "title": "Tall structures from the map: masts, water towers, chimneys, flagpoles; no trees on structures",
       "user_visible_behavior": "Queen Anne's broadcast masts stand in red and white with beacons at night; small towns have their water towers; no tree grows on a roof or up a mast.",
-      "status": "in_progress",
+      "status": "not_started",
       "verification": [
         "tests/foundry.test.ts towers (budgets, unit height)",
         "tests/realTile.test.ts tall structures",
@@ -912,7 +912,7 @@
       "area": "tools",
       "title": "Capture asserts that see: the subject's visible pixels and near occluders from an id render",
       "user_visible_behavior": "Every pinned frame is checked on what the lens actually sees — the subject covering at least its share of the frame (5% by default, occlusion included), nothing within 2.5 m over 5% or within 4 m over 15%, the world at least 20% of the frame — and a frame that fails is re-posed round its subject until it passes; only what still fails is stamped under the frame on the contact sheet.",
-      "status": "in_progress",
+      "status": "not_started",
       "verification": [
         "tools/spot-shots.js on streamed Queen Anne (shots/spots-r10-walls.jpg): 7 poses; the six that must pass pass (a parked car re-posed to its side at 6 m, 19.5% of the frame; the steps to a lot 8.1% as their own mesh); a pose facing the sky with repose:false fails with subject 0% and world under 20%"
       ],
@@ -927,7 +927,7 @@
       "area": "gameplay",
       "title": "The brush, slice 1 (docs/GAME_DESIGN.md §14): paint a kind from life, then paint one where you aim — the boat minute at Sea Bright",
       "user_visible_behavior": "Paint a moored skiff (or any boat or car) from life with P and its Almanac card colours in; B takes out the brush: the kinds you own are chips (the one that fits what you aim at first — water a boat, a street a car), a pencil sketch of it snaps to the nearest spot that fits (open water with its bow off the land; the lane going your way), click (tap it, on a phone) and the colour washes in from where you touched it — rub to hurry it — and when it dries it's real, saved where you painted it; E to board. A kind you haven't painted from life is a pencil chip that says where the nearest real one is. V/N no longer summon (a developer switch in the panel keeps them).",
-      "status": "in_progress",
+      "status": "not_started",
       "verification": [
         "tests/place.test.ts (boat: at the aim on open water, bow off the land; from the beach, the nearest water with room; inland, which way the water is; car: in the lane going your way, past a house at the kerb, never on a footpath; compass words)",
         "tests/brush.test.ts (a painting colours the cards of the kinds in frame and they become paintable; pencil cards and unknown kinds never are; newest first)",
@@ -947,7 +947,7 @@
       "area": "gameplay",
       "title": "Interiors at real scale (docs/INTERIORS_PLAN.md): rooms, not halls; towers you ride up",
       "user_visible_behavior": "Walk into a house and you're in a hall with the stair beside it; off it a living room, kitchen, dining room or study and a WC; upstairs a landing, bathroom and bedrooms sized like real ones. Apartment blocks have corridors and flats; offices a core, desk rows by the glass and meeting rooms; shops aisles and a back of house. Every room is reachable, you're never shut in, and the HUD names the room. In a tower every storey exists: lifts in the core (L to choose a floor, a real ride with doors and a floor display), stairs in their shafts, a double-height lobby in big offices, glass floor to ceiling in curtain-walled towers, and the HUD says which floor of how many.",
-      "status": "in_progress",
+      "status": "not_started",
       "verification": [
         "tests/interiorLayout.test.ts (14) and tests/interiorBudget.test.ts (14): houses 3–6 rooms a storey in 320/320, bedroom minimums, corridors ≥ 1.5 m, rooms ≤ 38 m², office cores 15–30% and desks within 13.5 m of glass, every room reached from the door, no wall on a window, ≤ 120k vertices, ≤ 60 draws, no build step over 8 ms",
         "tools/bench-interiors.mts: worst build step 47–1,243 ms → ~1 ms; house 43k → 30k vertices; supermarket 1.1 M → 12k",
@@ -984,9 +984,16 @@
         "index.html (inline guard)",
         "src/world/signs.ts (cropped atlases)",
         "src/sim/life.ts (live-slot counts)",
-        "src/world/stream.ts (streamParams)"
+        "src/world/stream.ts (streamParams)",
+        "src/player/controller.ts, src/player/vehicles.ts (shared thumbstick vehicle control and touch interaction)",
+        "src/main.ts, index.html, src/ui/style.css (mobile action tray, double-tap interaction, safe-area layouts)",
+        "src/ui/panel.ts (mobile options and developer tools drawer)",
+        "src/ui/photo.ts, src/ui/brush.ts (touch photo tools and brush rotation)",
+        "npm run init (47 test files, 450 tests) and npm run build",
+        "tools/mobile-check.mjs --device=pixel7|iphone: phone tier, no page/console errors, shader limits within caps",
+        "shots/shore-montage.jpg (Pixel 7 and iPhone touch layouts reviewed)"
       ],
-      "notes": "Needs a real phone after the next Pages deploy: …/Map_Game/?diag=1."
+      "notes": "Mobile control parity implemented and headless Pixel 7/iPhone checks pass. Local tile-health probes and some map requests fail because the tile worker/Overpass services are unavailable in the emulator. Needs a real phone after the next Pages deploy: …/Map_Game/?diag=1."
     },
     {
       "id": "photo-paints-frame",
@@ -994,7 +1001,7 @@
       "area": "gameplay",
       "title": "In paint-as-you-walk mode, a photo paints everything it frames, even the far distance",
       "user_visible_behavior": "With Watercolor → '…far away too' on, taking a photo (P, Space) colours in everything visible in the frame — the street, the far shore, the city on the horizon — blooming in over a couple of seconds; it stays painted.",
-      "status": "in_progress",
+      "status": "not_started",
       "verification": [
         "tests/explore.test.ts (+6), tests/seen.test.ts (depth → world points, joins, footprint discs, far cells)",
         "LIVE Sea Bright: ctx.paintView() from Ocean Ave painted 729 cells out to 1.6 km"
@@ -1013,7 +1020,7 @@
       "area": "gameplay",
       "title": "Every front door opens: no building inside a building, nothing across the way in",
       "user_visible_behavior": "Downtown, a tower mapped tier by tier is one building with one door, never a building standing inside another; twin copies and seam copies are gone (no flickering walls). Walk up to any front door (up a raised shore house's stair, past the fence, the parked cars, the racks and the hydrants) and in.",
-      "status": "in_progress",
+      "status": "not_started",
       "verification": [
         "tests/nest.test.ts (6), tests/seams.test.ts (2), tests/doorway.test.ts (5), tests/raisedStairs.test.ts (2): door, roof and stair tests checked to fail on the old code",
         "LIVE Manhattan, 7 real cells (__DOORS__): real doors blocked 14 → 3 of 295, stand-ins 22 → 8 of 205; nested pairs 98 → 8 (all Grand Central's partial overlaps)",
@@ -1035,7 +1042,7 @@
       "area": "rendering",
       "title": "Flying high, the ground holds still (no blue/green flashing)",
       "user_visible_behavior": "Fly up over a coast or a city: land and water stay put, however high.",
-      "status": "in_progress",
+      "status": "not_started",
       "verification": [
         "tests/nearPlane.test.ts (4): a depth step under 5 cm straight down and under 20 cm three times as far out at 300–3,000 m (the old fixed near: ~1 m at 2 km)",
         "Cloud mirror: __ALTITUDE__/__FLYOVER__ over Sea Bright at 400–3,000 m flicker-free (also with the old near plane: not reproduced there)"
@@ -1053,7 +1060,7 @@
       "area": "platform",
       "title": "Gameplay test suite: walk, drive, teleport, stream, frames, doors, nesting, flicker, altitude",
       "user_visible_behavior": "(Developer) One command plays the game headless and fails on a glitch: walks streets and into buildings and up their stairs, drives routes, teleports, streams a ring, times frames, walks into every door, finds nested buildings, surfaces fighting and posts in car lanes.",
-      "status": "in_progress",
+      "status": "not_started",
       "verification": [
         "Self-tests: each check catches its planted failure (walkabout 9, drive 5, teleports 5, streaming 4, frames 1, roadposts 1; flicker 1)",
         "tests/playtest.test.ts (23): the pure core (seeded rng, A*, road graph, carriageway index, frame stats)",

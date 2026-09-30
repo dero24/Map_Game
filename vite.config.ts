@@ -1,4 +1,5 @@
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig } from 'vitest/config';
+import type { Plugin } from 'vite';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -72,4 +73,5 @@ export default defineConfig({
   preview: { headers: isolation },
   worker: { format: 'es' },
   build: { target: 'es2022', chunkSizeWarningLimit: 1500 },
+  test: { include: ['tests/**/*.test.ts'] },
 });

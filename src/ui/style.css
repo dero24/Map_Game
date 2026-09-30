@@ -115,7 +115,7 @@ body.postcard #arrival { display: none; }
 #photo .bl { left: 5vw; bottom: 12vh; border-left-width: 2px; border-bottom-width: 2px; }
 #photo .br { right: 5vw; bottom: 12vh; border-right-width: 2px; border-bottom-width: 2px; }
 #photo-bar { position: absolute; left: 50%; transform: translateX(-50%); bottom: 16px; text-align: center; font-size: 14px; pointer-events: auto; background: rgba(245, 239, 225, 0.86);
-  border: 1px solid rgba(58, 51, 70, 0.2); border-radius: 4px; padding: 8px 18px; white-space: nowrap; }
+  border: 1px solid rgba(58, 51, 70, 0.2); border-radius: 4px; padding: 8px 18px; white-space: normal; max-width: min(740px, calc(100vw - 20px)); box-sizing: border-box; }
 #photo-info { font-style: italic; font-size: 16px; margin-bottom: 4px; }
 #photo-info .ok { color: #a0503c; }
 #photo.bare > * { display: none; }
@@ -148,10 +148,35 @@ body.postcard #osm-credit { display: none; }
 
 .lil-gui.root { --background-color: rgba(244, 238, 224, 0.94); --text-color: #3a3346; --title-background-color: #e6dcc6; --title-text-color: #3a3346;
   --widget-color: #e2d8c2; --hover-color: #d6cab0; --focus-color: #cfc1a4; --number-color: #5a4c78; --string-color: #6a7a3c; --font-family: Georgia, serif; }
+.lil-gui.root { max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; }
+.mobile-panel-close { display: none; }
 
 /* touch controls */
 #touchui { position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(84px + env(safe-area-inset-bottom)); display: none; flex-direction: column; gap: 12px; z-index: 40; }
 body.touch.walking #touchui { display: flex; } /* (not over the intro card) */
+#touch-more { position: fixed; right: calc(82px + env(safe-area-inset-right)); bottom: calc(86px + env(safe-area-inset-bottom)); z-index: 43; width: min(272px, calc(100vw - 110px)); display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding: 9px; border: 1px solid rgba(58,51,70,0.22); border-radius: 8px; background: rgba(245,239,225,0.95); box-shadow: 0 3px 18px rgba(40,30,60,0.18); }
+#touch-more #toptions { grid-column: 1 / -1; }
+.tmenu-btn { min-height: 44px; padding: 7px 9px; border: 1px solid rgba(58,51,70,0.22); border-radius: 5px; background: rgba(255,255,255,0.5); color: #3a3346; font: 14px Georgia, serif; touch-action: manipulation; }
+#tfly-adjust { grid-column: 1 / -1; display: flex; gap: 7px; }
+#tfly-adjust .tmenu-btn { flex: 1; }
+#touch-action { position: fixed; right: calc(82px + env(safe-area-inset-right)); bottom: calc(94px + env(safe-area-inset-bottom)); z-index: 42; min-height: 46px; min-width: 112px; padding: 7px 14px; border: 1px solid rgba(58,51,70,0.38); border-radius: 24px; background: rgba(245,239,225,0.94); box-shadow: 0 2px 12px rgba(40,30,60,0.16); color: #3a3346; font: 15px Georgia, serif; touch-action: manipulation; }
+#ride-touch { position: fixed; right: calc(82px + env(safe-area-inset-right)); bottom: calc(90px + env(safe-area-inset-bottom)); z-index: 42; display: flex; gap: 8px; }
+body.touch.driving #touchui #tfly, body.touch.driving #touchui #tgo, body.touch.driving #touchui #tphoto,
+body.touch.driving #touchui #tbrush { display: none !important; }
+body.touch.driving #touch-more #tplant, body.touch.driving #touch-more #tseed, body.touch.driving #touch-more #ttime,
+body.touch.driving #touch-more #tfly-adjust, body.touch.driving #ride-touch.hidden { display: none !important; }
+body.touch.driving #touch-action { bottom: calc(160px + env(safe-area-inset-bottom)); }
+body.touch.driving #osm-credit { z-index: 10; }
+body.touch.postcard #touchui, body.touch.postcard #touch-more, body.touch.postcard #touch-action, body.touch.postcard #ride-touch { display: none !important; }
+body.atlas-open #touchui, body.atlas-open #touch-more, body.atlas-open #touch-action, body.atlas-open #ride-touch { display: none !important; }
+body.touch #photo-bar { bottom: calc(12px + env(safe-area-inset-bottom)); padding: 7px; }
+body.touch #photo.bare #photo-bar { display: block; }
+body.touch #photo-bar .keys { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; font-size: 0; }
+body.touch #photo-bar .tonly { min-width: 42px; min-height: 42px; margin: 0; padding: 5px 9px; border-radius: 5px; font-size: 14px; touch-action: manipulation; }
+body.touch #photo-bar #photo-shoot, body.touch #photo-bar #photo-exit { min-width: 66px; }
+body.touch #vehud { bottom: calc(18px + env(safe-area-inset-bottom)) !important; max-width: 52vw; white-space: normal !important; text-align: center; }
+body.touch .lil-gui.root { --width: min(330px, calc(100vw - 18px)); position: fixed; top: calc(8px + env(safe-area-inset-top)); right: calc(8px + env(safe-area-inset-right)); left: auto; bottom: calc(8px + env(safe-area-inset-bottom)); width: min(330px, calc(100vw - 18px)); max-height: none; overflow-y: auto; box-shadow: 0 4px 24px rgba(40,30,60,0.24); }
+body.touch .lil-gui.root .mobile-panel-close { display: block; position: fixed; top: calc(9px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right)); z-index: 1200; width: 42px; height: 42px; border: 1px solid rgba(58,51,70,0.3); border-radius: 50%; background: rgba(245,239,225,0.96); color: #3a3346; font: 25px Georgia, serif; touch-action: manipulation; }
 /* no mouse (a phone, a tablet): the keyboard hints give way to the touch ones */
 body.nomouse #hud .hint, body.nomouse .card .keys:not(.tkeys) { display: none; }
 .card .tkeys { display: none; }
@@ -180,7 +205,21 @@ body.nomouse .card .tkeys { display: block; }
   #atlas-tabs button { padding: 4px 7px; font-size: 13px; }
   .cols { grid-template-columns: 1fr; }
   #arrival .a-name { font-size: 34px; }
-  #hint { bottom: 150px; font-size: 13px; }
+  #hint { left: 14px; right: calc(82px + env(safe-area-inset-right)); bottom: calc(68px + env(safe-area-inset-bottom)); max-width: none; box-sizing: border-box; transform: translateY(8px); white-space: normal; text-align: left; font-size: 12px; line-height: 1.25; }
+  #hint.show { transform: translateY(0); }
+  body.touch #photo-info { max-width: calc(100vw - 38px); font-size: 14px; white-space: normal; }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  body.touch.walking #touchui { right: calc(8px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); width: 154px; flex-direction: row; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+  body.touch.walking #touchui .tbtn { width: 46px; height: 46px; }
+  body.touch.walking #touchui #tlift { width: 46px; height: 46px; }
+  #touch-more { right: calc(166px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; }
+  #touch-action { right: calc(166px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); }
+  body.touch.driving #touch-action { bottom: calc(60px + env(safe-area-inset-bottom)); }
+  #hint { right: calc(166px + env(safe-area-inset-right)); bottom: calc(60px + env(safe-area-inset-bottom)); }
+  #ride-touch { right: calc(166px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); }
+  body.touch #photo-bar { max-height: 43dvh; overflow-y: auto; }
+  body.touch #photo-info { font-size: 12px; }
 }
 
 /* ---- the Almanac ---- */

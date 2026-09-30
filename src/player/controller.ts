@@ -190,6 +190,10 @@ export class Walker {
   }
 
   pressed(code: string) { return this.keys.has(code); }
+  /** Touch buttons feed the same held-key path as a keyboard without changing stick movement. */
+  touchKey(code: string, down: boolean) { if (down) this.keys.add(code); else this.keys.delete(code); }
+  /** Normalized left-stick axes; vehicles reuse the same stick while the walker is aboard. */
+  get touchAxes() { return { x: this.tMove.x, y: this.tMove.y }; }
   /** Walking forward right now — keys or the touch stick pushed up (walk-in boarding, vehicles.ts). */
   get pushing() { return this.keys.has('KeyW') || this.keys.has('ArrowUp') || this.tMove.y < -0.35; }
   get feet() { return this.surfaceY; }

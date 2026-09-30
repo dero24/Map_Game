@@ -57,6 +57,7 @@ const CSS = `
 #brush .sws { display: flex; gap: 6px; padding: 0 6px; border-left: 1px solid rgba(58,51,70,0.15); }
 #brush .sw { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid rgba(58,51,70,0.35); cursor: pointer; padding: 0; }
 #brush .sw.sel { box-shadow: 0 0 0 2px rgba(245,239,225,0.95), 0 0 0 3.5px #3a3346; }
+#brush .rotate { min-width: 42px; min-height: 40px; border: 1px solid rgba(58,51,70,0.2); border-radius: 4px; background: rgba(255,255,255,0.5); color: inherit; font: 22px Georgia, serif; touch-action: manipulation; }
 #brush .x { font: inherit; font-size: 18px; border: none; background: none; cursor: pointer; color: inherit; padding: 4px 8px; }
 #brush .status { background: rgba(245,239,225,0.9); border: 1px solid rgba(58,51,70,0.15); border-radius: 12px; padding: 4px 14px; font-size: 14px; font-style: italic; white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis; }
 #brush-dot { position: fixed; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border: 1.5px solid rgba(58,51,70,0.65); border-radius: 50%; display: none; pointer-events: none; z-index: 20; }
@@ -149,6 +150,7 @@ export class Brush {
     tb.id = 'tbrush';
     tb.className = 'tbtn';
     tb.title = 'your brush';
+    tb.setAttribute('aria-label', 'open your brush');
     tb.textContent = '✎';
     tb.onclick = () => { if (this.active || this.enabled()) this.toggle(); };
     (document.getElementById('tphoto') ?? document.getElementById('touchui'))?.after?.(tb);
@@ -159,7 +161,7 @@ export class Brush {
       if (!this.active) return;
       if (e.code === 'Escape') this.toggle(false);
       else if (/^Digit[1-9]$/.test(e.code)) this.choose(+e.code.slice(5) - 1);
-      else if (e.code === 'KeyR' && !e.repeat) this.turn += (e.shiftKey ? -1 : 1) * (Math.PI / 4);
+      else if (e.code === 'KeyR' && !e.repeat) this.rotate((e.shiftKey ? -1 : 1) * (Math.PI / 4));
       else if (e.code === 'KeyC' && !e.repeat) this.cycleColor();
     });
     window.addEventListener('wheel', (e) => {
@@ -272,6 +274,13 @@ export class Brush {
       }
       this.rowEl.appendChild(sws);
     }
+    const rotate = document.createElement('button');
+    rotate.className = 'rotate';
+    rotate.textContent = '↻';
+    rotate.title = 'turn the painting 45°';
+    rotate.setAttribute('aria-label', 'turn the painting 45 degrees');
+    rotate.onclick = () => this.rotate();
+    this.rowEl.appendChild(rotate);
     const x = document.createElement('button');
     x.className = 'x';
     x.textContent = '✕';
@@ -285,6 +294,7 @@ export class Brush {
     this.whereT = 0;
     this.build();
   }
+  rotate(step = Math.PI / 4) { if (!this.washing && !this.drying) this.turn += step; }
   private color(k: Kind) { return this.saved.colors[`${k.family}:${k.type}`] ?? boldFor(k.type); }
   private setColor(k: Kind, c: number) {
     this.saved.colors[`${k.family}:${k.type}`] = c;

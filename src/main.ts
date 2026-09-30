@@ -584,7 +584,7 @@ async function main() {
   let brushT = 0;
   explore.onBloom = (n) => { if (n > 3 && brushT <= 0) { brushT = 1.6; ambience?.ui('brush'); } };
   const VERB = { car: 'drive this', boat: 'take the helm of this', plane: 'fly this' } as const;
-  hints.add(() => { const e = vehicles.enterable(); return e ? { key: 'E', text: `${VERB[e.kind]} ${modelName(e.model)}`, pri: 10 } : null; });
+  hints.add(() => { const e = vehicles.enterable(); return e ? { key: document.body.classList.contains('touch') ? 'Tap twice' : 'E', text: `${VERB[e.kind]} ${modelName(e.model)}`, pri: 10 } : null; });
   hints.add(() => {
     const P = interiors.activePlan;
     if (!P || interiors.indoors || vehicles.driving) return null;
@@ -597,10 +597,10 @@ async function main() {
   hints.add(() => {
     if (ride.busy) return null;
     const h = ride.here();
-    return h ? { key: 'L', text: `call the lift — you're on ${h.storey ? `floor ${h.storey + 1}` : 'the ground floor'} of ${h.n}`, pri: 8 } : null;
+    return h ? { key: document.body.classList.contains('touch') ? '⇅' : 'L', text: `call the lift — you're on ${h.storey ? `floor ${h.storey + 1}` : 'the ground floor'} of ${h.n}`, pri: 8 } : null;
   });
   hints.add(() => {
-    for (const t of commissions.targets()) if (Math.hypot(t.x - walker.x, t.z - walker.z) < 60) return { key: 'P', text: `✧ ${t.title.replace(/^Paint /, 'paint ')}`, pri: 7 };
+    for (const t of commissions.targets()) if (Math.hypot(t.x - walker.x, t.z - walker.z) < 60) return { key: document.body.classList.contains('touch') ? '▣' : 'P', text: `✧ ${t.title.replace(/^Paint /, 'paint ')}`, pri: 7 };
     return null;
   });
   // Viewpoints (tourism=viewpoint): the view named — the summit it looks at, how far and which way
@@ -623,7 +623,7 @@ async function main() {
     const v = viewHere();
     if (!v) return null;
     const s = v.sight;
-    return { key: 'P', text: s ? `the view: ${s.name}, ${Math.round(s.km)} km to the ${compassWord(s.bearing)} — paint it` : 'a viewpoint — paint the view', pri: 6 };
+    return { key: document.body.classList.contains('touch') ? '▣' : 'P', text: s ? `the view: ${s.name}, ${Math.round(s.km)} km to the ${compassWord(s.bearing)} — paint it` : 'a viewpoint — paint the view', pri: 6 };
   });
   hints.add(() => {
     // (the peak list follows you: fetched here, again after 40 km)
@@ -636,11 +636,11 @@ async function main() {
     }
     return null;
   });
-  hints.add(() => (walkParams.fly && !vehicles.driving ? { key: 'F', text: 'land · Space / C up and down · wheel for speed', pri: 3, once: 'fly' } : null));
-  hints.add(() => (simTime > 12 ? { key: 'M', text: 'your map, sketchbook & commissions', pri: 1, once: 'atlas' } : null));
-  hints.add(() => (simTime > 70 && !vehicles.driving && !walkParams.fly && world.terrain.coverAt(walker.x, walker.z) === 30 ? { key: 'R', text: `plant a ${SPECIES[garden.nextSpecies].label} here (Shift+R: another seed)`, pri: 1, once: 'plant' } : null));
-  hints.add(() => (simTime > 45 ? { key: 'P', text: 'frame a view and paint it into your sketchbook', pri: 1, once: 'photo' } : null));
-  hints.add(() => (simTime > 100 ? { key: 'G', text: 'go anywhere — search a town or an address', pri: 1, once: 'go' } : null));
+  hints.add(() => (walkParams.fly && !vehicles.driving ? { key: document.body.classList.contains('touch') ? '⋯' : 'F', text: document.body.classList.contains('touch') ? 'More has hold-to-climb controls · adjust flight speed in Options' : 'land · Space / C up and down · wheel for speed', pri: 3, once: 'fly' } : null));
+  hints.add(() => (simTime > 12 ? { key: document.body.classList.contains('touch') ? '☰' : 'M', text: 'your map, sketchbook & commissions', pri: 1, once: 'atlas' } : null));
+  hints.add(() => (simTime > 70 && !vehicles.driving && !walkParams.fly && world.terrain.coverAt(walker.x, walker.z) === 30 ? { key: document.body.classList.contains('touch') ? '⋯' : 'R', text: `plant a ${SPECIES[garden.nextSpecies].label} here${document.body.classList.contains('touch') ? '' : ' (Shift+R: another seed)'}`, pri: 1, once: 'plant' } : null));
+  hints.add(() => (simTime > 45 ? { key: document.body.classList.contains('touch') ? '▣' : 'P', text: 'frame a view and paint it into your sketchbook', pri: 1, once: 'photo' } : null));
+  hints.add(() => (simTime > 100 ? { key: document.body.classList.contains('touch') ? '⌂' : 'G', text: 'go anywhere — search a town or an address', pri: 1, once: 'go' } : null));
 
   const post = new WatercolorPost(renderer);
   const shadows = new SunShadows(renderer);
@@ -693,7 +693,16 @@ async function main() {
     }
   }
 
-  const gui = CAPTURE && !params.has('panel') ? null : buildPanel({ onResize: resize, onPreset: setHour, onRespawn: respawn, onResetExplore: () => { void journal.reset(); void explore.reset(); } }, { name: townName, tz, respawn: spec?.on });
+  const gui = CAPTURE && !params.has('panel') ? null : buildPanel({
+    onResize: resize,
+    onPreset: setHour,
+    onRespawn: respawn,
+    onResetExplore: () => { void journal.reset(); void explore.reset(); },
+    onSummon: (kind) => {
+      if (debugParams.summons) vehicles.summon(kind);
+      else toast('turn on free rides in Debug first');
+    },
+  }, { name: townName, tz, respawn: spec?.on });
 
   const weather: Weather = { cloud: weatherParams.cloud, seaFog: weatherParams.seaFog, haze: weatherParams.haze, wind: weatherParams.wind };
   let simTime = 0;
@@ -908,13 +917,113 @@ async function main() {
     if (e.code === 'KeyR' && playing && !atlas.open && !photo.active && !vehicles.driving && !brush.active && !e.repeat) { if (e.shiftKey) garden.cycle(); else garden.plant(); }
     if (e.code === 'Escape' && atlas.open) atlas.toggle(false);
   });
-  // Touch buttons (shown by body.touch): fly toggle, go-anywhere search, atlas, photo mode.
+  // Touch actions mirror the keyboard verbs. The two existing movement surfaces (left stick and
+  // right-side look drag) stay owned by Walker; this dock only handles discrete actions.
   $('tfly').onclick = () => walker.setFly(!walkParams.fly);
   $('tgo').onclick = () => { if ($('intro').classList.contains('hidden') && !atlas.open) atlas.focusSearch(); };
   $('tphoto').onclick = () => { if ($('intro').classList.contains('hidden') && !atlas.open) photo.toggle(); };
-  $('tmenu').onclick = () => {
-    atlas.toggle();
+  $('tmenu').onclick = () => atlas.toggle();
+  const touchMore = $('touch-more'), moreButton = $('tmore');
+  moreButton.onclick = () => {
+    const open = touchMore.classList.contains('hidden');
+    touchMore.classList.toggle('hidden', !open);
+    moreButton.setAttribute('aria-expanded', String(open));
   };
+  $('tplant').addEventListener('click', () => {
+    if ($('intro').classList.contains('hidden') && !atlas.open && !photo.active && !vehicles.driving && !brush.active) garden.plant();
+  });
+  $('tseed').addEventListener('click', () => {
+    if ($('intro').classList.contains('hidden') && !vehicles.driving && !brush.active) garden.cycle();
+  });
+  $('ttime').addEventListener('click', () => setHour((localHour(worldMs, tz) + 1) % 24));
+
+  const bindHold = (id: string, down: () => void, up: () => void) => {
+    const button = $(id) as HTMLButtonElement;
+    let held = false;
+    const stop = () => { if (!held) return; held = false; up(); };
+    button.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      if (held) return;
+      held = true;
+      try { button.setPointerCapture(e.pointerId); } catch { /* browser does not support capture */ }
+      down();
+    });
+    button.addEventListener('pointerup', stop);
+    button.addEventListener('pointercancel', stop);
+    button.addEventListener('lostpointercapture', stop);
+    window.addEventListener('blur', stop);
+  };
+  bindHold('tfly-up', () => walker.touchKey('Space', true), () => walker.touchKey('Space', false));
+  bindHold('tfly-down', () => walker.touchKey('KeyC', true), () => walker.touchKey('KeyC', false));
+  bindHold('trboost', () => vehicles.setTouchBoost(true), () => vehicles.setTouchBoost(false));
+  bindHold('tthrottle-up', () => vehicles.setTouchThrottle(1), () => vehicles.setTouchThrottle(0));
+  bindHold('tthrottle-down', () => vehicles.setTouchThrottle(-1), () => vehicles.setTouchThrottle(0));
+
+  const touchAction = $('touch-action') as HTMLButtonElement;
+  const touchActionState = () => {
+    if (!$('intro').classList.contains('hidden') || atlas.open || photo.active || brush.active || (gui && !gui._hidden)) return null;
+    if (vehicles.driving) return { id: `exit:${vehicles.activeKind}`, label: `Exit ${vehicles.activeKind ?? 'ride'}` };
+    const e = vehicles.enterable();
+    return e ? { id: `enter:${e.kind}:${e.model}`, label: `Enter ${e.kind}` } : null;
+  };
+  const doTouchAction = () => { if (touchActionState()) vehicles.interact(); };
+  touchAction.addEventListener('click', doTouchAction);
+  let touchActionCheck = 0;
+  const syncTouchControls = (dt: number) => {
+    if (!document.body.classList.contains('touch')) return;
+    touchActionCheck -= dt;
+    if (touchActionCheck <= 0) {
+      touchActionCheck = 0.2;
+      const action = touchActionState();
+      touchAction.classList.toggle('hidden', !action);
+      if (action) {
+        touchAction.textContent = action.label;
+        touchAction.setAttribute('aria-label', `${action.label}; double-tap the world to use`);
+        touchAction.title = `${action.label} · or double-tap the view`;
+      }
+      const kind = vehicles.activeKind;
+      document.body.classList.toggle('driving', !!kind);
+      $('ride-touch').classList.toggle('hidden', !kind);
+      $('trboost').classList.toggle('hidden', kind === 'plane' || !kind);
+      $('tthrottle-up').classList.toggle('hidden', kind !== 'plane');
+      $('tthrottle-down').classList.toggle('hidden', kind !== 'plane');
+      $('tfly-adjust').classList.toggle('hidden', !walkParams.fly || !!kind);
+      const options = $('toptions');
+      options.setAttribute('aria-expanded', String(!!gui && !gui._hidden));
+    }
+  };
+
+  // A double-tap is only an interaction when two still taps happen in the look zone and the same
+  // contextual action is available both times. It never steals a stick drag or overlay gesture.
+  const touchStarts = new Map<number, { x: number; y: number; t: number; moved: number; action: string }>();
+  let lastTap: { x: number; y: number; t: number; action: string } | null = null;
+  canvas.addEventListener('touchstart', (e) => {
+    if (!document.body.classList.contains('touch') || e.touches.length > 1 || atlas.open || photo.active || brush.active) return;
+    for (const t of Array.from(e.changedTouches)) {
+      if (t.clientX < innerWidth * 0.45) continue;
+      const action = touchActionState();
+      if (action) touchStarts.set(t.identifier, { x: t.clientX, y: t.clientY, t: performance.now(), moved: 0, action: action.id });
+    }
+  }, { passive: true });
+  canvas.addEventListener('touchmove', (e) => {
+    for (const t of Array.from(e.changedTouches)) {
+      const s = touchStarts.get(t.identifier);
+      if (s) { s.moved += Math.hypot(t.clientX - s.x, t.clientY - s.y); s.x = t.clientX; s.y = t.clientY; }
+    }
+  }, { passive: true });
+  canvas.addEventListener('touchend', (e) => {
+    for (const t of Array.from(e.changedTouches)) {
+      const s = touchStarts.get(t.identifier);
+      touchStarts.delete(t.identifier);
+      if (!s || s.moved > 12 || performance.now() - s.t > 260) continue;
+      const now = performance.now(), action = touchActionState();
+      if (action?.id === s.action && lastTap?.action === s.action && now - lastTap.t <= 340 && Math.hypot(t.clientX - lastTap.x, t.clientY - lastTap.y) <= 30) {
+        lastTap = null;
+        vehicles.interact();
+      } else lastTap = { x: t.clientX, y: t.clientY, t: now, action: s.action };
+    }
+  }, { passive: true });
+  canvas.addEventListener('touchcancel', (e) => { for (const t of Array.from(e.changedTouches)) touchStarts.delete(t.identifier); lastTap = null; });
   if (CAPTURE) {
     $('intro').classList.add('hidden');
     document.body.classList.add('postcard', 'walking');
@@ -1076,6 +1185,7 @@ async function main() {
 
     reanchor();
     if (!vehicles.update(dt, camera)) walker.update(dt, camera);
+    syncTouchControls(dt);
     camera.position.sub(origin); // walker works in world coords; the renderer works origin-local
     stream.update(walker.x, walker.z);
     horizon.update(walker.x, walker.z);

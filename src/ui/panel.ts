@@ -44,7 +44,7 @@ function save() {
   try { localStorage.setItem(STORE, JSON.stringify({ ...out, uniforms: u })); } catch { /* storage off */ }
 }
 
-export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: number) => void; onRespawn: () => void; onResetExplore: () => void }, region: { name: string; tz: string; respawn?: string }) {
+export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: number) => void; onRespawn: () => void; onResetExplore: () => void; onSummon: (kind: 'car' | 'boat' | 'plane') => void }, region: { name: string; tz: string; respawn?: string }) {
   const gui = new GUI({ title: `${region.name} · tuning` });
   gui.onFinishChange(save);
   const ZONES: Record<string, string> = { 'America/Los_Angeles': 'Pacific', 'America/Denver': 'Mountain', 'America/Phoenix': 'Arizona', 'America/Chicago': 'Central', 'America/New_York': 'Eastern' };
@@ -137,12 +137,16 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   m.add(walkParams, 'fov', 35, 100, 1).name('field of view');
   m.add(walkParams, 'bob', 0, 2, 0.01).name('head bob');
   m.add(walkParams, 'mouseSens', 0.2, 3, 0.01).name('mouse sensitivity');
+  m.add(walkParams, 'flySpeed', 3, 400, 1).name('fly speed');
   m.add(walkParams, 'fly').name('fly (debug)').listen();
   m.add({ respawn: hooks.onRespawn }, 'respawn').name(`back to ${region.respawn ?? 'the start'}`);
 
   const d = gui.addFolder('Debug');
   d.add(debugParams, 'rawScene').name('show raw render');
   d.add(debugParams, 'summons').name('free rides: V car, ⇧B boat, N plane');
+  d.add({ car: () => hooks.onSummon('car') }, 'car').name('summon a car');
+  d.add({ boat: () => hooks.onSummon('boat') }, 'boat').name('summon a boat');
+  d.add({ plane: () => hooks.onSummon('plane') }, 'plane').name('summon a plane');
   d.add({ reset: hooks.onResetExplore }, 'reset').name('reset explored map');
   d.add({ clear: () => { localStorage.removeItem(STORE); location.reload(); } }, 'clear').name('reset all settings');
   d.close();
@@ -152,5 +156,17 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   // the game ships tuned: the panel is a developer tool, hidden until ` (backquote) opens it
   gui.hide();
   window.addEventListener('keydown', (e) => { if (e.code === 'Backquote') gui._hidden ? gui.show() : gui.hide(); });
+  const mobileOptions = document.getElementById('toptions');
+  const mobileClose = document.createElement('button');
+  mobileClose.className = 'mobile-panel-close';
+  mobileClose.textContent = '×';
+  mobileClose.type = 'button';
+  mobileClose.setAttribute('aria-label', 'close options and developer tools');
+  mobileClose.onclick = () => { gui.hide(); mobileOptions?.setAttribute('aria-expanded', 'false'); };
+  gui.domElement.appendChild(mobileClose);
+  mobileOptions?.addEventListener('click', () => {
+    if (gui._hidden) gui.show(); else gui.hide();
+    mobileOptions.setAttribute('aria-expanded', String(!gui._hidden));
+  });
   return gui;
 }
