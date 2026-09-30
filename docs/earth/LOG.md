@@ -2,6 +2,36 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-30 (evening) — Neighbourhoods, phase 1; the phone's silhouette ring budgeted
+
+- **Why Rumson read like its neighbours** (docs/NEIGHBOURHOODS.md): one style table for every town
+  in a region, every look decision a per-house hash from it; lot size and era — the two things
+  the eye reads first — reached nothing; a big house (> 700 m²) became a flat-roofed block; and
+  OSM maps almost none of Rumson's houses (one in the reference square), so the game had LiDAR
+  footprints and fixed-size fills there.
+- **Phase 1, client-side** (no tile-service redeploy): `world/hood.ts` measures each 256 m cell's
+  homes (footprint, spacing, uniformity) → estate / old grid / tract / suburb; recipes, drives,
+  frontage hedges and canopy follow (estates: shingle and white clapboard under slate, steep roofs,
+  dormers, long privet hedges, 3× trees; old grids: painted Victorians with bays; tracts: one model
+  a cell). The neutral path is today's recipe exactly; the shore keeps its look. The old grid
+  and the tract are regional (by the style's `sub`/family): Midwest brick bungalows, Northwest
+  craftsman, desert stucco-and-tile tracts.
+- **Real places, tested**: the baked pack's towns (Rumson → estate at 45% of homes vs < 5% for
+  Fair Haven, Red Bank, Monmouth Beach; Fair Haven and Red Bank → grid) and frozen real-lite tiles
+  from three more states (Levittown NY → tract, Portage Park IL → grid, Wallingford WA → grid).
+  AZ / CT / TX are listed but the tile service 503'd all day — re-run `tools/hood-fixtures.mjs`.
+- **Montage** (shots/shore-montage.jpg, before / after, street and 60 m): Rumson (Dogwood Lane,
+  Buena Vista Ave) reads more wooded, with privet hedge runs along the frontages — a modest change
+  from these views, since the houses stand back in the trees; Fair Haven and the shore unchanged.
+  A deep link to Red Bank's east side set the camera down by the shore instead (worth a look:
+  `?at=40.3478,-74.0636`), so Red Bank's grid look is verified by the tests, not yet by eye.
+- **The phone's silhouette ring budgeted** (`coarseMB` 90 / 60 MB): the Manhattan run below found
+  it at 171–190 MB — three times the detail tiles.
+- **Manhattan on a phone** (headless Pixel 7, phone tier, four hops round Midtown): 0 lost GPU
+  contexts, 0 errors, peak renderer 1,006 MB, GPU process 724 MB. The public Overpass servers
+  were down (the tile service answered 503 for uncached cells), so the detail tiles were the
+  procedural stand-ins — the real-tile run is still owed.
+
 ## 2026-09-30 (later) — Balloons, painting to the horizon, and the core loop reviewed
 
 - **Paint as you walk, smoother** (the far sketch). The walk's colour stepped in at 10 Hz in big

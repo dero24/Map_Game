@@ -11,6 +11,7 @@ import { paintMaterial, lin } from '../render/shared';
 import { hash01 } from '../core/rng';
 import { buildRoof, tidyRing, ringArea, offsetRing, type RoofGeom } from './roof';
 import { recipeFor, rowStyle, SIDING, ROOFMAT, type Recipe } from './recipe';
+import { measureHoods, hoodKey, type HoodClass } from './hood';
 import { activeStyle } from './styles';
 
 type P2 = [number, number];
@@ -291,6 +292,7 @@ export interface Mailbox { x: number; z: number; yaw: number }
 export interface Drive { x: number; z: number; yaw: number }
 
 interface Ctx {
+  estate?: boolean; // the house stands in estate country (hood.ts): long drives to big houses
   b: Builder;
   col: Colliders;
   streets: StreetIndex;
@@ -713,7 +715,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
         // Lot dressing: most North American houses have a drive beside the walk. Where the map
         // has none (no service way near the door), lay a 2.9 m strip to the street 6 m to one side
         // and park a car at its house end (props.ts) — only if the strip is clear of every house.
-        if (activeStyle().region === 'na' && r(0xd71e) < 0.62 && Math.abs(ringArea(B.ring)) < 280 && !C.streets.minorNear(fx, fz, 14)) {
+        if (activeStyle().region === 'na' && r(0xd71e) < (C.estate ? 0.9 : 0.62) && Math.abs(ringArea(B.ring)) < (C.estate ? 1500 : 280) && !C.streets.minorNear(fx, fz, 14)) {
           const ux = ddx / dl, uz = ddz / dl, px = -uz, pz = ux;
           for (const side of r(0xd7) < 0.5 ? [-1, 1] : [1, -1]) {
             const off = 6.0 * side;
@@ -1162,6 +1164,8 @@ export interface BuildingsResult {
   drives: Drive[];
   walks: number[]; // x0 z0 x1 z1 width per front walk (and generated drives, 2.9 m)
   pilings: { x: number; z: number; ang: number }[];
+  /** the neighbourhood class at a point (hood.ts, measured from this tile's houses) — props read it */
+  hood: (x: number, z: number) => HoodClass;
 }
 
 // Convex hull (monotone chain), oriented like `like` so buildRoof sees the same winding.
@@ -1223,6 +1227,14 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
   json.buildings.forEach((bd, bi) => { const r = tidy[bi]; if (r && near(r[0][0], r[0][1], 80) && (bd.lf ?? 0) <= 1.5 && !(bd.pt && bd.po != null)) solid.add(r); });
   // Margin-context buildings (own:0): neighbours' shapes, for scratch-walk seeds in the tile worker.
   const ctxRings: P2[][] = json.buildings.map((bd, bi) => (bd.own === 0 ? tidy[bi] : null)).filter((r): r is P2[] => !!r);
+  // The neighbourhood each house stands in (hood.ts): measured from this tile's own houses. By the
+  // sea the shore keeps its own look (Sea Bright's cottages are the gold standard) unless it's
+  // estate country.
+  const hoods = measureHoods(json.buildings);
+  const hoodAt = (x: number, z: number): HoodClass => {
+    const k = hoods.get(hoodKey(x, z))?.klass ?? 'suburb';
+    return k !== 'estate' && k !== 'suburb' && terrain.oceanDistAt(x, z) < 800 ? 'suburb' : k;
+  };
 
   json.buildings.forEach((bd: Building, bi: number) => {
     const ring = tidy[bi];
@@ -1263,12 +1275,19 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     // Every look decision comes from the recipe: pure f(bd.s, region style, real data).
     // North American rows (walk-ups, brownstones): flat roofs behind a cornice, apartments inside —
     // unless the survey measured or the map says otherwise (recipe.ts rowStyle)
+    const hood = activeStyle().region === 'na' ? hoodAt(cx, cz) : 'suburb';
+    // an estate house is a house, however big its footprint (the map's area rule made Rumson's
+    // mansions flat-roofed blocks): pitched, with its door and its drive
+    if (hood === 'estate' && bd.k === 'large' && !bd.at && bd.h <= 13 && (bd.fl ?? 2) <= 3 && Math.abs(ringArea(ring)) <= 1500) {
+      bd.k = 'house';
+      if (bd.roof === 'flat' && !bd.rt && !bd.ms) bd.roof = 'hip';
+    }
     const rowNA = rowStyle(bd, activeStyle());
     if (rowNA) {
       if (!bd.rt && !bd.ms) bd.roof = 'flat';
       if (bd.h >= 9.5) bd.k = 'large';
     }
-    const rc = recipeFor(bd, activeStyle());
+    const rc = recipeFor(bd, activeStyle(), hood, Math.floor(cx / 256) * 7919 + Math.floor(cz / 256) * 104729);
     const kindI = KIND[bd.k] ?? 0;
     // siding code rides in the fraction (the shader's kind tests use ±0.5 bands, so the glass
     // curtain wall, code 5, sits at .46 — still inside its kind's band, still rounds to 5)
@@ -1509,7 +1528,7 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     if (inSlice && !bd.lod && bd.k !== 'shed' && inZone) {
       const wall = pickDoorWall(ring, seed, bd.k, streets, entrances, solid);
       if (wall) {
-        const C: Ctx = { b, col: colliders, streets, rings, world, signs, mail: mailboxes, walks, drives };
+        const C: Ctx = { b, col: colliders, streets, rings, world, signs, mail: mailboxes, walks, drives, estate: hood === 'estate' };
         const B: BInfo = { ring, base, floor0, raise, eave: wallTop, kind: bd.k, seed, id, fo, roofCol, roofMat: rc.roofMat === ROOFMAT.tile ? ROOFMAT.metal : rc.roofMat, addr: bd.ad, name: bd.n, use: bd.u, bi: footprints.length - 1 };
         const porch = bd.k === 'house' && raise === 0 && r2 < 0.5 && porchFits(C, B, wall);
         const d = buildEntrance(C, B, wall, porch);
@@ -1547,7 +1566,7 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     m.layers.enable(1);
     group.add(m);
   }
-  return { group, footprints, ctxRings, lanterns, material, doors, colliders, signs, mailboxes, drives, walks, pilings };
+  return { group, footprints, ctxRings, lanterns, material, doors, colliders, signs, mailboxes, drives, walks, pilings, hood: hoodAt };
 }
 
 // The building you're visiting: its door stands open and its windows become real openings (a short

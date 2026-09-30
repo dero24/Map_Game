@@ -1,6 +1,7 @@
 // Street furniture and life: utility poles with sagging wires and cobra-head lamps (plus the lamp light map
 // that paints warm pools on the ground at night), trees from WorldCover, moored boats, lifeguard stands.
 import * as THREE from 'three';
+import type { HoodClass } from './hood';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { detailBox, type World, type WorldJson, type Road, type Box, type Building } from './data';
 import type { WalkWorld } from '../player/collision';
@@ -356,7 +357,8 @@ export function urbanCore(buildings: { r: number[]; h: number; pt?: 1; lf?: numb
   return (x: number, z: number) => { const [cover, h] = f(x, z); return cover > 0.3 && h > 16; };
 }
 
-export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P; w: number }[], extras: { mailboxes?: Mailbox[]; drives?: Drive[]; doors?: Door[]; ctx?: WorldJson; box?: Box } = {}) {
+export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P; w: number }[], extras: { mailboxes?: Mailbox[]; drives?: Drive[]; doors?: Door[]; ctx?: WorldJson; box?: Box; hood?: (x: number, z: number) => HoodClass } = {}) {
+  const hoodAt = extras.hood ?? (() => 'suburb' as HoodClass);
   const { json, terrain } = world;
   const S = json.slice; // region slice: lamp-map compositor box
   // Placement gate: the detail zone (the backdrop for baked tiles, cell+margin for synthetic
@@ -791,7 +793,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       const cov = terrain.coverAt(jx, jz);
       const beachy = terrain.oceanDistAt(jx, jz) < 90;
       const pr = cov === 10 ? 0.85 : beachy ? 0 : cov === 50 ? 0.035 : cov === 30 ? 0.05 : cov === 20 ? 0.3 : 0;
-      if (rng.float() > pr * look.treeDensity) continue;
+      // (estate country is old trees round big lawns; an old grid's street trees are mature too)
+      const hk = cov === 10 || beachy ? 'suburb' : hoodAt(jx, jz), canopy = hk === 'estate' ? 3.2 : hk === 'grid' ? 1.2 : 1;
+      if (rng.float() > pr * look.treeDensity * canopy) continue;
       if (terrain.sdfAt(jx, jz) < 3 || paved(jx, jz) || walk.blocked(jx, jz, 2.2) || onStructure(jx, jz)) continue;
       const g = terrain.heightAt(jx, jz);
       // species from the region's weights; coastal cells lean to wind-shaped pines everywhere
@@ -1948,6 +1952,25 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         const masonryYard = look.family === 'adobe' || look.family === 'stucco' || look.climate === 'arid';
         const picket = h0 >= 0.6 && h0 < 0.74 && look.region === 'na' && look.family === 'clapboard';
         const yardWall = masonryYard && h0 > 0.38 && h0 < 0.74;
+        // estate country: a long clipped hedge along the frontage, well out from the house (the
+        // privet walls of an estate lane), not a short run by the walk
+        if (look.region === 'na' && hoodAt(d.wx, d.wz) === 'estate' && h0 >= 0.2 && !d.porch) {
+          const ok = (x: number, z: number) => ownGround(x, z, 1) && !walk.blocked(x, z, 1) && !paved(x, z) && clearOfRoad(x, z, 2.4);
+          for (const D of [16, 12, 8]) {
+            let placed = 0;
+            for (const s of [-12.4, -9.2, -6, -2.8, 2.8, 6, 9.2, 12.4]) {
+              const hx = d.wx + d.nx * D + tx * s, hz = d.wz + d.nz * D + tz * s;
+              const ax = hx - tx * 1.6, az = hz - tz * 1.6, bxx = hx + tx * 1.6, bz2 = hz + tz * 1.6;
+              if (!ok(hx, hz) || !ok(ax, az) || !ok(bxx, bz2)) continue;
+              hedgeM.push(new THREE.Matrix4().compose(V(hx, terrain.heightAt(hx, hz), hz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(tz, tx)), V(1, 1.5 + h0 * 0.6, 1.1)));
+              hedgeC.push(new THREE.Color(rng.pick(green)).lerp(new THREE.Color(0x24391f), 0.3));
+              walk.addWall([ax, az], [bxx, bz2], -Infinity, terrain.heightAt(hx, hz) + 1.6);
+              placed++;
+            }
+            if (placed >= 3) break; // (a proper run, or try nearer the house)
+          }
+          continue;
+        }
         if (((h0 > 0.38 && h0 < 0.6) || picket || yardWall) && !d.porch) {
           // Hedge run parallel to the front, split to leave the walk clear. Try the yard line
           // first (6 m out) then hug the foundation (2.4 m) — every point must be off pavement,

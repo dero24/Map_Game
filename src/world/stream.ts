@@ -25,9 +25,10 @@ export const streamParams = {
   loadR: 1500, // keep tiles this close (3×3 cells and then some)
   dropR: 2400, // drop tiles beyond this
   coarseR: 8000, // silhouette ring: lite builds (meshes only) out to the horizon
-  // (these two a phone's tier sets — a PC's are as they always were: no budget, four at once)
+  // (these three a phone's tier sets — a PC's are as they always were: no budgets, four at once)
   budgetMB: 0, // the detail tiles' vertex data kept at once, nearest first (world/budget.ts); 0: no cap
   realConc: 4, // real-lite (tile service) builds in flight at once (the service caches in R2; Overpass slots are per endpoint)
+  coarseMB: 0, // the silhouette ring's vertex data kept at once (the farthest go first); 0: no cap
   // an unloaded tile's walls taken out of the walk world a slice a frame (WalkWorld.purgeSome), not
   // only marked dead: a long walk's walls would otherwise pile up for the whole session
   purge: true,
@@ -110,7 +111,13 @@ export class TileStream {
   private buildQueue: Pending[] = [];
   // Coarse tier: display-only tiles in [DROP_R, COARSE_R) — meshes rebuilt from lite builds,
   // no collision/interiors/plans. A tile entering the detail ring sheds its coarse mount.
-  private coarseLoaded = new Map<string, { spec: TileSpec; group: THREE.Group }>();
+  private coarseLoaded = new Map<string, { spec: TileSpec; group: THREE.Group; bytes: number }>();
+  // the silhouette ring over its budget (streamParams.coarseMB): nothing past this is fetched until
+  // the ring's back under ~70% of it (Midtown's stand-in towers were 175 MB of a phone's ring)
+  private coarseCut = Infinity;
+  private coarseBytes = 0;
+  private px = 0;
+  private pz = 0;
   private coarseFetching = new Map<string, Promise<Pending | null>>();
   private coarseQueue: Pending[] = [];
   private scopeSeq = 1;
@@ -405,6 +412,9 @@ export class TileStream {
   // ring under a small budget), mount at most one finished tile of each tier, drop far ones.
   update(x: number, z: number) {
     const { loadR: LOAD_R, dropR: DROP_R, coarseR: COARSE_R } = streamParams;
+    this.px = x;
+    this.pz = z;
+    if (this.coarseCut < Infinity && this.coarseBytes < streamParams.coarseMB * 1e6 * 0.7) this.coarseCut = Infinity;
     this.reveal();
     this.walk.purgeSome(); // (unloaded tiles' walls, ~1.5 ms a frame until they're gone)
     const now = performance.now();
@@ -447,7 +457,7 @@ export class TileStream {
           // without this, cells between LOAD_R and DROP_R were a dead zone that neither tier ever
           // fetched. They stay synth even under a tile service: cheap, local, and a distant cell
           // isn't worth an Overpass query.
-          if (d2 < COARSE_R * COARSE_R) {
+          if (d2 < COARSE_R * COARSE_R && d2 < this.coarseCut * this.coarseCut) {
             const cs = t.world ? this.synthSpec(cx, cz) : t;
             if (!this.loaded.has(t.id) && !this.loaded.has(cs.id) && !this.coarseLoaded.has(cs.id) && !this.coarseFetching.has(cs.id) && !this.queued.has('c' + cs.id) && !this.queued.has(cs.id) && this.coarseFetching.size < COARSE_BUDGET && now - (this.failed.get('c' + cs.id) ?? -30000) > 10000) void this.fetchCoarse(cs).then((p) => { if (p) { this.queued.add('c' + cs.id); this.coarseQueue.push(p); } });
           } else if (d2 >= COARSE_R * COARSE_R) {
@@ -968,7 +978,19 @@ export class TileStream {
       group.add(haloPoints(v3s(tile.lanterns), 7, new THREE.Color(1.0, 0.85, 0.55)));
       group.add(haloPoints(v3s(tile.towers), 1.2, new THREE.Color(1.0, 0.75, 0.45)));
       this.scene.add(group);
-      this.coarseLoaded.set(spec.id, { spec, group });
+      const bytes = streamParams.coarseMB > 0 ? vertexBytes(group) : 0;
+      this.coarseLoaded.set(spec.id, { spec, group, bytes });
+      this.coarseBytes += bytes;
+      // over the ring's budget: the farthest silhouettes go, and nothing that far is fetched again
+      // until there's room
+      if (streamParams.coarseMB > 0 && this.coarseBytes > streamParams.coarseMB * 1e6) {
+        const far = [...this.coarseLoaded].map(([id, a]) => [id, boxDist2(a.spec.box, this.px, this.pz)] as const).sort((a, b) => b[1] - a[1]);
+        for (const [id, d2] of far) {
+          if (this.coarseBytes <= streamParams.coarseMB * 1e6) break;
+          this.unloadCoarse(id);
+          this.coarseCut = Math.min(this.coarseCut, Math.sqrt(d2));
+        }
+      }
     } catch (e) {
       console.warn('coarse mount failed', spec.id, e);
     }
@@ -978,6 +1000,7 @@ export class TileStream {
     const a = this.coarseLoaded.get(id);
     if (!a) return;
     this.retireGroup(a.group, retire);
+    this.coarseBytes -= a.bytes;
     this.coarseLoaded.delete(id);
   }
 

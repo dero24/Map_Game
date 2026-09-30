@@ -26,7 +26,7 @@ terrain/DEM, or the LiDAR measure pipeline.
   while they fit — the cell you stand in (and within 150 m) always; a built cell counts 150 m
   nearer (no flip-flop). A cell past the budget unloads to its silhouette; queued builds for it
   are dropped; `ensureAround` leaves real tiles to `update()` (a teleport into Midtown built the
-  whole ring at once). `realConc` caps real builds in flight (4 on a PC). `purge` (all tiers)
+  whole ring at once). `realConc` caps real builds in flight (4 on a PC). `coarseMB` (phone 90, low 60, a PC none) caps the silhouette ring's vertex data: over it the farthest silhouettes go and nothing past that distance is fetched until the ring is under ~70% (`coarseCut`) — Midtown's stand-in silhouettes were 175–190 MB of a phone's ring, three times its detail tiles. `purge` (all tiers)
   takes an unloaded tile's walls out of the walk world a slice a frame (`removeScope(id, 'later')`
   → `WalkWorld.purgeSome`, ~1.5 ms, from `update()`); they stop blocking at once, and their ids
   are reused only once out of every grid cell.

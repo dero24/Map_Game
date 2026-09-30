@@ -1039,7 +1039,10 @@
         "tools/hud-audit.mjs: 'in a balloon' state on 10 phones × both ways, no overlaps"
       ],
       "evidence": [
-        "src/assets/balloon.ts", "src/player/balloonPhysics.ts", "src/world/wind.ts", "src/world/balloons.ts",
+        "src/assets/balloon.ts",
+        "src/player/balloonPhysics.ts",
+        "src/world/wind.ts",
+        "src/world/balloons.ts",
         "src/player/vehicles.ts (kind balloon: balloonFly, drift, basketCam, giftBalloon, ambient boarding)",
         "src/ui/brush.ts (balloon family, any-colour picker, stripe colour), src/player/place.ts placeBalloon",
         "src/ui/commissions.ts (balloon cards), src/ui/cardArt.ts, src/audio/ambience.ts (burner)"
@@ -1106,6 +1109,28 @@
         "src/player/landing.ts"
       ],
       "notes": "Found and fixed: posts in car lanes (props.ts offCarriageway, signs.ts), stand-in houses across streets (synth.ts), teleports into water (landing.ts), a raised house's stair across the street (buildings.ts). Next: run it live on Manhattan and Queen Anne; phone budgets on a real phone."
+    },
+    {
+      "id": "neighbourhoods",
+      "priority": 1,
+      "area": "world",
+      "title": "Neighbourhoods that look like themselves: estates, old grids and tracts, measured from the map",
+      "user_visible_behavior": "Walk from Fair Haven into Rumson and the town changes: big shingle and white clapboard houses under slate, far apart behind privet hedges and long drives, deep in trees. Red Bank's and Fair Haven's older streets are painted houses with bays close together; a postwar tract repeats one model down the street. Chicago's old grid is brick bungalows, Seattle's craftsman, a desert tract stucco under tile. Sea Bright is unchanged.",
+      "status": "passing",
+      "verification": [
+        "tests/hoods.test.ts (12): classification on synthetic streets; fills/context excluded; the suburb path equals the old recipe exactly; each archetype and its regional variants; the shore's towns from the baked pack (Rumson west → estate 45% vs < 5% for Fair Haven, Red Bank, Monmouth Beach; Fair Haven, Red Bank → grid; Monmouth Beach → suburb); real-lite fixtures Levittown NY → tract, Portage Park IL → grid, Wallingford WA → grid",
+        "shots/shore-montage.jpg: Rumson / Fair Haven / Sea Bright, before and after, street and 60 m (reviewed: Rumson more wooded with hedge runs; the rest unchanged). Red Bank's deep link landed by the shore — its grid look is test-verified only"
+      ],
+      "evidence": [
+        "src/world/hood.ts",
+        "src/world/recipe.ts",
+        "src/world/buildings.ts",
+        "src/world/props.ts",
+        "tools/hood-fixtures.mjs",
+        "tests/fixtures/hoods/",
+        "docs/NEIGHBOURHOODS.md"
+      ],
+      "notes": "Phase 1 only (client-side). Gilbert AZ / Greenwich CT / Sugar Land TX fixtures owed (the tile service 503'd); streamed suburbs where OSM has few houses are still fixed-size fills (66 of 67 near Rumson off the baked pack) — Phase 2 (Microsoft/Overture footprints, ACS era) is what fixes those."
     }
   ],
   "regions": {

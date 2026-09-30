@@ -124,4 +124,37 @@ https://gis-fema.hub.arcgis.com/pages/usa-structures
 
 ## Status
 
-See docs/earth/LOG.md for what has been built.
+**Phase 1, built (2026-09-30), client-side** — it needs no tile-service redeploy: styling runs in
+the browser's tile worker (`buildTile`), for baked and streamed tiles alike.
+- `src/world/hood.ts`: the morphology on 256 m cells (median footprint, p90, centroid spacing,
+  area CV) from a tile's own measured homes (no fills, no margin context) → estate / grid / tract /
+  suburb (`classify`). Within 800 m of the ocean only estate applies (the shore keeps its look).
+- `recipe.ts` `recipeFor(bd, st, hood, cellSeed)`: estate (white / grey clapboard, cedar shingle,
+  some render and brick, slate and shake, steep roofs, dormers, two chimneys, bays); grid, by the
+  style's `sub` — the Northeast's painted Victorians (bays, steep roofs), the Midwest's brick
+  bungalows (dark brick, low hips, the front bay), the Northwest's craftsman (stained shingle in
+  deep greens and browns, low wide gables); tract, one model a cell — cape or ranch in a narrow
+  pastel range, or in a stucco / adobe region low tile hips over sand-toned stucco. `suburb` is
+  today's recipe exactly (a test pins it). Mapped colour and material win.
+- `buildings.ts`: an estate's big footprint the map calls `large` stays a house (pitched, a door,
+  a drive); estate drives on any size house. `props.ts`: estate frontage hedges (long privet runs
+  8–16 m out) and 3.2× tree canopy (1.2× on old grids) where the survey hasn't placed trees.
+- Tests: tests/hoods.test.ts — classification on synthetic streets, what counts, the neutral path,
+  each archetype and its regional variants, and **real places read as themselves** (the Tier A
+  check, no browser, well under a second):
+  - the shore's towns from the baked pack (in the repo), 5×5 cells round each, home-weighted:
+    Rumson west of the river bend → estate (45% of homes; every neighbour under 5%), Fair Haven →
+    grid, Red Bank's east side → grid, Monmouth Beach → suburb;
+  - the country from frozen real-lite tiles (`tools/hood-fixtures.mjs` → `tests/fixtures/hoods/`,
+    the tile a visitor streams there, only the fields the measure reads): Levittown NY → tract
+    (732 of 787 homes), Chicago's Portage Park → grid (2,164 of 2,164), Seattle's Wallingford →
+    grid (1,328 of 1,328). Gilbert AZ (tract), Greenwich CT (estate) and Sugar Land TX (suburb) are
+    in the list; the tile service answered 503 for them all day (its Overpass upstream was down) —
+    re-run the tool and they join the test with no code change.
+  - Scaling to the lower 48 is adding a line to `HOODS` (a point, what it should read as) and
+    re-running the tool; a place too thinly mapped to measure (fills only) is skipped, since the
+    game stays neutral there.
+- Found on the way: OSM maps almost none of Rumson's houses (one building in the reference
+  square) — there the game has LiDAR-found footprints or the fixed-size fills, which is the
+  deeper reason it read like everywhere else. Phase 2's footprints (Microsoft / Overture) and the
+  ACS era data matter most there.

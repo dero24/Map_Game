@@ -73,8 +73,8 @@ behaviour.
 - A city is what kills a phone (Manhattan filled its GPU; Chrome crashed, then refused the site
   WebGL). So the phone/low tiers also: keep the detail tiles under `streamParams.budgetMB` of
   vertex data (200 / 120; `world/budget.ts` admits cells nearest first, the cell you stand in
-  always; the rest keep their silhouettes), build 2 / 1 real tiles at once (`realConc`), read a
-  4 / 3 km skyline, and measure no LiDAR (`?lidar=1` forces it). A PC's are unchanged (no budget,
+  always; the rest keep their silhouettes), build 2 / 1 real tiles at once (`realConc`), keep the silhouette ring under 90 / 60 MB
+  (`coarseMB`), read a 4 / 3 km skyline, and measure no LiDAR (`?lidar=1` forces it). A PC's are unchanged (no budget,
   4 at once, LiDAR, 8 km). `stream.detailBytes` is the budget's measure. On every platform now: a
   tile's sign atlas is disposed with it (it leaked on every unload), and an unloaded tile's walls
   leave the walk world ~1.5 ms a frame (`purge`, `WalkWorld.purgeSome`; they were tombstoned for

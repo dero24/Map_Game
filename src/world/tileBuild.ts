@@ -68,7 +68,7 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
   w.recording = true;
   const structures = buildStructures(world2, w);
   const signs = buildSigns(world, bld.signs, w); // full json: intersection signs need context roads
-  const props = buildProps(world2, w, structures.pierSegs, { mailboxes: bld.mailboxes, drives: bld.drives, doors: bld.doors, ctx: tj as unknown as WorldJson, box: spec.box });
+  const props = buildProps(world2, w, structures.pierSegs, { mailboxes: bld.mailboxes, drives: bld.drives, doors: bld.doors, ctx: tj as unknown as WorldJson, box: spec.box, hood: bld.hood });
   const stairs = buildStairs(pj.roads, (x, z) => terrain.heightAt(x, z), w); // (every highway=steps a flight you climb)
   const xing = crossingPaint(tj.roads, pj.points); // (the tile's own crossings, on any street round them)
   const vp = pj.points.filter((p) => p.c === 'viewpoint').flatMap((p) => [p.x, p.z, p.d ?? -1]);
