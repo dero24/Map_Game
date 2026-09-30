@@ -571,7 +571,7 @@ async function main() {
     teleport: async (lat, lon) => { await teleportTo(lat, lon); arrival.greet(); },
     sound: (k) => ambience?.ui(k),
     paintView: async () => {
-      if (!postParams.enabled || !postParams.sketch || !postParams.sketchFar) return null;
+      if (!postParams.enabled || !postParams.sketchFar) return null;
       // the frame's depth on a small grid (384 on the long side, a phone 256), unprojected through this frame's
       // camera — captured now, before the next frame moves it (render/seen.ts)
       const a = camera.aspect, L = MOBILE ? 256 : 384, /* (a phone lays it in sooner) */ w = a >= 1 ? L : Math.max(16, Math.round(L * a)), h = a >= 1 ? Math.max(16, Math.round(L / a)) : L;
@@ -1407,8 +1407,10 @@ async function main() {
       }
     } else if (paintSince != null) { paintSince = null; paintShown = 0; }
     if (!walkParams.fly) journal.update(walker.x, walker.z, dt);
-    explore.enabled = postParams.sketch;
-    explore.far = postParams.sketch && postParams.sketchFar; // (the far window: only the far sketch reads it)
+    // (your walks are always recorded — the atlas, the journal and the arrival cards count them —
+    // but the world only shows it, near or far, when you've picked it in the panel)
+    explore.enabled = true;
+    explore.far = postParams.sketchFar; // (the far window: only the far sketch reads it)
     explore.update(walker.x, walker.z, camera.position.y - Math.max(world.terrain.heightAt(walker.x, walker.z), 0), dt, postParams.sketchReach);
     if (atlas.open && (journalTimer -= dt) < 0) {
       journalTimer = 0.5;

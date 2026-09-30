@@ -81,7 +81,14 @@ terrain/DEM, or the LiDAR measure pipeline.
 - Worker route `GET /dem/<z>/<x>/<y>.png` proxies Terrarium (S3 has no CORP headers —
   module-worker fetches must go through the proxy).
 - `src/world/dem.ts` decodes z14 PNGs → 64×64 grid at 16 m pitch → a synthetic `TerrainLayer`
-  (heights f32-cm; sdf/flags derive from elevation — sea nodes = water).
+  (heights f32-cm; sdf/flags derive from elevation — sea nodes = water). The PNG is read byte for
+  byte (`terrariumFromPng`: IDAT inflated with three's bundled fflate, the scanline filters
+  undone) — no canvas, so no colour management, the same heights on every device, and a worker
+  without OffscreenCanvas (iPhones before iOS 16.4) still gets its ground; the canvas path is only
+  the fallback for a PNG it doesn't take.
+- A virtual cell whose DEM is late or failed is built on `flatDem` (the same lattice at the
+  stand-in's height) so the map's water still presses into it — a cell out on the Sound is sea,
+  not a flat lawn over it; a stand-in built so is marked `late` for its relief rebuild.
 - The worker registers the patch before `buildTile` so props/ground/interiors sit on real
   heights; `BuiltTile.dem` ships a copy to the main thread, which registers it under the cell
   key with `demHolders` refcounting so the s→w swap can't drop terrain.

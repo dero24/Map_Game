@@ -28,7 +28,7 @@ export const postParams = {
   vignette: 0.45,
   boilFps: 0,
   nightWash: 0.5,
-  sketch: true, // paint as you explore: unvisited places are a paler first wash that deepens as you arrive
+  sketch: false, // paint as you explore (a choice in the panel, off unless picked): unvisited places near you a paler first wash that deepens as you arrive
   // …all the way out (a developer switch, off for now): every place you haven't been — the far
   // distance too — is a pencil underdrawing on paper, and walking paints it in round you
   sketchFar: false,
@@ -695,7 +695,7 @@ export class WatercolorPost {
     c.uGolden.value = golden;
     c.uExposure.value = P.exposure;
     c.uRaw.value = raw ? 1 : 0;
-    c.uSketch.value = P.sketch && U.uExplore.value ? 1 : 0;
+    c.uSketch.value = (P.sketch || P.sketchFar) && U.uExplore.value ? 1 : 0; // (either choice; neither, and the world is simply painted)
     c.uSketchFar.value = P.sketchFar ? 1 : 0;
     c.uCrisp.value = P.crisp;
     c.uSoftGlow.value = P.softGlow;

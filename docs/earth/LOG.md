@@ -2,6 +2,30 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-01 (night) — Paint-as-you-explore only when picked; the open world's sea without a canvas
+
+- **No bleed**: `postParams.sketch` defaulted ON — everyone got the near "first wash" round them.
+  Both looks (near and far) are now panel choices, off unless picked; either one lights the
+  composite's `uSketch`, and the far one no longer needs the near one ticked. Walks are recorded
+  regardless (atlas, journal, arrival cards); the arrival card says "walk to paint it in" only with
+  a look picked.
+- **Puget Sound white on an iPhone** (reported; no iPhone or WebKit here to reproduce). Emulated on
+  a phone, the open world's unbuilt Sound is the stand-in: a flat 3 m plain in haze. Three ways it
+  stayed that plain, all fixed:
+  1. `dem.ts` decoded Terrarium through createImageBitmap + OffscreenCanvas — which a worker on
+     iOS < 16.4 doesn't have: no DEM, ever. Now `terrariumFromPng` reads the PNG bytes itself
+     (three's bundled fflate; exact vs pngjs on two real tiles; tests encode all five filters); the
+     canvas is the fallback. Also no colour management anywhere: the same heights on every device.
+  2. A stand-in's water needed a DEM to press into: no DEM in time, no sea. `flatDem` gives it a
+     flat grid at the stand-in height to take the map's water, marked late for its relief.
+  3. The relief rebuild returned nothing when the DEM never came, and flat ground never asked
+     again for late water. Now it rebuilds with the flat ground and the water, once (no re-late).
+- Not yet seen end to end: under SwiftShader here only three cells streamed in 25 minutes (a
+  stall worth its own look — see below), so the Sound's cell never built in the emulation.
+  Next: a phone screenshot + iOS version from the reporter; trace the slow open-world stream.
+- tests 501 (interiorTower's 5 s timeouts on the freshly restarted container fail on the previous
+  commit too), typecheck, build.
+
 ## 2026-10-01 (evening) — A photo sees past the ropes: no more streaks out to the horizon
 
 - **The streaks** (a phone, photos from a balloon, the atlas map): straight bands of canvas fanning

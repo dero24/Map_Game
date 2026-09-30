@@ -6,7 +6,7 @@ import { osmToTile, overpassQuery, makeProjector, type OsmDoc } from './realTile
 import { buildTile } from './tileBuild';
 import { packGroup, type BuiltTile } from './pack';
 import { synthTile, realExtras, waterSheets } from './synth';
-import { fetchDem, demLayer, setDemBase, raceNull, waterPatch, waterLevel, type WaterBody } from './dem';
+import { fetchDem, demLayer, flatDem, setDemBase, raceNull, waterPatch, waterLevel, type WaterBody } from './dem';
 import { readMvt, ringArea } from './mvt';
 import { vectorToOsm, clipPoly } from './vectorTile';
 import { gradeRoads } from './grade';
@@ -309,6 +309,8 @@ function mvtWaterTile(tpl: string, z: number, tx: number, ty: number): Promise<W
 /** A cell's water from the vector tiles covering it, as a slim tile (areas only) — or null when
  *  the CDN can't be reached. Cached per cell like the others. A distant (lite) cell reads z12:
  *  four tiles for the whole ring, not seventy. */
+/** Whether a cell can have the vector tiles' water at all (the open world, the CDN known). */
+function mvtWaterPossible(spec: TileSpec) { return !!origin && (spec.synth || spec.world); }
 async function mvtWater(spec: TileSpec, lite = false): Promise<TileJson | null> {
   if (!origin) return null;
   const [cx, cz] = spec.id.slice(1).split('_').map(Number), z = lite ? 12 : 14;
@@ -481,9 +483,11 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   // (a real cell's grid is 4 m — fine enough to carry its graded streets; a placeholder's 16 m)
   if (demOn && origin && (spec.synth || spec.world)) demP = demFor(cellKey, spec.box, !msg.lite ? 4 : 16);
   // Relief rebuilds: a synth cell waits for its DEM, a real cell for its LiDAR (below).
+  // (no DEM for good — offline, or a browser that can't read it — still rebuilds when the map's
+  // water can come: the flat ground below takes it)
   if (msg.relief && spec.synth) {
     const d = demP ? await demP : null;
-    if (!d) return null;
+    if (!d && !mvtWaterPossible(spec)) return null;
   }
   // The map's water from the vector tiles (a fifth of a second — cached per cell): a stand-in's
   // only real knowledge of its shore, and a real cell's sea — OSM's coastline is a line, and a
@@ -507,6 +511,14 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   const realish = spec.world || !!vec;
   // (a DEM that landed while the vector race ran on still counts)
   let dem = dem0 ?? (demP ? await raceNull(demP, 0) : null);
+  // No ground yet (late, failed, offline, or a browser that can't read the tiles): a flat grid at
+  // the resident stand-in's height, so the map's water still has somewhere to go — a cell out on
+  // the Sound is the Sound, not a flat lawn over it. The real ground comes with the relief rebuild.
+  let flatGround = false;
+  if (!dem && demP && origin && mvtP) {
+    dem = demLayer(flatDem(spec.box, (x, z) => terrain!.heightAt(x, z), msg.lite ? 16 : 4));
+    flatGround = true;
+  }
   // (a stand-in never overwrites the ground its real twin registered in this worker)
   const mayRegister = spec.world || !realPatched.has(cellKey);
   let waterLate = false, water: WaterBody[] | undefined, walls: number[] = [];
@@ -528,7 +540,7 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
           dem = waterPatch(dem, water, complete);
           if (mayRegister) terrain.registerPatch(cellKey, new TerrainLayer(dem.buf.slice(0), dem.layout));
         }
-      } else if (wet && !msg.relief) waterLate = true;
+      } else if ((wet || flatGround) && !msg.relief) waterLate = true; // (flat: no way to know it's dry — ask again)
     }
   }
   const syn: SynthResult | null = spec.synth && !vec ? synthTile(spec, seed, terrain) : null;
@@ -622,7 +634,7 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   if (shipped) tile.dem = { buf: shipped.buf.slice(0), layout: shipped.layout };
   // Built without data that's still coming (flat while a DEM was expected, or from priors
   // while the LiDAR read runs) — the stream asks for a relief rebuild and swaps it in.
-  else if (demP && spec.synth && !msg.lite) tile.late = 1;
+  if ((!shipped || flatGround) && demP && spec.synth && !msg.lite && !msg.relief) tile.late = 1; // (a relief is the last word: never another)
   if (lidarLate && !msg.lite) tile.late = 1;
   if (waterLate && !msg.lite) tile.late = 1; // (its water still on the way: rebuilt when it lands)
   return tile;
