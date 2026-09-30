@@ -11,7 +11,23 @@ import { lifeParams } from '../sim/life';
 import { audioParams } from '../audio/ambience';
 
 export const timeParams = { realTime: true, hour: 18.5, speed: 60, dayOfYear: 0 };
-export const weatherParams = { cloud: 0.35, seaFog: 0.0, haze: 0.35, wind: 0.5, autoWeather: true, snow: -1 }; // snow −1 = the season's own (season.ts)
+export const weatherParams = { cloud: 0.35, seaFog: 0.0, haze: 0.35, wind: 0.5, autoWeather: true, snow: -1, fogMode: 'rare, anywhere' }; // snow −1 = the season's own (season.ts)
+/** Drifting weather's fog (main.ts): now and then anywhere (more on a coastal morning), only a
+ *  coastal morning's marine layer, or never. */
+export const FOG_MODES = ['rare, anywhere', 'coastal mornings', 'never'] as const;
+/** Weather to test against (the panel's preset menu): each pins the weather (drifting off) —
+ *  'drifting' hands it back to the clock. */
+export const WEATHER_PRESETS: Record<string, Partial<typeof weatherParams>> = {
+  drifting: { autoWeather: true },
+  clear: { autoWeather: false, cloud: 0.08, seaFog: 0, haze: 0.12, wind: 0.3, snow: -1 },
+  fair: { autoWeather: false, cloud: 0.35, seaFog: 0, haze: 0.35, wind: 0.5, snow: -1 },
+  'hazy summer': { autoWeather: false, cloud: 0.15, seaFog: 0, haze: 0.85, wind: 0.2, snow: -1 },
+  'marine layer': { autoWeather: false, cloud: 0.5, seaFog: 0.45, haze: 0.4, wind: 0.3, snow: -1 },
+  'thick fog': { autoWeather: false, cloud: 0.8, seaFog: 0.9, haze: 0.7, wind: 0.1, snow: -1 },
+  overcast: { autoWeather: false, cloud: 0.92, seaFog: 0, haze: 0.5, wind: 0.6, snow: -1 },
+  blustery: { autoWeather: false, cloud: 0.55, seaFog: 0, haze: 0.25, wind: 1.3, snow: -1 },
+  'snow day': { autoWeather: false, cloud: 0.85, seaFog: 0.05, haze: 0.5, wind: 0.6, snow: 0.9 },
+};
 export const debugParams = { rawScene: false, showStats: false, lightScale: 1, summons: false }; // summons: the developer's free rides (V car, Shift+B boat, N plane)
 
 let STORE = 'world.panel.v3';
@@ -44,7 +60,7 @@ function save() {
   try { localStorage.setItem(STORE, JSON.stringify({ ...out, uniforms: u })); } catch { /* storage off */ }
 }
 
-export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: number) => void; onRespawn: () => void; onResetExplore: () => void }, region: { name: string; tz: string; respawn?: string }) {
+export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: number) => void; onRespawn: () => void; onResetExplore: () => void; onSummon: (kind: 'car' | 'boat' | 'plane') => void }, region: { name: string; tz: string; respawn?: string }) {
   const gui = new GUI({ title: `${region.name} · tuning` });
   gui.onFinishChange(save);
   const ZONES: Record<string, string> = { 'America/Los_Angeles': 'Pacific', 'America/Denver': 'Mountain', 'America/Phoenix': 'Arizona', 'America/Chicago': 'Central', 'America/New_York': 'Eastern' };
@@ -81,12 +97,21 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   for (const k of Object.keys(presets)) t.add(presets, k as keyof typeof presets);
 
   const w = gui.addFolder('Weather');
-  w.add(weatherParams, 'autoWeather').name('drifting weather');
-  w.add(weatherParams, 'cloud', 0, 1, 0.01).listen();
-  w.add(weatherParams, 'seaFog', 0, 1, 0.01).name('sea fog').listen();
-  w.add(weatherParams, 'haze', 0, 1, 0.01);
-  w.add(weatherParams, 'wind', 0, 1.5, 0.01).listen();
-  w.add(weatherParams, 'snow', -1, 1, 0.01).name('snow (−1 = season)');
+  const wx = { preset: weatherParams.autoWeather ? 'drifting' : 'custom' };
+  w.add(wx, 'preset', ['custom', ...Object.keys(WEATHER_PRESETS)]).name('weather preset').listen().onChange((k: string) => {
+    const p = WEATHER_PRESETS[k];
+    if (!p) return;
+    Object.assign(weatherParams, p);
+    save();
+  });
+  w.add(weatherParams, 'autoWeather').name('drifting weather').listen().onChange((on: boolean) => { wx.preset = on ? 'drifting' : 'custom'; });
+  w.add(weatherParams, 'fogMode', [...FOG_MODES]).name('drifting fog');
+  const custom = () => { if (!weatherParams.autoWeather) wx.preset = 'custom'; };
+  w.add(weatherParams, 'cloud', 0, 1, 0.01).listen().onChange(custom);
+  w.add(weatherParams, 'seaFog', 0, 1, 0.01).name('sea fog').listen().onChange(custom);
+  w.add(weatherParams, 'haze', 0, 1, 0.01).listen().onChange(custom);
+  w.add(weatherParams, 'wind', 0, 1.5, 0.01).listen().onChange(custom);
+  w.add(weatherParams, 'snow', -1, 1, 0.01).name('snow (−1 = season)').listen().onChange(custom);
 
   const life = gui.addFolder('Life & sound');
   life.add(lifeParams, 'enabled').name('townsfolk, cars, gulls');
@@ -99,6 +124,7 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   p.add(postParams, 'sketch').name('paint as you explore');
   p.add(postParams, 'sketchFar').name('…far away too (pencil till you walk it)');
   p.add(postParams, 'sketchReach', 20, 400, 5).name('paint reach as you walk (m)');
+  p.add(postParams, 'photoReach', 200, 22000, 100).name('a photo paints out to (m)');
   p.add(postParams, 'kuwaharaRadius', 1, 7, 0.1).name('brush size');
   p.add(postParams, 'kuwaharaSharpness', 1, 16, 0.1).name('brush sharpness');
   p.add(postParams, 'wobble', 0, 3, 0.01).name('hand wobble');
@@ -136,13 +162,17 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   m.add(walkParams, 'runSpeed', 2, 20, 0.1).name('shift speed');
   m.add(walkParams, 'fov', 35, 100, 1).name('field of view');
   m.add(walkParams, 'bob', 0, 2, 0.01).name('head bob');
-  m.add(walkParams, 'mouseSens', 0.2, 3, 0.01).name('mouse sensitivity');
+  m.add(walkParams, 'mouseSens', 0.2, 3, 0.01).name(document.body.classList.contains('nomouse') ? 'look sensitivity' : 'mouse sensitivity'); // (a phone's drag to look goes by it too)
+  m.add(walkParams, 'flySpeed', 3, 400, 1).name('fly speed');
   m.add(walkParams, 'fly').name('fly (debug)').listen();
   m.add({ respawn: hooks.onRespawn }, 'respawn').name(`back to ${region.respawn ?? 'the start'}`);
 
   const d = gui.addFolder('Debug');
   d.add(debugParams, 'rawScene').name('show raw render');
   d.add(debugParams, 'summons').name('free rides: V car, ⇧B boat, N plane');
+  d.add({ car: () => hooks.onSummon('car') }, 'car').name('summon a car');
+  d.add({ boat: () => hooks.onSummon('boat') }, 'boat').name('summon a boat');
+  d.add({ plane: () => hooks.onSummon('plane') }, 'plane').name('summon a plane');
   d.add({ reset: hooks.onResetExplore }, 'reset').name('reset explored map');
   d.add({ clear: () => { localStorage.removeItem(STORE); location.reload(); } }, 'clear').name('reset all settings');
   d.close();
@@ -152,5 +182,17 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   // the game ships tuned: the panel is a developer tool, hidden until ` (backquote) opens it
   gui.hide();
   window.addEventListener('keydown', (e) => { if (e.code === 'Backquote') gui._hidden ? gui.show() : gui.hide(); });
+  const mobileOptions = document.getElementById('toptions');
+  const mobileClose = document.createElement('button');
+  mobileClose.className = 'mobile-panel-close';
+  mobileClose.textContent = '× Close';
+  mobileClose.type = 'button';
+  mobileClose.setAttribute('aria-label', 'close options and developer tools');
+  mobileClose.onclick = () => { gui.hide(); mobileOptions?.setAttribute('aria-expanded', 'false'); };
+  gui.domElement.appendChild(mobileClose);
+  mobileOptions?.addEventListener('click', () => {
+    if (gui._hidden) gui.show(); else gui.hide();
+    mobileOptions.setAttribute('aria-expanded', String(!gui._hidden));
+  });
   return gui;
 }

@@ -38,10 +38,12 @@ export class LiftUI {
     this.tbtn.id = 'tlift';
     this.tbtn.className = 'tbtn hidden';
     this.tbtn.title = 'call the lift';
-    this.tbtn.textContent = '⇅';
+    this.tbtn.setAttribute('aria-label', 'call the lift');
+    this.tbtn.dataset.label = 'Lift';
+    this.tbtn.innerHTML = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m7.5 9.5 4.5-4.5 4.5 4.5M7.5 14.5l4.5 4.5 4.5-4.5"/></svg>';
     this.tbtn.onclick = () => { if (this.enabled()) ride.call(); };
     document.body.append(this.panel);
-    document.getElementById('touchui')?.append(this.tbtn);
+    (document.getElementById('tdock') ?? document.getElementById('touchui'))?.append(this.tbtn);
     // (capture: while the chooser is open its keys are its own — not the walker's, the atlas's)
     window.addEventListener('keydown', (e) => {
       if ((e.target as HTMLElement)?.closest?.('input,textarea,.lil-gui')) return;

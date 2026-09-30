@@ -5,6 +5,7 @@
 // facade colour picks the siding that colour implies instead of overriding it.
 import type { Building } from './data';
 import type { RegionStyle } from './styles';
+import type { HoodClass } from './hood';
 import { hash01 } from '../core/rng';
 
 // Shader codes (buildings.ts): siding rides in the fraction of vInfo.y (kind + code/10), roof
@@ -50,6 +51,22 @@ const GLASS = [0x55626e, 0x4a5552, 0x656b72, 0x7d858b, 0x3a4048, 0x5f6e78, 0x6f7
 const GLASS_OLD = [0x3a3530, 0x2e2f33, 0x4a4238, 0x343a3e];
 const GLASS_NEW = [0x6b7a88, 0x7d8a95, 0x5d6b78, 0x8a949b, 0x707c84];
 const pick = <T>(a: readonly T[], r: number) => a[Math.min(a.length - 1, Math.floor(r * a.length))];
+// Neighbourhood archetypes (hood.ts; docs/NEIGHBOURHOODS.md) — North American houses only:
+// estates wear white and grey clapboard, weathered cedar shingle, some Tudor render and brick,
+// under slate and shake; old grids wear painted Victorians; tracts repeat one model a street, in
+// a narrow pastel range.
+const ESTATE_FACADES = [0xf4f1ea, 0xece8de, 0xdcd8cc, 0xb9b3a7, 0x9a8a74, 0x8f7a63, 0xa9b0a4, 0xe3dccb];
+const ESTATE_ROOFS = [0x4a4f57, 0x55585e, 0x3f4347, 0x6b5e52, 0x5d5448];
+const PAINTED = [0xc9b27a, 0x6f8a86, 0xa35b4f, 0x5d7091, 0xd8cfb2, 0x7a8f63, 0xb98b6e, 0x8c6f8f];
+const TRACT_FACADES = [0xe9e2cf, 0xd7d9cf, 0xc9d3d8, 0xe3d3b8, 0xbfc7b5, 0xeae6dc];
+const TRACT_ROOFS = [0x5a5d61, 0x6d6a66, 0x4f5257];
+// the old grid is regional: the Midwest's is a brick bungalow belt (dark brick, low hips, the front
+// bay), the Northwest's craftsman (stained shingle in deep greens and browns, low wide gables)
+const BUNGALOW_BRICKS = [0x7e4a3a, 0x8a4f3c, 0x9a5a46, 0x6f4636, 0xa8674f, 0xb07a5c, 0x8b6a4f];
+const CRAFTSMAN = [0x5b6b4f, 0x6b5a45, 0x4f5b5e, 0x7a6a52, 0x8a7a5c, 0x3f4a44, 0xb9ad8e, 0x7d4f3f];
+// a desert tract: stucco in sand and adobe tones under red and brown tile
+const DESERT_TRACT = [0xe3d3b8, 0xd9c3a0, 0xcdb593, 0xe8dcc6, 0xc9a77f, 0xd8c8ae];
+const DESERT_ROOFS = [0xa0553b, 0x8f5a44, 0x7a5a48, 0xb06a4a];
 
 // Does a colour read as brick? (reddish-brown, not too light) — lets mapped materials/colours
 // choose the siding instead of the dice.
@@ -90,7 +107,7 @@ export function rowStyle(bd: Pick<Building, 'at' | 'k'>, st: Pick<RegionStyle, '
   return !!bd.at && st.region === 'na' && (bd.k === 'house' || bd.k === 'large') && (st.family === 'clapboard' || st.family === 'brick');
 }
 
-export function recipeFor(bd: Building, st: RegionStyle): Recipe {
+export function recipeFor(bd: Building, st: RegionStyle, hood: HoodClass = 'suburb', cellSeed = 0): Recipe {
   const s = bd.s >>> 0;
   const r1 = hash01(s), r2 = hash01((s ^ 0x5bd1e995) >>> 0); // the builder's historic draws — kept so NJ colours don't reshuffle
   const house = bd.k === 'house', shop = bd.k === 'commercial', large = bd.k === 'large';
@@ -166,5 +183,71 @@ export function recipeFor(bd: Building, st: RegionStyle): Recipe {
   const downspouts = !flat && (house || shop) && h(s, 0xd05) < 0.8;
   const rc2 = h(s, 0xc41);
   const chimney: Recipe['chimney'] = house && !row && !flat && st.climate !== 'tropical' && st.climate !== 'arid' ? (rc2 < 0.42 ? 1 : rc2 < 0.62 ? 2 : 0) : 0;
-  return { facade, roof, trim, siding, roofMat, pitch, basePitch, dormers, bay, downspouts, chimney };
+  const base: Recipe = { facade, roof, trim, siding, roofMat, pitch, basePitch, dormers, bay, downspouts, chimney };
+  return hood !== 'suburb' && house && !row && !flat && st.region === 'na' ? archetype(base, bd, hood, cellSeed, st) : base;
+}
+
+/** A house's recipe made over by its neighbourhood (mapped colours and materials always win). */
+function archetype(r: Recipe, bd: Building, hood: HoodClass, cellSeed: number, st: RegionStyle): Recipe {
+  const s = bd.s >>> 0, o = { ...r }, own = bd.fc == null && !bd.ma; // (own: the look is ours to choose)
+  const up = bd.h >= 7 && bd.fl == null; // (dormers are for a storey and a half and up)
+  if (hood === 'estate') {
+    const m = h(s, 0xe52);
+    if (own) {
+      if (m < 0.1) { o.facade = pick(HOUSE_BRICKS, h(s, 0xe51)); o.siding = SIDING.brick; }
+      else { o.facade = pick(ESTATE_FACADES, h(s, 0xe51)); o.siding = m < 0.46 ? SIDING.shingle : m < 0.84 ? SIDING.clapboard : SIDING.stucco; }
+    }
+    if (bd.rc == null) o.roof = pick(ESTATE_ROOFS, h(s, 0xe55));
+    const rm = h(s, 0xe56);
+    o.roofMat = rm < 0.32 ? ROOFMAT.slate : rm < 0.48 ? ROOFMAT.shake : ROOFMAT.asphalt;
+    o.pitch = Math.max(o.pitch, 0.72 + h(s, 0xe57) * 0.3);
+    if (up) o.dormers = h(s, 0xe53) < 0.55 ? 2 + Math.floor(h(s, 0xe58) * 2) : o.dormers;
+    o.chimney = h(s, 0xe54) < 0.6 ? 2 : 1;
+    o.bay = h(s, 0xe59) < 0.35;
+    o.trim = h(s, 0xe5a) < 0.8 ? 0xf2efe6 : 0x2f3a33;
+  } else if (hood === 'grid' && st.sub === 'midwest') {
+    if (own && h(s, 0x6b1) < 0.75) { o.facade = pick(BUNGALOW_BRICKS, h(s, 0x6b2)); o.siding = SIDING.brick; }
+    o.pitch = 0.45 + h(s, 0x6b4) * 0.15;
+    o.basePitch = o.pitch;
+    o.bay = h(s, 0x6b5) < 0.6;
+    if (up) o.dormers = h(s, 0x6b6) < 0.45 ? 1 : 0;
+    o.chimney = 1;
+    o.trim = h(s, 0x6b7) < 0.5 ? 0xe9e1cf : 0x4a3a30;
+  } else if (hood === 'grid' && st.sub === 'pnw') {
+    if (own && h(s, 0x6c1) < 0.8) { o.facade = pick(CRAFTSMAN, h(s, 0x6c2)); o.siding = h(s, 0x6c3) < 0.55 ? SIDING.shingle : SIDING.clapboard; }
+    o.pitch = 0.5 + h(s, 0x6c4) * 0.2;
+    o.basePitch = o.pitch;
+    o.bay = h(s, 0x6c5) < 0.25;
+    if (up) o.dormers = h(s, 0x6c6) < 0.35 ? 1 : 0;
+    o.chimney = h(s, 0x6c8) < 0.7 ? 1 : 0;
+    o.trim = h(s, 0x6c7) < 0.6 ? 0xeee6d2 : 0x3a3a32;
+  } else if (hood === 'grid') {
+    if (own && h(s, 0x6a1) < 0.6) { o.facade = pick(PAINTED, h(s, 0x6a2)); o.siding = h(s, 0x6a3) < 0.75 ? SIDING.clapboard : SIDING.shingle; }
+    o.pitch = Math.max(o.pitch, 0.85 + h(s, 0x6a4) * 0.25);
+    o.bay = h(s, 0x6a5) < 0.5;
+    if (up) o.dormers = h(s, 0x6a6) < 0.15 ? 1 : 0;
+    o.chimney = 1;
+    o.trim = h(s, 0x6a7) < 0.7 ? 0xf2efe6 : 0x5a4a3a;
+  } else if (hood === 'tract' && (st.family === 'adobe' || st.family === 'stucco')) {
+    // one model a street cell: low tile hips over stucco
+    if (own) { o.facade = pick(DESERT_TRACT, h(s, 0x7c1)); o.siding = SIDING.stucco; }
+    if (bd.rc == null) o.roof = pick(DESERT_ROOFS, h(cellSeed, 0x7c4));
+    o.roofMat = ROOFMAT.tile;
+    o.pitch = o.basePitch = 0.3 + h(cellSeed, 0x7c5) * 0.06;
+    o.dormers = 0;
+    o.bay = false;
+    o.chimney = 0;
+  } else if (hood === 'tract') {
+    // one model a street cell (the builder's plan), each house its own paint from a narrow range
+    const cape = h(cellSeed, 0x7a) < 0.5;
+    if (own) { o.facade = pick(TRACT_FACADES, h(s, 0x7b1)); o.siding = h(s, 0x7b2) < 0.9 ? SIDING.clapboard : SIDING.brick; if (o.siding === SIDING.brick) o.facade = pick(HOUSE_BRICKS, h(s, 0x7b3)); }
+    if (bd.rc == null) o.roof = pick(TRACT_ROOFS, h(cellSeed, 0x7b4));
+    o.roofMat = ROOFMAT.asphalt;
+    o.pitch = cape ? 0.82 + h(cellSeed, 0x7b5) * 0.08 : 0.34 + h(cellSeed, 0x7b5) * 0.06;
+    o.basePitch = o.pitch;
+    o.dormers = cape && bd.fl == null ? 2 : 0;
+    o.bay = false;
+    o.chimney = h(s, 0x7b6) < (cape ? 0.7 : 0.35) ? 1 : 0;
+  }
+  return o;
 }

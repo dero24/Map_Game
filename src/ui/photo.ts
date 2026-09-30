@@ -18,6 +18,8 @@ export class PhotoMode {
   private el: HTMLElement;
   private flashEl: HTMLElement;
   private info: HTMLElement;
+  private pinchDistance = 0;
+  private pinchIds = new Set<number>();
   onSaved: ((p: Page) => void) | null = null;
 
   constructor(private g: GameCtx, private com: Commissions) {
@@ -27,20 +29,65 @@ export class PhotoMode {
     window.addEventListener('wheel', (e) => {
       if (!this.active) return;
       e.stopImmediatePropagation();
-      walkParams.fov = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, walkParams.fov * (e.deltaY > 0 ? 1.08 : 1 / 1.08)));
-      this.status();
+      this.adjustZoom(e.deltaY > 0 ? 1.08 : 1 / 1.08);
     }, { capture: true, passive: true });
     window.addEventListener('keydown', (e) => {
       if (!this.active || (e.target as HTMLElement)?.closest?.('input,textarea,.lil-gui')) return;
       if (e.code === 'Space') { e.preventDefault(); e.stopImmediatePropagation(); if (!e.repeat) this.pending = true; }
-      else if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
-        this.g.setHour((this.g.hour() + (e.code === 'BracketLeft' ? -0.25 : 0.25) + 24) % 24);
-        this.status();
-      } else if (e.code === 'KeyH') this.el.classList.toggle('bare');
+      else if (e.code === 'BracketLeft' || e.code === 'BracketRight') this.adjustHour(e.code === 'BracketLeft' ? -0.25 : 0.25);
+      else if (e.code === 'KeyH') this.toggleFrame();
       else if (e.code === 'Escape') this.toggle(false);
     }, { capture: true });
     document.getElementById('photo-shoot')?.addEventListener('click', () => (this.pending = true));
     document.getElementById('photo-exit')?.addEventListener('click', () => this.toggle(false));
+    document.getElementById('photo-zoom-in')?.addEventListener('click', () => this.adjustZoom(1 / 1.12));
+    document.getElementById('photo-zoom-out')?.addEventListener('click', () => this.adjustZoom(1.12));
+    document.getElementById('photo-hour-back')?.addEventListener('click', () => this.adjustHour(-0.25));
+    document.getElementById('photo-hour-forward')?.addEventListener('click', () => this.adjustHour(0.25));
+    document.getElementById('photo-frame')?.addEventListener('click', () => this.toggleFrame());
+    // A pinch zooms. Its two fingers are taken off the walking stick and the look drag the moment the
+    // second lands (Walker.releaseTouches), so a zoom never walks or swings the view — and walking
+    // with the stick while you frame stays yours, as WASD always has been.
+    const canvas = this.g.canvas;
+    canvas.addEventListener('touchstart', (e) => {
+      if (!this.active) return;
+      for (const t of Array.from(e.changedTouches)) this.pinchIds.add(t.identifier);
+      if (this.pinchIds.size >= 2) { this.pinchDistance = this.distance(e.touches); this.g.walker.releaseTouches(); }
+    }, { passive: true });
+    canvas.addEventListener('touchmove', (e) => {
+      if (!this.active || this.pinchIds.size < 2) return;
+      const d = this.distance(e.touches);
+      if (d > 0 && this.pinchDistance > 0) this.adjustZoom(this.pinchDistance / d);
+      this.pinchDistance = d;
+    }, { passive: true });
+    const pinchEnd = (e: TouchEvent) => {
+      for (const t of Array.from(e.changedTouches)) this.pinchIds.delete(t.identifier);
+      if (this.pinchIds.size < 2) this.pinchDistance = 0;
+    };
+    canvas.addEventListener('touchend', pinchEnd);
+    canvas.addEventListener('touchcancel', pinchEnd);
+  }
+
+  private distance(touches: TouchList) {
+    const active = Array.from(touches).filter((t) => this.pinchIds.has(t.identifier)).slice(0, 2);
+    return active.length < 2 ? 0 : Math.hypot(active[0].clientX - active[1].clientX, active[0].clientY - active[1].clientY);
+  }
+
+  adjustZoom(factor: number) {
+    if (!this.active) return;
+    walkParams.fov = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, walkParams.fov * factor));
+    this.status();
+  }
+  adjustHour(delta: number) {
+    if (!this.active) return;
+    this.g.setHour((this.g.hour() + delta + 24) % 24);
+    this.status();
+  }
+  toggleFrame() {
+    if (!this.active) return;
+    this.el.classList.toggle('bare');
+    const b = document.getElementById('photo-frame');
+    if (b) { const hidden = this.el.classList.contains('bare'); b.textContent = hidden ? 'show frame' : 'hide frame'; b.setAttribute('aria-label', hidden ? 'show frame' : 'hide frame'); }
   }
 
   toggle(on = !this.active) {
@@ -49,6 +96,10 @@ export class PhotoMode {
     document.body.classList.toggle('postcard', on);
     this.el.classList.toggle('hidden', !on);
     this.el.classList.remove('bare');
+    this.pinchIds.clear();
+    this.pinchDistance = 0;
+    const frame = document.getElementById('photo-frame');
+    if (frame) { frame.textContent = 'hide frame'; frame.setAttribute('aria-label', 'hide frame'); }
     if (on) { this.fov = walkParams.fov; this.status(); }
     else walkParams.fov = this.fov;
   }
@@ -69,6 +120,32 @@ export class PhotoMode {
     void this.shoot();
   }
   private statusT?: number;
+  /** ' · …the size of Manhattan' the first time your painted area passes one. */
+  private milestone() {
+    const st = this.g.explore.stats(), km2 = st.km2 + st.photoKm2;
+    let said = 0;
+    try { said = Number(localStorage.getItem(MS_KEY) ?? 0); } catch { /* */ }
+    let hit = '';
+    for (let i = said; i < MILESTONES.length && km2 >= MILESTONES[i][1]; i++) { hit = MILESTONES[i][0]; said = i + 1; }
+    if (!hit) return '';
+    try { localStorage.setItem(MS_KEY, String(said)); } catch { /* */ }
+    return ` — you've painted an area the size of ${hit}`;
+  }
+  /** ' — the pencil is to the north-east': the way with the most unpainted ground (the far record). */
+  private pencilWay() {
+    const E = this.g.explore, w = this.g.walker, words = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+    let best = -1, bare = 0;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      let n = 0;
+      for (const d of [300, 800, 1600, 3200, 6000]) {
+        const x = w.x + Math.sin(a) * d, z = w.z - Math.cos(a) * d, v = Math.max(E.texelAt(x, z), E.texelAt(x, z, true));
+        if (v >= 0 && v < 120) n++;
+      }
+      if (n > bare) (bare = n), (best = k);
+    }
+    return best < 0 ? '' : ` — the pencil is to the ${words[best]}`;
+  }
 
   private async shoot() {
     const src = this.g.canvas;
@@ -84,7 +161,15 @@ export class PhotoMode {
     // (the far sketch) whatever's in frame — the distance too — blooms into colour in the world,
     // read from this very frame's depth; the brush sounds as the colour runs out
     const framed = this.g.paintView().catch(() => null);
-    void framed.then((s) => { if (s?.cells) this.g.sound('brush'); });
+    // the held breath: the viewfinder's marks lift while the colour runs out, the brush sounds on
+    // through the run, a chime when the farthest of it lands
+    void framed.then((s) => {
+      if (!s?.cells) return;
+      const bare = this.el.classList.contains('bare');
+      if (!bare) this.el.classList.add('bare');
+      for (const at of [0, 900, 1900, 2900]) setTimeout(() => this.g.sound('brush'), at);
+      setTimeout(() => { if (!bare && this.active) this.el.classList.remove('bare'); this.g.sound('chime'); }, 4200);
+    });
     // flash + brush right away (the encode below takes a moment)
     this.flashEl.classList.remove('go');
     void this.flashEl.offsetWidth;
@@ -128,18 +213,24 @@ export class PhotoMode {
     const painted = this.com.paintFrame(p.id);
     // a coloured card is a kind you can paint anywhere now (ui/brush.ts)
     const yours = this.com.fresh.some((k) => (PAINTABLE as readonly string[]).includes(k.split(':')[0]));
-    if (painted.length) setTimeout(() => this.g.toast(`almanac: painted in — ${painted.slice(0, 3).join(', ')}${painted.length > 3 ? ` and ${painted.length - 3} more` : ''}${yours ? ' · yours to paint now: B for your brush' : ''}`), done ? 2600 : 1800);
+    const thumbs = document.body.classList.contains('nomouse'); // (a phone names its buttons, not keys)
+    if (painted.length) setTimeout(() => this.g.toast(`almanac: painted in — ${painted.slice(0, 3).join(', ')}${painted.length > 3 ? ` and ${painted.length - 3} more` : ''}${yours ? ` · yours to paint now: ${thumbs ? '✎' : 'B'} for your brush` : ''}`), done ? 2600 : 1800);
     const seen = await framed;
-    const inWorld = seen?.cells ? `painted in what you framed — out to ${far(seen.reach)}` : '';
+    // what the shot did, in real terms; a shot that added nothing says where the pencil still is
+    const inWorld = seen?.cells ? `painted in what you framed — out to ${far(seen.reach)} · ${seen.km2 < 1 ? seen.km2.toFixed(2) : seen.km2 < 10 ? seen.km2.toFixed(1) : Math.round(seen.km2)} km² in colour${this.milestone()}`
+      : seen ? `already in colour here${this.pencilWay()}` : '';
     if (done) {
       this.com.complete(done, p.id);
       this.g.sound('chime');
       this.g.toast(`✦ commission complete — ${done.title}`);
       if (inWorld) setTimeout(() => this.g.toast(inWorld), painted.length ? 4600 : 2600);
-    } else this.g.toast(inWorld ? `${inWorld} · M for your sketchbook` : 'painted into your sketchbook · M to see it');
+    } else this.g.toast(inWorld ? `${inWorld} · ${thumbs ? 'Map' : 'M'} for your sketchbook` : `painted into your sketchbook · ${thumbs ? 'Map' : 'M'} to see it`);
     this.onSaved?.(p);
     this.status();
   }
 }
+// the area you've painted, in things you know (each said once)
+const MILESTONES: [string, number][] = [['a city park', 1], ['Central Park', 3.4], ['a small town', 10], ['Manhattan', 59], ['a county', 1000]];
+const MS_KEY = 'map-game.milestones.v1';
 const far = (m: number) => (m < 1000 ? `${Math.max(10, Math.round(m / 10) * 10)} m` : `${(m / 1000).toFixed(m < 9950 ? 1 : 0)} km`);
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);

@@ -26,7 +26,7 @@ export interface AudioFrame {
   harbour?: number; // m to the nearest moored boat
   sails?: number; // moored sailboats within ~80 m (halyards)
   trees?: number; // 0..1 tree cover around you (leaves, birds)
-  ride?: { kind: 'car' | 'boat' | 'plane'; v: number; throttle: number; airborne: boolean } | null;
+  ride?: { kind: 'car' | 'boat' | 'plane' | 'balloon'; v: number; throttle: number; airborne: boolean } | null;
   city?: number; // 0..1 how built-up the blocks around you are (stream.cityGrid): traffic roar, horns, sirens, crowds
   climate?: string; // styles.ts climate: the desert's cicadas and doves
   summer?: boolean; // the warm months where you are (hemisphere-aware)
@@ -582,7 +582,11 @@ export class Ambience {
     }
   }
 
-  resume() { void this.ctx.resume(); }
+  resume() { this.ctx.resume().catch(() => { /* not allowed yet (an iPhone after a call or the lock screen): the next tap asks again */ }); }
+  /** Silence while the page sleeps (a phone locked, the app switched away): the whole graph pauses where it is. */
+  suspend() { this.ctx.suspend().catch(() => { /* already closed */ }); }
+  /** Sounding now: false while suspended, or interrupted by the system (iOS). */
+  get running() { return this.ctx.state === 'running'; }
 
   private blip(opts: { freq: number; q: number; dur: number; gain: number; pan?: number; type?: BiquadFilterType }) {
     const ctx = this.ctx;
@@ -801,6 +805,15 @@ export class Ambience {
         set(e.g.gain, 0.025 + r.throttle * 0.05, 0.25);
         set(e.am.gain, 0.2, 0.2); set(e.lfo.frequency, 9 + r.throttle * 12, 0.2);
         set(e.rush.gain, Math.min(0.08, sp * 0.006), 0.3); // hull slap + spray
+      } else if (r.kind === 'balloon') {
+        // the burner: a roar of gas (the noise band) over a low flutter, only while it burns; the
+        // basket is otherwise silent — you drift with the air, so there's no wind in your ears
+        const burn = r.throttle;
+        set(e.o1.frequency, 48, 0.1); set(e.o2.frequency, 97, 0.1);
+        set(e.lp.frequency, 300 + burn * 900, 0.08);
+        set(e.g.gain, burn * 0.05, 0.08);
+        set(e.am.gain, 0.3 * burn, 0.1); set(e.lfo.frequency, 21, 0.2);
+        set(e.rush.gain, burn * 0.16, 0.06);
       } else {
         const f0 = 62 + r.throttle * 55;
         set(e.o1.frequency, f0, 0.3); set(e.o2.frequency, f0 * 1.99, 0.3);

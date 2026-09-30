@@ -6,6 +6,7 @@
 import type { GameCtx } from './ctx';
 import { loadState, saveState, type BookState } from './book';
 import { CAR_TYPES, BOAT_TYPES, PLANE_TYPES } from '../assets/kit';
+import { BALLOON_PATTERNS } from '../assets/balloon';
 import { modelName } from '../player/vehicles';
 import { CRITTERS, CRITTER_NAME } from '../assets/fauna';
 import { TREE_KINDS, PLANT_SPECIES, SPECIES } from '../assets/flora';
@@ -23,12 +24,13 @@ const FAMILY: Record<string, { label: string; all: string[] }> = {
   wildlife: { label: 'animal', all: CRITTERS },
   tree: { label: 'tree', all: TREE_KINDS },
   flower: { label: 'garden plant', all: PLANT_SPECIES },
+  balloon: { label: 'hot air balloon', all: BALLOON_PATTERNS },
 };
 export const FAMILIES = FAMILY;
 /** The families the brush can paint (ui/brush.ts). Planes join once airfields have planes to paint from life. */
-export const PAINTABLE = ['boat', 'car'] as const;
+export const PAINTABLE = ['boat', 'car', 'balloon'] as const;
 // Side-on area (m²) of each paintable kind, for how much of a painting it fills
-const SIDE: Record<string, number> = { skiff: 6.5, console: 12, cabin: 25, sail: 20, pontoon: 13, lobster: 33, pickup: 9, van: 10, suv: 8, jeep: 7 };
+const SIDE: Record<string, number> = { gores: 300, bands: 300, chevron: 300, harlequin: 300, skiff: 6.5, console: 12, cabin: 25, sail: 20, pontoon: 13, lobster: 33, pickup: 9, van: 10, suv: 8, jeep: 7 };
 // POI kinds that aren't worth a card (utilities, parking, generic tags)
 const DULL = new Set(['toilets', 'parking', 'wastewater_plant', 'pumping_station', 'monitoring_station', 'tyres', 'car_wash', 'yes', 'apartment', 'military', 'laundry', 'car_repair', 'bicycle_repair_station', 'social_facility']);
 export const niceName = (t: string, family = '') =>
@@ -167,7 +169,7 @@ export class Commissions {
       const d = this.dist(a);
       if (d < 70 && this.lastNear !== a.id) {
         this.lastNear = a.id;
-        this.g.toast(`✧ ${a.title} — P, frame it, Space`);
+        this.g.toast(`✧ ${a.title} — ${document.body.classList.contains('nomouse') ? 'Paint, frame it, paint' : 'P, frame it, Space'}`);
         return;
       }
     }
@@ -246,9 +248,9 @@ export class Commissions {
       this.g.toast(`almanac: ${nm} sketched in pencil — paint one to finish the card (${list.length} of ${F.all.length} ${F.label}s)`);
       this.g.sound('page');
     };
-    for (const [prefix, family] of [['parked-cars:', 'car'], ['kerb-cars:', 'car'], ['life-car:', 'car'], ['moored-boats:', 'boat'], ['life-boat:', 'boat'], ['ride-car:', 'car'], ['ride-boat:', 'boat'], ['ride-plane:', 'plane'], ['critter:', 'wildlife'], ['trees:', 'tree'], ['garden:', 'flower'], ['plant:', 'flower']] as const)
-      for (const p of this.g.instances(prefix, w.x, w.z, family === 'boat' ? 60 : family === 'wildlife' ? 35 : family === 'tree' ? 30 : family === 'flower' ? 20 : 30)) {
-        const n = this.g.toNdc(p.x, p.y + (family === 'wildlife' ? 0.2 : family === 'tree' ? 3 : family === 'flower' ? 0.5 : 0.8), p.z);
+    for (const [prefix, family] of [['parked-cars:', 'car'], ['kerb-cars:', 'car'], ['life-car:', 'car'], ['moored-boats:', 'boat'], ['life-boat:', 'boat'], ['ride-car:', 'car'], ['ride-boat:', 'boat'], ['ride-plane:', 'plane'], ['critter:', 'wildlife'], ['trees:', 'tree'], ['garden:', 'flower'], ['plant:', 'flower'], ['balloon:', 'balloon'], ['ride-balloon:', 'balloon']] as const)
+      for (const p of this.g.instances(prefix, w.x, w.z, family === 'boat' ? 60 : family === 'wildlife' ? 35 : family === 'tree' ? 30 : family === 'flower' ? 20 : family === 'balloon' ? 400 : 30)) {
+        const n = this.g.toNdc(p.x, p.y + (family === 'wildlife' ? 0.2 : family === 'tree' ? 3 : family === 'flower' ? 0.5 : family === 'balloon' ? 13 : 0.8), p.z);
         if (n.z < 1 && Math.abs(n.x) < 0.9 && Math.abs(n.y) < 0.9) hit(family, p.name.split(':')[1].split('+')[0]);
       }
   }
@@ -299,9 +301,9 @@ export class Commissions {
     const cam = this.g.camera, th = Math.tan(((cam.fov ?? 62) * Math.PI) / 360), aspect = cam.aspect || 16 / 9;
     const fills = new Map<string, number>();
     const firstCard = this.owned(PAINTABLE).length === 0;
-    for (const [prefix, family, r] of [['parked-cars:', 'car', 45], ['kerb-cars:', 'car', 45], ['life-car:', 'car', 45], ['moored-boats:', 'boat', 90], ['life-boat:', 'boat', 120], ['ride-car:', 'car', 40], ['ride-boat:', 'boat', 60], ['ride-plane:', 'plane', 80], ['critter:', 'wildlife', 30], ['trees:', 'tree', 40], ['garden:', 'flower', 18], ['plant:', 'flower', 18]] as const)
+    for (const [prefix, family, r] of [['parked-cars:', 'car', 45], ['kerb-cars:', 'car', 45], ['life-car:', 'car', 45], ['moored-boats:', 'boat', 90], ['life-boat:', 'boat', 120], ['ride-car:', 'car', 40], ['ride-boat:', 'boat', 60], ['ride-plane:', 'plane', 80], ['critter:', 'wildlife', 30], ['trees:', 'tree', 40], ['garden:', 'flower', 18], ['plant:', 'flower', 18], ['balloon:', 'balloon', 900], ['ride-balloon:', 'balloon', 900]] as const)
       for (const p of this.g.instances(prefix, w.x, w.z, r)) {
-        if (!this.inView(p.x, p.y + (family === 'tree' ? 3 : 0.6), p.z, 0.7)) continue;
+        if (!this.inView(p.x, p.y + (family === 'tree' ? 3 : family === 'balloon' ? 13 : 0.6), p.z, 0.7)) continue;
         const type = p.name.split(':')[1].split('+')[0];
         if (!FAMILY[family]?.all.includes(type)) continue;
         const key = `${family}:${type}`;
@@ -315,7 +317,8 @@ export class Commissions {
         const s = this.record(key);
         if (!s.painted) { s.painted = true; s.pt = Date.now(); s.page = page; done.push(niceName(type, family)); this.fresh.push(key); }
       }
-    const taught = [...fills].filter(([k, f]) => !this.state.seen?.[k]?.painted && f >= (firstCard ? 0.015 : 0.04)).sort((a, b) => b[1] - a[1]).slice(0, firstCard ? 1 : 3);
+    // (a balloon is taught from further off: they're big, and mostly seen across a field or in the sky)
+    const taught = [...fills].filter(([k, f]) => !this.state.seen?.[k]?.painted && f >= (firstCard ? 0.015 : k.startsWith('balloon:') ? 0.012 : 0.04)).sort((a, b) => b[1] - a[1]).slice(0, firstCard ? 1 : 3);
     for (const [key] of fills) {
       const s = this.record(key); // (in pencil at least: you saw it)
       if (s.painted || !taught.some(([k]) => k === key)) continue;

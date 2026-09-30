@@ -25,11 +25,27 @@ export class MapView {
   private lastPins: { p: Pin; sx: number; sy: number }[] = [];
 
   constructor(private g: GameCtx, private cv: HTMLCanvasElement) {
+    // one finger (or the mouse) drags the map; two pinch it, about the point between them — the
+    // page itself never zooms (style.css), so on a phone this is the map's only zoom
+    const lift = (e: PointerEvent) => {
+      this.pts.delete(e.pointerId);
+      if (!this.pinch || this.pts.size >= 2) return false;
+      this.pinch = null;
+      const q = [...this.pts.values()][0]; // (the finger left carries on dragging, never picks)
+      this.drag = q ? { x: q.x, y: q.y, cx: this.cx, cz: this.cz, moved: true } : null;
+      return true;
+    };
     cv.addEventListener('pointerdown', (e) => {
       cv.setPointerCapture(e.pointerId);
+      this.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.pts.size === 2) return this.startPinch();
       this.drag = { x: e.clientX, y: e.clientY, cx: this.cx, cz: this.cz, moved: false };
     });
+    cv.addEventListener('pointercancel', (e) => { lift(e); if (!this.pts.size) this.drag = null; });
     cv.addEventListener('pointermove', (e) => {
+      const p = this.pts.get(e.pointerId);
+      if (p) (p.x = e.clientX), (p.y = e.clientY);
+      if (this.pinch) return this.movePinch();
       if (!this.drag) return;
       const dx = e.clientX - this.drag.x, dy = e.clientY - this.drag.y;
       if (Math.hypot(dx, dy) > 4) this.drag.moved = true;
@@ -39,6 +55,7 @@ export class MapView {
       this.invalidate();
     });
     cv.addEventListener('pointerup', (e) => {
+      if (lift(e)) return; // (a pinch ending)
       const d = this.drag;
       this.drag = null;
       if (!d || d.moved) return;
@@ -58,6 +75,27 @@ export class MapView {
       this.cz = wz - (sy - cv.height / 2) / this.scale;
       this.invalidate();
     }, { passive: false });
+  }
+
+  private pts = new Map<number, { x: number; y: number }>(); // the pointers down on the map
+  private pinch: { d: number; scale: number; wx: number; wz: number } | null = null;
+  /** The two fingers' midpoint, in canvas pixels. */
+  private mid() {
+    const [a, b] = [...this.pts.values()], r = this.cv.getBoundingClientRect(), k = devicePixelRatio;
+    return { a, b, sx: ((a.x + b.x) / 2 - r.left) * k, sy: ((a.y + b.y) / 2 - r.top) * k };
+  }
+  private startPinch() {
+    const { a, b, sx, sy } = this.mid();
+    this.pinch = { d: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)), scale: this.scale, wx: this.cx + (sx - this.cv.width / 2) / this.scale, wz: this.cz + (sy - this.cv.height / 2) / this.scale };
+    this.drag = null;
+  }
+  // the place first under the fingers stays under them as they spread, close and move
+  private movePinch() {
+    const P = this.pinch!, { a, b, sx, sy } = this.mid();
+    this.scale = Math.max(0.01, Math.min(8, (P.scale * Math.hypot(a.x - b.x, a.y - b.y)) / P.d));
+    this.cx = P.wx - (sx - this.cv.width / 2) / this.scale;
+    this.cz = P.wz - (sy - this.cv.height / 2) / this.scale;
+    this.invalidate();
   }
 
   invalidate() { this.dirty = true; }

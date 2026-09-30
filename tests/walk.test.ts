@@ -150,6 +150,48 @@ describe('an open building\'s own scope', () => {
   });
 });
 
+describe('an unloaded tile\'s walls, purged a slice a frame', () => {
+  it('stop blocking at once, leave the grid over several calls, and only then are their ids reused', () => {
+    const w = new WalkWorld(terrain, bounds);
+    const priv = w as unknown as { segs: unknown[]; segFree: number[]; segDead: number[]; grid: Map<number, number[]> };
+    const street = (dx: number) => { for (let i = 0; i < 2000; i++) { const x = 10 + dx + (i % 50) * 0.8, z = -20 + Math.floor(i / 50); w.addWall([x, z], [x + 0.5, z]); } };
+    w.withScope(9, () => w.addWall([0, -5], [0, 5])); // the next tile's wall, staying
+    w.withScope(3, () => street(0)); // the tile that unloads: 2000 short walls over 40 × 40 m
+    expect(w.touching(10.25, -19.8, 0.3)).toBe(true);
+    w.removeScope(3, 'later');
+    expect(w.touching(10.25, -19.8, 0.3)).toBe(false); // gone at once…
+    expect(w.purging).toBe(2000); // …still in the grid, a slice a frame
+    w.withScope(4, () => w.addWall([90, 90], [91, 90])); // a wall meanwhile: a new id, none of those
+    expect(priv.segs.length).toBe(2002);
+    let calls = 0, early = 0;
+    while (w.purging) { w.purgeSome(0); calls++; if (w.purging) early += priv.segFree.length; } // (a 0 ms share: one step a call)
+    expect(calls).toBeGreaterThan(4); // (in steps, not at once)
+    expect(early).toBe(0); // (no id free while a cell might still hold it)
+    let stale = 0;
+    for (const l of priv.grid.values()) for (const id of l) if (priv.segDead[id]) stale++;
+    expect(stale).toBe(0);
+    expect(priv.segFree.length).toBe(2000);
+    expect(w.touching(0.1, 0, 0.3)).toBe(true); // the other tiles' walls untouched
+    expect(w.touching(90.5, 90.1, 0.3)).toBe(true);
+    w.withScope(5, () => street(100)); // the next tile in: every freed id reused
+    expect(priv.segs.length).toBe(2002);
+    expect(w.touching(110.25, -19.8, 0.3)).toBe(true);
+    expect(w.touching(10.25, -19.8, 0.3)).toBe(false);
+  });
+  it('a scope dropped twice over, or empty, queues nothing', () => {
+    const w = new WalkWorld(terrain, bounds);
+    w.withScope(3, () => w.addWall([0, -5], [0, 5]));
+    w.removeScope(3, 'later');
+    w.removeScope(3, 'later');
+    w.beginScope(6); w.endScope();
+    w.removeScope(6, 'later');
+    expect(w.purging).toBe(1);
+    w.purgeSome();
+    expect(w.purging).toBe(0);
+    w.purgeSome(); // (nothing queued: nothing to do)
+  });
+});
+
 describe('raised shore houses', () => {
   const w = new WalkWorld(terrain, bounds);
   const r2: [number, number][] = [[20, -4], [30, -4], [30, 4], [20, 4]];

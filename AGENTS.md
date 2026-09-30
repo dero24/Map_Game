@@ -19,6 +19,7 @@ docs below; read a topic doc only when the task touches that subsystem.
 | Freeze hunt | `node tools/soak.mjs --region=<id> --seconds=120` |
 | Visual check | `node tools/capture.mjs --shots=<names> [--region=<id>]` → `shots/<region>-montage.jpg` |
 | Phone check | `npm run build && node tools/mobile-check.mjs --device=pixel7\|iphone` — Pages-like serve, device emulation, shader limits audit, boot report (`docs/agent/debugging.md`) |
+| Phone HUD audit | `npm run build && node tools/hud-audit.mjs` — the touch HUD's boxes on 10 phones × both ways × 5 states, no overlaps (`docs/agent/debugging.md`) |
 | Tile worker (dev) | `cd worker && npx wrangler dev` (ports 8787–8789) |
 | Region gate | `npm run verify:region -- --region=<id> [--soak=90] [--shots=a,b]` |
 

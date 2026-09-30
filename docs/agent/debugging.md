@@ -70,6 +70,27 @@ behaviour.
   rings 750/1300/2500 m.
   A knob saved in the panel (`userKeys`) always wins. `?quality=desktop|phone|low` forces a tier;
   `window.__TIER__` says which one ran and what it set.
+- A city is what kills a phone (Manhattan filled its GPU; Chrome crashed, then refused the site
+  WebGL). So the phone/low tiers also: keep the detail tiles under `streamParams.budgetMB` of
+  vertex data (200 / 120; `world/budget.ts` admits cells nearest first, the cell you stand in
+  always; the rest keep their silhouettes), build 2 / 1 real tiles at once (`realConc`), keep the silhouette ring under 90 / 60 MB
+  (`coarseMB`), read a 4 / 3 km skyline, and measure no LiDAR (`?lidar=1` forces it). A PC's are unchanged (no budget,
+  4 at once, LiDAR, 8 km). `stream.detailBytes` is the budget's measure. On every platform now: a
+  tile's sign atlas is disposed with it (it leaked on every unload), and an unloaded tile's walls
+  leave the walk world ~1.5 ms a frame (`purge`, `WalkWorld.purgeSome`; they were tombstoned for
+  good — one long hop left 166k dead walls on a PC, and purging a tile's at once took 65 ms on a
+  phone).
+- A lost GPU context on a phone sheds memory at once (budget halved, silhouettes to `dropR`, no
+  shadow pass) and the next load in the tab steps down a tier (`diag.lostBefore`). WebGL that
+  won't start says how to get it back (`NO_WEBGL`: the browser may have blocked the site after a
+  crash — close it completely and reopen).
+- Phones sleep when put away (`ui/lifecycle.ts`, `window.__SLEEP__`): sound suspended, the life
+  worker paused (on a PC too — it ticked on in hidden tabs), held input released. Never under
+  `?capture=1`.
+- A phone lands (✈) only once the cell under it is built (`stream.solidAt`), and on foot waits
+  where it stands until it is: before that its buildings are silhouettes with no walls (a fast
+  flight landed inside a house and walked out through its wall). Tested headless: fly to an
+  unbuilt cell, press ✈, check `walkParams.fly` holds until `solidAt`, then the landing is outside.
 - The boot report (`src/ui/diag.ts`, shown in `#fatal`): browser, WebGL version + GPU string,
   the key limits, float-buffer extensions, the tier, the boot stage, the first shader log and the
   first JS errors. It opens by itself when WebGL can't start, a shader won't compile, the boot
@@ -91,6 +112,15 @@ behaviour.
   grows ~40 MB/s — it reproduces on a blank page and OOM-kills the tab within minutes (phones
   have no pointer lock). SwiftShader draws a frame every few seconds on 2 CPUs: poll
   `__RENDER_INFO__.frames`, click `#start` via `evaluate`, and allow minutes for screenshots.
+- `npm run build && node tools/hud-audit.mjs [--phones="Pixel 7,iPhone SE"] [--verbose] [--shots=shots/hud]`: the phone
+  HUD's geometry — the built CSS and markup (the game's module blocked, so no WebGL: about a minute)
+  on 10 phones from a 320-wide SE to a Pro Max, upright and on their side, walking / by a lift /
+  beside a ride / driving / flying a plane / flying on foot / in a balloon, a long hint and place
+  name up. Each button is measured with the word under it, and the stick's resting ring counts.
+  `--shots` writes a PNG of every layout (the HUD over a blank page) to look at. Every overlapping pair
+  of HUD boxes is listed; exit 1 if any. It sets the states as `syncTouchControls` does and makes
+  the ride readout as `vehicles.ts` does — keep those in step. Run it after any change to the touch
+  layout (style.css); the montage shows one phone, this shows them all.
 
 ## Play checks (`tools/playtest.js`)
 

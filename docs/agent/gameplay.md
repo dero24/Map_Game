@@ -130,6 +130,89 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 - While riding, `Vehicles.update` owns the camera and carries the walker (streaming/life/
   interiors key off it); `walker.update` is skipped.
 
+## Hot air balloons
+
+- **The family** (`assets/balloon.ts`): a ~2,800 m³ sport balloon from a seed — 12 or 16 scalloped
+  gores, a pattern (gores / bands / chevron / harlequin) in 2–3 colours with a crown band, an inner
+  skin in its own shade (look up from the basket), wicker basket, burner frame, cables; the flame
+  is its own mesh (glow channel). Vertex colour, no tint: the brush picks the colours. Budget
+  < 4,800 vertices (a handful in the sky at once; `tests/balloon.test.ts`).
+- **Physics** (`player/balloonPhysics.ts`, pure): buoyancy of the envelope's hot air in ISA air
+  (L = V·ρ·(1 − Tₐ/T)·g) against weight and quadratic drag, over the balloon's mass plus the air it
+  carries (the seconds of lag you fly by); the burner heats, the fabric cools, the vent dumps. You
+  can't steer: the basket takes up the wind at its height, plus a ±1.5 m/s "fan" (the stick). Let go
+  of burner and vent and the assist holds the height you let go at (`hold`); `Vehicles.holdAt`
+  flies to a height.
+- **Winds aloft** (`world/wind.ts`): four layers (surface, 200, 600, 1,500 m) veering and
+  strengthening with height, seeded by region (0.25°) and the world's UTC hour, eased hour to hour.
+- **Riding** (`vehicles.ts`, kind `balloon`): Space / ▲ burn, C / ▼ vent, WASD / the stick the fan
+  (relative to your look), V / ⤢ first ↔ third person, E / Get out · Jump out (over the side: fly
+  on; the empty balloon holds a while, then comes down on its own). First person is your own look
+  from the basket; photo mode works in the basket (P / ▣) — the best seat for a painting. The
+  burner has a roar (`ambience.ts`). Boarding needs you at the basket, not flying over it.
+- **Other people's balloons** (`world/balloons.ts` `AmbientBalloons`): each ~5 km cell of the real
+  map (0.05°) rolls once per half hour of the world's clock — ~30% at dawn and dusk, ~10% by day,
+  none at night (the world's hour gates it). A flight climbs, cruises on its layer's wind, then
+  comes down on the nearest beach within 2.5 km of where the wind took it (else open ground within
+  800 m, else it flies on out of sight), sits ~8 min envelope up (step in: it's yours —
+  `Vehicles.o.ambient`), and packs away. Off in capture mode (they keep the real clock).
+- **A first visit**: a balloon waits on the nearest beach within 1.5 km of the spawn
+  (`Vehicles.giftBalloon`, once per browser; none inland).
+- **Painting them**: a balloon in frame colours its Almanac card (`balloon:` / `ride-balloon:`;
+  taught from further off than a car); the brush paints one on open ground (`place.ts`
+  `placeBalloon`) in any colours — every ride's swatch row has a free colour picker, a balloon a
+  second one for its stripes.
+
+## Touch controls (phones, tablets)
+
+- `body.touch` (a touch screen) shows the touch UI; `body.nomouse` (no fine pointer: a phone or a
+  tablet) makes hints, toasts and the ride HUD name the touch buttons instead of keys — a
+  touch-screen laptop keeps its key names. Both are set in index.html's boot guard.
+- Walker (`player/controller.ts`): the left 45% of the screen is a floating stick (full push =
+  run; flying, 4× speed), the rest drags the look (scaled by the panel's look sensitivity). The
+  stick is drawn where it rests (`#stick-home`, labelled "walk" until you've walked with it once —
+  `map-game.stick-taught.v1`), comes to the thumb wherever it lands, and follows a thumb that runs
+  past its rim (the origin drags along) — you never have to lift and find it again.
+  `releaseTouches()` drops both (a pinch, the page going to sleep). `waitGround` holds walking
+  while the cell underfoot isn't built (main.ts `groundCheck`); `climb` is Up / Down while flying.
+- The buttons (index.html): every one a drawn SVG icon with its word under it (`data-label`, the
+  `::after`; `syncTouchControls` changes the words — Fly/Land, Up/Down or Burn/Vent). Two places:
+  the bar along the top right (`#tbar`: Go — search, focused in the tap so iOS raises its keyboard;
+  Map — the atlas; More — the drawer: plant, next seed, +1 hour, options; any touch on the world
+  closes it) for what you do now and then, and the cluster under the right thumb (`#tdock`, every
+  button placed from one corner anchor by CSS variables `--big --btn --col --row --dock-b`): Paint
+  (72 px, ink — the game's verb; the same as P: the brush away, a viewpoint faced) in the corner,
+  Fly over it, Brush beside it, Lift over the brush in a lobby. A tick of vibration on every press
+  (Android), and each button shrinks under the finger (`.held` while one is held down).
+- The ride's own button (`#touch-action`, main.ts `touchActionState`): Drive / Board / Step in
+  beside a ride, Get out / Jump out in one — an ink pill over the cluster that pops in; a
+  double-tap on the look side does it too, but gets you out only once stopped. `#ride-touch`
+  holds the held buttons, in the cluster's own places: Boost (car, boat — the corner), Faster /
+  Slower (plane), Up / Down (flying on foot; a balloon's Burn / Vent) beside Paint, View over it
+  in a balloon. A held button lets go when its finger lifts, it disappears, the window blurs or
+  the page sleeps (`bindHold`, `releaseHolds`).
+- Rides on the stick (`vehicles.ts` `stickAxes`): a 0.1 dead zone for steering/banking and 0.25
+  along the throttle/pitch (a thumb steering sideways never touches the pedals), rescaled. Part
+  way cruises at that share of the top speed and brakes that gently; keys are always ±1, so the
+  keyboard's driving is unchanged. Plane: pull the stick back (down) to climb.
+- Pinch: photo mode zooms (its fingers released from stick and look); the atlas map zooms about
+  the fingers (`mapview.ts`). The page itself never zooms (`touch-action` in style.css; iOS's
+  gesture events stopped in index.html — it ignores `user-scalable=no`).
+- Sleep (`ui/lifecycle.ts`): hidden → sound suspended (phones; a PC tab sounds on), the life
+  worker paused (everywhere), held input released; an iPhone's interrupted audio resumes on the
+  next tap.
+- The phone HUD (style.css "the phone HUD"; `body[data-ride]` = car / boat / plane / balloon /
+  fly / near, set in `syncTouchControls`): the place name, then the hint (or a ride's readout —
+  live numbers only — then the hint) read down the top left, clear of the bar; toasts at a
+  quarter height; the map-data credit on one line along the bottom edge, under the stick and the
+  cluster. On its side the same places, tighter (the bar a row, the cluster smaller). The words in
+  hints and toasts are the buttons' own (Paint, Land, Map, Go, More, Boost, Burn…).
+  `tools/hud-audit.mjs` checks it (10 phones × both ways × 7 states, every button with its word).
+- The options panel (lil-gui, More → Options) on a phone: an opaque sheet across the top leaving
+  the bottom ~300 px (stick, cluster, Get out) in reach — down the left on its side — with a
+  "× Close" pill. lil-gui 0.21's root is `.lil-root` (style.css matches `.root` too), and its theme
+  vars are set on every `.lil-gui` level.
+
 ## Ambient life + sound
 
 - Knockdowns: `Vehicles.onMove` → `LifeClient.bump` (throttled ~11 Hz) → worker `lifeSim.bump`: walkers in the car's path go `DOWN` — thrown with the car, slide with friction, lie 3–5 s (rolled on their side by the renderer, `amt −1`), snap back to the nearest walkable edge and walk on. `onBumped` plays a thud.
@@ -198,8 +281,12 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   IndexedDB (`map-game-explore`).
 - A walker-centred R8 texture window (4 km, 8 m texels → `U.uExplore` / `U.uExploreBox`) feeds
   the post composite, which paints unvisited ground as a paler, slightly desaturated first wash and
-  deepens it with a noisy wet edge as you arrive (`postParams.sketch`, `?sketch=0`). Never a
-  pencil sketch: the world always reads as painted.
+  deepens it with a noisy wet edge as you arrive (`postParams.sketch`, ON by default). The far
+  sketch (`sketchFar`: pencil to the horizon till you walk or photograph it, and photos painting
+  what they frame) is OFF by default — on trial; it stands on its own (either one turns on the
+  composite's `uSketch`); with neither, the world is simply painted.
+  Your walks are recorded either way (`explore.enabled` is always on): the atlas, the journal and
+  the arrival cards count them — the card says "walk to paint it in" only with a look picked.
 - Capture mode keeps regression shots fully painted unless `?sketch=1`.
 - Reveal radius grows with eye height (`revealRadius`), so flying paints wide.
   `paintedBefore(x,z)` reads the saved block, which is how an arrival card knows a first visit.
@@ -208,20 +295,35 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   as blocks load). They feed the far window (`farTexture`, filled only while `explore.far` —
   main sets it with the far sketch). `valueAt` is walked or photo-painted, so the map shows both.
 - Photos paint what they frame (the far sketch only; `ctx.paintView`, called from photo mode's
-  shot): the frame's depth → world points (`render/seen.ts`) → `paintSeen` / `paintSeenSliced`
+  shot): the frame's depth → mended (`mendDepth`: what stands thin in front of the ground — a rope,
+  a post, a wire, a bird, ≤ 6% of the frame — and, riding, the ride itself (nearer than 30 m in a
+  balloon's basket, 70 m in third person, 45 plane, 11 car, 14 boat) are bridged in 1/depth from
+  the ground on both sides, never into the sky; unmended, a basket rope was a streak of canvas
+  from you to the horizon) → world points (`render/seen.ts`) → `paintSeen` / `paintSeenSliced`
   (a slice a frame, ~4 ms). Each sample paints a disc its footprint wide (at least 1.5 cells);
   neighbours on one surface (`joined`: a smooth ramp in 1/depth, so ground at a grazing angle —
   not across a silhouette) are filled between; ground running on into the sky as a plane does
   continues to the sky cut while the terrain keeps it in sight (the sea to the horizon, not a
   plateau's hidden far side). Nearer than `SEEN_SPLIT` (2 km) it paints 8 m cells, past it far
-  cells, out to `SEEN_REACH` (15 km, level). It blooms in over ~2 s, near first. Walks and
-  `stats()` are untouched by it.
+  cells, out to `postParams.photoReach` (panel: "a photo paints out to", default and max
+  `SEEN_REACH` = 22 km, level). The pinholes and hairline gaps a frame's sampling leaves between
+  discs (the far "canvas clouds") are closed (`Stamps.close`: a bare cell with ≥ 5 of 8 stamped
+  neighbours, far cells ≥ 4, twice) — an edge never grows, so what a building hides stays hidden.
+  It blooms over ~2.4 s a cell, the farthest starting 2.2 s late (the colour runs out to the
+  horizon). Walks' `painted` is untouched; `stats().photoKm2` counts what photos brought to full.
+  Measured from a balloon at 150 m over Sea Bright: bare pixels in frame 0.1–0.4% out to 15 km
+  (3–5% before the closing). The shot's toast says the reach and area, or where the pencil still
+  is (`PhotoMode.pencilWay`); a painted-area milestone is said once (`milestone`).
+- Walking paint (the far sketch) soaks in: strokes at 20 Hz (`TICK`), ~1.5 s blank to full
+  underfoot, and the composite paints in two passes — a pale first wash over the pencil, then the
+  pigment deepening — its edge ragged by paper and brush-stroke noise that never reaches bare
+  paper or finished paint.
 
 ## The brush (`src/ui/brush.ts`, `src/player/place.ts`) — `docs/GAME_DESIGN.md`
 
 - Paint-to-own: a coloured Almanac card (painted from life with P — `Commissions.paintFrame`, which
   records `pt` and `fresh`) is a kind you can paint: `Commissions.owned(families)`. The families the
-  brush knows are `PAINTABLE` (boat, car; planes once airfields have planes to paint from life).
+  brush knows are `PAINTABLE` (boat, car, balloon — on open ground; planes once airfields have planes to paint from life).
   A painting teaches sparingly: the first, the one most prominent kind (≥ 1.5% of the frame); after
   that only composed ones (≥ 4% each, at most 3, not already painted) — the rest stay pencil.
 - B (✎ on touch) takes it out. Chips: the kinds you own (last used first), the one fitting what you

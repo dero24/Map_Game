@@ -37,6 +37,7 @@ export interface DiagState {
   frameErrorStreak: number;
   lost: number; // WebGL contexts lost so far
   crashed?: CrashNote | null;
+  lostBefore?: number; // GPU contexts the last load in this tab lost (a phone steps down a tier for it)
   began?: number; // performance.now() at Begin walking
   framesAtBegin?: number;
   watchdogS?: number; // no frame this long after Begin walking → the report (default 15)
@@ -83,6 +84,7 @@ export function formatReport(s: DiagState, reason: string, now: number, failed =
     L.push(`${pad('float RT')}color_buffer_float ${yes(g.ext.EXT_color_buffer_float)} · half ${yes(g.ext.EXT_color_buffer_half_float)} · float_linear ${yes(g.ext.OES_texture_float_linear)}`);
   } else L.push(`${pad('WebGL')}${s.glError ?? 'not started'}`);
   if (s.crashed) L.push(`${pad('last load')}stopped at "${s.crashed.stage}" (${s.crashed.tier}) ${Math.round(s.crashed.ageS)} s ago — killed, likely out of memory${s.crashed.n > 1 ? ` (×${s.crashed.n})` : ''}`);
+  if (s.lostBefore) L.push(`${pad('last load')}its GPU context was lost${s.lostBefore > 1 ? ` ×${s.lostBefore}` : ''} (out of GPU memory?)`);
   if (s.shaderErrors.length) {
     L.push('');
     L.push('shader error:');
@@ -116,7 +118,7 @@ export function errorLine(e: unknown, where?: { filename?: string; lineno?: numb
 
 // ---- the crash breadcrumb: did the last load in this tab die while on screen? ----
 
-export interface BootRecord { stage: string; tier: string; t: number; clean: boolean; n: number }
+export interface BootRecord { stage: string; tier: string; t: number; clean: boolean; n: number; lost?: number }
 
 /** From the previous load's record: a crash note (it died on screen) or null (clean exit / none). */
 export function crashFrom(prev: BootRecord | null, now: number): CrashNote | null {
@@ -125,6 +127,16 @@ export function crashFrom(prev: BootRecord | null, now: number): CrashNote | nul
   if (!(ageS >= 0) || ageS > 30 * 60) return null; // a stale record (clock change, long-closed tab): not this session's crash
   return { stage: prev.stage, tier: prev.tier, ageS, n: (prev.n || 0) + 1 };
 }
+
+/** How many GPU contexts the previous load in this tab lost (0 when none, or the record is stale). */
+export function lostFrom(prev: BootRecord | null, now: number): number {
+  if (!prev?.lost) return 0;
+  const ageS = (now - prev.t) / 1000;
+  return ageS >= 0 && ageS <= 30 * 60 ? prev.lost : 0;
+}
+
+/** When WebGL won't start in a browser where it may well have run before: what to do about it. */
+export const NO_WEBGL = 'WebGL 2 could not start in this browser.\n  If the game ran here before, the browser may have switched WebGL off for this site after a crash:\n  close the browser completely (swipe it away) and open it again — Chrome also offers a Reload\n  button on its "WebGL hit a snag" message.';
 
 // ---- the live state + DOM side ----
 
@@ -166,6 +178,7 @@ export function diagInit(): CrashNote | null {
   let prev: BootRecord | null = null;
   try { prev = JSON.parse(sessionStorage.getItem(KEY) ?? 'null') as BootRecord | null; } catch { prev = null; }
   diag.crashed = crashFrom(prev, Date.now());
+  diag.lostBefore = lostFrom(prev, Date.now());
   record = { stage: 'module', tier: '?', t: Date.now(), clean: false, n: diag.crashed?.n ?? 0 };
   save();
   // A kill while the tab is hidden (the OS reclaiming a background tab) isn't this page's fault:
@@ -262,7 +275,12 @@ export function began() {
   diagStage('walking');
 }
 
-export function contextLost() { diag.lost++; lostAt = performance.now(); diag.errors.push('WebGL context lost'); }
+export function contextLost() {
+  diag.lost++;
+  lostAt = performance.now();
+  diag.errors.push('WebGL context lost');
+  if (record) { record.lost = (record.lost ?? 0) + 1; record.t = Date.now(); save(); } // (the next load here steps down: main.ts)
+}
 export function contextRestored() { lostAt = 0; lastFrameAt = performance.now(); } // (the restored context gets a fresh window)
 
 /** DOM: once a second — the watchdog: no frame 15 s after Begin walking, frames that stop coming
@@ -276,7 +294,7 @@ export function diagTick(now = performance.now()) {
     if (now - Math.max(diag.began, lastFrameAt, visibleSince) > wd)
       showReport(first ? `no frame has rendered in the ${Math.round(wd / 1000)} s since Begin walking` : `the painting stopped: no new frame for ${Math.round(wd / 1000)} s`);
   }
-  if (lostAt && now - lostAt > 4000) showReport('the GPU dropped the WebGL context (out of GPU memory?) and did not give it back');
+  if (lostAt && now - lostAt > 4000) showReport('the GPU dropped the WebGL context (out of GPU memory?) and did not give it back —\n  reload the page; if it will not start again, close the browser completely and reopen it');
 }
 
 /** DOM: open the report in #fatal (once per reason; `?diag=1` and errors reopen it). */

@@ -2,6 +2,322 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-02 (later) — Weather to test against; fog now and then, anywhere
+
+- The owner liked the odd random fog — kept, rarer: drifting fog 'rare, anywhere' (default; about
+  one hour in eleven, lighter than a coast's, plus the coastal morning marine layer), 'coastal
+  mornings' or 'never' (panel Weather → drifting fog).
+- Weather presets (panel Weather → weather preset): clear, fair, hazy summer, marine layer, thick
+  fog, overcast, blustery, snow day, or drifting — checked in the game by choosing each in the
+  panel's own dropdown.
+- tests/interiorTower.test.ts: a 30 s limit (its 39-storey plans take 5–6 s on a slow machine — the
+  "failures" of the last sessions); 501 tests pass.
+
+## 2026-10-02 — The white wall: fog along the sight line; a phone's view sharper and farther
+
+- **Reported** (a phone over Seattle, 250–300 m up): past ~1 km everything sank into a flat white
+  sheet, tower tops standing clear of it; with the paint on, a smear.
+- **Why the sheet**: `applyFog` fogged a point by the density of its own layer (thick near the
+  ground, a ~33 m scale) times the whole distance — from a balloon or a hill, the sight line
+  mostly crosses thin air, but distant streets were fogged as if it hugged the ground the whole
+  way. Now the mean density along the sight line, eye height to point height (`layerMean`, exact).
+  At street level eye and point share a layer: Sea Bright's street view before/after identical.
+- **…and the sea fog**: auto weather rolled a sea-fog layer over every town a third of the time
+  (0.30 over inland Seattle when shot). Now a marine layer: coastal (oceanD < ~500 m), mornings,
+  gone by 11.
+- **A phone, sharper and farther** (quality.ts phone tier): hi-DPI paint (≤ 1.5×) and a canvas at
+  that ratio on phones only (setPixelRatio 1 stretched a DPR-3 screen ~3×), paint detail 0.75, a
+  6 km silhouette ring and skyline (under coarseMB). Auto quality now measures once the ring
+  has streamed in (≤ 40 s wait) — measured during the burst, a phone that holds 60 fps after was
+  stepped down for good. (SwiftShader here is slow enough to step down: sharpness is for a real
+  phone to show.)
+- **Evidence**: shots/phone-view-montage.jpg (Pixel 7 emulation, network trusted): Queen Anne at
+  250 m before — a white wall past 1 km; after — the water and the far shore. hud-audit 140 clean;
+  483 tests (interiorTower's 5 s timeouts excluded — they fail on the previous commit here too).
+
+## 2026-10-01 (night) — Paint-as-you-explore only when picked; the open world's sea without a canvas
+
+- **No bleed**: the far sketch (pencil to the horizon, photos painting the frame) is off unless
+  picked — it's on trial; the near "paint as you explore" wash stays ON by default (the owner's
+  call). Either lights the composite's `uSketch`; the far one no longer needs the near one ticked. Walks are recorded
+  regardless (atlas, journal, arrival cards); the arrival card says "walk to paint it in" only with
+  a look picked.
+- **Puget Sound white on an iPhone** (reported; no iPhone or WebKit here to reproduce). Emulated on
+  a phone, the open world's unbuilt Sound is the stand-in: a flat 3 m plain in haze. Three ways it
+  stayed that plain, all fixed:
+  1. `dem.ts` decoded Terrarium through createImageBitmap + OffscreenCanvas — which a worker on
+     iOS < 16.4 doesn't have: no DEM, ever. Now `terrariumFromPng` reads the PNG bytes itself
+     (three's bundled fflate; exact vs pngjs on two real tiles; tests encode all five filters); the
+     canvas is the fallback. Also no colour management anywhere: the same heights on every device.
+  2. A stand-in's water needed a DEM to press into: no DEM in time, no sea. `flatDem` gives it a
+     flat grid at the stand-in height to take the map's water, marked late for its relief.
+  3. The relief rebuild returned nothing when the DEM never came, and flat ground never asked
+     again for late water. Now it rebuilds with the flat ground and the water, once (no re-late).
+- Seen end to end, once the harness was fixed: the emulations' "stall" was the harness — its
+  Chromium didn't trust this container's proxy CA (net::ERR_CERT_AUTHORITY_INVALID), so every DEM
+  and vector-tile fetch failed and only flat stand-ins could build. With `ignoreHTTPSErrors`, the
+  ground under a camera over the Sound reads −6 m / sdf −60 (sea) within 3 minutes, and from 300 m
+  over Magnolia the Sound is water with boats on it, fading into pale haze to the horizon (maybe
+  the "white" reported — no far shore shows; to look at with the reporter's screenshot).
+  (Real cells meanwhile fail and retry: the tile service's Overpass upstream is still down.)
+- tests 501 (interiorTower's 5 s timeouts on the freshly restarted container fail on the previous
+  commit too), typecheck, build.
+
+## 2026-10-01 (evening) — A photo sees past the ropes: no more streaks out to the horizon
+
+- **The streaks** (a phone, photos from a balloon, the atlas map): straight bands of canvas fanning
+  from where you stood out across the bay. A photo paints what its depth readback saw, and in the
+  basket the ropes and posts run up the frame — each a column of samples 3 m away, hiding the
+  ground behind it from the basket to the horizon: a radial line of unpainted world per rope.
+  (Poles, wires and birds did the same, smaller; in third person the envelope a wedge.)
+- **Fix** (`render/seen.ts` `mendDepth`, called in main.ts `paintView` before unprojecting):
+  along each row and column, a run that stands well in front of ground on both sides — thin (≤ 6%
+  of the frame), or nearer than the ride's reach up in one (balloon 30 m / 70 m third person, plane
+  45, car 11, boat 14) — is bridged by the line through its two sides in 1/depth (exact for flat
+  ground). Never into the sky; a building wider than thin still hides what's behind it on foot.
+- **Tests**: seen.test.ts (ropes bridged to within 1% of the open ground; the sky and a 40 m house
+  kept; an envelope seen through with `near`), explore.test.ts (a basket photo: the ropes' lines
+  of sight bare 1–8 km out without the mend, none with it). 498 tests, typecheck, build.
+- Streaks already in a save stay until a photo covers them again — one from the same spot does.
+- **The live site** builds from `main` (pages.yml, or a manual run of it on a branch): the options
+  panel's close (2026-10-01 later) reaches the phone only once it's deployed again.
+
+## 2026-10-01 (later) — The options panel on a phone: it closes, and Get out stays in reach
+
+- **Couldn't close it**: lil-gui 0.21 names its root `.lil-root`; style.css still said `.lil-gui.root`,
+  so none of the phone rules matched — no close button, no sizing, no scrolling (and the cream theme
+  never reached the desktop panel either). Selectors now match both; the theme is set on every
+  level (0.21 declares its dark defaults on each nested folder, so a root-only theme left pale text
+  on cream). The close is a "× Close" pill.
+- **No Get out with it open**: `touchActionState` returned nothing while the panel was up, and the
+  panel covered the right edge top to bottom. Now, upright, it's an opaque sheet across the top
+  that always leaves the bottom ~300 px — the stick and the corner cluster — free; on its side it
+  runs down the left, clear of the cluster; and the ride's button stays.
+- **Verified** (real game, Pixel 7 emulation, both ways, by touch): More → Options opens it; the
+  Close pill is the element under the finger; a car summoned with the panel up — Drive reachable,
+  driving, Get out and Boost reachable, got out; Close hides it. hud-audit 140 layouts clean,
+  495 tests, typecheck, build.
+
+## 2026-10-01 — Phone controls rebuilt: a stick you can see, Paint under your thumb, every button named
+
+- **What a phone showed** (real game, Pixel 7, both ways): six identical unlabelled circles —
+  ✈ ⌂ ☰ ▣ ✎ ⋯ — stacked down the right edge (a 3 × 2 block in the corner on its side); Paint, the
+  game's verb, looked like everything else; ⌂ read as "home", not "go anywhere"; and the walking
+  stick was invisible until a thumb happened to land in the empty left half.
+- **Now** (index.html, style.css "the phone HUD", controller.ts, main.ts): each hand has one job.
+  The left thumb walks — the stick is drawn where it rests ("walk" in it until you've used it
+  once), comes to your thumb, and follows a thumb that runs past its rim, so you never lift to find
+  it. The right thumb looks and does — a cluster in the corner: Paint (72 px, ink) in the corner,
+  Fly (Land while flying) over it, Brush beside it, Lift in a lobby, and what you're next to (Board /
+  Drive / Step in / Get out) as an ink pill over them that pops in. Riding, the ride's buttons take
+  the same places (Boost in the corner; Faster / Slower; Up / Down — Burn / Vent in a balloon — beside
+  Paint; View over it). Go / Map / More sit along the top right, out of the way. Every button is a
+  drawn icon with its word under it; hints and toasts use those words (Paint, Land, Map, Boost…),
+  and the brush's hint no longer says P and B on a phone. Buttons shrink under the finger (and stay
+  pressed while held), and tick on Android. The place name, the hint and a ride's readout read down
+  the top left; the credit is one line along the bottom.
+- **Verified**: `tools/hud-audit.mjs` (now per button with its word, the stick's ring, and a
+  by-a-lift state; `--shots` writes every layout) — 140 layouts (10 phones × both ways × 7 states),
+  no overlaps. Real game on a Pixel 7 emulation, both ways, driven by touch: the stick walked ~7 m
+  and followed the thumb past its rim, its "walk" cleared, Fly turned to Land and took off.
+  typecheck, 495 tests (interiorTower's 5 s timeout under load passes alone), build.
+
+## 2026-09-30 (night) — A house on a tile line built once; the shore test on streamed tiles only
+
+- **Tile ownership is half-open** (`scripts/lib/tiles.mjs` `ownsPoint`): a building centred exactly
+  on a tile line was owned — and built — by both tiles (the Rumson playtest's one overlap: seed
+  41723065 at x = −3072 in −4_−2 and −3_−2). Four such entities in the shore pack; the raw inputs
+  aren't in this checkout, so the pack was patched by the same rule (the second copy → `own: 0`)
+  and `bakeId` recomputed by the bake's own FNV recipe (it reproduced the old id exactly before
+  the patch). tests/tiles.test.ts pins the edge (fails on the old rule).
+- **The shore test measured files nothing streams**: `public/data/shore/tiles/` holds 72 tile
+  files the manifest doesn't list (`-7_*`, `-8_*`, from the same bake commit — 2.9 MB shipped,
+  never loaded), and Red Bank lies in them, past the backdrop. tests/hoods.test.ts now reads only
+  manifest tiles; Long Branch's north end (grid) and Oceanport (suburb) replace Red Bank, which
+  moves to the real-lite fixtures (`nj-grid`) — it streams, as the deep link that set the montage
+  camera down in stand-ins showed. The leftover files are left in place (worth removing once
+  someone confirms nothing else reads them).
+
+## 2026-09-30 (evening) — Neighbourhoods, phase 1; the phone's silhouette ring budgeted
+
+- **Why Rumson read like its neighbours** (docs/NEIGHBOURHOODS.md): one style table for every town
+  in a region, every look decision a per-house hash from it; lot size and era — the two things
+  the eye reads first — reached nothing; a big house (> 700 m²) became a flat-roofed block; and
+  OSM maps almost none of Rumson's houses (one in the reference square), so the game had LiDAR
+  footprints and fixed-size fills there.
+- **Phase 1, client-side** (no tile-service redeploy): `world/hood.ts` measures each 256 m cell's
+  homes (footprint, spacing, uniformity) → estate / old grid / tract / suburb; recipes, drives,
+  frontage hedges and canopy follow (estates: shingle and white clapboard under slate, steep roofs,
+  dormers, long privet hedges, 3× trees; old grids: painted Victorians with bays; tracts: one model
+  a cell). The neutral path is today's recipe exactly; the shore keeps its look. The old grid
+  and the tract are regional (by the style's `sub`/family): Midwest brick bungalows, Northwest
+  craftsman, desert stucco-and-tile tracts.
+- **Real places, tested**: the baked pack's towns (Rumson → estate at 45% of homes vs < 5% for
+  Fair Haven, Monmouth Beach; Fair Haven → grid — see the night entry: Red Bank was measured from
+  unstreamed leftover files, now replaced) and frozen real-lite tiles
+  from three more states (Levittown NY → tract, Portage Park IL → grid, Wallingford WA → grid).
+  AZ / CT / TX are listed but the tile service 503'd all day — re-run `tools/hood-fixtures.mjs`.
+- **Montage** (shots/shore-montage.jpg, before / after, street and 60 m): Rumson (Dogwood Lane,
+  Buena Vista Ave) reads more wooded, with privet hedge runs along the frontages — a modest change
+  from these views, since the houses stand back in the trees; Fair Haven and the shore unchanged.
+  Red Bank's deep link (`?at=40.3478,-74.0636`) is past the shore pack, so it streams — and the
+  tile service's 503s set it in procedural stand-ins; not yet seen by eye.
+- **The phone's silhouette ring budgeted** (`coarseMB` 90 / 60 MB): the Manhattan run below found
+  it at 171–190 MB — three times the detail tiles.
+- **Manhattan on a phone** (headless Pixel 7, phone tier, four hops round Midtown): 0 lost GPU
+  contexts, 0 errors, peak renderer 1,006 MB, GPU process 724 MB. The public Overpass servers
+  were down (the tile service answered 503 for uncached cells), so the detail tiles were the
+  procedural stand-ins — the real-tile run is still owed. Re-run with the cap: the silhouette ring
+  held at 86–89 MB every hop (was 171–190), 0 lost contexts, 0 errors; peak renderer 1,021 MB
+  (JS heap and page textures dominate it now), GPU process 694 MB. The tile service still
+  answered 503 for Midtown at the end of the day.
+
+## 2026-09-30 (later) — Balloons, painting to the horizon, and the core loop reviewed
+
+- **Paint as you walk, smoother** (the far sketch). The walk's colour stepped in at 10 Hz in big
+  jumps — near you each pixel popped. Now strokes at 20 Hz, ~1.5 s blank to full underfoot
+  (`bloomRate`), and the composite paints in two passes: a pale first wash over the pencil, then
+  the pigment deepening, its edge ragged by paper and brush-stroke noise that never touches bare
+  paper or finished paint. (The walker pin in tests/explore.test.ts re-pinned on purpose.)
+- **A photo paints the whole frame.** Measured headless from 150 m over Sea Bright (the rendered
+  frame re-read at 480×270, each visible pixel's paint cell checked): bare pixels were 0.1–0.2%
+  within 2 km, **3.0% at 4–8 km, 5.2% at 8–15 km and 99% past 15 km** — the "canvas clouds" were
+  the far field's sampling gaps and everything past the reach. Now a closing pass over the stamps
+  (`Stamps.close`), a 48 km far window, reach up to 22 km under your control (panel: "a photo
+  paints out to"), a 384 readback on a PC: **0.1–0.4% out to 15 km**, 22% past it (past 22 km).
+  The bloom is slower (2.4 s a cell, the farthest 2.2 s late) so the colour is seen running out;
+  the viewfinder's marks lift and the brush sounds through the run, a chime as it lands.
+- **Hot air balloons** (docs/agent/gameplay.md "Hot air balloons"): a foundry family
+  (`assets/balloon.ts`), real buoyancy physics with the lag kept readable (`balloonPhysics.ts`),
+  winds aloft that veer with height (`wind.ts`), first person in the basket with third person on
+  V / ⤢, Space / ▲ burn, C / ▼ vent, an assist that holds the height you let go at, photo mode in
+  the basket. Other people's balloons fly at dawn and dusk and come down on beaches (step in:
+  yours); on a first visit one waits on the nearest beach (Sea Bright's). Paint one from life and
+  the brush paints your own on open ground.
+- **Any colour**: every ride's swatch row in the brush has a free colour picker; a balloon a
+  second one for its stripes.
+- **The core loop reviewed** (docs/CORE_LOOP_REVIEW.md, a designer's read of the code). Built from
+  its list: photo paint counted (`stats().photoKm2`, the journal, the arrival card); the shot says
+  its reach and area, or where the pencil still is; the held breath; area milestones; the balloon
+  and its card; `?loop=paint` starts in this loop.
+- **Neighbourhoods** — research only so far: docs/NEIGHBOURHOODS.md (why Rumson reads like its
+  neighbours, the open data that tells them apart, the model, a test framework, phases).
+- Verified: typecheck; `npm test` 481 tests in 51 files; build; tools/hud-audit.mjs 120 layouts
+  (with a balloon state); the montage (shots/shore-montage.jpg: the beach balloon, someone's
+  balloon aloft and down on the beach, the basket at 160 m, the envelope from inside, third
+  person, pencil before / colour after a photo — 199 km² out to 22 km — phones in the basket); PC
+  playtest (drive, walkabout) pass with the same numbers as before.
+
+## 2026-09-30 — Phones: the touch controls reviewed, a game that sleeps when put away, the city that crashed Chrome
+
+- **The touch controls (the entry below), reviewed and fixed.**
+  - Photo mode had stopped WASD walking on a PC (it set `walker.holdMove`), and leaving it let go of
+    a lift ride's hold mid-ride. A pinch now just takes its two fingers off the stick and the look
+    drag (`Walker.releaseTouches`); the stick walks while you frame, as WASD does.
+  - The ride stick had no dead zone: steering sideways wandered into full throttle or the brakes,
+    and a plane's nose never settled. `vehicles.ts` `stickAxes`: 0.1 steer, 0.25 throttle, rescaled;
+    part way cruises at that share of the top speed and brakes that gently. Keys are ±1, so the
+    keyboard drives exactly as before.
+  - A double-tap on the look side could throw you out of a car at speed (two missed taps by the
+    boost button): it gets you out only once stopped. The ride's button says Drive / Board /
+    Get out / Jump out.
+  - Touch "Fly up/down" did nothing unless the stick was pushed too (climbing rides on the movement,
+    as Space/C do on a PC — left as it is there). ▲ ▼ now climb and sink on their own
+    (`walker.climb`) and sit beside the dock while flying, not in a drawer over the view.
+  - The ⋯ drawer never closed: a touch on the world closes it, and it closes behind the map, a
+    photo, the brush or the panel. ▣ does what P does (the brush away, a viewpoint faced). ⌂
+    focuses the search in the tap (the only way an iPhone raises its keyboard). A phone's hints and
+    toasts name its buttons (`body.nomouse`; a touch-screen laptop keeps its key names). Held
+    buttons let go when they disappear, the window blurs or the page sleeps.
+  - The page never zooms (`touch-action`; iOS's gesture events, since iOS ignores
+    `user-scalable=no`): a pinch had zoomed the page, hiding the controls with no way back. The
+    atlas map pinch-zooms instead (`mapview.ts`).
+- **The phone HUD, from the montage and a geometry audit.** The montage showed three overlaps;
+  an audit of the HUD's boxes (the production CSS on 10 phone sizes, upright and on their side,
+  walking / beside a ride / driving a car / flying a plane / flying on foot, a long hint up) found
+  25 overlapping layouts, mostly on a phone's side. Now none:
+  - On its side the hint was centred and pinned to the dock's edge at once with its text on one
+    line, so its pill came out narrower than the text; it wraps now, centred over the place name
+    (a long street name ran under it), over Get out while riding, clear of ▲ ▼ while flying. Get
+    out sat 2 px over ⇧. The ride's readout sits beside the ride's buttons (a plane's ran over
+    + −), the place name ends short of it, and the map-data credit runs along the top edge (the
+    dock and a ride's buttons covered its end).
+  - Upright, the ride's readout sat over the place name: it moves to the free corner under the
+    dock; the place name keeps the left half while riding. The hint ends short of ▲ ▼, ⇧, + − or
+    Drive beside the dock (`body[data-ride]`).
+  - A phone's readout shows the live numbers only; how to drive is the toast as you get in (the
+    two lines of instructions were what ran into everything). A PC's readout is unchanged.
+- **Sleep when put away** (`ui/lifecycle.ts`): hidden → sound suspended (phones; a PC tab sounds
+  on), the life worker paused (everywhere: it ticked at 20 Hz for a page nobody could see), held
+  input released; back on screen it picks up (an iPhone's interrupted sound on the next tap).
+- **Walking out through a wall after a flight (Robby, on a phone).** Reproduced headless: a flight
+  faster than a phone builds tiles lands over a cell of silhouettes — no walls, no footprints — so
+  the search for open ground saw nothing and came down inside a house (dead centre); until its tile
+  came (23 s under SwiftShader) nothing held you in. A phone now hovers ("coming down as the street
+  paints in…") until the cell is built and lands on open ground (12.7 m clear of the same house),
+  and on foot waits where it stands (`stream.solidAt`, main.ts `groundCheck`).
+- **The Manhattan crash.** On a phone Chrome died in NYC, then refused the site WebGL (the red
+  report at the bottom). Found and fixed:
+  - Every tile's sign atlas leaked on unload, on every platform: GPU textures 24 → 36 over four
+    round trips in Sea Bright (the scene holds 19). Now disposed with the tile: 23–25.
+  - Collision walls were tombstoned, never reclaimed: 263k walls (211k dead) after four round
+    trips on a phone; one long hop on a PC left 166k dead. They leave the walk world now, on every
+    platform, a slice a frame (`WalkWorld.purgeSome`, ~1.5 ms; a tile's walls at once took 65 ms
+    on a phone): flat at 106k on the phone run.
+  - LiDAR in the tab: one Midtown cell (NY_NewYorkCity) measured +130 MB RSS in Node with the game's
+    own `measureCell`, two read at once, and each measured cell built twice. Phones build from the
+    mapped heights (`?lidar=1` forces it).
+  - The phone ring held up to nine 1 km cells, and a downtown cell is ~100 MB of vertices. A
+    200 MB budget (low: 120), nearest first (`world/budget.ts`); Sea Bright's whole ring (97 MB) is
+    untouched. Real builds 2 at a time (low 1), no teleport building the whole ring at once, a 4 km
+    skyline (low 3).
+  - A lost GPU context on a phone sheds memory before it's given back, and the next load in the
+    tab steps down a tier. WebGL that won't start says how to get it back (close the browser and
+    reopen: Chrome blocks a site's WebGL after a GPU crash).
+- Verified: typecheck; `npm test` 472 tests in 50 files on an idle machine (lifecycle, budget,
+  touchControls and the wall purge added; diag/quality extended) — under five SwiftShader browsers
+  three heavy tests time out at 5 s, all pass with a longer timeout; build. Headless Pixel 7, Sea
+  Bright, phone tier, four 3.5 km round trips: textures 23–25 (was 24 → 36), walls 106k flat (was
+  263k), renderer peak 1,165 MB (was 1,285), GPU process 881 MB (was 949), 0 page errors.
+  - Sleep, counted by the life worker's messages (not frames): 57–59 ticks in 3 s awake, 0
+    hidden, 50–59 back, phone and PC; a phone's sound running → suspended → running, a PC's
+    running throughout; a held stick let go.
+  - The wall purge: a 19k-wall tile took 7.5–34.5 ms at once in Node; sliced, at most 1.56–1.73 ms
+    a frame (7–10 ms in all). In the page every dead wall was freed and reused (phone 50,375, PC
+    95,971), none left queued.
+  - No page zoom: the viewport meta rewritten to allow zoom (Android's force-zoom; an iPhone
+    ignores it anyway), two-finger spreads on the intro card, the world, the map and the
+    sketchbook stayed at scale 1; with `touch-action` back to auto the card and the sketchbook
+    zoomed 4.9×. (iOS's gesture events can't be tried here: no WebKit.)
+  - `tools/hud-audit.mjs`: 100 layouts, no overlaps (25 before). The montage
+    (`shots/shore-montage.jpg`, 11 states upright and on its side) reviewed.
+  - `mobile-check`: Pixel 7, iPhone and desktop boot, 0 page/console errors, 72–75 programs
+    within the phone limits. PC playtest (drive, walkabout): pass, the same numbers as with the
+    purge off (296 m at up to 38 km/h, 0 clips; 146 m through a door and out, 0 stuck).
+  - The flight repro and the on-foot wait (stick held: 0 m until the cell was built, then walking)
+    as above.
+- **Not verifiable here:** the tile service, Overpass and OpenFreeMap are blocked from the agent
+  sandbox, so no real Manhattan tiles loaded; the budget was exercised in Sea Bright only. Needs a
+  real phone after the next Pages deploy (Manhattan, `?diag=1`).
+
+## 2026-09-29 — Mobile control parity
+
+- Kept the existing walking thumbstick behavior intact and reused its axes for vehicles.
+- Added contextual enter/exit controls plus a deliberate double-tap gesture in the look area
+  when the same interaction is available. Added touch boost and plane throttle controls.
+- Added a More drawer for planting, seed cycling, time skip, and flight controls, plus a mobile
+  Options drawer with developer controls and ride summoning behind the existing debug toggle.
+- Added touch controls for photo zoom, light-time steps, and frame visibility; pinch-to-zoom;
+  brush rotation; and mobile guidance for the existing lift and map controls.
+- Verified with `npm run init` (47 test files, 450 tests), `npm run build`, and Pixel 7/iPhone
+  mobile-check runs. Both device emulations booted in phone quality with shader limits in range
+  and zero page or console errors. Reviewed `shots/shore-montage.jpg`; OSM credit remains visible.
+- Headless emulation is not a physical-device check. Tile-health probes and some map requests
+  could not reach local tile/Overpass services; repeat the real-phone check after Pages deploy.
+- The feature queue had 12 pre-existing `in_progress` items, contrary to its one-active-item
+  invariant. Selected `phones` for this work and returned the other 11 to `not_started`, keeping
+  their notes/evidence, so `npm run init` can validate the queue. No staging, commit, or push.
+
 ## 2026-09-29 (af) — Towers you can ride up, and a test suite that plays the game
 
 Two helper agents worked in their own copies while the main session merged and committed (ae).

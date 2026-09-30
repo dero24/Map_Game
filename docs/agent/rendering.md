@@ -25,6 +25,17 @@ or per-region style.
   the sea, 0.25–40 m, in quarter-octave steps. At a fixed 25 cm, a 24-bit depth step was ~1 m at
   2 km, and low shore ground fought the sea plane from the air. Anything reading depth takes
   `camera.near` each frame (`post.ts`, `readSeen`); never assume 0.25.
+- Fog (`shared.ts` `applyFog`): density `uFogDensity` (haze), thinning upward with `uFogFalloff`
+  (scale ~33 m) plus a sea-fog term; heights are above the ground where you stand. It is the mean
+  density along the whole sight line — eye height to the point's (`layerMean`, exact) — not the
+  point's own layer taken the whole way: from a hill or a balloon the distant streets were buried
+  under a flat white sheet while tower tops rose out of it. At street level eye and point share a
+  layer, so nothing changes there. Drifting weather's fog (`weatherParams.fogMode`, panel
+  "drifting fog"): 'rare, anywhere' (default — about one hour in eleven, lighter, plus a coast's
+  morning marine layer), 'coastal mornings' (oceanD < ~500 m, burned off by 11) or 'never'.
+- Weather presets (panel Weather → "weather preset", `WEATHER_PRESETS` in ui/panel.ts): clear, fair,
+  hazy summer, marine layer, thick fog, overcast, blustery, snow day — each pins the weather
+  (drifting off); 'drifting' hands it back to the clock. Moving any slider shows 'custom'.
 - Coplanar layers carry a polygon offset, in depth units (constant in steps, so metres far off and a
   hair up close). Streets, lakes and shore foam are pulled forward (−1/−4); wakes −2/−6; the sea
   plane is pushed back (+1/+2) under shore ground.
@@ -68,11 +79,11 @@ or per-region style.
 - That full underdrawing is now a developer switch (`postParams.sketchFar`, panel → Watercolor →
   "…far away too"): off, unexplored ground is only a paler first wash within ~160 m. The paint
   reach round you on foot is `sketchReach` (45 m). In that mode the composite reads the fine
-  window (4 km, 8 m) and, past it, the far window (`U.uExploreFar` / `U.uExploreFarBox`: ~32 km,
+  window (4 km, 8 m) and, past it, the far window (`U.uExploreFar` / `U.uExploreFarBox`: ~48 km,
   64 m texels, RG = what photos painted / the share of each 64 m cell you walked), blended over
   the fine one's last ~200 m; inside the fine window far photo paint shows too. Only that branch
   reads the far window: the default mode renders exactly as before. Past ~12.5 km (depth ≥
   0.99999) is sky to the composite and never sketched.
 - A photo (photo mode, Space) in that mode paints what it frames: `WatercolorPost.readSeen` packs
-  the frame's depth into a small RGBA8 target (256 on the long side; log depth, 24 bits) and reads
+  the frame's depth into a small RGBA8 target (384 on the long side, a phone 256; log depth, 24 bits) and reads
   it back async; `render/seen.ts` unprojects it; `Explore.paintSeen` paints it (gameplay.md).

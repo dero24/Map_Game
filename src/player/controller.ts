@@ -18,17 +18,25 @@ export class Walker {
   holdLook = false;
   /** a lift ride is under way: no walking (player/lift.ts) */
   holdMove = false;
+  /** (a phone) the street under you isn't built yet — its buildings still silhouettes with no walls:
+   *  you wait where you stand until it is (main.ts) */
+  waitGround = false;
   /** Degrees off the field of view: a brief push-in (the brush, as a painted thing dries). */
   zoom = 0;
+  /** The touch ▲ ▼ buttons while flying: +1 climbs, −1 sinks, at the flying speed — with the stick
+   *  idle too (the keyboard's Space and C ride on the movement, as they always have). */
+  climb = 0;
   distance = 0;
   // Touch: left ~45% of the screen is a floating joystick (analog walk, full push = run),
-  // the rest is a look-drag region. The stick UI is injected on first touch.
+  // the rest is a look-drag region. The stick UI is injected on first touch (its resting ring is
+  // index.html's #stick-home).
   private tMove = { id: -1, ox: 0, oy: 0, x: 0, y: 0 };
   private tLook = { id: -1, lx: 0, ly: 0 };
   private stick?: HTMLElement;
   private knob?: HTMLElement;
 
   constructor(private world: WalkWorld, private dom: HTMLElement) {
+    if (this.taught) document.body.classList.add('stick-taught');
     window.addEventListener('keydown', (e) => {
       if ((e.target as HTMLElement)?.closest?.('.lil-gui')) return;
       this.keys.add(e.code);
@@ -50,16 +58,23 @@ export class Walker {
     document.addEventListener('pointerlockchange', () => (this.locked = document.pointerLockElement === dom));
 
     // ---- touch ----
-    const STICK_R = 56;
+    // (the stick comes to your thumb: centred where it lands, and dragged along behind it past the
+    // rim — a thumb that wanders off the stick keeps walking, it never has to lift and find it again)
+    const STICK_R = 50;
+    const place = (s: HTMLElement) => {
+      const half = s.offsetWidth / 2 || 58;
+      s.style.transform = `translate(${this.tMove.ox - half}px, ${this.tMove.oy - half}px)`;
+    };
     dom.addEventListener('touchstart', (e) => {
       document.body.classList.add('touch');
       for (const t of Array.from(e.changedTouches)) {
         if (t.clientX < window.innerWidth * 0.45 && this.tMove.id < 0) {
           this.tMove = { id: t.identifier, ox: t.clientX, oy: t.clientY, x: 0, y: 0 };
           const s = this.stick ?? this.mkStick();
-          s.style.transform = `translate(${t.clientX - STICK_R - 8}px, ${t.clientY - STICK_R - 8}px)`;
-          this.knob!.style.transform = 'translate(0px, 0px)';
           s.classList.add('on');
+          place(s);
+          this.knob!.style.transform = 'translate(0px, 0px)';
+          document.body.classList.add('stick-on');
         } else if (this.tLook.id < 0) this.tLook = { id: t.identifier, lx: t.clientX, ly: t.clientY };
       }
       e.preventDefault();
@@ -70,12 +85,19 @@ export class Walker {
         if (t.identifier === this.tMove.id) {
           let dx = t.clientX - this.tMove.ox, dy = t.clientY - this.tMove.oy;
           const l = Math.hypot(dx, dy);
-          if (l > STICK_R) { dx *= STICK_R / l; dy *= STICK_R / l; }
+          if (l > STICK_R) {
+            this.tMove.ox += dx * (1 - STICK_R / l);
+            this.tMove.oy += dy * (1 - STICK_R / l);
+            dx *= STICK_R / l;
+            dy *= STICK_R / l;
+            if (this.stick) place(this.stick);
+          }
           this.tMove.x = dx / STICK_R;
           this.tMove.y = dy / STICK_R;
           if (this.knob) this.knob.style.transform = `translate(${dx}px, ${dy}px)`;
+          if (l > STICK_R * 0.5 && !this.taught) this.teach();
         } else if (t.identifier === this.tLook.id) {
-          const s = this.holdLook ? 0 : 0.0045;
+          const s = this.holdLook ? 0 : 0.0045 * walkParams.mouseSens;
           this.yaw -= (t.clientX - this.tLook.lx) * s;
           this.pitch = Math.max(-1.35, Math.min(1.35, this.pitch - (t.clientY - this.tLook.ly) * s));
           this.tLook.lx = t.clientX;
@@ -88,11 +110,20 @@ export class Walker {
         if (t.identifier === this.tMove.id) {
           this.tMove = { id: -1, ox: 0, oy: 0, x: 0, y: 0 };
           this.stick?.classList.remove('on');
+          document.body.classList.remove('stick-on');
         } else if (t.identifier === this.tLook.id) this.tLook = { id: -1, lx: 0, ly: 0 };
       }
     };
     dom.addEventListener('touchend', touchEnd);
     dom.addEventListener('touchcancel', touchEnd);
+  }
+
+  // The resting stick says "walk" until you've walked with it once (on this device, for good).
+  private taught = (() => { try { return localStorage.getItem('map-game.stick-taught.v1') === '1'; } catch { return false; } })();
+  private teach() {
+    this.taught = true;
+    document.body.classList.add('stick-taught');
+    try { localStorage.setItem('map-game.stick-taught.v1', '1'); } catch { /* private mode: it just says so again next time */ }
   }
 
   private mkStick() {
@@ -147,7 +178,7 @@ export class Walker {
     }
     const analog = Math.min(1, Math.hypot(this.tMove.x, this.tMove.y));
     const run = k.has('ShiftLeft') || k.has('ShiftRight') || analog > 0.85;
-    if (this.holdMove) f = s = 0;
+    if (this.holdMove || this.waitGround) f = s = 0;
     const len = Math.hypot(f, s);
     const mag = Math.min(1, len); // keys land on integers (mag 1); the stick is analog
     const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw);
@@ -162,6 +193,7 @@ export class Walker {
       }
       if (k.has('Space')) this.y += sp;
       if (k.has('KeyC')) this.y -= sp;
+      if (this.climb) this.y += this.climb * walkParams.flySpeed * (run ? 4 : 1) * dt;
     } else {
       if (len > 0) {
         const sp = (run ? walkParams.runSpeed : walkParams.speed) * mag * dt;
@@ -190,6 +222,16 @@ export class Walker {
   }
 
   pressed(code: string) { return this.keys.has(code); }
+  /** Let go of the stick and the look drag: a pinch took the fingers over (photo zoom), or the
+   *  page went to sleep mid-drag and the finger's touchend may never come. */
+  releaseTouches() {
+    this.tMove = { id: -1, ox: 0, oy: 0, x: 0, y: 0 };
+    this.tLook = { id: -1, lx: 0, ly: 0 };
+    this.stick?.classList.remove('on');
+    document.body.classList.remove('stick-on');
+  }
+  /** Normalized left-stick axes; vehicles reuse the same stick while the walker is aboard. */
+  get touchAxes() { return { x: this.tMove.x, y: this.tMove.y }; }
   /** Walking forward right now — keys or the touch stick pushed up (walk-in boarding, vehicles.ts). */
   get pushing() { return this.keys.has('KeyW') || this.keys.has('ArrowUp') || this.tMove.y < -0.35; }
   get feet() { return this.surfaceY; }

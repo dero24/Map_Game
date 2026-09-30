@@ -6,18 +6,21 @@ export const TILE_CELL = 1024; // metres, region-local frame
 export const TILE_MARGIN = 48;
 
 const inBox = (b, x, z, m = 0) => x >= b.x0 - m && x <= b.x1 + m && z >= b.z0 - m && z <= b.z1 + m;
+// Ownership is half-open ([x0, x1) × [z0, z1)): a point exactly on a shared edge belongs to one
+// tile — closed on both sides, a house centred on a tile line was owned (and built) twice.
+export const ownsPoint = (b, x, z) => x >= b.x0 && x < b.x1 && z >= b.z0 && z < b.z1;
 
 function anyVertex(flat, box, m) {
   for (let i = 0; i + 1 < flat.length; i += 2) if (inBox(box, flat[i] / 10, flat[i + 1] / 10, m)) return true;
   return false;
 }
 function firstVertex(flat, box) {
-  return flat.length >= 2 && inBox(box, flat[0] / 10, flat[1] / 10);
+  return flat.length >= 2 && ownsPoint(box, flat[0] / 10, flat[1] / 10);
 }
 function centroid(ring, box) {
   let x = 0, z = 0, n = 0;
   for (let i = 0; i + 1 < ring.length; i += 2) (x += ring[i] / 10), (z += ring[i + 1] / 10), n++;
-  return n > 0 && inBox(box, x / n, z / n);
+  return n > 0 && ownsPoint(box, x / n, z / n);
 }
 
 // entities: { buildings, roads, areas, lines, points } in world.json schema (rings/paths are 0.1 m ints).
@@ -39,7 +42,7 @@ export function partitionEntities(entities, boxes, margin = TILE_MARGIN) {
         roads: roads.filter((r) => anyVertex(r.p, b, margin)).map((r) => tag(r, r.p)),
         areas: areas.filter((a) => a.o?.some((ring) => anyVertex(ring, b, margin))).map((a) => (a.o?.length && firstVertex(a.o[0], b) ? a : { ...a, ...ctx })),
         lines: lines.filter((l) => anyVertex(l.p, b, margin)).map((l) => tag(l, l.p)),
-        points: points.filter((p) => inBox(b, p.x, p.z, margin)).map((p) => (inBox(b, p.x, p.z) ? p : { ...p, ...ctx })),
+        points: points.filter((p) => inBox(b, p.x, p.z, margin)).map((p) => (ownsPoint(b, p.x, p.z) ? p : { ...p, ...ctx })),
       },
     };
   });

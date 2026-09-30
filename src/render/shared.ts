@@ -220,13 +220,25 @@ vec3 fogColorDir(vec3 dir) {
   return mix(uFogColor, uFogSunColor, s * 0.6);
 }
 uniform vec3 uWorldOffset;
+// The mean of exp(−k·h) over a straight line from height a to b (exact: the air thins with
+// height, and a sight line crosses every layer between the two ends).
+float layerMean(float k, float a, float b) {
+  float dh = b - a;
+  return abs(k * dh) < 1e-3 ? exp(-k * 0.5 * (a + b)) : (exp(-k * a) - exp(-k * b)) / (k * dh);
+}
 vec3 applyFog(vec3 col, vec3 wpos) {
   vec3 v = wpos - (cameraPosition + uWorldOffset);
   float d = length(v);
-  // height above the ground you're standing on (not sea level): a mile-high town keeps its haze
-  float h = max(wpos.y - max(uLampBaseY, 0.0), 0.0);
-  float dens = uFogDensity * (1.0 + uSeaFog * 12.0 * exp(-h * 0.08)) ;
-  float f = 1.0 - exp(-d * dens * exp(-h * uFogFalloff * (1.0 - uSeaFog * 0.7)));
+  // heights above the ground you're standing on (not sea level): a mile-high town keeps its haze.
+  // The haze thins upward, so what fogs a point is the air along the whole sight line to it —
+  // from the eye's height to the point's — not the point's own low, thick layer taken the whole
+  // way: from a balloon or a hill, distant streets were drowned under a flat white sheet while the
+  // towers' tops rose clear out of it. (At street level, eye and point share a layer: as before.)
+  float base = max(uLampBaseY, 0.0);
+  float h = max(wpos.y - base, 0.0), he = max(wpos.y - v.y - base, 0.0);
+  float k = uFogFalloff * (1.0 - uSeaFog * 0.7);
+  float mean = layerMean(k, he, h) + uSeaFog * 12.0 * layerMean(k + 0.08, he, h);
+  float f = 1.0 - exp(-d * uFogDensity * mean);
   return mix(col, fogColorDir(v / max(d, 1e-3)), clamp(f, 0.0, 1.0));
 }
 `;

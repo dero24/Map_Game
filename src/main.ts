@@ -23,7 +23,11 @@ import { buildSky, skyUniforms } from './world/sky';
 import { LifeClient, buildLifeBase, buildLifeInit, lifeInitSteps, lifeParams } from './sim/life';
 import { Ambience } from './audio/ambience';
 import { Journal } from './ui/journal';
-import { Explore } from './world/explore';
+import { Explore, SEEN_REACH } from './world/explore';
+import { AmbientBalloons } from './world/balloons';
+import { windKey } from './world/wind';
+import { propMaterial } from './render/propMaterial';
+import { compass } from './player/place';
 import { Atlas } from './ui/atlas';
 import { PhotoMode } from './ui/photo';
 import { Commissions } from './ui/commissions';
@@ -44,10 +48,11 @@ import { LiftUI } from './ui/lift';
 import { applyAtmosphere, type Weather } from './world/atmosphere';
 import { U } from './render/shared';
 import { WatercolorPost, postParams } from './render/post';
-import { skyDepth, unprojectDepth } from './render/seen';
+import { skyDepth, unprojectDepth, mendDepth } from './render/seen';
 import { SunShadows, shadowParams } from './render/shadows';
-import { applyTier, autoSteps, deviceInfo, pickTier } from './render/quality';
-import { began, contextLost, contextRestored, diag, diagInit, diagStage, diagTick, errorLine, frameFailed, frameOk, glInfo, glProbe, shaderError, showReport } from './ui/diag';
+import { applyTier, autoSteps, deviceInfo, isPhoneClass, pickTier } from './render/quality';
+import { sleepWhenHidden } from './ui/lifecycle';
+import { began, contextLost, contextRestored, diag, diagInit, diagStage, diagTick, errorLine, frameFailed, frameOk, glInfo, glProbe, NO_WEBGL, shaderError, showReport } from './ui/diag';
 import { WalkWorld } from './player/collision';
 import { landingAt } from './player/landing';
 import { Walker, walkParams } from './player/controller';
@@ -136,7 +141,11 @@ async function main() {
   const maxTex = renderer.capabilities.maxTextureSize;
   // Quality tier: a phone gets lighter paint, shadows, ground canvases and tile rings (quality.ts);
   // one whose last visit here died on screen steps down again. Saved panel knobs always win.
-  const tier = pickTier(deviceInfo(maxTex), { forced: params.get('quality'), crashed: !!crashed });
+  const device = deviceInfo(maxTex);
+  // A phone or a tablet: it sleeps when it's put away (below, ui/lifecycle.ts) — a PC tab is left as it was
+  const MOBILE = isPhoneClass(device);
+  // (a phone whose last load here lost its GPU context steps down a tier too: its GPU ran out)
+  const tier = pickTier(device, { forced: params.get('quality'), crashed: !!crashed || (MOBILE && !!diag.lostBefore) });
   const tierSet = applyTier(tier, { post: postParams, shadow: shadowParams, stream: streamParams }, userKeys);
   diag.tier = tier.tier;
   diag.tierWhy = tier.why;
@@ -247,15 +256,16 @@ async function main() {
   const tilesBase = TILES || manifest.tilesUrl || '';
   const stream = new TileStream(base, manifest, world.terrain, walk, interiors, worldRoot, tilesBase, terrBin, !!tilesBase);
   // Measured buildings from USGS 3DEP LiDAR wherever a survey covers the cell (lidar.ts);
-  // `?lidar=0` builds from mapped priors only.
-  stream.lidar = params.get('lidar') !== '0';
+  // `?lidar=0` builds from mapped priors only. A phone's tier builds from them too (quality.ts):
+  // a city's survey decoded in the tab was hundreds of MB, and each cell built twice; `?lidar=1`.
+  stream.lidar = params.get('lidar') === '1' || (params.get('lidar') !== '0' && tier.lidar);
   // The horizon ring: real mountains out to 80 km past the tiles (Terrarium z9 through the same
   // DEM route the cells use). `?horizon=0` turns it off.
   if (tilesBase) setDemBase(tilesBase);
   const horizon = new Horizon(manifest.origin, regionLook, !!tilesBase && params.get('horizon') !== '0');
   worldRoot.add(horizon.group);
   // …and a city's towers past the detail ring (a skyline you can navigate by). `?skyline=0` off.
-  const skyline = new Skyline(manifest.origin, manifest.cell, !!tilesBase && params.get('skyline') !== '0');
+  const skyline = new Skyline(manifest.origin, manifest.cell, !!tilesBase && params.get('skyline') !== '0', tier.skylineR);
   worldRoot.add(skyline.group);
   const realCells = new Set<string>();
   // The localhost auto-default was probed before setup: no worker answered → procedural past the bake.
@@ -316,6 +326,8 @@ async function main() {
   await journal.load();
   // Paint as you explore: a global, persistent record of where you've been (pencil elsewhere).
   const explore = new Explore(json.origin);
+  // ?loop=paint: start in the loop under test — the world in pencil, a photo paints what it frames
+  if (params.get('loop') === 'paint') { postParams.sketch = true; postParams.sketchFar = true; }
   if (CAPTURE) postParams.sketch = params.get('sketch') === '1'; // regression shots stay fully painted unless asked
   else if (params.get('sketch') === '0') postParams.sketch = false;
   const walker = new Walker(walk, canvas);
@@ -354,6 +366,9 @@ async function main() {
   const respawn = () => walker.place(spawn.x, spawn.z, spawn.yaw, -0.02, spawn.y);
   const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   if (isTouch) document.body.classList.add('touch');
+  // No mouse to hand (a phone, a tablet — index.html's `nomouse`): the hints name the touch
+  // controls. A touch-screen laptop has its keyboard, and keeps the key names.
+  const thumbs = () => document.body.classList.contains('nomouse');
   // Pointer lock wants a mouse or trackpad: a phone has none (and headless Chromium, granted one,
   // floods the page with mousemoves), while a touch-screen laptop still does.
   const canLock = () => { try { return matchMedia('(any-pointer: fine)').matches; } catch { return !isTouch; } };
@@ -450,7 +465,12 @@ async function main() {
   stream.onMount = () => { if (!vehicles.driving) settleWalker(); };
   let settleT = 1; // …and once a second on foot: whatever put you there (a slow frame, a bad door), you're never shut in
   // Rideable vehicles (E enter/exit; you paint your own with the brush, ui/brush.ts) — the walker rides along.
+  // other people's balloons: up at dawn and dusk, down on the beaches (world/balloons.ts)
+  const geoLL = { toLatLon: (x: number, z: number) => toLatLon(json.origin, x, z), fromLatLon: (lat: number, lon: number) => fromLatLon(json.origin, lat, lon) };
+  const ambientBalloons = new AmbientBalloons({ terrain: world.terrain, walk, mat: propMaterial(), geo: geoLL, hour: () => timeParams.hour });
+  worldRoot.add(ambientBalloons.group);
   const vehicles = new Vehicles({
+    ambient: ambientBalloons,
     walk, terrain: world.terrain, walker, root: worldRoot, toast,
     roads: () => stream.primRoads,
     tiles: () => stream.loaded.values(),
@@ -461,6 +481,26 @@ async function main() {
     geo: { toLatLon: (x, z) => toLatLon(json.origin, x, z), fromLatLon: (lat, lon) => fromLatLon(json.origin, lat, lon) },
   });
   { const prev = stream.onTile; stream.onTile = (a) => { prev?.(a); vehicles.onTile(a); }; } // re-hide taken driveway cars on remount
+  vehicles.windKey = windKey(json.origin.lat, json.origin.lon); // (the winds aloft: this region's)
+  // A first visit: a balloon waits on the nearest beach to where you start (tried as the terrain
+  // comes in; none inland). A balloon someone lands near you gets a word.
+  const isBeach = (x: number, z: number) => { const T = world.terrain, d = T.oceanDistAt(x, z); return d > 12 && d < 70 && T.heightAt(x, z) > 0.4 && T.sdfAt(x, z) > 3 && walk.buildingAt(x, z) < 0; };
+  let giftT = CAPTURE ? -1 : 0, giftTry = 0;
+  const landedSaid = new Set<string>();
+  const balloonNews = (dt: number) => {
+    if (giftT >= 0 && (giftT += dt) > 4 && (giftTry -= dt) <= 0) {
+      giftTry = 5;
+      if (vehicles.giftBalloon(spawn.x, spawn.z, isBeach) || giftT > 120) giftT = -1;
+    }
+    if (vehicles.driving) return;
+    for (const b of ambientBalloons.near(walker.x, walker.z, 2500)) {
+      const k = `${Math.round(b.x / 50)}:${Math.round(b.z / 50)}`;
+      if (!b.landed || landedSaid.has(k)) continue;
+      landedSaid.add(k);
+      const d = Math.hypot(b.x - walker.x, b.z - walker.z);
+      if (d > 60) toast(`a balloon has come down${world.terrain.oceanDistAt(b.x, b.z) < 80 ? ' on the beach' : ''}, ${d < 950 ? `${Math.round(d / 10) * 10} m` : `${(d / 1000).toFixed(1)} km`} ${compass(b.x - walker.x, b.z - walker.z)} — step in and fly it`);
+    }
+  };
 
   const lifeBase = buildLifeBase(paintWorld, walk);
   lifeBase.rhythm = rhythmFor(regionLook.climate, lifeBase.beachPts.length > 0); // the shape of this place's day
@@ -531,14 +571,19 @@ async function main() {
     teleport: async (lat, lon) => { await teleportTo(lat, lon); arrival.greet(); },
     sound: (k) => ambience?.ui(k),
     paintView: async () => {
-      if (!postParams.enabled || !postParams.sketch || !postParams.sketchFar) return null;
-      // the frame's depth on a small grid (256 on the long side), unprojected through this frame's
+      if (!postParams.enabled || !postParams.sketchFar) return null;
+      // the frame's depth on a small grid (384 on the long side, a phone 256), unprojected through this frame's
       // camera — captured now, before the next frame moves it (render/seen.ts)
-      const a = camera.aspect, w = a >= 1 ? 256 : Math.max(16, Math.round(256 * a)), h = a >= 1 ? Math.max(16, Math.round(256 / a)) : 256;
+      const a = camera.aspect, L = MOBILE ? 256 : 384, /* (a phone lays it in sooner) */ w = a >= 1 ? L : Math.max(16, Math.round(L * a)), h = a >= 1 ? Math.max(16, Math.round(L / a)) : L;
       const inv = [...camera.projectionMatrixInverse.elements], cw = [...camera.matrixWorld.elements], off = { x: origin.x, y: 0, z: origin.z };
       const depth = await post.readSeen(w, h, camera.near, camera.far);
+      // see through what stands in front of the view (a rope, a post, a wire — each was a streak of
+      // canvas out to the horizon) and, riding, through the ride itself (render/seen.ts mendDepth)
+      const k = vehicles.activeKind;
+      const rideNear = k === 'balloon' ? (vehicles.third ? 70 : 30) : k === 'plane' ? 45 : k === 'car' ? 11 : k === 'boat' ? 14 : 0;
+      if (depth) mendDepth(depth, w, h, { thin: Math.round(Math.max(w, h) * 0.06), near: rideNear });
       const g = depth && unprojectDepth(depth, w, h, inv, cw, off, skyDepth(camera.near, camera.far));
-      return g && explore.paintSeenSliced(g, { x: cw[12] + off.x, y: cw[13], z: cw[14] + off.z }, { ground: (x, z) => Math.max(world.terrain.heightAt(x, z), 0) });
+      return g && explore.paintSeenSliced(g, { x: cw[12] + off.x, y: cw[13], z: cw[14] + off.z }, { reach: Math.min(SEEN_REACH, postParams.photoReach), ground: (x, z) => Math.max(world.terrain.heightAt(x, z), 0) });
     },
     uiOpen: () => !$('intro').classList.contains('hidden') || atlas.open,
     lock: () => { if (canLock()) walker.lock(); },
@@ -583,8 +628,9 @@ async function main() {
   hints.add(() => brush.hint());
   let brushT = 0;
   explore.onBloom = (n) => { if (n > 3 && brushT <= 0) { brushT = 1.6; ambience?.ui('brush'); } };
-  const VERB = { car: 'drive this', boat: 'take the helm of this', plane: 'fly this' } as const;
-  hints.add(() => { const e = vehicles.enterable(); return e ? { key: 'E', text: `${VERB[e.kind]} ${modelName(e.model)}`, pri: 10 } : null; });
+  const VERB = { car: 'drive this', boat: 'take the helm of this', plane: 'fly this', balloon: 'step into this' } as const;
+  // (on a phone the ride's own button, beside your thumb, says the verb: the hint just names it)
+  hints.add(() => { const e = vehicles.enterable(); return e ? { key: thumbs() ? undefined : 'E', text: `${VERB[e.kind]} ${modelName(e.model)}`, pri: 10 } : null; });
   hints.add(() => {
     const P = interiors.activePlan;
     if (!P || interiors.indoors || vehicles.driving) return null;
@@ -597,10 +643,10 @@ async function main() {
   hints.add(() => {
     if (ride.busy) return null;
     const h = ride.here();
-    return h ? { key: 'L', text: `call the lift — you're on ${h.storey ? `floor ${h.storey + 1}` : 'the ground floor'} of ${h.n}`, pri: 8 } : null;
+    return h ? { key: thumbs() ? 'Lift' : 'L', text: `call the lift — you're on ${h.storey ? `floor ${h.storey + 1}` : 'the ground floor'} of ${h.n}`, pri: 8 } : null;
   });
   hints.add(() => {
-    for (const t of commissions.targets()) if (Math.hypot(t.x - walker.x, t.z - walker.z) < 60) return { key: 'P', text: `✧ ${t.title.replace(/^Paint /, 'paint ')}`, pri: 7 };
+    for (const t of commissions.targets()) if (Math.hypot(t.x - walker.x, t.z - walker.z) < 60) return { key: thumbs() ? 'Paint' : 'P', text: `✧ ${t.title.replace(/^Paint /, 'paint ')}`, pri: 7 };
     return null;
   });
   // Viewpoints (tourism=viewpoint): the view named — the summit it looks at, how far and which way
@@ -623,7 +669,7 @@ async function main() {
     const v = viewHere();
     if (!v) return null;
     const s = v.sight;
-    return { key: 'P', text: s ? `the view: ${s.name}, ${Math.round(s.km)} km to the ${compassWord(s.bearing)} — paint it` : 'a viewpoint — paint the view', pri: 6 };
+    return { key: thumbs() ? 'Paint' : 'P', text: s ? `the view: ${s.name}, ${Math.round(s.km)} km to the ${compassWord(s.bearing)} — paint it` : 'a viewpoint — paint the view', pri: 6 };
   });
   hints.add(() => {
     // (the peak list follows you: fetched here, again after 40 km)
@@ -636,11 +682,12 @@ async function main() {
     }
     return null;
   });
-  hints.add(() => (walkParams.fly && !vehicles.driving ? { key: 'F', text: 'land · Space / C up and down · wheel for speed', pri: 3, once: 'fly' } : null));
-  hints.add(() => (simTime > 12 ? { key: 'M', text: 'your map, sketchbook & commissions', pri: 1, once: 'atlas' } : null));
-  hints.add(() => (simTime > 70 && !vehicles.driving && !walkParams.fly && world.terrain.coverAt(walker.x, walker.z) === 30 ? { key: 'R', text: `plant a ${SPECIES[garden.nextSpecies].label} here (Shift+R: another seed)`, pri: 1, once: 'plant' } : null));
-  hints.add(() => (simTime > 45 ? { key: 'P', text: 'frame a view and paint it into your sketchbook', pri: 1, once: 'photo' } : null));
-  hints.add(() => (simTime > 100 ? { key: 'G', text: 'go anywhere — search a town or an address', pri: 1, once: 'go' } : null));
+  hints.add(() => (walkParams.fly && !vehicles.driving ? { key: thumbs() ? 'Land' : 'F', text: thumbs() ? 'hold Up and Down to climb and sink · push the stick far to go faster' : 'land · Space / C up and down · wheel for speed', pri: 3, once: 'fly' } : null));
+  hints.add(() => (vehicles.balloon && !vehicles.balloon.landed ? { key: thumbs() ? 'Paint' : 'P', text: 'the best seat for a painting — everything in frame, out to the horizon', pri: 4, once: 'balloon' } : null));
+  hints.add(() => (simTime > 12 ? { key: thumbs() ? 'Map' : 'M', text: 'your map, sketchbook & commissions', pri: 1, once: 'atlas' } : null));
+  hints.add(() => (simTime > 70 && !vehicles.driving && !walkParams.fly && world.terrain.coverAt(walker.x, walker.z) === 30 ? { key: thumbs() ? 'More' : 'R', text: `plant a ${SPECIES[garden.nextSpecies].label} here${thumbs() ? '' : ' (Shift+R: another seed)'}`, pri: 1, once: 'plant' } : null));
+  hints.add(() => (simTime > 45 ? { key: thumbs() ? 'Paint' : 'P', text: 'frame a view and paint it into your sketchbook', pri: 1, once: 'photo' } : null));
+  hints.add(() => (simTime > 100 ? { key: thumbs() ? 'Go' : 'G', text: 'go anywhere — search a town or an address', pri: 1, once: 'go' } : null));
 
   const post = new WatercolorPost(renderer);
   const shadows = new SunShadows(renderer);
@@ -651,6 +698,9 @@ async function main() {
   renderer.compile(scene, camera);
   if (firstPlan !== undefined) interiors.prime(null);
   const resize = () => {
+    // a phone's canvas at up to 1.5× its CSS pixels when the paint is hi-DPI (at 1× a DPR-3 screen
+    // stretched every painted pixel ~3× — the blur); a PC's stays at 1× (its paint supersamples)
+    renderer.setPixelRatio(tier.tier !== 'desktop' && postParams.hiDpi ? Math.min(1.5, Math.max(1, devicePixelRatio || 1)) * postParams.renderScale : 1);
     renderer.setSize(innerWidth, innerHeight, false);
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
@@ -693,7 +743,16 @@ async function main() {
     }
   }
 
-  const gui = CAPTURE && !params.has('panel') ? null : buildPanel({ onResize: resize, onPreset: setHour, onRespawn: respawn, onResetExplore: () => { void journal.reset(); void explore.reset(); } }, { name: townName, tz, respawn: spec?.on });
+  const gui = CAPTURE && !params.has('panel') ? null : buildPanel({
+    onResize: resize,
+    onPreset: setHour,
+    onRespawn: respawn,
+    onResetExplore: () => { void journal.reset(); void explore.reset(); },
+    onSummon: (kind) => {
+      if (debugParams.summons) vehicles.summon(kind);
+      else toast('turn on free rides in Debug first');
+    },
+  }, { name: townName, tz, respawn: spec?.on });
 
   const weather: Weather = { cloud: weatherParams.cloud, seaFog: weatherParams.seaFog, haze: weatherParams.haze, wind: weatherParams.wind };
   let simTime = 0;
@@ -839,7 +898,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, lift: ride, planInterior, registerPlan, plans, bld, life, stream, vehicles, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, streamParams, get spawn() { return spawn; }, at: atPos };
+  (window as unknown as Record<string, unknown>).__GAME__ = { ambientBalloons, walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, lift: ride, planInterior, registerPlan, plans, bld, life, stream, vehicles, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, streamParams, get spawn() { return spawn; }, at: atPos };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);
@@ -890,31 +949,189 @@ async function main() {
   canvas.addEventListener('click', () => { if ($('intro').classList.contains('hidden')) { ctx.lock(); startAudio(); } });
   $('credits-link').onclick = (e) => { e.preventDefault(); $('credits').classList.remove('hidden'); };
   $('credits-close').onclick = () => $('credits').classList.add('hidden');
+  // P (▣ on a phone): the brush goes away, and at a viewpoint you face its view first — the summit
+  // it names, else the way the map says it looks
+  const togglePhoto = () => {
+    brush.toggle(false);
+    const v = !photo.active ? viewHere() : null;
+    const b = v?.sight?.bearing ?? (v && v.vp.b >= 0 ? v.vp.b : null);
+    if (b !== null && b !== undefined) walker.place(walker.x, walker.z, (-b * Math.PI) / 180, v?.sight ? Math.min(0.12, v.sight.angle + 0.01) : 0.02, walker.y - walkParams.eyeHeight);
+    photo.toggle();
+  };
+  // ✈ on a phone. A phone builds tiles slower than you can fly, and past the ring the buildings
+  // below are silhouettes with no walls yet: a landing came down inside a house (the search for
+  // open ground found nothing there to avoid) and walked straight out through its wall. So a phone
+  // hovers until the street under it is built, then comes down on open ground (groundCheck); a
+  // second ✈ meanwhile calls it off. (A PC builds a tile in a moment: F lands at once, as ever.)
+  let landing = false, groundWait = 0;
+  const toggleFly = () => {
+    if (!walkParams.fly) { landing = false; walker.setFly(true); return; }
+    if (!MOBILE || stream.solidAt(walker.x, walker.z)) { landing = false; walker.setFly(false); return; }
+    landing = !landing;
+    toast(landing ? 'coming down as the street paints in…' : 'still flying');
+  };
+  // …and on foot the same: past a built tile (off a fast ride, a slow build) you wait a moment where
+  // you stand rather than walk through houses whose walls aren't there yet
+  const groundCheck = (dt: number) => {
+    if (landing && (!walkParams.fly || stream.solidAt(walker.x, walker.z))) { landing = false; if (walkParams.fly) walker.setFly(false); }
+    const bare = !walkParams.fly && !vehicles.driving && !stream.solidAt(walker.x, walker.z);
+    if (bare && groundWait < 1 && groundWait + dt >= 1) toast('the street is still painting in — a moment…');
+    groundWait = bare ? groundWait + dt : 0;
+    walker.waitGround = bare && groundWait < 15; // (a tile that never comes: walk on after 15 s)
+  };
   window.addEventListener('keydown', (e) => {
     if ((e.target as HTMLElement)?.closest?.('.lil-gui')) return;
     if (e.code === 'KeyT') setHour((localHour(worldMs, tz) + 1) % 24);
     if ((e.target as HTMLElement)?.closest?.('input,textarea')) return;
     const playing = $('intro').classList.contains('hidden');
-    if (e.code === 'KeyP' && playing && !atlas.open && !vehicles.driving) {
-      brush.toggle(false);
-      // at a viewpoint, face its view first: the summit it names, else the way the map says it looks
-      const v = !photo.active ? viewHere() : null;
-      const b = v?.sight?.bearing ?? (v && v.vp.b >= 0 ? v.vp.b : null);
-      if (b !== null && b !== undefined) walker.place(walker.x, walker.z, (-b * Math.PI) / 180, v?.sight ? Math.min(0.12, v.sight.angle + 0.01) : 0.02, walker.y - walkParams.eyeHeight);
-      photo.toggle();
-    }
+    if (e.code === 'KeyP' && playing && !atlas.open && (!vehicles.driving || vehicles.activeKind === 'balloon')) togglePhoto(); // (a balloon's basket is the best seat for a painting)
     if (e.code === 'KeyM' && playing) { if (photo.active) photo.toggle(false); atlas.toggle(); }
     if (e.code === 'KeyG' && playing && !atlas.open) { if (photo.active) photo.toggle(false); atlas.focusSearch(); }
     if (e.code === 'KeyR' && playing && !atlas.open && !photo.active && !vehicles.driving && !brush.active && !e.repeat) { if (e.shiftKey) garden.cycle(); else garden.plant(); }
     if (e.code === 'Escape' && atlas.open) atlas.toggle(false);
   });
-  // Touch buttons (shown by body.touch): fly toggle, go-anywhere search, atlas, photo mode.
-  $('tfly').onclick = () => walker.setFly(!walkParams.fly);
-  $('tgo').onclick = () => { if ($('intro').classList.contains('hidden') && !atlas.open) atlas.focusSearch(); };
-  $('tphoto').onclick = () => { if ($('intro').classList.contains('hidden') && !atlas.open) photo.toggle(); };
-  $('tmenu').onclick = () => {
-    atlas.toggle();
+  // Touch actions mirror the keyboard verbs. The walking stick (left) and the look drag (right) stay
+  // the Walker's; these are the rest: the dock, its ⋯ drawer, the ride's own button beside your
+  // thumb, and what you hold down while riding or flying.
+  const playing = () => $('intro').classList.contains('hidden');
+  const touchMore = $('touch-more'), moreButton = $('tmore');
+  const setMore = (open: boolean) => {
+    if (open === !touchMore.classList.contains('hidden')) return;
+    touchMore.classList.toggle('hidden', !open);
+    moreButton.setAttribute('aria-expanded', String(open));
+    document.body.classList.toggle('more-open', open);
   };
+  moreButton.onclick = () => setMore(touchMore.classList.contains('hidden'));
+  $('tfly').onclick = () => { setMore(false); toggleFly(); };
+  $('tgo').onclick = () => { if (playing() && !atlas.open) { setMore(false); atlas.focusSearch(true); } };
+  $('tphoto').onclick = () => { if (playing() && !atlas.open && (!vehicles.driving || vehicles.activeKind === 'balloon')) { setMore(false); togglePhoto(); } };
+  $('tview').onclick = () => vehicles.toggleView();
+  $('tmenu').onclick = () => { setMore(false); atlas.toggle(); };
+  $('tplant').addEventListener('click', () => {
+    if (playing() && !atlas.open && !photo.active && !vehicles.driving && !brush.active) garden.plant();
+  });
+  $('tseed').addEventListener('click', () => {
+    if (playing() && !vehicles.driving && !brush.active) garden.cycle();
+  });
+  $('ttime').addEventListener('click', () => setHour((localHour(worldMs, tz) + 1) % 24));
+  $('toptions').addEventListener('click', () => setMore(false)); // (the panel opens itself: ui/panel.ts)
+
+  // Held buttons (boost, the plane's throttle, climb and sink): each lets go when the finger lifts
+  // or is cancelled, the window loses focus, the button goes away (syncTouchControls) — or the page
+  // goes to sleep with a finger still on it (below).
+  const holds: (() => void)[] = [];
+  const bindHold = (id: string, down: () => void, up: () => void) => {
+    const button = $(id) as HTMLButtonElement;
+    let held = false;
+    const stop = () => { if (!held) return; held = false; button.classList.remove('held'); up(); };
+    button.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      if (held) return;
+      held = true;
+      button.classList.add('held');
+      try { button.setPointerCapture(e.pointerId); } catch { /* browser does not support capture */ }
+      down();
+    });
+    button.addEventListener('pointerup', stop);
+    button.addEventListener('pointercancel', stop);
+    button.addEventListener('lostpointercapture', stop);
+    window.addEventListener('blur', stop);
+    holds.push(stop);
+    return stop;
+  };
+  // (two held at once — ▲ and ▼, + and − — cancel out, and lifting one leaves the other's)
+  const pair = (set: (v: number) => void) => { let up = false, down = false; const put = () => set((up ? 1 : 0) - (down ? 1 : 0)); return { up: (on: boolean) => { up = on; put(); }, down: (on: boolean) => { down = on; put(); } }; };
+  const climb = pair((v) => (walker.climb = v)), throttle = pair((v) => vehicles.setTouchThrottle(v));
+  const releaseFly = [bindHold('tfly-up', () => climb.up(true), () => climb.up(false)), bindHold('tfly-down', () => climb.down(true), () => climb.down(false))];
+  const releaseBoost = bindHold('trboost', () => vehicles.setTouchBoost(true), () => vehicles.setTouchBoost(false));
+  const releaseThrottle = [bindHold('tthrottle-up', () => throttle.up(true), () => throttle.up(false)), bindHold('tthrottle-down', () => throttle.down(true), () => throttle.down(false))];
+  const releaseHolds = () => { walker.releaseTouches(); for (const stop of holds) stop(); };
+
+  // The ride's own button beside your thumb: what E does here, by name. A double-tap on the view
+  // does it too — getting out only once the ride has stopped (two taps by the boost button at speed
+  // are a missed button, not a wish to step out onto the road).
+  // A tap you can feel (Android; an iPhone has no web vibration): a short tick on every button.
+  const tick = (e: Event) => { if ((e.target as HTMLElement)?.closest?.('.tbtn, #touch-action, .tmenu-btn')) try { navigator.vibrate?.(8); } catch { /* not allowed here */ } };
+  for (const id of ['touchui', 'ride-touch', 'touch-action', 'touch-more']) $(id).addEventListener('pointerdown', tick, { passive: true });
+  const touchAction = $('touch-action') as HTMLButtonElement;
+  const BOARD = { car: 'Drive', boat: 'Board', plane: 'Board', balloon: 'Step in' } as const;
+  const touchActionState = () => {
+    if (!playing() || atlas.open || photo.active || brush.active) return null; // (the options panel leaves it in reach: style.css)
+    const r = vehicles.ride;
+    if (r) return { id: `exit:${r.kind}`, label: (r.kind === 'plane' || r.kind === 'balloon') && r.airborne ? 'Jump out' : 'Get out', aria: `get out of the ${modelName(r.model)}`, still: Math.abs(r.v) < 1 && !r.airborne };
+    const e = vehicles.enterable();
+    return e ? { id: `enter:${e.kind}:${e.model}`, label: BOARD[e.kind], aria: `${BOARD[e.kind].toLowerCase()} the ${modelName(e.model)}`, still: true } : null;
+  };
+  touchAction.addEventListener('click', () => { if (touchActionState()) vehicles.interact(); });
+  let touchActionCheck = 0;
+  const syncTouchControls = (dt: number) => {
+    if (!document.body.classList.contains('touch')) return;
+    touchActionCheck -= dt;
+    if (touchActionCheck > 0) return;
+    touchActionCheck = 0.2;
+    const action = touchActionState();
+    touchAction.classList.toggle('hidden', !action);
+    if (action && touchAction.textContent !== action.label) touchAction.textContent = action.label;
+    if (action) touchAction.setAttribute('aria-label', action.aria);
+    // (a map, a photo, the brush or the panel over the world: the drawer has closed behind it)
+    if (atlas.open || photo.active || brush.active || (gui && !gui._hidden)) setMore(false);
+    const kind = vehicles.activeKind, flying = walkParams.fly && !kind, climbs = flying || kind === 'balloon'; // (▲ ▼: climb and sink; a balloon's burner and vent)
+    document.body.classList.toggle('driving', !!kind);
+    // (which of the ride's buttons stand beside the dock: a phone held upright ends the hint short of them)
+    const beside = kind ?? (flying ? 'fly' : action ? 'near' : '');
+    if (document.body.dataset.ride !== beside) document.body.dataset.ride = beside;
+    $('ride-touch').classList.toggle('hidden', !kind && !flying);
+    $('ride-touch').classList.toggle('fly', climbs);
+    $('tview').classList.toggle('hidden', kind !== 'balloon');
+    $('trboost').classList.toggle('hidden', kind !== 'car' && kind !== 'boat');
+    for (const id of ['tthrottle-up', 'tthrottle-down']) $(id).classList.toggle('hidden', kind !== 'plane');
+    for (const id of ['tfly-up', 'tfly-down']) $(id).classList.toggle('hidden', !climbs);
+    // (each button's word says what it does now: Fly or Land; a balloon's burner and vent)
+    const say = (id: string, word: string) => { const el = $(id); if (el.dataset.label !== word) el.dataset.label = word; };
+    say('tfly', flying ? 'Land' : 'Fly');
+    say('tfly-up', kind === 'balloon' ? 'Burn' : 'Up');
+    say('tfly-down', kind === 'balloon' ? 'Vent' : 'Down');
+    // (a button that has gone lets go of whatever it held)
+    if (!climbs) for (const stop of releaseFly) stop();
+    if (kind !== 'car' && kind !== 'boat') releaseBoost();
+    if (kind !== 'plane') for (const stop of releaseThrottle) stop();
+    $('toptions').setAttribute('aria-expanded', String(!!gui && !gui._hidden));
+  };
+
+  // A double-tap is only an interaction when two still taps happen in the look zone and the same
+  // contextual action is available both times. It never steals a stick drag or overlay gesture.
+  // (Any touch on the world closes the ⋯ drawer, the way a tap outside closes a menu.)
+  const touchStarts = new Map<number, { x: number; y: number; t: number; moved: number; action: string }>();
+  let lastTap: { x: number; y: number; t: number; action: string } | null = null;
+  canvas.addEventListener('touchstart', (e) => {
+    if (!document.body.classList.contains('touch')) return;
+    setMore(false);
+    if (e.touches.length > 1 || atlas.open || photo.active || brush.active) return;
+    for (const t of Array.from(e.changedTouches)) {
+      if (t.clientX < innerWidth * 0.45) continue;
+      const action = touchActionState();
+      if (action?.still) touchStarts.set(t.identifier, { x: t.clientX, y: t.clientY, t: performance.now(), moved: 0, action: action.id });
+    }
+  }, { passive: true });
+  canvas.addEventListener('touchmove', (e) => {
+    for (const t of Array.from(e.changedTouches)) {
+      const s = touchStarts.get(t.identifier);
+      if (s) { s.moved += Math.hypot(t.clientX - s.x, t.clientY - s.y); s.x = t.clientX; s.y = t.clientY; }
+    }
+  }, { passive: true });
+  canvas.addEventListener('touchend', (e) => {
+    for (const t of Array.from(e.changedTouches)) {
+      const s = touchStarts.get(t.identifier);
+      touchStarts.delete(t.identifier);
+      if (!s || s.moved > 12 || performance.now() - s.t > 260) continue;
+      const now = performance.now(), action = touchActionState();
+      if (action?.still && action.id === s.action && lastTap?.action === s.action && now - lastTap.t <= 340 && Math.hypot(t.clientX - lastTap.x, t.clientY - lastTap.y) <= 30) {
+        lastTap = null;
+        vehicles.interact();
+      } else lastTap = { x: t.clientX, y: t.clientY, t: now, action: s.action };
+    }
+  }, { passive: true });
+  canvas.addEventListener('touchcancel', (e) => { for (const t of Array.from(e.changedTouches)) touchStarts.delete(t.identifier); lastTap = null; });
   if (CAPTURE) {
     $('intro').classList.add('hidden');
     document.body.classList.add('postcard', 'walking');
@@ -1017,11 +1234,15 @@ async function main() {
   // seconds into the walk on a GPU that can't hold ~40 fps; still slow after that, the render
   // scale and the shadow map follow (quality.ts autoSteps) — never a knob the player set in the
   // panel. The boot tier (quality.ts pickTier) already chose lighter defaults for phones.
-  let qT = 0, qN = 0, qSum = 0, qRound = 0, qDone = CAPTURE;
+  let qT = 0, qN = 0, qSum = 0, qRound = 0, qDone = CAPTURE, qWait = 0;
   const autoQuality = (rawDt: number) => {
     if (qDone || interiors.indoors) return;
     qT += rawDt;
-    if (qT < 4) return; // let the first tiles settle
+    // let the first tiles settle: the frames while the ring streams in are the slowest a device
+    // will have, and measured then, a phone that holds 60 fps afterwards was marked slow for good
+    qWait += rawDt;
+    if (stream.busy && qWait < 40) { (qT = 0), (qN = 0), (qSum = 0); return; } // (at most 40 s: a city streams on)
+    if (qT < 4) return;
     qSum += rawDt;
     qN++;
     if (qT < 10) return;
@@ -1059,7 +1280,18 @@ async function main() {
     if (weatherParams.autoWeather) {
       const t = worldMs / 3.6e6; // hours
       weatherParams.cloud = 0.3 + 0.3 * Math.sin(t * 0.37 + 1.3) * Math.sin(t * 0.11);
-      weatherParams.seaFog = Math.max(0, Math.sin(t * 0.23 + 0.4) * 0.8 - 0.45);
+      // sea fog as the coast has it: a marine layer some mornings, by the water — burned off by
+      // late morning, never inland (it rolled over every town a third of the time, a white sheet
+      // under the towers on a clear day)
+      const morning = 1 - Math.min(1, Math.max(0, (timeParams.hour - 9) / 2)); // (gone by 11)
+      const early = timeParams.hour >= 4.5 ? morning : 0;
+      const coast = 1 - Math.min(1, Math.max(0, (world.terrain.oceanDistAt(walker.x, walker.z) - 200) / 300)); // (oceanD tops out at 510 m: "inland")
+      const bank = Math.max(0, Math.sin(t * 0.23 + 0.4) * 0.8 - 0.5); // (a fog bank's hours: ~a fifth of them)
+      const marine = bank * early * coast;
+      // …and now and then, anywhere: a slower gate lets about one bank in three through (~one hour
+      // in eleven), lighter than a coast's — 'rare, anywhere' (the panel's drifting fog)
+      const rare = Math.sin(t * 0.071 + 2.1) > 0.35 ? bank * 0.8 : 0;
+      weatherParams.seaFog = weatherParams.fogMode === 'never' ? 0 : weatherParams.fogMode === 'coastal mornings' ? marine : Math.max(marine, rare);
       weatherParams.wind = 0.45 + 0.3 * Math.sin(t * 0.5);
     }
     const k = Math.min(1, dt * 0.8);
@@ -1075,11 +1307,15 @@ async function main() {
     skyUniforms.uCloudShift.value.set(simTime * 0.004 * (0.3 + weather.wind), simTime * 0.0015);
 
     reanchor();
+    if (MOBILE) groundCheck(dt);
     if (!vehicles.update(dt, camera)) walker.update(dt, camera);
+    syncTouchControls(dt);
     camera.position.sub(origin); // walker works in world coords; the renderer works origin-local
     stream.update(walker.x, walker.z);
     horizon.update(walker.x, walker.z);
     kerbCars.update(walker.x, walker.z);
+    if (!CAPTURE) ambientBalloons.update(walker.x, walker.z, dt); // (they keep the world's clock: never in a capture)
+    if (playing()) balloonNews(dt);
     groundT -= dt;
     if (groundT <= 0) { groundT = 1.5; streamedGround(); } // (coarse mounts have no hook)
     realCells.clear();
@@ -1189,13 +1425,15 @@ async function main() {
       }
     } else if (paintSince != null) { paintSince = null; paintShown = 0; }
     if (!walkParams.fly) journal.update(walker.x, walker.z, dt);
-    explore.enabled = postParams.sketch;
-    explore.far = postParams.sketch && postParams.sketchFar; // (the far window: only the far sketch reads it)
+    // (your walks are always recorded — the atlas, the journal and the arrival cards count them —
+    // but the world only shows it, near or far, when you've picked it in the panel)
+    explore.enabled = true;
+    explore.far = postParams.sketchFar; // (the far window: only the far sketch reads it)
     explore.update(walker.x, walker.z, camera.position.y - Math.max(world.terrain.heightAt(walker.x, walker.z), 0), dt, postParams.sketchReach);
     if (atlas.open && (journalTimer -= dt) < 0) {
       journalTimer = 0.5;
       const st = explore.stats();
-      journal.render(`<b>${st.km2 < 1 ? st.km2.toFixed(3) : st.km2.toFixed(2)} km²</b> painted by your walks (${(st.session * (8 * Math.cos((json.origin.lat * Math.PI) / 180)) ** 2 / 1e6).toFixed(3)} km² today)<br>${commissions.state.done.length} commissions painted · ${Object.values(commissions.state.spotted).reduce((a, l) => a + l.length, 0)} vehicle and animal types spotted · ${garden.plants.length} plants in your garden<br>`);
+      journal.render(`<b>${st.km2 < 1 ? st.km2.toFixed(3) : st.km2.toFixed(2)} km²</b> painted by your walks (${(st.session * (8 * Math.cos((json.origin.lat * Math.PI) / 180)) ** 2 / 1e6).toFixed(3)} km² today)${st.photoKm2 > 0.01 ? ` · <b>${st.photoKm2 < 10 ? st.photoKm2.toFixed(1) : Math.round(st.photoKm2)} km²</b> by your photos` : ''}<br>${commissions.state.done.length} commissions painted · ${Object.values(commissions.state.spotted).reduce((a, l) => a + l.length, 0)} vehicle and animal types spotted · ${garden.plants.length} plants in your garden<br>`);
     }
     brushT -= dt;
     const blocked = !$('intro').classList.contains('hidden') || atlas.open;
@@ -1234,11 +1472,42 @@ async function main() {
     if (frames === 3) (window as unknown as Record<string, unknown>).__READY__ = true;
     (window as unknown as Record<string, unknown>).__RENDER_INFO__ = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, errors: errors.size, frames };
   };
+  // Put away — a phone locked, the app switched, the tab hidden — the game sleeps like a phone
+  // game: the townsfolk stop ticking in their worker (it ran on at 20 Hz for a page nobody could
+  // see), nothing stays held down (the stick, the look drag, a held button: the finger's touchend
+  // may never come), and on a phone or tablet the sound stops too (a PC's tab sounds on as it
+  // always has). The frame loop stops by itself (no rAF for a hidden page). Back on screen it all
+  // picks up where it was. (ui/lifecycle.ts — never under ?capture=1: the harnesses pump a hidden
+  // pane's frames themselves, townsfolk and all)
+  const sleeper = CAPTURE ? null : sleepWhenHidden(document, window, {
+    sleep: () => { life.pause(); if (MOBILE) ambience?.suspend(); },
+    wake: () => {
+      life.resume();
+      if (MOBILE) ambience?.resume();
+      last = performance.now(); // (the first frame back steps from now, not from before the sleep)
+      if (!qDone) qT = qN = qSum = 0; // (a sleep is no slow frame: auto quality measures afresh)
+    },
+    release: releaseHolds,
+  });
+  (window as unknown as Record<string, unknown>).__SLEEP__ = sleeper;
+  // an iPhone parks the sound after a call or the lock screen ('interrupted') until the next tap
+  if (MOBILE && sleeper) addEventListener('touchend', () => { if (ambience && !ambience.running && !sleeper.asleep) ambience.resume(); }, { capture: true, passive: true });
   requestAnimationFrame(loop(chain));
   if (CAPTURE) (window as unknown as Record<string, unknown>).__KICK__ = () => { chain++; loop(chain)(performance.now()); };
   // A lost GPU context would freeze the canvas for good: say so, and recover when the browser allows
   // (and if it doesn't give the context back, diagTick puts the report up).
-  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); contextLost(); toast('the painting smudged — recovering…'); });
+  canvas.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();
+    contextLost();
+    toast('the painting smudged — recovering…');
+    // (a phone's GPU ran out: come back lighter — half the tile budget, the far silhouettes and the
+    // shadow pass let go — so the restored context isn't filled straight back up to where it failed)
+    if (MOBILE) {
+      streamParams.budgetMB = Math.max(60, Math.round((streamParams.budgetMB || 200) / 2));
+      streamParams.coarseR = Math.min(streamParams.coarseR, streamParams.dropR);
+      shadowParams.enabled = false;
+    }
+  });
   canvas.addEventListener('webglcontextrestored', () => { contextRestored(); toast('back to the walk'); });
   // The watchdog: no frame 15 s after Begin walking, or a context never given back → the report.
   // `?diag=1` opens it once the first frame is up (the GPU's facts, on the phone itself).
@@ -1307,5 +1576,5 @@ main().catch((e) => {
   console.error(e);
   $('loading').textContent = 'Something smudged: ' + (e as Error).message;
   diag.errors.push('boot: ' + errorLine(e));
-  showReport(diag.glError ? 'WebGL 2 could not start in this browser' : `the boot stopped at "${diag.stage}": ${errorLine(e)}`);
+  showReport(diag.glError ? NO_WEBGL : `the boot stopped at "${diag.stage}": ${errorLine(e)}`);
 });

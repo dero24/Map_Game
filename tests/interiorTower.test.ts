@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 import * as THREE from 'three';
 import { WalkWorld, floorAt } from '../src/player/collision';
 import { Interiors, planInterior, registerPlan, unstack } from '../src/world/interiors';
@@ -11,6 +11,9 @@ import { buildTile } from '../src/world/tileBuild';
 import { rect, fpOf, doorN, terrain, flood, nobodys, wallsOnWindows, wallsOnWindows2 } from './helpers/interiorCheck';
 // @ts-expect-error plain js lib
 import { packToBin } from '../scripts/lib/tiles.mjs';
+
+// (a 39-storey tower's plans take 5–6 s on a slow machine — past vitest's 5 s default, not a failure)
+vi.setConfig({ testTimeout: 30000 });
 
 // Slice 3 of docs/INTERIORS_PLAN.md — towers: every storey of a tall building exists, a lobby at the
 // ground and a core whose lifts and stair rise through all of them; you ride a lift to any storey

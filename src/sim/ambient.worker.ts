@@ -14,9 +14,14 @@ let mode: 'sab' | 'copy' = 'sab';
 let local: ArrayBuffer | null = null;
 const pool: ArrayBuffer[] = [];
 let avgCost = 0;
+// Asleep while the page can't be seen (a phone locked, the app switched away): no ticks at all —
+// the townsfolk stand where they were and walk on when it wakes (main.ts, ui/lifecycle.ts).
+let paused = false;
+let timer: ReturnType<typeof setTimeout> | 0 = 0;
 
 function tick() {
-  if (!sim) return;
+  timer = 0;
+  if (!sim || paused) return;
   const t0 = performance.now();
   const h = V.header;
   sim.setEnv({
@@ -44,7 +49,7 @@ function tick() {
   }
   avgCost = avgCost * 0.9 + cost * 0.1;
   const period = 1000 / SIM_HZ;
-  setTimeout(tick, Math.max(0, period - cost));
+  timer = setTimeout(tick, Math.max(0, period - cost));
 }
 
 ctx.onmessage = (e: MessageEvent) => {
@@ -70,6 +75,12 @@ ctx.onmessage = (e: MessageEvent) => {
   } else if (d.kind === 'regraph' && sim) {
     // new tiles streamed in: same worker, same agents, a bigger road graph
     sim = new LifeSim(d.init as LifeInit, sim);
+  } else if (d.kind === 'pause') {
+    paused = true;
+    if (timer) { clearTimeout(timer); timer = 0; }
+  } else if (d.kind === 'resume') {
+    paused = false;
+    if (!timer) tick(); // (one loop: a resume while ticking changes nothing)
   } else if (d.kind === 'return') {
     pool.push(d.buf as ArrayBuffer);
   } else if (d.kind === 'env' && mode === 'copy') {

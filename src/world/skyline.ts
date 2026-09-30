@@ -2,10 +2,11 @@
 // close; beyond them the coarse ring is procedural, so from Midtown the Empire State Building,
 // from Queen Anne the Seattle skyline, from a Miami beach the condo wall would simply not be there.
 // One Overpass read of every tall building (≥ 45 m or 14+ storeys) and tall building part within
-// 8 km — through the same osmToTile transform as the tiles, so heights, parts, colours and recipes
-// match — built as lite silhouettes per 1024 m cell. A cell's towers hide the moment its real tile mounts
-// (no doubled walls); the read is cached in IndexedDB like the direct tiles, and re-read when you
-// walk more than 4 km from where it was taken. Nothing in a town without towers: an empty read.
+// 8 km (a phone: 3–4 km — Manhattan's towers are thousands) — through the same osmToTile transform
+// as the tiles, so heights, parts, colours and recipes match — built as lite silhouettes per 1024 m
+// cell. A cell's towers hide the moment its real tile mounts (no doubled walls); the read is cached
+// in IndexedDB like the direct tiles, and re-read when you walk more than half that from where it
+// was taken. Nothing in a town without towers: an empty read.
 import * as THREE from 'three';
 import { buildBuildings } from './buildings';
 import { demSampler } from './dem';
@@ -13,7 +14,7 @@ import { kvGet, kvPut } from './cache';
 import { makeProjector, osmToTile, type LatLon, type OsmDoc } from './realTile';
 import type { Building, Terrain, TileJson, World, WorldJson } from './data';
 
-const R = 8000, TALL = 45, FLOORS = 14, SKY_V = 2;
+const TALL = 45, FLOORS = 14, SKY_V = 2;
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
 
 export function skylineQuery(bb: { s: number; w: number; n: number; e: number }) {
@@ -34,7 +35,8 @@ export class Skyline {
   private busy = false;
   private gen = 0;
 
-  constructor(private origin: LatLon, private cell: number, private enabled: boolean) {
+  /** `R`: how far out the towers are read, m — 8 km; a phone's quality tier reads nearer (quality.ts). */
+  constructor(private origin: LatLon, private cell: number, private enabled: boolean, private R = 8000) {
     this.group.name = 'skyline';
   }
 
@@ -44,7 +46,7 @@ export class Skyline {
     // a cell's towers stay until its real tile has mounted, however close you come — hiding
     // them by distance made a city melt away as you flew in faster than its tiles streamed
     for (const [k, g] of this.cells) g.visible = !realLoaded(k);
-    if (this.busy || Math.hypot(x - this.cx, z - this.cz) < 4000) return;
+    if (this.busy || Math.hypot(x - this.cx, z - this.cz) < this.R / 2) return;
     this.busy = true;
     const cx = Math.round(x / 2000) * 2000, cz = Math.round(z / 2000) * 2000;
     const gen = ++this.gen;
@@ -56,7 +58,8 @@ export class Skyline {
 
   private async read(cx: number, cz: number): Promise<TileJson | null> {
     const P = makeProjector(this.origin);
-    const key = `sky${SKY_V}|${this.origin.lat.toFixed(4)},${this.origin.lon.toFixed(4)}|${cx}_${cz}`;
+    const R = this.R;
+    const key = `sky${SKY_V}${R !== 8000 ? `r${R}` : ''}|${this.origin.lat.toFixed(4)},${this.origin.lon.toFixed(4)}|${cx}_${cz}`;
     const hit = await kvGet<TileJson>(key);
     if (hit) return hit;
     const box = { x0: cx - R, z0: cz - R, x1: cx + R, z1: cz + R };
