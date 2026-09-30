@@ -2,6 +2,22 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-30 (night) — A house on a tile line built once; the shore test on streamed tiles only
+
+- **Tile ownership is half-open** (`scripts/lib/tiles.mjs` `ownsPoint`): a building centred exactly
+  on a tile line was owned — and built — by both tiles (the Rumson playtest's one overlap: seed
+  41723065 at x = −3072 in −4_−2 and −3_−2). Four such entities in the shore pack; the raw inputs
+  aren't in this checkout, so the pack was patched by the same rule (the second copy → `own: 0`)
+  and `bakeId` recomputed by the bake's own FNV recipe (it reproduced the old id exactly before
+  the patch). tests/tiles.test.ts pins the edge (fails on the old rule).
+- **The shore test measured files nothing streams**: `public/data/shore/tiles/` holds 72 tile
+  files the manifest doesn't list (`-7_*`, `-8_*`, from the same bake commit — 2.9 MB shipped,
+  never loaded), and Red Bank lies in them, past the backdrop. tests/hoods.test.ts now reads only
+  manifest tiles; Long Branch's north end (grid) and Oceanport (suburb) replace Red Bank, which
+  moves to the real-lite fixtures (`nj-grid`) — it streams, as the deep link that set the montage
+  camera down in stand-ins showed. The leftover files are left in place (worth removing once
+  someone confirms nothing else reads them).
+
 ## 2026-09-30 (evening) — Neighbourhoods, phase 1; the phone's silhouette ring budgeted
 
 - **Why Rumson read like its neighbours** (docs/NEIGHBOURHOODS.md): one style table for every town
@@ -17,14 +33,15 @@ Newest first. One entry per work session: what changed, what was verified, what'
   and the tract are regional (by the style's `sub`/family): Midwest brick bungalows, Northwest
   craftsman, desert stucco-and-tile tracts.
 - **Real places, tested**: the baked pack's towns (Rumson → estate at 45% of homes vs < 5% for
-  Fair Haven, Red Bank, Monmouth Beach; Fair Haven and Red Bank → grid) and frozen real-lite tiles
+  Fair Haven, Monmouth Beach; Fair Haven → grid — see the night entry: Red Bank was measured from
+  unstreamed leftover files, now replaced) and frozen real-lite tiles
   from three more states (Levittown NY → tract, Portage Park IL → grid, Wallingford WA → grid).
   AZ / CT / TX are listed but the tile service 503'd all day — re-run `tools/hood-fixtures.mjs`.
 - **Montage** (shots/shore-montage.jpg, before / after, street and 60 m): Rumson (Dogwood Lane,
   Buena Vista Ave) reads more wooded, with privet hedge runs along the frontages — a modest change
   from these views, since the houses stand back in the trees; Fair Haven and the shore unchanged.
-  A deep link to Red Bank's east side set the camera down by the shore instead (worth a look:
-  `?at=40.3478,-74.0636`), so Red Bank's grid look is verified by the tests, not yet by eye.
+  Red Bank's deep link (`?at=40.3478,-74.0636`) is past the shore pack, so it streams — and the
+  tile service's 503s set it in procedural stand-ins; not yet seen by eye.
 - **The phone's silhouette ring budgeted** (`coarseMB` 90 / 60 MB): the Manhattan run below found
   it at 171–190 MB — three times the detail tiles.
 - **Manhattan on a phone** (headless Pixel 7, phone tier, four hops round Midtown): 0 lost GPU

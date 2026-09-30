@@ -144,11 +144,13 @@ the browser's tile worker (`buildTile`), for baked and streamed tiles alike.
   check, no browser, well under a second):
   - the shore's towns from the baked pack (in the repo), 5×5 cells round each, home-weighted:
     Rumson west of the river bend → estate (45% of homes; every neighbour under 5%), Fair Haven →
-    grid, Red Bank's east side → grid, Monmouth Beach → suburb;
+    grid, Long Branch's north end → grid, Oceanport and Monmouth Beach → suburb (only the tiles the
+    manifest lists: the folder also holds 72 files from an older, wider bake that nothing streams);
   - the country from frozen real-lite tiles (`tools/hood-fixtures.mjs` → `tests/fixtures/hoods/`,
     the tile a visitor streams there, only the fields the measure reads): Levittown NY → tract
     (732 of 787 homes), Chicago's Portage Park → grid (2,164 of 2,164), Seattle's Wallingford →
-    grid (1,328 of 1,328). Gilbert AZ (tract), Greenwich CT (estate) and Sugar Land TX (suburb) are
+    grid (1,328 of 1,328). Red Bank NJ (grid; past the shore pack's edge, so it streams),
+    Gilbert AZ (tract), Greenwich CT (estate) and Sugar Land TX (suburb) are
     in the list; the tile service answered 503 for them all day (its Overpass upstream was down) —
     re-run the tool and they join the test with no code change.
   - Scaling to the lower 48 is adding a line to `HOODS` (a point, what it should read as) and

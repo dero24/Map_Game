@@ -8,7 +8,7 @@
 //
 //   node tools/hood-fixtures.mjs [--only=ny-tract,il-bungalow] [--tries=3]
 //   (behind a proxy: NODE_USE_ENV_PROXY=1 NODE_EXTRA_CA_CERTS=<bundle> node tools/hood-fixtures.mjs)
-// The shore's own towns (Rumson, Fair Haven, Red Bank) need no fixture: the baked pack is in the repo.
+// The shore's own towns (Rumson, Fair Haven, Long Branch…) need no fixture: the baked pack is in the repo.
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +17,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = Object.fromEntries(process.argv.slice(2).map((a) => { const m = a.match(/^--([^=]+)(?:=(.*))?$/); return m ? [m[1], m[2] ?? true] : [a, true]; }));
 // expect: the class most of the place's measured homes should take (hood.ts)
 export const HOODS = [
+  { id: 'nj-grid', place: 'Red Bank NJ (east side)', lat: 40.3478, lon: -74.0636, expect: 'grid' },
   { id: 'ny-tract', place: 'Levittown NY', lat: 40.727, lon: -73.514, expect: 'tract' },
   { id: 'az-tract', place: 'Gilbert AZ', lat: 33.35, lon: -111.755, expect: 'tract' },
   { id: 'il-bungalow', place: 'Chicago, Portage Park IL', lat: 41.955, lon: -87.764, expect: 'grid' },

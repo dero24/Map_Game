@@ -92,7 +92,7 @@ describe('neighbourhood morphology (hood.ts)', () => {
 type Json = { buildings?: Building[] } & Record<string, unknown>;
 const baked = import.meta.glob<Json>('../public/data/shore/tiles/*.json', { eager: true, import: 'default' });
 const fixtureFiles = import.meta.glob<Json>('./fixtures/hoods/*.json', { eager: true, import: 'default' });
-import world from '../public/data/shore/world.json';
+import manifest from '../public/data/shore/manifest.json';
 const shares = (cells: Map<string, { n: number; klass: string }>, keep: (k: string) => boolean = () => true) => {
   const count: Record<string, number> = {};
   for (const [k, c] of cells) if (c.n >= 4 && keep(k)) count[c.klass] = (count[c.klass] ?? 0) + c.n; // (weighted by homes)
@@ -102,9 +102,12 @@ const shares = (cells: Map<string, { n: number; klass: string }>, keep: (k: stri
 };
 
 describe('the shore\'s towns read as themselves (baked pack)', () => {
-  const o = (world as unknown as { origin: { lat: number; lon: number } }).origin, kx = 111320 * Math.cos((o.lat * Math.PI) / 180);
+  const man = manifest as unknown as { origin: { lat: number; lon: number }; tiles: { file: string }[] };
+  const o = man.origin, kx = 111320 * Math.cos((o.lat * Math.PI) / 180);
   const all: Building[] = [];
-  for (const t of Object.values(baked)) all.push(...(t.buildings ?? []));
+  // only the tiles the manifest streams (the folder can hold an older bake's leftovers)
+  for (const t of man.tiles) all.push(...(baked[`../public/data/shore/${t.file}`]?.buildings ?? []));
+  expect(all.length).toBeGreaterThan(10000);
   const cells = measureHoods(all);
   // the 5×5 cells (1.3 km) round a point
   const round = (lat: number, lon: number) => {
@@ -114,7 +117,8 @@ describe('the shore\'s towns read as themselves (baked pack)', () => {
   it.each([
     ['Rumson (Rumson Rd west)', 40.3635, -74.02, 'estate'],
     ['Fair Haven', 40.3605, -74.0385, 'grid'],
-    ['Red Bank (east side)', 40.3478, -74.0636, 'grid'],
+    ['Long Branch (north end)', 40.31, -73.99, 'grid'],
+    ['Oceanport', 40.318, -74.015, 'suburb'],
     ['Monmouth Beach', 40.3304, -73.9818, 'suburb'],
   ] as const)('%s', (_, lat, lon, want) => {
     const s = round(lat, lon);
@@ -124,7 +128,7 @@ describe('the shore\'s towns read as themselves (baked pack)', () => {
   it('Rumson is told apart from its neighbours', () => {
     const est = (lat: number, lon: number) => { const s = round(lat, lon); return (s.count.estate ?? 0) / s.total; };
     expect(est(40.3635, -74.02)).toBeGreaterThan(0.35);
-    for (const [lat, lon] of [[40.3605, -74.0385], [40.3478, -74.0636], [40.3304, -73.9818]]) expect(est(lat, lon)).toBeLessThan(0.05);
+    for (const [lat, lon] of [[40.3605, -74.0385], [40.31, -73.99], [40.3304, -73.9818]]) expect(est(lat, lon)).toBeLessThan(0.05);
   });
 });
 

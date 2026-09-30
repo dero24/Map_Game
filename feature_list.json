@@ -1115,11 +1115,11 @@
       "priority": 1,
       "area": "world",
       "title": "Neighbourhoods that look like themselves: estates, old grids and tracts, measured from the map",
-      "user_visible_behavior": "Walk from Fair Haven into Rumson and the town changes: big shingle and white clapboard houses under slate, far apart behind privet hedges and long drives, deep in trees. Red Bank's and Fair Haven's older streets are painted houses with bays close together; a postwar tract repeats one model down the street. Chicago's old grid is brick bungalows, Seattle's craftsman, a desert tract stucco under tile. Sea Bright is unchanged.",
+      "user_visible_behavior": "Walk from Fair Haven into Rumson and the town changes: big shingle and white clapboard houses under slate, far apart behind privet hedges and long drives, deep in trees. Fair Haven's and Long Branch's older streets are painted houses with bays close together; a postwar tract repeats one model down the street. Chicago's old grid is brick bungalows, Seattle's craftsman, a desert tract stucco under tile. Sea Bright is unchanged.",
       "status": "passing",
       "verification": [
-        "tests/hoods.test.ts (12): classification on synthetic streets; fills/context excluded; the suburb path equals the old recipe exactly; each archetype and its regional variants; the shore's towns from the baked pack (Rumson west → estate 45% vs < 5% for Fair Haven, Red Bank, Monmouth Beach; Fair Haven, Red Bank → grid; Monmouth Beach → suburb); real-lite fixtures Levittown NY → tract, Portage Park IL → grid, Wallingford WA → grid",
-        "shots/shore-montage.jpg: Rumson / Fair Haven / Sea Bright, before and after, street and 60 m (reviewed: Rumson more wooded with hedge runs; the rest unchanged). Red Bank's deep link landed by the shore — its grid look is test-verified only"
+        "tests/hoods.test.ts (13): classification on synthetic streets; fills/context excluded; the suburb path equals the old recipe exactly; each archetype and its regional variants; the shore's towns from the baked pack (Rumson west → estate 45% vs < 5% for Fair Haven, Long Branch, Monmouth Beach; Fair Haven, north Long Branch → grid; Oceanport, Monmouth Beach → suburb; manifest tiles only); real-lite fixtures Levittown NY → tract, Portage Park IL → grid, Wallingford WA → grid",
+        "shots/shore-montage.jpg: Rumson / Fair Haven / Sea Bright, before and after, street and 60 m (reviewed: Rumson more wooded with hedge runs; the rest unchanged). Red Bank streams (past the shore pack) and the tile service 503'd, so it showed stand-ins — not yet seen by eye"
       ],
       "evidence": [
         "src/world/hood.ts",
