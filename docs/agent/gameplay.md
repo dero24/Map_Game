@@ -281,9 +281,10 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   IndexedDB (`map-game-explore`).
 - A walker-centred R8 texture window (4 km, 8 m texels → `U.uExplore` / `U.uExploreBox`) feeds
   the post composite, which paints unvisited ground as a paler, slightly desaturated first wash and
-  deepens it with a noisy wet edge as you arrive (`postParams.sketch`). Both looks — this near
-  one and the far sketch (`sketchFar`, pencil to the horizon) — are choices in the panel, OFF
-  unless picked (either turns on the composite's `uSketch`); unpicked, the world is simply painted.
+  deepens it with a noisy wet edge as you arrive (`postParams.sketch`, ON by default). The far
+  sketch (`sketchFar`: pencil to the horizon till you walk or photograph it, and photos painting
+  what they frame) is OFF by default — on trial; it stands on its own (either one turns on the
+  composite's `uSketch`); with neither, the world is simply painted.
   Your walks are recorded either way (`explore.enabled` is always on): the atlas, the journal and
   the arrival cards count them — the card says "walk to paint it in" only with a look picked.
 - Capture mode keeps regression shots fully painted unless `?sketch=1`.

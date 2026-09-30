@@ -4,9 +4,9 @@ Newest first. One entry per work session: what changed, what was verified, what'
 
 ## 2026-10-01 (night) — Paint-as-you-explore only when picked; the open world's sea without a canvas
 
-- **No bleed**: `postParams.sketch` defaulted ON — everyone got the near "first wash" round them.
-  Both looks (near and far) are now panel choices, off unless picked; either one lights the
-  composite's `uSketch`, and the far one no longer needs the near one ticked. Walks are recorded
+- **No bleed**: the far sketch (pencil to the horizon, photos painting the frame) is off unless
+  picked — it's on trial; the near "paint as you explore" wash stays ON by default (the owner's
+  call). Either lights the composite's `uSketch`; the far one no longer needs the near one ticked. Walks are recorded
   regardless (atlas, journal, arrival cards); the arrival card says "walk to paint it in" only with
   a look picked.
 - **Puget Sound white on an iPhone** (reported; no iPhone or WebKit here to reproduce). Emulated on
@@ -20,9 +20,13 @@ Newest first. One entry per work session: what changed, what was verified, what'
      flat grid at the stand-in height to take the map's water, marked late for its relief.
   3. The relief rebuild returned nothing when the DEM never came, and flat ground never asked
      again for late water. Now it rebuilds with the flat ground and the water, once (no re-late).
-- Not yet seen end to end: under SwiftShader here only three cells streamed in 25 minutes (a
-  stall worth its own look — see below), so the Sound's cell never built in the emulation.
-  Next: a phone screenshot + iOS version from the reporter; trace the slow open-world stream.
+- Seen end to end, once the harness was fixed: the emulations' "stall" was the harness — its
+  Chromium didn't trust this container's proxy CA (net::ERR_CERT_AUTHORITY_INVALID), so every DEM
+  and vector-tile fetch failed and only flat stand-ins could build. With `ignoreHTTPSErrors`, the
+  ground under a camera over the Sound reads −6 m / sdf −60 (sea) within 3 minutes, and from 300 m
+  over Magnolia the Sound is water with boats on it, fading into pale haze to the horizon (maybe
+  the "white" reported — no far shore shows; to look at with the reporter's screenshot).
+  (Real cells meanwhile fail and retry: the tile service's Overpass upstream is still down.)
 - tests 501 (interiorTower's 5 s timeouts on the freshly restarted container fail on the previous
   commit too), typecheck, build.
 

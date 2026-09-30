@@ -28,10 +28,10 @@ export const postParams = {
   vignette: 0.45,
   boilFps: 0,
   nightWash: 0.5,
-  sketch: false, // paint as you explore (a choice in the panel, off unless picked): unvisited places near you a paler first wash that deepens as you arrive
+  sketch: true, // paint as you explore (on by default): unvisited places near you a paler first wash that deepens as you arrive
   // …all the way out (a developer switch, off for now): every place you haven't been — the far
   // distance too — is a pencil underdrawing on paper, and walking paints it in round you
-  sketchFar: false,
+  sketchFar: false, // …far away too: pencil to the horizon till you walk or photograph it — OFF by default (on trial)
   sketchReach: 45, // m painted round you on foot (a plane paints wider)
   photoReach: 22000, // m out to which a photo paints what it frames (the far sketch; at most SEEN_REACH)
   paperColor: '#f8f4ea',
