@@ -135,6 +135,8 @@ export class Vehicles {
   private mat = propMaterial();
   private group = new THREE.Group();
   private hud: HTMLElement;
+  private hudVal: HTMLElement;
+  private hudKeys: HTMLElement;
   private keys = new Set<string>();
   private touchBoost = false;
   private touchThrottle = 0;
@@ -175,6 +177,10 @@ export class Vehicles {
     this.hud = document.createElement('div');
     this.hud.id = 'vehud';
     Object.assign(this.hud.style, { position: 'fixed', left: '50%', bottom: '18px', transform: 'translateX(-50%)', padding: '6px 14px', borderRadius: '14px', background: 'rgba(245,239,225,0.82)', color: '#3a3346', font: '14px Georgia, serif', pointerEvents: 'none', display: 'none', zIndex: '20', whiteSpace: 'nowrap' });
+    // the live numbers, then how to drive (a phone held upright shows only the numbers: style.css)
+    this.hudVal = this.hud.appendChild(document.createElement('span'));
+    this.hudKeys = this.hud.appendChild(document.createElement('span'));
+    this.hudKeys.className = 'vkeys';
     document.body.appendChild(this.hud);
     window.addEventListener('keydown', (e) => {
       if ((e.target as HTMLElement)?.closest?.('input,textarea,.lil-gui')) return;
@@ -580,9 +586,14 @@ export class Vehicles {
     const kmh = Math.round(Math.abs(v.v) * 3.6);
     this.hud.style.display = 'block';
     const touch = thumbs();
-    this.hud.textContent = v.kind === 'plane'
-      ? `✈ ${kmh} km/h · alt ${Math.round(v.y - this.ground(v.x, v.z))} m · throttle ${Math.round(v.throttle * 100)}% · ${touch ? 'stick: pitch / bank · +/−: throttle' : 'E to jump out'}`
-      : `${v.kind === 'car' ? '🚗' : '⛵'} ${kmh} km/h · ${touch ? 'left stick: steer / throttle · ⇧: boost' : 'E to get out'}`;
+    const val = v.kind === 'plane'
+      ? `✈ ${kmh} km/h · alt ${Math.round(v.y - this.ground(v.x, v.z))} m · throttle ${Math.round(v.throttle * 100)}%`
+      : `${v.kind === 'car' ? '🚗' : '⛵'} ${kmh} km/h`;
+    const keys = v.kind === 'plane'
+      ? ` · ${touch ? 'stick: pitch / bank · +/−: throttle' : 'E to jump out'}`
+      : ` · ${touch ? 'left stick: steer / throttle · ⇧: boost' : 'E to get out'}`;
+    if (this.hudVal.textContent !== val) this.hudVal.textContent = val;
+    if (this.hudKeys.textContent !== keys) this.hudKeys.textContent = keys;
     return true;
   }
 

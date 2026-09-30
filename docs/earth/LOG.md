@@ -26,6 +26,21 @@ Newest first. One entry per work session: what changed, what was verified, what'
   - The page never zooms (`touch-action`; iOS's gesture events, since iOS ignores
     `user-scalable=no`): a pinch had zoomed the page, hiding the controls with no way back. The
     atlas map pinch-zooms instead (`mapview.ts`).
+- **The phone HUD, from the montage and a geometry audit.** The montage showed three overlaps;
+  an audit of the HUD's boxes (the production CSS on 10 phone sizes, upright and on their side,
+  walking / beside a ride / driving a car / flying a plane / flying on foot, a long hint up) found
+  25 overlapping layouts, mostly on a phone's side. Now none:
+  - On its side the hint was centred and pinned to the dock's edge at once with its text on one
+    line, so its pill came out narrower than the text; it wraps now, centred over the place name
+    (a long street name ran under it), over Get out while riding, clear of ▲ ▼ while flying. Get
+    out sat 2 px over ⇧. The ride's readout sits beside the ride's buttons (a plane's ran over
+    + −), the place name ends short of it, and the map-data credit runs along the top edge (the
+    dock and a ride's buttons covered its end).
+  - Upright, the ride's readout sat over the place name: it moves to the free corner under the
+    dock; the place name keeps the left half while riding. The hint ends short of ▲ ▼, ⇧, + − or
+    Drive beside the dock (`body[data-ride]`).
+  - A phone's readout shows the live numbers only; how to drive is the toast as you get in (the
+    two lines of instructions were what ran into everything). A PC's readout is unchanged.
 - **Sleep when put away** (`ui/lifecycle.ts`): hidden → sound suspended (phones; a PC tab sounds
   on), the life worker paused (everywhere: it ticked at 20 Hz for a page nobody could see), held
   input released; back on screen it picks up (an iPhone's interrupted sound on the next tap).
@@ -40,7 +55,9 @@ Newest first. One entry per work session: what changed, what was verified, what'
   - Every tile's sign atlas leaked on unload, on every platform: GPU textures 24 → 36 over four
     round trips in Sea Bright (the scene holds 19). Now disposed with the tile: 23–25.
   - Collision walls were tombstoned, never reclaimed: 263k walls (211k dead) after four round
-    trips. A phone purges them now: flat at 106k.
+    trips on a phone; one long hop on a PC left 166k dead. They leave the walk world now, on every
+    platform, a slice a frame (`WalkWorld.purgeSome`, ~1.5 ms; a tile's walls at once took 65 ms
+    on a phone): flat at 106k on the phone run.
   - LiDAR in the tab: one Midtown cell (NY_NewYorkCity) measured +130 MB RSS in Node with the game's
     own `measureCell`, two read at once, and each measured cell built twice. Phones build from the
     mapped heights (`?lidar=1` forces it).
@@ -51,13 +68,28 @@ Newest first. One entry per work session: what changed, what was verified, what'
   - A lost GPU context on a phone sheds memory before it's given back, and the next load in the
     tab steps down a tier. WebGL that won't start says how to get it back (close the browser and
     reopen: Chrome blocks a site's WebGL after a GPU crash).
-- Verified: typecheck; 470 tests in 50 files (+ lifecycle, budget, touchControls, and diag/quality
-  cases) passed on an idle machine — three heavy interior/traffic/lot tests time out at 5 s while
-  five SwiftShader browsers hold every core (none imports a changed module but `sim/life.ts`,
-  whose change is two one-line message posts); build. Headless Pixel 7, Sea Bright, phone tier,
-  four 3.5 km round trips: textures 23–25 (was 24 → 36), walls 106k flat (was 263k), renderer
-  peak 1,165 MB (was 1,285), GPU process 881 MB (was 949), 0 page errors. The flight repro and the
-  on-foot wait (stick held: 0 m until the cell was built, then walking) as above.
+- Verified: typecheck; `npm test` 472 tests in 50 files on an idle machine (lifecycle, budget,
+  touchControls and the wall purge added; diag/quality extended) — under five SwiftShader browsers
+  three heavy tests time out at 5 s, all pass with a longer timeout; build. Headless Pixel 7, Sea
+  Bright, phone tier, four 3.5 km round trips: textures 23–25 (was 24 → 36), walls 106k flat (was
+  263k), renderer peak 1,165 MB (was 1,285), GPU process 881 MB (was 949), 0 page errors.
+  - Sleep, counted by the life worker's messages (not frames): 57–59 ticks in 3 s awake, 0
+    hidden, 50–59 back, phone and PC; a phone's sound running → suspended → running, a PC's
+    running throughout; a held stick let go.
+  - The wall purge: a 19k-wall tile took 7.5–34.5 ms at once in Node; sliced, at most 1.56–1.73 ms
+    a frame (7–10 ms in all). In the page every dead wall was freed and reused (phone 50,375, PC
+    95,971), none left queued.
+  - No page zoom: the viewport meta rewritten to allow zoom (Android's force-zoom; an iPhone
+    ignores it anyway), two-finger spreads on the intro card, the world, the map and the
+    sketchbook stayed at scale 1; with `touch-action` back to auto the card and the sketchbook
+    zoomed 4.9×. (iOS's gesture events can't be tried here: no WebKit.)
+  - `tools/hud-audit.mjs`: 100 layouts, no overlaps (25 before). The montage
+    (`shots/shore-montage.jpg`, 11 states upright and on its side) reviewed.
+  - `mobile-check`: Pixel 7, iPhone and desktop boot, 0 page/console errors, 72–75 programs
+    within the phone limits. PC playtest (drive, walkabout): pass, the same numbers as with the
+    purge off (296 m at up to 38 km/h, 0 clips; 146 m through a door and out, 0 stuck).
+  - The flight repro and the on-foot wait (stick held: 0 m until the cell was built, then walking)
+    as above.
 - **Not verifiable here:** the tile service, Overpass and OpenFreeMap are blocked from the agent
   sandbox, so no real Manhattan tiles loaded; the budget was exercised in Sea Bright only. Needs a
   real phone after the next Pages deploy (Manhattan, `?diag=1`).

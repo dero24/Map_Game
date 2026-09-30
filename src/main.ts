@@ -1032,6 +1032,9 @@ async function main() {
     if (atlas.open || photo.active || brush.active || (gui && !gui._hidden)) setMore(false);
     const kind = vehicles.activeKind, flying = walkParams.fly && !kind;
     document.body.classList.toggle('driving', !!kind);
+    // (which of the ride's buttons stand beside the dock: a phone held upright ends the hint short of them)
+    const beside = kind ?? (flying ? 'fly' : action ? 'near' : '');
+    if (document.body.dataset.ride !== beside) document.body.dataset.ride = beside;
     $('ride-touch').classList.toggle('hidden', !kind && !flying);
     $('ride-touch').classList.toggle('fly', flying);
     $('trboost').classList.toggle('hidden', kind !== 'car' && kind !== 'boat');

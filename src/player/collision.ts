@@ -47,6 +47,9 @@ export function floorAt(f: Floors, k: number, x: number, z: number) {
 }
 
 const DEAD_SEG: Seg = [0, 0, 0, 0, 0, 0];
+// A dropped scope's walls on their way out of the grid (WalkWorld.purgeRun): its walls' cells
+// gathered (i: walls done), then each cell's list filtered once (it: through the cells).
+interface PurgeJob { ids: number[]; gone: Set<number>; cells: Set<number>; it: Iterator<number> | null; i: number }
 
 const inRing = (x: number, z: number, ring: P2[]) => {
   let inside = false;
@@ -74,6 +77,7 @@ export class WalkWorld {
   private curScope = 0;
   private segDead: number[] = [];
   private segFree: number[] = []; // purged wall ids (out of every grid cell), free to reuse
+  private purgeQ: PurgeJob[] = []; // dropped scopes' walls, still in the grid (purgeSome)
   private polyDead: number[] = [];
   private deckDead: number[] = [];
   private scopeIds = new Map<number, { segs: number[]; polys: number[]; decks: number[] }>();
@@ -91,31 +95,56 @@ export class WalkWorld {
   }
   /** Drop scope `id`. `purge`: also take its walls out of the grid and recycle their ids — a scope
    *  that comes and goes all session (an open building's partitions) would otherwise leave a pile
-   *  of tombstones in the cells it covers. */
-  removeScope(id: number, purge = false) {
+   *  of tombstones in the cells it covers. `'later'`: the same, a slice a frame (purgeSome) — a
+   *  streamed tile's tens of thousands of walls took up to 65 ms in one go on a phone. The walls
+   *  stop blocking at once either way. */
+  removeScope(id: number, purge: boolean | 'later' = false) {
     const s = this.scopeIds.get(id);
     if (!s) return;
     for (const i of s.segs) this.segDead[i] = 1;
     for (const i of s.polys) this.polyDead[i] = 1;
     for (const i of s.decks) this.deckDead[i] = 1;
     this.scopeIds.delete(id);
-    if (!purge) return;
-    const cells = new Set<number>();
-    for (const i of s.segs) {
-      const g = this.segs[i];
-      const i0 = Math.floor(Math.min(g[0], g[2]) / this.cell), i1 = Math.floor(Math.max(g[0], g[2]) / this.cell);
-      const j0 = Math.floor(Math.min(g[1], g[3]) / this.cell), j1 = Math.floor(Math.max(g[1], g[3]) / this.cell);
-      for (let a = i0; a <= i1; a++) for (let b = j0; b <= j1; b++) cells.add(a * 73856093 ^ b * 19349663);
+    if (!purge || !s.segs.length) return;
+    const job: PurgeJob = { ids: s.segs, gone: new Set(), cells: new Set(), it: null, i: 0 };
+    if (purge === 'later') this.purgeQ.push(job);
+    else this.purgeRun(job, Infinity);
+  }
+  /** Walls queued by removeScope(id, 'later') leave the grid for up to `ms` a call (a frame's
+   *  share); their ids are reused only once they are out of every cell. */
+  purgeSome(ms = 1.5) {
+    const until = performance.now() + ms;
+    while (this.purgeQ.length && this.purgeRun(this.purgeQ[0], until)) this.purgeQ.shift();
+  }
+  /** Walls still waiting on purgeSome. */
+  get purging() { let n = 0; for (const j of this.purgeQ) n += j.ids.length; return n; }
+  /** One scope's walls out of the grid, in steps small enough to stop at `until`: the cells they
+   *  were filed under (as addWall filed them), then each of those cells filtered once, then their
+   *  ids freed. True once done. */
+  private purgeRun(j: PurgeJob, until: number) {
+    const late = () => until !== Infinity && performance.now() >= until;
+    while (j.i < j.ids.length) {
+      for (const end = Math.min(j.ids.length, j.i + 256); j.i < end; j.i++) {
+        const id = j.ids[j.i], g = this.segs[id];
+        j.gone.add(id);
+        const i0 = Math.floor(Math.min(g[0], g[2]) / this.cell), i1 = Math.floor(Math.max(g[0], g[2]) / this.cell);
+        const j0 = Math.floor(Math.min(g[1], g[3]) / this.cell), j1 = Math.floor(Math.max(g[1], g[3]) / this.cell);
+        for (let a = i0; a <= i1; a++) for (let b = j0; b <= j1; b++) j.cells.add(a * 73856093 ^ b * 19349663);
+      }
+      if (late()) return false;
     }
-    const gone = new Set(s.segs);
-    for (const k of cells) {
-      const l = this.grid.get(k);
-      if (!l) continue;
-      const kept = l.filter((q) => !gone.has(q));
-      if (kept.length) this.grid.set(k, kept);
-      else this.grid.delete(k);
+    const it = (j.it ??= j.cells.values()); // (picks up where the last call stopped)
+    for (let r = it.next(), n = 0; !r.done; r = it.next()) {
+      const l = this.grid.get(r.value);
+      if (l) {
+        const kept = l.filter((q) => !j.gone.has(q));
+        if (kept.length) this.grid.set(r.value, kept);
+        else this.grid.delete(r.value);
+      }
+      if (++n % 64 === 0 && late()) return false;
     }
-    for (const i of s.segs) { this.segs[i] = DEAD_SEG; this.segFree.push(i); }
+    for (const i of j.ids) { this.segs[i] = DEAD_SEG; this.segFree.push(i); }
+    return true;
   }
   private track(rec: 'segs' | 'polys' | 'decks', id: number) {
     const s = this.scopeIds.get(this.curScope);

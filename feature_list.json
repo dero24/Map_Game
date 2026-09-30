@@ -995,12 +995,15 @@
         "src/ui/lifecycle.ts + tests/lifecycle.test.ts (sleep when hidden: sound, the life worker, held input)",
         "src/world/budget.ts + tests/budget.test.ts (a phone's detail tiles under a vertex budget, nearest first)",
         "src/player/vehicles.ts stickAxes + tests/touchControls.test.ts (ride stick dead zones; keys unchanged)",
-        "src/world/stream.ts (sign atlases disposed with their tiles; budget; realConc; wall purge; solidAt)",
+        "src/world/stream.ts (sign atlases disposed with their tiles; budget; realConc; solidAt)",
+        "src/player/collision.ts purgeSome + tests/walk.test.ts: an unloaded tile's walls leave the grid ~1.5 ms a frame, every tier (a 19k-wall tile: 7.5–34.5 ms at once, at most 1.73 ms a frame sliced)",
         "src/render/quality.ts (+ tests/quality.test.ts): phone/low tiers — budget 200/120 MB, LiDAR off, 4/3 km skyline",
         "src/ui/diag.ts lostFrom/NO_WEBGL (+ tests/diag.test.ts): a lost GPU context steps a phone down; how to get WebGL back",
-        "index.html + src/ui/style.css: no page zoom (touch-action; iOS gesture events); src/ui/mapview.ts pinch"
+        "index.html + src/ui/style.css: no page zoom (touch-action; iOS gesture events); src/ui/mapview.ts pinch",
+        "tools/hud-audit.mjs: the phone HUD's boxes on 10 phones, upright and on their side, 5 states each — 100 layouts, no overlaps (25 overlapped before)",
+        "npm test (50 files, 472 tests, idle machine), npm run build — 2026-09-30"
       ],
-      "notes": "2026-09-30: controls reviewed and fixed (docs/earth/LOG.md); phones sleep when put away; the NYC crash's memory causes fixed (sign-atlas texture leak, walls never reclaimed, LiDAR ~130 MB a Midtown cell, up to 9 dense cells in the ring); a phone lands only once the street below is built. Verified headless in Sea Bright (Pixel 7 emulation): textures flat at 23–25 over 4 round trips (was 24 → 36), walls flat at 106k (was 263k), landing 12.7 m clear of the house it used to land in. Still needs a real phone after the next Pages deploy: …/Map_Game/?diag=1 in Manhattan (the tile service and Overpass are unreachable from the agent sandbox)."
+      "notes": "2026-09-30: controls reviewed and fixed (docs/earth/LOG.md); phones sleep when put away; the NYC crash's memory causes fixed (sign-atlas texture leak, walls never reclaimed, LiDAR ~130 MB a Midtown cell, up to 9 dense cells in the ring); a phone lands only once the street below is built. Verified headless in Sea Bright (Pixel 7 emulation): textures flat at 23–25 over 4 round trips (was 24 → 36), walls flat at 106k (was 263k), landing 12.7 m clear of the house it used to land in. Follow-up the same day: the phone HUD's overlaps fixed (the montage showed 3, an audit of 10 phones found 25 layouts); an unloaded tile's walls purged a slice a frame on every tier (a PC's long hop had left 166k dead walls); sleep re-measured by the life worker's messages (57–59 ticks in 3 s awake, 0 hidden); no page zoom even where the browser ignores the viewport meta (headless pinch: scale stays 1). Still needs a real phone after the next Pages deploy: …/Map_Game/?diag=1 in Manhattan (the tile service and Overpass are unreachable from the agent sandbox), and an iPhone for the gesture-event zoom guard (WebKit isn't installed here)."
     },
     {
       "id": "photo-paints-frame",

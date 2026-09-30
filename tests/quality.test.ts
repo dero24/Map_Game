@@ -56,7 +56,6 @@ describe('pickTier', () => {
       expect(t.skylineR).toBeLessThan(8000);
       expect(t.stream.budgetMB).toBeGreaterThan(0);
       expect(t.stream.realConc).toBeLessThan(4);
-      expect(t.stream.purge).toBe(true);
     }
     expect(pickTier({ ...PIXEL7, memoryGB: 2 }).stream.budgetMB!).toBeLessThan(pickTier(PIXEL7).stream.budgetMB!);
   });

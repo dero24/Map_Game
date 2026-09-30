@@ -25,10 +25,12 @@ export const streamParams = {
   loadR: 1500, // keep tiles this close (3×3 cells and then some)
   dropR: 2400, // drop tiles beyond this
   coarseR: 8000, // silhouette ring: lite builds (meshes only) out to the horizon
-  // (these three a phone's tier sets — a PC's are as they always were: no budget, four at once)
+  // (these two a phone's tier sets — a PC's are as they always were: no budget, four at once)
   budgetMB: 0, // the detail tiles' vertex data kept at once, nearest first (world/budget.ts); 0: no cap
   realConc: 4, // real-lite (tile service) builds in flight at once (the service caches in R2; Overpass slots are per endpoint)
-  purge: false, // an unloaded tile's walls taken out of the walk world, not only marked dead (a long walk's memory)
+  // an unloaded tile's walls taken out of the walk world a slice a frame (WalkWorld.purgeSome), not
+  // only marked dead: a long walk's walls would otherwise pile up for the whole session
+  purge: true,
 };
 // (what a detail tile weighs before its first build: a real city cell, a stand-in, a baked one)
 const EST = { w: 60e6, s: 10e6, b: 20e6 };
@@ -404,6 +406,7 @@ export class TileStream {
   update(x: number, z: number) {
     const { loadR: LOAD_R, dropR: DROP_R, coarseR: COARSE_R } = streamParams;
     this.reveal();
+    this.walk.purgeSome(); // (unloaded tiles' walls, ~1.5 ms a frame until they're gone)
     const now = performance.now();
     const gy = Math.max(0, this.terrain.heightAt(x, z));
     if (Number.isFinite(gy)) U.uLampBaseY.value = Number.isFinite(U.uLampBaseY.value) ? U.uLampBaseY.value + (gy - U.uLampBaseY.value) * 0.05 : gy;
@@ -926,8 +929,9 @@ export class TileStream {
   unload(id: string, retire?: THREE.Group[]) {
     const a = this.loaded.get(id);
     if (!a) return;
-    this.walk.removeScope(a.scope, streamParams.purge);
-    for (const fs of a.fpScopes ?? []) if (fs !== undefined) this.walk.removeScope(fs, streamParams.purge);
+    const purge = streamParams.purge && 'later';
+    this.walk.removeScope(a.scope, purge);
+    for (const fs of a.fpScopes ?? []) if (fs !== undefined) this.walk.removeScope(fs, purge);
     this.terrain.removePatch(id);
     // DEM patch bookkeeping: the patch belongs to the CELL; retire it only when the
     // last mounted twin leaves (an s-unload mid-swap mustn't drop the w-twin's terrain).

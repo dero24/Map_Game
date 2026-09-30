@@ -158,6 +158,14 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 - Sleep (`ui/lifecycle.ts`): hidden → sound suspended (phones; a PC tab sounds on), the life
   worker paused (everywhere), held input released; an iPhone's interrupted audio resumes on the
   next tap.
+- The phone HUD (style.css; `body[data-ride]` = car / boat / plane / fly / near, set in
+  `syncTouchControls`): upright, the ride's readout sits in the corner under the dock with its
+  live numbers only (the ride's toast says how to drive), the place name keeps the left half
+  while riding, and the hint ends short of whatever stands beside the dock. On its side, the
+  hint is centred over the place name (over Get out while riding, clear of ▲ ▼ while flying), the
+  readout sits beside the ride's buttons, and the map-data credit runs along the top edge (the
+  bottom has no room for it). A geometry audit (HUD boxes, 10 phone sizes × both ways × 5
+  states) found no overlaps — see docs/earth/LOG.md 2026-09-30.
 
 ## Ambient life + sound
 

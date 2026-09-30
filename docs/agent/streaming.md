@@ -26,8 +26,10 @@ terrain/DEM, or the LiDAR measure pipeline.
   while they fit — the cell you stand in (and within 150 m) always; a built cell counts 150 m
   nearer (no flip-flop). A cell past the budget unloads to its silhouette; queued builds for it
   are dropped; `ensureAround` leaves real tiles to `update()` (a teleport into Midtown built the
-  whole ring at once). `realConc` caps real builds in flight (4 on a PC). `purge` takes an
-  unloaded tile's walls out of the walk world (otherwise tombstoned for good).
+  whole ring at once). `realConc` caps real builds in flight (4 on a PC). `purge` (all tiers)
+  takes an unloaded tile's walls out of the walk world a slice a frame (`removeScope(id, 'later')`
+  → `WalkWorld.purgeSome`, ~1.5 ms, from `update()`); they stop blocking at once, and their ids
+  are reused only once out of every grid cell.
 - `TileStream.dispose` frees a tile's sign atlas with its geometry (`group.userData.atlas`) — it
   was the one per-tile texture, and it leaked on every unload.
 - The walker's neighbourhood grids (`houseGrid`, `shopGrid`, `cityGrid`, `pavedIndex`) are
