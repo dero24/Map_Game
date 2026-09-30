@@ -2,7 +2,7 @@
 // Phone HUD audit: the production build's CSS and markup as GitHub Pages serves them, the game's
 // module blocked (no WebGL — the HUD's geometry only, so it runs in a minute), opened as a range of
 // phones upright and on their side, in each touch state — walking, beside a ride, driving a car,
-// flying a plane, flying on foot — with a long hint up and a long place name. Every pair of HUD
+// flying a plane, flying on foot, in a balloon — with a long hint up and a long place name. Every pair of HUD
 // boxes that overlap is reported (the dock's own buttons with each other aside), and any box off
 // the screen; exit 1 if there are any. The states are set the way main.ts syncTouchControls sets
 // them (body classes, body[data-ride], the ride buttons shown); the ride readout is made with the
@@ -52,6 +52,7 @@ const STATES = {
   'driving a car': { ride: 'car', driving: true, action: 'Get out', show: ['trboost'], hud: ['🚗 38 km/h', ' · left stick: steer / throttle · ⇧: boost'], hint: ['▣', HINT] },
   'flying a plane': { ride: 'plane', driving: true, action: 'Jump out', show: ['tthrottle-down', 'tthrottle-up'], hud: ['✈ 212 km/h · alt 480 m · throttle 100%', ' · stick: pitch / bank · +/−: throttle'], hint: ['▣', HINT] },
   'flying on foot': { ride: 'fly', fly: true, show: ['tfly-up', 'tfly-down'], hint: ['✈', 'land · hold ▲ ▼ to climb and sink · push the stick far to go faster'] },
+  'in a balloon': { ride: 'balloon', driving: true, fly: true, action: 'Jump out', show: ['tfly-up', 'tfly-down', 'tview'], hud: ['🎈 312 m · ↑ 2.1 m/s · 84°C · ↗ 14 km/h · holding', ''], hint: ['▣', 'the best seat for a painting — everything in frame, out to the horizon'] },
 };
 
 // ---- in-page: set a state, measure the HUD ----

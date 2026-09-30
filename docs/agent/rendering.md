@@ -68,11 +68,11 @@ or per-region style.
 - That full underdrawing is now a developer switch (`postParams.sketchFar`, panel → Watercolor →
   "…far away too"): off, unexplored ground is only a paler first wash within ~160 m. The paint
   reach round you on foot is `sketchReach` (45 m). In that mode the composite reads the fine
-  window (4 km, 8 m) and, past it, the far window (`U.uExploreFar` / `U.uExploreFarBox`: ~32 km,
+  window (4 km, 8 m) and, past it, the far window (`U.uExploreFar` / `U.uExploreFarBox`: ~48 km,
   64 m texels, RG = what photos painted / the share of each 64 m cell you walked), blended over
   the fine one's last ~200 m; inside the fine window far photo paint shows too. Only that branch
   reads the far window: the default mode renders exactly as before. Past ~12.5 km (depth ≥
   0.99999) is sky to the composite and never sketched.
 - A photo (photo mode, Space) in that mode paints what it frames: `WatercolorPost.readSeen` packs
-  the frame's depth into a small RGBA8 target (256 on the long side; log depth, 24 bits) and reads
+  the frame's depth into a small RGBA8 target (384 on the long side, a phone 256; log depth, 24 bits) and reads
   it back async; `render/seen.ts` unprojects it; `Explore.paintSeen` paints it (gameplay.md).

@@ -99,6 +99,7 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   p.add(postParams, 'sketch').name('paint as you explore');
   p.add(postParams, 'sketchFar').name('…far away too (pencil till you walk it)');
   p.add(postParams, 'sketchReach', 20, 400, 5).name('paint reach as you walk (m)');
+  p.add(postParams, 'photoReach', 200, 22000, 100).name('a photo paints out to (m)');
   p.add(postParams, 'kuwaharaRadius', 1, 7, 0.1).name('brush size');
   p.add(postParams, 'kuwaharaSharpness', 1, 16, 0.1).name('brush sharpness');
   p.add(postParams, 'wobble', 0, 3, 0.01).name('hand wobble');

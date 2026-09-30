@@ -61,7 +61,7 @@ export class Arrival {
     const sky = env.fog > 0.3 ? 'sea fog' : env.night > 0.6 ? 'night' : env.golden > 0.35 ? 'golden hour' : 'fair';
     const stats = this.g.explore.stats();
     this.el.innerHTML = `<div class="a-name">${esc(name)}</div><div class="a-region">${esc(region)}</div>`
-      + `<div class="a-line">${((hh + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'am' : 'pm'} · ${sky} · ${first ? 'first visit — walk to paint it in' : `${stats.km2 < 1 ? stats.km2.toFixed(2) : stats.km2.toFixed(1)} km² painted so far`}</div>`;
+      + `<div class="a-line">${((hh + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'am' : 'pm'} · ${sky} · ${first ? 'first visit — walk to paint it in' : `${stats.km2 + stats.photoKm2 < 1 ? (stats.km2 + stats.photoKm2).toFixed(2) : (stats.km2 + stats.photoKm2).toFixed(1)} km² painted so far`}</div>`;
     this.el.classList.remove('show');
     void this.el.offsetWidth;
     this.el.classList.add('show');

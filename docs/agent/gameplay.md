@@ -130,6 +130,39 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 - While riding, `Vehicles.update` owns the camera and carries the walker (streaming/life/
   interiors key off it); `walker.update` is skipped.
 
+## Hot air balloons
+
+- **The family** (`assets/balloon.ts`): a ~2,800 m³ sport balloon from a seed — 12 or 16 scalloped
+  gores, a pattern (gores / bands / chevron / harlequin) in 2–3 colours with a crown band, an inner
+  skin in its own shade (look up from the basket), wicker basket, burner frame, cables; the flame
+  is its own mesh (glow channel). Vertex colour, no tint: the brush picks the colours. Budget
+  < 4,800 vertices (a handful in the sky at once; `tests/balloon.test.ts`).
+- **Physics** (`player/balloonPhysics.ts`, pure): buoyancy of the envelope's hot air in ISA air
+  (L = V·ρ·(1 − Tₐ/T)·g) against weight and quadratic drag, over the balloon's mass plus the air it
+  carries (the seconds of lag you fly by); the burner heats, the fabric cools, the vent dumps. You
+  can't steer: the basket takes up the wind at its height, plus a ±1.5 m/s "fan" (the stick). Let go
+  of burner and vent and the assist holds the height you let go at (`hold`); `Vehicles.holdAt`
+  flies to a height.
+- **Winds aloft** (`world/wind.ts`): four layers (surface, 200, 600, 1,500 m) veering and
+  strengthening with height, seeded by region (0.25°) and the world's UTC hour, eased hour to hour.
+- **Riding** (`vehicles.ts`, kind `balloon`): Space / ▲ burn, C / ▼ vent, WASD / the stick the fan
+  (relative to your look), V / ⤢ first ↔ third person, E / Get out · Jump out (over the side: fly
+  on; the empty balloon holds a while, then comes down on its own). First person is your own look
+  from the basket; photo mode works in the basket (P / ▣) — the best seat for a painting. The
+  burner has a roar (`ambience.ts`). Boarding needs you at the basket, not flying over it.
+- **Other people's balloons** (`world/balloons.ts` `AmbientBalloons`): each ~5 km cell of the real
+  map (0.05°) rolls once per half hour of the world's clock — ~30% at dawn and dusk, ~10% by day,
+  none at night (the world's hour gates it). A flight climbs, cruises on its layer's wind, then
+  comes down on the nearest beach within 2.5 km of where the wind took it (else open ground within
+  800 m, else it flies on out of sight), sits ~8 min envelope up (step in: it's yours —
+  `Vehicles.o.ambient`), and packs away. Off in capture mode (they keep the real clock).
+- **A first visit**: a balloon waits on the nearest beach within 1.5 km of the spawn
+  (`Vehicles.giftBalloon`, once per browser; none inland).
+- **Painting them**: a balloon in frame colours its Almanac card (`balloon:` / `ride-balloon:`;
+  taught from further off than a car); the brush paints one on open ground (`place.ts`
+  `placeBalloon`) in any colours — every ride's swatch row has a free colour picker, a balloon a
+  second one for its stripes.
+
 ## Touch controls (phones, tablets)
 
 - `body.touch` (a touch screen) shows the touch UI; `body.nomouse` (no fine pointer: a phone or a
@@ -251,14 +284,25 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   not across a silhouette) are filled between; ground running on into the sky as a plane does
   continues to the sky cut while the terrain keeps it in sight (the sea to the horizon, not a
   plateau's hidden far side). Nearer than `SEEN_SPLIT` (2 km) it paints 8 m cells, past it far
-  cells, out to `SEEN_REACH` (15 km, level). It blooms in over ~2 s, near first. Walks and
-  `stats()` are untouched by it.
+  cells, out to `postParams.photoReach` (panel: "a photo paints out to", default and max
+  `SEEN_REACH` = 22 km, level). The pinholes and hairline gaps a frame's sampling leaves between
+  discs (the far "canvas clouds") are closed (`Stamps.close`: a bare cell with ≥ 5 of 8 stamped
+  neighbours, far cells ≥ 4, twice) — an edge never grows, so what a building hides stays hidden.
+  It blooms over ~2.4 s a cell, the farthest starting 2.2 s late (the colour runs out to the
+  horizon). Walks' `painted` is untouched; `stats().photoKm2` counts what photos brought to full.
+  Measured from a balloon at 150 m over Sea Bright: bare pixels in frame 0.1–0.4% out to 15 km
+  (3–5% before the closing). The shot's toast says the reach and area, or where the pencil still
+  is (`PhotoMode.pencilWay`); a painted-area milestone is said once (`milestone`).
+- Walking paint (the far sketch) soaks in: strokes at 20 Hz (`TICK`), ~1.5 s blank to full
+  underfoot, and the composite paints in two passes — a pale first wash over the pencil, then the
+  pigment deepening — its edge ragged by paper and brush-stroke noise that never reaches bare
+  paper or finished paint.
 
 ## The brush (`src/ui/brush.ts`, `src/player/place.ts`) — `docs/GAME_DESIGN.md`
 
 - Paint-to-own: a coloured Almanac card (painted from life with P — `Commissions.paintFrame`, which
   records `pt` and `fresh`) is a kind you can paint: `Commissions.owned(families)`. The families the
-  brush knows are `PAINTABLE` (boat, car; planes once airfields have planes to paint from life).
+  brush knows are `PAINTABLE` (boat, car, balloon — on open ground; planes once airfields have planes to paint from life).
   A painting teaches sparingly: the first, the one most prominent kind (≥ 1.5% of the frame); after
   that only composed ones (≥ 4% each, at most 3, not already painted) — the rest stay pencil.
 - B (✎ on touch) takes it out. Chips: the kinds you own (last used first), the one fitting what you

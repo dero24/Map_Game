@@ -20,8 +20,11 @@ import type { Road, Terrain } from '../world/data';
 import { activeStyle } from '../world/styles';
 import { GEAR_NAME, type CarGear } from '../assets/furniture';
 import { placeBoat, placeCar, type PlaceWorld, type Spot } from './place';
+import { balloonGeometry, balloonRecipe, flameGeometry, BALLOON_PATTERNS, type BalloonPattern } from '../assets/balloon';
+import { newBalloon, stepBalloon, airTemp, type BalloonState } from './balloonPhysics';
+import { windAt, windLayers, windHour, compassArrow, WIND_LAYERS, type WindLayer } from '../world/wind';
 
-export type VKind = 'car' | 'boat' | 'plane';
+export type VKind = 'car' | 'boat' | 'plane' | 'balloon';
 
 interface Veh {
   kind: VKind;
@@ -37,19 +40,23 @@ interface Veh {
   throttle: number;
   feet: number; // ground/deck height under a car
   airborne: boolean;
+  colors?: number[]; // a balloon's own colours (its envelope's pattern)
+  bs?: BalloonState; // a balloon's flight
+  flame?: THREE.Object3D;
 }
 
 const SPECS = {
   car: { reach: 4.2, camDist: 7.2, camH: 2.6, look: 1.1 },
   boat: { reach: 7, camDist: 10, camH: 3.4, look: 1.2 }, // (a hull needs 5 m of open water round it: board from the shallows)
   plane: { reach: 7.5, camDist: 15, camH: 4.2, look: 1.4 },
+  balloon: { reach: 4.6, camDist: 38, camH: 6, look: 11 }, // (third person: the whole envelope in view)
 } as const;
 const CAR_COLORS = [0xf2f2ee, 0xb9bcc0, 0x26282c, 0x5a5e64, 0x2b3f63, 0x9c2a26, 0x3d5a46, 0xcdbf9e, 0x7a8894];
 const MAX_KEPT = 24; // parked player vehicles left around the world (oldest recycled)
 // Where you left things survives the session: the rides you parked (by real lat/lon) and the
 // driveway cars you drove off in (tile-instance keys are deterministic, so they stay gone).
 const STORE = 'map-game.vehicles.v1';
-interface Saved { taken: string[]; kept: { kind: VKind; model: string; lat: number; lon: number; yaw: number; color?: number }[] }
+interface Saved { taken: string[]; kept: { kind: VKind; model: string; lat: number; lon: number; yaw: number; color?: number; colors?: number[] }[] }
 
 // Someone at the helm of the boat you ride (Round 9: "nobody is at the helm"): the crowd's body,
 // one look (short hair, the rest of the wardrobe dropped), seated for a tiller or standing at a
@@ -117,7 +124,7 @@ function propGeo() {
 // Summoned boats cycle the kit's hulls; hull paint rotates independently.
 const BOAT_CYCLE: BoatType[] = ['console', 'skiff', 'cabin', 'sail', 'pontoon', 'lobster'];
 const HULLS = [0xf4f1ea, 0xeef0f0, 0x2d4a6a, 0xd9e4ea, 0x9b3b32];
-const NAME: Record<string, string> = { hatch: 'hatchback', suv: 'SUV', console: 'center-console', cabin: 'cabin cruiser', sail: 'sailboat', pontoon: 'pontoon boat', lobster: 'lobster boat', highwing: 'high-wing plane', lowwing: 'low-wing plane', seaplane: 'seaplane', biplane: 'biplane' };
+const NAME: Record<string, string> = { gores: 'striped balloon', bands: 'banded balloon', chevron: 'chevron balloon', harlequin: 'harlequin balloon', hatch: 'hatchback', suv: 'SUV', console: 'center-console', cabin: 'cabin cruiser', sail: 'sailboat', pontoon: 'pontoon boat', lobster: 'lobster boat', highwing: 'high-wing plane', lowwing: 'low-wing plane', seaplane: 'seaplane', biplane: 'biplane' };
 export const modelName = (m: string) => {
   const [base, gear] = m.split('+');
   return (NAME[base] ?? base) + (gear && gear in GEAR_NAME ? ` with ${GEAR_NAME[gear as CarGear]}` : '');
@@ -169,6 +176,8 @@ export class Vehicles {
       /** the developer's free rides (panel switch): V car, Shift+B boat, N plane */
       summons?: () => boolean;
       geo?: { toLatLon: (x: number, z: number) => [number, number]; fromLatLon: (lat: number, lon: number) => [number, number] };
+      /** other people's balloons (world/balloons.ts): one that's landed can be stepped into */
+      ambient?: { landedNear(x: number, z: number, r: number): { id: string; x: number; z: number; yaw: number; pattern: BalloonPattern; colors: number[] } | null; take(id: string): void };
     },
   ) {
     this.group.name = 'player-vehicles';
@@ -185,7 +194,9 @@ export class Vehicles {
     window.addEventListener('keydown', (e) => {
       if ((e.target as HTMLElement)?.closest?.('input,textarea,.lil-gui')) return;
       this.keys.add(e.code);
+      if (this.active?.kind === 'balloon' && (e.code === 'Space' || e.code === 'KeyC')) e.preventDefault(); // (the burner, not a page scroll)
       if (e.repeat || !o.enabled()) return;
+      if (e.code === 'KeyV' && this.active?.kind === 'balloon') return this.toggleView();
       if (e.code === 'KeyE') this.toggle();
       else if (e.code === 'KeyV' || e.code === 'KeyN' || (e.code === 'KeyB' && e.shiftKey)) {
         if (o.summons?.()) this.summon(e.code === 'KeyV' ? 'car' : e.code === 'KeyN' ? 'plane' : 'boat');
@@ -207,14 +218,14 @@ export class Vehicles {
       for (const k of d.taken ?? []) this.taken.add(k);
       for (const v of d.kept ?? []) {
         const [x, z] = g.fromLatLon(v.lat, v.lon);
-        if (Number.isFinite(x) && Number.isFinite(z)) this.make(v.kind, x, z, v.yaw, v.color, v.model);
+        if (Number.isFinite(x) && Number.isFinite(z)) this.make(v.kind, x, z, v.yaw, v.color, v.model, v.colors);
       }
     } catch { /* storage off or corrupt: start fresh */ }
   }
   private persist() {
     const g = this.o.geo;
     if (!g) return;
-    const kept = this.list.map((v) => { const [lat, lon] = g.toLatLon(v.x, v.z); return { kind: v.kind, model: v.model, lat, lon, yaw: v.yaw, color: v.color }; });
+    const kept = this.list.map((v) => { const [lat, lon] = g.toLatLon(v.x, v.z); return { kind: v.kind, model: v.model, lat, lon, yaw: v.yaw, color: v.color, colors: v.colors }; });
     try { localStorage.setItem(STORE, JSON.stringify({ taken: [...this.taken].slice(-400), kept } satisfies Saved)); } catch { /* ignore */ }
   }
 
@@ -226,17 +237,34 @@ export class Vehicles {
   /** Each frame a ride moves: (kind, x, y, z, vx, vz). main.ts hands it to life (knockdowns) and critters (they scatter). */
   onMove: ((kind: VKind, x: number, y: number, z: number, vx: number, vz: number) => void) | null = null;
   /** The ride you're in (sound + HUD): kind, model, speed m/s, throttle 0..1. */
-  get ride() { const v = this.active; return v ? { kind: v.kind, model: v.model, v: v.v, throttle: v.throttle, airborne: v.airborne } : null; }
+  get ride() { const v = this.active; return v ? { kind: v.kind, model: v.model, v: v.v, throttle: v.kind === 'balloon' ? v.bs!.burn : v.throttle, airborne: v.airborne } : null; }
+  /** The balloon you're in (null otherwise): height over the ground, climb, the burner, the view. */
+  get balloon() {
+    const v = this.active;
+    if (!v || v.kind !== 'balloon') return null;
+    return { agl: v.y - this.ground(v.x, v.z), vy: v.bs!.vy, burn: v.bs!.burn, landed: v.bs!.landed, third: this.third, hold: v.bs!.hold };
+  }
+  /** First person in the basket, or the balloon from outside (V, or the ⤢ button). */
+  third = false;
+  toggleView() { if (this.active?.kind === 'balloon') { this.third = !this.third; this.camInit = false; } }
+  /** Fly to a height (m above the ground): the assist burns and vents you there (the strip's layers). */
+  holdAt(agl: number) { const v = this.active; if (v?.bs) { v.bs.hold = this.ground(v.x, v.z) + agl; } }
+  /** The winds aloft here and now (world/wind.ts): what the strip shows. */
+  windKey = 0;
+  winds(): WindLayer[] { return windLayers(this.windKey, windHour()); }
   /** What E would board right now, without boarding it (context hints). */
   enterable(): { kind: VKind; model: string } | null {
     if (this.active || walkParams.fly) return null;
     const w = this.o.walker;
     let best: Veh | null = null, bd = Infinity;
     for (const v of this.list) {
+      if (v.kind === 'balloon' && Math.abs(w.y - walkParams.eyeHeight - v.y) > 6) continue; // (at the basket, not flying over it)
       const d = Math.hypot(v.x - w.x, v.z - w.z) - SPECS[v.kind].reach;
       if (d < 0 && d < bd) (bd = d), (best = v);
     }
     if (best) return { kind: best.kind, model: best.model };
+    const ab = this.o.ambient?.landedNear(w.x, w.z, SPECS.balloon.reach);
+    if (ab) return { kind: 'balloon', model: ab.pattern };
     const pk = this.parkedNear(w.x, w.z, SPECS.car.reach + 0.6);
     return pk ? { kind: 'car', model: pk.model } : null;
   }
@@ -264,6 +292,8 @@ export class Vehicles {
     return t.heightAt(x, z) < -0.45 && t.sdfAt(x, z) < -1.2;
   }
   private ground(x: number, z: number) { return Math.max(this.o.terrain.heightAt(x, z), 0); }
+  /** What a balloon's basket rests on: the ground, a roof, or the water. */
+  private floor(x: number, z: number) { return Math.max(this.ground(x, z), this.roofTop(x, z) - 2.5); }
   private roofTop(x: number, z: number) {
     const b = this.o.walk.buildingAt(x, z);
     if (b < 0) return -Infinity;
@@ -274,11 +304,21 @@ export class Vehicles {
   // ---------------- lifecycle ----------------
   /** A ride's model, painted `color` on its white parts, in `mat`. The brush builds its pencil
    *  sketch with the very same geometry, so the finished ride takes over from it unseen. */
-  build(kind: VKind, model: string, color: number, seed: number, mat: THREE.Material) {
+  build(kind: VKind, model: string, color: number, seed: number, mat: THREE.Material, colors?: number[]) {
     const obj = new THREE.Group();
     let prop: THREE.Object3D | undefined;
     let gearY = 0;
-    if (kind === 'car') {
+    if (kind === 'balloon') {
+      model = (BALLOON_PATTERNS as string[]).includes(model) ? model : 'gores';
+      const P = balloonGeometry(balloonRecipe(seed, colors?.length ? colors : [color], model as BalloonPattern));
+      obj.add(new THREE.Mesh(P.geo, mat));
+      const fl = new THREE.Mesh(flameGeometry(), mat);
+      fl.position.y = P.burnerY + 0.2;
+      fl.scale.setScalar(0.001);
+      fl.name = 'flame';
+      obj.add(fl);
+      gearY = P.burnerY;
+    } else if (kind === 'car') {
       const [base, gear] = model.split('+');
       const m = ((CAR_TYPES as string[]).includes(base) ? base : 'sedan') as CarType;
       const g = gear && gear in GEAR_NAME ? (gear as CarGear) : null;
@@ -301,31 +341,37 @@ export class Vehicles {
   }
   /** The paint a ride gets when nobody chose one. */
   defaultColor(kind: VKind, seed = this.seed) {
-    return kind === 'car' ? CAR_COLORS[(seed * 7) % CAR_COLORS.length] : kind === 'boat' ? HULLS[seed % HULLS.length] : 0xf4f1ea;
+    return kind === 'car' ? CAR_COLORS[(seed * 7) % CAR_COLORS.length] : kind === 'boat' ? HULLS[seed % HULLS.length] : kind === 'balloon' ? 0xd8412f : 0xf4f1ea;
   }
   get nextSeed() { return this.seed; }
   /** A painted ride, dry: it's real now, where the brush set it down (and it's saved there). */
-  paint(kind: VKind, model: string, at: Spot, color: number) {
-    const v = this.make(kind, at.x, at.z, at.yaw, color, model);
+  paint(kind: VKind, model: string, at: Spot, color: number, colors?: number[]) {
+    const v = this.make(kind, at.x, at.z, at.yaw, color, model, colors);
     if (kind === 'boat') this.settle.set(v, 1); // (it settles onto the water as the paint dries)
     return { kind: v.kind, model: v.model, x: v.x, z: v.z, obj: v.obj };
   }
-  private make(kind: VKind, x: number, z: number, yaw: number, color?: number, model?: string): Veh {
+  private make(kind: VKind, x: number, z: number, yaw: number, color?: number, model?: string, colors?: number[]): Veh {
     const seed = this.seed;
     const c = color ?? this.defaultColor(kind, seed);
     this.seed++;
     if (!model) {
       if (kind === 'car') model = pickFrom(carMix(activeStyle().region, activeStyle().climate), (seed * 0.618034) % 1);
       else if (kind === 'boat') model = BOAT_CYCLE[this.boatN++ % BOAT_CYCLE.length];
+      else if (kind === 'balloon') model = BALLOON_PATTERNS[seed % BALLOON_PATTERNS.length];
       else model = PLANE_TYPES[this.planeN++ % PLANE_TYPES.length];
     }
-    const built = this.build(kind, model, c, seed, this.mat);
+    const built = this.build(kind, model, c, seed, this.mat, colors);
     const { obj, prop, gearY } = built;
     model = built.model;
     obj.traverse((m) => m.layers.enable(1));
     this.group.add(obj);
-    const y = kind === 'boat' ? 0 : this.o.walk.surfaceAt(x, z);
+    const y = kind === 'boat' ? 0 : kind === 'balloon' ? this.floor(x, z) : this.o.walk.surfaceAt(x, z);
     const v: Veh = { kind, color: c, model, gearY, obj, prop, x, y, z, yaw, pitch: 0, roll: 0, v: 0, steer: 0, throttle: 0, feet: y, airborne: false };
+    if (kind === 'balloon') {
+      v.colors = colors;
+      v.bs = newBalloon(x, y, z, true);
+      v.flame = obj.getObjectByName('flame');
+    }
     this.list.push(v);
     // keep the world tidy: recycle the oldest parked player vehicle
     while (this.list.length > MAX_KEPT) {
@@ -399,8 +445,17 @@ export class Vehicles {
     const w = this.o.walker;
     let best: Veh | null = null, bd = Infinity;
     for (const v of this.list) {
+      if (v.kind === 'balloon' && Math.abs(w.y - walkParams.eyeHeight - v.y) > 6) continue; // (at the basket, not flying over it)
       const d = Math.hypot(v.x - w.x, v.z - w.z) - SPECS[v.kind].reach;
       if (d < 0 && d < bd) (bd = d), (best = v);
+    }
+    if (!best && !walkParams.fly) {
+      // someone's balloon, down on the beach: step in and it's yours
+      const ab = this.o.ambient?.landedNear(w.x, w.z, SPECS.balloon.reach);
+      if (ab) {
+        this.o.ambient!.take(ab.id);
+        best = this.make('balloon', ab.x, ab.z, ab.yaw, ab.colors[0], ab.pattern, ab.colors);
+      }
     }
     if (!best && !walkParams.fly) {
       const pk = this.parkedNear(w.x, w.z, SPECS.car.reach + 0.6);
@@ -433,9 +488,16 @@ export class Vehicles {
     this.helmOn(v);
     this.orbitYaw = 0;
     this.orbitPitch = 0;
+    this.camInit = false;
+    if (v.kind === 'balloon') {
+      // in the basket: you look where you were looking (first person — the look is yours)
+      this.o.walker.pitch = Math.max(this.o.walker.pitch, 0.15);
+      this.o.toast(thumbs() ? 'hold ▲ to burn and rise, ▼ to vent · let go and it holds its height · the wind steers — pick a layer'
+        : 'hold Space to burn and rise, C to vent · let go and it holds its height · the wind steers: pick a layer · V the view · E out');
+      return;
+    }
     this.o.walker.yaw = 0; // walker yaw/pitch become orbit offsets while riding
     this.o.walker.pitch = 0;
-    this.camInit = false;
     const hint = thumbs()
       ? v.kind === 'car' ? 'the stick drives and steers · hold ⇧ to boost' : v.kind === 'boat' ? 'the stick steers and throttles · hold ⇧ for more' : 'hold + for throttle · pull the stick back to climb'
       : v.kind === 'car' ? 'W/S drive · A/D steer · Shift boost · E to get out' : v.kind === 'boat' ? 'W/S throttle · A/D steer · E to get out (near shore)' : 'Shift/C throttle · W/S pitch · A/D bank · E to jump out';
@@ -448,7 +510,20 @@ export class Vehicles {
     this.exitT = performance.now();
     this.helmOff();
     this.hud.style.display = 'none';
-    const back = v.yaw; // restore a sensible look direction
+    const back = v.kind === 'balloon' ? w.yaw : v.yaw; // restore a sensible look direction
+    if (v.kind === 'balloon') {
+      v.v = 0;
+      const agl = v.y - this.ground(v.x, v.z);
+      if (!v.bs!.landed && agl > 3) {
+        // over the side: fly on (the balloon, empty, holds its height and drifts on)
+        w.place(v.x + 3, v.z, back, -0.1);
+        walkParams.fly = true;
+        w.y = v.y + 1;
+        v.bs!.hold = v.y;
+        this.o.toast(`you step out into the sky — ${thumbs() ? '✈' : 'F'} to come down`);
+        return;
+      }
+    }
     if (v.kind === 'plane' && v.airborne) {
       // a gift of the painted world: step out into the sky and keep flying
       w.place(v.x, v.z, back, -0.1);
@@ -462,7 +537,7 @@ export class Vehicles {
       return;
     }
     const rx = Math.cos(v.yaw), rz = -Math.sin(v.yaw); // vehicle's right
-    const side = v.kind === 'car' ? 1.9 : v.kind === 'plane' ? 3.2 : 2.5;
+    const side = v.kind === 'car' ? 1.9 : v.kind === 'plane' ? 3.2 : v.kind === 'balloon' ? 1.8 : 2.5;
     for (const [ox, oz] of [[-rx * side, -rz * side], [rx * side, rz * side], [Math.sin(v.yaw) * 3.5, Math.cos(v.yaw) * 3.5]]) {
       const x = v.x + ox, z = v.z + oz;
       if (walk.walkable(x, z) && walk.buildingAt(x, z) < 0 && !walk.blocked(x, z, 0.4)) {
@@ -479,6 +554,24 @@ export class Vehicles {
       return;
     }
     w.place(x, z, back, 0);
+  }
+
+  /** Once, on a first visit: a balloon waiting on the nearest beach to (x, z) (within 1.5 km) — the
+   *  best way to paint the world is from up high. False while the terrain there isn't in yet. */
+  giftBalloon(x: number, z: number, isBeach: (x: number, z: number) => boolean) {
+    const KEY = 'map-game.balloon-gift.v1';
+    try { if (localStorage.getItem(KEY) || this.list.some((v) => v.kind === 'balloon')) return true; } catch { return true; }
+    for (let r = 20; r <= 1500; r += 25) {
+      const n = Math.max(8, Math.floor((r * 6.283) / 25));
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * 6.283, px = x + Math.sin(a) * r, pz = z + Math.cos(a) * r;
+        if (!isBeach(px, pz) || !isBeach(px + 9, pz) || !isBeach(px - 9, pz) || !isBeach(px, pz + 9) || !isBeach(px, pz - 9)) continue;
+        this.make('balloon', px, pz, a, 0xd8412f, 'gores', [0xd8412f, 0xf2b632, 0xf4f1ea]);
+        try { localStorage.setItem(KEY, '1'); } catch { /* ignore */ }
+        return true;
+      }
+    }
+    return false;
   }
 
   // ---------------- summoning ----------------
@@ -568,11 +661,14 @@ export class Vehicles {
       b.pitch = Math.sin(t * 0.9 + b.x * 0.07) * 0.018;
       this.pose(b);
     }
+    // balloons: an empty one still aloft drifts on and comes down on its own; each breathes
+    for (const b of this.list) if (b.kind === 'balloon' && b !== this.active) this.drift(b, Math.min(dt, 0.1));
     const v = this.active;
     if (!v) { this.walkIn(dt); return false; }
     dt = Math.min(dt, 0.05);
     if (v.kind === 'car') this.drive(v, dt);
     else if (v.kind === 'boat') this.sail(v, dt);
+    else if (v.kind === 'balloon') this.balloonFly(v, dt);
     else this.fly(v, dt);
     this.pose(v);
     // the world reacts to where the ride goes: walkers in a car's path, animals near anything moving
@@ -582,10 +678,19 @@ export class Vehicles {
     w.x = v.x;
     w.z = v.z;
     w.y = v.y + 1.4;
-    this.chase(v, dt, cam);
+    if (v.kind === 'balloon' && !this.third) this.basketCam(v, cam);
+    else this.chase(v, dt, cam);
     const kmh = Math.round(Math.abs(v.v) * 3.6);
     this.hud.style.display = 'block';
     const touch = thumbs();
+    if (v.kind === 'balloon') {
+      const b = v.bs!, agl = Math.round(v.y - this.ground(v.x, v.z)), wd = Math.atan2(b.vx, -b.vz);
+      const val = `🎈 ${agl} m · ${b.vy >= 0 ? '↑' : '↓'} ${Math.abs(b.vy).toFixed(1)} m/s · ${Math.round(b.T - 273.15)}°C · ${compassArrow(wd)} ${kmh} km/h${b.hold !== null && !b.landed ? ' · holding' : ''}`;
+      const keys = touch ? '' : ' · Space burn · C vent · V view · E out';
+      if (this.hudVal.textContent !== val) this.hudVal.textContent = val;
+      if (this.hudKeys.textContent !== keys) this.hudKeys.textContent = keys;
+      return true;
+    }
     const val = v.kind === 'plane'
       ? `✈ ${kmh} km/h · alt ${Math.round(v.y - this.ground(v.x, v.z))} m · throttle ${Math.round(v.throttle * 100)}%`
       : `${v.kind === 'car' ? '🚗' : '⛵'} ${kmh} km/h`;
@@ -736,6 +841,64 @@ export class Vehicles {
     v.airborne = false;
     this.o.toast(`${why} — the paint forgives you; plane set down nearby`);
   }
+
+  // ---------------- balloons ----------------
+  /** Your balloon: Space / ▲ burn, C / ▼ vent, the stick (WASD) the little fan — relative to where
+   *  you look; let go of both and the assist holds the height (player/balloonPhysics.ts). */
+  private balloonFly(v: Veh, dt: number) {
+    const w = this.o.walker, a = this.stick;
+    const burn = this.k('Space') || w.climb > 0 ? 1 : 0, vent = this.k('KeyC') || w.climb < 0 ? 1 : 0;
+    const f = this.axisTouch(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown'], -a.y), st = this.axisTouch(['KeyD', 'ArrowRight'], ['KeyA', 'ArrowLeft'], a.x);
+    const yaw = this.third ? v.yaw + w.yaw : w.yaw, fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+    let fanX = fx * f + rx * st, fanZ = fz * f + rz * st;
+    const m = Math.hypot(fanX, fanZ);
+    if (m > 1) { fanX /= m; fanZ /= m; }
+    this.balloonStep(v, { burn, vent, fanX, fanZ, assist: true }, dt);
+  }
+  private balloonStep(v: Veh, inp: { burn: number; vent: number; fanX: number; fanZ: number; assist: boolean }, dt: number) {
+    const b = v.bs!;
+    const floor = this.floor(b.x, b.z);
+    const wind = b.landed && inp.burn === 0 ? [0, 0] as [number, number] : windAt(this.winds(), Math.max(0, b.y - this.ground(b.x, b.z)));
+    const was = b.landed, vy = b.vy;
+    for (let t = dt; t > 1e-6; t -= 0.05) stepBalloon(b, inp, { ground: floor, wind }, Math.min(0.05, t));
+    if (!was && b.landed && v === this.active) this.o.toast(vy < -2.5 ? 'a bump and a skid — down' : 'the basket settles — down');
+    v.x = b.x; v.y = b.y; v.z = b.z;
+    v.v = Math.hypot(b.vx, b.vz);
+    v.airborne = !b.landed;
+    // the basket turns slowly as balloons do; it swings a little under the envelope
+    const t = performance.now() / 1000;
+    v.yaw += (b.landed ? 0 : 0.012 * Math.sin(t * 0.05 + v.x * 0.01)) * dt;
+    v.pitch = b.landed ? 0 : Math.sin(t * 0.7) * 0.012;
+    v.roll = b.landed ? 0 : Math.sin(t * 0.55 + 1) * 0.012;
+    if (v.flame) {
+      const fl = b.burn > 0.02 ? b.burn * (0.85 + 0.15 * Math.sin(t * 37) * Math.sin(t * 23)) : 0.001;
+      v.flame.scale.set(fl, fl * (0.9 + 0.2 * Math.sin(t * 29)), fl);
+    }
+  }
+  private driftT = new Map<Veh, number>();
+  /** A balloon nobody's in: aloft, it holds a while then lets itself down; landed, it waits. */
+  private drift(b: Veh, dt: number) {
+    const s = b.bs!;
+    if (s.landed && s.hold === null) { if (b.flame) b.flame.scale.setScalar(0.001); return; }
+    const t = (this.driftT.get(b) ?? 0) + dt;
+    this.driftT.set(b, t);
+    if (t > 90 && s.hold !== null) s.hold = null; // (the assist gives up: it cools and comes down)
+    this.balloonStep(b, { burn: 0, vent: s.hold === null && s.y - this.ground(s.x, s.z) > 30 ? 0.2 : 0, fanX: 0, fanZ: 0, assist: s.hold !== null }, dt);
+    if (s.landed) this.driftT.delete(b);
+    this.pose(b);
+  }
+  /** First person in the basket: your own look, from beside the burner. */
+  private basketCam(v: Veh, cam: THREE.PerspectiveCamera) {
+    const w = this.o.walker;
+    const fx = -Math.sin(w.yaw) * 0.35, fz = -Math.cos(w.yaw) * 0.35; // (a step toward the rail you face)
+    cam.position.set(v.x + fx, v.y + 1.62, v.z + fz);
+    cam.up.set(0, 1, 0);
+    cam.rotation.set(w.pitch, w.yaw, 0, 'YXZ');
+    if (cam.fov !== walkParams.fov) { cam.fov = walkParams.fov; cam.updateProjectionMatrix(); }
+  }
+  /** Air temperature at the balloon (the HUD's envelope readout is against this). */
+  airAt(y: number) { return airTemp(y) - 273.15; }
+  static readonly LAYERS = WIND_LAYERS;
 
   private pose(v: Veh) {
     v.obj.position.set(v.x, v.y, v.z);

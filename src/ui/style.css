@@ -168,11 +168,12 @@ body.touch.walking #touchui { display: flex; } /* (not over the intro card) */
 /* (buttons held down for seconds — boost, throttle, climb — mustn't raise a long-press loupe or menu) */
 .tbtn, .tmenu-btn, #touch-action { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 body.more-open #touch-action { display: none !important; } /* (the open drawer is over it) */
-body.touch.driving #touchui #tfly, body.touch.driving #touchui #tgo, body.touch.driving #touchui #tphoto,
+body.touch.driving #touchui #tfly, body.touch.driving #touchui #tgo, body.touch.driving:not([data-ride="balloon"]) #touchui #tphoto,
 body.touch.driving #touchui #tbrush { display: none !important; }
 body.touch.driving #touch-more #tplant, body.touch.driving #touch-more #tseed, body.touch.driving #touch-more #ttime { display: none !important; }
 body.touch.driving #touch-more #toptions { grid-column: 1 / -1; }
 body.touch.driving #touch-action { bottom: calc(160px + env(safe-area-inset-bottom)); }
+body.touch[data-ride="balloon"] #touch-action { bottom: calc(282px + env(safe-area-inset-bottom)); } /* (over burn, vent and the view) */
 body.touch.driving #osm-credit { z-index: 10; }
 body.touch.postcard #touchui, body.touch.postcard #touch-more, body.touch.postcard #touch-action, body.touch.postcard #ride-touch { display: none !important; }
 body.atlas-open #touchui, body.atlas-open #touch-more, body.atlas-open #touch-action, body.atlas-open #ride-touch { display: none !important; }
@@ -223,27 +224,33 @@ body.nomouse .card .tkeys { display: block; }
   #touch-more { right: calc(166px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y: auto; }
   #touch-action { right: calc(166px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); }
   body.touch.driving #touch-action { bottom: calc(70px + env(safe-area-inset-bottom)); } /* (over the ride's buttons) */
+  body.touch[data-ride="balloon"] #touch-action { bottom: calc(194px + env(safe-area-inset-bottom)); }
   /* (centred over the place name, clear of the dock, wrapping — pinned at both ends it was squeezed
      narrower than its own line) */
   #hint { left: 50%; right: auto; bottom: calc(76px + env(safe-area-inset-bottom)); max-width: calc(100vw - 332px - 2 * env(safe-area-inset-right)); box-sizing: border-box;
     white-space: normal; text-align: center; transform: translate(-50%, 8px); }
   #hint.show { transform: translate(-50%, 0); }
   body.touch.driving #hint { bottom: calc(124px + env(safe-area-inset-bottom)); } /* (over Get out) */
-  body.touch[data-ride="fly"] #hint { max-width: calc(100vw - 460px - 2 * env(safe-area-inset-right)); } /* (clear of climb / sink) */
+  body.touch[data-ride="fly"] #hint, body.touch[data-ride="balloon"] #hint { max-width: calc(100vw - 460px - 2 * env(safe-area-inset-right)); } /* (clear of climb / sink) */
   #ride-touch { right: calc(166px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); }
   /* (the ride's readout beside its buttons, like a dial by the pedals: the live numbers only — how
      to drive came up as you got in) */
   body.touch.driving #vehud { left: auto !important; right: calc(228px + env(safe-area-inset-right)); transform: none !important; max-width: none; box-sizing: border-box; }
-  body.touch[data-ride="plane"] #vehud { right: calc(290px + env(safe-area-inset-right)); max-width: max(170px, calc(100vw - 540px)); }
+  body.touch[data-ride="plane"] #vehud, body.touch[data-ride="balloon"] #vehud { right: calc(290px + env(safe-area-inset-right)); max-width: max(170px, calc(100vw - 540px)); }
   body.touch #vehud .vkeys { display: none; }
   /* (…and the place name ends short of it) */
   body.touch.driving #place { max-width: calc(100vw - 380px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  body.touch[data-ride="plane"] #place { max-width: calc(100vw - 330px - max(170px, 100vw - 540px)); }
+  body.touch[data-ride="plane"] #place, body.touch[data-ride="balloon"] #place { max-width: calc(100vw - 330px - max(170px, 100vw - 540px)); }
   /* (the credit line from under the dock to the top edge, all of it readable: along the bottom a
      phone this size has no room for it beside the place name and a ride's buttons) */
   body.touch #osm-credit { top: calc(4px + env(safe-area-inset-top)); bottom: auto; right: calc(18px + env(safe-area-inset-right)); }
   body.touch #photo-bar { max-height: 43dvh; overflow-y: auto; }
   body.touch #photo-info { font-size: 12px; }
+}
+/* (a very small phone on its side, in a balloon's basket: no room for a hint beside burn, vent,
+   the view and Jump out — the hint gives way) */
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 640px) {
+  body.touch[data-ride="balloon"] #hint { display: none; }
 }
 /* A phone held upright: the bottom edge is the place name, the hint over it, the dock, and the
    ride's own buttons in a second column beside the dock. */
@@ -255,8 +262,11 @@ body.nomouse .card .tkeys { display: block; }
   body.touch #vehud .vkeys { display: none; }
   body.touch.driving #place { max-width: calc(50vw - 30px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* (the left half is the place's) */
   /* (climb / sink, boost, throttle or Drive beside the dock: the hint ends short of them) */
-  body.touch[data-ride="fly"] #hint, body.touch[data-ride="car"] #hint, body.touch[data-ride="boat"] #hint { right: calc(146px + env(safe-area-inset-right)); }
+  body.touch[data-ride="fly"] #hint, body.touch[data-ride="balloon"] #hint, body.touch[data-ride="car"] #hint, body.touch[data-ride="boat"] #hint { right: calc(146px + env(safe-area-inset-right)); }
   body.touch[data-ride="plane"] #hint, body.touch[data-ride="near"] #hint { right: calc(206px + env(safe-area-inset-right)); }
+  /* (a balloon's four numbers in two small lines under the dock, the place name giving way) */
+  body.touch[data-ride="balloon"] #vehud { max-width: calc(60vw - 16px); font-size: 12px !important; }
+  body.touch[data-ride="balloon"] #place { max-width: calc(40vw - 30px); }
 }
 @media (orientation: portrait) and (max-width: 340px) {
   /* (a plane's three numbers in two lines under the dock, the place name giving way) */

@@ -33,6 +33,7 @@ export const postParams = {
   // distance too — is a pencil underdrawing on paper, and walking paints it in round you
   sketchFar: false,
   sketchReach: 45, // m painted round you on foot (a plane paints wider)
+  photoReach: 22000, // m out to which a photo paints what it frames (the far sketch; at most SEEN_REACH)
   paperColor: '#f8f4ea',
   inkColor: '#2e2a3a',
   // resolution: the paint (brush) pass runs at this fraction of the frame (0.5 = the old half-res
@@ -346,13 +347,25 @@ export class WatercolorPost {
           vec2 ef = min(fe.x, fe.y) > 0.0 ? texture2D(tExploreFar, fu).rg : vec2(0.0);
           float e = max(ef.r, ef.g);
           if (inFine > 0.0) e = mix(e, max(texture2D(tExplore, eu).r, ef.r), inFine);
+          // Painting in, in two passes like a painter's: a pale first wash runs over the pencil, then
+          // the pigment deepens into it. The edge is ragged by the paper (fbm) and by brush strokes
+          // (long, thin noise laid one way); none of that noise reaches bare paper (e = 0) or finished
+          // paint (e = 1), so a painted place is always wholly painted.
           float n = fbm(wp.xz * 0.03) - 0.5 + (vnoise(wp.xz * 0.35 + wp.y) - 0.5) * 0.3;
-          float rev = smoothstep(0.34, 0.66, e + n * 0.5);
-          sketchAmt = (1.0 - rev) * uSketch;
+          vec2 sd = vec2(0.8, 0.6);
+          float stroke = vnoise(vec2(dot(wp.xz, sd) * 0.09, dot(wp.xz, vec2(-sd.y, sd.x)) * 0.9 + wp.y * 0.3)) - 0.5;
+          float v = e + (n * 0.75 + stroke * 0.35) * sin(3.14159 * clamp(e, 0.0, 1.0));
+          float wash = smoothstep(0.06, 0.42, v) * uSketch;
+          float rev = smoothstep(0.36, 0.88, v);
+          sketchAmt = 1.0 - wash;
+          float Lw = dot(c, vec3(0.299, 0.587, 0.114));
+          vec3 firstWash = mix(mix(vec3(Lw), c, 0.5), vec3(0.965, 0.95, 0.915), 0.22);
           float rim = rev * (1.0 - rev) * 4.0 * uSketch;
-          c = mix(c, c * c * 1.15, rim * 0.35);
+          vec3 wet = mix(c, c * c * 1.15, rim * 0.35); // pigment pooled at the wet edge
+          vec3 c0 = c; // (the pencil's tones come from the finished colour)
+          c = mix(firstWash, wet, rev);
           if (sketchAmt > 0.001) {
-            float L = dot(c, vec3(0.299, 0.587, 0.114));
+            float L = Lw;
             float tone = 1.0 - smoothstep(0.12, 0.92, L);
             vec2 hq = nuv * uRes.y; // view-anchored, like the paper noise
             float g = hatch(hq, 0.8, 6.5, 1.1) * smoothstep(0.3, 0.5, tone);
@@ -362,7 +375,7 @@ export class WatercolorPost {
             g *= (0.55 + 0.45 * p) * (1.0 - 0.55 * smoothstep(250.0, 1400.0, linZ(dS)));
             vec3 graphite = vec3(0.33, 0.32, 0.37);
             vec3 sk = mix(vec3(0.965, 0.95, 0.915), graphite, g * 0.55 + tone * 0.1);
-            sk = mix(sk, c, 0.1); // the faintest colour note, like a first wash
+            sk = mix(sk, c0, 0.1); // the faintest colour note, like a first wash
             c = mix(c, sk, sketchAmt);
           }
         } else if (uSketch > 0.001 && geo) {

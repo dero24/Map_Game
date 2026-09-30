@@ -23,7 +23,11 @@ import { buildSky, skyUniforms } from './world/sky';
 import { LifeClient, buildLifeBase, buildLifeInit, lifeInitSteps, lifeParams } from './sim/life';
 import { Ambience } from './audio/ambience';
 import { Journal } from './ui/journal';
-import { Explore } from './world/explore';
+import { Explore, SEEN_REACH } from './world/explore';
+import { AmbientBalloons } from './world/balloons';
+import { windKey } from './world/wind';
+import { propMaterial } from './render/propMaterial';
+import { compass } from './player/place';
 import { Atlas } from './ui/atlas';
 import { PhotoMode } from './ui/photo';
 import { Commissions } from './ui/commissions';
@@ -322,6 +326,8 @@ async function main() {
   await journal.load();
   // Paint as you explore: a global, persistent record of where you've been (pencil elsewhere).
   const explore = new Explore(json.origin);
+  // ?loop=paint: start in the loop under test — the world in pencil, a photo paints what it frames
+  if (params.get('loop') === 'paint') { postParams.sketch = true; postParams.sketchFar = true; }
   if (CAPTURE) postParams.sketch = params.get('sketch') === '1'; // regression shots stay fully painted unless asked
   else if (params.get('sketch') === '0') postParams.sketch = false;
   const walker = new Walker(walk, canvas);
@@ -459,7 +465,12 @@ async function main() {
   stream.onMount = () => { if (!vehicles.driving) settleWalker(); };
   let settleT = 1; // …and once a second on foot: whatever put you there (a slow frame, a bad door), you're never shut in
   // Rideable vehicles (E enter/exit; you paint your own with the brush, ui/brush.ts) — the walker rides along.
+  // other people's balloons: up at dawn and dusk, down on the beaches (world/balloons.ts)
+  const geoLL = { toLatLon: (x: number, z: number) => toLatLon(json.origin, x, z), fromLatLon: (lat: number, lon: number) => fromLatLon(json.origin, lat, lon) };
+  const ambientBalloons = new AmbientBalloons({ terrain: world.terrain, walk, mat: propMaterial(), geo: geoLL, hour: () => timeParams.hour });
+  worldRoot.add(ambientBalloons.group);
   const vehicles = new Vehicles({
+    ambient: ambientBalloons,
     walk, terrain: world.terrain, walker, root: worldRoot, toast,
     roads: () => stream.primRoads,
     tiles: () => stream.loaded.values(),
@@ -470,6 +481,26 @@ async function main() {
     geo: { toLatLon: (x, z) => toLatLon(json.origin, x, z), fromLatLon: (lat, lon) => fromLatLon(json.origin, lat, lon) },
   });
   { const prev = stream.onTile; stream.onTile = (a) => { prev?.(a); vehicles.onTile(a); }; } // re-hide taken driveway cars on remount
+  vehicles.windKey = windKey(json.origin.lat, json.origin.lon); // (the winds aloft: this region's)
+  // A first visit: a balloon waits on the nearest beach to where you start (tried as the terrain
+  // comes in; none inland). A balloon someone lands near you gets a word.
+  const isBeach = (x: number, z: number) => { const T = world.terrain, d = T.oceanDistAt(x, z); return d > 12 && d < 70 && T.heightAt(x, z) > 0.4 && T.sdfAt(x, z) > 3 && walk.buildingAt(x, z) < 0; };
+  let giftT = CAPTURE ? -1 : 0, giftTry = 0;
+  const landedSaid = new Set<string>();
+  const balloonNews = (dt: number) => {
+    if (giftT >= 0 && (giftT += dt) > 4 && (giftTry -= dt) <= 0) {
+      giftTry = 5;
+      if (vehicles.giftBalloon(spawn.x, spawn.z, isBeach) || giftT > 120) giftT = -1;
+    }
+    if (vehicles.driving) return;
+    for (const b of ambientBalloons.near(walker.x, walker.z, 2500)) {
+      const k = `${Math.round(b.x / 50)}:${Math.round(b.z / 50)}`;
+      if (!b.landed || landedSaid.has(k)) continue;
+      landedSaid.add(k);
+      const d = Math.hypot(b.x - walker.x, b.z - walker.z);
+      if (d > 60) toast(`a balloon has come down${world.terrain.oceanDistAt(b.x, b.z) < 80 ? ' on the beach' : ''}, ${d < 950 ? `${Math.round(d / 10) * 10} m` : `${(d / 1000).toFixed(1)} km`} ${compass(b.x - walker.x, b.z - walker.z)} — step in and fly it`);
+    }
+  };
 
   const lifeBase = buildLifeBase(paintWorld, walk);
   lifeBase.rhythm = rhythmFor(regionLook.climate, lifeBase.beachPts.length > 0); // the shape of this place's day
@@ -541,13 +572,13 @@ async function main() {
     sound: (k) => ambience?.ui(k),
     paintView: async () => {
       if (!postParams.enabled || !postParams.sketch || !postParams.sketchFar) return null;
-      // the frame's depth on a small grid (256 on the long side), unprojected through this frame's
+      // the frame's depth on a small grid (384 on the long side, a phone 256), unprojected through this frame's
       // camera — captured now, before the next frame moves it (render/seen.ts)
-      const a = camera.aspect, w = a >= 1 ? 256 : Math.max(16, Math.round(256 * a)), h = a >= 1 ? Math.max(16, Math.round(256 / a)) : 256;
+      const a = camera.aspect, L = MOBILE ? 256 : 384, /* (a phone lays it in sooner) */ w = a >= 1 ? L : Math.max(16, Math.round(L * a)), h = a >= 1 ? Math.max(16, Math.round(L / a)) : L;
       const inv = [...camera.projectionMatrixInverse.elements], cw = [...camera.matrixWorld.elements], off = { x: origin.x, y: 0, z: origin.z };
       const depth = await post.readSeen(w, h, camera.near, camera.far);
       const g = depth && unprojectDepth(depth, w, h, inv, cw, off, skyDepth(camera.near, camera.far));
-      return g && explore.paintSeenSliced(g, { x: cw[12] + off.x, y: cw[13], z: cw[14] + off.z }, { ground: (x, z) => Math.max(world.terrain.heightAt(x, z), 0) });
+      return g && explore.paintSeenSliced(g, { x: cw[12] + off.x, y: cw[13], z: cw[14] + off.z }, { reach: Math.min(SEEN_REACH, postParams.photoReach), ground: (x, z) => Math.max(world.terrain.heightAt(x, z), 0) });
     },
     uiOpen: () => !$('intro').classList.contains('hidden') || atlas.open,
     lock: () => { if (canLock()) walker.lock(); },
@@ -592,7 +623,7 @@ async function main() {
   hints.add(() => brush.hint());
   let brushT = 0;
   explore.onBloom = (n) => { if (n > 3 && brushT <= 0) { brushT = 1.6; ambience?.ui('brush'); } };
-  const VERB = { car: 'drive this', boat: 'take the helm of this', plane: 'fly this' } as const;
+  const VERB = { car: 'drive this', boat: 'take the helm of this', plane: 'fly this', balloon: 'step into this' } as const;
   // (on a phone the ride's own button, beside your thumb, says the verb: the hint just names it)
   hints.add(() => { const e = vehicles.enterable(); return e ? { key: thumbs() ? undefined : 'E', text: `${VERB[e.kind]} ${modelName(e.model)}`, pri: 10 } : null; });
   hints.add(() => {
@@ -647,6 +678,7 @@ async function main() {
     return null;
   });
   hints.add(() => (walkParams.fly && !vehicles.driving ? { key: thumbs() ? '✈' : 'F', text: thumbs() ? 'land · hold ▲ ▼ to climb and sink · push the stick far to go faster' : 'land · Space / C up and down · wheel for speed', pri: 3, once: 'fly' } : null));
+  hints.add(() => (vehicles.balloon && !vehicles.balloon.landed ? { key: thumbs() ? '▣' : 'P', text: 'the best seat for a painting — everything in frame, out to the horizon', pri: 4, once: 'balloon' } : null));
   hints.add(() => (simTime > 12 ? { key: thumbs() ? '☰' : 'M', text: 'your map, sketchbook & commissions', pri: 1, once: 'atlas' } : null));
   hints.add(() => (simTime > 70 && !vehicles.driving && !walkParams.fly && world.terrain.coverAt(walker.x, walker.z) === 30 ? { key: thumbs() ? '⋯' : 'R', text: `plant a ${SPECIES[garden.nextSpecies].label} here${thumbs() ? '' : ' (Shift+R: another seed)'}`, pri: 1, once: 'plant' } : null));
   hints.add(() => (simTime > 45 ? { key: thumbs() ? '▣' : 'P', text: 'frame a view and paint it into your sketchbook', pri: 1, once: 'photo' } : null));
@@ -858,7 +890,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, lift: ride, planInterior, registerPlan, plans, bld, life, stream, vehicles, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, streamParams, get spawn() { return spawn; }, at: atPos };
+  (window as unknown as Record<string, unknown>).__GAME__ = { ambientBalloons, walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, lift: ride, planInterior, registerPlan, plans, bld, life, stream, vehicles, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, streamParams, get spawn() { return spawn; }, at: atPos };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);
@@ -944,7 +976,7 @@ async function main() {
     if (e.code === 'KeyT') setHour((localHour(worldMs, tz) + 1) % 24);
     if ((e.target as HTMLElement)?.closest?.('input,textarea')) return;
     const playing = $('intro').classList.contains('hidden');
-    if (e.code === 'KeyP' && playing && !atlas.open && !vehicles.driving) togglePhoto();
+    if (e.code === 'KeyP' && playing && !atlas.open && (!vehicles.driving || vehicles.activeKind === 'balloon')) togglePhoto(); // (a balloon's basket is the best seat for a painting)
     if (e.code === 'KeyM' && playing) { if (photo.active) photo.toggle(false); atlas.toggle(); }
     if (e.code === 'KeyG' && playing && !atlas.open) { if (photo.active) photo.toggle(false); atlas.focusSearch(); }
     if (e.code === 'KeyR' && playing && !atlas.open && !photo.active && !vehicles.driving && !brush.active && !e.repeat) { if (e.shiftKey) garden.cycle(); else garden.plant(); }
@@ -964,7 +996,8 @@ async function main() {
   moreButton.onclick = () => setMore(touchMore.classList.contains('hidden'));
   $('tfly').onclick = () => { setMore(false); toggleFly(); };
   $('tgo').onclick = () => { if (playing() && !atlas.open) { setMore(false); atlas.focusSearch(true); } };
-  $('tphoto').onclick = () => { if (playing() && !atlas.open && !vehicles.driving) { setMore(false); togglePhoto(); } };
+  $('tphoto').onclick = () => { if (playing() && !atlas.open && (!vehicles.driving || vehicles.activeKind === 'balloon')) { setMore(false); togglePhoto(); } };
+  $('tview').onclick = () => vehicles.toggleView();
   $('tmenu').onclick = () => { setMore(false); atlas.toggle(); };
   $('tplant').addEventListener('click', () => {
     if (playing() && !atlas.open && !photo.active && !vehicles.driving && !brush.active) garden.plant();
@@ -1009,11 +1042,11 @@ async function main() {
   // does it too — getting out only once the ride has stopped (two taps by the boost button at speed
   // are a missed button, not a wish to step out onto the road).
   const touchAction = $('touch-action') as HTMLButtonElement;
-  const BOARD = { car: 'Drive', boat: 'Board', plane: 'Board' } as const;
+  const BOARD = { car: 'Drive', boat: 'Board', plane: 'Board', balloon: 'Step in' } as const;
   const touchActionState = () => {
     if (!playing() || atlas.open || photo.active || brush.active || (gui && !gui._hidden)) return null;
     const r = vehicles.ride;
-    if (r) return { id: `exit:${r.kind}`, label: r.kind === 'plane' && r.airborne ? 'Jump out' : 'Get out', aria: `get out of the ${modelName(r.model)}`, still: Math.abs(r.v) < 1 && !r.airborne };
+    if (r) return { id: `exit:${r.kind}`, label: (r.kind === 'plane' || r.kind === 'balloon') && r.airborne ? 'Jump out' : 'Get out', aria: `get out of the ${modelName(r.model)}`, still: Math.abs(r.v) < 1 && !r.airborne };
     const e = vehicles.enterable();
     return e ? { id: `enter:${e.kind}:${e.model}`, label: BOARD[e.kind], aria: `${BOARD[e.kind].toLowerCase()} the ${modelName(e.model)}`, still: true } : null;
   };
@@ -1030,18 +1063,19 @@ async function main() {
     if (action) touchAction.setAttribute('aria-label', action.aria);
     // (a map, a photo, the brush or the panel over the world: the drawer has closed behind it)
     if (atlas.open || photo.active || brush.active || (gui && !gui._hidden)) setMore(false);
-    const kind = vehicles.activeKind, flying = walkParams.fly && !kind;
+    const kind = vehicles.activeKind, flying = walkParams.fly && !kind, climbs = flying || kind === 'balloon'; // (▲ ▼: climb and sink; a balloon's burner and vent)
     document.body.classList.toggle('driving', !!kind);
     // (which of the ride's buttons stand beside the dock: a phone held upright ends the hint short of them)
     const beside = kind ?? (flying ? 'fly' : action ? 'near' : '');
     if (document.body.dataset.ride !== beside) document.body.dataset.ride = beside;
     $('ride-touch').classList.toggle('hidden', !kind && !flying);
-    $('ride-touch').classList.toggle('fly', flying);
+    $('ride-touch').classList.toggle('fly', climbs);
+    $('tview').classList.toggle('hidden', kind !== 'balloon');
     $('trboost').classList.toggle('hidden', kind !== 'car' && kind !== 'boat');
     for (const id of ['tthrottle-up', 'tthrottle-down']) $(id).classList.toggle('hidden', kind !== 'plane');
-    for (const id of ['tfly-up', 'tfly-down']) $(id).classList.toggle('hidden', !flying);
+    for (const id of ['tfly-up', 'tfly-down']) $(id).classList.toggle('hidden', !climbs);
     // (a button that has gone lets go of whatever it held)
-    if (!flying) for (const stop of releaseFly) stop();
+    if (!climbs) for (const stop of releaseFly) stop();
     if (kind !== 'car' && kind !== 'boat') releaseBoost();
     if (kind !== 'plane') for (const stop of releaseThrottle) stop();
     $('toptions').setAttribute('aria-expanded', String(!!gui && !gui._hidden));
@@ -1248,6 +1282,8 @@ async function main() {
     stream.update(walker.x, walker.z);
     horizon.update(walker.x, walker.z);
     kerbCars.update(walker.x, walker.z);
+    if (!CAPTURE) ambientBalloons.update(walker.x, walker.z, dt); // (they keep the world's clock: never in a capture)
+    if (playing()) balloonNews(dt);
     groundT -= dt;
     if (groundT <= 0) { groundT = 1.5; streamedGround(); } // (coarse mounts have no hook)
     realCells.clear();
@@ -1363,7 +1399,7 @@ async function main() {
     if (atlas.open && (journalTimer -= dt) < 0) {
       journalTimer = 0.5;
       const st = explore.stats();
-      journal.render(`<b>${st.km2 < 1 ? st.km2.toFixed(3) : st.km2.toFixed(2)} km²</b> painted by your walks (${(st.session * (8 * Math.cos((json.origin.lat * Math.PI) / 180)) ** 2 / 1e6).toFixed(3)} km² today)<br>${commissions.state.done.length} commissions painted · ${Object.values(commissions.state.spotted).reduce((a, l) => a + l.length, 0)} vehicle and animal types spotted · ${garden.plants.length} plants in your garden<br>`);
+      journal.render(`<b>${st.km2 < 1 ? st.km2.toFixed(3) : st.km2.toFixed(2)} km²</b> painted by your walks (${(st.session * (8 * Math.cos((json.origin.lat * Math.PI) / 180)) ** 2 / 1e6).toFixed(3)} km² today)${st.photoKm2 > 0.01 ? ` · <b>${st.photoKm2 < 10 ? st.photoKm2.toFixed(1) : Math.round(st.photoKm2)} km²</b> by your photos` : ''}<br>${commissions.state.done.length} commissions painted · ${Object.values(commissions.state.spotted).reduce((a, l) => a + l.length, 0)} vehicle and animal types spotted · ${garden.plants.length} plants in your garden<br>`);
     }
     brushT -= dt;
     const blocked = !$('intro').classList.contains('hidden') || atlas.open;

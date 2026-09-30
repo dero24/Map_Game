@@ -40,8 +40,8 @@ describe('paint as you explore', () => {
 
 describe('a photo paints what it frames (paintSeen, the far window)', () => {
   const O = { lat: 40.36, lon: -73.97 };
-  // ~3 s of frames at (x, z): every bloom is in by then
-  const settle = (e: Explore, x = 0, z = 0, h = 1.6) => { for (let i = 0; i < 60; i++) e.update(x, z, h, 1 / 20); };
+  // ~6 s of frames at (x, z): every bloom is in by then (the farthest start 2.2 s late and take 2.4 s)
+  const settle = (e: Explore, x = 0, z = 0, h = 1.6) => { for (let i = 0; i < 120; i++) e.update(x, z, h, 1 / 20); };
   const photo = (e: Explore, g: SeenGrid, eye = { x: 0, z: 0 }) => { const r = e.paintSeen(g, eye); settle(e, eye.x, eye.z); return r; };
   // a hand-made grid: samples at world (x, z) on the ground, view depth = how far north they are
   const grid = (w: number, h: number, at: (i: number, j: number) => [number, number] | null, foot: number): SeenGrid => {
@@ -157,8 +157,9 @@ describe('a photo paints what it frames (paintSeen, the far window)', () => {
   });
 
   it('walker paint is unchanged, byte for byte', () => {
-    // pinned from the implementation before photos could paint (2026-09-29): the texture window
-    // after a stroll, a run that re-centres it and a low flight
+    // pinned 2026-09-30 when the walk's bloom slowed into a wash (20 Hz strokes, ~1.5 s underfoot):
+    // the texture window after a (very fast) stroll, a run that re-centres it and a low flight —
+    // too quick for any cell to reach "painted", which a real walk does (the tests above)
     const e = new Explore(O);
     let x = 0, z = 0, bloomed = 0;
     e.onBloom = (n) => (bloomed += n);
@@ -168,10 +169,10 @@ describe('a photo paints what it frames (paintSeen, the far window)', () => {
     const d = e.texture.image.data as Uint8Array;
     let hash = 0x811c9dc5;
     for (let i = 0; i < d.length; i++) hash = Math.imul(hash ^ d[i], 0x01000193) >>> 0;
-    expect(hash).toBe(3282984800);
-    expect(e.stats().painted).toBe(2828);
-    expect(bloomed).toBe(2828);
-    expect([e.valueAt(x, z), e.valueAt(48, 20), e.valueAt(900, -360)]).toEqual([145, 255, 18]);
+    expect(hash).toBe(2619836985);
+    expect(e.stats().painted).toBe(0);
+    expect(bloomed).toBe(0);
+    expect([e.valueAt(x, z), e.valueAt(48, 20), e.valueAt(900, -360)]).toEqual([70, 137, 6]);
   });
 });
 

@@ -120,6 +120,32 @@ export class PhotoMode {
     void this.shoot();
   }
   private statusT?: number;
+  /** ' · …the size of Manhattan' the first time your painted area passes one. */
+  private milestone() {
+    const st = this.g.explore.stats(), km2 = st.km2 + st.photoKm2;
+    let said = 0;
+    try { said = Number(localStorage.getItem(MS_KEY) ?? 0); } catch { /* */ }
+    let hit = '';
+    for (let i = said; i < MILESTONES.length && km2 >= MILESTONES[i][1]; i++) { hit = MILESTONES[i][0]; said = i + 1; }
+    if (!hit) return '';
+    try { localStorage.setItem(MS_KEY, String(said)); } catch { /* */ }
+    return ` — you've painted an area the size of ${hit}`;
+  }
+  /** ' — the pencil is to the north-east': the way with the most unpainted ground (the far record). */
+  private pencilWay() {
+    const E = this.g.explore, w = this.g.walker, words = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+    let best = -1, bare = 0;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      let n = 0;
+      for (const d of [300, 800, 1600, 3200, 6000]) {
+        const x = w.x + Math.sin(a) * d, z = w.z - Math.cos(a) * d, v = Math.max(E.texelAt(x, z), E.texelAt(x, z, true));
+        if (v >= 0 && v < 120) n++;
+      }
+      if (n > bare) (bare = n), (best = k);
+    }
+    return best < 0 ? '' : ` — the pencil is to the ${words[best]}`;
+  }
 
   private async shoot() {
     const src = this.g.canvas;
@@ -135,7 +161,15 @@ export class PhotoMode {
     // (the far sketch) whatever's in frame — the distance too — blooms into colour in the world,
     // read from this very frame's depth; the brush sounds as the colour runs out
     const framed = this.g.paintView().catch(() => null);
-    void framed.then((s) => { if (s?.cells) this.g.sound('brush'); });
+    // the held breath: the viewfinder's marks lift while the colour runs out, the brush sounds on
+    // through the run, a chime when the farthest of it lands
+    void framed.then((s) => {
+      if (!s?.cells) return;
+      const bare = this.el.classList.contains('bare');
+      if (!bare) this.el.classList.add('bare');
+      for (const at of [0, 900, 1900, 2900]) setTimeout(() => this.g.sound('brush'), at);
+      setTimeout(() => { if (!bare && this.active) this.el.classList.remove('bare'); this.g.sound('chime'); }, 4200);
+    });
     // flash + brush right away (the encode below takes a moment)
     this.flashEl.classList.remove('go');
     void this.flashEl.offsetWidth;
@@ -182,7 +216,9 @@ export class PhotoMode {
     const thumbs = document.body.classList.contains('nomouse'); // (a phone names its buttons, not keys)
     if (painted.length) setTimeout(() => this.g.toast(`almanac: painted in — ${painted.slice(0, 3).join(', ')}${painted.length > 3 ? ` and ${painted.length - 3} more` : ''}${yours ? ` · yours to paint now: ${thumbs ? '✎' : 'B'} for your brush` : ''}`), done ? 2600 : 1800);
     const seen = await framed;
-    const inWorld = seen?.cells ? `painted in what you framed — out to ${far(seen.reach)}` : '';
+    // what the shot did, in real terms; a shot that added nothing says where the pencil still is
+    const inWorld = seen?.cells ? `painted in what you framed — out to ${far(seen.reach)} · ${seen.km2 < 1 ? seen.km2.toFixed(2) : seen.km2 < 10 ? seen.km2.toFixed(1) : Math.round(seen.km2)} km² in colour${this.milestone()}`
+      : seen ? `already in colour here${this.pencilWay()}` : '';
     if (done) {
       this.com.complete(done, p.id);
       this.g.sound('chime');
@@ -193,5 +229,8 @@ export class PhotoMode {
     this.status();
   }
 }
+// the area you've painted, in things you know (each said once)
+const MILESTONES: [string, number][] = [['a city park', 1], ['Central Park', 3.4], ['a small town', 10], ['Manhattan', 59], ['a county', 1000]];
+const MS_KEY = 'map-game.milestones.v1';
 const far = (m: number) => (m < 1000 ? `${Math.max(10, Math.round(m / 10) * 10)} m` : `${(m / 1000).toFixed(m < 9950 ? 1 : 0)} km`);
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);

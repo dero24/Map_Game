@@ -2,6 +2,42 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-09-30 (later) — Balloons, painting to the horizon, and the core loop reviewed
+
+- **Paint as you walk, smoother** (the far sketch). The walk's colour stepped in at 10 Hz in big
+  jumps — near you each pixel popped. Now strokes at 20 Hz, ~1.5 s blank to full underfoot
+  (`bloomRate`), and the composite paints in two passes: a pale first wash over the pencil, then
+  the pigment deepening, its edge ragged by paper and brush-stroke noise that never touches bare
+  paper or finished paint. (The walker pin in tests/explore.test.ts re-pinned on purpose.)
+- **A photo paints the whole frame.** Measured headless from 150 m over Sea Bright (the rendered
+  frame re-read at 480×270, each visible pixel's paint cell checked): bare pixels were 0.1–0.2%
+  within 2 km, **3.0% at 4–8 km, 5.2% at 8–15 km and 99% past 15 km** — the "canvas clouds" were
+  the far field's sampling gaps and everything past the reach. Now a closing pass over the stamps
+  (`Stamps.close`), a 48 km far window, reach up to 22 km under your control (panel: "a photo
+  paints out to"), a 384 readback on a PC: **0.1–0.4% out to 15 km**, 22% past it (past 22 km).
+  The bloom is slower (2.4 s a cell, the farthest 2.2 s late) so the colour is seen running out;
+  the viewfinder's marks lift and the brush sounds through the run, a chime as it lands.
+- **Hot air balloons** (docs/agent/gameplay.md "Hot air balloons"): a foundry family
+  (`assets/balloon.ts`), real buoyancy physics with the lag kept readable (`balloonPhysics.ts`),
+  winds aloft that veer with height (`wind.ts`), first person in the basket with third person on
+  V / ⤢, Space / ▲ burn, C / ▼ vent, an assist that holds the height you let go at, photo mode in
+  the basket. Other people's balloons fly at dawn and dusk and come down on beaches (step in:
+  yours); on a first visit one waits on the nearest beach (Sea Bright's). Paint one from life and
+  the brush paints your own on open ground.
+- **Any colour**: every ride's swatch row in the brush has a free colour picker; a balloon a
+  second one for its stripes.
+- **The core loop reviewed** (docs/CORE_LOOP_REVIEW.md, a designer's read of the code). Built from
+  its list: photo paint counted (`stats().photoKm2`, the journal, the arrival card); the shot says
+  its reach and area, or where the pencil still is; the held breath; area milestones; the balloon
+  and its card; `?loop=paint` starts in this loop.
+- **Neighbourhoods** — research only so far: docs/NEIGHBOURHOODS.md (why Rumson reads like its
+  neighbours, the open data that tells them apart, the model, a test framework, phases).
+- Verified: typecheck; `npm test` 481 tests in 51 files; build; tools/hud-audit.mjs 120 layouts
+  (with a balloon state); the montage (shots/shore-montage.jpg: the beach balloon, someone's
+  balloon aloft and down on the beach, the basket at 160 m, the envelope from inside, third
+  person, pencil before / colour after a photo — 199 km² out to 22 km — phones in the basket); PC
+  playtest (drive, walkabout) pass with the same numbers as before.
+
 ## 2026-09-30 — Phones: the touch controls reviewed, a game that sleeps when put away, the city that crashed Chrome
 
 - **The touch controls (the entry below), reviewed and fixed.**

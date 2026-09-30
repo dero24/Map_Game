@@ -18,7 +18,7 @@ import type { WalkWorld } from '../player/collision';
 import { propMaterial } from '../render/propMaterial';
 import { U } from '../render/shared';
 import { postParams } from '../render/post';
-import { placeBoat, placeCar, openWater, compass, HULL, type Placement, type Spot } from '../player/place';
+import { placeBoat, placeCar, placeBalloon, openWater, compass, HULL, type Placement, type Spot } from '../player/place';
 import { boatDims, BOAT_TYPES, type BoatType } from '../assets/kit';
 
 import { PAINTABLE } from './commissions';
@@ -34,16 +34,18 @@ const BOLD = [0xc8432c, 0x2f5f9e, 0xe2a52a, 0x3f7f52];
 const SWATCHES: Record<Fam, number[]> = {
   boat: [...BOLD, 0xf4f1ea, 0x2a2c30],
   car: [...BOLD, 0xf2f2ee, 0x26282c],
+  balloon: [0xd8412f, 0xf2b632, 0x2f6fb5, 0x3f9a5c, 0x7b3f9e, 0xe86a92],
 };
 const boldFor = (type: string) => { let h = 7; for (let i = 0; i < type.length; i++) h = (h * 31 + type.charCodeAt(i)) >>> 0; return BOLD[h % BOLD.length]; };
-const SAMPLE: Record<Fam, string> = { boat: 'skiff', car: 'sedan' }; // a pencil chip's picture
-const FITS: Record<Site, Fam | null> = { water: 'boat', street: 'car', ground: null };
+const SAMPLE: Record<Fam, string> = { boat: 'skiff', car: 'sedan', balloon: 'gores' }; // a pencil chip's picture
+const FITS: Record<Site, Fam | null> = { water: 'boat', street: 'car', ground: 'balloon' };
+const hex = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
 const RANGE = 160; // how far the brush reaches (m)
 const WASH_S = 1.3; // an unhurried wash, seconds (rubbing: up to three times the pace)…
 const DRY_S = 0.9; // …then it dries: the wet colour lightens into the real thing…
 const FX_S = 1.8; // …as it settles onto the water (a ring runs out) and the view leans in
 const STORE = 'map-game.brush.v1';
-interface Saved { recent: string[]; colors: Record<string, number>; used?: boolean }
+interface Saved { recent: string[]; colors: Record<string, number>; stripes?: Record<string, number>; used?: boolean }
 
 const CSS = `
 #brush { position: fixed; left: 50%; bottom: calc(32px + env(safe-area-inset-bottom)); /* (above the map credit: it stays readable) */ transform: translateX(-50%); z-index: 21; display: none; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; color: #3a3346; font-family: Georgia, serif; }
@@ -58,6 +60,9 @@ const CSS = `
 #brush .sw { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid rgba(58,51,70,0.35); cursor: pointer; padding: 0; }
 #brush .sw.sel { box-shadow: 0 0 0 2px rgba(245,239,225,0.95), 0 0 0 3.5px #3a3346; }
 #brush .rotate { min-width: 42px; min-height: 40px; border: 1px solid rgba(58,51,70,0.2); border-radius: 4px; background: rgba(255,255,255,0.5); color: inherit; font: 22px Georgia, serif; touch-action: manipulation; }
+#brush .pick { width: 26px; height: 26px; padding: 0; border: 1.5px dashed rgba(58,51,70,0.45); border-radius: 50%; background: conic-gradient(#d8412f, #f2b632, #3f9a5c, #2f6fb5, #7b3f9e, #d8412f); cursor: pointer; }
+#brush .pick::-webkit-color-swatch-wrapper { padding: 0; opacity: 0; }
+#brush .stripe { display: flex; align-items: center; gap: 4px; font-size: 11px; font-style: italic; opacity: 0.85; }
 #brush .x { font: inherit; font-size: 18px; border: none; background: none; cursor: pointer; color: inherit; padding: 4px 8px; }
 #brush .status { background: rgba(245,239,225,0.9); border: 1px solid rgba(58,51,70,0.15); border-radius: 12px; padding: 4px 14px; font-size: 14px; font-style: italic; white-space: nowrap; max-width: 92vw; overflow: hidden; text-overflow: ellipsis; }
 #brush-dot { position: fixed; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border: 1.5px solid rgba(58,51,70,0.65); border-radius: 50%; display: none; pointer-events: none; z-index: 20; }
@@ -94,7 +99,7 @@ export class Brush {
   private saved: Saved = { recent: [], colors: {} };
   private ghost: { key: string; obj: THREE.Group; spot: Spot | null; shown: { x: number; z: number; yaw: number } | null } | null = null;
   private mat = propMaterial({ wash: true });
-  private washing: { r: number; max: number; rub: number; rate: number; at: THREE.Vector3; kind: Kind; spot: Spot; color: number } | null = null;
+  private washing: { r: number; max: number; rub: number; rate: number; at: THREE.Vector3; kind: Kind; spot: Spot; color: number; colors?: number[] } | null = null;
   private drying: { t: number; x: number; z: number; boat: boolean; toast: string; obj: THREE.Object3D; splash: boolean } | null = null;
   private pale = 0; // how far the world has paled round the sketch
   /** The sketch pass's scene (post.ts draws it over the painting); its root follows the world's. */
@@ -272,6 +277,28 @@ export class Brush {
         b.onclick = () => this.setColor(k, c);
         sws.appendChild(b);
       }
+      // …or any colour at all (your own, not a livery)
+      const any = document.createElement('input');
+      any.type = 'color';
+      any.className = 'pick';
+      any.value = hex(cur);
+      any.title = 'any colour';
+      any.setAttribute('aria-label', 'paint it any colour');
+      any.onchange = () => this.setColor(k, parseInt(any.value.slice(1), 16));
+      sws.appendChild(any);
+      if (k.family === 'balloon') {
+        // a balloon has a second colour: its stripes, bands or diamonds
+        const st = document.createElement('label');
+        st.className = 'stripe';
+        const p2 = document.createElement('input');
+        p2.type = 'color';
+        p2.className = 'pick';
+        p2.value = hex(this.stripe(k));
+        p2.setAttribute('aria-label', 'the balloon\'s second colour');
+        p2.onchange = () => { (this.saved.stripes ??= {})[`${k.family}:${k.type}`] = parseInt(p2.value.slice(1), 16); this.save(); this.build(); };
+        st.append('stripes', p2);
+        sws.appendChild(st);
+      }
       this.rowEl.appendChild(sws);
     }
     const rotate = document.createElement('button');
@@ -295,7 +322,10 @@ export class Brush {
     this.build();
   }
   rotate(step = Math.PI / 4) { if (!this.washing && !this.drying) this.turn += step; }
-  private color(k: Kind) { return this.saved.colors[`${k.family}:${k.type}`] ?? boldFor(k.type); }
+  private color(k: Kind) { return this.saved.colors[`${k.family}:${k.type}`] ?? (k.family === 'balloon' ? 0xd8412f : boldFor(k.type)); }
+  /** A balloon's second colour (its stripes): chosen, else one that sits well with the first. */
+  private stripe(k: Kind) { const c = this.color(k); return this.saved.stripes?.[`${k.family}:${k.type}`] ?? (c === 0xf2b632 ? 0x2f6fb5 : 0xf2b632); }
+  private colors(k: Kind) { return k.family === 'balloon' ? [this.color(k), this.stripe(k), 0xf4f1ea] : undefined; }
   private setColor(k: Kind, c: number) {
     this.saved.colors[`${k.family}:${k.type}`] = c;
     this.save();
@@ -377,8 +407,8 @@ export class Brush {
     const dims = k.family === 'boat' && (BOAT_TYPES as string[]).includes(k.type) ? boatDims(k.type as BoatType) : null;
     const hull = dims ? { room: dims.L / 2 + 0.8, depth: dims.draft + 0.15 } : HULL;
     // never on top of what's already there: the moored boats and your rides; the parked cars
-    const R = k.family === 'boat' ? hull.room + 3.2 : 4.2;
-    const near = (k.family === 'boat' ? ['moored-boats:', 'life-boat:', 'ride-boat:'] : ['parked-cars:', 'kerb-cars:', 'life-car:', 'ride-car:'])
+    const R = k.family === 'boat' ? hull.room + 3.2 : k.family === 'balloon' ? 18 : 4.2;
+    const near = (k.family === 'boat' ? ['moored-boats:', 'life-boat:', 'ride-boat:'] : k.family === 'balloon' ? ['balloon:', 'ride-balloon:'] : ['parked-cars:', 'kerb-cars:', 'life-car:', 'ride-car:'])
       .flatMap((p) => this.g.instances(p, x, z, (k.family === 'boat' ? 40 : 20) + R + 2));
     const clear = (px: number, pz: number) => !near.some((q) => Math.hypot(q.x - px, q.z - pz) < R);
     // the sketch where you can see it (Round 9: "never snap it out of view"), clear of the brush's
@@ -443,6 +473,14 @@ export class Brush {
       }
       return { ok: false, why: this.farWhy.why };
     }
+    if (k.family === 'balloon') {
+      for (const free of [tries[1], tries[2], tries[3]]) {
+        const p = placeBalloon({ ...w, free }, x, z, yaw + this.turn, 30);
+        if (p.ok) return p;
+      }
+      if (placeBalloon({ ...w, free: clear }, x, z, yaw, 30).ok) return { ok: false, why: touch ? 'tap open ground where you can see it' : 'aim at open ground where you can see it' };
+      return placeBalloon(w, x, z, yaw, 30);
+    }
     // a car turned round takes the other lane
     const cy = yaw + (Math.cos(this.turn) < 0 ? Math.PI : 0);
     let c = placeCar({ ...w, free: tries[1] }, x, z, cy, 20);
@@ -454,13 +492,17 @@ export class Brush {
   /** Where a kind you haven't painted from life can be found near you. */
   private where(f: Fam) {
     const w = this.g.walker;
-    const from = f === 'boat' ? ['moored-boats:', 'life-boat:'] : ['parked-cars:', 'kerb-cars:', 'life-car:'];
+    const from = f === 'boat' ? ['moored-boats:', 'life-boat:'] : f === 'balloon' ? ['balloon:'] : ['parked-cars:', 'kerb-cars:', 'life-car:'];
     let best: { x: number; z: number; d: number } | null = null;
-    for (const p of from) for (const q of this.g.instances(p, w.x, w.z, f === 'boat' ? 2500 : 600)) {
+    for (const p of from) for (const q of this.g.instances(p, w.x, w.z, f === 'boat' ? 2500 : f === 'balloon' ? 8000 : 600)) {
       const d = Math.hypot(q.x - w.x, q.z - w.z);
       if (!best || d < best.d) best = { x: q.x, z: q.z, d };
     }
     const what = f === 'boat' ? 'boats' : 'cars';
+    if (f === 'balloon') {
+      if (!best) return 'paint a balloon from life first (P) — they fly at dawn and dusk and come down on beaches';
+      return `paint a balloon from life first (P) — one is ${best.d < 950 ? `${Math.round(best.d / 10) * 10} m` : `${(best.d / 1000).toFixed(1)} km`} ${compass(best.x - w.x, best.z - w.z)}`;
+    }
     if (!best) return `paint a ${f} from life first (P) — ${f === 'boat' ? 'boats moor at docks and marinas' : 'cars park along streets and driveways'}`;
     const far = best.d < 30 ? 'right here' : `${best.d < 950 ? `${Math.round(best.d / 10) * 10} m` : `${(best.d / 1000).toFixed(1)} km`} ${compass(best.x - w.x, best.z - w.z)}`;
     return `paint a ${f} from life first (P) — ${f === 'boat' ? 'moored' : 'parked'} ${what} ${far}`;
@@ -474,10 +516,10 @@ export class Brush {
     this.ghost = null;
   }
   private sketch(k: Kind) {
-    const c = this.color(k), key = `${k.family}:${k.type}:${c}`;
+    const c = this.color(k), key = `${k.family}:${k.type}:${c}:${this.colors(k)?.join(',') ?? ''}`;
     if (this.ghost?.key === key) return this.ghost;
     this.dropGhost();
-    const b = this.veh.build(k.family, k.type, c, this.veh.nextSeed, this.mat);
+    const b = this.veh.build(k.family, k.type, c, this.veh.nextSeed, this.mat, this.colors(k));
     b.obj.traverse((m) => m.layers.enable(1));
     b.obj.visible = false;
     this.root.add(b.obj);
@@ -506,14 +548,14 @@ export class Brush {
     let max = 0;
     for (let i = 0; i < 8; i++) max = Math.max(max, at.distanceTo(new THREE.Vector3(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z)));
     const s = gh.shown ?? gh.spot;
-    this.washing = { r: 0, max: max + 0.9, rub: 0, rate: 0, at, kind: k, spot: { ...gh.spot, x: s.x, z: s.z, yaw: s.yaw }, color: this.color(k) };
+    this.washing = { r: 0, max: max + 0.9, rub: 0, rate: 0, at, kind: k, spot: { ...gh.spot, x: s.x, z: s.z, yaw: s.yaw }, color: this.color(k), colors: this.colors(k) };
     this.g.sound('brush');
   }
   /** The wash has covered it: it's real now (the sketch pass fades off it as it dries). */
   private dry() {
     const w = this.washing!;
     this.washing = null;
-    const made = this.veh.paint(w.kind.family, w.kind.type, w.spot, w.color);
+    const made = this.veh.paint(w.kind.family, w.kind.type, w.spot, w.color, w.colors);
     const key = `${w.kind.family}:${w.kind.type}`;
     this.saved.recent = [key, ...this.saved.recent.filter((r) => r !== key)].slice(0, 12);
     this.saved.used = true;
@@ -530,7 +572,7 @@ export class Brush {
     const name = modelName(made.model);
     this.drying = {
       t: 0, x: made.x, z: made.z, boat, obj: made.obj, splash: false,
-      toast: boat ? `your ${name} — walk out to it to go aboard` : `your ${name} — ${document.body.classList.contains('nomouse') ? (near ? 'tap Drive to get in' : 'walk over, then tap Drive') : near ? 'E to get in' : 'walk over, then E'}`,
+      toast: boat ? `your ${name} — walk out to it to go aboard` : `your ${name} — ${document.body.classList.contains('nomouse') ? (near ? `tap ${w.kind.family === 'balloon' ? 'Step in' : 'Drive'} to get in` : `walk over, then tap ${w.kind.family === 'balloon' ? 'Step in' : 'Drive'}`) : near ? 'E to get in' : 'walk over, then E'}`,
     };
   }
 

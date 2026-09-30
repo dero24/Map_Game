@@ -24,15 +24,17 @@ const TEX = 512; // texels per side (8 m each)
 const FULL = 200; // a cell counts as "painted" at this value
 const AREA = BLOCK * BLOCK; // cells per block (a far block holds two layers: photo paint, then the share)
 export const FAR = 8; // fine cells per far cell side (64 mercator m)
-const FAR_WIN = 32768; // local metres covered by the far window
-const FAR_TEX = 512; // its texels per side (64 m each)
+const FAR_WIN = 49152; // local metres covered by the far window
+const FAR_TEX = 768; // its texels per side (64 m each)
 const FAR_STEP = 1024; // the far window re-centres (snapped to this) once you're this far off its centre
-/** How far out (m, level) a photo paints: inside the far window wherever you stand in it. */
-export const SEEN_REACH = 15000;
+/** How far out (m, level) a photo paints at most (and by default): inside the far window wherever
+ *  you stand in it (half its width less a re-centring step's diagonal). */
+export const SEEN_REACH = 22000;
 /** Nearer than this (m, level) a photo paints the 8 m cells; past it, the 64 m far cells. */
 export const SEEN_SPLIT = 2000;
-const SEEN_DUR = 1.1; // s: one cell's bloom, blank to full
-const SEEN_DELAY = 0.8; // s: the colour runs out from you — the farthest cells start this much later
+const SEEN_DUR = 2.4; // s: one cell's bloom, blank to full (slow enough to be seen soaking in)
+const SEEN_DELAY = 2.2; // s: the colour runs out from you — the farthest cells start this much later
+const TICK = 0.05; // s between walking paint strokes (and uploads): small steps, a smooth bloom
 
 export const mercX = (lon: number) => lon * K;
 export const mercY = (lat: number) => R_EARTH * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
@@ -44,10 +46,11 @@ export const farKey = (bx: number, by: number) => `f:${bx},${by}`;
 export function revealRadius(heightAboveGround: number, reach = 45) {
   return Math.min(Math.max(450, reach), reach + Math.max(0, heightAboveGround - 2) * 0.7);
 }
-/** Bloom rate (value/s) for a cell `d` m from the walker inside radius `r`: fast near, slow at the rim. */
+/** Bloom rate (value/s) for a cell `d` m from the walker inside radius `r`: fast near (~1.5 s blank
+ *  to full underfoot), slow at the rim — a wash soaking in, not a switch. */
 export function bloomRate(d: number, r: number) {
   if (d >= r) return 0;
-  return 320 * Math.sqrt(1 - d / r) + 40;
+  return 150 * Math.sqrt(1 - d / r) + 24;
 }
 
 /** Do two neighbouring samples of a frame (inverse view depths `a`, `b`; `p` before a and `n` after
@@ -65,7 +68,7 @@ export function joined(a: number, b: number, p: number, n: number) {
   return Math.abs(g) <= 2.5 * Math.max(Math.abs(gp), Math.abs(gn));
 }
 
-export interface ExploreStats { painted: number; session: number; km2: number }
+export interface ExploreStats { painted: number; session: number; km2: number; photoKm2: number }
 /** What a photo painted: cells newly coloured (fine and far), their area, how far out it reached (m). */
 export interface SeenPaint { cells: number; km2: number; reach: number }
 /** Where a photo was taken from (world metres; `y` the eye's height, for `ground`). */
@@ -106,6 +109,38 @@ class Stamps {
       }
     }
   }
+  private at(i: number, j: number) {
+    const bx = Math.floor(i / BLOCK), by = Math.floor(j / BLOCK);
+    const st = this.m.get((bx + NOFF) * NSPAN + (by + NOFF));
+    return st ? st[(j - by * BLOCK) * BLOCK + i - bx * BLOCK] : 255;
+  }
+  /** Close the pinholes and hairline gaps a frame's sampling leaves between its discs (the far
+   *  field's "canvas clouds"): a bare cell with at least `need` of its 8 neighbours stamped is
+   *  stamped too, starting with the latest of them — `passes` times. An edge (3 of 8) never grows,
+   *  so what a building hides stays hidden. A slice per block (a generator). */
+  *close(need: number, passes: number): Generator<void, void> {
+    for (let p = 0; p < passes; p++) {
+      const add: number[] = [];
+      for (const [id, st] of this.m) {
+        const bx = Math.floor(id / NSPAN) - NOFF, by = (id % NSPAN) - NOFF;
+        for (let n = 0; n < AREA; n++) {
+          if (st[n] !== 255) continue;
+          const i = bx * BLOCK + (n % BLOCK), j = by * BLOCK + Math.floor(n / BLOCK);
+          let c = 0, hi = 0;
+          for (let dj = -1; dj <= 1; dj++)
+            for (let di = -1; di <= 1; di++) {
+              if (!di && !dj) continue;
+              const v = this.at(i + di, j + dj);
+              if (v !== 255) { c++; if (v > hi) hi = v; }
+            }
+          if (c >= need) add.push(id, n, hi);
+        }
+        yield;
+      }
+      if (!add.length) return;
+      for (let k = 0; k < add.length; k += 3) this.m.get(add[k])![add[k + 1]] = add[k + 2];
+    }
+  }
 }
 
 export class Explore {
@@ -127,6 +162,7 @@ export class Explore {
   private saveT = 3;
   private painted = 0;
   private session = 0;
+  private photoKm2 = 0; // what photos brought to full colour (km², fine and far), kept apart from the walks
   private fineDirty = new Set<string>(); // fine blocks whose texels need a refill
   // the far layer
   private farX0 = Infinity; private farZ0 = Infinity;
@@ -227,7 +263,7 @@ export class Explore {
 
   stats(): ExploreStats {
     const a = (CELL * this.cosLat) ** 2;
-    return { painted: this.painted, session: this.session, km2: (this.painted * a) / 1e6 };
+    return { painted: this.painted, session: this.session, km2: (this.painted * a) / 1e6, photoKm2: this.photoKm2 };
   }
 
   /** Load every stored block covering a local rectangle (the map screen asks before drawing). */
@@ -286,7 +322,11 @@ export class Explore {
   }
   private async loadMeta() {
     if (!this.db) return;
-    try { this.painted = ((await (await this.db).get('meta', 'stats')) as number | undefined) ?? 0; } catch { /* ignore */ }
+    try {
+      const db = await this.db;
+      this.painted = ((await db.get('meta', 'stats')) as number | undefined) ?? 0;
+      this.photoKm2 = ((await db.get('meta', 'photoKm2')) as number | undefined) ?? 0;
+    } catch { /* ignore */ }
   }
   private async save() {
     if (!this.db || !this.dirtyBlocks.size) return;
@@ -296,6 +336,7 @@ export class Explore {
       const tx = (await this.db).transaction(['blocks', 'meta'], 'readwrite');
       for (const k of keys) void tx.objectStore('blocks').put(this.blocks.get(k)!, k);
       void tx.objectStore('meta').put(this.painted, 'stats');
+      void tx.objectStore('meta').put(this.photoKm2, 'photoKm2');
       await tx.done;
     } catch { /* ignore */ }
   }
@@ -308,13 +349,14 @@ export class Explore {
     this.sumDirty.clear();
     this.jobs.length = 0;
     for (const q of this.seenQueue.splice(0)) q.res({ cells: 0, km2: 0, reach: 0 });
-    this.painted = this.session = 0;
+    this.painted = this.session = this.photoKm2 = 0;
     this.winDirty = this.farWinDirty = true;
     if (!this.db) return;
     try {
       const db = await this.db;
       await db.clear('blocks');
       await db.put('meta', 0, 'stats');
+      await db.put('meta', 0, 'photoKm2');
     } catch { /* ignore */ }
   }
 
@@ -331,8 +373,8 @@ export class Explore {
     }
     if (this.winDirty) { this.winDirty = false; this.fineDirty.clear(); this.fill(this.winX0, this.winZ0, this.winX0 + WIN, this.winZ0 + WIN); }
     if ((this.tick -= dt) <= 0 && this.enabled) {
-      const step = 0.1 - this.tick; // accumulated time since the last paint tick
-      this.tick = 0.1;
+      const step = TICK - this.tick; // accumulated time since the last paint tick
+      this.tick = TICK;
       const r = revealRadius(h, reach);
       this.paint(x, z, r, Math.min(0.5, step));
       this.fill(x - r - 16, z - r - 16, x + r + 16, z + r + 16);
@@ -355,9 +397,9 @@ export class Explore {
     // …and the far window, while it's shown
     if (this.far) this.updateFar(x, z, dt);
     this.farShown = this.far;
-    // (uploads: as they come, but at 10 Hz while a photo blooms — it touches texels every frame)
+    // (uploads: as they come, but at 20 Hz while a photo blooms — it touches texels every frame)
     const up = !blooming || (this.upT -= dt) <= 0;
-    if (up && blooming) this.upT = 0.1;
+    if (up && blooming) this.upT = 0.05;
     if (this.texDirty && up) { this.texDirty = false; this.texture.needsUpdate = true; }
     if (this.farTexDirty && up) { this.farTexDirty = false; this.farTexture.needsUpdate = true; }
     if ((this.saveT -= dt) <= 0) { this.saveT = 4; void this.save(); }
@@ -500,6 +542,9 @@ export class Explore {
           }
         }
       }
+    // the gaps between the discs closed (fine: pinholes; far: hairlines too, where samples are sparse)
+    yield* fine.close(5, 1);
+    yield* far.close(4, 2);
     // queue the bloom; count what's new
     const job: SeenJob = { t: 0, stamps: [], at: 0 };
     let nFine = 0, nFar = 0;
@@ -523,14 +568,14 @@ export class Explore {
     return { cells: nFine + nFar, km2: (nFine * cm * cm + nFar * (cm * FAR) ** 2) / 1e6, reach: out };
   }
 
-  // Each frame a sixth of every blooming photo's blocks (so each is seen to ~10 times a second),
+  // Each frame a third of every blooming photo's blocks (so each is seen to ~20 times a second),
   // every stamped cell raised to where its own bloom has got to.
   private bloomJobs(dt: number) {
     const D = SEEN_DUR * 100;
     for (let q = this.jobs.length - 1; q >= 0; q--) {
       const job = this.jobs[q], list = job.stamps;
       const t = (job.t += dt) * 100;
-      for (let n = Math.ceil(list.length / 6); n > 0 && list.length; n--) {
+      for (let n = Math.ceil(list.length / 3); n > 0 && list.length; n--) {
         if (job.at >= list.length) job.at = 0;
         if (this.bloomStamp(list[job.at], t, D)) job.at++;
         else list[job.at] = list[list.length - 1], list.pop(); // all there: done with it
@@ -542,13 +587,14 @@ export class Explore {
   private bloomStamp(s: Stamp, t: number, D: number) {
     if (t <= s.lo) return true; // not started
     const far = s.far, blk = this.blockFor(s.k, far ? 2 * AREA : AREA);
-    let changed = false;
+    let changed = false, full = 0;
     for (let n = 0; n < AREA; n++) {
       const c = s.st[n];
       if (c === 255 || t <= c) continue;
       const a = (t - c) / D, v = a >= 1 ? 255 : Math.floor(a * 255);
-      if (v > blk[n]) { blk[n] = v; changed = true; }
+      if (v > blk[n]) { if (blk[n] < FULL && v >= FULL) full++; blk[n] = v; changed = true; }
     }
+    if (full) this.photoKm2 += (full * (CELL * this.cosLat * (far ? FAR : 1)) ** 2) / 1e6;
     if (changed) {
       this.dirtyBlocks.add(s.k);
       if (far) this.farDirty.add(s.k);

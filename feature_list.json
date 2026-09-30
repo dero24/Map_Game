@@ -1011,7 +1011,7 @@
       "area": "gameplay",
       "title": "In paint-as-you-walk mode, a photo paints everything it frames, even the far distance",
       "user_visible_behavior": "With Watercolor → '…far away too' on, taking a photo (P, Space) colours in everything visible in the frame — the street, the far shore, the city on the horizon — blooming in over a couple of seconds; it stays painted.",
-      "status": "not_started",
+      "status": "passing",
       "verification": [
         "tests/explore.test.ts (+6), tests/seen.test.ts (depth → world points, joins, footprint discs, far cells)",
         "LIVE Sea Bright: ctx.paintView() from Ocean Ave painted 729 cells out to 1.6 km"
@@ -1020,9 +1020,31 @@
         "src/render/seen.ts",
         "src/world/explore.ts (far cells, far window, paintSeen)",
         "src/render/post.ts (readSeen, far window in the sketchFar branch)",
-        "src/ui/photo.ts"
+        "src/ui/photo.ts",
+        "2026-09-30: stamp closing (Stamps.close), a 48 km far window, reach up to 22 km (postParams.photoReach, panel 'a photo paints out to'), a 384 readback on a PC — headless from 150 m over Sea Bright: bare pixels in frame 0.1–0.4% out to 15 km (was 3–5%), 0.1–0.2% within 2 km",
+        "shots/shore-montage.jpg 2026-09-30: pencil before / colour to the horizon after one photo from a balloon"
       ],
-      "notes": "Frames of the before/after still to shoot; the sketchbook page keeps the pencil frame from before the bloom."
+      "notes": "2026-09-30: the leftover 'canvas clouds' were the far field's sampling gaps (closed) and everything past 15 km (the reach, now 22 km and yours to set). The bloom is slower (2.4 s a cell, the farthest 2.2 s late) so the colour is seen running out; photo paint is counted apart from walks (stats().photoKm2). The sketchbook page keeps the pencil frame from before the bloom."
+    },
+    {
+      "id": "balloons",
+      "priority": 1,
+      "area": "gameplay",
+      "title": "Hot air balloons: fly one, watch others land on the beach, paint the world from up high",
+      "user_visible_behavior": "A balloon waits on the nearest beach on a first visit; others go up at dawn and dusk and come down on beaches (step in: it's yours). In the basket (first person, V / ⤢ for third): hold Space / ▲ to burn and rise, C / ▼ to vent; let go and it holds its height; the wind at each height blows a different way. P from the basket paints the whole view to the horizon. Paint a balloon from life and the brush paints your own anywhere open, in any colours.",
+      "status": "passing",
+      "verification": [
+        "tests/balloon.test.ts (9): level temperature 65–95 °C, lift-off and a real climb rate, the lag, the assist holds, wind + fan, never through the ground; winds veer and strengthen, deterministic, eased; the family valid and in budget, brush colours",
+        "headless Sea Bright (shots/shore-montage.jpg 2026-09-30): the gift on the beach 57 m from the sea, someone's balloon aloft and one landed on the beach (clock scanned), 160 m up in the basket, looking up into the envelope, third person, a photo from the basket (181 km² out to 22 km), phone upright and on its side",
+        "tools/hud-audit.mjs: 'in a balloon' state on 10 phones × both ways, no overlaps"
+      ],
+      "evidence": [
+        "src/assets/balloon.ts", "src/player/balloonPhysics.ts", "src/world/wind.ts", "src/world/balloons.ts",
+        "src/player/vehicles.ts (kind balloon: balloonFly, drift, basketCam, giftBalloon, ambient boarding)",
+        "src/ui/brush.ts (balloon family, any-colour picker, stripe colour), src/player/place.ts placeBalloon",
+        "src/ui/commissions.ts (balloon cards), src/ui/cardArt.ts, src/audio/ambience.ts (burner)"
+      ],
+      "notes": "From the core-loop review (docs/CORE_LOOP_REVIEW.md). Later: an altimeter strip with tappable wind layers (Vehicles.holdAt exists), sea breeze on coasts, a drift line on the atlas."
     },
     {
       "id": "city-doors",
