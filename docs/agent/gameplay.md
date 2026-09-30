@@ -291,7 +291,11 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   as blocks load). They feed the far window (`farTexture`, filled only while `explore.far` —
   main sets it with the far sketch). `valueAt` is walked or photo-painted, so the map shows both.
 - Photos paint what they frame (the far sketch only; `ctx.paintView`, called from photo mode's
-  shot): the frame's depth → world points (`render/seen.ts`) → `paintSeen` / `paintSeenSliced`
+  shot): the frame's depth → mended (`mendDepth`: what stands thin in front of the ground — a rope,
+  a post, a wire, a bird, ≤ 6% of the frame — and, riding, the ride itself (nearer than 30 m in a
+  balloon's basket, 70 m in third person, 45 plane, 11 car, 14 boat) are bridged in 1/depth from
+  the ground on both sides, never into the sky; unmended, a basket rope was a streak of canvas
+  from you to the horizon) → world points (`render/seen.ts`) → `paintSeen` / `paintSeenSliced`
   (a slice a frame, ~4 ms). Each sample paints a disc its footprint wide (at least 1.5 cells);
   neighbours on one surface (`joined`: a smooth ramp in 1/depth, so ground at a grazing angle —
   not across a silhouette) are filled between; ground running on into the sky as a plane does

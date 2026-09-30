@@ -2,6 +2,25 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-01 (evening) — A photo sees past the ropes: no more streaks out to the horizon
+
+- **The streaks** (a phone, photos from a balloon, the atlas map): straight bands of canvas fanning
+  from where you stood out across the bay. A photo paints what its depth readback saw, and in the
+  basket the ropes and posts run up the frame — each a column of samples 3 m away, hiding the
+  ground behind it from the basket to the horizon: a radial line of unpainted world per rope.
+  (Poles, wires and birds did the same, smaller; in third person the envelope a wedge.)
+- **Fix** (`render/seen.ts` `mendDepth`, called in main.ts `paintView` before unprojecting):
+  along each row and column, a run that stands well in front of ground on both sides — thin (≤ 6%
+  of the frame), or nearer than the ride's reach up in one (balloon 30 m / 70 m third person, plane
+  45, car 11, boat 14) — is bridged by the line through its two sides in 1/depth (exact for flat
+  ground). Never into the sky; a building wider than thin still hides what's behind it on foot.
+- **Tests**: seen.test.ts (ropes bridged to within 1% of the open ground; the sky and a 40 m house
+  kept; an envelope seen through with `near`), explore.test.ts (a basket photo: the ropes' lines
+  of sight bare 1–8 km out without the mend, none with it). 498 tests, typecheck, build.
+- Streaks already in a save stay until a photo covers them again — one from the same spot does.
+- **The live site** builds from `main` (pages.yml, or a manual run of it on a branch): the options
+  panel's close (2026-10-01 later) reaches the phone only once it's deployed again.
+
 ## 2026-10-01 (later) — The options panel on a phone: it closes, and Get out stays in reach
 
 - **Couldn't close it**: lil-gui 0.21 names its root `.lil-root`; style.css still said `.lil-gui.root`,

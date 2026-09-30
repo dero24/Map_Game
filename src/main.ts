@@ -48,7 +48,7 @@ import { LiftUI } from './ui/lift';
 import { applyAtmosphere, type Weather } from './world/atmosphere';
 import { U } from './render/shared';
 import { WatercolorPost, postParams } from './render/post';
-import { skyDepth, unprojectDepth } from './render/seen';
+import { skyDepth, unprojectDepth, mendDepth } from './render/seen';
 import { SunShadows, shadowParams } from './render/shadows';
 import { applyTier, autoSteps, deviceInfo, isPhoneClass, pickTier } from './render/quality';
 import { sleepWhenHidden } from './ui/lifecycle';
@@ -577,6 +577,11 @@ async function main() {
       const a = camera.aspect, L = MOBILE ? 256 : 384, /* (a phone lays it in sooner) */ w = a >= 1 ? L : Math.max(16, Math.round(L * a)), h = a >= 1 ? Math.max(16, Math.round(L / a)) : L;
       const inv = [...camera.projectionMatrixInverse.elements], cw = [...camera.matrixWorld.elements], off = { x: origin.x, y: 0, z: origin.z };
       const depth = await post.readSeen(w, h, camera.near, camera.far);
+      // see through what stands in front of the view (a rope, a post, a wire — each was a streak of
+      // canvas out to the horizon) and, riding, through the ride itself (render/seen.ts mendDepth)
+      const k = vehicles.activeKind;
+      const rideNear = k === 'balloon' ? (vehicles.third ? 70 : 30) : k === 'plane' ? 45 : k === 'car' ? 11 : k === 'boat' ? 14 : 0;
+      if (depth) mendDepth(depth, w, h, { thin: Math.round(Math.max(w, h) * 0.06), near: rideNear });
       const g = depth && unprojectDepth(depth, w, h, inv, cw, off, skyDepth(camera.near, camera.far));
       return g && explore.paintSeenSliced(g, { x: cw[12] + off.x, y: cw[13], z: cw[14] + off.z }, { reach: Math.min(SEEN_REACH, postParams.photoReach), ground: (x, z) => Math.max(world.terrain.heightAt(x, z), 0) });
     },

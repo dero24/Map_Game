@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { packDepth, unpackDepth, unprojectDepth, skyDepth } from '../src/render/seen';
 import { camera, planeFrame, sampleRay } from './helpers/frame';
+import { mendDepth } from '../src/render/seen';
 
 describe('what a frame sees (render/seen.ts)', () => {
   it('packs view depth into RGBA8 and back to ~1e-6', () => {
@@ -44,4 +45,44 @@ describe('what a frame sees (render/seen.ts)', () => {
     const b = unprojectDepth(d, w, h, local.projectionMatrixInverse.elements, local.matrixWorld.elements, off);
     for (let k = 0; k < a.pos.length; k++) expect(Math.abs(a.pos[k] - b.pos[k])).toBeLessThan(0.01);
   });
+
+  // A balloon's basket, 300 m up, looking out and down: two ropes run up the frame a few metres away.
+  const basket = () => camera([0, 300, 0], -18, 0, 62, 9 / 16);
+  const ropes = [-0.5, 0.6].map((x) => new THREE.Box3(new THREE.Vector3(x - 0.03, 280, -3.2), new THREE.Vector3(x + 0.03, 320, -3.1)));
+
+  it('sees through a rope in front of the ground: its column bridged to the ground behind it', () => {
+    const cam = basket(), w = 72, h = 128;
+    const clean = planeFrame(cam, w, h), roped = planeFrame(cam, w, h, ropes);
+    let hidden = 0;
+    for (let k = 0; k < w * h; k++) if (roped[k] > 0 && roped[k] < 10) hidden++;
+    expect(hidden).toBeGreaterThan(h); // (the ropes cover whole columns of the frame)
+    mendDepth(roped, w, h, { thin: 4 });
+    for (let k = 0; k < w * h; k++) {
+      if (!(clean[k] > 0)) continue;
+      expect(Math.abs(roped[k] - clean[k]) / clean[k]).toBeLessThan(0.01);
+    }
+  });
+
+  it('never bridges into the sky, nor through what is wider than thin — unless it is your ride', () => {
+    const cam = basket(), w = 72, h = 128;
+    const roped = planeFrame(cam, w, h, ropes);
+    const before = roped.slice();
+    mendDepth(roped, w, h, { thin: 4 });
+    const open = planeFrame(cam, w, h);
+    for (let k = 0; k < w * h; k++) if (!(open[k] > 0)) expect(roped[k]).toBe(before[k]); // (a rope against the sky stays the rope)
+    // a house 40 m wide, 60 m off, seen from the street: it hides what's behind it
+    const street = camera([0, 1.6, 0], 0), W = 128, H = 72, house = new THREE.Box3(new THREE.Vector3(-20, 0, -90), new THREE.Vector3(20, 30, -60));
+    const d = planeFrame(street, W, H, [house]), kept = d.slice();
+    mendDepth(d, W, H, { thin: Math.round(W * 0.06) });
+    expect(Array.from(d)).toEqual(Array.from(kept));
+    // …but the same shape a few metres off, up in the air, is your own ride: seen through
+    const up = camera([0, 300, 0], -18), envelope = new THREE.Box3(new THREE.Vector3(-8, 290, -30), new THREE.Vector3(8, 330, -14));
+    const e = planeFrame(up, W, H, [envelope]), clear = planeFrame(up, W, H);
+    mendDepth(e, W, H, { thin: 4, near: 60 });
+    let bridged = 0, blocked = 0;
+    for (let k = 0; k < W * H; k++) if (clear[k] > 0) { if (Math.abs(e[k] - clear[k]) / clear[k] < 0.02) bridged++; else blocked++; }
+    expect(blocked).toBe(0);
+    expect(bridged).toBeGreaterThan(1000);
+  });
 });
+

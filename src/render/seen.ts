@@ -85,3 +85,48 @@ export function unprojectDepth(depth: Float32Array, w: number, h: number, invPro
   const foot = Math.max((2 * rx) / -rz / w, (2 * uy) / -uz / h);
   return { w, h, pos, depth, foot, cut };
 }
+
+/** Mend a photo's depth before it's unprojected: see through what stands in front of the view without
+ *  hiding it — a rope, a basket post, a lamp post, a wire, a bird — and, up in a ride, the ride
+ *  itself. Each was a line of unpainted world on the map (a rope in frame is a column of samples from
+ *  the basket to the horizon: a streak from where you stood out to the photo's reach).
+ *  Along a row (and a column) of the frame, ground is smooth in 1/depth — exactly linear for a
+ *  plane — so a gap in it is bridged by the line through its two sides. What's bridged:
+ *  · `thin`: a run of at most that many samples that stands well in front of both its sides, where
+ *    those sides are one surface (their 1/depth within 35%) — a building a few samples wide still
+ *    hides what's behind it only if it's wider than this;
+ *  · `near` (> 0): any sample nearer than that many metres — your own ride, up in the air, where
+ *    nothing else is that close — however wide, wherever there's ground on both sides of it.
+ *  The sky (0) is never bridged into: a rope against the sky stays the rope. Pure; in place. */
+export function mendDepth(depth: Float32Array, w: number, h: number, opts: { thin: number; near?: number }) {
+  const near = opts.near ?? 0, thin = Math.max(0, Math.floor(opts.thin));
+  const pass = (n: number, len: number, at: (line: number, i: number) => number) => {
+    for (let line = 0; line < n; line++)
+      for (let i = 0; i + 2 < len;) {
+        const a = at(line, i), da = depth[a];
+        if (!(da > 0) || (near > 0 && da < near)) { i++; continue; }
+        // a run after i: in front of i (or near), up to the next sample that's ground again
+        let j = i + 1, lo = Infinity;
+        for (; j < len; j++) {
+          const d = depth[at(line, j)];
+          if (!(d > 0)) break; // the sky: nothing to bridge to
+          const hole = (near > 0 && d < near) || d < 0.7 * da;
+          if (!hole) break;
+          if (d < lo) lo = d;
+        }
+        const run = j - i - 1;
+        if (run === 0 || j >= len || !(depth[at(line, j)] > 0)) { i = j > i + 1 ? j : i + 1; continue; }
+        const db = depth[at(line, j)], ia = 1 / da, ib = 1 / db;
+        const nearRun = near > 0 && lo < near;
+        const sameSurface = Math.abs(ia - ib) <= 0.35 * Math.max(ia, ib);
+        const inFront = lo < 0.7 * Math.min(da, db);
+        if ((nearRun || (run <= thin && inFront)) && (sameSurface || nearRun)) {
+          for (let k = 1; k <= run; k++) depth[at(line, i + k)] = 1 / (ia + ((ib - ia) * k) / (run + 1));
+        }
+        i = j;
+      }
+  };
+  pass(h, w, (j, i) => j * w + i); // rows: posts, ropes, a person
+  pass(w, h, (i, j) => j * w + i); // columns: wires, a rail
+  return depth;
+}
