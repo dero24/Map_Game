@@ -295,7 +295,10 @@ body.touch #hint { transform: translateY(-6px); }
 body.touch #hint.show { transform: translateY(0); }
 /* A toast says what just happened in the hint's place, two lines at most — the hint steps aside
    until it has gone (main.ts toast: body.toasting). */
-body.touch #toast { transform: none; border-radius: 16px; box-shadow: 0 2px 10px rgba(40,30,60,0.14); z-index: 19;
+/* (its margin is a clear border, not padding: overflow clips at the padding's edge, so a padded
+   third line would peek out under the second) */
+body.touch #toast { transform: none; border-radius: 16px; padding: 0; border: solid transparent; border-width: 6px 13px;
+  box-shadow: 0 0 0 1px rgba(58,51,70,0.25), 0 2px 10px rgba(40,30,60,0.14); z-index: 19;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 body.touch.toasting #hint { visibility: hidden; }
 body.touch.postcard #toast, body.touch.atlas-open #toast { display: none; } /* (as on a PC: the painting, the map) */
@@ -306,7 +309,7 @@ body.touch.driving #hint, body.touch.driving #toast { top: calc(98px + var(--st)
 body.touch[data-ride="plane"] #hint, body.touch[data-ride="balloon"] #hint, body.touch[data-ride="plane"] #toast, body.touch[data-ride="balloon"] #toast { top: calc(120px + var(--st)); }
 /* An arrival card paints the town's name where the place name stands, on the same wash, for its few
    seconds (ui/arrival.ts: body.arriving) — not across the middle of the view. */
-body.touch #arrival { left: calc(6px + var(--sl)); top: calc(6px + var(--st)); transform: none; padding: 3px 10px 5px; box-sizing: border-box; text-align: left;
+body.touch #arrival { left: calc(6px + var(--sl)); top: calc(6px + var(--st)); transform: none; padding: 3px 10px 5px; box-sizing: border-box; text-align: left; font-size: 12px;
   max-width: calc(100vw - 76px - var(--sl) - var(--sr)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   background: rgba(245,239,225,0.9); border-radius: 12px; box-shadow: 0 0 10px 4px rgba(245,239,225,0.5); text-shadow: none; }
 body.touch #arrival .a-name { font-size: 22px; overflow: hidden; text-overflow: ellipsis; }
@@ -343,12 +346,13 @@ body.touch #osm-credit { left: 50%; right: auto; top: auto; bottom: calc(3px + v
   body.touch #hud { top: calc(4px + var(--st)); padding: 2px 10px 3px; max-width: calc(100vw - 200px - var(--sl) - var(--sr)); }
   body.touch #place { font-size: 17px; }
   body.touch #clock { font-size: 12px; margin-top: 0; }
-  body.touch #arrival { top: calc(4px + var(--st)); padding: 2px 10px 3px; max-width: calc(100vw - 200px - var(--sl) - var(--sr)); }
-  body.touch #arrival .a-name { font-size: 18px; }
+  body.touch #arrival { top: calc(4px + var(--st)); padding: 2px 10px; font-size: 11px; max-width: calc(100vw - 200px - var(--sl) - var(--sr)); }
+  body.touch #arrival .a-name { font-size: 17px; }
   body.touch #arrival .a-region, body.touch #arrival .a-line { font-size: 11px; }
+  body.touch #hint, body.touch #toast { max-width: calc(100vw - 206px - var(--sl) - var(--sr)); font-size: 12px; line-height: 1.25; padding: 4px 11px; }
+  body.touch #toast { padding: 0; border-width: 4px 11px; }
   body.touch #hint, body.touch #toast, body.touch.driving #hint, body.touch.driving #toast,
-  body.touch[data-ride="plane"] #hint, body.touch[data-ride="balloon"] #hint, body.touch[data-ride="plane"] #toast, body.touch[data-ride="balloon"] #toast {
-    top: calc(44px + var(--st)); max-width: calc(100vw - 206px - var(--sl) - var(--sr)); font-size: 12px; line-height: 1.25; padding: 4px 11px; }
+  body.touch[data-ride="plane"] #hint, body.touch[data-ride="balloon"] #hint, body.touch[data-ride="plane"] #toast, body.touch[data-ride="balloon"] #toast { top: calc(44px + var(--st)); }
   body.touch #vehud { top: auto; bottom: calc(var(--dock-b) + var(--sb) + 8px) !important; left: calc(124px + var(--sl)) !important; max-width: calc(100vw - 364px - var(--sl) - var(--sr)); }
   #tlift, #tfly-up { right: calc(var(--col) * 2); bottom: calc((var(--big) - var(--btn)) / 2); }
   #touch-action { right: calc(6px + var(--sr)); min-width: 0; min-height: 40px; padding: 4px 7px; font-size: min(13px, 2.2vw); letter-spacing: 0; }
