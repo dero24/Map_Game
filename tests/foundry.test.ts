@@ -184,6 +184,7 @@ describe('decor (interior + terrace furniture)', () => {
     ['cafeSet', D.cafeSet(0xf1ede4, 0x2a2622, 0x2f4a6a), 2600, null, true],
     // the pieces a planned interior repeats (docs/INTERIORS_PLAN.md, Slice 1): plain boxes, instanced by the hundred
     ['kitchenRun', D.kitchenRun(3.9), 800, [3.9, 0.66], true],
+    ['kitchenRun (under a window)', D.kitchenRun(2.4, undefined, undefined, false), 600, [2.42, 0.66], true],
     ['workstation', D.workstation(), 500, [1.6, 1.4], true],
     ['doorFrame', D.doorFrame(0.9), 200, [1.06, 0.16], true],
     ['doorLeaf', D.doorLeaf(0.8), 350, [0.8, 0.14], true],

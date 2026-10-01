@@ -86,8 +86,8 @@ export class Furnisher {
       const r = lf.ax === 0 ? { u0: lf.hinge - 0.06, u1: lf.hinge + 0.06, v0: Math.min(lf.c, lf.c + lf.side * (lf.w + 0.1)), v1: Math.max(lf.c, lf.c + lf.side * (lf.w + 0.1)) } : { u0: Math.min(lf.c, lf.c + lf.side * (lf.w + 0.1)), u1: Math.max(lf.c, lf.c + lf.side * (lf.w + 0.1)), v0: lf.hinge - 0.06, v1: lf.hinge + 0.06 };
       this.keepOut[lf.level]?.push(r);
     }
-    // the front door's swing
-    this.keepOut[0]?.push({ u0: P.ud - 0.2, u1: P.ud + 1.7, v0: P.vd - 1.2, v1: P.vd + 1.2 });
+    // the front door's swing, and the way in from it (where you stand as you step inside)
+    this.keepOut[0]?.push({ u0: P.ud - 0.2, u1: P.ud + 1.7, v0: P.vd - 1.2, v1: P.vd + 1.2 }, { u0: P.ud, u1: P.ud + 2.8, v0: P.vd - 0.55, v1: P.vd + 0.55 });
   }
   f(k: number) { return this.P.floor0 + k * this.P.floorH; }
   /** Storey k's outline and window model: the footprint's, or its tier's (a tower's storeys). */
