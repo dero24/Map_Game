@@ -17,6 +17,15 @@ behaviour.
     (`other`: unwrapped code, GC), and renders that compiled or uploaded (`+prog`, `+geo`, `+tex`).
   - `deep: true` adds the fine-grained wrappers (walk-world adds, interior registration). They
     inflate the numbers they measure.
+  - `sync: true` waits for the GPU after each frame (a 1-pixel `readPixels`), so the GPU's work is
+    counted in the frame that queued it (`gpu (sync)`). Use it whenever a hitch might be canvas or
+    upload work.
+    - The JS timers miss that work. A 2D canvas is recorded when it's drawn and only rastered when
+      it's read: its blur and its strokes run in the GPU process at the texture upload, or on the
+      main thread where the browser rasters canvases on the CPU.
+    - The ground paint's old full repaint recorded in ~6 ms but cost ~4 s headless (SwiftShader)
+      and 2.5–3.5 s on a CPU canvas.
+    - A probe that stubs the render out (`norender`) hides all of it.
   - To drive: `V = __GAME__.vehicles; V.summon('car'); V.enter(V.list.at(-1))`.
   - The car goes through buildings: the probe moves it, bypassing collision.
 
@@ -208,8 +217,10 @@ and puts the walker back.
   tile service or Overpass down, rate limits) is counted as `offline`, not failed: stand-ins cover
   those cells. Counts the frames over 50 and 100 ms meanwhile (`mountHitches`: the 100 ms ones
   that mounted a tile) without judging them.
-- `await __FRAMES__({ seconds: 8, budget })`: the page's own frames standing, then walking down the
-  street: p50/p95/p99 of the intervals, each frame's work (rAF to the end of the post pass), the
+- `await __FRAMES__({ seconds: 8, budget })`: the page's own frames standing, walking down the
+  street, then flying straight and level 80 m up at the default flying speed (`fly: false` skips it;
+  a walk never gets the 66 m that moves the ground paint's window): p50/p95/p99 of the intervals,
+  each frame's work (rAF to the end of the post pass), the
   frames over 50 and 100 ms, long tasks. Budgets (ms): `desktop` p50 20 · p95 34 · p99 50 · two
   100 ms hitches a minute; `phone` 34 · 50 · 100 · six; `soft` (SwiftShader, picked by itself)
   fails only a page that has all but stopped (a median frame over a minute, p99 over two: tens of

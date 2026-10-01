@@ -1362,7 +1362,7 @@ async function main() {
     }
     const tp = performance.now();
     if (paint.detail.update(walker.x, walker.z)) perf.detail = Math.max(perf.detail, performance.now() - tp);
-    else if (paint.mid.update(walker.x, walker.z)) perf.detail = Math.max(perf.detail, performance.now() - tp); // at most one window repaint per frame
+    else if (paint.mid.update(walker.x, walker.z)) perf.detail = Math.max(perf.detail, performance.now() - tp); // (one window paints a frame, a slice at a time)
     sky.position.copy(camera.position);
     // the near plane rides the height (render/nearPlane.ts): up high, low ground and the sea plane
     // under it fought for the depth buffer's pixels (the ground flashed blue and green)

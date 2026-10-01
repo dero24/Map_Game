@@ -1,5 +1,5 @@
 // Frame hitches, in-page (a `?capture=1` page pumped by inpage-montage's __PUMP__, or a live one):
-//   await import('/tools/hitch-probe.js'); await __HITCH__({ seconds: 20, move: [vx, vz], deep: false })
+//   await import('/tools/hitch-probe.js'); await __HITCH__({ seconds: 20, move: [vx, vz], deep: false, sync: false })
 // (To drive: __GAME__.vehicles.summon('car'), then walk into it and press E — or, scripted, the
 // private __GAME__.vehicles.enter(<the car>) — and the probe moves the car instead of the walker.)
 // Wraps the game's per-frame systems (everything __GAME__ exposes with an update / render / scan,
@@ -59,10 +59,18 @@ window.__HITCH__ = async (opts = {}) => {
     }
   };
   undo.push(() => { G.renderer.render = rr; });
-  // frames: the post pass ends each one
+  // frames: the post pass ends each one. `sync: true` waits for the GPU there (a 1-pixel read), so
+  // what the frame queued for it is counted in that frame: a 2D canvas the browser rasters only when
+  // it's uploaded (its blur, its strokes), the uploads, the draws. Without it they land in whatever
+  // frame the GPU catches up in — or nowhere, on a page that doesn't render.
   const ends = [];
-  const pr = G.post.render;
-  G.post.render = function (...a) { const r = pr.apply(this, a); ends.push(performance.now()); return r; };
+  const pr = G.post.render, gl = G.renderer.getContext(), px = new Uint8Array(4);
+  G.post.render = function (...a) {
+    const r = pr.apply(this, a);
+    if (opts.sync) { const t = performance.now(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); calls.push(['gpu (sync)', t, performance.now() - t, depth]); }
+    ends.push(performance.now());
+    return r;
+  };
   undo.push(() => { G.post.render = pr; });
   const t0 = performance.now();
   const wait = (ms) => new Promise((r) => (window.__WAIT__ ? window.__WAIT__(ms).then(r) : setTimeout(r, ms)));

@@ -59,6 +59,23 @@ or per-region style.
 - `groundPaint.ts` windows `detail` (300 m) + `mid` (1.6 km) re-centre on the walker and paint
   baked + streamed-tile features (stream `onTile`/`onUnload` → `paint.setTile/dropTile`); the
   shader applies them everywhere.
+- A window never repaints whole in a frame (`DetailGround`). The wash goes through a blur, and a
+  whole repaint was the flying hitch: ~0.5 s every 66 m wherever the browser rasters 2D canvases
+  on the CPU.
+  - It moves in whole steps of its own pixels (size/32: 9.375 m and 50 m). What it still shows
+    slides across in one canvas copy.
+  - It paints only the strip it moved onto, plus the band behind it, where the blur fades the wash
+    out at the edge. Slices go a frame at a time, each on a small canvas of its own with the blur's
+    reach as margin.
+  - The texture and `box` change together when a move is whole.
+  - A tile's change (`touch`: its box + 100 m) waits while the window moves, then repaints the same
+    way.
+  - Slices skip what they can't show: a land-cover layer lying opaque over a slice hides the lawn
+    and the layers under it.
+  - `tests/groundPaint.test.ts` meters each frame's blurred pixels on a flight.
+- `Painter.paint(…, clip)`: the window decides (each building's block-paving census), and the clip
+  only limits what's drawn. A slice draws the whole window's strokes that reach it, the same way.
+  Junctions are judged on all their arms, the roads within 50 m.
 
 ## Grass
 

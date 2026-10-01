@@ -7,7 +7,7 @@
 //   __ROADPOSTS__({ R: 600 })       posts, masts, poles standing in a car street's lanes
 //   await __FLICKER__({ frames })   the same view drawn twice: pixels that change with nothing moving
 //   await __ALTITUDE__({ heights }) fly up and look down: the ground holds still (no water/land flashing)
-//   await __FRAMES__({ seconds })   frame pacing standing, then walking: percentiles and hitches against a budget
+//   await __FRAMES__({ seconds })   frame pacing standing, walking, then flying: percentiles and hitches against a budget
 //   await __WALKABOUT__({ seconds, seed })  the walker's own moves on seeded routes: streets, in at doors, up the stairs, out
 //   await __DRIVE__({ seconds, seed })      take a parked car with E, drive the streets, get out and back in
 //   await __TELEPORTS__({ n, seed })        teleports to doors, streets and anywhere, settleWalker: where you're left
@@ -1593,8 +1593,8 @@ window.__STREAMING_SELFTEST__ = async (opts = {}) => {
 };
 
 
-// ---- frame pacing: the page's own frames standing still, then walking down the street (streaming,
-// interiors and life running as they do on a walk) ----
+// ---- frame pacing: the page's own frames standing still, walking down the street, then flying
+// straight on (streaming, interiors, life and the ground paint running as they do) ----
 // Each frame's start (the rAF time every callback of a frame shares) and the end of its draw (the
 // post pass is the last thing drawn) give the interval between frames and the frame's own work;
 // long tasks catch the stalls between frames. Judged against a budget: `desktop`, `phone`, `soft`
@@ -1648,6 +1648,22 @@ window.__FRAMES__ = async (opts = {}) => {
     if (route.pts.length > 1) w.yaw = yawTo(route.pts[1][0] - w.x, route.pts[1][1] - w.z);
     w.keys.add('KeyW');
     try { out.walk = await measure(); } finally { w.keys.delete('KeyW'); w.place(start.x, start.z, start.yaw, start.pitch, start.feet); }
+  }
+  // fly straight and level, 80 m up, at the default flying speed (W held): the ground paint's windows
+  // move every 66 m and the ring streams in (Robby: "flying through Sea Bright it locks up every ~2 s"
+  // — the walk never got 66 m from where it started)
+  if (opts.fly !== false && !G.vehicles.driving) {
+    const fly0 = G.walkParams.fly, y0 = w.y;
+    G.walkParams.fly = true;
+    w.y = w.feet + 80;
+    w.pitch = 0;
+    w.keys.add('KeyW');
+    try { out.fly = await measure(); } finally {
+      w.keys.delete('KeyW');
+      G.walkParams.fly = fly0;
+      w.y = y0;
+      w.place(start.x, start.z, start.yaw, start.pitch, start.feet);
+    }
   }
   po?.disconnect();
   const st = frameStats(all.iv, all.work), errors = (window.__RENDER_INFO__?.errors ?? 0) - err0;
