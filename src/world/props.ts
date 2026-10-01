@@ -1835,10 +1835,22 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     for (const b of extras.mailboxes ?? []) {
       if (hash01(Math.floor(b.x * 7) ^ Math.floor(b.z * 13)) > 0.26) continue; // ~1 in 4 curbs
       const a = b.yaw + Math.PI / 2;
-      const x = b.x + Math.sin(a) * 4.2, z = b.z + Math.cos(a) * 4.2;
+      // (along the kerb from the box, 60 cm behind the kerb's face: the box's post stands at 45)
+      const x = b.x + Math.sin(a) * 4.2 - Math.sin(b.yaw) * 0.15, z = b.z + Math.cos(a) * 4.2 - Math.cos(b.yaw) * 0.15;
       // (in the tile's own ground: over its edge are the next tile's doors and steps, which this
       // one doesn't know — a hydrant stood on a neighbour's bottom step)
-      if (!ownGround(x, z, 1.6) || walk.blocked(x, z, 1.6) || !clearOfRoad(x, z, 0.8)) continue;
+      if (!ownGround(x, z, 1.6) || walk.blocked(x, z, 1.6) || !clearOfRoad(x, z, 0.35)) continue;
+      // (at its kerb, as the box is: one a bend or the street's end leaves standing off it isn't placed)
+      let gap = Infinity;
+      for (const r of ctxJson.roads) {
+        if (r.lod || r.br || r.tu || !/^(primary|secondary|tertiary|residential|unclassified|living_street|pedestrian|trunk)$/.test(r.c)) continue;
+        for (let i = 0; i + 3 < r.p.length; i += 2) {
+          const ax = r.p[i] / 10, az = r.p[i + 1] / 10, dx = r.p[i + 2] / 10 - ax, dz = r.p[i + 3] / 10 - az, L2 = dx * dx + dz * dz || 1;
+          const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
+          gap = Math.min(gap, Math.hypot(ax + dx * t - x, az + dz * t - z) - r.w / 2);
+        }
+      }
+      if (!(gap > 0.35 && gap <= 1)) continue;
       hydrants.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), b.yaw), V(1, 1, 1)));
       hydCol.push(new THREE.Color(hash01(Math.floor(x * 5) ^ Math.floor(z * 5)) < 0.8 ? 0xb03024 : 0xd9a52c));
       walk.addLoop([[x - 0.14, z - 0.14], [x + 0.14, z - 0.14], [x + 0.14, z + 0.14], [x - 0.14, z + 0.14]], -Infinity, terrain.heightAt(x, z) + 0.7);
@@ -1846,6 +1858,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     if (hydrants.length) {
       const im = new THREE.InstancedMesh(HY, propMaterial(), hydrants.length);
       hydrants.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, hydCol[i]); });
+      im.name = 'street:hydrants:kerb';
       im.layers.enable(1);
       group.add(im);
     }

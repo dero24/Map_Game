@@ -76,6 +76,13 @@ the channel's buoys and markers) — are one layer, drawn in **two draws** howev
   traps on piers; moorings and pot floats off them. Each tile places only on its own ground, on a
   world-aligned grid (a beach or pier the map gives a neighbour still gets dressed). Solid pieces
   are walls in the walk world. `?date=` reaches the worker (`setMicroDate`).
+  - The lawn things (birdbath, kayak, a house's bike, hoop, lawn and sale signs, surfboard) stand only
+    on open ground — a lawn or a yard's gravel — never on what the paint lays paved (`paved` in
+    `micro.ts`, from `groundCover.ts`: each street with its sidewalk band, mapped walks and paths,
+    the tile's front walks and drives (`MicroInput.walks`), lots, plazas and piers, a dense block's
+    paving (`pavedAprons`) and a shop's frontage). The carts out on collection day stand 40 cm back
+    from the box's kerb line. `micro.test.ts` checks it on the shore pack against the painter's own
+    strokes (Sea Bright's middle, two tiles).
 - **Drawing** (`src/world/microLayer.ts`, main thread; stream `onTile`/`onUnload` → `add`/`remove`,
   `update` each frame): every `step` m moved it re-sorts the mounted tiles' records, nearest first,
   under the tier's caps. Close up, the real pieces are written into **one merged mesh**
@@ -130,6 +137,53 @@ the channel's buoys and markers) — are one layer, drawn in **two draws** howev
 - `Painter.paint(…, clip)`: the window decides (each building's block-paving census), and the clip
   only limits what's drawn. A slice draws the whole window's strokes that reach it, the same way.
   Junctions are judged on all their arms, the roads within 50 m.
+
+### The ground you walk on (`groundCover.ts` + the fine window)
+
+The street's cross-section and the lot's ground, in `src/world/groundCover.ts` (pure; the painter and
+the micro layer share it): the sidewalk band (`sidewalkBand`: 1.5 m, 3.5 m on a main road), the
+kerb (`KERB`: a 15 cm face, a 0.6 m gutter pan), the flags (`FLAG` 1.5 m, a centre joint on walks
+`CENTRE_JOINT` 3 m or wider), the yard (`YARD` 5 m, `yardOf`), sand drift's reach (`DRIFT_REACH`
+60 m), and the census of paved blocks (`pavedAprons`, the painter's sums).
+
+- **Yards** (level ≥ 1, under everything): each house or shed stands in a yard out to 5 m: a mown
+  lawn, white gravel or crushed shell, by its neighbourhood (`hood.ts`, measured per 256 m cell as
+  windows reach it) and the coast (`Terrain.oceanDistAt` < 500 m): an old grid by the sea is about
+  60% stone, a suburb a third, a tract or an estate nearly all lawn, a dry climate's mostly gravel. A
+  house weighs 0.45 in the paving census on the bake too, so a street of houses keeps its yards and
+  never takes the walk's concrete; the bake's shops stand on a paved frontage (`front`).
+- **Level 2 only** (300 m, ~15 cm/px), in this order: front walks scored every 1.2 m, drives in
+  blacktop, concrete or gravel (`DRIVE`, a hash of the house end); the sidewalk band in flags, each a
+  shade darker or lighter (a hash of its middle) between joints, counted from the way's start
+  (`flagRun`), and the mapped sidewalks and footways the same at their own width (`mappedFlags`,
+  drawn when the pavement loop leaves the paths, before the streets cover their ends); the kerb's
+  face (a 15 cm shadow line 25% darker than the walk); the gutter pans — every kerbed street's
+  carriageway is laid in gutter concrete first and its asphalt then 0.6 m narrower, so at a junction
+  each street's asphalt covers the others' pans and the pans turn the corners; the drives' aprons
+  across the walk (kerb to back, flared 0.6 m at the kerb, drawn over the kerb's face: the kerb cut);
+  tar snakes and sealed patches on every street, the bake's too (`wear`); sand drift along the kerbs
+  and walks within 60 m of a mapped beach (`drift`, its edges binned in 32 m cells).
+- **Loose stone** is marked in the fine window's alpha: a gravel or shell yard and a gravel drive
+  are stroked again with `destination-out` at 1 − `STONE_ALPHA` (0.6); everything opaque laid over
+  them puts the alpha back. The ground shader reads it (below); nothing else reads the detail
+  canvas's alpha (the grass mask's "painted" test is `a ≥ 50`).
+- Cost: everything is batched a style a path (a few dozen draws a slice); the bake's yards are
+  binned in 64 m cells, so a slice looks at its own. `tests/groundPaint.test.ts` checks the flags'
+  spacing from the way's start, the kerb/gutter/asphalt widths, the aprons' extent, the yards (no
+  block paving on a street of houses), drift only near a beach, determinism and that a slice draws
+  exactly the window's strokes that reach it.
+
+### The ground shader's grain (`ground.ts`)
+
+Near the walker the paint's material gets the texture you'd see standing on it, inferred from the
+paint (its chroma and value) and the stone alpha: concrete's and asphalt's mottle and stains (four
+octaves, 4.5–90 cm), a gravel or shell yard's pebbles (3.5 cm close up, 9 cm clumps further, a
+shell yard's blue-grey bits), the lawn's mown stipple, and on a beach (warm, light sand by the sea:
+`sandy`) 11 cm wind ripples across the wind in the dry band, trampled sand and footprints between
+the wet sand and the dunes, and the wrack line's dark clumps with pale shell through them. Every
+octave is kept only where it spans a few pixels (`octv`: `fwidth` of the ground position, the
+steeper axis), so it fades into the wash with distance and height, never shimmers, and is sized to
+come through the brush (the Kuwahara's ~1.6 px radius up close).
 
 ## Grass
 

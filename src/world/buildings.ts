@@ -755,7 +755,8 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
       const ex = st[0] + (ddx / dl) * edge, ez = st[1] + (ddz / dl) * edge;
       C.walks.push(fx, fz, ex, ez, B.kind === 'commercial' ? 2.0 : 1.1);
       if (B.kind === 'house' && dl > edge + 3) { // every house with a walk to the street gets a curbside box (props.ts picks the style, NA only)
-        const mx = st[0] + (ddx / dl) * (edge + 0.5) + (-ddz / dl) * 0.9, mz = st[1] + (ddz / dl) * (edge + 0.5) + (ddx / dl) * 0.9;
+        // (its post 45 cm behind the kerb's face — the box's door over the gutter, where the carrier reaches it)
+        const mx = st[0] + (ddx / dl) * (edge - 0.15) + (-ddz / dl) * 0.9, mz = st[1] + (ddz / dl) * (edge - 0.15) + (ddx / dl) * 0.9;
         if (!C.rings.hit(mx, mz, B.ring)) C.mail.push({ x: mx, z: mz, yaw: Math.atan2(-ddx, -ddz) });
         // Lot dressing: most North American houses have a drive beside the walk. Where the map
         // has none (no service way near the door), lay a 2.9 m strip to the street 6 m to one side
@@ -1616,6 +1617,19 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     m.layers.enable(1);
     group.add(m);
   }
+  // A house's kerb box never stands on a shop's sidewalk: none within 10 m of a commercial door (the
+  // margin's shops by their walls — their doors are the next tile's to make)
+  const shopDoors = doors.filter((d) => d.kind === 'commercial');
+  const shopWalls = json.buildings.filter((bd) => bd.own === 0 && bd.k === 'commercial' && !bd.lod).map((bd) => bd.r);
+  const nearShop = (x: number, z: number) => shopDoors.some((d) => Math.hypot(d.wx - x, d.wz - z) < 10) || shopWalls.some((r) => {
+    for (let i = 0, j = r.length - 2; i + 1 < r.length; j = i, i += 2) {
+      const ax = r[j] / 10, az = r[j + 1] / 10, dx = r[i] / 10 - ax, dz = r[i + 1] / 10 - az, L2 = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
+      if (Math.hypot(ax + dx * t - x, az + dz * t - z) < 10) return true;
+    }
+    return false;
+  });
+  for (let i = mailboxes.length - 1; i >= 0; i--) if (nearShop(mailboxes[i].x, mailboxes[i].z)) mailboxes.splice(i, 1);
   return { group, footprints, ctxRings, lanterns, material, doors, colliders, signs, mailboxes, drives, walks, pilings, hood: hoodAt };
 }
 

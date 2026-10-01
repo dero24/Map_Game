@@ -76,7 +76,7 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
   const stairs = buildStairs(pj.roads, (x, z) => terrain.heightAt(x, z), w); // (every highway=steps a flight you climb)
   // the small things — carts, chairs, cleats, towels, the mapped picnic tables — for the micro layer,
   // placed last so they keep off everything above
-  const micro = buildMicro({ world: world2, ctx: tj as unknown as WorldJson, walk: w, footprints: bld.footprints, doors: bld.doors, mailboxes: bld.mailboxes, drives: bld.drives, box: spec.box, hood: bld.hood, style: activeStyle() });
+  const micro = buildMicro({ world: world2, ctx: tj as unknown as WorldJson, walk: w, footprints: bld.footprints, doors: bld.doors, mailboxes: bld.mailboxes, drives: bld.drives, walks: bld.walks, box: spec.box, hood: bld.hood, style: activeStyle() });
   const xing = crossingPaint(tj.roads, pj.points); // (the tile's own crossings, on any street round them)
   const vp = pj.points.filter((p) => p.c === 'viewpoint').flatMap((p) => [p.x, p.z, p.d ?? -1]);
   const plans: BuiltTile['plans'] = [];

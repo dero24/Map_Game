@@ -325,3 +325,89 @@ describe('a slice of the window', () => {
     expect(part.ops.length).toBeLessThan(whole.ops.length);
   });
 });
+
+// ---- The ground you walk on (the fine window) ----
+// A residential street running east-west through z = 0 with houses on its north side (front walks
+// and drives to the kerb), a main road across it at x = 60, and a beach to the south.
+describe('the ground underfoot', () => {
+  const S = { joint: '#857f73', face: '#867f77', faceMain: '#8b877c', gutter: '#948f86', apron: '#c4beb0', drift: '#d8c69a', snake: 'rgba(24,23,22,0.66)', lawn: '#93a964', gravel: '#b9b4a9', shell: '#ddd5c2' };
+  const house = (x: number, z: number): number[] => [x - 5, z - 4, x + 5, z - 4, x + 5, z + 4, x - 5, z + 4].map((v) => Math.round(v * 10));
+  const scene = (beachZ: number) => ({
+    areas: [{ c: 'beach', o: [[-150, beachZ, 150, beachZ, 150, beachZ + 40, -150, beachZ + 40].map((v) => v * 10)], i: [] }],
+    roads: [{ c: 'residential', w: 6.5, p: [-1200, 0, 1200, 0] }, { c: 'primary', w: 11, p: [600, -1200, 600, 1200] }],
+    buildings: Array.from({ length: 8 }, (_, i) => ({ r: house(-90 + i * 16, -14), k: 'house' })),
+  }) as unknown as WorldJson;
+  // each house's walk to the kerb, and every other one's drive (x0 z0 x1 z1 width: the street end last)
+  const walks: number[] = [];
+  for (let i = 0; i < 8; i++) {
+    walks.push(-90 + i * 16, -9.5, -90 + i * 16, -3.85, 1.1);
+    if (i % 2) walks.push(-84 + i * 16, -9.5, -84 + i * 16, -3.85, 2.9);
+  }
+  const painted = (beachZ = 20, clip?: [number, number, number, number]) => {
+    const P = new Painter(scene(beachZ), walks, () => 200);
+    const { ctx, ops } = recorder();
+    P.paint(ctx, -100, -50, 100, 50, 6.83, 2, clip);
+    return ops;
+  };
+  it("scores the sidewalk in 1.5 m flags (a centre joint down a wide one), and draws the kerb's face, the gutter pan and the drives' aprons", () => {
+    const ops = painted();
+    const joints = ops.filter((o) => o.op === 'stroke' && o.style === S.joint).flatMap((o) => o.rings);
+    // the residential walk's joints, north side: across the band from the kerb's face (3.4 m) to its back (4.75)
+    const north = joints.filter((r) => r.length === 2 && Math.abs(r[0][1] + 3.4) < 0.01 && Math.abs(r[1][1] + 4.75) < 0.01).map((r) => r[0][0]).sort((a, b) => a - b);
+    expect(north.length).toBeGreaterThan(80);
+    for (let i = 1; i < north.length; i++) expect(north[i] - north[i - 1]).toBeCloseTo(1.5, 6); // (counted from the way's start)
+    // the main road's 3.5 m walks get a centre joint down the middle of each
+    expect(joints.some((r) => r.length >= 2 && Math.abs(r[0][0] - (60 + (5.5 + 0.15 + 9) / 2)) < 0.01 && Math.abs(r[0][0] - r[r.length - 1][0]) < 0.01)).toBe(true);
+    // the kerb: its face 15 cm each side; the gutter over the whole carriageway, the asphalt 0.6 m in
+    const widths = (style: string) => ops.filter((o) => o.op === 'stroke' && o.style === style).map((o) => o.width);
+    expect(widths(S.face)).toContain(6.5 + 0.3);
+    expect(widths(S.faceMain)).toContain(11 + 0.3);
+    expect(widths(S.gutter)).toContain(6.5);
+    expect(widths(S.gutter)).toContain(11);
+    expect(widths('#606265')).toContain(6.5 - 1.2);
+    // each drive's apron across the walk, kerb to back — drawn over the kerb's face (the kerb cut)
+    const aprons = ops.filter((o) => o.op === 'fill' && o.style === S.apron).flatMap((o) => o.rings);
+    expect(aprons.length).toBe(4);
+    for (const r of aprons) {
+      const zs = r.map((p) => p[1]).sort((a, b) => a - b);
+      expect(zs[0]).toBeCloseTo(-4.75, 3);
+      expect(zs[3]).toBeCloseTo(-3.25, 3);
+    }
+    expect(ops.findIndex((o) => o.style === S.apron)).toBeGreaterThan(ops.findIndex((o) => o.style === S.face));
+  });
+  it("stands the houses in yards — never the walk's concrete — and wears the street and drifts the beach's sand over its walks", () => {
+    const ops = painted();
+    const yards = ops.filter((o) => [S.lawn, S.gravel, S.shell].includes(o.style));
+    expect(yards.length).toBeGreaterThan(0);
+    expect(ops.some((o) => o.style === PAVE)).toBe(false); // (a street of houses isn't a paved block)
+    // every house is in one yard: its outline filled and stroked out to 5 m (and stroked again into
+    // the alpha where the yard is loose stone)
+    for (let i = 0; i < 8; i++) {
+      const mine = yards.filter((o) => o.rings.some((r) => Math.abs(r[0][0] - (-95 + i * 16)) < 0.01 && Math.abs(r[0][1] + 18) < 0.01));
+      expect(mine.filter((o) => o.op === 'fill').length).toBe(1);
+      expect(new Set(mine.map((o) => o.style)).size).toBe(1);
+    }
+    expect(yards.filter((o) => o.op === 'stroke').every((o) => o.width === 10)).toBe(true);
+    expect(ops.some((o) => o.style === S.snake && o.rings.length > 5)).toBe(true); // (tar snakes on the bake's own street)
+    expect(ops.filter((o) => o.style === S.drift).flatMap((o) => o.rings).length).toBeGreaterThan(20);
+    expect(painted(400).some((o) => o.style === S.drift)).toBe(false); // (no beach within 60 m: no drift)
+  });
+  it("is the same ground every time, and a slice draws exactly the window's strokes that reach it", () => {
+    const id = (o: Op, r: Ring) => `${o.op} ${o.style} ${o.width} ${JSON.stringify(r)}`;
+    const a = painted(), b = painted();
+    expect(JSON.stringify(b)).toEqual(JSON.stringify(a));
+    const clip: [number, number, number, number] = [-31, -50, 7, 50];
+    const part = painted(20, clip);
+    const whole = new Set(a.flatMap((o) => o.rings.map((r) => id(o, r))));
+    for (const o of part) for (const r of o.rings) expect(whole.has(id(o, r)), id(o, r).slice(0, 120)).toBe(true);
+    const mine = new Set(part.flatMap((o) => o.rings.map((r) => id(o, r))));
+    const touches = (r: Ring, pad: number) => {
+      const xs = r.map((p) => p[0]), zs = r.map((p) => p[1]);
+      return Math.max(...xs) + pad > clip[0] && Math.min(...xs) - pad < clip[2] && Math.max(...zs) + pad > clip[1] && Math.min(...zs) - pad < clip[3];
+    };
+    let n = 0;
+    for (const o of a) for (const r of o.rings) if (touches(r, o.width / 2 + 0.05)) (n++, expect(mine.has(id(o, r)), id(o, r).slice(0, 120)).toBe(true));
+    expect(n).toBeGreaterThan(100);
+    for (const s of [S.joint, S.apron, S.drift, S.snake, S.gutter, S.face]) expect(part.some((o) => o.style === s), s).toBe(true);
+  });
+});

@@ -30,6 +30,8 @@ import { MICRO_KINDS, MICRO_INDEX, type MicroId } from '../assets/micro';
 import { hashf } from '../assets/core';
 import { carriagewaysNear } from './props';
 import { useOf, terraceUse } from './uses';
+import { ROAD_RANK } from './roadPalette';
+import { sidewalkBand, pavedAprons, SHOPFRONT, PAVED_AREA, segDist, ringDist } from './groundCover';
 
 /** Floats per record: x, y, z, yaw, piece (MICRO_KINDS index), scale, colour 0xRRGGBB, flags. */
 export const MICRO_STRIDE = 8;
@@ -47,6 +49,8 @@ export interface MicroInput {
   doors: Door[];
   mailboxes: Mailbox[];
   drives: Drive[];
+  /** the front walks and drives the ground paint lays (x0 z0 x1 z1 width each, buildings.ts) */
+  walks?: number[];
   /** the tile's own cell (none: anywhere) */
   box?: Box;
   hood?: (x: number, z: number) => HoodClass;
@@ -166,6 +170,42 @@ export function buildMicro(I: MicroInput): Float32Array {
    *  way and deck, and `kerb` m clear of the carriageways. */
   const ground = (x: number, z: number, r: number, kerb = 0.4) =>
     own(x, z, 0.5) && terrain.sdfAt(x, z) > 1 && !walk.blocked(x, z, r) && walk.deckAt(x, z) === null && kerbOut(x, z) > kerb + r && softFree(x, z, r);
+  // What the ground paint lays paved (groundPaint.ts, groundCover.ts): every street and its sidewalk
+  // band, a mapped walk or path, the front walks and drives, the lots and plazas, the concrete round
+  // a dense block's buildings and a shop's frontage. The lawn things — a birdbath, a kayak, a bike, a
+  // hoop, a lawn sign — stand only off it: on a lawn, or a yard's gravel.
+  const SC = 24, segs = new Map<number, number[]>(); // ax az bx bz half, by 24 m cell
+  const sKey = (i: number, j: number) => (i + 65536) * 131072 + (j + 65536);
+  const addSeg = (ax: number, az: number, bx: number, bz: number, half: number) => {
+    for (let i = Math.floor((Math.min(ax, bx) - half) / SC); i <= Math.floor((Math.max(ax, bx) + half) / SC); i++)
+      for (let j = Math.floor((Math.min(az, bz) - half) / SC); j <= Math.floor((Math.max(az, bz) + half) / SC); j++) (segs.get(sKey(i, j)) ?? segs.set(sKey(i, j), []).get(sKey(i, j))!).push(ax, az, bx, bz, half);
+  };
+  for (const r of I.ctx.roads as Road[]) {
+    if (r.lod || r.br || r.tu) continue;
+    const half = r.w / 2 + (r.sw ? 0 : sidewalkBand(ROAD_RANK[r.c] ?? 1));
+    for (let i = 0; i + 3 < r.p.length; i += 2) addSeg(r.p[i] / 10, r.p[i + 1] / 10, r.p[i + 2] / 10, r.p[i + 3] / 10, half);
+  }
+  const W = I.walks ?? [];
+  for (let i = 0; i + 4 < W.length; i += 5) addSeg(W[i], W[i + 1], W[i + 2], W[i + 3], W[i + 4] / 2);
+  const ctxB = I.ctx.buildings.filter((b) => !b.lod && b.r.length >= 6);
+  const hard = [
+    ...pavedAprons(ctxB.map((b) => ({ ring: unpack(b.r), weight: b.k === 'house' || b.k === 'shed' ? 0.45 : 1 }))),
+    ...ctxB.filter((b) => b.k === 'commercial').map((b) => ({ ring: unpack(b.r), band: SHOPFRONT })),
+  ].map((h) => {
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (const [x, z] of h.ring) (x0 = Math.min(x0, x)), (z0 = Math.min(z0, z)), (x1 = Math.max(x1, x)), (z1 = Math.max(z1, z));
+    return { ...h, x0: x0 - h.band, z0: z0 - h.band, x1: x1 + h.band, z1: z1 + h.band };
+  });
+  const lots = I.ctx.areas.filter((a) => PAVED_AREA.has(a.c) && a.o?.[0] && a.o[0].length >= 6).map((a) => unpack(a.o[0]));
+  const paved = (x: number, z: number, r: number) => {
+    const L = segs.get(sKey(Math.floor(x / SC), Math.floor(z / SC)));
+    if (L) for (let i = 0; i + 4 < L.length; i += 5) if (segDist(x, z, L[i], L[i + 1], L[i + 2], L[i + 3]) < L[i + 4] + r) return true;
+    for (const h of hard) if (x > h.x0 - r && x < h.x1 + r && z > h.z0 - r && z < h.z1 + r && ringDist(x, z, h.ring) < h.band + r) return true;
+    for (const q of lots) if (ringDist(x, z, q) < r) return true;
+    return false;
+  };
+  /** Room for a lawn thing: open ground, and not paved. */
+  const lawnGround = (x: number, z: number, r: number, kerb = 0.4) => ground(x, z, r, kerb) && !paved(x, z, Math.min(r, 0.35));
 
   // ---------------------------------------------------------------- mapped first
   for (const p of json.points) {
@@ -257,9 +297,11 @@ export function buildMicro(I: MicroInput): Float32Array {
       if (na && mb && kerbDay(mb.x, mb.z)) {
         const ax = Math.cos(mb.yaw), az = -Math.sin(mb.yaw); // along the kerb, away from the walk
         const yaw = mb.yaw + Math.PI + (h2 - 0.5) * 0.3; // (lids to the street, set down a little askew)
+        // (the box stands at the kerb; the carts a step back from it, on the walk)
+        const bx = -Math.sin(mb.yaw) * 0.4, bz = -Math.cos(mb.yaw) * 0.4;
         for (const [k, o] of [[0, 1.15], [1, 1.95]] as const) {
           if (k === 1 && !two) break;
-          const x = mb.x + ax * o, z = mb.z + az * o;
+          const x = mb.x + ax * o + bx, z = mb.z + az * o + bz;
           if (ground(x, z, 0.35, 0.2)) put('cart', x, z, yaw + (k ? 0.12 : 0), cartPaint(x, z, k === 1));
         }
       } else {
@@ -305,37 +347,37 @@ export function buildMicro(I: MicroInput): Float32Array {
     const u = H(d.wx, d.wz, 21);
     if (sea && !arid && u < 0.11) {
       const [x, z] = lawn(3.2 + h1 * 2, (h2 < 0.5 ? -1 : 1) * (Math.max(left, right) + 1.2));
-      if (ground(x, z, 0.9, 1.5)) put('kayak', x, z, Math.atan2(tx, tz) + (h3 - 0.5) * 0.3, pick(KAYAK, h1));
+      if (lawnGround(x, z, 0.9, 1.5)) put('kayak', x, z, Math.atan2(tx, tz) + (h3 - 0.5) * 0.3, pick(KAYAK, h1));
     } else if (u < 0.17) {
       const [x, z] = lawn(2.4, (h2 < 0.5 ? -1 : 1) * (d.w / 2 + 1.7));
-      if (ground(x, z, 0.5, 1.5)) put('bike', x, z, Math.atan2(tx, tz), pick(BIKE, h1));
+      if (lawnGround(x, z, 0.5, 1.5)) put('bike', x, z, Math.atan2(tx, tz), pick(BIKE, h1));
     } else if (u < 0.24 && !arid && hd !== 'grid') {
       const [x, z] = lawn(4.5 + h1 * 2, (h2 < 0.5 ? -1 : 1) * (2.6 + h3 * 2));
-      if (ground(x, z, 0.35, 2)) put('birdbath', x, z, h3 * 6.28, 0xffffff);
+      if (lawnGround(x, z, 0.35, 2)) put('birdbath', x, z, h3 * 6.28, 0xffffff);
     }
     if (sea && h1 > 0.9 && d.porch) {
       // a surfboard stood against the porch's end
       const o = (h2 < 0.5 ? 1 : -1) * (d.w / 2 + 2.6), [x, z] = lawn(0.45, o);
-      if (ground(x, z, 0.3, 1.5)) put('surfboard', x, z, Math.atan2(nx, nz), pick(SURF, h3));
+      if (lawnGround(x, z, 0.3, 1.5)) put('surfboard', x, z, Math.atan2(nx, nz), pick(SURF, h3));
     }
     if (na && mb) {
       // signs by the walk: a lawn sign (a school, a candidate, a contractor), a realtor's now and then
       const ax = Math.cos(mb.yaw), az = -Math.sin(mb.yaw), hx = -Math.sin(mb.yaw), hz = -Math.cos(mb.yaw);
       const w = H(mb.x, mb.z, 31);
       if (w < (hd === 'estate' ? 0.02 : 0.07)) {
-        const x = mb.x - ax * 2.6 + hx * 1.3, z = mb.z - az * 2.6 + hz * 1.3;
-        if (ground(x, z, 0.32, 0.6)) put('yardsign', x, z, mb.yaw + Math.PI + (w - 0.03) * 4, pick(SIGNS, H(mb.x, mb.z, 32)));
+        const x = mb.x - ax * 2.6 + hx * 1.9, z = mb.z - az * 2.6 + hz * 1.9; // (in the yard, behind the walk)
+        if (lawnGround(x, z, 0.32, 0.6)) put('yardsign', x, z, mb.yaw + Math.PI + (w - 0.03) * 4, pick(SIGNS, H(mb.x, mb.z, 32)));
       } else if (w > 0.975) {
-        const x = mb.x - ax * 3.4 + hx * 1.4, z = mb.z - az * 3.4 + hz * 1.4;
-        if (ground(x, z, 0.45, 0.6)) put('salesign', x, z, facing(ax, az), pick(REALTOR, H(mb.x, mb.z, 33)));
+        const x = mb.x - ax * 3.4 + hx * 2.0, z = mb.z - az * 3.4 + hz * 2.0;
+        if (lawnGround(x, z, 0.45, 0.6)) put('salesign', x, z, facing(ax, az), pick(REALTOR, H(mb.x, mb.z, 33)));
       }
     }
     // 5. a hoop by the drive (where kids play in the street: tract and suburb)
     const v = driveOf(d);
     if (na && v && H(v.x, v.z, 41) < (hd === 'tract' ? 0.22 : hd === 'suburb' ? 0.12 : 0.03)) {
       const ux = Math.sin(v.yaw), uz = Math.cos(v.yaw), px = uz, pz = -ux, s = H(v.x, v.z, 42) < 0.5 ? 1 : -1;
-      const x = v.x + px * s * 1.85 + ux * 0.6, z = v.z + pz * s * 1.85 + uz * 0.6;
-      if (ground(x, z, 0.55, 1)) put('hoop', x, z, v.yaw + Math.PI, 0xffffff);
+      const x = v.x + px * s * 2.05 + ux * 0.6, z = v.z + pz * s * 2.05 + uz * 0.6; // (on the lawn at the drive's edge)
+      if (lawnGround(x, z, 0.55, 1)) put('hoop', x, z, v.yaw + Math.PI, 0xffffff);
     }
     // 6. beside and behind: the AC unit at a side wall, a grill or a fire ring out back
     if (!cold && h2 > 0.25) {

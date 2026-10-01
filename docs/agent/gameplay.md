@@ -297,6 +297,12 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   - `furniture.ts`: mailboxes, beach set, picnic table, car gear + `gearFor`;
   - `micro.ts`: the micro layer's small things (carts, A-frames, porch chairs, flags, hoops, cleats, buoys, beach gear, the mapped picnic tables, boards, cabinets, clocks, channel marks), placed by `world/micro.ts` and drawn real close up, as impostor cards further out (`docs/agent/rendering.md`).
 - Lot dressing (NA): `buildings.ts` lays a generated drive (a 2.9 m strip in `walks`) beside the front walk where the map has no service way near the door, and emits `drives`; `props.ts` parks a car at the house end (never on paved ground or the sidewalk strip). Doors also get hedges or `fence:picket` runs.
+  - The kerb line: a house's curbside box stands with its post 45 cm behind the kerb's face (the
+    carriageway's edge; `buildings.ts`), a hydrant 60 cm (`props.ts`, 4.2 m along the kerb from a
+    box, and only where that is still 35–100 cm off the kerb's face — not past a bend or the street's
+    end; its mesh is `street:hydrants:kerb`). No house's box within 10 m of a commercial door (the
+    margin's shops by their walls): a shop's sidewalk carries none. The ground the paint lays round
+    them — flags, kerb face, gutter pan, aprons — is `docs/agent/rendering.md` "The ground you walk on".
 - Keeping the way in clear while a tile builds (`tileBuild.ts`): the builders' scratch walk holds,
   unrecorded, the margin buildings' outlines, a 3.2 m apron in front of every door (`doorApron`),
   the tile's own footprints, and its stairs and landings (`deckKeepOut`, with 1.2 m past a flight's
