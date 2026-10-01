@@ -4,6 +4,7 @@ import { Terrain, TerrainLayer, type GridHeader, type LayerLayout, type Road } f
 import { WalkWorld } from '../src/player/collision';
 import { RecWalk, packDeck, unpackDeck, replayOps, type WalkOp } from '../src/world/pack';
 import { buildStructures } from '../src/world/structures';
+import { buildTile } from '../src/world/tileBuild';
 import { chainBridges, bridgeProfile, crossingsUnder, profileAt, chainAt, CLEAR_MOVABLE, LIFT, type Profile } from '../src/world/bridges';
 import rumson from './fixtures/rumson-bridge.json';
 
@@ -105,6 +106,22 @@ describe('a bridge’s long section', () => {
   it('is the same section every time', () => {
     const again = bridgeProfile(chainBridges(riverRoads(true, true))[0], river);
     expect(again.y).toEqual(pf.y);
+  });
+});
+
+// ---------------- through the tile pipeline ----------------
+describe('a bridge through the tile build', () => {
+  const tile = (roads: Road[]) => ({
+    version: 1, id: '0_0', lod: 0, box: { x0: -128, z0: -64, x1: 128, z1: 64 }, origin: { lat: 40.36, lon: -73.97 },
+    slice: { x0: -128, z0: -64, x1: 128, z1: 64 }, backdrop: { x0: -128, z0: -64, x1: 128, z1: 64 }, landmarks: [],
+    buildings: [], roads, areas: [], lines: [], points: [],
+  });
+  const spec = { id: '0_0', box: { x0: -128, z0: -64, x1: 128, z1: 64 }, lod: 0, file: 'tiles/0_0.json' };
+  it('a coarse (lite) build draws it — the silhouette ring — with no collision', async () => {
+    const lite = await buildTile(tile(riverRoads(true, true)) as never, river, spec, 0, true);
+    expect(lite.ops).toHaveLength(0);
+    expect(lite.objs.some((o) => o.n === 'structures')).toBe(true);
+    expect(lite.towers.length).toBe(4 * 3); // (a tender house's lamp at each corner of the bascule)
   });
 });
 
