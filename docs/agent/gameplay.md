@@ -63,9 +63,32 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
     white and white-shaded grey parts take the tint) and `interior/furnish.ts` (furniture by room
     type) build the mesh as generator steps the pump runs ≤ 3.5 ms a frame. Piece keys must fully
     determine their geometry (the piece cache is shared across builds).
-  - Budgets (`tests/interiorBudget.test.ts`): no step over 8 ms, ≤ 120k vertices (a house 40k),
-    ≤ 60 draws, a tall building ≤ 3 storeys built; layout rules in `tests/interiorLayout.test.ts`;
-    `npx tsx tools/bench-interiors.mts`.
+  - Budgets (`tests/interiorBudget.test.ts`): no step over 8 ms, ≤ 120k vertices (a house 40k, a
+    supermarket 90k), ≤ 60 draws, a tall building ≤ 3 storeys built; layout rules in
+    `tests/interiorLayout.test.ts`; `npx tsx tools/bench-interiors.mts`.
+- Deeper archetypes (Slice 4, `tests/interiorArch.test.ts`): `uses.ts placeOf(name, tag)` says what a
+  building is (its tag first — a pub called "The Library" stays a pub — else its name, several
+  languages) and plan.ts picks the family: `market` (a supermarket, a grocery ≥ 400 m², a pharmacy
+  ≥ 500 m², a tagged shop ≥ 1,500 m² on one storey), `hotel` / `school` (corridor strips: `STRIPS`,
+  the corridor where both bands come out most even; on a storefront's glass the ground storey is
+  `P.pub`, a public floor), a library/bank/post office/gym/pharmacy as its shop floor (a big one an
+  office core round its hall), a church or mosque (`P.place`).
+  - Layout: `backStrip` puts a big floor's back of house at the depth that makes its share (20–25% a
+    supermarket's, 30–40% a restaurant's kitchen) — across the middle it meets no facade; at each
+    side wall it jogs to that wall's pier, the corner between a back room. `bandCuts` picks a band's
+    party walls together on a 10 cm grid (a DP: rooms nearest the width wanted, out-of-range only
+    where no pier allows better; a greedy pick strands the next room in a window).
+  - A big floor is planned round its fixtures (`Layout.fix`: kind, rect, facing, modules): a
+    supermarket's checkouts by the door (lanes on a 2.5 m pitch), produce on the door's other side,
+    the main aisle, gondola runs (1.25 m modules, ≤ 11 a run: a cross aisle every 13.75 m, 1.8 m
+    aisles), chillers and freezers along the back partition; a church's pews (0.91 m pitch, a 1.5 m
+    centre aisle) and altar. `finish` drops a fixture a doorway came to land by.
+  - Rooms: `guest` (bath inboard, the entry passage open to the bedroom, mirrored pairs), `classroom`
+    (50–65 m², the board on a solid end wall), `assembly`, `staff` (a gym's changing room),
+    `narthex`, `prayer` (carpet rows, the mihrab and minbar on the far wall), `library`, `bank`,
+    `post`, `gym`; furnished in `furnish.ts` (`fixtures()` first, then the room's own).
+  - Not done: a dais (the type is there), a qibla from the real bearing, hotels' and gyms' tags
+    (`tourism`, `leisure` aren't in the tile's use tag yet: their names find them).
 - Tall buildings (Slice 3, `tests/interiorTower.test.ts`): plan.ts `tall` — ≥ 5 storeys, or more than
   12,000 m² of floor. Every storey exists: n = floor((top − floor0 + 0.2) ÷ fH), the facade's window
   rows (a 150 m office tower: 39).

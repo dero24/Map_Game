@@ -52,6 +52,8 @@ const ROOM_NAME: Partial<Record<Room['type'], string>> = {
   dining: 'dining room', bath: 'bathroom', bed: 'bedroom', study: 'study', utility: 'utility room', closet: 'closet',
   store: 'storeroom', open: 'open-plan office', meeting: 'meeting room', lift: 'elevator lobby', shop: 'shop floor',
   stock: 'stockroom', cafe: 'café', bar: 'bar', diner: 'dining room', galley: 'kitchen', church: 'nave', great: 'living room',
+  guest: 'guest room', classroom: 'classroom', assembly: 'school hall', staff: 'staff room', narthex: 'vestibule', prayer: 'prayer hall',
+  library: 'library', bank: 'banking hall', post: 'post office', gym: 'gym',
 };
 
 /** A build: an activation's, or a tall building's next window. What it made waits here until it

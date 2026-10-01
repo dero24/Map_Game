@@ -329,13 +329,17 @@ const CARPET = [0xb9ae9a, 0x9aa3a0, 0xa89080, 0x8d9aa8, 0xc4b8a2];
  *  big tiles / lino. */
 export function paintFor(type: Room['type'], rnd: () => number): { wall: number; style: number; floor: number; ft: number } {
   const wet = type === 'bath' || type === 'wc' || type === 'kitchen' || type === 'galley' || type === 'utility';
-  const trade = type === 'shop' || type === 'cafe' || type === 'church' || type === 'bar' || type === 'diner';
-  const plainT = type === 'corridor' || type === 'stair' || type === 'lobby' || type === 'open' || type === 'meeting' || type === 'lift' || type === 'store' || type === 'stock';
+  const trade = type === 'shop' || type === 'cafe' || type === 'church' || type === 'bar' || type === 'diner' || type === 'library' || type === 'bank' || type === 'narthex';
+  const plainT = type === 'corridor' || type === 'stair' || type === 'lobby' || type === 'open' || type === 'meeting' || type === 'lift' || type === 'store' || type === 'stock'
+    || type === 'classroom' || type === 'assembly' || type === 'staff' || type === 'post' || type === 'gym' || type === 'prayer';
   const wall = WALL_PAINT[Math.floor(rnd() * WALL_PAINT.length)];
   const style = wet ? 4 : trade ? 5 : plainT ? (type === 'lobby' && rnd() < 0.5 ? 5 : 0) : [0, 1, 1, 2, 3][Math.floor(rnd() * 5)];
-  const ft = wet ? 1 : type === 'shop' || type === 'lobby' || type === 'open' || type === 'stock' || type === 'store' || type === 'lift' || type === 'stair' ? 3
-    : type === 'corridor' || type === 'meeting' ? (rnd() < 0.6 ? 2 : 3) : type === 'bed' && rnd() < 0.35 ? 2 : 0;
-  const floor = ft === 1 ? [0xe8e4da, 0xd9e2e4, 0xefe9dc][Math.floor(rnd() * 3)] : ft === 2 ? CARPET[Math.floor(rnd() * CARPET.length)] : ft === 3 ? [0xcfc8b8, 0xc2c6c4, 0xd8d0c0][Math.floor(rnd() * 3)] : WOOD[Math.floor(rnd() * WOOD.length)];
+  // (a guest room's, a library's and a prayer hall's carpet; a classroom's lino, a school hall's
+  // boards; a gym's dark rubber)
+  const ft = wet ? 1 : type === 'shop' || type === 'lobby' || type === 'open' || type === 'stock' || type === 'store' || type === 'lift' || type === 'stair' || type === 'classroom' || type === 'staff' || type === 'post' || type === 'bank' || type === 'narthex' || type === 'gym' ? 3
+    : type === 'corridor' || type === 'meeting' ? (rnd() < 0.6 ? 2 : 3) : (type === 'bed' && rnd() < 0.35) || type === 'guest' || type === 'library' || type === 'prayer' ? 2 : 0;
+  const floor = type === 'gym' ? 0x5d6266 : type === 'prayer' ? [0x8c2f2a, 0x2f5a46, 0x6a2a3a][Math.floor(rnd() * 3)]
+    : ft === 1 ? [0xe8e4da, 0xd9e2e4, 0xefe9dc][Math.floor(rnd() * 3)] : ft === 2 ? CARPET[Math.floor(rnd() * CARPET.length)] : ft === 3 ? [0xcfc8b8, 0xc2c6c4, 0xd8d0c0][Math.floor(rnd() * 3)] : WOOD[Math.floor(rnd() * WOOD.length)];
   return { wall, style, floor, ft };
 }
 
@@ -490,7 +494,7 @@ export function* drawPartitionsGen(d: Draw, P: Plan, L: Layout, ceil: (k: number
   const f = (k: number) => P.floor0 + k * P.floorH;
   const M = P.main;
   const leaves: LeafSpot[] = [];
-  const circ = new Set(['hall', 'landing', 'corridor', 'lobby', 'open', 'shop', 'cafe', 'bar', 'diner', 'stair']);
+  const circ = new Set(['hall', 'landing', 'corridor', 'lobby', 'open', 'shop', 'cafe', 'bar', 'diner', 'stair', 'narthex', 'library', 'bank', 'post', 'gym', 'assembly', 'prayer']);
   const LP = new LocalPoly(P.loc);
   // (the walls by storey, axis and line, to a decimetre)
   const lines = new Map<number, Layout['walls']>();

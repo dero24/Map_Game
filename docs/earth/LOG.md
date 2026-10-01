@@ -2,6 +2,49 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-01 — Deeper archetypes: supermarkets, hotels, schools, churches, libraries, banks
+
+Interiors Slice 4 (docs/INTERIORS_PLAN.md §5), finishing a helper's groundwork that the usage
+limit stopped (its decor pieces, `placeOf`, the hotel and school strips in plan.ts).
+
+- **What a building is** (`uses.ts` `placeOf`): its OSM tag first, else its name (several languages);
+  plan.ts turns that into a family — `market`, `hotel`, `school`, a library/bank/post office/gym/
+  pharmacy floor, a church or a mosque.
+- **Back of house at its share** (`layout.ts` `backStrip`): a storefront's side walls are glass with
+  piers 0.35 m wide every 3.4–5 m, so a partition straight across could only land a cell's depth
+  either way of what it wanted. It now stands at the depth that makes the area and jogs at each side
+  wall to its pier; the corner is a back room. Supermarket 22.5% (§2: 20–25%); restaurant kitchens
+  30.9–35% (§2: 30–40%; they were 26–46%).
+- **A supermarket planned round its fixtures** (`Layout.fix`): checkouts at the door with lanes
+  toward it, produce on the door's other side, the main aisle, gondola runs with 1.8 m aisles and a
+  cross aisle every 13.75 m, chillers and freezers along the back partition. 60×40 m: 6 checkouts,
+  42 runs, 10 cold cases, 27k vertices (budget 90k).
+- **Hotels and schools**: corridor storeys with en-suite guest rooms (bath inboard, passage open to
+  the bedroom, mirrored pairs) and classrooms; the ground storey a lobby with its breakfast room or a
+  hall and office — or, on a storefront, a public floor (lobby, bar, breakfast room; a school's hall
+  and dining hall) with its kitchen behind.
+- **Walls chosen together** (`bandCuts`): a greedy pick put a party wall on a pier's far edge, and
+  the next room had no pier in range — 13 of 31 rooms on a hotel's back band came out too narrow for
+  a bathroom. A DP over a 10 cm grid now picks the band's walls together: 60×18 m hotel 27–31 rooms
+  of 25–35 m² a storey, all with a bathroom; classrooms 51–64 m².
+- **Churches** get a narthex, pews (0.91 m pitch, 1.5 m centre aisle) and an altar; a mosque a
+  carpeted prayer hall with its mihrab and minbar; a church that became a library is its reading
+  room. A library, a bank, a post office, a gym and a pharmacy furnish their floors (stacks; teller
+  counters and queue posts; treadmills by the glass).
+- Fixes on the way: slivers a lift or core left became unreachable "rooms" (now dropped); piece keys
+  that shared a key with different geometry (the shared cache would have mixed them).
+- **Tests:** `tests/interiorArch.test.ts` (16, all failing on the old code: no `market`, no `fix`,
+  no hotel rooms); `interiorBudget.test.ts` +5 cases (a supermarket ≤ 90k); foundry budgets for the
+  18 pieces. Full suite passes (hoods through its cloud shim).
+- **Visual:** test buildings registered live by the Sea Bright spawn, shot in SwiftShader
+  (`shots/synthin-{a,b,c}.jpg`): the supermarket, a hotel corridor, room and breakfast room, a school
+  corridor, classroom and hall, the nave, a restaurant, the library, bank, gym and prayer hall. The
+  pews read as one black mass under the nave's high lamps (now oak to walnut) and the gym's rubber
+  floor as a void (lightened). (Grass and a pole that poke through two of them are the test
+  placement's: open ground near the spawn, no footprint to clear them.)
+- **Next:** a dais for the chancel; the qibla from the real bearing; `tourism`/`leisure` into the
+  tile's use tag (a cache bump); lifts in five-storey blocks whose core slot has no pier.
+
 ## 2026-10-01 — Stand-in cells agree at their seams; a car stops at its bumper; raised doors on the wall with room
 
 Finishes the work of a helper that the usage limit cut short on 2026-09-29 (after (af)). It is

@@ -253,7 +253,7 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
   const S = F.sides(R);
   const area = (R.r.u1 - R.r.u0) * (R.r.v1 - R.r.v0);
   const fab = F.pick(FABRIC), wood = rng.float() < 0.5 ? F.wood : F.pick(WOOD);
-  const homey = ['living', 'bed', 'dining', 'kitchen', 'study', 'great', 'hall', 'landing'].includes(R.type);
+  const homey = ['living', 'bed', 'dining', 'kitchen', 'study', 'great', 'hall', 'landing', 'guest'].includes(R.type);
   const um = (R.r.u0 + R.r.u1) / 2, vm = (R.r.v0 + R.r.v1) / 2;
   const house = F.fp.kind === 'house';
   // ---- light: a ceiling fan in a beach house's rooms, else a glowing dish (none over the stairs) ----
@@ -449,6 +449,11 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
     const along = R.r.u1 - R.r.u0 >= R.r.v1 - R.r.v0;
     const rr = along ? { u0: R.r.u0 + 0.5, u1: R.r.u1 - 0.5, v0: vm - 0.35, v1: vm + 0.35 } : { u0: um - 0.35, u1: um + 0.35, v0: R.r.v0 + 0.5, v1: R.r.v1 - 0.5 };
     if (rr.u1 - rr.u0 > 1 && rr.v1 - rr.v0 > 0.5 && F.freeAt(k, rr)) rug(rr);
+    // (a hotel room's entry: the wardrobe and the luggage rack)
+    if (R.unit >= 0 && (P.arch === 'hotel' || P.up === 'hotel')) {
+      const wp = F.against(R, S, 1.1, 0.6, { tall: true });
+      if (wp) { F.claim(k, wp.r); F.put('wardrobe', () => D.wardrobe(1.1), wp.uc, wp.vc, y, wp.ax, wood); }
+    }
     if (R.type === 'hall' && k === 0 && house) {
       const cp = F.against(R, S, 0.9, 0.36);
       if (cp) { F.claim(k, cp.r); table(cp.r, 0.8, wood); d.box(cp.uc - 0.1, cp.uc + 0.1, cp.vc - 0.08, cp.vc + 0.08, y + 0.8, y + 0.86, 0xc9a24b, IP.porcelain); }
@@ -512,7 +517,35 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
       for (let i = 0; i < 4; i++) { const pl = F.anywhere(R, 0.5, 0.5, 0.2); if (pl) { F.claim(k, pl.r); plant(pl.uc, pl.vc, true); } }
       return;
     }
-    if (F.fp.kind === 'large') {
+    if (P.arch === 'hotel' || P.arch === 'school') {
+      // a hotel's front desk (its key rack and clock behind it), a school's office window; seats
+      const hotel = P.arch === 'hotel';
+      const rp = F.against(R, S, hotel ? 3.0 : 2.0, 0.65 + STAFF_AISLE, { noExt: true, tries: 20 });
+      if (rp && rp.side) {
+        F.claim(k, grow(rp.r, 0.3));
+        const cr = F.wrect(rp.side, rp.s0, rp.s1, STAFF_AISLE, STAFF_AISLE + 0.65), L = q(rp.s1 - rp.s0);
+        F.put(`desk:${L.toFixed(1)}`, () => D.counter(L, 0.65, 0xffffff, false), (cr.u0 + cr.u1) / 2, (cr.v0 + cr.v1) / 2, y, rp.ax, hotel ? wood : 0xd8d2c4);
+        if (hotel) {
+          F.wbox(rp.side, rp.s0 + 0.3, rp.s1 - 0.3, 0, 0.04, y + 1.3, y + 2.1, F.wood, IP.wood);
+          for (let i = 0; i < 3; i++) F.wbox(rp.side, rp.s0 + 0.5 + i * 0.7, rp.s0 + 0.8 + i * 0.7, 0.04, 0.05, y + 1.6, y + 1.9, 0xf2efe6, IP.porcelain);
+        }
+        const sm = (rp.s0 + rp.s1) / 2, st = F.wrect(rp.side, sm, sm, STAFF_AISLE * 0.5, STAFF_AISLE * 0.5);
+        F.npcs.push([st.u0, st.v0, y, yawTo(...out(rp)), 0, 1]);
+      }
+      for (let t = 0; t < Math.max(1, Math.min(3, Math.floor(area / 40))); t++) {
+        const gp = F.anywhere(R, 3.0, 1.2, 0.8);
+        if (!gp) break;
+        F.claim(k, gp.r);
+        table({ u0: gp.uc - 0.5, u1: gp.uc + 0.5, v0: gp.vc - 0.3, v1: gp.vc + 0.3 }, 0.42, wood);
+        F.put('armchair', () => D.armchair(0.8, 0.8, 0xffffff), gp.uc - 1.05, gp.vc, y, axFacing([1, 0]), fab);
+        F.put('armchair', () => D.armchair(0.8, 0.8, 0xffffff), gp.uc + 1.05, gp.vc, y, axFacing([-1, 0]), fab);
+        if (t === 0) F.npcs.push([gp.uc - 1.0, gp.vc, y, yawTo(1, 0), 0.45]);
+      }
+      const rr = { u0: um - 1.2, u1: um + 1.2, v0: vm - 0.9, v1: vm + 0.9 };
+      if (hotel && inside(R.r, rr) && F.freeAt(k, rr)) rug(rr);
+      for (let i = 0; i < 2; i++) { const pl = F.anywhere(R, 0.5, 0.5, 0.2); if (pl) { F.claim(k, pl.r); plant(pl.uc, pl.vc, true); } }
+      wallArt(2);
+    } else if (F.fp.kind === 'large') {
       const mp = F.against(R, S, 1.6, 0.32, { tall: true });
       if (mp) { F.claim(k, mp.r); F.put('mail', () => D.mailboxes(1.6), mp.uc, mp.vc, y, mp.ax); }
       const pl = F.anywhere(R, 0.5, 0.5, 0.2);
@@ -616,6 +649,25 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
     for (let t = 0; t < Math.min(4, Math.floor(area / 60)); t++) { const pl = F.anywhere(R, 0.5, 0.5, 0.3); if (pl) { F.claim(k, pl.r); plant(pl.uc, pl.vc, true); } }
   };
   const shop = function* () {
+    // (a supermarket's floor is its layout's fixtures: a plant by the door)
+    if (F.L.fix.some((fx) => fx.level === k)) {
+      const pl = F.anywhere(R, 0.5, 0.5, 0.3);
+      if (pl) plant(pl.uc, pl.vc, true);
+      return;
+    }
+    // a pharmacy's dispensary: its counter on the back wall, the shelves of medicines behind it
+    if (F.P.place === 'pharmacy') {
+      const dw = Math.min(4.8, (R.r.v1 - R.r.v0) * 0.45);
+      const dp = F.against(R, S, dw, 0.62 + 1.2, { keys: ['u1'], noExt: true }) ?? F.against(R, S, dw, 0.62 + 1.2, { noExt: true });
+      if (dp && dp.side) {
+        F.claim(k, grow(dp.r, 0.3));
+        const cr = F.wrect(dp.side, dp.s0, dp.s1, 1.2, 1.82), L = q(dp.s1 - dp.s0);
+        F.put(`dispensary:${L.toFixed(1)}`, () => D.counter(L, 0.62, 0xffffff, false), (cr.u0 + cr.u1) / 2, (cr.v0 + cr.v1) / 2, y, dp.ax, 0xf2efe6);
+        F.put(`meds:${L.toFixed(1)}`, () => D.shelves(L, 0.35, 2.1, 0xf2efe6, [0xf2efe6, 0x5b7fa6, 0xd9573f, 0x6e8c5a, 0xe9e2d0], 77), dp.uc + out(dp)[0] * -0.7, dp.vc + out(dp)[1] * -0.7, y, dp.ax);
+        const sm = (dp.s0 + dp.s1) / 2, st = F.wrect(dp.side, sm, sm, 0.75, 0.75);
+        F.npcs.push([st.u0, st.v0, y, yawTo(...out(dp)), 0, 1]);
+      }
+    }
     // gondola runs from the front toward the back of house, a cross aisle every ~12 m, the till by the door
     const grocery = F.use === 'grocery';
     const stock = grocery ? STOCK : FABRIC;
@@ -784,8 +836,312 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
     }
     wallArt(2);
   };
+  // ---- Slice 4: the fixtures a layout planned in this room, then its program's pieces ----
+  const fixtures = () => {
+    // (a building's own colours for its checkouts and its pews' wood: one pick each)
+    const seedB = Math.floor(F.fp.seed * 9973);
+    const counterHex = [0x2f4a5a, 0x8c2f2a, 0x3d5a46, 0xb5793a, 0x5b7fa6][seedB % 5];
+    // (oak to walnut: under a nave's high lamps a darker wood reads as one black mass)
+    const pewWood = [0xa07a52, 0xb89468, 0x8a6242, 0x9c7a5a][seedB % 4];
+    let lane = 0;
+    for (const fx of F.L.fix) {
+      if (fx.level !== k) continue;
+      const uc = (fx.r.u0 + fx.r.u1) / 2, vc = (fx.r.v0 + fx.r.v1) / 2;
+      if (uc < R.r.u0 || uc > R.r.u1 || vc < R.r.v0 || vc > R.r.v1) continue;
+      F.claim(k, fx.r);
+      const fv: P2 = fx.face === 0 ? [1, 0] : fx.face === 1 ? [-1, 0] : fx.face === 2 ? [0, 1] : [0, -1];
+      const ax = axFacing(fv), back: P2 = [-ax[1], ax[0]];
+      const alongU = fx.r.u1 - fx.r.u0 >= fx.r.v1 - fx.r.v0, len = alongU ? fx.r.u1 - fx.r.u0 : fx.r.v1 - fx.r.v0;
+      const vi = (Math.floor(uc * 3.1) + Math.floor(vc * 1.7)) & 3;
+      switch (fx.kind) {
+        case 'gondola': {
+          const m = len / fx.n;
+          for (let j = 0; j < fx.n; j++) {
+            const t = -len / 2 + (j + 0.5) * m, u = alongU ? uc + t : uc, v = alongU ? vc : vc + t;
+            const gi = (Math.floor(u * 3.1) + Math.floor(v * 1.7)) & 3;
+            // (the same piece as a shop's own grocery gondolas: one key, one geometry)
+            F.put(`gondola:g${gi}`, () => D.gondola(1.23, 101 + gi, STOCK), u, v, y, alongU ? [1, 0] : [0, 1]);
+          }
+          break;
+        }
+        case 'checkout': {
+          F.put(`checkout:${q(len).toFixed(1)}`, () => D.checkout(q(len)), uc, vc, y, ax, counterHex);
+          // the cashier on their side of it, facing the lane (the first few lanes open)
+          if (lane++ < 4) F.npcs.push([uc + back[0] * 0.75 + ax[0] * 0.5, vc + back[1] * 0.75 + ax[1] * 0.5, y, yawTo(-back[0], -back[1]), 0, 1]);
+          if (lane < 3) F.npcs.push([uc - back[0] * 0.85 - ax[0] * 0.6, vc - back[1] * 0.85 - ax[1] * 0.6, y, yawTo(back[0], back[1])]);
+          break;
+        }
+        case 'cooler': case 'freezer': {
+          const doors = fx.kind === 'freezer', ci = vi & 1;
+          F.put(`cold:${doors ? 1 : 0}:${ci}:${q(len).toFixed(1)}`, () => D.cooler(q(len), 301 + ci, STOCK, doors), uc, vc, y, ax, doors ? 0xdfe3e4 : 0x3f6f78);
+          F.glow(uc + fv[0] * 0.6, vc + fv[1] * 0.6, y + 1.9, 0.5);
+          break;
+        }
+        case 'produce':
+          F.put(`produce:${vi}:${q(len).toFixed(1)}`, () => D.produce(q(len), 0.9, 401 + vi), uc, vc, y, ax, F.wood);
+          break;
+        case 'pew':
+          F.put(`pew:${q(len).toFixed(1)}`, () => D.pew(q(len)), uc, vc, y, ax, pewWood);
+          if (rng.float() < 0.12) F.npcs.push([uc - fv[0] * 0.02 + ax[0] * (rng.float() - 0.5) * (len - 0.8), vc - fv[1] * 0.02 + ax[1] * (rng.float() - 0.5) * (len - 0.8), y, yawTo(fv[0], fv[1]), 0.45]);
+          break;
+        case 'altar': {
+          F.put(`altar:${q(len).toFixed(1)}`, () => D.altar(q(len), 0x8c2f2a), uc, vc, y, ax);
+          F.glow(uc, vc, y + 1.5, 0.5);
+          // the lectern to one side, in front
+          const lu = uc + fv[0] * 1.6 + ax[0] * (len / 2 + 0.6), lv = vc + fv[1] * 1.6 + ax[1] * (len / 2 + 0.6);
+          if (F.freeAt(k, { u0: lu - 0.3, u1: lu + 0.3, v0: lv - 0.3, v1: lv + 0.3 })) F.put('lectern', () => D.lectern(0xffffff), lu, lv, y, ax, pewWood);
+          break;
+        }
+        default: break;
+      }
+    }
+  };
+  /** Wall rects of the room's sides that run along `run` (0: along u), the facade's or not. */
+  const sidesAlong = (ext: boolean) => S.filter((x) => x.ext === ext).map((x) => x.key);
+  const guest = () => {
+    // the bed's head on a party wall, the desk with its TV across from it, an armchair by the window
+    const bp = F.against(R, S, 2.7, 2.15, { noExt: true, tries: 20 }) ?? F.against(R, S, 2.0, 2.1, { noExt: true });
+    let across: SideKey[] | undefined;
+    if (bp && bp.side) {
+      F.claim(k, grow(bp.r, 0.05));
+      F.put('hotelBed', () => D.hotelBed(1.6), bp.uc, bp.vc, y, bp.ax, F.pick([0x8c2f2a, 0x2f4a5a, 0x6e8c5a, 0xc9a24b, 0x7a5b8c]));
+      const o = out(bp);
+      F.glow(bp.uc - o[0] * 0.7, bp.vc - o[1] * 0.7, y + 1.0, 0.6);
+      F.npcs.push([bp.uc + o[0] * 0.2, bp.vc + o[1] * 0.2, y, yawTo(o[0], o[1]), 0.52]);
+      const side = bp.side;
+      across = S.filter((x) => x.run === side.run && x.key !== side.key).map((x) => x.key);
+      F.claim(k, F.wrect(side, bp.s0, bp.s1, 2.15, 2.75)); // (the walk past its foot)
+    }
+    const dp = F.against(R, S, 2.4, 0.5, { keys: across, noExt: true, tall: true }) ?? F.against(R, S, 1.8, 0.5, { noExt: true });
+    if (dp) { F.claim(k, grow(dp.r, 0.1)); F.put(`hotelDesk:${q(dp.s1 - dp.s0).toFixed(1)}`, () => D.hotelDesk(q(dp.s1 - dp.s0)), dp.uc, dp.vc, y, dp.ax, wood); }
+    const ac = F.against(R, S, 0.85, 0.85, { keys: sidesAlong(true) }) ?? F.anywhere(R, 0.85, 0.85, 0.4);
+    if (ac) {
+      F.claim(k, ac.r);
+      const o: P2 = ac.side ? out(ac) : [Math.sign(um - ac.uc) || 1, 0];
+      F.put('armchair', () => D.armchair(0.8, 0.8, 0xffffff), ac.uc, ac.vc, y, axFacing(o), fab);
+      lamp(ac.uc + ac.ax[0] * 0.6, ac.vc + ac.ax[1] * 0.6, y, true);
+    }
+    wallArt(1);
+  };
+  const classroom = () => {
+    // the board on a solid end wall (the windows on the pupils' side), the teacher's desk before it,
+    // double desks in rows facing it with a 0.6 m aisle down the side and between the pairs
+    const ext = S.find((x) => x.ext);
+    const ends = S.filter((x) => !x.ext && (!ext || x.run !== ext.run)).map((x) => x.key);
+    const bp = F.against(R, S, 3.0, 0.08, { keys: ends.length ? ends : undefined, noExt: true, tall: true, tries: 24 }) ?? F.against(R, S, 2.4, 0.08, { noExt: true, tall: true });
+    if (!bp || !bp.side) { wallArt(2); return; }
+    const Sd = bp.side, o = out(bp);
+    F.put(`whiteboard:${q(bp.s1 - bp.s0).toFixed(1)}`, () => D.whiteboard(q(bp.s1 - bp.s0) - 0.05), bp.uc, bp.vc, y, bp.ax);
+    // (the depth of the room away from the board, and its length along it)
+    const far = S.find((x) => x.run === Sd.run && x.key !== Sd.key)!;
+    const depth = Math.abs(far.face - Sd.face), lo = Sd.lo + 0.15, hi = Sd.hi - 0.15;
+    const mid = (bp.s0 + bp.s1) / 2;
+    const tr = F.wrect(Sd, mid - 0.7, mid + 0.7, 1.0, 1.7);
+    if (F.freeAt(k, tr)) {
+      F.claim(k, grow(tr, 0.3));
+      table(tr, 0.75, wood);
+      const ch = F.wrect(Sd, mid, mid, 0.62, 0.62);
+      F.put('officeChair', () => D.officeChair(0xffffff), ch.u0, ch.v0, y, axFacing(o), 0x3a3b3e);
+      const tch = F.wrect(Sd, mid + 1.1, mid + 1.1, 0.9, 0.9);
+      F.npcs.push([tch.u0, tch.v0, y, yawTo(o[0], o[1]), 0, 1]);
+    }
+    const chairHex = F.pick([0x5b7fa6, 0xd9573f, 0x6e8c5a, 0xe0a33b, 0x3f6f78]);
+    let seated = 0;
+    for (let dq = 2.8; dq + 1.1 <= depth - 0.5; dq += 1.4)
+      for (let s = lo + 0.75; s + 0.75 <= hi; s += 1.8) {
+        const r = F.wrect(Sd, s - 0.62, s + 0.62, dq - 0.27, dq + 0.95);
+        if (!F.freeAt(k, r) || !inside(R.r, r)) continue;
+        F.claim(k, r);
+        const c = F.wrect(Sd, s, s, dq, dq);
+        F.put('schoolDesk', () => D.schoolDesk(), c.u0, c.v0, y, axFacing(o), chairHex);
+        if (seated < 6 && rng.float() < 0.45) {
+          const sx = s + (rng.float() < 0.5 ? -0.3 : 0.3), sp = F.wrect(Sd, sx, sx, dq + 0.5, dq + 0.5);
+          F.npcs.push([sp.u0, sp.v0, y, yawTo(-o[0], -o[1]), 0.44]);
+          seated++;
+        }
+      }
+    const bc = F.against(R, S, 1.0, 0.36, { keys: [far.key], tall: true });
+    if (bc) { F.claim(k, bc.r); F.put('books:0', () => D.bookcase(1.0, 11, FABRIC), bc.uc, bc.vc, y, bc.ax, wood); }
+    wallArt(3);
+  };
+  const assembly = () => {
+    // a school hall: rows of chairs facing a lectern at one end, wall bars on a long wall
+    const ends = S.filter((x) => !x.ext).map((x) => x.key);
+    const lp = F.against(R, S, 3.0, 0.6, { keys: ends.length ? ends : undefined, tall: true, tries: 20 });
+    if (lp && lp.side) {
+      const o = out(lp), Sd = lp.side;
+      F.put('lectern', () => D.lectern(0xffffff), lp.uc + o[0] * 1.2, lp.vc + o[1] * 1.2, y, axFacing([-o[0], -o[1]]), wood);
+      F.claim(k, grow(F.wrect(Sd, lp.s0, lp.s1, 0, 2.2), 0.1));
+      const far = S.find((x) => x.run === Sd.run && x.key !== Sd.key)!;
+      const depth = Math.abs(far.face - Sd.face);
+      for (let dq = 3.6; dq <= depth - 1.2; dq += 0.95)
+        for (let s = Sd.lo + 1.0; s <= Sd.hi - 1.0; s += 0.55) {
+          if (Math.abs(s - (Sd.lo + Sd.hi) / 2) < 0.7) continue; // (the aisle down the middle)
+          const c = F.wrect(Sd, s, s, dq, dq);
+          if (!F.freeAt(k, { u0: c.u0 - 0.24, u1: c.u0 + 0.24, v0: c.v0 - 0.24, v1: c.v0 + 0.24 })) continue;
+          chair(c.u0, c.v0, [-o[0], -o[1]], 0x3f6f78);
+        }
+    }
+    const wb = F.against(R, S, 2.4, 0.15, { noExt: true, tall: true });
+    if (wb && wb.side) { F.claim(k, wb.r); for (let i = 0; i < 12; i++) F.wbox(wb.side, wb.s0, wb.s1, 0.05, 0.1, y + 0.2 + i * 0.2, y + 0.24 + i * 0.2, 0xb89468, IP.wood); for (let s = wb.s0; s <= wb.s1 + 0.01; s += 0.8) F.wbox(wb.side, s - 0.04, s + 0.04, 0, 0.12, y, y + 2.5, 0xa07a52, IP.wood); }
+  };
+  const staff = () => {
+    // a gym's changing room: lockers round the walls, benches; else a staff room or back office:
+    // a kitchenette, a table, lockers by the door
+    if (F.P.place === 'gym') {
+      for (let i = 0; i < 4; i++) { const lp = F.against(R, S, 1.8, 0.48, { tall: true }); if (!lp) break; F.claim(k, grow(lp.r, 0.05)); F.put('lockers:1.8', () => D.lockers(1.8), lp.uc, lp.vc, y, lp.ax, F.pick([0x5b7fa6, 0x8f8f96, 0x3f6f78])); }
+      for (let i = 0; i < 2; i++) { const bp = F.anywhere(R, 1.6, 0.4, 0.9); if (!bp) break; F.claim(k, grow(bp.r, 0.3)); table(bp.r, 0.45, wood); }
+      return;
+    }
+    if (area >= 12) kitchen(false);
+    diningSet(area > 20);
+    const lp = F.against(R, S, 1.2, 0.48, { tall: true, noExt: true });
+    if (lp) { F.claim(k, lp.r); F.put('lockers:1.2', () => D.lockers(1.2), lp.uc, lp.vc, y, lp.ax, 0x8f8f96); }
+    const nb = F.against(R, S, 1.2, 0.04, { tall: true });
+    if (nb && nb.side) { F.claim(k, nb.r); F.wbox(nb.side, nb.s0, nb.s1, 0, 0.02, y + 1.1, y + 1.9, 0xb89468, IP.wood); for (let i = 0; i < 5; i++) F.wbox(nb.side, nb.s0 + 0.1 + i * 0.21, nb.s0 + 0.28 + i * 0.21, 0.02, 0.025, y + 1.3 + (i % 2) * 0.25, y + 1.55 + (i % 2) * 0.25, F.pick([0xf2efe6, 0xe0a33b, 0x9fd6ff]), IP.art); }
+  };
+  const narthex = () => {
+    // the way in: a table of leaflets, a notice board, plants (a mosque's: racks for shoes)
+    if (F.P.place === 'mosque') {
+      for (let i = 0; i < 3; i++) { const rp = F.against(R, S, 1.2, 0.36); if (!rp || !rp.side) break; F.claim(k, rp.r); for (let r = 0; r < 4; r++) F.wbox(rp.side, rp.s0, rp.s1, 0, 0.34, y + 0.1 + r * 0.3, y + 0.13 + r * 0.3, wood, IP.wood); }
+    } else {
+      const tp = F.against(R, S, 1.2, 0.5);
+      if (tp) { F.claim(k, tp.r); table(tp.r, 0.8, wood); }
+      wallArt(2);
+    }
+    const pl = F.anywhere(R, 0.5, 0.5, 0.2);
+    if (pl) plant(pl.uc, pl.vc, true);
+  };
+  const prayer = () => {
+    // the carpet in rows toward the qibla wall (the far end), the mihrab's niche in it, the minbar's
+    // steps beside it, lamps hung low
+    const far = R.r.u1, vm2 = vm;
+    const rowHex = F.pick([0x8c2f2a, 0x2f5a46, 0x6a2a3a, 0x2f4a6a]);
+    for (let u = R.r.u0 + 1.2; u + 1.0 <= far - 1.2; u += 1.25) d.flatQuad(u, u + 1.1, R.r.v0 + 0.4, R.r.v1 - 0.4, y + 0.012, rowHex, IP.rug, 3.1 + 10 * Math.floor(rng.float() * 10));
+    d.box(far - 0.12, far - 0.02, vm2 - 0.8, vm2 + 0.8, y, y + 2.6, 0xe9dfc4, IP.porcelain);
+    d.box(far - 0.16, far - 0.12, vm2 - 0.55, vm2 + 0.55, y, y + 2.2, 0x2f5a46, IP.fabric);
+    d.box(far - 0.2, far - 0.12, vm2 - 0.62, vm2 + 0.62, y + 2.2, y + 2.32, 0xc9a74a);
+    for (let i = 0; i < 6; i++) d.box(far - 0.3 - i * 0.3, far - 0.02 - i * 0.3, vm2 + 1.1, vm2 + 1.9, y, y + 0.25 * (6 - i), 0x8a6242, IP.wood);
+    for (let t = 2; t < R.r.u1 - R.r.u0 - 1; t += 4) for (const dv of [-2, 2]) { const u = R.r.u0 + t, v = vm2 + dv; F.put('pendant', () => D.ceilingLight(0.9, 0.9, 0.16), u, v, y + 2.6, [1, 0]); F.glow(u, v, y + 2.4, 0.9); }
+    F.npcs.push([far - 3, vm2 - 1.2, y, yawTo(1, 0), 0.3]);
+  };
+  const library = () => {
+    // the circulation desk by the door, reading tables in the front of the room, the stacks behind:
+    // double-sided, 1.2 m apart, in runs of 2–3 with cross aisles
+    const dk = F.against(R, S, 2.4, 0.66 + STAFF_AISLE, { noExt: true });
+    if (dk && dk.side) {
+      F.claim(k, grow(dk.r, 0.3));
+      const cr = F.wrect(dk.side, dk.s0, dk.s1, STAFF_AISLE, STAFF_AISLE + 0.66);
+      F.put('libDesk', () => D.counter(2.4, 0.66, 0xffffff, false), (cr.u0 + cr.u1) / 2, (cr.v0 + cr.v1) / 2, y, dk.ax, wood);
+      const sm = (dk.s0 + dk.s1) / 2, st = F.wrect(dk.side, sm, sm, STAFF_AISLE * 0.5, STAFF_AISLE * 0.5);
+      F.npcs.push([st.u0, st.v0, y, yawTo(...out(dk)), 0, 1]);
+    }
+    const front = R.r.u0 + Math.max(3.2, (R.r.u1 - R.r.u0) * 0.35);
+    for (let t = 0; t < Math.min(6, Math.floor(area / 40)); t++) {
+      const tp = F.anywhere(R, 2.4, 2.0, 0.6);
+      if (!tp || tp.uc > front + 2) continue;
+      F.claim(k, tp.r);
+      table({ u0: tp.uc - 0.8, u1: tp.uc + 0.8, v0: tp.vc - 0.45, v1: tp.vc + 0.45 }, 0.75, wood);
+      for (const s of [-1, 1]) for (const dv of [-0.45, 0.45]) chair(tp.uc + dv, tp.vc + s * 0.75, [0, -s], wood);
+      F.glow(tp.uc, tp.vc, y + 1.2, 0.5);
+      if (t < 3) F.npcs.push([tp.uc - 0.45, tp.vc - 0.72, y, yawTo(0, 1), 0.46]);
+    }
+    const spines = FABRIC;
+    let n = 0;
+    for (let v = R.r.v0 + 1.4; v + 0.6 <= R.r.v1 - 1.2; v += 1.8)
+      for (let u = Math.max(front, R.r.u0 + 1.2); u + 1.8 <= R.r.u1 - 1.2; u += 1.8) {
+        if ((++n % 4) === 0) { u += 1.2; continue; } // (a cross aisle every three)
+        const r = { u0: u, u1: u + 1.8, v0: v, v1: v + 0.6 };
+        if (!F.freeAt(k, grow(r, 0.2)) || !F.lp(k).rectIn(r.u0, r.u1, r.v0, r.v1, 0.2)) continue;
+        F.claim(k, r);
+        const si = (Math.floor(u * 2.3) + Math.floor(v * 1.3)) & 3;
+        F.put(`stack:${si}`, () => D.bookStack(1.8, 211 + si, spines), u + 0.9, v + 0.3, y, [1, 0], wood);
+      }
+    wallArt(2);
+  };
+  const tellers = (post: boolean) => {
+    // the counter across the back of the hall, its staff behind it, the queue's posts in front; a
+    // bank's cash machines on a wall, a post office's boxes
+    const len = Math.min(post ? 6 : 7.5, Math.max(R.r.v1 - R.r.v0, R.r.u1 - R.r.u0) * 0.6);
+    const cp = F.against(R, S, len, 0.66 + 1.4, { noExt: true, tries: 20 }) ?? F.against(R, S, len * 0.7, 0.66 + 1.4, { tries: 20 });
+    if (cp && cp.side) {
+      const L = q(cp.s1 - cp.s0);
+      F.claim(k, grow(cp.r, 0.3));
+      const cr = F.wrect(cp.side, cp.s0, cp.s1, 1.4, 2.06);
+      F.put(`teller:${L.toFixed(1)}`, () => D.tellerCounter(L), (cr.u0 + cr.u1) / 2, (cr.v0 + cr.v1) / 2, y, cp.ax, post ? 0xb5793a : wood);
+      const n = Math.max(1, Math.round(L / 1.5)), o = out(cp);
+      for (let i = 0; i < n; i++) {
+        const s = cp.s0 + ((i + 0.5) * L) / n;
+        if (i < 3) { const st = F.wrect(cp.side, s, s, 0.8, 0.8); F.npcs.push([st.u0, st.v0, y, yawTo(o[0], o[1]), i ? 0.5 : 0, 1]); }
+      }
+      const qp = F.wrect(cp.side, (cp.s0 + cp.s1) / 2 - 1.4, (cp.s0 + cp.s1) / 2 + 1.4, 3.6, 3.6);
+      if (F.freeAt(k, grow(qp, 0.3))) { F.put('queue:2.8', () => D.queuePosts(2.8), (qp.u0 + qp.u1) / 2, (qp.v0 + qp.v1) / 2, y, cp.ax); F.claim(k, grow(qp, 0.3)); }
+      const cs = cp.s0 + L / (2 * n), cust = F.wrect(cp.side, cs, cs, 2.7, 2.7);
+      F.npcs.push([cust.u0, cust.v0, y, yawTo(-o[0], -o[1])]);
+    }
+    if (post) {
+      const bp = F.against(R, S, 1.8, 0.46, { tall: true });
+      if (bp) { F.claim(k, bp.r); F.put('lockers:1.8', () => D.lockers(1.8), bp.uc, bp.vc, y, bp.ax, 0xb08a4a); }
+      const tp = F.against(R, S, 1.6, 0.6);
+      if (tp) { F.claim(k, tp.r); table(tp.r, 0.95, wood); }
+    } else {
+      for (let i = 0; i < 2; i++) { const ap = F.against(R, S, 0.8, 0.35, { tall: true }); if (!ap) break; F.claim(k, grow(ap.r, 0.4)); F.put('atm', () => D.atm(), ap.uc, ap.vc, y, ap.ax); }
+      const gp = F.anywhere(R, 3.0, 1.2, 0.8);
+      if (gp) {
+        F.claim(k, gp.r);
+        table({ u0: gp.uc - 0.5, u1: gp.uc + 0.5, v0: gp.vc - 0.3, v1: gp.vc + 0.3 }, 0.42, wood);
+        F.put('armchair', () => D.armchair(0.8, 0.8, 0xffffff), gp.uc - 1.05, gp.vc, y, axFacing([1, 0]), fab);
+        F.put('armchair', () => D.armchair(0.8, 0.8, 0xffffff), gp.uc + 1.05, gp.vc, y, axFacing([-1, 0]), fab);
+      }
+    }
+    for (let i = 0; i < 2; i++) { const pl = F.anywhere(R, 0.5, 0.5, 0.2); if (pl) { F.claim(k, pl.r); plant(pl.uc, pl.vc, true); } }
+    wallArt(2);
+  };
+  const gym = () => {
+    // the front desk by the door; treadmills in a row along the glass looking out; benches, racks
+    // of dumbbells along a solid wall under a mirror
+    const dk = F.against(R, S, 2.0, 0.65 + STAFF_AISLE, { noExt: true });
+    if (dk && dk.side) {
+      F.claim(k, grow(dk.r, 0.3));
+      const cr = F.wrect(dk.side, dk.s0, dk.s1, STAFF_AISLE, STAFF_AISLE + 0.65);
+      F.put('gymDesk', () => D.counter(2.0, 0.65, 0xffffff, false), (cr.u0 + cr.u1) / 2, (cr.v0 + cr.v1) / 2, y, dk.ax, 0x3a3b3e);
+      const sm = (dk.s0 + dk.s1) / 2, st = F.wrect(dk.side, sm, sm, STAFF_AISLE * 0.5, STAFF_AISLE * 0.5);
+      F.npcs.push([st.u0, st.v0, y, yawTo(...out(dk)), 0, 1]);
+    }
+    const ext = S.filter((x) => x.ext);
+    let n = 0;
+    for (const Sd of ext)
+      for (let s = Sd.lo + 0.8; s + 0.8 <= Sd.hi - 0.6 && n < 10; s += 1.1) {
+        const r = F.wrect(Sd, s - 0.42, s + 0.42, 0.5, 2.5);
+        if (!F.freeAt(k, grow(r, 0.1)) || !inside(R.r, r)) continue;
+        F.claim(k, grow(r, 0.1));
+        const c = F.wrect(Sd, s, s, 1.5, 1.5);
+        F.put('treadmill', () => D.treadmill(), c.u0, c.v0, y, axFor(Sd.key), F.pick([0x3a3b3e, 0x8c2f2a, 0x2f4a5a]));
+        // (a runner on it, looking out of the window)
+        if (n++ < 3 && rng.float() < 0.6) F.npcs.push([c.u0, c.v0, y + 0.2, yawTo(Sd.run ? Sd.out : 0, Sd.run ? 0 : Sd.out)]);
+      }
+    const mp = F.against(R, S, 3.6, 0.6, { noExt: true, tall: true });
+    if (mp && mp.side) {
+      F.claim(k, mp.r);
+      F.wbox(mp.side, mp.s0, mp.s1, 0, 0.02, y + 0.4, y + 2.2, 0xcfe0e4, IP.glass);
+      F.put('dumbbells:1.8', () => D.dumbbellRack(1.8), mp.uc, mp.vc, y, mp.ax);
+    }
+    for (let i = 0; i < 3; i++) {
+      const bp = F.anywhere(R, 1.8, 1.6, 0.8);
+      if (!bp) break;
+      F.claim(k, bp.r);
+      F.put('weightBench', () => D.weightBench(), bp.uc, bp.vc, y, [0, 1], F.pick([0x3a3b3e, 0x8c2f2a]));
+      if (i === 0) F.npcs.push([bp.uc + 0.6, bp.vc, y, yawTo(-1, 0)]);
+    }
+  };
   const church = () => {
     const dir = P.ud > um ? -1 : 1; // altar at the far end from the door
+    // (a planned church: its pews and altar are the layout's fixtures; the runner up the aisle)
+    if (F.L.fix.some((fx) => fx.level === k && fx.kind === 'pew')) {
+      d.flatQuad(R.r.u0 + 0.4, R.r.u1 - 1.0, vm - 0.55, vm + 0.55, y + 0.012, 0x8c2f2a, IP.rug, 2.1 + 10);
+      F.npcs.push([R.r.u1 - 3.5, vm + 1.2, y, -Math.PI / 2, 0, 1]);
+      return;
+    }
     const alt = dir > 0 ? R.r.u1 - 1.5 : R.r.u0 + 0.5;
     d.box(alt, alt + 1.0, vm - 1.1, vm + 1.1, y, y + 1.0, 0xf4f1ea);
     d.box(alt - 0.02, alt + 1.02, vm - 1.0, vm + 1.0, y + 1.0, y + 1.02, 0xe9dfc4, IP.fabric);
@@ -816,12 +1172,14 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
     const nu = Math.max(1, Math.round((R.r.u1 - R.r.u0) / 5)), nv = Math.max(1, Math.round((R.r.v1 - R.r.v0) / 5));
     for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) lightAt(R.r.u0 + ((R.r.u1 - R.r.u0) * (i + 0.5)) / nu, R.r.v0 + ((R.r.v1 - R.r.v0) * (j + 0.5)) / nv, fan && i + j === 0, nu * nv > 4 ? 0.8 : 1);
   }
+  fixtures();
   switch (R.type) {
     // (a flat without a kitchen of its own — a studio — has a kitchenette in the living room)
     case 'living': living(R.unit >= 0 && !F.L.rooms.some((q) => q.unit === R.unit && q.type === 'kitchen')); break;
     case 'great': living(true); diningSet(false); break;
     case 'kitchen': kitchen(true); wallArt(1); break;
-    case 'dining': diningSet(true); wallArt(2); break;
+    // (a hotel's breakfast room, a school's dining hall: a table every ~12 m²)
+    case 'dining': for (let i = 0; i < (house || R.unit >= 0 ? 1 : Math.max(1, Math.min(14, Math.floor(area / 12)))); i++) diningSet(true); wallArt(2); break;
     case 'bed': bedroom(); break;
     case 'bath': bath(); break;
     case 'wc': wcRoom(); break;
@@ -840,6 +1198,16 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
     case 'bar': bar(); break;
     case 'diner': diner(); break;
     case 'church': church(); break;
+    case 'guest': guest(); break;
+    case 'classroom': classroom(); break;
+    case 'assembly': assembly(); break;
+    case 'staff': staff(); break;
+    case 'narthex': narthex(); break;
+    case 'prayer': prayer(); break;
+    case 'library': library(); break;
+    case 'bank': tellers(false); break;
+    case 'post': tellers(true); break;
+    case 'gym': gym(); break;
     default: break;
   }
   // a lived-in room: a few things in proportion to its floor (fewer than it used to: rooms are real now)

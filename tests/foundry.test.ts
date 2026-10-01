@@ -208,6 +208,27 @@ describe('decor (interior + terrace furniture)', () => {
     ['rack', D.rack(2.4), 900, [2.4, 0.6], true],
     ['range', D.range(), 400, [1.2, 0.8], true],
     ['ceilingLight', D.ceilingLight(0.6, 0.24, 0.05), 100, [0.6, 0.24], false],
+    // the deeper archetypes (Slice 4): a supermarket's, a church's, a hotel's, a school's, a
+    // library's, a bank's and a post office's, a gym's
+    ['checkout', D.checkout(4.2), 500, [4.2, 0.84], true],
+    ['cooler', D.cooler(1.9, 3, [0xc46a4a, 0x7fa0b8]), 2600, [1.9, 1.0], true],
+    ['cooler (doors)', D.cooler(1.9, 3, [0xc46a4a, 0x7fa0b8], true), 2600, [1.9, 1.0], true],
+    ['produce', D.produce(2.4, 1.2, 5), 1500, [2.4, 1.2], true],
+    ['pew', D.pew(4.5), 450, [4.5, 0.72], true],
+    ['altar', D.altar(2.0), 500, [2.04, 0.84], true],
+    ['lectern', D.lectern(), 150, [0.55, 0.45], true],
+    ['hotelBed', D.hotelBed(1.6), 600, [2.66, 2.14], true],
+    ['hotelDesk', D.hotelDesk(2.6), 450, [2.6, 1.3], true],
+    ['schoolDesk', D.schoolDesk(), 700, [1.2, 1.0], true],
+    ['whiteboard', D.whiteboard(3.0), 250, [3.06, 0.08], true],
+    ['bookStack', D.bookStack(0.9, 7, [0xc46a4a, 0x7fa0b8]), 4200, [0.9, 0.6], true],
+    ['tellerCounter', D.tellerCounter(4.5), 700, [4.54, 0.72], true],
+    ['queuePosts', D.queuePosts(2.8), 900, [3.1, 0.32], true],
+    ['atm', D.atm(), 200, [0.8, 0.48], true],
+    ['treadmill', D.treadmill(), 350, [0.78, 1.95], true],
+    ['weightBench', D.weightBench(), 900, [1.8, 1.27], true],
+    ['dumbbellRack', D.dumbbellRack(1.8), 1500, [1.8, 0.5], true],
+    ['lockers', D.lockers(1.8), 800, [1.8, 0.46], true],
   ];
   it('every piece is valid, grounded, within its footprint and its vertex budget', () => {
     for (const [name, parts, budget, fp, floor] of cases) {
@@ -238,7 +259,14 @@ describe('decor (interior + terrace furniture)', () => {
     for (let seed = 0; seed < 64; seed++) {
       expect(n(D.bookcase(1.0, seed, [0xc46a4a, 0x7fa0b8]))).toBeLessThan(2600);
       expect(n(D.gondola(1.23, seed, [0xc46a4a, 0x7fa0b8]))).toBeLessThan(2600);
+      // (Slice 4's stocked pieces: a cooler's decks, a stack's books, a stand's produce)
+      expect(n(D.cooler(1.9, seed, [0xc46a4a, 0x7fa0b8], seed % 2 === 1))).toBeLessThan(2600);
+      expect(n(D.bookStack(0.9, seed, [0xc46a4a, 0x7fa0b8]))).toBeLessThan(4200);
+      expect(n(D.produce(2.4, 1.2, seed))).toBeLessThan(1500);
     }
+    const stack = (seed: number) => D.mergeDecor(D.bookStack(0.9, seed, [0xc46a4a, 0x7fa0b8])).getAttribute('position').array;
+    expect(Array.from(stack(3))).toEqual(Array.from(stack(3)));
+    expect(Array.from(stack(3))).not.toEqual(Array.from(stack(4)));
     const books = (seed: number) => D.mergeDecor(D.bookcase(1.0, seed, [0xc46a4a, 0x7fa0b8])).getAttribute('position').array;
     expect(Array.from(books(11))).toEqual(Array.from(books(11)));
     expect(Array.from(books(11))).not.toEqual(Array.from(books(12)));

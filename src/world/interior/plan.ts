@@ -9,7 +9,7 @@
 import type { Footprint, Door } from '../buildings';
 import { floorHeight, KIND } from '../buildings';
 import type { WalkWorld, Floors, Shaft } from '../../player/collision';
-import { useOf } from '../uses';
+import { useOf, placeOf, hotelOnlyUpstairs, type Place } from '../uses';
 import { makeRng, type Rng } from '../../core/rng';
 
 export type P2 = [number, number];
@@ -66,7 +66,10 @@ export interface Band { r: Rect; ax: 0 | 1; side: -1 | 1; one?: boolean }
  *  stands in when that's more than the room (over a shop: a store behind it upstairs). */
 export interface Core { room: Rect; stair: Rect; slot?: Rect }
 
-export type Arch = 'house' | 'flats' | 'office' | 'shop' | 'food' | 'church' | 'open';
+/** A storey's family. Slice 4's deeper archetypes: 'market' (a supermarket or a big-box store: its
+ *  aisles, checkouts at the door, back of house), 'hotel' (corridors of guest rooms, the lobby on
+ *  the ground storey), 'school' (classrooms off wide corridors, a hall). */
+export type Arch = 'house' | 'flats' | 'office' | 'shop' | 'food' | 'church' | 'open' | 'market' | 'hotel' | 'school';
 
 export interface Plan {
   fp: string;
@@ -78,6 +81,13 @@ export interface Plan {
   ud: number; vd: number; // door (wall centre) in local coords
   arch: Arch; // the ground storey's family
   up: Arch; // the family of the storeys above it
+  /** What the building is, when its data says (uses.ts placeOf): a library, a bank, a post office,
+   *  a pharmacy or a gym furnishes its shop-family floor (or an office's lobby) as itself; a
+   *  supermarket stocks its aisles; a mosque's hall has no pews. */
+  place?: Place;
+  /** A hotel's or a school's ground storey is a public floor (a lobby, a lounge, a breakfast room; a
+   *  hall and a dining room) under its corridor storeys: the storefront's glass leaves no corridor. */
+  pub?: 1;
   n: number; // storeys by height (every one of them exists: levels = n, bar a stair that can't reach them)
   /** Built a few storeys at a time round the walker (docs/INTERIORS_PLAN.md §3 "Towers"): ≥ 5
    *  storeys, or more floor than one build may take. Its stairs are stacked (see Stacked). */
@@ -545,10 +555,27 @@ function wallAt(C: Ctx, ax: 0 | 1, want: number, lo: number, hi: number, ends: [
   return null;
 }
 
+/** How a corridor plan is drawn for its building (docs/INTERIORS_PLAN.md §3 "Spines"): the
+ *  corridor widths — single-loaded, double-loaded (least, wanted, most) and round a ring — the
+ *  least band depth either side of a double-loaded one and the plate depth it starts from, the
+ *  lobby slot's width, and whether a narrow block is a walk-up (no corridor) at all. A hotel's
+ *  and a school's corridor goes where its bands come out most even (`even`); a hotel with three
+ *  storeys or more has its lift. */
+interface Strips { walkup: boolean; single: [number, number]; dbl: [number, number, number]; ring: number; band: number; dblFrom: number; lobby: number; even: boolean; lift: boolean }
+const FLATS: Strips = { walkup: true, single: [1.25, 1.8], dbl: [1.5, 1.5, 1.95], ring: 1.8, band: 5, dblFrom: 14, lobby: 3.0, even: false, lift: false };
+/** A hotel (§2: rooms 25–35 m² on a 1.8 m corridor): bands 7–9 m deep, the corridor 1.6–2.2 m
+ *  between the end walls' windows. */
+const HOTEL: Strips = { walkup: false, single: [1.4, 1.9], dbl: [1.6, 1.8, 2.2], ring: 1.8, band: 4.6, dblFrom: 11.4, lobby: 6.0, even: true, lift: true };
+/** A school (§2: classrooms 50–62 m² off a 2.4 m corridor): on a storefront's glass the corridor
+ *  takes a window's width between its piers (up to 4.2 m — the lockers line it). */
+const SCHOOL: Strips = { walkup: false, single: [2.0, 4.8], dbl: [2.4, 2.8, 4.2], ring: 2.4, band: 6.2, dblFrom: 15, lobby: 5.0, even: true, lift: false };
+export const STRIPS = { flats: FLATS, hotel: HOTEL, school: SCHOOL };
+
 /** Flats (and the storeys over a shop): a corridor by the plate's depth — none in a narrow
  *  walk-up, single-loaded to 14 m, double-loaded on the centreline to 24 m, a ring round a core
- *  beyond — with bands of flats off it, the lobby at the front door and dogleg stair cores. */
-function planFlats(C: Ctx, lobby: boolean): boolean {
+ *  beyond — with bands of flats off it, the lobby at the front door and dogleg stair cores. A
+ *  hotel's rooms and a school's classrooms hang off the same (`o`). */
+function planFlats(C: Ctx, lobby: boolean, o: Strips = FLATS): boolean {
   const P = C.P, M = P.main;
   const Lm = M.u1 - M.u0, Wm = M.v1 - M.v0;
   const ax: 0 | 1 = Wm >= Lm ? 1 : 0; // the long axis: flats line up along it
@@ -561,8 +588,8 @@ function planFlats(C: Ctx, lobby: boolean): boolean {
   // one's, or none near the eave — so the ground and the first stand for every storey)
   const levels = Array.from({ length: P.tall ? Math.min(2, P.levels) : P.levels }, (_, k) => k);
   // a tall block's cores take a lift beside the stair: its shaft against the facade end, the
-  // landing in front of both its lobby
-  const tallLift = !!P.tall;
+  // landing in front of both its lobby (a hotel's from three storeys)
+  const tallLift = !!P.tall || (o.lift && P.levels >= 3);
   const LIFT = CAR_W + 0.15; // (how much wider a core slot is with its lift)
   // over a shop the corridor starts a storey up (the storefront's windows don't count: the stair
   // room below keeps off the end walls, so no ground-storey wall takes the corridor's line)
@@ -602,7 +629,7 @@ function planFlats(C: Ctx, lobby: boolean): boolean {
       P.lifts!.push({ r: R(dax, back, fac, l0, s1), face: faceOf(dax, (-dir) as 1 | -1), cars: 1, lobby: R(dax, side < 0 ? bd0 : bd1, back, l0, s1) });
     }
   };
-  const fam = lobby && ax === 1 && D <= 9.1 && len <= 26 ? 'walkup' : D <= 14 ? 'single' : D <= 24 || len < 30 ? 'double' : 'ring';
+  const fam = o.walkup && lobby && ax === 1 && D <= 9.1 && len <= 26 ? 'walkup' : D <= o.dblFrom ? 'single' : D <= 24 || len < 30 ? 'double' : 'ring';
   if (fam === 'walkup') {
     // one slot across the whole depth at the front door: the lobby and landings in front, the
     // dogleg against the back wall; a flat either side, its door on the landing
@@ -624,13 +651,33 @@ function planFlats(C: Ctx, lobby: boolean): boolean {
     }
   }
   const cw0 = 1.5;
-  if (fam === 'walkup' || fam === 'single' || D < 2 * 5.5 + cw0) {
+  if (fam === 'walkup' || fam === 'single' || (o === FLATS && D < 2 * 5.5 + cw0)) {
     // the corridor along the back (for a door on an end wall, along the long side it's nearer)
     const back = ax === 1 ? 1 : dd > (D0 + D1) / 2 ? -1 : 1;
-    const c = back > 0 ? corrWall(D1 - cw0, D1 - 1.8, D1 - 1.25) : corrWall(D0 + cw0, D0 + 1.25, D0 + 1.8);
+    const [s0, s1] = o.single, sw = o === FLATS ? cw0 : (s0 + Math.min(s1, s0 + 0.6)) / 2;
+    const c = back > 0 ? corrWall(D1 - sw, D1 - s1, D1 - s0) : corrWall(D0 + sw, D0 + s0, D0 + s1);
     if (c === null) return false;
     P.spine.push(back > 0 ? R(ax, A0, A1, c, D1) : R(ax, A0, A1, D0, c));
     P.bands.push(back > 0 ? band(A0, A1, D0, c, 1) : band(A0, A1, c, D1, -1));
+  } else if (fam === 'double' && o.even) {
+    // (a hotel's, a school's: of the corridors whose walls meet the end walls between their
+    // windows, the one whose bands come out most even, nearest its wanted width — every position
+    // on a 5 cm grid tested once)
+    const n = Math.floor(D / 0.05);
+    const ok = Array.from({ length: n + 1 }, (_, i) => { const x = D0 + i * 0.05; return x - D0 >= o.band - 1e-6 && D1 - x >= o.band - 1e-6 && corrWall(x, x, x) !== null; });
+    let best: { a: number; b: number; s: number } | null = null;
+    for (let i = 0; i <= n; i++) {
+      if (!ok[i]) continue;
+      for (let j = i + Math.ceil(o.dbl[0] / 0.05 - 1e-6); j <= Math.min(n, i + Math.floor(o.dbl[2] / 0.05 + 1e-6)); j++) {
+        if (!ok[j]) continue;
+        const a = D0 + i * 0.05, b = D0 + j * 0.05;
+        const s = Math.abs(a - D0 - (D1 - b)) + Math.abs(b - a - o.dbl[1]) * 1.5;
+        if (!best || s < best.s) best = { a, b, s };
+      }
+    }
+    if (!best) return false;
+    P.spine.push(R(ax, A0, A1, best.a, best.b));
+    P.bands.push(band(A0, A1, D0, best.a, 1), band(A0, A1, best.b, D1, -1));
   } else if (fam === 'double') {
     const flats = (2 * len) / 7;
     const w = flats > 16 ? 1.8 : cw0;
@@ -650,7 +697,7 @@ function planFlats(C: Ctx, lobby: boolean): boolean {
     if (!ok) return false;
   } else {
     // a ring round a core: flats 7–9 m deep all round, the corridor inside them
-    const ud = Math.min(9, Math.max(7, D * 0.3)), cw = 1.8;
+    const ud = Math.min(9, Math.max(7, D * 0.3)), cw = o.ring;
     const a0 = A0 + ud, a1 = A1 - ud, d0 = D0 + ud, d1 = D1 - ud;
     P.spine.push(R(ax, a0, a1, d0, d0 + cw), R(ax, a0, a1, d1 - cw, d1), R(ax, a0, a0 + cw, d0 + cw, d1 - cw), R(ax, a1 - cw, a1, d0 + cw, d1 - cw));
     P.bands.push(band(A0, A1, D0, d0, 1), band(A0, A1, d1, D1, -1));
@@ -667,9 +714,9 @@ function planFlats(C: Ctx, lobby: boolean): boolean {
     const B = P.bands[bi];
     const s0 = B.ax ? B.r.v0 : B.r.u0, s1 = B.ax ? B.r.v1 : B.r.u1;
     const pos = B.ax === 1 ? P.vd : P.ud; // the door along the band
-    const lw = 3.0;
+    const lw = o.lobby;
     const l0 = pos - s0 < lw + 2 ? s0 : slotWall(B, pos - lw / 2, s0 + 2.4, pos - hw);
-    const l1 = l0 === null ? null : s1 - pos < lw + 2 ? s1 : slotWall(B, Math.max(l0 + 2.6, pos + lw / 2), Math.max(l0 + 2.2, pos + hw), s1 - 2.4);
+    const l1 = l0 === null ? null : s1 - pos < lw + 2 ? s1 : slotWall(B, Math.max(l0 + lw - 0.4, pos + lw / 2), Math.max(l0 + lw - 0.8, pos + hw), s1 - 2.4);
     if (l0 === null || l1 === null) return false;
     P.lobby = B.ax ? { ...B.r, v0: l0, v1: l1 } : { ...B.r, u0: l0, u1: l1 };
     near = (l0 + l1) / 2;
@@ -712,26 +759,41 @@ function planFlats(C: Ctx, lobby: boolean): boolean {
   };
   if (!lobby) {
     // over a shop: the stair room runs along the corridor side of a slot (a store behind it
-    // upstairs), so on the shop floor its walls stay clear of the storefront glass
+    // upstairs), so on the shop floor its walls stay clear of the storefront glass — a hotel's
+    // lift beside it, its doors on the corridor (on the ground storey, onto the lobby floor)
     const wide2 = wide + 0.3, slen = clen + 1.4;
-    for (const b of order) {
-      const B = P.bands[b];
-      const s0 = B.ax ? B.r.v0 : B.r.u0, s1 = B.ax ? B.r.v1 : B.r.u1;
-      const bd0 = B.ax ? B.r.u0 : B.r.v0, bd1 = B.ax ? B.r.u1 : B.r.v1;
-      if (bd1 - bd0 < wide2 + 1.5 || s1 - s0 < slen + 5) continue;
-      for (const t of [s1 - slen - 4.5, s0 + 4.5, s1 - slen - 7, s0 + 7, (s0 + s1) / 2 - slen / 2]) {
-        if (t < s0 + 2.4 || t + slen > s1 - 2.4) continue;
-        const c0 = wallAt(C, B.ax, t, t - 1.2, t + 1.2, [[B.side < 0 ? bd1 - 0.05 : bd0 + 0.05, B.side < 0 ? 1 : -1]], upper, 0.05);
-        if (c0 === null) continue;
-        const c1 = wallAt(C, B.ax, c0 + slen, c0 + slen, c0 + slen + 1.6, [[B.side < 0 ? bd1 - 0.05 : bd0 + 0.05, B.side < 0 ? 1 : -1]], upper, 0.05);
-        if (c1 === null || c1 > s1 - 2.4) continue;
-        const e0 = B.side < 0 ? bd0 : bd1 - wide2, e1 = e0 + wide2; // the corridor side of the band
-        const room = B.ax ? { u0: e0, u1: e1, v0: c0, v1: c1 } : { u0: c0, u1: c1, v0: e0, v1: e1 };
-        const slot = B.ax ? { u0: bd0, u1: bd1, v0: c0, v1: c1 } : { u0: c0, u1: c1, v0: bd0, v1: bd1 };
-        const front = c0 + 1.4, cc = (e0 + e1) / 2 - wide / 2;
-        P.cores.push({ room, stair: R(B.ax, front, front + clen, cc, cc + wide), slot });
-        doglegs(C, sp, B.ax, front, 1, cc, 0);
-        return true;
+    for (const withLift of o.lift && tallLift ? [true, false] : [false]) {
+      const need = slen + (withLift ? CAR_W + 0.3 : 0);
+      for (const b of order) {
+        const B = P.bands[b];
+        const s0 = B.ax ? B.r.v0 : B.r.u0, s1 = B.ax ? B.r.v1 : B.r.u1;
+        const bd0 = B.ax ? B.r.u0 : B.r.v0, bd1 = B.ax ? B.r.u1 : B.r.v1;
+        if (bd1 - bd0 < wide2 + 1.5 || s1 - s0 < need + 5) continue;
+        for (const t of [s1 - need - 4.5, s0 + 4.5, s1 - need - 7, s0 + 7, (s0 + s1) / 2 - need / 2]) {
+          if (t < s0 + 2.4 || t + need > s1 - 2.4) continue;
+          const c0 = wallAt(C, B.ax, t, t - 1.2, t + 1.2, [[B.side < 0 ? bd1 - 0.05 : bd0 + 0.05, B.side < 0 ? 1 : -1]], upper, 0.05);
+          if (c0 === null) continue;
+          const c1 = wallAt(C, B.ax, c0 + need, c0 + need, c0 + need + 1.6, [[B.side < 0 ? bd1 - 0.05 : bd0 + 0.05, B.side < 0 ? 1 : -1]], upper, 0.05);
+          if (c1 === null || c1 > s1 - 2.4) continue;
+          const e0 = B.side < 0 ? bd0 : bd1 - wide2, e1 = e0 + wide2; // the corridor side of the band
+          const r1 = withLift ? c0 + slen : c1;
+          const room = B.ax ? { u0: e0, u1: e1, v0: c0, v1: r1 } : { u0: c0, u1: r1, v0: e0, v1: e1 };
+          const slot = B.ax ? { u0: bd0, u1: bd1, v0: c0, v1: c1 } : { u0: c0, u1: c1, v0: bd0, v1: bd1 };
+          const front = c0 + 1.4, cc = (e0 + e1) / 2 - wide / 2;
+          P.cores.push({ room, stair: R(B.ax, front, front + clen, cc, cc + wide), slot });
+          doglegs(C, sp, B.ax, front, 1, cc, 0);
+          if (withLift) {
+            // (the corridor in front of its doors is its lobby: the spine against this band)
+            const dax: 0 | 1 = B.ax ? 0 : 1, edge = B.side < 0 ? bd0 : bd1;
+            const sp0 = P.spine.find((q) => Math.abs((dax ? (B.side < 0 ? q.v1 : q.v0) : B.side < 0 ? q.u1 : q.u0) - edge) < 0.05);
+            const a0 = r1 + 0.15, a1 = a0 + CAR_W;
+            if (sp0) {
+              const dd0 = dax ? sp0.v0 : sp0.u0, dd1 = dax ? sp0.v1 : sp0.u1;
+              P.lifts.push({ r: R(B.ax, a0, a1, edge, edge - B.side * SHAFT_D), face: faceOf(dax, B.side), cars: 1, lobby: R(B.ax, a0, a1, dd0, dd1) });
+            }
+          }
+          return true;
+        }
       }
     }
     return false;
@@ -1005,13 +1067,39 @@ export function planInterior(fpKey: string, fp: Footprint, door: Door, seed: num
   const cover = (rectArea(main) + annex.reduce((s, a) => s + rectArea(a), 0)) / area;
   const doorIn = Math.abs(ud - main.u0) < 0.6 && vd > main.v0 + 0.4 && vd < main.v1 - 0.4;
   const roomy = cover > 0.72 && ring.length <= 40 && doorIn;
-  const reset = () => { P.flights.length = 0; P.holes.length = 0; P.landings.length = 0; P.cw.length = 0; P.levels = levels; P.cores = undefined; P.core = undefined; P.bands = undefined; P.spine = undefined; P.lobby = undefined; P.lifts = undefined; P.atrium = undefined; };
+  const reset = () => { P.flights.length = 0; P.holes.length = 0; P.landings.length = 0; P.cw.length = 0; P.levels = levels; P.cores = undefined; P.core = undefined; P.bands = undefined; P.spine = undefined; P.lobby = undefined; P.lifts = undefined; P.atrium = undefined; delete P.pub; };
+  // what the building is, when its data says (Slice 4): on a block of flats (or a big untagged
+  // building) only a hotel or a school is anything but flats; an "Inn" or a "Resort" is a hotel
+  // only with rooms upstairs; a church is a church, or a mosque — or the library it became
+  const place0 = kindS === 'commercial' || kindS === 'large' || kindS === 'church' ? placeOf(fp.name, fp.use) : null;
+  const place: Place | null = !place0 ? null
+    : kindS === 'church' ? (place0 === 'mosque' || place0 === 'library' ? place0 : null)
+    : place0 === 'mosque' ? null
+    : place0 === 'hotel' && levels < 2 && hotelOnlyUpstairs(fp.name) ? null
+    : kindS === 'large' && place0 !== 'hotel' && place0 !== 'school' ? null
+    : place0;
+  if (place) P.place = place;
   // a tower on a podium: an office core rising through every tier (else only the podium's storeys)
   if (plates.length) {
     P.arch = P.up = 'office';
     if (!roomy || !planOffice(C)) { reset(); P.arch = P.up = 'open'; shape(false); }
   }
-  if (P.plates) { /* a tower on its podium: planned */ }
+  // a hotel's corridors of rooms, a school's classrooms: on a storefront's glass (a commercial
+  // building's ground storey, where walls meet the facade only at narrow piers) a hotel's ground
+  // storey is its public floor under the corridors upstairs; a school takes the ground storey too,
+  // or — where its glass won't have a corridor — puts its halls there and classrooms upstairs
+  let strips = false;
+  if (!P.plates && roomy && (place === 'hotel' || place === 'school') && (kindS === 'large' || kindS === 'commercial')) {
+    const S = place === 'hotel' ? HOTEL : SCHOOL;
+    const tries: boolean[] = kindS === 'large' ? [true] : place === 'hotel' ? [levels < 2] : levels > 1 ? [true, false] : [true];
+    for (const lob of tries) {
+      reset();
+      P.arch = P.up = place;
+      if (planFlats(C, lob, S)) { strips = true; if (!lob) P.pub = 1; break; }
+    }
+    if (!strips) { reset(); P.arch = P.up = 'open'; }
+  }
+  if (P.plates || strips) { /* a tower on its podium, a hotel, a school: planned */ }
   else if (kindS === 'church') P.arch = P.up = 'church';
   else if (roomy && (kindS === 'house' || kindS === 'shed')) {
     P.arch = P.up = 'house';
@@ -1020,7 +1108,17 @@ export function planInterior(fpKey: string, fp: Footprint, door: Door, seed: num
     P.arch = P.up = 'flats';
     if (!planFlats(C, true)) { reset(); P.arch = P.up = 'open'; }
   } else if (roomy && kindS === 'commercial') {
-    P.arch = use === 'office' || use === 'civic' ? 'office' : use === 'cafe' || use === 'bar' || use === 'restaurant' ? 'food' : 'shop';
+    // a supermarket (or a big box: a tagged shop of 1,500 m² or more on one storey, a big
+    // pharmacy): its aisles, the checkouts at the door, a back of house; a library, a bank or a post
+    // office on one storey is a hall with its counter and a back of house (a big bank or library,
+    // offices round a core, its lobby the banking hall, its open floor the stacks); a pharmacy's or
+    // a gym's floor is the shop's
+    const hall = place === 'library' || place === 'bank' || place === 'post';
+    const market = place === 'supermarket' || (use === 'grocery' && area >= 400) || (place === 'pharmacy' && area >= 500) || (!!fp.use && !place && use === 'shop' && area >= 1500 && levels === 1);
+    P.arch = market ? 'market'
+      : hall ? (levels === 1 && (place === 'post' || area <= 700) ? 'shop' : 'office')
+      : place === 'pharmacy' || place === 'gym' ? 'shop'
+      : use === 'office' || use === 'civic' ? 'office' : use === 'cafe' || use === 'bar' || use === 'restaurant' ? 'food' : 'shop';
     // (a commercial tower is an office tower, its ground floor the lobby — whatever's on the corner)
     if (P.tall && levels >= 8) P.arch = 'office';
     if (P.arch === 'office') {
@@ -1028,8 +1126,9 @@ export function planInterior(fpKey: string, fp: Footprint, door: Door, seed: num
       if (!planOffice(C)) { reset(); P.arch = P.up = 'open'; }
     } else if (levels > 1) {
       // the storeys over a shop or a café: flats up a stair from the back of the shop, else offices
+      // (over a bank, a post office or a library: offices)
       P.up = 'flats';
-      if (!planFlats(C, false)) {
+      if (hall || !planFlats(C, false)) {
         reset();
         P.up = 'office';
         if (!planOffice(C)) { reset(); P.up = 'open'; }

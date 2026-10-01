@@ -953,7 +953,9 @@
         "tools/bench-interiors.mts: worst build step 47–1,243 ms → ~1 ms; house 43k → 30k vertices; supermarket 1.1 M → 12k",
         "LIVE Sea Bright (shots/int-seabright.jpg, shots/tour-seabright-house.jpg): hall + stair, living, kitchen, dining, study; landing, bedroom, bath",
         "tests/interiorTower.test.ts (18): 39 storeys with lobby and shaft holes, lift 0 → 23 lands at floor0 + 23 × fH, stair 23 → 24 walkable, ≤ 3 storeys / 120k vertices / 60 draws built, podium storey 10 has no floor outside the tower, storeys identical whichever set is built",
-        "Bench: tower plan 2.0 KB / 0.05 ms; worst build step 0.6–1.9 ms; shots/mid-montage.jpg (lobby, lift, floor 20 day and night, stair shaft, glass tower, podium) on a Manhattan-like grid through the real pipeline"
+        "Bench: tower plan 2.0 KB / 0.05 ms; worst build step 0.6–1.9 ms; shots/mid-montage.jpg (lobby, lift, floor 20 day and night, stair shaft, glass tower, podium) on a Manhattan-like grid through the real pipeline",
+        "tests/interiorArch.test.ts (15): supermarkets at six sizes — aisles ≥ 1.5 m between every pair of fixtures, gondola runs ≤ 15 m, checkouts within 3 m of the front and before the aisles, 20–25% back of house; restaurant kitchens 30–40% at eight sizes; 60×18 m hotels ≥ 24 rooms of 25–35 m² a storey each with its bath; classrooms 50–65 m² with WCs on every storey, a hall and an office; pews at 0.91 m either side of a 1.5 m aisle; a mosque without pews; every room reachable; no wall on a window",
+        "tests/interiorBudget.test.ts +5 (supermarket ≤ 90k: 27k; hotel, school, restaurant, church, library) and shots/synthin-a.jpg (the supermarket from the door, an aisle, the checkouts, the cold cases)"
       ],
       "evidence": [
         "src/world/interior/{plan,layout,mesh,furnish}.ts",
@@ -962,9 +964,12 @@
         "src/assets/decor.ts (17 new pieces)",
         "src/player/lift.ts",
         "src/ui/lift.ts",
-        "src/player/collision.ts (Floors.shafts, tiers)"
+        "src/player/collision.ts (Floors.shafts, tiers)",
+        "src/world/uses.ts (placeOf)",
+        "src/world/interior/layout.ts (backStrip, bandCuts, marketStorey, stripStorey, pubStorey, churchStorey, Layout.fix)",
+        "src/assets/decor.ts (18 Slice 4 pieces)"
       ],
-      "notes": "Slice 3 (towers) done 2026-09-29 (af). Next: see it in real Midtown; slice 2 (data in: building/tourism/amenity archetypes, party walls), plant floors and sky lobbies, lifts for 5–7-storey blocks over shops."
+      "notes": "Slice 3 (towers) done 2026-09-29 (af). Next: see it in real Midtown; slice 2 (data in: building/tourism/amenity archetypes, party walls), plant floors and sky lobbies, lifts for 5–7-storey blocks over shops. Slice 4 (deeper archetypes: supermarket, restaurant kitchen, hotel, school, church/mosque, library, bank, post office, gym, pharmacy) done 2026-10-01. Next: a chancel's dais, qibla from the real bearing, tourism/leisure use tags (cache bump), lifts in 5–7-storey blocks."
     },
     {
       "id": "phones",

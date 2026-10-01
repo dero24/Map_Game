@@ -27,7 +27,13 @@ const CASES: [string, Footprint, Door, number, number?][] = [
   // a tower on a 60 × 60 m podium, on the podium's top storey (the tower's first above it)
   ['podium tower, storey 4', { ...fpOf(rect(60, 60), 'commercial', 20, 'office'), tiers: [{ ring: rect(30, 30), lo: 20.2, top: 150 }] }, doorN(60, 0.3, 1.8), 120000, 4],
   ['shop + flats 60x18', fpOf(rect(60, 18), 'commercial', 30), doorN(18, 0.3, 1.8), 120000],
-  ['supermarket 60x40', fpOf(rect(60, 40), 'commercial', 7, 'supermarket'), doorN(40, 0.3, 1.8), 120000],
+  // (Slice 4: a supermarket ≤ 90k — its runs, checkouts and cold cases instanced)
+  ['supermarket 60x40', fpOf(rect(60, 40), 'commercial', 7, 'supermarket'), doorN(40, 0.3, 1.8), 90000],
+  ['hotel 60x18, 4 storeys', fpOf(rect(60, 18), 'commercial', 16, 'hotel'), doorN(18, 0.3, 1.8), 120000],
+  ['school 60x18, 3 storeys', fpOf(rect(60, 18), 'commercial', 12, 'school'), doorN(18, 0.3, 1.8), 120000],
+  ['restaurant 24x16', fpOf(rect(24, 16), 'commercial', 5, 'restaurant'), doorN(16, 0.3, 1.8), 120000],
+  ['church 12x24', fpOf(rect(12, 24), 'church', 12), doorN(24, 0.3, 2.2), 120000],
+  ['library 20x14', fpOf(rect(20, 14), 'commercial', 5, 'library'), doorN(14, 0.3, 1.8), 120000],
   // a vast plate builds fewer storeys (≤ ~12,000 m² of floor in all)
   ['flats 120x40, 20 m', fpOf(rect(120, 40), 'large', 20), doorN(40, 0.3), 120000],
   ['shop + flats 80x40, 25 m', fpOf(rect(80, 40), 'commercial', 25), doorN(40, 0.3, 1.8), 120000],
@@ -79,7 +85,7 @@ describe('interior budgets', () => {
       expect(stats.verts).toBeLessThanOrEqual(maxVerts);
       expect(stats.draws).toBeLessThanOrEqual(60);
       expect(meshes).toBe(stats.draws);
-      expect(stats.rooms).toBeGreaterThan(2);
+      expect(stats.rooms).toBeGreaterThanOrEqual(2); // (a church: its narthex and nave)
       // (a tall building: the storeys round the walker, never more than three)
       if (runs[0].tall) expect(stats.storeys).toBeLessThanOrEqual(3);
     }, 120000);
