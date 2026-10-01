@@ -232,7 +232,7 @@ export class Furnisher {
    *  10 cm along every stretch of solid wall — clear of its doorways, the stairs and what's there
    *  already; `tall` ones between the windows. (Where a piece belongs, not wherever it lands: the
    *  console along the hall ahead of the door, the coats beside it.) */
-  bestAgainst(R: Room, SS: Side[], w: number, dep: number, score: (p: Put) => number, o: { keys?: SideKey[]; tall?: boolean; noExt?: boolean } = {}): Put | null {
+  bestAgainst(R: Room, SS: Side[], w: number, dep: number, score: (p: Put) => number, o: { keys?: SideKey[]; tall?: boolean; noExt?: boolean; off?: number } = {}): Put | null {
     let best: Put | null = null, bs = Infinity;
     for (const S of SS) {
       if ((o.keys && !o.keys.includes(S.key)) || (o.noExt && S.ext)) continue;
@@ -242,7 +242,7 @@ export class Furnisher {
         for (let s0 = lo; s0 + w <= hi + 1e-6; s0 += 0.1) {
           const s1 = s0 + w;
           if (S.doors.some(([g0, g1]) => s0 < g1 + 0.2 && s1 > g0 - 0.2)) continue;
-          const r = this.wrect(S, s0, s1, 0.01, dep);
+          const r = this.wrect(S, s0, s1, o.off ?? 0.01, dep);
           if (!inside(R.r, r) || !this.freeAt(R.level, r) || (o.tall && this.onWindows(S, s0, s1, R.level))) continue;
           const p: Put = { r, uc: (r.u0 + r.u1) / 2, vc: (r.v0 + r.v1) / 2, ax: axFor(S.key), side: S, s0, s1 };
           const sc = score(p);
@@ -351,7 +351,7 @@ function planKitchen(F: Furnisher, R: Room, SS: Side[], maxL: number, away: P2):
         for (const s0 of starts) {
           const s1 = s0 + L;
           if (S.doors.some(([g0, g1]) => s0 < g1 + 0.2 && s1 > g0 - 0.2)) continue;
-          const r = F.wrect(S, s0, s1, 0.01, 0.64);
+          const r = F.wrect(S, s0, s1, 0.02, 0.64); // (a hair off the wall: what the stair keeps clear behind it may touch its face)
           if (!inside(R.r, r) || !F.freeAt(k, r)) continue;
           // the windows over this run, in its own x (to 5 cm, out)
           const sc0 = (s0 + s1) / 2, lx = (x: number) => dir * (x - sc0);
@@ -617,7 +617,7 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
       let best: [Put, Room, number] | null = null;
       for (const Q of L0.rooms.filter((x) => x.space === R.space && x.level === k)) {
         const pen = Q.type === R.type ? 0 : 1.5;
-        const p = F.bestAgainst(Q, F.sides(Q), w, dep, (x) => nearest(x) + pen, { tall: true });
+        const p = F.bestAgainst(Q, F.sides(Q), w, dep, (x) => nearest(x) + pen, { tall: true, off: 0.02 });
         if (p && (!best || nearest(p) + pen < best[2])) best = [p, Q, nearest(p) + pen];
       }
       return best;
@@ -629,8 +629,16 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
       if (sp) { const [st, Q] = sp; F.claim(k, grow(st.r, 0.02)); fronts.push(within(Q, F.wrect(st.side!, st.s0, st.s1, 0.6, 1.4))); F.put('stove', () => D.stove(), st.uc, st.vc, y, st.ax); }
     }
     if (!plan || plan.spec.fridge === 0) {
-      const sp = spot(D.FRIDGE_W + 0.04, 0.68);
-      if (sp) { const [fr, Q] = sp; F.claim(k, grow(fr.r, 0.02)); fronts.push(within(Q, F.wrect(fr.side!, fr.s0, fr.s1, 0.68, 1.3))); F.put('fridge', () => D.fridge(), fr.uc, fr.vc, y, fr.ax); }
+      // (a full-size one, else a slim one: a small kitchen's 60 cm fridge)
+      for (const fw of [D.FRIDGE_W, 0.6]) {
+        const sp = spot(fw + 0.04, 0.68);
+        if (!sp) continue;
+        const [fr, Q] = sp;
+        F.claim(k, grow(fr.r, 0.02));
+        fronts.push(within(Q, F.wrect(fr.side!, fr.s0, fr.s1, 0.68, 1.3)));
+        F.put(fw === D.FRIDGE_W ? 'fridge' : `fridge:${fw}`, () => D.fridge(fw), fr.uc, fr.vc, y, fr.ax);
+        break;
+      }
     }
     // (a clear stretch of floor in front of all of it)
     if (plan) F.claim(k, room(F.wrect(plan.put.side!, plan.put.s0, plan.put.s1, 0.6, 1.5)));

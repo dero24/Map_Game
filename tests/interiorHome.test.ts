@@ -59,7 +59,7 @@ describe('a home\'s kitchen (review round 11: "a sink run, with no range, fridge
         const run = mine.find((p) => p.key.startsWith('kitchen:'));
         const spec = run ? D.kitchenSpecOf(run.key) : null;
         const range = (spec && spec.range !== null) || mine.some((p) => p.key === 'stove');
-        const fridge = (spec && spec.fridge !== 0) || mine.some((p) => p.key === 'fridge');
+        const fridge = (spec && spec.fridge !== 0) || mine.some((p) => p.key.startsWith('fridge'));
         const wallM = spec ? D.wallCabinets(spec, true).reduce((a, [x0, x1]) => a + x1 - x0, 0) : 0;
         if (spec && range && fridge && wallM >= 0.6) whole++;
         else bad.push(`${name} ${R.type}: ${!spec ? 'no run' : ''}${range ? '' : ' no cooker'}${fridge ? '' : ' no fridge'}${wallM >= 0.6 ? '' : ` ${wallM.toFixed(2)} m of wall cabinets`}`);

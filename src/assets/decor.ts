@@ -316,12 +316,12 @@ function rangeParts(out: Parts, x: number, hood = true) {
   out.push(P(box(COOKER_W + 0.02, 0.1, 0.5, x, 1.58, 0.05), 'metal', st)); // the hood's canopy
   out.push(P(box(0.3, 2.17 - 1.68, 0.26, x, 1.68, 0.17), 'metal', 0xc8ccce)); // its chimney, up to the cabinet tops
 }
-/** The fridge (white or steel by the tint's absence: a fixed off-white), its two doors and handles. */
-function fridgeParts(out: Parts, x: number) {
-  out.push(P(box(FRIDGE_W - 0.02, 1.85, 0.64, x, 0, -0.01), 'porcelain', 0xe6e7e2));
-  out.push(P(box(FRIDGE_W - 0.04, 0.014, 0.01, x, 1.16, -0.335), 'solid', 0x8d8a84)); // the freezer's door below
-  out.push(P(box(0.03, 0.55, 0.03, x + FRIDGE_W / 2 - 0.09, 1.25, -0.345), 'metal', 0x8a8e90));
-  out.push(P(box(0.03, 0.4, 0.03, x + FRIDGE_W / 2 - 0.09, 0.62, -0.345), 'metal', 0x8a8e90));
+/** The fridge (a fixed off-white), its two doors and handles; `w` wide (a flat's slim one: 0.6 m). */
+function fridgeParts(out: Parts, x: number, w = FRIDGE_W) {
+  out.push(P(box(w - 0.02, 1.85, 0.64, x, 0, -0.01), 'porcelain', 0xe6e7e2));
+  out.push(P(box(w - 0.04, 0.014, 0.01, x, 1.16, -0.335), 'solid', 0x8d8a84)); // the freezer's door below
+  out.push(P(box(0.03, 0.55, 0.03, x + w / 2 - 0.09, 1.25, -0.345), 'metal', 0x8a8e90));
+  out.push(P(box(0.03, 0.4, 0.03, x + w / 2 - 0.09, 0.62, -0.345), 'metal', 0x8a8e90));
 }
 /** A spec back from its key (tests, probes). */
 export function kitchenSpecOf(key: string): KitchenSpec | null {
@@ -386,10 +386,10 @@ export function stove(): Parts {
   rangeParts(out, 0);
   return out;
 }
-/** A fridge on a wall of its own. */
-export function fridge(): Parts {
+/** A fridge on a wall of its own (`w`: a slim one where the wall is short). */
+export function fridge(w = FRIDGE_W): Parts {
   const out: Parts = [];
-  fridgeParts(out, 0);
+  fridgeParts(out, 0, w);
   return out;
 }
 

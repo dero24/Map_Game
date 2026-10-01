@@ -18,6 +18,13 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
   - A raised house's door goes on a wall whose stair stands in the open (`raisedDoorWall` over
     `doorWalls`, the open walls best-facing first, up to 8); none: the least-blocked one. Every
     other building keeps `pickDoorWall`'s wall, `doorWalls`' first.
+  - Under a raised house (review round 11, frame 5: "grass grows in the deep shade under the raised
+    house") the ground is a parking pad, gravel or — within 400 m of the sea — sand, never its yard's
+    lawn (`pads.ts` `underRaised`, a hash of where it stands: about two in five a pad). Every mounted
+    tile's go to the painter (`main.ts` `onTile` → `groundPaint.ts` `setPads`, dropped with the tile),
+    which fills the footprint with it after the yards (gravel lays its stones); the grass mask reads
+    only green paint, so no blade grows there (`tests/raisedGround.test.ts`, the mask rastered from
+    the painter's strokes).
 - Buildings inside buildings (`nest.ts`, run first in `buildBuildings`). A standing building
   ≥ 90% inside a larger one rises from its roof as a part of it (`lf`, `pt`, `po`) or, if no
   taller, is hidden (`in: 1`: no walls, footprint or door). This covers towers mapped tier by tier
@@ -65,7 +72,9 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
     determine their geometry (the piece cache is shared across builds).
   - Budgets (`tests/interiorBudget.test.ts`): no step over 8 ms, ≤ 120k vertices (a house 40k, a
     supermarket 90k), ≤ 60 draws, a tall building ≤ 3 storeys built; layout rules in
-    `tests/interiorLayout.test.ts`; `npx tsx tools/bench-interiors.mts`.
+    `tests/interiorLayout.test.ts`; `npx tsx tools/bench-interiors.mts`. Instanced pieces take up to
+    `MAX_INSTANCED` (47) draws; past it the rarest keys are baked into the merged mesh (the 120 × 40 m
+    flats: 115.6k vertices in 50 draws).
 - The way in (review round 10, must-fix 4: "the front door opens on a home"; `tests/interiorLayout.test.ts`,
   `interiorBudget.test.ts` "the way in", `tests/helpers/homes.ts`):
   - A cottage (plan.ts `COTTAGE`: ≤ 110 m² a storey, and wide enough for a living room of 3.2 m
@@ -97,6 +106,34 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
     "morning sun" in a hall with no window.
   - In the room the front door opens on, the free-standing pieces (the armchair, the big plant) stay off
     the line from the door to the room's far end: the view in reaches the kitchen and its table.
+- The kitchen and the table (review round 11: "a sink run, with no range, fridge or wall cabinets";
+  "three chairs crowd one side of the table"; "a WC is in view through the living room's left door";
+  `tests/interiorHome.test.ts`):
+  - A home's kitchen is one piece along a wall, `decor.ts` `kitchen(spec)` (`KitchenSpec`: its length,
+    the sink, the cooker — a range set in, its chimney hood over it — the fridge at an end with a
+    cabinet over it, and the stretches with a window over them): base units and the worktop, wall
+    cabinets wherever the wall above is solid, a low upstand under a window. `furnish.ts`
+    `planKitchen` picks its wall and length (from each end of every stretch and every 40 cm, the
+    longest it takes and a few shorter: 30 cm steps in a house, 60 in a block of flats so its kitchens
+    are a few instanced pieces) by `runLayouts` — the run laid out in its own x round its windows,
+    memoized: the fridge and the cooker only on solid wall (never in a window's stretch), the sink
+    under the window where it fits beside the cooker, the most wall cabinets, the far end of the room
+    from the door you come in by. A windowless run keeps its fridge on its left (a mirrored flat's is
+    the same piece turned round). What the run can't hold stands on a wall of its own, as near it as it
+    goes (`stove`, `fridge`: round the corner, an L; else the living room's kitchen end). One kitchen a
+    space (a kitchen the stair's wet room cuts in two has it in its biggest part). A fridge with no
+    wall for a full-size one is a slim 60 cm one. Of the 82 seeded homes' kitchens, 80 have their
+    cooker under a hood, a fridge and ≥ 0.6 m of wall cabinets (two have no wall left for a fridge).
+  - Dining chairs: a place per ~0.7 m of the table's edge, never under `DINE_PLACE` (0.6 m) —
+    `placesAlong`: two a side at 1.2–2.0 m, three from 2.1 m — and one at each end of a table of
+    `DINE_ENDS` (1.4 m) or longer where there's room behind it to draw the chair out (the table is
+    placed with that room first, then without).
+  - A WC's or a bathroom's door off a room of the day (living, great room, kitchen, dining) stands
+    shut in its doorway (`mesh.ts` `LeafSpot.shut`; a `leafShut:` piece, MOVING so it stays
+    instanced) and swings into its room as you step up to it — in front of the doorway within a stride,
+    or in the room itself — and shuts again once you've stepped away (`interiors.ts` `swingDoors`, a
+    quarter turn in ~0.25 s). Walking past it along the wall leaves it shut; the doorway is always open
+    in the walk world. Every other leaf stands open as before.
   - Pose 19 (`tools/review-shots.js`, "morning sun"): of the 'inside' house and its 24 nearest, the room
     with the most east-to-south glass (`interior/views.ts` `glassFacing`, `sunniest`; of rooms with as
     much, a room of the day before a bedroom, then the one whose floor takes more of the light), framed
@@ -432,8 +469,20 @@ once, from the map and seeds. No place names: a beach is a mapped `beach`, a mar
   (hours, walls, overnight), `tests/foundry.test.ts` (the lite body). Shots:
   `tools/calendar-shots.js` (`__CALENDAR__(tag, { set: 'autumn' | 'summer' })`: 9 and 12 re-shot
   with their counts, a house's dock, the 50 m beach pose at 13:00 in July with people and umbrellas
-  in frame, a lifeguard, the kids); review-shots.js 9 frames the nearest boat with eight others
-  within 45 m (a marina), not the nearest boat.
+  in frame, a lifeguard, the kids).
+- Review frame 9 (`tools/review-shots.js`, round 11: "still lands on house docks with about five
+  small boats"): a mapped marina — the loaded tiles' `marina` area with the most moored boats in or
+  within 25 m of its outline (≥ 8), its slips — framed, when the pose is taken, from the stand round
+  them (20–40 m out, 7 m up, every 15°, clear of buildings) where the most of its boats are in the lens
+  at ≥ 0.2% of the frame each (their hulls' boxes projected through the game's lens); it logs the
+  count (`[review] 9 marina: …`, `window.__REVIEW_COUNTS__[9]`). No such marina: the old nearest
+  cluster.
+- Wakes (`src/world/wakes.ts`; round 11, calendar-autumn 3: "white lozenges fan across the water at
+  the house's dock … its foam is too thick and opaque at 10 m"): each arm a ~20 cm line of broken
+  white in dashes along it (noise along the track, crawling outward) with a fainter line inside, faint
+  thin crests across the track, the churn in streaks along it; at most `WAKE_MAX` (55%) white, fading
+  by ~40 m. `wakeFoam` is the shader's TS twin (`tests/wakes.test.ts`). `Wakes.bedAt` (the terrain:
+  main.ts) fades a wake out over water shallower than `SHALLOW` (0.45 → 1.3 m): a dock's sand, a bar.
 
 ## Asset foundry (`src/assets/`, workbench `/kit.html`)
 
