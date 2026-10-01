@@ -184,12 +184,31 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
       // One octave of value noise at wavelength lam (m), kept only where it spans a few pixels
       // (fp: metres a pixel): finer, it would shimmer as you walk, and the brush would wipe it anyway.
       float octv(vec2 p, float lam, float fp) { return (vnoise(p / lam) - 0.5) * smoothstep(1.8, 4.5, lam / fp); }
-      // A surface's stones: a lighter one where an octave's noise peaks, a darker one where it dips
-      // (x the light, y the dark, 0–1). Each octave kept only while its stones are a fleck's size on
-      // screen, 3–14 px apart: finer, the brush wipes them and they shimmer; coarser, a darker one is a
-      // blot and a lighter one a patch, and the brush pools pigment round both. An octave a doubling
-      // from 3 cm to 1.9 m, so the nearer ground shows the smaller stones and the further the bigger,
-      // two or three octaves at a time, and every distance has its grain.
+      // A paved surface's stones: one round stone in each cell of a jittered grid (it keeps inside its
+      // cell, so no neighbour is looked at), its size and shade the cell's own — lighter than the
+      // surface in about half the cells, darker in most of the rest (x the light, y the dark, 0–1).
+      // Octaves a doubling apart from 3 cm to 1.9 m, each kept while its cells are 3–16 px on screen:
+      // finer, the brush wipes them and they shimmer; coarser, a stone is a blot. So the nearer ground
+      // shows the smaller stones and the further the bigger, and every distance has its aggregate.
+      vec2 stones(vec2 p, float fp) {
+        vec2 g = vec2(0.0);
+        float c = 0.03;
+        for (int i = 0; i < 7; i++) {
+          float s = c / fp, w = smoothstep(3.0, 5.0, s) * (1.0 - smoothstep(10.0, 16.0, s));
+          if (w > 0.0) {
+            vec2 q = p / c + vec2(7.31, 3.17) * float(i), id = floor(q), f = q - id;
+            float h = hash12(id), r = 0.2 + 0.16 * hash12(id + 4.4);
+            vec2 o = 0.3 + 0.4 * vec2(hash12(id + 7.7), hash12(id + 1.9));
+            float k = (1.0 - smoothstep(0.55, 1.0, length(f - o) / r)) * w;
+            g += h < 0.52 ? vec2(k, 0.0) : h < 0.95 ? vec2(0.0, k) : vec2(0.0);
+          }
+          c *= 2.0;
+        }
+        return g;
+      }
+      // The open ground's grain: a lighter fleck where an octave's noise peaks, a darker one where it
+      // dips (x the light, y the dark, 0–1), each octave kept while its flecks are 3–14 px apart on
+      // screen — octaves a doubling from 3 cm to 1.9 m, as the stones are.
       vec2 grit(vec2 p, float fp) {
         vec2 g = vec2(0.0);
         float lam = 0.03;
@@ -279,8 +298,8 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
         // texture you'd see standing on it: concrete's stones, asphalt's pale aggregate in its dark
         // binder, the stones of a gravel or shell yard, a beach's ripples, footprints and wrack. The
         // structure — flags and joints, the kerb, the gutter, tar snakes and patches — is the paint's;
-        // this is the surface between. Each octave only where it spans a few pixels (octv, grit), so
-        // it fades into the paint's own wash with distance and height, and never shimmers.
+        // this is the surface between. Each octave only where it spans a few pixels (octv, stones,
+        // grit), so it fades into the paint's own wash with distance and height, and never shimmers.
         vec3 eyeW = cameraPosition + uWorldOffset;
         float camD = length(vWorldPos - eyeW);
         float fp = max(length(dFdx(xz)), length(dFdy(xz)));
@@ -299,14 +318,15 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
           // the land cover's wash
           float paved = (1.0 - greenness) * (1.0 - stone) * (1.0 - sandy) * (1.0 - smoothstep(0.3, 0.42, rel));
           float unpaved = (1.0 - stone) * (1.0 - sandy) * smoothstep(0.3, 0.42, rel);
-          // (the brush is sized to the frame — 540 px tall its own size — and the flecks with it)
-          vec2 st = paved + unpaved > 0.0 ? grit(xz, fp * max(1.0, uViewport.y / 540.0)) : vec2(0.0);
+          // (the brush is sized to the frame — 540 px tall its own size — and the stones with it)
+          float fpx = fp * max(1.0, uViewport.y / 540.0);
           if (paved > 0.0) {
-            // concrete's stones are as often lighter than the slab as darker, the darker kept faint: the
+            // concrete's stones as often lighter than the slab as darker, the darker kept faint: the
             // brush pools pigment on the dark side of any edge, and a dark fleck pooled is grime. Asphalt
             // is pale stone in a dark binder, nothing darker. (The broad mottle is the land's wash, above.)
+            vec2 st = stones(xz, fpx);
             float asph = 1.0 - smoothstep(0.16, 0.24, lumS);
-            float spk = paved * mix(st.x * 0.27 - st.y * 0.09, st.x * 0.38, asph);
+            float spk = paved * mix(st.x * 0.4 - st.y * 0.07, st.x * 0.7, asph);
             gm *= 1.0 + spk;
             gp *= 1.0 + spk;
           }
@@ -326,6 +346,7 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
           // the open ground: the same flecks, fainter, the lawn's mown stipple over them (the blades
           // stand over that)
           if (unpaved > 0.0) {
+            vec2 st = grit(xz, fpx);
             float uspk = unpaved * (st.x * 0.18 - st.y * 0.05);
             gm *= (1.0 + uspk) * (1.0 - greenness * (octv(xz, 0.06, fp) * 0.16 + octv(xz + 2.0, 0.17, fp) * 0.12));
             gp *= 1.0 + uspk;

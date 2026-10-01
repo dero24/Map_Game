@@ -225,18 +225,20 @@ paint (its chroma and value) and the stone alpha. The structure is the paint's (
 the kerb's face, the gutter pan, aprons, tar snakes and sealed patches: groundCover.ts and the fine
 window); the shader lays the surface between it:
 
-- **Stones** (`grit`): a lighter fleck where an octave's noise peaks, a darker one where it dips.
-  The octaves run a doubling apart from 3 cm to 1.9 m, and each is kept only while its flecks are
-  3–14 px apart on screen. So the nearer ground shows the smaller stones and the further the bigger,
-  two or three octaves at a time (the loop skips the rest), and the grain is the same size on screen
-  at every distance. Finer, the brush wipes it and it shimmers; coarser, a darker fleck is a blot.
-  The band is sized to the frame as the brush is: 540 px tall is its own size, and a taller frame
-  (a phone at 1266) widens it in step (`uViewport`).
-  - Concrete: its stones are as often lighter than the slab as darker, the darker kept faint (+27%,
-    −9%).
-  - Asphalt (`lumS` under ~0.2): pale stone in a dark binder (+38%), nothing darker. There's no
+- **Stones** (`stones`, paved ground): one round stone in each cell of a jittered grid. It keeps
+  inside its cell, so no neighbour is looked at, and its size and shade are the cell's own. The
+  octaves run a doubling apart from 3 cm to 1.9 m, and each is kept only while its cells are 3–16 px
+  on screen. So the nearer ground shows the smaller stones and the further the bigger, two or three
+  octaves at a time (the loop skips the rest), and the aggregate is the same size on screen at every
+  distance. Finer, the brush wipes it and it shimmers; coarser, a stone is a blot. The band is sized
+  to the frame as the brush is: 540 px tall is its own size, and a taller frame (a phone at 1266)
+  widens it in step (`uViewport`).
+  - Concrete: about half its stones lighter than the slab (+40%), most of the rest darker but faint
+    (−7%).
+  - Asphalt (`lumS` under ~0.2): pale stone in a dark binder (+70%), nothing darker. There's no
     speckle field.
-  - The open ground: the same flecks, fainter (+18%, −5%), under the lawn's mown stipple.
+  - The open ground (`grit`): a lighter fleck where an octave's noise peaks and a darker one where
+    it dips, on the same octaves, fainter (+18%, −5%), under the lawn's mown stipple.
   - The broad mottle is the land's own wash (`wash`, ±8% at 1.1 m), everywhere.
 - **Why darks stay faint:** post.ts pools pigment on the darker side of any edge (`uEdgeDark`). A
   pixel 2–3 L* under its 2.4 px blur is deepened by several L* more, and a pale fleck's rim gets the
