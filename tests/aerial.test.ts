@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import shoreTile from '../public/data/shore/tiles/-2_6.json'; // (a baked Monmouth Beach tile: ~1,000 NAIP-sampled roofs)
+import shoreTile from '../public/data/shore/tiles/-2_6.json'; // (a baked shore tile: ~1,000 NAIP-sampled roofs)
 import {
   aerialRoof, fitCast, hex, NAIP_CAST, NO_CAST, readCell, rgbOf, rgbToHsl, ringPixels, ROOF_WARMTH, sampleRoof, setRoofSource,
   tileRoofs, uncast, unpaint, balanced, hslToRgb, type Aerial, type Cast, type RGB,
