@@ -156,12 +156,15 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
     run `CLEAR_MOVABLE`, else `clearOver` the run's shore-to-shore width, measured on past an end
     in the air so every tile agrees) plus its girders' depth (span/25); clears roads and railways
     under it; climbs at its class's grade (1.3× off the street); never under the line between its
-    ends; bascule leaves straight heel to heel.
+    ends; bascule leaves straight heel to heel. Chains are built longest first: one that runs onto
+    another's deck (a ramp onto a viaduct) holds that deck's height where it joins (`Pin`), and
+    neither parapet stands where they meet.
   - Collision is the deck as drawn: roadway and sidewalks are `table` decks (drawn station heights,
     exact over the worker boundary) with square ends (`Deck.cut` — a round end hung over the
-    sloping street; where two ways' pieces meet, both end along the drawn mitre); parapets are
-    walls a deck-high band; piers, bascule piers, fenders and towers are walls below the deck. A
-    mapped sidewalk alongside widens the deck (`deckEdges`).
+    sloping street; where two ways' pieces meet, both end along the drawn mitre; a cut deck reads
+    its height at the nearest point of its centreline); parapets are walls a deck-high band; piers,
+    bascule piers, fenders and towers are walls below the deck. A mapped sidewalk alongside widens
+    the deck (`deckEdges`).
   - What carries it (`carriedBy`, OSM `bridge:structure` → `Road.bs`, real-lite tiles only — the
     baked pack has none): girders on piers (beam, the default); through trusses (80 m spans);
     an arch over a low deck (hangers) or under a high one (columns); a suspension bridge's two
