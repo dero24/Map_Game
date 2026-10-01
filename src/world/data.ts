@@ -50,7 +50,9 @@ export interface Building {
  *  `tu`: underground (OSM tunnel=yes/culvert/…, not a building passage) — only the life sim's cars
  *  use it (they drive down into the portal and out of sight); nothing paints or furnishes it.
  *  `ic`: a mapped `incline` (fraction) — grade.ts leaves a street the map says is steep, steep. */
-export interface Road { p: number[]; c: string; w: number; n?: string; ref?: string; br?: 'yes' | 'movable'; l?: number; ow?: 1; sw?: 1; sv?: string; pk?: number; lod?: 1; own?: number; sy?: 1; tu?: 1; ic?: number; sf?: string; sc?: number /* steps: the mapped step_count */ }
+/** `bs`: a bridge's mapped structure (OSM bridge:structure: truss, arch, suspension, cable-stayed…);
+ *  unmapped, a bridge is a beam bridge — girders on piers (bridges.ts). */
+export interface Road { p: number[]; c: string; w: number; n?: string; ref?: string; br?: 'yes' | 'movable'; bs?: string; l?: number; ow?: 1; sw?: 1; sv?: string; pk?: number; lod?: 1; own?: number; sy?: 1; tu?: 1; ic?: number; sf?: string; sc?: number /* steps: the mapped step_count */ }
 /** `k`: what a pitch is for (sports.ts Sport, or 'playground'); `sf`: its mapped surface (OSM). */
 export interface Area { c: string; o: number[][]; i: number[][]; n?: string; lod?: 1; own?: number; k?: string; sf?: string }
 /** `ft` (fences): 1 iron railing, 2 chain-link, 3 wood/picket — from OSM fence_type; absent = unknown. */

@@ -213,6 +213,7 @@ export function buildStructures(world: World, walk: WalkWorld, ctx?: { roads: Ro
   }
 
   const mesh = new THREE.Mesh(m.geometry(), propMaterial());
+  mesh.name = 'structures';
   mesh.layers.enable(1);
   group.add(mesh);
   return { group, pierSegs, towers };

@@ -59,7 +59,7 @@ describe('osmToTile — roads', () => {
       osm(
         way(1, { highway: 'residential', name: 'Ocean Avenue', oneway: 'yes' }, [[10, 500], [300, 500], [700, 500]]), // starts inside -> owns
         way(2, { highway: 'service' }, [[2000, 500], [2500, 500]]), // entirely outside -> dropped
-        way(3, { highway: 'secondary', bridge: 'yes', layer: '1' }, [[-500, 100], [-100, 100], [400, 100]]), // first vertex far outside -> context
+        way(3, { highway: 'secondary', bridge: 'yes', layer: '1', 'bridge:structure': 'Truss' }, [[-500, 100], [-100, 100], [400, 100]]), // first vertex far outside -> context
         way(4, { highway: 'motorway' }, [[512, -30], [512, 300]]),
       ),
       OPTS,
@@ -75,6 +75,8 @@ describe('osmToTile — roads', () => {
     expect(bridge.own).toBe(0);
     expect(bridge.br).toBe('yes');
     expect(bridge.l).toBe(1);
+    expect(bridge.bs).toBe('truss'); // (how it's built: bridges.ts draws its trusses)
+    expect(ocean.bs).toBeUndefined();
     expect(t.roads.find((r) => r.c === 'motorway')!.w).toBe(14);
   });
   it('mapped street parking (either scheme) widens the carriageway and marks the kerbs', () => {

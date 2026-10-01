@@ -278,13 +278,22 @@ export interface Profile {
   ends: [{ land: boolean; h: number }, { land: boolean; h: number }];
 }
 
+/** What carries a way's deck, from its mapped bridge:structure: girders on piers (a beam bridge,
+ *  and anything the map doesn't say), trusses either side of it, an arch, a suspension bridge's
+ *  cables from its towers, a cable-stayed bridge's stays from its pylons. */
+export type Carried = 'beam' | 'truss' | 'arch' | 'suspension' | 'stayed';
+export const carriedBy = (bs: string | undefined): Carried =>
+  !bs ? 'beam' : /truss/.test(bs) ? 'truss' : /arch/.test(bs) ? 'arch' : /suspension/.test(bs) ? 'suspension' : /stay/.test(bs) ? 'stayed' : 'beam';
+
 /** How many spans a way of `len` metres is carried in (piers between them), and how deep its
- *  structure stands under the roadway (girders about a twenty-fifth of their span, and the slab). */
-export function spansOf(w: { movable: boolean; s0: number; s1: number }, c: string) {
-  const len = w.s1 - w.s0;
-  const n = w.movable ? 1 : Math.max(1, Math.round(len / (MINOR.has(c) ? 18 : HIGHWAY.has(c) ? 36 : SPAN)));
-  const span = len / n;
-  return { n, depth: w.movable ? 1.6 : clamp(0.3 + span / 25, 0.7, 2.2) };
+ *  structure stands under the roadway (girders about a twenty-fifth of their span, and the slab;
+ *  a deck hung from trusses, an arch or cables is a metre deep, and spans the whole way). */
+export function spansOf(w: { movable: boolean; s0: number; s1: number; r?: Road }, c: string) {
+  const len = w.s1 - w.s0, kind = carriedBy(w.r?.bs);
+  if (w.movable) return { n: 1, depth: 1.6 };
+  if (kind !== 'beam') return { n: kind === 'truss' ? Math.max(1, Math.round(len / 80)) : 1, depth: 1.0 };
+  const n = Math.max(1, Math.round(len / (MINOR.has(c) ? 18 : HIGHWAY.has(c) ? 36 : SPAN)));
+  return { n, depth: clamp(0.3 + len / n / 25, 0.7, 2.2) };
 }
 
 /** The roadway's long section. It lands on its approach streets at their own height; stands its
@@ -660,6 +669,8 @@ function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnTyp
     }
   }
 
+  if (!movable && carriedBy(w.r.bs) !== 'beam') superstructure(m, walk, ch, w, pf, ed, g, out, kerb);
+
   // ---- collision: the roadway and its sidewalks at their drawn heights; the parapets as walls
   const pts: P[] = [], cum: number[] = [];
   for (let j = 0; j < N; j++) {
@@ -793,6 +804,149 @@ function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnTyp
       walk.addWall(fA, fB, -50, ftop);
     }
   }
+}
+
+// ---------------------------------------------------------------- superstructures
+
+/** A square member from a to b, t thick (a truss's chord, a hanger, a cable, a stay). */
+function strut(m: Sink, a: THREE.Vector3, b: THREE.Vector3, t: number) {
+  const d = new THREE.Vector3().subVectors(b, a);
+  if (d.lengthSq() < 1e-6) return;
+  d.normalize();
+  const u = Math.abs(d.y) < 0.9 ? new THREE.Vector3(0, 1, 0).cross(d).normalize() : new THREE.Vector3(1, 0, 0).cross(d).normalize();
+  const v = new THREE.Vector3().crossVectors(d, u);
+  const h = t / 2;
+  const c = (p: THREE.Vector3, su: number, sv: number) => p.clone().addScaledVector(u, su * h).addScaledVector(v, sv * h);
+  for (const [su0, sv0, su1, sv1, fu, fv] of [[1, -1, 1, 1, 1, 0], [-1, 1, -1, -1, -1, 0], [1, 1, -1, 1, 0, 1], [-1, -1, 1, -1, 0, -1]] as const)
+    m.quad(c(a, su0, sv0), c(b, su0, sv0), c(b, su1, sv1), c(a, su1, sv1), u.clone().multiplyScalar(fu).addScaledVector(v, fv));
+}
+
+/** What holds up a deck the map says isn't a beam bridge: through trusses along its parapets; an
+ *  arch — over a deck that stands low over its gap, hangers down to it, under one that stands
+ *  high, columns up to it; a suspension bridge's towers and cables, their hangers; a cable-stayed
+ *  bridge's pylons and fans of stays. Its towers and pylons stand to the riverbed (walls there). */
+function superstructure(m: Sink, walk: WalkWorld, ch: Chain, w: ChainWay, pf: Profile, ed: ReturnType<typeof deckEdges>, g: Ground, out: BridgeOut, kerb: number) {
+  const kind = carriedBy(w.r.bs), len = w.s1 - w.s0;
+  const yAt = (s: number) => profileAt(pf, s);
+  const edge = (s: number, side: number) => interp(pf.S, side > 0 ? ed.left : ed.right, s);
+  const levels = pf.level.map((v) => (v === -Infinity ? -1e3 : v));
+  /** a point over the deck's edge line (side ±1, `outw` past its parapet's inner face), dy over the roadway */
+  const at = (s: number, side: number, dy: number, outw = CAP / 2) => {
+    const c = chainAt(ch, s), o = side * (edge(s, side) + outw) * c.mi;
+    return new THREE.Vector3(c.x + c.nx * o, yAt(s) + dy, c.z + c.nz * o);
+  };
+  /** what stands under the deck at s: the ground, or the water's surface over it */
+  const under = (s: number) => {
+    const c = chainAt(ch, s);
+    return Math.max(g.heightAt(c.x, c.z), interp(pf.S, levels, s));
+  };
+  m.color(C.steel);
+  if (kind === 'truss') {
+    const { n } = spansOf(w, ch.c), span = len / n, H = clamp(span / 7, 5.5, 11);
+    for (let q = 0; q < n; q++) {
+      const a = w.s0 + span * q, np = Math.max(2, Math.round(span / 6));
+      const sk = (k: number) => a + (span * k) / np;
+      for (const side of [1, -1]) {
+        const B = (k: number) => at(sk(k), side, kerb + 0.15), T = (k: number) => at(sk(k), side, kerb + H);
+        for (let k = 0; k < np; k++) {
+          if (k === 0) strut(m, B(0), T(1), 0.5); // (its inclined end posts)
+          else if (k === np - 1) strut(m, T(k), B(k + 1), 0.5);
+          else strut(m, T(k), T(k + 1), 0.5); // the top chord
+          if (k > 0) strut(m, B(k), T(k), 0.3);
+          if (k > 0 && k < np - 1) strut(m, k % 2 ? B(k) : T(k), k % 2 ? T(k + 1) : B(k + 1), 0.28);
+        }
+      }
+      // the bracing overhead: a strut across at every panel point, and crossed between them
+      for (let k = 1; k < np; k++) {
+        strut(m, at(sk(k), 1, kerb + H - 0.2), at(sk(k), -1, kerb + H - 0.2), 0.25);
+        if (k + 1 < np) strut(m, at(sk(k), 1, kerb + H - 0.2), at(sk(k + 1), -1, kerb + H - 0.2), 0.15);
+      }
+    }
+    return;
+  }
+  if (kind === 'arch') {
+    const mid = (w.s0 + w.s1) / 2, NS = Math.max(8, Math.round(len / 4));
+    if (yAt(mid) - under(mid) > len / 5) {
+      // a deck arch: ribs from springings at the gap's sides up to under the deck at mid-span,
+      // and columns from them up to it
+      const sA = w.s0 + 0.03 * len, sB = w.s1 - 0.03 * len, yS0 = under(sA) + 0.3, yS1 = under(sB) + 0.3;
+      const crown = yAt(mid) - SLAB - 1.2;
+      const rib = (t: number) => yS0 + (yS1 - yS0) * t + (crown - (yS0 + yS1) / 2) * 4 * t * (1 - t);
+      for (const side of [1, -1]) {
+        const P = (t: number) => {
+          const s = sA + (sB - sA) * t, c = chainAt(ch, s), o = side * Math.max(1, edge(s, side) - 1.2) * c.mi;
+          return new THREE.Vector3(c.x + c.nx * o, rib(t), c.z + c.nz * o);
+        };
+        for (let k = 0; k < NS; k++) strut(m, P(k / NS), P((k + 1) / NS), 1.1);
+        for (let k = 1; k < NS; k += 2) {
+          const p = P(k / NS), top = yAt(sA + ((sB - sA) * k) / NS) - SLAB - 1;
+          if (top - p.y > 0.6) strut(m, p, new THREE.Vector3(p.x, top, p.z), 0.6);
+        }
+      }
+    } else {
+      // a through arch: ribs over the deck's edges, hangers down to them, braced overhead
+      const H = clamp(len / 5, 6, 45);
+      const P = (t: number, side: number) => at(w.s0 + len * t, side, kerb + 0.15 + H * 4 * t * (1 - t));
+      for (const side of [1, -1]) {
+        for (let k = 0; k < NS; k++) strut(m, P(k / NS, side), P((k + 1) / NS, side), clamp(len / 90, 0.6, 1.6));
+        for (let k = 1; k < NS; k++) {
+          const t = k / NS, p = P(t, side), d = at(w.s0 + len * t, side, kerb + 0.15);
+          if (p.y - d.y > 1) strut(m, p, d, 0.08);
+        }
+      }
+      for (let k = 1; k < NS; k += 2) if (H * 4 * (k / NS) * (1 - k / NS) > 6) strut(m, P(k / NS, 1), P(k / NS, -1), 0.4);
+    }
+    return;
+  }
+  // towers (a suspension bridge's a fifth of the way in from each end) and pylons (a cable-stayed
+  // bridge's: one at mid-span, or one at each third of a long one)
+  const towersAt = kind === 'suspension' ? [w.s0 + 0.2 * len, w.s1 - 0.2 * len] : len > 260 ? [w.s0 + len / 3, w.s1 - len / 3] : [(w.s0 + w.s1) / 2];
+  const reach = kind === 'suspension' ? 0.6 * len : towersAt.length > 1 ? len / 3 : len / 2;
+  const Ht = kind === 'suspension' ? clamp(reach / 9, 12, 160) : clamp(reach * 0.45, 12, 150);
+  const legT = clamp(Ht / 22, 1.2, 5), off = legT / 2 + 0.6;
+  for (const s of towersAt) {
+    const y0 = yAt(s), c = chainAt(ch, s), ang = Math.atan2(c.tz, c.tx), ca = Math.cos(ang), sa = Math.sin(ang);
+    const foot = Math.min(under(s), Math.max(0, interp(pf.S, levels, s))) - 1, h = legT / 2 + 0.2;
+    const legs = [1, -1].map((side) => at(s, side, 0, off));
+    m.color(C.pier);
+    for (const p of legs) {
+      m.box(p.x, p.z, ang, legT, legT, foot, y0 + Ht);
+      walk.addLoop([[-h, -h], [h, -h], [h, h], [-h, h]].map(([u, v]) => [p.x + u * ca - v * sa, p.z + u * sa + v * ca] as P), -50, y0 + Ht);
+    }
+    m.color(C.pierCap);
+    for (const dy of [-1 - interp(pf.S, pf.depth, s), Ht * 0.55, Ht - 1]) strut(m, new THREE.Vector3(legs[0].x, y0 + dy, legs[0].z), new THREE.Vector3(legs[1].x, y0 + dy, legs[1].z), legT * 0.8);
+    out.towers.push(new THREE.Vector3((legs[0].x + legs[1].x) / 2, y0 + Ht + 0.5, (legs[0].z + legs[1].z) / 2));
+  }
+  m.color(C.steel);
+  if (kind === 'suspension') {
+    const [tA, tB] = towersAt, NS = Math.max(12, Math.round(len / 8));
+    const cableY = (s: number) => {
+      if (s <= tA) return yAt(w.s0) + 1 + ((yAt(tA) + Ht - yAt(w.s0) - 1) * (s - w.s0)) / Math.max(1e-6, tA - w.s0);
+      if (s >= tB) return yAt(w.s1) + 1 + ((yAt(tB) + Ht - yAt(w.s1) - 1) * (w.s1 - s)) / Math.max(1e-6, w.s1 - tB);
+      const u = (s - tA) / (tB - tA), top = yAt(tA) + Ht + (yAt(tB) - yAt(tA)) * u, sag = (2 * u - 1) * (2 * u - 1);
+      return yAt(s) + 1.5 + (top - yAt(s) - 1.5) * sag;
+    };
+    for (const side of [1, -1]) {
+      const C3 = (s: number) => { const p = at(s, side, 0, off); p.y = cableY(s); return p; };
+      const knots = [...Array.from({ length: NS + 1 }, (_, k) => w.s0 + (len * k) / NS), tA, tB].sort((a, b) => a - b);
+      for (let k = 0; k + 1 < knots.length; k++) if (knots[k + 1] - knots[k] > 0.01) strut(m, C3(knots[k]), C3(knots[k + 1]), 0.45);
+      for (let s = w.s0 + 6; s < w.s1 - 3; s += 6) {
+        if (Math.abs(s - tA) < 3 || Math.abs(s - tB) < 3) continue;
+        const top = C3(s), foot = at(s, side, kerb + 0.15, off);
+        if (top.y - foot.y > 0.8) strut(m, top, foot, 0.08);
+      }
+    }
+    return;
+  }
+  // the stays: a fan from high on each pylon out to the deck's edges either side, every 8 m
+  for (const s of towersAt)
+    for (const side of [1, -1])
+      for (const dir of [1, -1])
+        for (let d = 10; d < reach * 0.95; d += 8) {
+          const sd = s + dir * d;
+          if (sd <= w.s0 + 2 || sd >= w.s1 - 2) continue;
+          strut(m, at(s, side, Ht * (0.6 + 0.37 * (d / reach)), off), at(sd, side, kerb + 0.3, 0.1), 0.12);
+        }
 }
 
 const ring = (x: number, z: number, r: number, n: number): P[] => Array.from({ length: n }, (_, i) => [x + Math.cos((i / n) * Math.PI * 2) * r, z + Math.sin((i / n) * Math.PI * 2) * r] as P);

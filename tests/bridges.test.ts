@@ -176,6 +176,66 @@ describe('a bridge as built', () => {
   });
 });
 
+// ---------------- what carries the deck (OSM bridge:structure) ----------------
+describe('a bridge the map says how it’s built', () => {
+  // a gorge 40 m deep, a creek at its foot; and a sound 700 m wide
+  const gorge = (() => {
+    const grid = { x0: -200, z0: -40, cell: 2, w: 200, h: 40 }, h: number[] = [], sdf: number[] = [];
+    for (let j = 0; j < grid.h; j++)
+      for (let i = 0; i < grid.w; i++) {
+        const x = Math.abs(grid.x0 + (i + 0.5) * grid.cell);
+        h.push(Math.round(100 * (x > 60 ? 40 : 40 * (x / 60) ** 2)));
+        sdf.push(Math.round((x - 4) * 10));
+      }
+    return terrainOf(grid, h, sdf);
+  })();
+  const wide = (() => {
+    const grid = { x0: -500, z0: -40, cell: 4, w: 250, h: 20 }, h: number[] = [], sdf: number[] = [];
+    for (let j = 0; j < grid.h; j++)
+      for (let i = 0; i < grid.w; i++) {
+        const d = Math.abs(grid.x0 + (i + 0.5) * grid.cell) - 350;
+        h.push(d >= 0 ? 150 : -800);
+        sdf.push(Math.round(d * 10));
+      }
+    return terrainOf(grid, h, sdf);
+  })();
+  const span = (t: Terrain, x0: number, x1: number, bs?: string, c = 'secondary') => {
+    const roads = [road([[x0 - 50, 0], [x0, 0]], { c }), road([[x0, 0], [x1, 0]], { c, w: 9, br: 'yes', l: 1, ...(bs ? { bs } : {}) }), road([[x1, 0], [x1 + 50, 0]], { c })];
+    const w = new RecWalk(t, { x0: -600, z0: -600, x1: 600, z1: 600 });
+    const out = buildStructures(world(t, roads), w, { roads, lines: [] });
+    const mesh = out.group.children.find((o) => o.name === 'structures') as THREE.Mesh;
+    return { w, out, verts: mesh.geometry.attributes.position.count, pos: mesh.geometry.attributes.position.array as Float32Array };
+  };
+  const finite = (a: Float32Array) => a.every((v) => Number.isFinite(v));
+
+  it('a truss, an arch over the river, an arch under a deck over a gorge: more than girders, and sound', () => {
+    for (const [t, x0, x1, bs] of [[river, -120, 120, 'truss'], [river, -60, 60, 'arch'], [gorge, -70, 70, 'arch']] as const) {
+      const plain = span(t, x0, x1), built = span(t, x0, x1, bs);
+      expect(built.verts, `${bs} over ${x1 - x0} m`).toBeGreaterThan(plain.verts + 300);
+      expect(built.verts).toBeLessThan(40000);
+      expect(finite(built.pos)).toBe(true);
+      expect(roadwayDecks(built.w.ops).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('a suspension bridge hangs from two towers, a cable-stayed one from its pylons; both stand in the water', () => {
+    for (const [bs, n] of [['suspension', 2], ['cable-stayed', 2]] as const) {
+      const b = span(wide, -400, 400, bs, 'motorway');
+      expect(b.out.towers, bs).toHaveLength(n);
+      for (const tw of b.out.towers) expect(tw.y).toBeGreaterThan(20);
+      expect(b.verts).toBeLessThan(80000);
+      expect(finite(b.pos)).toBe(true);
+      const walk = new WalkWorld(wide, { x0: -600, z0: -600, x1: 600, z1: 600 });
+      replayOps(walk, b.w.ops);
+      const tw = b.out.towers[0];
+      // (a tower's legs stand either side of the deck: a swimmer at the water meets them)
+      let hit = false;
+      for (let dz = -20; dz <= 20 && !hit; dz += 0.5) hit = walk.touching(tw.x, tw.z + dz, 0.4, 0);
+      expect(hit, bs).toBe(true);
+    }
+  });
+});
+
 // ---------------- bridges over bridges ----------------
 describe('a flyover', () => {
   it('clears the bridge under it by a road’s clearance (its OSM layer says which is over)', () => {
