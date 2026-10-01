@@ -11,6 +11,8 @@ import { RecWalk, packGroup, packDeck, type BuiltTile } from './pack';
 import { canvasBitmap } from './canvas';
 import { crossingPaint } from './kerbside';
 import { buildStairs } from './stairs';
+import { buildMicro } from './micro';
+import { activeStyle } from './styles';
 
 export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec, idBase: number, lite = false): Promise<BuiltTile> {
   // Tunnels leave here: no builder paints, furnishes, parks along, faces a door to or grows grass
@@ -70,6 +72,9 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
   const signs = buildSigns(world, bld.signs, w); // full json: intersection signs need context roads
   const props = buildProps(world2, w, structures.pierSegs, { mailboxes: bld.mailboxes, drives: bld.drives, doors: bld.doors, ctx: tj as unknown as WorldJson, box: spec.box, hood: bld.hood });
   const stairs = buildStairs(pj.roads, (x, z) => terrain.heightAt(x, z), w); // (every highway=steps a flight you climb)
+  // the small things — carts, chairs, cleats, towels, the mapped picnic tables — for the micro layer,
+  // placed last so they keep off everything above
+  const micro = buildMicro({ world: world2, ctx: tj as unknown as WorldJson, walk: w, footprints: bld.footprints, doors: bld.doors, mailboxes: bld.mailboxes, drives: bld.drives, box: spec.box, hood: bld.hood, style: activeStyle() });
   const xing = crossingPaint(tj.roads, pj.points); // (the tile's own crossings, on any street round them)
   const vp = pj.points.filter((p) => p.c === 'viewpoint').flatMap((p) => [p.x, p.z, p.d ?? -1]);
   const plans: BuiltTile['plans'] = [];
@@ -98,6 +103,7 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
     atlas: await canvasBitmap(signs.atlas),
     lampPts: props.lampPts,
     kerb: props.kerb.length ? props.kerb : undefined,
+    micro: micro.length ? micro : undefined,
     junc: props.junc.length ? props.junc : undefined,
     ...(xing.length ? { xing } : {}),
     ...(vp.length ? { vp } : {}),

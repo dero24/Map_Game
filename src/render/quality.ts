@@ -39,11 +39,40 @@ export interface TierConfig {
   lidar: boolean;
   /** How far out the skyline reads a city's towers, m (world/skyline.ts). */
   skylineR: number;
+  /** The micro layer's budget (world/microLayer.ts): its impostor atlas, its caps, its ranges. */
+  micro: MicroTier;
 }
+
+/** A tier's budget for the micro layer (world/microLayer.ts, render/impostor.ts). */
+export interface MicroTier {
+  /** frames per side of each piece's picture grid; picture size (px) for big (R ≥ 1.4 m) and small pieces */
+  N: number; Fbig: number; Fsmall: number;
+  /** the widest the atlas may be (px) */
+  atlasW: number;
+  /** cards drawn at once (nearest first); 3D pieces at once, and their vertices */
+  cards: number; near: number; nearVerts: number;
+  /** the hand-over range (m); how far cards are drawn (m); the crossfade band (m) */
+  lo: number; hi: number; far: number; band: number;
+  /** pixels per metre at 1 m the hand-over is worked out for (the tier's typical frame) */
+  pxK: number;
+  /** pieces photographed per frame while the atlas fills; re-sort every `step` m */
+  bakePerFrame: number; step: number;
+  /** the 3D pieces cast shadows (the cards only receive them) */
+  castNear: boolean;
+}
+// A desktop draws 64 px pictures of the big pieces (a hoop, a kayak, an umbrella) and 32 px of the
+// rest, cards to 450 m and up to 12k of them, 3D pieces to 25–60 m. A phone halves the pictures (a
+// quarter of the atlas), draws a third of the cards to 260 m and hands over sooner (18–40 m); a
+// weak phone keeps a few hundred cards, the 3D pieces within 14–30 m, and casts no shadows.
+export const MICRO_TIERS: Record<Tier, MicroTier> = {
+  desktop: { N: 8, Fbig: 64, Fsmall: 32, atlasW: 2048, cards: 12000, near: 500, nearVerts: 160000, lo: 25, hi: 60, far: 450, band: 6, pxK: 900, bakePerFrame: 6, step: 3, castNear: true },
+  phone: { N: 8, Fbig: 32, Fsmall: 16, atlasW: 1024, cards: 4000, near: 160, nearVerts: 50000, lo: 18, hi: 40, far: 260, band: 5, pxK: 520, bakePerFrame: 3, step: 3, castNear: true },
+  low: { N: 8, Fbig: 32, Fsmall: 16, atlasW: 1024, cards: 1500, near: 80, nearVerts: 24000, lo: 14, hi: 30, far: 160, band: 4, pxK: 400, bakePerFrame: 2, step: 4, castNear: false },
+};
 
 const TIERS: Record<Tier, Omit<TierConfig, 'tier' | 'why'>> = {
   // the shipped defaults — nothing changes on a desktop
-  desktop: { post: {}, shadow: {}, stream: { loadR: 1500, dropR: 2400, coarseR: 8000 }, paintTex: 4096, lidar: true, skylineR: 8000 },
+  desktop: { post: {}, shadow: {}, stream: { loadR: 1500, dropR: 2400, coarseR: 8000 }, paintTex: 4096, lidar: true, skylineR: 8000, micro: MICRO_TIERS.desktop },
   // CSS-pixel paint (a DPR-3 phone rendered 1.5× its CSS size before), a 60% brush buffer (the
   // Kuwahara radius drops from 7 to ~4 texels: a third of the taps), 1024² shadows, ~half the
   // detail tiles and a 4 km silhouette ring, 2048² ground paint (a quarter of the slice canvas).
@@ -54,10 +83,10 @@ const TIERS: Record<Tier, Omit<TierConfig, 'tier' | 'why'>> = {
   // 6 km ring and skyline; the silhouettes stay under coarseMB, and auto quality steps a slow one
   // down once the streaming has settled — and back up when stepping down didn't make it quicker:
   // 85% paint since the same day, a phone's view still read blurry at 75%)
-  phone: { post: { hiDpi: true, paintDetail: 0.85 }, shadow: { size: 1024 }, stream: { loadR: 900, dropR: 1500, coarseR: 6000, budgetMB: 200, realConc: 2, coarseMB: 90 }, paintTex: 2048, lidar: false, skylineR: 6000 },
+  phone: { post: { hiDpi: true, paintDetail: 0.85 }, shadow: { size: 1024 }, stream: { loadR: 900, dropR: 1500, coarseR: 6000, budgetMB: 200, realConc: 2, coarseMB: 90 }, paintTex: 2048, lidar: false, skylineR: 6000, micro: MICRO_TIERS.phone },
   // …and a weak phone (or one whose last visit died): no shadow pass either — every tree, house and
   // car drawn a second time into the shadow map was half the vertex work of a frame
-  low: { post: { hiDpi: false, paintDetail: 0.5, renderScale: 0.75 }, shadow: { size: 1024, enabled: false }, stream: { loadR: 750, dropR: 1300, coarseR: 2500, budgetMB: 120, realConc: 1, coarseMB: 60 }, paintTex: 1024, lidar: false, skylineR: 3000 },
+  low: { post: { hiDpi: false, paintDetail: 0.5, renderScale: 0.75 }, shadow: { size: 1024, enabled: false }, stream: { loadR: 750, dropR: 1300, coarseR: 2500, budgetMB: 120, realConc: 1, coarseMB: 60 }, paintTex: 1024, lidar: false, skylineR: 3000, micro: MICRO_TIERS.low },
 };
 const ORDER: Tier[] = ['desktop', 'phone', 'low'];
 const ALIAS: Record<string, Tier> = { desktop: 'desktop', high: 'desktop', phone: 'phone', mobile: 'phone', medium: 'phone', low: 'low', safe: 'low' };

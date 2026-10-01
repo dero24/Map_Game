@@ -15,6 +15,7 @@ import { findPortals, portalMeshes } from './portals';
 import { shoreGroup } from './shore';
 import type { SynthResult } from './synth';
 import { setActiveStyle, styleByKey } from './styles';
+import { setMicroDate } from './micro';
 import { enrichTile, initLidar, lidarOn, setLidarLog, setLidarPort } from './lidar';
 
 // First visit to a cell: how long a detail build waits for its LiDAR measurement before
@@ -45,7 +46,7 @@ const realDem = new Map<string, { buf: ArrayBuffer; layout: LayerLayout }>(); //
 // stalls — the player gets the real town either way, never a placeholder for want of a proxy.
 // Results are cached per cell in IndexedDB (kvPut), so a revisit never re-queries Overpass.
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-const DIRECT_V = 22; // keep with the tile service's t/vN (realTile output version)
+const DIRECT_V = 23; // keep with the tile service's t/vN (realTile output version)
 // Overpass rate-limits per IP and per server: one query at a time on each mirror, so the three
 // mirrors carry three cells at once. A mirror that answers 429/504 cools down for its
 // retry-after; a query that fails on one mirror moves on to the next free one.
@@ -652,6 +653,7 @@ ctx.onmessage = (e: MessageEvent) => {
     if (m.baked) bakedCells = m.baked;
     for (const c of m.fail ?? []) failCells.add(c);
     if (m.vector === false) vecOn = false;
+    setMicroDate(m.date); // (the world's chosen day: the beach's season, the carts' collection day)
     if (m.demBase) setDemBase(m.demBase);
     if (m.lidar && m.origin) {
       setLidarLog((msg) => ctx.postMessage({ kind: 'log', msg }));
@@ -677,6 +679,7 @@ ctx.onmessage = (e: MessageEvent) => {
       for (const d of tile.decks) if (d.h) tr.push(d.h.buffer);
       for (const op of tile.ops) if (op.o === 'd' && op.d.h) tr.push(op.d.h.buffer);
       if (tile.atlas) tr.push(tile.atlas);
+      if (tile.micro) tr.push(tile.micro.buffer);
       if (tile.terr) tr.push(tile.terr);
       if (tile.dem) tr.push(tile.dem.buf);
       ctx.postMessage({ kind: 'built', id: m.id, tile }, tr);

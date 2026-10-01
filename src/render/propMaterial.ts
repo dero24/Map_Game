@@ -20,8 +20,14 @@ import { SIGNAL_GLSL } from '../sim/traffic';
 // touch, the wash's radius in m; < 0 all paper); uWash = (dry: 0 wet → 1 dry, opacity, -, -).
 // It writes display colour and coverage (+ 2 where the paint is wet) for post.ts to lay over the
 // painting; the outline is drawn there, from the pass's depth.
-export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean; signal?: boolean; fallHue?: number; blossom?: boolean; weep?: boolean; wash?: boolean } = {}) {
+// fade: the micro layer's near pieces (world/microLayer.ts), merged into one mesh. `aFade` is each
+// piece's foot (x, y, z) and where it hands over to its impostor card (m; < 0: it has no card and
+// draws whole); across the band uFade.x it gives way pixel by pixel on the ordered dither the cards
+// use the other way round (render/impostor.ts), so the two never both draw a pixel, nor leave one.
+// uFade.y: 0 by distance, 1 cards only (this draws nothing), 2 never hand over.
+export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean; signal?: boolean; fallHue?: number; blossom?: boolean; weep?: boolean; wash?: boolean; fade?: boolean } = {}) {
   const defines: Record<string, number> = {};
+  if (opts.fade) defines.FADE = 1;
   if (opts.wash) defines.WASH = 1;
   if (opts.weep) defines.WEEP = 1;
   defines.FALL_HUE = opts.fallHue ?? 0; // (always defined: an undefined macro in #if is a GLSL error)
@@ -35,7 +41,7 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
   if (opts.emissive) defines.EMISSIVE = 1;
   const mat = paintMaterial({
     defines,
-    uniforms: { uEmissive: { value: opts.emissive ?? new THREE.Color(0) }, uEmNight: { value: opts.emissiveNight ? 1 : 0 }, uCrown: { value: new THREE.Vector2(...(opts.crown ?? [3, 0])) }, uWashAt: { value: new THREE.Vector4(0, 0, 0, -1) }, uWash: { value: new THREE.Vector4(0, 1, 0, 0) }, uExposure: { value: 0.92 } },
+    uniforms: { uEmissive: { value: opts.emissive ?? new THREE.Color(0) }, uEmNight: { value: opts.emissiveNight ? 1 : 0 }, uCrown: { value: new THREE.Vector2(...(opts.crown ?? [3, 0])) }, uWashAt: { value: new THREE.Vector4(0, 0, 0, -1) }, uWash: { value: new THREE.Vector4(0, 1, 0, 0) }, uExposure: { value: 0.92 }, ...(opts.fade ? { uFade: { value: new THREE.Vector4(6, 0, 0, 0) } } : {}) },
     vertex: /* glsl */ `
       attribute vec3 color;
       varying vec3 vColor;
@@ -51,7 +57,17 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
       #ifdef SIGNAL
       ${SIGNAL_GLSL}
       #endif
+      #ifdef FADE
+      attribute vec4 aFade;
+      uniform vec4 uFade;
+      flat varying float vFade;
+      #endif
       void main() {
+        #ifdef FADE
+          float fd = length(cameraPosition - (modelMatrix * vec4(aFade.xyz, 1.0)).xyz);
+          vFade = aFade.w < 0.0 ? 1.0 : clamp((aFade.w + uFade.x * 0.5 - fd) / uFade.x, 0.0, 1.0);
+          if (uFade.y > 0.5) vFade = uFade.y > 1.5 ? 1.0 : 0.0;
+        #endif
         vec3 p = position;
         vAO = 1.0;
         vSig = 0.0;
@@ -131,7 +147,13 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
       #ifdef FOLIAGE
       varying vec3 vRimN;
       #endif
+      #ifdef FADE
+      flat varying float vFade;
+      #endif
       void main() {
+        #ifdef FADE
+          if (dither4(gl_FragCoord.xy) >= vFade) discard; // (its impostor card draws the rest)
+        #endif
         #ifdef FOLIAGE
           // A crown seen from 5–10 m: each low-poly lobe's rim breaks into leaf-sized bites and
           // holes where it turns away from the eye, so the outline is a ragged edge of leaves, not
