@@ -581,7 +581,7 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
     // a fitted kitchen along the wall that holds the most of one (planKitchen): base units and the
     // worktop, the sink under the window, the cooker under its hood and the fridge on solid wall,
     // wall cabinets over the rest — and what the run couldn't hold on a wall of its own beside it.
-    // One a space: a kitchen the stair's wet room cuts in two has it in its biggest part.
+    // One kitchen a space: one the stair's wet room cuts in two has it in its biggest part.
     const parts = L0.rooms.filter((x) => x.space === R.space && x.level === k && x.type === R.type);
     const host = parts.reduce((a, b) => (rectArea(b.r) > rectArea(a.r) + 1e-6 ? b : a), parts[0] ?? R);
     if (host.id !== R.id || F.kitchens.has(R.space)) { if (dining) diningSet(area > 12); return; }
