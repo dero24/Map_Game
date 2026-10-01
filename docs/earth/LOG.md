@@ -2,6 +2,46 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-01 — Stand-in cells agree at their seams; a car stops at its bumper; raised doors on the wall with room
+
+Finishes the work of a helper that the usage limit cut short on 2026-09-29 (after (af)). It is
+merged onto `feature/updated-controls-for-mobile` as `feature/back_to_local_agent_9_30`.
+
+- **Stand-in cells agree at their edges** (`synth.ts` `standInLots`). A stand-in placed its lots
+  greedily, in the order it walked its own streets, so two neighbouring cells kept different lots
+  in the strip they share: about a third of them. Buildings came out doubled, overlapping or missing
+  along the seam, and doubled walls flicker.
+  - Every lot is now a pure function of its position. Along a street they're kept in turn. Where
+    two streets' lots clash (a corner, the next block), the higher-ranked lot by hash wins in two
+    rounds of "outranks every undecided rival". A lot's fate depends only on candidates within
+    `LOT_REACH`, so any tile with that much ground round its window gets the same lots as its
+    neighbour, lot for lot.
+  - Streets are emitted 140 m past the box on every side. A street line wanders 26 m off its grid
+    line, so stretches just past the far edge had belonged to no tile.
+  - `tests/synthSeams.test.ts` (5): two neighbours built in both orders and alone have identical
+    margins; no footprint is doubled or overlapping across the seam; no lot stands in a street.
+  - Procedural Midtown, headless: 5,119 buildings, 0 nested, 0 touching.
+- **A car stops at its bumper** (`collision.ts` `moveBody`/`bodyPush`, `vehicles.ts` `carBody`).
+  A car's collider was one 1.05 m circle round its middle, so head on its nose went 1.15 m into a
+  wall. It is now a capsule as long and wide as the car's own model (kit recipe; a bike rack adds
+  to the back). It slides along walls, and a post or a corner brushing its side pushes it aside
+  instead of catching it.
+  - `tests/carBody.test.ts` (8): head-on, glancing, past a post, through a doorway's width, turning
+    against a wall.
+  - The `__DRIVE__` check measures the stall from the bumper.
+  - Procedural Midtown: 486 m driven, 0 clips, 0 inside.
+- **A raised house's door goes on a wall its stair has room at** (`buildings.ts` `doorWalls`,
+  `raisedStair`, `raisedDoorWall`).
+  - On a tight lot every stair shape from the street wall ran into a neighbour, a garage or the
+    street, so the door up there couldn't be reached. Now the house tries its other open walls
+    (best-facing first, up to 8). If none fits, it takes the least-blocked one.
+  - Any other building's door is the same wall as before.
+  - `tests/raisedStairs.test.ts` (+1).
+- Tests: 515 pass, including `hoods.test.ts` run here with file reads standing in for vite's
+  `import.meta.glob`. Typecheck clean.
+- Left from the helper's list: pilings on Grand Pointe Way (Sea Bright) stand over the road's
+  modelled width. The house outlines and the road width estimate disagree there. Not yet looked at.
+
 ## 2026-10-02 (later) — Weather to test against; fog now and then, anywhere
 
 - The owner liked the odd random fog — kept, rarer: drifting fog 'rare, anywhere' (default; about

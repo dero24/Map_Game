@@ -51,6 +51,42 @@ const DEAD_SEG: Seg = [0, 0, 0, 0, 0, 0];
 // gathered (i: walls done), then each cell's list filtered once (it: through the cells).
 interface PurgeJob { ids: number[]; gone: Set<number>; cells: Set<number>; it: Iterator<number> | null; i: number }
 
+/** The push (dx, dz) that takes a capsule — its axis a→b, `r` round it — clear of the wall `s`, or
+ *  null when it's clear. (px, pz): its centre before this step; an axis crossing the wall (a
+ *  turn swinging an end through it) goes back to that side. */
+export function bodyPush(ax: number, az: number, bx: number, bz: number, s: readonly number[], r: number, px: number, pz: number): [number, number] | null {
+  const cx = s[0], cz = s[1], ex = bx - ax, ez = bz - az, fx = s[2] - cx, fz = s[3] - cz;
+  const fl = Math.hypot(fx, fz);
+  // (back out along the wall's normal to (px, pz)'s side, past the deepest end of the axis)
+  const backOut = (): [number, number] => {
+    const wx = fl > 1e-9 ? -fz / fl : -ez, wz = fl > 1e-9 ? fx / fl : ex, wl = Math.hypot(wx, wz) || 1;
+    const nx = wx / wl, nz = wz / wl, side = (px - cx) * nx + (pz - cz) * nz >= 0 ? 1 : -1;
+    const deep = Math.max(0, -Math.min(((ax - cx) * nx + (az - cz) * nz) * side, ((bx - cx) * nx + (bz - cz) * nz) * side));
+    return [nx * side * (deep + r), nz * side * (deep + r)];
+  };
+  const den = ex * fz - ez * fx;
+  if (Math.abs(den) > 1e-12) {
+    const t = ((cx - ax) * fz - (cz - az) * fx) / den, u = ((cx - ax) * ez - (cz - az) * ex) / den;
+    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) return backOut();
+  }
+  // apart: the nearest pair is an end of one against the other (wx, wz: from the wall to the axis)
+  let best = Infinity, ox = 0, oz = 0;
+  const near = (qx: number, qz: number, sx: number, sz: number, vx: number, vz: number, qOnAxis: boolean) => {
+    const l2 = vx * vx + vz * vz, t = l2 > 0 ? Math.max(0, Math.min(1, ((qx - sx) * vx + (qz - sz) * vz) / l2)) : 0;
+    const hx = sx + vx * t, hz = sz + vz * t, wx = qOnAxis ? qx - hx : hx - qx, wz = qOnAxis ? qz - hz : hz - qz, d2 = wx * wx + wz * wz;
+    if (d2 < best) (best = d2), (ox = wx), (oz = wz);
+  };
+  near(ax, az, cx, cz, fx, fz, true);
+  near(bx, bz, cx, cz, fx, fz, true);
+  near(cx, cz, ax, az, ex, ez, false);
+  near(s[2], s[3], ax, az, ex, ez, false);
+  if (best >= r * r) return null;
+  const d = Math.sqrt(best);
+  if (d < 1e-9) return backOut();
+  const k = (r - d) / d;
+  return [ox * k, oz * k];
+}
+
 const inRing = (x: number, z: number, ring: P2[]) => {
   let inside = false;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -398,6 +434,49 @@ export class WalkWorld {
     let p: P2 = [x, z];
     for (let k = 0; k < n; k++) p = this.move1(p[0], p[1], dx / n, dz / n, r, feetY);
     return p;
+  }
+  /** Move a long body — a car: a capsule round its axis, from `front` metres ahead of (x, z) along
+   *  (ux, uz) to `back` metres behind it, `r` wide each side — by (dx, dz), sliding along walls,
+   *  in pieces like `move`. Its bumper stops at a wall; a post or a wall's end brushing its side or
+   *  a rounded corner pushes it aside rather than catching it. The ground (the water's edge) is
+   *  judged at its centre, as for `move`. A car was one 1.05 m circle round its middle: head on, its
+   *  nose went 1.15 m into the wall before the circle touched. */
+  moveBody(x: number, z: number, dx: number, dz: number, ux: number, uz: number, front: number, back: number, r: number, feetY?: number): P2 {
+    const L = Math.hypot(dx, dz), n = L > r * 0.75 ? Math.min(24, Math.ceil(L / (r * 0.75))) : 1;
+    let p: P2 = [x, z];
+    for (let k = 0; k < n; k++) p = this.moveBody1(p[0], p[1], dx / n, dz / n, ux, uz, front, back, r, feetY);
+    return p;
+  }
+  private moveBody1(x: number, z: number, dx: number, dz: number, ux: number, uz: number, front: number, back: number, r: number, feetY?: number): P2 {
+    let nx = x + dx, nz = z + dz;
+    if (!isFinite(nx) || !isFinite(nz) || !isFinite(ux) || !isFinite(uz)) return [x, z];
+    if ((dx !== 0 || dz !== 0) && !this.walkable(nx, nz)) {
+      if (this.walkable(x + dx, z)) nz = z;
+      else if (this.walkable(x, z + dz)) nx = x;
+      else return [x, z];
+    }
+    const reach = Math.max(front, back) + r;
+    for (let iter = 0; iter < 4; iter++) {
+      const i0 = Math.floor((nx - reach) / this.cell), i1 = Math.floor((nx + reach) / this.cell);
+      const j0 = Math.floor((nz - reach) / this.cell), j1 = Math.floor((nz + reach) / this.cell);
+      let pushed = false;
+      const mark = ++this.markId;
+      for (let i = i0; i <= i1; i++)
+        for (let j = j0; j <= j1; j++) {
+          const l = this.grid.get(i * 73856093 ^ j * 19349663);
+          if (!l) continue;
+          for (const id of l) {
+            if (this.segDead[id] || this.marks[id] === mark) continue;
+            this.marks[id] = mark;
+            const s = this.segs[id];
+            if (feetY !== undefined && (feetY < s[4] || feetY > s[5])) continue;
+            const q = bodyPush(nx + ux * front, nz + uz * front, nx - ux * back, nz - uz * back, s, r, x, z);
+            if (q) (nx += q[0]), (nz += q[1]), (pushed = true);
+          }
+        }
+      if (!pushed) break;
+    }
+    return [nx, nz];
   }
   private move1(x: number, z: number, dx: number, dz: number, r: number, feetY?: number): P2 {
     let nx = x + dx, nz = z + dz;

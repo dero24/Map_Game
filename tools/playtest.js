@@ -916,7 +916,7 @@ window.__DRIVE__ = async (opts = {}) => {
   for (const t of G.stream.loaded.values()) for (const m of t.group.children) if (m.name?.startsWith('parked-cars') && m.instanceMatrix) inst0.set(m, m.instanceMatrix.array.slice());
 
   // the streets it drives: the car's graph round the start, without the service ways (driveways,
-  // alleys, parking aisles: a car's 1.05 m collider barely fits them) unless asked; the
+  // alleys, parking aisles: a car barely fits them) unless asked; the
   // carriageways it must stay on: every way a car may use, service ways too
   const roads = roadsNear(G, start.x, start.z, 1000);
   const graph = roadGraph(roads, { car: true, skip: opts.service ? [] : ['service'] });
@@ -977,8 +977,8 @@ window.__DRIVE__ = async (opts = {}) => {
     if (b >= 0 && fb?.ground) underHouse++; // (between a raised house's pilings: parking under a beach house)
     else if (b >= 0) note('inside', at, () => ({ building: b, kmh: Math.round(car.v * 3.6) }));
     const fx = -Math.sin(car.yaw), fz = -Math.cos(car.yaw), rx = Math.cos(car.yaw), rz = -Math.sin(car.yaw);
-    // the body (the collider is a 1.05 m circle; the car is ~4.5 × 1.8 m): how deep its corners
-    // and ends reach into a footprint
+    // the body (the collider is a capsule as long and wide as the car, so its rounded corners can
+    // reach a little past a wall on a slanting hit): how deep its corners and ends reach into a footprint
     let deep = 0, pt = null;
     for (const [u, v] of BODY) {
       const qx = x + fx * u * HL + rx * v * HW, qz = z + fz * u * HL + rz * v * HW, bb = W.buildingAt(qx, qz);
@@ -1119,11 +1119,14 @@ window.__DRIVE__ = async (opts = {}) => {
       if (c.s > stall.s + 1) stall = { s: c.s, t: simT };
       else if (simT - stall.t > 3 && revT <= 0) {
         (revT = 1.5), reverses++, revs++, (stall = { s: c.s, t: simT + 1.5 }), (calmT = 3), (onRoad = false);
-        const wall = nearSeg(W, car.x, car.z, car.feet);
+        // (measured from the front of the body's axis: the collider is the car's own shape, so it
+        // stops with its bumper at a wall, its middle half a car's length back)
+        const bd = car.body ?? { f: Math.max(0, HL - HW), r: HW };
+        const wall = nearSeg(W, car.x - Math.sin(car.yaw) * bd.f, car.z - Math.cos(car.yaw) * bd.f, car.feet);
         note('stall', [car.x, car.z, car.y], () => ({ off: r2(c.d), wall }));
         // stopped dead on its street, lined up with it, a wall at its bumper: something stands in
         // the road (a post, a mast, a building across the carriageway)
-        if (c.i >= 1 && c.d < 1.5 && Math.abs(err) < 0.6 && wall && wall.d < 1.3) note('blocked', [car.x, car.z, car.y], () => ({ wall, kmh: Math.round(car.v * 3.6) }));
+        if (c.i >= 1 && c.d < 1.5 && Math.abs(err) < 0.6 && wall && wall.d < bd.r + 0.4) note('blocked', [car.x, car.z, car.y], () => ({ wall, kmh: Math.round(car.v * 3.6) }));
         if (opts.trace) trace.push({ t: r2(simT), rev: [r2(car.x), r2(car.z)], v: r2(car.v), err: r2(err), off: r2(c.d), s: r2(c.s), seg: nearSeg(W, car.x, car.z, car.feet), route: route.slice(Math.max(0, c.i - 1), c.i + 3).map((p) => p.map(r2)) });
       }
       if (opts.trace && Math.round(simT * 60) % (opts.trace === 'fine' ? 6 : 30) === 0) trace.push([r2(simT), r2(car.x), r2(car.z), r2(car.v), r2(err), r2(c.d), [...keys].join(''), r2(roadDist(ix, car.x, car.z).out), onRoad ? 1 : 0, r2(calmT), segNow]);

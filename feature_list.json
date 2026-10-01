@@ -1,6 +1,6 @@
 {
   "project": "map_game",
-  "last_updated": "2026-09-30",
+  "last_updated": "2026-10-01",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -1060,7 +1060,8 @@
       "verification": [
         "tests/nest.test.ts (6), tests/seams.test.ts (2), tests/doorway.test.ts (5), tests/raisedStairs.test.ts (2): door, roof and stair tests checked to fail on the old code",
         "LIVE Manhattan, 7 real cells (__DOORS__): real doors blocked 14 → 3 of 295, stand-ins 22 → 8 of 205; nested pairs 98 → 8 (all Grand Central's partial overlaps)",
-        "Cloud mirror, the whole baked region (tools/playtest.js __DOORS__ with the flood): 4 of 1,857 blocked (was 31 of the nearest 300)"
+        "Cloud mirror, the whole baked region (tools/playtest.js __DOORS__ with the flood): 4 of 1,857 blocked (was 31 of the nearest 300)",
+        "2026-10-01: stand-in seams a pure function of position (tests/synthSeams.test.ts, 5); procedural Midtown 5,119 buildings, 0 nested, 0 touching, 0 of 80 doors shut; raised houses take a wall with stair room (tests/raisedStairs.test.ts +1)"
       ],
       "evidence": [
         "src/world/nest.ts",
@@ -1068,7 +1069,9 @@
         "src/world/stream.ts (reconcileSeams, stand-in footprint scopes)",
         "src/world/tileBuild.ts (door aprons, own footprints, deck keep-outs in the scratch walk)",
         "src/world/buildings.ts (doorOpen probes; raised-stair shape by clearance)",
-        "src/world/props.ts (fence gates and deck gaps, banded fences, kerb cars, own-ground props, rooftop structures, flag beside a door)"
+        "src/world/props.ts (fence gates and deck gaps, banded fences, kerb cars, own-ground props, rooftop structures, flag beside a door)",
+        "src/world/synth.ts (standInLots)",
+        "src/world/buildings.ts (doorWalls, raisedStair, raisedDoorWall)"
       ],
       "notes": "Left: Grand Central-type partial overlaps; 3 Manhattan doors; stand-in door quality; lots with no room for a raised house's stair (choose another wall)."
     },
@@ -1100,14 +1103,17 @@
       "verification": [
         "Self-tests: each check catches its planted failure (walkabout 9, drive 5, teleports 5, streaming 4, frames 1, roadposts 1; flicker 1)",
         "tests/playtest.test.ts (23): the pure core (seeded rng, A*, road graph, carriageway index, frame stats)",
-        "Headless, cloud mirror: Sea Bright walkabout 846 m / 4 buildings in and out / 1 staircase, drive 477 m, teleports 6/6, streaming 12/12, overlaps 0 nested, doors 0 shut of 80; procedural Midtown the same with 0 failures"
+        "Headless, cloud mirror: Sea Bright walkabout 846 m / 4 buildings in and out / 1 staircase, drive 477 m, teleports 6/6, streaming 12/12, overlaps 0 nested, doors 0 shut of 80; procedural Midtown the same with 0 failures",
+        "2026-10-01: __DRIVE__ with the car's own body (tests/carBody.test.ts, 8): procedural Midtown 486 m, 0 clips"
       ],
       "evidence": [
         "tools/playtest.js",
         "tools/playtest-core.js",
         "tools/playtest.mjs",
         "docs/agent/debugging.md",
-        "src/player/landing.ts"
+        "src/player/landing.ts",
+        "src/player/collision.ts (moveBody, bodyPush)",
+        "src/player/vehicles.ts (carBody, carMove)"
       ],
       "notes": "Found and fixed: posts in car lanes (props.ts offCarriageway, signs.ts), stand-in houses across streets (synth.ts), teleports into water (landing.ts), a raised house's stair across the street (buildings.ts). Next: run it live on Manhattan and Queen Anne; phone budgets on a real phone."
     },

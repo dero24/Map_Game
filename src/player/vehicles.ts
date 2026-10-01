@@ -43,6 +43,25 @@ interface Veh {
   colors?: number[]; // a balloon's own colours (its envelope's pattern)
   bs?: BalloonState; // a balloon's flight
   flame?: THREE.Object3D;
+  /** a car's collider: a capsule along it, `f` ahead of its middle to `b` behind, `r` each side */
+  body?: CarBody;
+}
+
+export interface CarBody { f: number; b: number; r: number }
+/** A car's collider from its model: the body's own length and width (the kit recipe the model is
+ *  built from), a bike on a hitch rack adding to the back. */
+export function carBody(model: string): CarBody {
+  const [base, gear] = model.split('+');
+  const rc = carRecipe((CAR_TYPES as string[]).includes(base) ? (base as CarType) : 'sedan', 1);
+  const r = rc.W / 2, half = Math.max(0, rc.L / 2 - r);
+  return { f: half, b: half + (gear === 'bike' ? 0.33 : 0), r };
+}
+/** A car's step (dx, dz) against the walls, its own shape sliding along them: the bumper stops at a
+ *  wall, where the one 1.05 m circle round its middle it had stopped a metre short with the nose in
+ *  the wall. */
+export function carMove(walk: WalkWorld, v: { x: number; z: number; yaw: number; feet: number; model: string; body?: CarBody }, dx: number, dz: number): [number, number] {
+  const B = (v.body ??= carBody(v.model));
+  return walk.moveBody(v.x, v.z, dx, dz, -Math.sin(v.yaw), -Math.cos(v.yaw), B.f, B.b, B.r, v.feet);
 }
 
 const SPECS = {
@@ -366,7 +385,7 @@ export class Vehicles {
     obj.traverse((m) => m.layers.enable(1));
     this.group.add(obj);
     const y = kind === 'boat' ? 0 : kind === 'balloon' ? this.floor(x, z) : this.o.walk.surfaceAt(x, z);
-    const v: Veh = { kind, color: c, model, gearY, obj, prop, x, y, z, yaw, pitch: 0, roll: 0, v: 0, steer: 0, throttle: 0, feet: y, airborne: false };
+    const v: Veh = { kind, color: c, model, gearY, obj, prop, x, y, z, yaw, pitch: 0, roll: 0, v: 0, steer: 0, throttle: 0, feet: y, airborne: false, ...(kind === 'car' ? { body: carBody(model) } : {}) };
     if (kind === 'balloon') {
       v.colors = colors;
       v.bs = newBalloon(x, y, z, true);
@@ -723,7 +742,7 @@ export class Vehicles {
     const maxSteer = 0.55 / (1 + Math.abs(v.v) * 0.06);
     v.yaw += (v.v / 2.7) * Math.tan(v.steer * maxSteer) * dt;
     const dx = -Math.sin(v.yaw) * v.v * dt, dz = -Math.cos(v.yaw) * v.v * dt;
-    const [nx, nz] = walk.move(v.x, v.z, dx, dz, 1.05, v.feet);
+    const [nx, nz] = carMove(walk, v, dx, dz);
     const want = Math.hypot(dx, dz), got = Math.hypot(nx - v.x, nz - v.z);
     if (want > 1e-4 && got < want * 0.5) v.v *= 0.35; // bumped a wall / kerb of the water
     v.x = nx;

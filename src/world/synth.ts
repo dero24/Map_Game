@@ -47,6 +47,196 @@ const segOn = (mx: number, mz: number, iu: number, iv: number, seed: number, art
   return vh(iu * 31 + iv, iv * 17 + iu, seed ^ 0x700) < (arterial ? 0.35 + t * 0.55 : 0.08 + t * 0.8);
 };
 
+/** The street segments of grid lines iuA…iuB × ivA…ivB (north–south lines, then east–west), each
+ *  its whole length whatever the ground under it — a pure function of the lines and the seed. */
+function streetSegs(iuA: number, iuB: number, ivA: number, ivB: number, seed: number) {
+  const out: { pts: [number, number][]; arterial: boolean }[] = [];
+  for (let iu = iuA; iu <= iuB; iu++)
+    for (let iv = ivA; iv <= ivB; iv++) {
+      const mz = (iv + 0.5) * PITCH;
+      if (!segOn(nsX(iu, mz, seed), mz, iu, iv, seed, iu % 4 === 0)) continue;
+      const pts: [number, number][] = [];
+      for (let z = iv * PITCH; z <= (iv + 1) * PITCH; z += 18) pts.push([nsX(iu, z, seed), z]);
+      out.push({ pts, arterial: iu % 4 === 0 });
+    }
+  for (let iv = ivA; iv <= ivB; iv++)
+    for (let iu = iuA; iu <= iuB; iu++) {
+      const mx = (iu + 0.5) * PITCH;
+      if (!segOn(mx, ewZ(iv, mx, seed), iu, iv, seed, iv % 4 === 0)) continue;
+      const pts: [number, number][] = [];
+      for (let x = iu * PITCH; x <= (iu + 1) * PITCH; x += 18) pts.push([x, ewZ(iv, x, seed)]);
+      out.push({ pts, arterial: iv % 4 === 0 });
+    }
+  return out;
+}
+
+// ---- the stand-in's lots: a pure function of position ----
+// Lots front the streets: along each street segment one candidate a side per 18 m stretch, its
+// setback, size, kind and seed hashed from the segment and its own position. Along a segment they're
+// kept in turn, as a street builds up (one standing too close to the last kept goes). Where
+// segments meet — a corner, the next block, a street running close behind — the lot ranking higher
+// by its hash wins, decided in ROUNDS rounds (Luby's): each round keeps every lot that outranks all
+// its undecided rivals and drops those rivals; what's still undecided after the last round goes.
+// A lot's fate so depends only on candidates within LOT_REACH of it, so any tile building with that
+// much ground round its window works out the same lots as its neighbour does, lot for lot.
+// (They were placed greedily in the order each tile walked its own streets: two neighbours kept
+// different lots in the strip they share — a third of them — so a lot each owned could stand across
+// the other's, and some stood on none: buildings doubled, overlapping or missing along the seam.)
+const LOT_R = Math.hypot(16 / 2 + 14 / 2, 0.62 * 14); // the farthest a lot's outline reaches from its centre (a full-size L)
+const CLASH = 2 * LOT_R + 0.5; // the farthest apart two lots can clash (outlines and the 50 cm between them)
+const ROUNDS = 2;
+const LOT_REACH = ROUNDS * 2 * CLASH + 2; // two rivals apart a round
+
+export interface StandInLot {
+  /** its centre; r: how far round it the lot keeps things off (its spacing, or its outline's reach) */
+  x: number; z: number; r: number; ring: [number, number][];
+  /** the stretch of street it fronts */
+  ax: number; az: number; bx: number; bz: number;
+  nx: number; nz: number; side: number; W: number;
+  h: number; k: Building['k']; roof: Building['roof']; s: number;
+}
+
+/** The stand-in lots whose centres lie in `win` (edges included) — the same lots whatever the
+ *  window, each one a pure function of its position and the region seed. */
+export function standInLots(win: Box, seed: number): StandInLot[] {
+  const W = { x0: win.x0 - LOT_REACH, z0: win.z0 - LOT_REACH, x1: win.x1 + LOT_REACH, z1: win.z1 + LOT_REACH };
+  // every segment with a candidate in W (a lot stands ≤ 16 m off its street, which wanders ≤ 26 m
+  // off its grid line) — and for the street test, the streets two lines further round them all
+  const iuA = Math.floor((W.x0 - 60) / PITCH) - 1, iuB = Math.floor((W.x1 + 60) / PITCH) + 1;
+  const ivA = Math.floor((W.z0 - 60) / PITCH) - 1, ivB = Math.floor((W.z1 + 60) / PITCH) + 1;
+  const segs = streetSegs(iuA, iuB, ivA, ivB, seed);
+  const SC = 16, segCells = new Map<number, number[][]>();
+  for (const { pts } of streetSegs(iuA - 2, iuB + 2, ivA - 2, ivB + 2, seed))
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const sg = [pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], ROAD_W / 2 + 0.5];
+      for (let u = Math.floor((Math.min(sg[0], sg[2]) - sg[4]) / SC); u <= Math.floor((Math.max(sg[0], sg[2]) + sg[4]) / SC); u++)
+        for (let v = Math.floor((Math.min(sg[1], sg[3]) - sg[4]) / SC); v <= Math.floor((Math.max(sg[1], sg[3]) + sg[4]) / SC); v++) {
+          const k = u * 100003 + v;
+          (segCells.get(k) ?? segCells.set(k, []).get(k)!).push(sg);
+        }
+    }
+  const inStreet = (x: number, z: number) => {
+    for (const sg of segCells.get(Math.floor(x / SC) * 100003 + Math.floor(z / SC)) ?? []) {
+      const ex = sg[2] - sg[0], ez = sg[3] - sg[1], L2 = ex * ex + ez * ez || 1, t = Math.max(0, Math.min(1, ((x - sg[0]) * ex + (z - sg[1]) * ez) / L2));
+      if (Math.hypot(sg[0] + ex * t - x, sg[1] + ez * t - z) < sg[4]) return true;
+    }
+    return false;
+  };
+  // No lot stands in a street. Each is set back from the street it fronts, which never saw the
+  // cross street at a corner or the bend of a wavy one: 8% of the stand-ins' houses stood across
+  // the lanes (tools/playtest.js __ROADPOSTS__ found their pilings on the centre lines). Its outline
+  // is tested, and its inside every 2 m (a street crossing it between the corners).
+  const onStreet = (ring: [number, number][]) => {
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (const [x, z] of ring) {
+      if (inStreet(x, z)) return true;
+      (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z));
+    }
+    for (let x = x0 + 1; x < x1; x += 2) for (let z = z0 + 1; z < z1; z += 2) if (pointInRing(x, z, ring) && inStreet(x, z)) return true;
+    return false;
+  };
+  type Part = [number, number, number, number, number, number]; // an outline's rectangle: centre, its long axis, half sizes
+  type Cand = StandInLot & { id: number; seg: number; sp: number; parts: Part[] };
+  const mix = activeStyle().roofMix; // regional roof habit (gable / hip / rest flat)
+  const shape = (cx: number, cz: number, ang: number, id: number) => {
+    const L = 9 + vh(id, 3, seed) * 7, W = 8 + vh(id, 5, seed) * 6;
+    const c = Math.cos(ang), s = Math.sin(ang);
+    const kk = vh(id, 7, seed);
+    const t = town(cx, cz, seed);
+    const k: Building['k'] = kk < 0.12 && t > 0.55 ? 'commercial' : kk < 0.17 ? 'shed' : 'house';
+    // ~1 in 5 houses is an L — a wing off one end, so block faces aren't comb teeth.
+    const Lshape = k === 'house' && vh(id, 41, seed) < 0.2;
+    const local: [number, number][] = Lshape
+      ? [[-L / 2, -W / 2], [L / 2, -W / 2], [L / 2, 0], [L / 2 + W * 0.5, 0], [L / 2 + W * 0.5, W * 0.62], [-L / 2, W * 0.62]]
+      : [[-L / 2, -W / 2], [L / 2, -W / 2], [L / 2, W / 2], [-L / 2, W / 2]];
+    const ring = local.map(([u, v]) => [cx + u * c - v * s, cz + u * s + v * c] as [number, number]);
+    // the outline as rectangles (an L is two), for telling whether two lots really overlap
+    const part = (u: number, v: number, hu: number, hv: number): Part => [cx + u * c - v * s, cz + u * s + v * c, c, s, hu, hv];
+    const parts = Lshape ? [part(0, W * 0.06, L / 2, W * 0.56), part(L / 2 + W / 4, W * 0.31, W / 4, W * 0.31)] : [part(0, 0, L / 2, W / 2)];
+    const rv = vh(id, 11, seed);
+    const roof: Building['roof'] = k === 'commercial' ? (rv < 0.7 ? 'flat' : 'gable') : rv < mix[0] ? 'gable' : rv < mix[0] + mix[1] ? 'hip' : 'flat';
+    const h = k === 'commercial' ? 5 + vh(id, 13, seed) * 5 : k === 'shed' ? 2.6 : 3.4 + vh(id, 13, seed) * 5.6;
+    // sp: the spacing between lots (a rule of thumb); r: how far the outline itself reaches
+    return { ring, parts, sp: Math.max(L, W * 1.6) * 0.62, r: Math.max(...local.map(([u, v]) => Math.hypot(u, v))), W, k, roof, h, s: vh(id, 17, seed) * 4294967296 };
+  };
+  // Two lots clash when they stand closer than their spacing, or their outlines (and 50 cm round
+  // them) overlap — an L's wing reaches past its spacing and stood in the next house.
+  const GAP = CLASH - 2 * LOT_R;
+  const clash = (a: Cand | ReturnType<typeof shape> & { x: number; z: number }, b: Cand) => {
+    const d = Math.hypot(a.x - b.x, a.z - b.z);
+    if (d < a.sp + b.sp) return true;
+    if (d >= a.r + b.r + GAP) return false;
+    for (const p of a.parts)
+      for (const q of b.parts) {
+        const dx = q[0] - p[0], dz = q[1] - p[1];
+        let apart = false;
+        for (const [ax, az] of [[p[2], p[3]], [-p[3], p[2]], [q[2], q[3]], [-q[3], q[2]]]) {
+          const ext = (o: Part) => o[4] * Math.abs(o[2] * ax + o[3] * az) + o[5] * Math.abs(-o[3] * ax + o[2] * az);
+          if (Math.abs(dx * ax + dz * az) >= ext(p) + ext(q) + GAP) { apart = true; break; }
+        }
+        if (!apart) return true;
+      }
+    return false;
+  };
+  // 1. each segment's lots, kept in turn along it (both sides as they come)
+  const kept: Cand[] = [];
+  segs.forEach(({ pts }, si) => {
+    const D = pts.map(([x, z]) => [Math.round(x * 10), Math.round(z * 10)]); // (as the road ships: decimetres)
+    const P = D.map(([x, z]) => [x / 10, z / 10]);
+    const segId = ((Math.round(D[0][0] * 3) ^ Math.round(D[0][1] * 7)) >>> 0);
+    const mine: Cand[] = [];
+    for (let i = 0; i + 1 < P.length; i++) {
+      const [ax, az] = P[i], [bx, bz] = P[i + 1];
+      const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
+      if (len < 2) continue;
+      const ux = dx / len, uz = dz / len, nx = -uz, nz = ux;
+      const ang = Math.atan2(dz, dx);
+      for (let d = 10, n = 0; d < len - 6; n++, d += 17 + vh(segId, n * 97, seed) * 9)
+        for (const side of [-1, 1]) {
+          const sb = ROAD_W / 2 + 7.5 + vh(segId ^ n, side * 31 + 5, seed) * 5; // setback varies per lot
+          const lx = ax + ux * d + nx * side * sb, lz = az + uz * d + nz * side * sb;
+          // (seeded from its position: the same lot from either tile)
+          const id = ((Math.round(lx * 2.3) ^ Math.round(lz * 4.1) ^ (side + 1) * 77) >>> 0);
+          if (vh(id, 23, seed) > 0.25 + town(lx, lz, seed) * 0.6) continue; // density follows the town mask
+          const sh = { x: lx, z: lz, ...shape(lx, lz, ang, id) };
+          if (mine.some((o) => clash(sh, o))) continue;
+          if (onStreet(sh.ring)) continue;
+          mine.push({ ax, az, bx, bz, nx, nz, side, id, seg: si, ...sh });
+        }
+    }
+    kept.push(...mine);
+  });
+  // 2. rivals from other segments: rounds of "outranks every undecided rival"
+  const CS = CLASH, G = new Map<number, number[]>(), n = kept.length;
+  const gk = (u: number, v: number) => u * 100003 + v;
+  kept.forEach((c, i) => { const k = gk(Math.floor(c.x / CS), Math.floor(c.z / CS)); (G.get(k) ?? G.set(k, []).get(k)!).push(i); });
+  const rivals: number[][] = kept.map(() => []);
+  kept.forEach((c, i) => {
+    const u = Math.floor(c.x / CS), v = Math.floor(c.z / CS);
+    for (let du = -1; du <= 1; du++)
+      for (let dv = -1; dv <= 1; dv++)
+        for (const j of G.get(gk(u + du, v + dv)) ?? []) {
+          const o = kept[j];
+          if (j > i && o.seg !== c.seg && clash(c, o)) (rivals[i].push(j), rivals[j].push(i));
+        }
+  });
+  const rank = kept.map((c) => vh(c.id, 29, seed));
+  const above = (i: number, j: number) => rank[i] > rank[j] || (rank[i] === rank[j] && (kept[i].x > kept[j].x || (kept[i].x === kept[j].x && kept[i].z > kept[j].z)));
+  const state = new Uint8Array(n); // 0 undecided, 1 kept, 2 gone
+  for (let r = 0; r < ROUNDS; r++) {
+    const win: number[] = [];
+    for (let i = 0; i < n; i++) if (state[i] === 0 && rivals[i].every((j) => state[j] !== 0 || above(i, j))) win.push(i);
+    for (const i of win) state[i] = 1;
+    for (const i of win) for (const j of rivals[i]) if (state[j] === 0) state[j] = 2;
+  }
+  const out: StandInLot[] = [];
+  kept.forEach((c, i) => {
+    if (state[i] !== 1 || c.x < win.x0 || c.x > win.x1 || c.z < win.z0 || c.z > win.z1) return;
+    out.push({ x: c.x, z: c.z, r: Math.max(c.sp, c.r), ring: c.ring, ax: c.ax, az: c.az, bx: c.bx, bz: c.bz, nx: c.nx, nz: c.nz, side: c.side, W: c.W, h: c.h, k: c.k, roof: c.roof, s: c.s });
+  });
+  return out;
+}
+
 export interface SynthResult { tj: TileJson; extra: THREE.Group }
 
 export function synthTile(spec: TileSpec, seed: number, terrain: { sdfAt(x: number, z: number): number; heightAt(x: number, z: number): number }): SynthResult {
@@ -82,97 +272,35 @@ export function synthTile(spec: TileSpec, seed: number, terrain: { sdfAt(x: numb
     }
     flush();
   };
-  const streets = (iuA: number, iuB: number, ivA: number, ivB: number, into: Road[]) => {
-    for (let iu = iuA; iu <= iuB; iu++)
-      for (let iv = ivA; iv <= ivB; iv++) {
-        const mz = (iv + 0.5) * PITCH;
-        if (!segOn(nsX(iu, mz, seed), mz, iu, iv, seed, iu % 4 === 0)) continue;
-        const pts: [number, number][] = [];
-        for (let z = iv * PITCH; z <= (iv + 1) * PITCH; z += 18) pts.push([nsX(iu, z, seed), z]);
-        emitRoad(pts, iu % 4 === 0 ? 'secondary' : 'residential', ROAD_W, into);
-      }
-    for (let iv = ivA; iv <= ivB; iv++)
-      for (let iu = iuA; iu <= iuB; iu++) {
-        const mx = (iu + 0.5) * PITCH;
-        if (!segOn(mx, ewZ(iv, mx, seed), iu, iv, seed, iv % 4 === 0)) continue;
-        const pts: [number, number][] = [];
-        for (let x = iu * PITCH; x <= (iu + 1) * PITCH; x += 18) pts.push([x, ewZ(iv, x, seed)]);
-        emitRoad(pts, iv % 4 === 0 ? 'secondary' : 'residential', ROAD_W, into);
-      }
-  };
-  const iu0 = Math.floor((box.x0 - 140) / PITCH), iu1 = Math.floor(box.x1 / PITCH);
-  const iv0 = Math.floor((box.z0 - 140) / PITCH), iv1 = Math.floor(box.z1 / PITCH);
-  streets(iu0, iu1, iv0, iv1, roads);
+  // (140 m round the box on every side: a street line wanders 26 m off its grid line, so one just
+  // past the box's far edge can have stretches inside it — only the near side used to be covered,
+  // and those stretches belonged to no tile)
+  const iu0 = Math.floor((box.x0 - 140) / PITCH), iu1 = Math.floor((box.x1 + 140) / PITCH);
+  const iv0 = Math.floor((box.z0 - 140) / PITCH), iv1 = Math.floor((box.z1 + 140) / PITCH);
+  for (const sg of streetSegs(iu0, iu1, iv0, iv1, seed)) emitRoad(sg.pts, sg.arterial ? 'secondary' : 'residential', ROAD_W, roads);
 
-  // ---- buildings: lots along each owned/margin road, centres owned by their tile ----
-  // No lot stands in a street. Each is set back from the street it fronts, which never saw the
-  // cross street at a corner or the bend of a wavy one: 8% of the stand-ins' houses stood across
-  // the lanes (tools/playtest.js __ROADPOSTS__ found their pilings on the centre lines).
-  // (one more street all round than the tile emits: a lot in the margin is kept or dropped the
-  // same way by its own tile and by its neighbour)
-  const around: Road[] = [];
-  streets(iu0 - 1, iu1 + 1, iv0 - 1, iv1 + 1, around);
-  const SC = 16, segCells = new Map<number, number[][]>();
-  for (const rd of around)
-    for (let i = 0; i + 3 < rd.p.length; i += 2) {
-      const sg = [rd.p[i] / 10, rd.p[i + 1] / 10, rd.p[i + 2] / 10, rd.p[i + 3] / 10, rd.w / 2 + 0.5];
-      for (let u = Math.floor((Math.min(sg[0], sg[2]) - sg[4]) / SC); u <= Math.floor((Math.max(sg[0], sg[2]) + sg[4]) / SC); u++)
-        for (let v = Math.floor((Math.min(sg[1], sg[3]) - sg[4]) / SC); v <= Math.floor((Math.max(sg[1], sg[3]) + sg[4]) / SC); v++) {
-          const k = u * 100003 + v;
-          (segCells.get(k) ?? segCells.set(k, []).get(k)!).push(sg);
-        }
-    }
-  const inStreet = (x: number, z: number) => {
-    for (const sg of segCells.get(Math.floor(x / SC) * 100003 + Math.floor(z / SC)) ?? []) {
-      const ex = sg[2] - sg[0], ez = sg[3] - sg[1], L2 = ex * ex + ez * ez || 1, t = Math.max(0, Math.min(1, ((x - sg[0]) * ex + (z - sg[1]) * ez) / L2));
-      if (Math.hypot(sg[0] + ex * t - x, sg[1] + ez * t - z) < sg[4]) return true;
-    }
-    return false;
-  };
-  // (its outline, and its inside every 2 m: a street crossing it between the corners)
-  const onStreet = (ring: [number, number][]) => {
-    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
-    for (const [x, z] of ring) {
-      if (inStreet(x, z)) return true;
-      (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z));
-    }
-    for (let x = x0 + 1; x < x1; x += 2) for (let z = z0 + 1; z < z1; z += 2) if (pointInRing(x, z, ring) && inStreet(x, z)) return true;
-    return false;
-  };
+  // ---- buildings: lots along the streets, each owned by the tile holding its centre ----
+  // Every lot is a pure function of position (standInLots): this tile and its neighbour work out
+  // the same lots in the strip they share, so the margin copies are the neighbour's own lots and no
+  // two lots either tile owns stand on each other. The land test comes last: a neighbour's ground
+  // may not be here yet (its DEM patch), so it only ever takes a lot away, never lets one in.
+  for (const lt of standInLots(S, seed)) {
+    const { x: cx, z: cz } = lt;
+    if (!land(lt.ax, lt.az) || !land(lt.bx, lt.bz) || !land(cx, cz)) continue; // (its street is on land here)
+    if (!lt.ring.every(([x, z]) => land(x, z))) continue; // corner lots can't hang over water
+    lots.push({ x: cx, z: cz, r: lt.r });
+    buildings.push({ r: ints(lt.ring), h: lt.h, k: lt.k, roof: lt.roof, s: lt.s, own: own(cx, cz) });
+    // An entrance point on the street face biases the door toward the street, like OSM data does.
+    if (own(cx, cz) === undefined) points.push({ c: 'entrance', x: cx - lt.nx * lt.side * (lt.W / 2 + 0.4), z: cz - lt.nz * lt.side * (lt.W / 2 + 0.4) });
+  }
   const nearRoad = (x: number, z: number) => {
     const iu = Math.round((x - 26 * Math.sin(z * 0.006 + vh(Math.round(x / PITCH), 777, seed) * 6.28)) / PITCH);
     const iv = Math.round((z - 26 * Math.sin(x * 0.006 + vh(911, Math.round(z / PITCH), seed) * 6.28)) / PITCH);
     return Math.min(Math.abs(x - nsX(iu, z, seed)), Math.abs(z - ewZ(iv, x, seed)));
   };
-  const lotAt = (cx: number, cz: number, ax: number, nx: number, nz: number, side: number, id: number) => {
-    const r = vh(id, 3, seed);
-    const L = 9 + r * 7, W = 8 + vh(id, 5, seed) * 6;
-    const c = Math.cos(ax), s = Math.sin(ax);
-    const kk = vh(id, 7, seed);
-    const t = town(cx, cz, seed);
-    const k = kk < 0.12 && t > 0.55 ? 'commercial' : kk < 0.17 ? 'shed' : 'house';
-    // ~1 in 5 houses is an L — a wing off one end, so block faces aren't comb teeth.
-    const Lshape = k === 'house' && vh(id, 41, seed) < 0.2;
-    const local: [number, number][] = Lshape
-      ? [[-L / 2, -W / 2], [L / 2, -W / 2], [L / 2, 0], [L / 2 + W * 0.5, 0], [L / 2 + W * 0.5, W * 0.62], [-L / 2, W * 0.62]]
-      : [[-L / 2, -W / 2], [L / 2, -W / 2], [L / 2, W / 2], [-L / 2, W / 2]];
-    const ring = local.map(([u, v]) => [cx + u * c - v * s, cz + u * s + v * c] as [number, number]);
-    const rr = Math.max(L, W * 1.6) * 0.62;
-    if (lots.some((o) => Math.hypot(o.x - cx, o.z - cz) < o.r + rr)) return;
-    if (!ring.every(([x, z]) => land(x, z))) return; // corner lots can't hang over water
-    if (onStreet(ring)) return;
-    lots.push({ x: cx, z: cz, r: rr });
-    const mix = activeStyle().roofMix; // regional roof habit (gable / hip / rest flat)
-    const rv = vh(id, 11, seed);
-    const roof = k === 'commercial' ? (rv < 0.7 ? 'flat' : 'gable') : rv < mix[0] ? 'gable' : rv < mix[0] + mix[1] ? 'hip' : 'flat';
-    const h = k === 'commercial' ? 5 + vh(id, 13, seed) * 5 : k === 'shed' ? 2.6 : 3.4 + vh(id, 13, seed) * 5.6;
-    buildings.push({ r: ints(ring), h, k: k as Building['k'], roof: roof as Building['roof'], s: vh(id, 17, seed) * 4294967296, own: own(cx, cz) });
-    // An entrance point on the street face biases the door toward the street, like OSM data does.
-    if (own(cx, cz) === undefined) points.push({ c: 'entrance', x: cx - nx * side * (W / 2 + 0.4), z: cz - nz * side * (W / 2 + 0.4) });
-  };
-  // Lots front the roads: step along every emitted segment, offset each side. Step and
-  // setback jitter are seeded from the segment + step index — identical across tiles.
+  // sparse benches along owned road stretches
   for (const rd of roads) {
+    if (rd.own === 0) continue;
     const p = rd.p;
     const segId = ((Math.round(p[0] * 3) ^ Math.round(p[1] * 7)) >>> 0);
     for (let i = 0; i + 3 < p.length; i += 2) {
@@ -180,29 +308,11 @@ export function synthTile(spec: TileSpec, seed: number, terrain: { sdfAt(x: numb
       const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz);
       if (len < 2) continue;
       const ux = dx / len, uz = dz / len, nx = -uz, nz = ux;
-      const ang = Math.atan2(dz, dx);
-      for (let d = 10, n = 0; d < len - 6; n++, d += 17 + vh(segId, n * 97, seed) * 9) {
-        for (const side of [-1, 1]) {
-          const sb = ROAD_W / 2 + 7.5 + vh(segId ^ n, side * 31 + 5, seed) * 5; // setback varies per lot
-          const lx = ax + ux * d + nx * side * sb;
-          const lz = az + uz * d + nz * side * sb;
-          if (lx < S.x0 || lx > S.x1 || lz < S.z0 || lz > S.z1) continue;
-          // The lot id is seeded from its position, not tile indices — neighbour tiles
-          // synthesizing the same physical lot agree on its size/kind/seed.
-          const id = ((Math.round(lx * 2.3) ^ Math.round(lz * 4.1) ^ (side + 1) * 77) >>> 0);
-          if (!land(lx, lz)) continue;
-          const t = town(lx, lz, seed);
-          if (vh(id, 23, seed) > 0.25 + t * 0.6) continue; // density follows the town mask
-          lotAt(lx, lz, ang, nx, nz, side, id);
+      for (let d = 20; d < len - 8; d += 65)
+        if (vh(segId, Math.floor(d * 7), seed ^ 0xb3) < 0.3) {
+          const bxp = ax + ux * d + nx * (ROAD_W / 2 + 2.4), bzp = az + uz * d + nz * (ROAD_W / 2 + 2.4);
+          if (bxp >= box.x0 && bxp < box.x1 && bzp >= box.z0 && bzp < box.z1 && land(bxp, bzp)) points.push({ c: 'bench', x: bxp, z: bzp });
         }
-      }
-      // sparse benches along owned road stretches
-      if (rd.own !== 0)
-        for (let d = 20; d < len - 8; d += 65)
-          if (vh(segId, Math.floor(d * 7), seed ^ 0xb3) < 0.3) {
-            const bxp = ax + ux * d + nx * (ROAD_W / 2 + 2.4), bzp = az + uz * d + nz * (ROAD_W / 2 + 2.4);
-            if (bxp >= box.x0 && bxp < box.x1 && bzp >= box.z0 && bzp < box.z1 && land(bxp, bzp)) points.push({ c: 'bench', x: bxp, z: bzp });
-          }
     }
   }
 

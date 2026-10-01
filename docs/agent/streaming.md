@@ -70,6 +70,11 @@ terrain/DEM, or the LiDAR measure pipeline.
 - `?at=lat,lon` beyond every baked backdrop builds a virtual manifest (origin snapped to
   1/64° so players share cell/R2 keys) — `w-<cx>_<cz>` specs stream OSM→TileJson while `s-*`
   synth twins mount instantly and upgrade in place.
+- A stand-in's lots are a pure function of position (`synth.ts` `standInLots`): kept in turn along
+  each street, clashes between streets settled by hash rank in two rounds, so any tile with
+  `LOT_REACH` of ground round its window keeps the same lots as its neighbour, lot for lot. Placed
+  greedily in each tile's own street order, neighbours had disagreed on a third of the lots they
+  share: doubled, overlapping or missing buildings along the seam. `tests/synthSeams.test.ts`.
 - Deployed: live at `https://map-game-tiles.map-game-tiles.workers.dev` (R2 bound as TILES).
   Production defaults to it; localhost prefers `wrangler dev` and falls back to it. Redeploy:
   `cd worker && npx wrangler deploy`.

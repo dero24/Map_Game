@@ -15,6 +15,9 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
     clear of every other footprint (`C.rings`). The order is along the wall, round the side, a
     switchback, then straight out. Round the side also needs a walkway beside the flight, since its
     foot faces the back. None clear: the least-blocked shape.
+  - A raised house's door goes on a wall whose stair stands in the open (`raisedDoorWall` over
+    `doorWalls`, the open walls best-facing first, up to 8); none: the least-blocked one. Every
+    other building keeps `pickDoorWall`'s wall, `doorWalls`' first.
 - Buildings inside buildings (`nest.ts`, run first in `buildBuildings`). A standing building
   ≥ 90% inside a larger one rises from its roof as a part of it (`lf`, `pt`, `po`) or, if no
   taller, is hidden (`in: 1`: no walls, footprint or door). This covers towers mapped tier by tier
@@ -129,6 +132,10 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
   Shift+B boat, N plane) are a developer switch: panel → Debug → free rides.
 - While riding, `Vehicles.update` owns the camera and carries the walker (streaming/life/
   interiors key off it); `walker.update` is skipped.
+- A car's collider is its own body (`carBody`: a capsule as long and wide as its kit recipe, a bike
+  rack adding to the back), moved by `WalkWorld.moveBody` (`bodyPush` per wall). The bumper stops
+  at a wall, and a post or corner brushing its side pushes it aside. It was a 1.05 m circle round
+  the middle, and the nose went 1.15 m into a wall.
 
 ## Hot air balloons
 
