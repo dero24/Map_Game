@@ -8,7 +8,7 @@ import * as D from '../../assets/decor';
 import type { Footprint } from '../buildings';
 import { useOf } from '../uses';
 import type { Rng } from '../../core/rng';
-import { LocalPoly, wallWindows, liftCars, LIFT_DOOR, type Plan, type Rect, type WinModel } from './plan';
+import { LocalPoly, wallWindows, liftCars, rectArea, LIFT_DOOR, type Plan, type Rect, type WinModel } from './plan';
 import type { Layout, Room } from './layout';
 import { Draw, Instancer, IP, WOOD, type LeafSpot, type Mesher, type P2 } from './mesh';
 
@@ -19,6 +19,14 @@ export type NpcSpot = [number, number, number, number, number?, number?];
 export const FABRIC = [0x5b7fa6, 0xa65a44, 0x6e8c5a, 0xd9c7a0, 0x7a5b8c, 0x3f6f78, 0xc9a24b, 0x8f8f96, 0xc97b6b, 0x4f6d8f];
 const STOCK = [0xd9573f, 0xe0a33b, 0x6e8c5a, 0xf2efe6, 0x5b7fa6, 0xc9a24b, 0x8a4a3a];
 const STAFF_AISLE = 0.9; // the working aisle behind a shop, café or bar counter
+/** A place at a dining table: at least this much of its edge (m; 0.6 is the least anyone lays a
+ *  place in, 0.7 a comfortable one) … */
+export const DINE_PLACE = 0.6;
+/** … and a table this long or longer seats one at each end too, where the room behind allows. */
+export const DINE_ENDS = 1.4;
+/** Chairs along each long side of a table `w` long: a place per ~0.7 m of its edge, never less than
+ *  DINE_PLACE each (1.2–2.0 m: two a side; 2.1 m: three). */
+export const placesAlong = (w: number) => Math.max(1, Math.min(Math.floor(w / DINE_PLACE + 1e-6), Math.floor((w + 0.2) / 0.7 + 1e-6)));
 /** A hall runner's colours: its border, its figure (pinstripe, diamonds), its field. */
 const RUNNERS: [number, number, number][] = [[0x8c2f2a, 0xe9dcc0, 0xc9a27a], [0x2f4a6a, 0xe9dcc0, 0xb8c4c9], [0x3d5a46, 0xefe3c4, 0xc7b48a], [0x6a2a3a, 0xe0c9a0, 0xb48a6a], [0x34322f, 0xd9c7a0, 0x9fb3a5]];
 
@@ -43,6 +51,8 @@ export class Furnisher {
   readonly M: WinModel;
   lights: Light[] = [];
   npcs: NpcSpot[] = [];
+  /** The spaces whose kitchen is fitted (one run a space). */
+  readonly kitchens = new Set<number>();
   private claims: Rect[][];
   private keepOut: Rect[][];
   readonly use: ReturnType<typeof useOf>;
@@ -177,6 +187,25 @@ export class Furnisher {
     for (let i = 0; i < W.n; i++) if (Math.abs(along - (i + 0.5) * W.cellW) < W.half + half + 0.08) return true;
     return false;
   }
+  private winMemo = new Map<Side, [number, number][]>();
+  /** Where along facade side S (s) a window is, on storey k — each window's stretch with onWindows'
+   *  own margin, so a piece clear of these is clear of the glass. An inside wall has none. */
+  winsOf(S: Side, k: number): [number, number][] {
+    let out = this.winMemo.get(S);
+    if (out) return out;
+    out = [];
+    if (S.ext) {
+      let start: number | null = null;
+      for (let s = S.lo; s <= S.hi + 1e-6; s += 0.05) {
+        const on = this.onWindows(S, s, s, k);
+        if (on && start === null) start = s;
+        if (!on && start !== null) { out.push([start, s]); start = null; }
+      }
+      if (start !== null) out.push([start, S.hi]);
+    }
+    this.winMemo.set(S, out);
+    return out;
+  }
   /** A spot `w` wide and `dep` deep against one of the room's walls (`sides`: which), clear of its
    *  doorways, the stairs and what's already there; `tall` ones between the windows. */
   against(R: Room, SS: Side[], w: number, dep: number, o: { keys?: SideKey[]; tall?: boolean; noExt?: boolean; tries?: number } = {}): Put | null {
@@ -238,6 +267,111 @@ export class Furnisher {
   put(key: string, make: () => D.DecorPart[], uc: number, vc: number, y: number, ax: P2, tint = 0xffffff, sx = 1) { return this.inst.put(key, make, uc, vc, y, ax, tint, sx); }
 }
 const inside = (outer: Rect, r: Rect, m = 0.02) => r.u0 >= outer.u0 - m && r.u1 <= outer.u1 + m && r.v0 >= outer.v0 - m && r.v1 <= outer.v1 + m;
+
+/** A kitchen's run as planned: where it stands (the Put along its wall) and what's in it. */
+export interface KitchenPlan { put: Put; spec: D.KitchenSpec; score: number }
+/** What a run of length L holds, laid out in the piece's own x (−L/2 … L/2) round the windows over
+ *  it (`gaps`, to 5 cm): the fridge at an end — a run without windows keeps it on its left, so a
+ *  mirrored flat's kitchen is the same piece turned round — or none in it; the cooker on solid wall,
+ *  the sink under a window where it fits beside the cooker; best first by score (the least), with
+ *  the wall cabinets' metres. */
+interface RunLayout { spec: D.KitchenSpec; score: number; wallM: number; under: boolean }
+const RUN_MEMO = new Map<string, RunLayout[]>();
+function runLayouts(L: number, gaps: [number, number][]): RunLayout[] {
+  const key = `${L.toFixed(2)}|${gaps.map(([a, b]) => `${a.toFixed(2)}~${b.toFixed(2)}`).join(',')}`;
+  let out = RUN_MEMO.get(key);
+  if (out) return out;
+  out = [];
+  const FW = D.FRIDGE_W, CW = D.COOKER_W, x0 = -L / 2, x1 = L / 2;
+  const clear = (a: number, b: number) => !gaps.some(([g0, g1]) => a < g1 && b > g0);
+  const round = (x: number) => Math.round(x * 20) / 20;
+  for (const fe of [-1, 1, 0] as const) {
+    if (fe > 0 && !gaps.length) continue;
+    if (fe && (L - FW < 1.3 || (fe < 0 ? !clear(x0, x0 + FW + 0.05) : !clear(x1 - FW - 0.05, x1)))) continue;
+    const b0 = fe < 0 ? x0 + FW + 0.02 : x0, b1 = fe > 0 ? x1 - FW - 0.02 : x1;
+    // the cooker: a 60 cm slot on solid wall, a worktop either side of it where it can (and between
+    // it and the fridge: a small kitchen's may stand beside it)
+    let rc: number | null = null, rs = Infinity, sink = (b0 + b1) / 2, under = false;
+    for (let c = b0 + CW / 2; c <= b1 - CW / 2 + 1e-6; c += 0.05) {
+      if (!clear(c - CW / 2 - 0.03, c + CW / 2 + 0.03)) continue;
+      // the sink: under a window's middle where it fits beside the cooker, else across from it
+      let sk = NaN, uw = false;
+      for (const [w0, w1] of gaps) {
+        const m = Math.max(b0 + 0.33, Math.min(b1 - 0.33, (Math.max(w0, b0) + Math.min(w1, b1)) / 2));
+        if (Math.abs(m - c) >= CW / 2 + 0.28 + 0.15 && m - 0.28 < w1 && m + 0.28 > w0) { sk = m; uw = true; break; }
+      }
+      if (!uw) sk = c - b0 > b1 - c ? Math.max(b0 + 0.33, c - CW / 2 - 0.5) : Math.min(b1 - 0.33, c + CW / 2 + 0.5);
+      if (Math.abs(sk - c) < CW / 2 + 0.28 + 0.05) continue;
+      const side = Math.min(c - CW / 2 - b0, b1 - c - CW / 2), byFridge = (fe < 0 ? c - CW / 2 - b0 : fe > 0 ? b1 - c - CW / 2 : 1) < 0.3;
+      const sc = (uw ? -0.6 : 0) + (side < 0.3 ? 0.6 : 0) + (byFridge ? 0.5 : 0) + (Math.abs(sk - c) - CW / 2 - 0.28 < 0.4 ? 0.4 : 0) + Math.abs(c - (b0 + b1) / 2) * 0.05;
+      if (sc < rs - 1e-9) (rs = sc), (rc = c), (sink = sk), (under = uw);
+    }
+    if (rc === null) {
+      // (no solid stretch for the cooker: it goes on a wall of its own; the sink under a window)
+      rs = 3;
+      const w = gaps.find(([w0, w1]) => w1 > b0 + 0.3 && w0 < b1 - 0.3);
+      sink = w ? Math.max(b0 + 0.33, Math.min(b1 - 0.33, (w[0] + w[1]) / 2)) : (b0 + b1) / 2;
+      under = !!w;
+    }
+    const spec: D.KitchenSpec = { len: round(L), sink: round(sink), range: rc === null ? null : round(rc), fridge: fe, gaps: gaps.map(([a, b]) => [round(a), round(b)]) };
+    // the wall cabinets: over the base run's solid wall, less the hood; and the one over the fridge
+    const wallM = D.wallCabinets(spec, true).reduce((t, [a, b]) => t + b - a, 0);
+    const score = -L * 0.8 - Math.min(wallM, 2.4) * 0.5 + (fe ? 0 : 2.5) + rs + (wallM < 0.6 ? 3 : 0) + (under ? -0.3 : 0);
+    out.push({ spec, score, wallM, under });
+  }
+  out.sort((a, b) => a.score - b.score);
+  if (RUN_MEMO.size > 4096) RUN_MEMO.clear();
+  RUN_MEMO.set(key, out);
+  return out;
+}
+/** Where a home's kitchen goes (review round 11: "a sink run, with no range, fridge or wall
+ *  cabinets"): along the wall that holds the most of a real one — a run of base units 1.5–3.9 m long
+ *  with the fridge at one end and the cooker set in, both on solid wall (a tall fridge or a hood never
+ *  stands in a window), the sink under the window where the run passes one, and wall cabinets over
+ *  the rest of the solid wall (runLayouts). From each end of every stretch of wall and every 40 cm
+ *  between, the longest run it takes and a few shorter; the best by its score (the least), the far
+ *  end of the room from the door you come in by preferred. Null: no wall takes even a short run. */
+function planKitchen(F: Furnisher, R: Room, SS: Side[], maxL: number, away: P2): KitchenPlan | null {
+  const k = R.level;
+  let best: KitchenPlan | null = null;
+  for (const S of SS) {
+    const pl = SS.find((x) => x.run !== S.run && x.out < 0), ph = SS.find((x) => x.run !== S.run && x.out > 0);
+    const wins = F.winsOf(S, k), ax = axFor(S.key), dir = S.run === 0 ? ax[0] : ax[1];
+    for (const [a, b] of S.solid) {
+      const lo = Math.max(a + 0.04, (pl ? pl.face : S.lo) + 0.03), hi = Math.min(b - 0.04, (ph ? ph.face : S.hi) - 0.03);
+      // (a house's run to its wall in 30 cm steps; a block's flats in 60 cm, so their kitchens are a
+      // few pieces, instanced)
+      const st = F.fp.kind === 'house' ? 0.3 : 0.6, top = Math.floor(Math.min(maxL, hi - lo) / st + 1e-6) * st;
+      const Ls = [...new Set([top, top - st, top - 2 * st, 2.4, 1.8, 1.5].map((L) => Math.round(L * 10) / 10))].filter((L) => L <= top + 1e-6 && L >= 1.5 - 1e-6);
+      for (const L of Ls) {
+        // (no run this short can beat the best found: L's share of the score bounds it)
+        if (best && -L * 0.8 - 1.2 - 0.6 - 0.3 - 0.4 >= best.score) continue;
+        const starts = new Set([lo, hi - L]);
+        for (let s = lo + 0.4; s < hi - L; s += 0.4) starts.add(s);
+        for (const s0 of starts) {
+          const s1 = s0 + L;
+          if (S.doors.some(([g0, g1]) => s0 < g1 + 0.2 && s1 > g0 - 0.2)) continue;
+          const r = F.wrect(S, s0, s1, 0.01, 0.64);
+          if (!inside(R.r, r) || !F.freeAt(k, r)) continue;
+          // the windows over this run, in its own x (to 5 cm, out)
+          const sc0 = (s0 + s1) / 2, lx = (x: number) => dir * (x - sc0);
+          const gaps = wins.filter(([w0, w1]) => w0 < s1 && w1 > s0).map(([w0, w1]): [number, number] => {
+            const x0 = lx(Math.max(w0, s0)), x1 = lx(Math.min(w1, s1));
+            return [Math.floor(Math.min(x0, x1) * 20) / 20, Math.ceil(Math.max(x0, x1) * 20) / 20];
+          }).sort((p, q2) => p[0] - q2[0]);
+          const lay = runLayouts(L, gaps)[0];
+          if (!lay) continue;
+          // (the kitchen at the room's far end from the door you came in by, as kitchens are)
+          const far = Math.hypot((r.u0 + r.u1) / 2 - away[0], (r.v0 + r.v1) / 2 - away[1]);
+          const score = lay.score - Math.min(far, 8) * 0.05;
+          if (best && score >= best.score - 1e-9) continue;
+          best = { put: { r, uc: (r.u0 + r.u1) / 2, vc: (r.v0 + r.v1) / 2, ax, side: S, s0, s1 }, spec: lay.spec, score };
+        }
+      }
+    }
+  }
+  return best;
+}
 
 // the yaw that turns a resident (front = local −z) to face (du, dv) in the u/v frame
 const yawTo = (du: number, dv: number) => Math.atan2(-du, -dv);
@@ -444,22 +578,63 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
     wallArt(2);
   };
   const kitchen = (dining: boolean) => {
+    // a fitted kitchen along the wall that holds the most of one (planKitchen): base units and the
+    // worktop, the sink under the window, the cooker under its hood and the fridge on solid wall,
+    // wall cabinets over the rest — and what the run couldn't hold on a wall of its own beside it.
+    // One a space: a kitchen the stair's wet room cuts in two has it in its biggest part.
+    const parts = L0.rooms.filter((x) => x.space === R.space && x.level === k && x.type === R.type);
+    const host = parts.reduce((a, b) => (rectArea(b.r) > rectArea(a.r) + 1e-6 ? b : a), parts[0] ?? R);
+    if (host.id !== R.id || F.kitchens.has(R.space)) { if (dining) diningSet(area > 12); return; }
+    F.kitchens.add(R.space);
     const sideLen = Math.max(...S.flatMap((x) => x.solid.map(([a, b]) => b - a)), 0);
-    const len = Math.min(3.9, Math.max(2.1, q(sideLen - 0.5, 0.3)));
-    let kp: Put | null = null, low = false;
-    for (const L of [len, len - 0.6, len - 1.2]) if (L >= 2.0 && (kp = F.against(R, S, L, 0.64, { tall: true }))) break;
-    // (no wall long enough between the windows: the run under one — the sink under the window)
-    if (!kp) for (const L of [len, len - 0.6, 1.8, 1.5]) if (L >= 1.5 && (kp = F.against(R, S, L, 0.64, { tries: 20 }))) { low = true; break; }
-    if (kp) {
+    const len = Math.min(3.9, Math.max(1.5, Math.floor((sideLen - 0.08) / 0.3 + 1e-6) * 0.3));
+    const room = (r: Rect) => ({ u0: Math.max(R.r.u0, r.u0), u1: Math.min(R.r.u1, r.u1), v0: Math.max(R.r.v0, r.v0), v1: Math.min(R.r.v1, r.v1) });
+    // (away from the door it's entered by: the front door, when it opens into this room's space —
+    // a cottage's kitchen is the back of its living room — else the room's own doorway)
+    const entryRoom = k === 0 ? L0.rooms.find((x) => x.level === 0 && x.r.u0 - 0.01 <= P.ud + 0.35 && x.r.u1 + 0.01 >= P.ud + 0.35 && x.r.v0 - 0.01 <= P.vd && x.r.v1 + 0.01 >= P.vd) : undefined;
+    const dw = L0.doors.find((x) => x.level === k && x.rooms.includes(R.id));
+    const from: P2 = entryRoom && entryRoom.space === R.space ? [P.ud, P.vd] : dw ? (dw.ax === 0 ? [dw.t, dw.c] : [dw.c, dw.t]) : [um, vm];
+    const plan = planKitchen(F, R, S, len, from);
+    const cab = rng.float() < 0.6 ? 0xf2efe6 : F.pick([0x9fb3a5, 0x5f7a8c, 0xd9cbb0]);
+    let near: P2 = [um, vm];
+    if (plan) {
+      const kp = plan.put, sp = plan.spec;
       F.claim(k, kp.r);
-      const L = q(kp.s1 - kp.s0);
-      const cab = rng.float() < 0.6 ? 0xf2efe6 : F.pick([0x9fb3a5, 0x5f7a8c, 0xd9cbb0]);
-      F.put(`kitchen:${L.toFixed(1)}${low ? ':low' : ''}`, () => D.kitchenRun(L, undefined, undefined, !low), kp.uc, kp.vc, y, kp.ax, cab);
-      const o = out(kp);
-      F.npcs.push([kp.uc + o[0] * 0.42 - kp.ax[0] * 0.3 * (L / 3), kp.vc + o[1] * 0.42 - kp.ax[1] * 0.3 * (L / 3), y, yawTo(-o[0], -o[1])]);
-      // (a clear stretch in front of the run)
-      F.claim(k, F.wrect(kp.side!, kp.s0, kp.s1, 0.6, 1.5));
+      F.put(D.kitchenKey(sp), () => D.kitchen(sp), kp.uc, kp.vc, y, kp.ax, cab);
+      near = [kp.uc, kp.vc];
+      // the cook at the hob (or the sink)
+      const o = out(kp), at = sp.range ?? sp.sink;
+      F.npcs.push([kp.uc + o[0] * 0.42 + kp.ax[0] * at, kp.vc + o[1] * 0.42 + kp.ax[1] * at, y, yawTo(-o[0], -o[1])]);
+      F.claim(k, room(F.wrect(kp.side!, kp.s0, kp.s1, 0.6, 1.0)));
     }
+    // what the run couldn't hold, on solid wall as near it as it goes (round the corner from it,
+    // where the floor in front of the run is: an L)
+    const nearest = (p: Put) => Math.hypot(p.uc - near[0], p.vc - near[1]);
+    const fronts: Rect[] = [];
+    /** The best spot in the kitchen's space, as near the run as it goes: its own parts' walls, else
+     *  the living room's it's the back of (by its kitchen end). */
+    const spot = (w: number, dep: number) => {
+      let best: [Put, Room, number] | null = null;
+      for (const Q of L0.rooms.filter((x) => x.space === R.space && x.level === k)) {
+        const pen = Q.type === R.type ? 0 : 1.5;
+        const p = F.bestAgainst(Q, F.sides(Q), w, dep, (x) => nearest(x) + pen, { tall: true });
+        if (p && (!best || nearest(p) + pen < best[2])) best = [p, Q, nearest(p) + pen];
+      }
+      return best;
+    };
+    const within = (Q: Room, r: Rect) => ({ u0: Math.max(Q.r.u0, r.u0), u1: Math.min(Q.r.u1, r.u1), v0: Math.max(Q.r.v0, r.v0), v1: Math.min(Q.r.v1, r.v1) });
+    if (!plan || plan.spec.range === null) {
+      // the cooker and its hood
+      const sp = spot(D.COOKER_W + 0.04, 0.64);
+      if (sp) { const [st, Q] = sp; F.claim(k, grow(st.r, 0.02)); fronts.push(within(Q, F.wrect(st.side!, st.s0, st.s1, 0.6, 1.4))); F.put('stove', () => D.stove(), st.uc, st.vc, y, st.ax); }
+    }
+    if (!plan || plan.spec.fridge === 0) {
+      const sp = spot(D.FRIDGE_W + 0.04, 0.68);
+      if (sp) { const [fr, Q] = sp; F.claim(k, grow(fr.r, 0.02)); fronts.push(within(Q, F.wrect(fr.side!, fr.s0, fr.s1, 0.68, 1.3))); F.put('fridge', () => D.fridge(), fr.uc, fr.vc, y, fr.ax); }
+    }
+    // (a clear stretch of floor in front of all of it)
+    if (plan) F.claim(k, room(F.wrect(plan.put.side!, plan.put.s0, plan.put.s1, 0.6, 1.5)));
+    for (const f of fronts) F.claim(k, f);
     if (dining) diningSet(area > 12);
   };
   const diningSet = (big: boolean) => {
@@ -469,9 +644,11 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
     const RD: Room = open ? { ...R, r: { ...R.r, u0: Math.max(open.r.u0, R.r.u0 - 1.6) } } : R;
     const alongU = RD.r.u1 - RD.r.u0 >= RD.r.v1 - RD.r.v0;
     let tp: Put | null = null, w = 1.2, rotU = true;
-    for (const [bw, au, m] of [[big ? 1.8 : 1.2, alongU, 0.25], [big ? 1.8 : 1.2, !alongU, 0.25], [1.2, alongU, 0.1], [1.2, !alongU, 0.1]] as [number, boolean, number][]) {
+    // (first with room at its ends for a chair each and a hand behind it, then without)
+    const L1 = big ? 1.8 : 1.2, endPad = L1 >= DINE_ENDS ? 1.72 : 1.3;
+    for (const [bw, au, m, pa] of [[L1, alongU, 0.25, endPad], [L1, !alongU, 0.25, endPad], [L1, alongU, 0.25, 1.3], [L1, !alongU, 0.25, 1.3], [1.2, alongU, 0.1, 1.0], [1.2, !alongU, 0.1, 1.0]] as [number, boolean, number, number][]) {
       const pad = m > 0.2 ? 1.3 : 1.0;
-      tp = au ? F.anywhere(RD, bw + pad, 0.9 + pad, m) : F.anywhere(RD, 0.9 + pad, bw + pad, m);
+      tp = au ? F.anywhere(RD, bw + pa, 0.9 + pad, m) : F.anywhere(RD, 0.9 + pad, bw + pa, m);
       if (tp) { w = bw; rotU = au; break; }
     }
     if (!tp) {
@@ -485,21 +662,27 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
       for (const s of [-1, 1]) chair(sp.uc + (au ? s * 0.5 : 0), sp.vc + (au ? 0 : s * 0.5), au ? [-s, 0] : [0, -s], cc);
       return;
     }
-    F.claim(k, tp.r);
     const dd = 0.9, uc = tp.uc, vc = tp.vc;
     // (in the table's own frame: s along it, t across; mapped to u, v)
     const at = (s: number, t: number): [number, number] => (rotU ? [uc + s, vc + t] : [uc + t, vc + s]);
+    const box = (s0: number, s1: number, t0: number, t1: number): Rect => { const [a0, c0] = at(Math.min(s0, s1), Math.min(t0, t1)), [a1, c1] = at(Math.max(s0, s1), Math.max(t0, t1)); return { u0: Math.min(a0, a1), u1: Math.max(a0, a1), v0: Math.min(c0, c1), v1: Math.max(c0, c1) }; };
+    // the places round it (review round 11: "three chairs crowd one side of the table, backs
+    // touching"): DINE_PLACE of edge or more each — two a side at 1.2–2.0 m, three from 2.1 m — and one
+    // at each end of a long table where there's room behind it to draw the chair out (before the
+    // table's own floor is claimed: that's what is round it)
+    const n = placesAlong(w);
+    const ends = w >= DINE_ENDS ? ([-1, 1] as const).filter((e) => { const r = box(e * (w / 2 + 0.1), e * (w / 2 + 0.34 + 0.22 + 0.3), -0.26, 0.26); return inside(RD.r, r, 0) && F.freeAt(k, r); }) : [];
+    F.claim(k, tp.r);
     const tr = rotU ? { u0: uc - w / 2, u1: uc + w / 2, v0: vc - dd / 2, v1: vc + dd / 2 } : { u0: uc - dd / 2, u1: uc + dd / 2, v0: vc - w / 2, v1: vc + w / 2 };
     table(tr, 0.76, wood);
     const cc = rng.float() < 0.5 ? wood : 0xf1ede4;
-    const n = w > 1.5 ? 3 : 2;
     const face = (s: number, t: number): P2 => (rotU ? [s, t] : [t, s]);
     for (let i = 0; i < n; i++) {
       const s = -w / 2 + (w * (i + 0.5)) / n;
       chair(...at(s, -dd / 2 - 0.32), face(0, 1), cc);
       chair(...at(s, dd / 2 + 0.32), face(0, -1), cc);
     }
-    if (w > 1.5) { chair(...at(-w / 2 - 0.34, 0), face(1, 0), cc); chair(...at(w / 2 + 0.34, 0), face(-1, 0), cc); }
+    for (const e of ends) { chair(...at(e * (w / 2 + 0.34), 0), face(-e, 0), cc); F.claim(k, box(e * (w / 2 + 0.1), e * (w / 2 + 0.6), -0.26, 0.26)); }
     d.box(uc - 0.12, uc + 0.12, vc - 0.12, vc + 0.12, y + 0.76, y + 0.86, F.pick([0x7fa0b8, 0xe0a33b, 0xf1ede4]), IP.porcelain);
     const sp = at(-w / 2 + w / (2 * n), -dd / 2 - 0.3), fc = face(0, 1);
     F.npcs.push([sp[0], sp[1], y, yawTo(fc[0], fc[1]), 0.465]);

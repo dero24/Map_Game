@@ -198,8 +198,13 @@ describe('decor (interior + terrace furniture)', () => {
     ['pottedPlant', D.pottedPlant(true), 1500, null, true],
     ['cafeSet', D.cafeSet(0xf1ede4, 0x2a2622, 0x2f4a6a), 2600, null, true],
     // the pieces a planned interior repeats (docs/INTERIORS_PLAN.md, Slice 1): plain boxes, instanced by the hundred
-    ['kitchenRun', D.kitchenRun(3.9), 800, [3.9, 0.66], true],
-    ['kitchenRun (under a window)', D.kitchenRun(2.4, undefined, undefined, false), 600, [2.42, 0.66], true],
+    // a home's kitchen (review round 11): the run with its sink, cooker and hood, fridge and wall
+    // cabinets; one passing under a window; and a cooker and a fridge on walls of their own
+    ['kitchen', D.kitchen({ len: 3.9, sink: -0.6, range: 0.75, fridge: -1, gaps: [] }), 2400, [3.9, 0.7], true],
+    ['kitchen (under a window)', D.kitchen({ len: 3.3, sink: 0.2, range: -0.9, fridge: 1, gaps: [[-0.4, 0.8]] }), 2400, [3.3, 0.7], true],
+    ['kitchen (no cooker or fridge in the run)', D.kitchen({ len: 2.1, sink: 0, range: null, fridge: 0, gaps: [[-0.6, 0.6]] }), 1600, [2.1, 0.7], true],
+    ['stove', D.stove(), 700, [0.62, 0.7], true],
+    ['fridge', D.fridge(), 300, [0.72, 0.7], true],
     ['workstation', D.workstation(), 500, [1.6, 1.4], true],
     ['doorFrame', D.doorFrame(0.9), 200, [1.06, 0.16], true],
     ['doorLeaf', D.doorLeaf(0.8), 350, [0.8, 0.14], true],
@@ -275,6 +280,51 @@ describe('decor (interior + terrace furniture)', () => {
         }
       }
     expect(Array.from(D.mergeDecor(D.coatRail(1, 3, 5)).getAttribute('position').array)).toEqual(Array.from(D.mergeDecor(D.coatRail(1, 3, 5)).getAttribute('position').array));
+  });
+  it("a kitchen has its cooker under a hood, a fridge, and wall cabinets over the run — never in a window's stretch", () => {
+    // (the parts by what they are: the cooker's steel body at the floor, the hood's canopy over it, the
+    // fridge's tall body, the wall cabinets — tinted, hung from WALL_Y)
+    const kinds = (parts: D.DecorPart[]) => {
+      const out = { cooker: [] as THREE.Box3[], hood: [] as THREE.Box3[], fridge: [] as THREE.Box3[], wall: [] as THREE.Box3[], base: [] as THREE.Box3[] };
+      for (const p of parts) {
+        const b = bb(p.g), h = b.max.y - b.min.y, w = b.max.x - b.min.x;
+        if (p.mat === 'metal' && b.min.y < 0.01 && h > 0.85) out.cooker.push(b);
+        else if (p.mat === 'metal' && b.min.y > 1.5 && b.min.y < 1.6 && w > 0.55) out.hood.push(b);
+        else if (p.mat === 'porcelain' && h > 1.8) out.fridge.push(b);
+        else if (p.hex === 0xffffff && Math.abs(b.min.y - D.WALL_Y) < 0.01 && h > 0.7) out.wall.push(b);
+        else if (p.hex === 0xffffff && Math.abs(b.min.y - 0.08) < 0.01) out.base.push(b);
+      }
+      return out;
+    };
+    const spec: D.KitchenSpec = { len: 3.6, sink: 0.4, range: -1.1, fridge: 1, gaps: [[-0.2, 1.0]] };
+    const k = kinds(D.kitchen(spec));
+    expect(k.cooker.length).toBe(1);
+    expect(k.hood.length).toBe(1);
+    expect(k.fridge.length).toBe(1);
+    // the hood over the cooker
+    expect((k.hood[0].min.x + k.hood[0].max.x) / 2).toBeCloseTo((k.cooker[0].min.x + k.cooker[0].max.x) / 2, 2);
+    // the fridge at its end (+x), the cooker where the spec put it
+    expect(k.fridge[0].max.x).toBeCloseTo(spec.len / 2 - 0.01, 2);
+    expect((k.cooker[0].min.x + k.cooker[0].max.x) / 2).toBeCloseTo(-1.1, 2);
+    // wall cabinets: some, none over the window's stretch or the hood
+    const wallM = k.wall.reduce((a, b) => a + b.max.x - b.min.x, 0);
+    expect(wallM).toBeGreaterThan(0.6);
+    for (const b of k.wall) {
+      expect(b.max.x <= -0.2 || b.min.x >= 1.0).toBe(true);
+      expect(b.max.x <= -1.4 || b.min.x >= -0.8).toBe(true);
+    }
+    // the base units stop at the cooker (it has its own top) and at the fridge
+    for (const b of k.base) expect(b.max.x <= -1.4 + 1e-3 || b.min.x >= -0.8 - 1e-3).toBe(true);
+    for (const b of k.base) expect(b.max.x).toBeLessThan(spec.len / 2 - D.FRIDGE_W + 1e-3);
+    // the same spec, the same key and the same piece; a different one, another key
+    expect(D.kitchenKey(spec)).toBe(D.kitchenKey({ ...spec, gaps: [[-0.2, 1.0]] }));
+    expect(D.kitchenKey(spec)).not.toBe(D.kitchenKey({ ...spec, range: -1.0 }));
+    expect(Array.from(D.mergeDecor(D.kitchen(spec)).getAttribute('position').array)).toEqual(Array.from(D.mergeDecor(D.kitchen({ ...spec })).getAttribute('position').array));
+    // a cooker and a fridge on walls of their own: the stove has its hood
+    const st = kinds(D.stove());
+    expect(st.cooker.length).toBe(1);
+    expect(st.hood.length).toBe(1);
+    expect(kinds(D.fridge()).fridge.length).toBe(1);
   });
   it('the skirting is 12 cm of trim white, its back on the wall', () => {
     const b = new THREE.Box3();
