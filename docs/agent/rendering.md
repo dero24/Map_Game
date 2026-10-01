@@ -79,9 +79,9 @@ look); the shaders run GLSL twins fed the same numbers.
   - R has held, in turn: white gradients (r 13 m) added up then `pow 1.6` — a dim amber wash ~26 m
     across round every lamp (round 10's "amber-mud"); then a cone of distance the shaders shaped
     into the flat-topped heart above.
-  - The old 13 m gradient still goes into G under the canyon field, unchanged — the sprite is now
-    23 px, odd-sided and centred mid-pixel like the old 13 px one, so G lands on exactly the same
-    texels: `canyonAt` reads it as sky lost, so by day the sky fill under every lamp is cut by up to
+  - The old 13 m gradient still goes into G under the canyon field, unchanged — stamped from its
+    own 13 px sprite exactly as before (the pool has a 23 px sprite of its own, R only; each adds
+    only to its own channel): `canyonAt` reads it as sky lost, so by day the sky fill under every lamp is cut by up to
     45% (along a shop street with a post every 18 m, the whole street's shade). It's an accident of
     the two sharing the sprite, but the day look was judged with it: drawing the sprite's G as 0
     removes it and lifts a golden-hour shop street ~3.5 L\* (mean ΔE ~5). That's a look decision,
@@ -118,8 +118,8 @@ look); the shaders run GLSL twins fed the same numbers.
 - **Wires** at night take the sky's zenith × 0.6: darker than any sky behind them (`props.ts`
   `wireMaterial`, 73e83ec).
 - **Cost**: per pixel the pool is one texture read and a multiply (it was a sqrt, a pow and an exp);
-  the floor a uniform branch and a mix; the grade swapped `dim` for `fade`. The repaint stamps a 23 px
-  sprite per lamp instead of 13 px (every 1.5 s at most, on the CPU canvas).
+  the floor a uniform branch and a mix; the grade swapped `dim` for `fade`. The repaint stamps two
+  sprites per lamp (13 px and 23 px) instead of one (every 1.5 s at most, on the CPU canvas).
 - **The check**: `tools/night-check.js` (debugging.md) measures the review's frames 3 and 13 against
   round 11's numbers — the band, the hearts, the gap, a pool's fall-off along the road, pools down the
   street, the wires and the lens — with the moon up or down.
