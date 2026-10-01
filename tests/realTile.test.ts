@@ -59,12 +59,16 @@ describe('osmToTile — roads', () => {
       osm(
         way(1, { highway: 'residential', name: 'Ocean Avenue', oneway: 'yes' }, [[10, 500], [300, 500], [700, 500]]), // starts inside -> owns
         way(2, { highway: 'service' }, [[2000, 500], [2500, 500]]), // entirely outside -> dropped
-        way(3, { highway: 'secondary', bridge: 'yes', layer: '1' }, [[-500, 100], [-100, 100], [400, 100]]), // first vertex far outside -> context
+        way(3, { highway: 'secondary', bridge: 'yes', layer: '1', 'bridge:structure': 'Truss' }, [[-500, 100], [-100, 100], [400, 100]]), // first vertex far outside -> context
         way(4, { highway: 'motorway' }, [[512, -30], [512, 300]]),
+        way(5, { highway: 'tertiary', bridge: 'movable', 'bridge:movable': 'swing' }, [[600, 700], [640, 700]]),
       ),
       OPTS,
     );
-    expect(t.roads).toHaveLength(3);
+    expect(t.roads).toHaveLength(4);
+    const swing = t.roads.find((r) => r.c === 'tertiary')!;
+    expect(swing.br).toBe('movable');
+    expect(swing.bm).toBe('swing'); // (how it opens: bridges.ts turns it on a pier mid-channel)
     const ocean = t.roads.find((r) => r.n === 'Ocean Avenue')!;
     expect(ocean.c).toBe('residential');
     expect(ocean.w).toBeCloseTo(6.5 + 4.4, 1); // a North American street parks both kerbs by default
@@ -75,6 +79,8 @@ describe('osmToTile — roads', () => {
     expect(bridge.own).toBe(0);
     expect(bridge.br).toBe('yes');
     expect(bridge.l).toBe(1);
+    expect(bridge.bs).toBe('truss'); // (how it's built: bridges.ts draws its trusses)
+    expect(ocean.bs).toBeUndefined();
     expect(t.roads.find((r) => r.c === 'motorway')!.w).toBe(14);
   });
   it('mapped street parking (either scheme) widens the carriageway and marks the kerbs', () => {

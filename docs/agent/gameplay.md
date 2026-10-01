@@ -147,6 +147,32 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 - Stairs up a retaining wall (`retaining.ts` `wallStairs` → `stairColliders`): a ramp deck from
   the sidewalk to the landing, walls along its open side and past the landing. A retaining wall's
   own collider stops 0.4 m under its top, so from the landing you step over the coping onto the lot.
+- Road bridges (`world/bridges.ts`, called from `structures.ts`): the road-bridge ways a tile can
+  see, its margin's included, chain where exactly two meet end to end; every tile profiles the
+  whole chain and draws only the ways it owns, so pieces owned by different tiles meet (the
+  Rumson–Sea Bright bascule's tiles meet mid-river: profiled per tile, it sagged to the water there).
+  - The long section (`bridgeProfile`, stations at every vertex and 2 m between): lands on its
+    approach streets at their height + 4 cm; over each run of water stands the clearance (a movable
+    run `CLEAR_MOVABLE`, else `clearOver` the run's shore-to-shore width, measured on past an end
+    in the air so every tile agrees) plus its girders' depth (span/25); clears roads and railways
+    under it; climbs at its class's grade (1.3× off the street); never under the line between its
+    ends; bascule leaves straight heel to heel. Chains are built longest first: one that runs onto
+    another's deck (a ramp onto a viaduct) holds that deck's height where it joins (`Pin`), and
+    neither parapet stands where they meet.
+  - Collision is the deck as drawn: roadway and sidewalks are `table` decks (drawn station heights,
+    exact over the worker boundary) with square ends (`Deck.cut` — a round end hung over the
+    sloping street; where two ways' pieces meet, both end along the drawn mitre; a cut deck reads
+    its height at the nearest point of its centreline); parapets are walls a deck-high band; piers,
+    bascule piers, fenders and towers are walls below the deck. A mapped sidewalk alongside widens
+    the deck (`deckEdges`).
+  - What carries it (`carriedBy`, OSM `bridge:structure` → `Road.bs`, real-lite tiles only — the
+    baked pack has none): girders on piers (beam, the default); through trusses (80 m spans);
+    an arch over a low deck (hangers) or under a high one (columns); a suspension bridge's two
+    towers and cables; a cable-stayed bridge's pylons and stays. A higher OSM `layer` clears the
+    bridge it crosses (`decksUnder`). A movable span is drawn closed (`opensBy`, OSM `bridge:movable` →
+    `Road.bm`): a bascule's steel leaves, its piers, four tender houses (their lamps are `towers`)
+    and timber fenders; a lift span's two towers and the machinery house over each; a swing span's
+    rest piers, the round pier it turns on and the long fender along the river round that.
 
 ## Vehicles
 

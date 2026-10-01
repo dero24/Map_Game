@@ -341,6 +341,8 @@ for (const e of els) {
   if (t.name) r.n = t.name;
   if (t.ref) r.ref = t.ref;
   if (t.bridge && t.bridge !== 'no') r.br = t['bridge:movable'] || t.bridge === 'movable' ? 'movable' : 'yes';
+  if (r.br && t['bridge:structure']) r.bs = String(t['bridge:structure']).toLowerCase().slice(0, 24);
+  if (r.br === 'movable' && t['bridge:movable']) r.bm = String(t['bridge:movable']).toLowerCase().slice(0, 16);
   if (t.layer) r.l = parseInt(t.layer) || 0;
   if (t.oneway === 'yes') r.ow = 1;
   if (t.footway === 'sidewalk') r.sw = 1;

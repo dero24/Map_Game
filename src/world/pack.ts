@@ -5,7 +5,7 @@
 // no-worker fallback: buildTile() runs identically on either thread.
 import * as THREE from 'three';
 import type { Deck, DeckProfile, Floors, WalkWorld } from '../player/collision';
-import { WalkWorld as WalkWorldImpl } from '../player/collision';
+import { WalkWorld as WalkWorldImpl, tableHeight } from '../player/collision';
 import type { Footprint, Door } from './buildings';
 import type { Plan } from './interiors';
 import type { Area, LayerLayout, Road } from './data';
@@ -44,7 +44,7 @@ export interface PObj {
 
 // A walkable deck surface: pts + cumulative length + a height profile. Known profiles cross
 // exactly; anything else falls back to a sampled curve (<5 mm for typical shapes).
-export interface PDeck { pts: P2[]; cum: number[]; hw: number; p?: DeckProfile; h?: Float32Array }
+export interface PDeck { pts: P2[]; cum: number[]; hw: number; p?: DeckProfile; h?: Float32Array; cut?: 1 }
 
 // WalkWorld mutations the builders made while building — replayed verbatim inside the scope.
 export type WalkOp =
@@ -86,12 +86,12 @@ export interface BuiltTile {
 // ---------------- decks ----------------
 
 export function packDeck(d: Deck): PDeck {
-  if (d.profile) return { pts: d.pts, cum: d.cum, hw: d.halfWidth, p: d.profile };
+  if (d.profile) return { pts: d.pts, cum: d.cum, hw: d.halfWidth, p: d.profile, ...(d.cut ? { cut: 1 as const } : {}) };
   const total = d.cum[d.cum.length - 1];
   const n = Math.max(2, Math.min(97, Math.ceil(total / 1.5) + 1));
   const h = new Float32Array(n);
   for (let i = 0; i < n; i++) h[i] = d.heightAt((total * i) / (n - 1));
-  return { pts: d.pts, cum: d.cum, hw: d.halfWidth, h };
+  return { pts: d.pts, cum: d.cum, hw: d.halfWidth, h, ...(d.cut ? { cut: 1 as const } : {}) };
 }
 
 export function unpackDeck(p: PDeck): Deck {
@@ -105,6 +105,7 @@ export function unpackDeck(p: PDeck): Deck {
     const base = pf.hA + (pf.hB - pf.hA) * t;
     return base + Math.max(0, pf.peak - base) * Math.pow(Math.sin(Math.PI * t), 0.45);
   };
+  else if (pf?.k === 'table') heightAt = tableHeight(p.cum, pf.y);
   else {
     const h = p.h!, n = h.length;
     heightAt = (s) => {
@@ -113,7 +114,7 @@ export function unpackDeck(p: PDeck): Deck {
       return h[i] + (h[i + 1] - h[i]) * (t - i);
     };
   }
-  return { pts: p.pts, cum: p.cum, halfWidth: p.hw, heightAt, profile: p.p };
+  return { pts: p.pts, cum: p.cum, halfWidth: p.hw, heightAt, profile: p.p, ...(p.cut ? { cut: 1 as const } : {}) };
 }
 
 // ---------------- collision ops ----------------

@@ -1,11 +1,13 @@
-// Built structures from OSM lines: road bridges (incl. the Rumson–Sea Bright bascule), piers and docks,
-// the Sea Bright–Monmouth Beach seawall and rock groynes. Registers walkable decks with the walk world.
+// Built structures from OSM lines: road bridges (bridges.ts: decks on piers, a movable span's leaves,
+// tender houses and fenders), piers and docks, seawalls and rock groynes. Registers walkable decks
+// with the walk world.
 import * as THREE from 'three';
-import type { World } from './data';
+import type { Line, Road, World } from './data';
 import type { WalkWorld } from '../player/collision';
 import { propMaterial, colored } from '../render/propMaterial';
 import { makeRng } from '../core/rng';
 import { rockLib, type RockType } from '../assets/kit';
+import { buildBridges } from './bridges';
 
 type P = [number, number];
 const unpackPts = (f: number[]): P[] => {
@@ -69,40 +71,9 @@ function resample(p: P[], step: number) {
   return { pts: out, L };
 }
 
-function chainBridges(world: World) {
-  const segs = world.json.roads.filter((r) => r.br && !r.lod && !['footway', 'path', 'cycleway', 'steps'].includes(r.c)).map((r) => ({ r, p: unpackPts(r.p) }));
-  const key = (p: P) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`;
-  const chains: { pts: P[]; w: number; movable: boolean; name?: string }[] = [];
-  const used = new Set<number>();
-  for (let i = 0; i < segs.length; i++) {
-    if (used.has(i)) continue;
-    used.add(i);
-    let pts = segs[i].p.slice();
-    let w = segs[i].r.w, movable = segs[i].r.br === 'movable';
-    const name = segs[i].r.n;
-    let grew = true;
-    while (grew) {
-      grew = false;
-      for (let j = 0; j < segs.length; j++) {
-        if (used.has(j)) continue;
-        const q = segs[j].p;
-        if (key(q[0]) === key(pts[pts.length - 1])) pts = pts.concat(q.slice(1));
-        else if (key(q[q.length - 1]) === key(pts[0])) pts = q.concat(pts.slice(1));
-        else if (key(q[0]) === key(pts[0])) pts = q.slice().reverse().concat(pts.slice(1));
-        else if (key(q[q.length - 1]) === key(pts[pts.length - 1])) pts = pts.concat(q.slice().reverse().slice(1));
-        else continue;
-        used.add(j);
-        w = Math.max(w, segs[j].r.w);
-        movable ||= segs[j].r.br === 'movable';
-        grew = true;
-      }
-    }
-    chains.push({ pts, w, movable, name });
-  }
-  return chains;
-}
-
-export function buildStructures(world: World, walk: WalkWorld) {
+/** `ctx`: the tile's roads and lines with its margin's (own: 0) — a bridge whose spans other tiles
+ *  own is profiled whole from them, so the pieces meet (bridges.ts). Without it, `world`'s own. */
+export function buildStructures(world: World, walk: WalkWorld, ctx?: { roads: Road[]; lines: Line[] }) {
   const { terrain, json } = world;
   const group = new THREE.Group();
   group.name = 'structures';
@@ -123,76 +94,9 @@ export function buildStructures(world: World, walk: WalkWorld) {
   };
 
   // ---------- road bridges ----------
-  const towers: THREE.Vector3[] = [];
-  for (const ch of chainBridges(world)) {
-    const { pts, L } = resample(ch.pts, 2);
-    if (L < 8) continue;
-    const hA = Math.max(terrain.heightAt(pts[0].x, pts[0].z), 1.2);
-    const hB = Math.max(terrain.heightAt(pts[pts.length - 1].x, pts[pts.length - 1].z), 1.2);
-    const peak = ch.movable ? 6.4 : Math.min(3.2 + L * 0.004, 7);
-    const heightAt = (s: number) => {
-      const t = Math.min(1, Math.max(0, s / L));
-      const base = hA + (hB - hA) * t;
-      return base + Math.max(0, peak - base) * Math.pow(Math.sin(Math.PI * t), 0.45);
-    };
-    const hw = ch.w / 2 + 2.0;
-    const lr = pts.map((p) => {
-      const nx = p.tz, nz = -p.tx; // left normal
-      return { p, y: heightAt(p.s), nx, nz };
-    });
-    for (let i = 0; i + 1 < lr.length; i++) {
-      const a = lr[i], b = lr[i + 1];
-      const A = (o: number, dy = 0) => V(a.p.x + a.nx * o, a.y + dy, a.p.z + a.nz * o);
-      const B = (o: number, dy = 0) => V(b.p.x + b.nx * o, b.y + dy, b.p.z + b.nz * o);
-      // roadway + sidewalks
-      m.color(0x74767a).quad(A(-ch.w / 2), B(-ch.w / 2), B(ch.w / 2), A(ch.w / 2), up);
-      m.color(0xcfc9bc);
-      m.quad(A(ch.w / 2, 0.15), B(ch.w / 2, 0.15), B(hw, 0.15), A(hw, 0.15), up);
-      m.quad(A(-hw, 0.15), B(-hw, 0.15), B(-ch.w / 2, 0.15), A(-ch.w / 2, 0.15), up);
-      m.color(0xe2c14e).quad(A(-0.12, 0.01), B(-0.12, 0.01), B(0.12, 0.01), A(0.12, 0.01), up);
-      // fascia + underside
-      const side = V(a.nx, 0, a.nz);
-      m.color(0xb9b4aa);
-      m.quad(A(hw + 0.3, -1.1), B(hw + 0.3, -1.1), B(hw + 0.3, 1.2), A(hw + 0.3, 1.2), side);
-      m.quad(A(-hw - 0.3, -1.1), B(-hw - 0.3, -1.1), B(-hw - 0.3, 1.2), A(-hw - 0.3, 1.2), side.clone().negate());
-      m.color(0x6d6a66).quad(A(-hw - 0.3, -1.1), B(-hw - 0.3, -1.1), B(hw + 0.3, -1.1), A(hw + 0.3, -1.1), V(0, -1, 0));
-      // parapets (inner face + cap)
-      m.color(0xd6d1c6);
-      m.quad(A(hw, 0.15), B(hw, 0.15), B(hw, 1.2), A(hw, 1.2), side.clone().negate());
-      m.quad(A(-hw, 0.15), B(-hw, 0.15), B(-hw, 1.2), A(-hw, 1.2), side);
-      m.quad(A(hw, 1.2), B(hw, 1.2), B(hw + 0.3, 1.2), A(hw + 0.3, 1.2), up);
-      m.quad(A(-hw - 0.3, 1.2), B(-hw - 0.3, 1.2), B(-hw, 1.2), A(-hw, 1.2), up);
-    }
-    // piers under the deck, over water
-    for (let s = 12; s < L - 6; s += 22) {
-      const p = lr[Math.round((s / L) * (lr.length - 1))];
-      if (terrain.sdfAt(p.p.x, p.p.z) > 1) continue;
-      const ang = Math.atan2(p.p.tz, p.p.tx);
-      m.color(0x9b968c).box(p.p.x, p.p.z, ang, 1.6, hw * 2 - 1, -3, p.y - 1.1);
-    }
-    if (ch.movable) {
-      // bascule span: tender houses at the four corners of the moving leaves
-      const mid = lr[Math.floor(lr.length / 2)];
-      const ang = Math.atan2(mid.p.tz, mid.p.tx);
-      for (const du of [-9, 9])
-        for (const sv of [-1, 1]) {
-          const x = mid.p.x + mid.p.tx * du + mid.nx * sv * (hw + 2.2);
-          const z = mid.p.z + mid.p.tz * du + mid.nz * sv * (hw + 2.2);
-          m.color(0xe9e4d8).box(x, z, ang, 3.4, 3.0, mid.y - 1.2, mid.y + 3.2);
-          m.color(0x5d6b58).box(x, z, ang, 3.8, 3.4, mid.y + 3.2, mid.y + 3.5);
-          m.color(0x9b968c).box(x, z, ang, 3.0, 2.6, -3, mid.y - 1.2);
-          towers.push(V(x, mid.y + 3.6, z));
-        }
-      // the leaf joint painted across the deck
-      const a = lr[Math.floor(lr.length / 2)];
-      m.color(0x3d3f44).quad(
-        V(a.p.x + a.nx * -hw - a.p.tx * 0.2, a.y + 0.02, a.p.z + a.nz * -hw - a.p.tz * 0.2),
-        V(a.p.x + a.nx * hw - a.p.tx * 0.2, a.y + 0.02, a.p.z + a.nz * hw - a.p.tz * 0.2),
-        V(a.p.x + a.nx * hw + a.p.tx * 0.2, a.y + 0.02, a.p.z + a.nz * hw + a.p.tz * 0.2),
-        V(a.p.x + a.nx * -hw + a.p.tx * 0.2, a.y + 0.02, a.p.z + a.nz * -hw + a.p.tz * 0.2), up);
-    }
-    walk.addDeck({ pts: pts.map((p) => [p.x, p.z]), cum: pts.map((p) => p.s), halfWidth: hw - 0.35, heightAt: (s) => heightAt(s) + 0.1, profile: { k: 'arch', hA: hA + 0.1, hB: hB + 0.1, peak: peak + 0.1, total: L } });
-  }
+  // (every one the tile can see, its margin's too, drawn where it owns the ways)
+  const bridges = buildBridges(m, walk, ctx?.roads ?? json.roads, ctx?.lines ?? json.lines, terrain);
+  const towers = bridges.towers;
 
   // ---------- piers & docks ----------
   const DECK = 1.35;
@@ -230,11 +134,20 @@ export function buildStructures(world: World, walk: WalkWorld) {
     for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]));
     walk.addDeck({ pts: p, cum, halfWidth: w / 2, heightAt: () => DECK, profile: { k: 'const', y: DECK } });
   }
+  posts.push(...bridges.piles);
   if (posts.length) {
     const pg = colored(new THREE.CylinderGeometry(0.13, 0.15, 1, 6), 0x5c4e3f);
     const im = new THREE.InstancedMesh(pg, propMaterial(), posts.length);
     posts.forEach((mt, i) => im.setMatrixAt(i, mt));
     im.layers.enable(1);
+    group.add(im);
+  }
+  if (bridges.posts.length) {
+    const im = new THREE.InstancedMesh(colored(new THREE.BoxGeometry(1, 1, 1), 0x4f6c66), propMaterial(), bridges.posts.length);
+    bridges.posts.forEach((mt, i) => im.setMatrixAt(i, mt));
+    im.name = 'bridge:railing-posts';
+    im.layers.enable(1);
+    im.computeBoundingSphere();
     group.add(im);
   }
 
@@ -300,6 +213,7 @@ export function buildStructures(world: World, walk: WalkWorld) {
   }
 
   const mesh = new THREE.Mesh(m.geometry(), propMaterial());
+  mesh.name = 'structures';
   mesh.layers.enable(1);
   group.add(mesh);
   return { group, pierSegs, towers };
