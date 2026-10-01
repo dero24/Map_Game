@@ -23,10 +23,12 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
   // Only owner-flagged entities emit — margin context exists solely for builders that need it.
   const pj = { ...tj, roads: prim(tj.roads), areas: prim(tj.areas), lines: prim(tj.lines), points: prim(tj.points) } as unknown as WorldJson;
   const world2: World = { json: pj, terrain };
+  // (a bridge is profiled whole, from every span this tile can see — its margin's too)
+  const seen = { roads: tj.roads, lines: tj.lines };
   if (lite) {
     // Coarse ring: silhouettes only — building + structure meshes, no collision, interiors,
     // signs or props. The stream mounts these as display geometry until the detail ring takes over.
-    const structures = buildStructures(world2, w);
+    const structures = buildStructures(world2, w, seen);
     return {
       id: spec.id,
       lod: spec.lod,
@@ -66,7 +68,7 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
     for (const r of deckKeepOut(d)) w.addPolygon(r);
   }
   w.recording = true;
-  const structures = buildStructures(world2, w);
+  const structures = buildStructures(world2, w, seen);
   const signs = buildSigns(world, bld.signs, w); // full json: intersection signs need context roads
   const props = buildProps(world2, w, structures.pierSegs, { mailboxes: bld.mailboxes, drives: bld.drives, doors: bld.doors, ctx: tj as unknown as WorldJson, box: spec.box, hood: bld.hood });
   const stairs = buildStairs(pj.roads, (x, z) => terrain.heightAt(x, z), w); // (every highway=steps a flight you climb)

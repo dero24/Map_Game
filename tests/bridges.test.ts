@@ -1,0 +1,256 @@
+import { describe, it, expect } from 'vitest';
+import * as THREE from 'three';
+import { Terrain, TerrainLayer, type GridHeader, type LayerLayout, type Road } from '../src/world/data';
+import { WalkWorld } from '../src/player/collision';
+import { RecWalk, packDeck, unpackDeck, replayOps, type WalkOp } from '../src/world/pack';
+import { buildStructures } from '../src/world/structures';
+import { chainBridges, bridgeProfile, crossingsUnder, profileAt, chainAt, CLEAR_MOVABLE, LIFT, type Profile } from '../src/world/bridges';
+import rumson from './fixtures/rumson-bridge.json';
+
+// ---------------- fixtures ----------------
+/** A terrain from a lattice of heights (cm) and shore distances (dm, negative in the water). */
+function terrainOf(grid: GridHeader, h: ArrayLike<number>, sdf: ArrayLike<number>) {
+  const n = grid.w * grid.h, buf = new ArrayBuffer(n * 7);
+  new Int16Array(buf, 0, n).set(Array.from(h));
+  new Int16Array(buf, 2 * n, n).set(Array.from(sdf));
+  const flags = new Uint8Array(buf, 5 * n, n);
+  for (let i = 0; i < n; i++) flags[i] = sdf[i] < 0 ? 1 : 0;
+  const L: LayerLayout = {
+    grid,
+    height: { offset: 0, length: n, type: 'Int16Array' }, sdf: { offset: 2 * n, length: n, type: 'Int16Array' },
+    cover: { offset: 4 * n, length: n, type: 'Uint8Array' }, flags: { offset: 5 * n, length: n, type: 'Uint8Array' },
+    oceanD: { offset: 6 * n, length: n, type: 'Uint8Array' },
+  };
+  const l = new TerrainLayer(buf, L);
+  return new Terrain(l, l);
+}
+
+// A river 100 m wide between a 4.2 m bank (west) and a 1.2 m one (east), its bed 2.6 m down; a
+// primary road crossing it on three bridge ways — a fixed approach span each side and a bascule
+// over the channel — with a sidewalk mapped as a way of its own along the south side.
+const river = (() => {
+  const grid = { x0: -200, z0: -60, cell: 2, w: 200, h: 60 };
+  const h: number[] = [], sdf: number[] = [];
+  for (let j = 0; j < grid.h; j++)
+    for (let i = 0; i < grid.w; i++) {
+      const x = grid.x0 + (i + 0.5) * grid.cell, d = Math.abs(x) - 50;
+      const bank = x < 0 ? 4.2 : 1.2;
+      h.push(Math.round(100 * (d >= 10 ? bank : d >= 0 ? -0.5 + ((bank + 0.5) * d) / 10 : Math.max(-2.6, -0.5 + d * 0.2))));
+      sdf.push(Math.round(d * 10));
+    }
+  return terrainOf(grid, h, sdf);
+})();
+const m = (v: number) => Math.round(v * 10);
+const road = (pts: [number, number][], extra: Partial<Road> = {}): Road => ({ p: pts.flatMap(([x, z]) => [m(x), m(z)]), c: 'primary', w: 11, n: 'River Road', ...extra });
+const riverRoads = (ownWest: boolean, ownEast: boolean): Road[] => [
+  road([[-200, 0], [-120, 0]]),
+  road([[-120, 0], [-15, 0]], { br: 'yes', l: 1, ...(ownWest ? {} : { own: 0 }) }),
+  road([[-15, 0], [15, 0]], { br: 'movable', l: 1, ...(ownWest ? {} : { own: 0 }) }),
+  road([[15, 0], [120, 0]], { br: 'yes', l: 1, ...(ownEast ? {} : { own: 0 }) }),
+  road([[120, 0], [200, 0]]),
+  road([[-121, 8.5], [121, 8.5]], { c: 'footway', w: 1.6, n: undefined, br: 'yes', l: 1, ...(ownEast ? {} : { own: 0 }) }),
+];
+const world = (t: Terrain, roads: Road[]) => ({ json: { roads: roads.filter((r) => r.own !== 0), lines: [], areas: [], points: [], buildings: [] }, terrain: t }) as never;
+
+/** The heights the straight line between a profile's landed ends asks for, station by station. */
+const line = (pf: Profile, L: number) => pf.S.map((s) => pf.ends[0].h + ((pf.ends[1].h - pf.ends[0].h) * s) / L);
+const roadwayDecks = (ops: WalkOp[]) => ops.flatMap((o) => (o.o === 'd' && o.d.p?.k === 'table' && o.d.hw > 4 ? [unpackDeck(o.d)] : []));
+const near = (a: number, b: number, tol: number) => Math.abs(a - b) <= tol;
+
+// ---------------- the long section ----------------
+describe('a bridge’s long section', () => {
+  const roads = riverRoads(true, true);
+  const [ch] = chainBridges(roads);
+  const pf = bridgeProfile(ch, river, crossingsUnder(ch, roads, [], river));
+
+  it('chains the ways into one bridge, from its west end', () => {
+    expect(chainBridges(roads)).toHaveLength(1);
+    expect(ch.ways.map((w) => w.movable)).toEqual([false, true, false]);
+    expect(ch.pts[0]).toEqual([-120, 0]);
+    expect(ch.L).toBeCloseTo(240, 6);
+    expect(ch.ends.every((e) => e.approach)).toBe(true);
+  });
+
+  it('lands on its approach streets at their own height', () => {
+    expect(pf.ends.every((e) => e.land)).toBe(true);
+    expect(pf.y[0]).toBeCloseTo(river.heightAt(-120, 0) + LIFT, 3);
+    expect(pf.y[pf.y.length - 1]).toBeCloseTo(river.heightAt(120, 0) + LIFT, 3);
+  });
+
+  it('never sags below the straight line between its ends', () => {
+    const ln = line(pf, ch.L);
+    for (let i = 0; i < pf.y.length; i++) expect(pf.y[i], `station ${pf.S[i].toFixed(1)}`).toBeGreaterThanOrEqual(ln[i] - 0.02);
+  });
+
+  it('stands its clearance over the water: a bascule’s closed clearance over the channel', () => {
+    let channel = 0;
+    for (let i = 0; i < pf.S.length; i++) {
+      const s = pf.S[i], soffit = pf.y[i] - pf.depth[i];
+      if (s >= 105 && s <= 135) (channel++, expect(soffit, `channel at ${s.toFixed(1)}`).toBeGreaterThanOrEqual(CLEAR_MOVABLE - 0.05));
+      // (clear of the water everywhere off the end spans' last few metres to the bank)
+      if (pf.level[i] > -Infinity && s > 25 && s < ch.L - 25) expect(soffit - pf.level[i], `over the water at ${s.toFixed(1)}`).toBeGreaterThan(1);
+    }
+    expect(channel).toBeGreaterThan(10);
+  });
+
+  it('climbs at a road’s grade, and its leaves run straight from heel to heel', () => {
+    for (let i = 1; i < pf.S.length; i++) expect(Math.abs(pf.y[i] - pf.y[i - 1]) / (pf.S[i] - pf.S[i - 1])).toBeLessThan(0.07);
+    const leaf = pf.S.map((s, i) => [s, pf.y[i]]).filter(([s]) => s >= 105 && s <= 135);
+    for (let i = 1; i + 1 < leaf.length; i++) {
+      const [s0, y0] = leaf[i - 1], [s1, y1] = leaf[i], [s2, y2] = leaf[i + 1];
+      expect(y1).toBeCloseTo(y0 + ((y2 - y0) * (s1 - s0)) / (s2 - s0), 6);
+    }
+  });
+
+  it('is the same section every time', () => {
+    const again = bridgeProfile(chainBridges(riverRoads(true, true))[0], river);
+    expect(again.y).toEqual(pf.y);
+  });
+});
+
+// ---------------- the deck as built ----------------
+describe('a bridge as built', () => {
+  const buildFor = (t: Terrain, roads: Road[]) => {
+    const w = new RecWalk(t, { x0: -400, z0: -400, x1: 400, z1: 400 });
+    const out = buildStructures(world(t, roads), w, { roads, lines: [] });
+    return { w, out, mesh: out.group.children.find((c) => (c as THREE.Mesh).isMesh && !(c as THREE.InstancedMesh).isInstancedMesh) as THREE.Mesh };
+  };
+
+  it('two tiles that each own part of it profile the whole of it: their pieces meet, high over the river', () => {
+    const a = buildFor(river, riverRoads(true, false)), b = buildFor(river, riverRoads(false, true));
+    const da = roadwayDecks(a.w.ops), db = roadwayDecks(b.w.ops);
+    expect(da).toHaveLength(2); // (the west approach and the bascule: tile A's)
+    expect(db).toHaveLength(1);
+    const end = da.find((d) => near(d.pts[d.pts.length - 1][0], 15, 1e-6))!, start = db[0];
+    expect(start.pts[0]).toEqual([15, 0]);
+    const ya = end.heightAt(end.cum[end.cum.length - 1]), yb = start.heightAt(0);
+    expect(Math.abs(ya - yb)).toBeLessThan(0.001);
+    expect(ya).toBeGreaterThan(CLEAR_MOVABLE + 1.5); // (it used to come down to the bank's height here, mid-river)
+  });
+
+  it('collision is the deck as drawn: the roadway, the sidewalks over their kerb, walls at the parapets', () => {
+    const roads = riverRoads(true, true);
+    const { w, mesh } = buildFor(river, roads);
+    const walk = new WalkWorld(river, { x0: -400, z0: -400, x1: 400, z1: 400 });
+    replayOps(walk, w.ops);
+    const ch = chainBridges(roads)[0];
+    const pos = mesh.geometry.attributes.position, nrm = mesh.geometry.attributes.normal, col = mesh.geometry.attributes.color;
+    const asphalt = new THREE.Color(0x74767a), grid = new THREE.Color(0x5f6266), walkway = new THREE.Color(0xcfc9bc);
+    const is = (i: number, c: THREE.Color) => near(col.getX(i), c.r, 1e-4) && near(col.getY(i), c.g, 1e-4) && near(col.getZ(i), c.b, 1e-4);
+    let road = 0, side = 0;
+    for (let i = 0; i < pos.count; i++) {
+      if (nrm.getY(i) < 0.99) continue;
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      if (Math.abs(x) > 119.5) continue; // (the ends: the street's own ground runs on past them)
+      // (a roadway vertex is on its kerb line, where the sidewalk's deck begins: read it a little in)
+      if ((is(i, asphalt) || is(i, grid)) && Math.abs(z) > 5) (road++, expect(walk.deckAt(x, z - Math.sign(z) * 0.3)!, `roadway at ${x.toFixed(1)},${z.toFixed(1)}`).toBeCloseTo(y, 2));
+      if (is(i, walkway) && Math.abs(z) > 5.6) (side++, expect(walk.deckAt(x, z)!, `sidewalk at ${x.toFixed(1)},${z.toFixed(1)}`).toBeCloseTo(y, 2));
+    }
+    expect(road).toBeGreaterThan(50);
+    expect(side).toBeGreaterThan(50);
+    // the south sidewalk carries the mapped footway out to its far edge (8.5 m out, 0.8 m wide)
+    const mid = chainAt(ch, 120);
+    expect(walk.deckAt(mid.x, 9.1)).not.toBeNull();
+    // the parapets stop a walker on the deck; a boat under it passes
+    const deckY = walk.deckAt(-60, 0)!;
+    expect(walk.touching(-60, 9.3, 0.3, deckY + 0.15)).toBe(true);
+    expect(walk.touching(-60, -7.1, 0.3, deckY + 0.15)).toBe(true);
+    expect(walk.touching(-60, 9.3, 0.3, 0)).toBe(false);
+    // square ends: past the deck's end the street's own ground, not the deck hanging on
+    expect(walk.deckAt(-121.5, 0)).toBeNull();
+    expect(walk.deckAt(121.5, 0)).toBeNull();
+  });
+
+  it('a bascule stands on its piers with a tender house at each corner, fenders off them', () => {
+    const { out } = buildFor(river, riverRoads(true, true));
+    expect(out.towers).toHaveLength(4);
+    for (const t of out.towers) expect(t.y).toBeGreaterThan(CLEAR_MOVABLE + 4);
+    const piles = out.group.children.find((c) => (c as THREE.InstancedMesh).isInstancedMesh && (c as THREE.InstancedMesh).count > 10 && c.name === '') as THREE.InstancedMesh;
+    expect(piles).toBeDefined();
+  });
+
+  it('is built the same every time', () => {
+    const a = buildFor(river, riverRoads(true, true)), b = buildFor(river, riverRoads(true, true));
+    expect(JSON.stringify(b.w.ops)).toBe(JSON.stringify(a.w.ops));
+    expect(Array.from(b.mesh.geometry.attributes.position.array)).toEqual(Array.from(a.mesh.geometry.attributes.position.array));
+  });
+});
+
+// ---------------- the Rumson–Sea Bright bridge (the baked shore pack) ----------------
+describe('the Rumson–Sea Bright bascule, as the shore pack maps it', () => {
+  const fx = rumson as unknown as { grid: GridHeader; height: number[]; sdf: number[]; tiles: Record<string, { box: { x0: number; z0: number; x1: number; z1: number }; roads: Road[] }> };
+  const t = terrainOf(fx.grid, fx.height, fx.sdf);
+  const seaBright = (id: string) => {
+    const roads = fx.tiles[id].roads;
+    const ch = chainBridges(roads).find((c) => c.movable)!;
+    return { ch, pf: bridgeProfile(ch, t, crossingsUnder(ch, roads, [], t)), roads };
+  };
+  const W = seaBright('-1_-1'), E = seaBright('0_-1');
+
+  it('both its tiles see the whole bridge and profile it alike (it sagged to the water at their seam)', () => {
+    for (const { ch } of [W, E]) {
+      expect(ch.ways).toHaveLength(3);
+      expect(ch.L).toBeGreaterThan(195);
+    }
+    expect(W.ch.ways.map((w) => w.own)).toEqual([true, true, false]);
+    expect(E.ch.ways.map((w) => w.own)).toEqual([false, false, true]);
+    expect(E.pf.y).toEqual(W.pf.y);
+    const seam = W.ch.ways[2].s0; // (the bascule's east heel: where the tiles' pieces meet)
+    expect(profileAt(W.pf, seam)).toBeGreaterThan(4.5);
+  });
+
+  it('meets Rumson Road at both ends, and never sags below the line between them', () => {
+    const { ch, pf } = W;
+    const [a, b] = [ch.pts[0], ch.pts[ch.pts.length - 1]];
+    expect(Math.abs(pf.y[0] - (t.heightAt(a[0], a[1]) + LIFT))).toBeLessThan(0.01);
+    expect(Math.abs(pf.y[pf.y.length - 1] - (t.heightAt(b[0], b[1]) + LIFT))).toBeLessThan(0.01);
+    const ln = line(pf, ch.L);
+    for (let i = 0; i < pf.y.length; i++) expect(pf.y[i]).toBeGreaterThanOrEqual(ln[i] - 0.02);
+  });
+
+  it('stands clear of the Shrewsbury: three metres under its leaves, clear of the water off its end spans', () => {
+    const { ch, pf } = W;
+    const leaf = ch.ways[1];
+    for (let i = 0; i < pf.S.length; i++) {
+      const s = pf.S[i], soffit = pf.y[i] - pf.depth[i];
+      if (s >= leaf.s0 && s <= leaf.s1) expect(soffit, `under the leaves at ${s.toFixed(1)}`).toBeGreaterThan(3);
+      if (pf.level[i] > -Infinity && s > 30 && s < ch.L - 30) expect(soffit - pf.level[i], `over the water at ${s.toFixed(1)}`).toBeGreaterThan(0.75);
+    }
+  });
+
+  it('each tile draws its own spans, and their decks meet to the millimetre', () => {
+    const decks = (id: string) => {
+      const roads = fx.tiles[id].roads, w = new RecWalk(t, { x0: -400, z0: -600, x1: 400, z1: -200 });
+      buildStructures({ json: { roads: roads.filter((r) => r.own !== 0), lines: [], areas: [], points: [], buildings: [] }, terrain: t } as never, w, { roads, lines: [] });
+      return roadwayDecks(w.ops);
+    };
+    const dw = decks('-1_-1'), de = decks('0_-1');
+    expect(dw).toHaveLength(2);
+    expect(de).toHaveLength(1);
+    const heel = dw.find((d) => d.pts[d.pts.length - 1][0] > 0)!, east = de[0];
+    expect(heel.pts[heel.pts.length - 1]).toEqual(east.pts[0]);
+    expect(Math.abs(heel.heightAt(heel.cum[heel.cum.length - 1]) - east.heightAt(0))).toBeLessThan(0.001);
+  });
+});
+
+// ---------------- decks ----------------
+describe('a bridge’s deck in the walk world', () => {
+  it('ships its drawn heights exactly, square at its ends', () => {
+    const d = { pts: [[0, 0], [10, 0], [30, 5]] as [number, number][], cum: [0, 10, 10 + Math.hypot(20, 5)], halfWidth: 3, heightAt: () => 0, profile: { k: 'table' as const, y: [1, 2.5, 2] }, cut: 1 as const };
+    const u = unpackDeck(packDeck(d));
+    expect(u.cut).toBe(1);
+    expect(u.heightAt(0)).toBeCloseTo(1, 9);
+    expect(u.heightAt(5)).toBeCloseTo(1.75, 9);
+    expect(u.heightAt(10)).toBeCloseTo(2.5, 9);
+    expect(u.heightAt(d.cum[2])).toBeCloseTo(2, 9);
+    const w = new WalkWorld(river, { x0: -100, z0: -100, x1: 100, z1: 100 });
+    w.addDeck(u);
+    expect(w.deckAt(5, 1)).toBeCloseTo(1.75, 6);
+    expect(w.deckAt(-0.5, 0)).toBeNull(); // (past its first point)
+    expect(w.deckAt(30.5, 5.2)).toBeNull(); // (past its last)
+    const round = unpackDeck(packDeck({ ...d, cut: undefined }));
+    w.addDeck({ ...round, pts: round.pts.map(([x, z]) => [x, z + 50] as [number, number]) });
+    expect(w.deckAt(-0.5, 50)).toBeCloseTo(1, 6); // (an uncut deck reaches on round its ends, as stairs and piers always have)
+  });
+});
+
