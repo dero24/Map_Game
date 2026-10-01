@@ -54,6 +54,44 @@ or per-region style.
   hair up close). Streets, lakes and shore foam are pulled forward (−1/−4); wakes −2/−6; the sea
   plane is pushed back (+1/+2) under shore ground.
 
+## Night: lamp pools, the night's floor, the night grade (`render/nightLight.ts`)
+
+Night is laid the way a watercolourist lays it: one deep, cool wash over everything, the street
+lamps' pools left warm (a bright heart, a quick soft edge, real dark between one pool and the next),
+lit windows as the accents. The shapes and the grade's maths are plain functions in
+`nightLight.ts` (tests/nightLight.test.ts); the shaders run GLSL twins fed the same numbers.
+
+- **The lamp map** (`stream.ts` `repaintLamps`: 2 km round the walker at 2 m/px, repainted at most
+  every 1.5 s for tiles, at once near its edge). R holds the distance to the nearest lamp, as a cone
+  per lamp (1 at its foot, 0 at `POOL.reach` 12 m), composited with `lighten` (an opaque sprite: a
+  true max, so the nearest lamp wins). G is the canyon field alone.
+  - It used to hold the pool itself: white gradients (r 13 m) added up, then `pow 1.6`. At 2 m
+    texels that was a blur; every lamp spread a dim amber wash ~26 m across that ran into the
+    next (round 10's "amber-mud": the night street's lower 40% at L\* 26, hue 46–50°, C\* 15). The
+    white sprite also wrote into G, so by day every lamp cut the sky fill under it by up to 45%.
+- **The pool** (`shared.ts` `lampField`, `lampAt`): the distance read back from the cone, shaped as
+  `exp(−(d / radius)^edge)` — a broad, even heart, down to 1/e at `radius`, gone a couple of metres
+  past it — times the height falloff (full to 1.5 m over the local ground, nothing by 10.5 m).
+  `lampAt` = field × `uLampPower` × `gain`; `paintLight` adds `max(albedo, 0.3) × uLampColor ×
+  lampAt`, so an asphalt heart is near paper-white and warm. `U.uLampPool` = (reach, radius, edge,
+  gain): turn it in the page to try a shape.
+- **The night's floor** (`atmosphere.ts`): the sky fill's night lift is blue (it was a grey 0.015
+  that lit the shadows grey), and the ground's bounce loses the sand's warmth with the sun. Both
+  scale with `uNight`, which is 0 from a sun 1° under the horizon up: day and golden hour are
+  untouched.
+- **The night grade** (`post.ts` composite → `nightGrade`, after the colour grade, on display
+  colour): everything but the lights goes under one glaze (`NIGHT_GRADE.tint`, Payne's grey toward
+  indigo) — its value kept, most of its own hue (`hue`) given up to the glaze, the darks a little
+  deeper (`deep` at black) — so a pool's dim edge, a lawn and a tan sidewalk all go the same blue,
+  as the eye sees them by night. The lights (the brightest channel over `reserve`, red over blue
+  by `warm`: a lamp's heart, a lit window, the moon) are reserved, like paper. `postParams.nightWash`
+  scales it (the default look's 0.5 is all of it). It replaced a 50% multiply by (0.55, 0.62, 1.0),
+  which left a dim amber street amber.
+- **Wires** at night take the sky's zenith × 0.6: darker than any sky behind them (`props.ts`
+  `wireMaterial`, 73e83ec).
+- **The check**: `tools/night-check.js` (debugging.md) measures the review's night street against
+  round 10's numbers.
+
 ## The micro layer: impostor cards for the small things
 
 The small made things of a place — carts, A-frames, porch chairs, flags, hoops, AC units, cleats,

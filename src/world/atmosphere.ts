@@ -47,6 +47,7 @@ export interface Weather { cloud: number; seaFog: number; haze: number; wind: nu
 const overcast = C(0xb6babd);
 const sand = C(0xc9b894);
 const moonCol = C(0x8fa6dc);
+const nightLift = new THREE.Color().setRGB(0.009, 0.014, 0.034); // (linear: as light as the grey 0.015 it replaced)
 const v = new THREE.Vector3();
 
 export function applyAtmosphere(cel: CelestialState, w: Weather, hour: number, lightScale = 1) {
@@ -89,8 +90,11 @@ export function applyAtmosphere(cel: CelestialState, w: Weather, hour: number, l
   // up-facing planes (roofs) don't all turn teal.
   U.uAmbSky.value.copy(U.uSkyZenith.value).lerp(U.uSkyHorizon.value, 0.55).multiplyScalar((0.85 + 0.6 * oc + 0.25 * night) * lightScale);
   { const a = U.uAmbSky.value, g = a.r * 0.2126 + a.g * 0.7152 + a.b * 0.0722; a.lerp(tmp.b.setRGB(g, g, g), 0.3); }
-  U.uAmbSky.value.addScalar(0.015 * night);
-  U.uAmbGround.value.copy(sand).multiplyScalar((0.08 + 0.35 * Math.max(0, sunI / 3)) * lightScale).lerp(U.uAmbSky.value, 0.35);
+  // the night's floor of light is the sky's, so it's blue (a grey one lit the shadows grey)
+  U.uAmbSky.value.add(tmp.b.copy(nightLift).multiplyScalar(night));
+  // the ground's bounce is the sun's off the sand; by night there's only the sky's to bounce, and
+  // the sand's warmth went with the sun (it lit every wall's foot amber-grey under the moon)
+  U.uAmbGround.value.copy(sand).multiplyScalar((0.08 * (1 - 0.85 * night) + 0.35 * Math.max(0, sunI / 3)) * lightScale).lerp(U.uAmbSky.value, 0.35 + 0.4 * night);
   U.uFogSunColor.value.copy(sunCol).multiplyScalar(0.6 + 0.6 * golden).lerp(U.uFogColor.value, 0.35 + 0.4 * oc);
   U.uShadowTintAmt.value = 0.25 + 0.2 * golden;
 

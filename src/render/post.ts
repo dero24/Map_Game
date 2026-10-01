@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { GLSL_NOISE, U } from './shared';
 import { GLSL_PACK_DEPTH, unpackDepth } from './seen';
+import { GLSL_NIGHT_GRADE, NIGHT_GRADE } from './nightLight';
 
 export const postParams = {
   enabled: true,
@@ -247,7 +248,10 @@ export class WatercolorPost {
       uniform float uNear, uFar, uTime, uBoil;
       uniform float uWobble, uEdgeDark, uTurb, uGran, uPaper, uInk, uInkDist, uGlow, uVignette, uSat, uNightWash, uNight, uVibrance, uGrade;
       uniform vec3 uPaperColor, uInkColor, uNightTint, uWarm, uGradeShadow, uGradeLight;
+      uniform vec4 uNightGrade;
+      uniform vec2 uNightWarm;
       uniform float uGolden, uRaw;
+      ${GLSL_NIGHT_GRADE}
       uniform sampler2D tExplore, tExploreFar;
       uniform vec4 uExploreBox, uExploreFarBox;
       uniform float uSketch, uSketchFar, uCrisp, uSoftGlow, uClarity, uContrast;
@@ -486,11 +490,10 @@ export class WatercolorPost {
           c = 1.0 - (1.0 - c) * (1.0 - hiG * uSoftGlow * 0.5);
         }
 
-        // glazes: indigo by night, a whisper of warm sienna at golden hour
-        // warm light (windows, lamps) is left out of the night glaze, like reserved paper
-        // only genuinely bright warm light (windows, lamp hearts) is exempt — a dim amber street keeps its indigo night
-        float warmth = smoothstep(0.05, 0.3, c.r - c.b) * smoothstep(0.4, 0.75, dot(c, vec3(0.33)));
-        c = mix(c, c * uNightTint, uNightWash * uNight * (1.0 - warmth * 0.85));
+        // glazes: indigo by night (nightLight.ts: one cool wash over all but the lights — a lamp's
+        // heart, a lit window — which are left out of it like reserved paper; a dim amber street
+        // keeps its indigo night), a whisper of warm sienna at golden hour
+        c = nightGrade(c, uNight, uNightWash);
         c = mix(c, c * uWarm, uGolden * 0.25);
 
         // paper: tint, tooth, embossed light
@@ -522,7 +525,8 @@ export class WatercolorPost {
         tExplore: U.uExplore, uExploreBox: U.uExploreBox, tExploreFar: U.uExploreFar, uExploreFarBox: U.uExploreFarBox, uSketch: { value: 0 }, uSketchFar: { value: 0 }, uCrisp: { value: 0 }, uSoftGlow: { value: 0 }, uClarity: { value: 0 }, uContrast: { value: 0 },
         tGhost: { value: null }, tGhostDepth: { value: null }, uGhost: U.uGhost, uBrush: U.uBrush, uRipple: U.uRipple,
         uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() }, uWorldOff: U.uWorldOffset,
-        uNightTint: { value: new THREE.Color(0.55, 0.62, 1.0) }, uWarm: { value: new THREE.Color(1.08, 0.97, 0.86) },
+        uNightTint: { value: new THREE.Vector3(...NIGHT_GRADE.tint) }, uWarm: { value: new THREE.Color(1.08, 0.97, 0.86) },
+        uNightGrade: { value: new THREE.Vector4(NIGHT_GRADE.hue, NIGHT_GRADE.deep, ...NIGHT_GRADE.reserve) }, uNightWarm: { value: new THREE.Vector2(...NIGHT_GRADE.warm) },
         uVibrance: { value: 0 }, uGrade: { value: 0 }, uGradeShadow: { value: new THREE.Color() }, uGradeLight: { value: new THREE.Color() },
       },
     );

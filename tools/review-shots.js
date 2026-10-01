@@ -4,6 +4,7 @@
 // server's /__shot sink. The same poses every round so the reviewer compares like with like.
 // Needs /tools/inpage-montage.js (loaded here) and a landscape viewport (1600×900).
 await import('/tools/inpage-montage.js');
+const { idPass, lensVerdict } = await import('/tools/id-pass.js');
 
 window.__REVIEW__ = async (tag = 'r', opts = {}) => {
   const G = window.__GAME__, T = G.THREE, m = new T.Matrix4(), p = new T.Vector3();
@@ -182,24 +183,31 @@ window.__REVIEW__ = async (tag = 'r', opts = {}) => {
     } },
     { label: '24 a street lamp, close, at dusk', fn: async () => { set(19.6); const L = near('lamp:lens', s.x, s.z, 2); if (L) look(L, 7, -7, 1.2, -0.1); } },
   ];
-  // the round-3/6 assert: no single mesh (or instance) may fill > 25 % of a pose within 4 m of the lens
-  const occluder = () => {
-    const rc = new T.Raycaster(), hits = new Map();
-    let n = 0;
-    for (let gx = 0; gx < 8; gx++) for (let gy = 0; gy < 5; gy++) {
-      n++;
-      rc.setFromCamera(new T.Vector2(-0.9 + gx * (1.8 / 7), -0.8 + gy * 0.4), G.camera);
-      let h = null;
-      try { h = rc.intersectObjects(G.scene.children, true).find((x) => Number.isFinite(x.distance) && x.object.visible && !x.object.isPoints && !x.object.isLine); } catch { h = null; }
-      if (!h || h.distance > 4) continue;
-      // the ground under your feet isn't an occluder
-      const nm = h.object.name || h.object.parent?.name || '';
-      if (/^(water|ground|grass|ocean|sky)/.test(nm) || (/^tile:/.test(nm) && h.face && h.face.normal.y > 0.7)) continue;
-      const key = `${h.object.name || h.object.parent?.name || h.object.type}${h.instanceId !== undefined ? '#' + h.instanceId : ''}`;
-      hits.set(key, (hits.get(key) ?? 0) + 1);
+  // the lens: nothing within 2.5 m of it over 5% of the frame, nor within 4 m over 15%, measured on
+  // what the frame actually shows — the id pass (tools/id-pass.js, spot-shots' asserts). The round-3/6
+  // ray grid (25% of 40 rays within 4 m) let round 10's night street through with a slab filling its
+  // lower right. (The ground at your feet is below knee height: it never counts.)
+  const lensSeen = () => idPass(G);
+  const occluder = () => { const why = lensVerdict(lensSeen(), { world: 0 }); return why.length ? why.join(', ') : null; };
+  // …and a pose that fails it is re-posed: back and aside from where it stood, looking where it
+  // looked, on open ground, until it passes (else the least blocked of them)
+  const repose = async () => {
+    const x0 = G.walker.x, z0 = G.walker.z, y0 = G.walker.y, yaw = G.walker.yaw, pitch = G.walker.pitch ?? -0.03, fly = G.walkParams.fly;
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw), px = -fz, pz = fx;
+    const put = (x, z) => { G.walker.place(x, z, yaw, pitch); if (fly) { G.walkParams.fly = true; G.walker.y = y0; } };
+    let best = null;
+    for (const [back, side] of [[2, 0], [4, 0], [2, 2], [2, -2], [6, 0], [4, 3], [4, -3], [9, 0]]) {
+      const x = x0 - fx * back + px * side, z = z0 - fz * back + pz * side;
+      if (!fly && (G.walk.blocked(x, z, 0.6) || G.walk.buildingAt(x, z) >= 0)) continue;
+      put(x, z);
+      await wait(300);
+      const s = lensSeen(), why = lensVerdict(s, { world: 0 });
+      if (!why.length) return null;
+      const sc = s.near25 * 4 + Math.max(0, s.near4 - 0.15) * 2;
+      if (!best || sc < best.sc) best = { x, z, sc };
     }
-    for (const [k, c] of hits) if (c / n > 0.25) return k;
-    return null;
+    if (best) { put(best.x, best.z); await wait(300); }
+    return occluder();
   };
   // F: the regional cast — each new species on the lawn, close (the Almanac's foundry models)
   const pair = (a, b, hour) => async () => {
@@ -221,17 +229,12 @@ window.__REVIEW__ = async (tag = 'r', opts = {}) => {
     const f = it.fn, label = it.label;
     it.fn = async () => {
       clearInterval(track); track = 0; await f(); await wait(400); await idle();
-      // a parked car (or a van going by) right in the lens: step back along the view, up to 3 times
-      for (let k = 0; k < 3 && !track && !G.interiors.indoors; k++) {
-        const o = occluder();
-        if (!o) break;
-        const y = G.walker.yaw, back = 3;
-        G.walker.place(G.walker.x + Math.sin(y) * back, G.walker.z + Math.cos(y) * back, y, G.walker.pitch ?? -0.03);
-        await wait(300);
-      }
+      // a parked car, a van going by, a slab of something right in the lens: re-posed round it
+      const o = !track && !G.interiors.indoors ? occluder() : null;
+      if (o) console.log(`[review] ${label}: ${o} — re-posed: ${(await repose()) ?? 'clear'}`);
     };
     it.after = () => {
-      const o = occluder();
+      const o = G.interiors.indoors ? null : occluder(); // (indoors the walls are meant to be near)
       it.label = o ? `${label}  ⚠ occluder: ${o}` : label;
       if (o) console.warn('[review] occluder in', label, o);
     };
