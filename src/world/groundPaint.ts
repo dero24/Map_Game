@@ -233,6 +233,7 @@ export class Painter {
       xing,
     });
     this.merged.clear();
+    this.census.clear();
   }
   private xingIn(x0: number, z0: number, x1: number, z1: number): number[] {
     const out: number[] = [];
@@ -245,6 +246,8 @@ export class Painter {
   // kept per set of tiles: they were concatenated (and the roads and areas sorted) afresh for
   // every window, and a grass cell's mask is a window (a 20 m one, a few a frame on a drive).
   private merged = new Map<string, { roads?: Prepared<Road>[]; areas?: Prepared<Area>[]; foot?: Prepared<number>[]; front?: Prepared<number>[] }>();
+  // block-paving censuses by window (paint): the footprints round a window, binned
+  private census = new Map<string, { cells: Map<string, [number, number, number][]>; at: Map<Prepared<number>, [number, number, number]> }>();
   private near(x0: number, z0: number, x1: number, z1: number) {
     let key = '';
     for (const [id, t] of this.tiles) if (t.box[2] > x0 - 50 && t.box[0] < x1 + 50 && t.box[3] > z0 - 50 && t.box[1] < z1 + 50) key += id + ' ';
@@ -266,7 +269,7 @@ export class Painter {
     }
     return m.areas;
   }
-  dropTile(id: string) { this.tiles.delete(id); this.tileWalks.delete(id); this.merged.clear(); }
+  dropTile(id: string) { this.tiles.delete(id); this.tileWalks.delete(id); this.merged.clear(); this.census.clear(); }
   private roadsIn(x0: number, z0: number, x1: number, z1: number): Prepared<Road>[] {
     if (!this.tiles.size) return this.roads;
     const { key, m } = this.near(x0, z0, x1, z1);
@@ -327,8 +330,12 @@ export class Painter {
     else this.tileWalks.delete(id);
   }
 
-  paint(ctx: CanvasRenderingContext2D, x0: number, z0: number, x1: number, z1: number, pxPerM: number, level: 0 | 1 | 2) {
+  /** Paints the window x0..x1, z0..z1. With `clip` (a part of the window: the slice DetailGround is
+   *  painting) only what reaches that part is drawn; what the window decides — how paved a building's
+   *  block is, from its neighbours — is decided by the window, so a slice's pixels are the window's. */
+  paint(ctx: CanvasRenderingContext2D, x0: number, z0: number, x1: number, z1: number, pxPerM: number, level: 0 | 1 | 2, clip?: [number, number, number, number]) {
     const detail = level >= 1;
+    const [c0, d0, c1, d1] = clip ?? [x0, z0, x1, z1];
     // Dense blocks are paved: where footprints cover a quarter of the ground within 60 m of a
     // building (a city block, not a suburb), the ground round it is concrete and flagstone out to
     // 8–14 m (the denser, the wider), so the gaps between a city's buildings and the strips to its
@@ -337,21 +344,34 @@ export class Painter {
     // stair-steps through any grid that isn't (Seattle's is turned 32°). Under the areas: a city
     // park stays a park.
     if (detail) {
-      const C = 40, R = 60, cells = new Map<string, [number, number, number][]>(), near: [Prepared<number>, number, number, number][] = [];
-      for (const f of this.footIn(x0, z0, x1, z1)) {
-        if (!overlaps(f, x0, z0, x1, z1, 100)) continue;
-        const r = f.pts[0];
-        let a = 0, cx = 0, cz = 0;
-        for (let i = 0, j = r.length - 1; i < r.length; j = i++) (a += (r[j][0] - r[i][0]) * (r[j][1] + r[i][1])), (cx += r[i][0]), (cz += r[i][1]);
-        cx /= r.length;
-        cz /= r.length;
-        const k = `${Math.floor(cx / C)},${Math.floor(cz / C)}`;
-        // (a house's footprint counts for under half: a street of houses on their lots is lawns
-        // and gardens — Queen Anne paved over read as a car park)
-        if (!cells.has(k)) cells.set(k, []);
-        cells.get(k)!.push([cx, cz, Math.abs(a / 2) * f.item]);
-        if (overlaps(f, x0, z0, x1, z1, 16)) near.push([f, cx, cz, Math.abs(a / 2) * f.item]);
+      const C = 40, R = 60, near: [Prepared<number>, number, number, number][] = [];
+      // the window's census: each footprint's middle and weighted area, in 40 m cells (a window's
+      // slices share it — counted once a window, not once a slice)
+      const ck = `${x0},${z0},${x1},${z1}`;
+      let cen = clip ? this.census.get(ck) : undefined;
+      if (!cen) {
+        cen = { cells: new Map(), at: new Map() };
+        for (const f of this.footIn(x0, z0, x1, z1)) {
+          if (!overlaps(f, x0, z0, x1, z1, 100)) continue;
+          const r = f.pts[0];
+          let a = 0, cx = 0, cz = 0;
+          for (let i = 0, j = r.length - 1; i < r.length; j = i++) (a += (r[j][0] - r[i][0]) * (r[j][1] + r[i][1])), (cx += r[i][0]), (cz += r[i][1]);
+          cx /= r.length;
+          cz /= r.length;
+          const k = `${Math.floor(cx / C)},${Math.floor(cz / C)}`;
+          // (a house's footprint counts for under half: a street of houses on their lots is lawns
+          // and gardens — Queen Anne paved over read as a car park)
+          if (!cen.cells.has(k)) cen.cells.set(k, []);
+          cen.cells.get(k)!.push([cx, cz, Math.abs(a / 2) * f.item]);
+          cen.at.set(f, [cx, cz, Math.abs(a / 2) * f.item]);
+        }
+        if (clip) {
+          if (this.census.size >= 4) this.census.clear();
+          this.census.set(ck, cen);
+        }
       }
+      const cells = cen.cells;
+      for (const [f, [cx, cz, own]] of cen.at) if (overlaps(f, c0, d0, c1, d1, 16)) near.push([f, cx, cz, own]);
       // (one path a width band: a single stroke paints the union once, however many aprons overlap)
       const bands: Prepared<number>[][] = [[], [], []];
       for (const [f, cx, cz, own] of near) {
@@ -378,7 +398,7 @@ export class Painter {
     // Areas
     const areas = this.areasIn(x0, z0, x1, z1);
     for (const a of areas) {
-      if ((a.item.lod && level > 0) || !overlaps(a, x0, z0, x1, z1)) continue;
+      if ((a.item.lod && level > 0) || !overlaps(a, c0, d0, c1, d1)) continue;
       ctx.beginPath();
       for (const r of a.pts) pathOf(ctx, r, true);
       // a pier's deck, a playground's woodchips or rubber: the mapped surface's colour where it says
@@ -398,7 +418,7 @@ export class Painter {
     if (level >= 1)
       for (const a of areas) {
         const k = a.item.k;
-        if (a.item.c !== 'pitch' || !k || k === 'playground' || k === 'american_football' || !overlaps(a, x0, z0, x1, z1)) continue;
+        if (a.item.c !== 'pitch' || !k || k === 'playground' || k === 'american_football' || !overlaps(a, c0, d0, c1, d1)) continue;
         ctx.globalAlpha = 0.95;
         paintCourt(ctx, a.pts[0], k as Sport, a.item.sf, level === 2 ? Math.max(0.1, 0.9 / pxPerM) : 0);
       }
@@ -410,7 +430,7 @@ export class Painter {
       ctx.lineCap = 'butt';
       ctx.globalAlpha = 0.85;
       for (const a of areas) {
-        if (a.item.c !== 'parking' || !overlaps(a, x0, z0, x1, z1, 5)) continue;
+        if (a.item.c !== 'parking' || !overlaps(a, c0, d0, c1, d1, 5)) continue;
         const L = lotOf(a);
         if (!L) continue;
         ctx.beginPath();
@@ -428,7 +448,7 @@ export class Painter {
       ctx.lineWidth = 7; // 3.5 m: a sidewalk's width; deeper set-backs are the lots (mapped parking)
       ctx.lineJoin = 'round';
       for (const f of this.frontIn(x0, z0, x1, z1)) {
-        if (!overlaps(f, x0, z0, x1, z1, 10)) continue;
+        if (!overlaps(f, c0, d0, c1, d1, 10)) continue;
         ctx.beginPath();
         pathOf(ctx, f.pts[0], true);
         ctx.stroke();
@@ -441,21 +461,21 @@ export class Painter {
       ctx.lineWidth = level === 2 ? 1.1 : 1.6;
       ctx.lineJoin = 'round';
       for (const f of this.footIn(x0, z0, x1, z1)) {
-        if (!overlaps(f, x0, z0, x1, z1, 5)) continue;
+        if (!overlaps(f, c0, d0, c1, d1, 5)) continue;
         ctx.beginPath();
         pathOf(ctx, f.pts[0], true);
         ctx.fill();
         ctx.stroke();
       }
     }
-    const list = this.roadsIn(x0, z0, x1, z1).filter((r) => (level > 0 ? !r.item.lod : true) && (detail || !MINOR.has(r.item.c)) && overlaps(r, x0, z0, x1, z1));
+    const list = this.roadsIn(x0, z0, x1, z1).filter((r) => (level > 0 ? !r.item.lod : true) && (detail || !MINOR.has(r.item.c)) && overlaps(r, c0, d0, c1, d1));
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     // Front walks from each door to the street (flagstone-pale, under everything else).
     if (detail) {
       ctx.strokeStyle = '#bdb5a3';
-      for (const w of this.walksIn(x0, z0, x1, z1)) {
-        if (!overlaps(w, x0, z0, x1, z1, 5)) continue;
+      for (const w of this.walksIn(c0, d0, c1, d1)) {
+        if (!overlaps(w, c0, d0, c1, d1, 5)) continue;
         ctx.beginPath();
         pathOf(ctx, w.pts[0]);
         ctx.lineWidth = w.item;
@@ -551,7 +571,7 @@ export class Painter {
       }
       ctx.globalAlpha = 1;
     }
-    if (level === 2) this.crosswalks(ctx, list, this.xingIn(x0, z0, x1, z1));
+    if (level === 2) this.crosswalks(ctx, list, this.xingIn(c0, d0, c1, d1));
     if (level === 2) this.wear(ctx, list.filter((r) => !this.bakedRoads.has(r)), arid); // streamed streets (the baked shore keeps its look)
     ctx.lineCap = 'round';
   }
@@ -720,55 +740,211 @@ const makeTex = (c: HTMLCanvasElement) => {
   return t;
 };
 
+type Rect = [number, number, number, number]; // x0, z0, x1, z1: a window's pixels
+// A window's pixels go in cells of CELL px: the steps it moves in, its slices and the bands along its
+// edges all fall on them. CELL is also past the reach of the wash's blur (6 px reaches ~20), so a
+// slice painted with a CELL of margin round it gets the same blur as the whole window.
+const CELL = 32;
+
+// the cells a rect (pixels) touches, marked
+function mark(m: Uint8Array, N: number, x0: number, z0: number, x1: number, z1: number) {
+  const i0 = Math.max(0, Math.floor(x0 / CELL)), i1 = Math.min(N, Math.ceil(x1 / CELL));
+  for (let j = Math.max(0, Math.floor(z0 / CELL)); j < Math.min(N, Math.ceil(z1 / CELL)); j++) if (i1 > i0) m.fill(1, j * N + i0, j * N + i1);
+}
+/** The marked cells of an N×N grid as rectangles (pixels) of at most `max` pixels each: runs along
+ *  each row (N/4 cells at most), stacked while the rows under repeat them. The outer row and column
+ *  of cells stand alone, so a slice either takes in the window's edge or doesn't. */
+export function slices(m: Uint8Array, N: number, cell: number, max: number): Rect[] {
+  const out: Rect[] = [], run = Math.max(1, N >> 2);
+  let open: [number, number, number][] = []; // i0, i1, first row: rectangles growing down
+  for (let j = 0; j <= N; j++) {
+    const runs: [number, number][] = [];
+    for (let i = 0; j < N && i < N; ) {
+      if (!m[j * N + i]) { i++; continue; }
+      let e = i + 1;
+      while (e < N && e - i < run && m[j * N + e] && e !== 1 && e !== N - 1) e++;
+      runs.push([i, e]);
+      i = e;
+    }
+    const next: [number, number, number][] = [];
+    for (const o of open) {
+      const k = runs.findIndex(([a, b]) => a === o[0] && b === o[1]);
+      if (k >= 0 && j !== 1 && j !== N - 1 && (o[1] - o[0]) * (j - o[2] + 1) * cell * cell <= max) {
+        next.push(o);
+        runs.splice(k, 1);
+      } else out.push([o[0] * cell, o[2] * cell, o[1] * cell, j * cell]);
+    }
+    for (const [a, b] of runs) next.push([a, b, j]);
+    open = next;
+  }
+  return out;
+}
+
 // A ground window that re-centres on the walker: `detail` (300 m, ~15 cm/px, curbs and
 // double centre lines) and `mid` (1.6 km, ~0.8 m/px: sidewalks, walks, markings) — both
 // paint the baked features AND the mounted streamed tiles, over the land-cover wash where
 // the bake has one and a lawn wash past it.
+// Moving it used to repaint the whole window in one frame: the wash through its blur, every street
+// and lot, then the 2048² upload. That was half a second wherever the browser rasters a 2D canvas on
+// the CPU, every 66 m of a flight (Robby: "every ~2 seconds it locks up"). Now the window moves in
+// whole steps of its own pixels: what it still shows slides across in one copy, and only the strip
+// it moved onto is painted (with the bands along its edges, where the wash fades out), a slice a
+// frame. The texture shows the old window until the new one is whole.
 export class DetailGround {
   readonly canvas = document.createElement('canvas');
   readonly texture: THREE.CanvasTexture;
   readonly box = new THREE.Vector4(0, 0, 1, 1);
-  private cx = Infinity;
-  private cz = Infinity;
-  private dirty = false;
+  // the window the texture shows: its corner, in its own pixels from the region's origin (NaN
+  // until the first paint)
+  private wx = NaN;
+  private wz = NaN;
+  // the window being painted in: its corner, and the slices still to paint (the canvas already
+  // holds its pixels everywhere else)
+  private job: { wx: number; wz: number; todo: Rect[] } | null = null;
+  private changed: Rect[] = []; // world boxes tiles changed in (touch), not yet in a job
+  private slice: HTMLCanvasElement | null = null;
   constructor(private painter: Painter, private covers: { img: HTMLCanvasElement; L: TerrainLayer }[], res: number, readonly size = 300, private level: 1 | 2 = 2, private blur = 6) {
     this.canvas.width = this.canvas.height = res;
     this.texture = makeTex(this.canvas);
   }
-  /** A tile inside the window changed — repaint on the next update. */
+  /** A move or a change still painting in. */
+  get busy() { return this.job !== null; }
+  /** A tile changed: its box, out to what its paint reaches (a street's verges, a building's paved
+   *  apron and its neighbours'), repaints over the next frames. */
   touch(b: [number, number, number, number]) {
-    const h = this.size / 2;
-    if (b[2] > this.cx - h && b[0] < this.cx + h && b[3] > this.cz - h && b[1] < this.cz + h) this.dirty = true;
+    const R = 100;
+    this.changed.push([b[0] - R, b[1] - R, b[2] + R, b[3] + R]);
   }
+  /** Keeps the window round the walker, a slice a frame. True when it painted this frame (main.ts
+   *  gives one window a frame). */
   update(x: number, z: number, force = false) {
-    if (!force && !this.dirty && Math.hypot(x - this.cx, z - this.cz) < this.size * 0.22) return false;
-    this.dirty = false;
-    const s = this.size, res = this.canvas.width;
-    const snap = s > 1000 ? 50 : 10;
-    this.cx = Math.round(x / snap) * snap;
-    this.cz = Math.round(z / snap) * snap;
-    const x0 = this.cx - s / 2, z0 = this.cz - s / 2;
-    const ctx = this.canvas.getContext('2d')!;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.filter = `blur(${this.blur}px)`;
-    ctx.fillStyle = COVER[50]; // past the bake: town lawn (streamed tiles paint their paving on top)
-    ctx.fillRect(0, 0, res, res);
-    ctx.imageSmoothingEnabled = true;
-    for (const { img, L } of this.covers) {
-      const g = L.g;
-      // destination rect of the layer's grid inside this window
-      const k = res / s;
-      const dx = (g.x0 - x0) * k, dz = (g.z0 - z0) * k, dw = g.w * g.cell * k, dh = g.h * g.cell * k;
-      if (dx > res || dz > res || dx + dw < 0 || dz + dh < 0) continue;
-      ctx.drawImage(img, dx, dz, dw, dh);
+    const s = this.size, res = this.canvas.width, step = res / 32;
+    // the window centred on the walker, in steps of s/32 — whole pixels, so it slides unresampled
+    const wx = (Math.round((x * res) / s / step) - 16) * step, wz = (Math.round((z * res) / s / step) - 16) * step;
+    if (force || Number.isNaN(this.wx)) {
+      // the first paint: all of it, now
+      this.job = null;
+      this.changed.length = 0;
+      const ctx = this.canvas.getContext('2d')!;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, res, res);
+      this.draw(ctx, wx, wz, 0, 0, [0, 0, res, res]);
+      this.show(wx, wz);
+      return true;
     }
-    ctx.filter = 'none';
-    const k = res / s;
-    ctx.setTransform(k, 0, 0, k, -x0 * k, -z0 * k);
-    this.painter.paint(ctx, x0, z0, x0 + s, z0 + s, k, this.level);
-    this.texture.needsUpdate = true;
-    this.box.set(x0, z0, 1 / s, 1 / s);
+    const cx = (this.wx * s) / res + s / 2, cz = (this.wz * s) / res + s / 2; // (the shown window's middle)
+    if (!this.job) {
+      const moved = Math.hypot(x - cx, z - cz) >= s * 0.22;
+      if (!moved && !this.changed.length) return false;
+      this.job = this.plan(moved ? wx : this.wx, moved ? wz : this.wz);
+      if (!this.job.todo.length) {
+        this.job = null; // (tiles changed out of its reach)
+        return false;
+      }
+    } else if (this.changed.length) this.job.todo.push(...this.rects(this.job.wx, this.job.wz)); // (with the new paint)
+    // A slice a frame (small ones together); four slices' worth while the walker nears the edge of
+    // the window shown (a fast flight). What a slice costs: its canvas (with the blur's margin), once
+    // for the strokes and once for each wash layer through the blur — one, or all three at the edge.
+    const job = this.job, edge = (r: Rect) => r[0] < CELL || r[1] < CELL || r[2] > res - CELL || r[3] > res - CELL;
+    const cost = (r: Rect) => (Math.min(res, r[2] + CELL) - Math.max(0, r[0] - CELL)) * (Math.min(res, r[3] + CELL) - Math.max(0, r[1] - CELL)) * (edge(r) ? 4 : 2);
+    const budget = ((Math.max(Math.abs(x - cx), Math.abs(z - cz)) > s * 0.36 ? 4 : 1) * res * res) / 16;
+    for (let spent = 0; job.todo.length; ) {
+      const c = cost(job.todo[0]);
+      if (spent && spent + c > budget) break;
+      this.paintRect(job, job.todo.shift()!);
+      spent += c;
+    }
+    if (!job.todo.length) {
+      this.show(job.wx, job.wz);
+      this.job = null;
+    }
     return true;
+  }
+  // Moving to (wx, wz): what's still in the window slides across, and the rest is listed. The whole
+  // window's wash fades out along its edges (the blur), so: the strip it moved onto, with the band
+  // that was the edge there; the band the move made the edge behind it; and where tiles changed.
+  // (Along an axis it didn't move on, the edge's band slides along itself and stays right.)
+  private plan(wx: number, wz: number) {
+    const res = this.canvas.width, N = res / CELL, m = new Uint8Array(N * N);
+    const dx = wx - this.wx, dz = wz - this.wz;
+    if (Math.abs(dx) >= res || Math.abs(dz) >= res) mark(m, N, 0, 0, res, res);
+    else if (dx || dz) {
+      const ctx = this.canvas.getContext('2d')!;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.filter = 'none';
+      ctx.globalCompositeOperation = 'copy';
+      ctx.drawImage(this.canvas, -dx, -dz);
+      ctx.globalCompositeOperation = 'source-over';
+      if (dx > 0) (mark(m, N, res - dx - CELL, 0, res, res), mark(m, N, 0, 0, CELL, res));
+      else if (dx < 0) (mark(m, N, 0, 0, CELL - dx, res), mark(m, N, res - CELL, 0, res, res));
+      if (dz > 0) (mark(m, N, 0, res - dz - CELL, res, res), mark(m, N, 0, 0, res, CELL));
+      else if (dz < 0) (mark(m, N, 0, 0, res, CELL - dz), mark(m, N, 0, res - CELL, res, res));
+    }
+    return { wx, wz, todo: [...slices(m, N, CELL, (res * res) / 32), ...this.rects(wx, wz)] };
+  }
+  // the changed boxes' part of the window at (wx, wz), as slices
+  private rects(wx: number, wz: number) {
+    const res = this.canvas.width, N = res / CELL, k = res / this.size, m = new Uint8Array(N * N);
+    let any = false;
+    for (const b of this.changed.splice(0)) {
+      const r: Rect = [b[0] * k - wx, b[1] * k - wz, b[2] * k - wx, b[3] * k - wz];
+      if (r[2] <= 0 || r[3] <= 0 || r[0] >= res || r[1] >= res) continue;
+      mark(m, N, r[0], r[1], r[2], r[3]);
+      any = true;
+    }
+    return any ? slices(m, N, CELL, (res * res) / 32) : [];
+  }
+  // One slice of the window being painted in, drawn on a canvas of its own with a CELL of margin (the
+  // blur's reach; none past the window's edge, where the whole window's wash fades out too) and
+  // copied in: the browser rasters it now, a slice's worth, not the whole move at the upload.
+  private paintRect(job: { wx: number; wz: number }, r: Rect) {
+    const res = this.canvas.width;
+    const sx = Math.max(0, r[0] - CELL), sz = Math.max(0, r[1] - CELL);
+    const sc = (this.slice ??= document.createElement('canvas'));
+    sc.width = Math.min(res, r[2] + CELL) - sx;
+    sc.height = Math.min(res, r[3] + CELL) - sz;
+    this.draw(sc.getContext('2d')!, job.wx, job.wz, sx, sz, r);
+    const ctx = this.canvas.getContext('2d')!, w = r[2] - r[0], h = r[3] - r[1];
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.filter = 'none';
+    ctx.clearRect(r[0], r[1], w, h);
+    ctx.drawImage(sc, r[0] - sx, r[1] - sz, w, h, r[0], r[1], w, h);
+  }
+  // The paint of the window at (wx, wz) that reaches r, onto ctx, whose pixel (0, 0) is the window's
+  // (ox, oz) — the whole window or a slice of it, the same wash and strokes.
+  private draw(ctx: CanvasRenderingContext2D, wx: number, wz: number, ox: number, oz: number, r: Rect) {
+    const s = this.size, res = this.canvas.width, k = res / s, x0 = (wx * s) / res, z0 = (wz * s) / res;
+    // The wash: the town lawn (past the bake; streamed tiles paint their paving on top), the land
+    // cover over it, softened. A land-cover layer lying opaque over all of r (a CELL in from its edges
+    // and the window's: past the blur's reach) hides what's under it there, so that isn't drawn.
+    let lawn = true;
+    const layers: [HTMLCanvasElement, number, number, number, number][] = [];
+    for (const { img, L } of this.covers) {
+      const g = L.g, dx = (g.x0 - x0) * k, dz = (g.z0 - z0) * k, dw = g.w * g.cell * k, dh = g.h * g.cell * k;
+      if (dx > res || dz > res || dx + dw < 0 || dz + dh < 0) continue;
+      if (Math.max(dx, 0) + CELL <= r[0] && Math.max(dz, 0) + CELL <= r[1] && Math.min(dx + dw, res) - CELL >= r[2] && Math.min(dz + dh, res) - CELL >= r[3]) (layers.length = 0), (lawn = false);
+      layers.push([img, dx, dz, dw, dh]);
+    }
+    ctx.setTransform(1, 0, 0, 1, -ox, -oz);
+    ctx.imageSmoothingEnabled = true;
+    if (lawn) {
+      // (a flat colour comes through the blur unchanged, but where it fades out at the window's edge)
+      ctx.filter = r[0] < CELL || r[1] < CELL || r[2] > res - CELL || r[3] > res - CELL ? `blur(${this.blur}px)` : 'none';
+      ctx.fillStyle = COVER[50];
+      ctx.fillRect(0, 0, res, res);
+    }
+    ctx.filter = `blur(${this.blur}px)`;
+    for (const [img, dx, dz, dw, dh] of layers) ctx.drawImage(img, dx, dz, dw, dh);
+    ctx.filter = 'none';
+    ctx.setTransform(k, 0, 0, k, -wx - ox, -wz - oz);
+    this.painter.paint(ctx, x0, z0, x0 + s, z0 + s, k, this.level, [x0 + r[0] / k, z0 + r[1] / k, x0 + r[2] / k, z0 + r[3] / k]);
+  }
+  private show(wx: number, wz: number) {
+    const s = this.size, res = this.canvas.width;
+    this.wx = wx;
+    this.wz = wz;
+    this.texture.needsUpdate = true;
+    this.box.set((wx * s) / res, (wz * s) / res, 1 / s, 1 / s);
   }
 }
 
