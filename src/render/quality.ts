@@ -45,7 +45,7 @@ export interface TierConfig {
 
 /** A tier's budget for the micro layer (world/microLayer.ts, render/impostor.ts). */
 export interface MicroTier {
-  /** frames per side of each piece's picture grid; picture size (px) for big (R ≥ 1.4 m) and small pieces */
+  /** frames per side of each piece's picture grid; picture size (px) for big (R ≥ 1.2 m) and small pieces */
   N: number; Fbig: number; Fsmall: number;
   /** the widest the atlas may be (px) */
   atlasW: number;

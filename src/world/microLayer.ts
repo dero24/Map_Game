@@ -22,11 +22,11 @@ export type { MicroTier };
 
 
 interface KindGeo { pos: Float32Array; nrm: Float32Array; col: Float32Array; tint: Uint8Array; n: number; R: number; F: number; dh: number; far: number }
-interface TileRec { d: Float32Array; box: [number, number, number, number, number, number]; near: Uint32Array; card: Uint32Array }
+interface TileRec { uid: number; d: Float32Array; box: [number, number, number, number, number, number]; near: Uint32Array; card: Uint32Array }
 
 /** Per piece: the picture size (px), where it hands over and how far its cards are drawn (m). */
 export function kindLod(R: number, T: Pick<MicroTier, 'Fbig' | 'Fsmall' | 'lo' | 'hi' | 'far' | 'band' | 'pxK'>) {
-  const F = R >= 1.4 ? T.Fbig : T.Fsmall;
+  const F = R >= 1.2 ? T.Fbig : T.Fsmall;
   const dh = handoverAt(R, F, T.pxK, T.lo, T.hi);
   // drawn until it's a couple of pixels tall, and always well past its hand-over
   const far = Math.min(T.far, Math.max(dh + T.band + 12, (R * T.pxK) / 2.5));
@@ -51,6 +51,8 @@ export class MicroLayer {
   private dirty = true;
   private seen = -1;
   private gen = 0;
+  private uids = 0;
+  private nearSig = 0;
   readonly stats = { records: 0, cards: 0, near: 0, nearVerts: 0, refillMs: 0, bakeMs: 0, atlasW: 0, atlasH: 0, atlasMB: 0, kinds: 0, ready: 0 };
 
   constructor(renderer: THREE.WebGLRenderer, readonly tier: MicroTier, pieces?: (THREE.BufferGeometry | null)[]) {
@@ -136,7 +138,7 @@ export class MicroLayer {
       z0 = Math.min(z0, d[i + 2]); z1 = Math.max(z1, d[i + 2]);
     }
     const n = Math.floor(d.length / MICRO_STRIDE);
-    this.tiles.set(id, { d, box: [x0, y0, z0, x1, y1, z1], near: new Uint32Array(n), card: new Uint32Array(n) });
+    this.tiles.set(id, { uid: ++this.uids, d, box: [x0, y0, z0, x1, y1, z1], near: new Uint32Array(n), card: new Uint32Array(n) });
     this.dirty = true;
   }
   remove(id: string) {
@@ -206,16 +208,53 @@ export class MicroLayer {
       cardL.length = T.cards;
     }
     for (const c of cardL) c.t.card[c.i] = gen;
-    // the 3D pieces into the merged mesh
-    const g = this.nearGeo, P = g.getAttribute('position').array as Float32Array, N = g.getAttribute('normal').array as Int8Array;
-    const C = g.getAttribute('color').array as Float32Array, F = g.getAttribute('aFade').array as Float32Array;
-    let v = 0, nN = 0;
+    // the 3D pieces: which (nearest first, under the caps) — and the same ones as last time, in the
+    // same hand, need no new upload
+    const take: { t: TileRec; i: number; d: number }[] = [];
+    let v = 0, sig = 0;
     for (const e of nearL) {
-      if (nN >= T.near) break;
-      const d = e.t.d, i = e.i * MICRO_STRIDE, G = K[d[i + 4] | 0]!;
+      if (take.length >= T.near) break;
+      const G = K[e.t.d[e.i * MICRO_STRIDE + 4] | 0]!;
       if (v + G.n > T.nearVerts) continue;
       e.t.near[e.i] = gen;
-      nN++;
+      take.push(e);
+      v += G.n;
+      sig = (Math.imul(sig ^ (e.t.uid * 1000003 + e.i), 2654435761) + (e.t.card[e.i] === gen ? 7 : 1)) | 0;
+    }
+    const nN = take.length, g = this.nearGeo;
+    if (sig !== this.nearSig || v !== g.drawRange.count) {
+      this.nearSig = sig;
+      this.writeNear(take, gen);
+    }
+    // the cards
+    const ap = this.cardGeo.getAttribute('aPos') as THREE.InstancedBufferAttribute, ai = this.cardGeo.getAttribute('aInfo') as THREE.InstancedBufferAttribute;
+    const A = ap.array as Float32Array, B = ai.array as Float32Array;
+    let n = 0;
+    for (const e of cardL) {
+      const d = e.t.d, i = e.i * MICRO_STRIDE;
+      A[n * 4] = d[i]; A[n * 4 + 1] = d[i + 1]; A[n * 4 + 2] = d[i + 2]; A[n * 4 + 3] = d[i + 3];
+      B[n * 4] = d[i + 4]; B[n * 4 + 1] = d[i + 5]; B[n * 4 + 2] = d[i + 6]; B[n * 4 + 3] = e.t.near[e.i] === gen ? 1 : 0;
+      n++;
+    }
+    for (const a of [ap, ai]) {
+      a.clearUpdateRanges();
+      if (n) a.addUpdateRange(0, n * 4);
+      a.needsUpdate = n > 0;
+    }
+    this.cardGeo.instanceCount = n;
+    const st = this.stats;
+    st.records = records; st.cards = n; st.near = nN; st.nearVerts = v;
+    st.refillMs = performance.now() - t0;
+  }
+
+  /** The chosen 3D pieces into the merged mesh: turned, scaled, painted, each vertex carrying its
+   *  piece's foot and hand-over (−1: it has no card and draws whole). */
+  private writeNear(take: { t: TileRec; i: number }[], gen: number) {
+    const K = this.kinds, g = this.nearGeo, P = g.getAttribute('position').array as Float32Array, N = g.getAttribute('normal').array as Int8Array;
+    const C = g.getAttribute('color').array as Float32Array, F = g.getAttribute('aFade').array as Float32Array;
+    let v = 0;
+    for (const e of take) {
+      const d = e.t.d, i = e.i * MICRO_STRIDE, G = K[d[i + 4] | 0]!;
       const x = d[i], y = d[i + 1], z = d[i + 2], yaw = d[i + 3], s = d[i + 5], rgb = d[i + 6];
       const c = Math.cos(yaw), sn = Math.sin(yaw);
       const tr = srgb((rgb >> 16) & 255), tg = srgb((rgb >> 8) & 255), tb = srgb(rgb & 255);
@@ -244,25 +283,6 @@ export class MicroLayer {
       a.needsUpdate = v > 0;
     }
     g.setDrawRange(0, v);
-    // the cards
-    const ap = this.cardGeo.getAttribute('aPos') as THREE.InstancedBufferAttribute, ai = this.cardGeo.getAttribute('aInfo') as THREE.InstancedBufferAttribute;
-    const A = ap.array as Float32Array, B = ai.array as Float32Array;
-    let n = 0;
-    for (const e of cardL) {
-      const d = e.t.d, i = e.i * MICRO_STRIDE;
-      A[n * 4] = d[i]; A[n * 4 + 1] = d[i + 1]; A[n * 4 + 2] = d[i + 2]; A[n * 4 + 3] = d[i + 3];
-      B[n * 4] = d[i + 4]; B[n * 4 + 1] = d[i + 5]; B[n * 4 + 2] = d[i + 6]; B[n * 4 + 3] = e.t.near[e.i] === gen ? 1 : 0;
-      n++;
-    }
-    for (const a of [ap, ai]) {
-      a.clearUpdateRanges();
-      if (n) a.addUpdateRange(0, n * 4);
-      a.needsUpdate = n > 0;
-    }
-    this.cardGeo.instanceCount = n;
-    const st = this.stats;
-    st.records = records; st.cards = n; st.near = nN; st.nearVerts = v;
-    st.refillMs = performance.now() - t0;
   }
 
   dispose() {
