@@ -76,9 +76,10 @@ export class Furnisher {
     }
     for (const Lg of P.landings) { this.keepOut[Lg.level]?.push(grow(Lg, 0.3)); if (Lg.level + 1 < P.levels) this.keepOut[Lg.level + 1].push(grow(Lg, 0.3)); }
     for (const H of P.holes) this.keepOut[H.level]?.push(grow(H, 0.3));
-    // doorways: a swing's worth either side, and the leaf standing open
+    // doorways: a swing's worth either side (a leaf's width and a hand), and the leaf standing open
     for (const dw of L.doors) {
-      const z = dw.ax === 0 ? { u0: dw.t - dw.w / 2 - 0.15, u1: dw.t + dw.w / 2 + 0.15, v0: dw.c - 1.0, v1: dw.c + 1.0 } : { u0: dw.c - 1.0, u1: dw.c + 1.0, v0: dw.t - dw.w / 2 - 0.15, v1: dw.t + dw.w / 2 + 0.15 };
+      const sw = Math.min(1.0, Math.max(0.9, dw.w + 0.1));
+      const z = dw.ax === 0 ? { u0: dw.t - dw.w / 2 - 0.15, u1: dw.t + dw.w / 2 + 0.15, v0: dw.c - sw, v1: dw.c + sw } : { u0: dw.c - sw, u1: dw.c + sw, v0: dw.t - dw.w / 2 - 0.15, v1: dw.t + dw.w / 2 + 0.15 };
       this.keepOut[dw.level]?.push(z);
     }
     for (const lf of leaves) {
@@ -290,7 +291,7 @@ export function skirtRoom(F: Furnisher, R: Room) {
 
 /** Furnish one room (a generator: yields between batches in a big one). */
 export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void> {
-  const P = F.P, rng = F.rng, d = F.d, k = R.level;
+  const P = F.P, rng = F.rng, d = F.d, k = R.level, L0 = F.L;
   if (R.type === 'shaft') return; // (a lift's: nothing in it, nobody sees it)
   const y = F.f(k), cy = F.ceil(k);
   if (R.type === 'void') {
@@ -380,17 +381,18 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
     // (a cottage's front door opens into this room: coats by the door, and the sofa along a side
     // wall a few steps in, where it's the first thing you see)
     const entry = k === 0 && R.r.u0 - 0.01 <= P.ud + 0.35 && R.r.u1 + 0.01 >= P.ud + 0.35 && R.r.v0 - 0.01 <= P.vd && R.r.v1 + 0.01 >= P.vd;
-    if (entry) coats();
-    // (a three-seater, else a loveseat where the walls between the doors are short)
+    // (a three-seater, else a loveseat where the walls between the doors are short; then the coats,
+    // by the door, wherever the sofa left a wall)
     let sp: Put | null = null, sw = 2.1;
-    for (const w of [2.1, 1.7]) {
+    for (const w of [2.1, 1.7, 1.5]) {
       sp = entry
         ? F.bestAgainst(R, S, w, 0.95, (p) => Math.abs(p.uc - P.ud - 3.6) + (p.side!.run === 0 ? 0 : 1.5) + (p.side!.ext ? 0.4 : 0))
         : F.against(R, S, w, 0.95, { noExt: rng.float() < 0.5 });
       if (sp) { sw = w; break; }
     }
+    if (sp) F.claim(k, sp.r);
+    if (entry) coats();
     if (sp) {
-      F.claim(k, sp.r);
       sofa(sp, sw);
       const o = out(sp);
       // a coffee table in front, a rug under both, a lamp on a side table
@@ -432,13 +434,15 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
   const kitchen = (dining: boolean) => {
     const sideLen = Math.max(...S.flatMap((x) => x.solid.map(([a, b]) => b - a)), 0);
     const len = Math.min(3.9, Math.max(2.1, q(sideLen - 0.5, 0.3)));
-    let kp: Put | null = null;
+    let kp: Put | null = null, low = false;
     for (const L of [len, len - 0.6, len - 1.2]) if (L >= 2.0 && (kp = F.against(R, S, L, 0.64, { tall: true }))) break;
+    // (no wall long enough between the windows: the run under one — the sink under the window)
+    if (!kp) for (const L of [len, len - 0.6, 1.8, 1.5]) if (L >= 1.5 && (kp = F.against(R, S, L, 0.64, { tries: 20 }))) { low = true; break; }
     if (kp) {
       F.claim(k, kp.r);
       const L = q(kp.s1 - kp.s0);
       const cab = rng.float() < 0.6 ? 0xf2efe6 : F.pick([0x9fb3a5, 0x5f7a8c, 0xd9cbb0]);
-      F.put(`kitchen:${L.toFixed(1)}`, () => D.kitchenRun(L), kp.uc, kp.vc, y, kp.ax, cab);
+      F.put(`kitchen:${L.toFixed(1)}${low ? ':low' : ''}`, () => D.kitchenRun(L, undefined, undefined, !low), kp.uc, kp.vc, y, kp.ax, cab);
       const o = out(kp);
       F.npcs.push([kp.uc + o[0] * 0.42 - kp.ax[0] * 0.3 * (L / 3), kp.vc + o[1] * 0.42 - kp.ax[1] * 0.3 * (L / 3), y, yawTo(-o[0], -o[1])]);
       // (a clear stretch in front of the run)
@@ -447,23 +451,46 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
     if (dining) diningSet(area > 12);
   };
   const diningSet = (big: boolean) => {
-    const w = big ? 1.8 : 1.2, dd = 0.9;
-    const tp = F.anywhere(R, w + 1.3, dd + 1.3, 0.25) ?? F.anywhere(R, w + 1.0, dd + 1.0, 0.1);
-    if (!tp) return;
+    // (the table along the room's longer way where it fits, else across it; a smaller one, else none.
+    // A cottage's kitchen eats into the living room in front of it — one space — when it's shallow)
+    const open = L0.rooms.find((q) => q.id !== R.id && q.level === k && q.space === R.space && Math.abs(q.r.u1 - R.r.u0) < 0.02 && q.r.v0 <= R.r.v0 + 0.02 && q.r.v1 >= R.r.v1 - 0.02);
+    const RD: Room = open ? { ...R, r: { ...R.r, u0: Math.max(open.r.u0, R.r.u0 - 1.6) } } : R;
+    const alongU = RD.r.u1 - RD.r.u0 >= RD.r.v1 - RD.r.v0;
+    let tp: Put | null = null, w = 1.2, rotU = true;
+    for (const [bw, au, m] of [[big ? 1.8 : 1.2, alongU, 0.25], [big ? 1.8 : 1.2, !alongU, 0.25], [1.2, alongU, 0.1], [1.2, !alongU, 0.1]] as [number, boolean, number][]) {
+      const pad = m > 0.2 ? 1.3 : 1.0;
+      tp = au ? F.anywhere(RD, bw + pad, 0.9 + pad, m) : F.anywhere(RD, 0.9 + pad, bw + pad, m);
+      if (tp) { w = bw; rotU = au; break; }
+    }
+    if (!tp) {
+      // (no room for a table and its chairs round it: a little round one for two, under the window
+      // or by the wall)
+      const sp = F.anywhere(RD, 1.5, 0.8, 0.1, 16) ?? F.anywhere(RD, 0.8, 1.5, 0.1, 16);
+      if (!sp) return;
+      F.claim(k, sp.r);
+      const au = sp.r.u1 - sp.r.u0 > sp.r.v1 - sp.r.v0, cc = rng.float() < 0.5 ? wood : 0xf1ede4;
+      F.put('cafeTable:0', () => D.roundTable(0.35, 0.74, 0xffffff), sp.uc, sp.vc, y, [1, 0], wood);
+      for (const s of [-1, 1]) chair(sp.uc + (au ? s * 0.5 : 0), sp.vc + (au ? 0 : s * 0.5), au ? [-s, 0] : [0, -s], cc);
+      return;
+    }
     F.claim(k, tp.r);
-    const uc = tp.uc, vc = tp.vc;
-    const tr = { u0: uc - w / 2, u1: uc + w / 2, v0: vc - dd / 2, v1: vc + dd / 2 };
+    const dd = 0.9, uc = tp.uc, vc = tp.vc;
+    // (in the table's own frame: s along it, t across; mapped to u, v)
+    const at = (s: number, t: number): [number, number] => (rotU ? [uc + s, vc + t] : [uc + t, vc + s]);
+    const tr = rotU ? { u0: uc - w / 2, u1: uc + w / 2, v0: vc - dd / 2, v1: vc + dd / 2 } : { u0: uc - dd / 2, u1: uc + dd / 2, v0: vc - w / 2, v1: vc + w / 2 };
     table(tr, 0.76, wood);
     const cc = rng.float() < 0.5 ? wood : 0xf1ede4;
-    const n = big ? 3 : 2;
+    const n = w > 1.5 ? 3 : 2;
+    const face = (s: number, t: number): P2 => (rotU ? [s, t] : [t, s]);
     for (let i = 0; i < n; i++) {
-      const uu = tr.u0 + (w * (i + 0.5)) / n;
-      chair(uu, tr.v0 - 0.32, [0, 1], cc);
-      chair(uu, tr.v1 + 0.32, [0, -1], cc);
+      const s = -w / 2 + (w * (i + 0.5)) / n;
+      chair(...at(s, -dd / 2 - 0.32), face(0, 1), cc);
+      chair(...at(s, dd / 2 + 0.32), face(0, -1), cc);
     }
-    if (big) { chair(tr.u0 - 0.34, vc, [1, 0], cc); chair(tr.u1 + 0.34, vc, [-1, 0], cc); }
+    if (w > 1.5) { chair(...at(-w / 2 - 0.34, 0), face(1, 0), cc); chair(...at(w / 2 + 0.34, 0), face(-1, 0), cc); }
     d.box(uc - 0.12, uc + 0.12, vc - 0.12, vc + 0.12, y + 0.76, y + 0.86, F.pick([0x7fa0b8, 0xe0a33b, 0xf1ede4]), IP.porcelain);
-    F.npcs.push([tr.u0 + w / (2 * n), tr.v0 - 0.3, y, yawTo(0, 1), 0.465]);
+    const sp = at(-w / 2 + w / (2 * n), -dd / 2 - 0.3), fc = face(0, 1);
+    F.npcs.push([sp[0], sp[1], y, yawTo(fc[0], fc[1]), 0.465]);
   };
   const bedroom = () => {
     const dbl = R.bed !== 1;
@@ -525,11 +552,15 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
   /** Coats on their rail by the front door (a house's hall, a cottage's living room): its middle
    *  about a metre and a half in, between the windows. */
   const coats = () => {
-    const co = F.bestAgainst(R, S, 1.0, 0.3, (p) => Math.abs(Math.hypot(p.uc - P.ud, p.vc - P.vd) - 1.5) + (p.side!.ext ? 0.3 : 0), { tall: true });
-    if (!co) return;
-    F.claim(k, grow(co.r, 0.05));
-    const ci = Math.floor(F.fp.seed * 613) % 8;
-    F.put(`coats:${ci}`, () => D.coatRail(1.0, 3 + (ci % 2), ci + 1), co.uc, co.vc, y, co.ax, wood);
+    // (a metre of rail, else 80 cm where the doorways leave less)
+    for (const w of [1.0, 0.8]) {
+      const co = F.bestAgainst(R, S, w, 0.3, (p) => Math.abs(Math.hypot(p.uc - P.ud, p.vc - P.vd) - 1.5) + (p.side!.ext ? 0.3 : 0), { tall: true });
+      if (!co) continue;
+      F.claim(k, grow(co.r, 0.05));
+      const ci = Math.floor(F.fp.seed * 613) % 8;
+      F.put(`coats:${ci}:${w}`, () => D.coatRail(w, 3 + (ci % 2), ci + 1), co.uc, co.vc, y, co.ax, wood);
+      return;
+    }
   };
   /** A house's hall, the way in: a bordered runner down its way along from the doormat, the console
    *  with its lamp lit and a mirror over it on a wall ahead of the door (where you see it as you
@@ -542,15 +573,18 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
       const vc = (pa.v0 + pa.v1) / 2, pi = Math.floor(F.fp.seed * 977) % RUNNERS.length, [bd, fig, field] = RUNNERS[pi];
       F.put(`runner:${len.toFixed(1)}:${rw.toFixed(1)}:${pi}`, () => D.runner(len, rw, bd, fig), r0 + len / 2, vc, y + 0.011, [1, 0], field);
     }
-    const cp = F.bestAgainst(R, S, 1.0, 0.34, (p) => Math.abs(p.uc - P.ud - 3.2) + (p.side!.ext ? 0.8 : 0), { keys: ['v0', 'v1'], tall: true }) ?? F.against(R, S, 1.0, 0.34, { tall: true });
+    // (a metre long, else 80 cm between the doorways; ahead of the door, where you see it coming in)
+    let cp: Put | null = null, cw = 1.0;
+    for (const w of [1.0, 0.8]) if ((cp = F.bestAgainst(R, S, w, 0.34, (p) => Math.abs(p.uc - P.ud - 5.0) + (p.side!.ext ? 0.8 : 0), { keys: ['v0', 'v1'], tall: true }) ?? F.against(R, S, w, 0.34, { tall: true }))) { cw = w; break; }
     if (cp && cp.side) {
       F.claim(k, grow(cp.r, 0.05));
       const base = F.pick([0x7fa0b8, 0xe9e2d0, 0x3f6f78, 0xc96b4b]);
-      F.put(`console:${base}`, () => D.consoleLamp(1.0, base), cp.uc, cp.vc, y, cp.ax, wood);
+      F.put(`console:${cw}:${base}`, () => D.consoleLamp(cw, base), cp.uc, cp.vc, y, cp.ax, wood);
       // (the lamp at its left end, as you face it; its light on the wall and the runner)
-      F.glow(cp.uc - cp.ax[0] * 0.3, cp.vc - cp.ax[1] * 0.3, y + 1.25, 0.7);
-      const mid = (cp.s0 + cp.s1) / 2, mr = F.wrect(cp.side, mid - 0.35, mid + 0.35, 0, 0.036);
-      F.put('mirror', () => D.mirror(0.7, 0.9), (mr.u0 + mr.u1) / 2, (mr.v0 + mr.v1) / 2, y + 1.12, cp.ax, rng.float() < 0.5 ? 0xc9a74a : wood);
+      const lx = cw / 2 - 0.2;
+      F.glow(cp.uc - cp.ax[0] * lx, cp.vc - cp.ax[1] * lx, y + 1.25, 0.7);
+      const mw = cw - 0.25, mid = (cp.s0 + cp.s1) / 2, mr = F.wrect(cp.side, mid - mw / 2, mid + mw / 2, 0, 0.036);
+      F.put(`mirror:${mw.toFixed(2)}`, () => D.mirror(mw, 0.9), (mr.u0 + mr.u1) / 2, (mr.v0 + mr.v1) / 2, y + 1.12, cp.ax, rng.float() < 0.5 ? 0xc9a74a : wood);
       F.claim(k, F.wrect(cp.side, cp.s0, cp.s1, 0, 0.12));
     }
     coats();

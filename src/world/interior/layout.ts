@@ -294,9 +294,10 @@ function houseStorey(B: Builder, k: number) {
   // (no wall between) when the strip is deep enough, else one great room
   const stripRects = svc ? minus(S, svc) : [S];
   const hallParts: { r: Rect; t: RoomType }[] = [];
+  let cutK: number | null = null;
   if (great) {
     const D = S.u1 - S.u0;
-    const cutK = D >= GREAT_SPLIT ? S.u1 - Math.max(2.8, Math.min(3.8, D * 0.42)) : null;
+    cutK = D >= GREAT_SPLIT ? S.u1 - Math.max(2.8, Math.min(3.4, D * 0.4)) : null;
     for (const r of stripRects) {
       if (cutK === null) hallParts.push({ r, t: 'great' });
       else {
@@ -334,25 +335,27 @@ function houseStorey(B: Builder, k: number) {
       // the living room opens off the hall through a cased opening (≥ 1.2 m, no door), its middle
       // within 30° of the front door's axis — far enough along the hall that you see into it as you
       // step in: t − ud ≥ |v − vd| · cot 30°
-      const v = q.low ? S.v0 : S.v1, near = P.ud + Math.abs(v - P.vd) / Math.tan((LIVING_ANGLE * Math.PI) / 180) + 0.05;
+      // (and a few steps in, ~4 m, where it's still ahead of you once you're through the door)
+      const v = q.low ? S.v0 : S.v1, near = P.ud + Math.abs(v - P.vd) / Math.tan((LIVING_ANGLE * Math.PI) / 180) + 0.05, want = Math.max(near, P.ud + 4.2);
       let pick: { h: number; w: number; t: number; s: number } | null = null;
       for (const [h, s0, s1] of st)
         for (const ow of [1.6, 1.4, LIVING_OPEN]) {
           if (s1 - s0 < ow) continue;
-          const t = Math.max(s0 + ow / 2, Math.min(s1 - ow / 2, near));
-          const s = (t < near - 0.01 ? 10 + near - t : 0) + (1.6 - ow) * 2 + Math.max(0, t - near) * 0.3;
+          const t = Math.max(s0 + ow / 2, Math.min(s1 - ow / 2, want));
+          const s = (t < near - 0.01 ? 10 + near - t : 0) + (1.6 - ow) * 2 + Math.abs(t - want) * 0.3;
           if (!pick || s < pick.s) pick = { h, w: ow, t, s };
           break;
         }
       if (pick) { B.link(pick.h, id, pick.w, { pref: pick.t, wide: true }); continue; }
     }
-    // (one doorway off the hall: from the part of it with the longest free stretch along the room — a
-    // cottage's off its kitchen end where it can, else as near the front as it goes, so the living
-    // room keeps a long wall for its sofa)
+    // (one doorway off the hall: from the part of it with the longest free stretch along the room. A
+    // cottage's keep to the ends of its living room's walls and the front of its kitchen's — where the
+    // two meet, or by the front wall — so the sofa and the kitchen's run each keep a long wall)
     let bh = -1, bl = 0, pref: number | undefined;
     for (const [h, s0, s1] of st) {
-      const len = s1 - s0 + (great && B.rooms[h].type === 'kitchen' && s1 - s0 >= 0.8 ? 99 : 0);
-      if (len > bl) (bl = len), (bh = h), (pref = great && B.rooms[h].type !== 'kitchen' ? s0 + 0.45 : undefined);
+      const kit = great && B.rooms[h].type === 'kitchen';
+      const len = s1 - s0 + (kit && s1 - s0 >= 0.8 ? 99 : 0);
+      if (len > bl) (bl = len), (bh = h), (pref = !great ? undefined : kit ? s0 + 0.45 : cutK !== null && q.r.u1 >= cutK - 0.05 ? s1 - 0.45 : s0 + 0.45);
     }
     if (bh >= 0) B.link(bh, id, q.hall >= w ? w : 0.8, pref !== undefined ? { pref } : {});
   }

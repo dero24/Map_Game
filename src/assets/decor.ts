@@ -273,21 +273,24 @@ const box = (w: number, h: number, d: number, x: number, y: number, z: number) =
 
 /** A fitted kitchen along a wall, `len` long: base units with a worktop, sink, hob and oven, wall
  *  units and a hood above, a tall fridge at the end. Cabinet fronts take the tint. */
-export function kitchenRun(len: number, top = 0x4a4540, splash = 0xe9eef0): Parts {
-  const fr = 0.8, run = Math.max(1.2, len - fr - 0.05), x0 = -len / 2;
+export function kitchenRun(len: number, top = 0x4a4540, splash = 0xe9eef0, wall = true): Parts {
+  // (`wall` false: the run under a window — base units and worktop with the sink, no wall units, no
+  // hood, no fridge, a low upstand for a splashback)
+  const fr = 0.8, run = wall ? Math.max(1.2, len - fr - 0.05) : len, x0 = -len / 2;
   const out: Parts = [
     P(box(run, 0.08, 0.56, x0 + run / 2, 0, 0.02), 'solid', 0x2e2a26), // plinth
     P(box(run, 0.8, 0.6, x0 + run / 2, 0.08, 0), 'solid', T), // base units
     P(box(run + 0.02, 0.04, 0.64, x0 + run / 2, 0.88, -0.01), 'porcelain', top), // worktop
-    P(box(run, 0.53, 0.015, x0 + run / 2, 0.92, 0.3), 'porcelain', splash), // backsplash
-    P(box(run, 0.75, 0.36, x0 + run / 2, 1.45, 0.12), 'solid', T), // wall units
+    P(box(run, wall ? 0.53 : 0.1, 0.015, x0 + run / 2, 0.92, 0.3), 'porcelain', splash), // backsplash
   ];
+  if (wall) out.push(P(box(run, 0.75, 0.36, x0 + run / 2, 1.45, 0.12), 'solid', T)); // wall units
   for (let x = x0 + 0.5; x < x0 + run - 0.1; x += 0.5) out.push(P(box(0.012, 0.66, 0.01, x, 0.14, -0.305), 'solid', 0x8d8a84)); // door joins
   const sink = x0 + run * 0.35, hob = x0 + run * 0.72;
   out.push(P(box(0.6, 0.06, 0.4, sink, 0.865, -0.02), 'porcelain', 0x8e969a));
   out.push(P(box(0.04, 0.28, 0.04, sink, 0.92, 0.2), 'porcelain', 0xc0c4c6));
   out.push(P(box(0.64, 0.012, 0.56, hob, 0.92, -0.01), 'solid', 0x222326));
   out.push(P(box(0.6, 0.6, 0.012, hob, 0.15, -0.31), 'glass', 0x2a2b2e)); // oven door
+  if (!wall) return out;
   out.push(P(box(0.76, 0.1, 0.4, hob, 1.35, 0.1), 'porcelain', 0xb8bcbf)); // hood
   out.push(P(box(fr, 1.9, 0.62, x0 + run + 0.05 + fr / 2, 0, 0), 'porcelain', 0xe4e5e1)); // fridge
   out.push(P(box(0.04, 0.7, 0.03, x0 + run + 0.05 + fr - 0.1, 0.9, -0.325), 'metal', 0x8a8e90));

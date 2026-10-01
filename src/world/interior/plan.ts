@@ -515,10 +515,11 @@ function planHouse(C: Ctx): boolean {
       if ((wA > 1e-6 && wA < 1.0) || (wB > 1e-6 && wB < 1.0)) continue;
       // (a hall as narrow as it goes; a cottage's living room a little wider than its least, with a
       // bedroom's width beside it — never the whole house)
-      // (a two-storey cottage's stair goes up an inside wall, a room either side of its landing)
+      // (a two-storey cottage's stair goes up an inside wall, a room either side of its landing; the
+      // front door near the living room's middle, so you step in with the room either side of you)
       let s = cottage
-        ? Math.abs(w - swMin - 0.6) * 0.6 + Math.max(0, w - swMin - 1.4) * 1.5 + sidePen(wA) + sidePen(wB) + (wA < 2.2 && wB < 2.2 ? 4 : 0) + (kind && (wA <= 1e-6 || wB <= 1e-6) ? 1.5 : 0) + rng.float() * 0.3
-        : (w - swMin) * 0.6 + Math.max(0, w - swMin - 1.2) * 1.5 + sidePen(wA) + sidePen(wB) + (wA < 2.75 && wB < 2.75 ? 2.5 : 0) + rng.float() * 0.3;
+        ? Math.abs(w - swMin - 0.6) * 0.6 + Math.max(0, w - swMin - 1.4) * 1.5 + sidePen(wA) + sidePen(wB) + (wA < 2.2 && wB < 2.2 ? 4 : 0) + (kind && (wA <= 1e-6 || wB <= 1e-6) ? 1.5 : 0) + Math.abs(P.vd - (a + b + (kind ? (lowOf(a, b) === false ? -sl : sl) : 0)) / 2) * 0.4 + rng.float() * 0.3
+        : (w - swMin) * 0.6 + Math.max(0, w - swMin - 1.2) * 1.5 + sidePen(wA) + sidePen(wB) + (wA < 2.75 && wB < 2.75 ? 2.5 : 0) + Math.abs(P.vd - (a + b + (kind ? (lowOf(a, b) === false ? -sl : sl) : 0)) / 2) * 0.25 + rng.float() * 0.3;
       if (w > swMax) s += 0.8; // a hall grown over a sliver of side
       if (kind) { const lo = lowOf(a, b); if (lo === null ? !onPassage(a, b, true) && !onPassage(a, b, false) : !onPassage(a, b, lo)) s += 1.5; }
       if (!best || s < best.s) best = { a, b, s };
