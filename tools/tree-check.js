@@ -114,6 +114,7 @@ window.__TREECHECK__ = async (tag = 't', opts = {}) => {
   window.__MONTAGE_CLOSE__?.();
   L.mode = 0;
   // the masks on a sheet of their own
+  if (!masks.length) return { tree: { ...tr, kind: tr.n }, stats: { ...L.stats }, sheet: out, masks: 0 };
   const CW = 480, CH = Math.round((CW * masks[0].c.height) / masks[0].c.width), PAD = 22;
   const sheet = document.createElement('canvas');
   sheet.width = CW * masks.length; sheet.height = CH + PAD;

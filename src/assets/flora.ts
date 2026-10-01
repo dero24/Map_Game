@@ -710,7 +710,7 @@ function paintCluster(acc: Float32Array, W: number, ox: number, oy: number, S: n
     // centred on the point, or every picture would have a hole where the leaves start)
     const out = th + (rng.float() - 0.5) * (rr < 0.25 ? 6.28 : 2.4), Lf = L0 * (0.8 + 0.35 * rng.float());
     const cx = x - Math.cos(out) * Lf * 0.45, cyy = y - Math.sin(out) * Lf * 0.45;
-    if (needles) tuft(rr < 0.3 ? x : cx, rr < 0.3 ? y : cyy, out, L0 * 0.85, 0.42 + 0.3 * rr + 0.12 * rng.float());
+    if (needles) tuft(x - Math.cos(out) * L0 * 0.4, y - Math.sin(out) * L0 * 0.4, out, L0 * 0.85, 0.42 + 0.3 * rr + 0.12 * rng.float());
     else leaf(cx, cyy, out, Lf, 0.4, 0.4 + 0.32 * rr + 0.12 * rng.float());
   }
   // then the sprays' leaves (or tufts) over it, alternating along each twig, lighter toward the

@@ -189,13 +189,18 @@ the sky between the leaves. Past it, the tiles' own solid crowns, as before.
   position attribute folds to a point far underground, so an override pass — the id pass, the shadow
   pass — draws nothing of it), turned a little and every other one mirrored, swaying with the far
   crown's own wind and rocking in it. The picture is cut out leaf by leaf (alpha test, eased as the
-  mips shrink it). Lit as the far crown is: the crown's sphere field (its middle and radius, the
-  same ×1.4 flattening), 30% of the cluster's own roundness, the far crown's underside AO and the
-  heart darker, the instance green × each leaf's shade, pigment, snow, the autumn turn by the
-  species' fall hue, leaf fall leaf by leaf, the cherry's blossom. The shadow map holds the far
-  crown's solid ball (the shadow pass's override draws every far instance whole, so the near tree's
-  shadow is the far one's): a card looks it up from where the sun's ray leaves its crown, so only
-  buildings and other trees shade it. The near wood casts nothing of its own for the same reason.
+  mips shrink it). Each card stands at the front of its cluster (pushed toward the eye by 45% of
+  its half-width, drawn as large as from the cluster's middle), so the limbs inside a cluster go
+  behind its leaves. Lit as the far crown is: each pixel takes the normal of the crown's ball
+  (its middle and radius, the same ×1.4 flattening) where its sight line meets the ball's front —
+  what the far crown shows there; the card's own place inside the crown would turn every leaf
+  toward the eye and darken the crown a shade at the hand-over — with 25% of the cluster's own
+  roundness, the far crown's underside AO and the heart's cards darker, the instance green × each
+  leaf's shade, pigment, snow, the autumn turn by the species' fall hue, leaf fall leaf by leaf,
+  the cherry's blossom. The shadow map holds the far crown's solid ball (the shadow pass's override
+  draws every far instance whole, so the near tree's shadow is the far one's): a card looks it up
+  from that ball's surface stepped toward the sun, as the far crown does, so only buildings and
+  other trees shade it. The near wood casts nothing of its own for the same reason.
 - **Budgets** (`render/quality.ts` `TREE_TIERS`, tested in `tests/foundry.test.ts` and
   `tests/nearTrees.test.ts`): ≤ 2,500 vertices a near tree; desktop 160 trees to 30 m (band 6),
   phone 40 to 24 m (band 5), low 20 to 16 m (band 4, 128 px pictures); leaf atlas 1024 × 512 RGBA
