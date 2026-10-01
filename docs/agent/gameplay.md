@@ -303,8 +303,10 @@ once, from the map and seeds. No place names: a beach is a mapped `beach`, a mar
   carries its hours (`KERB_STRIDE` 13: … arrive, leave). Its walls go in the builders' scratch walk
   only (`scratchOnly`: what's placed after keeps off the stall); `kerbCars.ts` draws it, finds it
   for E and walls it only in its hours — one collision scope a car (−1,000,000 down), in and out of
-  the walk world as it arrives and leaves (`KerbCars.walls` = the walk world; `update(x, z, hour)`).
-  Other lots keep the town's fill (built density, `OCCUPANCY`) all day.
+  the walk world as it arrives and leaves (`KerbCars.walls` = the walk world; `update(x, z, hour,
+  view)`). One due to arrive or leave within 140 m in front of you waits until you look away (a jump
+  of the clock — a shot, the panel — applies at once); its walls follow what's drawn. Other lots
+  keep the town's fill (built density, `OCCUPANCY`) all day.
 - **Marinas and docks** (`docks.ts` `shoreDocks`, called in `tileBuild.ts` before the structures):
   - a mapped marina's waterline — the distance-to-water field's zero line through it (or within 6 m
     of its outline: an outline round the basin is the bulkhead), marching squares on 1.5 m — gets
@@ -333,10 +335,16 @@ once, from the map and seeds. No place names: a beach is a mapped `beach`, a mar
     (`PLAY`, 0.56–0.72 scale), some a parent wading waist-deep; a lifeguard on each stand's seat
     (`GUARD`, `GUARD_SEAT` 2.88 m — the stand gained the seat) in season, 10–17. Each party shares
     a window over `beachDay`. Out of season there's no gear and nobody on it.
+  - The gear comes and goes with its people: the stands' summer beach (props.ts `beach.gear`) is
+    appended to the tile's micro records, and every umbrella, chair, towel and cooler carries its
+    party's hours in the record's `flags` (`packWindow`; 0 = all day). `microLayer.ts` draws a
+    flagged piece only in its hours (`update(…, camera, hour)`), holding one in front of you like
+    the crowd does. No more empty umbrellas at eight in the morning.
   - `CrowdLayer` draws every tile's records: the nearest in the full body, the rest in the lite one
     (`people.ts` `personLiteGeometry`, ~250 vertices, the same joints/parts/markers) out to
-    `farR`, two draws (`beach-people`, `beach-people:lite`); `CROWD_TIERS`: desktop 120 + 1,400
-    to 420 m, phone 40 + 280 to 240 m (half `CAPS.peds`), low 20 + 140. Refilled every 4 m walked
+    `farR`, two draws (`beach-people`, `beach-people:lite`; no shadow — the shadow pass would draw
+    the standing body); `CROWD_TIERS`: desktop 120 + 1,400 to 420 m, phone 40 + 280 to 240 m (half
+    `CAPS.peds`), low 20 + 140. Refilled every 4 m walked
     or ~1 minute of the clock; someone due to come or go in front of you within 140 m waits until
     you look away (a jump of the clock — a shot, the panel — applies at once). `crowd.people()`
     lists who's drawn (probes).
