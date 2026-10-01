@@ -281,10 +281,14 @@ function houseStorey(B: Builder, k: number) {
     // (a hall house's living room wants the passage side of the hall, where its wide opening fits:
     // the stair's side has room for a door before the stair at most)
     const passLow = lane ? !laneLow : null;
+    // (a wet room along the passage stands where the living room's opening goes: it mustn't leave
+    // the hall's wall on that side too short for an opening within 30° of the door's axis)
+    const vp = laneLow ? S.v1 : S.v0;
+    const blocksLiving = !!svc && !!lane && k === 0 && !great && (laneLow ? svc.v1 >= S.v1 - 0.01 && svc.v0 > S.v0 + 0.01 : svc.v0 <= S.v0 + 0.01 && svc.v1 < S.v1 - 0.01) && svc.u0 < P.ud + Math.abs(vp - P.vd) / Math.tan((LIVING_ANGLE * Math.PI) / 180) + LIVING_OPEN / 2 + 0.3;
     for (const combo of combos) {
       const rs = combo.flatMap((parts, si) => parts.map((r) => ({ r, low: sides[si].low, hall: freeOf(sides[si].low, r) })));
       const c = assign(rs, k, n, !!svc, great, passLow);
-      const sc = c.s + rng.float() * 0.4;
+      const sc = c.s + rng.float() * 0.4 + (blocksLiving ? 4 : 0);
       if (!best || sc < best.s) best = { rooms: c.rooms, s: sc, svc };
     }
   }

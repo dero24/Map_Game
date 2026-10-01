@@ -78,7 +78,8 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
   - A bigger house keeps its hall: the stair's foot no more than 40° off the door's axis (a door far
     across a wide hall pushes the foot further in), the living room on the passage side, opening off
     the hall through a cased opening of 1.2–1.6 m (`LIVING_OPEN`; no leaf over 1.15 m) whose middle is
-    within 30° of the axis (`LIVING_ANGLE`: t − ud ≥ |v − vd| · cot 30°).
+    within 30° of the axis (`LIVING_ANGLE`: t − ud ≥ |v − vd| · cot 30°). A WC along a wide hall's
+    passage side is passed over when it would leave that wall too short for such an opening.
   - The hall at the front door (`furnish.ts` `wayIn`): a bordered runner down its way past the stair, the
     console with its lamp lit (always) and a mirror over it on a wall ahead of the door (`bestAgainst`:
     the best spot by a score, not the first random one), coats on their rail by the door (a cottage hangs
