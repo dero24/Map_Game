@@ -143,7 +143,8 @@ describe('people', () => {
     expect(Math.abs(b.min.y)).toBeLessThan(0.02);
     expect(b.max.y).toBeGreaterThan(1.65);
     expect(b.max.y).toBeLessThan(1.85);
-    expect(verts(g)).toBeLessThan(1800); // (headphones joined the wardrobe: 180 vertices)
+    expect(verts(g)).toBeLessThan(1600); // (indexed and smooth: tests/people.test.ts holds it at arm's length)
+    expect(g.getAttribute('aSkin').count).toBe(verts(g));
     for (const id of [1, 2, 5, 6]) expect(partCount(g, id)).toBeGreaterThan(0); // legs and arms swing
     HAIRSTYLES.forEach((_, i) => expect(partCount(g, 9 + i)).toBeGreaterThan(0));
     expect(partCount(g, 14)).toBeGreaterThan(0); // headphones, worn per person
@@ -154,16 +155,18 @@ describe('people', () => {
       expect(n).toBeGreaterThan(0);
     }
   });
-  it('the lite body (a beach crowd past ~40 m): the full body\'s joints, parts and markers in under 300 vertices', () => {
+  it('the lite body (a beach crowd small on screen): the full body\'s joints, parts, skin weights and markers in under 300 vertices', () => {
     const g = personLiteGeometry(), full = personGeometry();
     const b = bb(g), bf = bb(full);
     expect(finite(g)).toBe(true);
     expect(Math.abs(b.min.y)).toBeLessThan(0.03);
     expect(Math.abs(b.max.y - bf.max.y)).toBeLessThan(0.12); // (the same height: the same pose)
     expect(verts(g)).toBeLessThan(300);
+    expect(g.getAttribute('aSkin').count).toBe(verts(g)); // (the shader poses it like the full body)
     for (const id of [0, 1, 2, 5, 6, 9]) expect(partCount(g, id)).toBeGreaterThan(0);
     const col = g.getAttribute('color');
-    for (const m of Object.values(MARK)) {
+    // (no shoes or thigh band at that size: the clothes' own markers)
+    for (const m of [MARK.skin, MARK.hair, MARK.pants, MARK.shin, MARK.forearm]) {
       let n = 0;
       for (let i = 0; i < col.count; i++) if (col.getX(i) === m[0] && col.getY(i) === m[1] && col.getZ(i) === m[2]) n++;
       expect(n).toBeGreaterThan(0);

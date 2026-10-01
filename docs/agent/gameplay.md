@@ -387,6 +387,23 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 - Pure sim in `src/sim/lifeSim.ts` (testable), worker wrapper `ambient.worker.ts`,
   renderer/client `life.ts`, shared layout `protocol.ts` (SAB when cross-origin isolated,
   transferable copies otherwise). Sound: `src/audio/ambience.ts` (all synthesized).
+- Walkers are the foundry's person (`people.ts`), posed in the shader from `aAnim` (phase,
+  amount — 0 standing, 1 walking, 1.5 running, the knockdown and chat codes — and the lead). One
+  draw for all of them (`life-ped`), the residents and the café guests too, each in its own mesh.
+  - Standing (a pause, a chat, a corner) is never frozen: the weight goes over one foot, then the
+    other, the free knee easing, the head looking about (`walkPose`'s idle).
+  - **Dog walkers** (`PED.DOG`): `life.ts` `walkDog` puts the dog a lead's length ahead and to the
+    right, on the walker's own ground, and tells the walker's shader `aAnim.z` = 1 + how far the
+    dog has wandered sideways — the right arm holds the lead out toward it. The lead (`LEAD_V` 8
+    vertices, four segments sagging a little) runs from `leadHand` — the shader's own pose maths
+    on the CPU, so it ends in the drawn hand (within 2 cm: `tests/people.test.ts`) — to the
+    dog's collar (`DOG_COLLAR`). The dogs draw with `dogMaterial`: the fox's trot, the tail
+    carried and wagged side to side.
+  - Walkers are drawn on the ground under them (`life.ts`, `ground` = `WalkWorld.outdoorNear`, within
+    150 m): the sim walks them 12 cm over their street's own height, and the shoes hovered.
+  - Nobody stands in the first steps in from a front door, or sits within 2.2 m of where you stand
+    once you're in (`interiors.ts` `people`): a resident there was cut in half at the lens of
+    anyone walking in.
 
 ## The shore's calendar (`src/world/calendar.ts`) — round 10's must-fix 5
 
@@ -449,17 +466,21 @@ once, from the map and seeds. No place names: a beach is a mapped `beach`, a mar
     flagged piece only in its hours (`update(…, camera, hour)`), holding one in front of you like
     the crowd does. No more empty umbrellas at eight in the morning.
   - `CrowdLayer` draws every tile's records: the nearest in the full body, the rest in the lite one
-    (`people.ts` `personLiteGeometry`, ~250 vertices, the same joints/parts/markers) out to
+    (`people.ts` `personLiteGeometry`, 193 vertices, smooth, the same joints/parts/markers) out to
     `farR`, two draws (`beach-people`, `beach-people:lite`; no shadow — the shadow pass would draw
     the standing body); `CROWD_TIERS`: desktop 120 + 1,400 to 420 m, phone 40 + 280 to 240 m (half
-    `CAPS.peds`), low 20 + 140. Refilled every 4 m walked
-    or ~1 minute of the clock; someone due to come or go in front of you within 140 m waits until
+    `CAPS.peds`), low 20 + 140. `nearR` is for the walking lens: `update(…, lens)` stretches it by
+    the camera's magnification over 62° (main.ts passes tan 31° ÷ tan(fov/2): about 5.5 at the
+    calendar's 12° shot), so who gets the full body follows how big they are on screen — the
+    caps don't move. Refilled every 4 m walked, ~1 minute of the clock or a 10% change of lens;
+    someone due to come or go in front of you within 140 m waits until
     you look away (a jump of the clock — a shot, the panel — applies at once). `crowd.people()`
     lists who's drawn (probes).
   - `creature.ts` `BEACH`: swimwear (bare arms and legs, trunks or a suit in the instance colour,
-    half a top; the guard red) and the poses from the standing body (`bend`: thigh, shin, arms and
-    trunk turned about their joints; lying is the whole body turned onto its back on the towel);
-    `still` mutes the weight shift and the talking hands for anyone posed.
+    half a top; the guard red), bare feet (the shoe flattened to a foot in skin), and the poses
+    (`people.ts` `beachPose`: joint angles for the chair, the towel — the whole body turned onto
+    its back — the sand, the waves and the stand; heels on the sand, never in it). A standing
+    beach-goer shifts their weight like anyone standing.
 - Tests: `tests/calendar.test.ts` (the curves, windows exact to 2%, the lifeguard dates),
   `tests/shoreCalendar.test.ts` (on the baked pack: the beach lot ≤ 25% at 17:48 on 1 October and
   > 85% at 13:00 in July; comers never in the tile's collision; ≥ 8 boats a 100 m of the marina's
@@ -495,9 +516,9 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
 - Families:
   - `kit.ts`: cars (+ gear), boats, planes, rocks;
   - `flora.ts`: 7 tree species × 3 variants (`treeMeta` gives real dims), 12 garden species with growth stages, `plantMix`, `inBloom`;
-  - `fauna.ts`: 9 animals (incl. red fox, red-tailed hawk) on one jointed body plan + `birdGeometry` + `critterMaterial`;
+  - `fauna.ts`: 9 animals (incl. red fox, red-tailed hawk) on one jointed body plan + `birdGeometry` + `critterMaterial`, and the walkers' dog (`dogLib`, `dogMaterial`: the tail carried and wagged side to side, `DOG_COLLAR` for the lead);
   - `decor.ts`: the furniture family for interiors and terraces (sofa, armchair, bed, tables, chairs, bistro and office chairs, monitor, lamps, café counter, booth, stocked shelves, plants, ceiling fan, storage bench, `cafeSet`), rounded boxes (one bevel segment; plain boxes under 1.5 cm radius) and tapered legs, merged by `mergeDecor` or instanced by `interior/mesh.ts`, plus the plain-box pieces planned rooms repeat (kitchen run, workstation, door frame and leaf, WC, vanity, bath, wardrobe, dresser, bookcase, gondola, washer, lift doors, mailboxes, racking, range), and the way in (coats on their rail, a bordered runner, the console with its lamp, a mirror, skirting stretched to each wall, a ceiling dome lit after dark or all day); per-piece vertex budgets in `tests/foundry.test.ts` (a sofa < 4000, a chair < 1500, the coat rail < 3200);
-  - `people.ts`: one jointed person (~1.8k verts) for walkers and residents, and its lite twin (`personLiteGeometry`, < 300: the beach crowd past ~40 m). Skin, hair and trouser palettes, 5 hairstyles, shorts/sleeves by `warmthFor(climate, month)` — all chosen per instance in the shader (`PEOPLE` define in `creatureMaterial`, marker vertex colours `MARK`; `BEACH`: swimwear and poses), so a crowd is one draw;
+  - `people.ts`: one jointed person for walkers and residents — indexed and smooth (1,472 vertices, 2,522 triangles: limbs as tubes through the joints, shoes on soles, rounded hands), skinned in the shader by joint angles (`Pose`, `aSkin`; `POSE_GLSL` mirrors the TypeScript `walkPose`/`seatPose`/`beachPose`/`downPose`/`skinPoint`, which the lead and the helm's skipper use) — and its lite twin (`personLiteGeometry`, 193 vertices, smooth: the beach crowd where people are small on screen). Skin, hair, trouser and shoe palettes, 5 hairstyles, shorts/sleeves by `warmthFor(climate, month)` — all chosen per instance in the shader (`PEOPLE` define in `creatureMaterial`, marker vertex colours `MARK`; `BEACH`: swimwear, bare feet and poses), so a crowd is one draw. Measured in `tests/people.test.ts`: shoes ≤ 14 cm across and never below the ground on their feet, no normal break over 25° along a limb in 69 poses, the lead within 5 cm of the hand, standing weight shifts with planted feet, the dog's tail tip ≥ 15 cm up. Workbench: `/kit.html` → people;
   - `furniture.ts`: mailboxes, beach set, picnic table, car gear + `gearFor`;
   - `micro.ts`: the micro layer's small things (carts, A-frames, porch chairs, flags, hoops, cleats, buoys, beach gear, the mapped picnic tables, boards, cabinets, clocks, channel marks), placed by `world/micro.ts` and drawn real close up, as impostor cards further out (`docs/agent/rendering.md`).
 - Lot dressing (NA): `buildings.ts` lays a generated drive (a 2.9 m strip in `walks`) beside the front walk where the map has no service way near the door, and emits `drives`; `props.ts` parks a car at the house end (never on paved ground or the sidewalk strip). Doors also get hedges or `fence:picket` runs.

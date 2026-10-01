@@ -8,7 +8,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { BOAT_TYPES, CAR_TYPES, PLANE_TYPES, boatGeometry, boatRecipe, carGeometry, carRecipe, planeGeometry, planeRecipe, rockGeometry, type RockType } from '../assets/kit';
 import { TREE_KINDS, TREE_VARIANTS, treeLib, PLANT_SPECIES, plantGeometry, SPECIES } from '../assets/flora';
-import { CRITTERS, critterLib, critterMaterial } from '../assets/fauna';
+import { CRITTERS, critterLib, critterMaterial, dogLib, dogMaterial, DOG_COLLAR } from '../assets/fauna';
+import { personLib, personLiteLib, leadHand, atWorld } from '../assets/people';
+import { creatureMaterial } from '../render/creature';
 import { MAILBOXES, mailboxLib, beachLib, CAR_GEAR, gearGeometry } from '../assets/furniture';
 import { MICRO_KINDS } from '../assets/micro';
 import { MicroLayer } from '../world/microLayer';
@@ -77,10 +79,72 @@ function addCritter(kind: (typeof CRITTERS)[number], x: number, z: number, color
   animated.push({ m, anim, hz: kind === 'deer' ? 0.9 : kind === 'sandpiper' ? 3 : 1.6, kind });
 }
 
+// People (people.ts + creature.ts): every pose the world uses, side by side — walkers through the
+// stride, a runner, people standing (weight shifts), talking, a dog walker with the dog and lead,
+// the beach's poses, seated, knocked down, and the lite body beside the full one. `aAnim` per
+// figure: phase (advanced by time when `walk` is set), amount, the lead.
+const people: { m: THREE.InstancedMesh; anim: THREE.InstancedBufferAttribute; ph0: number; amt: number; lead: number; walk: boolean }[] = [];
+let leads: { line: THREE.LineSegments; who: number; dog: THREE.Vector3; dyaw: number; size: number } | null = null;
+function addPerson(x: number, z: number, yaw: number, shirt: number, o: { amt?: number; ph?: number; lead?: number; walk?: boolean; defines?: Record<string, number>; pose?: number; lite?: boolean; seedAt?: number } = {}) {
+  const geo = (o.lite ? personLiteLib() : personLib()).clone();
+  const anim = new THREE.InstancedBufferAttribute(new Float32Array(3), 3);
+  geo.setAttribute('aAnim', anim);
+  if (o.pose !== undefined) geo.setAttribute('aPose', new THREE.InstancedBufferAttribute(new Float32Array([o.pose]), 1));
+  const m = new THREE.InstancedMesh(geo, creatureMaterial(o.defines ?? { LEGS: 1, PEOPLE: 1 }), 1);
+  m.setMatrixAt(0, new THREE.Matrix4().compose(new THREE.Vector3(x, 0, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), new THREE.Vector3(1, 1, 1)));
+  m.setColorAt(0, new THREE.Color(shirt));
+  m.name = `person-${people.length}`;
+  m.frustumCulled = false;
+  root.add(m);
+  people.push({ m, anim, ph0: o.ph ?? 0, amt: o.amt ?? 0, lead: o.lead ?? 0, walk: !!o.walk });
+  return people.length - 1;
+}
+const SHIRTS = [0xe8d8b0, 0x5b7fa6, 0xc4553f, 0xf2efe6, 0x6e8c5a, 0xe0a33b, 0x7a5b8c, 0x3f6f78];
+function buildPeople(seed: number) {
+  // row 0: the stride at eight phases, side on (+x is their right; they face −x here)
+  for (let k = 0; k < 8; k++) addPerson(k * 1.1 - 3.85, 0, Math.PI / 2, SHIRTS[(k + seed) % 8], { amt: 1, ph: (k / 8) * Math.PI * 2 });
+  // row 1: walking (animated), a runner, standing (weight shifts), talking residents, a chat
+  addPerson(-3.6, 3, Math.PI / 2, SHIRTS[seed % 8], { amt: 1, walk: true });
+  addPerson(-2.2, 3, Math.PI / 2, SHIRTS[(seed + 1) % 8], { amt: 1.5, walk: true });
+  addPerson(-0.8, 3, 0.3, SHIRTS[(seed + 2) % 8], { amt: 0 });
+  addPerson(0.4, 3, -0.4, SHIRTS[(seed + 3) % 8], { defines: { LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1 } });
+  addPerson(1.6, 3, 0.2, SHIRTS[(seed + 4) % 8], { amt: -4 });
+  addPerson(2.8, 3, 0, SHIRTS[(seed + 5) % 8], { amt: -2.5 });
+  // row 2: a dog walker, side on, walking — the dog a lead's length ahead and to the right
+  const who = addPerson(-0.6, 6, Math.PI / 2, 0xe0a33b, { amt: 1, walk: true, lead: 1.05 });
+  const dg = dogLib().clone(), da = new THREE.InstancedBufferAttribute(new Float32Array(3), 3);
+  dg.setAttribute('aAnim', da);
+  const dogM = new THREE.InstancedMesh(dg, dogMaterial(), 1);
+  const yaw = Math.PI / 2, fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+  const dog = new THREE.Vector3(-0.6 + fx * 1.25 + rx * 0.6, 0, 6 + fz * 1.25 + rz * 0.6), size = 1.0;
+  dogM.setMatrixAt(0, new THREE.Matrix4().compose(dog, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), new THREE.Vector3(size, size, size)));
+  dogM.setColorAt(0, new THREE.Color(0xd9a860));
+  dogM.name = 'dog';
+  root.add(dogM);
+  animated.push({ m: dogM, anim: da, hz: 1 / (0.55 * size) / 5.2 * 1.3 * 5.2 / (Math.PI * 2) * Math.PI * 2, kind: 'dog' });
+  const lg = new THREE.BufferGeometry();
+  lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(16 * 3), 3));
+  const line = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x2a2320 }));
+  line.frustumCulled = false;
+  root.add(line);
+  leads = { line, who, dog, dyaw: yaw, size };
+  // a dog walker stopped (the dog sniffing): the lead slack, the arm easy
+  addPerson(2.6, 6, -Math.PI / 2, 0x5b7fa6, { amt: 0, lead: 0.9 });
+  // row 3: the beach — chair, lying, sitting on the sand, standing, a kid jumping, the lifeguard
+  for (let pz = 0; pz < 6; pz++) addPerson(pz * 1.5 - 3.75, 9.5, 0, [0x1f3f7a, 0xc8302a, 0x2e8a6a, 0xf2c23a, 0xe0705a, 0xc8302a][pz], { defines: { LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1, BEACH: 1 }, pose: pz });
+  // row 4: seated (a café chair), the knocked down, and the lite body beside the full one
+  addPerson(-3, 12.5, Math.PI, 0x7a5b8c, { defines: { LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1, SEATED: 1, INDOOR: 1 } });
+  addPerson(-1.4, 12.5, Math.PI, 0x3f6f78, { amt: -2.5 });
+  addPerson(0.4, 12.5, Math.PI + 0.4, 0xe8d8b0, { amt: 0, lite: true });
+  addPerson(1.4, 12.5, Math.PI + 0.4, 0xe8d8b0, { amt: 0 });
+}
+
 const $ = (id: string) => document.getElementById(id) as HTMLInputElement;
 function build() {
   root.clear();
   animated.length = 0;
+  people.length = 0;
+  leads = null;
   const fam = ($('family') as unknown as HTMLSelectElement).value;
   const seed = +$('seed').value || 1;
   const growth = +$('growth').value;
@@ -109,6 +173,7 @@ function build() {
     rowOf(PLANT_SPECIES.length, 2.2, (i, x, z) => add(plantGeometry(PLANT_SPECIES[i], seed, g), x, z, GREENS[i % GREENS.length], `plant-${PLANT_SPECIES[i]} (${SPECIES[PLANT_SPECIES[i]].label}) g=${g}`, 0, mats.foliage), 3);
     if (fam === 'plants') for (const gg of [0.15, 0.4, 0.65, 1]) rowOf(PLANT_SPECIES.length, 2.2, (i, x, z) => add(plantGeometry(PLANT_SPECIES[i], seed + 1, gg), x, z, GREENS[i % GREENS.length], `plant-${PLANT_SPECIES[i]} g=${gg}`, 0, mats.foliage), 3);
   }
+  if (fam === 'people') buildPeople(seed);
   if (fam === 'all' || fam === 'wildlife') rowOf(CRITTERS.length, 2.2, (i, x, z) => addCritter(CRITTERS[i], x, z, [0xffffff, 0xffffff, 0xc2302a, 0xffffff, 0xffffff, 0xe8862a, 0xffffff][i]), 5);
   if (fam === 'all' || fam === 'rocks') {
     const T: RockType[] = ['boulder', 'riprap', 'stone'];
@@ -180,9 +245,25 @@ const t0 = performance.now();
 const loop = () => {
   const t = (performance.now() - t0) / 1000;
   U.uTime.value = t;
+  for (const a of people) {
+    const ph = a.walk ? a.ph0 + t * 1.3 * 5.2 : a.ph0;
+    a.anim.setXYZ(0, ph, a.amt, a.lead);
+    a.anim.needsUpdate = true;
+  }
+  if (leads) {
+    // the lead: from where the shader draws the walker's hand (people.ts leadHand) to the collar
+    const P = people[leads.who], ph = P.walk ? P.ph0 + t * 1.3 * 5.2 : P.ph0, h = leadHand(ph, P.amt, U.uTime.value, 0, P.lead); // (each figure is its own mesh: instance 0, seed 0)
+    const e = P.m.instanceMatrix.array, x = e[12], z = e[14], yaw = Math.atan2(e[8], e[10]);
+    const [hx, hy, hz] = atWorld(x, 0, z, yaw, h);
+    const cs = Math.cos(leads.dyaw), sn = Math.sin(leads.dyaw), [cx0, cy0, cz0] = DOG_COLLAR;
+    const cx = leads.dog.x + (cx0 * cs + cz0 * sn) * leads.size, cy = cy0 * leads.size, cz = leads.dog.z + (-cx0 * sn + cz0 * cs) * leads.size;
+    const sag = 0.05 * Math.hypot(cx - hx, cz - hz) * 0.6, lp = leads.line.geometry.getAttribute('position') as THREE.BufferAttribute;
+    for (let s = 0; s < 4; s++) for (const k of [0, 1]) { const u = (s + k) / 4; lp.setXYZ(s * 2 + k, hx + (cx - hx) * u, hy + (cy - hy) * u - sag * 4 * u * (1 - u), hz + (cz - hz) * u); }
+    lp.needsUpdate = true;
+  }
   for (const a of animated) {
     // walk for a while, then stand and look about; flying things flap, fireflies glow
-    const moving = Math.sin(t * 0.5) > -0.2;
+    const moving = a.kind === 'dog' || Math.sin(t * 0.5) > -0.2;
     const pose = a.kind === 'firefly' ? 3 : a.kind === 'butterfly' || (a.kind === 'songbird' && !moving) ? 2 : moving ? 1 : 0;
     a.anim.setXYZ(0, t * a.hz, moving ? 1 : 0, pose);
     a.anim.needsUpdate = true;
@@ -195,4 +276,4 @@ const loop = () => {
   requestAnimationFrame(loop);
 };
 loop();
-(window as unknown as Record<string, unknown>).__KIT__ = { scene, camera, controls, renderer, build, root, frame, render: () => post.render(scene, camera, 0, 0, 0, 0, 0), get micro() { return micro; } };
+(window as unknown as Record<string, unknown>).__KIT__ = { scene, camera, controls, renderer, build, root, frame, people, U, render: () => post.render(scene, camera, 0, 0, 0, 0, 0), get micro() { return micro; } };
