@@ -832,3 +832,129 @@ This round is back on the gold standard after three Seattle rounds (6–7) and t
   - Paint the leaves raised with a mast between them at golden hour. That earns a rare card, and a commission that sends you down the coast to every movable bridge the map tags.
 
 Sources: [Rumson–Sea Bright Bridge opening schedule](https://www.rumsonseabrightbridge.com/bridge-opening-schedule/) · [New bridge open to vehicles and pedestrians](https://www.rumsonseabrightbridge.com/new-bridge-open-to-vehicles-and-pedestrians/)
+
+## Round 11 — 2026-10-01 — "Five for five, and three overshot" — 8.5/10 on Sea Bright (expanded scope), NOT PASSED
+
+*"The front door opens on a home and the beach has people on it. Then the sidewalk looks dirty and every streetlamp is a stage light."*
+
+All five of round 10's must-fixes are built. Two of them move their areas a full point: the front door (6, 19) and the shore's calendar (the summer beach). Three overshot: the ground's grain, the lamp pools and the beach's tint. They need tuning, not rebuilding. The overall moves from 8 to 8.5. It doesn't pass, because the overshoots sit in the standard frames (1, 2, 3, 11, 13, 16, 17) and the trees are in their ninth round. `merged-r11`, `nightcheck-r11` and the `phone-r11` frames hadn't rendered when this was written. The helper sheets are numbered in reading order.
+
+- **Scores:**
+  - **The look (Sea Bright): 8.5.** Held, not raised. The yards are now lawn and shell (5, 10) and the night has its indigo structure (3). But the 0–10 m band traded blank paper for grime (1, 2, 17), gravel-looking asphalt (11) and stage-light pools (3, 13).
+  - **Life and micro detail: 8** (from 7.5). The summer beach keeps its day, the marina and the house docks have boats, the café has customers (18), and the beach lot follows the season (12). People at arm's length hold it back.
+  - **Structures (bridges): 7.5.** Not touched this round.
+  - **Roofs and colour: 7.5.** `paintLight(…, skyNeutral)` at 0.6 and the 0.14 caps are in, as specified. The five-roof test isn't reported, and nothing at frame 12's scale shows the change. Evidence owed.
+  - **Interiors: 7.5** (from 6.5). The cottage opens on a lived-in room (6), and the morning lands on a dining-room floor in window-shaped pools (19). The kitchen is a sink run, and the table crowds its chairs.
+  - **The game loop and feel: 7.** Unchanged in kind. Nothing new is a verb, and round 10's first-visit bloom question is still open. The beach's day is the best new reason to stop and watch.
+  - **Phone presentation: 8** (from 7). Portrait is now a 41° window, the HUD is out of the middle and the clock is legible. But the messages end in "…", and there's no merged-build phone frame yet.
+  - **Overall: 8.5/10, NOT PASSED.** Close and finite.
+- **Closed / moved:**
+  - **Round 10 MF1, the phone window: closed.** 41.0° across at 390×844, 95.0° on its side, the toast under the place name, the clock at 7.45:1 on its wash, and `hud-audit`'s middle band clear in all 560 layouts (phonefov-r2, hud). New: long messages end in "…" (must-fix 3).
+  - **MF2, night: moved.**
+    - Closed: the wires (L\* 2.1 against a sky of 2.5), the lens (0%), and frame 3's gaps (L\* 8–12, hue 255–273°).
+    - Overshot: the pools (see "Still reads fake" 1).
+    - My round 10 test gave the dark a ceiling but no floor. Frame 13's black gaps (L\* 2.7) pass it. The test below has both.
+  - **MF3, the ground: moved.**
+    - Closed: flags, the kerb face, the gutter, aprons, and yards by neighbourhood (5, 10). The placement rules pass: no lawn pieces on paving, and mailboxes stand 0.45 m behind the kerb.
+    - The texture metric passes (std 2.6–4.5), but speckle carries it. That's my metric's blind spot: it measured how much texture there was, not what kind. The speck test below closes it.
+  - **MF4, the front door: closed.** 6 and 19 are different rooms now (ΔE76 25.4, against a mean difference of 5.8/255 in round 10).
+  - **MF5, the shore's calendar: closed.**
+    - Summer: 219 people under 80 umbrellas at 13:00, a lifeguard in the stand and kids in the shallows. October: the beach lot is 13% full (12).
+    - Frame 9's pose still lands on house docks with about five small boats. Re-aim it at the marina (calendar-autumn 1).
+  - **Roof hue: in as specified, evidence owed.**
+  - **Tree crowns at 5–10 m: open, ninth round** (15; must-fix 4).
+  - **R.30 far skyline: unchanged, unproven.**
+- **Reads real:**
+  - **The Jersey Shore in July** (calendar-summer 4–5). Chairs and towels under umbrellas, a lifeguard up in the stand, the brick block behind, a gull overhead. It keeps the day: empty at 8:30, full at 13:00, packing up at 18:30 (2–3). This is the first frame in the game a local would post.
+  - **A home behind the door.** 6 shows a cottage's kitchen-living room: a sofa, a table and chairs, a plant, the sink under a curtained window, a lit dome. In 19, the morning falls on a dining-room floor in pools that carry the window's muntins.
+  - **Yards.** The raised house stands on its lawn (5), and the porch chairs look over grass, not concrete (10).
+  - **The night's bones** (3). The wires are silhouettes, the gaps between lamps are indigo, and the lit windows are the accents.
+  - **Water with boats.** Finger piers with a sailboat, a cruiser and skiffs (calendar-autumn 1), and a house's own dock with its centre-console (3).
+  - **The phone** (phonefov-r2). 41° holds the shopfronts and the parked van in one view, and the toast sits under the place name.
+- **Still reads fake** (most damaging first):
+  1. **Every streetlamp is a stage light (3, 13).**
+     - Frame 13 is one flat orange ellipse (L\* 68, C\* 55, hue 76°) on black ground (L\* 2.7), a 125:1 step. The pool's near edge drops from L\* 55 to 14 in about 18 px.
+     - In 3 the camera stands in a heart, so 35% of the frame is an orange carpet (bottom 40% at L\* 54, C\* 34; the heart at C\* 48).
+     - The cause is two things together:
+       - `exp(−(d/5.2)³)`, cut to zero by 9 m, is a flat top with a cliff;
+       - the night grade reserves the heart (brightest channel 0.3–0.56) at full chroma, and glazes and halves everything warm below it (`dim` 0.5). That turns the pool's own fall-off into a rim.
+     - A watercolourist paints a lamp's pool as a warm, pale glow that dies away, and a town's gaps are lit by porches, windows and sky glow. They're never black.
+  2. **The grain reads as grime (1, 2, 11, 17, 20, phone-gp-v2b).**
+     - 10–13% of the bottom 40% sits ≥ 6 L\* below its local mean, in 0.7–1.1 dark blobs per 1,000 px. That's busier than the lawn in 7 (8%, 0.5). In round 10, frames 1, 2, 11 and 17 had 0.04–0.17 blobs per 1,000 px.
+     - On 11's pale asphalt (L\* ≈ 65), the dark specks read as gravel.
+     - On the beach (16) there are half a dozen peach discs: a\* 6–7 against the sand's 1–2, hue 72–78° against 86–88°, ΔE 6–14. The ripples read as wood grain (16) or cobbles (gp-v2-b, merged 6).
+  3. **Trees at 8 m (15), ninth round.**
+     - A closed green lump on a pole. The crown's top is one straight edge, 31% of its width, and 0% of the crown shows sky.
+     - No limb enters the crown, and the trunk doesn't taper.
+     - Every tree in 11 is still a ball.
+  4. **Arm's length (20; calendar-summer 1; 6).**
+     - The dog walker stands stiff with his arms hanging, as if the lead weren't there, on a black block where his shoes should be. The dog's tail drags on the ground like a fifth leg.
+     - At the 12° lens the bathers are faceted mannequins.
+     - In 6, a resident is cut off at the lens.
+  5. **The reward is cut off (hud-montage).** The paint result, the game's payoff, ends "…you've painted an area…". The arrival card ends "· 7:42 pm · …".
+  6. **The kitchen and the table (6, 19).**
+     - The kitchen in view is a sink run, with no range, fridge or wall cabinets.
+     - Three chairs crowd one side of the table, backs touching.
+     - A WC is in view through the living room's left door.
+  7. **Small reads.**
+     - A red block fills the lower right of 1 at the lens, where round 10 had the hedge, and the id pass let it through.
+     - White lozenges fan across the water at the house's dock (calendar-autumn 3). If that's a passing boat's wake, its foam is too thick and opaque at 10 m.
+     - Grass grows in the deep shade under the raised house (5); that's usually where people park.
+- **Next must-fix** (ranked by what an hour buys):
+  1. **Pools as light, not stage discs (3, 13).**
+     - The fall-off: change it to a lamp's own, `h³/(h² + d²)^1.5` at h = 8 m. That's half at 6 m, 17% at 12 m and 9% at 16 m. Widen the map's reach from 9 m to about 22 m so pools meet faintly between lamps.
+     - The heart is a warm cream, with chroma ≤ 30 (today 48–55).
+     - Widen the grade's reserve ramp (0.3–0.56 → 0.15–0.6) and stop `dim` biting the pool's own edge.
+     - A floor of sky glow and window and porch spill keeps the gaps at L\* 10–20.
+     - *Test* (`night-check`):
+       - 13: the heart's C\* ≤ 30; the gap's ground at L\* 10–20 and hue 220–280°; along the road, the pool's light halves at ≥ 5 m from the heart and is still ≥ 8% of it at 12 m (no rim);
+       - 3: the bottom 40% at C\* ≤ 22;
+       - kept: ≥ 2 pools at ≥ 2.5× their gap, the wires, and the lens.
+  2. **Texture from structure, not grime.**
+     - Concrete: keep the flags, joints, kerb, gutter and broad low-contrast mottle. Cut the dark pebble and pock speckle by about two-thirds, and make specks as often lighter than the slab as darker.
+     - Asphalt: darker than its walk, with light aggregate on a dark base. Tar snakes are lines, patches are rectangles, and there's no speckle field.
+     - Beach: find the peach discs. Ripples get an 8–15 cm wavelength, ΔL\* ≤ 4, long crests broken by footprints, and fade out by 15 m.
+     - *Test:*
+       - the bottom-40% local L\* std stays ≥ 2.5 in 2, 10, 11, 17, merged 4 and 7, and the phone;
+       - in those frames, the share ≥ 6 L\* below the local mean is ≤ 6%, in ≤ 0.35 blobs per 1,000 px;
+       - in 11 the road reads ≥ 8 L\* darker than the walk or verge beside it;
+       - on 16 and merged 6, no blotch ≥ (2% of the frame width)² has a\* ≥ the sand's + 3;
+       - the ripple band's ΔL\* is ≤ 4.
+  3. **No message cut off, and the phone shown on the merged build.**
+     - Write every toast and the arrival card to fit two lines at 320–390 px. For example: "Painted out to 1.2 km · 0.35 km²" and "Monmouth County, NJ · 7:42 pm".
+     - Re-shoot `phone-r11-portrait` and `phone-r11-landscape` on the merged build.
+     - *Test:*
+       - `hud-audit` renders the full copy set at 320, 375 and 390 px with no "…" and at most two lines;
+       - the merged phone frame reads ≥ 40° across, the clock ≥ 4.5:1, and the ground passes test 2.
+  4. **Trees at 5–10 m, ninth round: change the approach.**
+     - Six rounds of noise on solid lobes haven't converged. Build the near LOD the backlog already names (1.11c):
+       - the species' branch skeleton to second order;
+       - 8–20 alpha-tested leaf-cluster cards per crown, shaded by round 2's sphere field so the outline breaks up and sky shows through;
+       - a trunk that tapers and forks into the crown;
+       - today's crowns from about 30 m out.
+     - Budget: ≤ 2,500 vertices and no extra draws per near tree (instanced cards), and ≤ 40 near trees on a phone.
+     - *Test:*
+       - 15 re-shot at 5, 8 and 10 m: sky through 4–12% of the crown's pixels (today 0%);
+       - the longest straight silhouette edge ≤ 15% of the crown's width (today 31%);
+       - ≥ 3 limbs visible entering the crown;
+       - the trunk's base ≥ 30% wider than where it meets the crown;
+       - a foundry vertex-budget test.
+  5. **People at arm's length.**
+     - Feet are shoes, planted, never a block.
+     - A dog walker's hand holds the lead, and the arm follows it. Standing idles shift weight.
+     - Within 10 m, limbs are smooth-shaded with rounded hands.
+     - A walking dog's tail stays off the ground.
+     - *Test:*
+       - 20 and calendar-summer 1 re-shot;
+       - the lead's end within 5 cm of a hand;
+       - no shoe wider than 14 cm or sunk below the ground;
+       - a walking dog's tail tip ≥ 15 cm up;
+       - a mesh test: no normal break over 25° along a limb.
+- **Gameplay idea: series.**
+  - The shore keeps time now, so make time something you collect. A viewpoint can ask for a series: the same frame, within 5 m and 8° of the first panel, at three hours or in three seasons. The candidates are a `tourism=viewpoint`, a lifeguard stand, a movable bridge's sidewalk, or a named storefront.
+  - Examples:
+    - the beach at 8:30, 13:00 and 18:30;
+    - the bascule closed, rising and open on the hour (the bridge idea's first series);
+    - Ocean Ave in October and under snow.
+  - A finished series is one card that cross-fades between its panels in the sketchbook, and its rarity is the time it took.
+  - It's Monet's haystacks as a collection: Animal Crossing's come-back-at-another-hour patience loop, built on a world that runs on its own clock the way Rockstar's do. It rewards exactly what this round made true.
