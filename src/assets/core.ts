@@ -51,6 +51,60 @@ export function limb(a: THREE.Vector3, b: THREE.Vector3, r0: number, r1: number,
   return g;
 }
 
+/** A smooth tapered tube through a run of points (a trunk that bends, a limb with a knee): one
+ *  ring of `sides` per point, each ring square to the path's direction there (turned along the
+ *  path without twisting), its normals the ring's own outward directions leaned by the taper — so
+ *  the bark shades round and unbroken through every bend, where a chain of `limb`s creases at each
+ *  joint. Open at both ends. */
+export function tube(pts: THREE.Vector3[], radii: number[], sides = 6) {
+  const n = pts.length;
+  const T: THREE.Vector3[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)];
+    const t = new THREE.Vector3().subVectors(b, a);
+    T.push(t.lengthSq() > 1e-12 ? t.normalize() : (T[i - 1]?.clone() ?? new THREE.Vector3(0, 1, 0)));
+  }
+  // the ring's frame carried along the path (parallel transport): no twist, no flip at a bend
+  const N: THREE.Vector3[] = [], B: THREE.Vector3[] = [];
+  const ref = Math.abs(T[0].y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+  N.push(new THREE.Vector3().crossVectors(T[0], ref).normalize());
+  for (let i = 1; i < n; i++) {
+    const q = new THREE.Quaternion().setFromUnitVectors(T[i - 1], T[i]);
+    N.push(N[i - 1].clone().applyQuaternion(q).normalize());
+  }
+  for (let i = 0; i < n; i++) B.push(new THREE.Vector3().crossVectors(T[i], N[i]).normalize());
+  const ring: number[][] = [], nrm: number[][] = [];
+  for (let i = 0; i < n; i++) {
+    const L = i ? pts[i].distanceTo(pts[i - 1]) : pts[1].distanceTo(pts[0]);
+    const dr = ((radii[Math.min(n - 1, i + 1)] - radii[Math.max(0, i - 1)]) / Math.max(1e-4, (i > 0 && i < n - 1 ? 2 : 1) * L)) || 0;
+    const R: number[] = [], Nn: number[] = [];
+    for (let k = 0; k < sides; k++) {
+      const th = (k / sides) * Math.PI * 2, c = Math.cos(th), s = Math.sin(th);
+      const ox = N[i].x * c + B[i].x * s, oy = N[i].y * c + B[i].y * s, oz = N[i].z * c + B[i].z * s;
+      R.push(pts[i].x + ox * radii[i], pts[i].y + oy * radii[i], pts[i].z + oz * radii[i]);
+      // (a tapering tube's surface leans back along the path: its normal tips toward the tip)
+      const nx = ox - T[i].x * dr, ny = oy - T[i].y * dr, nz = oz - T[i].z * dr, l = Math.hypot(nx, ny, nz) || 1;
+      Nn.push(nx / l, ny / l, nz / l);
+    }
+    ring.push(R); nrm.push(Nn);
+  }
+  const pos: number[] = [], nor: number[] = [];
+  const put = (i: number, k: number) => {
+    const kk = k % sides;
+    pos.push(ring[i][kk * 3], ring[i][kk * 3 + 1], ring[i][kk * 3 + 2]);
+    nor.push(nrm[i][kk * 3], nrm[i][kk * 3 + 1], nrm[i][kk * 3 + 2]);
+  };
+  for (let i = 0; i + 1 < n; i++)
+    for (let k = 0; k < sides; k++) {
+      put(i, k); put(i, k + 1); put(i + 1, k + 1);
+      put(i, k); put(i + 1, k + 1); put(i + 1, k);
+    }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  return g;
+}
+
 /** A soft lumpy blob (crowns, bodies, bushes): a displaced icosahedron whose shared corners move
  *  together (no cracks). `squash` flattens y; `lump` sets how knobbly. */
 export function blob(r: number, seed: number, opts: { detail?: number; squash?: number; lump?: number } = {}) {
