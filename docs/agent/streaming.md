@@ -46,7 +46,8 @@ terrain/DEM, or the LiDAR measure pipeline.
   tags → `buildObject` recreates meshes/materials on mount; canvas work ships as
   `ImageBitmap` (sign atlas; per-tile lamp pools are composited into `U.uLampMap` by the
   stream); collision ships as `WalkOp`s replayed inside the scope; deck heights ship as exact
-  `DeckProfile` params (ramp/const/arch on the `Deck` interface).
+  `DeckProfile` params (ramp/const/arch/table on the `Deck` interface; a bridge's `table` is its
+  drawn heights, its `cut` its square ends).
 
 ## Terrain packs
 

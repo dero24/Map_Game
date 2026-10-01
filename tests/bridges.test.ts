@@ -176,6 +176,51 @@ describe('a bridge as built', () => {
   });
 });
 
+// ---------------- bridges over bridges ----------------
+describe('a flyover', () => {
+  it('clears the bridge under it by a road’s clearance (its OSM layer says which is over)', () => {
+    const flat = terrainOf({ x0: -200, z0: -200, cell: 4, w: 100, h: 100 }, new Array(10000).fill(100), new Array(10000).fill(500));
+    const roads = [
+      road([[-200, 0], [-150, 0]], { c: 'secondary', w: 9 }), road([[-150, 0], [150, 0]], { c: 'secondary', w: 9, br: 'yes', l: 1 }), road([[150, 0], [200, 0]], { c: 'secondary', w: 9 }),
+      road([[0, -200], [0, -160]], { c: 'motorway', w: 12 }), road([[0, -160], [0, 160]], { c: 'motorway', w: 12, br: 'yes', l: 2 }), road([[0, 160], [0, 200]], { c: 'motorway', w: 12 }),
+    ];
+    const w = new RecWalk(flat, { x0: -300, z0: -300, x1: 300, z1: 300 });
+    buildStructures(world(flat, roads), w, { roads, lines: [] });
+    const walk = new WalkWorld(flat, { x0: -300, z0: -300, x1: 300, z1: 300 });
+    replayOps(walk, w.ops);
+    const [lo, hi] = walk.decksAt(0, 0).sort((a, b) => a - b);
+    expect(lo).toBeGreaterThan(1);
+    expect(hi - lo).toBeGreaterThan(5 + 1); // (5 m to its soffit, and its girders)
+  });
+});
+
+// ---------------- a long bridge, seen a piece at a time ----------------
+describe('a long bridge no tile sees whole', () => {
+  // 400 m of water, a trunk road over it on three ways; each tile sees its own way and the next
+  // one in, never the far one (a tile carries only the ways within 48 m of its cell)
+  const grid = { x0: -520, z0: -20, cell: 2, w: 520, h: 20 };
+  const h: number[] = [], sdf: number[] = [];
+  for (let j = 0; j < grid.h; j++)
+    for (let i = 0; i < grid.w; i++) {
+      const d = Math.abs(grid.x0 + (i + 0.5) * grid.cell) - 200;
+      h.push(d >= 0 ? 100 : -600);
+      sdf.push(Math.round(d * 10));
+    }
+  const sound = terrainOf(grid, h, sdf);
+  const way = (x0: number, x1: number, br = true): Road => road([[x0, 0], [x1, 0]], { c: 'trunk', w: 12, n: 'Causeway', ...(br ? { br: 'yes' as const, l: 1 } : {}) });
+  const [aW, w1, w2, w3, aE] = [way(-500, -420, false), way(-420, -40), way(-40, 40), way(40, 420), way(420, 500, false)];
+  const at = (roads: Road[], x: number) => {
+    const ch = chainBridges(roads)[0];
+    return profileAt(bridgeProfile(ch, sound), x - ch.pts[0][0]);
+  };
+  it('every tile gives the crossing its full width, so the pieces meet at its full clearance', () => {
+    const A = [aW, w1, w2], B = [w1, w2, w3], C = [w2, w3, aE];
+    expect(Math.abs(at(A, -40) - at(B, -40))).toBeLessThan(0.001);
+    expect(Math.abs(at(C, 40) - at(B, 40))).toBeLessThan(0.001);
+    expect(at(B, -40)).toBeGreaterThan(17.5); // (400 m of water under a highway: 17.5 m to its soffit)
+  });
+});
+
 // ---------------- the Rumson–Sea Bright bridge (the baked shore pack) ----------------
 describe('the Rumson–Sea Bright bascule, as the shore pack maps it', () => {
   const fx = rumson as unknown as { grid: GridHeader; height: number[]; sdf: number[]; tiles: Record<string, { box: { x0: number; z0: number; x1: number; z1: number }; roads: Road[] }> };

@@ -88,6 +88,8 @@ export interface ChainEnd { x: number; z: number; approach: boolean; junction: b
 export interface Chain {
   pts: P[]; cum: number[]; L: number; ways: ChainWay[]; ends: [ChainEnd, ChainEnd];
   w: number; c: string; movable: boolean; oneway: boolean;
+  /** its OSM layer (a bridge untagged is a layer up): one higher crosses over it */
+  layer: number;
 }
 
 /** The road bridges among `roads` (a tile's own ways and its margin's), joined into chains where
@@ -179,6 +181,7 @@ export function chainBridges(roads: Road[]): Chain[] {
       w: wMax, c,
       movable: span.some((s) => s.r.br === 'movable'),
       oneway: span.every((s) => !!s.r.ow),
+      layer: Math.max(...span.map((s) => s.r.l ?? 1)),
     });
   }
   return chains;
@@ -315,6 +318,34 @@ export function bridgeProfile(ch: Chain, g: Ground, under: Under[] = []): Profil
   }
   for (let i = 0; i < N; i++) if (!depth[i]) depth[i] = 1;
   const highway = HIGHWAY.has(ch.c);
+  // its ends: on a street (or dry ground at the end of what this tile can see), or up in the air
+  // where it runs into more bridge, or stops over the water
+  const endOf = (e: ChainEnd) => ({
+    land: e.approach || (!e.junction && g.sdfAt(e.x, e.z) >= 0),
+    h: Math.max(g.heightAt(e.x, e.z), -0.2) + LIFT, // (the walk surface: the ground, or the water's skin)
+  });
+  const A = endOf(ch.ends[0]), B = endOf(ch.ends[1]);
+  // A crossing's width runs from shore to shore: each edge found to the millimetre between the
+  // stations either side of it — and where the water runs on past an end in the air (more bridge,
+  // out of this tile's sight), on along the way's line to the far shore. Every tile that draws a
+  // piece of the bridge then gives the crossing the same width, and the same clearance.
+  const shore = (wetAt: (d: number) => boolean, dry: number, inWet: number) => {
+    for (let n = 0; n < 24; n++) {
+      const mid = (dry + inWet) / 2;
+      if (wetAt(mid)) inWet = mid;
+      else dry = mid;
+    }
+    return (dry + inWet) / 2;
+  };
+  const wetOn = (s: number) => { const p = chainAt(ch, s); return g.sdfAt(p.x, p.z) < 0; };
+  const beyond = (k: number, inward: number) => {
+    const p = ch.pts[k], q = ch.pts[k + inward], l = Math.hypot(p[0] - q[0], p[1] - q[1]) || 1;
+    const dx = (p[0] - q[0]) / l, dz = (p[1] - q[1]) / l;
+    const wetAt = (d: number) => g.sdfAt(p[0] + dx * d, p[1] + dz * d) < 0;
+    let d = 0;
+    while (d < 3000 && wetAt(d + 4)) d += 4;
+    return d < 3000 ? shore(wetAt, d + 4, d) : d;
+  };
   // the water: each run of it the chain crosses, at its level (the sea's datum, or a lake's — its
   // bed lies half a metre under its surface), with its clearance
   const level: number[] = new Array(N).fill(-Infinity), req: number[] = new Array(N);
@@ -330,7 +361,9 @@ export function bridgeProfile(ch: Chain, g: Ground, under: Under[] = []): Profil
     }
     beds.sort((a, b) => a - b);
     const lv = beds.length ? Math.max(0, beds[beds.length >> 1] + 0.5) : 0;
-    const W = S[j] - S[i] + STEP;
+    const s0 = i > 0 ? shore(wetOn, S[i - 1], S[i]) : !A.land && wet[0] ? -beyond(0, 1) : 0;
+    const s1 = j < N - 1 ? shore(wetOn, S[j + 1], S[j]) : !B.land && wet[N - 1] ? ch.L + beyond(ch.pts.length - 1, -1) : ch.L;
+    const W = s1 - s0;
     const clear = mov ? CLEAR_MOVABLE : clearOver(W, highway);
     for (let k = i; k <= j; k++) (level[k] = lv), (req[k] = lv + clear + depth[k]);
     i = j + 1;
@@ -343,13 +376,6 @@ export function bridgeProfile(ch: Chain, g: Ground, under: Under[] = []): Profil
   const E = req.slice();
   for (let i = 1; i < N; i++) E[i] = Math.max(E[i], E[i - 1] - grade * (S[i] - S[i - 1]));
   for (let i = N - 2; i >= 0; i--) E[i] = Math.max(E[i], E[i + 1] - grade * (S[i + 1] - S[i]));
-  // its ends: on a street (or dry ground at the end of what this tile can see), or up in the air
-  // where it runs into more bridge, or stops over the water
-  const endOf = (e: ChainEnd) => ({
-    land: e.approach || (!e.junction && g.sdfAt(e.x, e.z) >= 0),
-    h: Math.max(g.heightAt(e.x, e.z), -0.2) + LIFT, // (the walk surface: the ground, or the water's skin)
-  });
-  const A = endOf(ch.ends[0]), B = endOf(ch.ends[1]);
   const Lv = Math.min(20, ch.L / 4); // the vertical curve where it leaves the street
   const rise = (d: number) => (d < Lv ? (steep * d * d) / (2 * Lv) : steep * (d - Lv / 2));
   const crown = Math.min(0.5, 0.004 * ch.L);
@@ -408,8 +434,14 @@ export function deckEdges(ch: Chain, pf: Profile, roads: Road[]) {
   const base = ch.w / 2 + (HIGHWAY.has(ch.c) ? 1.2 : MINOR.has(ch.c) ? 0.6 : 1.8);
   const left: number[] = new Array(N).fill(base), right: number[] = new Array(N).fill(base);
   const taken = new Set<Road>();
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (const [x, z] of ch.pts) (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z));
+  const reach = base + 5;
   for (const r of roads) {
     if (!isSidePath(r)) continue;
+    let near = false;
+    for (let i = 0; i + 1 < r.p.length && !near; i += 2) near = r.p[i] / 10 > x0 - reach && r.p[i] / 10 < x1 + reach && r.p[i + 1] / 10 > z0 - reach && r.p[i + 1] / 10 < z1 + reach;
+    if (!near) continue;
     const p = unpack(r.p);
     const smp: { S: number; o: number; ok: boolean }[] = [];
     for (let k = 0; k + 1 < p.length; k++) {
@@ -461,13 +493,35 @@ export interface BridgeOut {
  *  its margin's included (own: 0). */
 export function buildBridges(m: Sink, walk: WalkWorld, roads: Road[], lines: Line[], g: Ground): BridgeOut {
   const out: BridgeOut = { towers: [], posts: [], piles: [], taken: new Set() };
-  for (const ch of chainBridges(roads)) {
-    if (!ch.ways.some((w) => w.own) || ch.L < 2) continue;
-    const pf = bridgeProfile(ch, g, crossingsUnder(ch, roads, lines, g));
+  // (lowest layer first: a flyover clears the deck it crosses, as that deck was profiled)
+  const done: { ch: Chain; pf: Profile }[] = [];
+  for (const ch of chainBridges(roads).sort((a, b) => a.layer - b.layer)) {
+    if (ch.L < 2) continue;
+    const under = crossingsUnder(ch, roads, lines, g);
+    for (const o of done) if (o.ch.layer < ch.layer) under.push(...decksUnder(ch, o.ch, o.pf));
+    const pf = bridgeProfile(ch, g, under);
+    done.push({ ch, pf });
+    if (!ch.ways.some((w) => w.own)) continue;
     const ed = deckEdges(ch, pf, roads);
     for (const r of ed.taken) out.taken.add(r);
     ch.ways.forEach((w, k) => { if (w.own) drawWay(m, walk, ch, pf, ed, k, g, out); });
   }
+  return out;
+}
+
+/** Where a chain crosses over a lower bridge's deck: that deck's roadway, a road's clearance under it. */
+export function decksUnder(ch: Chain, lo: Chain, pf: Profile): Under[] {
+  const out: Under[] = [];
+  for (let k = 0; k + 1 < ch.pts.length; k++)
+    for (let q = 0; q + 1 < lo.pts.length; q++) {
+      const [px, pz] = ch.pts[k], [qx, qz] = ch.pts[k + 1], [ax, az] = lo.pts[q], [bx, bz] = lo.pts[q + 1];
+      const rx = qx - px, rz = qz - pz, sx = bx - ax, sz = bz - az, den = rx * sz - rz * sx;
+      if (Math.abs(den) < 1e-9) continue;
+      const t = ((ax - px) * sz - (az - pz) * sx) / den, u = ((ax - px) * rz - (az - pz) * rx) / den;
+      if (t < 0 || t > 1 || u < 0 || u > 1) continue;
+      const sin = Math.abs(den) / ((Math.hypot(rx, rz) || 1) * (Math.hypot(sx, sz) || 1));
+      out.push({ S: ch.cum[k] + t * (ch.cum[k + 1] - ch.cum[k]), h: profileAt(pf, lo.cum[q] + u * (lo.cum[q + 1] - lo.cum[q])), need: UNDER.road, half: lo.w / 2 / Math.max(0.3, sin) + 3 });
+    }
   return out;
 }
 

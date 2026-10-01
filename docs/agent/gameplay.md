@@ -147,6 +147,20 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 - Stairs up a retaining wall (`retaining.ts` `wallStairs` → `stairColliders`): a ramp deck from
   the sidewalk to the landing, walls along its open side and past the landing. A retaining wall's
   own collider stops 0.4 m under its top, so from the landing you step over the coping onto the lot.
+- Road bridges (`world/bridges.ts`, called from `structures.ts`): the road-bridge ways a tile can
+  see, its margin's included, chain where exactly two meet end to end; every tile profiles the
+  whole chain and draws only the ways it owns, so pieces owned by different tiles meet (the
+  Rumson–Sea Bright bascule's tiles meet mid-river: profiled per tile, it sagged to the water there).
+  - The long section (`bridgeProfile`, stations at every vertex and 2 m between): lands on its
+    approach streets at their height + 4 cm; over each run of water stands the clearance (a movable
+    run `CLEAR_MOVABLE`, else `clearOver` the run's shore-to-shore width, measured on past an end
+    in the air so every tile agrees) plus its girders' depth (span/25); clears roads and railways
+    under it; climbs at its class's grade (1.3× off the street); never under the line between its
+    ends; bascule leaves straight heel to heel.
+  - Collision is the deck as drawn: roadway and sidewalks are `table` decks (drawn station heights,
+    exact over the worker boundary) with square ends (`Deck.cut` — a round end hung over the
+    sloping street); parapets are walls a deck-high band; piers, bascule piers and fenders are
+    walls below the deck. A mapped sidewalk alongside widens the deck (`deckEdges`).
 
 ## Vehicles
 
