@@ -87,7 +87,9 @@ behaviour.
   - the pools down the street: each lamp ahead in a 25 m corridor whose heart is in sight, its
     heart's luminance against the ground between it and the next pool ≥ 12 m further on — ≥ 2 pools
     at ≥ 2.5×.
-  - "The ground" is what faces up (screen-space normal) within a metre of the street's level.
+  - "The ground" is what faces up (screen-space normal) within 2 m of the street's level; each pose
+    first sets the street's level (`U.uLampBaseY`, which the stream eases 5% a frame) to where the
+    walker stands, as the game holds it once it has caught up after a long jump.
   - Pose keys: `3`, `13`, `center` (Center Street at 22:00), `day` (frame 2: the morning the night
     must leave alone); `3n`/`13n` move to the next night with the moon down (the floor alone);
     `13n@0.12` sets the floor's strength in the page (`G.U.uNightFloor.w`) for that pose.

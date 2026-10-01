@@ -19,7 +19,7 @@
 //            heart is in sight: its heart's mean luminance against the ground between it and the
 //            next pool down the street. ≥ 2 pools at ≥ 2.5×
 // The lamp field is the pools' own light per pixel (0–1 of a lone heart), drawn by the shaders' own
-// lamp code from the lamp map they read; the ground is what faces up within a metre of the street.
+// lamp code from the lamp map they read; the ground is what faces up within 2 m of the street.
 // Each pose judges what applies to it (round 11: frame 3 its band, pools, wires and lens; frame 13
 // its heart, gap, fall-off, wires and lens); everything is measured and reported for every pose.
 // Saves shots/nightcheck-<tag>.jpg (each pose as painted, and the same frame with what was measured
@@ -46,7 +46,7 @@ const wireMeshes = (G) => {
 };
 
 /** Per pixel at W×H, rows from the top: R the lamp field (the pools' own light, 0–1 of a heart), G how
- *  squarely the surface faces up (|n.y|), B its height over the street (−4…+4 m → 0–1), A anything
+ *  squarely the surface faces up (|n.y|), B its height over the street (−8…+8 m → 0–1), A anything
  *  there. */
 async function lampField(G, W, H) {
   const T = G.THREE, S = await import('/src/render/shared.ts');
@@ -57,7 +57,7 @@ async function lampField(G, W, H) {
     vertexShader: S.GLSL_VERT_COMMON + `void main() { vec4 wp = worldMat() * vec4(position, 1.0); vWorldPos = wp.xyz + uWorldOffset; vNormalW = vec3(0.0, 1.0, 0.0); gl_Position = projectionMatrix * viewMatrix * wp; }`,
     fragmentShader: S.GLSL_SHARED + `void main() {
       vec3 n = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
-      gl_FragColor = vec4(clamp(${expr}, 0.0, 1.0), abs(n.y), clamp((vWorldPos.y - uLampBaseY + 4.0) / 8.0, 0.0, 1.0), 1.0);
+      gl_FragColor = vec4(clamp(${expr}, 0.0, 1.0), abs(n.y), clamp((vWorldPos.y - uLampBaseY + 8.0) / 16.0, 0.0, 1.0), 1.0);
     }`,
     side: T.DoubleSide,
   }));
@@ -164,7 +164,7 @@ function falloff(G, shot, view, M, gapY) {
     const L0 = Math.hypot(cx - l.x, cz - l.z), ux = (cx - l.x) / L0, uz = (cz - l.z) / L0;
     const at = (d) => { const s = toScreen(l.x + ux * d, l.z + uz * d); return s ? windowMean(px, W, H, s[0], s[1], 3, 1, M.ground) : { n: 0 }; };
     const heart = at(0);
-    if (heart.n < 3 || M.F(Math.round(s0[1]) * W + Math.round(s0[0])) < 0.6) continue;
+    if (heart.n < 3 || M.F(Math.min(H - 1, Math.round(s0[1])) * W + Math.min(W - 1, Math.round(s0[0]))) < 0.6) continue;
     const samples = [], marks = [];
     for (let d = 0; d <= 20 && d < L0 - 3; d += 1) {
       const s = toScreen(l.x + ux * d, l.z + uz * d);
@@ -207,8 +207,8 @@ async function measure(G, label, opts, judge) {
   const M = {
     F: (i) => field[i * 4] / 255,
     there: (i) => field[i * 4 + 3] > 127,
-    // the ground: faces up, within a metre of the street's level (not a car's roof, nor a flat roof)
-    ground: (i) => field[i * 4 + 3] > 127 && field[i * 4 + 1] > 235 && Math.abs((field[i * 4 + 2] / 255) * 8 - 4) < 1,
+    // the ground: faces up, within 2 m of the street's level (not a flat roof; a car's roof is lit as the street is)
+    ground: (i) => field[i * 4 + 3] > 127 && field[i * 4 + 1] > 235 && Math.abs((field[i * 4 + 2] / 255) * 16 - 8) < 2,
   };
   const view = viewOf(G, W, H);
   // the wires where the sky is behind them (nothing of the world drawn there)
@@ -346,6 +346,9 @@ window.__NIGHTCHECK__ = async (tag = 'n', poses = null, opts = {}) => {
     if (G.U.uNightFloor) G.U.uNightFloor.value.w = floor0;
     await p.fn(G);
     G.timeParams.speed = 0;
+    // the street's level, as the game holds it once it has caught up with you (stream.ts eases it 5% a
+    // frame: a few frames after a long jump it still sits at the last place's)
+    G.U.uLampBaseY.value = Math.max(0, G.world.terrain.heightAt(G.walker.x, G.walker.z));
     await frames(opts.settle);
     for (const v of variants) {
       await v.apply(G);
