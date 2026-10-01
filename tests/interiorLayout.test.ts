@@ -197,7 +197,9 @@ describe('houses', () => {
       // with the sun (9:18 on 1 October at 40.4° N: 26° up, bearing 118°): the stance sees the pools
       const s = sunRoomView(P, fp, Ly, 90, 180, 0, sun)!;
       expect(s.glass).toBe(v.glass);
-      expect(s.pool!).toBeGreaterThanOrEqual(0.5);
+      // (sunlit floor in the frame — the stance's own estimate: a narrow bedroom's single window
+      // leaves a small patch; the review's room, 5 m² of glass, about 5%)
+      expect(s.pool!).toBeGreaterThan(0.01);
       const su = (s.x - P.cx) * P.ux + (s.z - P.cz) * P.uz, sv = (s.x - P.cx) * P.vx + (s.z - P.cz) * P.vz;
       expect(su > s.room.r.u0 && su < s.room.r.u1 && sv > s.room.r.v0 && sv < s.room.r.v1).toBe(true);
       // furniture where it stood: it stands clear of it, and the light on that floor isn't a pool

@@ -116,20 +116,80 @@ export function sunniest(homes: readonly { P: Plan; fp: Footprint; L: Layout }[]
   });
   return at;
 }
+/** Whether a point of room R's floor (local u, v) lies in the sun: the shader's pools — from it toward
+ *  the sun and out through a pane of one of the room's own facade window cells (the panes poolOn casts). */
+function sunlit(P: Plan, fp: Footprint, R: Room, sun: [number, number, number], k: number) {
+  const M = { kind: P.kind, eave: fp.eave, fo: fp.floor0 - fp.base, glass: !!P.glass };
+  const su = sun[0] * P.ux + sun[2] * P.uz, sv = sun[0] * P.vx + sun[2] * P.vz, r = R.r;
+  const loc = P.loc, ccw = polyArea(loc) > 0;
+  const walls: { a: P2; eu: number; ev: number; nu: number; nv: number; len: number; toward: number; W: NonNullable<ReturnType<typeof wallWindows>> }[] = [];
+  for (let i = 0; i < loc.length; i++) {
+    const a = loc[i], b = loc[(i + 1) % loc.length], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len < 1) continue;
+    const eu = (b[0] - a[0]) / len, ev = (b[1] - a[1]) / len, nu = ccw ? ev : -ev, nv = ccw ? -eu : eu, toward = su * nu + sv * nv;
+    const W = toward > 0.02 && sun[1] >= 0.05 ? wallWindows(len, k, M) : null;
+    if (W) walls.push({ a, eu, ev, nu, nv, len, toward, W });
+  }
+  return (u: number, v: number) => {
+    for (const w of walls) {
+      const din = (w.a[0] - u) * w.nu + (w.a[1] - v) * w.nv; // (how far in from that wall)
+      if (din < 0) continue;
+      const h = (din * sun[1]) / w.toward; // (the height the light comes in at)
+      if (h < 0.98 || h > 2.17) continue;
+      const s = (u + (su / sun[1]) * h - w.a[0]) * w.eu + (v + (sv / sun[1]) * h - w.a[1]) * w.ev, j = Math.floor(s / w.W.cellW), cs = (j + 0.5) * w.W.cellW;
+      if (s < 0 || s > w.len || j >= w.W.n || Math.abs(s - cs) > Math.max(0.05, w.W.half - 0.12)) continue;
+      const cu = w.a[0] + w.eu * cs - w.nu * 0.15, cv = w.a[1] + w.ev * cs - w.nv * 0.15;
+      if (cu > r.u0 - 0.05 && cu < r.u1 + 0.05 && cv > r.v0 - 0.05 && cv < r.v1 + 0.05) return true;
+    }
+    return false;
+  };
+}
+/** What the lens (62° high, 16:9) sees of room R from c (local), the eye 1.6 m up, looking along
+ *  `dir` (a local unit vector) pitched by `pitch`: the shares of the frame on its bare floor, on its
+ *  sunlit floor and on its biggest wall — the room as a box, its furniture (`taken`) as blocks the
+ *  height of a sofa's back. */
+function frameIn(R: Rect, c: P2, dir: P2, pitch: number, lit: (u: number, v: number) => boolean, taken: readonly Rect[], ceil: number) {
+  const ty = Math.tan((31 * Math.PI) / 180), tx = (ty * 16) / 9, e = 1.6, cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const NX = 16, NY = 9, wall = [0, 0, 0, 0];
+  let floor = 0, sun = 0;
+  for (let j = 0; j < NY; j++)
+    for (let i = 0; i < NX; i++) {
+      const x = (-1 + (2 * i + 1) / NX) * tx, y = (-1 + (2 * j + 1) / NY) * ty;
+      const du = dir[0] * (cp - sp * y) + dir[1] * x, dv = dir[1] * (cp - sp * y) - dir[0] * x, dy = sp + cp * y;
+      let tw = Infinity, side = -1;
+      if (du > 1e-9) (tw = (R.u1 - c[0]) / du), (side = 1);
+      else if (du < -1e-9) (tw = (R.u0 - c[0]) / du), (side = 0);
+      if (dv > 1e-9 && (R.v1 - c[1]) / dv < tw) (tw = (R.v1 - c[1]) / dv), (side = 3);
+      else if (dv < -1e-9 && (R.v0 - c[1]) / dv < tw) (tw = (R.v0 - c[1]) / dv), (side = 2);
+      const tf = dy < -1e-9 ? e / -dy : Infinity;
+      if (tf < tw) {
+        // (over a piece of furniture on the way down — below its back — the ray ends on that)
+        const t85 = (e - 0.85) / -dy;
+        if (taken.some((q) => [t85, (t85 + tf) / 2, tf * 0.999].some((t) => inR(q, c[0] + du * t, c[1] + dv * t)))) continue;
+        floor++;
+        if (lit(c[0] + du * tf, c[1] + dv * tf)) sun++;
+      } else if (side >= 0) {
+        const h = e + dy * tw;
+        if (h >= 0 && h <= ceil) wall[side]++;
+      }
+    }
+  const n = NX * NY;
+  return { floor: floor / n, sun: sun / n, wall: Math.max(...wall) / n };
+}
 /** The stance that frames the room of storey k with the most glass facing east to south (null: no
  *  such glass). With the sun (`sun`: world direction toward it) — the stance in that room (on a 40 cm
- *  grid, or a step inside one of its doorways) that sees most of the sun's pools on its floor in the
- *  lens, a metre or more off, the windows in view too; with its furniture (`taken`: the floor it
- *  claims, furnish.ts) not stood in, and the pools behind a sofa or a bed out of sight. Without: in a
- *  doorway of the room, or at its far side, whichever stands farthest back from that glass, looking
- *  at the floor a stride in from the windows. The eye is pitched down enough for the pools and not so
- *  far the windows' heads leave the frame. */
+ *  grid, or a step inside one of its doorways; turned toward its pools, a little either way, and
+ *  pitched down 0.2–0.44) whose frame holds the most sunlit floor, while no bare floor or wall takes
+ *  more than about a quarter of it and the light no more than half the floor in sight (`pool`: that
+ *  sunlit share of the frame); with its furniture (`taken`: the floor it claims, furnish.ts) not stood
+ *  in and seen as low blocks. Without: in a doorway of the room, or at its far side, whichever stands
+ *  farthest back from that glass, looking at the floor a stride in from the windows. */
 export function sunRoomView(P: Plan, fp: Footprint, L: Layout, lo = 90, hi = 180, k = 0, sun?: [number, number, number], taken: readonly Rect[] = []): Stance | null {
   const g = sunniestRoom(P, fp, L, lo, hi, k, sun)?.g;
   if (!g) return null;
   const R = g.room.r, [nu, nv] = g.out;
   const pool = sun ? poolOn(P, fp, g.room, sun, k, taken) : [];
-  if (pool.length >= 4) {
+  if (sun && pool.length >= 4) {
     const cand: P2[] = [];
     for (let u = R.u0 + 0.45; u <= R.u1 - 0.45 + 1e-6; u += 0.4) for (let v = R.v0 + 0.45; v <= R.v1 - 0.45 + 1e-6; v += 0.4) cand.push([u, v]);
     for (const d of L.doors) {
@@ -137,35 +197,28 @@ export function sunRoomView(P: Plan, fp: Footprint, L: Layout, lo = 90, hi = 180
       const [u, v] = d.ax === 0 ? [d.t, d.c] : [d.c, d.t];
       cand.push([u + (d.ax === 1 ? Math.sign((R.u0 + R.u1) / 2 - u) * 0.35 : 0), v + (d.ax === 0 ? Math.sign((R.v0 + R.v1) / 2 - v) * 0.35 : 0)]);
     }
-    const H = (40 * Math.PI) / 180, V = (29 * Math.PI) / 180, eye = 1.6;
-    // (a pool's out of sight where the line to it passes over furniture below sofa-back height: past
-    // the middle of the way down from the eye)
-    const hidden = (c: P2, p: P2) => taken.some((q) => [0.5, 0.6, 0.7, 0.8, 0.9].some((t) => inR(q, c[0] + (p[0] - c[0]) * t, c[1] + (p[1] - c[1]) * t)));
-    let best: { c: P2; yaw: number; pitch: number; s: number; n: number } | null = null;
+    const lit = sunlit(P, fp, g.room, sun, k), ceil = P.floorH - 0.3;
+    // (the lens sees past the room into the rest of its open plan: the space's extent)
+    const box = L.rooms.filter((q) => q.level === k && q.space === g.room.space).reduce((b, q) => ({ u0: Math.min(b.u0, q.r.u0), u1: Math.max(b.u1, q.r.u1), v0: Math.min(b.v0, q.r.v0), v1: Math.max(b.v1, q.r.v1) }), { ...R });
+    let best: { c: P2; ang: number; pitch: number; s: number; sun: number } | null = null;
     for (const c of cand) {
       if (taken.some((q) => inR(q, c[0], c[1], 0.3))) continue; // (not standing in the furniture)
-      const near = pool.filter((p) => Math.hypot(p[0] - c[0], p[1] - c[1]) >= 1.0);
+      const near = pool.filter((p) => Math.hypot(p[0] - c[0], p[1] - c[1]) >= 1.4);
       if (!near.length) continue;
-      const fu = near.reduce((s, p) => s + p[0], 0) / near.length, fv = near.reduce((s, p) => s + p[1], 0) / near.length;
-      const fd = Math.hypot(fu - c[0], fv - c[1]), ang = Math.atan2(fv - c[1], fu - c[0]);
-      const pitch = -Math.max(0.18, Math.min(0.55, Math.atan2(eye, fd) * 0.8));
-      let n = 0;
-      for (const p of near) {
-        const d = Math.hypot(p[0] - c[0], p[1] - c[1]), da = Math.abs(((Math.atan2(p[1] - c[1], p[0] - c[0]) - ang + 3 * Math.PI) % (2 * Math.PI)) - Math.PI);
-        if (da <= H && Math.abs(-Math.atan2(eye, d) - pitch) <= V && !hidden(c, p)) n++;
-      }
+      const a0 = Math.atan2(near.reduce((s, p) => s + p[1], 0) / near.length - c[1], near.reduce((s, p) => s + p[0], 0) / near.length - c[0]);
       // (the windows the light comes through in the frame too: their middle within the lens)
-      const wa = Math.abs(((Math.atan2(g.at[1] - c[1], g.at[0] - c[0]) - ang + 3 * Math.PI) % (2 * Math.PI)) - Math.PI);
-      const s = n + (wa <= H ? 6 : 0);
-      if (!best || s > best.s + 1e-9) best = { c, yaw: 0, pitch, s, n };
-      if (best.c === c) {
-        const [x0, z0] = toW(P, c[0], c[1]), [x1, z1] = toW(P, fu, fv);
-        best.yaw = Math.atan2(-(x1 - x0), -(z1 - z0));
-      }
+      const wa = Math.atan2(g.at[1] - c[1], g.at[0] - c[0]);
+      for (const da of [0, -0.2, 0.2, -0.4, 0.4])
+        for (const pitch of [-0.2, -0.28, -0.36, -0.44]) {
+          const ang = a0 + da, f = frameIn(box, c, [Math.cos(ang), Math.sin(ang)], pitch, lit, taken, ceil);
+          const over = Math.max(0, f.floor - 0.22) + Math.max(0, f.wall - 0.24) + Math.max(0, f.sun - 0.45 * f.floor);
+          const s = f.sun - 3 * over + (Math.abs(((wa - ang + 3 * Math.PI) % (2 * Math.PI)) - Math.PI) <= 0.7 ? 0.004 : 0);
+          if (!best || s > best.s + 1e-9) best = { c, ang, pitch, s, sun: f.sun };
+        }
     }
     if (best) {
-      const [x, z] = toW(P, best.c[0], best.c[1]);
-      return { x, z, yaw: best.yaw, pitch: best.pitch, feet: P.floor0 + k * P.floorH, room: g.room, glass: g.glass, pool: best.n / pool.length };
+      const [x, z] = toW(P, best.c[0], best.c[1]), [x1, z1] = toW(P, best.c[0] + Math.cos(best.ang), best.c[1] + Math.sin(best.ang));
+      return { x, z, yaw: Math.atan2(-(x1 - x), -(z1 - z)), pitch: best.pitch, feet: P.floor0 + k * P.floorH, room: g.room, glass: g.glass, pool: best.sun };
     }
   }
   // the floor a stride in from that glass: where the pools lie
