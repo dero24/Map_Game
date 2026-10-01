@@ -53,14 +53,15 @@ can do the roof half with open data; the wall half has no open, global source.
 | Roofs, lower 48 | USDA NAIP (0.6 m, some states 0.3 m, leaf-on, ~2–3 yr cycle) via the USGS National Map ImageServer `imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer/exportImage` | Public domain ("USGS, USDA, The National Map: Orthoimagery"); keyless; ArcGIS Server's CORS default is all origins (Esri docs) — not testable from the agents' sandbox, so the tile service relays it too (`/naip`) | **built** (bake + streamed cells) |
 | Roofs, lower 48 (other doors) | NAIP COGs: AWS `naip-visualization` (requester-pays — no browser), Planetary Computer (SAS-token API + a GeoTIFF decoder); `basemap.nationalmap.gov` USGSImageryOnly tiles (NAIP-based, but cached only to z16 ≈ 1.8 m/px) | public domain | not used |
 | Roofs, elsewhere | National orthophotos: France IGN Géoplateforme WMTS (Licence Ouverte 2.0, keyless), Netherlands PDOK Luchtfoto (CC BY 4.0), Spain PNOA (CC BY 4.0), Switzerland SWISSIMAGE (free OGD), Austria basemap.at (CC BY 4.0), Japan GSI seamlessphoto (attribution); never Esri World Imagery, Bing or Google (their terms forbid extraction) | per country | next: one adapter each behind `naipRequest`'s shape |
-| Facade colour / material | OSM `building:colour`, `building:material` (well under 2% of US houses); Overture `facade_color`/`facade_material` (OSM's tags, conflated) | ODbL | read (`realTile.ts`, bake) |
+| Facade colour / material | OSM `building:colour`, `building:material` (well under 2% of US houses); Overture `facade_color`/`facade_material` (its docs name no source; OSM is its top-priority input and the ML footprint sources carry no colours, so in practice OSM's tags) | ODbL | read (`realTile.ts`, bake) |
 | Facades from the street | Mapillary (CC BY-SA 4.0 imagery, free client token), Panoramax (CC BY-SA 4.0 by default, no key, mostly France/Europe), KartaView (CC BY-SA, Grab) | see plan below | next |
 
 **What's built (2026-09-30)**
 
 - `src/world/aerial.ts` (pure, `tests/aerial.test.ts`): reading a roof off a photo — the
-  footprint eroded 0.7–1.5 m, the cell's footprints registered to the photo (±5 px, then ±1 px a
-  house: survey offsets, a house leaning from the camera), greenery (excess green) and no-data
+  footprint eroded 0.7–1.5 m, the cell's footprints registered to the photo (±6 px, then ±1 px a
+  house: survey offsets, a house leaning from the camera; nothing over 16 m is read — a tall
+  building leans off its footprint further than that), greenery (excess green) and no-data
   dropped, the darkest 35% (shaded slope, tree and chimney shadow) and brightest 15% (glints,
   vents, trim) left out, the per-channel median of the rest. The photo's cast is fitted per cell as
   a line in brightness (NAIP leans green; haze turns dark roofs cyan, light ones yellow) against
