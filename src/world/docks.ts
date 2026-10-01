@@ -27,8 +27,9 @@ export interface Berth { x: number; z: number; yaw: number; type: BoatType; seed
 
 /** Finger piers: one every SLIP m along the waterline, FINGER m long, FINGER_W wide. */
 export const SLIP = 4.5, FINGER = 9, FINGER_W = 0.9;
-/** A house's dock: within REACH of the water, none mapped within CLEAR m, two in five. */
-const REACH = 30, CLEAR = 30, DOCK_SHARE = 0.4, DOCK_W = 1.6;
+/** A house's dock: within REACH of the water, none mapped within CLEAR m; a hash under DOCK_SHARE
+ *  (two in five of the lots once docks keep 10 m apart and each has room for its boat). */
+const REACH = 30, CLEAR = 30, DOCK_SHARE = 0.46, DOCK_W = 1.6;
 
 const H = (x: number, z: number, salt: number) => hashf(Math.floor(x * 4) * 73856093 ^ Math.floor(z * 4) * 19349663 ^ (salt * 83492791));
 const unpack = (f: number[]): P[] => { const o: P[] = []; for (let i = 0; i + 1 < f.length; i += 2) o.push([f[i] / 10, f[i + 1] / 10]); return o; };
