@@ -81,6 +81,22 @@ window.__TREECHECK__ = async (tag = 't', opts = {}) => {
       else L.mask(true, tr.x, tr.z, 1.0);
       R.setRenderTarget(rt); R.setClearColor(0x0000ff, 1); R.clear();
       R.render(G.scene, cam);
+      // …then the ground over it in the sky's blue, against the tree's depth: the trunk's foot is
+      // cut where the ground cuts it in the painted frame (its root ring runs on under it)
+      const gnd = world.getObjectByName('ground'), shown = [];
+      if (gnd) {
+        for (const o of off) if (o === gnd) (o.visible = true), shown.push(o);
+        const was = [];
+        world.traverse((o) => { if (o !== world && o.parent === world && o !== gnd && o.visible) (was.push(o), (o.visible = false)); });
+        G.scene.overrideMaterial = (window.__TREEBLUE__ ??= new T.MeshBasicMaterial({ color: 0x0000ff, side: T.DoubleSide }));
+        const ac = R.autoClear;
+        R.autoClear = false;
+        R.render(G.scene, cam);
+        R.autoClear = ac;
+        G.scene.overrideMaterial = null;
+        for (const o of was) o.visible = true;
+        for (const o of shown) o.visible = false;
+      }
       R.readRenderTargetPixels(rt, 0, 0, W, H, px);
     } finally {
       L.mask(false);

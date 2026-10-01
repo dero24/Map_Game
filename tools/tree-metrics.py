@@ -15,7 +15,8 @@ For each mask:
   limbs   wood entering the crown (test: ≥ 3): the most separate runs of wood, at least 2 px wide,
           across any row of the crown's lower half where leaves are, inside its outline.
   taper   the trunk's width at its base over its width where it meets the crown (test: ≥ 1.3):
-          the wood's run under the crown's middle, at the lowest rows and just under the crown.
+          the wood's run under the crown's middle — the widest row of its lowest 15% (the mask has no
+          ground) — over its median just under the crown. Only when the foot is in the frame.
 Needs numpy, scipy, Pillow and scikit-image.
 """
 import sys
@@ -126,8 +127,13 @@ def measure_mask(path):
             return 0
         sizes = [(abs(np.nonzero(lab == k)[0].mean() - cx), (lab == k).sum()) for k in range(1, n + 1)]
         return min(sizes)[1]
-    if len(trunk_rows) >= 6:
-        base = np.median([width_at(y) for y in trunk_rows[-4:]])
+    if trunk_rows and trunk_rows[-1] >= wood.shape[0] - 1:
+        out['foot_out_of_frame'] = True
+    elif len(trunk_rows) >= 6:
+        # (the foot: the widest row of the trunk's lowest 15% — the mask has no ground, and its last
+        # rows are the rounded end of the root ring under it)
+        foot = trunk_rows[-max(4, len(trunk_rows) * 15 // 100):]
+        base = max(width_at(y) for y in foot)
         top = np.median([width_at(y) for y in trunk_rows[:4]])
         out['taper'] = float(base / max(1, top))
         out['trunk_px'] = [float(base), float(top)]
@@ -166,4 +172,4 @@ if __name__ == '__main__':
         print(f"{p}\n  sky through the crown {s * 100:.1f}% (2%: {m['sky_2'] * 100:.1f}, 5%: {m['sky_5'] * 100:.1f}) [{ok(0.04 <= s <= 0.12)}]"
               f"\n  longest straight edge {m['edge'] * 100:.1f}% of the crown's width ({m['crown_w_px']} px; at 1.5 px {m['edge_tol1_5'] * 100:.1f}%) [{ok(m['edge'] <= 0.15)}]"
               f"\n  limbs entering the crown {m['limbs']} [{ok(m['limbs'] >= 3)}]"
-              + (f"\n  trunk base / top {m['taper']:.2f} ({m['trunk_px'][0]:.0f} / {m['trunk_px'][1]:.0f} px) [{ok(m['taper'] >= 1.3)}]" if 'taper' in m else '\n  trunk: not in view'))
+              + (f"\n  trunk base / top {m['taper']:.2f} ({m['trunk_px'][0]:.0f} / {m['trunk_px'][1]:.0f} px) [{ok(m['taper'] >= 1.3)}]" if 'taper' in m else '\n  trunk: its foot is out of the frame' if m.get('foot_out_of_frame') else '\n  trunk: not in view'))
