@@ -406,7 +406,28 @@ export function furnitureClass(t: Record<string, string>): string | null {
   if (t.barrier === 'bollard') return 'bollard';
   if (t.amenity === 'vending_machine' && /parking_tickets/.test(t.vending ?? '')) return 'meter';
   if (t.tourism === 'viewpoint') return 'viewpoint';
+  // the micro layer's (world/micro.ts): a picnic table, a fire ring, a public grill, a planter, an
+  // information board or map, a recycling container, a street cabinet, a vending machine, a clock
+  // on its post (one on a wall is the wall's)
+  if (t.leisure === 'picnic_table') return 'picnic';
+  if (t.leisure === 'firepit') return 'firepit';
+  if (t.amenity === 'bbq') return 'bbq';
+  if (t.amenity === 'planter' || t.man_made === 'planter') return 'planter';
+  if (t.tourism === 'information' && /^(board|map)$/.test(t.information ?? '')) return 'info';
+  if (t.amenity === 'recycling' && t.recycling_type !== 'centre') return 'recycling';
+  if (t.man_made === 'street_cabinet') return 'cabinet';
+  if (t.amenity === 'vending_machine') return 'vending';
+  if (t.amenity === 'clock' && !/wall/.test(t.support ?? '')) return 'clock';
   return null;
+}
+/** A navigation mark on the water (OpenSeaMap `seamark:type`): a buoy (lateral, cardinal, special,
+ *  a mooring) or a beacon on its pile → its Point class and `sp` = its shape and colour
+ *  ('conical:red', 'can:green', 'mooring:white'), or null. */
+export function seamarkOf(t: Record<string, string>): { c: 'buoy' | 'beacon'; sp: string } | null {
+  const sm = t['seamark:type'];
+  if (!sm || !/^(buoy_|beacon_|mooring$)/.test(sm)) return null;
+  const shape = t[`seamark:${sm}:shape`] ?? (sm === 'mooring' ? 'mooring' : ''), colour = (t[`seamark:${sm}:colour`] ?? '').split(';')[0];
+  return { c: sm.startsWith('beacon') ? 'beacon' : 'buoy', sp: `${shape}:${colour}`.slice(0, 32) };
 }
 /** A playground piece's kind (assets/play.ts PlayKind) from its OSM `playground=*` value. */
 export function playKindOf(v: string | undefined): string | null {
@@ -518,7 +539,11 @@ export function overpassQuery(bb: { s: number; w: number; n: number; e: number }
   node["natural"="tree"];
   node["amenity"="bench"];
   node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp)$"];
-  node["amenity"~"^(waste_basket|post_box|bicycle_parking|drinking_water|vending_machine)$"];
+  node["amenity"~"^(waste_basket|post_box|bicycle_parking|drinking_water|vending_machine|recycling|bbq|clock|planter)$"];
+  node["leisure"~"^(picnic_table|firepit)$"];
+  node["tourism"="information"]["information"~"^(board|map)$"];
+  node["man_made"~"^(street_cabinet|planter)$"];
+  node["seamark:type"~"^(buoy_|beacon_|mooring$)"];
   node["barrier"="bollard"];
   node["tourism"="viewpoint"];
   node["playground"];
@@ -635,6 +660,11 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
           }
           points.push(pt);
         }
+      }
+      const mark = seamarkOf(t);
+      if (mark && e.lat != null && e.lon != null) {
+        const [x, z] = P.project(e.lat, e.lon);
+        if (inB(x, z, margin)) points.push({ c: mark.c, sp: mark.sp, x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10, own: inB(x, z) ? undefined : OWN_CTX });
       }
       const sc = STRUCT(t);
       if (sc && e.lat != null && e.lon != null) {

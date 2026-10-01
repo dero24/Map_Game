@@ -97,6 +97,8 @@ async function tile(request, env, ctx, url, cx, cz) {
   if (hit) return hit;
   // v4: fills gained per-road rng + land masks + interior clamp — bump the object key
   // so stale tile payloads can't be served past the edge TTL.
+  // v23: bridges' bridge:structure / bridge:movable (Road.bs / Road.bm) and the micro layer's
+  // furniture (picnic tables, boards, cabinets, recycling, clocks, seamarks…)
   const okey = `t/v23/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
   const bucket = env.TILES ?? null; // binding may be absent under `wrangler dev` before the bucket exists
   if (bucket) {

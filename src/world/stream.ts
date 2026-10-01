@@ -70,6 +70,7 @@ export interface TileArt {
   tunnels?: Road[]; // underground roads (Road.tu) — the life sim's cars only
   areas: Area[];
   kerb?: Float32Array; // parked cars for kerbCars.ts
+  micro?: Float32Array; // the small things, for the micro layer (world/microLayer.ts)
   junc?: Float32Array; // junction control for the life sim (src/sim/traffic.ts)
   flat?: boolean; // mounted without data still in flight (late DEM or LiDAR) — a relief rebuild will replace it
   vec?: boolean; // a stand-in built from the vector tiles: real streets and buildings (the skyline steps aside)
@@ -555,7 +556,7 @@ export class TileStream {
           console.warn('lidar worker unavailable; measuring on the tile worker', e);
         }
       }
-      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin, origin: this.man.origin, dem: this.demEnabled, demBase: this.tilesBase, style: activeStyle().key, baked: this.man.tiles.map((t) => t.id), lidar: this.lidar, lidarPort, fail: new URLSearchParams(location.search).get('fail')?.split(',') ?? [], vector: new URLSearchParams(location.search).get('vector') !== '0' }, lidarPort ? [lidarPort] : []);
+      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin, origin: this.man.origin, dem: this.demEnabled, demBase: this.tilesBase, style: activeStyle().key, baked: this.man.tiles.map((t) => t.id), lidar: this.lidar, lidarPort, fail: new URLSearchParams(location.search).get('fail')?.split(',') ?? [], vector: new URLSearchParams(location.search).get('vector') !== '0', date: new URLSearchParams(location.search).get('date') }, lidarPort ? [lidarPort] : []);
       this.worker = w;
     } catch {
       this.workerDead = true;
@@ -766,6 +767,7 @@ export class TileStream {
         tunnels: tile.tun,
         areas: tile.areas ?? [],
         kerb: tile.kerb,
+        micro: tile.micro,
         junc: tile.junc,
         flat: !!tile.late,
         vec: !!tile.vec,

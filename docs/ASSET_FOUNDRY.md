@@ -111,6 +111,14 @@ for plants you grow and the workbench); animals < 1,600; cars about 1,800.
   - summer beaches (umbrellas, towels, chairs) around the lifeguard stands;
   - picnic tables;
   - car gear, chosen by `gearFor` (coastal → surfboards and kayaks).
+- **Micro things** (`micro.ts`): the small made objects of a lived-in place — trash and
+  recycling carts, A-frames, planters, newspaper boxes, kerb pedestals, signs, Adirondack chairs,
+  grills, fire rings, AC units, birdbaths, house flags, lawn and realtor signs, hoops, bikes,
+  kayaks, surfboards, coolers, cleats, dock boxes, life rings, crab traps, mooring balls, pot
+  floats, channel buoys and markers, and the map's picnic tables, boards, cabinets, recycling,
+  vending machines and clocks. Placed per tile by `world/micro.ts` (real data first, then a fill
+  keyed by position, house, shop, beach, pier); drawn by the micro layer — 3D close up,
+  hemi-octahedral impostor cards beyond 25–60 m, two draws for all of them.
 - **Vehicles and rocks** (`kit.ts`), unchanged in shape. Cars now carry gear keys and per-car proportions and fade, both for driveway cars and for moving traffic.
 
 ## Time: the Grow verb
@@ -144,7 +152,7 @@ collectible the moment it exists.
 
 - More families: docks and piers from the same recipe, playgrounds, fences and gates, lifeguard stands, porch furniture, laundry lines, flags.
 - Per-instance vertex AO (ASSET_FIDELITY §3).
-- Impostor or billboard LOD for trees beyond ~1 km.
+- Impostor LOD for trees beyond ~1 km and people beyond ~60 m: the micro layer's `ImpostorAtlas` + card shader (`render/impostor.ts`) take any foundry geometry.
 - Seasonal foliage colour (autumn crowns from the same calendar that drives bloom).
 - More animals by region: pelicans and herons on southern coasts, moose up north, lizards in the desert.
 - Construction tiers 2–4 (dock/boat, structures, sketch-to-build) on the same recipe vocabulary.

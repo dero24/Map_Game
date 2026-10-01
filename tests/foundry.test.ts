@@ -416,3 +416,35 @@ describe('playgrounds: the pieces a park\'s playground is made of', () => {
     expect(bb(playGeometry('swing')).max.y).toBeGreaterThan(2.2);
   });
 });
+
+import { MICRO_KINDS, microLib } from '../src/assets/micro';
+describe('micro things: the small made objects the micro layer draws (assets/micro.ts)', () => {
+  it('every piece is valid, within its box and under budget; on its foot (a float: at the waterline; a wall mount: at its bracket)', () => {
+    for (const k of MICRO_KINDS) {
+      const g = k.geo(), [w, h, d] = k.box, b = bb(g);
+      expect(finite(g), k.id).toBe(true);
+      expect(verts(g), k.id).toBeLessThanOrEqual(k.budget);
+      expect(b.max.x - b.min.x, k.id).toBeLessThanOrEqual(w);
+      expect(b.max.y - b.min.y, k.id).toBeLessThanOrEqual(h);
+      expect(b.max.z - b.min.z, k.id).toBeLessThanOrEqual(d);
+      if (k.mount === 'float') expect(b.min.y, k.id).toBeGreaterThan(-2.1); // (a buoy's skirt, a marker's pile under the water)
+      else if (!k.mount) expect(Math.abs(b.min.y), k.id).toBeLessThanOrEqual(0.21); // (an umbrella's pole is pushed into the sand)
+      for (const a of ['position', 'normal', 'color']) expect(g.getAttribute(a), `${k.id} ${a}`).toBeDefined();
+      // every collider fits inside the piece's own footprint
+      if (k.solid) expect(k.solid[0] * 2 <= w + 0.01 && k.solid[1] * 2 <= d + 0.01, k.id).toBe(true);
+    }
+    expect(new Set(MICRO_KINDS.map((k) => k.id)).size).toBe(MICRO_KINDS.length);
+  });
+  it('is deterministic, and most pieces take the instance colour somewhere (TINT)', () => {
+    let tinted = 0;
+    for (const k of MICRO_KINDS) {
+      const a = k.geo().getAttribute('position').array, b = k.geo().getAttribute('position').array;
+      expect(Array.from(a)).toEqual(Array.from(b));
+      const c = microLib(k.id)!.getAttribute('color').array as Float32Array;
+      let white = false;
+      for (let i = 0; i + 2 < c.length; i += 3) if (c[i] >= 0.98 && c[i + 1] >= 0.98 && c[i + 2] >= 0.98) white = true;
+      if (white) tinted++;
+    }
+    expect(tinted).toBeGreaterThan(MICRO_KINDS.length * 0.6);
+  });
+});

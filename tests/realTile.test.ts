@@ -178,7 +178,8 @@ describe('osmToTile — buildings', () => {
     ), OPTS);
     const at = (x: number) => t.points.find((p) => Math.abs(p.x - x) < 1)?.c;
     expect([100, 120, 140, 160, 180].map(at)).toEqual(['xing', 'xing_l', 'xing_u', 'xing_u', 'xing']);
-    expect([200, 220, 240, 260, 280, 300, 320, 340, 360].map(at)).toEqual(['lamp', 'bin', 'postbox', 'bikerack', undefined, 'drinking', 'bollard', 'meter', undefined]);
+    // (a drinks machine is the micro layer's: world/micro.ts draws it where it stands in the open)
+    expect([200, 220, 240, 260, 280, 300, 320, 340, 360].map(at)).toEqual(['lamp', 'bin', 'postbox', 'bikerack', undefined, 'drinking', 'bollard', 'meter', 'vending']);
   });
 
   it('a business node inside a building names it and says what it is used for', () => {

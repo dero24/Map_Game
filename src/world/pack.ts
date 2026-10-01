@@ -71,6 +71,7 @@ export interface BuiltTile {
   tun?: Road[]; // prim tunnels (Road.tu): the life sim's cars only
   areas?: Area[]; // prim (own-only) areas — the ground paint's parks, lots, pitches
   kerb?: Float32Array; // parked kerb + lot cars as records (kerbCars.ts KERB_STRIDE)
+  micro?: Float32Array; // the small things of the place, for the micro layer (world/micro.ts MICRO_STRIDE)
   junc?: Float32Array; // the tile's junctions and who stops where (src/sim/traffic.ts packJunctions)
   poles: { x: number; z: number; cx: number; cz: number }[];
   atlas?: ImageBitmap; // street-sign atlas

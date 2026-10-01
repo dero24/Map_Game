@@ -54,6 +54,60 @@ or per-region style.
   hair up close). Streets, lakes and shore foam are pulled forward (−1/−4); wakes −2/−6; the sea
   plane is pushed back (+1/+2) under shore ground.
 
+## The micro layer: impostor cards for the small things
+
+The small made things of a place — carts, A-frames, porch chairs, flags, hoops, AC units, cleats,
+dock boxes, buoys, beach gear, and what the map tags one by one (picnic tables, information
+boards, street cabinets, recycling containers, vending machines, clocks, fire rings, planters,
+the channel's buoys and markers) — are one layer, drawn in **two draws** however many there are.
+
+- **Pieces** (`src/assets/micro.ts`, a foundry family): 37 recipes in a fixed order — a record
+  carries the index, so add at the end, never reorder. Front −z, origin on the ground (a wall
+  mount at its bracket, a float at the waterline), TINT where the instance colour paints. Budgets
+  and boxes in `tests/foundry.test.ts`.
+- **Placement** (`src/world/micro.ts`, in the tile worker, after every other builder): plain
+  records (`MICRO_STRIDE` 8: x, y, z, yaw, piece, scale, 0xRRGGBB, flags) on `BuiltTile.micro`.
+  Real data first (realTile `furnitureClass`/`seamarkOf`), then a seeded fill keyed by position
+  and by what's there: each house's trash and recycling carts (at the kerb on the round's
+  collection day — a weekday per ~2 km cell, from the real date; the round's cart colour), porch
+  chairs, a flag by the door, lawn things by hood and coast, a hoop by the drive, an AC unit and a
+  grill or fire ring; shopfront A-frames, planters, newspaper boxes; kerb pedestals and signs; the
+  beach crowd in the dry sand by the season (`BEACH_SEASON`); cleats, dock boxes, life rings and
+  traps on piers; moorings and pot floats off them. Each tile places only on its own ground, on a
+  world-aligned grid (a beach or pier the map gives a neighbour still gets dressed). Solid pieces
+  are walls in the walk world. `?date=` reaches the worker (`setMicroDate`).
+- **Drawing** (`src/world/microLayer.ts`, main thread; stream `onTile`/`onUnload` → `add`/`remove`,
+  `update` each frame): every `step` m moved it re-sorts the mounted tiles' records, nearest first,
+  under the tier's caps. Close up, the real pieces are written into **one merged mesh**
+  (`propMaterial({ fade: true })`: lit, shaded and casting like any prop). Further out, **one
+  instanced draw of impostor cards** (`src/render/impostor.ts`).
+- **Impostors**: each piece is photographed once on the GPU, a few a frame at boot, from an 8 × 8
+  **hemi-octahedral** grid of directions (the square's middle straight down, its rim the horizon,
+  28 azimuths on it) into an atlas: RGBA8 colour (√-encoded, premultiplied coverage) + RGBA8
+  octahedral normal, depth toward the camera and the TINT mask. Pictures are 64 px for big pieces
+  (R ≥ 1.2 m) and 32 px for the rest on a desktop (32 / 16 on phones), blocks packed on a
+  power-of-two grid so mips never mix pictures (cards read to a 4-texel picture). A card is a quad
+  square to the sight line through the piece's middle; the vertex shader turns the view into the
+  piece's frame (yaw), picks the grid triangle it falls in (three pictures, barycentric weights)
+  and carries each corner along the sight line onto each picture's plane (Brucks' virtual-frame
+  projection — no swimming between pictures). The fragment shader blends the three, decodes the
+  normal (turned by the yaw), writes **per-pixel depth** from the baked depth (`gl_FragDepth`: it
+  sits in the ground and behind posts, and the ink finds its outline) and lights it with the
+  props' own `snowOn` / `pigment` / `shadowAt` (it receives shadows) / `paintLight` / `applyFog`.
+- **Hand-over**: per piece, where a texel of its pictures is about a pixel on screen
+  (`handoverAt`), clamped to the tier's range (desktop 25–60 m, phone 18–40, low 14–30). Across
+  `band` m both draw, splitting the pixels on one ordered dither (`dither4`): the mesh where the
+  dither is under its share, the card the rest — the share computed identically from the piece's
+  foot in both shaders. A piece only one side holds (capped out, or not yet photographed) draws
+  whole on that side. Far off the cards thin out the same way at the piece's `far`.
+- **Budgets** (`render/quality.ts` `MICRO_TIERS`, tested in `tests/micro.test.ts`): two draws in
+  the main pass (+1 in the shadow pass where the 3D pieces cast: desktop and phone); cards
+  12,000 / 4,000 / 1,500 and 3D pieces 500 / 160 / 80 (160k / 50k / 24k vertices) for desktop /
+  phone / low; atlas ≤ 48 MB / 12 MB / 12 MB with mips.
+- Debug: `__GAME__.micro` (`stats`, `mode` 0 hand over · 1 cards only · 2 3D only), `?micro=0`.
+- The atlas takes any foundry geometry: people (9.5) and trees (1.15) can use the same
+  `ImpostorAtlas` + card shader.
+
 ## Ground paint
 
 - `groundPaint.ts` windows `detail` (300 m) + `mid` (1.6 km) re-centre on the walker and paint
