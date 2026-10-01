@@ -102,7 +102,7 @@ export function leafCardMaterial(tex: THREE.Texture) {
         float pic = aD.z;
         vec2 cell = vec2(mod(pic, ${cols}.0), floor(pic / ${cols}.0));
         vUv = (cell + aCorner * 0.5 + 0.5) / vec2(${cols}.0, ${rows}.0);
-        vQ = q / max(1.0, length(q));
+        vQ = q; // (the pixel's place on the card, −√2 … √2: the cluster's roundness reads it)
         vRight = right; vUp = up; vToCam = toCam;
         vInfo = vec4(far, aD.w, aE.w, fract(sin(dot(foot.xz + uWorldOffset.xz, vec2(12.9898, 78.233))) * 43758.5453));
         vCrown = vec4(aK.xyz, aK.w);
@@ -151,7 +151,8 @@ export function leafCardMaterial(tex: THREE.Texture) {
         vec3 rel = vWorldPos - vCrown.xyz, perp = rel - V * dot(rel, V);
         vec3 surf = perp + V * vCrown.w * sqrt(max(0.0, 1.0 - dot(perp, perp) / (vCrown.w * vCrown.w)));
         vec3 cN = normalize(surf * vec3(1.0, 1.4, 1.0));
-        vec3 bulge = normalize(vRight * vQ.x + vUp * vQ.y + vToCam * sqrt(max(0.0, 1.0 - dot(vQ, vQ))));
+        vec2 qq = vQ / max(1.0, length(vQ));
+        vec3 bulge = normalize(vRight * qq.x + vUp * qq.y + vToCam * sqrt(max(0.0, 1.0 - dot(qq, qq))));
         vec3 N = normalize(mix(cN, bulge, 0.25));
         vec3 alb = twig ? vec3(0.15, 0.105, 0.068) * (0.9 + 0.4 * t.r) : vTint * (0.48 + 0.75 * t.r); // (twigs: the bark's brown)
         alb *= 0.72 + 0.5 * fbm3(vWorldPos * 0.9);

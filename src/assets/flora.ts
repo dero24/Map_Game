@@ -452,7 +452,7 @@ export const crownField = (m: TreeMeta): [number, number] => [m.crownBottom + 0.
 // the far model hides, a trunk that flares at the root and tapers to its fork, scaffold limbs and a
 // second order of branches reaching into the crown, and the crown itself a few large leaf-cluster
 // cards — each a spray of painted leaves with gaps between them — set where the far model's lobes
-// are. Lit by the same sphere field and the same instance colour, the two read as one tree at the
+// are. Lit by the same crown field and the same instance colour, the two read as one tree at the
 // hand-over; up close the outline is leaves and the sky shows through.
 //
 // The near model is grown from the far recipe's own plan (TreePlan), so a species keeps the
@@ -500,7 +500,7 @@ export function nearTreeGeometry(kind: TreeKind, v: number): NearTree {
   // (anything left over — a loop the joiner can't start — still grows, a run of its own)
   B.forEach((q, i) => { if (!used[i]) runs.push({ p: [q.a.clone(), q.b.clone()], r: [q.r0, q.r1], col: q.col, trunk: q.a.y <= 0.01 }); });
 
-  // every run resampled into a gently crooked curve (a ring every ~0.6 m, each nudged off the
+  // every run resampled into a gently crooked curve (a ring every ~0.8 m, each nudged off the
   // straight line), the trunk with its root flare: wide where it meets the ground, tapering up
   const wood: THREE.BufferGeometry[] = [], trunks: { p: THREE.Vector3[]; r: number[] }[] = [];
   const axis: { p: THREE.Vector3; r: number; trunk: boolean }[] = []; // where a branch may start
@@ -560,11 +560,12 @@ export function nearTreeGeometry(kind: TreeKind, v: number): NearTree {
   const reaches = (a: THREE.Vector3, b: THREE.Vector3) => a.y < cb + 0.5 && b.y > cb + 0.3;
   const stems = runs.filter((rn) => rn.trunk);
   let limbsIn = runs.filter((rn) => (!rn.trunk || stems.length > 1) && reaches(rn.p[0], rn.p[rn.p.length - 1])).length;
+  const limbed = axis.some((o) => !o.trunk);
   for (const q of cards) {
     let best = -1, bs = Infinity;
     for (let i = 0; i < axis.length; i++) {
       const s = axis[i];
-      if (s.trunk && s.p.y < above && axis.some((o) => !o.trunk)) continue; // (not off the bare trunk under the crown)
+      if (s.trunk && s.p.y < above && limbed) continue; // (not off the bare trunk under the crown)
       const d = s.p.distanceTo(q.c) + Math.max(0, s.p.y - q.c.y - 0.2) * 2;
       if (d < bs) (bs = d), (best = i);
     }
