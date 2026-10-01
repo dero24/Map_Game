@@ -363,7 +363,7 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
     dog's collar (`DOG_COLLAR`). The dogs draw with `dogMaterial`: the fox's trot, the tail
     carried and wagged side to side.
   - Walkers are drawn on the ground under them (`life.ts`, `ground` = `WalkWorld.outdoorNear`, within
-    300 m): the sim walks them 12 cm over their street's own height, and the shoes hovered.
+    150 m): the sim walks them 12 cm over their street's own height, and the shoes hovered.
   - Nobody stands in the first steps in from a front door, or sits within 2.2 m of where you stand
     once you're in (`interiors.ts` `people`): a resident there was cut in half at the lens of
     anyone walking in.

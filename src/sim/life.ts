@@ -753,7 +753,7 @@ export class LifeClient {
           if (dist < 25) st.pedsNear++;
           // on the ground under them, as the cars are: the sim walks them 12 cm over their street's
           // own height, and a shoe hovering over the sidewalk read as a block on stilts of shadow
-          if (this.ground && dist < 300 && (amt > -0.5 || amt < -3.5)) {
+          if (this.ground && dist < 150 && (amt > -0.5 || amt < -3.5)) { // (past 150 m 12 cm is under half a pixel)
             const gy = this.ground(x, z, y - 0.12);
             if (Number.isFinite(gy) && Math.abs(gy - (y - 0.12)) < 0.5) y = gy + 0.005;
           }
