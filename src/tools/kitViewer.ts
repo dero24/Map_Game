@@ -133,10 +133,10 @@ function buildPeople(seed: number) {
   // row 3: the beach — chair, lying, sitting on the sand, standing, a kid jumping, the lifeguard
   for (let pz = 0; pz < 6; pz++) addPerson(pz * 1.5 - 3.75, 9.5, 0, [0x1f3f7a, 0xc8302a, 0x2e8a6a, 0xf2c23a, 0xe0705a, 0xc8302a][pz], { defines: { LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1, BEACH: 1 }, pose: pz });
   // row 4: seated (a café chair), the knocked down, and the lite body beside the full one
-  addPerson(-3, 12.5, 0, 0x7a5b8c, { defines: { LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1, SEATED: 1, INDOOR: 1 } });
-  addPerson(-1.4, 12.5, 0, 0x3f6f78, { amt: -1.5 });
-  addPerson(0.4, 12.5, 0.4, 0xe8d8b0, { amt: 0, lite: true });
-  addPerson(1.4, 12.5, 0.4, 0xe8d8b0, { amt: 0 });
+  addPerson(-3, 12.5, Math.PI, 0x7a5b8c, { defines: { LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1, SEATED: 1, INDOOR: 1 } });
+  addPerson(-1.4, 12.5, Math.PI, 0x3f6f78, { amt: -2.5 });
+  addPerson(0.4, 12.5, Math.PI + 0.4, 0xe8d8b0, { amt: 0, lite: true });
+  addPerson(1.4, 12.5, Math.PI + 0.4, 0xe8d8b0, { amt: 0 });
 }
 
 const $ = (id: string) => document.getElementById(id) as HTMLInputElement;

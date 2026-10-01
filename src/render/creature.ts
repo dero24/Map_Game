@@ -30,7 +30,8 @@ const BEACH_GLSL_LOOK = /* glsl */ `
     else if (isMark(pc, ${mk(MARK.shoe)}) || isMark(pc, ${mk(MARK.sole)})) {
       pc = ${mk(MARK.skin)};
       float sx = aPart < 1.5 ? HX : -HX;
-      p.x = sx + (p.x - sx) * 0.8; p.y *= 0.62; p.z = p.z * 0.92 - 0.006;
+      // (lower over the toes, up to the ankle at the back: the shin still meets it)
+      p.x = sx + (p.x - sx) * 0.8; p.y = min(p.y, 0.03) + max(p.y - 0.03, 0.0) * mix(0.55, 0.85, smoothstep(-0.1, 0.03, p.z)); p.z = p.z * 0.92 - 0.006;
     }
     else if (isMark(pc, ${mk(MARK.pants)})) pc = vec3(1.0);
     else if (all(greaterThan(pc, vec3(0.98)))) {

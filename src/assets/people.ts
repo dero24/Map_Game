@@ -382,8 +382,9 @@ export function walkPose(ph: number, amt: number, t: number, seed: number, still
   const walk = clamp(amt, 0, 1), run = clamp((amt - 1) * 2, 0, 1);
   const idle = (1 - clamp(amt * 4, 0, 1)) * (1 - still);
   const A = 0.36 * walk + 0.14 * run;
-  // the weight on one leg, then the other (held, then shifted): the hips over it, the other knee easy
-  const ws = clamp(Math.sin(t * 0.16 + seed * 2.3) * 2.6, -1, 1) * idle, dx = 0.035 * ws;
+  // the weight on one leg, then the other (held ten seconds or so, then shifted): the hips over it,
+  // the other knee easy
+  const ws = clamp(Math.sin(t * 0.26 + seed * 2.3) * 2.6, -1, 1) * idle, dx = 0.035 * ws;
   const leg = (sd: number) => {
     // (the knee starts to fold before the toe leaves the ground and is straight again before the
     // heel lands: its curve runs half a radian ahead of the thigh's)
@@ -540,7 +541,7 @@ export const POSE_GLSL = /* glsl */ `
     float walk = clamp(amt, 0.0, 1.0), run = clamp((amt - 1.0) * 2.0, 0.0, 1.0);
     float idle = (1.0 - clamp(amt * 4.0, 0.0, 1.0)) * (1.0 - still);
     float A = 0.36 * walk + 0.14 * run;
-    float ws = clamp(sin(t * 0.16 + seed * 2.3) * 2.6, -1.0, 1.0) * idle, dx = 0.035 * ws;
+    float ws = clamp(sin(t * 0.26 + seed * 2.3) * 2.6, -1.0, 1.0) * idle, dx = 0.035 * ws;
     P.lr = pLeg(1.0, ph, A, walk, run, ws, dx); P.ll = pLeg(-1.0, ph, A, walk, run, ws, dx);
     P.ar = pArm(1.0, ph, walk, run, idle, t, seed, talk); P.al = pArm(-1.0, ph, walk, run, idle, t, seed, talk);
     if (lead > 0.5) {
