@@ -67,7 +67,7 @@ terrain/DEM, or the LiDAR measure pipeline.
   server proxies `/__tiles/*` to whichever port answers and the game probes that first
   (`?tiles=` explicit overrides, `?tiles=off` disables; no worker → procedural past the bake
   + a toast).
-- Tile cache key: worker R2 `t/v23`, client `&v=23` — bump both when realTile output changes (v23: a bridge's `bridge:structure` → `Road.bs`, drawn by bridges.ts as a truss, an arch, a suspension or a cable-stayed span, and `bridge:movable` → `Road.bm`, a lift or swing span; v7: named business nodes → `Building.n` / `Building.u`; the worker's Overpass query fetches `node[name][amenity|shop|office]`). **Redeploy the worker** (`cd worker && npx wrangler deploy`) for streamed towns to carry them.
+- Tile cache key: worker R2 `t/v23`, client `&v=23`, and the direct (Overpass) cache's `DIRECT_V` 23 in `tile.worker.ts` — bump all three when realTile output changes (v23: a bridge's `bridge:structure` → `Road.bs`, drawn by bridges.ts as a truss, an arch, a suspension or a cable-stayed span, and `bridge:movable` → `Road.bm`, a lift or swing span; v7: named business nodes → `Building.n` / `Building.u`; the worker's Overpass query fetches `node[name][amenity|shop|office]`). **Redeploy the worker** (`cd worker && npx wrangler deploy`) for streamed towns to carry them.
 - `?at=lat,lon` beyond every baked backdrop builds a virtual manifest (origin snapped to
   1/64° so players share cell/R2 keys) — `w-<cx>_<cz>` specs stream OSM→TileJson while `s-*`
   synth twins mount instantly and upgrade in place.
