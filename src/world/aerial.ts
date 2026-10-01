@@ -145,11 +145,13 @@ export const toward = (cast: Cast, warm: RGB): Cast => ({ a: [cast.a[0] - warm[0
 // pixel mixes a roof with its gutters and shadow): a little contrast and colour go back in. Hue
 // and lightness are the measurement and stay; chroma is held to what roofing comes in — clay and
 // brown shingle can be strong, painted metal (greens, blues) only so far, and a sage or teal
-// that's left is more likely a tree's shade than a copper roof.
+// that's left is more likely a tree's shade than a copper roof. A light roof, and a flat one
+// (membrane, gravel, tar), mirrors the sky: its blue is the sky's, not its own.
 export function aerialRoof(c: number, flat: boolean): number {
   const [h, s, l] = rgbToHsl(((c >> 16) & 255) / 255, ((c >> 8) & 255) / 255, (c & 255) / 255);
-  const deg = h * 360;
-  const cap = deg < 45 || deg >= 335 ? 0.36 : deg < 75 ? 0.2 : deg < 170 ? 0.1 : deg < 265 ? 0.15 : 0.08;
+  const deg = h * 360, warm = deg < 45 || deg >= 335;
+  let cap = warm ? 0.36 : deg < 75 ? 0.2 : deg < 170 ? 0.1 : deg < 265 ? 0.11 : 0.08;
+  if (!warm && (flat || l > 0.55)) cap *= 0.5;
   const s2 = Math.min(cap, s * 1.5);
   const l2 = clamp(0.5 + (l - 0.5) * 1.1, flat ? 0.2 : 0.12, flat ? 0.72 : 0.6);
   const [R, G, B] = hslToRgb(h, s2, l2);
