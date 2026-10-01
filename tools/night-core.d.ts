@@ -9,6 +9,16 @@ export function lch(a: number, b: number): { C: number; h: number };
 export interface RegionColour { n: number; L: number | null; C: number | null; h: number | null; L90: number | null }
 export function regionColour(px: Pixels, w: number, h: number, keep: (i: number) => boolean): RegionColour;
 export function nightDarkPasses(c: RegionColour | null, opts?: { maxL?: number; hue?: [number, number]; maxC?: number }): { pass: boolean; why: string };
+export function nightGapPasses(c: RegionColour | null, opts?: { L?: [number, number]; hue?: [number, number] }): { pass: boolean; why: string };
+export function chromaPasses(c: RegionColour | null, maxC: number): { pass: boolean; why: string };
+
+export interface Falloff {
+  pass: boolean; why: string;
+  dHalf: number | null; at12: number | null;
+  steep?: number; rise?: number; heartL?: number; floorL?: number;
+  profile: [number, number, number][];
+}
+export function poolFalloff(samples: { d: number; Y: number | null }[], floorY: number | null, opts?: { half?: number; at?: number; keep?: number }): Falloff;
 
 export interface WireReading { n: number; wireL: number | null; skyL: number | null; delta: number | null; d95: number | null; over: number; pass: boolean | null }
 export function wiresVsSky(shown: Pixels, hidden: Pixels, mask: ArrayLike<number>, opts?: { tol?: number }): WireReading;

@@ -1,7 +1,7 @@
 // Shared uniforms + GLSL chunks for every painted material. Uniform objects are shared by reference,
 // so updating U.* once per frame updates every material.
 import * as THREE from 'three';
-import { POOL, GLSL_POOL } from './nightLight';
+import { POOL, GLSL_POOL, FLOOR, GLSL_FLOOR } from './nightLight';
 
 const v3 = (x = 0, y = 0, z = 0) => ({ value: new THREE.Vector3(x, y, z) });
 export const HOLE_MAX = 32;
@@ -35,9 +35,13 @@ export const U = {
   uLampMap: { value: null as THREE.Texture | null },
   uLampBox: { value: new THREE.Vector4(0, 0, 1, 1) },
   uLampBaseY: { value: 0 }, // ground height around the walker: lamp pools light the street, not roofs
-  // a pool's shape (nightLight.ts POOL): the lamp map's cone reach, the heart's radius, the edge's
-  // steepness, the heart's gain over the lamp colour
-  uLampPool: { value: new THREE.Vector4(POOL.reach, POOL.radius, POOL.edge, POOL.gain) },
+  // a pool (nightLight.ts POOL): the lamp's height and the pool's reach in the map (both as painted
+  // there), the heart's gain over the pool's colour, and the map's headroom
+  uLampPool: { value: new THREE.Vector4(POOL.height, POOL.reach, POOL.gain, POOL.headroom) },
+  uPoolColor: { value: new THREE.Vector3(...POOL.color) }, // the pools' light (linear): a warm cream
+  // the night's floor (nightLight.ts FLOOR): the town's glow at street level, its colour (linear) and
+  // strength; it goes with uNight, so it's nothing by day
+  uNightFloor: { value: new THREE.Vector4(...FLOOR.color, FLOOR.strength) },
   // Paint-as-you-explore window (src/world/explore.ts): R8 paint amount per 8 m texel, box = x0 z0 1/w 1/h.
   uExplore: { value: null as THREE.Texture | null },
   uExploreBox: { value: new THREE.Vector4(0, 0, 1 / 4096, 1 / 4096) },
@@ -111,7 +115,8 @@ uniform float uShadowOn, uShadowTexel, uShadowStrength;
 uniform sampler2D uLampMap;
 uniform vec4 uLampBox, uLampPool;
 uniform float uLampBaseY;
-uniform vec3 uLampColor;
+uniform vec3 uLampColor, uPoolColor;
+uniform vec4 uNightFloor;
 uniform float uLampPower, uPigment, uPigmentScale, uWind;
 uniform float uSnow, uLeafFall, uAutumn, uTurn, uBloom;
 uniform vec4 uBiome;
@@ -163,21 +168,23 @@ float canyonAt(vec3 wpos) {
   if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
   return texture2D(uLampMap, uv).g * (1.0 - smoothstep(0.0, 45.0, wpos.y - uLampBaseY));
 }
+// How much of the street's own light reaches a point: all of it up to 1.5 m over the local ground,
+// none by 10.5 m — the lamps' pools and the night's floor light the street, not the roofs. (Relative
+// to the local ground, not sea level: streamed towns sit on real (DEM) terrain, and an absolute clamp
+// blacked out every pool more than ~10 m above the sea.)
+float streetLevel(vec3 wpos) { return clamp(1.0 - max(wpos.y - uLampBaseY - 1.5, 0.0) / 9.0, 0.0, 1.0); }
 ${GLSL_POOL}
-// The street lamps' pools (0–1 of a heart) at a point: the nearest lamp's distance, read back from
-// the lamp map's cone, shaped into a bright heart and a quick soft edge (nightLight.ts), with dark
-// between one pool and the next.
+${GLSL_FLOOR}
+// The street lamps' pools (0–1 of a lone heart) at a point: their light, added up in the lamp map —
+// a pale glow under each lamp that dies away, meeting the next one's faintly (nightLight.ts).
 float lampField(vec3 wpos) {
   vec2 uv = (wpos.xz - uLampBox.xy) * uLampBox.zw;
   if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
-  // relative to the local ground, not sea level: streamed towns sit on real (DEM) terrain, and
-  // an absolute clamp blacked out every pool more than ~10 m above the sea
-  float h = clamp(1.0 - max(wpos.y - uLampBaseY - 1.5, 0.0) / 9.0, 0.0, 1.0);
-  return poolLight(texture2D(uLampMap, uv).r) * h;
+  return poolLight(texture2D(uLampMap, uv).r) * streetLevel(wpos);
 }
 float lampAt(vec3 wpos) {
   if (uLampPower <= 0.001) return 0.0;
-  return lampField(wpos) * uLampPower * uLampPool.w;
+  return lampField(wpos) * uLampPower * uLampPool.z;
 }
 
 // Pigment turbulence (Bousseau et al.): density variation anchored to world space.
@@ -226,7 +233,9 @@ vec3 paintLight(vec3 albedo, vec3 N, vec3 wpos, float shadow, float ao, float sk
   vec3 glaze = mix(vec3(1.0), uShadowTint / max(lt, 1e-3), 0.4);
   lit = mix(lit, lit * glaze, (1.0 - diff) * uShadowTintAmt);
   // a lamp pool is painted as light, not albedo × light (dark asphalt would halve every pool)
-  lit += max(albedo, vec3(0.3)) * uLampColor * lampAt(wpos);
+  lit += max(albedo, vec3(0.3)) * uPoolColor * lampAt(wpos);
+  // …and between the pools the night's floor, the town's own glow (nothing by day)
+  lit += nightFloor(albedo, streetLevel(wpos));
   return lit;
 }
 vec3 paintLight(vec3 albedo, vec3 N, vec3 wpos, float shadow, float ao) { return paintLight(albedo, N, wpos, shadow, ao, 0.0); }

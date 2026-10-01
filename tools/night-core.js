@@ -1,6 +1,6 @@
 // The night check's pure parts (tools/night-check.js; tests/nightCheck.test.ts): colour science on
-// 8-bit sRGB frames and the reviewer's round-10 night tests, kept free of the page so Node can test
-// them. A frame is RGBA bytes, row 0 at the TOP (as a 2D canvas reads it), w × h.
+// 8-bit sRGB frames and the reviewer's night tests (rounds 10 and 11), kept free of the page so Node
+// can test them. A frame is RGBA bytes, row 0 at the TOP (as a 2D canvas reads it), w × h.
 
 const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
 const LIN = new Float64Array(256).map((_, i) => lin(i));
@@ -70,10 +70,65 @@ export function wiresVsSky(shown, hidden, mask, { tol = 2 } = {}) {
   return { n, wireL: +wireL.toFixed(1), skyL: +skyL.toFixed(1), delta: +(wireL - skyL).toFixed(2), d95: +d[Math.floor(0.95 * (n - 1))].toFixed(1), over: +(over / n).toFixed(3), pass: wireL <= skyL + tol };
 }
 
+/** Round 11's gap: the ground between the pools, lit by the night's floor (sky glow, windows,
+ *  porches) — never black, never a wash: L* 10–20, and cool (hue 220–280°). */
+export function nightGapPasses(c, { L = [10, 20], hue = [220, 280] } = {}) {
+  if (!c || !c.n) return { pass: false, why: 'no pixels' };
+  const why = [];
+  if (c.L < L[0] || c.L > L[1]) why.push(`L* ${c.L} outside ${L[0]}–${L[1]}`);
+  if (!(c.h >= hue[0] && c.h <= hue[1])) why.push(`hue ${c.h}° outside ${hue[0]}–${hue[1]}°`);
+  return { pass: !why.length, why: why.join(', ') };
+}
+
+/** A colour's chroma at most maxC: round 11's heart (a warm cream, C* ≤ 30) and the night street's
+ *  bottom 40% (C* ≤ 22: no orange carpet where you stand in a pool). */
+export function chromaPasses(c, maxC) {
+  if (!c || !c.n) return { pass: false, why: 'no pixels' };
+  return c.C <= maxC ? { pass: true, why: '' } : { pass: false, why: `C* ${c.C} > ${maxC}` };
+}
+
+/** A pool's fall-off along the road (round 11: a lamp's own light, not a disc with a rim). samples:
+ *  [{ d, Y }] — d m from the pool's heart, Y the ground's mean relative luminance there — and the
+ *  floor's Y (the gap's ground). The pool's own light at d is (Y − floor) / (heart − floor), the
+ *  heart being the samples within 1 m. It must halve no nearer than `half` m and still be ≥ `keep`
+ *  of the heart at `at` m. Also returned: the profile in L*, the steepest drop in L* per metre and
+ *  the largest rise (a ring brighter than what's inside it). */
+export function poolFalloff(samples, floorY, { half = 5, at = 12, keep = 0.08 } = {}) {
+  const s = samples.filter((p) => p.Y != null && Number.isFinite(p.Y)).sort((a, b) => a.d - b.d);
+  const core = s.filter((p) => p.d <= 1);
+  if (!core.length || floorY == null || s.length < 4) return { pass: false, why: 'no profile', dHalf: null, at12: null, profile: [] };
+  const heartY = core.reduce((t, p) => t + p.Y, 0) / core.length;
+  if (!(heartY > floorY)) return { pass: false, why: 'no pool above the floor', dHalf: null, at12: null, profile: [] };
+  const rel = s.map((p) => ({ d: p.d, p: (p.Y - floorY) / (heartY - floorY), L: lstar(Math.max(p.Y, 0)) }));
+  const lerpAt = (d) => {
+    for (let i = 0; i + 1 < rel.length; i++) if (rel[i].d <= d && rel[i + 1].d >= d) { const a = rel[i], b = rel[i + 1]; return b.d === a.d ? a.p : a.p + ((b.p - a.p) * (d - a.d)) / (b.d - a.d); }
+    return null;
+  };
+  let dHalf = null;
+  for (let i = 1; i < rel.length && dHalf == null; i++) if (rel[i].p < 0.5) { const a = rel[i - 1], b = rel[i]; dHalf = a.p <= 0.5 ? a.d : a.d + ((a.p - 0.5) * (b.d - a.d)) / (a.p - b.p); }
+  if (dHalf == null && rel[rel.length - 1].p >= 0.5) dHalf = Infinity; // (still above half as far as it was seen)
+  let steep = 0, rise = 0;
+  for (let i = 1; i < rel.length; i++) {
+    const dd = rel[i].d - rel[i - 1].d, dl = rel[i - 1].L - rel[i].L;
+    if (dd > 0) steep = Math.max(steep, dl / dd);
+    rise = Math.max(rise, -dl);
+  }
+  const at12 = lerpAt(at);
+  const why = [];
+  if (dHalf == null || dHalf < half) why.push(`halves at ${dHalf == null ? '?' : dHalf.toFixed(1)} m < ${half} m`);
+  if (at12 == null) why.push(`not seen at ${at} m`);
+  else if (at12 < keep) why.push(`${(at12 * 100).toFixed(1)}% at ${at} m < ${keep * 100}%`);
+  return {
+    pass: !why.length, why: why.join(', '),
+    dHalf: dHalf == null || !Number.isFinite(dHalf) ? dHalf : +dHalf.toFixed(1), at12: at12 == null ? null : +at12.toFixed(3),
+    steep: +steep.toFixed(1), rise: +rise.toFixed(1), heartL: +lstar(heartY).toFixed(1), floorL: +lstar(floorY).toFixed(1),
+    profile: rel.map((r) => [r.d, +r.L.toFixed(1), +r.p.toFixed(3)]),
+  };
+}
+
 /** Lamp pools down the street, heart against gap. pools: each { heartY, gapY } (mean relative
- *  luminance of the pool's heart and of the dark ground between it and the next pool down the
- *  street; null: no dark ground there at all — the pools run together), nearest first. A pool
- *  counts when heart ≥ ratio × gap. */
+ *  luminance of the pool's heart and of the ground between it and the next pool down the street;
+ *  null: no ground seen there), nearest first. A pool counts when heart ≥ ratio × gap. */
 export function poolContrast(pools, { ratio = 2.5, need = 2 } = {}) {
   const rows = pools.map((p) => ({ ...p, ratio: p.gapY == null ? 0 : p.gapY > 0 ? +(p.heartY / p.gapY).toFixed(2) : p.heartY > 0 ? Infinity : 0 }));
   const good = rows.filter((p) => p.ratio >= ratio).length;
