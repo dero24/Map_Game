@@ -10,6 +10,7 @@ import { BOAT_TYPES, CAR_TYPES, PLANE_TYPES, boatGeometry, boatRecipe, carGeomet
 import { TREE_KINDS, TREE_VARIANTS, treeLib, PLANT_SPECIES, plantGeometry, SPECIES } from '../assets/flora';
 import { CRITTERS, critterLib, critterMaterial } from '../assets/fauna';
 import { MAILBOXES, mailboxLib, beachLib, CAR_GEAR, gearGeometry } from '../assets/furniture';
+import { MICRO_KINDS } from '../assets/micro';
 import { merge } from '../assets/core';
 import { propMaterial } from '../render/propMaterial';
 import { U } from '../render/shared';
@@ -116,6 +117,13 @@ function build() {
       const k = (['umbrella', 'umbrella', 'chair', 'towel', 'picnic'] as const)[i];
       add(beachLib(k, i), x, z, [0x3a8ac0, 0xd8342c, 0x5aa4c8, 0xf2c23a, 0x9a8f80][i], `beach-${k}`);
     }, 4);
+  }
+  if (fam === 'all' || fam === 'micro') {
+    // the micro layer's small things (assets/micro.ts), ten to a row
+    for (let r0 = 0; r0 < MICRO_KINDS.length; r0 += 10) {
+      const ks = MICRO_KINDS.slice(r0, r0 + 10);
+      rowOf(ks.length, 2.4, (i, x, z) => add(ks[i].geo(), x, z, PAINT[(r0 + i + seed) % PAINT.length], `micro-${ks[i].id}`), 5);
+    }
   }
   frame();
 }
