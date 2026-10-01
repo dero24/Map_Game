@@ -8,7 +8,7 @@ import { activeStyle } from './styles';
 import { lotLayout, type LotLayout } from './lots';
 import { MINOR, ROAD_RANK, roadPaint, streetSurface } from './roadPalette';
 import { COURT, courtFrame, diamondFrame, surfacePaint, type Sport } from './sports';
-import { makeCanvas } from './canvas';
+import { makeCanvas, type AnyCanvas } from './canvas';
 
 // a lot's stall layout, computed once per prepared outline
 const LOTS = new WeakMap<object, LotLayout | null>();
@@ -468,7 +468,8 @@ export class Painter {
         ctx.stroke();
       }
     }
-    const list = this.roadsIn(x0, z0, x1, z1).filter((r) => (level > 0 ? !r.item.lod : true) && (detail || !MINOR.has(r.item.c)) && overlaps(r, c0, d0, c1, d1));
+    const all = this.roadsIn(x0, z0, x1, z1).filter((r) => (level > 0 ? !r.item.lod : true) && (detail || !MINOR.has(r.item.c)) && overlaps(r, x0, z0, x1, z1));
+    const list = clip ? all.filter((r) => overlaps(r, c0, d0, c1, d1)) : all;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     // Front walks from each door to the street (flagstone-pale, under everything else).
@@ -571,7 +572,9 @@ export class Painter {
       }
       ctx.globalAlpha = 1;
     }
-    if (level === 2) this.crosswalks(ctx, list, this.xingIn(c0, d0, c1, d1));
+    // (a junction is judged by all its arms: a crossing's bars reach ~25 m from its node, so the
+    // arms of one just past the slice count too)
+    if (level === 2) this.crosswalks(ctx, clip ? all.filter((r) => overlaps(r, c0, d0, c1, d1, 50)) : all, this.xingIn(c0, d0, c1, d1));
     if (level === 2) this.wear(ctx, list.filter((r) => !this.bakedRoads.has(r)), arid); // streamed streets (the baked shore keeps its look)
     ctx.lineCap = 'round';
   }
@@ -746,6 +749,15 @@ type Rect = [number, number, number, number]; // x0, z0, x1, z1: a window's pixe
 // slice painted with a CELL of margin round it gets the same blur as the whole window.
 const CELL = 32;
 
+// A slice's canvas: an OffscreenCanvas where its 2D context blurs (`filter`), else an element.
+function sliceCanvas(): AnyCanvas {
+  if (typeof OffscreenCanvas !== 'undefined') {
+    const c = new OffscreenCanvas(1, 1), g = c.getContext('2d');
+    if (g && typeof (g as { filter?: unknown }).filter === 'string') return c;
+  }
+  return document.createElement('canvas');
+}
+
 // the cells a rect (pixels) touches, marked
 function mark(m: Uint8Array, N: number, x0: number, z0: number, x1: number, z1: number) {
   const i0 = Math.max(0, Math.floor(x0 / CELL)), i1 = Math.min(N, Math.ceil(x1 / CELL));
@@ -802,7 +814,7 @@ export class DetailGround {
   // holds its pixels everywhere else)
   private job: { wx: number; wz: number; todo: Rect[] } | null = null;
   private changed: Rect[] = []; // world boxes tiles changed in (touch), not yet in a job
-  private slice: HTMLCanvasElement | null = null;
+  private slice: AnyCanvas | null = null;
   constructor(private painter: Painter, private covers: { img: HTMLCanvasElement; L: TerrainLayer }[], res: number, readonly size = 300, private level: 1 | 2 = 2, private blur = 6) {
     this.canvas.width = this.canvas.height = res;
     this.texture = makeTex(this.canvas);
@@ -825,10 +837,8 @@ export class DetailGround {
       // the first paint: all of it, now
       this.job = null;
       this.changed.length = 0;
-      const ctx = this.canvas.getContext('2d')!;
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, res, res);
-      this.draw(ctx, wx, wz, 0, 0, [0, 0, res, res]);
+      this.canvas.width = res; // (cleared, its state reset: as a slice's canvas starts)
+      this.draw(this.canvas.getContext('2d')!, wx, wz, 0, 0, [0, 0, res, res]);
       this.show(wx, wz);
       return true;
     }
@@ -904,19 +914,24 @@ export class DetailGround {
   }
   // One slice of the window being painted in, drawn on a canvas of its own with a CELL of margin (the
   // blur's reach; none past the window's edge, where the whole window's wash fades out too) and
-  // copied in: the browser rasters it now, a slice's worth, not the whole move at the upload.
+  // copied in as a bitmap. Taking an OffscreenCanvas's bitmap rasters it there and then: on the main
+  // thread where 2D canvases are rastered on the CPU (a slice's worth, this frame), queued for the GPU
+  // otherwise. (A canvas element drawn into another stays a recording: the whole move was rastered
+  // at once, at the upload.)
   private paintRect(job: { wx: number; wz: number }, r: Rect) {
     const res = this.canvas.width;
     const sx = Math.max(0, r[0] - CELL), sz = Math.max(0, r[1] - CELL);
-    const sc = (this.slice ??= document.createElement('canvas'));
-    sc.width = Math.min(res, r[2] + CELL) - sx;
+    const sc = (this.slice ??= sliceCanvas());
+    sc.width = Math.min(res, r[2] + CELL) - sx; // (its state reset too: each slice starts as the whole window does)
     sc.height = Math.min(res, r[3] + CELL) - sz;
-    this.draw(sc.getContext('2d')!, job.wx, job.wz, sx, sz, r);
+    this.draw(sc.getContext('2d') as CanvasRenderingContext2D, job.wx, job.wz, sx, sz, r);
+    const img = 'transferToImageBitmap' in sc ? sc.transferToImageBitmap() : sc;
     const ctx = this.canvas.getContext('2d')!, w = r[2] - r[0], h = r[3] - r[1];
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.filter = 'none';
     ctx.clearRect(r[0], r[1], w, h);
-    ctx.drawImage(sc, r[0] - sx, r[1] - sz, w, h, r[0], r[1], w, h);
+    ctx.drawImage(img, r[0] - sx, r[1] - sz, w, h, r[0], r[1], w, h);
+    if ('close' in img) img.close();
   }
   // The paint of the window at (wx, wz) that reaches r, onto ctx, whose pixel (0, 0) is the window's
   // (ox, oz) — the whole window or a slice of it, the same wash and strokes.

@@ -181,13 +181,31 @@ function fly(D: DetailGround, from: [number, number], v: [number, number], secs:
   return out;
 }
 
+// (an OffscreenCanvas: a slice is painted on one and handed over as a bitmap)
+class MeterOffscreen extends MeterCanvas {
+  constructor(w: number, h: number) {
+    super();
+    this.width = w;
+    this.height = h;
+  }
+  transferToImageBitmap() {
+    const b = Object.assign(new MeterCanvas(), { close() {} });
+    b.width = this.width;
+    b.height = this.height;
+    this.ctx.reset();
+    return b;
+  }
+}
+
 describe('the ground windows on a flight', () => {
-  let doc: unknown;
+  const g = globalThis as Record<string, unknown>;
+  let doc: unknown, off: unknown;
   beforeAll(() => {
-    doc = (globalThis as Record<string, unknown>).document;
-    (globalThis as Record<string, unknown>).document = { createElement: () => new MeterCanvas() };
+    (doc = g.document), (off = g.OffscreenCanvas);
+    g.document = { createElement: () => new MeterCanvas() };
+    g.OffscreenCanvas = MeterOffscreen;
   });
-  afterAll(() => { (globalThis as Record<string, unknown>).document = doc; });
+  afterAll(() => { (g.document = doc), (g.OffscreenCanvas = off); });
   const res = 2048, full = res * res;
   const covers = () => [cover(-3000, -3000, 600, 600, 10), cover(-800, -1500, 800, 1500, 2)];
 
