@@ -61,7 +61,9 @@ window.__CALENDAR__ = async (tag = 'c', opts = {}) => {
   const BOAT = { skiff: [5, 1.9, 1.2], console: [7.2, 2.5, 2.2], cabin: [10.5, 3.4, 3.2], sail: [9.5, 3, 4], pontoon: [7.5, 2.6, 1.8], lobster: [11, 3.6, 3.2] };
   const boatsInFrame = () => {
     const shares = instances('moored-boats:').map((b) => { const d = BOAT[b.n.split(':')[1]] ?? [6, 2.4, 1.6]; return share(b.x, b.y, b.z, b.yaw, d[0], d[1], d[2]); }).filter((v) => v > 0);
-    return { inFrame: shares.length, big: shares.filter((v) => v >= 0.001).length };
+    // (a hull's box on screen: its rectangle over-counts a boat's pixels, so the ≥ 0.2% count is the
+    // safe reading of "each ≥ 0.1% of the frame")
+    return { inFrame: shares.length, over01: shares.filter((v) => v >= 0.001).length, over02: shares.filter((v) => v >= 0.002).length };
   };
   // the marina: the moored boat nearest the start with eight others within 45 m (review-shots.js 9)
   const marinaBoat = () => {

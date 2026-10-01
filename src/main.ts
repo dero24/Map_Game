@@ -1364,7 +1364,7 @@ async function main() {
     camera.position.sub(origin); // walker works in world coords; the renderer works origin-local
     stream.update(walker.x, walker.z);
     horizon.update(walker.x, walker.z);
-    kerbCars.update(walker.x, walker.z, timeParams.hour);
+    kerbCars.update(walker.x, walker.z, timeParams.hour, [walker.x, walker.z, fwd.x, fwd.z]); // (last frame's look)
     if (micro.group.visible) micro.update(camera.position.x + origin.x, camera.position.y, camera.position.z + origin.z, camera, timeParams.hour);
     if (!CAPTURE) ambientBalloons.update(walker.x, walker.z, dt); // (they keep the world's clock: never in a capture)
     if (playing()) balloonNews(dt);

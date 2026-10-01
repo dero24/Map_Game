@@ -8,7 +8,9 @@
 // Taken cars (driven off by the player; vehicles.ts) are skipped by key.
 // A car that comes and goes through the day (a beach lot's: calendar.ts) carries the hours it is
 // parked for; it is drawn only then, and walled only then — its walls go in and out of the walk
-// world as it arrives and leaves (its own collision scope), not with its tile.
+// world as it arrives and leaves (its own collision scope), not with its tile. One due to arrive or
+// leave in front of you waits until you look away (the clock jumping — a shot, the panel — doesn't
+// wait), as the beach's people do (crowdLayer.ts).
 import * as THREE from 'three';
 import { CAR_TYPES, carFarLib, carFarScale, carLib, carLiteLib, carRecipe, type CarType } from '../assets/kit';
 import { propMaterial } from '../render/propMaterial';
@@ -43,11 +45,14 @@ export class KerbCars {
   skip: (key: string) => boolean = () => false;
   /** main: the walk world, which walls the cars that come and go while they're parked */
   walls: KerbWalls | null = null;
-  /** the world's hour the cars are parked for (update's) */
+  /** the world's hour the cars are parked for (update's), and where the camera is and looks */
   private hour = 12;
   private hourDrawn = NaN;
-  // the cars that come and go, by tile: record index → its collision scope while it's walled
-  private comers = new Map<string, { k: number[]; scope: Map<number, number> }>();
+  private jump = true;
+  private view: [number, number, number, number] | undefined;
+  // the cars that come and go, by tile: which are parked as drawn (by record; 255 not yet), and the
+  // collision scope of each while it's walled
+  private comers = new Map<string, { k: number[]; on: Uint8Array; scope: Map<number, number> }>();
   private nextScope = SCOPE0;
   private tiles = new Map<string, Float32Array>();
   // the live ground under each far car, looked up once and kept until a tile mounts near it
@@ -139,8 +144,8 @@ export class KerbCars {
     }
     this.hy.set(id, { h: new Float32Array(data.length / KERB_STRIDE).fill(NaN), box: [x0, z0, x1, z1] });
     if (k.length) {
-      this.comers.set(id, { k, scope: new Map() });
-      this.wallComers(id);
+      this.comers.set(id, { k, on: new Uint8Array(data.length / KERB_STRIDE).fill(255), scope: new Map() });
+      this.syncComers(id);
     }
     this.dirty = true;
   }
@@ -151,32 +156,47 @@ export class KerbCars {
     this.comers.delete(id);
     if (this.tiles.delete(id)) this.dirty = true;
   }
-  refresh() { this.dirty = true; for (const id of this.comers.keys()) this.wallComers(id); }
+  refresh() { this.dirty = true; for (const id of this.comers.keys()) this.syncComers(id); }
 
-  /** Wall the tile's comers that are parked now, and unwall the ones that have left (or were taken). */
-  private wallComers(id: string) {
-    const c = this.comers.get(id), d = this.tiles.get(id), W = this.walls;
-    if (!c || !d || !W) return;
+  /** The tile's comers: parked or gone by the hour (a taken one gone at once; one in front of you
+   *  waits for you to look away), and walled while they're parked. */
+  private syncComers(id: string) {
+    const c = this.comers.get(id), d = this.tiles.get(id), W = this.walls, V = this.view;
+    if (!c || !d) return;
     for (const r of c.k) {
-      const i = r * KERB_STRIDE, want = parkedAt(d, i, this.hour) && !this.skip(`${id}:kerb:${r}`), s = c.scope.get(r);
-      if (want && s === undefined) {
+      const i = r * KERB_STRIDE, taken = this.skip(`${id}:kerb:${r}`), want = parkedAt(d, i, this.hour) && !taken ? 1 : 0;
+      if (c.on[r] !== want) {
+        const dx = d[i] - (V?.[0] ?? 0), dz = d[i + 2] - (V?.[1] ?? 0);
+        const held = c.on[r] !== 255 && !taken && !this.jump && V && dx * dx + dz * dz < 140 * 140 && dx * V[2] + dz * V[3] > -3;
+        if (!held) c.on[r] = want;
+      }
+      if (!W) continue;
+      const s = c.scope.get(r);
+      if (c.on[r] === 1 && s === undefined) {
         const scope = this.nextScope--;
         W.withScope(scope, () => W.addLoop(carCorners(d[i], d[i + 2], d[i + 3], CAR_TYPES[d[i + 4]] as CarType)));
         c.scope.set(r, scope);
-      } else if (!want && s !== undefined) {
+      } else if (c.on[r] !== 1 && s !== undefined) {
         W.removeScope(s, true);
         c.scope.delete(r);
       }
     }
   }
+  /** Is the car at record `r` (offset i) of tile `id` drawn now? */
+  private parked(id: string, d: Float32Array, i: number, r: number) { return allDay(d, i) || this.comers.get(id)?.on[r] === 1; }
 
   /** Per frame: refill when the walker has moved a few metres, the set changed, or the world's
-   *  clock has moved on (a few minutes: the beach lots fill and empty through the day). */
-  update(x: number, z: number, hour = this.hour) {
+   *  clock has moved on (a few minutes: the beach lots fill and empty through the day). `view`:
+   *  where the camera is and looks (x, z, forward x, forward z). */
+  update(x: number, z: number, hour = this.hour, view?: [number, number, number, number]) {
     this.hour = hour;
+    this.view = view;
     if (!(Math.abs(hour - this.hourDrawn) < 0.05)) {
+      const dh = Math.abs(hour - this.hourDrawn);
+      this.jump = !(dh < 0.25) && !(dh > 23.75);
       this.hourDrawn = hour;
-      for (const id of this.comers.keys()) this.wallComers(id);
+      for (const id of this.comers.keys()) this.syncComers(id);
+      this.jump = false;
       this.dirty = true;
     }
     if (!this.dirty && Math.hypot(x - this.lx, z - this.lz) < 6) return;
@@ -194,7 +214,7 @@ export class KerbCars {
         const t = d[i + 4];
         // (only a car that will be drawn is posed: the far ring holds tens of thousands)
         if (!(r2 < U2 && fullN[t] < FULL_CAP) && !(r2 < N2 && nearN[t] < NEAR_CAP) && farN >= FAR_CAP) continue;
-        if (!parkedAt(d, i, this.hour) || this.skip(`${id}:kerb:${k}`)) continue;
+        if (!this.parked(id, d, i, k) || this.skip(`${id}:kerb:${k}`)) continue;
         this.pose(d[i], d[i + 1], d[i + 2], d[i + 3], r2 < N2, hy, k);
         this.c.setRGB(d[i + 5], d[i + 6], d[i + 7]);
         if (r2 < U2 && fullN[t] < FULL_CAP) {
@@ -238,7 +258,7 @@ export class KerbCars {
         const dist = Math.hypot(d[i] - x, d[i + 2] - z);
         if (dist >= r || (best && dist >= best.d)) continue;
         const key = `${id}:kerb:${k}`;
-        if (!parkedAt(d, i, this.hour) || this.skip(key)) continue;
+        if (!this.parked(id, d, i, k) || this.skip(key)) continue;
         best = { key, x: d[i], z: d[i + 2], yaw: d[i + 3], color: this.c.setRGB(d[i + 5], d[i + 6], d[i + 7]).getHex(), model: CAR_TYPES[d[i + 4]], d: dist };
       }
     return best;

@@ -63,4 +63,20 @@ describe('kerb cars', () => {
     k.remove('b');
     expect(W.scopes.size).toBe(0);
   });
+  it('one due to leave in front of you waits until you look away (a jump of the clock doesn\'t)', () => {
+    const k = new KerbCars(), W = new Walls();
+    k.walls = W;
+    k.add('c', new Float32Array([...rec(20, 0, 0, 10.5, 16)]));
+    const ahead: [number, number, number, number] = [0, 0, 1, 0], behind: [number, number, number, number] = [0, 0, -1, 0];
+    k.update(0, 0, 15.9, ahead);
+    expect(drawn(k)).toBe(1);
+    k.update(0, 0, 16.1, ahead); // (its hours are up, but you're looking at it)
+    expect(drawn(k)).toBe(1);
+    expect(W.scopes.size).toBe(1);
+    k.update(0, 0, 16.2, behind);
+    expect(drawn(k)).toBe(0);
+    expect(W.scopes.size).toBe(0);
+    k.update(0, 0, 12, ahead); // (a jump: straight back)
+    expect(drawn(k)).toBe(1);
+  });
 });
