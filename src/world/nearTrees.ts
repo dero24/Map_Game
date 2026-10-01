@@ -58,6 +58,8 @@ export class NearTrees {
   private lx = Infinity; private ly = Infinity; private lz = Infinity;
   private dirty = true;
   private last = 0;
+  private grow = new Set<string>();
+  private grown = new Set<string>();
   /** false: every tree from its far mesh (`?neartrees=0`) */
   enabled = true;
   /** 0: hand over by distance · 1 far models only · 2 near models only (within reach) — a comparison */
@@ -88,6 +90,7 @@ export class NearTrees {
       let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
       for (let i = 0; i < n; i++) { const x = e[i * 16 + 12], z = e[i * 16 + 14]; x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
       fars.push({ im, kind: kind as TreeKind, v: +vs || 0, near, box: [x0, z0, x1, z1] });
+      if (!this.grown.has(`${kind}:${+vs || 0}`)) this.grow.add(`${kind}:${+vs || 0}`);
     });
     if (fars.length) this.tiles.set(id, fars);
     this.dirty = true;
@@ -111,6 +114,15 @@ export class NearTrees {
 
   /** Per frame, with the camera's position in the region frame. */
   update(x: number, y: number, z: number) {
+    // a species' near model is grown the first time a tile brings it, one a frame (a few ms each),
+    // not all at once the moment you walk up to it
+    for (const key of this.grow) {
+      this.grow.delete(key);
+      this.grown.add(key);
+      const [kind, vs] = key.split(':');
+      nearTreeLib(kind as TreeKind, +vs);
+      break;
+    }
     if (this.job) {
       // the leaf pictures, one a frame
       if (this.job.step()) {

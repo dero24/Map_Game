@@ -136,11 +136,12 @@ export function leafCardMaterial(tex: THREE.Texture) {
         float falls = mod(flags, 2.0), hue = mod(floor(flags / 2.0), 4.0), bloom = floor(flags / 8.0);
         float vTree = vInfo.w;
         bool twig = t.g < 0.5;
-        if (!twig && falls > 0.5) {
+        if (falls > 0.5) {
           // leaves go clump by clump as the far crown's do (each tree on its own schedule) — and
-          // here leaf by leaf within the clump
+          // here leaf by leaf within the clump; the card's twigs go with the last of them (bare, a
+          // card's twigs would be a starburst: the tree's own limbs and branches are its winter form)
           float clump = mix(vnoise3(vWorldPos * 1.1), t.b, 0.45) * 0.75 + vTree * 0.25;
-          if (clump < uLeafFall * 1.05 - 0.02) discard;
+          if (twig ? uLeafFall > 0.55 + 0.4 * vnoise3(vWorldPos * 2.3) : clump < uLeafFall * 1.05 - 0.02) discard;
         }
         // the crown's light field, as the far crown shows it: the normal of the crown's ball where the
         // sight line through this pixel meets its front (flattened as the far field is) — a card
