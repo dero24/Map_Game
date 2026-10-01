@@ -241,6 +241,13 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
         #endif
         #ifdef FOLIAGE
           alb *= 0.72 + 0.5 * fbm3(vWorldPos * 0.9);
+          #ifdef TREE_LOD
+          #if TREE_LOD == 2
+            // a near tree's bark: furrows running up the wood (in its own frame, so they stay on it as
+            // it sways), under a pixel by the hand-over
+            alb *= 0.74 + 0.36 * smoothstep(0.2, 0.8, vnoise3(vLocal * vec3(7.0, 0.8, 7.0)));
+          #endif
+          #endif
         #endif
         #ifdef DECID
           if (vLeafy > 0.5) {
