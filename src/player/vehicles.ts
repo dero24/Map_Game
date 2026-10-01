@@ -15,7 +15,7 @@ import { carMix, carLib, boatLib, boatRecipe, planeGeometry, planeRecipe, pickFr
 import { personLib, MARK } from '../assets/people';
 import { KERB_STRIDE } from '../world/kerbCars';
 import type { WalkWorld } from './collision';
-import { walkParams, type Walker } from './controller';
+import { walkParams, setLens, type Walker } from './controller';
 import type { Road, Terrain } from '../world/data';
 import { activeStyle } from '../world/styles';
 import { GEAR_NAME, type CarGear } from '../assets/furniture';
@@ -913,7 +913,7 @@ export class Vehicles {
     cam.position.set(v.x + fx, v.y + 1.62, v.z + fz);
     cam.up.set(0, 1, 0);
     cam.rotation.set(w.pitch, w.yaw, 0, 'YXZ');
-    if (cam.fov !== walkParams.fov) { cam.fov = walkParams.fov; cam.updateProjectionMatrix(); }
+    setLens(cam);
   }
   /** Air temperature at the balloon (the HUD's envelope readout is against this). */
   airAt(y: number) { return airTemp(y) - 273.15; }
@@ -949,9 +949,6 @@ export class Vehicles {
     cam.up.set(0, 1, 0);
     cam.lookAt(v.x, v.y + S.look, v.z);
     if (v.kind === 'plane') cam.rotateZ(v.roll * 0.35);
-    if (cam.fov !== walkParams.fov) {
-      cam.fov = walkParams.fov;
-      cam.updateProjectionMatrix();
-    }
+    setLens(cam);
   }
 }

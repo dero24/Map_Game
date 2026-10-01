@@ -9,6 +9,9 @@ import { savePage, type Page } from './book';
 import { walkParams } from '../player/controller';
 import { PAINTABLE } from './brush';
 
+// (the zoom turns the lens, walkParams.fov, and each screen's frame follows it in proportion —
+// player/frame.ts — so a phone held upright zooms from a 24° to a 97° tall frame, 41° across at
+// rest, where a PC zooms from 18° to 80°; the millimetres name the lens, the same on every screen)
 const ZOOM_MIN = 18, ZOOM_MAX = 80;
 
 export class PhotoMode {
