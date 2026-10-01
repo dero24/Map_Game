@@ -681,8 +681,11 @@ function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnTyp
     for (const [o, ow] of [[Lf, 1], [Rf, -1]] as const) {
       const oo: F = (q) => o(q) + ow * CAP;
       if (open(j, ow)) {
+        // (the sidewalk runs on to the deck's edge where the parapet would stand)
+        m.color(highway ? C.shoulder : C.walk);
+        flat(j, ow > 0 ? o : oo, ow > 0 ? oo : o, kerb);
         m.color(movable ? C.steel : C.fascia);
-        wall(j, oo, -SLAB, kerb, ow); // (the deck's edge, under where the parapet would stand)
+        wall(j, oo, -SLAB, kerb, ow);
         continue;
       }
       m.color(movable ? C.steel : C.parapet);
