@@ -94,12 +94,18 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
     storefront's glass on the ground, a curtain wall's floor to ceiling: `uSunWin`, `uSunWinUp`), and only
     where the wall the ray leaves by is the same room's (the room map a hand's width inside it): no
     "morning sun" in a hall with no window.
-  - Pose 19 (`tools/review-shots.js`, "morning sun") stands in the room with the most east-to-south
-    glass (`interior/views.ts` `glassFacing`, `sunRoomView`: from its doorway or far side, looking at the
-    floor a stride in from those windows), the 'inside' house's or the nearest house's with any.
-  - Measuring a frame (`cloud/home.mjs`-style id passes): with `window.__TAG_PIECES__` set, a build's
-    merged mesh carries an `aObj` stream — each piece drawn while furnishing, each baked piece, its own
-    tag; 0 the building (`mesh.ts` `tagging`, `ARCH_KEY` for the pieces that are the building's).
+  - In the room the front door opens on, the free-standing pieces (the armchair, the big plant) stay off
+    the line from the door to the room's far end: the view in reaches the kitchen and its table.
+  - Pose 19 (`tools/review-shots.js`, "morning sun"): of the 'inside' house and its 24 nearest, the room
+    with the most east-to-south glass (`interior/views.ts` `glassFacing`, `sunniest`; of rooms with as
+    much, a room of the day before a bedroom, then the one whose floor takes more of the light), framed
+    from where the sun's patches on its bare floor are in the lens (`poolOn`: each pane cast down along
+    the real sun, `uKeyDir`; `sunRoomView`: a 40 cm grid and its doorways, never inside its furniture —
+    `Interiors.activeTaken`, the floor it claimed — and not looking over a sofa back). Without the sun:
+    its doorway or far side, looking at the floor a stride in from those windows.
+  - Measuring a frame (an id pass): with `window.__TAG_PIECES__` set, a build's merged mesh carries an
+    `aObj` stream — each piece drawn while furnishing, each baked piece, its own tag; 0 the building
+    (`mesh.ts` `tagging`, `ARCH_KEY` for the pieces that are the building's).
 - Deeper archetypes (Slice 4, `tests/interiorArch.test.ts`): `uses.ts placeOf(name, tag)` says what a
   building is (its tag first — a pub called "The Library" stays a pub — else its name, several
   languages) and plan.ts picks the family: `market` (a supermarket, a grocery ≥ 400 m², a pharmacy
