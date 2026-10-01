@@ -41,9 +41,9 @@ const YARD_PAINT: Record<Yard, string> = { lawn: '#93a964', gravel: '#b9b4a9', s
 export const STONE_ALPHA = 0.6;
 // The sidewalk's flags (a shade each, darker joints), the kerb's face (a shadow line 25% darker than
 // the walk), the gutter pan's grey concrete, a drive's apron where it crosses the walk.
-const FLAG_DARK = 'rgba(70,64,54,0.09)', FLAG_LIGHT = 'rgba(255,251,240,0.12)', JOINT = '#857f73';
+const FLAG_DARK = 'rgba(70,64,54,0.14)', FLAG_LIGHT = 'rgba(255,251,240,0.16)', JOINT = '#857f73';
 const KERB_FACE: Record<string, string> = { '#b3ad9f': '#867f77', '#bab4a6': '#8b877c' };
-const GUTTER = '#948f86', APRON = '#c4beb0';
+const GUTTER = '#8b867d', APRON = '#c4beb0';
 // a drive's own surface: blacktop, poured concrete, or gravel
 const DRIVE = ['#5c5e61', '#bcb6a8', '#aaa498'];
 const SAND_DRIFT = '#d8c69a';

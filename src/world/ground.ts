@@ -266,15 +266,19 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
         float rel = (max(alb.r, max(alb.g, alb.b)) - min(alb.r, min(alb.g, alb.b))) / max(lumS, 0.04);
         // sand: warm and light (not a concrete's warm grey, not a yard's stone), by the sea
         float sandy = (1.0 - greenness) * (1.0 - stone) * smoothstep(0.28, 0.4, lumS) * smoothstep(0.38, 0.5, (alb.r - alb.b) / max(lumS, 0.04)) * (1.0 - step(250.0, T.a)) * step(0.5, T.g);
+        // (the grain's light and dark, gathered: it multiplies the albedo, and once lit, the brighter
+        // the ground the more of it again — a sunlit walk or a beach loses its grain to the light's
+        // shoulder otherwise)
+        float gm = 1.0;
         if (camD < 60.0 && fp < 0.3) {
           // paved: the low-chroma greys (concrete, gutters, asphalt), darker ones a little more
           float paved = (1.0 - greenness) * (1.0 - stone) * (1.0 - sandy) * (1.0 - smoothstep(0.3, 0.42, rel));
           if (paved > 0.0) {
-            float g = octv(xz, 0.045, fp) * 0.9 + octv(xz + 3.7, 0.12, fp) + octv(xz - 7.1, 0.32, fp) * 0.85 + octv(xz + 1.3, 0.9, fp) * 0.6;
+            float g = octv(xz, 0.045, fp) * 1.3 + octv(xz + 3.7, 0.12, fp) * 1.2 + octv(xz - 7.1, 0.32, fp) * 0.9 + octv(xz + 1.3, 0.9, fp) * 0.6;
             // a stain now and then (gum, drips, the rust off a bike): soft dark blots
             float stain = smoothstep(0.66, 0.86, vnoise(xz * 1.3 + 11.0)) * smoothstep(0.3, 0.75, vnoise(xz * 4.1 - 3.0)) * smoothstep(1.0, 3.0, 0.4 / fp);
-            float k = mix(0.62, 0.46, smoothstep(0.12, 0.35, lumS));
-            alb *= (1.0 + paved * g * k) * (1.0 - paved * stain * 0.16);
+            float k = mix(0.82, 0.62, smoothstep(0.12, 0.35, lumS));
+            gm *= (1.0 + paved * g * k) * (1.0 - paved * stain * 0.2);
           }
           // loose stone: pebbles of 3.5 cm close up, 9 cm clumps a little further, a dappled wash past them
           if (stone > 0.0) {
@@ -284,41 +288,45 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
             float gap = wa * (1.0 - smoothstep(0.0, 0.22, pa.y)) * 0.42 + wb * (1.0 - smoothstep(0.0, 0.18, pb.y)) * 0.3;
             // (a shell yard's blue-grey mussel bits, a gravel yard's rust-brown stones)
             vec3 odd = lumS > 0.55 ? vec3(0.62, 0.68, 0.8) : vec3(1.12, 0.92, 0.72);
-            vec3 stc = alb * tone * (1.0 - gap);
-            stc = mix(stc, stc * odd, wa * step(0.86, fract(pa.x * 7.31)));
-            alb = mix(alb, stc, stone);
+            alb = mix(alb, mix(alb, alb * odd, wa * step(0.86, fract(pa.x * 7.31))), stone);
+            gm *= mix(1.0, tone * (1.0 - gap), stone);
           }
-          // the town lawn's mown stipple, a little stronger close up (the blades stand over it)
-          alb *= 1.0 - greenness * (octv(xz, 0.06, fp) * 0.22 + octv(xz + 2.0, 0.17, fp) * 0.16);
+          // the rest of the open ground — a lawn, a verge, bare earth, the land cover's wash — mottled
+          // the same way, the lawn's mown stipple over it (the blades stand over that)
+          float open = (1.0 - stone) * (1.0 - sandy) * smoothstep(0.3, 0.42, rel);
+          gm *= 1.0 + open * (octv(xz, 0.05, fp) * 1.2 + octv(xz + 5.1, 0.14, fp) + octv(xz - 2.3, 0.4, fp) * 0.8) * 0.42;
+          gm *= 1.0 - greenness * (octv(xz, 0.06, fp) * 0.22 + octv(xz + 2.0, 0.17, fp) * 0.16);
         }
         // Ocean beaches read as sand: wind ripples across the wind off the sea in the dry band, the
         // wrack line of weed and shell at the last high tide, footprints and trampled sand where people
         // walk. All from the shore distance field and the painted sand colour, so every coast gets its
-        // own — strong enough to come through the brush.
+        // own — mostly shadow (a ripple's lee, a footprint's pit), which a bright beach keeps through
+        // the light's shoulder and the brush where a lighter mark would go.
         if (sandy > 0.0) {
           vec2 gN = vec2(terrainAt(xz + vec2(1.5, 0.0)).g - T.g, terrainAt(xz + vec2(0.0, 1.5)).g - T.g);
           vec2 sN = gN / max(length(gN), 1e-3);
           float dry = smoothstep(13.0, 18.0, T.g) * (1.0 - smoothstep(70.0, 90.0, T.g));
           // the long swells of the dry sand
-          alb *= 1.0 + 0.035 * sin(dot(xz, sN) * 2.4 + fbm(xz * 0.2) * 4.0) * dry * sandy;
+          gm *= 1.0 + 0.06 * sin(dot(xz, sN) * 2.4 + fbm(xz * 0.2) * 4.0) * dry * sandy;
           if (camD < 60.0) {
-            // its ripples: 11 cm crests across the wind, wandering (a gentle rise, a steep lee)
-            float ph = dot(xz, sN) / 0.11 + fbm(xz * 1.6) * 3.0 + vnoise(xz * 0.35) * 4.0;
-            float saw = fract(ph), rip = smoothstep(0.0, 0.7, saw) - smoothstep(0.7, 1.0, saw) * 1.6;
-            float ripA = dry * (1.0 - smoothstep(0.22, 0.5, fp * 1.3 / 0.11)); // (crests under ~4 px apart: gone)
-            alb *= 1.0 + sandy * 0.11 * (rip - 0.2) * ripA;
-            // trampled sand: churned by feet between the dunes and the wet sand
+            // its ripples: 11 cm crests across the wind, wandering — a gentle rise, the crest catching
+            // the light, a steep lee in shadow (gone where the crests come under ~4 px apart)
+            float ph = dot(xz, sN) / 0.11 + fbm(xz * 1.6) * 3.0 + vnoise(xz * 0.35) * 4.0, saw = fract(ph);
+            float ripA = dry * (1.0 - smoothstep(0.22, 0.5, fp * 1.3 / 0.11));
+            float lee = smoothstep(0.7, 0.78, saw) * (1.0 - smoothstep(0.93, 1.0, saw)), crest = smoothstep(0.5, 0.7, saw) * (1.0 - smoothstep(0.7, 0.76, saw));
+            gm *= 1.0 + sandy * ripA * (0.07 * crest - 0.3 * lee);
+            // trampled sand between the dunes and the wet sand: churned, pocked by feet, footprints
             float tramp = smoothstep(11.0, 16.0, T.g) * (1.0 - smoothstep(90.0, 130.0, T.g));
-            float churn = octv(xz, 0.05, fp) + octv(xz + 4.0, 0.14, fp) * 0.9 + octv(xz - 2.0, 0.38, fp) * 0.7;
-            alb *= 1.0 + sandy * tramp * churn * 0.34;
-            // footprints: a heel-and-toe pit, its shadowed side dark and its rim pushed up light
+            float churn = octv(xz, 0.05, fp) + octv(xz + 4.0, 0.14, fp) * 0.9 + octv(xz - 2.0, 0.38, fp) * 0.8 + octv(xz + 7.0, 0.9, fp) * 0.6;
+            float pock = smoothstep(0.6, 0.86, vnoise(xz / 0.09)) * smoothstep(1.8, 4.5, 0.09 / fp) + smoothstep(0.62, 0.88, vnoise(xz / 0.24 + 3.3)) * smoothstep(1.8, 4.5, 0.24 / fp);
+            gm *= (1.0 + sandy * tramp * churn * 0.5) * (1.0 - sandy * tramp * pock * 0.3);
             vec2 fc = floor(xz / 0.62), ff = xz / 0.62 - fc;
-            if (hash12(fc + 3.7) < 0.55 * tramp) {
+            if (hash12(fc + 3.7) < 0.8 * tramp) {
               float a = hash12(fc + 9.1) * 6.2832, ca = cos(a), sa = sin(a);
               vec2 q = (ff - 0.5 - (vec2(hash12(fc + 1.3), hash12(fc + 2.9)) - 0.5) * 0.4) * 0.62;
               q = vec2(ca * q.x + sa * q.y, -sa * q.x + ca * q.y) / vec2(0.13, 0.055);
               float r = length(q), vis = smoothstep(1.5, 4.0, 0.1 / fp);
-              alb *= 1.0 - sandy * vis * (0.24 * (1.0 - smoothstep(0.7, 1.0, r)) * (0.6 + 0.4 * q.y) - 0.1 * smoothstep(0.85, 1.0, r) * (1.0 - smoothstep(1.0, 1.3, r)));
+              gm *= 1.0 - sandy * vis * (0.38 * (1.0 - smoothstep(0.7, 1.0, r)) * (0.6 + 0.4 * q.y) - 0.1 * smoothstep(0.85, 1.0, r) * (1.0 - smoothstep(1.0, 1.3, r)));
             }
           }
           // the wrack line: clumps of dark weed, broken, with pale shell bits through it
@@ -329,11 +337,13 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
             alb = mix(alb, vec3(0.86, 0.83, 0.76), 0.5 * band * sandy * step(0.9, vnoise(xz * 13.0)) * smoothstep(1.5, 4.0, 0.08 / fp));
           }
         }
+        alb *= gm;
         // snow: lawns, yards and sidewalks take it; dark asphalt is ploughed down to slushy tracks
         alb = snowOn(alb, N, vWorldPos, snowKeep(alb));
         alb = pigment(alb, vWorldPos);
         float sh = shadowAt(vWorldPos, N);
         vec3 col = paintLight(alb, N, vWorldPos, sh, 1.0);
+        col *= 1.0 + (gm - 1.0) * 1.3 * smoothstep(0.3, 1.1, dot(col, vec3(0.2126, 0.7152, 0.0722)));
         gl_FragColor = vec4(applyFog(col, vWorldPos), 1.0);
       }`,
   });

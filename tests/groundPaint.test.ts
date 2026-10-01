@@ -343,7 +343,7 @@ describe('a slice of the window', () => {
 // A residential street running east-west through z = 0 with houses on its north side (front walks
 // and drives to the kerb), a main road across it at x = 60, and a beach to the south.
 describe('the ground underfoot', () => {
-  const S = { joint: '#857f73', face: '#867f77', faceMain: '#8b877c', gutter: '#948f86', apron: '#c4beb0', drift: '#d8c69a', snake: 'rgba(24,23,22,0.66)', lawn: '#93a964', gravel: '#b9b4a9', shell: '#ddd5c2' };
+  const S = { joint: '#857f73', face: '#867f77', faceMain: '#8b877c', gutter: '#8b867d', apron: '#c4beb0', drift: '#d8c69a', snake: 'rgba(24,23,22,0.66)', lawn: '#93a964', gravel: '#b9b4a9', shell: '#ddd5c2' };
   const house = (x: number, z: number): number[] => [x - 5, z - 4, x + 5, z - 4, x + 5, z + 4, x - 5, z + 4].map((v) => Math.round(v * 10));
   const scene = (beachZ: number) => ({
     areas: [{ c: 'beach', o: [[-150, beachZ, 150, beachZ, 150, beachZ + 40, -150, beachZ + 40].map((v) => v * 10)], i: [] }],

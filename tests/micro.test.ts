@@ -340,7 +340,7 @@ const covers = (o: POp, x: number, z: number) => {
 // what the paint lays: the paved ground (streets, gutters and kerbs, sidewalks, walks, drives and
 // their aprons, a block's paving, lots, plazas, piers) and the open (yards, the cover's lawn, sand,
 // parks and wild ground) — the overlays (flags, joints, stains, shadows, drift, markings) say nothing
-const PAVED = new Set(['#b1ab9d', '#b3ad9f', '#bab4a6', '#bdb5a3', '#5c5e61', '#bcb6a8', '#aaa498', '#c4beb0', '#867f77', '#8b877c', '#948f86', '#55575b', '#606265', '#6f6d68', '#b8b2a4', '#bab4a7', '#687a62', '#8a8883', '#c2baa8', '#9c8466', '#aaa698', '#aaa597', '#63c2cf', '#8b5a47', '#8c8378', '#6f6a63', '#8e8c86', '#7a5d42', '#a39884', '#8c7a5e']);
+const PAVED = new Set(['#b1ab9d', '#b3ad9f', '#bab4a6', '#bdb5a3', '#5c5e61', '#bcb6a8', '#aaa498', '#c4beb0', '#867f77', '#8b877c', '#8b867d', '#55575b', '#606265', '#6f6d68', '#b8b2a4', '#bab4a7', '#687a62', '#8a8883', '#c2baa8', '#9c8466', '#aaa698', '#aaa597', '#63c2cf', '#8b5a47', '#8c8378', '#6f6a63', '#8e8c86', '#7a5d42', '#a39884', '#8c7a5e']);
 const OPEN = new Set(['#93a964', '#b9b4a9', '#ddd5c2', '#dccb9f', '#617043', '#8a955c', '#8c9761', '#9fb56d', '#8db35f', '#9fc373', '#cbbb93']);
 const LAWN_THINGS = new Set<MicroId>(['birdbath', 'kayak', 'hoop', 'yardsign', 'salesign', 'surfboard']);
 
