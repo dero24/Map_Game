@@ -323,6 +323,43 @@ describe('the Rumson–Sea Bright bascule, as the shore pack maps it', () => {
     }
   });
 
+  it('its collision is its deck as drawn, both tiles’ pieces of it', () => {
+    // (both tiles mounted, as the stream mounts them: each one's collision in the one walk world)
+    const walk = new WalkWorld(t, { x0: -400, z0: -600, x1: 400, z1: -200 });
+    const built = ['-1_-1', '0_-1'].map((id) => {
+      const roads = fx.tiles[id].roads, w = new RecWalk(t, { x0: -400, z0: -600, x1: 400, z1: -200 });
+      const out = buildStructures({ json: { roads: roads.filter((r) => r.own !== 0), lines: [], areas: [], points: [], buildings: [] }, terrain: t } as never, w, { roads, lines: [] });
+      replayOps(walk, w.ops);
+      return { id, out };
+    });
+    let n = 0;
+    for (const { id, out } of built) {
+      const { ch } = seaBright(id);
+      const mesh = out.group.children.find((o) => o.name === 'structures') as THREE.Mesh;
+      const pos = mesh.geometry.attributes.position, nrm = mesh.geometry.attributes.normal, col = mesh.geometry.attributes.color;
+      const roadway = [new THREE.Color(0x74767a), new THREE.Color(0x5f6266)];
+      for (let i = 0; i < pos.count; i++) {
+        if (nrm.getY(i) < 0.99 || !roadway.some((c) => near(col.getX(i), c.r, 1e-4) && near(col.getY(i), c.g, 1e-4) && near(col.getZ(i), c.b, 1e-4))) continue;
+        // (a roadway vertex sits on its kerb line: read the deck a little in from it, toward the
+        // centreline; and not at the bridge's very ends, where the street's ground runs on)
+        const x = pos.getX(i), z = pos.getZ(i);
+        let best = Infinity, cx = 0, cz = 0, sAt = 0;
+        for (let k = 0; k + 1 < ch.pts.length; k++) {
+          const [ax, az] = ch.pts[k], [bx, bz] = ch.pts[k + 1], dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+          const u = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)), d = Math.hypot(ax + dx * u - x, az + dz * u - z);
+          if (d < best) (best = d), (cx = ax + dx * u), (cz = az + dz * u), (sAt = ch.cum[k] + u * Math.sqrt(l2));
+        }
+        if (sAt < 0.5 || sAt > ch.L - 0.5) continue;
+        const f = Math.max(0, best - 0.4) / Math.max(best, 1e-9);
+        const yy = walk.deckAt(cx + (x - cx) * f, cz + (z - cz) * f);
+        expect(yy, `deck at ${x.toFixed(1)},${z.toFixed(1)}`).not.toBeNull();
+        expect(Math.abs(yy! - pos.getY(i)), `deck at ${x.toFixed(1)},${z.toFixed(1)}`).toBeLessThan(0.02);
+        n++;
+      }
+    }
+    expect(n).toBeGreaterThan(40);
+  });
+
   it('each tile draws its own spans, and their decks meet to the millimetre', () => {
     const decks = (id: string) => {
       const roads = fx.tiles[id].roads, w = new RecWalk(t, { x0: -400, z0: -600, x1: 400, z1: -200 });

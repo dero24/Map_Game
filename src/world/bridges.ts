@@ -4,8 +4,10 @@
 // and over any road or railway under it, never sagging below the straight line between its ends —
 // a slab with real depth on girders, sidewalks and parapets with a railing, piers down into the
 // riverbed between its spans, abutments where it lands; a movable span's leaves on their bascule
-// piers, a tender house at each corner, timber fenders along the channel. Collision is the deck as
-// drawn: the roadway and sidewalks at their drawn heights, the parapets as walls, the piers too.
+// piers, a tender house at each corner, timber fenders along the channel; and where the map says
+// how it's built (bridge:structure), trusses, an arch, a suspension bridge's towers and cables or a
+// cable-stayed bridge's pylons and stays. Collision is the deck as drawn: the roadway and sidewalks
+// at their drawn heights, the parapets as walls, the piers and towers too.
 //   A bridge is mapped as a chain of ways (its approach spans, its movable span), and a tile owns
 // only some of them: each tile profiles the whole chain from every way it can see — its own and
 // its margin's — and draws the ways it owns, so the pieces meet where their owners' tiles do.
@@ -672,40 +674,37 @@ function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnTyp
   if (!movable && carriedBy(w.r.bs) !== 'beam') superstructure(m, walk, ch, w, pf, ed, g, out, kerb);
 
   // ---- collision: the roadway and its sidewalks at their drawn heights; the parapets as walls
-  const pts: P[] = [], cum: number[] = [];
-  for (let j = 0; j < N; j++) {
-    pts.push([px[j], pz[j]]);
-    cum.push(j ? cum[j - 1] + Math.hypot(px[j] - px[j - 1], pz[j] - pz[j - 1]) : 0);
-  }
-  const deck = (p: P[], half: number, dy: number) => {
+  // (each deck stops square at its ends; where the next way's deck goes on round a bend, square
+  // along the mitre both are drawn to — a 2 cm last step along it — or a wedge of the bend's
+  // outside was neither piece's)
+  const cs: { x: number; z: number; nx: number; nz: number; mi: number; y: number; eL: number; eR: number }[] = [];
+  for (let j = 0; j < N; j++) cs.push({ x: px[j], z: pz[j], nx: nx[j], nz: nz[j], mi: mi[j], y: y[j], eL: eL[j], eR: eR[j] });
+  const mitre = (j: number, dir: number) => {
+    const c = chainAt(ch, st[j]), q = cs[j];
+    return { ...q, x: q.x + c.tx * dir * 0.02, z: q.z + c.tz * dir * 0.02, y: yAt(st[j] + dir * 0.02) };
+  };
+  const [head, tail] = [mitre(0, 1), mitre(N - 1, -1)];
+  if (k < ch.ways.length - 1) cs.splice(cs.length - 1, 0, tail);
+  if (k > 0) cs.splice(1, 0, head);
+  const deck = (o: (q: (typeof cs)[number]) => number, half: number, dy: number) => {
+    const p: P[] = cs.map((q) => [q.x + q.nx * o(q) * q.mi, q.z + q.nz * o(q) * q.mi]);
     const c = [0];
     for (let j = 1; j < p.length; j++) c.push(c[j - 1] + Math.hypot(p[j][0] - p[j - 1][0], p[j][1] - p[j - 1][1]));
-    const yy = y.map((v) => v + dy);
+    const yy = cs.map((q) => q.y + dy);
     walk.addDeck({ pts: p, cum: c, halfWidth: half, heightAt: tableHeight(c, yy), profile: { k: 'table', y: yy }, cut: 1 });
   };
   if (kerb) {
-    deck(pts, hw + 0.02, 0);
+    deck(() => 0, hw + 0.02, 0);
     for (const ow of [1, -1]) {
-      const e = ow > 0 ? eL : eR;
       let half = 0;
-      const p: P[] = [];
-      for (let j = 0; j < N; j++) {
-        const o = ow * ((hw + e[j]) / 2) * mi[j];
-        p.push([px[j] + nx[j] * o, pz[j] + nz[j] * o]);
-        half = Math.max(half, (e[j] - hw) / 2);
-      }
-      deck(p, half + 0.02, kerb);
+      for (const q of cs) half = Math.max(half, ((ow > 0 ? q.eL : q.eR) - hw) / 2);
+      deck((q) => (ow * (hw + (ow > 0 ? q.eL : q.eR))) / 2, half + 0.02, kerb);
     }
   } else {
     // (a highway's shoulders are the roadway's own level: one deck, centred between its barriers)
-    const p: P[] = [];
     let half = 0;
-    for (let j = 0; j < N; j++) {
-      const o = ((eL[j] - eR[j]) / 2) * mi[j];
-      p.push([px[j] + nx[j] * o, pz[j] + nz[j] * o]);
-      half = Math.max(half, (eL[j] + eR[j]) / 2);
-    }
-    deck(p, half + 0.02, 0);
+    for (const q of cs) half = Math.max(half, (q.eL + q.eR) / 2);
+    deck((q) => (q.eL - q.eR) / 2, half + 0.02, 0);
   }
   for (const ow of [1, -1]) {
     const e = ow > 0 ? eL : eR;
