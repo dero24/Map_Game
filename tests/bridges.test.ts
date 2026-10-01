@@ -218,6 +218,30 @@ describe('a bridge the map says how it’s built', () => {
     }
   });
 
+  it('a movable span opens as the map says: a lift span between its towers, a swing span on its pier', () => {
+    const movable = (bm: string) => {
+      const roads = riverRoads(true, true);
+      roads[2] = { ...roads[2], bm };
+      const w = new RecWalk(river, { x0: -400, z0: -400, x1: 400, z1: 400 });
+      const out = buildStructures(world(river, roads), w, { roads, lines: [] });
+      const walk = new WalkWorld(river, { x0: -400, z0: -400, x1: 400, z1: 400 });
+      replayOps(walk, w.ops);
+      const mesh = out.group.children.find((o) => o.name === 'structures') as THREE.Mesh;
+      expect(finite(mesh.geometry.attributes.position.array as Float32Array), bm).toBe(true);
+      return { out, walk };
+    };
+    const lift = movable('lift');
+    expect(lift.out.towers).toHaveLength(2); // (a machinery house atop each tower — no tender houses)
+    for (const t of lift.out.towers) expect(t.y).toBeGreaterThan(CLEAR_MOVABLE + 12);
+    const swing = movable('swing');
+    expect(swing.out.towers).toHaveLength(0);
+    // (the pier it turns on stands mid-channel, round, as wide as the deck: a swimmer meets it there)
+    let hit = false;
+    for (let x = -14; x <= 14 && !hit; x += 0.25) hit = swing.walk.touching(x, 1, 0.3, 0);
+    expect(hit).toBe(true);
+    expect(movable('bascule').out.towers).toHaveLength(4);
+  });
+
   it('a suspension bridge hangs from two towers, a cable-stayed one from its pylons; both stand in the water', () => {
     for (const [bs, n] of [['suspension', 2], ['cable-stayed', 2]] as const) {
       const b = span(wide, -400, 400, bs, 'motorway');

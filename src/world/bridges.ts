@@ -312,6 +312,10 @@ export interface Pin { y: number; half: number; tx: number; tz: number }
  *  and anything the map doesn't say), trusses either side of it, an arch, a suspension bridge's
  *  cables from its towers, a cable-stayed bridge's stays from its pylons. */
 export type Carried = 'beam' | 'truss' | 'arch' | 'suspension' | 'stayed';
+/** How a movable span opens (OSM bridge:movable): a bascule's leaves tip up from their piers (and
+ *  a drawbridge, and anything else the map names), a lift span rises between two towers, a swing
+ *  span turns on a pier in mid-channel. */
+export const opensBy = (bm: string | undefined): 'bascule' | 'lift' | 'swing' => (/lift/.test(bm ?? '') ? 'lift' : /swing/.test(bm ?? '') ? 'swing' : 'bascule');
 export const carriedBy = (bs: string | undefined): Carried =>
   !bs ? 'beam' : /truss/.test(bs) ? 'truss' : /arch/.test(bs) ? 'arch' : /suspension/.test(bs) ? 'suspension' : /stay/.test(bs) ? 'stayed' : 'beam';
 
@@ -831,12 +835,36 @@ function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnTyp
   };
   if (k === 0 && pf.ends[0].street) abut(0, 1);
   if (k === ch.ways.length - 1 && pf.ends[1].street) abut(ch.L, -1);
-  // a movable span: the bascule piers at both its ends — wide, the leaves' counterweights inside —
-  // a tender house on each corner, and the channel's timber fenders off their faces
-  if (movable) {
+  // a movable span: a bascule's piers at both its ends — wide, the leaves' counterweights inside —
+  // a tender house on each corner, and the channel's timber fenders off their faces; a lift span's
+  // towers on its piers, the machinery bridging their tops; a swing span's rest piers, the pier it
+  // turns on mid-channel and the long fender that keeps boats off it
+  if (movable && opensBy(w.r.bm) === 'swing') {
+    pierAt(w.s0);
+    pierAt(w.s1);
+    const sm = (w.s0 + w.s1) / 2, c = chainAt(ch, sm), l = interp(pf.S, ed.left, sm), r = interp(pf.S, ed.right, sm);
+    const R = (l + r) / 2 + 1.5, mx = c.x + (c.nx * (l - r)) / 2, mz = c.z + (c.nz * (l - r)) / 2, lv = Math.max(0, interp(pf.S, seaLv, sm));
+    m.color(C.pier);
+    prism(m, mx, mz, R, 16, Math.min(g.heightAt(mx, mz), lv) - 1, gbAt(sm));
+    walk.addLoop(ring(mx, mz, R + 0.1, 12), -50, gbAt(sm) - 0.2);
+    // (the fender runs along the river, the length the span swings out to, either side of the pier)
+    const half = (w.s1 - w.s0) / 2 + 2, ftop = lv + 1.8, q = new THREE.Quaternion();
+    for (const t of [-(R + 1.5), R + 1.5]) {
+      const fx = mx + c.tx * t, fz = mz + c.tz * t;
+      for (let o = -half; o <= half + 1e-6; o += 2) {
+        const x = fx + c.nx * o, z = fz + c.nz * o, gh = g.heightAt(x, z);
+        out.piles.push(new THREE.Matrix4().compose(new THREE.Vector3(x, (ftop + gh - 0.5) / 2, z), q, new THREE.Vector3(1.6, ftop - gh + 0.5, 1.6)));
+      }
+      m.color(C.wale);
+      const A = (o: number, yy2: number) => new THREE.Vector3(fx + c.nx * o, yy2, fz + c.nz * o);
+      for (const wy of [lv + 0.6, lv + 1.5]) for (const f of [1, -1]) m.quad(A(-half, wy - 0.25), A(half, wy - 0.25), A(half, wy + 0.05), A(-half, wy + 0.05), new THREE.Vector3(c.tx * f, 0, c.tz * f));
+      walk.addWall([fx - c.nx * half, fz - c.nz * half], [fx + c.nx * half, fz + c.nz * half], -50, ftop);
+    }
+  } else if (movable) {
+    const lift = opensBy(w.r.bm) === 'lift';
     for (const [s, into] of [[w.s0, 1], [w.s1, -1]] as const) {
       const c = chainAt(ch, s), yy = yAt(s), l = interp(pf.S, ed.left, s), r = interp(pf.S, ed.right, s), ang = Math.atan2(c.tz, c.tx);
-      const reach = 5.0, len = 8;
+      const reach = lift ? 2.5 : 5.0, len = lift ? 6 : 8;
       const cx = c.x - c.tx * into * 2, cz = c.z - c.tz * into * 2; // (mostly under the fixed span's end: the leaf's heel)
       let low = Infinity;
       for (const o of [-r - reach, 0, l + reach]) for (const d of [-len / 2, len / 2]) low = Math.min(low, g.heightAt(cx + c.nx * o + c.tx * d, cz + c.nz * o + c.tz * d));
@@ -846,8 +874,27 @@ function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnTyp
       const pr: P[] = [];
       for (const [o, d] of [[-r - reach, -len / 2], [l + reach, -len / 2], [l + reach, len / 2], [-r - reach, len / 2]]) pr.push([cx + c.nx * o + c.tx * d, cz + c.nz * o + c.tz * d]);
       walk.addLoop(pr, -50, pTop - 0.4);
+      if (lift) {
+        // its towers: a pair of legs each side, braced, the machinery house across their tops
+        const H = Math.max(12, yy - lv + 10), tx = cx + c.tx * into * 0.5, tz = cz + c.tz * into * 0.5;
+        const leg = (o: number, d: number) => [tx + c.nx * o + c.tx * d, tz + c.nz * o + c.tz * d] as P;
+        m.color(C.steel);
+        for (const o of [l + CAP + 1, -r - CAP - 1]) {
+          for (const d of [-1.6, 1.6]) {
+            const [lx, lz] = leg(o, d);
+            m.box(lx, lz, ang, 0.9, 0.9, pTop, yy + H);
+            walk.addLoop(ring(lx, lz, 0.7, 6), -50, yy + H);
+          }
+          const [ax, az] = leg(o, -1.6), [bx, bz] = leg(o, 1.6);
+          for (const dy of [3, H * 0.5, H - 1]) strut(m, new THREE.Vector3(ax, yy + dy, az), new THREE.Vector3(bx, yy + dy, bz), 0.4);
+          strut(m, new THREE.Vector3(ax, yy + 3, az), new THREE.Vector3(bx, yy + H - 1, bz), 0.3);
+        }
+        m.color(C.house).box(tx + (c.nx * (l - r)) / 2, tz + (c.nz * (l - r)) / 2, ang, 4.2, l + r + 2 * CAP + 3, yy + H, yy + H + 3);
+        roofTo(m, tx + (c.nx * (l - r)) / 2, tz + (c.nz * (l - r)) / 2, ang + Math.PI / 2, l + r + 2 * CAP + 3.4, 4.6, yy + H + 3, yy + H + 4.2);
+        out.towers.push(new THREE.Vector3(tx, yy + H + 4.4, tz));
+      }
       // the tender houses, on the pier past the parapets
-      for (const [o, ow] of [[l, 1], [-r, -1]] as const) {
+      for (const [o, ow] of lift ? [] : ([[l, 1], [-r, -1]] as const)) {
         const oc = o + ow * (CAP + 0.5 + 1.6), hx = cx + c.nx * oc, hz = cz + c.nz * oc;
         m.color(C.house).box(hx, hz, ang, 3.6, 3.2, pTop, yy + 1.4);
         m.color(C.trim).box(hx, hz, ang, 3.65, 3.25, yy + 1.4, yy + 2.3); // (its band of windows)

@@ -166,8 +166,10 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
     baked pack has none): girders on piers (beam, the default); through trusses (80 m spans);
     an arch over a low deck (hangers) or under a high one (columns); a suspension bridge's two
     towers and cables; a cable-stayed bridge's pylons and stays. A higher OSM `layer` clears the
-    bridge it crosses (`decksUnder`). A movable span is drawn closed: a bascule's steel leaves,
-    its piers, four tender houses (their lamps are `towers`) and timber fenders.
+    bridge it crosses (`decksUnder`). A movable span is drawn closed (`opensBy`, OSM `bridge:movable` →
+    `Road.bm`): a bascule's steel leaves, its piers, four tender houses (their lamps are `towers`)
+    and timber fenders; a lift span's two towers and the machinery house over each; a swing span's
+    rest piers, the round pier it turns on and the long fender along the river round that.
 
 ## Vehicles
 

@@ -686,6 +686,7 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       if (t.ref) r.ref = t.ref;
       if (t.bridge && t.bridge !== 'no') r.br = t['bridge:movable'] || t.bridge === 'movable' ? 'movable' : 'yes';
       if (r.br && t['bridge:structure']) r.bs = String(t['bridge:structure']).toLowerCase().slice(0, 24);
+      if (r.br === 'movable' && t['bridge:movable']) r.bm = String(t['bridge:movable']).toLowerCase().slice(0, 16);
       if (t.layer) r.l = parseInt(t.layer) || 0;
       // underground (Seattle's SR 99 bored tunnel, Boston's Big Dig, the Hudson crossings): not a
       // street across the blocks above — cars dive into the portal and out of sight. A building
