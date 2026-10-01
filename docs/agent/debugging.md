@@ -81,6 +81,9 @@ behaviour.
   - `opts.variants: [{ name, apply(G) }]` measures knobs turned in the page (`G.U.uLampPool`, the
     post's `uNightGrade`) without re-posing. The pure parts are `tools/night-core.js`
     (tests/nightCheck.test.ts).
+  - Headless: `node tools/night-check.mjs --url=http://localhost:5173/ [--tag=n] [--swiftshader]`
+    (the page served first) prints each pose's numbers, writes `shots/nightcheck-<tag>.{jpg,json}`,
+    exits 1 on a failed pose.
 - The id pass is `tools/id-pass.js` (`idPass`, `flatPass`, `lensVerdict`). `review-shots.js` checks
   every outdoor pose with it — nothing within 2.5 m of the lens over 5% of the frame, nor within 4 m
   over 15% — and re-poses one that fails (back and aside, looking where it looked; logged as
