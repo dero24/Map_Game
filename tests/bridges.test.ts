@@ -409,6 +409,14 @@ describe('the Rumson–Sea Bright bascule, as the shore pack maps it', () => {
       }
     }
     expect(n).toBeGreaterThan(40);
+    // …and between its stations: every half metre along the centreline, the deck under your feet
+    // is the long section (drawn to within a centimetre and a half of it)
+    const { ch, pf } = W;
+    for (let s = 0.25; s < ch.L - 0.25; s += 0.5) {
+      const c = chainAt(ch, s), yy = walk.deckAt(c.x, c.z);
+      expect(yy, `deck at s=${s}`).not.toBeNull();
+      expect(Math.abs(yy! - profileAt(pf, s)), `deck at s=${s}`).toBeLessThan(0.03);
+    }
   });
 
   it('each tile draws its own spans, and their decks meet to the millimetre', () => {

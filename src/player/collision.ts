@@ -343,20 +343,25 @@ export class WalkWorld {
         if ((x - p[0][0]) * (p[1][0] - p[0][0]) + (z - p[0][1]) * (p[1][1] - p[0][1]) < 0) return;
         if ((x - p[n - 1][0]) * (p[n - 1][0] - p[n - 2][0]) + (z - p[n - 1][1]) * (p[n - 1][1] - p[n - 2][1]) > 0) return;
       }
+      // (a square-ended deck reads its height where its centreline passes nearest — a bridge's runs
+      // in stretches of every length, and a short one's end reached a long way along the next)
+      let best = d.halfWidth * d.halfWidth, s = NaN;
       for (let i = 0; i + 1 < d.pts.length; i++) {
         const [ax, az] = d.pts[i], [bx, bz] = d.pts[i + 1];
         const dx = bx - ax, dz = bz - az;
         const l2 = dx * dx + dz * dz;
         if (l2 < 1e-6) continue;
         const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2));
-        const ex = ax + dx * t - x, ez = az + dz * t - z;
-        if (ex * ex + ez * ez <= d.halfWidth * d.halfWidth) {
-          const h = d.heightAt(d.cum[i] + Math.sqrt(l2) * t);
-          out.push(h);
-          for (let r = 1; r <= (d.rep ?? 0); r++) out.push(h + r * d.dy!);
-          return;
+        const ex = ax + dx * t - x, ez = az + dz * t - z, e2 = ex * ex + ez * ez;
+        if (e2 <= best) {
+          (best = e2), (s = d.cum[i] + Math.sqrt(l2) * t);
+          if (!d.cut) break;
         }
       }
+      if (Number.isNaN(s)) return;
+      const h = d.heightAt(s);
+      out.push(h);
+      for (let r = 1; r <= (d.rep ?? 0); r++) out.push(h + r * d.dy!);
     };
     for (const id of this.deckGrid.get(Math.floor(x / 50) * 92821 + Math.floor(z / 50)) ?? []) if (!this.deckDead[id]) test(this.decks[id]);
     return out;
