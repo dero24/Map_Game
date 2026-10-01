@@ -121,24 +121,29 @@ window.__CALENDAR__ = async (tag = 'c', opts = {}) => {
     { label: 'a riverfront house\'s dock, 16:00', fn: () => { lens(62); set(16); const b = dockBoat(); if (b) look(b, 13, 3.5, 2.2); } },
     { label: 'the beach lot from the ground, 17:48', fn: () => { lens(62); set(17.8); const lot = beachLot(); if (lot) { G.walkParams.fly = false; G.walker.place(lot.cx + 30, lot.cz + 50, Math.atan2(30, 50), -0.04); } } },
   ];
+  // micro-compare's 50 m pose: a 12° lens up the beach from the firm sand seaward of the umbrellas,
+  // 40 m short of the stand nearest the start, turned 10° to the land — the nearest umbrellas ~30 m off
+  const pose50 = (h) => () => {
+    set(h); const st = stand(); if (!st) return;
+    const [sx, sz] = seaDir(st.x, st.z), ax = -sz, az = sx; // (along the beach)
+    const out = Math.max(0, G.world.terrain.sdfAt(st.x, st.z) - 8);
+    const x = st.x - ax * 40 + sx * out, z = st.z - az * 40 + sz * out;
+    const c = Math.cos(0.17), sn = Math.sin(0.17), dx = ax * c - sx * sn, dz = az * c - sz * sn;
+    G.walkParams.fly = false; G.walker.place(x, z, Math.atan2(-dx, -dz), -0.035); lens(12);
+  };
   const summer = [
-    { label: 'the beach at ~50 m, 12° lens, 13:00', fn: () => {
-      set(13); const st = stand(); if (!st) return;
-      const [sx, sz] = seaDir(st.x, st.z), ax = -sz, az = sx; // (along the beach)
-      const x = st.x - sx * 2 + ax * 2.2, z = st.z - sz * 2 + az * 2.2;
-      G.walkParams.fly = false; G.walker.place(x, z, Math.atan2(-(ax + sx * 0.15), -(az + sz * 0.15)), -0.035); lens(12);
-    }, after: () => note('50 m pose', crowdInFrame()) },
+    { label: 'the beach at ~50 m, 12° lens, 13:00', fn: pose50(13), after: () => note('50 m pose 13:00', crowdInFrame()) },
+    { label: 'the same, 8:30', fn: pose50(8.5), after: () => note('50 m pose 8:30', crowdInFrame()) },
+    { label: 'the same, 18:30', fn: pose50(18.5), after: () => note('50 m pose 18:30', crowdInFrame()) },
     { label: 'a lifeguard on duty, 12:00', fn: () => { lens(62); set(12); const st = stand(); if (st) { const [sx, sz] = seaDir(st.x, st.z); look({ ...st, y: st.y + 2.6 }, 7, 0.4, Math.atan2(sx, sz) + 0.5, 0.05); } } },
     { label: 'under the umbrellas, 13:00', fn: () => { lens(62); set(13); const t = stand(); if (t) { const [sx, sz] = seaDir(t.x, t.z); G.walkParams.fly = false; G.walker.place(t.x - sx * 9 + sz * 14, t.z - sz * 9 - sx * 14, Math.atan2(-(sx - sz * 0.6), -(sz + sx * 0.6)), -0.1); } } },
     { label: 'kids at the waterline, 13:00', fn: () => {
       lens(62); set(13); let best = null;
       for (const q of G.crowd.people()) if (q.pose === 4 && (!best || Math.hypot(q.x - s.x, q.z - s.z) < Math.hypot(best.x - s.x, best.z - s.z))) best = q;
       if (best) { const [sx, sz] = seaDir(best.x, best.z); G.walkParams.fly = false; G.walker.place(best.x - sx * 7 + sz * 3, best.z - sz * 7 - sx * 3, Math.atan2(-(sx - sz * 0.4), -(sz + sx * 0.4)), -0.06); }
-    } },
-    { label: 'the beach lot, 13:00', fn: () => { lens(62); window.__APPLY_SHOT__('roofs'); set(13); }, after: () => { const lot = beachLot(); if (lot) note('beach lot 13:00', lotFill(lot, 13)); } },
-    { label: '9 marina, moored boats, 17:00 (July)', fn: () => { lens(62); set(17); const b = marinaBoat(); if (b) look(b, 24, 7, 4.4); }, after: () => note('9 boats (July)', boatsInFrame()) },
+    }, after: () => { const lot = beachLot(); if (lot) note('beach lot 13:00 (July)', lotFill(lot, 13)); } },
   ];
-  const items = opts.set === 'summer' ? summer : autumn;
+  const items = opts.set === 'summer' ? summer : opts.set === 'pose50' ? summer.slice(0, 3) : autumn;
   const idle = async () => { for (let i = 0; i < 80; i++) { const b = typeof G.stream.busy === 'function' ? G.stream.busy() : G.stream.busy; if (!b) return; await wait(250); } };
   for (const it of items) { const f = it.fn; it.fn = async () => { await f(); await wait(400); await idle(); }; }
   await window.__MONTAGE__([{ label: 'warm-up', fn: () => { window.__APPLY_SHOT__('ocean-golden'); } }], { settle: 16, timers: true, cw: 200, cols: 1 });
