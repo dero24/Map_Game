@@ -30,10 +30,12 @@ const RES = 0.9; // metres a pixel north–south (NAIP is 0.6 m; a house is stil
 let on = false;
 let origin: LatLon | null = null;
 let proxy = ''; // the tile service, whose /naip route relays the same request with CORS headers
+let direct: boolean | null = null; // does USGS answer this browser itself (CORS)? null: not asked yet
 export function initAerial(o: LatLon, tilesBase?: string) {
   on = true;
   origin = o;
   proxy = tilesBase && /^https?:/.test(tilesBase) ? tilesBase.replace(/\/$/, '') : '';
+  direct = null; // (whether this browser may read USGS directly: found out on the first photo)
 }
 export const aerialOn = () => on && !!origin;
 let log: (msg: string) => void = (m) => console.info(m);
@@ -83,8 +85,7 @@ let io: AerialIO = { image: browserImage };
 export function setAerialIO(x: AerialIO | null) { io = x ?? { image: browserImage }; }
 
 // Straight from the server while that works; once a browser refuses it (no CORS header), the
-// tile service's relay for the rest of the session.
-let direct: boolean | null = null;
+// tile service's relay for the rest of the session. (`direct` is declared with the session state.)
 async function photo(query: string): Promise<Photo | null> {
   if (direct !== false) {
     try {

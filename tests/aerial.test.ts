@@ -4,7 +4,7 @@ import {
   aerialRoof, fitCast, hex, NAIP_CAST, NO_CAST, readCell, rgbOf, rgbToHsl, ringPixels, ROOF_WARMTH, sampleRoof, setRoofSource,
   tileRoofs, uncast, unpaint, balanced, hslToRgb, type Aerial, type Cast, type RGB,
 } from '../src/world/aerial';
-import { enrichAerial, initAerial, naipRequest, setAerialIO, setAerialLog } from '../src/world/aerialFetch';
+import { enrichAerial, initAerial, naipRequest, NAIP_SERVICE, setAerialIO, setAerialLog } from '../src/world/aerialFetch';
 import { recipeFor, ROOFMAT, roofGamut } from '../src/world/recipe';
 import { regionStyle } from '../src/world/styles';
 import { makeProjector, TAG_ROOF_COLOURS } from '../src/world/realTile';
@@ -295,12 +295,22 @@ describe('streamed cells: the NAIP request and the enrichment (aerialFetch.ts)',
     const off = { ...tile(), buildings: tile().buildings.map((b) => ({ ...b, r: b.r.map((v, k) => (k % 2 ? v + 3000 : v + 13240)) })), areas: [], lines: [], points: [] } as unknown as TileJson;
     expect(await enrichAerial(off, other, 10)).toBe('none');
     expect(off.buildings.every((b) => b.ar == null)).toBe(true);
+    // a browser USGS refuses (no CORS header for its origin): the tile service's relay, and only
+    // the relay from then on
+    const asked: string[] = [];
+    setAerialIO({ image: async (url) => { asked.push(url.split('?')[0]); if (url.includes('nationalmap')) throw new TypeError('Failed to fetch'); return { w: frame.w, h: frame.h, px: big }; } });
+    initAerial(origin, 'https://tiles.example/');
+    const cell2 = { x0: 0, z0: 1024, x1: 1024, z1: 2048 }, cell3 = { x0: -1024, z0: 1024, x1: 0, z1: 2048 };
+    const shiftTo = (dz: number, dx = 0) => ({ ...tj, buildings: tile().buildings.map(move).map((b) => ({ ...b, r: b.r.map((v, k) => v + (k % 2 ? dz : dx)) })) }) as TileJson;
+    expect(await enrichAerial(shiftTo(10240), cell2, null)).toBe('done');
+    expect(await enrichAerial(shiftTo(10240, -10240), cell3, null)).toBe('done');
+    expect(asked).toEqual([NAIP_SERVICE, 'https://tiles.example/naip', 'https://tiles.example/naip']);
     // out past the survey (the open Atlantic): settled without asking
-    let asked = 0;
-    setAerialIO({ image: async () => { asked++; return null; } });
+    let sea = 0;
+    setAerialIO({ image: async () => { sea++; return null; } });
     initAerial({ lat: 38.0, lon: -60.0 }, '');
     expect(await enrichAerial({ ...tile(), areas: [], lines: [], points: [] } as unknown as TileJson, box, null)).toBe('none');
-    expect(asked).toBe(0);
+    expect(sea).toBe(0);
     setAerialIO(null);
   });
 });
