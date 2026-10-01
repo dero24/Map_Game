@@ -99,10 +99,13 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
   - Pose 19 (`tools/review-shots.js`, "morning sun"): of the 'inside' house and its 24 nearest, the room
     with the most east-to-south glass (`interior/views.ts` `glassFacing`, `sunniest`; of rooms with as
     much, a room of the day before a bedroom, then the one whose floor takes more of the light), framed
-    from where the sun's patches on its bare floor are in the lens (`poolOn`: each pane cast down along
-    the real sun, `uKeyDir`; `sunRoomView`: a 40 cm grid and its doorways, never inside its furniture —
-    `Interiors.activeTaken`, the floor it claimed — and not looking over a sofa back). Without the sun:
-    its doorway or far side, looking at the floor a stride in from those windows.
+    where the most sunlit floor is in the lens (`sunRoomView`: from a 40 cm grid and its doorways, never
+    inside its furniture — `Interiors.activeTaken`, the floor it claimed — each turned a little either
+    way and pitched 0.2–0.44 down; a coarse lens of rays through the room's box, its furniture as low
+    blocks, estimates the frame's sunlit floor — `sunlit`: back toward the real sun, `uKeyDir`, through
+    the room's own window cells — its bare floor and its biggest wall, and keeps the most light with
+    neither over about a quarter of the frame). Without the sun: its doorway or far side, looking at the
+    floor a stride in from those windows.
   - Measuring a frame (an id pass): with `window.__TAG_PIECES__` set, a build's merged mesh carries an
     `aObj` stream — each piece drawn while furnishing, each baked piece, its own tag; 0 the building
     (`mesh.ts` `tagging`, `ARCH_KEY` for the pieces that are the building's).
