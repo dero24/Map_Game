@@ -217,8 +217,10 @@ and puts the walker back.
   tile service or Overpass down, rate limits) is counted as `offline`, not failed: stand-ins cover
   those cells. Counts the frames over 50 and 100 ms meanwhile (`mountHitches`: the 100 ms ones
   that mounted a tile) without judging them.
-- `await __FRAMES__({ seconds: 8, budget })`: the page's own frames standing, then walking down the
-  street: p50/p95/p99 of the intervals, each frame's work (rAF to the end of the post pass), the
+- `await __FRAMES__({ seconds: 8, budget })`: the page's own frames standing, walking down the
+  street, then flying straight and level 80 m up at the default flying speed (`fly: false` skips it;
+  a walk never gets the 66 m that moves the ground paint's window): p50/p95/p99 of the intervals,
+  each frame's work (rAF to the end of the post pass), the
   frames over 50 and 100 ms, long tasks. Budgets (ms): `desktop` p50 20 · p95 34 · p99 50 · two
   100 ms hitches a minute; `phone` 34 · 50 · 100 · six; `soft` (SwiftShader, picked by itself)
   fails only a page that has all but stopped (a median frame over a minute, p99 over two: tens of
