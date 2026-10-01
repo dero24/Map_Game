@@ -483,7 +483,6 @@ export interface NearTree {
 export function nearTreeGeometry(kind: TreeKind, v: number): NearTree {
   const { meta, plan } = treeGeometry(kind, v);
   const rng = makeRng(31337 * (TREE_KINDS.indexOf(kind) + 1) + v * 104729);
-  const [cy, cR] = crownField(meta);
   const conifer = CONIFER.has(kind);
 
   // ---- the wood the far recipe grew, joined end to end into runs (a trunk, a limb with its knee)
@@ -558,12 +557,15 @@ export function nearTreeGeometry(kind: TreeKind, v: number): NearTree {
     P.forEach((p, i) => axis.push({ p, r: R[i], trunk: run.trunk }));
   }
 
-  const crownC = V3(0, cy, 0);
+  // how deep in the crown each card sits: 0 for the outermost cluster, 1 at the middle of them all
+  // (the lobes' own middle — a wide crown's field sits high, and its dome would read as its heart)
+  const mid = cards.reduce((m, q) => m.add(q.c), V3(0, 0, 0)).multiplyScalar(1 / cards.length);
+  const reachOut = Math.max(0.5, ...cards.map((q) => q.c.distanceTo(mid)));
   const rec = new Float32Array(cards.length * CARD_STRIDE);
   cards.forEach((q, i) => {
     const big = q.h >= 1.6;
     const pic = conifer ? 4 + (i % 4) : (big ? 0 : 2) + (i % 2);
-    const depth = 1 - Math.min(1, q.c.distanceTo(crownC) / Math.max(0.5, cR));
+    const depth = 1 - Math.min(1, q.c.distanceTo(mid) / reachOut);
     rec.set([q.c.x, q.c.y, q.c.z, q.h, q.sq, rng.float(), pic, depth], i * CARD_STRIDE);
   });
 

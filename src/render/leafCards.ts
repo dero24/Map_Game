@@ -164,7 +164,7 @@ export function leafCardMaterial(tex: THREE.Texture) {
         alb *= vMottle;
         // underside and heart in shade (the far crown's underside AO, and deeper toward the middle)
         float ao = mix(0.55, 1.0, smoothstep(vCrown.y - vCrown.w, vCrown.y + 0.3 * vCrown.w, vWorldPos.y));
-        ao *= 1.0 - 0.35 * smoothstep(0.35, 1.0, vInfo.y); // (the rim's cards as lit as the far crown's skin)
+        ao *= 1.0 - 0.25 * smoothstep(0.4, 1.0, vInfo.y); // (the rim's cards as lit as the far crown's skin)
         if (!twig && falls > 0.5 && uTurn > 0.0) {
           vec3 fall;
           if (hue > 1.5) {
