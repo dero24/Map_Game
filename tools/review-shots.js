@@ -148,7 +148,17 @@ window.__REVIEW__ = async (tag = 'r', opts = {}) => {
   const D4 = [
     { label: '17 café terrace', fn: async () => { set(12.5); const t = near('terrace:', s.x, s.z); if (t) look({ ...t, y: t.y + 0.8 }, 7, 1.7, 0.9); await wait(800); } },
     { label: '18 inside a café / diner', fn: async () => { const P = shopPlan(['cafe', 'restaurant', 'bar']) ?? shopPlan(['shop', 'unknown']); if (P) await inside(P, 13); } },
-    { label: '19 inside a house, morning sun', fn: async () => { shot('inside')(); set(9.3); await wait(1500); } },
+    { label: '19 inside a house, morning sun', fn: async () => {
+      // the room with the most east-to-south glass (that house's, else the nearest house with any),
+      // framed from a doorway or its far side toward its windows (src/world/interior/views.ts)
+      shot('inside')(); set(9.3);
+      const V = await import('/src/world/interior/views.ts'), I = G.interiors, P0 = I.activePlan;
+      const homes = [P0, ...[...G.plans.values()].filter((P) => P !== P0 && G.stream.fpByKey.get(P.fp)?.kind === 'house' && !P.tall).sort((a, b) => Math.hypot(a.door.x - P0.door.x, a.door.z - P0.door.z) - Math.hypot(b.door.x - P0.door.x, b.door.z - P0.door.z)).slice(0, 24)];
+      let v = null;
+      for (const P of homes) { const fp = G.stream.fpByKey.get(P.fp); if (fp && (v = V.sunRoomView(P, fp, P === P0 && I.activeLayout ? I.activeLayout : V.layoutInterior(P, fp)))) break; }
+      if (v) for (let i = 0; i < 2; i++) { G.walkParams.fly = false; G.walker.place(v.x, v.z, v.yaw, v.pitch, v.feet); for (let k = 0; k < 8; k++) I.update(G.walker.x, G.walker.z, 0.25, G.walker.feet); I.flush(); }
+      await wait(1500);
+    } },
     { label: '20 a walker, side on', fn: async () => {
       set(15); ground(s.x, s.z, 0); await wait(3500);
       let mesh = null; G.scene.traverse((o) => { if (o.name === 'life-ped') mesh = o; });

@@ -9,7 +9,9 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
-export type DecorMat = 'fabric' | 'wood' | 'metal' | 'porcelain' | 'glass' | 'solid' | 'glow';
+/** `glow`: a lamp's shade or bulb, always lit; `lamp`: a ceiling light's glass, lit after dark only (a
+ *  room with windows has its ceiling light off by day). */
+export type DecorMat = 'fabric' | 'wood' | 'metal' | 'porcelain' | 'glass' | 'solid' | 'glow' | 'lamp';
 export interface DecorPart { g: THREE.BufferGeometry; mat: DecorMat; hex: number }
 type Parts = DecorPart[];
 
@@ -788,6 +790,114 @@ export function lockers(len = 1.8): Parts {
   out.push(P(box(len - 0.02, 0.012, 0.01, 0, 0.98, -0.226), 'metal', 0x5a5e62));
   for (let i = 0; i < n; i++) for (const y of [0.8, 1.7]) out.push(P(box(0.14, 0.04, 0.01, -len / 2 + ((i + 0.5) * len) / n, y, -0.228), 'metal', 0x3a3b3e));
   return out;
+}
+
+// ---- the way in (review round 10, must-fix 4: "the front door opens on a home"): coats hanging on
+// their rail, a bordered runner, the console with its lamp lit, a mirror over it, the skirting
+// round every wall, a ceiling light's glass dome. Back at +z, as every wall piece ----
+/** An open tube from y0 to y0 + h (a sleeve, a rod): no end caps — nobody looks up a sleeve. */
+const tube = (r0: number, r1: number, h: number, segs = 6) => ni(new THREE.CylinderGeometry(r1, r0, h, segs, 1, true)).translate(0, h / 2, 0);
+/** A turned shape from (radius, height) pairs. */
+const turned = (pts: [number, number][], segs: number) => ni(new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(Math.max(0.001, r), y)), segs));
+/** Coats a hall's rail holds: navy, brick, mustard, olive, charcoal, rust, slate, oatmeal. */
+export const COATS = [0x3f5a78, 0x8c3a2e, 0xc9a24b, 0x5f6e4a, 0x34322f, 0xb8604a, 0x6f7f8f, 0xd8cfb8];
+/** One coat hanging from its peg, `len` long from the collar to the hem: a rounded body that narrows
+ *  at the waist and flares a touch to the hem, sloping shoulders, its sleeves down its sides, a
+ *  collar — flattened against the wall the way a coat hangs. Its middle at (x, z), its hem at y0. */
+function coat(len: number, hex: number, x: number, z: number, y0: number): Parts {
+  const L = len, body = turned([[0.225, 0], [0.215, 0.14 * L], [0.188, 0.46 * L], [0.205, 0.72 * L], [0.192, 0.86 * L], [0.12, 0.95 * L], [0.045, L]], 8).scale(1, 1, 0.5);
+  const out: Parts = [P(body.translate(x, y0, z), 'fabric', hex)];
+  for (const s of [-1, 1]) {
+    const sl = tube(0.056, 0.05, 0.6 * L).rotateZ(s * 0.07).translate(x + s * 0.2, y0 + 0.28 * L, z - 0.015);
+    out.push(P(sl, 'fabric', darken(hex, 0.08)));
+  }
+  out.push(P(box(0.17, 0.07, 0.1, x, y0 + L - 0.1, z - 0.02), 'fabric', darken(hex, 0.15))); // the collar
+  return out;
+}
+/** A coat rail by the front door, `w` wide, its back on the wall at 1.66 m: the board and its pegs,
+ *  a hat shelf over it with a hat on it, and `n` coats (≥ 3) of 0.9–1.1 m hanging from the pegs, in
+ *  colours and lengths by `seed`. 0.3 m deep. */
+export function coatRail(w = 1.0, n = 3, seed = 1): Parts {
+  const rnd = seeded(seed), zw = 0.15;
+  const out: Parts = [
+    P(box(w, 0.1, 0.025, 0, 1.62, zw - 0.0125), 'wood', T),
+    P(box(w + 0.06, 0.025, 0.24, 0, 1.86, zw - 0.12), 'wood', T), // the hat shelf
+  ];
+  for (const s of [-1, 1]) out.push(P(box(0.025, 0.14, 0.2, s * (w / 2 - 0.06), 1.72, zw - 0.1), 'wood', T)); // its brackets
+  // (crowded the way a rail is: each coat half over the next, every other one a little proud of it)
+  const pitch = (w - 0.5) / Math.max(1, n - 1);
+  for (let i = 0; i < n; i++) {
+    const x = -w / 2 + 0.25 + i * pitch, len = 0.9 + rnd() * 0.2;
+    out.push(P(box(0.024, 0.024, 0.07, x, 1.655, zw - 0.06), 'metal', 0xc9a74a)); // the peg
+    out.push(...coat(len, COATS[Math.floor(rnd() * COATS.length)], x + (rnd() - 0.5) * 0.02, zw - 0.135 - (i % 2) * 0.02, 1.69 - len));
+  }
+  // a hat on the shelf
+  const hx = (rnd() - 0.5) * (w - 0.4);
+  out.push(P(turned([[0.17, 0], [0.17, 0.012], [0.1, 0.02], [0.096, 0.1], [0.07, 0.12], [0.001, 0.125]], 10).scale(1, 1, 0.9).translate(hx, 1.885, zw - 0.12), 'fabric', COATS[Math.floor(rnd() * COATS.length)]));
+  return out;
+}
+/** A hall runner `len` × `w` lying on the floor (x along it): its field (tint), a border round it, a
+ *  pale pinstripe inside the border, diamonds down the middle, a fringe at each end. */
+export function runner(len: number, w = 0.8, border = 0x8c2f2a, figure = 0xe9dcc0): Parts {
+  const t = 0.008, b = Math.min(0.12, w * 0.16), fl = len - 2 * b, fw = w - 2 * b;
+  const out: Parts = [
+    P(box(fl, t, fw, 0, 0, 0), 'fabric', T),
+    P(box(len, t, b, 0, 0, -w / 2 + b / 2), 'fabric', border), P(box(len, t, b, 0, 0, w / 2 - b / 2), 'fabric', border),
+    P(box(b, t, fw, -len / 2 + b / 2, 0, 0), 'fabric', border), P(box(b, t, fw, len / 2 - b / 2, 0, 0), 'fabric', border),
+  ];
+  for (const s of [-1, 1]) {
+    out.push(P(box(fl - 0.06, 0.002, 0.022, 0, t, s * (fw / 2 - 0.045)), 'fabric', figure)); // the pinstripe
+    out.push(P(box(0.06, 0.003, w - 0.06, s * (len / 2 + 0.03), 0, 0), 'fabric', 0xefe8d8)); // the fringe
+  }
+  const nd = Math.max(1, Math.min(7, Math.floor(fl / 0.62)));
+  for (let i = 0; i < nd; i++) {
+    const d = Math.min(0.3, fw * 0.55) / Math.SQRT2;
+    out.push(P(box(d, 0.002, d, 0, t, 0).rotateY(Math.PI / 4).translate(-fl / 2 + (i + 0.5) * (fl / nd), 0, 0), 'fabric', i % 2 ? figure : border));
+  }
+  return out;
+}
+/** A hall console `w` wide, 0.32 m deep, 0.8 m high (its wood the tint): top, an apron with a drawer,
+ *  a shelf low down with books on it, slim legs — its table lamp lit at one end (a turned ceramic
+ *  base, a drum shade), a bowl for the keys at the other. */
+export function consoleLamp(w = 1.0, base = 0x7fa0b8, shade = 0xfff1d0): Parts {
+  const d = 0.32, h = 0.8, lx = -w / 2 + 0.2;
+  const out: Parts = [
+    P(box(w, 0.03, d, 0, h - 0.03, 0), 'wood', T),
+    P(box(w - 0.07, 0.1, d - 0.05, 0, h - 0.13, 0), 'wood', T),
+    P(box(0.12, 0.02, 0.012, 0, h - 0.09, -d / 2 + 0.02), 'metal', 0xc9a74a), // the drawer's pull
+    P(box(w - 0.08, 0.02, d - 0.07, 0, 0.16, 0), 'wood', T),
+    P(box(0.24, 0.045, 0.17, w / 2 - 0.2, 0.18, 0), 'fabric', 0x8c3a2e), P(box(0.21, 0.04, 0.16, w / 2 - 0.21, 0.225, 0.005), 'fabric', 0x3f5a78),
+  ];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) out.push(P(cyl(0.015, 0.02, h - 0.03, sx * (w / 2 - 0.04), 0, sz * (d / 2 - 0.04), 6), 'wood', T));
+  out.push(P(turned([[0.03, 0], [0.075, 0.04], [0.085, 0.13], [0.05, 0.24], [0.02, 0.27]], 10).translate(lx, h, 0.02), 'porcelain', base));
+  out.push(P(cyl(0.008, 0.008, 0.08, lx, h + 0.27, 0.02, 5), 'metal', 0xc9a74a));
+  out.push(P(turned([[0.15, 0], [0.12, 0.2]], 12).translate(lx, h + 0.33, 0.02), 'glow', shade));
+  out.push(P(turned([[0.001, 0], [0.08, 0.005], [0.12, 0.05]], 10).translate(w / 2 - 0.22, h, 0), 'porcelain', 0xe9e2d0)); // the bowl
+  return out;
+}
+/** A mirror `w` × `h` hung on the wall (its bottom at y = 0): a moulded frame (tint) round the glass. */
+export function mirror(w = 0.7, h = 0.9): Parts {
+  const t = 0.055, d = 0.035;
+  return [
+    P(box(w, t, d, 0, 0, 0), 'wood', T), P(box(w + 0.03, t, d + 0.006, 0, h - t, 0), 'wood', T),
+    P(box(t, h - 2 * t, d, -w / 2 + t / 2, t, 0), 'wood', T), P(box(t, h - 2 * t, d, w / 2 - t / 2, t, 0), 'wood', T),
+    P(box(w - 2 * t + 0.01, h - 2 * t + 0.01, 0.006, 0, t - 0.005, 0.006), 'glass', 0xd6e0e4),
+  ];
+}
+/** Skirting a metre long — its instances stretch it along x to each wall's length — 12 cm high, its
+ *  back on the wall: the board and a moulded top, trim white. */
+export const SKIRT_H = 0.12;
+export function skirting(hex = 0xf4f1ea): Parts {
+  return [P(box(1, 0.104, 0.013, 0, 0, 0.0025), 'solid', hex), P(box(1, 0.016, 0.018, 0, 0.104, 0), 'solid', hex)];
+}
+/** A ceiling light's glass dome under a brass rim, hanging from its top (y = 0.12): `lamp` lit only
+ *  after dark (a room with windows), `glow` always (a hall without one). */
+export function ceilingDome(r = 0.17, mat: 'glow' | 'lamp' = 'glow'): Parts {
+  const h = 0.12;
+  return [
+    P(cyl(r + 0.025, r + 0.025, 0.02, 0, h - 0.02, 0, 14), 'metal', 0xc9a74a),
+    P(turned([[0.001, 0], [r * 0.55, 0.012], [r * 0.88, h * 0.4], [r, h - 0.02]], 14), mat, 0xfff3d8),
+  ];
 }
 
 /** Merge a piece into one vertex-coloured geometry (for props outside: café terraces). */

@@ -346,10 +346,15 @@ function houseStorey(B: Builder, k: number) {
         }
       if (pick) { B.link(pick.h, id, pick.w, { pref: pick.t, wide: true }); continue; }
     }
-    // (one doorway off the hall: from the part of it with the longest free stretch along the room)
-    let bh = -1, bl = 0;
-    for (const [h, s0, s1] of st) if (s1 - s0 > bl) (bl = s1 - s0), (bh = h);
-    if (bh >= 0) B.link(bh, id, q.hall >= w ? w : 0.8);
+    // (one doorway off the hall: from the part of it with the longest free stretch along the room — a
+    // cottage's off its kitchen end where it can, else as near the front as it goes, so the living
+    // room keeps a long wall for its sofa)
+    let bh = -1, bl = 0, pref: number | undefined;
+    for (const [h, s0, s1] of st) {
+      const len = s1 - s0 + (great && B.rooms[h].type === 'kitchen' && s1 - s0 >= 0.8 ? 99 : 0);
+      if (len > bl) (bl = len), (bh = h), (pref = great && B.rooms[h].type !== 'kitchen' ? s0 + 0.45 : undefined);
+    }
+    if (bh >= 0) B.link(bh, id, q.hall >= w ? w : 0.8, pref !== undefined ? { pref } : {});
   }
   if (svc) {
     const id = B.add(svc, sType, k);

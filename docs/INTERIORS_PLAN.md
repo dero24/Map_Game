@@ -1,6 +1,6 @@
 # Interiors v2 — rooms, cores and towers that scale with the map
 
-Status: Slice 1 (rooms, not halls) built 2026-09-29 — `src/world/interior/{plan,layout,mesh,furnish}.ts`, tests `interiorLayout` and `interiorBudget`; results under the table in §1. Slice 3 (towers) built 2026-09-29 — `player/lift.ts`, `ui/lift.ts`, test `interiorTower`; results under Slice 3 in §5. Slices 2, 4 and 5 planned (backlog R.31). Written 2026-09-28 from a read of `interiors.ts`, `buildings.ts`, `realTile.ts` and the numbers below.
+Status: Slice 1 (rooms, not halls) built 2026-09-29 — `src/world/interior/{plan,layout,mesh,furnish}.ts`, tests `interiorLayout` and `interiorBudget`; results under the table in §1. Slice 3 (towers) built 2026-09-29 — `player/lift.ts`, `ui/lift.ts`, test `interiorTower`; results under Slice 3 in §5. The front door opens on a home (review round 10, must-fix 4: cottages open into their living room, halls show their stair and living room, the way in dressed, skirting, real sun pools) built 2026-10-01 — §5, before Slice 5. Slices 2, 4 and 5 planned (backlog R.31). Written 2026-09-28 from a read of `interiors.ts`, `buildings.ts`, `realTile.ts` and the numbers below.
 
 Goal: real room scale and variety in every building, bungalow to 40-storey tower, derived from the map data we carry, on a phone budget.
 
@@ -242,6 +242,15 @@ Instanced: furniture, residents, lift doors; merged: shell, partitions, stairs. 
   - **Corridor rooms:** `bandCuts` chooses a band's party walls together (a DP on a 10 cm grid: rooms nearest the width wanted; out of range only where no pier allows better) — the greedy pick landed a wall on a pier's far edge and the next room had nowhere to end (a 60×18 m hotel's back band: 13 of 31 rooms too narrow for a bathroom).
   - **Fixtures** (`Layout.fix`): checkouts at the door, produce, gondola runs with 1.8 m aisles and cross aisles every 13.75 m, the cold cases along the back partition; pews and an altar. Numbers (60×40 m supermarket): 6 checkouts, 42 runs, 10 cold cases, 22.5% back of house, 27k vertices. 60×18 m hotel: 27–31 rooms of 25–35 m² a storey, each with its bathroom. Classrooms 51–64 m².
   - **Not done:** a chancel's dais (`Layout.dais`: the type is there, nothing raises it yet); the qibla from the real bearing (the mihrab is on the wall opposite the door); `tourism=hotel` and `leisure=*` in the tile's use tag (a cache bump: names find them meanwhile); a five-storey block's lift where its core slot has no pier for the shaft's wall.
+
+**The front door opens on a home (review round 10, must-fix 4).** The reviewer: "every front door opens on nothing" — a bare peach hall, a coat rail that read as two cabinet doors, no stair, no lit lamp, no skirting, and "morning sun" in a hall with no window.
+
+- **Built 2026-10-01** (`interior/{plan,layout,furnish,mesh,views}.ts`, `interiors.ts`, `decor.ts`, `tools/review-shots.js` pose 19; tests `interiorLayout` (`tests/helpers/homes.ts`), `interiorBudget` "the way in", `foundry`):
+  - **Cottages** (`COTTAGE` ≤ 110 m² a storey — the shore's: 27% of its 32,275 houses): no hall. The strip from the front door is the living room, 3.2 m or more beside its stair, the kitchen at its back in the same space (one great room under 6.4 m deep), bedrooms and the bathroom off it; the stair up an inside wall; upstairs the landing is the stair's lane and a passage. Real-world sizing (§2): living rooms 17–30 m², width ≥ 3.0–3.5 m.
+  - **Bigger houses** keep the hall: the stair's foot ≤ 40° off the door's axis (and ≤ 5 m away), the living room off the passage side through a 1.2–1.6 m cased opening within 30° of the axis.
+  - **The way in:** a bordered runner, the console with its lamp lit and a mirror over it, coats on a rail (3–4 turned coats, 0.9–1.1 m), skirting (12 cm, trim white) round every room — one stretched instanced piece, so it costs one draw however many rooms — and ceiling domes lit after dark in rooms with windows, all day in rooms without.
+  - **Sun pools** through the facade's real window cells and only in the room the light comes in by.
+  - **Numbers** (seeded cases in `tests/helpers/homes.ts`): of 40 cottages, 40 open into the living room (before: 0, all into a hall); of 40 houses over 150 m², 40 have the stair's foot in the door's view (before: 37) and 39 the living room's cased opening within 30° (before: 0 — a 0.9 m door). Vertices (`interiorBudget`): house 12×8 m 27.6k, 16×10 m three storeys 36.8k, the review's 11.1×7.7 m cottage 21.1k (budget 40k); flats 120×40 m 94k (120k).
 
 **Slice 5 — Light and lens.**
 

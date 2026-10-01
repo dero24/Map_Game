@@ -25,7 +25,7 @@ import * as D from '../assets/decor';
 import { toW, unstack, plateAt, storeyAt, ringOf, atriumEdges, liftCars, type Plan, type Rect, type Lift } from './interior/plan';
 import { layoutSteps, registerLayout, type Layout, type Room } from './interior/layout';
 import { Mesher, Draw, Instancer, IP, WOOD, roomMapGen, drawStairs, drawPartitionsGen, pieceGeo, type RoomMap } from './interior/mesh';
-import { Furnisher, furnishRoom, furnishLifts, FABRIC, type Light, type NpcSpot } from './interior/furnish';
+import { Furnisher, furnishRoom, furnishLifts, skirtRoom, FABRIC, type Light, type NpcSpot } from './interior/furnish';
 
 export { planInterior, registerPlan, unstack, LocalPoly, type Plan, type Flight, type Lift } from './interior/plan';
 export { layoutInterior, registerLayout, type Layout, type Room } from './interior/layout';
@@ -93,6 +93,10 @@ export class Interiors {
   readonly roomInfoU = { value: new THREE.Vector4(0, 0, 10, 1) }; // u of cell 0, v of cell 0, cells per m, rows per storey
   readonly roomDimU = { value: new THREE.Vector4(1, 1, 0, 0) }; // columns, storeys, the first storey's index
   readonly fabU = { value: new THREE.Color() };
+  /** The facade's window cells as the sun comes through them (buildings.ts windowAt): spacing, sill,
+   *  head, a pane's share of its cell — the ground storey's, and the ones above it. */
+  readonly sunWinU = { value: new THREE.Vector4(2.7, 0.9, 2.25, 0.5) };
+  readonly sunWinUpU = { value: new THREE.Vector4(2.7, 0.9, 2.25, 0.5) };
   private mat: THREE.ShaderMaterial;
   private npcMat = creatureMaterial({ LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1 });
   // residents in chairs, on sofas, in booths and on bar stools sit (INDOOR: they don't leave at dusk)
@@ -354,10 +358,13 @@ export class Interiors {
   private walkId(fi: string | null) { return fi !== null ? this.walkIds.get(fi) ?? -2 : -2; }
 
   private pickLights(x: number, y: number, z: number) {
-    const ls = (this.carLamp ? [this.carLamp, ...this.lights] : this.lights.slice()).sort((a, b) => (a.x - x) ** 2 + ((a.y - y) * 2.5) ** 2 + (a.z - z) ** 2 - ((b.x - x) ** 2 + ((b.y - y) * 2.5) ** 2 + (b.z - z) ** 2));
+    // (a ceiling light in a room with windows is off by day: it comes on as the light goes)
+    const night = Math.min(1, Math.max(0, (U.uNight.value - 0.1) / 0.5));
+    const all = this.carLamp ? [this.carLamp, ...this.lights] : this.lights;
+    const ls = (night > 0.02 ? all.slice() : all.filter((l) => !l.n)).sort((a, b) => (a.x - x) ** 2 + ((a.y - y) * 2.5) ** 2 + (a.z - z) ** 2 - ((b.x - x) ** 2 + ((b.y - y) * 2.5) ** 2 + (b.z - z) ** 2));
     for (let i = 0; i < 8; i++) {
       const l = ls[i];
-      this.lightsU.value[i].set(l?.x ?? 0, l?.y ?? -999, l?.z ?? 0, l?.w ?? 0);
+      this.lightsU.value[i].set(l?.x ?? 0, l?.y ?? -999, l?.z ?? 0, (l?.w ?? 0) * (l?.n ? night : 1));
     }
   }
 
@@ -528,6 +535,13 @@ export class Interiors {
     this.dimsU.value.set(P.L / 2, P.W / 2);
     this.levelsU.value.set(P.floor0, P.levels > 1 ? P.floorH : P.ceilTop - P.floor0, P.door.wx, P.door.wz);
     this.doorU.value.set(P.door.y, P.door.w / 2, P.door.h, P.up === 'office' ? 0 : 1); // (an office's windows: no curtains)
+    // (the sun through the windows the facade has: plan.ts windowsOf — a storefront's glass on the
+    // ground, a curtain wall's floor to ceiling, a church's tall lancets, everyone else's sashes)
+    const sash: [number, number, number, number] = fp.kind === 'large' ? [2.2, 0.9, 2.25, 0.5] : fp.kind === 'church' ? [3.4, 0.9, 4.3, 0.4] : [2.7, 0.9, 2.25, 0.5];
+    const glass: [number, number, number, number] = [1.5, 0.93, P.floorH - 0.05, 0.94];
+    const store: [number, number, number, number] = [3.4, 0.45, 2.75, 0.78];
+    this.sunWinUpU.value.fromArray(P.glass ? glass : sash);
+    this.sunWinU.value.fromArray(fp.kind === 'commercial' ? store : P.glass ? glass : sash);
     // a tall building builds round the walker's storey (at the door: the ground)
     const k = P.tall ? this.storeyFor(P, this.at?.feet ?? P.floor0) : -1;
     this.want = k;
@@ -757,8 +771,16 @@ export class Interiors {
     // stay bare — a tall building's storeys each at their own share of it)
     const F = new Furnisher(P, fp, L, m, inst, tallB ? storeyRng(-1, 0xf0d5) : rng, leaves, ceil);
     for (let k = k0; k <= k1; k++) furnishLifts(F, k);
+    // skirting round every room first (one instanced piece: it costs no budget, so no room goes without)
+    let ns = 0;
+    for (const R of L.rooms) {
+      skirtRoom(F, R);
+      if (++ns % 24 === 0) yield;
+    }
+    yield;
     const nth = new Map<number, number>();
     let lv = -1, lvBase = 0;
+    m.furn = true; // (a tagged build: each thing drawn from here is a piece of its own — mesh.ts `tagging`)
     for (const R of L.rooms) {
       if (m.n + inst.uniqueVerts() > FURNISH_MAX) break;
       if (tallB) {
@@ -771,6 +793,7 @@ export class Interiors {
       yield* furnishRoom(F, R);
       yield; // one room's furniture done
     }
+    m.furn = false;
 
     // Assemble: the merged mesh, one InstancedMesh per repeated piece; then the residents.
     const group = new THREE.Group();
@@ -867,6 +890,7 @@ function interiorMaterial(I: Interiors) {
     uniforms: {
       uLights: I.lightsU, uFrame: I.frameU, uDims: I.dimsU, uLevels: I.levelsU, uDoor: I.doorU,
       uRoomMap: I.roomMapU, uRoomPal: I.roomPalU, uRoomInfo: I.roomInfoU, uRoomDim: I.roomDimU, uFab: I.fabU, uWindowColor: { value: lin(0xffc27a) },
+      uSunWin: I.sunWinU, uSunWinUp: I.sunWinUpU,
     },
     vertex: /* glsl */ `
       attribute vec3 color;
@@ -893,7 +917,7 @@ function interiorMaterial(I: Interiors) {
       }`,
     fragment: /* glsl */ `
       uniform vec4 uLights[8];
-      uniform vec4 uFrame, uLevels, uDoor, uRoomInfo, uRoomDim;
+      uniform vec4 uFrame, uLevels, uDoor, uRoomInfo, uRoomDim, uSunWin, uSunWinUp;
       uniform vec2 uDims;
       uniform sampler2D uRoomMap, uRoomPal;
       uniform vec3 uWindowColor, uFab;
@@ -974,7 +998,7 @@ function interiorMaterial(I: Interiors) {
           else if (style > 2.5 && style < 3.5) { vec2 g = fract(vec2(dot(vWorldPos.xz, ua) + dot(vWorldPos.xz, va), vWorldPos.y) / 0.18) - 0.5; alb = mix(alb, alb * 0.72, step(length(g), 0.12)); }
           else if (style > 3.5 && style < 4.5 && yl < 1.3) { vec2 g = fract(vec2(dot(vWorldPos.xz, ua) + dot(vWorldPos.xz, va), vWorldPos.y) / 0.15); alb = mix(vec3(0.95, 0.96, 0.95), vec3(0.78, 0.8, 0.8), step(0.93, max(g.x, g.y))); gloss = 0.25; }
           else if (style > 4.5 && yl < 1.1) alb = mix(vec3(0.55, 0.4, 0.28), vec3(0.62, 0.46, 0.32), step(0.5, fract(dot(vWorldPos.xz, ua + va) / 0.6)));
-          if (yl < 0.12) alb = vec3(0.45, 0.36, 0.28); // baseboard
+          if (yl < 0.12) alb = vec3(0.93, 0.92, 0.88); // (under the skirting boards: trim white)
           alb *= 0.96 + 0.06 * vnoise(vWorldPos.xz * 3.0 + vWorldPos.y * 2.0);
         } else if (part < 1.5) {
           alb = RB.rgb;
@@ -1022,11 +1046,15 @@ function interiorMaterial(I: Interiors) {
           float g = vnoise(vec2(dot(vWorldPos.xz, ua) * 1.5 + vWorldPos.y * 1.5, dot(vWorldPos.xz, va) * 20.0 + vWorldPos.y * 20.0));
           alb *= 0.88 + 0.22 * g;
           gloss = 0.1;
-        } else if (part > 11.5) {
+        } else if (part > 11.5 && part < 12.5) {
           // railing panel: top rail, bottom rail, balusters
           float u = vWall.x, v = vWall.y, h = vWall.w;
           bool solid = v > h - 0.07 || v < 0.06 || fract(u / 0.12) < 0.3;
           if (!solid) discard;
+        } else if (part > 12.5) {
+          // a ceiling light's glass in a room with windows: off by day, lit as the light goes
+          emis = smoothstep(0.1, 0.6, uNight);
+          gloss = 0.3;
         }
         alb = pigment(alb, vWorldPos);
         // daylight spilling in from the windows + warm lamps (lamps light only their own storey)
@@ -1051,8 +1079,10 @@ function interiorMaterial(I: Interiors) {
         }
         vec3 col = alb * (amb + lamp * (0.55 + 0.6 * uNight));
         // Sun through the windows: follow the ray toward the sun to the outer wall it leaves by,
-        // and light this point if it passes through a pane (house windows: 0.9–2.25 m above the
-        // floor, one per ~2.7 m of wall). Warm pools on the floorboards, slanting up the walls.
+        // and light this point if it passes through one of that wall's panes — the facade's own
+        // window cells (n = floor((len − 0.6) ÷ spacing) to a wall, a pane centred in each, the sill
+        // and head of the building's kind) — and the wall it leaves by is this room's: no pool in a
+        // hall with no window (a partition stands between). Warm pools on the floor, up the walls.
         if (uKeyDir.y > 0.04 && uNight < 0.5) {
           vec2 sd = vec2(dot(uKeyDir.xz, ua), dot(uKeyDir.xz, va));
           float hl = length(sd);
@@ -1062,11 +1092,21 @@ function interiorMaterial(I: Interiors) {
             float tv = hd.y > 0.0 ? (uDims.y - pv) / hd.y : hd.y < 0.0 ? (-uDims.y - pv) / hd.y : 1e9;
             float t = min(tu, tv);
             float hitY = yl + t * uKeyDir.y / hl;
-            float along = tu < tv ? pv + t * hd.y : pu + t * hd.x;
-            float cellW = 2.7, cu = (fract(along / cellW) - 0.5) * cellW;
+            // (the cells are symmetric about a wall's middle: measured from either end, they're the same)
+            float halfW = tu < tv ? uDims.y : uDims.x;
+            float along = (tu < tv ? pv + t * hd.y : pu + t * hd.x) + halfW;
+            vec4 SW = lvl + uRoomDim.z < 0.5 ? uSunWin : uSunWinUp;
+            float nW = max(1.0, floor((2.0 * halfW - 0.6) / SW.x)), cellW = 2.0 * halfW / nW;
+            // (the glass: the pane less its 8 cm frame, as the wall cuts it)
+            float hw = 0.5 * (SW.w > 0.6 ? cellW * SW.w : min(SW.w < 0.45 ? 1.1 : 1.0, cellW * SW.w)) - 0.08;
+            float cu = (fract(along / cellW) - 0.5) * cellW;
             // a crisp window shape with its muntin cross (sash bars) printed in the light
-            float pane = (1.0 - smoothstep(0.455, 0.475, abs(cu))) * smoothstep(0.9, 0.92, hitY) * (1.0 - smoothstep(2.23, 2.25, hitY));
-            pane *= smoothstep(0.018, 0.03, abs(cu)) * smoothstep(0.018, 0.03, abs(hitY - 1.575));
+            float pane = (1.0 - smoothstep(hw - 0.02, hw, abs(cu))) * smoothstep(SW.y + 0.07, SW.y + 0.09, hitY) * (1.0 - smoothstep(SW.z - 0.09, SW.z - 0.07, hitY));
+            pane *= smoothstep(0.018, 0.03, abs(cu)) * smoothstep(0.018, 0.03, abs(hitY - 0.5 * (SW.y + SW.z)));
+            // the room it leaves by: the room map a hand's width inside that wall
+            vec2 ex = vec2(pu, pv) + hd * max(0.0, t - 0.25);
+            ivec2 te = ivec2(int(clamp(floor((ex.x - uRoomInfo.x) * uRoomInfo.z), 0.0, uRoomDim.x - 1.0)), int(clamp(floor((ex.y - uRoomInfo.y) * uRoomInfo.z), 0.0, uRoomInfo.w - 1.0) + lvl * uRoomInfo.w));
+            pane *= step(abs(float(int(texelFetch(uRoomMap, te, 0).r * 255.0 + 0.5) - ri)), 0.5);
             float sun = pane * step(t, 7.0) * max(dot(N, uKeyDir), 0.0) * (1.0 - smoothstep(0.2, 0.5, uNight));
             col += alb * uKeyColor * sun * 1.5;
           }

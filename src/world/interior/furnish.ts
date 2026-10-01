@@ -12,12 +12,15 @@ import { LocalPoly, wallWindows, liftCars, LIFT_DOOR, type Plan, type Rect, type
 import type { Layout, Room } from './layout';
 import { Draw, Instancer, IP, WOOD, type LeafSpot, type Mesher, type P2 } from './mesh';
 
-export interface Light { x: number; y: number; z: number; w: number }
+/** A lamp's light: where, how strong; `n`: lit after dark only (a ceiling light in a room with windows). */
+export interface Light { x: number; y: number; z: number; w: number; n?: 1 }
 /** [u, v, floor y, yaw, seat height (0: standing), staff (1: placed first)] */
 export type NpcSpot = [number, number, number, number, number?, number?];
 export const FABRIC = [0x5b7fa6, 0xa65a44, 0x6e8c5a, 0xd9c7a0, 0x7a5b8c, 0x3f6f78, 0xc9a24b, 0x8f8f96, 0xc97b6b, 0x4f6d8f];
 const STOCK = [0xd9573f, 0xe0a33b, 0x6e8c5a, 0xf2efe6, 0x5b7fa6, 0xc9a24b, 0x8a4a3a];
 const STAFF_AISLE = 0.9; // the working aisle behind a shop, café or bar counter
+/** A hall runner's colours: its border, its figure (pinstripe, diamonds), its field. */
+const RUNNERS: [number, number, number][] = [[0x8c2f2a, 0xe9dcc0, 0xc9a27a], [0x2f4a6a, 0xe9dcc0, 0xb8c4c9], [0x3d5a46, 0xefe3c4, 0xc7b48a], [0x6a2a3a, 0xe0c9a0, 0xb48a6a], [0x34322f, 0xd9c7a0, 0x9fb3a5]];
 
 type SideKey = 'u0' | 'u1' | 'v0' | 'v1';
 /** One side of a room: its line, which way is out, the face furniture backs onto, and where along
@@ -98,10 +101,18 @@ export class Furnisher {
     for (const K of this.claims[k] ?? []) if (hitR(K, r)) return false;
     return true;
   }
-  glow(u: number, v: number, y: number, w: number) { const p = this.d.W(u, v); this.lights.push({ x: p[0], y, z: p[1], w }); }
+  glow(u: number, v: number, y: number, w: number, night = false) { const p = this.d.W(u, v); this.lights.push({ x: p[0], y, z: p[1], w, ...(night ? { n: 1 as const } : {}) }); }
   pick<T>(a: readonly T[]) { return a[Math.floor(this.rng.float() * a.length)]; }
+  private sideMemo = new Map<number, Side[]>();
   /** The sides of a room: walls (with their doorways) from the layout, facade where it's outside. */
   sides(R: Room): Side[] {
+    let out = this.sideMemo.get(R.id);
+    if (!out) this.sideMemo.set(R.id, (out = this.sidesOf(R)));
+    return out;
+  }
+  /** Has the room a window (in a facade side of it, on its storey)? */
+  windowed(R: Room) { return this.sides(R).some((S) => S.ext && this.onWindows(S, S.lo, S.hi, R.level)); }
+  private sidesOf(R: Room): Side[] {
     const P = this.P, out: Side[] = [];
     for (const key of ['u0', 'u1', 'v0', 'v1'] as SideKey[]) {
       const run: 0 | 1 = key[0] === 'v' ? 0 : 1;
@@ -130,6 +141,9 @@ export class Furnisher {
           if (e > s) solid.push([s, e]);
         }
       }
+      // (one wall surface on this side, though rooms of two spaces may lie behind it: their stretches join)
+      solid.sort((x, y) => x[0] - y[0]);
+      for (let i = solid.length - 1; i > 0; i--) if (solid[i][0] - solid[i - 1][1] < 0.03) { solid[i - 1] = [solid[i - 1][0], Math.max(solid[i - 1][1], solid[i][1])]; solid.splice(i, 1); }
       out.push({ key, run, at, out: o, face: at - o * (ext ? 0.14 : 0.06), lo, hi, ext, solid: solid.filter(([a, b]) => b - a > 0.2), doors });
     }
     return out;
@@ -182,6 +196,30 @@ export class Furnisher {
     }
     return null;
   }
+  /** The best spot by `score` (the least) `w` wide and `dep` deep against the room's walls — every
+   *  10 cm along every stretch of solid wall — clear of its doorways, the stairs and what's there
+   *  already; `tall` ones between the windows. (Where a piece belongs, not wherever it lands: the
+   *  console along the hall ahead of the door, the coats beside it.) */
+  bestAgainst(R: Room, SS: Side[], w: number, dep: number, score: (p: Put) => number, o: { keys?: SideKey[]; tall?: boolean; noExt?: boolean } = {}): Put | null {
+    let best: Put | null = null, bs = Infinity;
+    for (const S of SS) {
+      if ((o.keys && !o.keys.includes(S.key)) || (o.noExt && S.ext)) continue;
+      const pl = SS.find((x) => x.run !== S.run && x.out < 0), ph = SS.find((x) => x.run !== S.run && x.out > 0);
+      for (const [a, b] of S.solid) {
+        const lo = Math.max(a + 0.04, (pl ? pl.face : S.lo) + 0.03), hi = Math.min(b - 0.04, (ph ? ph.face : S.hi) - 0.03);
+        for (let s0 = lo; s0 + w <= hi + 1e-6; s0 += 0.1) {
+          const s1 = s0 + w;
+          if (S.doors.some(([g0, g1]) => s0 < g1 + 0.2 && s1 > g0 - 0.2)) continue;
+          const r = this.wrect(S, s0, s1, 0.01, dep);
+          if (!inside(R.r, r) || !this.freeAt(R.level, r) || (o.tall && this.onWindows(S, s0, s1, R.level))) continue;
+          const p: Put = { r, uc: (r.u0 + r.u1) / 2, vc: (r.v0 + r.v1) / 2, ax: axFor(S.key), side: S, s0, s1 };
+          const sc = score(p);
+          if (sc < bs) (bs = sc), (best = p);
+        }
+      }
+    }
+    return best;
+  }
   /** A free spot `w` × `dep` (along u × along v) anywhere in the room, `m` clear of its walls. */
   anywhere(R: Room, w: number, dep: number, m = 0.45, tries = 12): Put | null {
     const r0 = R.r;
@@ -193,8 +231,8 @@ export class Furnisher {
     }
     return null;
   }
-  /** A repeated piece (instanced), its x along ax. */
-  put(key: string, make: () => D.DecorPart[], uc: number, vc: number, y: number, ax: P2, tint = 0xffffff) { return this.inst.put(key, make, uc, vc, y, ax, tint); }
+  /** A repeated piece (instanced), its x along ax (stretched sx times along it). */
+  put(key: string, make: () => D.DecorPart[], uc: number, vc: number, y: number, ax: P2, tint = 0xffffff, sx = 1) { return this.inst.put(key, make, uc, vc, y, ax, tint, sx); }
 }
 const inside = (outer: Rect, r: Rect, m = 0.02) => r.u0 >= outer.u0 - m && r.u1 <= outer.u1 + m && r.v0 >= outer.v0 - m && r.v1 <= outer.v1 + m;
 
@@ -231,6 +269,25 @@ export function furnishLifts(F: Furnisher, k: number) {
   });
 }
 
+/** Skirting round a room: 12 cm of trim white along every stretch of its walls — the facade's inside
+ *  and each face of its partitions — from wall to wall, stopping at its doorways (their casings
+ *  take it). One stretched piece, instanced: a thousand rooms of it cost one draw. */
+export function skirtRoom(F: Furnisher, R: Room) {
+  if (R.type === 'shaft' || R.type === 'void') return;
+  const y = F.f(R.level), SS = F.sides(R);
+  for (const S of SS) {
+    const pl = SS.find((x) => x.run !== S.run && x.out < 0), ph = SS.find((x) => x.run !== S.run && x.out > 0);
+    const lo = pl ? pl.face : S.lo, hi = ph ? ph.face : S.hi;
+    let segs: [number, number][] = S.solid.map(([a, b]) => [Math.max(a, lo), Math.min(b, hi)]);
+    for (const [g0, g1] of S.doors) segs = segs.flatMap(([a, b]) => (b <= g0 || a >= g1 ? [[a, b]] : [[a, g0], [g1, b]]) as [number, number][]);
+    for (const [a, b] of segs) {
+      if (b - a < 0.08) continue;
+      const r = F.wrect(S, a, b, 0, 0.018);
+      F.put('skirt', () => D.skirting(), (r.u0 + r.u1) / 2, (r.v0 + r.v1) / 2, y, axFor(S.key), 0xffffff, b - a);
+    }
+  }
+}
+
 /** Furnish one room (a generator: yields between batches in a big one). */
 export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void> {
   const P = F.P, rng = F.rng, d = F.d, k = R.level;
@@ -256,13 +313,23 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
   const homey = ['living', 'bed', 'dining', 'kitchen', 'study', 'great', 'hall', 'landing', 'guest'].includes(R.type);
   const um = (R.r.u0 + R.r.u1) / 2, vm = (R.r.v0 + R.r.v1) / 2;
   const house = F.fp.kind === 'house';
-  // ---- light: a ceiling fan in a beach house's rooms, else a glowing dish (none over the stairs) ----
+  // ---- light: a ceiling fan in a beach house's rooms, else a glowing dish (none over the stairs). A
+  // home's is a glass dome: lit after dark in a room with windows, all day in one without (a hall) ----
+  const home = house || R.unit >= 0;
+  const dark = home && !F.windowed(R); // (a windowless room keeps its light on)
   const lightAt = (u: number, v: number, fan: boolean, w = 1) => {
     if (P.holes.some((H) => H.level === k && hitR(grow(H, 0.3), { u0: u, u1: u, v0: v, v1: v })) || P.flights.some((G) => G.level === k && hitR(G, { u0: u, u1: u, v0: v, v1: v }))) return;
     if (k === 0 && P.atrium && hitR(grow(P.atrium, 0.3), { u0: u, u1: u, v0: v, v1: v })) return; // (the double-height lobby's own lamps hang from storey 1)
     if (fan) F.put(`fan:${WOOD.indexOf(F.wood)}`, () => D.ceilingFan(F.wood), u, v, cy - 0.45, [1, 0]);
+    else if (home) F.put(dark ? 'dome' : 'dome:n', () => D.ceilingDome(0.17, dark ? 'glow' : 'lamp'), u, v, cy - 0.12, [1, 0]);
     else F.put('dish', () => D.ceilingLight(0.4, 0.4, 0.1), u, v, cy - 0.12, [1, 0]);
-    F.glow(u, v, cy - 0.35, w);
+    F.glow(u, v, cy - 0.35, w, home && !dark);
+  };
+  /** A hall's (or a landing's) way along, beside its stair: where its lights hang and its runner lies. */
+  const passage = (): Rect => {
+    const ln = P.lane && (R.type === 'hall' || R.type === 'landing') && hitR(grow(P.lane, 0.05), R.r) ? P.lane : null;
+    if (!ln) return R.r;
+    return (ln.v0 + ln.v1) / 2 < vm ? { ...R.r, v0: Math.min(R.r.v1 - 0.6, Math.max(R.r.v0, ln.v1 + 0.05)) } : { ...R.r, v1: Math.max(R.r.v0 + 0.6, Math.min(R.r.v1, ln.v0 - 0.05)) };
   };
   const beachy = house && (F.fp.seed * 7.3) % 1 < 0.6;
   // ---- the kit ----
@@ -302,18 +369,29 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
     const w = q(r.u1 - r.u0), dd = q(r.v1 - r.v0);
     F.put(`table:${w.toFixed(1)}x${dd.toFixed(1)}x${h}`, () => D.table(w, dd, h, 0xffffff), (r.u0 + r.u1) / 2, (r.v0 + r.v1) / 2, y, [1, 0], hex);
   };
-  const sofa = (p: Put) => {
-    F.put('sofa', () => D.sofa(2.1, 0.92, 0xffffff), p.uc, p.vc, y, p.ax, fab);
+  const sofa = (p: Put, w = 2.1) => {
+    F.put(w > 2 ? 'sofa' : `sofa:${w}`, () => D.sofa(w, 0.92, 0xffffff), p.uc, p.vc, y, p.ax, fab);
     // on the cushion, hips forward of the back cushions (the seated pose's hips sit 0.45 up)
     const inw: P2 = [-p.ax[1] * -1, p.ax[0] * -1]; // −z of the piece: out of the wall
     F.npcs.push([p.uc + inw[0] * 0.08, p.vc + inw[1] * 0.08, y, yawTo(inw[0], inw[1]), 0.47]);
   };
   const out = (p: Put): P2 => [p.ax[1], -p.ax[0]]; // the direction a wall piece faces (into the room)
   const living = (withKitchen: boolean) => {
-    const sp = F.against(R, S, 2.1, 0.95, { noExt: rng.float() < 0.5 });
+    // (a cottage's front door opens into this room: coats by the door, and the sofa along a side
+    // wall a few steps in, where it's the first thing you see)
+    const entry = k === 0 && R.r.u0 - 0.01 <= P.ud + 0.35 && R.r.u1 + 0.01 >= P.ud + 0.35 && R.r.v0 - 0.01 <= P.vd && R.r.v1 + 0.01 >= P.vd;
+    if (entry) coats();
+    // (a three-seater, else a loveseat where the walls between the doors are short)
+    let sp: Put | null = null, sw = 2.1;
+    for (const w of [2.1, 1.7]) {
+      sp = entry
+        ? F.bestAgainst(R, S, w, 0.95, (p) => Math.abs(p.uc - P.ud - 3.6) + (p.side!.run === 0 ? 0 : 1.5) + (p.side!.ext ? 0.4 : 0))
+        : F.against(R, S, w, 0.95, { noExt: rng.float() < 0.5 });
+      if (sp) { sw = w; break; }
+    }
     if (sp) {
       F.claim(k, sp.r);
-      sofa(sp);
+      sofa(sp, sw);
       const o = out(sp);
       // a coffee table in front, a rug under both, a lamp on a side table
       const tc: P2 = [sp.uc + o[0] * 0.95, sp.vc + o[1] * 0.95];
@@ -444,26 +522,52 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
     const vp = F.against(R, S, 0.5, 0.4, { tall: true });
     if (vp) F.put('vanity:0.5', () => D.vanity(0.5), vp.uc, vp.vc, y, vp.ax, 0xf2efe6);
   };
+  /** Coats on their rail by the front door (a house's hall, a cottage's living room): its middle
+   *  about a metre and a half in, between the windows. */
+  const coats = () => {
+    const co = F.bestAgainst(R, S, 1.0, 0.3, (p) => Math.abs(Math.hypot(p.uc - P.ud, p.vc - P.vd) - 1.5) + (p.side!.ext ? 0.3 : 0), { tall: true });
+    if (!co) return;
+    F.claim(k, grow(co.r, 0.05));
+    const ci = Math.floor(F.fp.seed * 613) % 8;
+    F.put(`coats:${ci}`, () => D.coatRail(1.0, 3 + (ci % 2), ci + 1), co.uc, co.vc, y, co.ax, wood);
+  };
+  /** A house's hall, the way in: a bordered runner down its way along from the doormat, the console
+   *  with its lamp lit and a mirror over it on a wall ahead of the door (where you see it as you
+   *  come in), coats on their rail by the door, a picture. (Its ceiling light is on all day: a hall
+   *  has no window.) */
+  const wayIn = () => {
+    const pa = passage();
+    const rw = q(Math.min(0.9, pa.v1 - pa.v0 - 0.45)), r0 = Math.max(pa.u0 + 0.3, P.ud + 1.15), len = q(pa.u1 - 0.4 - r0);
+    if (rw >= 0.5 && len >= 1.2) {
+      const vc = (pa.v0 + pa.v1) / 2, pi = Math.floor(F.fp.seed * 977) % RUNNERS.length, [bd, fig, field] = RUNNERS[pi];
+      F.put(`runner:${len.toFixed(1)}:${rw.toFixed(1)}:${pi}`, () => D.runner(len, rw, bd, fig), r0 + len / 2, vc, y + 0.011, [1, 0], field);
+    }
+    const cp = F.bestAgainst(R, S, 1.0, 0.34, (p) => Math.abs(p.uc - P.ud - 3.2) + (p.side!.ext ? 0.8 : 0), { keys: ['v0', 'v1'], tall: true }) ?? F.against(R, S, 1.0, 0.34, { tall: true });
+    if (cp && cp.side) {
+      F.claim(k, grow(cp.r, 0.05));
+      const base = F.pick([0x7fa0b8, 0xe9e2d0, 0x3f6f78, 0xc96b4b]);
+      F.put(`console:${base}`, () => D.consoleLamp(1.0, base), cp.uc, cp.vc, y, cp.ax, wood);
+      // (the lamp at its left end, as you face it; its light on the wall and the runner)
+      F.glow(cp.uc - cp.ax[0] * 0.3, cp.vc - cp.ax[1] * 0.3, y + 1.25, 0.7);
+      const mid = (cp.s0 + cp.s1) / 2, mr = F.wrect(cp.side, mid - 0.35, mid + 0.35, 0, 0.036);
+      F.put('mirror', () => D.mirror(0.7, 0.9), (mr.u0 + mr.u1) / 2, (mr.v0 + mr.v1) / 2, y + 1.12, cp.ax, rng.float() < 0.5 ? 0xc9a74a : wood);
+      F.claim(k, F.wrect(cp.side, cp.s0, cp.s1, 0, 0.12));
+    }
+    coats();
+    wallArt(Math.min(2, Math.max(1, Math.floor(area / 6))));
+  };
   const hall = () => {
-    // a runner down the hall's length, a console by the door, coats on a rail, a picture or two
-    const along = R.r.u1 - R.r.u0 >= R.r.v1 - R.r.v0;
-    const rr = along ? { u0: R.r.u0 + 0.5, u1: R.r.u1 - 0.5, v0: vm - 0.35, v1: vm + 0.35 } : { u0: um - 0.35, u1: um + 0.35, v0: R.r.v0 + 0.5, v1: R.r.v1 - 0.5 };
-    if (rr.u1 - rr.u0 > 1 && rr.v1 - rr.v0 > 0.5 && F.freeAt(k, rr)) rug(rr);
     // (a hotel room's entry: the wardrobe and the luggage rack)
     if (R.unit >= 0 && (P.arch === 'hotel' || P.up === 'hotel')) {
       const wp = F.against(R, S, 1.1, 0.6, { tall: true });
       if (wp) { F.claim(k, wp.r); F.put('wardrobe', () => D.wardrobe(1.1), wp.uc, wp.vc, y, wp.ax, wood); }
     }
-    if (R.type === 'hall' && k === 0 && house) {
-      const cp = F.against(R, S, 0.9, 0.36);
-      if (cp) { F.claim(k, cp.r); table(cp.r, 0.8, wood); d.box(cp.uc - 0.1, cp.uc + 0.1, cp.vc - 0.08, cp.vc + 0.08, y + 0.8, y + 0.86, 0xc9a24b, IP.porcelain); }
-      const hp = F.against(R, S, 0.9, 0.2);
-      if (hp && hp.side) {
-        F.claim(k, hp.r);
-        F.wbox(hp.side, hp.s0, hp.s1, 0.0, 0.05, y + 1.62, y + 1.7, wood, IP.wood);
-        for (let i = 0; i < 3; i++) if (rng.float() < 0.75) F.wbox(hp.side, hp.s0 + 0.1 + i * 0.28, hp.s0 + 0.32 + i * 0.28, 0.03, 0.18, y + 0.9, y + 1.62, F.pick(FABRIC), IP.fabric);
-      }
-    }
+    // a house's hall at the front door: the way in
+    if (R.type === 'hall' && k === 0 && house && R.r.u0 - 0.01 <= P.ud + 0.35 && R.r.u1 + 0.01 >= P.ud + 0.35 && R.r.v0 - 0.01 <= P.vd && R.r.v1 + 0.01 >= P.vd) { wayIn(); return; }
+    // a runner down the hall's length (along its way past the stair), a picture or two
+    const pa = passage(), along = pa.u1 - pa.u0 >= pa.v1 - pa.v0, pm = (pa.u0 + pa.u1) / 2, pv = (pa.v0 + pa.v1) / 2;
+    const rr = along ? { u0: pa.u0 + 0.5, u1: pa.u1 - 0.5, v0: pv - 0.35, v1: pv + 0.35 } : { u0: pm - 0.35, u1: pm + 0.35, v0: pa.v0 + 0.5, v1: pa.v1 - 0.5 };
+    if (rr.u1 - rr.u0 > 1 && rr.v1 - rr.v0 > 0.5 && pa.v1 - pa.v0 > 0.9 && pa.u1 - pa.u0 > 0.9) d.flatQuad(rr.u0, rr.u1, rr.v0, rr.v1, y + 0.012, F.pick(FABRIC), IP.rug, 0.1 + Math.floor(rng.float() * FABRIC.length) * 10); // (a border: style 0)
     wallArt(Math.min(2, Math.floor(area / 5)));
   };
   const corridor = () => {
@@ -1168,9 +1272,10 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
   else if (R.type === 'church') {
     for (let t = 2; t < R.r.u1 - R.r.u0 - 1; t += 6) { const u = R.r.u0 + t; F.put('dish', () => D.ceilingLight(0.4, 0.4, 0.1), u, vm, cy - 0.12, [1, 0]); F.glow(u, vm, cy - 0.35, 2.2); }
   } else {
-    // big rooms get a light every ~5 m
-    const nu = Math.max(1, Math.round((R.r.u1 - R.r.u0) / 5)), nv = Math.max(1, Math.round((R.r.v1 - R.r.v0) / 5));
-    for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) lightAt(R.r.u0 + ((R.r.u1 - R.r.u0) * (i + 0.5)) / nu, R.r.v0 + ((R.r.v1 - R.r.v0) * (j + 0.5)) / nv, fan && i + j === 0, nu * nv > 4 ? 0.8 : 1);
+    // big rooms get a light every ~5 m (a hall's down the middle of its way along, not over the stair)
+    const lr = passage();
+    const nu = Math.max(1, Math.round((lr.u1 - lr.u0) / 5)), nv = Math.max(1, Math.round((lr.v1 - lr.v0) / 5));
+    for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) lightAt(lr.u0 + ((lr.u1 - lr.u0) * (i + 0.5)) / nu, lr.v0 + ((lr.v1 - lr.v0) * (j + 0.5)) / nv, fan && i + j === 0, nu * nv > 4 ? 0.8 : 1);
   }
   fixtures();
   switch (R.type) {

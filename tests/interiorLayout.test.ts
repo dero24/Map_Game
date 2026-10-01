@@ -4,6 +4,7 @@ import { planInterior, registerPlan, rectArea } from '../src/world/interior/plan
 import { layoutInterior, registerLayout } from '../src/world/interior/layout';
 import { build, flood, pockets, nobodys, wallsOnWindows, wallsOnWindows2, realRooms, area, minWidth, rect, fpOf, doorN, terrain, toW, type Built } from './helpers/interiorCheck';
 import { cottageCases, bigHouseCases, entryType, stairInView, livingOpening } from './helpers/homes';
+import { glassFacing, sunRoomView } from '../src/world/interior/views';
 import type { Footprint, Door } from '../src/world/buildings';
 
 // Slice 1 of docs/INTERIORS_PLAN.md — "rooms, not halls": the layout rules a planned interior
@@ -169,6 +170,30 @@ describe('houses', () => {
       }
     }
   }, SLOW);
+  it('pose 19 (morning sun) frames the room with the most east-to-south glass, from inside it, facing it', () => {
+    // the review's cottage, its door in the north wall: its back (south) and east rooms take the morning
+    for (const [L, W, x] of [[11.1, 7.7, -0.84], [9, 9, 0.5], [15, 11, 1.5]] as const) {
+      const fp = fpOf(rect(L, W), 'house', 3.8), P = planInterior('v', fp, doorN(W, x), 99), Ly = layoutInterior(P, fp);
+      const g = glassFacing(P, fp, Ly);
+      expect(g.length).toBeGreaterThan(0);
+      for (const q of g) {
+        // (facing east to south: +x east, +z south; out of the building)
+        const wx = P.ux * q.out[0] + P.vx * q.out[1], wz = P.uz * q.out[0] + P.vz * q.out[1];
+        expect(wx).toBeGreaterThan(-0.01);
+        expect(wz).toBeGreaterThan(-0.01);
+      }
+      const v = sunRoomView(P, fp, Ly)!;
+      // (a home's rooms: not its bathroom, WC, utility room or a cupboard)
+      expect(v.glass).toBe(Math.max(...g.filter((q) => !['wc', 'bath', 'utility', 'closet'].includes(q.room.type)).map((q) => q.glass)));
+      const u = (v.x - P.cx) * P.ux + (v.z - P.cz) * P.uz, vv = (v.x - P.cx) * P.vx + (v.z - P.cz) * P.vz, r = v.room.r;
+      expect(u > r.u0 && u < r.u1 && vv > r.v0 && vv < r.v1).toBe(true);
+      // looking toward its glass (forward is (−sin yaw, −cos yaw)), and down at the floor before it
+      const gq = g.find((q) => q.room.id === v.room.id)!, fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);
+      expect(fx * (P.ux * gq.out[0] + P.vx * gq.out[1]) + fz * (P.uz * gq.out[0] + P.vz * gq.out[1])).toBeGreaterThan(0.3);
+      expect(v.pitch).toBeLessThan(-0.15);
+      expect(sunRoomView(P, fp, Ly)).toEqual(v);
+    }
+  });
   it('the front door opens onto the hall, not onto the stair', () => {
     for (const name of ['house', 'house3']) {
       const b = get(name), d = b.P.door;
