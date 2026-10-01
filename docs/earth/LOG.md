@@ -2,6 +2,79 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-01 (small hours) — The flying hitch, whole bridges, roofs from the photo, the small things
+
+Four of Robby's reports (2026-09-30 21:50), taken by four helpers working side by side and
+merged here.
+
+- **The flying hitch** (`groundPaint.ts` `DetailGround`). Robby: "every ~2 seconds, even flying
+  slow, it locks up for half a second".
+  - **What it was:** the ground-paint windows repainted their whole 2048² canvas whenever you were
+    66 m from the detail window's middle: three `blur(6px)` passes over the land cover, every road,
+    lot and footprint, then a 16 MB upload. At the default 40 m/s that's every 1.65 s; the 1.6 km
+    window did the same every 352 m.
+  - **Why the probes missed it:** the script only records those draws (6–10 ms). The browser
+    rasters them at the upload, which a probe with rendering off never reaches.
+  - **The fix:** a window now slides. What it still shows is copied across, and only the strip it
+    moved onto, plus the blur's band, is painted, a slice a frame, on an OffscreenCanvas. The new
+    picture is swapped in when the move is whole.
+  - **Measured:** a headless flight with rendering on went from a worst frame of 11.0 s to 4.6 s
+    (now a tile mount), p90 from 4.16 to 3.01 s.
+  - **Tests:** `groundPaint.test.ts` (10), with a canvas that meters its blur. The playtest's frame
+    check flies too (R.35), and `tools/hitch-probe.js` gains `sync`, which waits for the GPU.
+- **Bridges stand whole** (`bridges.ts`, new). Robby: "the bridge in Sea Bright looks collapsed".
+  - **What it was:** each tile profiled only its own piece of the Rumson–Sea Bright bridge, as an
+    arch of its own. The deck dropped to ~0.2 m over the channel, a V in the river, and walkers on
+    the mapped sidewalk stood on the water.
+  - **The fix:** every tile profiles the whole bridge from every way it can see, then draws only
+    its own. The deck:
+    - lands on the approach streets within centimetres;
+    - holds level over the channel: 3.5 m under a movable span, rising with the width of the water
+      for a fixed bridge;
+    - never dips below the line between its ends.
+  - **What a bridge is made of:** slab and girders, sidewalks, parapets with railings, piers into
+    the riverbed, abutments.
+    - `bridge:movable`: a bascule (tender houses, timber fenders), a lift span or a swing span.
+    - `bridge:structure`: a truss, an arch, a suspension or a cable-stayed span.
+  - **Collision** is the deck as drawn.
+  - **Tests:** `bridges.test.ts` (23), including a fixture cut from the baked pack. The tiles'
+    two pieces of Sea Bright's bridge meet to the millimetre, and none of the pack's 33 road
+    bridges dips.
+- **Roofs wear the colour the aerial photo sees** (`aerial.ts`, `aerialFetch.ts`).
+  - **What it was:** 25,770 of the shore pack's 27,161 buildings carry a NAIP roof sample, but with
+    the photo's green cast in it. The renderer folded every green and blue to one warm grey: 97% of
+    the shore's roofs were the same grey.
+  - **The baked pack:** each tile's samples are white-balanced as it builds (the cast fitted per
+    tile), and `aerialRoof` keeps the hue. Clay red reads as tile, a blue or green as painted
+    metal. Mapped `roof:colour` still wins.
+  - **Streamed US cells** read their own roofs off NAIP in the tile worker: the USGS National Map
+    ImageServer (public domain, no key), or the tile service's new `/naip` relay if a browser is
+    refused. The result is cached per cell. `?aerial=0` shows the old roofs.
+  - **Walls** have no real data beyond rare tags. The street-level plan (Mapillary) is in
+    `docs/agent/world-data.md`.
+- **The micro layer** (`render/impostor.ts`, `world/micro.ts`, `world/microLayer.ts`,
+  `assets/micro.ts`). Robby: detail "as much as we want … 2D–3D assets that always face the user".
+  - **What's placed:** 37 small things, deterministic by position:
+    - carts at the kerb on the area's collection day;
+    - porch chairs, flags, A-frames and planters;
+    - beach umbrellas, chairs and towels, by season;
+    - cleats, dock boxes and buoys;
+    - the OSM picnic tables, boards, cabinets and seamarks.
+  - **How it's drawn:** real 3D close up, hemi-octahedral impostor cards from 25–60 m, +2 draw
+    calls for all of it.
+  - **Caps:** cards per tier 12k / 4k / 1.5k; atlas 2048² on desktop, 1024² on phones.
+  - **Tests:** `impostor` (11), `micro` (11), `foundry` (+2).
+- **Tile cache keys:** `t/v23`, `&v=23`, `DIRECT_V` 23 (the bridge tags `bs`/`bm` and the micro
+  furniture). **Robby: redeploy the worker** (`cd worker && npx wrangler deploy`). It also carries
+  the `/naip` relay.
+- **Verified:**
+  - Typecheck clean.
+  - The full suite: 605 tests, plus `hoods` 13 through its container stand-in.
+  - esbuild bundle.
+  - The four helpers' before/after montages, and a merged sheet (`shots/merged-a.jpg`).
+- **Next:** the expert reviewer's round on all of it. Then trees and people on impostor cards
+  (1.15, 9.5), and wall colours from street-level photos.
+
 ## 2026-10-01 (night) — No more pale distance; a sharp frame on phones
 
 - **"Paint as you explore" is gone** (Robby: it laid a pale colour over the distance, which

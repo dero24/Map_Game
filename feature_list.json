@@ -687,7 +687,8 @@
         "src/assets/street.ts",
         "src/world/props.ts (mapped lamps, mapped small furniture, mapped bins)",
         "src/world/kerbside.ts crossingPaint",
-        "src/world/groundPaint.ts crosswalks"
+        "src/world/groundPaint.ts crosswalks",
+        "src/world/micro.ts + src/world/microLayer.ts + src/render/impostor.ts (the micro layer: mapped picnic tables, fire rings, grills, planters, boards, recycling, cabinets, vending, clocks, seamarks, plus seeded fill; +2 draws; tile cache v23); tests/micro.test.ts (11), tests/impostor.test.ts (11)"
       ],
       "notes": "Blocked on frames from real (Overpass) cells: the vector twin keeps no lamps, crossing markings or hydrants, and Overpass was down for most of (v) (it answered again at the end). Test: 3rd & Pike from a real cell — mapped lamps with arms over the street, ladder crossings where marked."
     },
@@ -796,7 +797,8 @@
         "src/world/groundPaint.ts (merged lists per tile set, walks per tile)",
         "src/world/data.ts (Terrain patch memo, genIn)",
         "src/world/roadBounds.ts",
-        "tools/hitch-probe.js"
+        "tools/hitch-probe.js",
+        "src/world/groundPaint.ts (DetailGround slides: the uncovered strip painted a slice a frame on an OffscreenCanvas, swapped in when whole — the flying hitch, 2026-10-01); tests/groundPaint.test.ts (10); tools/hitch-probe.js sync; tools/playtest.js flight phase"
       ],
       "notes": "Left: the GPU. The downtown ring draws ~15M triangles in ~1,800 calls a frame. Buildings are 76 bytes a vertex, non-indexed, 1.3M vertices a tile, and rockeries 390k vertices a tile. Next: LOD and lighter vertices, then a phone budget. Collision walls are tombstoned but never compacted over a long drive."
     },
@@ -1140,9 +1142,47 @@
         "src/world/props.ts",
         "tools/hood-fixtures.mjs",
         "tests/fixtures/hoods/",
-        "docs/NEIGHBOURHOODS.md"
+        "docs/NEIGHBOURHOODS.md",
+        "src/world/aerial.ts + src/world/aerialFetch.ts (roof colours off the NAIP photo: the baked samples white-balanced per tile, streamed US cells read in the tile worker; worker /naip relay); src/world/recipe.ts (aerialRoof, clay tile / painted metal); tests/aerial.test.ts (20)"
       ],
       "notes": "Phase 1 only (client-side). Gilbert AZ / Greenwich CT / Sugar Land TX fixtures owed (the tile service 503'd); streamed suburbs where OSM has few houses are still fixed-size fills (66 of 67 near Rumson off the baked pack) — Phase 2 (Microsoft/Overture footprints, ACS era) is what fixes those."
+    },
+    {
+      "id": "bridges",
+      "priority": 1,
+      "area": "world",
+      "title": "Bridges that stand whole: one profile per bridge, built the way the map says",
+      "user_visible_behavior": "The Rumson–Sea Bright bridge is level over the channel on piers, with its bascule's tender houses and fenders, and lands on Rumson Road at both ends; walkers and cars use its sidewalks and roadway. Every road bridge in the bake has no dip; tagged bridges draw as trusses, arches, suspension or cable-stayed spans, and lift and swing spans.",
+      "status": "passing",
+      "verification": [
+        "tests/bridges.test.ts (23): no sag below the end-to-end line, ends on the approaches, straight leaves, grades, clearance, tiles' pieces meet, collision = drawn deck, determinism; a fixture cut from the baked pack",
+        "shots/bridge-before.jpg / bridge-after.jpg (helper worktree) and shots/merged-a.jpg"
+      ],
+      "evidence": [
+        "src/world/bridges.ts",
+        "src/world/structures.ts, src/world/tileBuild.ts (margin roads)",
+        "src/player/collision.ts, src/world/pack.ts (exact deck height table, square deck ends)",
+        "src/world/data.ts, src/world/realTile.ts (Road.bs / Road.bm; tile cache v23)"
+      ]
+    },
+    {
+      "id": "micro-layer",
+      "priority": 1,
+      "area": "rendering",
+      "title": "The small things of a place on impostor cards: dense micro detail for two draws",
+      "user_visible_behavior": "Kerb carts on collection day, porch chairs and flags, café A-frames, beach umbrellas and towels in season, cleats and buoys at the docks, and every mapped picnic table, board and seamark; real 3D close up and painted cards beyond 25–60 m, with no visible switch.",
+      "status": "passing",
+      "verification": [
+        "tests/impostor.test.ts (11), tests/micro.test.ts (11), tests/foundry.test.ts (+2)",
+        "shots/shore-micro-before.jpg / after / compare (helper worktree) and shots/merged-a.jpg",
+        "draw calls +2 measured in game (252→254 … 978→980)"
+      ],
+      "evidence": [
+        "src/render/impostor.ts",
+        "src/world/micro.ts, src/world/microLayer.ts, src/assets/micro.ts",
+        "src/render/propMaterial.ts (fade), src/render/quality.ts (MICRO_TIERS)",
+        "src/world/realTile.ts (micro furniture classes; tile cache v23)"
+      ]
     }
   ],
   "regions": {
