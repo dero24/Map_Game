@@ -293,8 +293,8 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
           }
           // the rest of the open ground — a lawn, a verge, bare earth, the land cover's wash — mottled
           // the same way, the lawn's mown stipple over it (the blades stand over that)
-          float open = (1.0 - stone) * (1.0 - sandy) * smoothstep(0.3, 0.42, rel);
-          gm *= 1.0 + open * (octv(xz, 0.05, fp) * 1.2 + octv(xz + 5.1, 0.14, fp) + octv(xz - 2.3, 0.4, fp) * 0.8) * 0.42;
+          float unpaved = (1.0 - stone) * (1.0 - sandy) * smoothstep(0.3, 0.42, rel);
+          gm *= 1.0 + unpaved * (octv(xz, 0.05, fp) * 1.2 + octv(xz + 5.1, 0.14, fp) + octv(xz - 2.3, 0.4, fp) * 0.8) * 0.42;
           gm *= 1.0 - greenness * (octv(xz, 0.06, fp) * 0.22 + octv(xz + 2.0, 0.17, fp) * 0.16);
         }
         // Ocean beaches read as sand: wind ripples across the wind off the sea in the dry band, the
