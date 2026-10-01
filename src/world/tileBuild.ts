@@ -85,7 +85,8 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
   // placed last so they keep off everything above
   const micro = buildMicro({ world: world2, ctx, walk: w, footprints: bld.footprints, doors: bld.doors, mailboxes: bld.mailboxes, drives: bld.drives, box: spec.box, hood: bld.hood, style: activeStyle() });
   // the beach's people: on its chairs and towels, at the waterline, up in the lifeguard stands
-  const crowd = beachCrowd({ micro, umbrellas: props.beach.umbrellas, seats: props.beach.seats, stands: props.beach.stands, terrain, south: tj.origin.lat < 0 });
+  // (the beach's gear comes and goes with them: its micro records carry their hours)
+  const beach = beachCrowd({ micro, gear: props.beach.gear, stands: props.beach.stands, terrain, south: tj.origin.lat < 0 });
   const xing = crossingPaint(tj.roads, pj.points); // (the tile's own crossings, on any street round them)
   const vp = pj.points.filter((p) => p.c === 'viewpoint').flatMap((p) => [p.x, p.z, p.d ?? -1]);
   const plans: BuiltTile['plans'] = [];
@@ -114,8 +115,8 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
     atlas: await canvasBitmap(signs.atlas),
     lampPts: props.lampPts,
     kerb: props.kerb.length ? props.kerb : undefined,
-    micro: micro.length ? micro : undefined,
-    crowd: crowd.length ? crowd : undefined,
+    micro: beach.micro,
+    crowd: beach.people.length ? beach.people : undefined,
     junc: props.junc.length ? props.junc : undefined,
     ...(xing.length ? { xing } : {}),
     ...(vp.length ? { vp } : {}),

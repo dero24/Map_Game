@@ -32,7 +32,8 @@ import { carriagewaysNear } from './props';
 import { useOf, terraceUse } from './uses';
 import { BEACH_SEASON } from './calendar';
 
-/** Floats per record: x, y, z, yaw, piece (MICRO_KINDS index), scale, colour 0xRRGGBB, flags. */
+/** Floats per record: x, y, z, yaw, piece (MICRO_KINDS index), scale, colour 0xRRGGBB, flags (the
+ *  hours it's out — calendar.ts packWindow, 0 all day: crowd.ts gives the beach's gear its party's). */
 export const MICRO_STRIDE = 8;
 
 type P2 = [number, number];

@@ -31,7 +31,7 @@ import { streetLib, streetPaint, STREET_VARIANTS, type StreetKind } from '../ass
 import { playLib, PLAY_KINDS, PLAY_PAINT, PLAY_FOOT, type PlayKind } from '../assets/play';
 import { beachSeason, beachLotFill, marinaSeason, windowFor, worldDate } from './calendar';
 import { seaLevel, type Berth } from './docks';
-import { GUARD_SEAT, type Seat, type Stand } from './crowd';
+import { GUARD_SEAT, type Gear, type Stand } from './crowd';
 
 type P = [number, number];
 /** The hours a thing is there for when it's there all day (calendar.ts windows). */
@@ -2365,11 +2365,12 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   }
 
   // ---------- a summer beach: umbrellas, towels and chairs around the lifeguard stands ----------
-  // (crowd.ts puts someone on each chair and towel: `beachUmbrellas`, `beachSeats`)
-  const beachUmbrellas: [number, number, number][] = [], beachSeats: Seat[] = [];
+  // Handed to the micro layer with its umbrella cells (crowd.ts appends them to the tile's micro
+  // records): drawn by the same manager, someone on each chair and towel, all of it out on the sand
+  // only in its party's hours (`beachGear`).
+  const beachGear: Gear[] = [];
   const warmMonth = south ? ((month + 5) % 12) + 1 : month;
   if (standAt.length && warmMonth >= 6 && warmMonth <= 9 && look.climate !== 'boreal' && look.climate !== 'polar') {
-    const beach = { umbrella: [] as { m: THREE.Matrix4; c: THREE.Color }[], towel: [] as { m: THREE.Matrix4; c: THREE.Color }[], chair: [] as { m: THREE.Matrix4; c: THREE.Color }[] };
     const UMB = [0x3a8ac0, 0xd8342c, 0x2e8a6a, 0xf2c23a, 0xe0705a, 0x5a4a9a];
     const TOW = [0xf2c23a, 0x5aa4c8, 0xe0705a, 0x8ac06a, 0xd86a9a, 0xf2efe6];
     for (const [sx, sz] of standAt) {
@@ -2382,29 +2383,11 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         const x = sx + along[0] * a + sea[0] * b, z = sz + along[1] * a + sea[1] * b;
         if (terrain.sdfAt(x, z) < 6 || walk.blocked(x, z, 1.4)) continue;
         const yaw = Math.atan2(-sea[0], -sea[1]) + (u - 0.5) * 0.6; // looking out to sea
-        const y = terrain.heightAt(x, z);
-        beach.umbrella.push({ m: new THREE.Matrix4().compose(V(x, y, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw + (w - 0.5)), V(1, 1, 1)), c: new THREE.Color(UMB[Math.floor(u * 97) % UMB.length]) });
-        beachUmbrellas.push([x, y, z]);
-        const tq = new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw);
+        beachGear.push({ k: 'umbrella', x, y: terrain.heightAt(x, z), z, yaw: yaw + (w - 0.5), rgb: UMB[Math.floor(u * 97) % UMB.length] });
         const ox = Math.sin(yaw + 1.6) * 1.2, oz = Math.cos(yaw + 1.6) * 1.2;
-        if (w < 0.7) {
-          beach.towel.push({ m: new THREE.Matrix4().compose(V(x + ox, terrain.heightAt(x + ox, z + oz) + 0.01, z + oz), tq, V(1, 1, 1)), c: new THREE.Color(TOW[Math.floor(w * 91) % TOW.length]) });
-          beachSeats.push({ x: x + ox, y: terrain.heightAt(x + ox, z + oz), z: z + oz, yaw, k: 'towel' });
-        }
-        if (u < 0.6) {
-          beach.chair.push({ m: new THREE.Matrix4().compose(V(x - ox * 0.8, terrain.heightAt(x - ox * 0.8, z - oz * 0.8), z - oz * 0.8), tq, V(1, 1, 1)), c: new THREE.Color(TOW[Math.floor(u * 53) % TOW.length]) });
-          beachSeats.push({ x: x - ox * 0.8, y: terrain.heightAt(x - ox * 0.8, z - oz * 0.8), z: z - oz * 0.8, yaw, k: 'chair' });
-        }
+        if (w < 0.7) beachGear.push({ k: 'towel', x: x + ox, y: terrain.heightAt(x + ox, z + oz) + 0.01, z: z + oz, yaw, rgb: TOW[Math.floor(w * 91) % TOW.length] });
+        if (u < 0.6) beachGear.push({ k: 'chair', x: x - ox * 0.8, y: terrain.heightAt(x - ox * 0.8, z - oz * 0.8), z: z - oz * 0.8, yaw, rgb: TOW[Math.floor(u * 53) % TOW.length] });
       }
-    }
-    for (const k of ['umbrella', 'towel', 'chair'] as const) {
-      const list = beach[k];
-      if (!list.length) continue;
-      const im = new THREE.InstancedMesh(beachLib(k).clone(), propMaterial(), list.length);
-      im.name = `beach:${k}`;
-      list.forEach((q, i) => { im.setMatrixAt(i, q.m); im.setColorAt(i, q.c); });
-      im.layers.enable(1);
-      group.add(im);
     }
   }
 
@@ -2639,5 +2622,5 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
 
   const lampPts = lampGround.flat();
   group.add(haloPoints(lampHeads, 1.6, new THREE.Color(1.0, 0.7, 0.38)));
-  return { group, lampHeads, lampPts, kerb: new Float32Array(kerb), junc: packJunctions(junctions), beach: { umbrellas: beachUmbrellas, seats: beachSeats, stands: beachStands } };
+  return { group, lampHeads, lampPts, kerb: new Float32Array(kerb), junc: packJunctions(junctions), beach: { gear: beachGear, stands: beachStands } };
 }

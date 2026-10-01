@@ -6,7 +6,7 @@ import { RecWalk, replayOps, type BuiltTile } from '../src/world/pack';
 import { WalkWorld } from '../src/player/collision';
 import { setActiveStyle, regionStyle, activeStyle } from '../src/world/styles';
 import { setMicroDate, MICRO_STRIDE } from '../src/world/micro';
-import { setWorldDate, present } from '../src/world/calendar';
+import { setWorldDate, present, presentPacked } from '../src/world/calendar';
 import { KERB_STRIDE, parkedAt } from '../src/world/kerbCars';
 import { lotLayout } from '../src/world/lots';
 import { shoreDocks, waterline, SLIP } from '../src/world/docks';
@@ -195,7 +195,6 @@ describe('the shore keeps one calendar', () => {
     const c = t.crowd!, m = t.micro!;
     const umbs: P[] = [];
     for (let i = 0; i + MICRO_STRIDE <= m.length; i += MICRO_STRIDE) if (m[i + 4] === MICRO_INDEX.umbrella) umbs.push([m[i], m[i + 2]]);
-    for (const o of t.objs) if (o.n === 'beach:umbrella') for (let i = 0; i + 16 <= o.im!.length; i += 16) umbs.push([o.im![i + 12], o.im![i + 14]]);
     expect(umbs.length).toBeGreaterThan(50);
     const people: { x: number; z: number; pose: number; a: number; l: number }[] = [];
     for (let i = 0; i + CROWD_STRIDE <= c.length; i += CROWD_STRIDE) people.push({ x: c[i], z: c[i + 2], pose: c[i + 4], a: c[i + 9], l: c[i + 10] });
@@ -216,6 +215,11 @@ describe('the shore keeps one calendar', () => {
     // the morning and the evening: fewer
     expect(people.filter((q) => present(8, q.a, q.l)).length).toBeLessThan(at13.length * 0.15);
     expect(people.filter((q) => present(19.5, q.a, q.l)).length).toBeLessThan(at13.length * 0.35);
+    // the gear goes up and comes down with its people: every umbrella out at 13:00, few at 8:00
+    const flags: number[] = [];
+    for (let i = 0; i + MICRO_STRIDE <= m.length; i += MICRO_STRIDE) if (m[i + 4] === MICRO_INDEX.umbrella) flags.push(m[i + 7]);
+    expect(flags.every((f) => f > 0 && presentPacked(13, f))).toBe(true);
+    expect(flags.filter((f) => presentPacked(8, f)).length).toBeLessThan(flags.length * 0.15);
   });
 
   it('out of season: no lifeguards after Labor Day, and nobody on a winter beach', async () => {

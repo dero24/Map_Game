@@ -11,18 +11,23 @@
 //
 // Every few metres walked (or flown) the manager re-sorts what's near: the nearest pieces first,
 // within the tier's caps — so a phone draws fewer, and closer.
+//
+// A piece out only some hours (a record's `flags`: the beach's gear, out with its party — world/
+// crowd.ts) is drawn only then. One due to go up or come down in front of you waits until you look
+// away, as its people do (crowdLayer.ts); a jump of the clock applies at once.
 import * as THREE from 'three';
 import { MICRO_KINDS, microLib } from '../assets/micro';
 import { ImpostorAtlas, impostorMaterial, cardGeometry, handoverAt, maxLodOf, KIND_TEXELS, GUTTER, atlasBytes } from '../render/impostor';
 import { propMaterial } from '../render/propMaterial';
 import { U } from '../render/shared';
 import { MICRO_STRIDE } from './micro';
+import { presentPacked } from './calendar';
 import type { MicroTier } from '../render/quality';
 export type { MicroTier };
 
 
 interface KindGeo { pos: Float32Array; nrm: Float32Array; col: Float32Array; tint: Uint8Array; n: number; R: number; F: number; dh: number; far: number }
-interface TileRec { uid: number; d: Float32Array; box: [number, number, number, number, number, number]; near: Uint32Array; card: Uint32Array }
+interface TileRec { uid: number; d: Float32Array; box: [number, number, number, number, number, number]; near: Uint32Array; card: Uint32Array; shown: Uint8Array }
 
 /** Per piece: the picture size (px), where it hands over and how far its cards are drawn (m). */
 export function kindLod(R: number, T: Pick<MicroTier, 'Fbig' | 'Fsmall' | 'lo' | 'hi' | 'far' | 'band' | 'pxK'>) {
@@ -53,6 +58,11 @@ export class MicroLayer {
   private gen = 0;
   private uids = 0;
   private nearSig = 0;
+  /** the world's hour the pieces out some hours are drawn for (update's); NaN: not told */
+  private hour = NaN;
+  private jump = true;
+  private fwd = new THREE.Vector3(0, 0, -1);
+  private view = false;
   readonly stats = { records: 0, cards: 0, near: 0, nearVerts: 0, refillMs: 0, bakeMs: 0, atlasW: 0, atlasH: 0, atlasMB: 0, kinds: 0, ready: 0 };
 
   constructor(renderer: THREE.WebGLRenderer, readonly tier: MicroTier, pieces?: (THREE.BufferGeometry | null)[]) {
@@ -138,7 +148,7 @@ export class MicroLayer {
       z0 = Math.min(z0, d[i + 2]); z1 = Math.max(z1, d[i + 2]);
     }
     const n = Math.floor(d.length / MICRO_STRIDE);
-    this.tiles.set(id, { uid: ++this.uids, d, box: [x0, y0, z0, x1, y1, z1], near: new Uint32Array(n), card: new Uint32Array(n) });
+    this.tiles.set(id, { uid: ++this.uids, d, box: [x0, y0, z0, x1, y1, z1], near: new Uint32Array(n), card: new Uint32Array(n), shown: new Uint8Array(n).fill(255) });
     this.dirty = true;
   }
   remove(id: string) {
@@ -148,8 +158,15 @@ export class MicroLayer {
 
   /** Per frame, with the camera's position in the region frame: photograph a few more pieces while
    *  the atlas fills, and re-sort what's near when the camera has moved a few metres. */
-  update(x: number, y: number, z: number, camera?: THREE.PerspectiveCamera) {
+  update(x: number, y: number, z: number, camera?: THREE.PerspectiveCamera, hour?: number) {
     const T = this.tier;
+    if (hour !== undefined && !(Math.abs(hour - this.hour) < 0.02)) {
+      const dh = Math.abs(hour - this.hour);
+      this.jump = !(dh < 0.25) && !(dh > 23.75);
+      this.hour = hour;
+      this.dirty = true;
+    }
+    if (camera) { camera.getWorldDirection(this.fwd); this.view = true; }
     if (this.atlas.pending) {
       const t0 = performance.now();
       this.atlas.bake(T.bakePerFrame);
@@ -193,6 +210,7 @@ export class MicroLayer {
         const G = K[d[i + 4] | 0];
         if (!G) continue; // (a piece this build doesn't have: left out)
         const dx = d[i] - cx, dy = d[i + 1] - cy, dz = d[i + 2] - cz, dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (d[i + 7] > 0 && !this.outNow(t, r, d[i + 7], dx, dz, dist)) continue;
         if (dist > G.far + M) continue; // (and a step past: the camera moves on before the next sort)
         const ready = this.atlas.ready(d[i + 4] | 0);
         const wantNear = mode === 2 || (mode === 0 && (dist < G.dh + T.band / 2 + M || !ready));
@@ -245,6 +263,20 @@ export class MicroLayer {
     const st = this.stats;
     st.records = records; st.cards = n; st.near = nN; st.nearVerts = v;
     st.refillMs = performance.now() - t0;
+    this.jump = false;
+  }
+
+  /** Is a piece out only some hours (`flags`) out as drawn now? It changes when its hours say so —
+   *  unless it's within 140 m in front of you and the clock only moved on (it waits for you to look
+   *  away). */
+  private outNow(t: TileRec, r: number, flags: number, dx: number, dz: number, dist: number) {
+    if (!Number.isFinite(this.hour)) return true;
+    const want = presentPacked(this.hour, flags) ? 1 : 0, S = t.shown;
+    if (S[r] !== want) {
+      const held = S[r] !== 255 && !this.jump && this.view && dist < 140 && dx * this.fwd.x + dz * this.fwd.z > -2;
+      if (!held) S[r] = want;
+    }
+    return S[r] === 1;
   }
 
   /** The chosen 3D pieces into the merged mesh: turned, scaled, painted, each vertex carrying its

@@ -97,3 +97,11 @@ export const present = (hour: number, arrive: number, leave: number) => {
   const h = ((hour % 24) + 24) % 24;
   return arrive <= leave ? h >= arrive && h < leave : h >= arrive || h < leave;
 };
+/** A window in one float (a micro record's `flags`: micro.ts) — tenths of an hour, exact in a
+ *  float32: 1 + arrive·10·1000 + leave·10. 0: there all day. */
+export const packWindow = (w: [number, number] | null): number => (!w || (w[0] <= 0 && w[1] >= 24) ? 0 : 1 + Math.round(w[0] * 10) * 1000 + Math.round(w[1] * 10));
+export const presentPacked = (hour: number, f: number) => {
+  if (!(f > 0)) return true;
+  const v = f - 1;
+  return present(hour, Math.floor(v / 1000) / 10, (v % 1000) / 10);
+};

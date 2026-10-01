@@ -280,6 +280,82 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
   renderer/client `life.ts`, shared layout `protocol.ts` (SAB when cross-origin isolated,
   transferable copies otherwise). Sound: `src/audio/ambience.ts` (all synthesized).
 
+## The shore's calendar (`src/world/calendar.ts`) — round 10's must-fix 5
+
+The season and the hour decide how full the marina, the beach and its parking are, everywhere at
+once, from the map and seeds. No place names: a beach is a mapped `beach`, a marina a mapped
+`marina`, a riverfront lot a house with sea-level water within 30 m of its walls.
+
+- **One calendar**: the world's day (`setWorldDate`, from `?date=` — the tile worker at init, the
+  page at boot for in-page builds; else today), `BEACH_SEASON` (moved from micro.ts, which
+  re-exports it), `MARINA_SEASON` (slips taken: July–August 0.9, October 0.55, a temperate winter
+  ~0.22; a warm coast ≥ 0.72, a cold one less), `beachDay(hour)` (one rise, one fall: full 11:30–
+  15:30, about half at six, empty by 20:30), `beachLotFill`, `lifeguardSeason` (the last Monday of
+  May to the first Monday of September; half a year round in the south) and `LIFEGUARD_HOURS`
+  10–17. The month is fixed when a tile builds; the hour moves while you watch.
+- **Windows**: something that comes and goes carries the hours it's there (`windowFor(u, fill)`:
+  there while u < fill(h) — for a one-rise-one-fall day that's one stretch; the lowest keys come
+  first and stay latest, and the count at any hour is exactly the fill). `present(h, a, b)`; [0, 24]
+  is all day, b < a overnight.
+- **The beach lot** (`props.ts`): a lot within 150 m of a mapped beach (none in the tile's context:
+  within 150 m of the open sea) fills by `beachLotFill(hour, season)` — 6% all day and night, then
+  the beach's day × its season (1 October 17:48: ~10%; a July afternoon: full). Each car's record
+  carries its hours (`KERB_STRIDE` 13: … arrive, leave). Its walls go in the builders' scratch walk
+  only (`scratchOnly`: what's placed after keeps off the stall); `kerbCars.ts` draws it, finds it
+  for E and walls it only in its hours — one collision scope a car (−1,000,000 down), in and out of
+  the walk world as it arrives and leaves (`KerbCars.walls` = the walk world; `update(x, z, hour)`).
+  Other lots keep the town's fill (built density, `OCCUPANCY`) all day.
+- **Marinas and docks** (`docks.ts` `shoreDocks`, called in `tileBuild.ts` before the structures):
+  - a mapped marina's waterline — the distance-to-water field's zero line through it (or within 6 m
+    of its outline: an outline round the basin is the bulkhead), marching squares on 1.5 m — gets
+    finger piers (`SLIP` 4.5 m apart, `FINGER` 9 m long, 0.9 m wide) where the water is deep and
+    goes on past the tip, never within a slip's width of the map's own piers (their stretch is
+    theirs); a boat from `boatMix` (narrow enough for the slip) lies bow-in in each slip between
+    two fingers. Every tile that sees the marina lays it out whole and builds the fingers rooted on
+    its own ground, so a marina across a tile edge meets itself;
+  - two in five riverfront house lots (sea-level water within 30 m of the walls, nothing between,
+    not the ocean's beach, no mapped pier within 30 m) get a 6–9 m dock off the bulkhead and a boat
+    alongside (`riverfront` counts the lots that could);
+  - the generated piers are the map's `pier` lines with `gen` set (`'slip'`, `'dock'`; never in a
+    tile file): `structures.ts` decks and posts them, the micro layer cleats them; `props.ts` moors
+    their boats at the berths, not along them;
+  - piers (mapped and generated) are built on fine ground only (`pierGround`: the region's 2 m
+    lattice and 150 m round it, or a tile's pack / a streamed cell's DEM — not the 10 m backdrop);
+    boats only on sea-level water (`seaLevel`);
+  - every moored boat (the map's piers too) is in the water at the month's share, keyed by where
+    it lies, and no two hulls overlap (`oneToASpace`).
+- **The beach's people** (`crowd.ts` `beachCrowd`, after the micro layer in `tileBuild.ts` →
+  `BuiltTile.crowd` → `crowdLayer.ts`):
+  - they go where the beach's things are: a person on each chair (`CHAIR`) and towel (`LIE` or
+    `SIT`) of the micro layer's umbrella cells and of the summer beach round the stands (props.ts
+    `beach`), one to three to an umbrella (someone sitting in its shade if no seat is taken), now
+    and then one standing to talk; a third of the parties' kids at the waterline jumping the waves
+    (`PLAY`, 0.56–0.72 scale), some a parent wading waist-deep; a lifeguard on each stand's seat
+    (`GUARD`, `GUARD_SEAT` 2.88 m — the stand gained the seat) in season, 10–17. Each party shares
+    a window over `beachDay`. Out of season there's no gear and nobody on it.
+  - `CrowdLayer` draws every tile's records: the nearest in the full body, the rest in the lite one
+    (`people.ts` `personLiteGeometry`, ~250 vertices, the same joints/parts/markers) out to
+    `farR`, two draws (`beach-people`, `beach-people:lite`); `CROWD_TIERS`: desktop 120 + 1,400
+    to 420 m, phone 40 + 280 to 240 m (half `CAPS.peds`), low 20 + 140. Refilled every 4 m walked
+    or ~1 minute of the clock; someone due to come or go in front of you within 140 m waits until
+    you look away (a jump of the clock — a shot, the panel — applies at once). `crowd.people()`
+    lists who's drawn (probes).
+  - `creature.ts` `BEACH`: swimwear (bare arms and legs, trunks or a suit in the instance colour,
+    half a top; the guard red) and the poses from the standing body (`bend`: thigh, shin, arms and
+    trunk turned about their joints; lying is the whole body turned onto its back on the towel);
+    `still` mutes the weight shift and the talking hands for anyone posed.
+- Tests: `tests/calendar.test.ts` (the curves, windows exact to 2%, the lifeguard dates),
+  `tests/shoreCalendar.test.ts` (on the baked pack: the beach lot ≤ 25% at 17:48 on 1 October and
+  > 85% at 13:00 in July; comers never in the tile's collision; ≥ 8 boats a 100 m of the marina's
+  waterline in October, fingers 4.5 m apart, bow-in; docks on 30–45% of riverfront lots; ≥ 1.2
+  people an umbrella at 13:00 in July, 1–3 under each, a guard in every stand 10–17, none in
+  October, nobody in January; deterministic; the tiers' caps and vertices), `tests/kerbCars.test.ts`
+  (hours, walls, overnight), `tests/foundry.test.ts` (the lite body). Shots:
+  `tools/calendar-shots.js` (`__CALENDAR__(tag, { set: 'autumn' | 'summer' })`: 9 and 12 re-shot
+  with their counts, a house's dock, the 50 m beach pose at 13:00 in July with people and umbrellas
+  in frame, a lifeguard, the kids); review-shots.js 9 frames the nearest boat with eight others
+  within 45 m (a marina), not the nearest boat.
+
 ## Asset foundry (`src/assets/`, workbench `/kit.html`)
 
 Design and reasoning: `docs/ASSET_FOUNDRY.md`.
@@ -293,7 +369,7 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   - `flora.ts`: 7 tree species × 3 variants (`treeMeta` gives real dims), 12 garden species with growth stages, `plantMix`, `inBloom`;
   - `fauna.ts`: 9 animals (incl. red fox, red-tailed hawk) on one jointed body plan + `birdGeometry` + `critterMaterial`;
   - `decor.ts`: the furniture family for interiors and terraces (sofa, armchair, bed, tables, chairs, bistro and office chairs, monitor, lamps, café counter, booth, stocked shelves, plants, ceiling fan, storage bench, `cafeSet`), rounded boxes (one bevel segment; plain boxes under 1.5 cm radius) and tapered legs, merged by `mergeDecor` or instanced by `interior/mesh.ts`, plus the plain-box pieces planned rooms repeat (kitchen run, workstation, door frame and leaf, WC, vanity, bath, wardrobe, dresser, bookcase, gondola, washer, lift doors, mailboxes, racking, range); per-piece vertex budgets in `tests/foundry.test.ts` (a sofa < 4000, a chair < 1500);
-  - `people.ts`: one jointed person (~1.4k verts) for walkers and residents. Skin, hair and trouser palettes, 5 hairstyles, shorts/sleeves by `warmthFor(climate, month)` — all chosen per instance in the shader (`PEOPLE` define in `creatureMaterial`, marker vertex colours `MARK`), so a crowd is one draw;
+  - `people.ts`: one jointed person (~1.8k verts) for walkers and residents, and its lite twin (`personLiteGeometry`, < 300: the beach crowd past ~40 m). Skin, hair and trouser palettes, 5 hairstyles, shorts/sleeves by `warmthFor(climate, month)` — all chosen per instance in the shader (`PEOPLE` define in `creatureMaterial`, marker vertex colours `MARK`; `BEACH`: swimwear and poses), so a crowd is one draw;
   - `furniture.ts`: mailboxes, beach set, picnic table, car gear + `gearFor`;
   - `micro.ts`: the micro layer's small things (carts, A-frames, porch chairs, flags, hoops, cleats, buoys, beach gear, the mapped picnic tables, boards, cabinets, clocks, channel marks), placed by `world/micro.ts` and drawn real close up, as impostor cards further out (`docs/agent/rendering.md`).
 - Lot dressing (NA): `buildings.ts` lays a generated drive (a 2.9 m strip in `walks`) beside the front walk where the map has no service way near the door, and emits `drives`; `props.ts` parks a car at the house end (never on paved ground or the sidewalk strip). Doors also get hedges or `fence:picket` runs.
@@ -324,7 +400,7 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
 - Placement:
   - Choose variants by position (`variantAt`) and mixes by region/climate tables (`carMix`, `boatMix`, `plantMix`, `gearFor`). Never per-town lists.
   - Name each InstancedMesh `family:type[:variant]`:
-    - `trees:`, `garden:`, `mailbox:`, `beach:`, `picnic:`, `parked-cars:<type>[:<gear>]`, `moored-boats:`, `rocks:` (tile props);
+    - `trees:`, `garden:`, `mailbox:`, `beach:`, `picnic:`, `parked-cars:<type>[:<gear>]`, `moored-boats:` (the map's piers, a marina's slips and a house's dock alike), `rocks:` (tile props);
     - `critter:` (wildlife);
     - `plant:` (the player's garden).
   - The spotting log, commissions, hints and critter habitat all find things by these prefixes. A vehicle model string may carry gear: `suv+surf`.

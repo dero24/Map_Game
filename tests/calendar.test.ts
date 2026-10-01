@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { BEACH_SEASON, beachDay, beachLotFill, beachSeason, lifeguardSeason, marinaSeason, present, warmMonth, windowFor, BEACH_LOT_FLOOR } from '../src/world/calendar';
+import { BEACH_SEASON, beachDay, beachLotFill, beachSeason, lifeguardSeason, marinaSeason, present, presentPacked, packWindow, warmMonth, windowFor, BEACH_LOT_FLOOR } from '../src/world/calendar';
 
 // The shore's calendar (world/calendar.ts): one season and one day for the beach, its lot and the
 // marina, everywhere at once.
@@ -67,6 +67,12 @@ describe('the shore calendar', () => {
     expect(a[1]).toBeGreaterThanOrEqual(b[1]);
     expect(windowFor(0.01, fill)).toEqual([0, 24]); // (under the floor: there all day and night)
     expect(windowFor(0.5, () => 0.1)).toBeNull();
+    // in one float (a micro record's flags): exact to the tenth of an hour
+    expect(presentPacked(12, 0)).toBe(true);
+    expect(presentPacked(12, packWindow([10.3, 16.7]))).toBe(true);
+    expect(presentPacked(10.2, packWindow([10.3, 16.7]))).toBe(false);
+    expect(presentPacked(16.8, packWindow([10.3, 16.7]))).toBe(false);
+    expect(packWindow([0, 24])).toBe(0);
     // overnight windows
     expect(present(23, 20, 7)).toBe(true);
     expect(present(3, 20, 7)).toBe(true);

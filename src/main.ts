@@ -1365,7 +1365,7 @@ async function main() {
     stream.update(walker.x, walker.z);
     horizon.update(walker.x, walker.z);
     kerbCars.update(walker.x, walker.z, timeParams.hour);
-    if (micro.group.visible) micro.update(camera.position.x + origin.x, camera.position.y, camera.position.z + origin.z, camera);
+    if (micro.group.visible) micro.update(camera.position.x + origin.x, camera.position.y, camera.position.z + origin.z, camera, timeParams.hour);
     if (!CAPTURE) ambientBalloons.update(walker.x, walker.z, dt); // (they keep the world's clock: never in a capture)
     if (playing()) balloonNews(dt);
     groundT -= dt;
