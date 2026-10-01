@@ -105,7 +105,11 @@ for plants you grow and the workbench); animals < 1,600; cars about 1,800.
   shoulders; ~1.4k vertices), varied per instance on the GPU: skin, hair and trouser palettes,
   five hairstyles (the unworn ones collapse), shorts and short sleeves by the region's warmth
   (climate × season). Gait: thighs swing about the hip, the knee folds on the forward swing, arms
-  counter-swing; standing people shift their weight. A whole crowd is one instanced draw.
+  counter-swing; standing people shift their weight. A whole crowd is one instanced draw. A lite
+  twin (`personLiteGeometry`, < 300 vertices, the same joints, parts and markers) draws a beach
+  crowd past ~40 m; the `BEACH` shader poses either from the standing body — in a beach chair, lying
+  on a towel, sitting on the sand, a kid jumping the waves, a lifeguard on the stand
+  (`world/crowd.ts`, `docs/agent/gameplay.md` "The shore's calendar").
 - **Furniture** (`furniture.ts`):
   - five mailbox styles, North American curbs only;
   - summer beaches (umbrellas, towels, chairs) around the lifeguard stands;

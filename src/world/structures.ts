@@ -8,6 +8,7 @@ import { propMaterial, colored } from '../render/propMaterial';
 import { makeRng } from '../core/rng';
 import { rockLib, type RockType } from '../assets/kit';
 import { buildBridges } from './bridges';
+import { pierGround } from './docks';
 
 type P = [number, number];
 const unpackPts = (f: number[]): P[] => {
@@ -101,12 +102,14 @@ export function buildStructures(world: World, walk: WalkWorld, ctx?: { roads: Ro
   // ---------- piers & docks ----------
   const DECK = 1.35;
   const posts: THREE.Matrix4[] = [];
-  const pierSegs: { a: P; b: P; w: number }[] = [];
+  // (a pier the map didn't draw — a marina's finger pier, a house's dock: docks.ts — is built the
+  // same; its boats are moored at their berths, not along it: `gen`)
+  const pierSegs: { a: P; b: P; w: number; gen?: 'slip' | 'dock' }[] = [];
   for (const l of json.lines) {
     if (l.c !== 'pier') continue;
     const p = unpackPts(l.p);
-    const near = p.some(([x, z]) => terrain.slice.contains(x, z, -150));
-    if (!near) continue;
+    // (on fine ground only: the region's lattice, a tile's pack or a streamed cell's DEM)
+    if (!p.some(([x, z]) => pierGround(terrain, x, z))) continue;
     const w = l.w ?? 2.2;
     const { pts } = resample(p, 1.5);
     const hy = (x: number, z: number) => Math.max(DECK, terrain.heightAt(x, z) + 0.35);
@@ -129,7 +132,7 @@ export function buildStructures(world: World, walk: WalkWorld, ctx?: { roads: Ro
         posts.push(new THREE.Matrix4().compose(V(x, (top - 2.5) / 2, z), new THREE.Quaternion(), V(1, top + 2.5, 1)));
       }
     }
-    for (let i = 0; i + 1 < p.length; i++) pierSegs.push({ a: p[i], b: p[i + 1], w });
+    for (let i = 0; i + 1 < p.length; i++) pierSegs.push({ a: p[i], b: p[i + 1], w, ...(l.gen ? { gen: l.gen } : {}) });
     const cum = [0];
     for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]));
     walk.addDeck({ pts: p, cum, halfWidth: w / 2, heightAt: () => DECK, profile: { k: 'const', y: DECK } });

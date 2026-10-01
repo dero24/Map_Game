@@ -83,7 +83,18 @@ window.__REVIEW__ = async (tag = 'r', opts = {}) => {
   const [mbx, mbz] = G.world ? (() => { const o = G.world.json.origin; const K = (Math.PI / 180) * 6378137; return [(-73.9818 - o.lon) * K * Math.cos((o.lat * Math.PI) / 180), (o.lat - 40.3312) * K]; })() : [0, 0];
   const lawn = (() => { for (let r = 20; r < 300; r += 7) for (let a = 0; a < 6.28; a += 0.35) { const x = s.x + Math.sin(a) * r, z = s.z + Math.cos(a) * r; if (G.world.terrain.coverAt(x, z) === 30) return { x, z, y: G.world.terrain.heightAt(x, z) }; } return { x: s.x, z: s.z, y: 0 }; })();
   // (the umbrellas are out June–September; the rest of the year the beach shot frames a lifeguard stand)
-  const um = near('beach:umbrella', s.x, s.z) ?? near('beach:lifeguard', s.x, s.z), boat = near('moored-boats:', s.x, s.z), bed = near('garden:hydrangea', s.x, s.z);
+  // (the marina: the moored boat nearest the start with eight others within 45 m — a house's dock
+  // boat is nearer, but it's one boat)
+  const marina = () => {
+    const all = [];
+    G.scene.traverse((o) => {
+      if (!o.name.startsWith('moored-boats:') || !o.isInstancedMesh) return;
+      for (let i = 0; i < o.count; i++) { o.getMatrixAt(i, m); if (m.elements[0] === 0) continue; p.setFromMatrixPosition(m); all.push({ d: Math.hypot(p.x - s.x, p.z - s.z), x: p.x, y: p.y, z: p.z, n: o.name }); }
+    });
+    all.sort((a, b) => a.d - b.d);
+    return all.find((b) => all.filter((c) => Math.hypot(c.x - b.x, c.z - b.z) < 45).length >= 9) ?? all[0];
+  };
+  const um = near('beach:umbrella', s.x, s.z) ?? near('beach:lifeguard', s.x, s.z), boat = marina(), bed = near('garden:hydrangea', s.x, s.z);
   const set = (h) => { G.setHour(h); G.timeParams.speed = 0; };
   const A = [
     { label: '1 arrival: Ocean Ave, golden hour', fn: () => { shot('ocean-golden')(); set(18.3); } },

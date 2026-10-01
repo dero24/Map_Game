@@ -16,6 +16,7 @@ import { shoreGroup } from './shore';
 import type { SynthResult } from './synth';
 import { setActiveStyle, styleByKey } from './styles';
 import { setMicroDate } from './micro';
+import { setWorldDate } from './calendar';
 import { enrichTile, initLidar, lidarOn, setLidarLog, setLidarPort } from './lidar';
 import { enrichAerial, initAerial, aerialOn, prefetchAerial, setAerialLog } from './aerialFetch';
 import { setRoofSource } from './aerial';
@@ -673,6 +674,7 @@ ctx.onmessage = (e: MessageEvent) => {
     for (const c of m.fail ?? []) failCells.add(c);
     if (m.vector === false) vecOn = false;
     setMicroDate(m.date); // (the world's chosen day: the beach's season, the carts' collection day)
+    setWorldDate(m.date); // (…the marina's boats, the beach's people, its lot's cars: calendar.ts)
     if (m.demBase) setDemBase(m.demBase);
     if (m.lidar && m.origin) {
       setLidarLog((msg) => ctx.postMessage({ kind: 'log', msg }));
@@ -708,6 +710,7 @@ ctx.onmessage = (e: MessageEvent) => {
       for (const op of tile.ops) if (op.o === 'd' && op.d.h) tr.push(op.d.h.buffer);
       if (tile.atlas) tr.push(tile.atlas);
       if (tile.micro) tr.push(tile.micro.buffer);
+      if (tile.crowd) tr.push(tile.crowd.buffer);
       if (tile.terr) tr.push(tile.terr);
       if (tile.dem) tr.push(tile.dem.buf);
       ctx.postMessage({ kind: 'built', id: m.id, tile }, tr);

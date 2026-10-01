@@ -106,6 +106,35 @@ export function personGeometry() {
 }
 export const personLib = () => cached('person', personGeometry);
 
+/** The same body for a crowd seen from further off (the beach's past ~40 m: world/crowdLayer.ts):
+ *  three-sided limbs, box hips and chest, an octahedron head under a cap of hair, ~250 vertices.
+ *  Its joints, parts and marker colours are the full body's, so every pose and the per-person look
+ *  in the shader (PEOPLE, BEACH) work on it unchanged. */
+export function personLiteGeometry() {
+  const parts: THREE.BufferGeometry[] = [];
+  const prism = (a: THREE.Vector3, b: THREE.Vector3, r0: number, r1: number) => {
+    const d = new THREE.Vector3().subVectors(b, a), L = d.length();
+    const g = new THREE.CylinderGeometry(r1, r0, L, 3, 1, true).translate(0, L / 2, 0);
+    g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+    return g.translate(a.x, a.y, a.z);
+  };
+  for (const s of [1, -1]) {
+    const leg = s > 0 ? 1 : 2, arm = s > 0 ? 5 : 6, x = 0.092 * s;
+    parts.push(mark(prism(v(x, 0.87), v(x, 0.47), 0.09, 0.066), MARK.pants, leg));
+    parts.push(mark(prism(v(x, 0.47), v(x, 0.0, -0.04), 0.064, 0.05), MARK.shin, leg));
+    parts.push(part(prism(v(0.2 * s, 1.39), v(0.235 * s, 1.12, 0.01), 0.06, 0.05), TINT, arm));
+    parts.push(mark(prism(v(0.235 * s, 1.12, 0.01), v(0.245 * s, 0.82, -0.02), 0.048, 0.04), MARK.forearm, arm));
+  }
+  parts.push(mark(box(0.34, 0.2, 0.22, 0, 0.9, 0), MARK.pants, 0)); // hips
+  parts.push(part(box(0.38, 0.46, 0.25, 0, 1.2, 0), TINT, 0)); // chest
+  parts.push(mark(new THREE.OctahedronGeometry(1, 0).scale(0.105, 0.125, 0.115).translate(0, 1.6, 0), MARK.skin, 0)); // head
+  parts.push(mark(new THREE.ConeGeometry(0.115, 0.1, 4, 1, true).rotateY(Math.PI / 4).translate(0, 1.7, 0.01), MARK.hair, HAIR_PART0));
+  const g = merge(parts);
+  g.computeBoundingSphere();
+  return g;
+}
+export const personLiteLib = () => cached('person:lite', personLiteGeometry);
+
 // sat < 1 calms a palette in the painted world (skin at full chroma read as orange)
 const lin = (hex: number, sat = 1) => { const c = new THREE.Color(hex), hsl = { h: 0, s: 0, l: 0 }; c.getHSL(hsl); c.setHSL(hsl.h, hsl.s * sat, hsl.l); return `vec3(${c.r.toFixed(4)}, ${c.g.toFixed(4)}, ${c.b.toFixed(4)})`; };
 const arr = (name: string, hexes: number[], sat = 1) => `const vec3 ${name}[${hexes.length}] = vec3[${hexes.length}](${hexes.map((h) => lin(h, sat)).join(', ')});`;

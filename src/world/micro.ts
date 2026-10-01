@@ -35,8 +35,10 @@ import { carriagewaysNear } from './props';
 import { useOf, terraceUse } from './uses';
 import { ROAD_RANK } from './roadPalette';
 import { sidewalkBand, pavedAprons, SHOPFRONT, PAVED_AREA, segDist, ringDist } from './groundCover';
+import { BEACH_SEASON } from './calendar';
 
-/** Floats per record: x, y, z, yaw, piece (MICRO_KINDS index), scale, colour 0xRRGGBB, flags. */
+/** Floats per record: x, y, z, yaw, piece (MICRO_KINDS index), scale, colour 0xRRGGBB, flags (the
+ *  hours it's out — calendar.ts packWindow, 0 all day: crowd.ts gives the beach's gear its party's). */
 export const MICRO_STRIDE = 8;
 
 type P2 = [number, number];
@@ -69,9 +71,9 @@ export function setMicroDate(iso: string | null | undefined) {
   const t = iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? Date.parse(iso + 'T12:00:00Z') : NaN;
   worldDay = Number.isFinite(t) ? new Date(t) : null;
 }
-/** How full a beach is, by the month (warm months of the hemisphere, 1 = January up north): the
- *  season's height in July and August, a handful on a warm day either side, nobody in winter. */
-export const BEACH_SEASON = [0, 0, 0, 0, 0.15, 0.7, 1, 1, 0.55, 0.2, 0, 0];
+/** How full a beach is, by the month: the shore's calendar keeps it (world/calendar.ts), so the
+ *  umbrellas, the people under them and the cars in the beach lot keep one season. */
+export { BEACH_SEASON };
 
 /** A position hash in [0, 1): the same for every visitor and every tile that asks. */
 const H = (x: number, z: number, salt = 0) => hashf(Math.floor(x * 10) * 73856093 ^ Math.floor(z * 10) * 19349663 ^ (salt * 83492791));

@@ -57,8 +57,10 @@ export interface Building {
 export interface Road { p: number[]; c: string; w: number; n?: string; ref?: string; br?: 'yes' | 'movable'; bs?: string; bm?: string; l?: number; ow?: 1; sw?: 1; sv?: string; pk?: number; lod?: 1; own?: number; sy?: 1; tu?: 1; ic?: number; sf?: string; sc?: number /* steps: the mapped step_count */ }
 /** `k`: what a pitch is for (sports.ts Sport, or 'playground'); `sf`: its mapped surface (OSM). */
 export interface Area { c: string; o: number[][]; i: number[][]; n?: string; lod?: 1; own?: number; k?: string; sf?: string }
-/** `ft` (fences): 1 iron railing, 2 chain-link, 3 wood/picket — from OSM fence_type; absent = unknown. */
-export interface Line { c: string; p: number[]; w?: number; br?: 1; own?: number; ft?: number }
+/** `ft` (fences): 1 iron railing, 2 chain-link, 3 wood/picket — from OSM fence_type; absent = unknown.
+ *  `gen` (piers): a pier the map didn't draw, added as the tile builds (docks.ts) — a marina's
+ *  finger pier ('slip') or a riverfront house's dock ('dock'); never in a tile file. */
+export interface Line { c: string; p: number[]; w?: number; br?: 1; own?: number; ft?: number; gen?: 'slip' | 'dock' }
 /** `h`: a mapped height (m) — masts, water towers, chimneys, flagpoles. */
 export interface Point { c: string; x: number; z: number; own?: number; h?: number; sp?: string /* a tree's kind (realTile treeKindOf) */; d?: number /* a viewpoint's bearing (°) */ }
 export interface Poi { name: string; kind: string; x: number; z: number; slice: boolean }
