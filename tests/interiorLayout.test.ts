@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { WalkWorld } from '../src/player/collision';
-import { planInterior, registerPlan, rectArea } from '../src/world/interior/plan';
-import { layoutInterior, registerLayout } from '../src/world/interior/layout';
+import { planInterior, registerPlan, rectArea, type Plan } from '../src/world/interior/plan';
+import { layoutInterior, registerLayout, type Layout } from '../src/world/interior/layout';
 import { build, flood, pockets, nobodys, wallsOnWindows, wallsOnWindows2, realRooms, area, minWidth, rect, fpOf, doorN, terrain, toW, type Built } from './helpers/interiorCheck';
 import { cottageCases, bigHouseCases, entryType, stairInView, livingOpening } from './helpers/homes';
-import { glassFacing, sunRoomView } from '../src/world/interior/views';
+import { glassFacing, sunRoomView, sunniest, poolOn } from '../src/world/interior/views';
 import type { Footprint, Door } from '../src/world/buildings';
 
 // Slice 1 of docs/INTERIORS_PLAN.md — "rooms, not halls": the layout rules a planned interior
@@ -172,6 +172,8 @@ describe('houses', () => {
   }, SLOW);
   it('pose 19 (morning sun) frames the room with the most east-to-south glass, from inside it, facing it', () => {
     // the review's cottage, its door in the north wall: its back (south) and east rooms take the morning
+    // (the sun at 9:18 on 1 October at 40.4° N: 26° up, bearing 118°)
+    const sun: [number, number, number] = [0.794, 0.438, 0.422], homes: { P: Plan; fp: Footprint; L: Layout }[] = [];
     for (const [L, W, x] of [[11.1, 7.7, -0.84], [9, 9, 0.5], [15, 11, 1.5]] as const) {
       const fp = fpOf(rect(L, W), 'house', 3.8), P = planInterior('v', fp, doorN(W, x), 99), Ly = layoutInterior(P, fp);
       const g = glassFacing(P, fp, Ly);
@@ -192,7 +194,25 @@ describe('houses', () => {
       expect(fx * (P.ux * gq.out[0] + P.vx * gq.out[1]) + fz * (P.uz * gq.out[0] + P.vz * gq.out[1])).toBeGreaterThan(0.3);
       expect(v.pitch).toBeLessThan(-0.15);
       expect(sunRoomView(P, fp, Ly)).toEqual(v);
+      // with the sun (9:18 on 1 October at 40.4° N: 26° up, bearing 118°): the stance sees the pools
+      const s = sunRoomView(P, fp, Ly, 90, 180, 0, sun)!;
+      expect(s.glass).toBe(v.glass);
+      expect(s.pool!).toBeGreaterThanOrEqual(0.5);
+      const su = (s.x - P.cx) * P.ux + (s.z - P.cz) * P.uz, sv = (s.x - P.cx) * P.vx + (s.z - P.cz) * P.vz;
+      expect(su > s.room.r.u0 && su < s.room.r.u1 && sv > s.room.r.v0 && sv < s.room.r.v1).toBe(true);
+      // furniture where it stood: it stands clear of it, and the light on that floor isn't a pool
+      const at = { u0: su - 0.5, u1: su + 0.5, v0: sv - 0.5, v1: sv + 0.5 }, s2 = sunRoomView(P, fp, Ly, 90, 180, 0, sun, [at])!;
+      const u2 = (s2.x - P.cx) * P.ux + (s2.z - P.cz) * P.uz, v2 = (s2.x - P.cx) * P.vx + (s2.z - P.cz) * P.vz;
+      expect(u2 > at.u0 - 0.3 && u2 < at.u1 + 0.3 && v2 > at.v0 - 0.3 && v2 < at.v1 + 0.3).toBe(false);
+      expect(s2.glass).toBe(s.glass);
+      for (const p of poolOn(P, fp, s.room, sun, 0, [at])) expect(p[0] > at.u0 && p[0] < at.u1 && p[1] > at.v0 && p[1] < at.v1).toBe(false);
+      homes.push({ P, fp, L: Ly });
     }
+    // across homes: the one holding the most of that glass
+    const most = (h: (typeof homes)[number]) => Math.max(0, ...glassFacing(h.P, h.fp, h.L).filter((q) => !['wc', 'bath', 'utility', 'closet'].includes(q.room.type)).map((q) => q.glass));
+    const i = sunniest(homes, 90, 180, 0, sun);
+    expect(most(homes[i])).toBe(Math.max(...homes.map(most)));
+    expect(sunniest(homes.slice(i, i + 1), 90, 180, 0, sun)).toBe(0);
   });
   it('the front door opens onto the hall, not onto the stair', () => {
     for (const name of ['house', 'house3']) {

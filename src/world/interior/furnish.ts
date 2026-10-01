@@ -94,6 +94,8 @@ export class Furnisher {
   lp(k: number) { let o = this.LP; for (const p of this.plates) if (p.from <= k) o = p.LP; return o; }
   wm(k: number) { let o = this.M; for (const p of this.plates) if (p.from <= k) o = p.M; return o; }
   claim(k: number, r: Rect) { this.claims[k]?.push(r); }
+  /** The floor storey k's furniture stands on (all it claimed). */
+  taken(k: number): readonly Rect[] { return this.claims[k] ?? []; }
   /** A tall building's lift doors on the storeys built: each car's two leaves, as instances of the
    *  'liftLeaf' piece (a ride slides them: interiors.ts liftDoor). */
   liftLeaves: { lift: number; car: number; level: number; side: -1 | 1; idx: number }[] = [];
@@ -418,9 +420,19 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
     }
     const bc = F.against(R, S, 1.0, 0.36, { tall: true });
     if (bc) { const bi = rng.u32() % 3; F.claim(k, bc.r); F.put(`books:${bi}`, () => D.bookcase(1.0, 11 + bi, FABRIC), bc.uc, bc.vc, y, bc.ax, wood); }
-    const pl = F.anywhere(R, 0.5, 0.5, 0.2);
+    // (the room the front door opens on keeps the view through it: nothing free-standing on the line
+    // from the door to its far end, where an armchair's back would hide the rest of the room)
+    const through: Rect | null = entry ? { u0: P.ud, u1: R.r.u1, v0: P.vd - 0.6, v1: P.vd + 0.6 } : null;
+    const free = (w: number, dep: number, m: number) => {
+      for (let t = 0; t < (through ? 4 : 1); t++) {
+        const c = F.anywhere(R, w, dep, m);
+        if (c && !(through && hitR(through, c.r))) return c;
+      }
+      return null;
+    };
+    const pl = free(0.5, 0.5, 0.2);
     if (pl) { F.claim(k, pl.r); plant(pl.uc, pl.vc, true); }
-    const ac = F.anywhere(R, 0.85, 0.85, 0.5);
+    const ac = free(0.85, 0.85, 0.5);
     if (ac) {
       F.claim(k, grow(ac.r, 0.2));
       const face: P2 = [Math.sign(um - ac.uc) || 1, 0];

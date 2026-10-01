@@ -69,6 +69,7 @@ interface Job {
   inst: Instancer | null;
   lights: Light[];
   leaves: Furnisher['liftLeaves'];
+  taken: (readonly Rect[])[];
   stats: InteriorStats | null;
   fab: number;
   dims: [number, number];
@@ -108,6 +109,7 @@ export class Interiors {
   private openAmt = 0;
   private opened = false; // hysteresis state for the facade openings (see update)
   private layout: Layout | null = null;
+  private taken: (readonly Rect[])[] = [];
   private scope = 0; // the standing build's collision scope (0: none)
   private roomTex: RoomMap | null = null;
   private inst: Instancer | null = null;
@@ -230,6 +232,8 @@ export class Interiors {
   get activePlan() { return this.active !== null ? this.plans.get(this.active) ?? null : null; }
   /** The laid-out rooms of the building standing open (null while none is). */
   get activeLayout() { return this.layout; }
+  /** The floor the open building's furniture stands on, storey by storey (furnish.ts claims). */
+  get activeTaken(): readonly (readonly Rect[])[] { return this.taken; }
   /** The storeys standing built (a tall building's window; the whole building otherwise). */
   get built() { return this.win; }
   fpOf(key: string | null) { return key !== null ? this.fps.get(key) : undefined; }
@@ -431,6 +435,7 @@ export class Interiors {
     if (job.roomTex) { this.roomInfoU.value.copy(job.roomTex.info); this.roomDimU.value.copy(job.roomTex.dim); }
     this.inst = job.inst;
     this.lights = job.lights;
+    this.taken = job.taken;
     // (the lift doors a ride slides: each leaf's instance and its resting place)
     this.leafAt.clear();
     this.leafMesh = (mesh.getObjectByName('interior:liftLeaf') as THREE.InstancedMesh | undefined) ?? null;
@@ -467,6 +472,7 @@ export class Interiors {
     this.inst?.release();
     this.inst = null;
     this.layout = null;
+    this.taken = [];
     this.win = null;
     this.leafMesh = null;
     this.leafAt.clear();
@@ -497,7 +503,7 @@ export class Interiors {
     this.pending = this.job(this.active!, P, fp, k);
   }
   private job(fi: string, P: Plan, fp: Footprint, k: number): Job {
-    const job: Job = { fi, k: P.tall ? k : -1, win: this.windowOf(P, P.tall ? k : -1), scope: SCOPES[0] === this.scope ? SCOPES[1] : SCOPES[0], gen: null!, layout: null, roomTex: null, inst: null, lights: [], leaves: [], stats: null, fab: 0xffffff, dims: [P.L / 2, P.W / 2] };
+    const job: Job = { fi, k: P.tall ? k : -1, win: this.windowOf(P, P.tall ? k : -1), scope: SCOPES[0] === this.scope ? SCOPES[1] : SCOPES[0], gen: null!, layout: null, roomTex: null, inst: null, lights: [], leaves: [], taken: [], stats: null, fab: 0xffffff, dims: [P.L / 2, P.W / 2] };
     job.gen = this.steps(P, fp, job);
     return job;
   }
@@ -861,6 +867,7 @@ export class Interiors {
     }
     job.lights = F.lights;
     job.leaves = F.liftLeaves;
+    job.taken = Array.from({ length: P.levels }, (_, k) => F.taken(k));
     job.stats = { verts: m.n + verts, draws: main.length + meshes.length + npcDraws, instances: meshes.reduce((a, im) => a + im.count, 0), texels: rm.texels, rooms: L.rooms.length, storeys: k1 - k0 + 1 };
     return group;
   }
