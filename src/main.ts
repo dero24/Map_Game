@@ -200,7 +200,10 @@ async function main() {
   setActiveStyle(regionLook);
   // A baked pack whose roof colours were read off aerial photos (its sources say so) has them
   // balanced per tile as it builds (aerial.ts) — here for the in-page builds, and the tile worker.
-  setRoofSource(manifest.sources?.roofColours ? 'painted' : null, TAG_ROOF_COLOURS);
+  // `?aerial=0`: the roofs as they were (the pack's raw samples folded to grey, palette roofs on
+  // streamed cells) — for comparing.
+  const aerialRoofs = params.get('aerial') !== '0';
+  setRoofSource(aerialRoofs && manifest.sources?.roofColours ? 'painted' : null, TAG_ROOF_COLOURS);
   activeBuilding.uWinStyle.value.set(regionLook.windowCode, regionLook.shutterP, 0, 0);
   U.uBiome.value.set(...regionLook.biome);
   const townName = meta?.name ?? 'town';
@@ -267,7 +270,7 @@ async function main() {
   stream.lidar = params.get('lidar') === '1' || (params.get('lidar') !== '0' && tier.lidar);
   // Real roof colours on streamed US cells, off the NAIP aerial photo (aerialFetch.ts) — one
   // photo a cell, read once per browser; every tier. `?aerial=0` keeps the palette roofs.
-  stream.aerial = params.get('aerial') !== '0';
+  stream.aerial = aerialRoofs;
   // The horizon ring: real mountains out to 80 km past the tiles (Terrarium z9 through the same
   // DEM route the cells use). `?horizon=0` turns it off.
   if (tilesBase) setDemBase(tilesBase);

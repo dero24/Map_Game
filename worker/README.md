@@ -5,6 +5,12 @@
 Cold path per cell: R2 hit → else Overpass bbox query (cell + 48 m margin, `out geom`)
 → `src/world/realTile.ts` transform → R2 + edge cache. Warm cells never touch Overpass.
 
+Two relays the game's module workers read through when an upstream sends no CORS/CORP
+headers: `GET /dem/<z>/<x>/<y>.png` (Terrarium heights) and `GET /naip?bbox=<w,s,e,n>&size=<W,H>`
+(one cell's USDA NAIP orthophoto from the USGS National Map, for real roof colours —
+`src/world/aerialFetch.ts`; the game asks USGS directly first, so the relay only carries the
+browsers it refuses; edge-cached a month, one lower-48 cell per request).
+
 ## Setup (once, needs a free Cloudflare account)
 
 ```bash

@@ -594,9 +594,10 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
     lidarNew = e === 'done';
   }
   // Real roof colours off the cell's aerial photo (after the survey, whose new buildings count
-  // too). A stand-in or a coarse silhouette takes only what this browser already read.
+  // too). A stand-in or a coarse silhouette takes only what this browser already read. (A baked
+  // pack's roofs were read at bake time: aerial.ts tileRoofs balances them as they build.)
   let aerialLate = false, aerialNew = false;
-  if (!syn && aerialOn()) {
+  if (realish && !syn && aerialOn()) {
     const a = await enrichAerial(tj, spec.box, msg.relief ? null : AERIAL_WAIT, !msg.lite && !vec);
     aerialLate = a === 'late';
     aerialNew = a === 'done';
