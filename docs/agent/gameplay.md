@@ -270,10 +270,11 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
   proportion: upright, photo zoom runs from a 24° to a 97° tall frame. `tests/frame.test.ts`.
 - The phone HUD (style.css "the phone HUD"; `body[data-ride]` = car / boat / plane / balloon /
   fly / near, set in `syncTouchControls`). The middle of the frame — x 15–85%, y 30–62% — is the
-  world's: nothing of the HUD stands in it while you walk or ride, toasts included.
-  - Upright: the place name and the clock on a paper wash (the clock in full ink, ≥ 4.5:1 over
-    anything), then the hint (or a ride's readout — live numbers only — then the hint) read down the
-    top left, clear of the bar; the bar's column keeps to the right 15% (its margin narrows on a
+  world's: nothing of the HUD stands in it while you walk or ride, toasts included. The place name
+  and the clock sit on a paper wash, the clock in full ink (it was grey at 0.75 — under 4.5:1 on a
+  grey wall).
+  - Upright: the place, then the hint (or a ride's readout — live numbers only — then the hint)
+    read down the top left, clear of the bar; the bar's column keeps to the right 15% (its margin narrows on a
     narrow phone, its buttons 40 px on a 320-wide one); the word for what you're next to sits just
     over Fly; an SE's cluster is a size smaller.
   - On its side: the bar a row; the place, then one message under it; the ride's readout along the
@@ -281,9 +282,10 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
     (Lift, Up or Burn beside the brush) with Fly — and the word over it — up the right edge; a
     smaller stick ring, lower.
   - A toast (main.ts `toast`, `body.toasting`) takes the hint's place for its few seconds, two lines
-    at most (clamped), and the hint steps aside till it has faded. An arrival card
-    (`body.arriving`) is painted smaller where the place name stands, on the same wash, and the
-    place name waits.
+    at most (clamped; its margin is a clear border, so no third line peeks out of the padding), and
+    the hint steps aside till it has faded. An arrival card (`body.arriving`) is painted smaller
+    where the place name stands, on the same wash, and the place name waits till the card's fade
+    ends (`animationend` — the wall clock, not the slow frames' game time).
   - The map-data credit on one line along the bottom edge, under the stick and the cluster. The
     words in hints and toasts are the buttons' own (Paint, Land, Map, Go, More, Boost, Burn…).
   - `tools/hud-audit.mjs` checks it: 10 phones × both ways × 7 states × 4 message sets (none, a
