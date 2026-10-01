@@ -29,6 +29,7 @@ import type { RegionStyle } from './styles';
 import { MICRO_KINDS, MICRO_INDEX, type MicroId } from '../assets/micro';
 import { hashf } from '../assets/core';
 import { carriagewaysNear } from './props';
+import { useOf, terraceUse } from './uses';
 
 /** Floats per record: x, y, z, yaw, piece (MICRO_KINDS index), scale, colour 0xRRGGBB, flags. */
 export const MICRO_STRIDE = 8;
@@ -355,7 +356,8 @@ export function buildMicro(I: MicroInput): Float32Array {
     const h0 = H(d.wx, d.wz, 51), h1 = H(d.wx, d.wz, 52), h2 = H(d.wx, d.wz, 53);
     const nx = d.nx, nz = d.nz, tx = -nz, tz = nx;
     const paint = pick(SHOP, h1);
-    if (h0 < 0.45) {
+    // (a café, a restaurant, a bar sets its board out most days; a shop now and then)
+    if (h0 < (terraceUse(useOf(d.name, d.use)) ? 0.75 : 0.4)) {
       // the A-frame on the sidewalk to one side of the door, its faces to the passers-by
       const s = h2 < 0.5 ? -1 : 1, o = s * (d.w / 2 + 1.0), x = d.wx + tx * o + nx * 1.5, z = d.wz + tz * o + nz * 1.5;
       if (ground(x, z, 0.32, 0.6)) put('aframe', x, z, facing(tx, tz) + (h1 - 0.5) * 0.4, paint);
