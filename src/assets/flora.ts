@@ -683,7 +683,25 @@ function paintCluster(acc: Float32Array, W: number, ox: number, oy: number, S: n
     }
   };
   const L0 = needles ? 0.15 : smallLeaf ? 0.085 : 0.12;
-  // the heart first, darker (it's under the rest): enough leaves to close the inner three quarters
+  // the sprays: twigs from near the heart out toward the rim, a side spray off each — laid out
+  // first, their twigs painted under every leaf (they show only in the gaps, as branchlets, never
+  // as a starburst over the leaves)
+  const sprays = needles ? 11 : 17;
+  const a0 = rng.float() * 6.28;
+  const runs: [number, number, number, number, number][] = [];
+  for (let s = 0; s < sprays; s++) {
+    const th = a0 + s * GOLDEN * 2 + (rng.float() - 0.5) * 0.3;
+    // (a leaf at the tip stays inside the cell: one cut by its edge would be a straight edge)
+    const reach = Math.min(rim(th) * (0.86 + 0.2 * rng.float()), 0.95 - L0 * 1.1);
+    const r0 = 0.1 + 0.3 * rng.float();
+    const bx = Math.cos(th + 0.25) * r0, by = Math.sin(th + 0.25) * r0;
+    const ex = Math.cos(th) * reach, ey = Math.sin(th) * reach;
+    runs.push([bx, by, ex, ey, needles ? 0.012 : 0.013]);
+    const mx = bx + (ex - bx) * 0.45, my = by + (ey - by) * 0.45, sa = th + (rng.float() < 0.5 ? 0.7 : -0.7), sl = (reach - r0) * 0.45;
+    runs.push([mx, my, mx + Math.cos(sa) * sl, my + Math.sin(sa) * sl, needles ? 0.009 : 0.009]);
+  }
+  for (const [bx, by, ex, ey, w] of runs) stroke(bx, by, ex, ey, w, 0.28, 0, 0);
+  // the heart, darker (it's under the rest): enough leaves to close the inner three quarters
   const fill = needles ? 105 : smallLeaf ? 950 : 460;
   for (let q = 0; q < fill; q++) {
     const rr = Math.sqrt(rng.float()) * 0.8, th = rng.float() * 6.28;
@@ -695,12 +713,9 @@ function paintCluster(acc: Float32Array, W: number, ox: number, oy: number, S: n
     if (needles) tuft(rr < 0.3 ? x : cx, rr < 0.3 ? y : cyy, out, L0 * 0.85, 0.42 + 0.3 * rr + 0.12 * rng.float());
     else leaf(cx, cyy, out, Lf, 0.4, 0.4 + 0.32 * rr + 0.12 * rng.float());
   }
-  // then the sprays over it: twigs from near the heart out to (and a little past) the rim, a side
-  // spray off each, leaves (or tufts) along them lighter toward the open rim
-  const sprays = needles ? 11 : 17;
-  const a0 = rng.float() * 6.28;
-  const spray = (bx: number, by: number, ex: number, ey: number, w: number) => {
-    stroke(bx, by, ex, ey, w, 0.28, 0, 0);
+  // then the sprays' leaves (or tufts) over it, alternating along each twig, lighter toward the
+  // open rim, a leaf at the tip
+  for (const [bx, by, ex, ey] of runs) {
     const dir = Math.atan2(ey - by, ex - bx), len = Math.hypot(ex - bx, ey - by);
     const step = needles ? 0.09 : L0 * 0.48;
     let side = rng.float() < 0.5 ? 1 : -1;
@@ -710,18 +725,7 @@ function paintCluster(acc: Float32Array, W: number, ox: number, oy: number, S: n
       else leaf(px, py, dir + side * (0.8 + (rng.float() - 0.5) * 0.4), L0 * (1.1 - 0.3 * t) * (0.85 + 0.3 * rng.float()), 0.42, sh);
       side = -side;
     }
-    if (!needles) leaf(ex, ey, dir + (rng.float() - 0.5) * 0.3, L0 * 0.85, 0.4, 0.95); // the tip leaf
-  };
-  for (let s = 0; s < sprays; s++) {
-    const th = a0 + s * GOLDEN * 2 + (rng.float() - 0.5) * 0.3;
-    // (a leaf at the tip stays inside the cell: one cut by its edge would be a straight edge)
-    const reach = Math.min(rim(th) * (0.86 + 0.2 * rng.float()), 0.95 - L0 * 1.1);
-    const r0 = 0.1 + 0.3 * rng.float();
-    const bx = Math.cos(th + 0.25) * r0, by = Math.sin(th + 0.25) * r0;
-    const ex = Math.cos(th) * reach, ey = Math.sin(th) * reach;
-    spray(bx, by, ex, ey, needles ? 0.014 : 0.016);
-    const mx = bx + (ex - bx) * 0.45, my = by + (ey - by) * 0.45, sa = th + (rng.float() < 0.5 ? 0.7 : -0.7), sl = (reach - r0) * 0.45;
-    spray(mx, my, mx + Math.cos(sa) * sl, my + Math.sin(sa) * sl, needles ? 0.01 : 0.011);
+    if (!needles) leaf(ex, ey, dir + (rng.float() - 0.5) * 0.3, L0 * 0.85, 0.4, 0.95);
   }
 }
 

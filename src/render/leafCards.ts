@@ -51,6 +51,7 @@ export function leafTexture(data: Uint8Array, w: number, h: number) {
 export function leafCardMaterial(tex: THREE.Texture) {
   const cols = 4, rows = Math.ceil(LEAF_PICS / 4);
   return paintMaterial({
+    side: THREE.DoubleSide, // (a mirrored card winds the other way)
     uniforms: { uLeaf: { value: tex }, uLeafW: { value: (tex.image as { width: number }).width }, uTreeLod: TREE_LOD_U, uTreeMask: TREE_MASK_U },
     vertex: /* glsl */ `
       attribute vec2 aCorner;
@@ -141,11 +142,16 @@ export function leafCardMaterial(tex: THREE.Texture) {
           float clump = mix(vnoise3(vWorldPos * 1.1), t.b, 0.45) * 0.75 + vTree * 0.25;
           if (clump < uLeafFall * 1.05 - 0.02) discard;
         }
-        // the crown's light field: its own sphere (flattened as the far crown's), a little of the
-        // cluster's roundness on top
-        vec3 cN = normalize((vWorldPos - vCrown.xyz) * vec3(1.0, 1.4, 1.0));
+        // the crown's light field, as the far crown shows it: the normal of the crown's ball where the
+        // sight line through this pixel meets its front (flattened as the far field is) — a card
+        // stands inside the crown, and its own position would turn every leaf toward the eye — with
+        // a little of the cluster's own roundness on top
+        vec3 V = normalize(cameraPosition + uWorldOffset - vWorldPos);
+        vec3 rel = vWorldPos - vCrown.xyz, perp = rel - V * dot(rel, V);
+        vec3 surf = perp + V * vCrown.w * sqrt(max(0.0, 1.0 - dot(perp, perp) / (vCrown.w * vCrown.w)));
+        vec3 cN = normalize(surf * vec3(1.0, 1.4, 1.0));
         vec3 bulge = normalize(vRight * vQ.x + vUp * vQ.y + vToCam * sqrt(max(0.0, 1.0 - dot(vQ, vQ))));
-        vec3 N = normalize(mix(cN, bulge, 0.3));
+        vec3 N = normalize(mix(cN, bulge, 0.25));
         vec3 alb = twig ? vec3(0.15, 0.105, 0.068) * (0.9 + 0.4 * t.r) : vTint * (0.48 + 0.75 * t.r); // (twigs: the bark's brown)
         alb *= 0.72 + 0.5 * fbm3(vWorldPos * 0.9);
         // underside and heart in shade (the far crown's underside AO, and deeper toward the middle)
@@ -172,12 +178,10 @@ export function leafCardMaterial(tex: THREE.Texture) {
           alb = mix(alb, mix(vec3(0.96, 0.72, 0.8), vec3(0.98, 0.9, 0.92), vnoise3(vWorldPos * 2.3)) * (0.9 + 0.2 * fbm3(vWorldPos * 1.3)), uBloom * smoothstep(0.2, 0.5, vnoise3(vWorldPos * 1.6) * 0.8 + 0.3));
         alb = snowOn(alb, N, vWorldPos, 0.9);
         alb = pigment(alb, vWorldPos);
-        // the shadow map holds the far crown's solid ball: look it up from where the sun's ray leaves
-        // this crown, so only buildings and other trees shade it (its own shading is the field's)
-        vec3 rel = vWorldPos - vCrown.xyz;
-        float b = dot(rel, uKeyDir), cc = dot(rel, rel) - vCrown.w * vCrown.w;
-        float exitD = max(0.0, -b + sqrt(max(0.0, b * b - cc))) + 0.3;
-        float sh = mix(shadowAt(vWorldPos + uKeyDir * exitD, N), 1.0, 0.3);
+        // the shadow map holds the far crown's solid ball: look it up as the far crown does, from its
+        // surface stepped toward the sun, so only buildings and other trees shade it (its own shading
+        // is the field's)
+        float sh = mix(shadowAt(vCrown.xyz + surf + uKeyDir * vCrown.w * 0.7, N), 1.0, 0.3);
         vec3 col = paintLight(alb * mix(0.8, 1.0, ao), N, vWorldPos, sh, ao);
         gl_FragColor = vec4(applyFog(col, vWorldPos), 1.0);
       }`,

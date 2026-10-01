@@ -231,7 +231,7 @@ export class NearTrees {
         aC.set([wx, wy, wz, R[q + 3] * sxz], n * 4);
         aD.set([R[q + 4] * (sy / Math.max(1e-3, sxz)), fract(R[q + 5] + seed), R[q + 6], R[q + 7]], n * 4);
         aT.set([fx, fy, fz, Math.max(y - 1.5, 0) * 0.012 * sxz], n * 4);
-        aK.set([kx, ky, kz, cRM * sy], n * 4);
+        aK.set([kx, ky, kz, cRM * sxz], n * 4);
         aE.set([r, g, b, flags], n * 4);
       }
     }
