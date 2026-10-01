@@ -57,47 +57,72 @@ or per-region style.
 ## Night: lamp pools, the night's floor, the night grade (`render/nightLight.ts`)
 
 Night is laid the way a watercolourist lays it: one deep, cool wash over everything, the street
-lamps' pools left warm (a bright heart, a quick soft edge, real dark between one pool and the next),
-lit windows as the accents. The shapes and the grade's maths are plain functions in
-`nightLight.ts` (tests/nightLight.test.ts); the shaders run GLSL twins fed the same numbers.
+lamps' pools left warm — a pale cream glow under each lamp that dies away into the night — and the
+lit windows as the accents. A town's night is never black between its lamps: the night's floor keeps
+the street a readable deep blue. The shapes, the floor and the grade's maths are plain functions in
+`nightLight.ts` (tests/nightLight.test.ts, which also runs the street end to end through the default
+look); the shaders run GLSL twins fed the same numbers.
 
+- **The pool** (`POOL`, `poolLight`): a lamp's own light on the street, `h³/(h² + d²)^1.5` at
+  h = 8 m — half at 6 m, 17% at 12 m, 9% at 16 m — exact to `ease` (12 m), then eased out to nothing
+  at `reach` (22 m). Lamps closer than 44 m meet faintly between them; a shore street's lamps (every
+  third pole, ~114 m) leave the floor between their pools. Its light is `POOL.color`, a warm cream
+  (sRGB #ffe8c4; the heart reads C\* ~20–24 through the default look), × `gain` (3).
+  - Round 11 retired the pool before it: `exp(−(d/5.2)³)`, cut to nothing by 9 m — a flat top with
+    a cliff, sodium orange (#ffb86a, hearts at C\* 48–55) on black. Every lamp was a stage light.
 - **The lamp map** (`stream.ts` `repaintLamps`: 2 km round the walker at 2 m/px, repainted at most
-  every 1.5 s for tiles, at once near its edge; one sprite stamped per lamp, added up). R holds how
-  near a lamp is: a cone per lamp, 1 at its foot and 0 at `POOL.reach` (9 m), squared — lamps 18 m or
-  more apart never meet in it, and two closer than that share a middle a little brighter than
-  either. G is the canyon field.
-  - R used to hold the pool itself: white gradients (r 13 m) added up, then `pow 1.6`. At 2 m texels
-    that was a blur; every lamp spread a dim amber wash ~26 m across that ran into the next (round
-    10's "amber-mud": the night street's lower 40% at L\* 26, hue 46–50°, C\* 15).
-  - The old gradient still goes into G under the canyon field, unchanged: `canyonAt` reads it as
-    sky lost, so by day the sky fill under every lamp is cut by up to 45% (along a shop street
-    with a post every 18 m, the whole street's shade). It's an accident of the two sharing the
-    sprite, but the day look was judged with it: drawing the sprite's G as 0 removes it and lifts a
-    golden-hour shop street ~3.5 L\* (mean ΔE ~5). That's a look decision, left for one.
-- **The pool** (`shared.ts` `lampField`, `lampAt`): the distance read back from the cone, shaped as
-  `exp(−(d / radius)^edge)` — a broad, even heart, down to 1/e at `radius`, gone a couple of metres
-  past it — times the height falloff (full to 1.5 m over the local ground, nothing by 10.5 m).
-  `lampAt` = field × `uLampPower` × `gain`; `paintLight` adds `max(albedo, 0.3) × uLampColor ×
-  lampAt`, so an asphalt heart is near paper-white and warm. `U.uLampPool` = (reach, radius, edge,
-  gain): turn it in the page to try a shape.
-- **The night's floor** (`atmosphere.ts`): the sky fill's night lift is blue (it was a grey 0.015
-  that lit the shadows grey), and the ground's bounce loses the sand's warmth with the sun. Both
-  scale with `uNight`, which is 0 from a sun 1° under the horizon up: day and golden hour are
-  untouched.
+  every 1.5 s for tiles, at once near its edge; one sprite stamped per lamp, added up). R holds the
+  pools' light itself (`poolStamp`: the curve ÷ `headroom` 2, so overlapping pools add up to twice a
+  heart before the 8 bits run out); the shaders read it straight back (`poolRead`). The curve is
+  smooth enough to hold as light at 2 m texels (within 0.05 of a heart, 8-bit and bilinear,
+  tested). G is the canyon field.
+  - R has held, in turn: white gradients (r 13 m) added up then `pow 1.6` — a dim amber wash ~26 m
+    across round every lamp (round 10's "amber-mud"); then a cone of distance the shaders shaped
+    into the flat-topped heart above.
+  - The old 13 m gradient still goes into G under the canyon field, unchanged — the sprite is now
+    23 px, odd-sided and centred mid-pixel like the old 13 px one, so G lands on exactly the same
+    texels: `canyonAt` reads it as sky lost, so by day the sky fill under every lamp is cut by up to
+    45% (along a shop street with a post every 18 m, the whole street's shade). It's an accident of
+    the two sharing the sprite, but the day look was judged with it: drawing the sprite's G as 0
+    removes it and lifts a golden-hour shop street ~3.5 L\* (mean ΔE ~5). That's a look decision,
+    left for one.
+- **In the shaders** (`shared.ts`): `lampField` = the map's R × headroom × `streetLevel` (full to
+  1.5 m over the local ground, nothing by 10.5 m: the pools light the street, not the roofs);
+  `lampAt` = field × `uLampPower` × gain; `paintLight` adds `max(albedo, 0.3) × uPoolColor ×
+  lampAt` (painted as light, so an asphalt heart is near paper-white). `U.uLampPool` = (height,
+  reach, gain, headroom) — only gain and headroom are read; the shape is in the map.
+  `U.uLampColor` (the old orange) is now only the sea foam's warm note.
+- **The night's floor** (`FLOOR`, `nightFloor` in `paintLight`): the town's own glow at street level
+  — sky glow, and the spill of windows and porches — a cool light (`FLOOR.color`, `strength` 0.16 in
+  the scene's linear units; a high gibbous moon is ~0.08) on every surface, fading with height as the
+  pools do, and drawing albedos together toward a middle grey (`even` 0.85: by night a white wall and
+  a black road sit closer in value). Moonless, a street's asphalt reads L\* ~13, its sidewalk ~19, a
+  lawn ~17, all hue 255–270° (the gap the review asks at L\* 10–20, hue 220–280°). It goes with
+  `uNight` (0 from a sun 1° under the horizon up), so day and golden hour are untouched. `U.uNightFloor`
+  = (colour, strength): set once, turn it in the page.
+  - `atmosphere.ts` keeps the sky fill's blue night lift and the ground bounce without the sand's
+    warmth; on their own they left a moonless street at L\* ~3 (round 11's frame 13: L\* 2.7).
 - **The night grade** (`post.ts` composite → `nightGrade`, after the colour grade, on display
   colour): everything but the lights goes under one glaze (`NIGHT_GRADE.tint`, Payne's grey toward
-  indigo) — its value kept, most of its own hue (`hue`) given up to the glaze, the darks a little
-  deeper (`deep` at black) — so a pool's dim edge, a lawn and a tan sidewalk all go the same blue,
-  as the eye sees them by night. A warm colour under the glaze goes darker as well (`dim`, as blue
-  over orange does on paper, and as reds do first in the dark): a pool's fading edge sinks into the
-  night instead of ringing it in pale blue. The lights (the brightest channel over `reserve`, red
-  over blue by `warm`: a lamp's heart, a lit window, the moon) are reserved, like paper.
-  `postParams.nightWash` scales it (the default look's 0.5 is all of it). It replaced a 50%
-  multiply by (0.55, 0.62, 1.0), which left a dim amber street amber.
+  indigo) — its value kept, most of its own hue (`hue` 0.85) given up to the glaze, the darks a little
+  deeper (`deep` at black) — so the floor's street, a lawn and a tan sidewalk all go the same blue,
+  as the eye sees them by night. The glaze thins as the value rises (`fade` 0.8 over luma
+  `fadeAt` 0.08–0.4): the last of a pool's glow goes a warm grey and then the night's blue, never a
+  ring of pale blue round a warm heart. The lights (the brightest channel over `reserve` 0.15–0.6,
+  red over blue by `warm`: a lamp's heart, a lit window) are reserved like paper, the reserve coming
+  on over the pool's whole fall-off so its light hands over gradually. `postParams.nightWash` scales
+  it (the default look's 0.5 is all of it).
+  - Round 11 widened the reserve from 0.3–0.56 and dropped `dim` (everything warm under the glaze
+    went up to half as dark again): together they turned a pool's own fall-off into a rim. The grade
+    before that was a 50% multiply by (0.55, 0.62, 1.0), which left a dim amber street amber.
 - **Wires** at night take the sky's zenith × 0.6: darker than any sky behind them (`props.ts`
   `wireMaterial`, 73e83ec).
-- **The check**: `tools/night-check.js` (debugging.md) measures the review's night street against
-  round 10's numbers.
+- **Cost**: per pixel the pool is one texture read and a multiply (it was a sqrt, a pow and an exp);
+  the floor a uniform branch and a mix; the grade swapped `dim` for `fade`. The repaint stamps a 23 px
+  sprite per lamp instead of 13 px (every 1.5 s at most, on the CPU canvas).
+- **The check**: `tools/night-check.js` (debugging.md) measures the review's frames 3 and 13 against
+  round 11's numbers — the band, the hearts, the gap, a pool's fall-off along the road, pools down the
+  street, the wires and the lens — with the moon up or down.
 
 ## The micro layer: impostor cards for the small things
 

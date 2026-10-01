@@ -66,9 +66,8 @@ export function floorLight(albedo: RGB, night = 1, p: Floor = FLOOR): RGB {
 /** The same, in the shaders (shared.ts paintLight): uNightFloor = (colour, strength). */
 export const GLSL_FLOOR = /* glsl */ `
 vec3 nightFloor(vec3 albedo, float level) {
-  float k = uNight * uNightFloor.w * level;
-  if (k <= 0.0) return vec3(0.0);
-  return mix(albedo, vec3(${FLOOR.grey.toFixed(3)}), ${FLOOR.even.toFixed(3)}) * uNightFloor.rgb * k;
+  if (uNight <= 0.0) return vec3(0.0); // (by day: nothing to add, and nothing spent)
+  return mix(albedo, vec3(${FLOOR.grey.toFixed(3)}), ${FLOOR.even.toFixed(3)}) * uNightFloor.rgb * (uNight * uNightFloor.w * level);
 }`;
 
 /** The night grade (post.ts, after the colour grade, on display colour 0–1). Everything but the

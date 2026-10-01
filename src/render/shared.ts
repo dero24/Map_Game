@@ -55,7 +55,7 @@ export const U = {
   // Floating origin: the world root renders shifted by -uWorldOffset so the camera stays near 0.
   // Shaders add it back where they need true region/world coords.
   uWorldOffset: { value: new THREE.Vector3() },
-  uLampColor: c3(0xffb86a),
+  uLampColor: c3(0xffb86a), // (a warm note the sea's foam keeps, day and night; the pools' own light is uPoolColor)
   uLampPower: { value: 0 },
   uPigment: { value: 0.22 },
   uPigmentScale: { value: 0.35 },
