@@ -33,6 +33,7 @@ export const MARK = {
   forearm: [0, 0, 1], // the sleeve below mid upper-arm: shirt, or skin in short sleeves
   shoe: [1, 0.5, 0],
   sole: [0, 0.5, 1],
+  chest: [0.5, 1, 0], // the shirt above a swimsuit top's edge (bare on the beach)
 } as const;
 // Parts: 0 body · 1/2 right/left leg · 5/6 right/left arm · 9 hair (short/long/bun) ·
 // 10 long hair · 11 bun · 12 baseball cap · 13 cropped · 14 headphones. The shader collapses
@@ -242,9 +243,10 @@ function buildPerson() {
     shoe(B, s, leg);
     // the arm, shoulder to wrist: the shirt to mid upper-arm (a short sleeve's hem), then the
     // sleeve or bare arm through the elbow to the cuff
-    const ax = (y: number) => s * (0.19 + (1.43 - y) * 0.15);
+    // (its top ring inside the shoulder's round, so no rim shows above the shoulder)
+    const ax = (y: number) => s * (0.192 + (1.38 - y) * 0.16);
     B.tube([
-      R([ax(1.43), 1.43, 0.0], 0.054, 0.058, TINTC, 0),
+      R([ax(1.385), 1.385, 0.0], 0.047, 0.05, TINTC, 0),
       R([ax(1.34), 1.34, 0.0], 0.05, 0.054, TINTC, 0),
       R([ax(1.3), 1.3, 0.003], 0.048, 0.052, TINTC, 0),
       R([ax(1.3), 1.3, 0.003], 0.048, 0.052, MARK.forearm, 0, true),
@@ -273,10 +275,12 @@ function buildPerson() {
     R([0, 1.05, -0.002], 0.153, 0.102, TINTC, 0),
     R([0, 1.15, -0.008], 0.165, 0.112, TINTC, 0),
     R([0, 1.25, -0.014], 0.182, 0.122, TINTC, 0),
-    R([0, 1.32, -0.01], 0.193, 0.122, TINTC, 0),
-    R([0, 1.38, 0.0], 0.19, 0.112, TINTC, 0),
-    R([0, 1.425, 0.002], 0.145, 0.088, TINTC, 0),
-    R([0, 1.455, 0.004], 0.075, 0.062, TINTC, 0),
+    R([0, 1.3, -0.012], 0.19, 0.123, TINTC, 0),
+    R([0, 1.3, -0.012], 0.19, 0.123, MARK.chest, 0, true),
+    R([0, 1.34, -0.008], 0.194, 0.121, MARK.chest, 0),
+    R([0, 1.38, 0.0], 0.19, 0.112, MARK.chest, 0),
+    R([0, 1.425, 0.002], 0.145, 0.088, MARK.chest, 0),
+    R([0, 1.455, 0.004], 0.075, 0.062, MARK.chest, 0),
   ], 12, 0, [true, true]);
   B.tube([R([0, 1.43, 0.004], 0.05, 0.048, MARK.skin, 0), R([0, 1.49, 0.006], 0.047, 0.046, MARK.skin, 0), R([0, 1.545, 0.006], 0.045, 0.044, MARK.skin, 0)], 8, 0);
   // the head: an egg, narrowing to the jaw, with a nose and ears
@@ -338,7 +342,7 @@ export function personLiteGeometry() {
   }
   B.tube([
     R([0, 0.795, 0.004], 0.05, 0.045, MARK.pants, 0), R([0, 0.88, 0.008], 0.172, 0.114, MARK.pants, 0), R([0, 0.97, 0.002], 0.162, 0.106, MARK.pants, 0),
-    R([0, 0.985, 0.0], 0.16, 0.105, TINTC, 0), R([0, 1.25, -0.014], 0.182, 0.122, TINTC, 0), R([0, 1.38, 0.0], 0.19, 0.112, TINTC, 0), R([0, 1.45, 0.004], 0.08, 0.065, TINTC, 0),
+    R([0, 0.985, 0.0], 0.16, 0.105, TINTC, 0), R([0, 1.25, -0.014], 0.182, 0.122, TINTC, 0), R([0, 1.38, 0.0], 0.19, 0.112, MARK.chest, 0), R([0, 1.45, 0.004], 0.08, 0.065, MARK.chest, 0),
   ], 6, 0, [true, true]);
   B.mesh(new THREE.SphereGeometry(1, 6, 4).scale(0.097, 0.118, 0.106).translate(0, 1.58, 0.004), MARK.skin, 0, 0, true);
   B.mesh(new THREE.SphereGeometry(1, 6, 2, 0, Math.PI * 2, 0, Math.PI * 0.42).scale(0.106, 0.13, 0.116).translate(0, 1.6, 0.012), MARK.hair, HAIR_PART0, 0, true);
@@ -684,6 +688,7 @@ export const PEOPLE_GLSL_MAIN = /* glsl */ `
     else if (isMark(pc, ${mk(MARK.forearm)})) pc = shortSleeves ? skin : vec3(1.0);
     else if (isMark(pc, ${mk(MARK.shoe)})) pc = SHOEC[sh];
     else if (isMark(pc, ${mk(MARK.sole)})) pc = SOLEC[sh];
+    else if (isMark(pc, ${mk(MARK.chest)})) pc = vec3(1.0);
     else if (aPart > ${HAIR_PART0 + 2.5} && aPart < ${HAIR_PART0 + 3.5}) pc = PANTS[int(fract(r4 * 3.7) * ${TROUSERS.length}.0)] * 1.4;
   }
 `;

@@ -85,7 +85,7 @@ function helmGeometry(sit: boolean) {
   if (!helmCache) {
     // (baked through people.ts's own pose maths: smooth limbs, shoes on the deck; a tiller hand
     // seated, both hands on the wheel standing)
-    const look: [readonly number[], number][] = [[MARK.skin, 0xc68642], [MARK.hair, 0x3b2a1e], [MARK.pants, 0x2e3a52], [MARK.thigh, 0x2e3a52], [MARK.shin, 0x2e3a52], [MARK.forearm, 0xd8cfa8], [[1, 1, 1], 0xd8cfa8], [MARK.shoe, 0x5e3c26], [MARK.sole, 0x2e241c]];
+    const look: [readonly number[], number][] = [[MARK.skin, 0xc68642], [MARK.hair, 0x3b2a1e], [MARK.pants, 0x2e3a52], [MARK.thigh, 0x2e3a52], [MARK.shin, 0x2e3a52], [MARK.forearm, 0xd8cfa8], [[1, 1, 1], 0xd8cfa8], [MARK.chest, 0xd8cfa8], [MARK.shoe, 0x5e3c26], [MARK.sole, 0x2e241c]];
     const seat = seatPose(0, 0), stand = walkPose(0, 0, 0, 0, 1);
     stand.ar = [0.55, 1.35, 0, 0]; stand.al = [0.55, 1.35, 0, 0];
     // (a low thwart: the hips at 0.42, the knees up, the shoes on the boards)

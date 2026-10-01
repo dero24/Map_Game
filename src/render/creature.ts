@@ -26,7 +26,7 @@ const BEACH_GLSL_LOOK = /* glsl */ `
     // swimwear: bare arms and legs, trunks or a suit in the instance colour, half of them a top
     // (the lifeguard: red top and trunks); bare feet — the shoe flattened to a foot
     bool top = aPose > 4.5 || pHash(seed + 13.7) < 0.5;
-    if (isMark(pc, ${mk(MARK.forearm)}) || isMark(pc, ${mk(MARK.shin)}) || isMark(pc, ${mk(MARK.thigh)})) pc = ${mk(MARK.skin)};
+    if (isMark(pc, ${mk(MARK.forearm)}) || isMark(pc, ${mk(MARK.shin)}) || isMark(pc, ${mk(MARK.thigh)}) || isMark(pc, ${mk(MARK.chest)})) pc = ${mk(MARK.skin)};
     else if (isMark(pc, ${mk(MARK.shoe)}) || isMark(pc, ${mk(MARK.sole)})) {
       pc = ${mk(MARK.skin)};
       float sx = aPart < 1.5 ? HX : -HX;
@@ -36,7 +36,7 @@ const BEACH_GLSL_LOOK = /* glsl */ `
     else if (isMark(pc, ${mk(MARK.pants)})) pc = vec3(1.0);
     else if (all(greaterThan(pc, vec3(0.98)))) {
       if (aPart > 4.5 && aPart < 6.5 && aPose < 4.5) pc = ${mk(MARK.skin)};
-      else if (aPart < 0.5 && position.y > 0.97 && (!top || position.y > 1.31)) pc = ${mk(MARK.skin)};
+      else if (aPart < 0.5 && position.y > 0.97 && !top) pc = ${mk(MARK.skin)};
     }
   }
 `;
