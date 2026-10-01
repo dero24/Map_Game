@@ -70,17 +70,25 @@ vertices are what it costs. There are four axes, cheapest first:
 | **Add-ons as model keys** — `parked-cars:suv:surf` | +1 draw per used combo | surfboards, kayaks, roof racks, roof boxes, hitch bikes |
 | **State / time** — growth stage, bloom season | a rebuild when the state changes | gardens bloom by the real calendar; your plants grow |
 
-Vertex budgets (checked by `tests/foundry.test.ts`): trees < 1,500 (most around 800–1,200);
+Vertex budgets (checked by `tests/foundry.test.ts`): trees < 1,500 (most around 800–1,200), and
+a tree's near model (its limbs and leaf cards, the nearest 160 on a desktop, 40 on a phone) ≤ 2,500;
 garden plants in the world use a `lite` genome under 900 (usually 250–840; the full version is
 for plants you grow and the workbench); animals < 1,600; cars about 1,800; a person < 1,600
 unique vertices and 2,700 triangles (indexed), the crowd's lite person < 300.
 
 ## Families
 
-- **Trees** (`flora.ts`): round, oak, shrub, pine, spruce, palm, birch.
+- **Trees** (`flora.ts`): round, oak, shrub, pine, spruce, palm, birch, mesquite, fan palm, maple, willow, elm, poplar, magnolia, cherry.
   - Trunk, forks at the golden angle, then crown lobes on a Fibonacci sphere (or conical whorls, or fronds).
   - `treeMeta` reports height, crown radius, crown bottom and trunk radius, so LiDAR-measured trees scale to their real size and the building clearance uses the real crown.
   - Regional reading: palms where it's warm by the sea, birches up north.
+  - **Two models per tree.** The recipe grows a *plan* (`TreePlan`: every bough from → to with its radii and bark, every crown lobe's middle, radius and squash). The far model is drawn from it as before — solid lobes, under 1,500 vertices, thousands a tile. Within ~30 m the **near model** (`nearTreeGeometry`, round 11's must-fix 4) is grown from the *same* plan, so it stands where the far tree stands with the same crown:
+    - the trunk a smooth tube (`core.ts` `tube`: rings carried along the path without twist, normals leaning with the taper — no crease at a knee) that flares at the root to half again its girth and tapers to its fork, the base ≥ 1.3× where it meets the crown;
+    - the recipe's scaffold limbs as tubes (a stem or limb that ended in the open — a birch's side stems, hidden in the far model — grows on into the nearest cluster, thinning), and a **second order** of branches: one from the nearest limb out into each leaf cluster, arching up, ending inside it — so ≥ 3 pieces of wood go up into a street tree's crown;
+    - the crown as **8–20 leaf-cluster cards**, one per far lobe (where it was, as big, as squashed; a shrub's few split until there are 8), each card showing one of 8 painted leaf pictures (`leafAtlas`: sprays of almond leaves on twigs, alternating along them, a darker heart, a ragged rim with gaps between the leaves — or needle tufts for the conifers), drawn by `render/leafCards.ts`;
+    - **≤ 2,500 vertices** a tree (wood + four corners a card; most 1,000–1,900), checked with validation, determinism, the taper, the limbs and the crown's fit to the far one in `tests/foundry.test.ts`.
+    - Palms and the willow keep their far model at every distance (fronds and tresses already). `NEAR_KINDS` lists the rest.
+  - The leaf pictures are painted in JS, deterministic, a picture a frame while the world boots (`leafAtlasJob`): 4 × 2 cells of 256 px (128 on a weak phone), A coverage, R the leaf's shade, G leaf/twig, B a number per leaf for autumn.
 - **Garden plants** (`flora.ts`): twelve species in six growth forms — mound, clipped, rosette, spike, clump and stem.
   - Each species has a climate weighting (`plantMix`) and a bloom season (`inBloom`, flipped in the southern hemisphere).
   - Growth stages 0–7 go from sprout, to leafing out, to blossoms opening from about 60% grown.
@@ -200,6 +208,7 @@ collectible the moment it exists.
 - More families: docks and piers from the same recipe, playgrounds, fences and gates, lifeguard stands, porch furniture, laundry lines, flags.
 - Per-instance vertex AO (ASSET_FIDELITY §3).
 - Impostor LOD for trees beyond ~1 km and people beyond ~60 m: the micro layer's `ImpostorAtlas` + card shader (`render/impostor.ts`) take any foundry geometry.
+- Near trees: per-species leaf shapes (lobed oak, palmate maple, the magnolia's big glossy leaf), a third order of twigs for the bare winter form, the willow's tresses and the palms on the near layer.
 - Seasonal foliage colour (autumn crowns from the same calendar that drives bloom).
 - More animals by region: pelicans and herons on southern coasts, moose up north, lizards in the desert.
 - Construction tiers 2–4 (dock/boat, structures, sketch-to-build) on the same recipe vocabulary.

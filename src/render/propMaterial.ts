@@ -25,8 +25,27 @@ import { SIGNAL_GLSL } from '../sim/traffic';
 // draws whole); across the band uFade.x it gives way pixel by pixel on the ordered dither the cards
 // use the other way round (render/impostor.ts), so the two never both draw a pixel, nor leave one.
 // uFade.y: 0 by distance, 1 cards only (this draws nothing), 2 never hand over.
-export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean; signal?: boolean; fallHue?: number; blossom?: boolean; weep?: boolean; wash?: boolean; fade?: boolean } = {}) {
+// treeLod: a tree's two models (world/nearTrees.ts). 'far' (TREE_LOD 1): a tile's trees, the solid
+// lobed crowns — the near-tree layer marks the trees it draws close up (`aNear`, per instance), and
+// for those this gives way to the near model across the hand-over band on the same ordered dither
+// (and draws nothing at all inside it: the instance folds to a point). 'near' (TREE_LOD 2): the
+// near model's limbs, the other side of the same split. TREE_LOD_U = (hand-over distance, band,
+// mode: 0 by distance · 1 far only · 2 near only, -), shared by every tree material; the near
+// layer's mask pass (uTreeMask: x, z, radius, on) draws one tree's wood flat red for the metrics.
+export const TREE_LOD_U = { value: new THREE.Vector4(30, 6, 0, 0) };
+export const TREE_MASK_U = { value: new THREE.Vector4(0, 0, 0, 0) };
+/** The far model's share of a tree's pixels at distance d (TREE_LOD_U's x, y): 0 inside the
+ *  hand-over, 1 past it. The shaders run the same sum. */
+export const farShare = (d: number, hand: number, band: number) => Math.min(1, Math.max(0, (d - hand + band * 0.5) / Math.max(band, 1e-3)));
+const GLSL_TREE_LOD = /* glsl */ `
+  float treeFarShare(float d, vec4 L, float flagged) {
+    if (flagged < 0.5) return 1.0;
+    if (L.z > 0.5) return L.z > 1.5 ? 0.0 : 1.0;
+    return clamp((d - L.x + L.y * 0.5) / max(L.y, 1e-3), 0.0, 1.0);
+  }`;
+export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean; signal?: boolean; fallHue?: number; blossom?: boolean; weep?: boolean; wash?: boolean; fade?: boolean; treeLod?: 'far' | 'near' } = {}) {
   const defines: Record<string, number> = {};
+  if (opts.treeLod) defines.TREE_LOD = opts.treeLod === 'far' ? 1 : 2;
   if (opts.fade) defines.FADE = 1;
   if (opts.wash) defines.WASH = 1;
   if (opts.weep) defines.WEEP = 1;
@@ -41,7 +60,7 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
   if (opts.emissive) defines.EMISSIVE = 1;
   const mat = paintMaterial({
     defines,
-    uniforms: { uEmissive: { value: opts.emissive ?? new THREE.Color(0) }, uEmNight: { value: opts.emissiveNight ? 1 : 0 }, uCrown: { value: new THREE.Vector2(...(opts.crown ?? [3, 0])) }, uWashAt: { value: new THREE.Vector4(0, 0, 0, -1) }, uWash: { value: new THREE.Vector4(0, 1, 0, 0) }, uExposure: { value: 0.92 }, ...(opts.fade ? { uFade: { value: new THREE.Vector4(6, 0, 0, 0) } } : {}) },
+    uniforms: { uEmissive: { value: opts.emissive ?? new THREE.Color(0) }, uEmNight: { value: opts.emissiveNight ? 1 : 0 }, uCrown: { value: new THREE.Vector2(...(opts.crown ?? [3, 0])) }, uWashAt: { value: new THREE.Vector4(0, 0, 0, -1) }, uWash: { value: new THREE.Vector4(0, 1, 0, 0) }, uExposure: { value: 0.92 }, ...(opts.fade ? { uFade: { value: new THREE.Vector4(6, 0, 0, 0) } } : {}), uTreeLod: TREE_LOD_U, uTreeMask: TREE_MASK_U },
     vertex: /* glsl */ `
       attribute vec3 color;
       varying vec3 vColor;
@@ -62,6 +81,15 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
       uniform vec4 uFade;
       flat varying float vFade;
       #endif
+      #ifdef TREE_LOD
+      uniform vec4 uTreeLod, uTreeMask;
+      flat varying float vLodFar;
+      flat varying float vMaskOut;
+      ${GLSL_TREE_LOD}
+      #if TREE_LOD == 1
+      attribute float aNear;
+      #endif
+      #endif
       void main() {
         #ifdef FADE
           float fd = length(cameraPosition - (modelMatrix * vec4(aFade.xyz, 1.0)).xyz);
@@ -75,6 +103,17 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
         vLocal = position;
         mat4 m = worldMat();
         vec3 origin = (m * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+        #ifdef TREE_LOD
+          // the hand-over between a tree's two models, by its foot's distance from the eye
+          #if TREE_LOD == 1
+            vLodFar = treeFarShare(length(cameraPosition - origin), uTreeLod, aNear);
+            if (vLodFar <= 0.0) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; } // (the near model has it all)
+          #else
+            vLodFar = treeFarShare(length(cameraPosition - origin), uTreeLod, 1.0);
+            if (vLodFar >= 1.0) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+          #endif
+          vMaskOut = uTreeMask.w > 0.5 && length(origin.xz + uWorldOffset.xz - uTreeMask.xy) > uTreeMask.z ? 1.0 : 0.0;
+        #endif
         vTree = fract(sin(dot(origin.xz + uWorldOffset.xz, vec2(12.9898, 78.233))) * 43758.5453);
         #ifdef WIND
           float sway = max(p.y - 1.5, 0.0) * 0.012 * (0.4 + uWind);
@@ -150,9 +189,23 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
       #ifdef FADE
       flat varying float vFade;
       #endif
+      #ifdef TREE_LOD
+      uniform vec4 uTreeMask;
+      flat varying float vLodFar;
+      flat varying float vMaskOut;
+      #endif
       void main() {
         #ifdef FADE
           if (dither4(gl_FragCoord.xy) >= vFade) discard; // (its impostor card draws the rest)
+        #endif
+        #ifdef TREE_LOD
+          // one dither, split: the far crown where it's under the far share, the near tree the rest
+          #if TREE_LOD == 1
+            if (dither4(gl_FragCoord.xy) >= vLodFar) discard;
+          #else
+            if (dither4(gl_FragCoord.xy) < vLodFar) discard;
+            if (uTreeMask.w > 0.5) { if (vMaskOut > 0.5) discard; gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); return; }
+          #endif
         #endif
         #ifdef FOLIAGE
           // A crown seen from 5–10 m: each low-poly lobe's rim breaks into leaf-sized bites and
@@ -188,6 +241,13 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
         #endif
         #ifdef FOLIAGE
           alb *= 0.72 + 0.5 * fbm3(vWorldPos * 0.9);
+          #ifdef TREE_LOD
+          #if TREE_LOD == 2
+            // a near tree's bark: furrows running up the wood (in its own frame, so they stay on it as
+            // it sways), under a pixel by the hand-over
+            alb *= 0.74 + 0.36 * smoothstep(0.2, 0.8, vnoise3(vLocal * vec3(7.0, 0.8, 7.0)));
+          #endif
+          #endif
         #endif
         #ifdef DECID
           if (vLeafy > 0.5) {

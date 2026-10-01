@@ -41,7 +41,22 @@ export interface TierConfig {
   skylineR: number;
   /** The micro layer's budget (world/microLayer.ts): its impostor atlas, its caps, its ranges. */
   micro: MicroTier;
+  /** The near trees' budget (world/nearTrees.ts). */
+  trees: TreeTier;
 }
+
+/** A tier's budget for the near trees (world/nearTrees.ts): within `hand` m a tree is drawn from
+ *  its near model (limbs and leaf cards) — at most `near` of them, nearest first — across a `band`
+ *  of m where the two models trade pixels; re-sorted every `step` m; leaf pictures `atlas` px. */
+export interface TreeTier { near: number; hand: number; band: number; step: number; atlas: number }
+// A desktop draws the near model to 30 m (the reviewer's "today's crowns from about 30 m out"), up
+// to 160 trees — ~300k vertices in a wood; a phone 40 trees to 24 m; a weak phone 20 to 16 m with
+// half-size leaf pictures. (Every near tree is under 2,500 vertices: tests/foundry.test.ts.)
+export const TREE_TIERS: Record<Tier, TreeTier> = {
+  desktop: { near: 160, hand: 30, band: 6, step: 2, atlas: 256 },
+  phone: { near: 40, hand: 24, band: 5, step: 2, atlas: 256 },
+  low: { near: 20, hand: 16, band: 4, step: 3, atlas: 128 },
+};
 
 /** A tier's budget for the micro layer (world/microLayer.ts, render/impostor.ts). */
 export interface MicroTier {
@@ -72,7 +87,7 @@ export const MICRO_TIERS: Record<Tier, MicroTier> = {
 
 const TIERS: Record<Tier, Omit<TierConfig, 'tier' | 'why'>> = {
   // the shipped defaults — nothing changes on a desktop
-  desktop: { post: {}, shadow: {}, stream: { loadR: 1500, dropR: 2400, coarseR: 8000 }, paintTex: 4096, lidar: true, skylineR: 8000, micro: MICRO_TIERS.desktop },
+  desktop: { post: {}, shadow: {}, stream: { loadR: 1500, dropR: 2400, coarseR: 8000 }, paintTex: 4096, lidar: true, skylineR: 8000, micro: MICRO_TIERS.desktop, trees: TREE_TIERS.desktop },
   // CSS-pixel paint (a DPR-3 phone rendered 1.5× its CSS size before), a 60% brush buffer (the
   // Kuwahara radius drops from 7 to ~4 texels: a third of the taps), 1024² shadows, ~half the
   // detail tiles and a 4 km silhouette ring, 2048² ground paint (a quarter of the slice canvas).
@@ -83,10 +98,10 @@ const TIERS: Record<Tier, Omit<TierConfig, 'tier' | 'why'>> = {
   // 6 km ring and skyline; the silhouettes stay under coarseMB, and auto quality steps a slow one
   // down once the streaming has settled — and back up when stepping down didn't make it quicker:
   // 85% paint since the same day, a phone's view still read blurry at 75%)
-  phone: { post: { hiDpi: true, paintDetail: 0.85 }, shadow: { size: 1024 }, stream: { loadR: 900, dropR: 1500, coarseR: 6000, budgetMB: 200, realConc: 2, coarseMB: 90 }, paintTex: 2048, lidar: false, skylineR: 6000, micro: MICRO_TIERS.phone },
+  phone: { post: { hiDpi: true, paintDetail: 0.85 }, shadow: { size: 1024 }, stream: { loadR: 900, dropR: 1500, coarseR: 6000, budgetMB: 200, realConc: 2, coarseMB: 90 }, paintTex: 2048, lidar: false, skylineR: 6000, micro: MICRO_TIERS.phone, trees: TREE_TIERS.phone },
   // …and a weak phone (or one whose last visit died): no shadow pass either — every tree, house and
   // car drawn a second time into the shadow map was half the vertex work of a frame
-  low: { post: { hiDpi: false, paintDetail: 0.5, renderScale: 0.75 }, shadow: { size: 1024, enabled: false }, stream: { loadR: 750, dropR: 1300, coarseR: 2500, budgetMB: 120, realConc: 1, coarseMB: 60 }, paintTex: 1024, lidar: false, skylineR: 3000, micro: MICRO_TIERS.low },
+  low: { post: { hiDpi: false, paintDetail: 0.5, renderScale: 0.75 }, shadow: { size: 1024, enabled: false }, stream: { loadR: 750, dropR: 1300, coarseR: 2500, budgetMB: 120, realConc: 1, coarseMB: 60 }, paintTex: 1024, lidar: false, skylineR: 3000, micro: MICRO_TIERS.low, trees: TREE_TIERS.low },
 };
 const ORDER: Tier[] = ['desktop', 'phone', 'low'];
 const ALIAS: Record<string, Tier> = { desktop: 'desktop', high: 'desktop', phone: 'phone', mobile: 'phone', medium: 'phone', low: 'low', safe: 'low' };

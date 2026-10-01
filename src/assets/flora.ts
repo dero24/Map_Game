@@ -8,7 +8,7 @@
 // greens; bark and blossoms carry their own colours.
 import * as THREE from 'three';
 import { makeRng } from '../core/rng';
-import { TINT, P, part, merge, limb, blob, card, lathe, fibSphere, fibCount, taper, GOLDEN, cached, bounds } from './core';
+import { TINT, P, part, merge, limb, tube, blob, card, lathe, fibSphere, fibCount, taper, GOLDEN, cached, bounds } from './core';
 
 const V3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const BARK = 0x6b5a48, BARK_DARK = 0x5d4a3a, BIRCH = 0xe4dfd2, PALM = 0x8a7458, MESQ = 0x4f4034, PALOVERDE = 0x8f9c5a;
@@ -26,13 +26,28 @@ export const DECIDUOUS = new Set<TreeKind>(['round', 'oak', 'birch', 'shrub', 'm
 export const TREE_VARIANTS = 3;
 /** `lean`: the trunk's horizontal drift per metre of height (model space) — where the bark is. */
 export interface TreeMeta { h: number; crownR: number; crownBottom: number; trunkR: number; lean: [number, number] }
+/** The grown plan behind a tree's model: every piece of wood (from → to, radius at each end, bark)
+ *  and every crown lobe (its middle, radius and squash), in the order the recipe grew them. The far
+ *  model is drawn from it as solid lobes; the near one (nearTreeGeometry) grows its limbs and leaf
+ *  cards from the same plan, so the two stand in the same place with the same crown. */
+export interface Bough { a: THREE.Vector3; b: THREE.Vector3; r0: number; r1: number; col: number }
+export interface Lobe { c: THREE.Vector3; r: number; sq: number }
+export interface TreePlan { boughs: Bough[]; lobes: Lobe[] }
 
 /** Build one grown tree. Deterministic in (kind, variant). */
-export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeometry; meta: TreeMeta } {
+export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeometry; meta: TreeMeta; plan: TreePlan } {
   const r = makeRng(9173 * (TREE_KINDS.indexOf(kind) + 1) + v * 7919);
   const wood: THREE.BufferGeometry[] = [], leaf: THREE.BufferGeometry[] = [];
+  const plan: TreePlan = { boughs: [], lobes: [] };
   let trunkR = 0.3, leanPer: [number, number] = [0, 0];
-  const lobe = (rad: number, c: THREE.Vector3, seed: number, squash = 0.85, detail = 1) => leaf.push(blob(rad, seed, { squash, detail }).translate(c.x, c.y, c.z));
+  const lobe = (rad: number, c: THREE.Vector3, seed: number, squash = 0.85, detail = 1) => {
+    plan.lobes.push({ c: c.clone(), r: rad, sq: squash });
+    leaf.push(blob(rad, seed, { squash, detail }).translate(c.x, c.y, c.z));
+  };
+  const bough = (a: THREE.Vector3, b: THREE.Vector3, r0: number, r1: number, segs: number, col: number) => {
+    plan.boughs.push({ a: a.clone(), b: b.clone(), r0, r1, col });
+    return part(limb(a, b, r0, r1, segs), col);
+  };
   const j = (a: number) => (r.float() * 2 - 1) * a;
 
   if (kind === 'oak') {
@@ -43,7 +58,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     trunkR = 0.36;
     const th = 2.5 + j(0.3), lean = V3(j(0.3), 0, j(0.3)), top = V3(lean.x, th, lean.z);
     leanPer = [lean.x / (th + 0.3), lean.z / (th + 0.3)];
-    wood.push(part(limb(V3(0, -0.3, 0), top, trunkR, trunkR * 0.8, 6), BARK_DARK));
+    wood.push(bough(V3(0, -0.3, 0), top, trunkR, trunkR * 0.8, 6, BARK_DARK));
     const limbs = 4, a0 = r.float() * Math.PI * 2;
     let rise = 0;
     for (let i = 0; i < limbs; i++) {
@@ -51,7 +66,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
       rise += up / limbs;
       const knee = V3(lean.x + Math.cos(a) * reach * 0.45, th + up * 0.55, lean.z + Math.sin(a) * reach * 0.45);
       const tip = V3(lean.x + Math.cos(a) * reach, th + up, lean.z + Math.sin(a) * reach);
-      wood.push(part(limb(top.clone().add(V3(0, -0.35, 0)), knee, trunkR * 0.62, trunkR * 0.42, 4), BARK_DARK), part(limb(knee, tip, trunkR * 0.42, trunkR * 0.16, 4), BARK_DARK));
+      wood.push(bough(top.clone().add(V3(0, -0.35, 0)), knee, trunkR * 0.62, trunkR * 0.42, 4, BARK_DARK), bough(knee, tip, trunkR * 0.42, trunkR * 0.16, 4, BARK_DARK));
       // the billow at the limb's end: a big lobe over the tip, two smaller ones either side of it
       const ca = Math.cos(a), sa = Math.sin(a);
       lobe(1.85 + r.float() * 0.35, tip.clone().add(V3(ca * 0.3, 0.7, sa * 0.3)), 120 + v * 17 + i * 3, 0.82, 0);
@@ -76,7 +91,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     for (let s = 0; s < stems; s++) {
       const off = s ? V3(Math.cos(s * GOLDEN) * 0.45, 0, Math.sin(s * GOLDEN) * 0.45) : V3(0, 0, 0);
       const t = top.clone().add(off.clone().multiplyScalar(2.2)).add(V3(0, s ? -0.6 : 0, 0));
-      wood.push(part(limb(off.clone().add(V3(0, -0.3, 0)), t, trunkR * (s ? 0.75 : 1), trunkR * 0.55, 6), barkC));
+      wood.push(bough(off.clone().add(V3(0, -0.3, 0)), t, trunkR * (s ? 0.75 : 1), trunkR * 0.55, 6, barkC));
     }
     // scaffold limbs: a Fibonacci count of forks set at the golden angle
     const forks = fibCount(r.float(), 1, oak ? 3 : 2);
@@ -85,7 +100,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     for (let i = 0; i < forks; i++) {
       const a = i * GOLDEN + r.float();
       const tip = top.clone().add(V3(Math.cos(a) * spread, (oak ? 0.9 : 1.5) + j(0.4), Math.sin(a) * spread));
-      wood.push(part(limb(top.clone().add(V3(0, -0.6, 0)), tip, trunkR * 0.55, trunkR * 0.25, 4), barkC));
+      wood.push(bough(top.clone().add(V3(0, -0.6, 0)), tip, trunkR * 0.55, trunkR * 0.25, 4, barkC));
       tips.push(tip);
     }
     // crown: lobes on a Fibonacci sphere around the fork tips, smaller toward the top
@@ -109,7 +124,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     const stems = fibCount(r.float(), 1, 2);
     for (let i = 0; i < stems; i++) {
       const a = i * GOLDEN + r.float();
-      wood.push(part(limb(V3(0, -0.1, 0), V3(Math.cos(a) * 0.4, 1.1 + j(0.2), Math.sin(a) * 0.4), 0.08, 0.04, 4), BARK));
+      wood.push(bough(V3(0, -0.1, 0), V3(Math.cos(a) * 0.4, 1.1 + j(0.2), Math.sin(a) * 0.4), 0.08, 0.04, 4, BARK));
     }
     const n = fibCount(r.float(), 1, 2);
     for (let i = 0; i < n; i++) {
@@ -122,7 +137,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     // trunk (open, clumped tufts), and a couple of lower limbs with their own tufts
     trunkR = 0.24;
     const kink = V3(j(0.4), 3.6, j(0.4)), top = V3(kink.x + j(0.6), 7.0 + j(0.5), kink.z + j(0.6));
-    wood.push(part(limb(V3(0, -0.3, 0), kink, trunkR, trunkR * 0.8, 6), BARK_DARK), part(limb(kink, top, trunkR * 0.8, trunkR * 0.45, 6), BARK_DARK));
+    wood.push(bough(V3(0, -0.3, 0), kink, trunkR, trunkR * 0.8, 6, BARK_DARK), bough(kink, top, trunkR * 0.8, trunkR * 0.45, 6, BARK_DARK));
     const wind = r.float() * Math.PI * 2;
     // three overlapping tiers of clumped tufts (never separate pancakes with sky between them):
     // each tuft's radius ≥ 0.7 × the tier spacing, tufts staggered ±0.6 m, leaning downwind
@@ -133,7 +148,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
       for (let k = 0; k < 3; k++) {
         const a = wind + t * GOLDEN + (k / 3) * Math.PI * 2 + j(0.3);
         const c = V3(top.x + Math.cos(a) * spread + Math.cos(wind) * 0.45 + j(0.6) * 0.5, y + j(0.25), top.z + Math.sin(a) * spread + Math.sin(wind) * 0.45 + j(0.6) * 0.5);
-        wood.push(part(limb(V3(top.x, y - 0.5, top.z), c, 0.09, 0.045, 3), BARK_DARK));
+        wood.push(bough(V3(top.x, y - 0.5, top.z), c, 0.09, 0.045, 3, BARK_DARK));
         lobe(Math.max(0.7 * gap * 1.25, 1.2 - t * 0.12) + r.float() * 0.12, c, 300 + v * 11 + t * 3 + k, 0.8, 0);
       }
     }
@@ -145,7 +160,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
       const f = Math.min(1, y / 3.6);
       const from = V3(kink.x * f + (top.x - kink.x) * Math.max(0, (y - 3.6) / (top.y - 3.6)), y, kink.z * f + (top.z - kink.z) * Math.max(0, (y - 3.6) / (top.y - 3.6)));
       const tip = from.clone().add(V3(Math.cos(a) * 1.15, 0.45, Math.sin(a) * 1.15));
-      wood.push(part(limb(from, tip, 0.08, 0.04, 3), BARK_DARK));
+      wood.push(bough(from, tip, 0.08, 0.04, 3, BARK_DARK));
       lobe(0.95 + r.float() * 0.15, tip.clone().add(V3(0, 0.25, 0)), 320 + v * 7 + i, 0.6, 0);
     }
     lobe(1.6, top.clone().add(V3(Math.cos(wind) * 0.4, 0.55, Math.sin(wind) * 0.4)), 311 + v, 0.62); // swallows the upper tier
@@ -153,7 +168,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     // conical tiers — a Fibonacci count of whorls, each a ring of drooping lobes
     trunkR = 0.18;
     const H = 9.4 + j(0.6);
-    wood.push(part(limb(V3(0, -0.3, 0), V3(0, H - 0.9, 0), trunkR, 0.05, 5), BARK_DARK));
+    wood.push(bough(V3(0, -0.3, 0), V3(0, H - 0.9, 0), trunkR, 0.05, 5, BARK_DARK));
     const tiers = fibCount(r.float(), 3, 3); // 8
     const gap = (H - 2.6) / (tiers - 1);
     for (let t = 0; t < tiers; t++) {
@@ -179,7 +194,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     for (let i = 1; i <= segs; i++) {
       const t = i / segs;
       const p = V3(bend.x * t * t, H * t, bend.z * t * t);
-      wood.push(part(limb(prev, p, trunkR * (1 - t * 0.25) + 0.02, trunkR * (1 - t * 0.25), 6), i % 2 ? PALM : 0x7c684e));
+      wood.push(bough(prev, p, trunkR * (1 - t * 0.25) + 0.02, trunkR * (1 - t * 0.25), 6, i % 2 ? PALM : 0x7c684e));
       prev = p;
     }
     const n = fibCount(r.float(), 3, 4); // 8 or 13 fronds
@@ -206,7 +221,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
       const a = i * GOLDEN + r.float();
       const knee = V3(Math.cos(a) * 0.7, 1.5 + j(0.3), Math.sin(a) * 0.7);
       const tip = V3(Math.cos(a) * (2.2 + r.float()), 3.6 + j(0.4), Math.sin(a) * (2.2 + r.float()));
-      wood.push(part(limb(V3(0, -0.3, 0), knee, trunkR, trunkR * 0.75, 5), barkC), part(limb(knee, tip, trunkR * 0.75, trunkR * 0.35, 4), barkC));
+      wood.push(bough(V3(0, -0.3, 0), knee, trunkR, trunkR * 0.75, 5, barkC), bough(knee, tip, trunkR * 0.75, trunkR * 0.35, 4, barkC));
       crowns.push(tip);
     }
     // canopy: small, irregular, loosely stacked clouds over each limb tip (an airy, uneven
@@ -230,7 +245,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     const H = 9.4 + r.float() * 2.0;
     const lean = V3(j(0.35), 0, j(0.35));
     const top = V3(lean.x, H, lean.z);
-    wood.push(part(limb(V3(0, -0.3, 0), top, trunkR * 1.25, trunkR * 0.8, 7), 0x7a6a58));
+    wood.push(bough(V3(0, -0.3, 0), top, trunkR * 1.25, trunkR * 0.8, 7, 0x7a6a58));
     // the skirt: a hanging shell of thatch, widest at the top (street palms are kept trimmed short)
     const skirt = lathe([[0.001, -1.25], [0.5, -1.22], [0.6, -0.5], [0.48, -0.02], [0.001, 0]], 9);
     wood.push(part(skirt.translate(top.x, top.y - 0.15, top.z), 0x8a7552));
@@ -254,7 +269,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
       for (let i = 0; i < stems; i++) {
         const a = a0 + i * ((2 * Math.PI) / stems) + j(0.4), ca = Math.cos(a), sa = Math.sin(a);
         const knee = V3(ca * 0.9, 2.6 + j(0.3), sa * 0.9), tip = V3(ca * (2.6 + r.float() * 0.6), 5.6 + j(0.5), sa * (2.6 + r.float() * 0.6));
-        wood.push(part(limb(V3(ca * 0.15, -0.3, sa * 0.15), knee, trunkR * (i ? 0.8 : 1), trunkR * 0.65, 5), BARK), part(limb(knee, tip, trunkR * 0.6, trunkR * 0.22, 4), BARK));
+        wood.push(bough(V3(ca * 0.15, -0.3, sa * 0.15), knee, trunkR * (i ? 0.8 : 1), trunkR * 0.65, 5, BARK), bough(knee, tip, trunkR * 0.6, trunkR * 0.22, 4, BARK));
         lobe(1.95 + r.float() * 0.3, tip.clone().add(V3(ca * 0.3, 0.7, sa * 0.3)), 610 + v * 17 + i * 3, 0.78, 0);
         lobe(1.45 + r.float() * 0.25, tip.clone().add(V3(-sa * 1.2 + ca * 0.5, -0.4 + j(0.3), ca * 1.2 + sa * 0.5)), 611 + v * 17 + i * 3, 0.8, 0);
         lobe(1.35 + r.float() * 0.25, knee.clone().add(V3(ca * 1.3 + sa * 0.6, 0.9, sa * 1.3 - ca * 0.6)), 612 + v * 17 + i * 3, 0.8, 0);
@@ -267,10 +282,10 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
       trunkR = 0.26;
       const th = 2.1 + j(0.3), lean = V3(j(0.2), 0, j(0.2)), top = V3(lean.x, th, lean.z);
       leanPer = [lean.x / (th + 0.3), lean.z / (th + 0.3)];
-      wood.push(part(limb(V3(0, -0.3, 0), top, trunkR, trunkR * 0.6, 6), BARK));
+      wood.push(bough(V3(0, -0.3, 0), top, trunkR, trunkR * 0.6, 6, BARK));
       for (let i = 0; i < 4; i++) {
         const a = i * GOLDEN + r.float();
-        wood.push(part(limb(top.clone().add(V3(0, -0.4, 0)), top.clone().add(V3(Math.cos(a) * 1.5, 2.2 + j(0.3), Math.sin(a) * 1.5)), trunkR * 0.5, trunkR * 0.22, 4), BARK));
+        wood.push(bough(top.clone().add(V3(0, -0.4, 0)), top.clone().add(V3(Math.cos(a) * 1.5, 2.2 + j(0.3), Math.sin(a) * 1.5)), trunkR * 0.5, trunkR * 0.22, 4, BARK));
       }
       const rx = 3.3 + j(0.2), ry = 3.2 + j(0.3), cy = top.y + 3.0, n = 14;
       for (let i = 0; i < n; i++) {
@@ -287,11 +302,11 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     trunkR = 0.34;
     const th = 2.3 + j(0.3), lean = V3(j(0.5), 0, j(0.5)), top = V3(lean.x, th, lean.z);
     leanPer = [lean.x / (th + 0.3), lean.z / (th + 0.3)];
-    wood.push(part(limb(V3(0, -0.3, 0), top, trunkR, trunkR * 0.7, 6), BARK_DARK));
+    wood.push(bough(V3(0, -0.3, 0), top, trunkR, trunkR * 0.7, 6, BARK_DARK));
     const R0 = 2.8 + j(0.3), H0 = 6.8 + j(0.5);
     for (let i = 0; i < 4; i++) {
       const a = i * GOLDEN + r.float();
-      wood.push(part(limb(top.clone().add(V3(0, -0.3, 0)), V3(lean.x + Math.cos(a) * R0 * 0.7, H0 - 0.9 + j(0.4), lean.z + Math.sin(a) * R0 * 0.7), trunkR * 0.5, trunkR * 0.18, 4), BARK_DARK));
+      wood.push(bough(top.clone().add(V3(0, -0.3, 0)), V3(lean.x + Math.cos(a) * R0 * 0.7, H0 - 0.9 + j(0.4), lean.z + Math.sin(a) * R0 * 0.7), trunkR * 0.5, trunkR * 0.18, 4, BARK_DARK));
     }
     // the dome: a few round lobes (not a lid)
     for (let k = 0; k < 5; k++) {
@@ -328,13 +343,13 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     trunkR = 0.3;
     const th = 2.4 + j(0.3), lean = V3(j(0.2), 0, j(0.2)), top = V3(lean.x, th, lean.z);
     leanPer = [lean.x / (th + 0.3), lean.z / (th + 0.3)];
-    wood.push(part(limb(V3(0, -0.3, 0), top, trunkR, trunkR * 0.75, 6), BARK_DARK));
+    wood.push(bough(V3(0, -0.3, 0), top, trunkR, trunkR * 0.75, 6, BARK_DARK));
     const W = 3.6 + j(0.4), H = 8.4 + j(0.6), limbs = 3;
     for (let i = 0; i < limbs; i++) {
       const a = i * ((2 * Math.PI) / limbs) + r.float() * 0.6;
       const knee = V3(lean.x + Math.cos(a) * W * 0.3, th + 2.6, lean.z + Math.sin(a) * W * 0.3);
       const tip = V3(lean.x + Math.cos(a) * W * 0.78, H - 0.9, lean.z + Math.sin(a) * W * 0.78);
-      wood.push(part(limb(top.clone().add(V3(0, -0.3, 0)), knee, trunkR * 0.6, trunkR * 0.42, 4), BARK_DARK), part(limb(knee, tip, trunkR * 0.42, trunkR * 0.18, 4), BARK_DARK));
+      wood.push(bough(top.clone().add(V3(0, -0.3, 0)), knee, trunkR * 0.6, trunkR * 0.42, 4, BARK_DARK), bough(knee, tip, trunkR * 0.42, trunkR * 0.18, 4, BARK_DARK));
     }
     // the umbrella: one broad dome of overlapping lobes (no sky between them), a flat core to
     // close its middle, and a drooping outer fringe
@@ -354,7 +369,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     // the trunk to a point — the windbreak row, the formal drive, the Tuscan hill
     trunkR = 0.2;
     const H = 11 + j(0.8);
-    wood.push(part(limb(V3(0, -0.3, 0), V3(0, H - 2, 0), trunkR, trunkR * 0.3, 5), BARK));
+    wood.push(bough(V3(0, -0.3, 0), V3(0, H - 2, 0), trunkR, trunkR * 0.3, 5, BARK));
     // a spindle: lobes a little apart round the axis, overlapping tier on tier so the column
     // reads as one piece, narrowing to the tip
     const tiers = 9;
@@ -372,7 +387,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     // and reaching down almost to the lawn, rounding off at the top
     trunkR = 0.24;
     const H = 8.2 + j(0.6);
-    wood.push(part(limb(V3(0, -0.3, 0), V3(j(0.15), H - 1.6, j(0.15)), trunkR, trunkR * 0.4, 6), BARK_DARK));
+    wood.push(bough(V3(0, -0.3, 0), V3(j(0.15), H - 1.6, j(0.15)), trunkR, trunkR * 0.4, 6, BARK_DARK));
     const cy = H * 0.5, rx = 2.5 + j(0.2), ry = H * 0.4, n = 13;
     for (let i = 0; i < n; i++) {
       const u = fibSphere(i, n, -0.85, r.float() * 6);
@@ -386,10 +401,10 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     trunkR = 0.2;
     const th = 1.5 + j(0.2), lean = V3(j(0.25), 0, j(0.25)), top = V3(lean.x, th, lean.z);
     leanPer = [lean.x / (th + 0.3), lean.z / (th + 0.3)];
-    wood.push(part(limb(V3(0, -0.3, 0), top, trunkR, trunkR * 0.7, 6), 0x5a3f36));
+    wood.push(bough(V3(0, -0.3, 0), top, trunkR, trunkR * 0.7, 6, 0x5a3f36));
     for (let i = 0; i < 4; i++) {
       const a = i * GOLDEN + r.float();
-      wood.push(part(limb(top.clone().add(V3(0, -0.2, 0)), V3(lean.x + Math.cos(a) * 2.3, th + 1.7 + j(0.3), lean.z + Math.sin(a) * 2.3), trunkR * 0.55, trunkR * 0.22, 4), 0x5a3f36));
+      wood.push(bough(top.clone().add(V3(0, -0.2, 0)), V3(lean.x + Math.cos(a) * 2.3, th + 1.7 + j(0.3), lean.z + Math.sin(a) * 2.3), trunkR * 0.55, trunkR * 0.22, 4, 0x5a3f36));
     }
     // a rounded, spreading crown: lobes packed over a wide dome round a flat core
     const n = 12, cy = th + 2.5;
@@ -416,7 +431,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     trunkR,
     lean: leanPer,
   };
-  return { geo, meta };
+  return { geo, meta, plan };
 }
 const tmeta = new Map<string, TreeMeta>();
 export function treeLib(kind: TreeKind, v: number) {
@@ -427,6 +442,307 @@ export function treeMeta(kind: TreeKind, v: number): TreeMeta {
   const k = `tree:${kind}:${v}`;
   if (!tmeta.has(k)) treeLib(kind, v);
   return tmeta.get(k)!;
+}
+/** Where a tree's crown is lit from (the far shader's sphere field, propMaterial `uCrown`): its
+ *  middle's height and its radius, in the model's own metres. */
+export const crownField = (m: TreeMeta): [number, number] => [m.crownBottom + 0.85 * m.crownR, m.crownR];
+
+// ================================================================ near trees
+// Within about 30 m a tree is drawn from its near model instead (world/nearTrees.ts): the limbs
+// the far model hides, a trunk that flares at the root and tapers to its fork, scaffold limbs and a
+// second order of branches reaching into the crown, and the crown itself a few large leaf-cluster
+// cards — each a spray of painted leaves with gaps between them — set where the far model's lobes
+// are. Lit by the same crown field and the same instance colour, the two read as one tree at the
+// hand-over; up close the outline is leaves and the sky shows through.
+//
+// The near model is grown from the far recipe's own plan (TreePlan), so a species keeps the
+// silhouette its far model was tuned to: the oak's billows at its limbs' ends, the elm's vase, the
+// pine's windswept tufts. Palms and the willow keep their far model at every distance: their
+// leaves are already fronds and tresses.
+export const NEAR_KINDS = new Set<TreeKind>(['round', 'oak', 'shrub', 'pine', 'spruce', 'birch', 'mesquite', 'maple', 'elm', 'poplar', 'magnolia', 'cherry']);
+/** A leaf card: its middle (x, y, z, model space), half its width, height : width, its turn in the
+ *  picture plane (0–1 of a turn), its picture (LEAF_PICS) and how deep in the crown it sits
+ *  (0 on the rim … 1 at the heart). */
+export const CARD_STRIDE = 8;
+/** The leaf pictures: 0–1 sprays of small leaves (the big cards), 2–3 of large leaves, 4–7 needle tufts. */
+export const LEAF_PICS = 8;
+const CONIFER = new Set<TreeKind>(['pine', 'spruce']);
+export interface NearTree {
+  /** the branch skeleton: trunk, limbs, branches — non-indexed, bark colours, aPart 0 */
+  wood: THREE.BufferGeometry;
+  /** CARD_STRIDE floats per leaf card */
+  cards: Float32Array;
+  meta: TreeMeta;
+  /** pieces of wood (limbs and branches, or a clump's stems) that reach from below the crown into it */
+  limbsIn: number;
+  /** the trunk's radius at the ground and where it meets the crown (m) */
+  trunk: [number, number];
+}
+
+/** Grow a tree's near model from its plan. Deterministic in (kind, variant). */
+export function nearTreeGeometry(kind: TreeKind, v: number): NearTree {
+  const { meta, plan } = treeGeometry(kind, v);
+  const rng = makeRng(31337 * (TREE_KINDS.indexOf(kind) + 1) + v * 104729);
+  const conifer = CONIFER.has(kind);
+
+  // ---- the wood the far recipe grew, joined end to end into runs (a trunk, a limb with its knee)
+  type Run = { p: THREE.Vector3[]; r: number[]; col: number; trunk: boolean };
+  const B = plan.boughs, used = new Uint8Array(B.length), runs: Run[] = [];
+  const next = (i: number) => B.findIndex((q, k) => !used[k] && k !== i && q.a.distanceTo(B[i].b) < 1e-3 && q.col === B[i].col);
+  for (let i = 0; i < B.length; i++) {
+    if (used[i] || B.some((q, k) => k !== i && q.b.distanceTo(B[i].a) < 1e-3 && q.col === B[i].col)) continue; // (a run starts where nothing ends)
+    used[i] = 1;
+    const run: Run = { p: [B[i].a.clone(), B[i].b.clone()], r: [B[i].r0, B[i].r1], col: B[i].col, trunk: B[i].a.y <= 0.01 };
+    for (let k = next(i); k >= 0; k = next(k)) { used[k] = 1; run.p.push(B[k].b.clone()); run.r.push(B[k].r1); }
+    runs.push(run);
+  }
+  // (anything left over — a loop the joiner can't start — still grows, a run of its own)
+  B.forEach((q, i) => { if (!used[i]) runs.push({ p: [q.a.clone(), q.b.clone()], r: [q.r0, q.r1], col: q.col, trunk: q.a.y <= 0.01 }); });
+
+  // ---- the crown: one leaf card per far lobe (where it was, as big, as squashed), split until
+  // there are at least 8 — a shrub's three lobes would be three stickers
+  type Card = { c: THREE.Vector3; h: number; sq: number };
+  const cards: Card[] = plan.lobes.map((l) => ({ c: l.c.clone(), h: l.r * 1.17, sq: Math.min(1.5, Math.max(0.6, l.sq)) }));
+  while (cards.length < 8) {
+    let bi = 0;
+    cards.forEach((q, i) => { if (q.h > cards[bi].h) bi = i; });
+    const q = cards[bi], a = cards.length * GOLDEN, o = V3(Math.cos(a), 0.15, Math.sin(a)).multiplyScalar(q.h * 0.4);
+    cards.splice(bi, 1, { c: q.c.clone().add(o), h: q.h * 0.78, sq: q.sq }, { c: q.c.clone().sub(o), h: q.h * 0.78, sq: q.sq });
+  }
+  // a run that ends in the open (a clump's side stem, a limb the far lobes covered) grows on into the
+  // nearest leaf cluster, thinning — never a cut-off stick under the crown
+  for (const run of runs) {
+    const e = run.p[run.p.length - 1];
+    if (e.y < 0.5) continue;
+    let near: Card | null = null, nd = Infinity;
+    for (const q of cards) { const d = q.c.distanceTo(e) - q.h * 0.8; if (d < nd) (nd = d), (near = q); }
+    if (!near || nd <= 0) continue;
+    const to = e.clone().lerp(near.c, 0.85), r1 = run.r[run.r.length - 1];
+    run.p.push(e.clone().lerp(to, 0.5).add(V3(0, 0.08 * e.distanceTo(to), 0)), to);
+    run.r.push(r1 * 0.75, Math.max(0.015, r1 * 0.45));
+  }
+
+  // every run resampled into a gently crooked curve (a ring every ~0.8 m, each nudged off the
+  // straight line), the trunk with its root flare: wide where it meets the ground, tapering up
+  const wood: THREE.BufferGeometry[] = [], trunks: { p: THREE.Vector3[]; r: number[] }[] = [];
+  const axis: { p: THREE.Vector3; r: number; trunk: boolean }[] = []; // where a branch may start
+  for (const run of runs) {
+    const P: THREE.Vector3[] = [], R: number[] = [];
+    for (let s = 0; s + 1 < run.p.length; s++) {
+      const a = run.p[s], b = run.p[s + 1], L = a.distanceTo(b);
+      const steps = Math.max(1, Math.min(run.trunk ? 5 : 3, Math.round(L / 0.8)));
+      const d = b.clone().sub(a).normalize(), side = new THREE.Vector3(-d.z, 0, d.x);
+      if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
+      side.normalize();
+      const up = new THREE.Vector3().crossVectors(side, d).normalize();
+      for (let k = s ? 1 : 0; k <= steps; k++) {
+        const t = k / steps, p = a.clone().lerp(b, t);
+        const inner = k > 0 && k < steps;
+        if (inner) p.addScaledVector(side, (rng.float() - 0.5) * 0.08 * L / steps).addScaledVector(up, (rng.float() - 0.5) * 0.06 * L / steps);
+        P.push(p);
+        R.push(run.r[s] + (run.r[s + 1] - run.r[s]) * t);
+      }
+    }
+    if (run.trunk) {
+      // the root flare: rings packed near the ground, swelling to half again the trunk's girth
+      const base = P[0], top = P[1], r0 = R[0];
+      const at = (y: number) => base.clone().lerp(top, (y - base.y) / Math.max(1e-3, top.y - base.y));
+      const flare = [[0.0, 1.5], [0.18, 1.3], [0.5, 1.1]].filter(([y]) => y + 0.1 < top.y);
+      P.splice(1, 0, ...flare.map(([y]) => at(y)));
+      R.splice(0, 1, r0 * 1.55, ...flare.map(([y, f]) => r0 * (f as number) * (1 - 0.15 * (y as number) / Math.max(1, top.y))));
+    }
+    const sides = run.trunk ? 8 : R[0] > 0.12 ? 6 : 5;
+    if (run.trunk) trunks.push({ p: P, r: R });
+    wood.push(part(tube(P, R, sides), run.col));
+    P.forEach((p, i) => axis.push({ p, r: R[i], trunk: run.trunk }));
+  }
+
+  // how deep in the crown each card sits: 0 for the outermost cluster, 1 at the middle of them all
+  // (the lobes' own middle — a wide crown's field sits high, and its dome would read as its heart)
+  const mid = cards.reduce((m, q) => m.add(q.c), V3(0, 0, 0)).multiplyScalar(1 / cards.length);
+  const reachOut = Math.max(0.5, ...cards.map((q) => q.c.distanceTo(mid)));
+  const rec = new Float32Array(cards.length * CARD_STRIDE);
+  cards.forEach((q, i) => {
+    const big = q.h >= 1.6;
+    const pic = conifer ? 4 + (i % 4) : (big ? 0 : 2) + (i % 2);
+    const depth = 1 - Math.min(1, q.c.distanceTo(mid) / reachOut);
+    rec.set([q.c.x, q.c.y, q.c.z, q.h, q.sq, rng.float(), pic, depth], i * CARD_STRIDE);
+  });
+
+  // ---- the second order: a branch from the nearest limb out into each card's cluster (ending
+  // inside it), arching up; none where a limb already ends in the cluster
+  const above = meta.crownBottom - 0.4, cb = meta.crownBottom;
+  const reaches = (a: THREE.Vector3, b: THREE.Vector3) => a.y < cb + 0.5 && b.y > cb + 0.3;
+  const stems = runs.filter((rn) => rn.trunk);
+  let limbsIn = runs.filter((rn) => (!rn.trunk || stems.length > 1) && reaches(rn.p[0], rn.p[rn.p.length - 1])).length;
+  const limbed = axis.some((o) => !o.trunk);
+  for (const q of cards) {
+    let best = -1, bs = Infinity;
+    for (let i = 0; i < axis.length; i++) {
+      const s = axis[i];
+      if (s.trunk && s.p.y < above && limbed) continue; // (not off the bare trunk under the crown)
+      const d = s.p.distanceTo(q.c) + Math.max(0, s.p.y - q.c.y - 0.2) * 2;
+      if (d < bs) (bs = d), (best = i);
+    }
+    if (best < 0) continue;
+    const S = axis[best], L = S.p.distanceTo(q.c);
+    if (L < Math.max(0.6, q.h * 0.35)) continue;
+    const E = S.p.clone().lerp(q.c, 0.82);
+    const M = S.p.clone().lerp(E, 0.5).add(V3((rng.float() - 0.5) * 0.12 * L, 0.12 * L, (rng.float() - 0.5) * 0.12 * L));
+    const r0 = Math.min(0.11, Math.max(0.025, Math.min(S.r * 0.55, 0.03 + 0.025 * L))), r1 = Math.max(0.012, r0 * 0.3);
+    wood.push(part(tube([S.p.clone(), M, E], [r0, (r0 + r1) * 0.55, r1], r0 > 0.06 ? 5 : 4), plan.boughs[0].col));
+    if (reaches(S.p, E)) limbsIn++;
+  }
+  // the trunk's girth at the ground and where it meets the crown (the first stem's)
+  const t0 = trunks[0];
+  const rAt = (y: number) => {
+    for (let i = 0; i + 1 < t0.p.length; i++) if (t0.p[i + 1].y >= y) { const f = (y - t0.p[i].y) / Math.max(1e-4, t0.p[i + 1].y - t0.p[i].y); return t0.r[i] + (t0.r[i + 1] - t0.r[i]) * Math.max(0, Math.min(1, f)); }
+    return t0.r[t0.r.length - 1];
+  };
+  return { wood: merge(wood), cards: rec, meta, limbsIn, trunk: [rAt(0), rAt(Math.min(cb, t0.p[t0.p.length - 1].y))] };
+}
+const nearCache = new Map<string, NearTree>();
+/** One near model per (kind, variant) — its wood through the foundry cache (a builder clones it). */
+export function nearTreeLib(kind: TreeKind, v: number): NearTree {
+  const k = `near-tree:${kind}:${v}`;
+  let t = nearCache.get(k);
+  if (!t) {
+    const g = nearTreeGeometry(kind, v);
+    nearCache.set(k, (t = { ...g, wood: cached(k, () => g.wood) }));
+  }
+  return t;
+}
+
+/** The leaf pictures the cards show (LEAF_PICS in a 4 × 2 grid of S-pixel cells), painted once:
+ *  A how much leaf covers the texel (anti-aliased), R the leaf's own shade (0–1, ~0.7 on average:
+ *  each leaf a little lighter or darker, a midrib, the side away from the light deeper), G 1 on a
+ *  leaf and 0 on the twigs between them (bark), B a number per leaf (autumn turns and drops them
+ *  one by one). Each picture is a cluster: twigs from its heart out to sprays of leaves set along
+ *  them, alternating, smaller toward the tip, inside a lobed outline — dense at the heart, ragged
+ *  at the rim, gaps between the sprays. Deterministic. */
+export function leafAtlas(S = 256): { data: Uint8Array; w: number; h: number } {
+  const job = leafAtlasJob(S);
+  while (!job.step());
+  return job;
+}
+/** The same, a picture at a time (a few tens of ms each): `step()` paints the next and says
+ *  whether the atlas is done — the near-tree layer runs one a frame while the world boots. */
+export function leafAtlasJob(S = 256) {
+  const W = S * 4, H = S * 2, data = new Uint8Array(W * H * 4);
+  let pic = 0;
+  return {
+    data, w: W, h: H,
+    step() {
+      if (pic >= LEAF_PICS) return true;
+      const ox = (pic % 4) * S, oy = Math.floor(pic / 4) * S, acc = new Float32Array(S * S * 4); // straight-alpha r, g, b, a
+      paintCluster(acc, S, 0, 0, S, pic);
+      for (let y = 0; y < S; y++)
+        for (let x = 0; x < S * 4; x++) data[((oy + y) * W + ox) * 4 + x] = Math.max(0, Math.min(255, Math.round(acc[y * S * 4 + x] * 255)));
+      return ++pic >= LEAF_PICS;
+    },
+  };
+}
+
+function paintCluster(acc: Float32Array, W: number, ox: number, oy: number, S: number, pic: number) {
+  const rng = makeRng(7907 + pic * 3301);
+  const needles = pic >= 4, smallLeaf = pic < 2;
+  const half = S / 2, gutter = 3, k = half - gutter; // (texels per unit: the cell spans −1 … 1)
+  // lay one shape over the picture, anti-aliased: `edge(u, v)` is how far inside the shape a point
+  // is, in the picture's units (< 0 outside), and sets `tone` for that point when it's inside
+  let tone = 0;
+  const over = (x0: number, y0: number, x1: number, y1: number, edge: (u: number, v: number) => number, g: number, b: number) => {
+    const px0 = Math.max(0, Math.floor(x0 * k + half)), px1 = Math.min(S - 1, Math.ceil(x1 * k + half));
+    const py0 = Math.max(0, Math.floor(y0 * k + half)), py1 = Math.min(S - 1, Math.ceil(y1 * k + half));
+    for (let py = py0; py <= py1; py++) {
+      const v = (py + 0.5 - half) / k;
+      for (let px = px0; px <= px1; px++) {
+        const cov = Math.min(1, edge((px + 0.5 - half) / k, v) * k + 0.5);
+        if (cov <= 0) continue;
+        const i = ((oy + py) * W + ox + px) * 4, a0 = acc[i + 3], a = cov + a0 * (1 - cov);
+        const k0 = (a0 * (1 - cov)) / a, k1 = cov / a;
+        acc[i] = acc[i] * k0 + tone * k1; acc[i + 1] = acc[i + 1] * k0 + g * k1; acc[i + 2] = acc[i + 2] * k0 + b * k1; acc[i + 3] = a;
+      }
+    }
+  };
+  // the cluster's outline: a lobed disc, never reaching the gutter
+  const ph = [rng.float() * 6.28, rng.float() * 6.28, rng.float() * 6.28];
+  const rim = (th: number) => 0.8 + 0.08 * Math.sin(3 * th + ph[0]) + 0.05 * Math.sin(5 * th + ph[1]) + 0.04 * Math.sin(8 * th + ph[2]);
+  // a stroke from a to b, w wide at a and half that at b (a twig, a needle)
+  const stroke = (ax: number, ay: number, bx: number, by: number, w: number, r: number, g: number, b: number) => {
+    const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy || 1e-6;
+    over(Math.min(ax, bx) - w, Math.min(ay, by) - w, Math.max(ax, bx) + w, Math.max(ay, by) + w, (u, v) => {
+      const t = Math.max(0, Math.min(1, ((u - ax) * dx + (v - ay) * dy) / L2));
+      tone = r;
+      return w * (1 - 0.5 * t) - Math.hypot(u - ax - dx * t, v - ay - dy * t);
+    }, g, b);
+  };
+  // a leaf: an almond from its base along angle a, length L, widest a third of the way out; the
+  // half turned to the light (up) a shade lighter than the other, a darker midrib between them
+  const leaf = (bx: number, by: number, a: number, L: number, wid: number, shade: number) => {
+    const ca = Math.cos(a), sa = Math.sin(a), hw = L * wid, tx = bx + ca * L, ty = by + sa * L;
+    const id = rng.float(), lit = sa >= 0 ? 1 : -1, rib = hw * 0.1;
+    const hi = Math.min(1, shade * 1.1), lo = shade * 0.86, mid = shade * 0.8;
+    over(Math.min(bx, tx) - hw, Math.min(by, ty) - hw, Math.max(bx, tx) + hw, Math.max(by, ty) + hw, (u, v) => {
+      const x = u - bx, y = v - by, s = (x * ca + y * sa) / L, w = -x * sa + y * ca;
+      if (s <= 0 || s >= 1) return -1;
+      const wl = w * lit;
+      tone = wl > rib ? hi : wl < -rib ? lo : mid;
+      return Math.sqrt(s) * (1 - s) * 1.8 * hw - Math.abs(w);
+    }, 1, id);
+  };
+  // a needle tuft: a fan of fine needles from a point
+  const tuft = (bx: number, by: number, a: number, L: number, shade: number) => {
+    const n = 9 + Math.floor(rng.float() * 5), id = rng.float();
+    for (let q = 0; q < n; q++) {
+      const t = q / (n - 1) - 0.5, aa = a + t * 2.4 + (rng.float() - 0.5) * 0.25, LL = L * (0.7 + 0.6 * (0.5 - Math.abs(t)) + rng.float() * 0.2);
+      stroke(bx, by, bx + Math.cos(aa) * LL, by + Math.sin(aa) * LL, 0.016, Math.min(1, shade * (0.82 + 0.36 * rng.float())), 1, id);
+    }
+  };
+  const L0 = needles ? 0.15 : smallLeaf ? 0.085 : 0.12;
+  // the sprays: twigs from near the heart out toward the rim, a side spray off each — laid out
+  // first, their twigs painted under every leaf (they show only in the gaps, as branchlets, never
+  // as a starburst over the leaves)
+  const sprays = needles ? 11 : 17;
+  const a0 = rng.float() * 6.28;
+  const runs: [number, number, number, number, number][] = [];
+  for (let s = 0; s < sprays; s++) {
+    const th = a0 + s * GOLDEN * 2 + (rng.float() - 0.5) * 0.3;
+    // (a leaf at the tip stays inside the cell: one cut by its edge would be a straight edge)
+    const reach = Math.min(rim(th) * (0.86 + 0.2 * rng.float()), 0.95 - L0 * 1.1);
+    const r0 = 0.1 + 0.3 * rng.float();
+    const bx = Math.cos(th + 0.25) * r0, by = Math.sin(th + 0.25) * r0;
+    const ex = Math.cos(th) * reach, ey = Math.sin(th) * reach;
+    runs.push([bx, by, ex, ey, needles ? 0.012 : 0.013]);
+    const mx = bx + (ex - bx) * 0.45, my = by + (ey - by) * 0.45, sa = th + (rng.float() < 0.5 ? 0.7 : -0.7), sl = (reach - r0) * 0.45;
+    runs.push([mx, my, mx + Math.cos(sa) * sl, my + Math.sin(sa) * sl, needles ? 0.009 : 0.009]);
+  }
+  for (const [bx, by, ex, ey, w] of runs) stroke(bx, by, ex, ey, w, 0.28, 0, 0);
+  // the heart, darker (it's under the rest): enough leaves to close the inner three quarters
+  const fill = needles ? 72 : smallLeaf ? 950 : 460;
+  for (let q = 0; q < fill; q++) {
+    const rr = Math.sqrt(rng.float()) * 0.8, th = rng.float() * 6.28;
+    const x = Math.cos(th) * rr * rim(th), y = Math.sin(th) * rr * rim(th);
+    // (pointing roughly outward, the way leaves face the light — any way at the very heart — and
+    // centred on the point, or every picture would have a hole where the leaves start)
+    const out = th + (rng.float() - 0.5) * (rr < 0.25 ? 6.28 : 2.4), Lf = L0 * (0.8 + 0.35 * rng.float());
+    const cx = x - Math.cos(out) * Lf * 0.45, cyy = y - Math.sin(out) * Lf * 0.45;
+    if (needles) tuft(x - Math.cos(out) * L0 * 0.4, y - Math.sin(out) * L0 * 0.4, out, L0 * 0.85, 0.42 + 0.3 * rr + 0.12 * rng.float());
+    else leaf(cx, cyy, out, Lf, 0.4, 0.4 + 0.32 * rr + 0.12 * rng.float());
+  }
+  // then the sprays' leaves (or tufts) over it, alternating along each twig, lighter toward the
+  // open rim, a leaf at the tip
+  for (const [bx, by, ex, ey] of runs) {
+    const dir = Math.atan2(ey - by, ex - bx), len = Math.hypot(ex - bx, ey - by);
+    const step = needles ? 0.09 : L0 * 0.48;
+    let side = rng.float() < 0.5 ? 1 : -1;
+    for (let t = 0.2; t <= 1.0; t += step / len) {
+      const px = bx + (ex - bx) * t, py = by + (ey - by) * t, sh = 0.6 + 0.38 * t + (rng.float() - 0.5) * 0.16;
+      if (needles) tuft(px, py, dir + side * 0.45, L0 * (1.05 - 0.25 * t), sh);
+      else leaf(px, py, dir + side * (0.8 + (rng.float() - 0.5) * 0.4), L0 * (1.1 - 0.3 * t) * (0.85 + 0.3 * rng.float()), 0.42, sh);
+      side = -side;
+    }
+    if (!needles) leaf(ex, ey, dir + (rng.float() - 0.5) * 0.3, L0 * 0.85, 0.4, 0.95);
+  }
 }
 
 // ================================================================ garden plants

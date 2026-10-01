@@ -1,20 +1,23 @@
 // The asset foundry's workbench (kit.html): every family on a grid in the game's own painted
 // materials — vehicles (with gear), rocks, trees (every species × grown variant), garden plants
-// (growth slider), wildlife (animated), street + beach furniture. Seeds reroll, and a .glb export
+// (growth slider), wildlife (animated), street + beach furniture, and trees up close: every species'
+// far model handing over to its near model (world/nearTrees.ts, the game's own layer) as you orbit
+// in and out. Seeds reroll, and a .glb export
 // of whatever is shown (recipes are the source of truth; GLB is a byproduct for sharing/Blender).
 // `window.__KIT__` exposes the scene for montage shots.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { BOAT_TYPES, CAR_TYPES, PLANE_TYPES, boatGeometry, boatRecipe, carGeometry, carRecipe, planeGeometry, planeRecipe, rockGeometry, type RockType } from '../assets/kit';
-import { TREE_KINDS, TREE_VARIANTS, treeLib, PLANT_SPECIES, plantGeometry, SPECIES } from '../assets/flora';
+import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, crownField, DECIDUOUS, fallHueOf, PLANT_SPECIES, plantGeometry, SPECIES } from '../assets/flora';
+import { NearTrees, nearKinds } from '../world/nearTrees';
 import { CRITTERS, critterLib, critterMaterial, dogLib, dogMaterial, DOG_COLLAR } from '../assets/fauna';
 import { personLib, personLiteLib, leadHand, atWorld } from '../assets/people';
 import { creatureMaterial } from '../render/creature';
 import { MAILBOXES, mailboxLib, beachLib, CAR_GEAR, gearGeometry } from '../assets/furniture';
 import { MICRO_KINDS } from '../assets/micro';
 import { MicroLayer } from '../world/microLayer';
-import { MICRO_TIERS } from '../render/quality';
+import { MICRO_TIERS, TREE_TIERS } from '../render/quality';
 import { merge } from '../assets/core';
 import { propMaterial } from '../render/propMaterial';
 import { U } from '../render/shared';
@@ -66,6 +69,7 @@ function add(g: THREE.BufferGeometry, x: number, z: number, hex: number, name: s
 }
 const animated: { m: THREE.InstancedMesh; anim: THREE.InstancedBufferAttribute; hz: number; kind: string }[] = [];
 let micro: MicroLayer | null = null;
+let nearTrees: NearTrees | null = null;
 function addCritter(kind: (typeof CRITTERS)[number], x: number, z: number, color: number) {
   const geo = critterLib(kind).clone();
   const anim = new THREE.InstancedBufferAttribute(new Float32Array(3), 3);
@@ -168,6 +172,28 @@ function build() {
   }
   if (fam === 'all' || fam === 'trees')
     for (let v = 0; v < TREE_VARIANTS; v++) rowOf(TREE_KINDS.length, 11, (i, x, z) => add(treeLib(TREE_KINDS[i], v), x, z, GREENS[(i + v) % GREENS.length], `tree-${TREE_KINDS[i]}-${v}`, 0, mats.foliage), 12);
+  if (fam === 'neartrees') {
+    // every species with a near model, three grown variants each, as a tile places them: one far
+    // mesh per species × variant named as a tile's, which the near layer takes up close
+    nearTrees ??= (() => {
+      const l = new NearTrees({ ...TREE_TIERS.desktop });
+      scene.add(l.group);
+      return l;
+    })();
+    const g = new THREE.Group();
+    const ks = nearKinds();
+    ks.forEach((k, i) => {
+      for (let v = 0; v < TREE_VARIANTS; v++) {
+        const im = new THREE.InstancedMesh(treeLib(k, v).clone(), propMaterial({ wind: true, foliage: true, crown: crownField(treeMeta(k, v)), decid: DECIDUOUS.has(k), fallHue: fallHueOf(k, v), blossom: k === 'cherry' }), 1);
+        im.name = `trees:${k}:${v}`;
+        im.setMatrixAt(0, new THREE.Matrix4().compose(new THREE.Vector3((i - (ks.length - 1) / 2) * 13, 0, v * 16), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -0.6 + v), new THREE.Vector3(1, 1, 1)));
+        im.setColorAt(0, new THREE.Color(GREENS[(i + v) % GREENS.length]));
+        g.add(im);
+      }
+    });
+    root.add(g);
+    nearTrees.add('kit', g);
+  } else nearTrees?.remove('kit');
   if (fam === 'all' || fam === 'plants') {
     const g = fam === 'all' ? 1 : growth;
     rowOf(PLANT_SPECIES.length, 2.2, (i, x, z) => add(plantGeometry(PLANT_SPECIES[i], seed, g), x, z, GREENS[i % GREENS.length], `plant-${PLANT_SPECIES[i]} (${SPECIES[PLANT_SPECIES[i]].label}) g=${g}`, 0, mats.foliage), 3);
@@ -271,9 +297,10 @@ const loop = () => {
   controls.update();
   camera.updateMatrixWorld();
   micro?.update(camera.position.x, camera.position.y, camera.position.z, camera);
+  nearTrees?.update(camera.position.x, camera.position.y, camera.position.z);
   if (($('painted') as HTMLInputElement).checked) post.render(scene, camera, t, 0, 0, 0, 0);
   else renderer.render(scene, camera);
   requestAnimationFrame(loop);
 };
 loop();
-(window as unknown as Record<string, unknown>).__KIT__ = { scene, camera, controls, renderer, build, root, frame, people, U, render: () => post.render(scene, camera, 0, 0, 0, 0, 0), get micro() { return micro; } };
+(window as unknown as Record<string, unknown>).__KIT__ = { scene, camera, controls, renderer, build, root, frame, people, U, render: () => post.render(scene, camera, 0, 0, 0, 0, 0), get micro() { return micro; }, get nearTrees() { return nearTrees; }, ground, post };

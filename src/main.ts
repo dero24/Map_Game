@@ -8,6 +8,7 @@ import { FarSkyline } from './world/farSkyline';
 import { KerbCars } from './world/kerbCars';
 import { underRaised, PAD_PAINT } from './world/pads';
 import { MicroLayer } from './world/microLayer';
+import { NearTrees } from './world/nearTrees';
 import { seasonAt, dayOfYear } from './world/season';
 import { setWorldDate } from './world/calendar';
 import { CrowdLayer, CROWD_TIERS } from './world/crowdLayer';
@@ -315,6 +316,12 @@ async function main() {
   const micro = new MicroLayer(renderer, tier.micro);
   micro.group.visible = params.get('micro') !== '0';
   worldRoot.add(micro.group);
+  // Trees within ~30 m drawn from their near model — limbs, a tapering trunk, leaf-cluster cards
+  // with the sky between the leaves — handing over to the tiles' own crowns further out
+  // (world/nearTrees.ts). `?neartrees=0` keeps every tree on its far model.
+  const treeLayer = new NearTrees(tier.trees);
+  treeLayer.enabled = params.get('neartrees') !== '0';
+  worldRoot.add(treeLayer.group);
   // the coarse backdrop's far-forest canopy drops wherever a detail tile is mounted (its trees are
   // real), and the backdrop steps aside altogether where a streamed cell brought its own ground
   const streamedGround = () => {
@@ -333,6 +340,7 @@ async function main() {
     paint.addWalks(a.walks, a.spec.id);
     kerbCars.add(a.spec.id, a.kerb, [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1]);
     micro.add(a.spec.id, a.micro);
+    treeLayer.add(a.spec.id, a.group);
     crowd.add(a.spec.id, a.crowd);
     streamedGround();
     // J1: streamed tiles (past the bake) paint their streets and footprints into the ground windows
@@ -341,7 +349,7 @@ async function main() {
     paint.setPads(a.spec.id, underRaised(a.fps, (x, z) => world.terrain.oceanDistAt(x, z)).map((q) => ({ ring: q.ring, fill: PAD_PAINT[q.kind], stone: q.kind === 'gravel' })), [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1]);
     grass.invalidateBox(a.spec.box);
   };
-  stream.onUnload = (id) => { paint.dropTile(id); kerbCars.remove(id); micro.remove(id); crowd.remove(id); queueMicrotask(streamedGround); };
+  stream.onUnload = (id) => { paint.dropTile(id); kerbCars.remove(id); micro.remove(id); treeLayer.remove(id); crowd.remove(id); queueMicrotask(streamedGround); };
   const plans = stream.plans;
   const bld = {
     get footprints() { return stream.footprints; },
@@ -957,7 +965,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { ambientBalloons, walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, lift: ride, planInterior, registerPlan, plans, bld, life, stream, vehicles, farSkyline, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, streamParams, micro, crowd, kerbCars, wakes, get spawn() { return spawn; }, at: atPos };
+  (window as unknown as Record<string, unknown>).__GAME__ = { ambientBalloons, walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, lift: ride, planInterior, registerPlan, plans, bld, life, stream, vehicles, farSkyline, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, streamParams, micro, nearTrees: treeLayer, crowd, kerbCars, wakes, get spawn() { return spawn; }, at: atPos };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);
@@ -1389,6 +1397,7 @@ async function main() {
     horizon.update(walker.x, walker.z);
     kerbCars.update(walker.x, walker.z, timeParams.hour, [walker.x, walker.z, fwd.x, fwd.z]); // (last frame's look)
     if (micro.group.visible) micro.update(camera.position.x + origin.x, camera.position.y, camera.position.z + origin.z, camera, timeParams.hour);
+    treeLayer.update(camera.position.x + origin.x, camera.position.y, camera.position.z + origin.z);
     if (!CAPTURE) ambientBalloons.update(walker.x, walker.z, dt); // (they keep the world's clock: never in a capture)
     if (playing()) balloonNews(dt);
     groundT -= dt;

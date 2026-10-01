@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { TREE_KINDS, TREE_VARIANTS, treeGeometry, PLANT_SPECIES, plantGeometry, plantMix, inBloom, stageOf, STAGES, fallHueOf } from '../src/assets/flora';
+import { TREE_KINDS, TREE_VARIANTS, treeGeometry, PLANT_SPECIES, plantGeometry, plantMix, inBloom, stageOf, STAGES, fallHueOf, NEAR_KINDS, nearTreeGeometry, CARD_STRIDE, LEAF_PICS, leafAtlas } from '../src/assets/flora';
+import { TREE_TIERS } from '../src/render/quality';
 import { CRITTERS, critterGeometry } from '../src/assets/fauna';
 import { MAILBOXES, mailboxGeometry, gearGeometry, gearFor, CAR_GEAR, umbrellaGeometry, picnicTableGeometry } from '../src/assets/furniture';
-import { fibCount, fibSphere, hashf, variantAt } from '../src/assets/core';
+import { fibCount, fibSphere, hashf, variantAt, tube } from '../src/assets/core';
 import { personGeometry, personLiteGeometry, HAIRSTYLES, MARK, warmthFor } from '../src/assets/people';
 import { dogLib } from '../src/assets/fauna';
 import * as D from '../src/assets/decor';
@@ -84,6 +85,103 @@ describe('flora', () => {
     expect(partCount(plantGeometry('hydrangea', 1, 1), 8)).toBeGreaterThan(0);
     expect(stageOf(0)).toBe(0);
     expect(stageOf(1)).toBe(STAGES - 1);
+  });
+  // The near model (round 11, must-fix 4): within ~30 m a tree is its branch skeleton and 8–20
+  // leaf-cluster cards, grown from the far recipe's own plan (flora.ts nearTreeGeometry)
+  it('near trees: every species with a near model is sane, grounded, deterministic and within budget', () => {
+    let n = 0;
+    for (const k of TREE_KINDS) for (let v = 0; v < TREE_VARIANTS; v++) {
+      if (!NEAR_KINDS.has(k)) continue;
+      n++;
+      const t = nearTreeGeometry(k, v), b = bb(t.wood), cards = t.cards.length / CARD_STRIDE;
+      expect(finite(t.wood)).toBe(true);
+      expect(t.cards.every(Number.isFinite)).toBe(true);
+      expect(b.min.y).toBeLessThanOrEqual(0.01); // the root reaches into the ground…
+      expect(b.min.y).toBeGreaterThan(-0.6); // …and no deeper than the far trunk's
+      expect(cards).toBeGreaterThanOrEqual(8);
+      expect(cards).toBeLessThanOrEqual(20);
+      // ≤ 2,500 vertices a tree: its wood, and four corners a card
+      expect(verts(t.wood) + 4 * cards).toBeLessThanOrEqual(2500);
+      for (let i = 0; i < t.cards.length; i += CARD_STRIDE) {
+        expect(t.cards[i + 3]).toBeGreaterThan(0.2); // half its width, m
+        expect(t.cards[i + 6]).toBeGreaterThanOrEqual(0);
+        expect(t.cards[i + 6]).toBeLessThan(LEAF_PICS);
+        expect(t.cards[i + 7]).toBeGreaterThanOrEqual(0);
+        expect(t.cards[i + 7]).toBeLessThanOrEqual(1);
+      }
+      const again = nearTreeGeometry(k, v);
+      expect(verts(again.wood)).toBe(verts(t.wood));
+      expect(Array.from(again.cards)).toEqual(Array.from(t.cards));
+    }
+    expect(n).toBe(NEAR_KINDS.size * TREE_VARIANTS);
+  });
+  it('near trees: the trunk flares and tapers, limbs reach into the crown, the crown stands where the far one does', () => {
+    for (const k of NEAR_KINDS) for (let v = 0; v < TREE_VARIANTS; v++) {
+      const t = nearTreeGeometry(k, v), far = treeGeometry(k, v);
+      // the trunk's base at least 30% wider than where it meets the crown
+      expect(t.trunk[0]).toBeGreaterThanOrEqual(1.3 * t.trunk[1]);
+      // …and the mesh says so: its widest ring at the ground against the far trunk's
+      const P = t.wood.getAttribute('position');
+      let r0 = 0;
+      for (let i = 0; i < P.count; i++) if (Math.abs(P.getY(i)) < 0.02) r0 = Math.max(r0, Math.hypot(P.getX(i), P.getZ(i)));
+      if (k !== 'birch' && k !== 'mesquite' && !(k === 'maple' && v === 2)) expect(r0).toBeGreaterThan(1.3 * far.meta.trunkR); // (a clump's stems stand apart)
+      // the street and yard broadleaves show at least three limbs going up into the crown
+      if (['round', 'oak', 'maple', 'elm', 'cherry', 'birch', 'mesquite'].includes(k)) expect(t.limbsIn).toBeGreaterThanOrEqual(3);
+      // every card's middle inside the far crown's box, and the cards reach out to fill most of it
+      const lb = new THREE.Box3();
+      for (const l of far.plan.lobes) lb.expandByPoint(l.c.clone().addScalar(-l.r)).expandByPoint(l.c.clone().addScalar(l.r));
+      const cb = new THREE.Box3();
+      for (let i = 0; i < t.cards.length; i += CARD_STRIDE) {
+        const c = new THREE.Vector3(t.cards[i], t.cards[i + 1], t.cards[i + 2]), h = t.cards[i + 3];
+        expect(lb.containsPoint(c)).toBe(true);
+        cb.expandByPoint(c.clone().addScalar(-h * 0.9)).expandByPoint(c.clone().addScalar(h * 0.9));
+      }
+      const fs = lb.getSize(new THREE.Vector3()), ns = cb.getSize(new THREE.Vector3());
+      expect(ns.x / fs.x).toBeGreaterThan(0.85);
+      expect(ns.x / fs.x).toBeLessThan(1.25);
+      expect(ns.y / fs.y).toBeGreaterThan(0.8);
+      expect(ns.y / fs.y).toBeLessThan(1.3);
+    }
+  });
+  it('a tube bends without creasing: no normal turns more than 25° from one ring to the next', () => {
+    // a limb with a 40° knee, tapering
+    const pts = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 2, 0), new THREE.Vector3(0.64, 2.77, 0), new THREE.Vector3(1.29, 3.53, 0)];
+    const g = tube(pts, [0.3, 0.27, 0.24, 0.2, 0.15], 6), N = g.getAttribute('normal'), P = g.getAttribute('position');
+    // each quad: (i,k) (i,k+1) (i+1,k+1) (i,k) (i+1,k+1) (i+1,k) — compare the ring-i corner with the ring-(i+1) corner on the same side
+    let worst = 0;
+    for (let q = 0; q < N.count; q += 6) {
+      const a = new THREE.Vector3(N.getX(q), N.getY(q), N.getZ(q)), b = new THREE.Vector3(N.getX(q + 5), N.getY(q + 5), N.getZ(q + 5));
+      worst = Math.max(worst, (a.angleTo(b) * 180) / Math.PI);
+    }
+    expect(worst).toBeLessThan(25);
+    expect(finite(g)).toBe(true);
+    expect(P.count).toBe(4 * 6 * 6);
+  });
+  it('leaf pictures: deterministic, leafy at the heart, ragged at the rim, with gaps between the leaves', () => {
+    const S = 64, a = leafAtlas(S), b = leafAtlas(S);
+    expect(a.w).toBe(4 * S);
+    expect(a.data.every((x, i) => x === b.data[i])).toBe(true);
+    for (let p = 0; p < LEAF_PICS; p++) {
+      let inN = 0, inC = 0, rimN = 0, rimC = 0;
+      const ox = (p % 4) * S, oy = Math.floor(p / 4) * S;
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+        const u = (x + 0.5 - S / 2) / (S / 2 - 3), v = (y + 0.5 - S / 2) / (S / 2 - 3), r = Math.hypot(u, v), on = a.data[((oy + y) * a.w + ox + x) * 4 + 3] >= 128;
+        if (r < 0.6) (inN++, (inC += on ? 1 : 0));
+        else if (r > 0.85 && r < 1) (rimN++, (rimC += on ? 1 : 0));
+      }
+      expect(inC / inN).toBeGreaterThan(0.5); // a mass of leaves…
+      expect(inC / inN).toBeLessThan(0.97); // …with the sky between some of them
+      expect(rimC / rimN).toBeLessThan(inC / inN); // and thinner at the edge: the outline is leaves
+    }
+  });
+  it('near trees: a phone draws at most 40; every tier within its vertex budget', () => {
+    expect(TREE_TIERS.phone.near).toBeLessThanOrEqual(40);
+    expect(TREE_TIERS.low.near).toBeLessThanOrEqual(TREE_TIERS.phone.near);
+    for (const t of Object.values(TREE_TIERS)) {
+      expect(t.near * 2500).toBeLessThanOrEqual(400000);
+      expect(t.hand).toBeLessThanOrEqual(30);
+      expect(t.band).toBeGreaterThan(0);
+    }
   });
   it('gardens follow the climate and the calendar', () => {
     for (const c of ['tropical', 'arid', 'mediterranean', 'temperate', 'continental', 'boreal', 'polar']) expect(plantMix(c).length).toBeGreaterThan(0);

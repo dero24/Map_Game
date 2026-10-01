@@ -192,6 +192,61 @@ the channel's buoys and markers) — are one layer, drawn in **two draws** howev
 - The atlas takes any foundry geometry: people (9.5) and trees (1.15) can use the same
   `ImpostorAtlas` + card shader.
 
+## Near trees: limbs and leaf cards (`world/nearTrees.ts`, `render/leafCards.ts`)
+
+Round 11's must-fix 4 ("trees at 5–10 m, ninth round: change the approach"). Within the hand-over
+distance a tree is drawn from its **near model** (`assets/flora.ts` `nearTreeGeometry`, grown from
+the far recipe's own plan: docs/ASSET_FOUNDRY.md): a trunk that flares and tapers, scaffold limbs
+and a second order of branches reaching into the crown, and the crown 8–20 leaf-cluster cards with
+the sky between the leaves. Past it, the tiles' own solid crowns, as before.
+
+- **The layer** (main thread; stream `onTile`/`onUnload` → `add`/`remove`, `update` each frame):
+  `add` finds a tile's `trees:<kind>:<v>` meshes (kinds in `NEAR_KINDS`), gives each a per-instance
+  `aNear` and its material the `TREE_LOD 1` define. Every `step` m moved (and twice a second) it
+  re-sorts the mounted trees within reach, nearest first under the tier's cap (`pickNear`), marks
+  the taken ones' `aNear`, and fills the draws: **one instanced draw per model in use** for the
+  limbs (`propMaterial({ treeLod: 'near' })`, the far instance's own matrix) and **one instanced
+  draw for every card of every near tree** (`leafCards.ts`). Nothing per tree. A tree it hasn't
+  taken (over the cap, a tile it was never told of, a palm) draws whole from its far mesh. The
+  near wood is the props' material (`treeLod: 'near'`: the far trunk's own sway and paint) with bark
+  furrows running up it in its own frame.
+- **The hand-over** (`propMaterial` `TREE_LOD_U` = hand-over distance, band, mode): both models
+  compute the far share from the tree foot's distance to the eye (`farShare`: 0 inside, 1 past the
+  band) and split the pixels on one ordered dither (`dither4`) — the far crown where the dither is
+  under its share, the near model the rest. A marked tree inside the hand-over folds its far
+  instance to a point in the vertex shader (no fragments at all). When more trees are within reach
+  than the cap allows, the hand-over comes in so the first tree left out stays past the band and a
+  step's walk (a tree joins and leaves inside the band; it never pops in close). Mode 1 draws far
+  crowns only, mode 2 near models only (`__GAME__.nearTrees.mode`, a comparison); `?neartrees=0`
+  turns the layer off.
+- **The cards**: a quad square to the eye through each cluster's middle (corners in `aCorner`; the
+  position attribute folds to a point far underground, so an override pass — the id pass, the shadow
+  pass — draws nothing of it), turned a little and every other one mirrored, swaying with the far
+  crown's own wind and rocking in it. The picture is cut out leaf by leaf (alpha test, eased as the
+  mips shrink it). Each card stands at the front of its cluster (pushed toward the eye by 45% of
+  its half-width, drawn as large as from the cluster's middle), so the limbs inside a cluster go
+  behind its leaves. Lit as the far crown is: each pixel takes the normal of the crown's ball
+  (its middle and radius, the same ×1.4 flattening) where its sight line meets the ball's front —
+  what the far crown shows there; the card's own place inside the crown would turn every leaf
+  toward the eye and darken the crown a shade at the hand-over — with 25% of the cluster's own
+  roundness, the far crown's underside AO and the heart's cards darker, the instance green × each
+  leaf's shade, pigment, snow, the autumn turn by the species' fall hue, leaf fall leaf by leaf,
+  the cherry's blossom. The shadow map holds the far crown's solid ball (the shadow pass's override
+  draws every far instance whole, so the near tree's shadow is the far one's): a card looks it up
+  from that ball's surface stepped toward the sun, as the far crown does, so only buildings and
+  other trees shade it. The near wood casts nothing of its own for the same reason.
+- **Budgets** (`render/quality.ts` `TREE_TIERS`, tested in `tests/foundry.test.ts` and
+  `tests/nearTrees.test.ts`): ≤ 2,500 vertices a near tree; desktop 160 trees to 30 m (band 6),
+  phone 40 to 24 m (band 5), low 20 to 16 m (band 4, 128 px pictures); leaf atlas 1024 × 512 RGBA
+  (2.7 MB with mips; 0.7 MB on low). Draws: the models in use (a street's 2–6) + 1.
+- **The check**: `tools/tree-check.js` (in-page, `?capture=1`: `await __TREECHECK__('tag')`) shoots
+  review frame 15's tree at 5, 8, 10 and 11 m, the hand-over at 30 m (near only, far only, both)
+  and 40 m, and a mask pass per close frame (that tree alone, leaves green, wood red, sky blue;
+  `nearTrees.mask`); `python3 tools/tree-metrics.py shots/treecheck-<tag>-*-mask.png` measures sky
+  through the crown, the longest straight edge of its outline, the limbs entering it and the
+  trunk's taper. The workbench's "trees up close" family (`/kit.html`) runs the same layer on every
+  species, orbit in and out across the hand-over.
+
 ## Ground paint
 
 - `groundPaint.ts` windows `detail` (300 m) + `mid` (1.6 km) re-centre on the walker and paint
