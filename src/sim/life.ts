@@ -751,6 +751,12 @@ export class LifeClient {
           sx = 0.97 + hashf(i * 7919 + variant) * 0.06; sy = 0.96 + hashf(i * 104729 + variant) * 0.08; sz = 0.97 + hashf(i * 31 + variant * 131) * 0.06;
         } else if (kind === 2) {
           if (dist < 25) st.pedsNear++;
+          // on the ground under them, as the cars are: the sim walks them 12 cm over their street's
+          // own height, and a shoe hovering over the sidewalk read as a block on stilts of shadow
+          if (this.ground && dist < 300 && (amt > -0.5 || amt < -3.5)) {
+            const gy = this.ground(x, z, y - 0.12);
+            if (Number.isFinite(gy) && Math.abs(gy - (y - 0.12)) < 0.5) y = gy + 0.005;
+          }
           // (stopped for a chat, the dog waits at the end of its lead — the other hand does the talking)
           lead = flags & (PED.DOG << 1) && (amt > -0.5 || amt < -3.5) && dist < 220 && this.nDogs < DOG_CAP ? this.walkDog(i, li, x, y, z, yaw, amt, snap[o + S.ANIM]) : 0;
           if (amt < -0.5 && amt > -1.999) {

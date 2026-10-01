@@ -362,8 +362,11 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
     on the CPU, so it ends in the drawn hand (within 2 cm: `tests/people.test.ts`) — to the
     dog's collar (`DOG_COLLAR`). The dogs draw with `dogMaterial`: the fox's trot, the tail
     carried and wagged side to side.
-  - Nobody stands in the first steps in from a front door (`interiors.ts` `people`): a resident
-    there was cut in half at the lens of anyone walking in.
+  - Walkers are drawn on the ground under them (`life.ts`, `ground` = `WalkWorld.outdoorNear`, within
+    300 m): the sim walks them 12 cm over their street's own height, and the shoes hovered.
+  - Nobody stands in the first steps in from a front door, or sits within 2.2 m of where you stand
+    once you're in (`interiors.ts` `people`): a resident there was cut in half at the lens of
+    anyone walking in.
 
 ## The shore's calendar (`src/world/calendar.ts`) — round 10's must-fix 5
 

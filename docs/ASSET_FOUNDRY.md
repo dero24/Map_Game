@@ -119,7 +119,8 @@ unique vertices and 2,700 triangles (indexed), the crowd's lite person < 300.
     trainers, dark brown on a crepe sole — never a black block). The
     hands are rounded mittens with a thumb; the head is an egg narrowing to the jaw, with a nose,
     ears and a painted face. Hems are doubled rings: a crisp short sleeve at mid upper-arm,
-    shorts just above the knee.
+    shorts just above the knee, a swimsuit top's edge (the chest above it has its own marker,
+    `MARK.chest`: the shirt, or bare on the beach).
   - **Indexed**, unlike the other families: a smooth limb needs its rings shared across the
     joint, and sharing them cuts the vertex shader to about a fifth of the same triangles
     unshared. 1,472 vertices and 2,522 triangles (the old faceted body: 1,764 vertices and 588
