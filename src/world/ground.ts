@@ -319,7 +319,7 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
             float tramp = smoothstep(11.0, 16.0, T.g) * (1.0 - smoothstep(90.0, 130.0, T.g));
             float churn = octv(xz, 0.05, fp) + octv(xz + 4.0, 0.14, fp) * 0.9 + octv(xz - 2.0, 0.38, fp) * 0.8 + octv(xz + 7.0, 0.9, fp) * 0.6;
             float pock = smoothstep(0.6, 0.86, vnoise(xz / 0.09)) * smoothstep(1.8, 4.5, 0.09 / fp) + smoothstep(0.62, 0.88, vnoise(xz / 0.24 + 3.3)) * smoothstep(1.8, 4.5, 0.24 / fp);
-            gm *= (1.0 + sandy * tramp * churn * 0.5) * (1.0 - sandy * tramp * pock * 0.3);
+            gm *= (1.0 + sandy * tramp * churn * 0.44) * (1.0 - sandy * tramp * pock * 0.27);
             vec2 fc = floor(xz / 0.62), ff = xz / 0.62 - fc;
             if (hash12(fc + 3.7) < 0.8 * tramp) {
               float a = hash12(fc + 9.1) * 6.2832, ca = cos(a), sa = sin(a);
@@ -343,7 +343,7 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
         alb = pigment(alb, vWorldPos);
         float sh = shadowAt(vWorldPos, N);
         vec3 col = paintLight(alb, N, vWorldPos, sh, 1.0);
-        col *= 1.0 + (gm - 1.0) * 1.3 * smoothstep(0.3, 1.1, dot(col, vec3(0.2126, 0.7152, 0.0722)));
+        col *= 1.0 + (gm - 1.0) * 1.15 * smoothstep(0.3, 1.1, dot(col, vec3(0.2126, 0.7152, 0.0722)));
         gl_FragColor = vec4(applyFog(col, vWorldPos), 1.0);
       }`,
   });

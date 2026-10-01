@@ -187,7 +187,7 @@ steeper axis), so it fades into the wash with distance and height, never shimmer
 come through the brush (the Kuwahara's ~1.6 px radius up close).
 
 - The grain is gathered as one luminance multiplier (`gm`): it multiplies the albedo, and once lit
-  the ground takes it again in proportion to how bright it's lit (`col *= 1 + (gm − 1)·1.3·…`). The
+  the ground takes it again in proportion to how bright it's lit (`col *= 1 + (gm − 1)·1.15·…`). The
   tonemap's shoulder otherwise takes a sunlit walk's grain and most of a beach's (at L* 87 a ±10%
   albedo change shows as ±1.4 L*, against ±2.5 on a walk at L* 70). The sand reads mostly by its
   shadows (a lee, a pock, a footprint's pit), which the shoulder and the brush keep.
