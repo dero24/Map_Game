@@ -31,7 +31,7 @@ interface Streams { pos: Float32Array; nrm: Float32Array; col: Float32Array; wal
  *  attribute (0: the building itself). Unset: no stream, no cost. */
 const tagging = () => (globalThis as { __TAG_PIECES__?: boolean }).__TAG_PIECES__ === true;
 /** Pieces that are the building's, not its furnishing (door casings and leaves, skirting, lift doors). */
-export const ARCH_KEY = /^(frame:|leaf:|skirt|lift(Frame|Leaf|Button))/;
+export const ARCH_KEY = /^(frame:|leaf:|leafShut:|skirt|lift(Frame|Leaf|Button))/;
 
 /** Vertex streams for the interior material: position, normal, colour, aWall, aInfo, aOut. */
 export class Mesher {
@@ -254,9 +254,20 @@ export function pieceGeo(key: string, make: () => D.DecorPart[]): THREE.BufferGe
 }
 
 interface Rec { key: string; geo: THREE.BufferGeometry; m: number[]; c: number[] }
-/** Pieces that move once they're built (a lift's door leaves: a ride slides them open): always an
- *  InstancedMesh of their own, never baked into the merged mesh, so their instances can be moved. */
+/** Pieces that move once they're built (a lift's door leaves: a ride slides them open; a WC's shut
+ *  door swings as you come to it): always an InstancedMesh of their own, never baked into the merged
+ *  mesh, so their instances can be moved. */
 export const MOVING = new Set(['liftLeaf']);
+export const moving = (key: string) => MOVING.has(key) || key.startsWith('leafShut:');
+/** A piece's instance matrix (column-major): at local (uc, vc), height y, its x along ax (its back,
+ *  +z, turned with it: a proper rotation about y), stretched `sx` times along x. */
+export function placeM(P: Plan, uc: number, vc: number, y: number, ax: P2, sx = 1): number[] {
+  const [px, pz] = toW(P, uc, vc);
+  // piece x → ax, piece z → (−ax.v, ax.u)
+  const axw = [P.ux * ax[0] + P.vx * ax[1], P.uz * ax[0] + P.vz * ax[1]];
+  const azw = [P.ux * -ax[1] + P.vx * ax[0], P.uz * -ax[1] + P.vz * ax[0]];
+  return [axw[0] * sx, 0, axw[1] * sx, 0, 0, 1, 0, 0, azw[0], 0, azw[1], 0, px, y, pz, 1];
+}
 /** Repeated pieces: one InstancedMesh per key (≥ 2 of them), a single one baked into the main mesh. */
 export class Instancer {
   private recs = new Map<string, Rec>();
@@ -267,12 +278,7 @@ export class Instancer {
   put(key: string, make: () => D.DecorPart[], uc: number, vc: number, y: number, ax: P2, tint = 0xffffff, sx = 1): number {
     let r = this.recs.get(key);
     if (!r) { r = { key, geo: pieceGeo(key, make), m: [], c: [] }; this.recs.set(key, r); inUse.set(key, (inUse.get(key) ?? 0) + 1); }
-    const P = this.P;
-    const [px, pz] = toW(P, uc, vc);
-    // piece x → ax, piece z → (−ax.v, ax.u): a proper rotation about y
-    const axw = [P.ux * ax[0] + P.vx * ax[1], P.uz * ax[0] + P.vz * ax[1]];
-    const azw = [P.ux * -ax[1] + P.vx * ax[0], P.uz * -ax[1] + P.vz * ax[0]];
-    r.m.push(axw[0] * sx, 0, axw[1] * sx, 0, 0, 1, 0, 0, azw[0], 0, azw[1], 0, px, y, pz, 1);
+    r.m.push(...placeM(this.P, uc, vc, y, ax, sx));
     const t = lin3(tint);
     r.c.push(t[0], t[1], t[2]);
     return r.m.length / 16 - 1;
@@ -297,7 +303,7 @@ export class Instancer {
   /** Build the instanced meshes (a step at a time); singles (and the rarest keys past `maxDraws`)
    *  are baked into `main`. (y0, y1: the storeys built — a tower's window — else the building.) */
   *finishGen(main: Mesher, mat: THREE.Material, maxDraws: number, y0 = this.P.floor0, y1 = this.P.ceilTop): Generator<void, { meshes: THREE.InstancedMesh[]; verts: number }, void> {
-    const recs = [...this.recs.values()].sort((a, b) => Number(MOVING.has(b.key)) - Number(MOVING.has(a.key)) || b.m.length - a.m.length);
+    const recs = [...this.recs.values()].sort((a, b) => Number(moving(b.key)) - Number(moving(a.key)) || b.m.length - a.m.length);
     const meshes: THREE.InstancedMesh[] = [];
     let verts = 0, baked = 0, placed = 0;
     const m4 = new THREE.Matrix4();
@@ -306,7 +312,7 @@ export class Instancer {
     const sphere = new THREE.Sphere(new THREE.Vector3(P.cx, y0 + hh, P.cz), Math.hypot(P.L / 2, P.W / 2, hh) + 1);
     for (const r of recs) {
       const n = r.m.length / 16;
-      if (MOVING.has(r.key) || (n >= 2 && meshes.length < maxDraws)) {
+      if (moving(r.key) || (n >= 2 && meshes.length < maxDraws)) {
         const im = new THREE.InstancedMesh(r.geo, mat, n);
         im.instanceMatrix.array.set(r.m);
         im.instanceMatrix.needsUpdate = true;
@@ -516,8 +522,12 @@ const grow = (r: Rect, m: number): Rect => ({ u0: r.u0 - m, u1: r.u1 + m, v0: r.
 // ---------------- partitions and doorways ----------------
 export const DOOR_H = 2.1;
 /** Where a doorway's leaf stands open: into the room it serves (not the hall or corridor it opens
- *  from), hinged at the jamb nearer that room's corner. */
-export interface LeafSpot { level: number; ax: 0 | 1; c: number; hinge: number; side: -1 | 1; w: number }
+ *  from), hinged at the jamb nearer that room's corner. `t`: the doorway's middle along its wall.
+ *  `shut`: a WC's or a bathroom's door off a room of the day stands shut (it opens as you come to it). */
+export interface LeafSpot { level: number; ax: 0 | 1; c: number; t: number; hinge: number; side: -1 | 1; w: number; shut?: 1; room?: Rect }
+/** The rooms a front door opens on and you sit in: a WC or a bathroom off one keeps its door shut
+ *  (review round 11: "a WC is in view through the living room's left door"). */
+const DAY = new Set(['living', 'great', 'kitchen', 'dining']);
 export function* drawPartitionsGen(d: Draw, P: Plan, L: Layout, ceil: (k: number) => number, wallHex = 0xffffff): Generator<void, { leaves: LeafSpot[] }, void> {
   const f = (k: number) => P.floor0 + k * P.floorH;
   const M = P.main;
@@ -561,13 +571,17 @@ export function* drawPartitionsGen(d: Draw, P: Plan, L: Layout, ceil: (k: number
   for (const dw of L.doors) {
     if (dw.w > 1.15) continue; // a wide opening: cased, no leaf
     const [ra, rb] = dw.rooms.map((i) => L.rooms[i]);
-    // the leaf swings into the room that isn't circulation (a flat's own door: into the flat)
-    const into = circ.has(ra.type) && !circ.has(rb.type) ? rb : circ.has(rb.type) && !circ.has(ra.type) ? ra : (ra.r.u1 - ra.r.u0) * (ra.r.v1 - ra.r.v0) < (rb.r.u1 - rb.r.u0) * (rb.r.v1 - rb.r.v0) ? ra : rb;
+    // the leaf swings into the room that isn't circulation (a flat's own door: into the flat), a
+    // WC's or a bathroom's into it
+    const wet = (r: Room) => r.type === 'wc' || r.type === 'bath';
+    const into = wet(ra) !== wet(rb) ? (wet(ra) ? ra : rb) : circ.has(ra.type) && !circ.has(rb.type) ? rb : circ.has(rb.type) && !circ.has(ra.type) ? ra : (ra.r.u1 - ra.r.u0) * (ra.r.v1 - ra.r.v0) < (rb.r.u1 - rb.r.u0) * (rb.r.v1 - rb.r.v0) ? ra : rb;
     const side: -1 | 1 = (dw.ax === 0 ? (into.r.v0 + into.r.v1) / 2 : (into.r.u0 + into.r.u1) / 2) > dw.c ? 1 : -1;
     // hinge on the jamb nearer the room's own corner, so the leaf lies back along its wall
     const rm = dw.ax === 0 ? (into.r.u0 + into.r.u1) / 2 : (into.r.v0 + into.r.v1) / 2;
     const hinge = dw.t > rm ? dw.t + dw.w / 2 : dw.t - dw.w / 2;
-    leaves.push({ level: dw.level, ax: dw.ax, c: dw.c, hinge, side, w: dw.w });
+    const other = into === ra ? rb : ra;
+    const shut = wet(into) && DAY.has(other.type);
+    leaves.push({ level: dw.level, ax: dw.ax, c: dw.c, t: dw.t, hinge, side, w: dw.w, ...(shut ? { shut: 1 as const, room: { ...into.r } } : {}) });
   }
   return { leaves };
 }

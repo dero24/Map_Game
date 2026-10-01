@@ -271,29 +271,125 @@ export function cafeSet(topHex: number, chairHex: number, parasol: number | null
 const T = 0xffffff;
 const box = (w: number, h: number, d: number, x: number, y: number, z: number) => ni(new THREE.BoxGeometry(w, h, d)).translate(x, y + h / 2, z);
 
-/** A fitted kitchen along a wall, `len` long: base units with a worktop, sink, hob and oven, wall
- *  units and a hood above, a tall fridge at the end. Cabinet fronts take the tint. */
-export function kitchenRun(len: number, top = 0x4a4540, splash = 0xe9eef0, wall = true): Parts {
-  // (`wall` false: the run under a window — base units and worktop with the sink, no wall units, no
-  // hood, no fridge, a low upstand for a splashback)
-  const fr = 0.8, run = wall ? Math.max(1.2, len - fr - 0.05) : len, x0 = -len / 2;
-  const out: Parts = [
-    P(box(run, 0.08, 0.56, x0 + run / 2, 0, 0.02), 'solid', 0x2e2a26), // plinth
-    P(box(run, 0.8, 0.6, x0 + run / 2, 0.08, 0), 'solid', T), // base units
-    P(box(run + 0.02, 0.04, 0.64, x0 + run / 2, 0.88, -0.01), 'porcelain', top), // worktop
-    P(box(run, wall ? 0.53 : 0.1, 0.015, x0 + run / 2, 0.92, 0.3), 'porcelain', splash), // backsplash
-  ];
-  if (wall) out.push(P(box(run, 0.75, 0.36, x0 + run / 2, 1.45, 0.12), 'solid', T)); // wall units
-  for (let x = x0 + 0.5; x < x0 + run - 0.1; x += 0.5) out.push(P(box(0.012, 0.66, 0.01, x, 0.14, -0.305), 'solid', 0x8d8a84)); // door joins
-  const sink = x0 + run * 0.35, hob = x0 + run * 0.72;
-  out.push(P(box(0.6, 0.06, 0.4, sink, 0.865, -0.02), 'porcelain', 0x8e969a));
-  out.push(P(box(0.04, 0.28, 0.04, sink, 0.92, 0.2), 'porcelain', 0xc0c4c6));
-  out.push(P(box(0.64, 0.012, 0.56, hob, 0.92, -0.01), 'solid', 0x222326));
-  out.push(P(box(0.6, 0.6, 0.012, hob, 0.15, -0.31), 'glass', 0x2a2b2e)); // oven door
-  if (!wall) return out;
-  out.push(P(box(0.76, 0.1, 0.4, hob, 1.35, 0.1), 'porcelain', 0xb8bcbf)); // hood
-  out.push(P(box(fr, 1.9, 0.62, x0 + run + 0.05 + fr / 2, 0, 0), 'porcelain', 0xe4e5e1)); // fridge
-  out.push(P(box(0.04, 0.7, 0.03, x0 + run + 0.05 + fr - 0.1, 0.9, -0.325), 'metal', 0x8a8e90));
+/** A home's fitted kitchen along one wall (review round 11: "the kitchen in view is a sink run, with
+ *  no range, fridge or wall cabinets"). Everything in the piece's x, −len/2 … len/2: */
+export interface KitchenSpec {
+  len: number;
+  /** the sink's middle (under the window, where the run has one) */
+  sink: number;
+  /** the cooker's middle — a range set into the run, its hood over it — or null: it stands on
+   *  another wall of the room (`stove`) */
+  range: number | null;
+  /** the fridge at the run's left (−1) or right (+1) end, or on another wall (0: `fridge`) */
+  fridge: -1 | 0 | 1;
+  /** the stretches with a window over them: no wall cabinets there, a low upstand for the splash */
+  gaps: [number, number][];
+}
+/** A fridge's width, a cooker's, a wall cabinet's door (m); the wall cabinets hang from WALL_Y. */
+export const FRIDGE_W = 0.72, COOKER_W = 0.6, WALL_Y = 1.45;
+const qk = (x: number) => (Math.round(x * 20) / 20).toFixed(2);
+/** The piece key a kitchen spec draws as (everything that shapes it, to 5 cm). */
+export const kitchenKey = (s: KitchenSpec) => `kitchen:${qk(s.len)}:${qk(s.sink)}:${s.range === null ? 'n' : qk(s.range)}:${s.fridge}:${s.gaps.map(([a, b]) => `${qk(a)}~${qk(b)}`).join(',')}`;
+/** The stretches of [a, b] left once `cut` is taken out (each at least `min` long). */
+function stretchesOf(a: number, b: number, cut: [number, number][], min: number): [number, number][] {
+  let segs: [number, number][] = [[a, b]];
+  for (const [c0, c1] of cut) segs = segs.flatMap(([s0, s1]) => (c1 <= s0 || c0 >= s1 ? [[s0, s1]] : [[s0, c0], [c1, s1]]) as [number, number][]);
+  return segs.filter(([s0, s1]) => s1 - s0 >= min);
+}
+/** A run of doors `y0`–`y1` high on the front (z) of [a, b]: the joins between them, ~0.5–0.6 m apart. */
+function joins(out: Parts, a: number, b: number, y0: number, y1: number, z: number) {
+  const n = Math.max(1, Math.round((b - a) / 0.6));
+  for (let i = 1; i < n; i++) out.push(P(box(0.012, y1 - y0, 0.01, a + ((b - a) * i) / n, y0, z), 'solid', 0x8d8a84));
+}
+/** The cooker: a range's oven and hob in steel, its glass door and handle, the knobs, four rings, the
+ *  backguard; a chimney hood over it to the cabinet tops. x across, the back at +z. */
+function rangeParts(out: Parts, x: number, hood = true) {
+  const st = 0xb8bcbf;
+  out.push(P(box(COOKER_W - 0.01, 0.9, 0.6, x, 0, 0), 'metal', st)); // the body
+  out.push(P(box(COOKER_W - 0.03, 0.012, 0.52, x, 0.9, -0.03), 'solid', 0x222326)); // the hob
+  for (const [dx, dz] of [[-0.14, -0.15], [0.14, -0.15], [-0.14, 0.1], [0.14, 0.1]]) out.push(P(box(0.17, 0.014, 0.17, x + dx, 0.905, dz), 'metal', 0x3a3b3e)); // the rings
+  out.push(P(box(COOKER_W - 0.01, 0.13, 0.04, x, 0.9, 0.27), 'metal', 0xc8ccce)); // the backguard
+  out.push(P(box(0.46, 0.38, 0.012, x, 0.2, -0.305), 'glass', 0x2a2b2e)); // the oven's door
+  out.push(P(box(0.48, 0.024, 0.03, x, 0.64, -0.325), 'metal', 0x8a8e90)); // its handle
+  out.push(P(box(0.5, 0.04, 0.02, x, 0.755, -0.305), 'solid', 0x2a2b2e)); // the knobs' strip
+  if (!hood) return;
+  out.push(P(box(COOKER_W + 0.02, 0.1, 0.5, x, 1.58, 0.05), 'metal', st)); // the hood's canopy
+  out.push(P(box(0.3, 2.17 - 1.68, 0.26, x, 1.68, 0.17), 'metal', 0xc8ccce)); // its chimney, up to the cabinet tops
+}
+/** The fridge (a fixed off-white), its two doors and handles; `w` wide (a flat's slim one: 0.6 m). */
+function fridgeParts(out: Parts, x: number, w = FRIDGE_W) {
+  out.push(P(box(w - 0.02, 1.85, 0.64, x, 0, -0.01), 'porcelain', 0xe6e7e2));
+  out.push(P(box(w - 0.04, 0.014, 0.01, x, 1.16, -0.335), 'solid', 0x8d8a84)); // the freezer's door below
+  out.push(P(box(0.03, 0.55, 0.03, x + w / 2 - 0.09, 1.25, -0.345), 'metal', 0x8a8e90));
+  out.push(P(box(0.03, 0.4, 0.03, x + w / 2 - 0.09, 0.62, -0.345), 'metal', 0x8a8e90));
+}
+/** A spec back from its key (tests, probes). */
+export function kitchenSpecOf(key: string): KitchenSpec | null {
+  const m = /^kitchen:([-\d.]+):([-\d.]+):(n|[-\d.]+):(-?\d):(.*)$/.exec(key);
+  if (!m) return null;
+  return { len: +m[1], sink: +m[2], range: m[3] === 'n' ? null : +m[3], fridge: +m[4] as -1 | 0 | 1, gaps: m[5] ? m[5].split(',').map((g) => g.split('~').map(Number) as [number, number]) : [] };
+}
+/** The base run's ends: the run less the fridge. */
+const baseOf = (s: KitchenSpec): [number, number] => [s.fridge < 0 ? -s.len / 2 + FRIDGE_W + 0.02 : -s.len / 2, s.fridge > 0 ? s.len / 2 - FRIDGE_W - 0.02 : s.len / 2];
+/** Where a kitchen's wall cabinets hang (x): over the base run where the wall is solid — not in a
+ *  window's stretch, not over the cooker's hood — each stretch 30 cm or more; and the one over the
+ *  fridge (`fridge` set). */
+export function wallCabinets(s: KitchenSpec, fridge = false): [number, number][] {
+  const [b0, b1] = baseOf(s);
+  const cut: [number, number][] = s.gaps.map(([a, b]): [number, number] => [a - 0.02, b + 0.02]);
+  if (s.range !== null) cut.push([s.range - COOKER_W / 2 - 0.02, s.range + COOKER_W / 2 + 0.02]);
+  const out = stretchesOf(b0, b1, cut, 0.3);
+  if (fridge && s.fridge) out.push(s.fridge < 0 ? [-s.len / 2, -s.len / 2 + FRIDGE_W] : [s.len / 2 - FRIDGE_W, s.len / 2]);
+  return out;
+}
+/** A fitted kitchen (`KitchenSpec`): base units on a plinth with the worktop, the sink and its tap,
+ *  the cooker set in with its hood, the fridge at an end with a cabinet over it, wall cabinets along
+ *  the rest where the wall above is solid, a tiled splashback between (a low upstand under a window).
+ *  Cabinet fronts take the tint. */
+export function kitchen(s: KitchenSpec, top = 0x4a4540, splash = 0xe9eef0): Parts {
+  const x0 = -s.len / 2, x1 = s.len / 2;
+  const [b0, b1] = baseOf(s);
+  const rg: [number, number] | null = s.range === null ? null : [s.range - COOKER_W / 2, s.range + COOKER_W / 2];
+  const out: Parts = [];
+  // the plinth, the carcass and the worktop either side of the cooker (it has its own top)
+  for (const [a, b] of stretchesOf(b0, b1, rg ? [rg] : [], 0.05)) {
+    out.push(P(box(b - a, 0.08, 0.56, (a + b) / 2, 0, 0.02), 'solid', 0x2e2a26));
+    out.push(P(box(b - a, 0.8, 0.6, (a + b) / 2, 0.08, 0), 'solid', T));
+    out.push(P(box(b - a + 0.01, 0.04, 0.64, (a + b) / 2, 0.88, -0.01), 'porcelain', top));
+    joins(out, a, b, 0.14, 0.82, -0.305);
+    out.push(P(box(b - a - 0.02, 0.01, 0.01, (a + b) / 2, 0.7, -0.305), 'solid', 0x8d8a84)); // the drawers' line
+  }
+  // the splashback: tiled up to the wall cabinets, a low upstand where a window's over the worktop
+  const glass = s.gaps.map(([a, b]): [number, number] => [a - 0.02, b + 0.02]);
+  for (const [a, b] of stretchesOf(b0, b1, glass, 0.05)) out.push(P(box(b - a, 0.53, 0.015, (a + b) / 2, 0.92, 0.3), 'porcelain', splash));
+  for (const [a, b] of glass) { const c0 = Math.max(a, b0), c1 = Math.min(b, b1); if (c1 - c0 > 0.05) out.push(P(box(c1 - c0, 0.1, 0.015, (c0 + c1) / 2, 0.92, 0.3), 'porcelain', splash)); }
+  // the sink, its tap and spout
+  out.push(P(box(0.56, 0.06, 0.4, s.sink, 0.865, -0.02), 'porcelain', 0x8e969a));
+  out.push(P(box(0.04, 0.3, 0.04, s.sink, 0.92, 0.2), 'porcelain', 0xc0c4c6));
+  out.push(P(box(0.04, 0.03, 0.18, s.sink, 1.19, 0.12), 'porcelain', 0xc0c4c6));
+  if (s.range !== null) rangeParts(out, s.range);
+  // the wall cabinets: over the base run where the wall is solid, not over the cooker's hood
+  for (const [a, b] of wallCabinets(s)) {
+    out.push(P(box(b - a, 0.72, 0.34, (a + b) / 2, WALL_Y, 0.13), 'solid', T));
+    joins(out, a, b, WALL_Y + 0.04, WALL_Y + 0.68, -0.042);
+  }
+  if (s.fridge) {
+    const fx = s.fridge < 0 ? x0 + FRIDGE_W / 2 : x1 - FRIDGE_W / 2;
+    fridgeParts(out, fx);
+    out.push(P(box(FRIDGE_W, 0.3, 0.6, fx, 1.88, 0.0), 'solid', T)); // a cabinet over it
+  }
+  return out;
+}
+/** A cooker on a wall of its own (the run had no solid stretch for it): the range and its hood. */
+export function stove(): Parts {
+  const out: Parts = [];
+  rangeParts(out, 0);
+  return out;
+}
+/** A fridge on a wall of its own (`w`: a slim one where the wall is short). */
+export function fridge(w = FRIDGE_W): Parts {
+  const out: Parts = [];
+  fridgeParts(out, 0, w);
   return out;
 }
 

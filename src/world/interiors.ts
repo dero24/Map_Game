@@ -24,7 +24,7 @@ import { pedGeo, creatureMaterial } from '../sim/life';
 import * as D from '../assets/decor';
 import { toW, unstack, plateAt, storeyAt, ringOf, atriumEdges, liftCars, type Plan, type Rect, type Lift } from './interior/plan';
 import { layoutSteps, registerLayout, type Layout, type Room } from './interior/layout';
-import { Mesher, Draw, Instancer, IP, WOOD, roomMapGen, drawStairs, drawPartitionsGen, pieceGeo, type RoomMap } from './interior/mesh';
+import { Mesher, Draw, Instancer, IP, WOOD, roomMapGen, drawStairs, drawPartitionsGen, pieceGeo, placeM, type RoomMap } from './interior/mesh';
 import { Furnisher, furnishRoom, furnishLifts, skirtRoom, FABRIC, type Light, type NpcSpot } from './interior/furnish';
 
 export { planInterior, registerPlan, unstack, LocalPoly, type Plan, type Flight, type Lift } from './interior/plan';
@@ -40,7 +40,7 @@ const CAR_SCOPE = -9;
 const CAR = { w: 2.1, d: 1.6, gap: 0.12 };
 const NPC_MAX = 12; // residents an interior shows at once (the shared ped geometry's aAnim covers this many)
 /** Draw calls an interior may take for its instanced pieces (the budget is 60 all told). */
-const MAX_INSTANCED = 44;
+const MAX_INSTANCED = 47;
 /** Vertices past which no more rooms are furnished (the budget is 120k: a room's worth of margin). */
 const FURNISH_MAX = 110000;
 /** A tall building's storey stops furnishing past this many of its own merged vertices (a third of
@@ -69,11 +69,17 @@ interface Job {
   inst: Instancer | null;
   lights: Light[];
   leaves: Furnisher['liftLeaves'];
+  swing: Swing[];
   taken: (readonly Rect[])[];
   stats: InteriorStats | null;
   fab: number;
   dims: [number, number];
 }
+/** A door that stands shut and swings open as you come to it (a WC's off the living room): its
+ *  leaf's InstancedMesh (by name) and instance, its storey, its hinge (local), its wall (axis, line,
+ *  the doorway's middle along it and width, which way its room is), the leaf's x shut (across the
+ *  doorway) and open (into its room), the room it serves, and how far open it is (0 … 1). */
+interface Swing { key: string; idx: number; level: number; hu: number; hv: number; ax: 0 | 1; c: number; t: number; w: number; side: -1 | 1; shut: P2; open: P2; y: number; room: Rect; amt?: number; mesh?: THREE.InstancedMesh | null }
 
 export class Interiors {
   readonly group = new THREE.Group();
@@ -137,6 +143,8 @@ export class Interiors {
   private car: THREE.Group | null = null;
   private carAt: { li: number; car: number; k: number } | null = null;
   private carLamp: Light | null = null;
+  /** The standing build's doors that stand shut and swing open as you come to them. */
+  private swing: Swing[] = [];
 
   constructor(private walk: WalkWorld) {
     this.group.name = 'interiors';
@@ -203,6 +211,7 @@ export class Interiors {
       const lv = (feet - P.floor0) / P.floorH;
       this.onStairs = Math.abs(lv - Math.round(lv)) > 0.06;
     } else this.onStairs = false;
+    if (P && this.swing.length) this.swingDoors(P, x, z, feet, dt);
     if ((this.timer -= dt) > 0) return;
     this.timer = 0.2;
     this.pickLights(x, feet + 1.4, z);
@@ -360,6 +369,34 @@ export class Interiors {
   }
   private walkIds = new Map<string, number>();
   private walkId(fi: string | null) { return fi !== null ? this.walkIds.get(fi) ?? -2 : -2; }
+  /** A shut door (a WC's off the living room) swings open into its room as you step up to it — in
+   *  front of the doorway, within a stride of it, or in the room it serves — on its storey and
+   *  indoors, and shuts again once you've stepped away (a quarter turn in ~0.25 s; walking past it
+   *  along the wall leaves it shut). The doorway is always open in the walk world: the leaf is out of
+   *  your way before you reach it. */
+  private swingDoors(P: Plan, x: number, z: number, feet: number, dt: number) {
+    const u = (x - P.cx) * P.ux + (z - P.cz) * P.uz, v = (x - P.cx) * P.vx + (z - P.cz) * P.vz, k = storeyAt(P, feet);
+    const touched = new Set<THREE.InstancedMesh>();
+    for (const q of this.swing) {
+      if (!q.mesh) continue;
+      const was = q.amt ?? 0, held = was > 0.5;
+      // (along the wall from the doorway's middle; out from the wall on the side you come from)
+      const a = Math.abs((q.ax === 0 ? u : v) - q.t), out = -q.side * ((q.ax === 0 ? v : u) - q.c);
+      const m = held ? 0.3 : 0, r = q.room;
+      const inRoom = u > r.u0 - m && u < r.u1 + m && v > r.v0 - m && v < r.v1 + m;
+      const near = this.indoors && q.level === k && (inRoom || (a < q.w / 2 + (held ? 0.5 : 0.2) && out > -0.2 && out < (held ? 1.6 : 1.1)));
+      const amt = Math.max(0, Math.min(1, was + Math.max(-dt * 4, Math.min(dt * 4, (near ? 1 : 0) - was))));
+      if (amt === was) continue;
+      q.amt = amt;
+      // (a quarter turn about the hinge: its x from across the doorway to into the room, the leaf a
+      // hair into the room as it opens, as the open leaves stand)
+      const th = (amt * Math.PI) / 2, c = Math.cos(th), s = Math.sin(th);
+      const ax: P2 = [q.shut[0] * c + q.open[0] * s, q.shut[1] * c + q.open[1] * s];
+      q.mesh.instanceMatrix.array.set(placeM(P, q.hu + q.open[0] * 0.02 * s, q.hv + q.open[1] * 0.02 * s, q.y, ax), q.idx * 16);
+      touched.add(q.mesh);
+    }
+    for (const m of touched) m.instanceMatrix.needsUpdate = true;
+  }
 
   private pickLights(x: number, y: number, z: number) {
     // (a ceiling light in a room with windows is off by day: it comes on as the light goes)
@@ -448,6 +485,8 @@ export class Interiors {
         this.leafAt.set(key, l);
       }
     }
+    // (the doors that swing as you come to them: each leaf's instance, shut)
+    this.swing = job.swing.map((q) => ({ ...q, amt: 0, mesh: (mesh.getObjectByName(q.key) as THREE.InstancedMesh | undefined) ?? null }));
     this.fabU.value.set(job.fab);
     this.dimsU.value.set(job.dims[0], job.dims[1]);
     if (job.stats) this.lastStats = job.stats;
@@ -476,6 +515,7 @@ export class Interiors {
     this.win = null;
     this.leafMesh = null;
     this.leafAt.clear();
+    this.swing = [];
   }
   /** An unfinished build goes: whatever it had made (walls in its scope, a room map, pieces). */
   private dropJob(job: Job) {
@@ -503,7 +543,7 @@ export class Interiors {
     this.pending = this.job(this.active!, P, fp, k);
   }
   private job(fi: string, P: Plan, fp: Footprint, k: number): Job {
-    const job: Job = { fi, k: P.tall ? k : -1, win: this.windowOf(P, P.tall ? k : -1), scope: SCOPES[0] === this.scope ? SCOPES[1] : SCOPES[0], gen: null!, layout: null, roomTex: null, inst: null, lights: [], leaves: [], taken: [], stats: null, fab: 0xffffff, dims: [P.L / 2, P.W / 2] };
+    const job: Job = { fi, k: P.tall ? k : -1, win: this.windowOf(P, P.tall ? k : -1), scope: SCOPES[0] === this.scope ? SCOPES[1] : SCOPES[0], gen: null!, layout: null, roomTex: null, inst: null, lights: [], leaves: [], swing: [], taken: [], stats: null, fab: 0xffffff, dims: [P.L / 2, P.W / 2] };
     job.gen = this.steps(P, fp, job);
     return job;
   }
@@ -707,10 +747,20 @@ export class Interiors {
     yield;
     for (const lf of leaves) {
       if (++nd % 250 === 0) yield;
+      const w = Math.round(lf.w * 20) / 20;
+      if (lf.shut) {
+        // a WC's or a bathroom's door off a room of the day: shut in its doorway, from the hinge across
+        // to the far jamb (it swings into the room it serves as you come to it: swingDoors)
+        const hu = lf.ax === 0 ? lf.hinge : lf.c, hv = lf.ax === 0 ? lf.c : lf.hinge;
+        const across = Math.sign(lf.t - lf.hinge) || 1;
+        const shut: P2 = lf.ax === 0 ? [across, 0] : [0, across], open: P2 = lf.ax === 0 ? [0, lf.side] : [lf.side, 0];
+        const idx = inst.put(`leafShut:${w}`, () => D.doorLeaf(w - 0.04), hu, hv, fl(lf.level), shut, leafHex);
+        job.swing.push({ key: `interior:leafShut:${w}`, idx, level: lf.level, hu, hv, ax: lf.ax, c: lf.c, t: lf.t, w: lf.w, side: lf.side, shut, open, y: fl(lf.level), room: lf.room ?? { u0: 0, u1: 0, v0: 0, v1: 0 } });
+        continue;
+      }
       // the leaf's x runs from the hinge into the room
       const [uc, vc] = lf.ax === 0 ? [lf.hinge, lf.c + lf.side * 0.02] : [lf.c + lf.side * 0.02, lf.hinge];
       const ax: P2 = lf.ax === 0 ? [0, lf.side] : [lf.side, 0];
-      const w = Math.round(lf.w * 20) / 20;
       inst.put(`leaf:${w}`, () => D.doorLeaf(w - 0.04), uc, vc, fl(lf.level), ax, leafHex);
     }
     yield;

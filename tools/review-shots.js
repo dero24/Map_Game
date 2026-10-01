@@ -107,7 +107,61 @@ window.__REVIEW__ = async (tag = 'r', opts = {}) => {
   const B = [
     { label: '7 lawn / grass close-up', fn: () => { set(10.5); ground(lawn.x, lawn.z, 0.7, -0.12); } },
     { label: '8 the summer beach', fn: () => { set(13); if (um) look(um, 26, 6, 0.5); } },
-    { label: '9 marina, moored boats', fn: () => { set(17); if (boat) look(boat, 24, 7, 4.4); } },
+    { label: '9 marina, moored boats', fn: () => {
+      // a mapped marina's finger piers and the boats in its slips (docks.ts) — not the house docks a
+      // boat-cluster search lands on (round 11: "about five small boats"): the marina with the most
+      // boats in or within 25 m of its outline, framed from where the most of them are in the lens,
+      // each ≥ 0.1% of the frame (counted on its hull's box: ≥ 0.2% is the safe reading), and counted
+      set(17);
+      const M4 = new T.Matrix4(), P3 = new T.Vector3(), box = { skiff: [5, 1.9, 1.2], console: [7.2, 2.5, 2.2], cabin: [10.5, 3.4, 3.2], sail: [9.5, 3, 4], pontoon: [7.5, 2.6, 1.8], lobster: [11, 3.6, 3.2] };
+      const boats = [];
+      G.scene.traverse((o) => {
+        if (!o.name.startsWith('moored-boats:') || !o.isInstancedMesh) return;
+        for (let i = 0; i < o.count; i++) { o.getMatrixAt(i, M4); if (M4.elements[0] === 0 && M4.elements[10] === 0) continue; P3.setFromMatrixPosition(M4); boats.push({ x: P3.x, y: P3.y, z: P3.z, yaw: Math.atan2(M4.elements[8], M4.elements[10]), d: box[o.name.split(':')[1]] ?? [6, 2.4, 1.6] }); }
+      });
+      const inR = (x, z, r) => { let ins = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (r[i][1] > z !== r[j][1] > z && x < ((r[j][0] - r[i][0]) * (z - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) ins = !ins; return ins; };
+      const segD = (x, z, a, b) => { const dx = b[0] - a[0], dz = b[1] - a[1], L2 = dx * dx + dz * dz || 1, u = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / L2)); return Math.hypot(a[0] + dx * u - x, a[1] + dz * u - z); };
+      const rings = new Map();
+      for (const t of G.stream.loaded.values()) for (const a of t.areas ?? []) if (a.c === 'marina' && a.o?.[0]?.length >= 6) { const r = []; for (let i = 0; i + 1 < a.o[0].length; i += 2) r.push([a.o[0][i] / 10, a.o[0][i + 1] / 10]); rings.set(`${r[0][0].toFixed(1)},${r[0][1].toFixed(1)}`, r); }
+      let best = null;
+      for (const r of rings.values()) {
+        const mine = boats.filter((b) => inR(b.x, b.z, r) || r.some((p, k) => segD(b.x, b.z, r[(k + r.length - 1) % r.length], p) < 25));
+        if (mine.length >= 8 && (!best || mine.length > best.length)) best = mine;
+      }
+      if (!best) { console.log(`[review] 9: no mapped marina with 8 boats in reach (${rings.size} marinas) — the nearest cluster`); if (boat) look(boat, 24, 7, 4.4); return; }
+      // the lens: the game's, from candidate stands round the slips' middle, 7 m up, looking at it
+      const cx = best.reduce((s, b) => s + b.x, 0) / best.length, cz = best.reduce((s, b) => s + b.z, 0) / best.length, cy = best.reduce((s, b) => s + b.y, 0) / best.length;
+      const cam = new T.PerspectiveCamera(G.camera.fov, G.camera.aspect, 0.5, 2000);
+      const shares = () => best.map((b) => {
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+        const c = Math.cos(b.yaw), sn = Math.sin(b.yaw);
+        for (const u of [-b.d[1] / 2, b.d[1] / 2]) for (const v of [-b.d[0] / 2, b.d[0] / 2]) for (const yy of [b.y - 0.3, b.y + b.d[2]]) {
+          P3.set(b.x + u * c + v * sn, yy, b.z - u * sn + v * c).project(cam);
+          if (P3.z >= 1) return 0;
+          (x0 = Math.min(x0, P3.x)), (x1 = Math.max(x1, P3.x)), (y0 = Math.min(y0, P3.y)), (y1 = Math.max(y1, P3.y));
+        }
+        return (Math.max(0, Math.min(1, x1) - Math.max(-1, x0)) * Math.max(0, Math.min(1, y1) - Math.max(-1, y0))) / 4;
+      });
+      let pick = null;
+      for (const dist of [20, 26, 32, 40]) for (let k = 0; k < 24; k++) {
+        const ang = (k / 24) * Math.PI * 2, x = cx + Math.sin(ang) * dist, z = cz + Math.cos(ang) * dist;
+        if (G.walk.buildingAt(x, z) >= 0) continue;
+        let seen = true;
+        for (let f = 1; f < 8 && seen; f++) if (G.walk.buildingAt(x + (cx - x) * f / 8, z + (cz - z) * f / 8) >= 0) seen = false;
+        if (!seen) continue;
+        const eye = Math.max(G.world.terrain.heightAt(x, z) + 1.65, cy + 7);
+        cam.position.set(x, eye, z); cam.lookAt(cx, cy + 1, cz); cam.updateMatrixWorld(); cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+        const sh = shares(), n2 = sh.filter((v) => v >= 0.002).length, n1 = sh.filter((v) => v >= 0.001).length;
+        if (!pick || n2 > pick.n2 || (n2 === pick.n2 && n1 > pick.n1)) pick = { x, z, eye, ang, dist, n2, n1, n: sh.filter((v) => v > 0).length };
+      }
+      if (!pick) { if (boat) look(boat, 24, 7, 4.4); return; }
+      const g = G.world.terrain.heightAt(pick.x, pick.z);
+      G.walkParams.fly = pick.eye - g > 1.8;
+      G.walker.place(pick.x, pick.z, pick.ang, -Math.atan2(pick.eye - cy - 1, pick.dist));
+      if (G.walkParams.fly) G.walker.y = pick.eye;
+      console.log(`[review] 9 marina: ${pick.n} of its ${best.length} boats in frame, ${pick.n1} at ≥ 0.1% of it (${pick.n2} at ≥ 0.2%), from ${pick.dist} m`);
+      window.__REVIEW_COUNTS__ = { ...(window.__REVIEW_COUNTS__ ?? {}), 9: { inFrame: pick.n, over01: pick.n1, over02: pick.n2, marina: best.length } };
+    } },
     { label: '10 a house-front garden', fn: () => { set(10); for (let k = 0; k < 12; k++) { const b = near('garden:', s.x, s.z, k); if (b && look(b, 6, 2.2, 2.4)) break; } } },
     { label: '11 Monmouth Beach street', fn: async () => { set(16.5); await G.stream.ensureAround(mbx, mbz); street(mbx, mbz, 0.25); await wait(800); } },
     { label: '12 from the air', fn: () => { shot('roofs')(); set(17.8); } },

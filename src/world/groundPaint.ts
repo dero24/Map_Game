@@ -403,7 +403,7 @@ export class Painter {
     }
     return m.areas;
   }
-  dropTile(id: string) { this.tiles.delete(id); this.tileWalks.delete(id); this.merged.clear(); this.census.clear(); }
+  dropTile(id: string) { this.tiles.delete(id); this.tileWalks.delete(id); this.padsBy.delete(id); this.merged.clear(); this.census.clear(); }
   private roadsIn(x0: number, z0: number, x1: number, z1: number): Prepared<Road>[] {
     if (!this.tiles.size) return this.roads;
     const { key, m } = this.near(x0, z0, x1, z1);
@@ -501,6 +501,7 @@ export class Painter {
         ctx.stroke();
         if (k && level === 2) this.stone(ctx, () => ctx.stroke());
       });
+      this.underRaised(ctx, c0, d0, c1, d1, level); // (pads.ts: the ground under a raised house)
     }
     // Dense blocks are paved: where footprints cover a quarter of the ground within 60 m of a
     // building (a city block, not a suburb), the ground round it is concrete and flagstone out to
@@ -778,6 +779,28 @@ export class Painter {
     // …and near a beach the wind lays its sand along the kerbs and over the walks
     if (fine) this.drift(ctx, list, areas, clipBox);
     ctx.lineCap = 'round';
+  }
+
+  // ---- the ground under a raised house (pads.ts; review round 11, frame 5): its footprint filled
+  // with a parking pad, gravel or sand over the yard's lawn — the grass mask then grows none there.
+  // Every mounted tile's (the bake's too), dropped with it. ----
+  private padsBy = new Map<string, { pads: { pts: P[]; fill: string; stone: boolean; box: Box4 }[]; box: Box4 }>();
+  setPads(id: string, pads: { ring: [number, number][]; fill: string; stone: boolean }[], box: Box4) {
+    if (!pads.length) { this.padsBy.delete(id); return; }
+    this.padsBy.set(id, { box, pads: pads.map((q) => ({ pts: q.ring as P[], fill: q.fill, stone: q.stone, box: [Math.min(...q.ring.map((r) => r[0])), Math.min(...q.ring.map((r) => r[1])), Math.max(...q.ring.map((r) => r[0])), Math.max(...q.ring.map((r) => r[1]))] as Box4 })) });
+  }
+  private underRaised(ctx: CanvasRenderingContext2D, x0: number, z0: number, x1: number, z1: number, level: number) {
+    for (const t of this.padsBy.values()) {
+      if (t.box[2] < x0 - 1 || t.box[0] > x1 + 1 || t.box[3] < z0 - 1 || t.box[1] > z1 + 1) continue;
+      for (const q of t.pads) {
+        if (q.box[2] < x0 || q.box[0] > x1 || q.box[3] < z0 || q.box[1] > z1) continue;
+        ctx.beginPath();
+        pathOf(ctx, q.pts, true);
+        ctx.fillStyle = q.fill;
+        ctx.fill('nonzero');
+        if (q.stone && level === 2) this.stone(ctx, () => ctx.fill('nonzero'));
+      }
+    }
   }
 
   /** Loose stone where the path just drawn lies (the fine window's alpha: STONE_ALPHA). */
@@ -1070,6 +1093,8 @@ export interface GroundPaint {
   addWalks: (walks: number[], id?: string) => void;
   setTile: (id: string, roads: Road[], rings: [number, number][][], box: [number, number, number, number], fronts?: boolean[], areas?: Area[], weights?: number[], xing?: number[]) => void;
   dropTile: (id: string) => void;
+  /** The ground under a tile's raised houses (pads.ts), repainted where it lands. */
+  setPads: (id: string, pads: { ring: [number, number][]; fill: string; stone: boolean }[], box: [number, number, number, number]) => void;
   /** Where the painted ground is open (unpainted land or a green wash) inside a square — the
    *  grass field grows only there, so it can never sit on a painted sidewalk, walk, lot or beach. */
   grassMask: (x0: number, z0: number, size: number) => { res: number; data: Uint8Array };
@@ -1377,5 +1402,6 @@ export function paintGround(world: World, maxTex: number, walks: number[] = []):
     addWalks: (w: number[], id?: string) => painter.addWalks(w, id),
     setTile: (id, roads, rings, box, fronts, areas, weights, xing) => { painter.setTile(id, roads, rings, box, fronts, areas, weights, xing); detail.touch(box); mid.touch(box); },
     dropTile: (id) => painter.dropTile(id),
+    setPads: (id, pads, box) => { painter.setPads(id, pads, box); if (pads.length) { detail.touch(box); mid.touch(box); } },
   };
 }

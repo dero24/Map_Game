@@ -6,6 +6,7 @@ import { Horizon } from './world/horizon';
 import { Skyline } from './world/skyline';
 import { FarSkyline } from './world/farSkyline';
 import { KerbCars } from './world/kerbCars';
+import { underRaised, PAD_PAINT } from './world/pads';
 import { MicroLayer } from './world/microLayer';
 import { seasonAt, dayOfYear } from './world/season';
 import { setWorldDate } from './world/calendar';
@@ -245,6 +246,7 @@ async function main() {
   setGndMaterial(groundGroup.userData.groundMat); // synthetic tiles reuse this material
   worldRoot.add(buildWater(tt));
   const wakes = new Wakes(); // (every boat under way draws its V on the water)
+  wakes.bedAt = (x, z) => world.terrain.heightAt(x, z); // (none over a dock's sand or a bar)
   worldRoot.add(wakes.mesh);
   waterParams.uOpenSea.value = VIRTUAL ? 1 : 0; // (the open world's plane is the sea itself)
   { // the region's water: Puget Sound's green-steel, the Keys' turquoise, the Gulf's olive
@@ -335,6 +337,8 @@ async function main() {
     streamedGround();
     // J1: streamed tiles (past the bake) paint their streets and footprints into the ground windows
     if (a.spec.world || a.spec.synth) paint.setTile(a.spec.id, a.primRoads, a.fps.map((f) => f.ring as [number, number][]), [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1], a.fps.map((f) => !!f.front), a.areas, a.fps.map((f) => (f.kind === 'house' || f.kind === 'shed' ? 0.45 : 1)), a.xing);
+    // the ground under a raised house: a pad, gravel or sand — never lawn (pads.ts), every tile's
+    paint.setPads(a.spec.id, underRaised(a.fps, (x, z) => world.terrain.oceanDistAt(x, z)).map((q) => ({ ring: q.ring, fill: PAD_PAINT[q.kind], stone: q.kind === 'gravel' })), [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1]);
     grass.invalidateBox(a.spec.box);
   };
   stream.onUnload = (id) => { paint.dropTile(id); kerbCars.remove(id); micro.remove(id); crowd.remove(id); queueMicrotask(streamedGround); };
@@ -953,7 +957,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { ambientBalloons, walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, lift: ride, planInterior, registerPlan, plans, bld, life, stream, vehicles, farSkyline, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, streamParams, micro, crowd, kerbCars, get spawn() { return spawn; }, at: atPos };
+  (window as unknown as Record<string, unknown>).__GAME__ = { ambientBalloons, walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, lift: ride, planInterior, registerPlan, plans, bld, life, stream, vehicles, farSkyline, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, streamParams, micro, crowd, kerbCars, wakes, get spawn() { return spawn; }, at: atPos };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);
