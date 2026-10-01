@@ -16,10 +16,16 @@ import { shoreGroup } from './shore';
 import type { SynthResult } from './synth';
 import { setActiveStyle, styleByKey } from './styles';
 import { enrichTile, initLidar, lidarOn, setLidarLog, setLidarPort } from './lidar';
+import { enrichAerial, initAerial, aerialOn, prefetchAerial, setAerialLog } from './aerialFetch';
+import { setRoofSource } from './aerial';
+import { TAG_ROOF_COLOURS } from './realTile';
 
 // First visit to a cell: how long a detail build waits for its LiDAR measurement before
 // building from mapped priors (the measured rebuild then swaps in when it lands).
 const LIDAR_WAIT = 3500;
+// …and for its aerial photo (real roof colours, aerialFetch.ts) — fetched from the start of the
+// build, alongside the map data, so it has usually landed by then
+const AERIAL_WAIT = 1500;
 
 interface TileWorkerScope {
   postMessage(msg: unknown, transfer?: Transferable[]): void;
@@ -494,6 +500,8 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   // cell wholly out on the bay has none to close a sea polygon from (Elliott Bay's south cell
   // was a DEM smear: a lawn under trees); the ocean polygons are the coastline already closed.
   const mvtP = origin && (spec.synth || spec.world) ? mvtWater(spec, !!msg.lite) : null;
+  // A real cell's aerial photo starts now too (it only needs the box): real roof colours.
+  if (spec.world && !msg.lite) prefetchAerial(spec.box);
   // OSM/tile fetch starts first (it's the slow pole); DEM resolves in parallel.
   const tjP: Promise<TileJson> | null = spec.synth
     ? null
@@ -578,15 +586,24 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   }
   // Measured buildings: real footprints get LiDAR ridge/eave/roof shape before the builders
   // run. Lite (LOD) builds only use what's already cached; detail builds wait briefly.
-  let lidarLate = false;
+  let lidarLate = false, lidarNew = false;
   if (!syn && lidarOn()) {
     // (a vector twin is a stand-in: up now from priors, its measured rebuild later)
     const e = await enrichTile(tj, spec.box, msg.relief ? null : vec ? 0 : LIDAR_WAIT, !msg.lite);
-    // (a real cell's relief rebuild is for its measurements: none, nothing to swap; a stand-in's
-    // is for its ground, and is built whatever the survey says)
-    if (msg.relief && spec.world && e !== 'done') return null;
     lidarLate = e === 'late';
+    lidarNew = e === 'done';
   }
+  // Real roof colours off the cell's aerial photo (after the survey, whose new buildings count
+  // too). A stand-in or a coarse silhouette takes only what this browser already read.
+  let aerialLate = false, aerialNew = false;
+  if (!syn && aerialOn()) {
+    const a = await enrichAerial(tj, spec.box, msg.relief ? null : AERIAL_WAIT, !msg.lite && !vec);
+    aerialLate = a === 'late';
+    aerialNew = a === 'done';
+  }
+  // (a real cell's relief rebuild is for its measurements and its roofs: neither, nothing to swap;
+  // a stand-in's is for its ground, and is built whatever the survey says)
+  if (msg.relief && spec.world && (lidarOn() || aerialOn()) && !lidarNew && !aerialNew) return null;
   const tbuf = spec.terrain && !msg.lite ? await cachedFetch(base + spec.terrain.file) : undefined;
   const tile = await buildTile(tj, terrain, spec, msg.idBase, !!msg.lite);
   if (syn) tile.objs.push(...packGroup(syn.extra));
@@ -636,6 +653,7 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   // while the LiDAR read runs) — the stream asks for a relief rebuild and swaps it in.
   if ((!shipped || flatGround) && demP && spec.synth && !msg.lite && !msg.relief) tile.late = 1; // (a relief is the last word: never another)
   if (lidarLate && !msg.lite) tile.late = 1;
+  if (aerialLate && !msg.lite) tile.late = 1; // (its roof colours still on the way)
   if (waterLate && !msg.lite) tile.late = 1; // (its water still on the way: rebuilt when it lands)
   return tile;
 }
@@ -661,6 +679,15 @@ ctx.onmessage = (e: MessageEvent) => {
     if (m.fp) initCache(base, m.fp); // same idb database as the page
     const st = m.style ? styleByKey(m.style) : null;
     if (st) setActiveStyle(st); // Phase I: builders read the region's style (palettes, species, roof habits)
+    return;
+  }
+  if (m.kind === 'roofs') {
+    // where roof colours come from: the baked pack's aerial samples, and the streamed cells' photos
+    setRoofSource(m.painted ? 'painted' : null, TAG_ROOF_COLOURS);
+    if (m.aerial && origin) {
+      setAerialLog((msg) => ctx.postMessage({ kind: 'log', msg }));
+      initAerial(origin, m.relay || undefined);
+    }
     return;
   }
   if (m.kind !== 'build') return;
