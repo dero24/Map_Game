@@ -121,6 +121,15 @@ note means the browser was refused CORS and the relay took over (needs the worke
   the image's own road pixels, the median across images and dates → `fc`.
 - Licence: imagery CC BY-SA 4.0 — credit "© Mapillary contributors, CC BY-SA" next to the OSM
   credit; treat the per-building colours derived from it as share-alike.
+- Grounding the wall palettes meanwhile: EIA RECS 2024 table HC2.7 (housing units by outside wall,
+  millions) — Middle Atlantic siding 7.48 / brick 5.78 / wood 1.68 (brick ≈ 35% of units, much of
+  it apartments and row houses, which `rowStyle` and the block rules already brick); New England
+  brick ≈ 15%; East North Central ≈ 33%; West North Central ≈ 18%. `recipe.ts` `BRICK_SHARE` (0 in
+  the Northeast) is a choice to keep the shore's look, not data — and a regional share is the
+  wrong scale anyway (a beach town is far below its region's): the per-neighbourhood answer is the
+  Phase 2 hood layer (`docs/NEIGHBOURHOODS.md`).
+- The bake could read its roofs the way streamed cells do (registration, street balance:
+  `scripts/fetch-imagery.mjs` calling `aerial.ts` `readCell` on its tiles) on the next re-bake.
 - Cheaper first steps: batch with the next `t/vN` bump — read `building:color`,
   `building:facade:colour` and `roof:color` (common misspellings that carry real colours) in
   `realTile.ts`; and LiDAR RGB — many 3DEP point clouds carry colour from their project's own

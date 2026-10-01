@@ -201,6 +201,14 @@ describe('the baked shore\'s roof colours (aerial.ts tileRoofs)', () => {
     setRoofSource(null);
     expect([...tileRoofs(tj.buildings, true)].every((v) => v === -1)).toBe(true);
   });
+  it('passes a streamed cell\'s own readings straight through, whatever the region', () => {
+    const b = (ar?: number): Building => ({ r: [0, 0, 100, 0, 100, 100], h: 6, k: 'house', roof: 'gable', s: 7, ...(ar != null ? { ar } : {}) });
+    for (const src of ['painted', null] as const) {
+      setRoofSource(src, TAG_ROOF_COLOURS);
+      expect([...tileRoofs([b(0x6b5a4c), b(), b(0x55585c)], false)]).toEqual([0x6b5a4c, -1, 0x55585c]);
+    }
+    setRoofSource(null);
+  });
   it('leaves a mapped roof colour alone', () => {
     setRoofSource('painted', TAG_ROOF_COLOURS);
     const b = (rc: number): Building => ({ r: [0, 0, 100, 0, 100, 100], h: 6, k: 'house', roof: 'gable', s: 7, rc });
