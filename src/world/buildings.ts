@@ -12,6 +12,7 @@ import { hash01 } from '../core/rng';
 import { buildRoof, tidyRing, ringArea, offsetRing, type RoofGeom } from './roof';
 import { recipeFor, rowStyle, SIDING, ROOFMAT, type Recipe } from './recipe';
 import { measureHoods, hoodKey, type HoodClass } from './hood';
+import { tileRoofs } from './aerial';
 import { activeStyle } from './styles';
 
 type P2 = [number, number];
@@ -1279,6 +1280,10 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     const k = hoods.get(hoodKey(x, z))?.klass ?? 'suburb';
     return k !== 'estate' && k !== 'suburb' && terrain.oceanDistAt(x, z) < 800 ? 'suburb' : k;
   };
+  // Real roof colours read off aerial photos, the photo's cast taken out (aerial.ts): a streamed
+  // cell's from the tile worker, a baked pack's balanced here, one cast per tile. (Streamed tiles
+  // carry the map's attribution; a baked tile's `rc` are its region's aerial samples.)
+  const seenRoofs = tileRoofs(json.buildings, !(json as { attribution?: string }).attribution);
 
   json.buildings.forEach((bd: Building, bi: number) => {
     const ring = tidy[bi];
@@ -1331,7 +1336,7 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
       if (!bd.rt && !bd.ms) bd.roof = 'flat';
       if (bd.h >= 9.5) bd.k = 'large';
     }
-    const rc = recipeFor(bd, activeStyle(), hood, Math.floor(cx / 256) * 7919 + Math.floor(cz / 256) * 104729);
+    const rc = recipeFor(bd, activeStyle(), hood, Math.floor(cx / 256) * 7919 + Math.floor(cz / 256) * 104729, seenRoofs[bi]);
     const kindI = KIND[bd.k] ?? 0;
     // siding code rides in the fraction (the shader's kind tests use ±0.5 bands, so the glass
     // curtain wall, code 5, sits at .46 — still inside its kind's band, still rounds to 5)

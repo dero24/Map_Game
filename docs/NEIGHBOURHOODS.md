@@ -19,7 +19,7 @@ and the plan. Status of each phase is at the end.
 | Height | `height`, `building:levels`, LiDAR, Overture (bake) | 6.5 + hash·3 m |
 | Kind | `building`, shop/amenity, area | **bug:** `apartments || area > 700 → 'large'` (`realTile.ts` ~L773, `bake.mjs` L262): an estate house becomes a flat-roofed block — hits Rumson directly |
 | Roof shape | `roof:shape`, LiDAR roofs | hash + OBB width |
-| Facade / roof colour | `building:colour/material`, `roof:colour/material`, NAIP (bake) | `recipe.ts` hash pick from the family palette; footprint size, lot size and era never used |
+| Facade / roof colour | `building:colour/material`, `roof:colour/material`, NAIP roofs per building (bake, and streamed US cells since 2026-09-30 — `aerial.ts`) | `recipe.ts` hash pick from the family palette; footprint size, lot size and era never used |
 | Dormers, bay, chimney | — | hash × family constant |
 | Drive | mapped `service=driveway` | 62% of houses, **only if footprint < 280 m²** (estates get none) |
 | Hedges, fences, walls | OSM barrier fence/wall | per-door hash: 22% hedge, 14% picket; always 3.2 m runs by the walk; setback and lot line ignored |
@@ -156,6 +156,11 @@ the browser's tile worker (`buildTile`), for baked and streamed tiles alike.
   - Scaling to the lower 48 is adding a line to `HOODS` (a point, what it should read as) and
     re-running the tool; a place too thinly mapped to measure (fills only) is skipped, since the
     game stays neutral there.
+**Real roof colours (2026-09-30)** — per building rather than a per-block-group palette: every
+US roof the NAIP photo shows wears the colour it shows, balanced against the cell's streets (the
+baked shore's own samples balanced per tile). Mapped colours still win; the palette is the floor.
+`docs/agent/world-data.md` "Building colours from real data". Walls have no such source yet
+(the street-level plan is there).
 - Found on the way: OSM maps almost none of Rumson's houses (one building in the reference
   square) — there the game has LiDAR-found footprints or the fixed-size fills, which is the
   deeper reason it read like everywhere else. Phase 2's footprints (Microsoft / Overture) and the

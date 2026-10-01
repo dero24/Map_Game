@@ -115,3 +115,14 @@ terrain/DEM, or the LiDAR measure pipeline.
   `detectBuildings`, `detectTrees`), spawned by the stream and wired to the tile worker with
   a MessageChannel; `lidar.ts` (tile worker) owns the IDB cache and applies results.
 - `?lidar=0` disables. Bump `VER` in lidar.ts whenever measure/raster/tree logic changes.
+
+## Aerial roof colours (streamed US cells)
+
+- `src/world/aerialFetch.ts` (tile worker IO) + `aerial.ts` (pure): a real cell's USDA NAIP photo
+  is fetched from the start of its build (`prefetchAerial`), read after the LiDAR enrichment
+  (`enrichAerial` → `Building.ar`), cached per cell in IndexedDB (`aerial|vN|…`); waits 1.5 s on
+  a first visit, else `late` → relief rebuild. Direct from USGS, else the tile service's `/naip`
+  relay. Baked tiles never fetch: `tileRoofs` balances their baked samples as they build.
+- `?aerial=0` disables (and shows a baked pack's roofs as they were). Bump `VER` in
+  aerialFetch.ts when the reading changes. Details and sources: `world-data.md` "Building colours
+  from real data".

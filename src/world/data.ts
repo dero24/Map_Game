@@ -21,7 +21,8 @@ export interface Building {
   n?: string; // name (from OSM / a POI inside)
   u?: string; // what it's used for: the OSM amenity / shop / office / craft value (language-neutral, uses.ts)
   fc?: number; // real facade colour 0xRRGGBB (tags / materials)
-  rc?: number; // real roof colour 0xRRGGBB (tags / materials / aerial imagery)
+  rc?: number; // real roof colour 0xRRGGBB (tags / materials; a baked pack's aerial samples, aerial.ts tileRoofs)
+  ar?: number; // roof colour read off an aerial photo, its cast taken out (aerial.ts — the tile worker, streamed US cells)
   fl?: number; // mapped number of floors
   mh?: number; // mapped min_height (m): the building stands on something (pilings)
   // Simple 3D Buildings (OSM building:part): a tower's setbacks, podium and crown are parts

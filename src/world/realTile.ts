@@ -332,6 +332,9 @@ const ROOF_MAT: Record<string, number> = {
   glass: 0x9ab3bf, stone: 0x77746e, gravel: 0x9a968c, grass: 0x6b7f4a, eternit: 0x8d8b86,
 };
 const roofMaterialColour = (v: unknown) => (v ? ROOF_MAT[String(v).toLowerCase().replace(/\s/g, '_')] ?? null : null);
+/** Every roof colour a tag can resolve to by name or material — how a baked pack's mapped roof
+ *  colours are told from its aerial samples (aerial.ts tileRoofs). */
+export const TAG_ROOF_COLOURS: ReadonlySet<number> = new Set([...Object.values(NAMED), ...Object.values(ROOF_MAT)]);
 
 // ---------------- tag tables (port of scripts/bake.mjs) ----------------
 

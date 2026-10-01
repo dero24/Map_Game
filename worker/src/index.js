@@ -29,6 +29,7 @@ const CORS = {
   // The game page runs cross-origin-isolated (COEP) in dev — tiles must be CORP-readable.
   'cross-origin-resource-policy': 'cross-origin',
 };
+const USAGE = 'GET /tile/<cx>_<cz>.json?olat=<deg>&olon=<deg> | GET /dem/<z>/<x>/<y>.png | GET /naip?bbox=<w,s,e,n>&size=<W,H>';
 const json = (body, init = {}) =>
   new Response(typeof body === 'string' ? body : JSON.stringify(body), {
     ...init,
@@ -40,11 +41,12 @@ export default {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
     if (url.pathname === '/' || url.pathname === '/health')
-      return json({ ok: true, service: 'map-game-tiles', usage: 'GET /tile/<cx>_<cz>.json?olat=<deg>&olon=<deg> | GET /dem/<z>/<x>/<y>.png' });
+      return json({ ok: true, service: 'map-game-tiles', usage: USAGE });
     const dm = url.pathname.match(/^\/dem\/(\d+)\/(\d+)\/(\d+)\.png$/);
     if (dm) return dem(request, env, ctx, url, parseInt(dm[1]), parseInt(dm[2]), parseInt(dm[3]));
+    if (url.pathname === '/naip') return naip(request, ctx, url);
     const m = url.pathname.match(/^\/tile\/(-?\d+)_(-?\d+)\.json$/);
-    if (!m) return json({ error: 'unknown route', usage: 'GET /tile/<cx>_<cz>.json?olat=<deg>&olon=<deg> | GET /dem/<z>/<x>/<y>.png' }, { status: 404 });
+    if (!m) return json({ error: 'unknown route', usage: USAGE }, { status: 404 });
     return tile(request, env, ctx, url, parseInt(m[1]), parseInt(m[2]));
   },
 };
@@ -80,6 +82,37 @@ async function dem(request, env, ctx, url, z, x, y) {
     return res;
   } catch (e) {
     return json({ error: `dem fetch ${e?.message ?? e}` }, { status: 502 });
+  }
+}
+
+// GET /naip?bbox=<w,s,e,n>&size=<W,H> — one cell's USDA NAIP orthophoto (public domain), relayed
+// from the USGS National Map's ImageServer for a browser the server itself refuses (no CORS
+// header for its origin, or a COEP-isolated page). The game reads roof colours off it in the
+// tile worker (src/world/aerialFetch.ts), which asks the server directly first. Only one
+// lower-48 cell's worth is relayed — the upstream query is rebuilt from the checked values,
+// never passed through — and each answer is edge-cached for a month (the photos change yearly).
+const NAIP = 'https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer/exportImage';
+async function naip(request, ctx, url) {
+  const bbox = url.searchParams.get('bbox') ?? '', size = url.searchParams.get('size') ?? '';
+  const bb = bbox.split(',').map(Number), sz = size.split(',').map(Number);
+  if (bb.length !== 4 || !bb.every(isFinite) || sz.length !== 2 || !sz.every((v) => Number.isInteger(v) && v > 0 && v <= 2400))
+    return json({ error: 'bad naip request', usage: USAGE }, { status: 400 });
+  const [w, s, e, n] = bb;
+  if (!(e > w && n > s && e - w < 0.03 && n - s < 0.02 && s > 24 && n < 50 && w > -125.5 && e < -66.5))
+    return json({ error: 'one lower-48 cell at a time' }, { status: 400 });
+  const cache = caches.default;
+  const hit = await cache.match(request);
+  if (hit) return hit;
+  const q = `bbox=${bbox}&bboxSR=4326&imageSR=4326&size=${size}&format=jpg&compressionQuality=85&interpolation=RSP_BilinearInterpolation&f=image`;
+  try {
+    const up = await fetch(`${NAIP}?${q}`, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(25000) });
+    const type = up.headers.get('content-type') ?? '';
+    if (!up.ok || !type.startsWith('image/')) return json({ error: `naip upstream ${up.status} ${type}` }, { status: 502 });
+    const res = new Response(await up.arrayBuffer(), { headers: { 'content-type': type, 'cache-control': 'public, max-age=2592000', 'x-naip-cache': 'miss', 'x-imagery': 'USDA NAIP via USGS The National Map (public domain)', ...CORS } });
+    ctx.waitUntil(cache.put(request, res.clone()));
+    return res;
+  } catch (e) {
+    return json({ error: `naip fetch ${e?.message ?? e}` }, { status: 502 });
   }
 }
 

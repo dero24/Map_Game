@@ -7,6 +7,7 @@ import type { Building } from './data';
 import type { RegionStyle } from './styles';
 import type { HoodClass } from './hood';
 import { hash01 } from '../core/rng';
+import { aerialRoof, rgbToHsl } from './aerial';
 
 // Shader codes (buildings.ts): siding rides in the fraction of vInfo.y (kind + code/10), roof
 // material in vInfo.w on roof faces (walls use that slot for the foundation height).
@@ -76,10 +77,12 @@ function brickish(c: number) {
   return r > g * 1.18 && r > b * 1.3 && lum < 0.62 && lum > 0.18;
 }
 
-// Real roof colours (tags / aerial imagery) pulled into a roofing gamut: aerial samples carry
-// haze, tree shadow and sea glare that read as sage/teal "sea-foam" roofs street after street.
-// Keep the measured hue family and lightness order; cap chroma (greens/blues hardest, reds
-// and browns gentler) and clamp lightness into what shingles, slate, metal and tile span.
+// Mapped roof colours and the palettes pulled into a roofing gamut. (Aerial samples used to come
+// through here with their haze and NAIP's green still in them — sage/teal "sea-foam" roofs street
+// after street, so every green and blue was folded to grey. They're balanced now and go through
+// aerial.ts aerialRoof, which keeps the hue the photo measured.) Keep the hue family and
+// lightness order; cap chroma (greens/blues hardest, reds and browns gentler) and clamp
+// lightness into what shingles, slate, metal and tile span.
 export function roofGamut(c: number): number {
   let r = ((c >> 16) & 255) / 255, g = ((c >> 8) & 255) / 255, b = (c & 255) / 255;
   const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
@@ -107,7 +110,20 @@ export function rowStyle(bd: Pick<Building, 'at' | 'k'>, st: Pick<RegionStyle, '
   return !!bd.at && st.region === 'na' && (bd.k === 'house' || bd.k === 'large') && (st.family === 'clapboard' || st.family === 'brick');
 }
 
-export function recipeFor(bd: Building, st: RegionStyle, hood: HoodClass = 'suburb', cellSeed = 0): Recipe {
+/** What an aerial roof colour says the roof is made of, when it says anything: clay tile (a
+ *  strong terracotta), painted metal (a blue or green the photo still shows once balanced).
+ *  Greys and browns say nothing — asphalt, slate, shake and metal all come in them. */
+function aerialMaterial(roof: number): number | null {
+  const [h, s, l] = rgbToHsl(((roof >> 16) & 255) / 255, ((roof >> 8) & 255) / 255, (roof & 255) / 255);
+  const deg = h * 360;
+  if ((deg < 38 || deg >= 350) && s >= 0.22 && l > 0.22 && l < 0.6) return ROOFMAT.tile;
+  if (deg >= 80 && deg < 265 && s >= 0.085) return ROOFMAT.metal;
+  return null;
+}
+
+/** `aerial`: the roof colour read off an aerial photo, balanced (aerial.ts tileRoofs), or −1. It
+ *  wins over the palette and the neighbourhood's roofs; a mapped `roof:colour` still wins over it. */
+export function recipeFor(bd: Building, st: RegionStyle, hood: HoodClass = 'suburb', cellSeed = 0, aerial = -1): Recipe {
   const s = bd.s >>> 0;
   const r1 = hash01(s), r2 = hash01((s ^ 0x5bd1e995) >>> 0); // the builder's historic draws — kept so NJ colours don't reshuffle
   const house = bd.k === 'house', shop = bd.k === 'commercial', large = bd.k === 'large';
@@ -116,7 +132,9 @@ export function recipeFor(bd: Building, st: RegionStyle, hood: HoodClass = 'subu
   if (bd.k === 'church' && bd.fc == null) facade = 0xf4f1ea;
   if (bd.k === 'lighthouse' && bd.fc == null) facade = 0x9a7b62;
   const flat = bd.roof === 'flat';
-  const roof = roofGamut(bd.rc ?? (flat ? st.flatRoof : st.roof)[Math.floor(r2 * (flat ? st.flatRoof.length : st.roof.length))]);
+  const seen = aerial >= 0;
+  const roof = seen ? aerialRoof(aerial, flat) : roofGamut(bd.rc ?? (flat ? st.flatRoof : st.roof)[Math.floor(r2 * (flat ? st.flatRoof.length : st.roof.length))]);
+  const seenMat = seen && !flat ? aerialMaterial(roof) : null;
 
   // Blocks and towers (flat, 15 m+): masonry or a glass curtain wall. Real data first (mapped
   // material, era), then height: the taller the tower, the likelier glass; nothing pre-1955 is.
@@ -168,6 +186,7 @@ export function recipeFor(bd: Building, st: RegionStyle, hood: HoodClass = 'subu
     else if (st.family === 'brick') roofMat = terracotta ? ROOFMAT.tile : rr < 0.6 ? ROOFMAT.slate : ROOFMAT.asphalt;
     else if (st.family === 'eastasian') roofMat = rr < 0.7 ? ROOFMAT.tile : ROOFMAT.metal;
     else roofMat = rr < 0.08 ? ROOFMAT.metal : rr < 0.16 ? ROOFMAT.shake : ROOFMAT.asphalt; // N. American
+    if (seenMat != null) roofMat = seenMat; // the photo's clay or painted metal, whatever the region's habit
   }
 
   // Trim: white/cream mostly; dark trim is a regional + brick habit.
@@ -184,12 +203,17 @@ export function recipeFor(bd: Building, st: RegionStyle, hood: HoodClass = 'subu
   const rc2 = h(s, 0xc41);
   const chimney: Recipe['chimney'] = house && !row && !flat && st.climate !== 'tropical' && st.climate !== 'arid' ? (rc2 < 0.42 ? 1 : rc2 < 0.62 ? 2 : 0) : 0;
   const base: Recipe = { facade, roof, trim, siding, roofMat, pitch, basePitch, dormers, bay, downspouts, chimney };
-  return hood !== 'suburb' && house && !row && !flat && st.region === 'na' ? archetype(base, bd, hood, cellSeed, st) : base;
+  if (!(hood !== 'suburb' && house && !row && !flat && st.region === 'na')) return base;
+  const o = archetype(base, bd, hood, cellSeed, st, seen);
+  if (seenMat != null) o.roofMat = seenMat;
+  return o;
 }
 
-/** A house's recipe made over by its neighbourhood (mapped colours and materials always win). */
-function archetype(r: Recipe, bd: Building, hood: HoodClass, cellSeed: number, st: RegionStyle): Recipe {
+/** A house's recipe made over by its neighbourhood (mapped colours and materials always win, and
+ *  a roof the aerial photo saw keeps its colour). */
+function archetype(r: Recipe, bd: Building, hood: HoodClass, cellSeed: number, st: RegionStyle, seen = false): Recipe {
   const s = bd.s >>> 0, o = { ...r }, own = bd.fc == null && !bd.ma; // (own: the look is ours to choose)
+  const ownRoof = bd.rc == null && !seen;
   const up = bd.h >= 7 && bd.fl == null; // (dormers are for a storey and a half and up)
   if (hood === 'estate') {
     const m = h(s, 0xe52);
@@ -197,7 +221,7 @@ function archetype(r: Recipe, bd: Building, hood: HoodClass, cellSeed: number, s
       if (m < 0.1) { o.facade = pick(HOUSE_BRICKS, h(s, 0xe51)); o.siding = SIDING.brick; }
       else { o.facade = pick(ESTATE_FACADES, h(s, 0xe51)); o.siding = m < 0.46 ? SIDING.shingle : m < 0.84 ? SIDING.clapboard : SIDING.stucco; }
     }
-    if (bd.rc == null) o.roof = pick(ESTATE_ROOFS, h(s, 0xe55));
+    if (ownRoof) o.roof = pick(ESTATE_ROOFS, h(s, 0xe55));
     const rm = h(s, 0xe56);
     o.roofMat = rm < 0.32 ? ROOFMAT.slate : rm < 0.48 ? ROOFMAT.shake : ROOFMAT.asphalt;
     o.pitch = Math.max(o.pitch, 0.72 + h(s, 0xe57) * 0.3);
@@ -231,7 +255,7 @@ function archetype(r: Recipe, bd: Building, hood: HoodClass, cellSeed: number, s
   } else if (hood === 'tract' && (st.family === 'adobe' || st.family === 'stucco')) {
     // one model a street cell: low tile hips over stucco
     if (own) { o.facade = pick(DESERT_TRACT, h(s, 0x7c1)); o.siding = SIDING.stucco; }
-    if (bd.rc == null) o.roof = pick(DESERT_ROOFS, h(cellSeed, 0x7c4));
+    if (ownRoof) o.roof = pick(DESERT_ROOFS, h(cellSeed, 0x7c4));
     o.roofMat = ROOFMAT.tile;
     o.pitch = o.basePitch = 0.3 + h(cellSeed, 0x7c5) * 0.06;
     o.dormers = 0;
@@ -241,7 +265,7 @@ function archetype(r: Recipe, bd: Building, hood: HoodClass, cellSeed: number, s
     // one model a street cell (the builder's plan), each house its own paint from a narrow range
     const cape = h(cellSeed, 0x7a) < 0.5;
     if (own) { o.facade = pick(TRACT_FACADES, h(s, 0x7b1)); o.siding = h(s, 0x7b2) < 0.9 ? SIDING.clapboard : SIDING.brick; if (o.siding === SIDING.brick) o.facade = pick(HOUSE_BRICKS, h(s, 0x7b3)); }
-    if (bd.rc == null) o.roof = pick(TRACT_ROOFS, h(cellSeed, 0x7b4));
+    if (ownRoof) o.roof = pick(TRACT_ROOFS, h(cellSeed, 0x7b4));
     o.roofMat = ROOFMAT.asphalt;
     o.pitch = cape ? 0.82 + h(cellSeed, 0x7b5) * 0.08 : 0.34 + h(cellSeed, 0x7b5) * 0.06;
     o.basePitch = o.pitch;
