@@ -500,6 +500,29 @@ export function nearTreeGeometry(kind: TreeKind, v: number): NearTree {
   // (anything left over — a loop the joiner can't start — still grows, a run of its own)
   B.forEach((q, i) => { if (!used[i]) runs.push({ p: [q.a.clone(), q.b.clone()], r: [q.r0, q.r1], col: q.col, trunk: q.a.y <= 0.01 }); });
 
+  // ---- the crown: one leaf card per far lobe (where it was, as big, as squashed), split until
+  // there are at least 8 — a shrub's three lobes would be three stickers
+  type Card = { c: THREE.Vector3; h: number; sq: number };
+  const cards: Card[] = plan.lobes.map((l) => ({ c: l.c.clone(), h: l.r * 1.17, sq: Math.min(1.5, Math.max(0.6, l.sq)) }));
+  while (cards.length < 8) {
+    let bi = 0;
+    cards.forEach((q, i) => { if (q.h > cards[bi].h) bi = i; });
+    const q = cards[bi], a = cards.length * GOLDEN, o = V3(Math.cos(a), 0.15, Math.sin(a)).multiplyScalar(q.h * 0.4);
+    cards.splice(bi, 1, { c: q.c.clone().add(o), h: q.h * 0.78, sq: q.sq }, { c: q.c.clone().sub(o), h: q.h * 0.78, sq: q.sq });
+  }
+  // a run that ends in the open (a clump's side stem, a limb the far lobes covered) grows on into the
+  // nearest leaf cluster, thinning — never a cut-off stick under the crown
+  for (const run of runs) {
+    const e = run.p[run.p.length - 1];
+    if (e.y < 0.5) continue;
+    let near: Card | null = null, nd = Infinity;
+    for (const q of cards) { const d = q.c.distanceTo(e) - q.h * 0.8; if (d < nd) (nd = d), (near = q); }
+    if (!near || nd <= 0) continue;
+    const to = e.clone().lerp(near.c, 0.85), r1 = run.r[run.r.length - 1];
+    run.p.push(e.clone().lerp(to, 0.5).add(V3(0, 0.08 * e.distanceTo(to), 0)), to);
+    run.r.push(r1 * 0.75, Math.max(0.015, r1 * 0.45));
+  }
+
   // every run resampled into a gently crooked curve (a ring every ~0.8 m, each nudged off the
   // straight line), the trunk with its root flare: wide where it meets the ground, tapering up
   const wood: THREE.BufferGeometry[] = [], trunks: { p: THREE.Vector3[]; r: number[] }[] = [];
@@ -535,16 +558,6 @@ export function nearTreeGeometry(kind: TreeKind, v: number): NearTree {
     P.forEach((p, i) => axis.push({ p, r: R[i], trunk: run.trunk }));
   }
 
-  // ---- the crown: one leaf card per far lobe (where it was, as big, as squashed), split until
-  // there are at least 8 — a shrub's three lobes would be three stickers
-  type Card = { c: THREE.Vector3; h: number; sq: number };
-  const cards: Card[] = plan.lobes.map((l) => ({ c: l.c.clone(), h: l.r * 1.17, sq: Math.min(1.5, Math.max(0.6, l.sq)) }));
-  while (cards.length < 8) {
-    let bi = 0;
-    cards.forEach((q, i) => { if (q.h > cards[bi].h) bi = i; });
-    const q = cards[bi], a = cards.length * GOLDEN, o = V3(Math.cos(a), 0.15, Math.sin(a)).multiplyScalar(q.h * 0.4);
-    cards.splice(bi, 1, { c: q.c.clone().add(o), h: q.h * 0.78, sq: q.sq }, { c: q.c.clone().sub(o), h: q.h * 0.78, sq: q.sq });
-  }
   const crownC = V3(0, cy, 0);
   const rec = new Float32Array(cards.length * CARD_STRIDE);
   cards.forEach((q, i) => {
