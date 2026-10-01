@@ -159,8 +159,15 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
     ends; bascule leaves straight heel to heel.
   - Collision is the deck as drawn: roadway and sidewalks are `table` decks (drawn station heights,
     exact over the worker boundary) with square ends (`Deck.cut` — a round end hung over the
-    sloping street); parapets are walls a deck-high band; piers, bascule piers and fenders are
-    walls below the deck. A mapped sidewalk alongside widens the deck (`deckEdges`).
+    sloping street; where two ways' pieces meet, both end along the drawn mitre); parapets are
+    walls a deck-high band; piers, bascule piers, fenders and towers are walls below the deck. A
+    mapped sidewalk alongside widens the deck (`deckEdges`).
+  - What carries it (`carriedBy`, OSM `bridge:structure` → `Road.bs`, real-lite tiles only — the
+    baked pack has none): girders on piers (beam, the default); through trusses (80 m spans);
+    an arch over a low deck (hangers) or under a high one (columns); a suspension bridge's two
+    towers and cables; a cable-stayed bridge's pylons and stays. A higher OSM `layer` clears the
+    bridge it crosses (`decksUnder`). A movable span is drawn closed: a bascule's steel leaves,
+    its piers, four tender houses (their lamps are `towers`) and timber fenders.
 
 ## Vehicles
 
