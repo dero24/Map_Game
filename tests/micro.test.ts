@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
-import { Terrain, TerrainLayer, type TileJson, type Building } from '../src/world/data';
+import { Terrain, TerrainLayer, type TileJson, type Building, type WorldJson } from '../src/world/data';
+import { Painter } from '../src/world/groundPaint';
 import { buildTile } from '../src/world/tileBuild';
 import { setActiveStyle, regionStyle } from '../src/world/styles';
 import { MICRO_STRIDE, setMicroDate, BEACH_SEASON } from '../src/world/micro';
@@ -298,4 +299,97 @@ describe('micro layer budgets (world/microLayer.ts)', () => {
       expect(small.far).toBeGreaterThan(small.dh + T.band);
     }
   });
+});
+
+// ---- The ground you walk on, on the shore pack ----
+// Sea Bright's middle (the shops on the avenue, the blocks behind them), built as the tile worker
+// builds it, against the ground the paint lays there (groundPaint.ts Painter, from the bake's
+// paint.json and the tiles' own walks and drives).
+type POp = { op: 'fill' | 'stroke' | 'fillRect'; style: string; width: number; rings: [number, number][][] };
+function paintRecorder() {
+  const ops: POp[] = [];
+  let rings: [number, number][][] = [], cur: [number, number][] | null = null;
+  const st: Record<string, unknown> = { lineWidth: 1, fillStyle: '#000', strokeStyle: '#000' };
+  const fns: Record<string, (...a: number[]) => void> = {
+    beginPath: () => { rings = []; cur = null; },
+    moveTo: (x, z) => { cur = [[x, z]]; rings.push(cur); },
+    lineTo: (x, z) => { cur?.push([x, z]); },
+    fill: () => { ops.push({ op: 'fill', style: String(st.fillStyle), width: 0, rings: rings.slice() }); },
+    stroke: () => { ops.push({ op: 'stroke', style: String(st.strokeStyle), width: st.lineWidth as number, rings: rings.slice() }); },
+    fillRect: () => {},
+  };
+  const ctx = new Proxy({}, { get: (_, k: string) => fns[k] ?? (k in st ? st[k] : () => null), set: (_, k: string, v) => { st[k] = v; return true; } }) as unknown as CanvasRenderingContext2D;
+  return { ctx, ops };
+}
+const segD = (x: number, z: number, a: [number, number], b: [number, number]) => {
+  const dx = b[0] - a[0], dz = b[1] - a[1], L2 = dx * dx + dz * dz;
+  const t = L2 > 1e-9 ? Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / L2)) : 0;
+  return Math.hypot(a[0] + dx * t - x, a[1] + dz * t - z);
+};
+const inside = (x: number, z: number, r: [number, number][]) => {
+  let ins = false;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (r[i][1] > z !== r[j][1] > z && x < ((r[j][0] - r[i][0]) * (z - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) ins = !ins;
+  return ins;
+};
+const covers = (o: POp, x: number, z: number) => {
+  if (o.op === 'stroke') return o.rings.some((r) => r.some((p, i) => i > 0 && segD(x, z, r[i - 1], p) <= o.width / 2) || (r.length === 1 && Math.hypot(r[0][0] - x, r[0][1] - z) <= o.width / 2));
+  return o.rings.filter((r) => r.length > 2 && inside(x, z, r)).length % 2 === 1;
+};
+// what the paint lays: the paved ground (streets, gutters and kerbs, sidewalks, walks, drives and
+// their aprons, a block's paving, lots, plazas, piers) and the open (yards, the cover's lawn, sand,
+// parks and wild ground) — the overlays (flags, joints, stains, shadows, drift, markings) say nothing
+const PAVED = new Set(['#b1ab9d', '#b3ad9f', '#bab4a6', '#bdb5a3', '#5c5e61', '#bcb6a8', '#aaa498', '#c4beb0', '#867f77', '#8b877c', '#8b867d', '#55575b', '#606265', '#6f6d68', '#b8b2a4', '#bab4a7', '#687a62', '#8a8883', '#c2baa8', '#9c8466', '#aaa698', '#aaa597', '#63c2cf', '#8b5a47', '#8c8378', '#6f6a63', '#8e8c86', '#7a5d42', '#a39884', '#8c7a5e']);
+const OPEN = new Set(['#93a964', '#b9b4a9', '#ddd5c2', '#dccb9f', '#617043', '#8a955c', '#8c9761', '#9fb56d', '#8db35f', '#9fc373', '#cbbb93']);
+const LAWN_THINGS = new Set<MicroId>(['birdbath', 'kayak', 'hoop', 'yardsign', 'salesign', 'surfboard']);
+
+describe('the ground you walk on (the shore pack)', () => {
+  it('stands no lawn thing on paved ground, every kerb box and hydrant at its kerb, none on a shop\'s sidewalk', async () => {
+    // (node's fs by a name TypeScript doesn't resolve: the project carries no node types)
+    const { readFileSync } = (await import(/* @vite-ignore */ ['node', 'fs'].join(':'))) as { readFileSync: (f: URL, enc?: string) => string & Uint8Array };
+    const at = (f: string) => new URL(`../public/data/shore/${f}`, import.meta.url);
+    const man = JSON.parse(readFileSync(at('manifest.json'), 'utf8'));
+    const bin = readFileSync(at('terrain.bin')), tab = bin.buffer.slice(bin.byteOffset, bin.byteOffset + bin.byteLength) as ArrayBuffer;
+    const shore = new Terrain(new TerrainLayer(tab, man.terrain.slice), new TerrainLayer(tab, man.terrain.backdrop));
+    setMicroDate('2026-07-15');
+    const P = new Painter(JSON.parse(readFileSync(at('paint.json'), 'utf8')) as WorldJson, [], (x, z) => shore.oceanDistAt(x, z));
+    const lawnThings: { x: number; z: number; k: MicroId }[] = [], boxes: [number, number][] = [], hydrants: [number, number][] = [], shopDoors: [number, number][] = [];
+    const carriage: { p: number[]; w: number }[] = [];
+    for (const id of ['0_-1', '0_0']) {
+      const spec = man.tiles.find((t: { id: string }) => t.id === id);
+      const tj = JSON.parse(readFileSync(at(spec.file), 'utf8')) as TileJson;
+      const t = await buildTile(tj, shore, spec, 0);
+      P.addWalks(t.walks, id);
+      // (a bike leant on its own lawn, not one at a shop's door)
+      const homeBike = (x: number, z: number) => { let best: { d: number; k?: string } = { d: 12 }; for (const d of t.doors) { const dd = Math.hypot(d.wx - x, d.wz - z); if (dd < best.d) best = { d: dd, k: d.kind }; } return best.k === 'house'; };
+      for (const q of recs(t.micro)) if (LAWN_THINGS.has(q.k) || (q.k === 'bike' && homeBike(q.x, q.z))) lawnThings.push(q);
+      for (const o of t.objs) {
+        const put = (list: [number, number][]) => { for (let i = 0; i + 15 < o.im!.length; i += 16) list.push([o.im![i + 12], o.im![i + 14]]); };
+        if (o.k === 'inst' && o.n?.startsWith('mailbox:')) put(boxes);
+        if (o.k === 'inst' && o.n === 'street:hydrants:kerb') put(hydrants);
+      }
+      for (const d of t.doors) if (d.kind === 'commercial') shopDoors.push([d.wx, d.wz]);
+      for (const r of tj.roads) if (!r.lod && !r.br && !r.tu && /^(primary|secondary|tertiary|residential|unclassified|living_street|pedestrian|trunk)$/.test(r.c)) carriage.push(r);
+    }
+    expect(lawnThings.length).toBeGreaterThan(10);
+    expect(boxes.length).toBeGreaterThan(20);
+    // 1. every lawn thing on a lawn or a yard's gravel: the paint's top layer under it is open ground
+    const bad: string[] = [];
+    for (const q of lawnThings) {
+      const { ctx, ops } = paintRecorder();
+      P.paint(ctx, q.x - 15, q.z - 15, q.x + 15, q.z + 15, 7, 2);
+      const top = [...ops].reverse().find((o) => (PAVED.has(o.style) || OPEN.has(o.style)) && covers(o, q.x, q.z));
+      if (top && PAVED.has(top.style)) bad.push(`${q.k} at ${q.x.toFixed(1)},${q.z.toFixed(1)} on ${top.style}`);
+    }
+    expect(bad).toEqual([]);
+    // 2. a kerb box and a hydrant stand within 1 m of the kerb's face (outside every carriageway);
+    //    no box within 10 m of a shop's door
+    const kerbGap = (x: number, z: number) => {
+      let best = Infinity;
+      for (const r of carriage) for (let i = 0; i + 3 < r.p.length; i += 2) best = Math.min(best, segD(x, z, [r.p[i] / 10, r.p[i + 1] / 10], [r.p[i + 2] / 10, r.p[i + 3] / 10]) - r.w / 2);
+      return best;
+    };
+    const misplaced = [...boxes.map((b) => ['box', ...b] as const), ...hydrants.map((b) => ['hydrant', ...b] as const)].filter(([, x, z]) => { const g = kerbGap(x, z); return !(g > 0.1 && g <= 1.0); });
+    expect(misplaced.map(([k, x, z]) => `${k} at ${x.toFixed(1)},${z.toFixed(1)}: ${kerbGap(x, z).toFixed(2)} m out`)).toEqual([]);
+    expect(boxes.filter(([x, z]) => shopDoors.some(([dx, dz]) => Math.hypot(dx - x, dz - z) < 10))).toEqual([]);
+  }, 240000);
 });
