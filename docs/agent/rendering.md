@@ -221,24 +221,58 @@ kerb (`KERB`: a 15 cm face, a 0.6 m gutter pan), the flags (`FLAG` 1.5 m, a cent
 ### The ground shader's grain (`ground.ts`)
 
 Near the walker the paint's material gets the texture you'd see standing on it, inferred from the
-paint (its chroma and value) and the stone alpha: concrete's and asphalt's mottle and stains (four
-octaves, 4.5–90 cm), a gravel or shell yard's pebbles (3.5 cm close up, 9 cm clumps further, a
-shell yard's blue-grey bits), the open ground's mottle (verges, lawns, bare earth) with the lawn's
-mown stipple, and on a beach (warm, light sand by the sea: `sandy`) 11 cm wind ripples across the
-wind in the dry band (a lit crest, a lee in shadow), trampled sand — churned, pocked, footprints —
-between the wet sand and the dunes, and the wrack line's dark clumps with pale shell through them.
-Every octave is kept only where it spans a few pixels (`octv`: `fwidth` of the ground position, the
-steeper axis), so it fades into the wash with distance and height, never shimmers, and is sized to
-come through the brush (the Kuwahara's ~1.6 px radius up close).
+paint (its chroma and value) and the stone alpha. The structure is the paint's (flags and joints,
+the kerb's face, the gutter pan, aprons, tar snakes and sealed patches: groundCover.ts and the fine
+window); the shader lays the surface between it:
 
-- The grain is gathered as one luminance multiplier (`gm`): it multiplies the albedo, and once lit
-  the ground takes it again in proportion to how bright it's lit (`col *= 1 + (gm − 1)·1.15·…`). The
-  tonemap's shoulder otherwise takes a sunlit walk's grain and most of a beach's (at L* 87 a ±10%
-  albedo change shows as ±1.4 L*, against ±2.5 on a walk at L* 70). The sand reads mostly by its
-  shadows (a lee, a pock, a footprint's pit), which the shoulder and the brush keep.
-- Measure it as the reviewer does (`docs/earth/REVIEWER.md` round 10, must-fix 3): the bottom 40%'s
-  median local L* std in windows 1.5% of the frame wide, on review frames 2, 10, 17 and the merged
-  sheet's 4, 6 and 7.
+- **Stones** (`grit`): a lighter fleck where an octave's noise peaks, a darker one where it dips.
+  The octaves run a doubling apart from 3 cm to 1.9 m, and each is kept only while its flecks are
+  3–14 px apart on screen. So the nearer ground shows the smaller stones and the further the bigger,
+  two or three octaves at a time (the loop skips the rest), and the grain is the same size on screen
+  at every distance. Finer, the brush wipes it and it shimmers; coarser, a darker fleck is a blot.
+  The band is sized to the frame as the brush is: 540 px tall is its own size, and a taller frame
+  (a phone at 1266) widens it in step (`uViewport`).
+  - Concrete: its stones are as often lighter than the slab as darker, the darker kept faint (+27%,
+    −9%).
+  - Asphalt (`lumS` under ~0.2): pale stone in a dark binder (+38%), nothing darker. There's no
+    speckle field.
+  - The open ground: the same flecks, fainter (+18%, −5%), under the lawn's mown stipple.
+  - The broad mottle is the land's own wash (`wash`, ±8% at 1.1 m), everywhere.
+- **Why darks stay faint:** post.ts pools pigment on the darker side of any edge (`uEdgeDark`). A
+  pixel 2–3 L* under its 2.4 px blur is deepened by several L* more, and a pale fleck's rim gets the
+  same. Round 11's symmetric four-octave grain (±25% albedo, up to 90 cm, plus soft stains) came out
+  as dark specks: 10–13% of the bottom 40% ≥ 6 L* under its local mean, in 0.7–1.1 blobs per 1,000
+  px. That's grime, and it read as gravel on pale asphalt.
+- **Loose stone** (a gravel or shell yard, a gravel drive): pebbles of 3.5 cm close up and 9 cm
+  clumps further, the gaps between them a shade, not a hole; a shell yard's blue-grey bits.
+- **A beach** (warm, light sand by the sea: `sandy`) is all shadow, never a lighter patch:
+  - the swells' far sides in a faint shadow, and the land's wash on sand only darkening (capped at
+    0.96);
+  - trampled sand with only its darker half, pocks (−9%) and footprints (−30%);
+  - 11 cm ripples across the wind in the dry band: a lee 11% darker and a crest 2.5% lighter, long
+    crests that bend gently, end now and then (a per-crest break) and are broken where a foot came
+    down. They're gone by 15 m, and where the crests come under ~4 px.
+  - The wrack line's dark clumps with pale shell through them.
+- **Light, and the bloom.** The grain multiplies the albedo (`gm`). Once lit, the ground takes `gp`
+  again in proportion to how bright it's lit (`col *= 1 + (gp − 1)·1.15·…`): the tonemap's shoulder
+  otherwise takes a sunlit walk's grain. `gp` is the darks and the small lights only.
+  - A broad lighter patch taken again tips sunlit sand over the day bloom's knee. post.ts adds
+    `max(blurHdr·exposure − 1.3, 0)` per channel, so red crosses it first, and its steep sRGB
+    encode turns a few % of excess into a peach disc.
+  - That was round 11's "peach discs": on the beach, 1.6–3.6 L\* *lighter* than the sand round
+    them, with a\* +4 and the hue 10° redder. Round 10 had faint ones from the wash alone.
+  - Sunlit sand at noon sits just under the knee (its red ~1.25 at p95 against 1.3), so on sand
+    nothing brightens over ~0.5 m.
+- Every octave is kept only where it spans a few pixels (`octv`, `grit`: `fwidth` of the ground
+  position, the steeper axis), so it fades into the wash with distance and height and never shimmers.
+- Measure it as the reviewer does (`docs/earth/REVIEWER.md` round 11, must-fix 2), on the montage
+  cut (800 px a review frame, 560 a merged one):
+  - the bottom 40%'s median local L\* std, in windows 1.5% of the frame wide;
+  - the share ≥ 6 L\* under the local mean (6% wide), and those blobs ≥ (0.6% W)² per 1,000 px;
+  - on the beach, blotches ≥ (2% W)² with a\* ≥ the sand's + 3;
+  - on review frames 2, 10, 11, 16, 17, the merged sheet's 4, 6 and 7, and the phone.
+  - Structure counts too: the asphalt beside a bright walk and the pooled joints are "dark" by that
+    test. Frame 2 holds ~5% of it with no grain at all, and 17's red car ~15%.
 
 ## Grass
 
