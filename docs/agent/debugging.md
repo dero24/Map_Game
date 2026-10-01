@@ -66,6 +66,28 @@ behaviour.
   sketch → dry over its pixels (CIE76 + CIEDE2000), with pass flags (≥ 2%, ≥ 70%, ≥ 25). Painted
   rides persist (`map-game.vehicles.v1` in localStorage) — clear it between runs or they crowd the
   water the next sketch wants.
+- The night street, measured (reviewer round 10, must-fix 2): on a `?capture=1` page,
+  `await import('/tools/night-check.js'); await __NIGHTCHECK__('tag')` poses the review's night street
+  (frame 3: `ocean-night` at 22:00) and Center Street at 22:00, and measures each on the painted frame
+  (the paper margin left off) → `shots/nightcheck-<tag>.jpg` (each frame, then the same frame with what
+  was measured drawn on it) and the numbers, with pass flags:
+  - the lens: the id pass (below);
+  - wires against the sky: a wire-only mask (the wires drawn alone, flat, against the world's
+    depth) and the frame with and without them — their mean L\* ≤ the sky's + 2;
+  - the bottom 40% outside the lamp hearts (the lamp field the shaders read ≥ 0.25; also given at
+    0.1 and 0.5): L\* ≤ 18, and hue 200–290° or C\* ≤ 6;
+  - the pools down the street: each lamp ahead in a 25 m corridor whose heart is in sight, its
+    heart's luminance against the dark ground between it and the next — ≥ 2 pools at ≥ 2.5×.
+  - `opts.variants: [{ name, apply(G) }]` measures knobs turned in the page (`G.U.uLampPool`, the
+    post's `uNightGrade`) without re-posing. The pure parts are `tools/night-core.js`
+    (tests/nightCheck.test.ts).
+  - Headless: `node tools/night-check.mjs --url=http://localhost:5173/ [--tag=n] [--swiftshader]`
+    (the page served first) prints each pose's numbers, writes `shots/nightcheck-<tag>.{jpg,json}`,
+    exits 1 on a failed pose.
+- The id pass is `tools/id-pass.js` (`idPass`, `flatPass`, `lensVerdict`). `review-shots.js` checks
+  every outdoor pose with it — nothing within 2.5 m of the lens over 5% of the frame, nor within 4 m
+  over 15% — and re-poses one that fails (back and aside, looking where it looked; logged as
+  `[review] … re-posed`). Only a pose that still fails is stamped `⚠ occluder`.
 - Debug handles on `window.__GAME__`: `explore`, `commissions`, `photo`, `atlas`, `arrival`,
   `hints`.
 

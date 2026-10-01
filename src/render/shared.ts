@@ -1,6 +1,7 @@
 // Shared uniforms + GLSL chunks for every painted material. Uniform objects are shared by reference,
 // so updating U.* once per frame updates every material.
 import * as THREE from 'three';
+import { POOL, GLSL_POOL } from './nightLight';
 
 const v3 = (x = 0, y = 0, z = 0) => ({ value: new THREE.Vector3(x, y, z) });
 export const HOLE_MAX = 32;
@@ -34,6 +35,9 @@ export const U = {
   uLampMap: { value: null as THREE.Texture | null },
   uLampBox: { value: new THREE.Vector4(0, 0, 1, 1) },
   uLampBaseY: { value: 0 }, // ground height around the walker: lamp pools light the street, not roofs
+  // a pool's shape (nightLight.ts POOL): the lamp map's cone reach, the heart's radius, the edge's
+  // steepness, the heart's gain over the lamp colour
+  uLampPool: { value: new THREE.Vector4(POOL.reach, POOL.radius, POOL.edge, POOL.gain) },
   // Paint-as-you-explore window (src/world/explore.ts): R8 paint amount per 8 m texel, box = x0 z0 1/w 1/h.
   uExplore: { value: null as THREE.Texture | null },
   uExploreBox: { value: new THREE.Vector4(0, 0, 1 / 4096, 1 / 4096) },
@@ -105,7 +109,7 @@ uniform sampler2D uShadowMap;
 uniform mat4 uShadowMatrix;
 uniform float uShadowOn, uShadowTexel, uShadowStrength;
 uniform sampler2D uLampMap;
-uniform vec4 uLampBox;
+uniform vec4 uLampBox, uLampPool;
 uniform float uLampBaseY;
 uniform vec3 uLampColor;
 uniform float uLampPower, uPigment, uPigmentScale, uWind;
@@ -159,14 +163,21 @@ float canyonAt(vec3 wpos) {
   if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
   return texture2D(uLampMap, uv).g * (1.0 - smoothstep(0.0, 45.0, wpos.y - uLampBaseY));
 }
-float lampAt(vec3 wpos) {
-  if (uLampPower <= 0.001) return 0.0;
+${GLSL_POOL}
+// The street lamps' pools (0–1 of a heart) at a point: the nearest lamp's distance, read back from
+// the lamp map's cone, shaped into a bright heart and a quick soft edge (nightLight.ts), with dark
+// between one pool and the next.
+float lampField(vec3 wpos) {
   vec2 uv = (wpos.xz - uLampBox.xy) * uLampBox.zw;
   if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
   // relative to the local ground, not sea level: streamed towns sit on real (DEM) terrain, and
   // an absolute clamp blacked out every pool more than ~10 m above the sea
   float h = clamp(1.0 - max(wpos.y - uLampBaseY - 1.5, 0.0) / 9.0, 0.0, 1.0);
-  return pow(texture2D(uLampMap, uv).r, 1.6) * uLampPower * h; // a tight heart, dark gaps between poles
+  return poolLight(texture2D(uLampMap, uv).r) * h;
+}
+float lampAt(vec3 wpos) {
+  if (uLampPower <= 0.001) return 0.0;
+  return lampField(wpos) * uLampPower * uLampPool.w;
 }
 
 // Pigment turbulence (Bousseau et al.): density variation anchored to world space.
