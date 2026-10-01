@@ -16,7 +16,7 @@ window.__FLY__ = async (tag = 'fly', o = {}) => {
   const tx = o.tx ?? G.walker.x, tz = o.tz ?? G.walker.z, from = o.from ?? 1500, alt = o.alt ?? 150, step = o.step ?? 180, speed = o.speed ?? 60;
   const dir = o.dir ?? Math.PI; // approach from the west (bearing of the start from the target, radians from +z)
   const sx = tx + Math.sin(dir) * from, sz = tz + Math.cos(dir) * from;
-  G.setHour(14); G.timeParams.speed = 0; G.postParams.sketch = true;
+  G.setHour(14); G.timeParams.speed = 0;
   G.walkParams.fly = true;
   const yaw = Math.atan2(sx - tx, sz - tz);
   const stats = [];

@@ -62,7 +62,7 @@ window.__SPECIES__ = async (tag = 'here', kinds = ['maple', 'willow', 'elm', 'po
   const all = G.ctx.instances('trees:', x0, z0, 600);
   for (const t of all) { const k = t.name.split(':')[1]; counts[k] = (counts[k] ?? 0) + 1; }
   const F = kinds.map((k) => ({ label: k, fn: async () => {
-    G.setHour(15); G.timeParams.speed = 0; G.postParams.sketch = true;
+    G.setHour(15); G.timeParams.speed = 0;
     const near = all.filter((t) => t.name.split(':')[1] === k).sort((a, b) => Math.hypot(a.x - x0, a.z - z0) - Math.hypot(b.x - x0, b.z - z0))[0];
     if (!near) return;
     const h = (near.sy ?? 1) * 8;

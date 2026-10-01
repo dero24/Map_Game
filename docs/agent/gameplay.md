@@ -304,19 +304,20 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
 - Wildlife (`src/sim/critters.ts`) is a main-thread sim within ~90 m of the walker. Behaviour is per *role*; the species filling each role comes from `faunaMix(region, climate)` (`env.region/climate` from the region style), so a desert walk meets jackrabbits, quail, a roadrunner and a coyote with no new code. Burrowers dive down a burrow (despawn) when startled. Habitat comes from tree instances, land cover (`field()`: lawn, meadow, shrub, crops, bare desert), the ocean edge and gardens. Behaviours: wander, flee, climb, flush, drift, and the ecosystem states stalk/pounce (fox), soar/stoop/rise (hawk). Threats: the walker, predators, and `env.movers` (traffic from `LifeClient.movers` plus the player's ride via `Vehicles.onMove`). Alarms spread (`alarm` delay). `critters.eco` tallies hunts, catches and scares. Animals are drawn 1.3–2× life size on purpose.
 - Grow verb (`src/ui/garden.ts`): R plants, Shift+R picks the next seed. Plants grow while you play (about 20 min) and while you're away (IndexedDB `map-game-garden`). Each bed adds a collider and clears the grass.
 
-## Paint as you explore (`src/world/explore.ts`)
+## Exploring: the map paints in, and sketch mode (`src/world/explore.ts`)
 
 - Where you've been is a sparse bitmap on a **global** grid: Web-Mercator metres, 8 m cells,
   32×32-cell blocks. It survives re-anchoring, teleports and region changes. Blocks persist to
-  IndexedDB (`map-game-explore`).
-- A walker-centred R8 texture window (4 km, 8 m texels → `U.uExplore` / `U.uExploreBox`) feeds
-  the post composite, which paints unvisited ground as a paler, slightly desaturated first wash and
-  deepens it with a noisy wet edge as you arrive (`postParams.sketch`, ON by default). The far
-  sketch (`sketchFar`: pencil to the horizon till you walk or photograph it, and photos painting
-  what they frame) is OFF by default — on trial; it stands on its own (either one turns on the
-  composite's `uSketch`); with neither, the world is simply painted.
-  Your walks are recorded either way (`explore.enabled` is always on): the atlas, the journal and
-  the arrival cards count them — the card says "walk to paint it in" only with a look picked.
+  IndexedDB (`map-game-explore`). It's always recorded (`explore.enabled`): the map paints in
+  where you've walked (mapview.ts), and the atlas, the journal and the arrival cards count it.
+- The world itself is simply painted, near and far — unless **sketch mode** is on
+  (`postParams.sketchFar`, panel "sketch mode", OFF by default; `?sketch=1`, `?loop=paint`): then
+  everywhere you haven't been is a pencil underdrawing to the horizon, walking paints it in round
+  you and a photo paints what it frames. A walker-centred R8 texture window (4 km, 8 m texels →
+  `U.uExplore` / `U.uExploreBox`) and the far window feed the post composite (`uSketch`).
+  (Until 2026-10-01 a lighter "paint as you explore", on by default, laid a pale first wash over
+  the unwalked ground near you. It read as fog in the distance and was removed: the map is where
+  exploring shows.) The arrival card says "walk to paint it in" only in sketch mode.
 - Capture mode keeps regression shots fully painted unless `?sketch=1`.
 - Reveal radius grows with eye height (`revealRadius`), so flying paints wide.
   `paintedBefore(x,z)` reads the saved block, which is how an arrival card knows a first visit.

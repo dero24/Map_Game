@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyTier, autoSteps, isPhoneClass, pickTier, type DeviceInfo } from '../src/render/quality';
+import { applyTier, autoSteps, isPhoneClass, pickTier, stepsPaid, type DeviceInfo } from '../src/render/quality';
 
 const PIXEL7: DeviceInfo = { coarse: true, hover: false, touchPoints: 5, screenMin: 412, screenMax: 915, dpr: 2.625, memoryGB: 8, cores: 8, ua: 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36', maxTex: 8192 };
 const IPHONE: DeviceInfo = { coarse: true, hover: false, touchPoints: 5, screenMin: 390, screenMax: 844, dpr: 3, cores: 4, ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1', maxTex: 16384 };
@@ -115,5 +115,11 @@ describe('autoSteps', () => {
   it('never touches a saved knob', () => {
     expect(autoSteps(60, 0, P, S, new Set(['post.hiDpi', 'post.paintDetail']), 2)).toEqual([]);
     expect(autoSteps(60, 1, P, S, new Set(['shadow.size']), 2)).toEqual([['post', 'renderScale', 0.75]]);
+  });
+  it('keeps a step only if the frames got quicker (else the sharp frame comes back)', () => {
+    expect(stepsPaid(40, 30)).toBe(true);
+    expect(stepsPaid(40, 35.2)).toBe(true); // (12% quicker)
+    expect(stepsPaid(40, 37)).toBe(false); // a phone held back by its vertices: blurrier for nothing
+    expect(stepsPaid(40, 42)).toBe(false);
   });
 });

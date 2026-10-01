@@ -28,10 +28,12 @@ export const postParams = {
   vignette: 0.45,
   boilFps: 0,
   nightWash: 0.5,
-  sketch: true, // paint as you explore (on by default): unvisited places near you a paler first wash that deepens as you arrive
-  // …all the way out (a developer switch, off for now): every place you haven't been — the far
-  // distance too — is a pencil underdrawing on paper, and walking paints it in round you
-  sketchFar: false, // …far away too: pencil to the horizon till you walk or photograph it — OFF by default (on trial)
+  // sketch mode (off by default): every place you haven't been, to the horizon, is a pencil
+  // underdrawing on paper; walking paints it in round you and a photo paints what it frames. Off,
+  // the world is simply painted — the map (mapview.ts) is where what you've explored shows.
+  // (There used to be a lighter 'paint as you explore' that laid a pale first wash over the
+  // unwalked ground near you: it read as fog, and it's gone.)
+  sketchFar: false,
   sketchReach: 45, // m painted round you on foot (a plane paints wider)
   photoReach: 22000, // m out to which a photo paints what it frames (the far sketch; at most SEEN_REACH)
   paperColor: '#f8f4ea',
@@ -333,15 +335,13 @@ export class WatercolorPost {
         float dL = (L0 - L0 * L0) * (turb * uTurb * 2.2 + (0.55 - p) * uGran * 1.6);
         c *= clamp((L0 - dL) / max(L0, 1e-3), 0.0, 2.0);
 
-        // paint as you explore: close by, where you haven't walked yet, the colour is still a first,
-        // paler wash (a little desaturated, lifted toward the paper); it deepens with a soft wet
-        // edge as you arrive. Subtle on purpose — the world always reads as painted, never a sketch.
+        // sketch mode: where you haven't been, at any distance, the page is still a pencil
+        // underdrawing; colour blooms in round you as you walk, a wet noisy edge with pigment pooled
+        // at its rim. The sky and the far layer (horizon, far skyline) stay painted. Out of sketch
+        // mode the world is simply painted, near and far.
         float sketchAmt = 0.0;
-        if (uSketch > 0.001 && geo && uSketchFar > 0.5) {
-          // …all the way out (a developer switch): where you haven't been, at any distance, the page
-          // is still a pencil underdrawing; colour blooms in round you as you walk, a wet noisy edge
-          // with pigment pooled at its rim. The sky and the far layer (horizon, far skyline) stay
-          // painted. Past the fine window (4 km, 8 m) the far one (~32 km, 64 m) says what's painted
+        if (uSketch > 0.001 && geo) {
+          // Past the fine window (4 km, 8 m) the far one (~32 km, 64 m) says what's painted
           // (R what a photo framed, G the share you walked), blended over the fine one's last
           // ~200 m; inside it, what a photo painted far off shows too.
           vec2 eu = (wp.xz - uExploreBox.xy) * uExploreBox.zw;
@@ -381,23 +381,6 @@ export class WatercolorPost {
             vec3 sk = mix(vec3(0.965, 0.95, 0.915), graphite, g * 0.55 + tone * 0.1);
             sk = mix(sk, c0, 0.1); // the faintest colour note, like a first wash
             c = mix(c, sk, sketchAmt);
-          }
-        } else if (uSketch > 0.001 && geo) {
-          vec2 eu = (wp.xz - uExploreBox.xy) * uExploreBox.zw;
-          float e = (eu.x > 0.0 && eu.y > 0.0 && eu.x < 1.0 && eu.y < 1.0) ? texture2D(tExplore, eu).r : 0.0;
-          float n = fbm(wp.xz * 0.03) - 0.5;
-          float rev = smoothstep(0.3, 0.7, e + n * 0.35);
-          // Only near you: the bloom is the moment of arriving, so the first wash lives in a ring
-          // just past your reveal radius and fades out by ~160 m. Far away the world is always
-          // finished watercolour (a paler horizon read as "not loaded"); the atlas map is where
-          // unvisited stays pencil.
-          float camD = length(wp - (uCamWorld[3].xyz + uWorldOff));
-          sketchAmt = (1.0 - rev) * uSketch * (1.0 - smoothstep(60.0, 160.0, camD));
-          if (sketchAmt > 0.001) {
-            float L = dot(c, vec3(0.299, 0.587, 0.114));
-            vec3 first = mix(vec3(L), c, 0.62);             // a first wash: less saturated…
-            first = mix(first, vec3(0.965, 0.95, 0.915), 0.14); // …and lighter, more paper showing
-            c = mix(c, first, sketchAmt);
           }
         }
 
@@ -699,7 +682,7 @@ export class WatercolorPost {
     c.uGolden.value = golden;
     c.uExposure.value = P.exposure;
     c.uRaw.value = raw ? 1 : 0;
-    c.uSketch.value = (P.sketch || P.sketchFar) && U.uExplore.value ? 1 : 0; // (either choice; neither, and the world is simply painted)
+    c.uSketch.value = P.sketchFar && U.uExplore.value ? 1 : 0; // (sketch mode, once the explore record is up)
     c.uSketchFar.value = P.sketchFar ? 1 : 0;
     c.uCrisp.value = P.crisp;
     c.uSoftGlow.value = P.softGlow;

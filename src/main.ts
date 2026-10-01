@@ -51,7 +51,7 @@ import { U } from './render/shared';
 import { WatercolorPost, postParams } from './render/post';
 import { skyDepth, unprojectDepth, mendDepth } from './render/seen';
 import { SunShadows, shadowParams } from './render/shadows';
-import { applyTier, autoSteps, deviceInfo, isPhoneClass, pickTier } from './render/quality';
+import { applyTier, autoSteps, deviceInfo, isPhoneClass, pickTier, stepsPaid } from './render/quality';
 import { sleepWhenHidden } from './ui/lifecycle';
 import { began, contextLost, contextRestored, diag, diagInit, diagStage, diagTick, errorLine, frameFailed, frameOk, glInfo, glProbe, NO_WEBGL, shaderError, showReport } from './ui/diag';
 import { WalkWorld } from './player/collision';
@@ -333,9 +333,10 @@ async function main() {
   // Paint as you explore: a global, persistent record of where you've been (pencil elsewhere).
   const explore = new Explore(json.origin);
   // ?loop=paint: start in the loop under test — the world in pencil, a photo paints what it frames
-  if (params.get('loop') === 'paint') { postParams.sketch = true; postParams.sketchFar = true; }
-  if (CAPTURE) postParams.sketch = params.get('sketch') === '1'; // regression shots stay fully painted unless asked
-  else if (params.get('sketch') === '0') postParams.sketch = false;
+  // sketch mode: `?loop=paint` starts in it (the photo → paint loop), `?sketch=1` / `?sketch=0` set
+  // it; regression shots stay fully painted unless asked
+  if (params.get('loop') === 'paint' || params.get('sketch') === '1') postParams.sketchFar = true;
+  else if (CAPTURE || params.get('sketch') === '0') postParams.sketchFar = false;
   const walker = new Walker(walk, canvas);
 
   // Spawn: nearest point on `spawn.on` to an anchor point — the `extreme` end of `spawn.near.road`
@@ -1239,8 +1240,11 @@ async function main() {
   // Auto quality: the crisper defaults (paint detail, full screen resolution) step down a few
   // seconds into the walk on a GPU that can't hold ~40 fps; still slow after that, the render
   // scale and the shadow map follow (quality.ts autoSteps) — never a knob the player set in the
-  // panel. The boot tier (quality.ts pickTier) already chose lighter defaults for phones.
-  let qT = 0, qN = 0, qSum = 0, qRound = 0, qDone = CAPTURE, qWait = 0;
+  // panel. Each round's steps are measured by the next and undone if they didn't make the frames
+  // quicker (quality.ts stepsPaid): a device held back by something else keeps its sharp frame.
+  // The boot tier (quality.ts pickTier) already chose lighter defaults for phones.
+  let qT = 0, qN = 0, qSum = 0, qRound = 0, qDone = CAPTURE, qWait = 0, qBefore = 0;
+  let qUndo: [Record<string, unknown>, string, unknown][] = [];
   const autoQuality = (rawDt: number) => {
     if (qDone || interiors.indoors) return;
     qT += rawDt;
@@ -1253,12 +1257,24 @@ async function main() {
     qN++;
     if (qT < 10) return;
     const ms = (qSum / qN) * 1000;
+    (qT = 0), (qN = 0), (qSum = 0);
+    if (qUndo.length && !stepsPaid(qBefore, ms)) {
+      // the last round's steps bought nothing: back to the sharper frame, and no more stepping
+      for (const [bag, k, v] of qUndo) bag[k] = v;
+      resize();
+      console.info(`auto quality: ${ms.toFixed(1)} ms/frame, no quicker than ${qBefore.toFixed(1)} — kept the sharp frame`);
+      qDone = true;
+      return;
+    }
     const steps = autoSteps(ms, qRound, postParams, shadowParams, userKeys, devicePixelRatio);
-    for (const [bag, k, v] of steps) ((bag === 'post' ? postParams : shadowParams) as Record<string, unknown>)[k] = v;
+    const bagOf = (b: string) => (b === 'post' ? postParams : shadowParams) as Record<string, unknown>;
+    qUndo = steps.map(([b, k]) => [bagOf(b), k, bagOf(b)[k]]);
+    qBefore = ms;
+    for (const [b, k, v] of steps) bagOf(b)[k] = v;
     if (steps.length) { resize(); console.info(`auto quality: ${ms.toFixed(1)} ms/frame — ${steps.map(([b, k, v]) => `${b}.${k}=${v}`).join(', ')}`); }
     qRound++;
-    (qT = 0), (qN = 0), (qSum = 0);
-    qDone = !steps.length || qRound >= 2; // (a second round measures the first round's result)
+    // (each round's steps are measured by the next: two rounds of steps, a third to judge the last)
+    qDone = (!steps.length && !qUndo.length) || qRound >= 3;
   };
   const frame = (now: number) => {
     const rawDt = Math.min(0.25, Math.max(0, (now - last) / 1000));

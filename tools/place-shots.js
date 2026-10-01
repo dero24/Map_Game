@@ -14,7 +14,7 @@ window.__PLACE__ = async (tag = 'place', opts = {}) => {
   window.__PUMP__(); // frames even in a hidden pane (inpage-montage.js)
   const wait = window.__WAIT__; // pumped, so hidden-pane timer throttling can't stretch it
   const idle = async (max = 240) => { for (let i = 0; i < max; i++) { const b = typeof G.stream.busy === 'function' ? G.stream.busy() : G.stream.busy; if (!b && !G.stream.worldPending) return; await wait(250); } };
-  const set = (h) => { G.setHour(h); G.timeParams.speed = 0; G.postParams.sketch = true; };
+  const set = (h) => { G.setHour(h); G.timeParams.speed = 0; };
   const { useOf } = await import('/src/world/uses.ts');
   const x0 = G.walker.x, z0 = G.walker.z;
   // real map first: wait (up to realWait s) until no synth placeholder is left within 800 m

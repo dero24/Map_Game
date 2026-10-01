@@ -1,4 +1,4 @@
-// Design-review capture set (in-page, no Playwright). Open `?capture=1&sketch=1`, then:
+// Design-review capture set (in-page, no Playwright). Open `?capture=1` (`&sketch=1`: sketch mode), then:
 //   await import('/tools/review-shots.js'); await __REVIEW__('r1')
 // Saves shots/review-<tag>-a.jpg, -b.jpg (6 frames each) and -c.jpg (4), 800 px wide, through the dev
 // server's /__shot sink. The same poses every round so the reviewer compares like with like.
@@ -82,7 +82,7 @@ window.__REVIEW__ = async (tag = 'r', opts = {}) => {
   const [mbx, mbz] = G.world ? (() => { const o = G.world.json.origin; const K = (Math.PI / 180) * 6378137; return [(-73.9818 - o.lon) * K * Math.cos((o.lat * Math.PI) / 180), (o.lat - 40.3312) * K]; })() : [0, 0];
   const lawn = (() => { for (let r = 20; r < 300; r += 7) for (let a = 0; a < 6.28; a += 0.35) { const x = s.x + Math.sin(a) * r, z = s.z + Math.cos(a) * r; if (G.world.terrain.coverAt(x, z) === 30) return { x, z, y: G.world.terrain.heightAt(x, z) }; } return { x: s.x, z: s.z, y: 0 }; })();
   const um = near('beach:umbrella', s.x, s.z), boat = near('moored-boats:', s.x, s.z), bed = near('garden:hydrangea', s.x, s.z);
-  const set = (h, sk = true) => { G.setHour(h); G.timeParams.speed = 0; G.postParams.sketch = sk; };
+  const set = (h) => { G.setHour(h); G.timeParams.speed = 0; };
   const A = [
     { label: '1 arrival: Ocean Ave, golden hour', fn: () => { shot('ocean-golden')(); set(18.3); } },
     { label: '2 Ocean Ave, morning', fn: () => { shot('ocean-morning')(); set(8.2); } },

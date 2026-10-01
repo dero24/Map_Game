@@ -49,7 +49,7 @@ behaviour.
     sky). `window.__SPOTKIT__` pokes one pose by hand.
   - A subject `name` matches the mesh's own name or a parent's (`retaining-walls`, `retaining-steps`,
     `player-vehicles`, `trees:`).
-- Sketch look in shots: capture mode is fully painted unless the URL has `&sketch=1`.
+- Sketch mode in shots: capture mode is fully painted unless the URL has `&sketch=1` (sketch mode on).
 - The brush's readability (reviewer round 9): with the brush out and a sketch showing on a
   `?capture=1` page, `await import('/tools/brush-check.js'); await __BRUSHCHECK__()` paints it in
   and returns the sketch's share of the frame, its visible share at the sketch and through the wash

@@ -241,7 +241,7 @@ window.__SPOTS__ = async (tag = 'spots', poses = [], opts = {}) => {
   };
   window.__SPOTKIT__ = { idPass, check, sphereOf, stand, repose }; // (for poking at one pose by hand)
   const F = poses.map((p, k) => ({ label: p.label ?? `${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`, fn: async () => {
-    G.setHour(p.hour ?? 14); G.timeParams.speed = 0; G.postParams.sketch = true;
+    G.setHour(p.hour ?? 14); G.timeParams.speed = 0;
     // (a fair day unless the pose asks for weather: the automatic weather drifts between frames)
     Object.assign(G.weatherParams, { autoWeather: false, cloud: 0.3, seaFog: 0, haze: 0.35, wind: 0.5 }, p.weather ?? {});
     const [x, z] = fromLatLon(origin, p.lat, p.lon);

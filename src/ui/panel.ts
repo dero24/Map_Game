@@ -121,8 +121,8 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
 
   const p = gui.addFolder('Watercolor');
   p.add(postParams, 'enabled').name('painting on');
-  p.add(postParams, 'sketch').name('paint as you explore');
-  p.add(postParams, 'sketchFar').name('…far away too (pencil till you walk it)');
+  // (the map always paints in what you've explored; sketch mode puts the world itself in pencil)
+  p.add(postParams, 'sketchFar').name('sketch mode: pencil till you walk or photograph it');
   p.add(postParams, 'sketchReach', 20, 400, 5).name('paint reach as you walk (m)');
   p.add(postParams, 'photoReach', 200, 22000, 100).name('a photo paints out to (m)');
   p.add(postParams, 'kuwaharaRadius', 1, 7, 0.1).name('brush size');

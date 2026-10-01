@@ -16,7 +16,7 @@ window.__STREET__ = async (tag = 'street', opts = {}) => {
   const wait = window.__WAIT__;
   const { unpackJunctions } = await import('/src/sim/traffic.ts');
   const { RANGES, S, H } = await import('/src/sim/protocol.ts');
-  const set = (h) => { G.setHour(h); G.timeParams.speed = 0; G.postParams.sketch = true; };
+  const set = (h) => { G.setHour(h); G.timeParams.speed = 0; };
   const idle = async (max = 120) => { for (let i = 0; i < max; i++) { const b = typeof G.stream.busy === 'function' ? G.stream.busy() : G.stream.busy; if (!b) return; await wait(250); } };
   const g = (x, z) => G.world.terrain.heightAt(x, z);
   const x0 = G.walker.x, z0 = G.walker.z;

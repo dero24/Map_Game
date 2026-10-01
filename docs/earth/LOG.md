@@ -2,6 +2,21 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-01 (night) — No more pale distance; a sharp frame on phones
+
+- **"Paint as you explore" is gone** (Robby: it laid a pale colour over the distance, which
+  read as the fog he'd complained about). It was the lighter of two paint modes: a pale first wash
+  over the ground you hadn't walked. The world is now simply painted, near and far. Exploring shows
+  on the map, which always paints in where you've walked; the atlas and journal still count it.
+- **Sketch mode** is the other mode and is unchanged: pencil to the horizon, painted as you walk
+  or photograph. It's named that in the panel ("sketch mode: pencil till you walk or photograph
+  it"). `?sketch=1`, `?loop=paint`.
+- **Phones keep the sharp frame** (`quality.ts` `stepsPaid`, main.ts auto quality). Auto quality
+  used to drop a phone's paint detail and hi-DPI whenever the frame was over 25 ms, whether or not
+  pixels were the problem. Now each round's steps are measured by the next and undone unless the
+  frames got 12% quicker; Robby saw no speed difference raising it back by hand. The phone tier's
+  paint detail is 85% (from 75%).
+
 ## 2026-10-01 (later) — The far skyline: the city across the bay
 
 A helper's draft (2026-09-28), merged onto today's code.
