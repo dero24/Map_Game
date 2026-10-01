@@ -833,15 +833,29 @@ export class DetailGround {
       return true;
     }
     const cx = (this.wx * s) / res + s / 2, cz = (this.wz * s) / res + s / 2; // (the shown window's middle)
+    const moved = Math.hypot(x - cx, z - cz) >= s * 0.22;
+    // A move goes before tiles' changes: a change waits while the window moves, and a move falling
+    // due while a change paints in goes first, the rest of the change after it. (A tile landing under
+    // the window repaints all of it — a move taking that along fell behind a fast flight.)
+    if (this.job && this.job.wx === this.wx && this.job.wz === this.wz) {
+      if (moved) {
+        const k = res / s;
+        for (const r of this.job.todo) this.changed.push([(this.wx + r[0]) / k, (this.wz + r[1]) / k, (this.wx + r[2]) / k, (this.wz + r[3]) / k]);
+        this.job = null;
+      } else if (this.changed.length) {
+        const N = res / CELL, m = new Uint8Array(N * N);
+        this.markChanged(m, N, this.wx, this.wz);
+        this.job.todo.push(...slices(m, N, CELL, (res * res) / 32));
+      }
+    }
     if (!this.job) {
-      const moved = Math.hypot(x - cx, z - cz) >= s * 0.22;
       if (!moved && !this.changed.length) return false;
       this.job = this.plan(moved ? wx : this.wx, moved ? wz : this.wz);
       if (!this.job.todo.length) {
         this.job = null; // (tiles changed out of its reach)
         return false;
       }
-    } else if (this.changed.length) this.job.todo.push(...this.rects(this.job.wx, this.job.wz)); // (with the new paint)
+    }
     // A slice a frame (small ones together); four slices' worth while the walker nears the edge of
     // the window shown (a fast flight). What a slice costs: its canvas (with the blur's margin), once
     // for the strokes and once for each wash layer through the blur — one, or all three at the edge.
@@ -862,8 +876,8 @@ export class DetailGround {
   }
   // Moving to (wx, wz): what's still in the window slides across, and the rest is listed. The whole
   // window's wash fades out along its edges (the blur), so: the strip it moved onto, with the band
-  // that was the edge there; the band the move made the edge behind it; and where tiles changed.
-  // (Along an axis it didn't move on, the edge's band slides along itself and stays right.)
+  // that was the edge there, and the band the move made the edge behind it. (Along an axis it didn't
+  // move on, the edge's band slides along itself and stays right.) Standing still: where tiles changed.
   private plan(wx: number, wz: number) {
     const res = this.canvas.width, N = res / CELL, m = new Uint8Array(N * N);
     const dx = wx - this.wx, dz = wz - this.wz;
@@ -880,19 +894,13 @@ export class DetailGround {
       if (dz > 0) (mark(m, N, 0, res - dz - CELL, res, res), mark(m, N, 0, 0, res, CELL));
       else if (dz < 0) (mark(m, N, 0, 0, res, CELL - dz), mark(m, N, 0, res - CELL, res, res));
     }
-    return { wx, wz, todo: [...slices(m, N, CELL, (res * res) / 32), ...this.rects(wx, wz)] };
+    else this.markChanged(m, N, wx, wz);
+    return { wx, wz, todo: slices(m, N, CELL, (res * res) / 32) };
   }
-  // the changed boxes' part of the window at (wx, wz), as slices
-  private rects(wx: number, wz: number) {
-    const res = this.canvas.width, N = res / CELL, k = res / this.size, m = new Uint8Array(N * N);
-    let any = false;
-    for (const b of this.changed.splice(0)) {
-      const r: Rect = [b[0] * k - wx, b[1] * k - wz, b[2] * k - wx, b[3] * k - wz];
-      if (r[2] <= 0 || r[3] <= 0 || r[0] >= res || r[1] >= res) continue;
-      mark(m, N, r[0], r[1], r[2], r[3]);
-      any = true;
-    }
-    return any ? slices(m, N, CELL, (res * res) / 32) : [];
+  // the changed boxes' part of the window at (wx, wz), marked (and the boxes let go)
+  private markChanged(m: Uint8Array, N: number, wx: number, wz: number) {
+    const k = this.canvas.width / this.size;
+    for (const b of this.changed.splice(0)) mark(m, N, b[0] * k - wx, b[1] * k - wz, b[2] * k - wx, b[3] * k - wz);
   }
   // One slice of the window being painted in, drawn on a canvas of its own with a CELL of margin (the
   // blur's reach; none past the window's edge, where the whole window's wash fades out too) and

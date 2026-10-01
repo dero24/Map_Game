@@ -238,6 +238,20 @@ describe('the ground windows on a flight', () => {
     const still = f.slice(241);
     expect(still.slice(30, 90).some((r) => r.uploaded && !r.moved)).toBe(true);
   });
+  it("doesn't let tiles landing under it hold it back on a fast flight", () => {
+    // (the real tiles past the bake: a stand-in, then the tile itself, then its relief — each one
+    // repaints its part of both windows, and a move falling due mid-change takes the rest along)
+    const P = new Painter(town, []), D = new DetailGround(P, covers(), res, 300, 2, 6);
+    const f = fly(D, [0, -1200], [0, 160], 8, (i) => {
+      if (i % 90 !== 45) return;
+      const z = -1200 + (160 * i) / 60, b: [number, number, number, number] = [-200, z - 100, 200, z + 300];
+      P.setTile(`t${i}`, [{ c: 'primary', w: 15, p: [-2000, z * 10, 2000, z * 10] }], [], b);
+      D.touch(b);
+    }).slice(1);
+    expect(f.every((r) => r.inside)).toBe(true);
+    expect(f.filter((r) => r.moved).length).toBeGreaterThanOrEqual(15); // (1280 m: 66 m a move)
+    expect(Math.max(...f.map((r) => r.blurred))).toBeLessThanOrEqual(full / 4);
+  });
 });
 
 describe('slices of a window', () => {
