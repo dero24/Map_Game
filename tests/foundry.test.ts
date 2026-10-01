@@ -184,6 +184,7 @@ describe('decor (interior + terrace furniture)', () => {
     ['cafeSet', D.cafeSet(0xf1ede4, 0x2a2622, 0x2f4a6a), 2600, null, true],
     // the pieces a planned interior repeats (docs/INTERIORS_PLAN.md, Slice 1): plain boxes, instanced by the hundred
     ['kitchenRun', D.kitchenRun(3.9), 800, [3.9, 0.66], true],
+    ['kitchenRun (under a window)', D.kitchenRun(2.4, undefined, undefined, false), 600, [2.42, 0.66], true],
     ['workstation', D.workstation(), 500, [1.6, 1.4], true],
     ['doorFrame', D.doorFrame(0.9), 200, [1.06, 0.16], true],
     ['doorLeaf', D.doorLeaf(0.8), 350, [0.8, 0.14], true],
@@ -229,7 +230,44 @@ describe('decor (interior + terrace furniture)', () => {
     ['weightBench', D.weightBench(), 900, [1.8, 1.27], true],
     ['dumbbellRack', D.dumbbellRack(1.8), 1500, [1.8, 0.5], true],
     ['lockers', D.lockers(1.8), 800, [1.8, 0.46], true],
+    // the way in (review round 10, must-fix 4): coats on their rail, the hall's runner, the console
+    // with its lamp lit, the mirror over it, a metre of skirting, a ceiling light's dome
+    ['coatRail', D.coatRail(1.0, 4, 3), 3200, [1.06, 0.3], true],
+    ['runner', D.runner(3.0, 0.8), 800, [3.12, 0.8], true],
+    ['consoleLamp', D.consoleLamp(1.0), 1200, [1.0, 0.32], true],
+    ['mirror', D.mirror(0.7, 0.9), 250, [0.73, 0.045], true],
+    ['skirting', D.skirting(), 100, [1.0, 0.02], true],
+    ['ceilingDome', D.ceilingDome(0.17, 'lamp'), 500, [0.4, 0.4], false],
   ];
+  it('coats hang as coats: three or more on a rail, rounded, 0.9–1.1 m long, whatever the seed', () => {
+    for (let seed = 0; seed < 32; seed++)
+      for (const n of [3, 4]) {
+        const parts = D.coatRail(1.0, n, seed);
+        // (a coat's body: the fabric part that hangs most of a metre)
+        const bodies = parts.filter((p) => p.mat === 'fabric' && bb(p.g).max.y - bb(p.g).min.y > 0.85);
+        expect(bodies.length).toBe(n);
+        for (const p of bodies) {
+          const b = bb(p.g), len = b.max.y - b.min.y;
+          expect(len).toBeGreaterThanOrEqual(0.9 - 1e-6);
+          expect(len).toBeLessThanOrEqual(1.1 + 1e-6);
+          // rounded: a turned body, many vertices across its width at the waist (a box has two)
+          const pos = p.g.getAttribute('position'), xs = new Set<number>();
+          for (let i = 0; i < pos.count; i++) if (Math.abs(pos.getY(i) - (b.min.y + 0.46 * len)) < 0.01) xs.add(Math.round(pos.getX(i) * 1000) * 10000 + Math.round(pos.getZ(i) * 1000));
+          expect(xs.size).toBeGreaterThanOrEqual(6);
+          // it hangs in front of the wall, from a peg at ~1.66 m
+          expect(b.max.y).toBeGreaterThan(1.6);
+          expect(b.max.z).toBeLessThanOrEqual(0.15 + 1e-6);
+        }
+      }
+    expect(Array.from(D.mergeDecor(D.coatRail(1, 3, 5)).getAttribute('position').array)).toEqual(Array.from(D.mergeDecor(D.coatRail(1, 3, 5)).getAttribute('position').array));
+  });
+  it('the skirting is 12 cm of trim white, its back on the wall', () => {
+    const b = new THREE.Box3();
+    for (const p of D.skirting()) b.union(bb(p.g));
+    expect(b.max.y).toBeCloseTo(D.SKIRT_H, 2);
+    expect(b.max.z).toBeCloseTo(0.009, 3);
+    for (const p of D.skirting()) for (const sh of [16, 8, 0]) expect((p.hex >> sh) & 255).toBeGreaterThanOrEqual(0xe0); // (trim white)
+  });
   it('every piece is valid, grounded, within its footprint and its vertex budget', () => {
     for (const [name, parts, budget, fp, floor] of cases) {
       let n = 0;

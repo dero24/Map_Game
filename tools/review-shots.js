@@ -148,7 +148,21 @@ window.__REVIEW__ = async (tag = 'r', opts = {}) => {
   const D4 = [
     { label: '17 café terrace', fn: async () => { set(12.5); const t = near('terrace:', s.x, s.z); if (t) look({ ...t, y: t.y + 0.8 }, 7, 1.7, 0.9); await wait(800); } },
     { label: '18 inside a café / diner', fn: async () => { const P = shopPlan(['cafe', 'restaurant', 'bar']) ?? shopPlan(['shop', 'unknown']); if (P) await inside(P, 13); } },
-    { label: '19 inside a house, morning sun', fn: async () => { shot('inside')(); set(9.3); await wait(1500); } },
+    { label: '19 inside a house, morning sun', fn: async () => {
+      // the room with the most east-to-south glass, of this house and its 24 nearest, framed where the
+      // sun's pools on its floor are in the lens past its furniture (src/world/interior/views.ts)
+      shot('inside')(); set(9.3); await wait(300);
+      const V = await import('/src/world/interior/views.ts'), I = G.interiors, P0 = I.activePlan, kd = G.U.uKeyDir.value, sun = [kd.x, kd.y, kd.z];
+      const near = P0 ? [P0, ...[...G.plans.values()].filter((P) => P !== P0 && G.stream.fpByKey.get(P.fp)?.kind === 'house' && !P.tall).sort((a, b) => Math.hypot(a.door.x - P0.door.x, a.door.z - P0.door.z) - Math.hypot(b.door.x - P0.door.x, b.door.z - P0.door.z)).slice(0, 24)] : [];
+      const homes = near.map((P) => ({ P, fp: G.stream.fpByKey.get(P.fp) })).filter((h) => h.fp).map((h) => ({ ...h, L: h.P === P0 && I.activeLayout ? I.activeLayout : V.layoutInterior(h.P, h.fp) }));
+      const h = homes[V.sunniest(homes, 90, 180, 0, sun)];
+      // (stood in once to build it, then again where its furniture leaves the pools in sight)
+      for (let pass = 0; h && pass < 2; pass++) {
+        const own = I.activePlan === h.P, v = V.sunRoomView(h.P, h.fp, own && I.activeLayout ? I.activeLayout : h.L, 90, 180, 0, sun, own ? I.activeTaken[0] : undefined);
+        if (v) for (let i = 0; i < 2; i++) { G.walkParams.fly = false; G.walker.place(v.x, v.z, v.yaw, v.pitch, v.feet); for (let k = 0; k < 8; k++) I.update(G.walker.x, G.walker.z, 0.25, G.walker.feet); I.flush(); }
+      }
+      await wait(1500);
+    } },
     { label: '20 a walker, side on', fn: async () => {
       set(15); ground(s.x, s.z, 0); await wait(3500);
       let mesh = null; G.scene.traverse((o) => { if (o.name === 'life-ped') mesh = o; });

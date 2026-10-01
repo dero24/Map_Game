@@ -152,8 +152,20 @@ type Prog = 'living' | 'kitchen' | 'dining' | 'wc' | 'bath' | 'bed' | 'study' | 
 const BED_D = { a: 11.5, w: 2.75 }, BED_S = { a: 7.5, w: 2.15 };
 const minW = (r: Rect) => Math.min(r.u1 - r.u0, r.v1 - r.v0);
 
+/** A living room's opening off the hall: at least this wide (a cased opening, no door) … */
+export const LIVING_OPEN = 1.2;
+/** … its middle within this angle of the front door's axis, seen from the door (deg): you see into it. */
+export const LIVING_ANGLE = 30;
+/** A cottage's strip is its living room at the front and its kitchen at the back (one space) when
+ *  it's this deep (m); shallower, it's one great room with its kitchen along a wall. */
+const GREAT_SPLIT = 6.4;
+
 function houseStorey(B: Builder, k: number) {
-  const P = B.P, M = P.main, S = P.strip!, rng = B.rng;
+  const P = B.P, M = P.main, rng = B.rng;
+  // (a cottage's strip is its living room downstairs; upstairs its landing is the stair's lane and
+  // a passage beside it, the rest of the strip bedrooms)
+  const S = k > 0 && P.land ? P.land : P.strip!;
+  const great = !!P.cottage && k === 0;
   const n = P.levels;
   const lane = P.lane;
   const laneLow = lane ? lane.v0 + lane.v1 < S.v0 + S.v1 : true;
@@ -187,17 +199,18 @@ function houseStorey(B: Builder, k: number) {
   }
   if (lane) {
     // a hall grown wide over a sliver of side: the wet room along the passage, beside the stair
+    // (not in a cottage's living room)
     const passW = laneLow ? S.v1 - lane.v1 : lane.v0 - S.v0;
     const need = sType === 'wc' ? 1.3 : 3.2;
-    if (passW >= 2.05) {
+    if (passW >= 2.05 && !great) {
       const d = Math.min(1.6, passW - 0.95);
       const len = Math.max(1.5, need / d);
       const u0 = lane.u0 + 0.4, u1 = Math.min(lane.u1 + 0.4, u0 + len);
       if (u1 - u0 >= 1.45 && (u1 - u0) * d >= need) svcs.push(laneLow ? { u0, u1, v0: S.v1 - d, v1: S.v1 } : { u0, u1, v0: S.v0, v1: S.v0 + d });
     }
-  } else if (n === 1 && M.u1 - M.u0 > 6) {
+  } else if (n === 1 && M.u1 - M.u0 > 6 && !great) {
     // a single storey: the bathroom closes the hall's far end (its wall between windows where the
-    // hall runs along an outside wall)
+    // hall runs along an outside wall) — a cottage's bathroom is beside its living room
     let u0: number | null = M.u1 - Math.max(2.2, 3.4 / Math.max(0.9, S.v1 - S.v0));
     const ends: [number, -1 | 1][] = [];
     if (S.v0 <= M.v0 + 0.01) ends.push([M.v0 + 0.05, -1]);
@@ -265,28 +278,97 @@ function houseStorey(B: Builder, k: number) {
       if (x === undefined) seen.set(r, (x = free(low, r)));
       return x;
     };
+    // (a hall house's living room wants the passage side of the hall, where its wide opening fits:
+    // the stair's side has room for a door before the stair at most)
+    const passLow = lane ? !laneLow : null;
+    // (a wet room along the passage stands where the living room's opening goes: it mustn't leave
+    // the hall's wall on that side too short for an opening within 30° of the door's axis)
+    const vp = laneLow ? S.v1 : S.v0;
+    const blocksLiving = !!svc && !!lane && k === 0 && !great && (laneLow ? svc.v1 >= S.v1 - 0.01 && svc.v0 > S.v0 + 0.01 : svc.v0 <= S.v0 + 0.01 && svc.v1 < S.v1 - 0.01) && svc.u0 < P.ud + Math.abs(vp - P.vd) / Math.tan((LIVING_ANGLE * Math.PI) / 180) + LIVING_OPEN / 2 + 0.3;
     for (const combo of combos) {
       const rs = combo.flatMap((parts, si) => parts.map((r) => ({ r, low: sides[si].low, hall: freeOf(sides[si].low, r) })));
-      const c = assign(rs, k, n, !!svc);
-      const sc = c.s + rng.float() * 0.4;
+      const c = assign(rs, k, n, !!svc, great, passLow);
+      const sc = c.s + rng.float() * 0.4 + (blocksLiving ? 4 : 0);
       if (!best || sc < best.s) best = { rooms: c.rooms, s: sc, svc };
     }
   }
   const svc = best?.svc ?? null;
   const hallSpace = B.space();
-  const hallIds = (svc ? minus(S, svc) : [S]).map((r) => B.add(r, k === 0 ? 'hall' : 'landing', k, { space: hallSpace }));
+  // the hall — or a cottage's living room: at the front, its kitchen behind it in the same space
+  // (no wall between) when the strip is deep enough, else one great room
+  const stripRects = svc ? minus(S, svc) : [S];
+  const hallParts: { r: Rect; t: RoomType }[] = [];
+  let cutK: number | null = null;
+  if (great) {
+    const D = S.u1 - S.u0;
+    cutK = D >= GREAT_SPLIT ? S.u1 - Math.max(2.8, Math.min(3.4, D * 0.4)) : null;
+    for (const r of stripRects) {
+      if (cutK === null) hallParts.push({ r, t: 'great' });
+      else {
+        if (r.u0 < cutK - 0.05) hallParts.push({ r: { ...r, u1: Math.min(r.u1, cutK) }, t: 'living' });
+        if (r.u1 > cutK + 0.05) hallParts.push({ r: { ...r, u0: Math.max(r.u0, cutK) }, t: 'kitchen' });
+      }
+    }
+  } else for (const r of stripRects) hallParts.push({ r, t: k === 0 ? 'hall' : 'landing' });
+  const hallIds = hallParts.map((h) => B.add(h.r, h.t, k, { space: hallSpace }));
+  /** The free stretches (u) of the hall's edge v along room r, clear of the stair: [hall id, s0, s1]. */
+  const stretches = (low: boolean, r: Rect): [number, number, number][] => {
+    const v = low ? S.v0 : S.v1, out: [number, number, number][] = [];
+    hallIds.forEach((h) => {
+      const hr = B.rooms[h]?.r;
+      if (!hr || (low ? Math.abs(hr.v0 - v) : Math.abs(hr.v1 - v)) > 0.05) return;
+      let segs: [number, number][] = [[Math.max(hr.u0, r.u0) + 0.3, Math.min(hr.u1, r.u1) - 0.3]];
+      for (const K of keep) {
+        if (!(K.v0 < v + 0.75 && K.v1 > v - 0.75)) continue;
+        segs = segs.flatMap(([s0, s1]) => (K.u1 <= s0 || K.u0 >= s1 ? [[s0, s1]] : [[s0, K.u0], [K.u1, s1]]) as [number, number][]);
+      }
+      for (const [s0, s1] of segs) if (s1 > s0) out.push([h, s0, s1]);
+    });
+    return out;
+  };
   let living = -1, kitchen = -1;
   for (const q of best?.rooms ?? []) {
     const bed = q.t === 'bed' ? (rectArea(q.r) >= BED_D.a && minW(q.r) >= BED_D.w ? 2 : 1) : undefined;
     const id = B.add(q.r, q.t, k, bed ? { bed } : {});
     if (q.t === 'living') living = id;
     if (q.t === 'kitchen') kitchen = id;
+    if (q.hall < 0.8) continue;
     const w = q.t === 'living' || q.t === 'kitchen' || q.t === 'dining' ? 0.9 : 0.8;
-    if (q.hall >= 0.8) for (const h of hallIds) B.link(h, id, q.hall >= w ? w : 0.8);
+    const st = stretches(q.low, q.r);
+    if (q.t === 'living' && k === 0 && st.length) {
+      // the living room opens off the hall through a cased opening (≥ 1.2 m, no door), its middle
+      // within 30° of the front door's axis — far enough along the hall that you see into it as you
+      // step in: t − ud ≥ |v − vd| · cot 30°
+      // (and a few steps in, ~4 m, where it's still ahead of you once you're through the door)
+      const v = q.low ? S.v0 : S.v1, near = P.ud + Math.abs(v - P.vd) / Math.tan((LIVING_ANGLE * Math.PI) / 180) + 0.05, want = Math.max(near, P.ud + 4.2);
+      let pick: { h: number; w: number; t: number; s: number } | null = null;
+      for (const [h, s0, s1] of st)
+        for (const ow of [1.6, 1.4, LIVING_OPEN]) {
+          if (s1 - s0 < ow) continue;
+          const t = Math.max(s0 + ow / 2, Math.min(s1 - ow / 2, want));
+          const s = (t < near - 0.01 ? 10 + near - t : 0) + (1.6 - ow) * 2 + Math.abs(t - want) * 0.3;
+          if (!pick || s < pick.s) pick = { h, w: ow, t, s };
+          break;
+        }
+      if (pick) { B.link(pick.h, id, pick.w, { pref: pick.t, wide: true }); continue; }
+    }
+    // (one doorway off the hall: from the part of it with the longest free stretch along the room. A
+    // cottage's keep to the ends of its living room's walls and the front of its kitchen's — where the
+    // two meet, or by the front wall — so the sofa and the kitchen's run each keep a long wall)
+    let bh = -1, bl = 0, pref: number | undefined;
+    for (const [h, s0, s1] of st) {
+      const kit = great && B.rooms[h].type === 'kitchen';
+      const len = s1 - s0 + (kit && s1 - s0 >= 0.8 ? 99 : 0);
+      if (len > bl) (bl = len), (bh = h), (pref = !great ? undefined : kit ? s0 + 0.45 : cutK !== null && q.r.u1 >= cutK - 0.05 ? s1 - 0.45 : s0 + 0.45);
+    }
+    if (bh >= 0) B.link(bh, id, q.hall >= w ? w : 0.8, pref !== undefined ? { pref } : {});
   }
   if (svc) {
     const id = B.add(svc, sType, k);
-    for (const h of hallIds) B.link(h, id, 0.8);
+    // (its door off the part of the hall it shares the most wall with)
+    let bh = -1, bl = 0.05;
+    for (const h of hallIds) { const e = id >= 0 && B.rooms[h] ? shared(B.rooms[h], B.rooms[id]) : null; if (e && e.b - e.a > bl) (bl = e.b - e.a), (bh = h); }
+    if (bh >= 0) B.link(bh, id, 0.8);
   }
   // an open kitchen: a wide opening to the living room when they're side by side
   if (living >= 0 && kitchen >= 0 && rng.float() < 0.55) B.link(living, kitchen, 1.4, { wide: true });
@@ -303,19 +385,33 @@ function take(left: Slot[], pred: (q: Slot) => boolean, score: (q: Slot) => numb
 const ratio = (r: Rect) => Math.max(r.u1 - r.u0, r.v1 - r.v0) / Math.max(0.1, minW(r));
 const reach = (q: { hall: number }) => q.hall >= 0.8;
 
-/** Give a storey's rooms their program, scored against real proportions. */
-function assign(rs: { r: Rect; low: boolean; hall: number }[], k: number, n: number, service: boolean) {
+/** Give a storey's rooms their program, scored against real proportions. `great`: a cottage's ground
+ *  storey, whose living room and kitchen are its strip (the side rooms are bedrooms, a bathroom, a
+ *  study). `passLow`: the side of a hall house's hall away from its stair (its living room's). */
+function assign(rs: { r: Rect; low: boolean; hall: number }[], k: number, n: number, service: boolean, great = false, passLow: boolean | null = null) {
   const out: { r: Rect; low: boolean; t: Prog; hall: number }[] = [];
   let s = 0;
   const left: Slot[] = rs.map((q) => ({ ...q, a: rectArea(q.r) })).sort((x, y) => y.a - x.a);
-  if (k === 0 || n === 1) {
-    // (in a small house, the best room there is — a tight living room beats none)
-    const liv = take(left, (q) => q.a >= 10 && minW(q.r) >= 2.9, (q) => -q.a * (reach(q) ? 1 : 0.6) + q.r.u0 * 0.4) ?? take(left, (q) => q.a >= 7 && minW(q.r) >= 2.3, (q) => -q.a * (reach(q) ? 1 : 0.6));
+  if (great) {
+    if (!service && n > 1) {
+      const wc = take(left, (q) => q.a >= 1.3 && q.a <= 7 && reach(q), (q) => q.a);
+      if (wc) out.push({ ...wc, t: 'wc' }); else s += 1.2;
+    }
+    if (n === 1 && !service) {
+      const ba = take(left, (q) => q.a >= 3.2 && reach(q), (q) => Math.abs(q.a - 5.5));
+      if (ba) out.push({ ...ba, t: 'bath' }); else s += 5;
+    }
+  } else if (k === 0 || n === 1) {
+    // (in a small house, the best room there is — a tight living room beats none; a hall house's on
+    // the passage side, where its wide opening fits)
+    const side = (q: Slot) => (passLow !== null && q.low !== passLow ? 6 : 0);
+    const liv = take(left, (q) => q.a >= 10 && minW(q.r) >= 2.9, (q) => -q.a * (reach(q) ? 1 : 0.6) + q.r.u0 * 0.4 + side(q)) ?? take(left, (q) => q.a >= 7 && minW(q.r) >= 2.3, (q) => -q.a * (reach(q) ? 1 : 0.6) + side(q));
     if (liv) {
       out.push({ ...liv, t: 'living' });
       s += liv.a > 42 ? (liv.a - 42) * 0.08 : 0;
       s += reach(liv) ? 0 : 1.5;
       if (liv.a < 10 || minW(liv.r) < 2.9) s += 3;
+      if (passLow !== null && liv.low !== passLow) s += 1;
     } else s += 9;
     const kit = take(left, (q) => q.a >= 6 && minW(q.r) >= 2.2, (q) => -q.a - q.r.u1 * 0.3);
     if (kit) out.push({ ...kit, t: 'kitchen' }); else s += 5;
@@ -351,14 +447,15 @@ function assign(rs: { r: Rect; low: boolean; hall: number }[], k: number, n: num
   }
   // whatever's left: a dining room, a study, a guest bedroom, a utility room or a closet
   for (const q of left) {
-    const t: Prog = k === 0 && n > 1 && q.a >= 7 && !out.some((o) => o.t === 'dining') ? 'dining'
+    // (a cottage eats in its kitchen: a room beside it downstairs is a den or a guest bedroom)
+    const t: Prog = k === 0 && n > 1 && !great && q.a >= 7 && !out.some((o) => o.t === 'dining') ? 'dining'
       : q.a >= 4.5 && !out.some((o) => o.t === 'study') ? 'study'
         : q.a >= BED_S.a && minW(q.r) >= BED_S.w ? 'bed'
           : q.a >= 2 ? 'utility' : 'closet';
     out.push({ ...q, t });
     if (t === 'closet') s += 0.5;
   }
-  const count = out.length + (service ? 1 : 0);
+  const count = out.length + (service ? 1 : 0) + (great ? 2 : 0);
   if (count < 3) s += 6 * (3 - count);
   if (count > 6) s += count - 6;
   for (const q of out) {

@@ -66,6 +66,50 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
   - Budgets (`tests/interiorBudget.test.ts`): no step over 8 ms, ≤ 120k vertices (a house 40k, a
     supermarket 90k), ≤ 60 draws, a tall building ≤ 3 storeys built; layout rules in
     `tests/interiorLayout.test.ts`; `npx tsx tools/bench-interiors.mts`.
+- The way in (review round 10, must-fix 4: "the front door opens on a home"; `tests/interiorLayout.test.ts`,
+  `interiorBudget.test.ts` "the way in", `tests/helpers/homes.ts`):
+  - A cottage (plan.ts `COTTAGE`: ≤ 110 m² a storey, and wide enough for a living room of 3.2 m
+    beside its stair and a bedroom beside that) has no hall. The strip from the front door is its living
+    room (`Plan.cottage`): the kitchen at the back of it in the same space (no wall), or one `great` room
+    when it's under 6.4 m deep; the stair up an inside wall of it; bedrooms, the bathroom (a WC behind
+    the stair over a storey) off it — off its kitchen end where they can, else near the front, so the
+    living room keeps a long wall for its sofa. Upstairs the landing is the stair's lane and a passage
+    (`Plan.land`, its wall between windows); the rest of the strip is bedrooms.
+  - A bigger house keeps its hall: the stair's foot no more than 40° off the door's axis (a door far
+    across a wide hall pushes the foot further in), the living room on the passage side, opening off
+    the hall through a cased opening of 1.2–1.6 m (`LIVING_OPEN`; no leaf over 1.15 m) whose middle is
+    within 30° of the axis (`LIVING_ANGLE`: t − ud ≥ |v − vd| · cot 30°). A WC along a wide hall's
+    passage side is passed over when it would leave that wall too short for such an opening.
+  - The hall at the front door (`furnish.ts` `wayIn`): a bordered runner down its way past the stair, the
+    console with its lamp lit (always) and a mirror over it on a wall ahead of the door (`bestAgainst`:
+    the best spot by a score, not the first random one), coats on their rail by the door (a cottage hangs
+    them in its living room). Pieces: `decor.ts` `coatRail` (3–4 turned coats of 0.9–1.1 m), `runner`,
+    `consoleLamp`, `mirror`, `skirting`, `ceilingDome`.
+  - Skirting (`skirtRoom`, before the furniture): 12 cm of trim white along every stretch of every room's
+    walls, both faces of a partition, stopping at doorways — one 1 m piece stretched per stretch
+    (`Instancer.put`'s `sx`), so a block of flats' thousands cost one draw.
+  - Ceiling lights in a home: a glass dome, off by day in a room with windows (decor mat `lamp` → part
+    `IP.night`, lit by `uNight`; its `Light.n` weighted by the night in `pickLights`), on all day in one
+    without (a hall, a landing, a WC). Lamps on tables and floors stay lit.
+  - Sun pools come only through the facade's own window cells (spacing, sill, head by kind — a
+    storefront's glass on the ground, a curtain wall's floor to ceiling: `uSunWin`, `uSunWinUp`), and only
+    where the wall the ray leaves by is the same room's (the room map a hand's width inside it): no
+    "morning sun" in a hall with no window.
+  - In the room the front door opens on, the free-standing pieces (the armchair, the big plant) stay off
+    the line from the door to the room's far end: the view in reaches the kitchen and its table.
+  - Pose 19 (`tools/review-shots.js`, "morning sun"): of the 'inside' house and its 24 nearest, the room
+    with the most east-to-south glass (`interior/views.ts` `glassFacing`, `sunniest`; of rooms with as
+    much, a room of the day before a bedroom, then the one whose floor takes more of the light), framed
+    where the most sunlit floor is in the lens (`sunRoomView`: from a 40 cm grid and its doorways, never
+    inside its furniture — `Interiors.activeTaken`, the floor it claimed — each turned a little either
+    way and pitched 0.2–0.44 down; a coarse lens of rays through the room's box, its furniture as low
+    blocks, estimates the frame's sunlit floor — `sunlit`: back toward the real sun, `uKeyDir`, through
+    the room's own window cells — its bare floor and its biggest wall, and keeps the most light with
+    neither over about a quarter of the frame). Without the sun: its doorway or far side, looking at the
+    floor a stride in from those windows.
+  - Measuring a frame (an id pass): with `window.__TAG_PIECES__` set, a build's merged mesh carries an
+    `aObj` stream — each piece drawn while furnishing, each baked piece, its own tag; 0 the building
+    (`mesh.ts` `tagging`, `ARCH_KEY` for the pieces that are the building's).
 - Deeper archetypes (Slice 4, `tests/interiorArch.test.ts`): `uses.ts placeOf(name, tag)` says what a
   building is (its tag first — a pub called "The Library" stays a pub — else its name, several
   languages) and plan.ts picks the family: `market` (a supermarket, a grocery ≥ 400 m², a pharmacy
@@ -128,7 +172,8 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
   diner for restaurants/bars (vinyl booths, counter + stools, menu board), office/civic (desks,
   monitors, office chairs), shop for groceries (stocked gondolas).
 - Sun pools: the interior shader traces the sun ray to the outer wall (`uDims`) and lights the
-  floor where it passes a window band (0.9–2.25 m, 2.7 m cells).
+  floor where it passes one of that wall's real window cells (the facade's spacing, sill and head
+  for the building's kind) and that wall is the same room's (see "The way in" above).
 - Only on foot: driving or flying (`interiors.update(..., onFoot)`), no interior activates; a build
   in progress drops, and an open one goes once you're 30 m past its door. A downtown drive used to
   assemble an interior for every door it passed, with 70–200 ms spikes.
@@ -318,7 +363,7 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   - `kit.ts`: cars (+ gear), boats, planes, rocks;
   - `flora.ts`: 7 tree species × 3 variants (`treeMeta` gives real dims), 12 garden species with growth stages, `plantMix`, `inBloom`;
   - `fauna.ts`: 9 animals (incl. red fox, red-tailed hawk) on one jointed body plan + `birdGeometry` + `critterMaterial`;
-  - `decor.ts`: the furniture family for interiors and terraces (sofa, armchair, bed, tables, chairs, bistro and office chairs, monitor, lamps, café counter, booth, stocked shelves, plants, ceiling fan, storage bench, `cafeSet`), rounded boxes (one bevel segment; plain boxes under 1.5 cm radius) and tapered legs, merged by `mergeDecor` or instanced by `interior/mesh.ts`, plus the plain-box pieces planned rooms repeat (kitchen run, workstation, door frame and leaf, WC, vanity, bath, wardrobe, dresser, bookcase, gondola, washer, lift doors, mailboxes, racking, range); per-piece vertex budgets in `tests/foundry.test.ts` (a sofa < 4000, a chair < 1500);
+  - `decor.ts`: the furniture family for interiors and terraces (sofa, armchair, bed, tables, chairs, bistro and office chairs, monitor, lamps, café counter, booth, stocked shelves, plants, ceiling fan, storage bench, `cafeSet`), rounded boxes (one bevel segment; plain boxes under 1.5 cm radius) and tapered legs, merged by `mergeDecor` or instanced by `interior/mesh.ts`, plus the plain-box pieces planned rooms repeat (kitchen run, workstation, door frame and leaf, WC, vanity, bath, wardrobe, dresser, bookcase, gondola, washer, lift doors, mailboxes, racking, range), and the way in (coats on their rail, a bordered runner, the console with its lamp, a mirror, skirting stretched to each wall, a ceiling dome lit after dark or all day); per-piece vertex budgets in `tests/foundry.test.ts` (a sofa < 4000, a chair < 1500, the coat rail < 3200);
   - `people.ts`: one jointed person (~1.4k verts) for walkers and residents. Skin, hair and trouser palettes, 5 hairstyles, shorts/sleeves by `warmthFor(climate, month)` — all chosen per instance in the shader (`PEOPLE` define in `creatureMaterial`, marker vertex colours `MARK`), so a crowd is one draw;
   - `furniture.ts`: mailboxes, beach set, picnic table, car gear + `gearFor`;
   - `micro.ts`: the micro layer's small things (carts, A-frames, porch chairs, flags, hoops, cleats, buoys, beach gear, the mapped picnic tables, boards, cabinets, clocks, channel marks), placed by `world/micro.ts` and drawn real close up, as impostor cards further out (`docs/agent/rendering.md`).

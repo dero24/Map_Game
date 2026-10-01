@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { WalkWorld } from '../src/player/collision';
-import { planInterior, registerPlan, rectArea } from '../src/world/interior/plan';
-import { layoutInterior, registerLayout } from '../src/world/interior/layout';
+import { planInterior, registerPlan, rectArea, type Plan } from '../src/world/interior/plan';
+import { layoutInterior, registerLayout, type Layout } from '../src/world/interior/layout';
 import { build, flood, pockets, nobodys, wallsOnWindows, wallsOnWindows2, realRooms, area, minWidth, rect, fpOf, doorN, terrain, toW, type Built } from './helpers/interiorCheck';
+import { cottageCases, bigHouseCases, entryType, stairInView, livingOpening } from './helpers/homes';
+import { glassFacing, sunRoomView, sunniest, poolOn } from '../src/world/interior/views';
 import type { Footprint, Door } from '../src/world/buildings';
 
 // Slice 1 of docs/INTERIORS_PLAN.md — "rooms, not halls": the layout rules a planned interior
@@ -114,6 +116,106 @@ describe('houses', () => {
     expect(three / storeys).toBeGreaterThanOrEqual(0.9);
     expect(bad).toEqual([]);
   }, SLOW);
+  // the review's round 10, must-fix 4: "the front door opens on a home"
+  it('a cottage (≤ 110 m² a storey) opens straight into its living room: of 40 seeded, ≥ 80%', () => {
+    let open = 0;
+    const bad: string[] = [];
+    for (const c of cottageCases()) {
+      const P = planInterior('c', c.fp, c.door, c.seed);
+      const t = entryType(P, layoutInterior(P, c.fp));
+      if (t === 'living' || t === 'great') open++; else bad.push(`${c.name}: ${t}`);
+    }
+    expect(open / 40, bad.join('; ')).toBeGreaterThanOrEqual(0.8);
+    expect(open).toBe(40); // (all of them, as it stands)
+  });
+  it('a house over 150 m² keeps its hall, the stair\'s foot ≤ 5 m from the door and in view: of 40 seeded, ≥ 80%', () => {
+    let seen = 0, hall = 0;
+    const bad: string[] = [];
+    for (const c of bigHouseCases()) {
+      const P = planInterior('h', c.fp, c.door, c.seed);
+      const L = layoutInterior(P, c.fp);
+      if (entryType(P, L) === 'hall') hall++;
+      const s = stairInView(P, L);
+      if (s.ok) seen++; else bad.push(`${c.name}: ${s.why}`);
+    }
+    expect(hall).toBe(40);
+    expect(seen / 40, bad.join('; ')).toBeGreaterThanOrEqual(0.8);
+    expect(seen).toBe(40);
+  });
+  it('the living room opens off the hall through a cased opening ≥ 1.2 m wide, within 30° of the door\'s axis', () => {
+    let ok = 0;
+    const bad: string[] = [];
+    for (const c of bigHouseCases()) {
+      const P = planInterior('h', c.fp, c.door, c.seed);
+      const L = layoutInterior(P, c.fp);
+      const o = livingOpening(P, L);
+      if (o.ok) ok++; else bad.push(`${c.name}: ${o.why}`);
+      // (a cased opening: wider than a door, so no leaf stands in it)
+      if (o.ok) expect(o.w!).toBeGreaterThan(1.15);
+    }
+    expect(ok / 40, bad.join('; ')).toBeGreaterThanOrEqual(0.9);
+  });
+  it('a cottage is walkable, every room of it, from the front door — upstairs off its landing', () => {
+    for (const [L, W, top, x] of [[11.1, 7.7, 3.8, -0.84], [9, 9, 6.7, 0.5], [8, 7, 6.7, -1]] as const) {
+      const b = build(fpOf(rect(L, W), 'house', top), doorN(W, x));
+      expect(b.P.cottage).toBe(1);
+      const { reached, out } = flood(b, 0.35);
+      expect(out).toBe(true);
+      expect(b.L.rooms.filter((r) => !nobodys(r) && !reached.has(r.id)).map((r) => `${L}×${W} ${r.type}@${r.level}`)).toEqual([]);
+      // upstairs: bedrooms and a bathroom off a landing no wider than the stair and a passage
+      if (b.P.levels > 1) {
+        expect(b.L.rooms.some((r) => r.level === 1 && r.type === 'bed')).toBe(true);
+        expect(b.L.rooms.some((r) => r.level === 1 && r.type === 'bath')).toBe(true);
+        if (b.P.land) expect(b.P.land.v1 - b.P.land.v0).toBeLessThan(b.P.strip!.v1 - b.P.strip!.v0);
+      }
+    }
+  }, SLOW);
+  it('pose 19 (morning sun) frames the room with the most east-to-south glass, from inside it, facing it', () => {
+    // the review's cottage, its door in the north wall: its back (south) and east rooms take the morning
+    // (the sun at 9:18 on 1 October at 40.4° N: 26° up, bearing 118°)
+    const sun: [number, number, number] = [0.794, 0.438, 0.422], homes: { P: Plan; fp: Footprint; L: Layout }[] = [];
+    for (const [L, W, x] of [[11.1, 7.7, -0.84], [9, 9, 0.5], [15, 11, 1.5]] as const) {
+      const fp = fpOf(rect(L, W), 'house', 3.8), P = planInterior('v', fp, doorN(W, x), 99), Ly = layoutInterior(P, fp);
+      const g = glassFacing(P, fp, Ly);
+      expect(g.length).toBeGreaterThan(0);
+      for (const q of g) {
+        // (facing east to south: +x east, +z south; out of the building)
+        const wx = P.ux * q.out[0] + P.vx * q.out[1], wz = P.uz * q.out[0] + P.vz * q.out[1];
+        expect(wx).toBeGreaterThan(-0.01);
+        expect(wz).toBeGreaterThan(-0.01);
+      }
+      const v = sunRoomView(P, fp, Ly)!;
+      // (a home's rooms: not its bathroom, WC, utility room or a cupboard)
+      expect(v.glass).toBe(Math.max(...g.filter((q) => !['wc', 'bath', 'utility', 'closet'].includes(q.room.type)).map((q) => q.glass)));
+      const u = (v.x - P.cx) * P.ux + (v.z - P.cz) * P.uz, vv = (v.x - P.cx) * P.vx + (v.z - P.cz) * P.vz, r = v.room.r;
+      expect(u > r.u0 && u < r.u1 && vv > r.v0 && vv < r.v1).toBe(true);
+      // looking toward its glass (forward is (−sin yaw, −cos yaw)), and down at the floor before it
+      const gq = g.find((q) => q.room.id === v.room.id)!, fx = -Math.sin(v.yaw), fz = -Math.cos(v.yaw);
+      expect(fx * (P.ux * gq.out[0] + P.vx * gq.out[1]) + fz * (P.uz * gq.out[0] + P.vz * gq.out[1])).toBeGreaterThan(0.3);
+      expect(v.pitch).toBeLessThan(-0.15);
+      expect(sunRoomView(P, fp, Ly)).toEqual(v);
+      // with the sun (9:18 on 1 October at 40.4° N: 26° up, bearing 118°): the stance sees the pools
+      const s = sunRoomView(P, fp, Ly, 90, 180, 0, sun)!;
+      expect(s.glass).toBe(v.glass);
+      // (sunlit floor in the frame — the stance's own estimate: a narrow bedroom's single window
+      // leaves a small patch; the review's room, 5 m² of glass, about 5%)
+      expect(s.pool!).toBeGreaterThan(0.01);
+      const su = (s.x - P.cx) * P.ux + (s.z - P.cz) * P.uz, sv = (s.x - P.cx) * P.vx + (s.z - P.cz) * P.vz;
+      expect(su > s.room.r.u0 && su < s.room.r.u1 && sv > s.room.r.v0 && sv < s.room.r.v1).toBe(true);
+      // furniture where it stood: it stands clear of it, and the light on that floor isn't a pool
+      const at = { u0: su - 0.5, u1: su + 0.5, v0: sv - 0.5, v1: sv + 0.5 }, s2 = sunRoomView(P, fp, Ly, 90, 180, 0, sun, [at])!;
+      const u2 = (s2.x - P.cx) * P.ux + (s2.z - P.cz) * P.uz, v2 = (s2.x - P.cx) * P.vx + (s2.z - P.cz) * P.vz;
+      expect(u2 > at.u0 - 0.3 && u2 < at.u1 + 0.3 && v2 > at.v0 - 0.3 && v2 < at.v1 + 0.3).toBe(false);
+      expect(s2.glass).toBe(s.glass);
+      for (const p of poolOn(P, fp, s.room, sun, 0, [at])) expect(p[0] > at.u0 && p[0] < at.u1 && p[1] > at.v0 && p[1] < at.v1).toBe(false);
+      homes.push({ P, fp, L: Ly });
+    }
+    // across homes: the one holding the most of that glass
+    const most = (h: (typeof homes)[number]) => Math.max(0, ...glassFacing(h.P, h.fp, h.L).filter((q) => !['wc', 'bath', 'utility', 'closet'].includes(q.room.type)).map((q) => q.glass));
+    const i = sunniest(homes, 90, 180, 0, sun);
+    expect(most(homes[i])).toBe(Math.max(...homes.map(most)));
+    expect(sunniest(homes.slice(i, i + 1), 90, 180, 0, sun)).toBe(0);
+  });
   it('the front door opens onto the hall, not onto the stair', () => {
     for (const name of ['house', 'house3']) {
       const b = get(name), d = b.P.door;
