@@ -94,8 +94,8 @@ async function photo(query: string): Promise<Photo | null> {
       return p;
     } catch (e) {
       if (direct === true || !proxy) throw e; // (it worked before: this is the server, not CORS)
-      direct = false;
-      log(`[aerial] direct NAIP read refused (${(e as Error)?.message ?? e}) — using the tile service's relay`);
+      if (direct === null) log(`[aerial] direct NAIP read refused (${(e as Error)?.message ?? e}) — using the tile service's relay`);
+      direct = false; // (the cells that asked at the same time fall through here too: one note)
     }
   }
   if (!proxy) return null;
