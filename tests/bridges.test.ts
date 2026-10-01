@@ -254,6 +254,33 @@ describe('a flyover', () => {
   });
 });
 
+// ---------------- a ramp onto a bridge ----------------
+describe('a ramp that runs onto a bridge’s deck', () => {
+  it('meets it at its height, and neither parapet stands across the other’s roadway', () => {
+    // the river crossing, and a ramp up from the east bank that joins its deck over the water
+    const roads = [...riverRoads(true, true), road([[60, 40], [30, 0]], { c: 'primary_link', w: 6, n: undefined, br: 'yes', l: 1, ow: 1 }), road([[90, 80], [60, 40]], { c: 'primary_link', w: 6, n: undefined, ow: 1 })];
+    // (the ramp meets the east approach at a vertex of its own)
+    roads[3] = road([[15, 0], [30, 0], [120, 0]], { br: 'yes', l: 1 });
+    const w = new RecWalk(river, { x0: -400, z0: -400, x1: 400, z1: 400 });
+    buildStructures(world(river, roads), w, { roads, lines: [] });
+    const walk = new WalkWorld(river, { x0: -400, z0: -400, x1: 400, z1: 400 });
+    replayOps(walk, w.ops);
+    const tables = w.ops.flatMap((o) => (o.o === 'd' && o.d.p?.k === 'table' ? [unpackDeck(o.d)] : []));
+    const ramp = tables.filter((d) => d.pts.some(([, z]) => z > 30)).sort((a, b) => b.halfWidth - a.halfWidth)[0];
+    expect(ramp).toBeDefined();
+    const main = roadwayDecks(w.ops).find((d) => d.pts.some(([x, z]) => near(x, 30, 1e-6) && near(z, 0, 1e-6)))!;
+    const at30 = main.heightAt(main.cum[main.pts.findIndex(([x]) => near(x, 30, 1e-6))]);
+    const rampEnd = ramp.pts.findIndex(([x, z]) => near(x, 30, 1e-6) && near(z, 0, 1e-6));
+    expect(Math.abs(ramp.heightAt(ramp.cum[rampEnd]) - at30)).toBeLessThan(0.001);
+    // a car coming up the ramp crosses the main deck's south parapet line where the ramp joins…
+    const y = walk.deckAt(37, 9.3)!;
+    expect(y).toBeGreaterThan(3);
+    expect(walk.touching(37, 9.3, 0.3, y)).toBe(false);
+    // …which still stands away from it
+    expect(walk.touching(80, 9.3, 0.3, walk.deckAt(80, 8)! + 0.15)).toBe(true);
+  });
+});
+
 // ---------------- a long bridge, seen a piece at a time ----------------
 describe('a long bridge no tile sees whole', () => {
   // 400 m of water, a trunk road over it on three ways; each tile sees its own way and the next

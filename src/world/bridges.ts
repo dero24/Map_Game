@@ -87,12 +87,17 @@ function interp(S: ArrayLike<number>, v: ArrayLike<number>, s: number) {
 export interface ChainWay { r: Road; own: boolean; s0: number; s1: number; movable: boolean }
 /** An end of a chain: a street to land on there (`approach`), or another bridge way (`junction`). */
 export interface ChainEnd { x: number; z: number; approach: boolean; junction: boolean }
+/** A vertex of a chain where other bridge ways meet it (a ramp onto it, a fork): its station, and
+ *  the others' arms out of it (directions) with their widths. */
+export interface Joint { s: number; key: string; arms: { dx: number; dz: number; w: number }[] }
 export interface Chain {
   pts: P[]; cum: number[]; L: number; ways: ChainWay[]; ends: [ChainEnd, ChainEnd];
   w: number; c: string; movable: boolean; oneway: boolean;
   /** its OSM layer (a bridge untagged is a layer up): one higher crosses over it */
   layer: number;
+  joints: Joint[];
 }
+const keyOf = (x: number, z: number) => `${Math.round(x * 10)},${Math.round(z * 10)}`;
 
 /** The road bridges among `roads` (a tile's own ways and its margin's), joined into chains where
  *  exactly two of them meet end to end. Each chain runs from its end with the lesser (x, z), so
@@ -107,13 +112,14 @@ export function chainBridges(roads: Road[]): Chain[] {
   const K = (p: P) =>`${Math.round(p[0] * 10)},${Math.round(p[1] * 10)}`;
   const endsAt = new Map<string, number[]>();
   const deckV = new Map<string, number>(); // every road-bridge vertex: how many ways pass or end there
+  const waysAt = new Map<string, number[]>();
   ways.forEach((w, i) => {
     for (const q of [w.p[0], w.p[w.p.length - 1]]) {
       const k = K(q), l = endsAt.get(k);
       if (l) l.push(i);
       else endsAt.set(k, [i]);
     }
-    for (const q of new Set(w.p.map(K))) deckV.set(q, (deckV.get(q) ?? 0) + 1);
+    for (const q of new Set(w.p.map(K))) (deckV.set(q, (deckV.get(q) ?? 0) + 1), (waysAt.get(q) ?? waysAt.set(q, []).get(q)!).push(i));
   });
   // the streets a bridge can land on: every vertex of a road that isn't a bridge or a tunnel
   const street = new Set<string>();
@@ -176,6 +182,21 @@ export function chainBridges(roads: Road[]): Chain[] {
     };
     let wMax = 0, c = span[0].r.c;
     for (const s of span) if (s.r.w > wMax) (wMax = s.r.w), (c = s.r.c);
+    // where other bridge ways meet it, and which way they leave
+    const mine = new Set(seq.map(([wi]) => wi)), joints: Joint[] = [];
+    keep.forEach((p, k) => {
+      const key = K(p), arms: Joint['arms'] = [];
+      for (const wi of waysAt.get(key) ?? []) {
+        if (mine.has(wi)) continue;
+        const q = ways[wi].p, i = q.findIndex((v) => K(v) === key);
+        for (const j of [i - 1, i + 1]) {
+          if (j < 0 || j >= q.length) continue;
+          const dx = q[j][0] - p[0], dz = q[j][1] - p[1], l = Math.hypot(dx, dz);
+          if (l > 1e-6) arms.push({ dx: dx / l, dz: dz / l, w: ways[wi].r.w });
+        }
+      }
+      if (arms.length) joints.push({ s: cum[k], key, arms });
+    });
     chains.push({
       pts: keep, cum, L,
       ways: span.map((s) => ({ r: s.r, own: s.r.own !== 0, s0: cum[idx[s.a]], s1: cum[idx[s.b]], movable: s.r.br === 'movable' })).filter((w) => w.s1 - w.s0 > 1e-3),
@@ -184,6 +205,7 @@ export function chainBridges(roads: Road[]): Chain[] {
       movable: span.some((s) => s.r.br === 'movable'),
       oneway: span.every((s) => !!s.r.ow),
       layer: Math.max(...span.map((s) => s.r.l ?? 1)),
+      joints,
     });
   }
   return chains;
@@ -276,9 +298,15 @@ export interface Profile {
   S: number[]; y: number[]; ground: number[]; wet: Uint8Array;
   /** the water's surface under each station (−Infinity: dry), the structure's depth under the roadway there */
   level: number[]; depth: number[];
-  /** each end: on its street (`land`, at its height `h` — the roadway's surface there), or in the air */
-  ends: [{ land: boolean; h: number }, { land: boolean; h: number }];
+  /** each end: held at a height `h` (`land`) — on its street (`street`, the roadway's surface
+   *  there), or on another bridge's deck (`onto`: how far that deck reaches either side of where
+   *  this one meets it) — or free, in the air */
+  ends: [ProfileEnd, ProfileEnd];
 }
+export interface ProfileEnd { land: boolean; h: number; street: boolean; onto?: number }
+/** A deck already built, where another runs onto it: its roadway's height there, how far it
+ *  reaches either side, and its direction. */
+export interface Pin { y: number; half: number; tx: number; tz: number }
 
 /** What carries a way's deck, from its mapped bridge:structure: girders on piers (a beam bridge,
  *  and anything the map doesn't say), trusses either side of it, an arch, a suspension bridge's
@@ -305,7 +333,7 @@ export function spansOf(w: { movable: boolean; s0: number; s1: number; r?: Road 
  *  to heel; and it is smoothed into one long curve. Pure: the same chain and ground, the same
  *  section — every station a vertex of the way or a subdivision of its segment, so a tile seeing
  *  a little more or less of a long chain still puts the same stations on the ways both see. */
-export function bridgeProfile(ch: Chain, g: Ground, under: Under[] = []): Profile {
+export function bridgeProfile(ch: Chain, g: Ground, under: Under[] = [], pins?: Map<string, Pin>): Profile {
   const S: number[] = [];
   for (let k = 0; k + 1 < ch.pts.length; k++) {
     const a = ch.cum[k], b = ch.cum[k + 1], n = Math.max(1, Math.ceil((b - a) / STEP - 1e-9));
@@ -331,11 +359,18 @@ export function bridgeProfile(ch: Chain, g: Ground, under: Under[] = []): Profil
   const highway = HIGHWAY.has(ch.c);
   // its ends: on a street (or dry ground at the end of what this tile can see), or up in the air
   // where it runs into more bridge, or stops over the water
-  const endOf = (e: ChainEnd) => ({
-    land: e.approach || (!e.junction && g.sdfAt(e.x, e.z) >= 0),
-    h: Math.max(g.heightAt(e.x, e.z), -0.2) + LIFT, // (the walk surface: the ground, or the water's skin)
-  });
-  const A = endOf(ch.ends[0]), B = endOf(ch.ends[1]);
+  // (one that runs onto a deck already built holds that deck's height there)
+  const endOf = (e: ChainEnd, k: number): ProfileEnd => {
+    const pin = e.junction ? pins?.get(keyOf(e.x, e.z)) : undefined;
+    if (pin) {
+      const p = ch.pts[k ? ch.pts.length - 1 : 0], q = ch.pts[k ? ch.pts.length - 2 : 1], l = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+      const sin = Math.abs(((q[0] - p[0]) * pin.tz - (q[1] - p[1]) * pin.tx) / l);
+      return { land: true, h: pin.y, street: false, onto: Math.min(40, pin.half / Math.max(0.3, sin) + 1) };
+    }
+    const land = e.approach || (!e.junction && g.sdfAt(e.x, e.z) >= 0);
+    return { land, h: Math.max(g.heightAt(e.x, e.z), -0.2) + LIFT, street: land }; // (the walk surface: the ground, or the water's skin)
+  };
+  const A = endOf(ch.ends[0], 0), B = endOf(ch.ends[1], 1);
   // A crossing's width runs from shore to shore: each edge found to the millimetre between the
   // stations either side of it — and where the water runs on past an end in the air (more bridge,
   // out of this tile's sight), on along the way's line to the far shore. Every tile that draws a
@@ -504,14 +539,22 @@ export interface BridgeOut {
  *  its margin's included (own: 0). */
 export function buildBridges(m: Sink, walk: WalkWorld, roads: Road[], lines: Line[], g: Ground): BridgeOut {
   const out: BridgeOut = { towers: [], posts: [], piles: [], taken: new Set() };
-  // (lowest layer first: a flyover clears the deck it crosses, as that deck was profiled)
+  // (lowest layer first: a flyover clears the deck it crosses, as that deck was profiled; and the
+  // longest first within a layer — a ramp that runs onto a bridge's deck meets it at its height)
   const done: { ch: Chain; pf: Profile }[] = [];
-  for (const ch of chainBridges(roads).sort((a, b) => a.layer - b.layer)) {
+  const pins = new Map<string, Pin>();
+  const order = chainBridges(roads).sort((a, b) => a.layer - b.layer || b.L - a.L || a.pts[0][0] - b.pts[0][0] || a.pts[0][1] - b.pts[0][1]);
+  for (const ch of order) {
     if (ch.L < 2) continue;
     const under = crossingsUnder(ch, roads, lines, g);
     for (const o of done) if (o.ch.layer < ch.layer) under.push(...decksUnder(ch, o.ch, o.pf));
-    const pf = bridgeProfile(ch, g, under);
+    const pf = bridgeProfile(ch, g, under, pins);
     done.push({ ch, pf });
+    for (const j of ch.joints) {
+      if (pins.has(j.key)) continue;
+      const c = chainAt(ch, j.s);
+      pins.set(j.key, { y: profileAt(pf, j.s), half: ch.w / 2 + (HIGHWAY.has(ch.c) ? 1.2 : MINOR.has(ch.c) ? 0.6 : 1.8), tx: c.tx, tz: c.tz });
+    }
     if (!ch.ways.some((w) => w.own)) continue;
     const ed = deckEdges(ch, pf, roads);
     for (const r of ed.taken) out.taken.add(r);
@@ -563,6 +606,7 @@ function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnTyp
     if (keep) st.push(fine[(a = j)]);
   }
   const N = st.length;
+  const wetLv = pf.level.map((v) => (v === -Infinity ? -1e3 : v)), seaLv = pf.level.map((v) => (v === -Infinity ? 0 : v));
   const px: number[] = [], pz: number[] = [], nx: number[] = [], nz: number[] = [], mi: number[] = [];
   const y: number[] = [], eL: number[] = [], eR: number[] = [], gb: number[] = [];
   for (let j = 0; j < N; j++) {
@@ -573,7 +617,7 @@ function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnTyp
     eR.push(interp(pf.S, ed.right, st[j]));
     // the girders' foot: the structure's depth under the roadway — over the water, never into it
     // (the end span, coming down to the bank, shallows into its abutment instead)
-    const lv = interp(pf.S, pf.level.map((v) => (v === -Infinity ? -1e3 : v)), st[j]);
+    const lv = interp(pf.S, wetLv, st[j]);
     gb.push(Math.min(y[j] - SLAB - 0.05, Math.max(y[j] - interp(pf.S, pf.depth, st[j]), lv + 0.3)));
   }
   const V = (j: number, o: number, dy: number) => new THREE.Vector3(px[j] + nx[j] * o * mi[j], y[j] + dy, pz[j] + nz[j] * o * mi[j]);
@@ -593,6 +637,23 @@ function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnTyp
   const Lf: F = (j) => eL[j], Rf: F = (j) => -eR[j];
   const foot: F = (j) => gb[j] - y[j];
   const top = kerb + PARAPET;
+  // no parapet where this deck runs onto another (its last stretch, over that one), or where another
+  // runs onto it (across that one's mouth, on its side)
+  const gaps: { side: number; s0: number; s1: number }[] = [];
+  pf.ends.forEach((e, q) => { if (e.onto) for (const side of [1, -1]) gaps.push(q ? { side, s0: ch.L - e.onto, s1: ch.L + 1 } : { side, s0: -1, s1: e.onto }); });
+  for (const jt of ch.joints) {
+    const c = chainAt(ch, jt.s);
+    for (const a of jt.arms) {
+      const along = a.dx * c.tx + a.dz * c.tz, across = a.dx * c.nx + a.dz * c.nz, sin = Math.max(0.3, Math.abs(across)), side = across > 0 ? 1 : -1;
+      const e = interp(pf.S, side > 0 ? ed.left : ed.right, jt.s), at = jt.s + (Math.sign(along) * e * Math.sqrt(Math.max(0, 1 - sin * sin))) / sin;
+      const half = (a.w / 2 + 2) / sin;
+      gaps.push({ side, s0: Math.max(jt.s - 40, at - half), s1: Math.min(jt.s + 40, at + half) });
+    }
+  }
+  const open = (j: number, side: number) => {
+    const sm = (st[j] + st[j + 1]) / 2;
+    return gaps.some((q) => q.side === side && sm > q.s0 && sm < q.s1);
+  };
   for (let j = 0; j + 1 < N; j++) {
     // the roadway — a bascule's leaves an open steel grid — and its lines
     m.color(movable ? C.grid : C.asphalt);
@@ -619,6 +680,11 @@ function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnTyp
     // parapets: the inner face, the cap, the fascia from the slab's foot up (a bascule's in steel)
     for (const [o, ow] of [[Lf, 1], [Rf, -1]] as const) {
       const oo: F = (q) => o(q) + ow * CAP;
+      if (open(j, ow)) {
+        m.color(movable ? C.steel : C.fascia);
+        wall(j, oo, -SLAB, kerb, ow); // (the deck's edge, under where the parapet would stand)
+        continue;
+      }
       m.color(movable ? C.steel : C.parapet);
       wall(j, o, kerb, top, -ow);
       m.color(movable ? C.steel : C.cap);
@@ -665,6 +731,7 @@ function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnTyp
       const c = chainAt(ch, s), yy = yAt(s) + top;
       q.setFromEuler(e.set(0, -Math.atan2(c.tz, c.tx), 0));
       for (const [ee, ow] of [[interp(pf.S, ed.left, s), 1], [interp(pf.S, ed.right, s), -1]] as const) {
+        if (gaps.some((g2) => g2.side === ow && s > g2.s0 && s < g2.s1)) continue;
         const o = ow * (ee + CAP * 0.5) * c.mi;
         out.posts.push(new THREE.Matrix4().compose(new THREE.Vector3(c.x + c.nx * o, yy + 0.3, c.z + c.nz * o), q.clone(), sc));
       }
@@ -709,6 +776,7 @@ function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnTyp
   for (const ow of [1, -1]) {
     const e = ow > 0 ? eL : eR;
     for (let j = 0; j + 1 < N; j++) {
+      if (open(j, ow)) continue;
       const a: P = [px[j] + nx[j] * ow * e[j] * mi[j], pz[j] + nz[j] * ow * e[j] * mi[j]];
       const b: P = [px[j + 1] + nx[j + 1] * ow * e[j + 1] * mi[j + 1], pz[j + 1] + nz[j + 1] * ow * e[j + 1] * mi[j + 1]];
       walk.addWall(a, b, Math.min(y[j], y[j + 1]) - 0.7, Math.max(y[j], y[j + 1]) + kerb + 1.2);
@@ -729,7 +797,7 @@ function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnTyp
       cols.push([x, z, gh]);
       low = Math.min(low, gh);
     }
-    const lv = interp(pf.S, pf.level.map((v) => (v === -Infinity ? -1e3 : v)), s);
+    const lv = interp(pf.S, wetLv, s);
     if (capBot - Math.max(low, lv) < 0.6) return; // (the deck's on the ground here: an embankment, not a pier)
     const mid = (l - r) / 2;
     m.color(C.pierCap).box(c.x + c.nx * mid, c.z + c.nz * mid, ang, 1.4, l + r + 2 * CAP, capBot, capTop);
@@ -758,8 +826,8 @@ function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnTyp
       m.box(c.x + c.nx * oo + c.tx * dir * 0.35, c.z + c.nz * oo + c.tz * dir * 0.35, ang, 0.7, CAP + 0.2, yy - SLAB, yy + top + 0.3);
     }
   };
-  if (k === 0 && pf.ends[0].land) abut(0, 1);
-  if (k === ch.ways.length - 1 && pf.ends[1].land) abut(ch.L, -1);
+  if (k === 0 && pf.ends[0].street) abut(0, 1);
+  if (k === ch.ways.length - 1 && pf.ends[1].street) abut(ch.L, -1);
   // a movable span: the bascule piers at both its ends — wide, the leaves' counterweights inside —
   // a tender house on each corner, and the channel's timber fenders off their faces
   if (movable) {
@@ -769,7 +837,7 @@ function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnTyp
       const cx = c.x - c.tx * into * 2, cz = c.z - c.tz * into * 2; // (mostly under the fixed span's end: the leaf's heel)
       let low = Infinity;
       for (const o of [-r - reach, 0, l + reach]) for (const d of [-len / 2, len / 2]) low = Math.min(low, g.heightAt(cx + c.nx * o + c.tx * d, cz + c.nz * o + c.tz * d));
-      const lv = Math.max(0, interp(pf.S, pf.level.map((v) => (v === -Infinity ? 0 : v)), s));
+      const lv = Math.max(0, interp(pf.S, seaLv, s));
       const pTop = yy - SLAB - 0.05, mid = (l - r) / 2;
       m.color(C.pier).box(cx + c.nx * mid, cz + c.nz * mid, ang, len, l + r + 2 * reach, Math.min(low, lv) - 1, pTop);
       const pr: P[] = [];
