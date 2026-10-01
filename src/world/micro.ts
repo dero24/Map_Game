@@ -20,7 +20,10 @@
 //   - the water off the piers: mooring balls, and crab-pot floats further out.
 // Every choice is a hash of position (or of the data the thing hangs off), so neighbouring tiles
 // and every visitor agree; each tile places only on its own ground. Nothing stands in a building,
-// a door's way in or a carriageway; the solid things are walls in the walk world like any prop.
+// a door's way in or a carriageway; the solid things are walls in the walk world like any prop. The
+// lawn things stand only on open ground — a lawn, a yard's gravel — never on what the ground paint
+// lays paved (groundCover.ts: the street's sidewalk band, the walks and drives, lots, a dense block's
+// paving, a shop's frontage).
 import type { WalkWorld } from '../player/collision';
 import type { World, WorldJson, Box, Road } from './data';
 import type { Door, Mailbox, Drive, Footprint } from './buildings';
