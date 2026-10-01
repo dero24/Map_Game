@@ -25,6 +25,20 @@ or per-region style.
   the sea, 0.25–40 m, in quarter-octave steps. At a fixed 25 cm, a 24-bit depth step was ~1 m at
   2 km, and low shore ground fought the sea plane from the air. Anything reading depth takes
   `camera.near` each frame (`post.ts`, `readSeen`); never assume 0.25.
+- The far layer lies past the camera's far plane and has a depth of its own (`shared.ts`
+  `farDepth`, linear to 150 km): `farSkyline.ts` towers (renderOrder −9.5, test + write) →
+  `horizon.ts` ring (−9, test only: its nearer ridges and sea hide the towers) → a hook (−8.5)
+  clears depth, and the near world paints over the whole layer. Anything new past the far plane
+  joins it the same way; nothing near may sort before −8.5. `?farskyline=0` turns the towers off.
+- The far skyline (`farSkyline.ts`): one Overpass read of the very tall (≥ 120 m or 35 storeys,
+  masts ≥ 150 m) within 60 km, through the tiles' `osmToTile`, cached in IndexedDB and re-read
+  after a 15 km walk; flat-topped prisms merged per 8 km sector on the bare-earth DEM (z11). The
+  earth's curve with refraction (R/0.87) lowers them, the sea's bulge hides their bases (from a
+  Jersey beach Manhattan's lowest ~100 m), the day's air takes them toward the sky (`airT`: clear
+  air shows them to ~75 km, the usual haze faintly, a hazy day or sea fog not at all). Towers the
+  skyline ring (`skyline.ts` `box`) or the detail tiles draw are left to them. Real size: from the
+  Sea Bright beach Manhattan stands a few pixels tall at the eye's field of view — a line on the
+  horizon you notice, plainer through the photo zoom.
 - Fog (`shared.ts` `applyFog`): density `uFogDensity` (haze), thinning upward with `uFogFalloff`
   (scale ~33 m) plus a sea-fog term; heights are above the ground where you stand. It is the mean
   density along the whole sight line — eye height to the point's (`layerMean`, exact) — not the

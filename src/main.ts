@@ -4,6 +4,7 @@ import { cachedFetchJson, initCache, manifestFingerprint } from './world/cache';
 import { TileStream, streamParams } from './world/stream';
 import { Horizon } from './world/horizon';
 import { Skyline } from './world/skyline';
+import { FarSkyline } from './world/farSkyline';
 import { KerbCars } from './world/kerbCars';
 import { seasonAt, dayOfYear } from './world/season';
 import { setDemBase } from './world/dem';
@@ -267,6 +268,11 @@ async function main() {
   // …and a city's towers past the detail ring (a skyline you can navigate by). `?skyline=0` off.
   const skyline = new Skyline(manifest.origin, manifest.cell, !!tilesBase && params.get('skyline') !== '0', tier.skylineR);
   worldRoot.add(skyline.group);
+  // …and past it the far skyline: the very tallest towers out to ~60 km at their real distance,
+  // over the earth's curve and through the day's air — the city across the bay on a clear day,
+  // nothing in the haze. `?farskyline=0` off.
+  const farSkyline = new FarSkyline(manifest.origin, !!tilesBase && params.get('farskyline') !== '0');
+  worldRoot.add(farSkyline.group);
   const realCells = new Set<string>();
   // The localhost auto-default was probed before setup: no worker answered → procedural past the bake.
 
@@ -898,7 +904,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { ambientBalloons, walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, lift: ride, planInterior, registerPlan, plans, bld, life, stream, vehicles, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, streamParams, get spawn() { return spawn; }, at: atPos };
+  (window as unknown as Record<string, unknown>).__GAME__ = { ambientBalloons, walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, lift: ride, planInterior, registerPlan, plans, bld, life, stream, vehicles, farSkyline, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, streamParams, get spawn() { return spawn; }, at: atPos };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);
@@ -1321,6 +1327,7 @@ async function main() {
     realCells.clear();
     for (const a of stream.loaded.values()) if (!a.spec.synth || a.vec) realCells.add(`${Math.floor((a.spec.box.x0 + a.spec.box.x1) / 2 / manifest.cell)}_${Math.floor((a.spec.box.z0 + a.spec.box.z1) / 2 / manifest.cell)}`);
     skyline.update(walker.x, walker.z, (k) => realCells.has(k));
+    farSkyline.update(walker.x, walker.z, skyline.box);
     if (!walkParams.fly || walker.y - walker.feet < 60) grass.update(walker.x, walker.z);
     // The traffic's road graph follows the tile set — rebuilt a few ms a frame (life.ts
     // lifeInitSteps): in one go a city's took half a second, every time a tile mounted on a drive.

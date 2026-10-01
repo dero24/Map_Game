@@ -257,6 +257,15 @@ mat4 worldMat() {
 }
 `;
 
+// The far layer (horizon.ts's ring, farSkyline.ts's towers) lies out past the camera's far plane:
+// it keeps a depth of its own, linear in true distance to 150 km, so it sorts among itself and is
+// never clipped. The far skyline clears that depth before the near world draws, which then paints
+// over the whole layer as it always has.
+export const FAR_DEPTH_M = 150000;
+export const GLSL_FAR_DEPTH = /* glsl */ `
+float farDepth(float d) { return min(d / ${FAR_DEPTH_M.toFixed(1)}, 0.9999) * 2.0 - 1.0; }
+`;
+
 // Helper to build a painted ShaderMaterial wired to the shared uniforms.
 export function paintMaterial(opts: {
   vertex: string;

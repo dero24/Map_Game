@@ -1,16 +1,17 @@
 // The horizon ring: real terrain from just inside the coarse tile ring (~6 km) out to 125 km, so
 // the mountains a place is known by stand on its skyline — the Santa Catalinas over Tucson,
 // Rainier over Seattle, the Watchungs behind a Jersey town. Two low-zoom Terrarium reads (z10
-// near, z9 far) become a polar mesh drawn right after the sky with no depth, back to front:
-// whatever is nearer (the tiles) paints over it, and its own nearer rings paint over its
-// farther ones. Earth curvature drops the far rim; an aerial-perspective wash takes it toward
-// the sky. Rebuilt when you walk more than 5 km from its centre. Deterministic: a pure function
-// of the DEM and the centre.
+// near, z9 far) become a polar mesh drawn right after the sky, back to front: whatever is nearer
+// (the tiles) paints over it, and its own nearer rings paint over its farther ones. It writes no
+// depth, but tests the far layer's own (shared.ts farDepth): a ridge in front of the far
+// skyline's towers hides them, the ground behind them doesn't. Earth curvature drops the far
+// rim; an aerial-perspective wash takes it toward the sky. Rebuilt when you walk more than 5 km
+// from its centre. Deterministic: a pure function of the DEM and the centre.
 import * as THREE from 'three';
 import { demSampler } from './dem';
 import { makeProjector, type LatLon } from './realTile';
 import { landcoverAround } from './peaks';
-import { paintMaterial } from '../render/shared';
+import { GLSL_FAR_DEPTH, paintMaterial } from '../render/shared';
 import type { RegionStyle } from './styles';
 
 // (two reads: z10, ~90 m a pixel, out to 60 km; z9 beyond, to 125 km — Rainier stands 95 km from
@@ -34,6 +35,7 @@ export function horizonMaterial(haze = 1) {
   const m = paintMaterial({
     uniforms: { uHaze: { value: haze } },
     vertex: /* glsl */ `
+      ${GLSL_FAR_DEPTH}
       attribute vec3 color;
       varying vec3 vCol;
       void main() {
@@ -42,7 +44,8 @@ export function horizonMaterial(haze = 1) {
         vNormalW = normalize(mat3(modelMatrix) * normal);
         vCol = color;
         gl_Position = projectionMatrix * viewMatrix * wp;
-        gl_Position.z = gl_Position.w * 0.99999; // past the camera's far plane: pin to it, never clip
+        // past the camera's far plane: never clipped, and at its true distance in the far layer
+        gl_Position.z = farDepth(distance(wp.xyz, cameraPosition)) * gl_Position.w;
       }`,
     fragment: /* glsl */ `
       varying vec3 vCol;
@@ -69,7 +72,8 @@ export function horizonMaterial(haze = 1) {
       }`,
     depthWrite: false,
   });
-  m.depthTest = false;
+  // (depth-tested: the only depth written before it is the far skyline's — see farSkyline.ts)
+  m.depthTest = true;
   return m;
 }
 
@@ -203,7 +207,7 @@ export class Horizon {
     g.computeVertexNormals();
     const mesh = new THREE.Mesh(g, this.mat);
     mesh.frustumCulled = false;
-    mesh.renderOrder = -9; // right after the sky dome (-10), before anything with depth
+    mesh.renderOrder = -9; // after the sky (-10) and the far skyline's towers (-9.5); before anything near
     mesh.name = 'horizon:ring';
     return mesh;
   }

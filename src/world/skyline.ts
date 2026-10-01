@@ -12,10 +12,10 @@ import { buildBuildings } from './buildings';
 import { demSampler } from './dem';
 import { kvGet, kvPut } from './cache';
 import { makeProjector, osmToTile, type LatLon, type OsmDoc } from './realTile';
-import type { Building, Terrain, TileJson, World, WorldJson } from './data';
+import type { Box, Building, Terrain, TileJson, World, WorldJson } from './data';
 
 const TALL = 45, FLOORS = 14, SKY_V = 2;
-const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
+export const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
 
 export function skylineQuery(bb: { s: number; w: number; n: number; e: number }) {
   const b = `${bb.s.toFixed(5)},${bb.w.toFixed(5)},${bb.n.toFixed(5)},${bb.e.toFixed(5)}`;
@@ -29,6 +29,10 @@ export function skylineQuery(bb: { s: number; w: number; n: number; e: number })
 
 export class Skyline {
   readonly group = new THREE.Group();
+  /** The ground its towers cover: the box of its latest read, set as that read's towers build (null
+   *  before one). The far skyline (farSkyline.ts) leaves every tower in it to this ring and the
+   *  tiles inside it. */
+  box: Box | null = null;
   private cells = new Map<string, THREE.Group>();
   private cx = Infinity;
   private cz = Infinity;
@@ -51,7 +55,11 @@ export class Skyline {
     const cx = Math.round(x / 2000) * 2000, cz = Math.round(z / 2000) * 2000;
     const gen = ++this.gen;
     void this.read(cx, cz)
-      .then((tj) => (gen === this.gen && tj ? this.build(tj) : undefined))
+      .then((tj) => {
+        if (gen !== this.gen || !tj) return;
+        this.box = { x0: cx - this.R, z0: cz - this.R, x1: cx + this.R, z1: cz + this.R };
+        return this.build(tj);
+      })
       .catch(() => {})
       .finally(() => { this.cx = cx; this.cz = cz; this.busy = false; });
   }

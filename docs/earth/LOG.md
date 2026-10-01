@@ -2,6 +2,29 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-01 (later) — The far skyline: the city across the bay
+
+A helper's draft (2026-09-28), merged onto today's code.
+
+- **What it is** (`world/farSkyline.ts`): one Overpass read of the very tall — 120 m or 35 storeys,
+  masts from 150 m — within 60 km, through the tiles' own `osmToTile`. The towers are flat-topped
+  prisms, one merged mesh per 8 km sector on the bare-earth DEM, cached in IndexedDB and re-read
+  after a 15 km walk. Real-lite tiles only (`?farskyline=0` off).
+- **How it looks:** the earth's curve with standard refraction lowers the towers. The sea's bulge
+  hides their bases: from a Jersey beach, Manhattan's lowest ~100 m. The day's air takes them
+  toward the sky. Clear air shows them faintly out to ~75 km; the usual haze barely; a hazy day or
+  sea fog not at all. Towers the skyline ring or the detail tiles already draw are left to them.
+- **The far layer** has a depth of its own (`shared.ts` `farDepth`, linear to 150 km). The towers
+  write it, the horizon ring tests against it (a nearer ridge hides a tower), and a hook clears it
+  before the near world draws.
+- **The paint kept them** (`post.ts`): a tower at 40 km is a stroke a few pixels wide, and the brush
+  smeared it into the sky. Towers mark themselves in alpha (0.5) and the composite lays them back as
+  drawn.
+- Tests: `tests/farSkyline.test.ts` (7). Visual: the container reaches neither Overpass nor the
+  DEM, so it ran on a stand-in read of Manhattan's tallest at their real places. A debug block
+  showed the layer draws, behind the beach's crest and the jetty. At true scale the city is a few
+  pixels from the beach, so the real check is on the deploy, from a balloon on a clear day.
+
 ## 2026-10-01 — Deeper archetypes: supermarkets, hotels, schools, churches, libraries, banks
 
 Interiors Slice 4 (docs/INTERIORS_PLAN.md §5), finishing a helper's groundwork that the usage

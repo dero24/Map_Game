@@ -291,6 +291,10 @@ export class WatercolorPost {
         vec3 sc = tonemap(texture2D(tScene, uv + wob * 0.5).rgb);
         float hi = smoothstep(0.08, 0.3, dot(sc - c, vec3(0.33))) * smoothstep(0.5, 0.85, dot(sc, vec3(0.33)));
         c = mix(c, sc, hi);
+        // the far skyline's towers (alpha 0.5, farSkyline.ts; no depth: the near world's is all there
+        // is) are a stroke a few pixels wide on the horizon — the brush would smear them into the sky
+        float farA = texture2D(tScene, uv).a;
+        c = mix(c, sc, (1.0 - smoothstep(0.06, 0.14, abs(farA - 0.5))) * step(0.99999, texture2D(tDepth, uv).r));
         // the cleaner looks lay the unbrushed frame back over the paint: crisp edges, flat colour
         c = mix(c, sc, uCrisp);
         // clarity: the paint's local contrast lifted against its own small blur (clean, crisp forms)
