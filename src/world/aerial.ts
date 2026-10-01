@@ -150,7 +150,9 @@ export const toward = (cast: Cast, warm: RGB): Cast => ({ a: [cast.a[0] - warm[0
 export function aerialRoof(c: number, flat: boolean): number {
   const [h, s, l] = rgbToHsl(((c >> 16) & 255) / 255, ((c >> 8) & 255) / 255, (c & 255) / 255);
   const deg = h * 360, warm = deg < 45 || deg >= 335;
-  let cap = warm ? 0.36 : deg < 75 ? 0.2 : deg < 170 ? 0.1 : deg < 265 ? 0.11 : 0.08;
+  // (greens and blues to 0.14 since the roof shader stopped taking 40% of every roof's colour out:
+  // a painted-metal roof the photo saw reads as painted metal, not grey)
+  let cap = warm ? 0.36 : deg < 75 ? 0.2 : deg < 170 ? 0.14 : deg < 265 ? 0.14 : 0.08;
   if (!warm && (flat || l > 0.55)) cap *= 0.5;
   const s2 = Math.min(cap, s * 1.5);
   const l2 = clamp(0.5 + (l - 0.5) * 1.1, flat ? 0.2 : 0.12, flat ? 0.72 : 0.6);

@@ -198,12 +198,16 @@ float snowKeep(vec3 alb) {
 
 // Two-wash lighting: a light wash where the key light lands, one cool glaze where it doesn't.
 // Wrapped terminator so low sun still warms horizontal ground (a painter's golden hour, not a photometer's).
-vec3 paintLight(vec3 albedo, vec3 N, vec3 wpos, float shadow, float ao) {
+// skyNeutral: how much of the sky fill's blue to grey out before it lights the albedo (roofs face
+// the sky, and a blue fill turned every grey shingle teal) — the surface keeps its own hue, the
+// sun keeps its colour, the shade keeps the cool glaze every other surface has
+vec3 paintLight(vec3 albedo, vec3 N, vec3 wpos, float shadow, float ao, float skyNeutral) {
   float ndl = dot(N, uKeyDir);
   float lowSun = 1.0 - smoothstep(0.05, 0.45, uKeyDir.y);
   float wrap = 0.15 + 0.25 * lowSun * step(0.7, N.y);
   float diff = smoothstep(-wrap, 0.55, ndl) * shadow;
   vec3 hemi = mix(uAmbGround, uAmbSky, N.y * 0.5 + 0.5) * (1.0 - 0.45 * canyonAt(wpos));
+  hemi = mix(hemi, dot(hemi, vec3(0.2126, 0.7152, 0.0722)) * vec3(1.03, 1.0, 0.96), skyNeutral);
   vec3 lit = albedo * (uKeyColor * diff + hemi * ao);
   // shadows are a transparent cool glaze: shift the hue toward the shadow tint but keep the value
   // (multiplying by a dark tint is what painters call mud)
@@ -214,6 +218,7 @@ vec3 paintLight(vec3 albedo, vec3 N, vec3 wpos, float shadow, float ao) {
   lit += max(albedo, vec3(0.3)) * uLampColor * lampAt(wpos);
   return lit;
 }
+vec3 paintLight(vec3 albedo, vec3 N, vec3 wpos, float shadow, float ao) { return paintLight(albedo, N, wpos, shadow, ao, 0.0); }
 
 vec3 fogColorDir(vec3 dir) {
   float s = pow(max(dot(dir, uSunDir), 0.0), 6.0);

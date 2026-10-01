@@ -164,7 +164,7 @@ describe('the painter\'s roof (aerial.ts aerialRoof)', () => {
     expect(clay[0] * 360).toBeLessThan(30);
     expect(clay[1]).toBeGreaterThan(0.25);
     const sage = hsl(aerialRoof(hex([90, 140, 95]), false)); // a sage the photo left: shade, not copper
-    expect(sage[1]).toBeLessThanOrEqual(0.105); // (0.1, and a level of rounding)
+    expect(sage[1]).toBeLessThanOrEqual(0.145); // (0.14, and a level of rounding)
     const dark = hsl(aerialRoof(hex([20, 20, 22]), false)), light = hsl(aerialRoof(hex([200, 200, 196]), false));
     expect(dark[2]).toBeGreaterThanOrEqual(0.115); // (0.12, and a level of rounding)
     expect(light[2]).toBeLessThanOrEqual(0.6001);

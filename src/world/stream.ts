@@ -52,6 +52,10 @@ function vertexBytes(root: THREE.Object3D) {
   return n;
 }
 const LAMP_WIN = 2048; // m — the night light-map window around the walker
+/** Repaint the lamp window now? At once when the walker nears its edge (`far`); for tiles' lamps
+ *  coming and going (`dirty`), at most every 1.5 s — a flight mounts a tile every few seconds, and
+ *  each repaint (a 1024² canvas and its upload) landed on top of the next mount's frame. */
+export const lampRepaintDue = (now: number, last: number, dirty: boolean, far: boolean) => far || (dirty && now - last >= 1500);
 const COARSE_BUDGET = 4; // max outstanding lite builds — they're lowest priority
 const REVEAL_BYTES = 12e6; // vertex data a newly mounted tile shows (so uploads) per frame
 const REVEAL_OBJS = 24; // …and meshes (each small one still costs its buffers and bindings)
@@ -143,6 +147,7 @@ export class TileStream {
   private lampCx = Infinity;
   private lampCz = Infinity;
   private lampDirty = false;
+  private lampAt = -Infinity; // when the window was last painted (performance.now)
   private lampCanvas: HTMLCanvasElement | null = null;
   private lampSprite: HTMLCanvasElement | null = null;
   // A new tile shows a few meshes a frame (REVEAL_BYTES): a downtown tile is ~100 MB of vertices,
@@ -155,6 +160,7 @@ export class TileStream {
   lastMount: { id: string; collision: number; objects: number; retire: number; hooks: number } | null = null;
   private lampTex: THREE.CanvasTexture | null = null;
   private canyonCanvas: HTMLCanvasElement | null = null;
+  private canyonBlur: HTMLCanvasElement | null = null;
   onChange: (() => void) | null = null;
   onTile: ((a: TileArt) => void) | null = null; // fired after a tile mounts (walks -> ground paint)
   onUnload: ((id: string) => void) | null = null; // fired after a detail tile unmounts
@@ -424,8 +430,9 @@ export class TileStream {
     const now = performance.now();
     const gy = Math.max(0, this.terrain.heightAt(x, z));
     if (Number.isFinite(gy)) U.uLampBaseY.value = Number.isFinite(U.uLampBaseY.value) ? U.uLampBaseY.value + (gy - U.uLampBaseY.value) * 0.05 : gy;
-    if (this.lampDirty || Math.hypot(x - this.lampCx, z - this.lampCz) > LAMP_WIN * 0.25) {
-      if (this.lampPts.size) this.repaintLamps(x, z);
+    if (this.lampPts.size && lampRepaintDue(now, this.lampAt, this.lampDirty, Math.hypot(x - this.lampCx, z - this.lampCz) > LAMP_WIN * 0.25)) {
+      this.lampAt = now;
+      this.repaintLamps(x, z);
     }
     // Cells in the coarse ring — manifest tiles where baked, synthetic where not. Iterating
     // cells rather than man.tiles is what makes the world continue past the bake.
@@ -877,10 +884,18 @@ export class TileStream {
         cc.closePath();
         cc.fill();
       }
+      // blurred at its own quarter size (3 px there is the 12 px it was blurred by once drawn up,
+      // ~25 m), then drawn up: a sixteenth of the pixels through the blur, which was most of the
+      // repaint (0.1–0.25 s on a canvas the CPU rasters)
+      const bv = (this.canyonBlur ??= document.createElement('canvas'));
+      bv.width = bv.height = R / 4; // (and cleared)
+      const bc = bv.getContext('2d')!;
+      bc.filter = 'blur(3px)';
+      bc.drawImage(cv, 0, 0);
+      bc.filter = 'none';
       ctx.globalCompositeOperation = 'lighter';
-      ctx.filter = 'blur(12px)';
-      ctx.drawImage(cv, 0, 0, R, R);
-      ctx.filter = 'none';
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(bv, 0, 0, R, R);
     }
     if (!this.lampTex) {
       this.lampTex = new THREE.CanvasTexture(this.lampCanvas);

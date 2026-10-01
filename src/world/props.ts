@@ -151,7 +151,7 @@ export function offCarriageway(near: (x: number, z: number) => Road[], x: number
 // the other end (aOther) and a side (aSide); the vertex shader spreads them across the line.
 export function wireMaterial() {
   return new THREE.ShaderMaterial({
-    uniforms: { uFogColor: U.uFogColor, uFogDensity: U.uFogDensity, uNight: U.uNight, uViewport: U.uViewport },
+    uniforms: { uFogColor: U.uFogColor, uFogDensity: U.uFogDensity, uNight: U.uNight, uViewport: U.uViewport, uSkyZenith: U.uSkyZenith },
     vertexShader: /* glsl */ `
       attribute vec3 aOther;
       attribute float aSide;
@@ -173,10 +173,12 @@ export function wireMaterial() {
         gl_Position.xy += n * aSide * (0.5 * px) / hv * a.w;
       }`,
     fragmentShader: /* glsl */ `
-      uniform vec3 uFogColor; uniform float uFogDensity, uNight;
+      uniform vec3 uFogColor, uSkyZenith; uniform float uFogDensity, uNight;
       varying float vDist;
       void main() {
-        vec3 c = mix(vec3(0.16, 0.15, 0.17), vec3(0.05, 0.06, 0.1), uNight);
+        // at night a wire is a silhouette, darker than the sky behind it (a fixed navy was ten
+        // times the night zenith's light: the wires glowed like searchlights)
+        vec3 c = mix(vec3(0.16, 0.15, 0.17), min(vec3(0.05, 0.06, 0.1), uSkyZenith * 0.6), uNight);
         float f = 1.0 - exp(-vDist * (uFogDensity * 2.0 + 0.004));
         gl_FragColor = vec4(mix(c, uFogColor, f), 1.0 - f * 0.9);
       }`,
@@ -1755,6 +1757,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     parts.push(colored(new THREE.BoxGeometry(1.4, 0.35, 0.05).translate(0, 3.2, 0.3), 0xc2412f));
     for (let k = 0; k < 4; k++) parts.push(colored(new THREE.BoxGeometry(1.7, 0.06, 0.1).translate(0, 0.4 + k * 0.5, 0.78), 0xf4f1ea));
     const im = new THREE.InstancedMesh(mergeGeometries(parts), propMaterial(), stands.length);
+    im.name = 'beach:lifeguard'; // (the review's beach shot frames one when the umbrellas are packed away)
     stands.forEach((m, i) => im.setMatrixAt(i, m));
     im.layers.enable(1);
     group.add(im);

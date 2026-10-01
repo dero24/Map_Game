@@ -2116,10 +2116,11 @@ export function buildingMaterial() {
         alb = snowOn(alb, N, vWorldPos, 1.0); // roofs, sills and porch floors white in a snowy winter
         alb = pigment(alb, vWorldPos);
         float sh = shadowAt(vWorldPos, N);
-        vec3 col = paintLight(alb, N, vWorldPos, sh, ao);
-        // roofs face the sky, so the blue sky fill tints every grey shingle teal; take most of
-        // that chroma back out (a touch warm, like sunlit asphalt shingle)
-        if (part > 0.5 && part < 1.5) { float rl = dot(col, vec3(0.2126, 0.7152, 0.0722)); col = mix(col, rl * vec3(1.04, 1.0, 0.94), 0.4 * (1.0 - uNight)); }
+        // roofs face the sky, and its blue fill tinted every grey shingle teal: on a roof the fill
+        // is greyed (a touch warm, like sunlit asphalt shingle) — not the roof's own colour, which
+        // the aerial photo measured, nor the sun's, which golden hour lays on roofs and walls alike
+        float roofSky = part > 0.5 && part < 1.5 ? 0.6 * (1.0 - uNight) : 0.0;
+        vec3 col = paintLight(alb, N, vWorldPos, sh, ao, roofSky);
         col += glow * uWindowColor * (0.15 + 1.25 * uNight);
         col = mix(col, winCol, winMask);
         gl_FragColor = vec4(applyFog(col, vWorldPos), 1.0);
