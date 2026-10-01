@@ -11,6 +11,8 @@ import { TREE_KINDS, TREE_VARIANTS, treeLib, PLANT_SPECIES, plantGeometry, SPECI
 import { CRITTERS, critterLib, critterMaterial } from '../assets/fauna';
 import { MAILBOXES, mailboxLib, beachLib, CAR_GEAR, gearGeometry } from '../assets/furniture';
 import { MICRO_KINDS } from '../assets/micro';
+import { MicroLayer } from '../world/microLayer';
+import { MICRO_TIERS } from '../render/quality';
 import { merge } from '../assets/core';
 import { propMaterial } from '../render/propMaterial';
 import { U } from '../render/shared';
@@ -61,6 +63,7 @@ function add(g: THREE.BufferGeometry, x: number, z: number, hex: number, name: s
   return m;
 }
 const animated: { m: THREE.InstancedMesh; anim: THREE.InstancedBufferAttribute; hz: number; kind: string }[] = [];
+let micro: MicroLayer | null = null;
 function addCritter(kind: (typeof CRITTERS)[number], x: number, z: number, color: number) {
   const geo = critterLib(kind).clone();
   const anim = new THREE.InstancedBufferAttribute(new Float32Array(3), 3);
@@ -118,6 +121,26 @@ function build() {
       add(beachLib(k, i), x, z, [0x3a8ac0, 0xd8342c, 0x5aa4c8, 0xf2c23a, 0x9a8f80][i], `beach-${k}`);
     }, 4);
   }
+  if (fam === 'impostors') {
+    // the impostor check: every micro piece's 3D model (left) beside its impostor card (right), the
+    // same turn and paint — orbit round them: the card should read as the piece from every side
+    micro ??= (() => {
+      const l = new MicroLayer(renderer, { ...MICRO_TIERS.desktop, far: 3000, pxK: 9000 });
+      l.mode = 1;
+      scene.add(l.group);
+      return l;
+    })();
+    const rec: number[] = [];
+    for (let r0 = 0; r0 < MICRO_KINDS.length; r0 += 8) {
+      const ks = MICRO_KINDS.slice(r0, r0 + 8);
+      rowOf(ks.length, 6, (i, x, z) => {
+        const hex = PAINT[(r0 + i + seed) % PAINT.length], w = Math.max(ks[i].box[0], ks[i].box[2]) * 0.5 + 0.4;
+        add(ks[i].geo(), x - w, z, hex, `3d-${ks[i].id}`);
+        rec.push(x + w, 0, z, -0.6, r0 + i, 1, hex, 0);
+      }, 7);
+    }
+    micro.add('kit', new Float32Array(rec));
+  } else micro?.remove('kit');
   if (fam === 'all' || fam === 'micro') {
     // the micro layer's small things (assets/micro.ts), ten to a row
     for (let r0 = 0; r0 < MICRO_KINDS.length; r0 += 10) {
@@ -166,9 +189,10 @@ const loop = () => {
   }
   controls.update();
   camera.updateMatrixWorld();
+  micro?.update(camera.position.x, camera.position.y, camera.position.z, camera);
   if (($('painted') as HTMLInputElement).checked) post.render(scene, camera, t, 0, 0, 0, 0);
   else renderer.render(scene, camera);
   requestAnimationFrame(loop);
 };
 loop();
-(window as unknown as Record<string, unknown>).__KIT__ = { scene, camera, controls, renderer, build, root, frame, render: () => post.render(scene, camera, 0, 0, 0, 0, 0) };
+(window as unknown as Record<string, unknown>).__KIT__ = { scene, camera, controls, renderer, build, root, frame, render: () => post.render(scene, camera, 0, 0, 0, 0, 0), get micro() { return micro; } };

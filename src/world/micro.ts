@@ -438,7 +438,7 @@ export function buildMicro(I: MicroInput): Float32Array {
           // the dry sand between the wrack line and the dunes, the crowd thickest mid-beach
           const wd = terrain.sdfAt(cx, cz);
           if (wd < 12 || wd > 75 || !inRing(cx, cz, ring)) continue;
-          const dens = 0.42 * season * Math.max(0, 1 - Math.abs(wd - 32) / 45);
+          const dens = 0.55 * season * Math.max(0, 1 - Math.abs(wd - 32) / 45);
           if (hashf(i * 31 + j * 7919 + 13) > dens || walk.blocked(cx, cz, 2.5) || walk.deckAt(cx, cz) !== null || kerbOut(cx, cz) < 4) continue;
           const [sx, sz] = seaDir(cx, cz), yaw = facing(sx, sz) + (u - 0.5) * 0.5, ax = sz, az = -sx;
           const w = hashf(i * 7 + j * 131 + 17);
@@ -478,8 +478,9 @@ export function buildMicro(I: MicroInput): Float32Array {
           if (y === null || !own(x, z) || !softFree(x, z, 0.2)) continue;
           put('cleat', x, z, Math.atan2(-uz, ux), 0xffffff, y);
         }
-        if (w >= 1.8 && h < 0.16) {
-          const s = h < 0.08 ? 1 : -1, x = cx + nx * s * (w / 2 - 0.5), z = cz + nz * s * (w / 2 - 0.5), y = walk.deckAt(x, z);
+        if (w >= 1.8 && h < 0.16 && t + 3 < L) {
+          // (a slip's box sits between two cleats)
+          const s = h < 0.08 ? 1 : -1, x = cx + ux * 3 + nx * s * (w / 2 - 0.5), z = cz + uz * 3 + nz * s * (w / 2 - 0.5), y = walk.deckAt(x, z);
           if (y !== null && own(x, z) && softFree(x, z, 0.65)) put('dockbox', x, z, Math.atan2(-uz, ux), 0xffffff, y);
         } else if (w >= 2.4 && h > 0.95) {
           const x = cx, z = cz, y = walk.deckAt(x, z);

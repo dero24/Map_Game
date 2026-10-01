@@ -412,8 +412,8 @@ export function impostorMaterial(atlas: ImpostorAtlas, kinds: THREE.DataTexture)
         vec3 toEye = cameraPosition - mid;
         float dm = max(length(toEye), 1e-3);
         vec3 V = toEye / dm;
-        float band = uLod.x, near = mod(aInfo.w, 2.0);
-        float share = near > 0.5 ? clamp((K2.x + band * 0.5 - dist) / band, 0.0, 1.0) : 0.0;
+        float band = uLod.x, hasNear = mod(aInfo.w, 2.0);
+        float share = hasNear > 0.5 ? clamp((K2.x + band * 0.5 - dist) / band, 0.0, 1.0) : 0.0;
         if (uLod.y > 0.5) share = uLod.y > 1.5 ? 1.0 : 0.0;
         float farF = clamp((K2.y - dist) / (0.12 * K2.y), 0.0, 1.0);
         if (share > 0.999 || farF <= 0.0 || K2.z < 0.5 || K0.w <= 0.0) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
