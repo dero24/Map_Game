@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { luminance, lab, lstar, lch, regionColour, nightDarkPasses, wiresVsSky, poolContrast, windowMean, flipRows } from '../tools/night-core.js';
+import { lensVerdict } from '../tools/id-pass.js';
 
 // The night check's pure parts (tools/night-core.js): the colour science and the reviewer's round-10
 // night tests the page runs on its own frames (tools/night-check.js).
@@ -89,6 +90,18 @@ describe('pools down the street', () => {
   });
   it('one pool is not a street of them', () => {
     expect(poolContrast([{ heartY: 0.4, gapY: 0.01 }]).pass).toBe(false);
+  });
+});
+
+describe('the lens (tools/id-pass.js, what review-shots re-poses on)', () => {
+  it('a slab at the lens fails; a person across the street, the ground at your feet, pass', () => {
+    // round 10's frame 3: a tan slab over the lower right, ~15% of the frame within 2.5 m — the old
+    // ray grid wanted 25% of its rays within 4 m to call it
+    expect(lensVerdict({ subject: 0, near25: 0.15, near4: 0.18, world: 0.63 })).toEqual(['15% within 2.5 m']);
+    expect(lensVerdict({ subject: 0, near25: 0.01, near4: 0.2, world: 0.6 })).toEqual(['20% within 4 m']);
+    expect(lensVerdict({ subject: 0, near25: 0, near4: 0.03, world: 0.63 })).toEqual([]);
+    expect(lensVerdict({ subject: 0, near25: 0, near4: 0, world: 0.1 })).toEqual(['the world 10% of the frame']);
+    expect(lensVerdict({ subject: 0, near25: 0, near4: 0, world: 0.1 }, { world: 0 })).toEqual([]);
   });
 });
 

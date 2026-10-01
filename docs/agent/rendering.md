@@ -62,13 +62,18 @@ lit windows as the accents. The shapes and the grade's maths are plain functions
 `nightLight.ts` (tests/nightLight.test.ts); the shaders run GLSL twins fed the same numbers.
 
 - **The lamp map** (`stream.ts` `repaintLamps`: 2 km round the walker at 2 m/px, repainted at most
-  every 1.5 s for tiles, at once near its edge). R holds the distance to the nearest lamp, as a cone
-  per lamp (1 at its foot, 0 at `POOL.reach` 12 m), composited with `lighten` (an opaque sprite: a
-  true max, so the nearest lamp wins). G is the canyon field alone.
-  - It used to hold the pool itself: white gradients (r 13 m) added up, then `pow 1.6`. At 2 m
-    texels that was a blur; every lamp spread a dim amber wash ~26 m across that ran into the
-    next (round 10's "amber-mud": the night street's lower 40% at L\* 26, hue 46–50°, C\* 15). The
-    white sprite also wrote into G, so by day every lamp cut the sky fill under it by up to 45%.
+  every 1.5 s for tiles, at once near its edge; one sprite stamped per lamp, added up). R holds how
+  near a lamp is: a cone per lamp, 1 at its foot and 0 at `POOL.reach` (9 m), squared — lamps 18 m or
+  more apart never meet in it, and two closer than that share a middle a little brighter than
+  either. G is the canyon field.
+  - R used to hold the pool itself: white gradients (r 13 m) added up, then `pow 1.6`. At 2 m texels
+    that was a blur; every lamp spread a dim amber wash ~26 m across that ran into the next (round
+    10's "amber-mud": the night street's lower 40% at L\* 26, hue 46–50°, C\* 15).
+  - The old gradient still goes into G under the canyon field, unchanged: `canyonAt` reads it as
+    sky lost, so by day the sky fill under every lamp is cut by up to 45% (along a shop street
+    with a post every 18 m, the whole street's shade). It's an accident of the two sharing the
+    sprite, but the day look was judged with it: drawing the sprite's G as 0 removes it and lifts a
+    golden-hour shop street ~3.5 L\* (mean ΔE ~5). That's a look decision, left for one.
 - **The pool** (`shared.ts` `lampField`, `lampAt`): the distance read back from the cone, shaped as
   `exp(−(d / radius)^edge)` — a broad, even heart, down to 1/e at `radius`, gone a couple of metres
   past it — times the height falloff (full to 1.5 m over the local ground, nothing by 10.5 m).

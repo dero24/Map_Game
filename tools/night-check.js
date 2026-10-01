@@ -107,9 +107,11 @@ function pools(G, shot, field, opts) {
     if (heart.n < 2) continue;
     seen.push({ ...l, at: s.map(Math.round), heartY: heart.Y, heartN: heart.n, rx, ry });
   }
-  // the gap down the street from each: the dark ground between its foot and the next one's
+  // the gap down the street from each: the dark ground between its foot and the next one's (a lone
+  // pool: the street 18 m short of it, on the way there)
   for (let k = 0; k < seen.length; k++) {
-    const a = seen[k], b = seen[k + 1] ?? seen[k - 1];
+    const a = seen[k], t0 = (a.ahead - 18) / a.ahead;
+    const b = seen[k + 1] ?? seen[k - 1] ?? (a.ahead > 20 ? { x: cx + (a.x - cx) * t0, z: cz + (a.z - cz) * t0 } : null);
     if (!b) { a.gapY = null; continue; }
     let n = 0, sY = 0;
     const marks = [];
@@ -126,7 +128,7 @@ function pools(G, shot, field, opts) {
   return seen;
 }
 
-async function measure(G, label, opts) {
+async function measure(G, label, opts, judge = ['lens', 'wires', 'dark', 'pools']) {
   const P = G.postParams, vig = P.vignette;
   P.vignette = 0; // (measured on the painting: the paper margin isn't the street)
   await frames(3);
@@ -165,7 +167,9 @@ async function measure(G, label, opts) {
     dark: { ...dark, pass: darkV.pass, why: darkV.why, heart: opts.heart, heartShare: +(hearts40.n / Math.max(1, all40.n)).toFixed(3), all: all40, hearts: hearts40, at: darkAt },
     pools: { good: P2.good, pass: P2.pass, list: P2.pools.map((p) => ({ ahead: Math.round(p.ahead), side: Math.round(p.side), at: p.at, heartL: +(116 * Math.cbrt(p.heartY) - 16).toFixed(1), gapL: p.gapY == null ? null : +(116 * Math.cbrt(Math.max(p.gapY, 0.0089)) - 16).toFixed(1), ratio: p.ratio })) },
   };
-  r.pass = r.lens.pass && r.wires.pass !== false && r.dark.pass && r.pools.pass;
+  // (a pose judges what applies to it: a street with one lamp in sight has no pools to count)
+  r.judged = judge;
+  r.pass = judge.every((k) => r[k].pass !== false);
   return { r, A, field, wm, plist: P2.pools };
 }
 
@@ -214,7 +218,9 @@ window.__NIGHTCHECK__ = async (tag = 'n', poses = null, opts = {}) => {
   G.timeParams.speed = 0;
   poses ??= [
     { label: 'the night street (review 3: ocean-night, 22:00)', fn: () => { window.__APPLY_SHOT__('ocean-night'); G.setHour(22); } },
-    { label: 'Center Street, 22:00', fn: () => { G.walkParams.fly = false; G.walker.place(52, 257, 1.52, 0.0); G.setHour(22); } },
+    // (Center Street's lamps hang every third pole, ~114 m apart: one is in sight, so its pools are
+    // measured, not judged)
+    { label: 'Center Street, 22:00', judge: ['lens', 'wires', 'dark'], fn: () => { G.walkParams.fly = false; G.walker.place(52, 257, 1.52, 0.0); G.setHour(22); } },
   ];
   const variants = opts.variants ?? [{ name: '', apply: () => {} }];
   const out = [], sheets = [];
@@ -226,7 +232,7 @@ window.__NIGHTCHECK__ = async (tag = 'n', poses = null, opts = {}) => {
       await v.apply(G);
       if (variants.length > 1) await frames(3);
       const label = v.name ? `${p.label} [${v.name}]` : p.label;
-      const m = await measure(G, label, opts);
+      const m = await measure(G, label, opts, p.judge);
       out.push(m.r);
       console.log(`[night] ${JSON.stringify(m.r)}`);
       const a = document.createElement('canvas');
