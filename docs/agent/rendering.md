@@ -175,7 +175,9 @@ the sky between the leaves. Past it, the tiles' own solid crowns, as before.
   the taken ones' `aNear`, and fills the draws: **one instanced draw per model in use** for the
   limbs (`propMaterial({ treeLod: 'near' })`, the far instance's own matrix) and **one instanced
   draw for every card of every near tree** (`leafCards.ts`). Nothing per tree. A tree it hasn't
-  taken (over the cap, a tile it was never told of, a palm) draws whole from its far mesh.
+  taken (over the cap, a tile it was never told of, a palm) draws whole from its far mesh. The
+  near wood is the props' material (`treeLod: 'near'`: the far trunk's own sway and paint) with bark
+  furrows running up it in its own frame.
 - **The hand-over** (`propMaterial` `TREE_LOD_U` = hand-over distance, band, mode): both models
   compute the far share from the tree foot's distance to the eye (`farShare`: 0 inside, 1 past the
   band) and split the pixels on one ordered dither (`dither4`) — the far crown where the dither is
