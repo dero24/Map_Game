@@ -6,6 +6,7 @@ import { Horizon } from './world/horizon';
 import { Skyline } from './world/skyline';
 import { FarSkyline } from './world/farSkyline';
 import { KerbCars } from './world/kerbCars';
+import { underRaised, PAD_PAINT } from './world/pads';
 import { MicroLayer } from './world/microLayer';
 import { seasonAt, dayOfYear } from './world/season';
 import { setWorldDate } from './world/calendar';
@@ -335,6 +336,8 @@ async function main() {
     streamedGround();
     // J1: streamed tiles (past the bake) paint their streets and footprints into the ground windows
     if (a.spec.world || a.spec.synth) paint.setTile(a.spec.id, a.primRoads, a.fps.map((f) => f.ring as [number, number][]), [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1], a.fps.map((f) => !!f.front), a.areas, a.fps.map((f) => (f.kind === 'house' || f.kind === 'shed' ? 0.45 : 1)), a.xing);
+    // the ground under a raised house: a pad, gravel or sand — never lawn (pads.ts), every tile's
+    paint.setPads(a.spec.id, underRaised(a.fps, (x, z) => world.terrain.oceanDistAt(x, z)).map((q) => ({ ring: q.ring, fill: PAD_PAINT[q.kind], stone: q.kind === 'gravel' })), [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1]);
     grass.invalidateBox(a.spec.box);
   };
   stream.onUnload = (id) => { paint.dropTile(id); kerbCars.remove(id); micro.remove(id); crowd.remove(id); queueMicrotask(streamedGround); };
