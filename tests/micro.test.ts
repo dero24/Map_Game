@@ -1,7 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
-// @ts-expect-error node's own module (the project carries no node types)
-import { readFileSync } from 'node:fs';
 import { Terrain, TerrainLayer, type TileJson, type Building, type WorldJson } from '../src/world/data';
 import { Painter } from '../src/world/groundPaint';
 import { buildTile } from '../src/world/tileBuild';
@@ -345,11 +343,13 @@ const OPEN = new Set(['#93a964', '#b9b4a9', '#ddd5c2', '#dccb9f', '#617043', '#8
 const LAWN_THINGS = new Set<MicroId>(['birdbath', 'kayak', 'hoop', 'yardsign', 'salesign', 'surfboard']);
 
 describe('the ground you walk on (the shore pack)', () => {
-  const at = (f: string) => new URL(`../public/data/shore/${f}`, import.meta.url);
-  const man = JSON.parse(readFileSync(at('manifest.json'), 'utf8'));
-  const bin = readFileSync(at('terrain.bin')), tab = bin.buffer.slice(bin.byteOffset, bin.byteOffset + bin.byteLength) as ArrayBuffer;
-  const shore = new Terrain(new TerrainLayer(tab, man.terrain.slice), new TerrainLayer(tab, man.terrain.backdrop));
   it('stands no lawn thing on paved ground, every kerb box and hydrant at its kerb, none on a shop\'s sidewalk', async () => {
+    // (node's fs by a name TypeScript doesn't resolve: the project carries no node types)
+    const { readFileSync } = (await import(/* @vite-ignore */ ['node', 'fs'].join(':'))) as { readFileSync: (f: URL, enc?: string) => string & Uint8Array };
+    const at = (f: string) => new URL(`../public/data/shore/${f}`, import.meta.url);
+    const man = JSON.parse(readFileSync(at('manifest.json'), 'utf8'));
+    const bin = readFileSync(at('terrain.bin')), tab = bin.buffer.slice(bin.byteOffset, bin.byteOffset + bin.byteLength) as ArrayBuffer;
+    const shore = new Terrain(new TerrainLayer(tab, man.terrain.slice), new TerrainLayer(tab, man.terrain.backdrop));
     setMicroDate('2026-07-15');
     const P = new Painter(JSON.parse(readFileSync(at('paint.json'), 'utf8')) as WorldJson, [], (x, z) => shore.oceanDistAt(x, z));
     const lawnThings: { x: number; z: number; k: MicroId }[] = [], boxes: [number, number][] = [], hydrants: [number, number][] = [], shopDoors: [number, number][] = [];
