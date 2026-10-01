@@ -59,7 +59,7 @@ export class CrowdLayer {
       im.count = 0;
       im.frustumCulled = false; // (refilled round the walker: its bounds would always be stale)
       im.name = name;
-      if (name === 'beach-people') im.layers.enable(1); // (the near ones cast shadows)
+      // (no shadow: the shadow pass draws the standing body — a lying one's would stand up off the towel)
       this.meshes.push({ im, pose, cap });
       this.group.add(im);
     }
