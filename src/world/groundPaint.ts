@@ -824,8 +824,9 @@ export class Painter {
       const [ex, ez] = w.pts[0][w.pts[0].length - 1]; // (its street end)
       if (ex < clip[0] - 8 || ex > clip[2] + 8 || ez < clip[1] - 8 || ez > clip[3] + 8) continue;
       let best: { d: number; fx: number; fz: number; tx: number; tz: number; r: Road } | null = null;
-      for (const { item: r, pts } of roads) {
-        if ((ROAD_RANK[r.c] ?? 1) < 2 || r.sw) continue;
+      for (const R of roads) {
+        const { item: r, pts } = R;
+        if ((ROAD_RANK[r.c] ?? 1) < 2 || r.sw || !overlaps(R, ex, ez, ex, ez, r.w / 2 + 3)) continue;
         const p = pts[0];
         for (let i = 0; i + 1 < p.length; i++) {
           const [ax, az] = p[i], dx = p[i + 1][0] - ax, dz = p[i + 1][1] - az, L2 = dx * dx + dz * dz;
@@ -1211,8 +1212,10 @@ export class DetailGround {
     // A slice a frame (small ones together); four slices' worth while the walker nears the edge of
     // the window shown (a fast flight). What a slice costs: its canvas (with the blur's margin), once
     // for the strokes and once for each wash layer through the blur — one, or all three at the edge.
-    const job = this.job, edge = (r: Rect) => r[0] < CELL || r[1] < CELL || r[2] > res - CELL || r[3] > res - CELL;
-    const cost = (r: Rect) => (Math.min(res, r[2] + CELL) - Math.max(0, r[0] - CELL)) * (Math.min(res, r[3] + CELL) - Math.max(0, r[1] - CELL)) * (edge(r) ? 4 : 2);
+    // (The fine window's strokes count half again: the ground underfoot — flags, kerbs, gutters,
+    // yards, drift — is half again the strokes.)
+    const job = this.job, edge = (r: Rect) => r[0] < CELL || r[1] < CELL || r[2] > res - CELL || r[3] > res - CELL, strokes = this.level === 2 ? 1.5 : 1;
+    const cost = (r: Rect) => (Math.min(res, r[2] + CELL) - Math.max(0, r[0] - CELL)) * (Math.min(res, r[3] + CELL) - Math.max(0, r[1] - CELL)) * (strokes + (edge(r) ? 3 : 1));
     const budget = ((Math.max(Math.abs(x - cx), Math.abs(z - cz)) > s * 0.36 ? 4 : 1) * res * res) / 16;
     for (let spent = 0; job.todo.length; ) {
       const c = cost(job.todo[0]);

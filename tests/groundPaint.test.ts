@@ -77,7 +77,7 @@ describe('block paving', () => {
 // rastered on the CPU, every 66 m of a flight (Robby: "every ~2 seconds it locks up"). A metering
 // canvas counts the raster work each frame asks for: each draw's pixels on its canvas (inside the
 // clip), those that went through a blur, and the canvas-to-canvas copies.
-const work = { blurred: 0, drawn: 0, copied: 0 };
+const work = { blurred: 0, drawn: 0, copied: 0, calls: 0 };
 type Box4 = [number, number, number, number];
 class MeterCanvas {
   private w = 0;
@@ -125,6 +125,7 @@ class MeterCtx {
   private count(b: Box4) {
     const a = this.area(b);
     work.drawn += a;
+    work.calls++;
     if (this.filter.includes('blur')) work.blurred += a;
   }
   fill() { this.count(this.path); }
@@ -164,13 +165,13 @@ const cover = (x0: number, z0: number, w: number, h: number, cell: number) => {
   img.height = h;
   return { img: img as unknown as HTMLCanvasElement, L: { g: { x0, z0, w, h, cell } } as unknown as TerrainLayer };
 };
-interface Frame { x: number; z: number; blurred: number; drawn: number; copied: number; uploaded: boolean; moved: boolean; inside: boolean }
+interface Frame { x: number; z: number; blurred: number; drawn: number; copied: number; calls: number; uploaded: boolean; moved: boolean; inside: boolean }
 // fly a window along v (m/s) for secs at 60 frames a second, metering each frame
 function fly(D: DetailGround, from: [number, number], v: [number, number], secs: number, at?: (i: number) => void): Frame[] {
   const out: Frame[] = [];
   let ver = D.texture.version, bx = D.box.x, bz = D.box.y;
   for (let i = 0; i <= secs * 60; i++) {
-    work.blurred = work.drawn = work.copied = 0;
+    work.blurred = work.drawn = work.copied = work.calls = 0;
     const x = from[0] + (v[0] * i) / 60, z = from[1] + (v[1] * i) / 60;
     at?.(i);
     D.update(x, z);
@@ -224,6 +225,18 @@ describe('the ground windows on a flight', () => {
     expect(rest.filter((r) => r.uploaded).length).toBe(moves);
     // …and it keeps up: the walker never nears the edge of the window shown
     expect(rest.every((r) => r.inside)).toBe(true);
+  });
+  it("the ground underfoot costs a slice a few dozen draws: a frame's raster stays a fraction of the window", () => {
+    // (the town's streets with their sidewalks in flags, kerbs and gutters, its houses in yards,
+    // the streets worn: everything the fine window lays, a slice at a time on a flight)
+    const D = new DetailGround(new Painter(town, [], () => 200), covers(), res, 300, 2, 6);
+    const f = fly(D, [0, -900], [0, 40], 12).slice(1).filter((r) => r.calls > 0);
+    expect(f.length).toBeGreaterThan(20);
+    // (measured 2026-10-01: at most 63 draws and 0.48 of a window's pixels a frame, 0.19 on average —
+    // each draw metered at its whole box, so a batched path of joints counts its slice once)
+    expect(Math.max(...f.map((r) => r.calls))).toBeLessThanOrEqual(80);
+    expect(Math.max(...f.map((r) => r.drawn))).toBeLessThanOrEqual(full * 0.6);
+    expect(f.reduce((s, r) => s + r.drawn, 0) / f.length).toBeLessThanOrEqual(full * 0.25);
   });
   it('keeps up on a diagonal and at four times the speed', () => {
     for (const v of [[28, -28], [0, 160], [113, 113]] as [number, number][]) {
