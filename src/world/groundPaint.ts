@@ -800,8 +800,8 @@ export function slices(m: Uint8Array, N: number, cell: number, max: number): Rec
 // and lot, then the 2048² upload. That was half a second wherever the browser rasters a 2D canvas on
 // the CPU, every 66 m of a flight (Robby: "every ~2 seconds it locks up"). Now the window moves in
 // whole steps of its own pixels: what it still shows slides across in one copy, and only the strip
-// it moved onto is painted (with the bands along its edges, where the wash fades out), a slice a
-// frame. The texture shows the old window until the new one is whole.
+// it moved onto is painted (with the band behind it, where the wash fades out at the edge), a slice
+// a frame. The texture shows the old window until the new one is whole.
 export class DetailGround {
   readonly canvas = document.createElement('canvas');
   readonly texture: THREE.CanvasTexture;

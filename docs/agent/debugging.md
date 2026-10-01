@@ -17,6 +17,15 @@ behaviour.
     (`other`: unwrapped code, GC), and renders that compiled or uploaded (`+prog`, `+geo`, `+tex`).
   - `deep: true` adds the fine-grained wrappers (walk-world adds, interior registration). They
     inflate the numbers they measure.
+  - `sync: true` waits for the GPU after each frame (a 1-pixel `readPixels`), so the GPU's work is
+    counted in the frame that queued it (`gpu (sync)`). Use it whenever a hitch might be canvas or
+    upload work.
+    - The JS timers miss that work. A 2D canvas is recorded when it's drawn and only rastered when
+      it's read: its blur and its strokes run in the GPU process at the texture upload, or on the
+      main thread where the browser rasters canvases on the CPU.
+    - The ground paint's old full repaint recorded in ~6 ms but cost ~4 s headless (SwiftShader)
+      and 2.5–3.5 s on a CPU canvas.
+    - A probe that stubs the render out (`norender`) hides all of it.
   - To drive: `V = __GAME__.vehicles; V.summon('car'); V.enter(V.list.at(-1))`.
   - The car goes through buildings: the probe moves it, bypassing collision.
 
