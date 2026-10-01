@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { luminance, lab, lstar, lch, regionColour, nightDarkPasses, wiresVsSky, poolContrast, windowMean, flipRows } from '../tools/night-core.js';
+import { luminance, lab, lstar, lch, regionColour, nightDarkPasses, nightGapPasses, chromaPasses, poolFalloff, wiresVsSky, poolContrast, windowMean, flipRows } from '../tools/night-core.js';
 import { lensVerdict } from '../tools/id-pass.js';
 
-// The night check's pure parts (tools/night-core.js): the colour science and the reviewer's round-10
-// night tests the page runs on its own frames (tools/night-check.js).
+// The night check's pure parts (tools/night-core.js): the colour science and the reviewer's night
+// tests (rounds 10 and 11) the page runs on its own frames (tools/night-check.js).
 
 // a w × h frame of one colour, rows from the top
 const frame = (w: number, h: number, rgb: (x: number, y: number) => [number, number, number]) => {
@@ -53,6 +53,63 @@ describe('the dark (bottom 40% outside the lamp hearts)', () => {
     expect(nightDarkPasses(low).pass).toBe(true);
     expect(nightDarkPasses(all).pass).toBe(false);
     expect(regionColour(px, w, h, () => false).n).toBe(0);
+  });
+});
+
+describe("round 11: the gap, the heart and the band", () => {
+  it("the gap's ground: lit by the night's floor, never black, and cool", () => {
+    expect(nightGapPasses({ n: 100, L: 2.7, C: 3, h: 260, L90: 4 }).pass).toBe(false); // round 11's frame 13: black
+    expect(nightGapPasses({ n: 100, L: 14, C: 11, h: 266, L90: 18 }).pass).toBe(true);
+    expect(nightGapPasses({ n: 100, L: 23, C: 12, h: 266, L90: 28 }).pass).toBe(false); // a wash, not a night
+    expect(nightGapPasses({ n: 100, L: 14, C: 9, h: 46, L90: 18 }).pass).toBe(false); // amber
+    expect(nightGapPasses({ n: 100, L: 14, C: 9, h: 300, L90: 18 }).pass).toBe(false); // violet
+    expect(nightGapPasses({ n: 0, L: null, C: null, h: null, L90: null }).pass).toBe(false);
+  });
+  it("a heart is a warm cream (C* ≤ 30), the bottom 40% no orange carpet (C* ≤ 22)", () => {
+    expect(chromaPasses({ n: 100, L: 68, C: 55, h: 76, L90: 72 }, 30).pass).toBe(false); // round 11's frame 13
+    expect(chromaPasses({ n: 100, L: 80, C: 22, h: 82, L90: 84 }, 30).pass).toBe(true);
+    expect(chromaPasses({ n: 100, L: 54, C: 34, h: 70, L90: 60 }, 22).pass).toBe(false); // round 11's frame 3
+    expect(chromaPasses({ n: 100, L: 40, C: 12, h: 75, L90: 60 }, 22).pass).toBe(true);
+  });
+});
+
+describe("a pool's fall-off along the road", () => {
+  // a pool's light d m from its heart over a floor, as display luminance
+  const profile = (light: (d: number) => number, floor = 0.02, heart = 0.5) => Array.from({ length: 21 }, (_, d) => ({ d, Y: floor + heart * light(d) }));
+  const lamp = (d: number) => 512 / (64 + d * d) ** 1.5; // h³/(h² + d²)^1.5 at h = 8 m
+  it("a lamp's own light passes: half at ~6 m, 17% at 12 m", () => {
+    const r = poolFalloff(profile(lamp), 0.02);
+    expect(r.pass).toBe(true);
+    expect(r.dHalf!).toBeGreaterThan(5.8); expect(r.dHalf!).toBeLessThan(6.4);
+    expect(r.at12!).toBeCloseTo(0.171, 2);
+    expect(r.rise).toBe(0);
+  });
+  it("round 11's stage disc fails: flat to 4 m, then a cliff", () => {
+    const disc = (d: number) => Math.exp(-Math.pow(d / 5.2, 3)) * (d < 7.2 ? 1 : Math.max(0, 1 - (d - 7.2) / 1.8));
+    const r = poolFalloff(profile(disc), 0.02);
+    expect(r.pass).toBe(false);
+    expect(r.at12!).toBeLessThan(0.01);
+    expect(r.why).toMatch(/at 12 m/);
+  });
+  it('a small hot spot that halves within 5 m fails', () => {
+    const r = poolFalloff(profile((d) => Math.exp(-d / 3)), 0.02);
+    expect(r.dHalf!).toBeLessThan(5);
+    expect(r.pass).toBe(false);
+  });
+  it('a ring brighter than what is inside it shows as a rise', () => {
+    const ring = (d: number) => (d >= 8 && d <= 10 ? 0.8 : lamp(d));
+    expect(poolFalloff(profile(ring), 0.02).rise).toBeGreaterThan(5);
+  });
+  it('the floor is taken off: the same pool over a lighter floor reads the same', () => {
+    const a = poolFalloff(profile(lamp, 0.02), 0.02), b = poolFalloff(profile(lamp, 0.05), 0.05);
+    expect(a.dHalf!).toBeCloseTo(b.dHalf!, 3); expect(a.at12!).toBeCloseTo(b.at12!, 3);
+  });
+  it('samples missing here and there (a car in the way) are stepped over; no heart, no verdict', () => {
+    const s = profile(lamp).filter((p) => p.d !== 6 && p.d !== 12);
+    const r = poolFalloff(s, 0.02);
+    expect(r.at12!).toBeCloseTo(0.171, 1);
+    expect(poolFalloff(profile(lamp).filter((p) => p.d > 2), 0.02).pass).toBe(false);
+    expect(poolFalloff(profile(lamp), null).pass).toBe(false);
   });
 });
 

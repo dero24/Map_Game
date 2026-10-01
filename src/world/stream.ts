@@ -16,7 +16,7 @@ import { signTexture } from './signs';
 import { registerPlan, type Interiors, type Plan } from './interiors';
 import type { WalkWorld } from '../player/collision';
 import { U } from '../render/shared';
-import { POOL, poolConeStops } from '../render/nightLight';
+import { POOL, poolStops } from '../render/nightLight';
 import { activeStyle } from './styles';
 import { roofSource } from './aerial';
 import { admitCells, type BudgetCell } from './budget';
@@ -152,6 +152,7 @@ export class TileStream {
   private lampAt = -Infinity; // when the window was last painted (performance.now)
   private lampCanvas: HTMLCanvasElement | null = null;
   private lampSprite: HTMLCanvasElement | null = null;
+  private poolSprite: HTMLCanvasElement | null = null;
   // A new tile shows a few meshes a frame (REVEAL_BYTES): a downtown tile is ~100 MB of vertices,
   // and sending it all to the GPU in the frame it mounted stalled that frame 40–60 ms. What it
   // replaces (its stand-in, its silhouette, its flat first build) stays on screen until it's whole.
@@ -830,12 +831,13 @@ export class TileStream {
   }
 
   // Paint the lamp window around (x,z), ~2 m/px over 2 km, one sprite stamped per lamp and added up.
-  // R: how near a lamp is — a cone per lamp, 1 at its foot and 0 at POOL.reach (9 m: lamps 18 m or
-  // more apart never meet in it), squared; the shaders shape the pool from that distance (shared.ts
-  // lampField). G: the canyon field, over each lamp's old 13 m gradient. (The pools were once white
-  // gradients added up and read as light: two stops of amber wash ~26 m across round every lamp,
-  // running into the next. Their trace in G dims the sky's light under every lamp, by day too, and
-  // the day look has been made with it there: it stays until that look is judged without it.)
+  // R: the pools' light — each lamp's own fall-off out to POOL.reach (22 m), added up as light adds
+  // and held at 1/POOL.headroom of a heart (nightLight.ts poolStamp); the shaders read it straight
+  // back (shared.ts lampField). G: the canyon field, over each lamp's old 13 m gradient. (The pools
+  // were once white gradients added up: two stops of amber wash ~26 m across round every lamp; then a
+  // cone of distance shaped into a flat-topped heart with a cliff at 9 m. That old gradient's trace
+  // in G dims the sky's light under every lamp, by day too, and the day look has been made with it
+  // there: it stays until that look is judged without it.)
   private repaintLamps(x: number, z: number) {
     const R = 1024, size = LAMP_WIN;
     this.lampCx = Math.round(x / 50) * 50;
@@ -851,10 +853,11 @@ export class TileStream {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, R, R);
     ctx.globalCompositeOperation = 'lighter';
-    const r = 13 * k;
-    // one sprite, painted once and stamped at every lamp (a gradient object per lamp — a city
-    // ring has thousands — made this repaint a 10–14 ms stall on every mount)
-    const S = Math.ceil(r * 2);
+    // two sprites, each painted once and stamped at every lamp (a gradient object per lamp — a city
+    // ring has thousands — made this repaint a 10–14 ms stall on every mount): the old 13 m one for G
+    // exactly as it always was (the day's look has it), and the pool, out to its reach, for R. Each
+    // adds only to its own channel.
+    const r = 13 * k, S = Math.ceil(r * 2);
     if (!this.lampSprite || this.lampSprite.width !== S) {
       const sp = (this.lampSprite = document.createElement('canvas'));
       sp.width = sp.height = S;
@@ -868,14 +871,24 @@ export class TileStream {
       old.addColorStop(1, 'rgb(0,0,0)');
       sc.fillStyle = old;
       sc.fillRect(0, 0, S, S);
-      const cone = sc.createRadialGradient(c, c, 0, c, c, POOL.reach * k); // (a radial gradient runs linearly in distance between stops)
-      for (const [t, v] of poolConeStops()) cone.addColorStop(t, `rgb(${Math.round(v * 255)},0,0)`);
-      sc.fillStyle = cone;
-      sc.fillRect(0, 0, S, S);
+    }
+    const rp = POOL.reach * k, SP = 2 * Math.ceil(rp) + 1; // (odd: the lamp's foot mid-pixel)
+    if (!this.poolSprite || this.poolSprite.width !== SP) {
+      const sp = (this.poolSprite = document.createElement('canvas'));
+      sp.width = sp.height = SP;
+      const sc = sp.getContext('2d')!, c = SP / 2;
+      sc.fillStyle = '#000';
+      sc.fillRect(0, 0, SP, SP);
+      const pool = sc.createRadialGradient(c, c, 0, c, c, rp); // (a radial gradient runs linearly in distance between stops)
+      for (const [t, v] of poolStops()) pool.addColorStop(t, `rgb(${Math.round(v * 255)},0,0)`);
+      sc.fillStyle = pool;
+      sc.fillRect(0, 0, SP, SP);
     }
     for (const pts of this.lampPts.values())
       for (let i = 0; i + 1 < pts.length; i += 2) {
         const px = (pts[i] - x0) * k, pz = (pts[i + 1] - z0) * k;
+        if (px < -rp || pz < -rp || px > R + rp || pz > R + rp) continue;
+        ctx.drawImage(this.poolSprite, px - SP / 2, pz - SP / 2);
         if (px < -r || pz < -r || px > R + r || pz > R + r) continue;
         ctx.drawImage(this.lampSprite, px - S / 2, pz - S / 2);
       }

@@ -66,24 +66,40 @@ behaviour.
   sketch → dry over its pixels (CIE76 + CIEDE2000), with pass flags (≥ 2%, ≥ 70%, ≥ 25). Painted
   rides persist (`map-game.vehicles.v1` in localStorage) — clear it between runs or they crowd the
   water the next sketch wants.
-- The night street, measured (reviewer round 10, must-fix 2): on a `?capture=1` page,
-  `await import('/tools/night-check.js'); await __NIGHTCHECK__('tag')` poses the review's night street
-  (frame 3: `ocean-night` at 22:00) and Center Street at 22:00, and measures each on the painted frame
-  (the paper margin left off) → `shots/nightcheck-<tag>.jpg` (each frame, then the same frame with what
-  was measured drawn on it) and the numbers, with pass flags:
+- The night street, measured (reviewer rounds 10 and 11): on a `?capture=1` page,
+  `await import('/tools/night-check.js'); await __NIGHTCHECK__('tag'[, poses])` poses the review's
+  night frames — 3, its night street (`ocean-night` at 22:00), and 13, its streamed street at night
+  (Long Branch at 21:30, the review's own pose; where no tile service answers, the synth stand-in) —
+  and measures each on the painted frame (the paper margin left off) → `shots/nightcheck-<tag>.jpg`
+  (each frame, then the same frame with what was measured drawn on it) and the numbers, with pass
+  flags. Every pose is measured on everything; each judges what the review asks of it (3: band,
+  pools, wires, lens; 13: heart, gap, fall-off, wires, lens):
   - the lens: the id pass (below);
   - wires against the sky: a wire-only mask (the wires drawn alone, flat, against the world's
     depth) and the frame with and without them — their mean L\* ≤ the sky's + 2;
-  - the bottom 40% outside the lamp hearts (the lamp field the shaders read ≥ 0.25; also given at
-    0.1 and 0.5): L\* ≤ 18, and hue 200–290° or C\* ≤ 6;
+  - the band: the bottom 40% of the frame, C\* ≤ 22 (no orange carpet where you stand in a pool);
+  - the heart: the ground in the pools' hearts (the lamp field the shaders read ≥ 0.6), C\* ≤ 30;
+  - the gap: the ground past the pools' reach (field ≤ 0.02) in the lower half, L\* 10–20 and hue
+    220–280° (the night's floor: never black);
+  - the fall-off: the nearest pool 14–70 m ahead, sampled every metre along the line from its heart
+    toward you; its own light over the floor (the same line past its reach) halves no nearer than
+    5 m and is still ≥ 8% of the heart at 12 m (also: the steepest L\* drop per metre, any rise);
   - the pools down the street: each lamp ahead in a 25 m corridor whose heart is in sight, its
-    heart's luminance against the dark ground between it and the next — ≥ 2 pools at ≥ 2.5×.
-  - `opts.variants: [{ name, apply(G) }]` measures knobs turned in the page (`G.U.uLampPool`, the
-    post's `uNightGrade`) without re-posing. The pure parts are `tools/night-core.js`
-    (tests/nightCheck.test.ts).
-  - Headless: `node tools/night-check.mjs --url=http://localhost:5173/ [--tag=n] [--swiftshader]`
-    (the page served first) prints each pose's numbers, writes `shots/nightcheck-<tag>.{jpg,json}`,
-    exits 1 on a failed pose.
+    heart's luminance against the ground between it and the next pool ≥ 12 m further on — ≥ 2 pools
+    at ≥ 2.5×.
+  - "The ground" is what faces up (screen-space normal) within 2 m of the street's level; each pose
+    first sets the street's level (`U.uLampBaseY`, which the stream eases 5% a frame) to where the
+    walker stands, as the game holds it once it has caught up after a long jump.
+  - Pose keys: `3`, `13`, `center` (Center Street at 22:00), `day` (frame 2: the morning the night
+    must leave alone); `3n`/`13n` move to the next night with the moon down (the floor alone);
+    `13n@0.12` sets the floor's strength in the page (`G.U.uNightFloor.w`) for that pose.
+  - `opts.variants: [{ name, apply(G) }]` measures knobs turned in the page (`G.U.uLampPool`,
+    `G.U.uPoolColor`, `G.U.uNightFloor`, the post's `uNightGrade`/`uNightFade`) without re-posing.
+    The pure parts are `tools/night-core.js` (tests/nightCheck.test.ts).
+  - Headless: `node tools/night-check.mjs --url=http://localhost:5173/ [--tag=n] [--swiftshader]
+    [--poses=3,13,13n,day] [--png]` (the page served first) prints each pose's numbers, writes
+    `shots/nightcheck-<tag>.{jpg,json}` (`--png`: each pose's frame too, for a diff), exits 1 on a
+    failed pose.
 - The id pass is `tools/id-pass.js` (`idPass`, `flatPass`, `lensVerdict`). `review-shots.js` checks
   every outdoor pose with it — nothing within 2.5 m of the lens over 5% of the frame, nor within 4 m
   over 15% — and re-poses one that fails (back and aside, looking where it looked; logged as
