@@ -246,6 +246,7 @@ async function main() {
   setGndMaterial(groundGroup.userData.groundMat); // synthetic tiles reuse this material
   worldRoot.add(buildWater(tt));
   const wakes = new Wakes(); // (every boat under way draws its V on the water)
+  wakes.bedAt = (x, z) => world.terrain.heightAt(x, z); // (none over a dock's sand or a bar)
   worldRoot.add(wakes.mesh);
   waterParams.uOpenSea.value = VIRTUAL ? 1 : 0; // (the open world's plane is the sea itself)
   { // the region's water: Puget Sound's green-steel, the Keys' turquoise, the Gulf's olive
