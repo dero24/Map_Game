@@ -102,8 +102,11 @@ export interface Plan {
   holes: Opening[];
   landings: Landing[];
   cw: number[]; // stair collision walls, 6 per wall: u0 v0 u1 v1 y0 y1 (y above floor0)
-  strip?: Rect; // house: the hall from the front door (stair and passage)
+  strip?: Rect; // house: the hall from the front door (stair and passage) — a cottage's living room
   lane?: Rect; // house: the stair's part of the hall (a straight flight or a dogleg core)
+  /** A house of ≤ COTTAGE m² a storey: the front door opens into the living room (the strip). */
+  cottage?: 1;
+  land?: Rect; // a cottage's landing upstairs: the stair's lane and a passage beside it
   spine?: Rect[]; // flats: corridors
   bands?: Band[]; // flats: rows of flats off the corridors (`one`: a single flat)
   lobby?: Rect; // flats: the entrance lobby (ground storey)
@@ -446,8 +449,16 @@ function plateOf(LP: LocalPoly, L: number, W: number, ud: number, vd: number): {
 }
 
 // ---------------- families ----------------
+/** A cottage: a house of this much floor a storey or less (m², the review's "the shore's cottages")
+ *  opens straight into its living room — the front door's strip is the living room, the kitchen at
+ *  its back, the stair up one side of it — rather than a hall. */
+export const COTTAGE = 110;
+/** The living room's width beside a cottage's stair (and its least: a sofa, a table, a way past). */
+const LIVING_W = 3.2;
 /** A house: a hall runs in from the front door with the stair up one side of it (a straight flight
- *  when the house is deep enough, else a dogleg); rooms either side. */
+ *  when the house is deep enough, else a dogleg); rooms either side. A cottage's strip is its living
+ *  room (and kitchen) instead, with the stair along one side of it; upstairs the landing is the
+ *  stair's lane and a passage beside it (`Plan.land`), the rest of the strip bedrooms. */
 function planHouse(C: Ctx): boolean {
   const P = C.P, M = P.main, rng = C.rng;
   let n = P.levels;
@@ -472,8 +483,12 @@ function planHouse(C: Ctx): boolean {
     }
     return r;
   };
-  const swMin = kind === 'straight' ? lane + 0.95 : kind === 'dogleg' ? dog + 0.95 : 1.1;
-  const swMax = swMin + 2.2;
+  const sl = kind === 'straight' ? lane : kind === 'dogleg' ? dog : 0;
+  // (a cottage: the living room's width beside the stair, wide enough to furnish, and room either
+  // side of it for a bedroom — 2.15 m — else it's a house with a hall like any other)
+  const cottage = Math.abs(polyArea(P.loc)) <= COTTAGE && M.v1 - M.v0 >= sl + LIVING_W + 2.2;
+  const swMin = cottage ? sl + LIVING_W : kind === 'straight' ? lane + 0.95 : kind === 'dogleg' ? dog + 0.95 : 1.1;
+  const swMax = swMin + (cottage ? 1.6 : 2.2);
   const sidePen = (w: number) => (w <= 1e-6 ? 0.35 : w < 2.2 ? 1.2 : w < 2.75 ? 0.8 : w > 6.5 ? (w - 6.5) * 0.25 : 0);
   // which side of a hall [a, b] the stair takes (below): the side with less to reach, against the
   // outside wall when the hall has taken that side — on a tie, the side away from the front door,
@@ -498,7 +513,12 @@ function planHouse(C: Ctx): boolean {
       if (w < swMin - 1e-6) continue;
       if (w > swMax + (wA <= 1e-6 ? 2.3 : 0) + (wB <= 1e-6 ? 2.3 : 0)) continue;
       if ((wA > 1e-6 && wA < 1.0) || (wB > 1e-6 && wB < 1.0)) continue;
-      let s = (w - swMin) * 0.6 + Math.max(0, w - swMin - 1.2) * 1.5 + sidePen(wA) + sidePen(wB) + (wA < 2.75 && wB < 2.75 ? 2.5 : 0) + rng.float() * 0.3;
+      // (a hall as narrow as it goes; a cottage's living room a little wider than its least, with a
+      // bedroom's width beside it — never the whole house)
+      // (a two-storey cottage's stair goes up an inside wall, a room either side of its landing)
+      let s = cottage
+        ? Math.abs(w - swMin - 0.6) * 0.6 + Math.max(0, w - swMin - 1.4) * 1.5 + sidePen(wA) + sidePen(wB) + (wA < 2.2 && wB < 2.2 ? 4 : 0) + (kind && (wA <= 1e-6 || wB <= 1e-6) ? 1.5 : 0) + rng.float() * 0.3
+        : (w - swMin) * 0.6 + Math.max(0, w - swMin - 1.2) * 1.5 + sidePen(wA) + sidePen(wB) + (wA < 2.75 && wB < 2.75 ? 2.5 : 0) + rng.float() * 0.3;
       if (w > swMax) s += 0.8; // a hall grown over a sliver of side
       if (kind) { const lo = lowOf(a, b); if (lo === null ? !onPassage(a, b, true) && !onPassage(a, b, false) : !onPassage(a, b, lo)) s += 1.5; }
       if (!best || s < best.s) best = { a, b, s };
@@ -510,6 +530,8 @@ function planHouse(C: Ctx): boolean {
   }
   const strip = { u0: M.u0, u1: M.u1, v0: best.a, v1: best.b };
   P.strip = strip;
+  // (a cottage keeps a room beside its living room: else it's a hall house after all)
+  if (cottage && (strip.v0 - M.v0 >= 2.0 || M.v1 - strip.v1 >= 2.0)) P.cottage = 1;
   if (!kind) return true;
   // the stair goes up the side of the hall with less to reach (see lowOf), so the bigger rooms
   // open straight off the passage
@@ -518,7 +540,10 @@ function planHouse(C: Ctx): boolean {
   const inset = (edge: number, isExt: boolean) => (isExt ? 0.14 : 0.06) + 0.03 + (edge ? 0 : 0);
   const e0 = strip.v0 + inset(0, wA <= 1e-6), e1 = strip.v1 - inset(0, wB <= 1e-6);
   const roomsOnLane = low ? wA >= 2.2 : wB >= 2.2;
-  const vest = roomsOnLane ? 1.5 : 1.2;
+  // (the stair's foot in view from the front door: no more than 40° off its axis — a door far
+  // across a wide hall from the stair has the foot a step further in)
+  const lc = kind === 'straight' ? (low ? e0 + sp.width / 2 : e1 - sp.width / 2) : low ? e0 + doglegWide(sp) - sp.width / 2 : e1 - doglegWide(sp) + sp.width / 2;
+  const vest = Math.max(roomsOnLane ? 1.5 : 1.2, Math.min(3.0, Math.abs(lc - P.vd) / Math.tan((40 * Math.PI) / 180) - 0.1));
   const front = M.u0 + 0.14 + vest;
   if (kind === 'straight') {
     const c0 = low ? e0 : e1 - sp.width, c1 = c0 + sp.width;
@@ -531,6 +556,16 @@ function planHouse(C: Ctx): boolean {
     const f = Math.min(front, M.u1 - 0.14 - 0.2 - doglegLen(sp));
     doglegs(C, sp, 0, f, 1, c0, low ? 1 : 0);
     P.lane = { u0: f, u1: f + doglegLen(sp), v0: c0, v1: c0 + wide };
+  }
+  if (P.cottage) {
+    // upstairs a cottage's landing is the stair's lane and a passage beside it, its wall meeting the
+    // front and back walls between their windows; the rest of the strip goes to the bedrooms
+    const ln = P.lane, up = (v: number) => { for (let k = 1; k < n; k++) if (!endOK(C.LP, C.M, k, M.u0 + 0.05, v, -1, 0) || !endOK(C.LP, C.M, k, M.u1 - 0.05, v, 1, 0)) return false; return true; };
+    for (let pw = 1.0; pw <= 2.6 + 1e-6; pw += 0.05) {
+      const v = low ? ln.v1 + pw : ln.v0 - pw;
+      if ((low ? M.v1 - v : v - M.v0) < 2.2) break;
+      if (up(v)) { P.land = low ? { ...strip, v1: v } : { ...strip, v0: v }; break; }
+    }
   }
   return true;
 }
