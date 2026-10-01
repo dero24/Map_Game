@@ -257,13 +257,37 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 - Sleep (`ui/lifecycle.ts`): hidden → sound suspended (phones; a PC tab sounds on), the life
   worker paused (everywhere), held input released; an iPhone's interrupted audio resumes on the
   next tap.
+- The frame (`player/frame.ts`, reviewer round 10 "a phone is a window, not a slot"):
+  `walkParams.fov` is the lens — the vertical angle on a PC's 4:3–16:9 screen, which those screens
+  keep exactly — and `frameFov(lens, aspect)` fits the camera to the screen's shape. Upright (any
+  tall window) the frame opens taller until it shows 41° across (78° tall at 390×844, where a fixed
+  62° was a 31° slot; at most 84° tall); on its side (or an ultrawide) it stops at 95° across (it
+  showed 105°; the height gives). `setLens(cam, lens)` (controller.ts) is how every camera that
+  follows you sets it — the walker (less the brush's push-in), the chase, the basket — and main.ts's
+  resize, which also runs on a turn of the phone (`screen.orientation` change, or
+  `orientationchange`) and again once the new size has settled. Every zoom turns the lens (photo
+  mode's wheel, pinch and ± buttons; the panel's "field of view"), so the frame follows in
+  proportion: upright, photo zoom runs from a 24° to a 97° tall frame. `tests/frame.test.ts`.
 - The phone HUD (style.css "the phone HUD"; `body[data-ride]` = car / boat / plane / balloon /
-  fly / near, set in `syncTouchControls`): the place name, then the hint (or a ride's readout —
-  live numbers only — then the hint) read down the top left, clear of the bar; toasts at a
-  quarter height; the map-data credit on one line along the bottom edge, under the stick and the
-  cluster. On its side the same places, tighter (the bar a row, the cluster smaller). The words in
-  hints and toasts are the buttons' own (Paint, Land, Map, Go, More, Boost, Burn…).
-  `tools/hud-audit.mjs` checks it (10 phones × both ways × 7 states, every button with its word).
+  fly / near, set in `syncTouchControls`). The middle of the frame — x 15–85%, y 30–62% — is the
+  world's: nothing of the HUD stands in it while you walk or ride, toasts included.
+  - Upright: the place name and the clock on a paper wash (the clock in full ink, ≥ 4.5:1 over
+    anything), then the hint (or a ride's readout — live numbers only — then the hint) read down the
+    top left, clear of the bar; the bar's column keeps to the right 15% (its margin narrows on a
+    narrow phone, its buttons 40 px on a 320-wide one); the word for what you're next to sits just
+    over Fly; an SE's cluster is a size smaller.
+  - On its side: the bar a row; the place, then one message under it; the ride's readout along the
+    bottom like a dashboard, between the stick and the cluster; the cluster a row along the bottom
+    (Lift, Up or Burn beside the brush) with Fly — and the word over it — up the right edge; a
+    smaller stick ring, lower.
+  - A toast (main.ts `toast`, `body.toasting`) takes the hint's place for its few seconds, two lines
+    at most (clamped), and the hint steps aside till it has faded. An arrival card
+    (`body.arriving`) is painted smaller where the place name stands, on the same wash, and the
+    place name waits.
+  - The map-data credit on one line along the bottom edge, under the stick and the cluster. The
+    words in hints and toasts are the buttons' own (Paint, Land, Map, Go, More, Boost, Burn…).
+  - `tools/hud-audit.mjs` checks it: 10 phones × both ways × 7 states × 4 message sets (none, a
+    toast, an arrival card, both) — every button with its word, no overlaps, nothing in the middle.
 - The options panel (lil-gui, More → Options) on a phone: an opaque sheet across the top leaving
   the bottom ~300 px (stick, cluster, Get out) in reach — down the left on its side — with a
   "× Close" pill. lil-gui 0.21's root is `.lil-root` (style.css matches `.root` too), and its theme
@@ -418,7 +442,8 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   - `parked-cars:`, `moored-boats:` (tile props); `kerb-cars:` (the city's kerb and lot cars)
   - `life-car:`, `life-boat:` (ambient life)
   - `ride-car:`, `ride-boat:`, `ride-plane:` (player vehicles)
-- `photo.ts`: P frames the view, Space paints a page (the grab happens in `afterRender()`, right
+- `photo.ts`: P frames the view (the zoom turns the lens: the frame follows on every screen, and
+  the millimetres name the lens), Space paints a page (the grab happens in `afterRender()`, right
   after `post.render`, so no `preserveDrawingBuffer` is needed), then a caption is added and it is
   stored via `book.ts` (IndexedDB `map-game-sketchbook`). With the far sketch on, the same shot
   paints everything in frame into the world (`ctx.paintView`; toast "painted in what you framed

@@ -1,5 +1,6 @@
 // Arrival cards: cross into a new town and its name is painted across the top of the page —
-// "Monmouth Beach / Monmouth County, New Jersey / 7:42 pm · fair · first visit". The town comes from
+// "Monmouth Beach / Monmouth County, New Jersey / 7:42 pm · fair · first visit" (a phone paints it
+// smaller, in the place name's spot, so the middle of the view stays clear). The town comes from
 // reverse geocoding (geo.ts, cached + throttled); offline the region's own name (meta) stands in.
 // A card also greets you at the start of a walk and after every teleport.
 import type { GameCtx } from './ctx';
@@ -26,7 +27,7 @@ export class Arrival {
   greet() { this.force = true; this.lastX = Infinity; this.t = 0; }
 
   update(dt: number, blocked: boolean) {
-    if (this.hideT > 0 && (this.hideT -= dt) <= 0) this.el.classList.remove('show');
+    if (this.hideT > 0 && (this.hideT -= dt) <= 0) { this.el.classList.remove('show'); document.body.classList.remove('arriving'); }
     if ((this.t -= dt) > 0) return;
     this.t = 1;
     const w = this.g.walker;
@@ -66,6 +67,8 @@ export class Arrival {
     this.el.classList.remove('show');
     void this.el.offsetWidth;
     this.el.classList.add('show');
+    // (a phone paints the card where the place name stands, and the place name waits: style.css)
+    document.body.classList.add('arriving');
     this.hideT = 5.5;
     this.g.sound('chime');
   }

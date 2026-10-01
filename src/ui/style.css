@@ -216,9 +216,11 @@ body.nomouse .card .tkeys { display: block; }
      riding, the ride's own buttons take the same places;
    · the things you do now and then — Go, Map, More — in a bar along the top right, out of the way.
    The place name, the hint and a ride's readout read down the top left. Every button is a drawn
-   icon with its word under it. (tools/hud-audit.mjs checks every phone, both ways, every state.) */
+   icon with its word under it. The middle of the frame — x 15–85%, y 30–62% — is the world's:
+   nothing of the HUD stands in it, a toast included (reviewer round 10). (tools/hud-audit.mjs
+   checks every phone, both ways, every state, with a toast and an arrival card up.) */
 :root { --sl: env(safe-area-inset-left); --sr: env(safe-area-inset-right); --st: env(safe-area-inset-top); --sb: env(safe-area-inset-bottom);
-  --dock-b: 33px; --big: 72px; --btn: 56px; --col: 94px; --row: 98px; --pill-gap: 24px; }
+  --dock-b: 33px; --big: 72px; --btn: 56px; --col: 94px; --row: 96px; --pill-gap: 8px; --tb: 46px; }
 .tbtn { position: relative; box-sizing: border-box; width: var(--btn); height: var(--btn); padding: 0; display: grid; place-items: center; border-radius: 50%;
   border: 1.5px solid rgba(58,51,70,0.42); background: rgba(245,239,225,0.84); color: #3a3346; box-shadow: 0 2px 10px rgba(40,30,60,0.16);
   font: 22px Georgia, serif; touch-action: none; transition: transform 0.12s ease-out, background-color 0.12s, color 0.12s; }
@@ -238,8 +240,9 @@ body[data-ride="fly"] #tfly .ic-land { display: block; }
 
 #touchui { display: none; }
 body.touch.walking #touchui { display: block; } /* (not over the intro card) */
-#tbar { position: fixed; top: calc(12px + var(--st)); right: calc(14px + var(--sr)); z-index: 40; display: flex; flex-direction: column; gap: 22px; }
-#tbar .tbtn { --btn: 46px; }
+/* (upright, its margin narrows on a narrow phone so the column keeps to the screen's right 15%) */
+#tbar { position: fixed; top: calc(12px + var(--st)); right: calc(min(14px, max(6px, 15vw - var(--tb) - 1px)) + var(--sr)); z-index: 40; display: flex; flex-direction: column; gap: 22px; }
+#tbar .tbtn { --btn: var(--tb); }
 #tbar .tbtn .ic { width: 22px; height: 22px; }
 /* the corner cluster: every button placed from one anchor, the corner under the right thumb */
 #tdock, #ride-touch { position: fixed; right: calc(16px + var(--sr)); bottom: calc(var(--dock-b) + var(--sb)); width: 1px; height: 1px; z-index: 40; }
@@ -254,7 +257,7 @@ body.touch.driving #tdock #tfly, body.touch.driving #tbar #tgo, body.touch.drivi
 body.touch.driving #tdock #tbrush, body.touch[data-ride="fly"] #tdock #tbrush, body.touch.driving #tdock #tlift, body.touch[data-ride="fly"] #tdock #tlift { display: none !important; }
 /* what you're next to, or getting out: a word over the cluster — the one thing to tap */
 #touch-action { position: fixed; right: calc(16px + var(--sr)); bottom: calc(var(--dock-b) + var(--sb) + var(--row) + var(--btn) + var(--pill-gap)); z-index: 42;
-  min-height: 50px; min-width: 120px; padding: 8px 22px; border: 1.5px solid rgba(245,239,225,0.75); border-radius: 26px; background: rgba(58,51,70,0.86);
+  min-height: 44px; min-width: 120px; padding: 6px 20px; border: 1.5px solid rgba(245,239,225,0.75); border-radius: 26px; background: rgba(58,51,70,0.86);
   box-shadow: 0 3px 14px rgba(40,30,60,0.24); color: #f7f2e6; font: 17px Georgia, serif; letter-spacing: 0.02em; touch-action: manipulation;
   animation: pop-in 0.22s ease-out; transition: transform 0.12s ease-out; }
 #touch-action:active { transform: scale(0.94); }
@@ -280,43 +283,77 @@ body.stick-on #stick-home { opacity: 0; }
 /* (the world covered — a painting, the map, the brush — the controls step aside) */
 body.touch.postcard #touchui, body.touch.postcard #touch-more, body.touch.postcard #touch-action, body.touch.postcard #ride-touch, body.touch.postcard #stick-home,
 body.atlas-open #touchui, body.atlas-open #touch-more, body.atlas-open #touch-action, body.atlas-open #ride-touch, body.atlas-open #stick-home { display: none !important; }
-/* the top left, read downward: the place, the hint (or a ride's readout, then the hint) */
-body.touch #hud { left: calc(16px + var(--sl)); right: auto; top: calc(10px + var(--st)); bottom: auto; max-width: calc(100vw - 96px - var(--sl) - var(--sr)); }
+/* the top left, read downward: the place and the clock on a paper wash (readable over a grey wall
+   or a bright sky), then the hint — or a ride's readout, then the hint */
+body.touch #hud { left: calc(6px + var(--sl)); right: auto; top: calc(6px + var(--st)); bottom: auto; padding: 4px 10px 5px; box-sizing: border-box;
+  max-width: calc(100vw - 76px - var(--sl) - var(--sr)); background: rgba(245,239,225,0.86); border-radius: 12px; box-shadow: 0 0 10px 4px rgba(245,239,225,0.5); }
 body.touch #place { font-size: 19px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-body.touch #clock { font-size: 13px; }
-body.touch #hint { left: calc(16px + var(--sl)); right: auto; top: calc(60px + var(--st)); bottom: auto; max-width: calc(100vw - 96px - var(--sl) - var(--sr)); box-sizing: border-box;
-  transform: translateY(-6px); white-space: normal; text-align: left; font-size: 13px; line-height: 1.3; padding: 6px 13px; }
+body.touch #clock { font-size: 13px; opacity: 1; color: #4a4257; }
+body.touch #hint, body.touch #toast { left: calc(16px + var(--sl)); right: auto; top: calc(60px + var(--st)); bottom: auto; max-width: calc(100vw - 96px - var(--sl) - var(--sr)); box-sizing: border-box;
+  white-space: normal; text-align: left; font-size: 13px; line-height: 1.3; padding: 6px 13px; }
+body.touch #hint { transform: translateY(-6px); }
 body.touch #hint.show { transform: translateY(0); }
+/* A toast says what just happened in the hint's place, two lines at most — the hint steps aside
+   until it has gone (main.ts toast: body.toasting). */
+body.touch #toast { transform: none; border-radius: 16px; box-shadow: 0 2px 10px rgba(40,30,60,0.14); z-index: 19;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+body.touch.toasting #hint { visibility: hidden; }
+body.touch.postcard #toast, body.touch.atlas-open #toast { display: none; } /* (as on a PC: the painting, the map) */
 body.touch #vehud { left: calc(16px + var(--sl)) !important; top: calc(60px + var(--st)); bottom: auto !important; transform: none !important; box-sizing: border-box;
   max-width: calc(100vw - 96px - var(--sl) - var(--sr)); white-space: normal !important; text-align: left; font-size: 13px !important; }
 body.touch #vehud .vkeys { display: none; } /* (the live numbers only — how to drive came up as you got in) */
-body.touch.driving #hint { top: calc(98px + var(--st)); }
-body.touch[data-ride="plane"] #hint, body.touch[data-ride="balloon"] #hint { top: calc(120px + var(--st)); }
-body.touch #toast { top: calc(26dvh + var(--st)); max-width: calc(100vw - 40px); box-sizing: border-box; white-space: normal; text-align: center; }
+body.touch.driving #hint, body.touch.driving #toast { top: calc(98px + var(--st)); }
+body.touch[data-ride="plane"] #hint, body.touch[data-ride="balloon"] #hint, body.touch[data-ride="plane"] #toast, body.touch[data-ride="balloon"] #toast { top: calc(120px + var(--st)); }
+/* An arrival card paints the town's name where the place name stands, on the same wash, for its few
+   seconds (ui/arrival.ts: body.arriving) — not across the middle of the view. */
+body.touch #arrival { left: calc(6px + var(--sl)); top: calc(6px + var(--st)); transform: none; padding: 3px 10px 5px; box-sizing: border-box; text-align: left;
+  max-width: calc(100vw - 76px - var(--sl) - var(--sr)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: rgba(245,239,225,0.9); border-radius: 12px; box-shadow: 0 0 10px 4px rgba(245,239,225,0.5); text-shadow: none; }
+body.touch #arrival .a-name { font-size: 22px; overflow: hidden; text-overflow: ellipsis; }
+body.touch #arrival .a-name::after { display: none; }
+body.touch #arrival .a-region, body.touch #arrival .a-line { display: inline; font-size: 12px; margin: 0; }
+body.touch #arrival .a-line::before { content: ' · '; }
+body.touch.arriving #hud { visibility: hidden; }
 /* (ODbL: the credit along the bottom edge, in the gap under the stick and the cluster — one line) */
 body.touch #osm-credit { left: 50%; right: auto; top: auto; bottom: calc(3px + var(--sb)); transform: translateX(-50%); white-space: nowrap; font-size: min(10px, 2.7vw); z-index: 10; }
-/* A phone on its side: the bar along the top, the cluster lower and tighter (the height is short). */
+/* The shortest phones upright (an SE): the cluster a size smaller, so the word over it stays below
+   the middle of the frame. */
+@media (orientation: portrait) and (max-height: 620px) {
+  :root { --big: 64px; --btn: 50px; --col: 80px; --row: 84px; --pill-gap: 6px; }
+  #touch-action { min-height: 40px; padding: 4px 18px; }
+}
+/* the narrowest phones (320 px): a smaller bar, so it fits in the right 15%; the hint and a toast a
+   size smaller and as wide as the bar allows, so they keep to two lines above the middle */
+@media (max-width: 340px) {
+  :root { --tb: 40px; }
+  body.touch #hint, body.touch #toast { font-size: 12px; line-height: 1.25; max-width: calc(100vw - 68px - var(--sl) - var(--sr)); }
+}
+/* A phone on its side: the bar along the top, the cluster lower and tighter (the height is short).
+   The middle of the frame is most of a short screen, so: the place, then one message under it (the
+   hint, or a toast in its place); the ride's readout along the bottom like a dashboard, between the
+   stick and the cluster; the cluster's row along the bottom (Lift, Up or Burn beside the brush),
+   with Fly — and the word for what you're next to over it — up the right edge. */
 @media (orientation: landscape) and (max-height: 500px) {
-  :root { --dock-b: 27px; --big: 64px; --btn: 52px; --col: 82px; --row: 84px; }
-  #tbar { top: calc(8px + var(--st)); flex-direction: row; gap: 14px; }
-  #tbar .tbtn { --btn: 44px; }
+  :root { --dock-b: 27px; --big: 64px; --btn: 52px; --col: 82px; --row: 84px; --tb: 44px; }
+  #tbar { top: calc(8px + var(--st)); right: calc(14px + var(--sr)); flex-direction: row; gap: 14px; }
   #touch-more { top: calc(74px + var(--st)); right: calc(14px + var(--sr)); max-height: calc(100dvh - 86px - var(--st) - var(--sb)); }
-  #stick-home, #stick { width: 108px; height: 108px; }
-  #stick > div { left: 29px; top: 29px; }
-  body.touch #hud, body.touch #hint, body.touch #vehud { max-width: calc(100vw - 250px - var(--sl) - var(--sr)); }
-  body.touch #hint { top: calc(52px + var(--st)); }
-  body.touch #vehud { top: calc(52px + var(--st)); }
-  body.touch.driving #hint { top: calc(88px + var(--st)); }
-  body.touch[data-ride="plane"] #hint, body.touch[data-ride="balloon"] #hint { top: calc(106px + var(--st)); }
-  body.touch #toast { top: calc(20dvh + var(--st)); }
+  #stick-home, #stick { width: 100px; height: 100px; }
+  #stick-home { left: calc(12px + var(--sl)); bottom: calc(18px + var(--sb)); }
+  #stick > div { left: 25px; top: 25px; }
+  body.touch #hud { top: calc(4px + var(--st)); padding: 2px 10px 3px; max-width: calc(100vw - 200px - var(--sl) - var(--sr)); }
+  body.touch #place { font-size: 17px; }
+  body.touch #clock { font-size: 12px; margin-top: 0; }
+  body.touch #arrival { top: calc(4px + var(--st)); padding: 2px 10px 3px; max-width: calc(100vw - 200px - var(--sl) - var(--sr)); }
+  body.touch #arrival .a-name { font-size: 18px; }
+  body.touch #arrival .a-region, body.touch #arrival .a-line { font-size: 11px; }
+  body.touch #hint, body.touch #toast, body.touch.driving #hint, body.touch.driving #toast,
+  body.touch[data-ride="plane"] #hint, body.touch[data-ride="balloon"] #hint, body.touch[data-ride="plane"] #toast, body.touch[data-ride="balloon"] #toast {
+    top: calc(44px + var(--st)); max-width: calc(100vw - 206px - var(--sl) - var(--sr)); font-size: 12px; line-height: 1.25; padding: 4px 11px; }
+  body.touch #vehud { top: auto; bottom: calc(var(--dock-b) + var(--sb) + 8px) !important; left: calc(124px + var(--sl)) !important; max-width: calc(100vw - 364px - var(--sl) - var(--sr)); }
+  #tlift, #tfly-up { right: calc(var(--col) * 2); bottom: calc((var(--big) - var(--btn)) / 2); }
+  #touch-action { right: calc(6px + var(--sr)); min-width: 0; min-height: 40px; padding: 4px 7px; font-size: min(13px, 2.2vw); letter-spacing: 0; }
   body.touch #photo-bar { max-height: 43dvh; overflow-y: auto; }
   body.touch #photo-info { font-size: 12px; }
-}
-/* (the shortest phones on their side, under 330 px: the word for what you're next to sits a
-   little closer over the cluster, so it fits under the bar) */
-@media (orientation: landscape) and (max-height: 330px) {
-  :root { --pill-gap: 14px; }
-  #touch-action { min-height: 44px; padding: 5px 20px; }
 }
 
 /* ---- the Almanac ---- */

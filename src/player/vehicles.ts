@@ -511,7 +511,7 @@ export class Vehicles {
     if (v.kind === 'balloon') {
       // in the basket: you look where you were looking (first person — the look is yours)
       this.o.walker.pitch = Math.max(this.o.walker.pitch, 0.15);
-      this.o.toast(thumbs() ? 'hold Burn to rise, Vent to sink · let go and it holds its height · the wind steers — pick a layer'
+      this.o.toast(thumbs() ? 'Burn to rise, Vent to sink · let go to hold · the wind steers — pick a layer' // (a phone's toast: two lines)
         : 'hold Space to burn and rise, C to vent · let go and it holds its height · the wind steers: pick a layer · V the view · E out');
       return;
     }

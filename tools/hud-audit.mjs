@@ -2,14 +2,21 @@
 // Phone HUD audit: the production build's CSS and markup as GitHub Pages serves them, the game's
 // module blocked (no WebGL — the HUD's geometry only, so it runs in a minute), opened as a range of
 // phones upright and on their side, in each touch state — walking, by a lift, beside a ride,
-// driving a car, flying a plane, flying on foot, in a balloon — with a long hint up and a long place name. Every pair of HUD
-// boxes that overlap is reported (the dock's own buttons with each other aside), and any box off
-// the screen; exit 1 if there are any. The states are set the way main.ts syncTouchControls sets
-// them (body classes, body[data-ride], the ride buttons shown); the ride readout is made with the
-// inline style player/vehicles.ts gives it — keep those in step.
+// driving a car, flying a plane, flying on foot, in a balloon — with a long hint up and a long place
+// name, and each of those with the messages that come and go: a toast (the longest the game says),
+// an arrival card, and both. Reported, exit 1 if any:
+// · every pair of HUD boxes that overlap, and any box off the screen;
+// · anything of the HUD — a button with its word, the stick's ring, the place, a hint, a toast, a
+//   ride's readout, an arrival card — in the middle of the frame, x 15–85%, y 30–62%: that is the
+//   world's while you walk or ride (reviewer round 10, "a phone is a window, not a slot").
+// The states are set the way main.ts syncTouchControls sets them (body classes, body[data-ride],
+// the ride buttons shown), a toast the way main.ts toast() puts it up (body.toasting), an arrival
+// card the way ui/arrival.ts does (body.arriving); the ride readout is made with the inline style
+// player/vehicles.ts gives it — keep those in step.
 //
 //   npm run build && node tools/hud-audit.mjs [--phones="Pixel 7,iPhone SE"] [--dist=dist] [--port=4191] [--shots=shots/hud]
-//   (--shots: a PNG of every layout, the HUD alone over a blank page, to look at)
+//   (--shots: a PNG of every layout, the HUD alone over a blank page, to look at;
+//    --base=/ for a build whose index.html asks for its files from the root — dist is served under /Map_Game/)
 //
 // Uses Playwright from ../../shot-harness (like capture.mjs), else a global one.
 import { createRequire } from 'node:module';
@@ -28,6 +35,9 @@ const { chromium, devices } = pw;
 const DIST = resolve(ROOT, String(args.dist ?? 'dist'));
 if (!existsSync(join(DIST, 'index.html'))) { console.error(`no ${DIST}/index.html — npm run build first`); process.exit(1); }
 const PORT = Number(args.port ?? 4191);
+// (the page's path: GitHub Pages serves the build under /Map_Game/; --base=/ for a build whose
+// index.html asks for its files from the root, like an esbuild bundle that links /src/ui/style.css)
+const BASE = String(args.base ?? '/Map_Game/').replace(/^\/?/, '/').replace(/\/?$/, '/');
 if (args.shots) mkdirSync(resolve(ROOT, String(args.shots)), { recursive: true });
 // (small to large, old to new: a 320-wide SE to a Pro Max; the Playwright descriptors' viewports
 // are what a page gets — the browser's bars already taken off)
@@ -38,16 +48,22 @@ for (const p of PHONES) if (!devices[p]) { console.error(`no Playwright device "
 const TYPES = { '.js': 'application/javascript', '.html': 'text/html', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
 const server = http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x');
-  if (!u.pathname.startsWith('/Map_Game/')) { res.writeHead(404); res.end(); return; }
-  let p = decodeURIComponent(u.pathname.slice('/Map_Game'.length));
+  if (!u.pathname.startsWith(BASE)) { res.writeHead(404); res.end(); return; }
+  let p = decodeURIComponent(u.pathname.slice(BASE.length - 1));
   if (p.endsWith('/')) p += 'index.html';
-  const f = normalize(join(DIST, p));
-  if (!f.startsWith(DIST) || !existsSync(f) || !statSync(f).isFile()) { res.writeHead(404); res.end(); return; }
+  // (the build first, then the checkout: a stylesheet the build links from the source tree)
+  const f = [DIST, ROOT].map((d) => normalize(join(d, p))).find((c, i) => c.startsWith([DIST, ROOT][i]) && existsSync(c) && statSync(c).isFile());
+  if (!f) { res.writeHead(404); res.end(); return; }
   res.writeHead(200, { 'Content-Type': TYPES[extname(f)] ?? 'application/octet-stream' });
   res.end(readFileSync(f));
 }).listen(PORT, '127.0.0.1');
 
 const HINT = '✧ paint the lighthouse from the end of the jetty at dusk';
+// (the longest toast the game says, and an arrival card)
+const TOAST = "painted in what you framed — out to 1.2 km · 0.35 km² in colour — you've painted an area the size of Central Park · Map for your sketchbook";
+const ARRIVAL = ['Monmouth Beach', 'Monmouth County, New Jersey', '7:42 pm · golden hour · first visit — walk to paint it in'];
+// the middle of the screen — x 15–85%, y 30–62% — is the world's while you walk or ride (reviewer round 10)
+const BAND = { l: 0.15, r: 0.85, t: 0.3, b: 0.62 };
 const STATES = {
   walking: { hint: ['Paint', HINT] },
   'by a lift': { lift: true, hint: ['Lift', "call the lift — you're on floor 3 of 12"] },
@@ -55,15 +71,17 @@ const STATES = {
   'driving a car': { ride: 'car', driving: true, action: 'Get out', show: ['trboost'], hud: ['🚗 38 km/h', ' · left stick: steer / throttle · ⇧: boost'], hint: ['Paint', HINT] },
   'flying a plane': { ride: 'plane', driving: true, action: 'Jump out', show: ['tthrottle-down', 'tthrottle-up'], hud: ['✈ 212 km/h · alt 480 m · throttle 100%', ' · stick: pitch / bank · +/−: throttle'], hint: ['Paint', HINT] },
   'flying on foot': { ride: 'fly', fly: true, show: ['tfly-up', 'tfly-down'], hint: ['Land', 'hold Up and Down to climb and sink · push the stick far to go faster'] },
-  'in a balloon': { ride: 'balloon', driving: true, fly: true, action: 'Jump out', show: ['tfly-up', 'tfly-down', 'tview'], hud: ['🎈 312 m · ↑ 2.1 m/s · 84°C · ↗ 14 km/h · holding', ''], hint: ['Paint', 'the best seat for a painting — everything in frame, out to the horizon'] },
+  'in a balloon': { ride: 'balloon', driving: true, fly: true, action: 'Jump out', show: ['tfly-up', 'tfly-down', 'tview'], hud: ['🎈 312 m · ↑ 2.1 m/s · 84°C · ↗ 14 km/h · holding', ''], hint: ['Paint', 'the best seat for a painting, out to the horizon'] }, // (main.ts: a phone's words)
 };
 
 // ---- in-page: set a state, measure the HUD ----
-const MEASURE = ({ s, place }) => {
+const MEASURE = ({ s, place, msg, band }) => {
   const $ = (id) => document.getElementById(id);
   const b = document.body;
   b.className = 'touch nomouse walking';
   if (s.driving) b.classList.add('driving');
+  if (msg.toast) b.classList.add('toasting');
+  if (msg.arrival) b.classList.add('arriving');
   b.dataset.ride = s.ride ?? '';
   $('intro')?.classList.add('hidden');
   $('fatal')?.classList.add('hidden');
@@ -80,6 +98,7 @@ const MEASURE = ({ s, place }) => {
   h.style.transition = 'none';
   h.classList.add('show');
   const ta = $('touch-action');
+  ta.style.animation = 'none'; // (measured where it comes to rest, not mid-pop at 0.9×)
   ta.classList.toggle('hidden', !s.action);
   ta.textContent = s.action ?? '';
   const rt = $('ride-touch');
@@ -97,6 +116,18 @@ const MEASURE = ({ s, place }) => {
   }
   v.style.display = s.hud ? 'block' : 'none';
   if (s.hud) { v.firstChild.textContent = s.hud[0]; v.lastChild.textContent = s.hud[1]; }
+  // a toast and an arrival card, as main.ts toast() and ui/arrival.ts put them up
+  const toast = $('toast'), arr = $('arrival');
+  toast.textContent = msg.toast ?? '';
+  toast.style.transition = 'none';
+  toast.classList.toggle('show', !!msg.toast);
+  arr.replaceChildren();
+  if (msg.arrival) {
+    for (const [cls, text] of [['a-name', msg.arrival[0]], ['a-region', msg.arrival[1]], ['a-line', msg.arrival[2]]]) { const d = document.createElement('div'); d.className = cls; d.textContent = text; arr.append(d); }
+    arr.style.animation = 'none';
+    arr.style.opacity = '1';
+  }
+  arr.classList.toggle('show', !!msg.arrival);
   const shown = (el) => { const c = getComputedStyle(el); return c.display !== 'none' && c.visibility !== 'hidden'; };
   const box = (el) => { const q = el.getBoundingClientRect(); return q.width && q.height && shown(el) ? { l: q.left, t: q.top, r: q.right, b: q.bottom } : null; };
   // (a line of text by its text — a block can run wider than what it shows — clipped where it hides its overflow)
@@ -117,6 +148,8 @@ const MEASURE = ({ s, place }) => {
   add('hint', '#hint', box(h));
   add('vehud', '#vehud', box(v));
   add('credit', '#osm-credit', textBox($('osm-credit')));
+  if (msg.toast) add('toast', '#toast', box(toast));
+  if (msg.arrival) add('arrival', '#arrival', box(arr));
   // (a button and the word under it, as one box: the label is the button's ::after)
   const ctx2 = document.createElement('canvas').getContext('2d');
   ctx2.font = '11px Georgia, serif';
@@ -139,9 +172,18 @@ const MEASURE = ({ s, place }) => {
       if (w > 0.5 && hh > 0.5) hits.push(`${a.label} × ${c.label} (${w.toFixed(0)}×${hh.toFixed(0)} px)`);
     }
   for (const q of items) if (q.l < -0.5 || q.t < -0.5 || q.r > innerWidth + 0.5 || q.b > innerHeight + 0.5) hits.push(`${q.label} off the screen`);
+  // the middle of the frame is the world's: nothing of the HUD stands in it
+  const B = { l: innerWidth * band.l, r: innerWidth * band.r, t: innerHeight * band.t, b: innerHeight * band.b };
+  for (const q of items) {
+    const w = Math.min(q.r, B.r) - Math.max(q.l, B.l), hh = Math.min(q.b, B.b) - Math.max(q.t, B.t);
+    if (w > 0.5 && hh > 0.5) hits.push(`${q.label} in the middle (${w.toFixed(0)}×${hh.toFixed(0)} px)`);
+  }
   return hits;
 };
 
+// (what comes and goes over a state: nothing but its hint; a toast in the hint's place; an arrival card
+// over the place name; both at once)
+const MESSAGES = { '': {}, 'a toast': { toast: TOAST }, 'an arrival card': { arrival: ARRIVAL }, 'a toast and an arrival card': { toast: TOAST, arrival: ARRIVAL } };
 const browser = await chromium.launch({ headless: true });
 let bad = 0, n = 0;
 for (const name of PHONES)
@@ -150,19 +192,20 @@ for (const name of PHONES)
     const dev = side ? (devices[`${name} landscape`] ?? { ...base, viewport: { width: base.viewport.height, height: base.viewport.width } }) : base;
     const ctx = await browser.newContext({ ...dev });
     const page = await ctx.newPage();
-    await page.route('**/assets/*.js', (r) => r.abort()); // (the CSS and the markup only)
-    await page.goto(`http://127.0.0.1:${PORT}/Map_Game/`, { waitUntil: 'load' });
-    for (const [state, s] of Object.entries(STATES)) {
-      const hits = await page.evaluate(MEASURE, { s, place: 'Ocean Avenue North' });
-      if (args.shots) await page.screenshot({ path: resolve(ROOT, String(args.shots), `${name}${side ? '-side' : ''}-${state}.png`.replace(/[^\w.-]+/g, '_')) });
-      const tag = `${name}${side ? ' on its side' : ''} (${dev.viewport.width}×${dev.viewport.height}) · ${state}`;
-      n++;
-      if (hits.length) { bad++; console.log(`✗ ${tag}: ${hits.join('; ')}`); }
-      else if (args.verbose) console.log(`✓ ${tag}`);
-    }
+    await page.route('**/*.js', (r) => r.abort()); // (the CSS and the markup only: no script file runs)
+    await page.goto(`http://127.0.0.1:${PORT}${BASE}`, { waitUntil: 'load' });
+    for (const [state, s] of Object.entries(STATES))
+      for (const [up, msg] of Object.entries(MESSAGES)) {
+        const hits = await page.evaluate(MEASURE, { s, place: 'Ocean Avenue North', msg, band: BAND });
+        if (args.shots) await page.screenshot({ path: resolve(ROOT, String(args.shots), `${name}${side ? '-side' : ''}-${state}${up ? `-${up}` : ''}.png`.replace(/[^\w.-]+/g, '_')) });
+        const tag = `${name}${side ? ' on its side' : ''} (${dev.viewport.width}×${dev.viewport.height}) · ${state}${up ? ` · ${up}` : ''}`;
+        n++;
+        if (hits.length) { bad++; console.log(`✗ ${tag}: ${hits.join('; ')}`); }
+        else if (args.verbose) console.log(`✓ ${tag}`);
+      }
     await ctx.close();
   }
 await browser.close();
 server.close();
-console.log(bad ? `${bad} of ${n} layouts overlap` : `${n} layouts, no overlaps`);
+console.log(bad ? `${bad} of ${n} layouts overlap or stand in the middle` : `${n} layouts, no overlaps, nothing in the middle`);
 process.exit(bad ? 1 : 0);

@@ -717,7 +717,7 @@ async function main() {
     return null;
   });
   hints.add(() => (walkParams.fly && !vehicles.driving ? { key: thumbs() ? 'Land' : 'F', text: thumbs() ? 'hold Up and Down to climb and sink · push the stick far to go faster' : 'land · Space / C up and down · wheel for speed', pri: 3, once: 'fly' } : null));
-  hints.add(() => (vehicles.balloon && !vehicles.balloon.landed ? { key: thumbs() ? 'Paint' : 'P', text: 'the best seat for a painting — everything in frame, out to the horizon', pri: 4, once: 'balloon' } : null));
+  hints.add(() => (vehicles.balloon && !vehicles.balloon.landed ? { key: thumbs() ? 'Paint' : 'P', text: thumbs() ? 'the best seat for a painting, out to the horizon' : 'the best seat for a painting — everything in frame, out to the horizon', pri: 4, once: 'balloon' } : null));
   hints.add(() => (simTime > 12 ? { key: thumbs() ? 'Map' : 'M', text: 'your map, sketchbook & commissions', pri: 1, once: 'atlas' } : null));
   hints.add(() => (simTime > 70 && !vehicles.driving && !walkParams.fly && world.terrain.coverAt(walker.x, walker.z) === 30 ? { key: thumbs() ? 'More' : 'R', text: `plant a ${SPECIES[garden.nextSpecies].label} here${thumbs() ? '' : ' (Shift+R: another seed)'}`, pri: 1, once: 'plant' } : null));
   hints.add(() => (simTime > 45 ? { key: thumbs() ? 'Paint' : 'P', text: 'frame a view and paint it into your sketchbook', pri: 1, once: 'photo' } : null));
