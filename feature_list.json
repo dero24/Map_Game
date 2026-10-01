@@ -103,7 +103,9 @@
         "node tools/capture.mjs --shots=ocean-night,inside-night --montage=only — read shots/shore-montage.jpg",
         "Night shot on a streamed tile past the backdrop (e.g. ?at= west of the bake) — lamps lit"
       ],
-      "evidence": [],
+      "evidence": [
+        "src/render/nightLight.ts (pools with a heart and a gap: the lamp map carries distance; one indigo night grade), stream.ts repaintLamps (distance cones; repaints throttled to 1.5 s for tiles), shared.ts lampField; tools/night-check.mjs; tests/nightLight (12), nightCheck (14), lampWindow (4) (round 10 must-fix 2)"
+      ],
       "notes": "Mostly shipped in 6260066: tiles ship lampPts + walker-centred 2 km lamp map paints on every streamed tile. What remains is verification + any backdrop coverage gap past the slice. Close it with evidence or fix what's missing."
     },
     {
@@ -852,7 +854,8 @@
         "Live (v): downtown Seattle from 45 m (shots/spots-r8-final.jpg 5 — reviewer round 8: 'blocks paved to the building line')"
       ],
       "evidence": [
-        "src/world/groundPaint.ts (Painter, density bands)"
+        "src/world/groundPaint.ts (Painter, density bands)",
+        "src/world/groundCover.ts + groundPaint.ts (flags, kerb face, gutter pan, aprons, tar snakes, yards by neighbourhood, sand drift) and ground.ts (texture near the walker); micro.ts placement on unpaved ground; tests/groundPaint (14), micro (12) (round 10 must-fix 3)"
       ],
       "notes": "Sea Bright to be re-shot after the change (baked NJ unchanged by design; the paving runs on streamed tiles)."
     },
@@ -969,7 +972,8 @@
         "src/player/collision.ts (Floors.shafts, tiers)",
         "src/world/uses.ts (placeOf)",
         "src/world/interior/layout.ts (backStrip, bandCuts, marketStorey, stripStorey, pubStorey, churchStorey, Layout.fix)",
-        "src/assets/decor.ts (18 Slice 4 pieces)"
+        "src/assets/decor.ts (18 Slice 4 pieces)",
+        "src/world/interior/plan.ts + layout.ts (cottages open into the living room 40/40; bigger houses: stair in the door's view, cased living opening), furnish.ts (the way in: runner, console lamp, mirror, coats; skirting everywhere; domes), interior/views.ts (sun pools through real windows; pose 19 the sunniest room); tests/interiorLayout (19), interiorBudget (24), foundry (29) (round 10 must-fix 4)"
       ],
       "notes": "Slice 3 (towers) done 2026-09-29 (af). Next: see it in real Midtown; slice 2 (data in: building/tourism/amenity archetypes, party walls), plant floors and sky lobbies, lifts for 5–7-storey blocks over shops. Slice 4 (deeper archetypes: supermarket, restaurant kitchen, hotel, school, church/mosque, library, bank, post office, gym, pharmacy) done 2026-10-01. Next: a chancel's dais, qibla from the real bearing, tourism/leisure use tags (cache bump), lifts in 5–7-storey blocks."
     },
@@ -1009,7 +1013,8 @@
         "src/ui/diag.ts lostFrom/NO_WEBGL (+ tests/diag.test.ts): a lost GPU context steps a phone down; how to get WebGL back",
         "index.html + src/ui/style.css: no page zoom (touch-action; iOS gesture events); src/ui/mapview.ts pinch",
         "tools/hud-audit.mjs: the phone HUD's boxes on 10 phones, upright and on their side, 5 states each — 100 layouts, no overlaps (25 overlapped before)",
-        "npm test (50 files, 472 tests, idle machine), npm run build — 2026-09-30"
+        "npm test (50 files, 472 tests, idle machine), npm run build — 2026-09-30",
+        "src/player/frame.ts (the lens fitted to the screen: 41° across upright, ≤ 95° on its side, 4:3–16:9 unchanged; tests/frame.test.ts); src/ui/style.css + main.ts toast/arrival slots (the middle band clear); tools/hud-audit.mjs middle-band rule (560 layouts clear); clock 7.45:1 on its paper wash (round 10 must-fix 1)"
       ],
       "notes": "2026-09-30: controls reviewed and fixed (docs/earth/LOG.md); phones sleep when put away; the NYC crash's memory causes fixed (sign-atlas texture leak, walls never reclaimed, LiDAR ~130 MB a Midtown cell, up to 9 dense cells in the ring); a phone lands only once the street below is built. Verified headless in Sea Bright (Pixel 7 emulation): textures flat at 23–25 over 4 round trips (was 24 → 36), walls flat at 106k (was 263k), landing 12.7 m clear of the house it used to land in. Follow-up the same day: the phone HUD's overlaps fixed (the montage showed 3, an audit of 10 phones found 25 layouts); an unloaded tile's walls purged a slice a frame on every tier (a PC's long hop had left 166k dead walls); sleep re-measured by the life worker's messages (57–59 ticks in 3 s awake, 0 hidden); no page zoom even where the browser ignores the viewport meta (headless pinch: scale stays 1). Still needs a real phone after the next Pages deploy: …/Map_Game/?diag=1 in Manhattan (the tile service and Overpass are unreachable from the agent sandbox), and an iPhone for the gesture-event zoom guard (WebKit isn't installed here)."
     },
@@ -1182,6 +1187,25 @@
         "src/world/micro.ts, src/world/microLayer.ts, src/assets/micro.ts",
         "src/render/propMaterial.ts (fade), src/render/quality.ts (MICRO_TIERS)",
         "src/world/realTile.ts (micro furniture classes; tile cache v23)"
+      ]
+    },
+    {
+      "id": "shore-calendar",
+      "priority": 1,
+      "area": "gameplay",
+      "title": "The shore keeps one calendar: marinas, docks, beach people, lifeguards and lots by season and hour",
+      "user_visible_behavior": "A mapped marina is full of boats in finger slips (fewer in October); riverfront houses have their docks; on a July afternoon people sit under the umbrellas and kids jump waves, a lifeguard sits in each stand from 10 to 5 in season, and the beach lot fills by the season and the hour (nearly empty on an October evening).",
+      "status": "passing",
+      "verification": [
+        "tests/calendar.test.ts (5), tests/shoreCalendar.test.ts (9) on the baked pack: lot fill, marina, docks, crowd, out of season, determinism, budgets",
+        "tools/calendar-shots.js (frames 9 and 12 re-shot; the 50 m beach pose in July)"
+      ],
+      "evidence": [
+        "src/world/calendar.ts",
+        "src/world/docks.ts",
+        "src/world/crowd.ts, src/world/crowdLayer.ts",
+        "src/world/props.ts (lots by season × hour, boats by month), src/world/kerbCars.ts (cars in their hours)",
+        "src/render/creature.ts (BEACH), src/assets/people.ts (lite body)"
       ]
     }
   ],

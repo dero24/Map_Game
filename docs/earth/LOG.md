@@ -2,6 +2,77 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-01 (morning) — Review round 10 and its five must-fixes
+
+The expert reviewer (a Nintendo / Rockstar bar) scored Sea Bright's expanded scope **8/10, not
+passed**: "real at thirty metres, bare at three" (`docs/earth/REVIEWER.md`, round 10). The lead fixed
+the small items itself; five helpers took the five must-fixes side by side, merged here.
+
+- **The lead's fixes (73e83ec):**
+  - **Roofs keep their own hue.** On a roof the sky fill's blue is greyed (`paintLight` with
+    `skyNeutral` 0.6 by day) instead of 40% of the roof's own colour being taken out. Aerial
+    greens and blues may reach 0.14 saturation.
+  - **Night wires are silhouettes** (`uSkyZenith × 0.6`). A fixed navy was ten times the night
+    zenith's light: the wires read as searchlights.
+  - **The lamp window waits:**
+    - it repaints at most every 1.5 s for tiles coming and going (each repaint is a 1024² canvas
+      and its upload);
+    - the canyon field is blurred at quarter size, which was most of a repaint's 0.1–0.25 s on a
+      CPU canvas.
+    - Tests: `lampWindow` (4).
+- **1. A phone is a window, not a slot** (`player/frame.ts`):
+  - **Field of view:** the lens is fitted to the screen. An upright phone sees 41° across
+    (it was 31°); one on its side is capped at 95° (it was 105°). 4:3–16:9 screens are exactly as
+    before.
+  - **Toasts** sit under the place name, two lines at most ("Van, in pencil — paint one to finish
+    it · 2 of 8 cars").
+  - **The place name and clock** sit on a paper wash. The clock reads 7.45:1 against the world
+    behind it (it was 3.09).
+  - **HUD audit:** `tools/hud-audit.mjs` keeps the middle band (x 15–85%, y 30–62%) clear: 560
+    layouts, all clear.
+- **2. Night that reads as night** (`render/nightLight.ts`):
+  - **Lamp pools:** each lamp's pool has a bright warm heart (`exp(−(d/5.2)³)`) and real dark
+    between lamps. The lamp map now carries distance, not a 2 m blur of light.
+  - **The grade:** one indigo night glaze in the post leaves the lights alone and sinks a pool's
+    warm edge, the way blue over orange does. The night's floor is blue, not sand-warm.
+  - **The review's occluder check** uses spot-shots' id pass (`tools/id-pass.js`).
+  - **`tools/night-check.mjs`** measures frame 3 the reviewer's way.
+- **3. The ground you walk on** (`groundCover.ts`, `groundPaint.ts`, `ground.ts`):
+  - **In the detail window:**
+    - sidewalk flags every 1.5 m, with a centre joint on wide walks;
+    - a dark kerb face and a 0.6 m gutter pan that turns the corners;
+    - drive aprons, tar snakes and patches;
+    - yards of lawn, gravel or crushed shell, by neighbourhood and distance to the sea;
+    - sand drift near beaches.
+  - **The ground shader** adds mottle, pebbles and the beach's ripples, footprints and wrack near
+    the walker, faded by pixel footprint.
+  - **Measured:** the bottom 40%'s texture is 2.6–4.2 (the reviewer asked ≥ 2.5; it was 0.8–1.5).
+  - **Placement:** lawn things never on paving; mailboxes and hydrants 45–60 cm behind the kerb
+    face.
+- **4. The front door opens on a home** (`interior/*`, `decor.ts`):
+  - **Cottages** (≤ 110 m² a storey) open into the living room: 40 of 40 seeded.
+  - **Bigger houses** keep a hall with the stair in view and a cased opening to the living room.
+  - **New pieces:** skirting, coats on a rail, a runner, a lit console lamp, a mirror, ceiling
+    domes.
+  - **Sun pools** come only through real windows, in the room they light.
+  - **Pose 19** picks the sunniest room. Frame 6 shows 10 pieces with its largest bare plane at
+    15%; frame 19 is 8–11% sun pool.
+- **5. The shore keeps one calendar** (`calendar.ts`, `docks.ts`, `crowd.ts`, `crowdLayer.ts`):
+  - **Marinas** get finger piers every 4.5 m, with boats at the month's share: 27.9 boats per
+    100 m of waterline in October.
+  - **Riverfront docks:** 40% of riverfront lots get a dock and a boat.
+  - **Beach people** in season sit under the umbrellas: 219 people for 80 umbrellas at the 50 m
+    pose, 13:00 on 15 July.
+  - **Kids** jump waves at the waterline. **Lifeguards** are on duty Memorial Day to Labor Day,
+    10:00–17:00.
+  - **Beach lots** fill by season × hour: 13% on an October evening, 98% at a July lunchtime.
+- **Verified:**
+  - Typecheck clean.
+  - The full suite: 674 tests, plus `hoods` 13.
+  - esbuild bundle.
+  - Each helper's measurements and montages, plus the round 11 captures.
+- **Next:** round 11 with the reviewer.
+
 ## 2026-10-01 (small hours) — The flying hitch, whole bridges, roofs from the photo, the small things
 
 Four of Robby's reports (2026-09-30 21:50), taken by four helpers working side by side and
