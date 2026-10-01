@@ -122,14 +122,20 @@ behaviour.
   have no pointer lock). SwiftShader draws a frame every few seconds on 2 CPUs: poll
   `__RENDER_INFO__.frames`, click `#start` via `evaluate`, and allow minutes for screenshots.
 - `npm run build && node tools/hud-audit.mjs [--phones="Pixel 7,iPhone SE"] [--verbose] [--shots=shots/hud]`: the phone
-  HUD's geometry — the built CSS and markup (the game's module blocked, so no WebGL: about a minute)
+  HUD's geometry — the built CSS and markup (every script file blocked, so no WebGL: a minute or two)
   on 10 phones from a 320-wide SE to a Pro Max, upright and on their side, walking / by a lift /
   beside a ride / driving / flying a plane / flying on foot / in a balloon, a long hint and place
-  name up. Each button is measured with the word under it, and the stick's resting ring counts.
-  `--shots` writes a PNG of every layout (the HUD over a blank page) to look at. Every overlapping pair
-  of HUD boxes is listed; exit 1 if any. It sets the states as `syncTouchControls` does and makes
-  the ride readout as `vehicles.ts` does — keep those in step. Run it after any change to the touch
-  layout (style.css); the montage shows one phone, this shows them all.
+  name up, each with nothing else, a toast (the longest the game says), an arrival card, and both.
+  Each button is measured with the word under it, and the stick's resting ring counts.
+  `--shots` writes a PNG of every layout (the HUD over a blank page) to look at. Listed, exit 1 if
+  any: every overlapping pair of HUD boxes, anything off the screen, and anything in the middle of
+  the frame — x 15–85%, y 30–62%, the world's while you walk or ride (reviewer round 10). It sets
+  the states as `syncTouchControls` does, a toast as main.ts `toast` does (`body.toasting`), an
+  arrival card as `arrival.ts` does (`body.arriving`) and makes the ride readout as `vehicles.ts`
+  does — keep those in step. Run it after any change to the touch layout (style.css); the montage
+  shows one phone, this shows them all. A build whose index.html asks for its files from the root
+  (an esbuild bundle that links `/src/ui/style.css`): `--dist=<dir> --base=/` (files not in the
+  build come from the checkout).
 
 ## Play checks (`tools/playtest.js`)
 

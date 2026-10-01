@@ -59,7 +59,8 @@ import { sleepWhenHidden } from './ui/lifecycle';
 import { began, contextLost, contextRestored, diag, diagInit, diagStage, diagTick, errorLine, frameFailed, frameOk, glInfo, glProbe, NO_WEBGL, shaderError, showReport } from './ui/diag';
 import { WalkWorld } from './player/collision';
 import { landingAt } from './player/landing';
-import { Walker, walkParams } from './player/controller';
+import { Walker, walkParams, setLens } from './player/controller';
+import { frameFov } from './player/frame';
 import { celestial, localHour, localToMs, sunPosition } from './core/sun';
 import { buildPanel, loadSettings, userKeys, timeParams, weatherParams, debugParams } from './ui/panel';
 
@@ -223,7 +224,7 @@ async function main() {
   await new Promise((r) => setTimeout(r, 0));
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(walkParams.fov, innerWidth / innerHeight, 0.25, 25000);
+  const camera = new THREE.PerspectiveCamera(frameFov(walkParams.fov, innerWidth / innerHeight), innerWidth / innerHeight, 0.25, 25000);
   camera.layers.enable(1);
 
   diagStage('paint');
@@ -339,13 +340,20 @@ async function main() {
   const startAudio = () => {
     try { ambience ??= new Ambience(); ambience.resume(); } catch (e) { console.warn('audio unavailable', e); }
   };
-  let toastTimer = 0;
+  // (a phone says one thing at a time under the place name: the toast takes the hint's place, two
+  // lines at most, and the hint comes back once it has faded — body.toasting, style.css)
+  let toastTimer = 0, toastGone = 0;
   const toast = (msg: string) => {
     const el = $('toast');
     el.textContent = msg;
     el.classList.add('show');
+    document.body.classList.add('toasting');
     clearTimeout(toastTimer);
-    toastTimer = window.setTimeout(() => el.classList.remove('show'), 3200);
+    clearTimeout(toastGone);
+    toastTimer = window.setTimeout(() => {
+      el.classList.remove('show');
+      toastGone = window.setTimeout(() => document.body.classList.remove('toasting'), 800); // (its fade)
+    }, 3200);
   };
   const journal = new Journal(world, paint.sliceCanvas, toast);
   await journal.load();
@@ -709,7 +717,7 @@ async function main() {
     return null;
   });
   hints.add(() => (walkParams.fly && !vehicles.driving ? { key: thumbs() ? 'Land' : 'F', text: thumbs() ? 'hold Up and Down to climb and sink · push the stick far to go faster' : 'land · Space / C up and down · wheel for speed', pri: 3, once: 'fly' } : null));
-  hints.add(() => (vehicles.balloon && !vehicles.balloon.landed ? { key: thumbs() ? 'Paint' : 'P', text: 'the best seat for a painting — everything in frame, out to the horizon', pri: 4, once: 'balloon' } : null));
+  hints.add(() => (vehicles.balloon && !vehicles.balloon.landed ? { key: thumbs() ? 'Paint' : 'P', text: thumbs() ? 'the best seat for a painting, out to the horizon' : 'the best seat for a painting — everything in frame, out to the horizon', pri: 4, once: 'balloon' } : null));
   hints.add(() => (simTime > 12 ? { key: thumbs() ? 'Map' : 'M', text: 'your map, sketchbook & commissions', pri: 1, once: 'atlas' } : null));
   hints.add(() => (simTime > 70 && !vehicles.driving && !walkParams.fly && world.terrain.coverAt(walker.x, walker.z) === 30 ? { key: thumbs() ? 'More' : 'R', text: `plant a ${SPECIES[garden.nextSpecies].label} here${thumbs() ? '' : ' (Shift+R: another seed)'}`, pri: 1, once: 'plant' } : null));
   hints.add(() => (simTime > 45 ? { key: thumbs() ? 'Paint' : 'P', text: 'frame a view and paint it into your sketchbook', pri: 1, once: 'photo' } : null));
@@ -730,9 +738,20 @@ async function main() {
     renderer.setSize(innerWidth, innerHeight, false);
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
+    // (the frame fitted to the new shape at once: taller upright, no wider than 95° on its side)
+    setLens(camera, vehicles.driving ? walkParams.fov : walkParams.fov - walker.zoom);
     post.setSize(innerWidth, innerHeight);
   };
   addEventListener('resize', resize);
+  // A phone turned on its side (or back): some browsers give the new size only a moment after the
+  // turn's events, so the frame is fitted again once it has settled.
+  const turned = () => {
+    resize();
+    const w = innerWidth, h = innerHeight;
+    setTimeout(() => { if (innerWidth !== w || innerHeight !== h) resize(); }, 350);
+  };
+  if (screen.orientation?.addEventListener) screen.orientation.addEventListener('change', turned);
+  else addEventListener('orientationchange', turned); // (older iPhones)
   resize();
 
   // World clock: real time in the region's timezone, or a free-running clock set from the panel.

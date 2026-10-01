@@ -245,7 +245,8 @@ export class Commissions {
       // the Almanac card remembers where and when
       this.record(`${family}:${type}`);
       const nm = niceName(type, family);
-      this.g.toast(`almanac: ${nm} sketched in pencil — paint one to finish the card (${list.length} of ${F.all.length} ${F.label}s)`);
+      // (two lines at most on a phone: "Van, in pencil — paint one to finish it · 2 of 8 cars")
+      this.g.toast(`${nm.charAt(0).toUpperCase()}${nm.slice(1)}, in pencil — paint one to finish it · ${list.length} of ${F.all.length} ${F.label}s`);
       this.g.sound('page');
     };
     for (const [prefix, family] of [['parked-cars:', 'car'], ['kerb-cars:', 'car'], ['life-car:', 'car'], ['moored-boats:', 'boat'], ['life-boat:', 'boat'], ['ride-car:', 'car'], ['ride-boat:', 'boat'], ['ride-plane:', 'plane'], ['critter:', 'wildlife'], ['trees:', 'tree'], ['garden:', 'flower'], ['plant:', 'flower'], ['balloon:', 'balloon'], ['ride-balloon:', 'balloon']] as const)

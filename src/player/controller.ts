@@ -1,8 +1,21 @@
 // First-person walker: pointer-lock mouse look, WASD, gentle head bob, eye height over ground/decks.
 import * as THREE from 'three';
 import type { WalkWorld } from './collision';
+import { frameFov } from './frame';
 
+/** `fov` is the lens: the vertical angle on a PC's 4:3–16:9 screen. A phone's frame is fitted to
+ *  its shape from it (player/frame.ts) — taller held upright, no wider than 95° on its side. */
 export const walkParams = { speed: 2.4, runSpeed: 6, eyeHeight: 1.65, bob: 0.35, fov: 62, fly: false, flySpeed: 40, mouseSens: 1 };
+
+/** Point the camera's lens: `lens`° (walkParams.fov, less any push-in), framed for the screen's
+ *  shape. Every camera that follows you (on foot, the chase, the basket) and the resize call it. */
+export function setLens(cam: THREE.PerspectiveCamera, lens = walkParams.fov) {
+  const fov = frameFov(lens, cam.aspect);
+  if (cam.fov !== fov) {
+    cam.fov = fov;
+    cam.updateProjectionMatrix();
+  }
+}
 
 export class Walker {
   x = 0;
@@ -214,11 +227,7 @@ export class Walker {
     }
     cam.position.set(this.x, this.y, this.z);
     cam.rotation.set(this.pitch, this.yaw, Math.sin(this.bobPhase * 0.5) * 0.004 * walkParams.bob, 'YXZ');
-    const fov = walkParams.fov - this.zoom;
-    if (cam.fov !== fov) {
-      cam.fov = fov;
-      cam.updateProjectionMatrix();
-    }
+    setLens(cam, walkParams.fov - this.zoom);
   }
 
   pressed(code: string) { return this.keys.has(code); }
