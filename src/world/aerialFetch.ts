@@ -17,7 +17,7 @@ import INDEX from './lidar-index.json';
 import { kvGet, kvPut } from './cache';
 import { boxLatLon, candidates, unprojectLocal, type LidarIndex } from './lidarCore';
 import { makeProjector } from './realTile';
-import { readCell, type Aerial } from './aerial';
+import { readCell, seeable, type Aerial } from './aerial';
 
 type LatLon = { lat: number; lon: number };
 // Cache key version: bump when sampling, registration or the cast fit changes (aerial.ts), or the
@@ -140,9 +140,7 @@ function bKey(b: Building) {
   const [lat, lon] = unprojectLocal(origin!, x / n / 10, z / n / 10);
   return `${lat.toFixed(5)},${lon.toFixed(5)}`;
 }
-// what the photo can see: a building's own roof (not a guessed fill, a part of a taller building
-// or the outline its parts draw, a canopy or a lifted piece)
-const visible = (b: Building) => b.gen !== 'fill' && !b.pt && !b.hp && !b.cn && (b.lf ?? 0) <= 1.5 && !b.in;
+const visible = seeable; // (what the photo can read: aerial.ts)
 
 function persist(ck: string, rec: Rec) {
   recMem.set(ck, rec);

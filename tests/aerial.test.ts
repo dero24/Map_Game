@@ -119,8 +119,13 @@ describe('reading roofs off a photo (aerial.ts readCell)', () => {
     });
     expect(naive).toBeGreaterThan(ours * 4);
   });
-  it('says nothing for a house it can\'t see (under a tree), and nothing at all off the survey', () => {
+  it('says nothing for a house it can\'t see (under a tree), a tower that leans off its footprint, or off the survey', () => {
     expect(out.roofs.has(HOUSES.length - 1)).toBe(false);
+    const tall = tile();
+    tall.buildings[3] = { ...tall.buildings[3], h: 30, k: 'large' };
+    const withTower = readCell(scene(), tall);
+    expect(withTower.roofs.has(3)).toBe(false);
+    expect(withTower.roofs.has(2)).toBe(true);
     const blank: Aerial = { ...img, px: new Uint8ClampedArray(img.px.length) };
     const none = readCell(blank, t);
     expect(none.nodata).toBe(true);

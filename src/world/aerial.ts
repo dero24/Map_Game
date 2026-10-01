@@ -193,7 +193,7 @@ export function tileRoofs(bs: readonly Building[], baked = true): Int32Array {
   if (any || !baked || roofSrc !== 'painted') return out;
   const idx: number[] = [], obs: RGB[] = [];
   bs.forEach((b, i) => {
-    if (b.rc == null || tagColours.has(b.rc)) return;
+    if (b.rc == null || tagColours.has(b.rc) || !seeable(b)) return;
     idx.push(i);
     obs.push(unpaint(b.rc));
   });
@@ -379,6 +379,13 @@ export function streetSamples(img: Aerial, roads: readonly { p: number[]; c: str
   return out;
 }
 
+/** Whose roof a photo can read: a building's own, low enough to sit on its footprint. Not a
+ *  guessed fill, a part of a taller building or the outline its parts draw, a canopy or a lifted
+ *  piece — and not anything over 16 m: an aerial camera sees a tall building lean away from the
+ *  middle of its frame (a five-storey block by several metres), past what registration corrects;
+ *  towers keep the recipe's masonry and glass. */
+export const seeable = (b: Building) => b.gen !== 'fill' && !b.pt && !b.hp && !b.cn && (b.lf ?? 0) <= 1.5 && !b.in && b.h <= 16;
+
 export interface CellRoofs {
   cast: Cast;
   by: 'streets' | 'roofs' | 'prior';
@@ -387,8 +394,7 @@ export interface CellRoofs {
   nodata: boolean; // the photo doesn't cover this cell
 }
 /** A whole cell read off its photo: the cast (from its streets, else its roofs), the footprints
- *  registered, each building's balanced roof colour. Skips what has no roof of its own to see:
- *  guessed fills, building parts and the outlines they draw, canopies, lifted pieces. */
+ *  registered, each `seeable` building's balanced roof colour. */
 export function readCell(img: Aerial, tile: { buildings: readonly Building[]; roads: readonly { p: number[]; c: string; w: number; br?: unknown; tu?: unknown }[] }): CellRoofs {
   // no data at all (outside the survey): a few hundred pixels across the image tell
   let data = 0, seen = 0;
@@ -406,7 +412,7 @@ export function readCell(img: Aerial, tile: { buildings: readonly Building[]; ro
   if (st.length >= 400) (cast = fitCast(st, undefined, NAIP_CAST, 400)), (by = 'streets');
   const todo: { i: number; mask: number[] }[] = [];
   tile.buildings.forEach((b, i) => {
-    if (b.gen === 'fill' || b.pt || b.hp || b.cn || (b.lf ?? 0) > 1.5 || b.in) return;
+    if (!seeable(b)) return;
     const ring: P2[] = [];
     for (let k = 0; k + 1 < b.r.length; k += 2) ring.push([b.r[k] / 10, b.r[k + 1] / 10]);
     if (ring.length < 3) return;
