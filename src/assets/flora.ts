@@ -716,7 +716,7 @@ function paintCluster(acc: Float32Array, W: number, ox: number, oy: number, S: n
   }
   for (const [bx, by, ex, ey, w] of runs) stroke(bx, by, ex, ey, w, 0.28, 0, 0);
   // the heart, darker (it's under the rest): enough leaves to close the inner three quarters
-  const fill = needles ? 105 : smallLeaf ? 950 : 460;
+  const fill = needles ? 72 : smallLeaf ? 950 : 460;
   for (let q = 0; q < fill; q++) {
     const rr = Math.sqrt(rng.float()) * 0.8, th = rng.float() * 6.28;
     const x = Math.cos(th) * rr * rim(th), y = Math.sin(th) * rr * rim(th);

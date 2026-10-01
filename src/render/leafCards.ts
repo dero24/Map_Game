@@ -16,7 +16,7 @@
 // frame; its sway at the card's height) · aK (the crown's middle, region frame; its radius) · aE
 // (the tree's green, linear; flags: 1 broadleaf that falls, + 2 × fall hue, + 8 blossom).
 import * as THREE from 'three';
-import { paintMaterial } from './shared';
+import { paintMaterial, GLSL_NOISE } from './shared';
 import { TREE_LOD_U, TREE_MASK_U } from './propMaterial';
 import { LEAF_PICS } from '../assets/flora';
 
@@ -54,6 +54,7 @@ export function leafCardMaterial(tex: THREE.Texture) {
     side: THREE.DoubleSide, // (a mirrored card winds the other way)
     uniforms: { uLeaf: { value: tex }, uLeafW: { value: (tex.image as { width: number }).width }, uTreeLod: TREE_LOD_U, uTreeMask: TREE_MASK_U },
     vertex: /* glsl */ `
+      ${GLSL_NOISE}
       attribute vec2 aCorner;
       attribute vec4 aC, aD, aT, aK, aE;
       uniform vec4 uTreeLod, uTreeMask;
@@ -64,6 +65,7 @@ export function leafCardMaterial(tex: THREE.Texture) {
       flat varying vec3 vTint;
       flat varying vec3 vRight, vUp, vToCam;
       flat varying float vCut;
+      flat varying float vMottle;
       void main() {
         vec3 foot = (modelMatrix * vec4(aT.xyz, 1.0)).xyz; // (render frame)
         float far = 1.0;
@@ -107,6 +109,9 @@ export function leafCardMaterial(tex: THREE.Texture) {
         vInfo = vec4(far, aD.w, aE.w, fract(sin(dot(foot.xz + uWorldOffset.xz, vec2(12.9898, 78.233))) * 43758.5453));
         vCrown = vec4(aK.xyz, aK.w);
         vTint = aE.rgb;
+        // the far crown's tone mottle (its fbm over the crown, a metre or so across), here once a
+        // card: the leaves' own shades carry the detail inside it
+        vMottle = 0.72 + 0.5 * fbm3((c + uWorldOffset) * 0.9);
         // a card the eye is inside of (walking under a low crown) melts away rather than fill the view
         vCut = clamp((dc / max(aC.w, 0.1) - 0.45) / 0.7, 0.0, 1.0);
         gl_Position = projectionMatrix * viewMatrix * vec4(wp, 1.0);
@@ -122,6 +127,7 @@ export function leafCardMaterial(tex: THREE.Texture) {
       flat varying vec3 vTint;
       flat varying vec3 vRight, vUp, vToCam;
       flat varying float vCut;
+      flat varying float vMottle;
       void main() {
         float dth = dither4(gl_FragCoord.xy);
         if (dth < vInfo.x) discard; // (the far crown draws these pixels)
@@ -136,7 +142,7 @@ export function leafCardMaterial(tex: THREE.Texture) {
         float falls = mod(flags, 2.0), hue = mod(floor(flags / 2.0), 4.0), bloom = floor(flags / 8.0);
         float vTree = vInfo.w;
         bool twig = t.g < 0.5;
-        if (falls > 0.5) {
+        if (falls > 0.5 && uLeafFall > 0.0) {
           // leaves go clump by clump as the far crown's do (each tree on its own schedule) — and
           // here leaf by leaf within the clump; the card's twigs go with the last of them (bare, a
           // card's twigs would be a starburst: the tree's own limbs and branches are its winter form)
@@ -155,11 +161,11 @@ export function leafCardMaterial(tex: THREE.Texture) {
         vec3 bulge = normalize(vRight * qq.x + vUp * qq.y + vToCam * sqrt(max(0.0, 1.0 - dot(qq, qq))));
         vec3 N = normalize(mix(cN, bulge, 0.25));
         vec3 alb = twig ? vec3(0.15, 0.105, 0.068) * (0.9 + 0.4 * t.r) : vTint * (0.48 + 0.75 * t.r); // (twigs: the bark's brown)
-        alb *= 0.72 + 0.5 * fbm3(vWorldPos * 0.9);
+        alb *= vMottle;
         // underside and heart in shade (the far crown's underside AO, and deeper toward the middle)
         float ao = mix(0.55, 1.0, smoothstep(vCrown.y - vCrown.w, vCrown.y + 0.3 * vCrown.w, vWorldPos.y));
         ao *= 1.0 - 0.35 * smoothstep(0.35, 1.0, vInfo.y); // (the rim's cards as lit as the far crown's skin)
-        if (!twig && falls > 0.5) {
+        if (!twig && falls > 0.5 && uTurn > 0.0) {
           vec3 fall;
           if (hue > 1.5) {
             fall = mix(vec3(0.88, 0.7, 0.14), vec3(0.74, 0.52, 0.08), vTree);
@@ -174,7 +180,7 @@ export function leafCardMaterial(tex: THREE.Texture) {
           float onset = vTree * 0.85 * (hue > 0.5 && hue < 1.5 ? 0.7 : 1.0);
           float hi = smoothstep(vCrown.y - vCrown.w, vCrown.y + vCrown.w, vWorldPos.y);
           float turn = smoothstep(onset - 0.02, onset + 0.22, uTurn * 1.25 + 0.14 * (hi - 0.5) + 0.12 * (vnoise3(vWorldPos * 0.8) - 0.5) + 0.08 * (t.b - 0.5)) * smoothstep(0.0, 0.04, uTurn);
-          alb = mix(alb, fall * (0.8 + 0.4 * fbm3(vWorldPos * 0.9)) * (0.6 + 0.55 * t.r), turn);
+          alb = mix(alb, fall * (0.8 + 0.4 * (vMottle - 0.72) / 0.5) * (0.6 + 0.55 * t.r), turn);
         }
         if (!twig && bloom > 0.5)
           alb = mix(alb, mix(vec3(0.96, 0.72, 0.8), vec3(0.98, 0.9, 0.92), vnoise3(vWorldPos * 2.3)) * (0.9 + 0.2 * fbm3(vWorldPos * 1.3)), uBloom * smoothstep(0.2, 0.5, vnoise3(vWorldPos * 1.6) * 0.8 + 0.3));

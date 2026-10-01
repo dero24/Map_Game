@@ -110,13 +110,24 @@ window.__TREECHECK__ = async (tag = 't', opts = {}) => {
     { label: '30 m — far crowns only', fn: async () => { look(30, 1); await wait(400); } },
     { label: '40 m — handing over', fn: async () => { look(40, 0); await wait(400); } },
   ];
-  // what the layer drew at each pose: near trees, cards, the draws it took (models in use + 1), vertices
+  // what the layer drew at each pose (near trees, cards, the draws it took: models in use + 1,
+  // vertices), and each painted frame saved the moment it has settled (a slow software GPU may not
+  // see the sheet through)
   const stats = [];
-  for (const it of items) {
-    const a = it.after;
-    it.after = async () => { stats.push({ pose: it.label, ...L.stats, draws: L.stats.models + (L.stats.cards ? 1 : 0) }); if (a) await a(); };
+  const want = opts.only ? items.filter((_, i) => opts.only.includes(i)) : items;
+  for (const it of want) {
+    const a = it.after, name = it.label.split(' — ')[0].replace(/[^\w]+/g, '-').replace(/-+$/, '') + (it.label.includes('—') ? '-' + it.label.split('— ')[1].split(' ')[0] : '');
+    it.after = async () => {
+      stats.push({ pose: it.label, ...L.stats, draws: L.stats.models + (L.stats.cards ? 1 : 0) });
+      const cv = document.querySelector('canvas'), c = document.createElement('canvas');
+      c.width = cv.width; c.height = cv.height;
+      c.getContext('2d').drawImage(cv, 0, 0);
+      const b = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.92));
+      await fetch(`/__shot?name=${encodeURIComponent(`treecheck-${tag}-${name}.jpg`)}`, { method: 'POST', body: b });
+      if (a) await a();
+    };
   }
-  const out = await window.__MONTAGE__(items, { settle, timers: true, cw: 640, cols: 3, save: `treecheck-${tag}.jpg` });
+  const out = await window.__MONTAGE__(want, { settle, timers: true, cw: 640, cols: 3, save: `treecheck-${tag}.jpg` });
   window.__MONTAGE_CLOSE__?.();
   L.mode = 0;
   // the masks on a sheet of their own
