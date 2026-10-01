@@ -14,9 +14,9 @@
 //      grey: the streets where they show (asphalt and concrete are neutral the world over), else
 //      the cell's roofs taken together (most roofs are greys and browns) — and taken back out
 //      (`fitCast`, `uncast`). A roof's colour is what's left: its own difference from grey.
-// The baked shore carries roof colours sampled this way at bake time (scripts/fetch-imagery.mjs)
-// but already lifted for paint and never balanced: `tileRoofs` undoes the lift and balances them
-// per tile, so the pack itself never changes.
+// A baked pack carries roof colours sampled from the same photos at bake time
+// (scripts/fetch-imagery.mjs), but lifted for paint and never balanced: `tileRoofs` undoes the
+// lift and balances them per tile as they build, so the pack itself never changes.
 // `aerialRoof` turns a balanced sample into the colour the painter mixes: the measured hue and
 // lightness kept, chroma held to what roofing comes in.
 import type { Building } from './data';
