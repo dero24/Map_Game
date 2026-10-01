@@ -78,6 +78,7 @@ export function nightGrade(c: RGB, night: number, wash: number, P: NightGradePar
  *  (warm ramp, dim), uNightTint = tint. */
 export const GLSL_NIGHT_GRADE = /* glsl */ `
 vec3 nightGrade(vec3 c, float night, float wash) {
+  if (night <= 0.0) return c; // (by day: nothing to do, and nothing spent)
   float L = dot(c, vec3(0.299, 0.587, 0.114));
   float res = smoothstep(uNightWarm.x, uNightWarm.y, c.r - c.b) * smoothstep(uNightGrade.z, uNightGrade.w, max(c.r, max(c.g, c.b)));
   float deep = (1.0 - uNightGrade.y * (1.0 - smoothstep(0.0, 0.45, L))) * (1.0 - uNightWarm.z * smoothstep(0.0, 0.15, c.r - c.b) * (1.0 - res));
