@@ -254,7 +254,8 @@ describe('micro layer budgets (world/microLayer.ts)', () => {
     for (let i = 0; i < l.stats.cards; i++) cardAt.set(Math.round(A[i * 4]), B[i * 4 + 3]);
     for (let i = 0; i < n; i++) {
       const x = 1 + i, inNear = nearAt.has(x), inCard = cardAt.has(x);
-      if (x > G.far) { expect(inNear || inCard).toBe(false); continue; }
+      if (x > G.far + T.step + 1) { expect(inNear || inCard).toBe(false); continue; }
+      if (x > G.far) continue; // (a step past the far ring: kept for the camera's next few metres)
       expect(inNear || inCard, `piece at ${x} m`).toBe(true); // (never a hole)
       if (x < G.dh - T.band / 2 - T.step - 1) expect([inNear, inCard, nearAt.get(x)]).toEqual([true, false, -1]);
       if (x > G.dh + T.band / 2 + T.step + 1) expect([inNear, cardAt.get(x)]).toEqual([false, 0]);

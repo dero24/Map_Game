@@ -193,7 +193,7 @@ export class MicroLayer {
         const G = K[d[i + 4] | 0];
         if (!G) continue; // (a piece this build doesn't have: left out)
         const dx = d[i] - cx, dy = d[i + 1] - cy, dz = d[i + 2] - cz, dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (dist > G.far) continue;
+        if (dist > G.far + M) continue; // (and a step past: the camera moves on before the next sort)
         const ready = this.atlas.ready(d[i + 4] | 0);
         const wantNear = mode === 2 || (mode === 0 && (dist < G.dh + T.band / 2 + M || !ready));
         const wantCard = ready && (mode === 1 || (mode === 0 && dist > G.dh - T.band / 2 - M));
