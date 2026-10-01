@@ -291,15 +291,26 @@ const ringArea = (r: readonly P2[]) => {
 /** The cell's footprints slid together (pixels, ±`reach`) to where they sit best on roofs: the
  *  map's survey and the photo's disagree by a few metres over a whole neighbourhood. Ties go to
  *  the smaller shift, scanned in a fixed order — the same answer every time. */
-export function registerCell(img: Aerial, masks: readonly number[][], reach = 5): [number, number] {
-  const use = masks.filter((m) => m.length >= 12).slice(0, 220);
+export function registerCell(img: Aerial, masks: readonly number[][], reach = 6): [number, number] {
+  const use = masks.filter((m) => m.length >= 12).slice(0, 120);
   if (use.length < 3) return [0, 0];
+  const score = (si: number, sj: number) => {
+    let s = 0;
+    for (const m of use) s += roofScore(img, m, si, sj);
+    return s / use.length - 0.004 * Math.hypot(si, sj);
+  };
+  // every other pixel out to `reach`, then the pixel round the best of those
   let best: [number, number] = [0, 0], bestS = -Infinity;
-  for (let sj = -reach; sj <= reach; sj++)
-    for (let si = -reach; si <= reach; si++) {
-      let s = 0;
-      for (const m of use) s += roofScore(img, m, si, sj);
-      s = s / use.length - 0.004 * Math.hypot(si, sj);
+  for (let sj = -reach; sj <= reach; sj += 2)
+    for (let si = -reach; si <= reach; si += 2) {
+      const s = score(si, sj);
+      if (s > bestS + 1e-9) (bestS = s), (best = [si, sj]);
+    }
+  const [ci, cj] = best;
+  for (let sj = cj - 1; sj <= cj + 1; sj++)
+    for (let si = ci - 1; si <= ci + 1; si++) {
+      if (si === ci && sj === cj) continue;
+      const s = score(si, sj);
       if (s > bestS + 1e-9) (bestS = s), (best = [si, sj]);
     }
   return best;
@@ -338,7 +349,7 @@ export function sampleRoof(img: Aerial, mask: readonly number[], si: number, sj:
 const PAVED = new Set(['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'living_street', 'service', 'primary_link', 'secondary_link', 'tertiary_link', 'pedestrian']);
 /** Grey references from the cell's streets: pixels down the middle of each paved street (the
  *  middle 60% of its width, every pixel's length), greenery and deep shade left out. Raw values. */
-export function streetSamples(img: Aerial, roads: readonly { p: number[]; c: string; w: number; br?: unknown; tu?: unknown }[], cap = 30000): RGB[] {
+export function streetSamples(img: Aerial, roads: readonly { p: number[]; c: string; w: number; br?: unknown; tu?: unknown }[], cap = 12000): RGB[] {
   const out: RGB[] = [];
   const { px, ch, w, h } = img;
   const step = Math.min(Math.abs(img.dx), Math.abs(img.dz));
