@@ -3,6 +3,7 @@ import { Terrain, TerrainLayer } from '../src/world/data';
 import { WalkWorld } from '../src/player/collision';
 import { replayOps } from '../src/world/pack';
 import { buildTile } from '../src/world/tileBuild';
+import { KERB_STRIDE } from '../src/world/kerbCars';
 // @ts-expect-error plain js lib
 import { packToBin } from '../scripts/lib/tiles.mjs';
 
@@ -72,7 +73,7 @@ describe('the way to a front door stays open', () => {
     const t = await buildTile(tj as never, terrain, { id: '0_0', box: tj.box, lod: 0, file: 'x' }, 0);
     const k = t.kerb ?? new Float32Array(0);
     expect(k.length).toBeGreaterThan(0); // (the far kerb still parks)
-    for (let i = 0; i + 10 < k.length; i += 11) if (k[i] > 60 && k[i] < 131) expect(Math.abs(k[i + 2] - 110)).toBeGreaterThan(2.4); // (car centre ≥ a car's half-width + 1.5 m off the facade)
+    for (let i = 0; i + KERB_STRIDE <= k.length; i += KERB_STRIDE) if (k[i] > 60 && k[i] < 131) expect(Math.abs(k[i + 2] - 110)).toBeGreaterThan(2.4); // (car centre ≥ a car's half-width + 1.5 m off the facade)
   });
 
   it('a flag mapped over the front door stands beside it: the way in stays open', async () => {

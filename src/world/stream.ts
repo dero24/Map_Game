@@ -76,6 +76,7 @@ export interface TileArt {
   areas: Area[];
   kerb?: Float32Array; // parked cars for kerbCars.ts
   micro?: Float32Array; // the small things, for the micro layer (world/microLayer.ts)
+  crowd?: Float32Array; // the beach's people, for the crowd layer (world/crowdLayer.ts)
   junc?: Float32Array; // junction control for the life sim (src/sim/traffic.ts)
   flat?: boolean; // mounted without data still in flight (late DEM or LiDAR) — a relief rebuild will replace it
   vec?: boolean; // a stand-in built from the vector tiles: real streets and buildings (the skyline steps aside)
@@ -780,6 +781,7 @@ export class TileStream {
         areas: tile.areas ?? [],
         kerb: tile.kerb,
         micro: tile.micro,
+        crowd: tile.crowd,
         junc: tile.junc,
         flat: !!tile.late,
         vec: !!tile.vec,

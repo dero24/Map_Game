@@ -29,8 +29,30 @@ import { kerbSpaces, oneToASpace, OCCUPANCY } from './kerbside';
 import { viewCones, viewDir } from './views';
 import { streetLib, streetPaint, STREET_VARIANTS, type StreetKind } from '../assets/street';
 import { playLib, PLAY_KINDS, PLAY_PAINT, PLAY_FOOT, type PlayKind } from '../assets/play';
+import { beachSeason, beachLotFill, marinaSeason, windowFor, worldDate } from './calendar';
+import { seaLevel, type Berth } from './docks';
+import { GUARD_SEAT, type Seat, type Stand } from './crowd';
 
 type P = [number, number];
+/** The hours a thing is there for when it's there all day (calendar.ts windows). */
+const ALL_DAY: [number, number] = [0, 24];
+/** Do two outlines come within `d` of each other (or overlap)? */
+function ringsWithin(a: P[], b: P[], d: number) {
+  let ax0 = Infinity, az0 = Infinity, ax1 = -Infinity, az1 = -Infinity, bx0 = Infinity, bz0 = Infinity, bx1 = -Infinity, bz1 = -Infinity;
+  for (const [x, z] of a) (ax0 = Math.min(ax0, x)), (ax1 = Math.max(ax1, x)), (az0 = Math.min(az0, z)), (az1 = Math.max(az1, z));
+  for (const [x, z] of b) (bx0 = Math.min(bx0, x)), (bx1 = Math.max(bx1, x)), (bz0 = Math.min(bz0, z)), (bz1 = Math.max(bz1, z));
+  if (ax0 > bx1 + d || bx0 > ax1 + d || az0 > bz1 + d || bz0 > az1 + d) return false;
+  const segD = (px: number, pz: number, r: P[]) => {
+    let best = Infinity;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+      const [x0, z0] = r[j], dx = r[i][0] - x0, dz = r[i][1] - z0, L2 = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((px - x0) * dx + (pz - z0) * dz) / L2));
+      best = Math.min(best, Math.hypot(x0 + dx * t - px, z0 + dz * t - pz));
+    }
+    return best;
+  };
+  return a.some(([x, z]) => pointIn(x, z, b) || segD(x, z, b) <= d) || b.some(([x, z]) => pointIn(x, z, a) || segD(x, z, a) <= d);
+}
 const pointIn = (x: number, z: number, r: P[]) => {
   let ins = false;
   for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (r[i][1] > z !== r[j][1] > z && x < ((r[j][0] - r[i][0]) * (z - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) ins = !ins;
@@ -359,7 +381,7 @@ export function urbanCore(buildings: { r: number[]; h: number; pt?: 1; lf?: numb
   return (x: number, z: number) => { const [cover, h] = f(x, z); return cover > 0.3 && h > 16; };
 }
 
-export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P; w: number }[], extras: { mailboxes?: Mailbox[]; drives?: Drive[]; doors?: Door[]; ctx?: WorldJson; box?: Box; hood?: (x: number, z: number) => HoodClass } = {}) {
+export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P; w: number; gen?: 'slip' | 'dock' }[], extras: { mailboxes?: Mailbox[]; drives?: Drive[]; doors?: Door[]; ctx?: WorldJson; box?: Box; hood?: (x: number, z: number) => HoodClass; berths?: Berth[] } = {}) {
   const hoodAt = extras.hood ?? (() => 'suburb' as HoodClass);
   const { json, terrain } = world;
   const S = json.slice; // region slice: lamp-map compositor box
@@ -388,6 +410,14 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     ? { x0: extras.box.x0 - 8, z0: extras.box.z0 - 8, x1: extras.box.x1 + 8, z1: extras.box.z1 + 8 }
     : big;
   const paved = pavedMask({ json: ctxJson, terrain }, maskZone);
+  /** Walls only the builders see — the tile's scratch walk's (pack.ts RecWalk), not shipped with it:
+   *  a car that comes and goes keeps its stall clear of what's placed after it, and the main thread
+   *  walls it only while it's there (kerbCars.ts). */
+  const scratchOnly = (fn: () => void) => {
+    const w = walk as WalkWorld & { recording?: boolean }, was = w.recording;
+    if (was !== undefined) w.recording = false;
+    try { fn(); } finally { if (was !== undefined) w.recording = was; }
+  };
 
   // ---------- utility poles, wires, lamps ----------
   // Dense cores bury their wires: where blocks stand tall and close (a downtown, not a main
@@ -1125,10 +1155,24 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       group.add(im);
     }
 
-  // ---------- moored boats (asset kit hulls, packed along each pier side bow-to-stern) ----------
+  // ---------- moored boats (asset kit hulls) ----------
+  // Along each side of the map's piers bow to stern, and in the berths the map didn't draw — a
+  // marina's slips, a house's dock (docks.ts) — as many as the month puts in the water (calendar.ts
+  // marinaSeason: nearly every slip in July and August, about half in October). Every choice a
+  // hash of where the boat lies.
   const MOOR = boatMix(look.climate);
+  const inWater = marinaSeason(worldDate().getUTCMonth() + 1, json.origin.lat < 0, look.climate);
+  const HULL = [0xf4f2ec, 0xf4f2ec, 0xeef0f0, 0x2d4a6a, 0xd9e4ea, 0x9b3b32];
+  const hb = (x: number, z: number, salt: number) => hashf(Math.floor(x * 3) * 73856093 ^ Math.floor(z * 3) * 19349663 ^ (salt * 83492791));
   const moored = new Map<BoatType, { m: THREE.Matrix4; c: THREE.Color }[]>();
+  // (each boat's hull, so two never lie in one another — a pier's boats and the next pier's, 6 m off)
+  const hulls: { type: BoatType; x: number; z: number; yaw: number; corners: P[] }[] = [];
+  const moor = (type: BoatType, x: number, z: number, yaw: number) => {
+    const r = boatRecipe(type, 1), hl = r.L / 2 + 0.2, hw = r.B / 2 + 0.15, cy = Math.cos(yaw), sy = Math.sin(yaw);
+    hulls.push({ type, x, z, yaw, corners: [[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]].map(([u, v]) => [x + u * cy + v * sy, z - u * sy + v * cy] as P) });
+  };
   for (const s of pierSegs) {
+    if (s.gen) continue; // (a generated pier's boats lie at its berths, below)
     const dx = s.b[0] - s.a[0], dz = s.b[1] - s.a[1];
     const L = Math.hypot(dx, dz);
     if (L < 4) continue;
@@ -1136,22 +1180,26 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     for (const side of [-1, 1]) {
       let d = 2;
       while (d < L - 3) {
-        if (rng.float() < 0.35) { d += 4; continue; } // an empty slip
-        const type = pickFrom(MOOR, rng.float());
+        const px = s.a[0] + tx * d + tz * side, pz = s.a[1] + tz * d - tx * side;
+        if (hb(px, pz, 1) >= inWater) { d += 4; continue; } // an empty slip (the boat's out of the water this month)
+        const type = pickFrom(MOOR, hb(px, pz, 2));
         const r = boatRecipe(type, 1);
         if (d + r.L > L - 1) break;
         const off = s.w / 2 + r.B / 2 + 0.6;
         const c = d + r.L / 2;
         const x = s.a[0] + tx * c + tz * side * off, z = s.a[1] + tz * c - tx * side * off;
         d += r.L + 1.2;
-        if (terrain.sdfAt(x, z) > -2.5 || walk.deckAt(x, z) !== null) continue;
+        if (terrain.sdfAt(x, z) > -2.5 || walk.deckAt(x, z) !== null || !seaLevel(terrain, x, z)) continue;
         // bow (−z in the model) toward either end of the pier
-        const f = rng.float() < 0.5 ? 1 : -1;
-        const m = new THREE.Matrix4().compose(V(x, 0, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(-tx * f, -tz * f)), V(1, 1, 1));
-        if (!moored.has(type)) moored.set(type, []);
-        moored.get(type)!.push({ m, c: new THREE.Color(rng.pick([0xf4f2ec, 0xf4f2ec, 0xeef0f0, 0x2d4a6a, 0xd9e4ea, 0x9b3b32])) });
+        const f = hb(px, pz, 3) < 0.5 ? 1 : -1;
+        moor(type, x, z, Math.atan2(-tx * f, -tz * f));
       }
     }
+  }
+  for (const b of extras.berths ?? []) if (b.u < inWater && inSlice(b.x, b.z) && walk.deckAt(b.x, b.z) === null) moor(b.type, b.x, b.z, b.yaw);
+  for (const h of oneToASpace(hulls)) {
+    if (!moored.has(h.type)) moored.set(h.type, []);
+    moored.get(h.type)!.push({ m: new THREE.Matrix4().compose(V(h.x, 0, h.z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), h.yaw), V(1, 1, 1)), c: new THREE.Color(HULL[Math.floor(hb(h.x, h.z, 5) * HULL.length)]) });
   }
   for (const [type, list] of moored) {
     const im = new THREE.InstancedMesh(boatLib(type).clone(), propMaterial({ bob: true }), list.length);
@@ -1163,8 +1211,10 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   }
 
   // ---------- lifeguard stands along the beach, facing the sea ----------
+  // (crowd.ts seats a lifeguard up in each one in season: `beachStands`)
   const stands: THREE.Matrix4[] = [];
   const standAt: [number, number][] = [];
+  const beachStands: Stand[] = [];
   const SZ = extras.box
     ? { x0: Math.max(DZ.x0 + 60, extras.box.x0), z0: Math.max(DZ.z0 + 60, extras.box.z0), x1: Math.min(DZ.x1 - 60, extras.box.x1), z1: Math.min(DZ.z1 - 60, extras.box.z1) }
     : { x0: DZ.x0 + 60, z0: DZ.z0 + 60, x1: DZ.x1 - 60, z1: DZ.z1 - 60 };
@@ -1177,6 +1227,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       standAt.push([x, z]);
       // the chair's back (local -z) to the land, looking out along the seaward slope
       stands.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(gx, gz)), V(1, 1, 1)));
+      beachStands.push({ x, y: terrain.heightAt(x, z), z, yaw: Math.atan2(gx, gz) });
       walk.addLoop([[x - 1, z - 0.9], [x + 1, z - 0.9], [x + 1, z + 0.9], [x - 1, z + 0.9]]);
     }
 
@@ -1283,7 +1334,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   const kerb: number[] = [];
   {
     const KERB_CAP = 8000;
-    const cand: { x: number; z: number; yaw: number; type: CarType; hq: number; corners: P[] }[] = [];
+    const cand: { x: number; z: number; yaw: number; type: CarType; hq: number; corners: P[]; win?: [number, number] }[] = [];
     // (a market's own streets are its walkers' and its stalls': the shared streets within ~60 m of a
     // market hall park no cars — the stalls line them further down)
     const halls = ctxJson.buildings.filter((b) => b.u === 'marketplace' && !b.pt).map((b) => { const r = unpackPts(b.r); return [r.reduce((a, q) => a + q[0], 0) / r.length, r.reduce((a, q) => a + q[1], 0) / r.length] as P; });
@@ -1309,22 +1360,37 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       cand.push({ x: k.x, z: k.z, yaw: k.yaw, type, hq: k.hq, corners });
     }
     // Parking lots (lots.ts, the stalls the ground paint stripes): filled by the town's pulse —
-    // a third of the stalls at the edge of town, most of them where the blocks are built up
+    // a third of the stalls at the edge of town, most of them where the blocks are built up. A
+    // beach's lot (within 150 m of a mapped beach; the map drawing none round the tile, within
+    // 150 m of the open sea) keeps the beach's calendar instead (calendar.ts): a few cars all day
+    // and night, then as full as the beach is this month at this hour. Each of its cars carries
+    // the hours it's parked; kerbCars.ts draws and walls it only then, so here it walls the stall
+    // for the builders after it and nothing else.
+    const beachRings = ctxJson.areas.filter((a) => a.c === 'beach' && a.o?.[0]?.length >= 6).map((a) => unpackPts(a.o[0]));
+    const beachLot = (ring: P[]) => {
+      if (!beachRings.length) return ring.some(([x, z]) => terrain.oceanDistAt(x, z) < 150);
+      return beachRings.some((b) => ringsWithin(ring, b, 150));
+    };
+    const lotSeason = beachSeason(worldDate().getUTCMonth() + 1, json.origin.lat < 0, look.climate);
+    const beachFill = (h: number) => beachLotFill(h, lotSeason);
     for (const a of json.areas) {
       if (a.c !== 'parking' || a.lod || !a.o.length) continue;
-      const L = lotLayout(unpackPts(a.o[0]), 600);
+      const ring = unpackPts(a.o[0]);
+      const L = lotLayout(ring, 600);
       if (!L) continue;
+      const beach = beachLot(ring);
       for (const st of L.stalls) {
         if (!inSlice(st.x, st.z)) continue;
         const occ = 0.3 + (OCCUPANCY - 0.3) * Math.min(1, Math.max(0, (built(st.x, st.z)[0] - 0.03) / 0.2));
-        if (st.hq > occ) continue;
+        const win = beach ? windowFor(st.hq, beachFill) : st.hq > occ ? null : ALL_DAY;
+        if (!win) continue;
         const type = pickFrom(carMix(look.region, look.climate), hashf(Math.floor(st.x * 3.3) + Math.floor(st.z * 7.1) * 131));
         const rc = carRecipe(type, 1), hl = rc.L / 2, hw = rc.W / 2 + 0.05;
         const yaw = st.yaw + (st.hq < 0.08 ? Math.PI : 0); // a few backed in
         const cy = Math.cos(yaw), sy = Math.sin(yaw);
         const corners: P[] = [[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]].map(([u, v]) => [st.x + u * cy + v * sy, st.z - u * sy + v * cy]);
         if (corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.15)) || terrain.sdfAt(st.x, st.z) < 2) continue;
-        cand.push({ x: st.x, z: st.z, yaw, type, hq: st.hq, corners });
+        cand.push({ x: st.x, z: st.z, yaw, type, hq: st.hq, corners, win });
       }
     }
     // over the cap: keep the spaces with the lowest hash — an even thinning across the tile
@@ -1332,8 +1398,10 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     for (const k of oneToASpace(cand.filter((k) => k.hq <= keep))) {
       const u3 = hashf(Math.floor(k.x * 13 + k.z * 97));
       const paint = new THREE.Color(CAR[Math.floor(k.hq * 97 + u3 * 31) % CAR.length]).lerp(new THREE.Color(0xd8d4cc), u3 < 0.2 ? 0.12 + u3 : 0);
-      kerb.push(k.x, terrain.heightAt(k.x, k.z), k.z, k.yaw, CAR_TYPES.indexOf(k.type), paint.r, paint.g, paint.b, 0.97 + k.hq * 0.06, 0.97 + u3 * 0.06, 0.98); // kerbCars.ts KERB_STRIDE
-      walk.addLoop(k.corners);
+      const [arrive, leave] = k.win ?? ALL_DAY;
+      kerb.push(k.x, terrain.heightAt(k.x, k.z), k.z, k.yaw, CAR_TYPES.indexOf(k.type), paint.r, paint.g, paint.b, 0.97 + k.hq * 0.06, 0.97 + u3 * 0.06, 0.98, arrive, leave); // kerbCars.ts KERB_STRIDE
+      if (arrive <= 0 && leave >= 24) walk.addLoop(k.corners);
+      else scratchOnly(() => walk.addLoop(k.corners));
     }
   }
   // Main-street lamps: where shops line the street, ornamental posts on the sidewalk just behind
@@ -1756,6 +1824,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     parts.push(colored(new THREE.BoxGeometry(1.9, 1.0, 0.12).translate(0, 2.95, -0.75), 0xf4f1ea));
     parts.push(colored(new THREE.BoxGeometry(1.4, 0.35, 0.05).translate(0, 3.2, 0.3), 0xc2412f));
     for (let k = 0; k < 4; k++) parts.push(colored(new THREE.BoxGeometry(1.7, 0.06, 0.1).translate(0, 0.4 + k * 0.5, 0.78), 0xf4f1ea));
+    // the guard's seat on the platform, against the back (GUARD_SEAT: crowd.ts sits the lifeguard on it)
+    parts.push(colored(new THREE.BoxGeometry(1.1, 0.06, 0.46).translate(0, GUARD_SEAT - 0.03, -0.42), 0xf4f1ea));
+    for (const sx of [-0.5, 0.5]) parts.push(colored(new THREE.BoxGeometry(0.06, GUARD_SEAT - 2.46, 0.4).translate(sx, (GUARD_SEAT + 2.46) / 2, -0.42), 0xf4f1ea));
     const im = new THREE.InstancedMesh(mergeGeometries(parts), propMaterial(), stands.length);
     im.name = 'beach:lifeguard'; // (the review's beach shot frames one when the umbrellas are packed away)
     stands.forEach((m, i) => im.setMatrixAt(i, m));
@@ -2256,7 +2327,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // Species from the region's garden mix; in bloom when the real calendar says so (seasons flip
   // south of the equator). A house plants one or two species, a few of each either side of the
   // door, on open (unpaved, unblocked) ground only — storefronts on sidewalks get none.
-  const month = new Date().getMonth() + 1, south = json.origin.lat < 0;
+  const month = worldDate().getUTCMonth() + 1, south = json.origin.lat < 0; // (the world's day: ?date=)
   const gardenMix = plantMix(look.climate);
   const beds = new Map<string, { m: THREE.Matrix4; c: THREE.Color }[]>();
   const bed = (sp: PlantSpecies, v: number, x: number, z: number, yaw: number, s: number) => {
@@ -2294,6 +2365,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   }
 
   // ---------- a summer beach: umbrellas, towels and chairs around the lifeguard stands ----------
+  // (crowd.ts puts someone on each chair and towel: `beachUmbrellas`, `beachSeats`)
+  const beachUmbrellas: [number, number, number][] = [], beachSeats: Seat[] = [];
   const warmMonth = south ? ((month + 5) % 12) + 1 : month;
   if (standAt.length && warmMonth >= 6 && warmMonth <= 9 && look.climate !== 'boreal' && look.climate !== 'polar') {
     const beach = { umbrella: [] as { m: THREE.Matrix4; c: THREE.Color }[], towel: [] as { m: THREE.Matrix4; c: THREE.Color }[], chair: [] as { m: THREE.Matrix4; c: THREE.Color }[] };
@@ -2311,10 +2384,17 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         const yaw = Math.atan2(-sea[0], -sea[1]) + (u - 0.5) * 0.6; // looking out to sea
         const y = terrain.heightAt(x, z);
         beach.umbrella.push({ m: new THREE.Matrix4().compose(V(x, y, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw + (w - 0.5)), V(1, 1, 1)), c: new THREE.Color(UMB[Math.floor(u * 97) % UMB.length]) });
+        beachUmbrellas.push([x, y, z]);
         const tq = new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw);
         const ox = Math.sin(yaw + 1.6) * 1.2, oz = Math.cos(yaw + 1.6) * 1.2;
-        if (w < 0.7) beach.towel.push({ m: new THREE.Matrix4().compose(V(x + ox, terrain.heightAt(x + ox, z + oz) + 0.01, z + oz), tq, V(1, 1, 1)), c: new THREE.Color(TOW[Math.floor(w * 91) % TOW.length]) });
-        if (u < 0.6) beach.chair.push({ m: new THREE.Matrix4().compose(V(x - ox * 0.8, terrain.heightAt(x - ox * 0.8, z - oz * 0.8), z - oz * 0.8), tq, V(1, 1, 1)), c: new THREE.Color(TOW[Math.floor(u * 53) % TOW.length]) });
+        if (w < 0.7) {
+          beach.towel.push({ m: new THREE.Matrix4().compose(V(x + ox, terrain.heightAt(x + ox, z + oz) + 0.01, z + oz), tq, V(1, 1, 1)), c: new THREE.Color(TOW[Math.floor(w * 91) % TOW.length]) });
+          beachSeats.push({ x: x + ox, y: terrain.heightAt(x + ox, z + oz), z: z + oz, yaw, k: 'towel' });
+        }
+        if (u < 0.6) {
+          beach.chair.push({ m: new THREE.Matrix4().compose(V(x - ox * 0.8, terrain.heightAt(x - ox * 0.8, z - oz * 0.8), z - oz * 0.8), tq, V(1, 1, 1)), c: new THREE.Color(TOW[Math.floor(u * 53) % TOW.length]) });
+          beachSeats.push({ x: x - ox * 0.8, y: terrain.heightAt(x - ox * 0.8, z - oz * 0.8), z: z - oz * 0.8, yaw, k: 'chair' });
+        }
       }
     }
     for (const k of ['umbrella', 'towel', 'chair'] as const) {
@@ -2559,5 +2639,5 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
 
   const lampPts = lampGround.flat();
   group.add(haloPoints(lampHeads, 1.6, new THREE.Color(1.0, 0.7, 0.38)));
-  return { group, lampHeads, lampPts, kerb: new Float32Array(kerb), junc: packJunctions(junctions) };
+  return { group, lampHeads, lampPts, kerb: new Float32Array(kerb), junc: packJunctions(junctions), beach: { umbrellas: beachUmbrellas, seats: beachSeats, stands: beachStands } };
 }

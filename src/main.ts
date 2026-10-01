@@ -8,6 +8,8 @@ import { FarSkyline } from './world/farSkyline';
 import { KerbCars } from './world/kerbCars';
 import { MicroLayer } from './world/microLayer';
 import { seasonAt, dayOfYear } from './world/season';
+import { setWorldDate } from './world/calendar';
+import { CrowdLayer, CROWD_TIERS } from './world/crowdLayer';
 import { setDemBase } from './world/dem';
 import { virtualRegion } from './world/virtual';
 import { paintGround } from './world/groundPaint';
@@ -64,6 +66,7 @@ import { celestial, localHour, localToMs, sunPosition } from './core/sun';
 import { buildPanel, loadSettings, userKeys, timeParams, weatherParams, debugParams } from './ui/panel';
 
 const params = new URLSearchParams(location.search);
+setWorldDate(params.get('date')); // (tiles built in the page keep the tile worker's calendar)
 const CAPTURE = params.has('capture');
 // real-lite tile service base (the H1 worker). Dev convenience: when the page runs on
 // localhost with no explicit ?tiles=, assume the local wrangler dev worker — teleporting
@@ -296,7 +299,13 @@ async function main() {
   const kerbCars = new KerbCars();
   kerbCars.ground = (x, z, y) => walk.outdoorNear(x, z, y);
   kerbCars.height = (x, z) => world.terrain.heightAt(x, z);
+  kerbCars.walls = walk; // (a beach lot's cars are walled while they're parked: calendar.ts)
   worldRoot.add(kerbCars.group);
+  // The beach's people (crowd.ts places them per tile — on the chairs and towels, at the waterline,
+  // up in the lifeguard stands): the near ones in the full body, the beach in the lite one, only
+  // those there at the world's hour (crowdLayer.ts)
+  const crowd = new CrowdLayer(CROWD_TIERS[tier.tier]);
+  worldRoot.add(crowd.group);
   // The small things of the place (world/micro.ts places them per tile: carts, chairs, cleats,
   // towels, the mapped picnic tables…): real close up, impostor cards further out, two draws for
   // all of them (world/microLayer.ts). `?micro=0` leaves them out.
@@ -321,12 +330,13 @@ async function main() {
     paint.addWalks(a.walks, a.spec.id);
     kerbCars.add(a.spec.id, a.kerb, [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1]);
     micro.add(a.spec.id, a.micro);
+    crowd.add(a.spec.id, a.crowd);
     streamedGround();
     // J1: streamed tiles (past the bake) paint their streets and footprints into the ground windows
     if (a.spec.world || a.spec.synth) paint.setTile(a.spec.id, a.primRoads, a.fps.map((f) => f.ring as [number, number][]), [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1], a.fps.map((f) => !!f.front), a.areas, a.fps.map((f) => (f.kind === 'house' || f.kind === 'shed' ? 0.45 : 1)), a.xing);
     grass.invalidateBox(a.spec.box);
   };
-  stream.onUnload = (id) => { paint.dropTile(id); kerbCars.remove(id); micro.remove(id); queueMicrotask(streamedGround); };
+  stream.onUnload = (id) => { paint.dropTile(id); kerbCars.remove(id); micro.remove(id); crowd.remove(id); queueMicrotask(streamedGround); };
   const plans = stream.plans;
   const bld = {
     get footprints() { return stream.footprints; },
@@ -924,7 +934,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { ambientBalloons, walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, lift: ride, planInterior, registerPlan, plans, bld, life, stream, vehicles, farSkyline, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, streamParams, micro, get spawn() { return spawn; }, at: atPos };
+  (window as unknown as Record<string, unknown>).__GAME__ = { ambientBalloons, walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, lift: ride, planInterior, registerPlan, plans, bld, life, stream, vehicles, farSkyline, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, streamParams, micro, crowd, kerbCars, get spawn() { return spawn; }, at: atPos };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);
@@ -1354,7 +1364,7 @@ async function main() {
     camera.position.sub(origin); // walker works in world coords; the renderer works origin-local
     stream.update(walker.x, walker.z);
     horizon.update(walker.x, walker.z);
-    kerbCars.update(walker.x, walker.z);
+    kerbCars.update(walker.x, walker.z, timeParams.hour);
     if (micro.group.visible) micro.update(camera.position.x + origin.x, camera.position.y, camera.position.z + origin.z, camera);
     if (!CAPTURE) ambientBalloons.update(walker.x, walker.z, dt); // (they keep the world's clock: never in a capture)
     if (playing()) balloonNews(dt);
@@ -1393,6 +1403,8 @@ async function main() {
     }
     camera.updateMatrixWorld();
     camera.getWorldDirection(fwd);
+    crowd.group.visible = lifeParams.enabled;
+    if (crowd.group.visible) crowd.update(walker.x, walker.z, timeParams.hour, [camera.position.x + origin.x, camera.position.z + origin.z, fwd.x, fwd.z]);
     focus.set(camera.position.x + fwd.x * 60, walker.y - walkParams.eyeHeight, camera.position.z + fwd.z * 60);
     const ti = performance.now();
     interiors.update(walker.x, walker.z, dt, walker.feet, !vehicles.driving && !walkParams.fly);

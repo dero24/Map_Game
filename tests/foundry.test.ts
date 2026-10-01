@@ -4,7 +4,7 @@ import { TREE_KINDS, TREE_VARIANTS, treeGeometry, PLANT_SPECIES, plantGeometry, 
 import { CRITTERS, critterGeometry } from '../src/assets/fauna';
 import { MAILBOXES, mailboxGeometry, gearGeometry, gearFor, CAR_GEAR, umbrellaGeometry, picnicTableGeometry } from '../src/assets/furniture';
 import { fibCount, fibSphere, hashf, variantAt } from '../src/assets/core';
-import { personGeometry, HAIRSTYLES, MARK, warmthFor } from '../src/assets/people';
+import { personGeometry, personLiteGeometry, HAIRSTYLES, MARK, warmthFor } from '../src/assets/people';
 import { dogLib } from '../src/assets/fauna';
 import * as D from '../src/assets/decor';
 import { SPORT_PIECES, sportGeometry } from '../src/assets/sport';
@@ -147,6 +147,21 @@ describe('people', () => {
     for (const id of [1, 2, 5, 6]) expect(partCount(g, id)).toBeGreaterThan(0); // legs and arms swing
     HAIRSTYLES.forEach((_, i) => expect(partCount(g, 9 + i)).toBeGreaterThan(0));
     expect(partCount(g, 14)).toBeGreaterThan(0); // headphones, worn per person
+    const col = g.getAttribute('color');
+    for (const m of Object.values(MARK)) {
+      let n = 0;
+      for (let i = 0; i < col.count; i++) if (col.getX(i) === m[0] && col.getY(i) === m[1] && col.getZ(i) === m[2]) n++;
+      expect(n).toBeGreaterThan(0);
+    }
+  });
+  it('the lite body (a beach crowd past ~40 m): the full body\'s joints, parts and markers in under 300 vertices', () => {
+    const g = personLiteGeometry(), full = personGeometry();
+    const b = bb(g), bf = bb(full);
+    expect(finite(g)).toBe(true);
+    expect(Math.abs(b.min.y)).toBeLessThan(0.03);
+    expect(Math.abs(b.max.y - bf.max.y)).toBeLessThan(0.12); // (the same height: the same pose)
+    expect(verts(g)).toBeLessThan(300);
+    for (const id of [0, 1, 2, 5, 6, 9]) expect(partCount(g, id)).toBeGreaterThan(0);
     const col = g.getAttribute('color');
     for (const m of Object.values(MARK)) {
       let n = 0;
