@@ -110,11 +110,17 @@ window.__TREECHECK__ = async (tag = 't', opts = {}) => {
     { label: '30 m — far crowns only', fn: async () => { look(30, 1); await wait(400); } },
     { label: '40 m — handing over', fn: async () => { look(40, 0); await wait(400); } },
   ];
+  // what the layer drew at each pose: near trees, cards, the draws it took (models in use + 1), vertices
+  const stats = [];
+  for (const it of items) {
+    const a = it.after;
+    it.after = async () => { stats.push({ pose: it.label, ...L.stats, draws: L.stats.models + (L.stats.cards ? 1 : 0) }); if (a) await a(); };
+  }
   const out = await window.__MONTAGE__(items, { settle, timers: true, cw: 640, cols: 3, save: `treecheck-${tag}.jpg` });
   window.__MONTAGE_CLOSE__?.();
   L.mode = 0;
   // the masks on a sheet of their own
-  if (!masks.length) return { tree: { ...tr, kind: tr.n }, stats: { ...L.stats }, sheet: out, masks: 0 };
+  if (!masks.length) return { tree: { ...tr, kind: tr.n }, stats, sheet: out, masks: 0 };
   const CW = 480, CH = Math.round((CW * masks[0].c.height) / masks[0].c.width), PAD = 22;
   const sheet = document.createElement('canvas');
   sheet.width = CW * masks.length; sheet.height = CH + PAD;
@@ -124,5 +130,5 @@ window.__TREECHECK__ = async (tag = 't', opts = {}) => {
   masks.forEach((q, i) => { cx.drawImage(q.c, i * CW, 0, CW, CH); cx.fillText(q.label, i * CW + 8, CH + 16); });
   const blob = await new Promise((r) => sheet.toBlob(r, 'image/jpeg', 0.9));
   await fetch(`/__shot?name=${encodeURIComponent(`treecheck-${tag}-masks.jpg`)}`, { method: 'POST', body: blob });
-  return { tree: { ...tr, kind: tr.n }, stats: { ...L.stats }, sheet: out };
+  return { tree: { ...tr, kind: tr.n }, stats, sheet: out };
 };
