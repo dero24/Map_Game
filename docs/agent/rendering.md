@@ -67,7 +67,10 @@ look); the shaders run GLSL twins fed the same numbers.
   h = 8 m — half at 6 m, 17% at 12 m, 9% at 16 m — exact to `ease` (12 m), then eased out to nothing
   at `reach` (22 m). Lamps closer than 44 m meet faintly between them; a shore street's lamps (every
   third pole, ~114 m) leave the floor between their pools. Its light is `POOL.color`, a warm cream
-  (sRGB #ffe8c4; the heart reads C\* ~20–24 through the default look), × `gain` (3).
+  (sRGB #ffecce, ~4000 K), × `gain` 1.8: a pale heart (L\* ~75 on asphalt, C\* ~19) on the filmic
+  curve's straight part, so the glow's fall-off shows. At gain 3 — right for the old small disc — a
+  broad pool sat on the curve's shoulder: a flat cream plateau, and Ocean Ave's lamps (25–45 m
+  apart) summed into a floodlit street (frame 3's bottom 40% at L\* 79).
   - Round 11 retired the pool before it: `exp(−(d/5.2)³)`, cut to nothing by 9 m — a flat top with
     a cliff, sodium orange (#ffb86a, hearts at C\* 48–55) on black. Every lamp was a stage light.
 - **The lamp map** (`stream.ts` `repaintLamps`: 2 km round the walker at 2 m/px, repainted at most
@@ -88,9 +91,13 @@ look); the shaders run GLSL twins fed the same numbers.
     left for one.
 - **In the shaders** (`shared.ts`): `lampField` = the map's R × headroom × `streetLevel` (full to
   1.5 m over the local ground, nothing by 10.5 m: the pools light the street, not the roofs);
-  `lampAt` = field × `uLampPower` × gain; `paintLight` adds `max(albedo, 0.3) × uPoolColor ×
-  lampAt` (painted as light, so an asphalt heart is near paper-white). `U.uLampPool` = (height,
-  reach, gain, headroom) — only gain and headroom are read; the shape is in the map.
+  `lampAt` = field × `uLampPower` × gain; `paintLight` adds `poolOn` (`nightLight.ts`, the TS twin
+  for the tests): the surface's albedo with its own colour muted (`POOL.mute` 0.6: a tan sidewalk or
+  a lawn doesn't flare orange or lime under the lamp), never under 0.3 (a pool is painted as light:
+  dark asphalt would halve every heart), × `uPoolColor` × lampAt × (0.5 + 0.5 N.y) — the ground gets
+  all of it, a wall or a passer-by half, what faces down none (the lamp is overhead). The term is
+  skipped on a uniform branch by day. `U.uLampPool` = (height, reach, gain, headroom) — only gain and
+  headroom are read; the shape is in the map.
   `U.uLampColor` (the old orange) is now only the sea foam's warm note.
 - **The night's floor** (`FLOOR`, `nightFloor` in `paintLight`): the town's own glow at street level
   — sky glow, and the spill of windows and porches — a cool light (`FLOOR.color`, `strength` 0.16 in
