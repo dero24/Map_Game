@@ -13,7 +13,9 @@ import { present } from './calendar';
 import type { Tier } from '../render/quality';
 
 /** A tier's crowd: people in the full body within `nearR` (at most `full`), in the lite one out to
- *  `farR` (at most `lite`). */
+ *  `farR` (at most `lite`). `nearR` is for the walking lens: a longer lens (photo zoom, a 12° shot)
+ *  draws people as large from further off, so it reaches further by as much as the lens magnifies —
+ *  the full body is chosen by how big a person is on screen, not how far away they stand. */
 export interface CrowdTier { full: number; lite: number; nearR: number; farR: number }
 export const CROWD_TIERS: Record<Tier, CrowdTier> = {
   desktop: { full: 120, lite: 1400, nearR: 45, farR: 420 },
@@ -30,6 +32,7 @@ export class CrowdLayer {
   private lx = Infinity;
   private lz = Infinity;
   private hourDrawn = NaN;
+  private lensDrawn = 1;
   private dirty = true;
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
@@ -72,17 +75,21 @@ export class CrowdLayer {
   }
   remove(id: string) { if (this.tiles.delete(id)) this.dirty = true; }
 
-  /** Per frame: refill when the walker has moved a few metres, the set changed, or the clock has
-   *  moved on a minute or so. `view`: where the camera is and looks (x, z, forward x, forward z). */
-  update(x: number, z: number, hour: number, view?: [number, number, number, number]) {
+  /** Per frame: refill when the walker has moved a few metres, the set changed, the clock has
+   *  moved on a minute or so, or the lens changed. `view`: where the camera is and looks (x, z,
+   *  forward x, forward z). `lens`: how much the camera magnifies over the walking lens (1 at 62°;
+   *  about 5.5 at 12°). */
+  update(x: number, z: number, hour: number, view?: [number, number, number, number], lens = 1) {
     const dh = Math.abs(hour - this.hourDrawn), jump = !(dh < 0.25) && !(dh > 23.75);
     if (!(dh < 0.02)) this.dirty = true;
+    lens = Math.max(1, lens);
+    if (Math.abs(lens / this.lensDrawn - 1) > 0.1) { this.dirty = true; this.lensDrawn = lens; }
     if (!this.dirty && Math.hypot(x - this.lx, z - this.lz) < 4) return;
     this.dirty = false;
     this.hourDrawn = hour;
     this.lx = x;
     this.lz = z;
-    const T = this.tier, F2 = T.farR * T.farR, N2 = T.nearR * T.nearR;
+    const T = this.tier, F2 = T.farR * T.farR, N2 = (T.nearR * this.lensDrawn) ** 2;
     // who's here: present now — or, in front of you and near, as they were drawn
     let n = 0;
     for (const t of this.tiles.values()) n += t.shown.length;

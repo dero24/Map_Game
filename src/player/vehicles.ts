@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { propMaterial, colored } from '../render/propMaterial';
 import { carMix, carLib, boatLib, boatRecipe, planeGeometry, planeRecipe, pickFrom, carRecipe, PLANE_TYPES, CAR_TYPES, type CarType, type BoatType, type PlaneType } from '../assets/kit';
-import { personLib, MARK } from '../assets/people';
+import { MARK, posedPerson, seatPose, walkPose } from '../assets/people';
 import { KERB_STRIDE } from '../world/kerbCars';
 import type { WalkWorld } from './collision';
 import { walkParams, setLens, type Walker } from './controller';
@@ -83,36 +83,14 @@ interface Saved { taken: string[]; kept: { kind: VKind; model: string; lat: numb
 let helmCache: { sit: THREE.BufferGeometry; stand: THREE.BufferGeometry } | null = null;
 function helmGeometry(sit: boolean) {
   if (!helmCache) {
-    const src = personLib();
-    const pos = src.getAttribute('position') as THREE.BufferAttribute, col = src.getAttribute('color') as THREE.BufferAttribute, part = src.getAttribute('aPart') as THREE.BufferAttribute;
-    const recolour: [readonly number[], number][] = [[MARK.skin, 0xc68642], [MARK.hair, 0x3b2a1e], [MARK.pants, 0x2e3a52], [MARK.shin, 0x2e3a52], [MARK.forearm, 0xd8cfa8], [[1, 1, 1], 0xd8cfa8]];
-    const make = (seated: boolean) => {
-      const P: number[] = [], C: number[] = [];
-      for (let t = 0; t < pos.count; t += 3) {
-        const id = part.getX(t);
-        if (id >= 10) continue; // (the other hairstyles, the cap, the headphones)
-        for (let k = 0; k < 3; k++) {
-          const i = t + k;
-          let y = pos.getY(i), z = pos.getZ(i);
-          const x = pos.getX(i);
-          if (seated && (id === 1 || id === 2)) {
-            // the thigh swings forward about the hip, the shin hangs from the knee
-            if (y > 0.47) { const d = 0.87 - y; y = 0.87 - 0.03 * (d / 0.4); z -= d; } else { y += 0.4; z -= 0.4; }
-          }
-          if (seated) y -= 0.45;
-          P.push(x, y, z);
-          let r = col.getX(i), g = col.getY(i), b = col.getZ(i);
-          for (const [m, hex] of recolour) if (Math.abs(r - m[0]) < 0.01 && Math.abs(g - m[1]) < 0.01 && Math.abs(b - m[2]) < 0.01) { const c = new THREE.Color(hex); r = c.r; g = c.g; b = c.b; break; }
-          C.push(r, g, b);
-        }
-      }
-      const out = new THREE.BufferGeometry();
-      out.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
-      out.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
-      out.computeVertexNormals();
-      return out;
-    };
-    helmCache = { sit: make(true), stand: make(false) };
+    // (baked through people.ts's own pose maths: smooth limbs, shoes on the deck; a tiller hand
+    // seated, both hands on the wheel standing)
+    const look: [readonly number[], number][] = [[MARK.skin, 0xc68642], [MARK.hair, 0x3b2a1e], [MARK.pants, 0x2e3a52], [MARK.thigh, 0x2e3a52], [MARK.shin, 0x2e3a52], [MARK.forearm, 0xd8cfa8], [[1, 1, 1], 0xd8cfa8], [MARK.shoe, 0x5e3c26], [MARK.sole, 0x2e241c]];
+    const seat = seatPose(0, 0), stand = walkPose(0, 0, 0, 0, 1);
+    stand.ar = [0.55, 1.35, 0, 0]; stand.al = [0.55, 1.35, 0, 0];
+    // (a low thwart: the hips at 0.42, the knees up, the shoes on the boards)
+    seat.lr = [1.75, 0.2, 0, 0]; seat.ll = [1.75, 0.2, 0, 0]; seat.rt[1] = 0.42;
+    helmCache = { sit: posedPerson(seat, look), stand: posedPerson(stand, look) };
   }
   return sit ? helmCache.sit : helmCache.stand;
 }

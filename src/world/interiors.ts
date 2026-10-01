@@ -823,6 +823,9 @@ export class Interiors {
         if (used.has(k)) continue;
         used.add(k);
         const [u, v, y, yaw, seat] = spots[k];
+        // nobody stands in the first steps in from the front door: that's where you come in (a
+        // resident there was cut in half at the lens of anyone walking in)
+        if (!seat && u - P.ud > -0.5 && u - P.ud < 3 && Math.abs(v - P.vd) < 1 && Math.abs(y - P.floor0) < 0.5) continue;
         const w = toW(P, u, v);
         const col = new THREE.Color(SH[Math.floor(r.float() * SH.length)]);
         const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -ang + yaw + (seat ? r.range(-0.15, 0.15) : r.range(-0.4, 0.4)));

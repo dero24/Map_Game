@@ -6,7 +6,7 @@
 // material animates them in the vertex shader from a per-instance `aAnim` (gait phase, gait
 // amount, pose) — no skinning, no rigs, one instanced draw per species.
 import * as THREE from 'three';
-import { P, part, merge, limb, blob, card, cached } from './core';
+import { P, part, merge, limb, blob, card, cached, taper } from './core';
 import { paintMaterial } from '../render/shared';
 
 export type CritterKind =
@@ -79,6 +79,8 @@ const BIRD: Partial<Record<CritterKind, Bird>> = {
   // white, long red legs, the long down-curved bill
   ibis: { coat: 0xf4f2ee, belly: 0xf4f2ee, legC: 0xd86a4a, beakC: 0xd86a4a, legH: 0.1, beakL: 0.1, k: 2.4, plan: { body: [0.75, 0.75, 1.3], curve: 0.55, head: [0.06, -0.075] } },
 };
+// the dog's tail: root to tip (up and back from the rump, in metres before the dog's 1.18)
+const DOG_TAIL: [number, number][] = [[-0.012, -0.025], [0.03, 0.065], [0.075, 0.145], [0.105, 0.21], [0.118, 0.255]];
 const scaleGeo = (g: THREE.BufferGeometry, k: number) => {
   if (k === 1) return g;
   for (const a of ['position', 'aPivot']) { const at = g.getAttribute(a); for (let i = 0; i < at.count; i++) at.setXYZ(i, at.getX(i) * k, at.getY(i) * k, at.getZ(i) * k); }
@@ -239,7 +241,19 @@ export function critterGeometry(kind: CritterKind): THREE.BufferGeometry {
       const pl = Q.plume ?? 1;
       pts.forEach((q, i) => parts.push(jointed(blob((0.058 - i * 0.003) * pl, 20 + i, { detail: 0, lump: 0.1 }).scale(0.75, 0.9, 1.05).translate(tb.x + q.x, tb.y + q.y, tb.z + q.z), Q.coat !== undefined ? coat : 0x9a948c, P.tail, tb)));
     } else if (rb) parts.push(jointed(blob(0.045, 21, { detail: 0 }).translate(tb.x, tb.y + 0.02, tb.z + 0.02), 0xf2eee6, P.tail, tb));
-    else if (fx0) {
+    else if (kind === ('dog' as CritterKind)) {
+      // a dog out for a walk carries its tail: up off the rump and curving back, tapering to the
+      // tip (dogMaterial wags it side to side about the root — it never drops to the ground)
+      const pts = DOG_TAIL.map(([y, z]) => V3(tb.x, tb.y + y, tb.z + z));
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const a = pts[i], b = pts[i + 1], d = new THREE.Vector3().subVectors(b, a), L = d.length();
+        const g = new THREE.CylinderGeometry(0.033 * taper(i / 4, 0.45) * 0.86, 0.033 * taper(i / 4, 0.45), L * 1.08, 5, 1, true).translate(0, L / 2, 0);
+        g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+        parts.push(jointed(g.translate(a.x, a.y, a.z), coat, P.tail, tb));
+      }
+      const tip = pts[pts.length - 1];
+      parts.push(jointed(new THREE.SphereGeometry(0.013, 5, 3).translate(tip.x, tip.y, tip.z), coat, P.tail, tb));
+    } else if (fx0) {
       // the brush: long, low and full, with a white tip
       // (carried low: drooping ~20° from the rump, swaying with the trot via the tail joint)
       [V3(0, -0.04, 0.1), V3(0, -0.1, 0.21), V3(0, -0.15, 0.31)].forEach((q, i) => parts.push(jointed(blob(0.075 - i * 0.008, 23 + i, { detail: 0, lump: 0.12 }).scale(0.8, 0.8, 1.3).rotateX(0.35).translate(tb.x + q.x, tb.y + q.y, tb.z + q.z), coat, P.tail, tb)));
@@ -272,6 +286,16 @@ export const critterLib = (k: CritterKind) => cached(`critter:${k}`, () => critt
 QUAD['dog' as CritterKind] = { base: 'fox', k: 1.18, coat: 0xffffff, belly: 0xffffff, stock: 0xffffff, tailTip: 0xffffff, ear: 0.85, earC: 0xffffff };
 export const DOG_COATS = [0xd9a860, 0x2a2624, 0x6b4a32, 0xe8dcc4, 0x8a8680, 0xb07040, 0xf2ece0, 0x3a2e28];
 export const dogLib = () => cached('critter:dog', () => critterGeometry('dog' as CritterKind));
+/** Where the lead clips to the dog's collar (the dog's own frame, before its size: life.ts). */
+export const DOG_COLLAR: readonly [number, number, number] = [0, 0.56, -0.33];
+/** The dogs' material: the fox's trot, and the tail carried and wagged side to side. */
+export function dogMaterial() {
+  const m = critterMaterial('fox');
+  m.uniforms.uGait.value.set(Math.PI, 0, 0, 0.2);
+  m.uniforms.uLimb.value = 0.62;
+  m.uniforms.uWag.value.set(0.42, 8.5);
+  return m;
+}
 
 // Per-species animation constants: x hind-leg phase offset (bound 0.5π, walk π), y tail swing,
 // z wing flap, w head bob.
@@ -288,7 +312,7 @@ export const GAIT: Record<CritterKind, [number, number, number, number]> = {
 export function critterMaterial(kind: CritterKind) {
   const g = GAIT[kind];
   return paintMaterial({
-    uniforms: { uGait: { value: new THREE.Vector4(...g) }, uLimb: { value: LIMB[kind] }, uFlap: { value: new THREE.Vector2(kind === 'hawk' ? 6.5 : 38, kind === 'hawk' ? 1 : 0) } },
+    uniforms: { uGait: { value: new THREE.Vector4(...g) }, uLimb: { value: LIMB[kind] }, uFlap: { value: new THREE.Vector2(kind === 'hawk' ? 6.5 : 38, kind === 'hawk' ? 1 : 0) }, uWag: { value: new THREE.Vector2(0, 0) } },
     vertex: /* glsl */ `
       attribute vec3 color;
       attribute float aPart;
@@ -297,10 +321,12 @@ export function critterMaterial(kind: CritterKind) {
       uniform vec4 uGait;
       uniform float uLimb;
       uniform vec2 uFlap; // x flap rate, y 1 = a soaring bird (wings held out, flap by amount, folded in a stoop)
+      uniform vec2 uWag; // x > 0: the tail wags side to side (a dog) by this much, y times a second
       varying vec3 vColor;
       varying float vGlow;
       mat3 rotX(float a) { float c = cos(a), s = sin(a); return mat3(1.0, 0.0, 0.0, 0.0, c, s, 0.0, -s, c); }
       mat3 rotZ(float a) { float c = cos(a), s = sin(a); return mat3(c, s, 0.0, -s, c, 0.0, 0.0, 0.0, 1.0); }
+      mat3 rotY(float a) { float c = cos(a), s = sin(a); return mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c); }
       void main() {
         vec3 p = position;
         float ph = aAnim.x * 6.2831853, amt = aAnim.y;
@@ -308,7 +334,10 @@ export function critterMaterial(kind: CritterKind) {
         vec3 q = p - aPivot;
         if (aPart > 0.5 && aPart < 1.5) q = rotX(sin(ph) * uLimb * amt) * q;                       // fore limbs
         else if (aPart > 1.5 && aPart < 2.5) q = rotX(sin(ph + uGait.x) * uLimb * amt) * q;        // hind limbs
-        else if (aPart > 4.5 && aPart < 5.5) q = rotX(sin(ph * 0.5) * uGait.y * (0.3 + amt) + sin(uTime * 3.1 + aAnim.x * 9.0) * 0.12 * idle) * q; // tail
+        else if (aPart > 4.5 && aPart < 5.5) {                                                    // tail
+          if (uWag.x > 0.0) q = rotY(sin(uTime * uWag.y + float(gl_InstanceID) * 2.1) * uWag.x * (0.55 + 0.45 * amt)) * q;
+          else q = rotX(sin(ph * 0.5) * uGait.y * (0.3 + amt) + sin(uTime * 3.1 + aAnim.x * 9.0) * 0.12 * idle) * q;
+        }
         else if (aPart > 5.5 && aPart < 6.5) q = rotX((0.5 + 0.5 * sin(uTime * 2.3 + aAnim.x * 17.0)) * uGait.w * idle * step(0.5, fract(uTime * 0.21 + aAnim.x * 3.7)) + sin(ph) * 0.06 * amt) * q; // head: grazing / pecking bobs
         else if (aPart > 6.5 && aPart < 7.5) {                                                  // wings
           // flying: a fast flap; perched: folded down along the body (butterflies rest wings-up)

@@ -13,8 +13,8 @@ import { gearGeometry, gearFor, TAXI_PAINT, type CarGear } from '../assets/furni
 import { hashf } from '../assets/core';
 import { propMaterial } from '../render/propMaterial';
 import { activeStyle } from '../world/styles';
-import { personLib, warmthFor } from '../assets/people';
-import { dogLib, critterMaterial, DOG_COATS } from '../assets/fauna';
+import { personLib, warmthFor, leadHand, atWorld } from '../assets/people';
+import { dogLib, dogMaterial, DOG_COATS, DOG_COLLAR } from '../assets/fauna';
 import { PED } from './lifeSim';
 
 // Moving boats offshore: the working/pleasure mix (skiffs and pontoons stay moored near shore).
@@ -433,6 +433,7 @@ export { peopleU, creatureMaterial };
 
 const CAR_COLORS = [0xf2f2ee, 0xb9bcc0, 0x26282c, 0x5a5e64, 0x2b3f63, 0x9c2a26, 0x3d5a46, 0xcdbf9e];
 const DOG_CAP = 96;
+const LEAD_V = 8; // the lead's vertices: four segments
 const SHIRTS = [0xe8d8b0, 0x5b7fa6, 0xc4553f, 0xf2efe6, 0x6e8c5a, 0xe0a33b, 0x7a5b8c, 0x3f6f78, 0xd98a8a, 0x2f3a4a];
 const BOATS = [0xf5f3ee, 0xf5f3ee, 0xe9eef0, 0x2d4a6a, 0xc9d8de, 0x9b3b32];
 
@@ -464,6 +465,10 @@ export class LifeClient {
   private sc = new THREE.Vector3();
   private up = new THREE.Vector3(0, 1, 0);
   private envFrame = 0;
+  // the walkers' gait amount as drawn: eased toward the sim's 0 (standing) / 1 (walking) / 1.5
+  // (running) over a third of a second, so a stride settles into a stance instead of snapping
+  private amtDrawn = new Float32Array(CAPS.peds);
+  private lastNow = 0;
   readonly stats: LifeStats = { nearestCar: 1e9, carPan: 0, carSpeed: 0, gullsNear: 0, gullPan: 0, gullDist: 1e9, pedsNear: 0, active: 0, simMs: 0, mode: 'sab' };
 
   constructor(init: LifeInit) {
@@ -523,7 +528,7 @@ export class LifeClient {
       this.dogAnim = new THREE.InstancedBufferAttribute(new Float32Array(DOG_CAP * 3), 3);
       this.dogAnim.setUsage(THREE.DynamicDrawUsage);
       geo.setAttribute('aAnim', this.dogAnim);
-      this.dogs = new THREE.InstancedMesh(geo, critterMaterial('fox'), DOG_CAP);
+      this.dogs = new THREE.InstancedMesh(geo, dogMaterial(), DOG_CAP);
       this.dogs.name = 'life-dog';
       this.dogs.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       this.dogs.frustumCulled = false;
@@ -531,9 +536,9 @@ export class LifeClient {
       for (let i = 0; i < DOG_CAP; i++) { this.dogs.setMatrixAt(i, this.zeroM); this.dogs.setColorAt(i, this.tmpC.set(0xffffff)); }
       this.dogs.count = 0;
       this.group.add(this.dogs);
-      // the lead: a thin dark line from the walker's hand to the collar
+      // the lead: a thin dark line from the walker's hand to the collar, sagging a little
       const lg = new THREE.BufferGeometry();
-      lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(DOG_CAP * 6), 3));
+      lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(DOG_CAP * LEAD_V * 3), 3));
       this.leads = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x2a2320 }));
       this.leads.frustumCulled = false;
       this.group.add(this.leads);
@@ -603,9 +608,11 @@ export class LifeClient {
     }
   }
 
-  /** The dog of walker i: a lead's length ahead and to the right, trotting when they walk,
-   *  standing (and sniffing) when they stop; its coat is the walker's own pick of the breeds. */
-  private walkDog(i: number, x: number, y: number, z: number, yaw: number, amt: number, anim: number) {
+  /** The dog of walker i (slot li of the walkers' mesh): a lead's length ahead and to the right,
+   *  trotting when they walk, standing (and sniffing) when they stop; its coat is the walker's own
+   *  pick of the breeds. Returns what the walker's shader is told (aAnim.z): 1 + how far the dog
+   *  has wandered sideways — the walker holds the lead out toward it. */
+  private walkDog(i: number, li: number, x: number, y: number, z: number, yaw: number, amt: number, anim: number) {
     const k = this.nDogs++;
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
     const wob = Math.sin(anim * 0.23 + i) * 0.25;
@@ -613,18 +620,31 @@ export class LifeClient {
     const dyaw = yaw + wob * 0.6 + (amt > 0.5 ? 0 : Math.sin(anim * 0.05 + i * 3) * 0.8);
     this.q.setFromAxisAngle(this.up, dyaw);
     const size = 0.75 + hashf(i * 131) * 0.55; // a terrier to a shepherd
-    this.m.compose(this.p.set(dx, y - 0.08, dz), this.q, this.sc.setScalar(size));
+    // (on the walker's own ground: it stood 8 cm into the sidewalk)
+    this.m.compose(this.p.set(dx, y, dz), this.q, this.sc.setScalar(size));
     this.dogs.setMatrixAt(k, this.m);
     this.dogs.setColorAt(k, this.tmpC.set(DOG_COATS[Math.floor(hashf(i * 977) * DOG_COATS.length)]));
     const A = this.dogAnim.array as Float32Array;
     // gait cycles per metre walked (the walker's phase is 5.2 rad a metre), fast little steps
     A[k * 3] = anim / 5.2 / (0.55 * size); A[k * 3 + 1] = amt > 0.5 ? 1 : 0; A[k * 3 + 2] = amt > 0.5 ? 1 : 0;
+    // the lead: from the walker's hand — where the shader draws it this frame (people.ts leadHand,
+    // the same pose maths) — to the collar, sagging a little in the middle
+    const lead = 1 + wob, [hx, hy, hz] = atWorld(x, y, z, yaw, leadHand(anim, Math.max(0, amt), U.uTime.value, li * 1.37, lead));
+    const cs = Math.cos(dyaw), sn = Math.sin(dyaw), [cx0, cy0, cz0] = DOG_COLLAR;
+    const cx = dx + (cx0 * cs + cz0 * sn) * size, cy = y + cy0 * size, cz = dz + (-cx0 * sn + cz0 * cs) * size;
+    const sag = 0.05 * Math.hypot(cx - hx, cz - hz) * (amt > 0.5 ? 0.6 : 1);
     const lp = this.leads.geometry.attributes.position as THREE.BufferAttribute;
-    lp.setXYZ(k * 2, x + rx * 0.26 + fx * 0.15, y + 0.86, z + rz * 0.26 + fz * 0.15); // the hand
-    lp.setXYZ(k * 2 + 1, dx - Math.sin(dyaw) * 0.28 * size, y + 0.34 * size, dz - Math.cos(dyaw) * 0.28 * size); // the collar
+    for (let s = 0; s < LEAD_V / 2; s++)
+      for (const e of [0, 1]) {
+        const t = (s + e) / (LEAD_V / 2);
+        lp.setXYZ(k * LEAD_V + s * 2 + e, hx + (cx - hx) * t, hy + (cy - hy) * t - sag * 4 * t * (1 - t), hz + (cz - hz) * t);
+      }
+    return lead;
   }
 
   update(now: number, player: { x: number; z: number; yaw: number }, env: { night: number; hour: number; wind: number; clock?: number }) {
+    const ease = Math.min(1, Math.max(0, now - this.lastNow) / 1000 * 8);
+    this.lastNow = now;
     const h = this.V.header;
     this.group.visible = lifeParams.enabled;
     const hdr = [Math.round(player.x * 100), Math.round(player.z * 100), Math.round(env.night * 1000), Math.round(env.hour * 100), Math.round(lifeParams.density * this.crowd * 100), Math.round(env.wind * 1000)];
@@ -671,11 +691,18 @@ export class LifeClient {
         let yaw0 = snap[o + S.PYAW], yaw1 = snap[o + S.YAW];
         const d = ((yaw1 - yaw0 + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
         const yaw = yaw0 + d * a;
-        const amt = snap[o + S.AMT];
+        let amt = snap[o + S.AMT];
+        if (kind === 2) {
+          // (the knockdown and chat codes pass straight through)
+          const k = i - r0, d0 = this.amtDrawn[k] < -3.5 ? 0 : this.amtDrawn[k]; // (out of a chat: from standing)
+          amt = amt >= 0 && d0 >= 0 ? d0 + (amt - d0) * ease : amt;
+          this.amtDrawn[k] = amt;
+        }
         const variant = snap[o + S.VARIANT];
         const lights = flags & 2 ? 1 : 0;
         let sx = g.scale, sy = g.scale, sz = g.scale;
         let roll = 0, pitch = 0, spin = 0;
+        let lead = 0;
         const dist = Math.hypot(x - player.x, z - player.z);
         // a share of a dense core's traffic is cabs (main sets taxiShare from the built volume)
         const taxi = kind === 1 && this.taxiShare > 0 && hashf(i * 977 + variant * 3) < this.taxiShare;
@@ -724,7 +751,8 @@ export class LifeClient {
           sx = 0.97 + hashf(i * 7919 + variant) * 0.06; sy = 0.96 + hashf(i * 104729 + variant) * 0.08; sz = 0.97 + hashf(i * 31 + variant * 131) * 0.06;
         } else if (kind === 2) {
           if (dist < 25) st.pedsNear++;
-          if (flags & (PED.DOG << 1) && amt > -0.5 && dist < 220 && this.nDogs < DOG_CAP) this.walkDog(i, x, y, z, yaw, amt, snap[o + S.ANIM]);
+          // (stopped for a chat, the dog waits at the end of its lead — the other hand does the talking)
+          lead = flags & (PED.DOG << 1) && (amt > -0.5 || amt < -3.5) && dist < 220 && this.nDogs < DOG_CAP ? this.walkDog(i, li, x, y, z, yaw, amt, snap[o + S.ANIM]) : 0;
           if (amt < -0.5 && amt > -1.999) {
             // knocked down: laid back over ~0.15 s with one log-roll as they slide, then sprawled
             // face-up (the pose itself — knees up, an arm flung out — is in the shader)
@@ -772,7 +800,8 @@ export class LifeClient {
         } else g.mesh.setMatrixAt(li, this.m);
         hi = li;
         const aph = snap[o + S.ANIM];
-        A[li * 3] = aph; A[li * 3 + 1] = amt; // walkers pass the knockdown code (< 0) through to the pose shader A[li * 3 + 2] = lights;
+        A[li * 3] = aph; A[li * 3 + 1] = amt; // walkers pass the knockdown code (< 0) through to the pose shader
+        A[li * 3 + 2] = kind === 2 ? lead : 0; // (a dog walker's lead: people.ts walkPose)
         if (kind === 1) A[li * 3 + 1] = 0;
       }
       // Draw only up to the last live slot: every variant mesh holds every slot (zero-scaled where
@@ -794,7 +823,7 @@ export class LifeClient {
     if (this.dogs.instanceColor) this.dogs.instanceColor.needsUpdate = true;
     this.dogAnim.needsUpdate = true;
     const lp = this.leads.geometry.attributes.position as THREE.BufferAttribute;
-    this.leads.geometry.setDrawRange(0, this.nDogs * 2);
+    this.leads.geometry.setDrawRange(0, this.nDogs * LEAD_V);
     lp.needsUpdate = true;
     this.movers.length = this.nMovers;
     this.boats.length = this.nBoats;

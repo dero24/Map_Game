@@ -1423,7 +1423,7 @@ async function main() {
     camera.updateMatrixWorld();
     camera.getWorldDirection(fwd);
     crowd.group.visible = lifeParams.enabled;
-    if (crowd.group.visible) crowd.update(walker.x, walker.z, timeParams.hour, [camera.position.x + origin.x, camera.position.z + origin.z, fwd.x, fwd.z]);
+    if (crowd.group.visible) crowd.update(walker.x, walker.z, timeParams.hour, [camera.position.x + origin.x, camera.position.z + origin.z, fwd.x, fwd.z], Math.tan(Math.PI * 31 / 180) / Math.tan((camera.fov * Math.PI) / 360));
     focus.set(camera.position.x + fwd.x * 60, walker.y - walkParams.eyeHeight, camera.position.z + fwd.z * 60);
     const ti = performance.now();
     interiors.update(walker.x, walker.z, dt, walker.feet, !vehicles.driving && !walkParams.fly);
