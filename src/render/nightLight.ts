@@ -23,11 +23,18 @@ export const POOL = {
   height: 8, // m: the lamp over the street (a cobra head on its mast, 8 m up)
   reach: 22, // m: how far a pool runs in the map
   ease: 12, // m: the lamp's own fall-off holds to here, then eases out to nothing at the reach
-  gain: 3, // the heart's light against the lamp's colour: paper-bright even on asphalt
+  // the heart's light against the lamp's colour: a pale heart (L* ~75 on asphalt) on the filmic
+  // curve's straight part, so the glow's fall-off shows. (At 3, right for the old small disc, a
+  // broad pool sat on the curve's shoulder: a flat cream plateau, and where lamps stand 30 m apart
+  // a floodlit street.)
+  gain: 1.8,
   headroom: 2, // the map holds light ÷ this: overlapping pools add up to twice a lone heart
-  // the light (linear): a warm cream — sRGB #ffe8c4, a little warmer than 4000 K — not the sodium
-  // orange (#ffb86a) that painted every heart at C* 48–55
-  color: [1.0, 0.807, 0.552] as RGB,
+  // the light (linear): a warm cream — sRGB #ffecce, about 4000 K — not the sodium orange (#ffb86a)
+  // that painted every heart at C* 48–55
+  color: [1.0, 0.84, 0.62] as RGB,
+  // how much of a surface's own colour the lamplight mutes (by night the lamp's cream leads: a tan
+  // sidewalk or a lawn under it doesn't flare orange or lime)
+  mute: 0.6,
 };
 export type Pool = typeof POOL;
 
@@ -41,9 +48,23 @@ export const poolRead = (g: number, p: Pool = POOL) => clamp01(g) * p.headroom;
  *  within a hundredth of the curve at 16 stops). */
 export const poolStops = (n = 16, p: Pool = POOL) => Array.from({ length: n + 1 }, (_, i) => [i / n, poolStamp((i / n) * p.reach, p)] as [number, number]);
 
-/** The same, in the shaders (shared.ts lampField): uLampPool = (height, reach, gain, headroom). */
+/** A pool's light on a surface (scene linear), `light` its share of a heart there (poolLight): the
+ *  lamp's colour × gain on the surface's albedo — its own colour muted, and never under 0.3 (a pool
+ *  is painted as light: dark asphalt would halve every heart) — the full of it on the ground, half
+ *  on a wall, none on what faces down (the lamp is overhead: a passer-by isn't lit like the street). */
+export function poolOn(albedo: RGB, light: number, up = 1, p: Pool = POOL): RGB {
+  const l = albedo[0] * 0.2126 + albedo[1] * 0.7152 + albedo[2] * 0.0722, face = 0.5 + 0.5 * up;
+  return albedo.map((a, i) => Math.max(a + (l - a) * p.mute, 0.3) * p.color[i] * p.gain * light * face) as RGB;
+}
+
+/** The same, in the shaders (shared.ts lampField, paintLight): uLampPool = (height, reach, gain,
+ *  headroom); the mute is baked in. */
 export const GLSL_POOL = /* glsl */ `
-float poolLight(float g) { return clamp(g, 0.0, 1.0) * uLampPool.w; }`;
+float poolLight(float g) { return clamp(g, 0.0, 1.0) * uLampPool.w; }
+vec3 poolOn(vec3 albedo, float light, float up) {
+  vec3 a = max(mix(albedo, vec3(dot(albedo, vec3(0.2126, 0.7152, 0.0722))), ${POOL.mute.toFixed(3)}), vec3(0.3));
+  return a * uPoolColor * (light * (0.5 + 0.5 * up));
+}`;
 
 /** The night's floor: the town's own glow at street level — sky glow from above, the spill of lit
  *  windows and porches — that keeps the street between the pools readable, a deep blue (L* 10–20).

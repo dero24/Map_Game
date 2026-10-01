@@ -232,8 +232,9 @@ vec3 paintLight(vec3 albedo, vec3 N, vec3 wpos, float shadow, float ao, float sk
   float lt = dot(uShadowTint, vec3(0.2126, 0.7152, 0.0722));
   vec3 glaze = mix(vec3(1.0), uShadowTint / max(lt, 1e-3), 0.4);
   lit = mix(lit, lit * glaze, (1.0 - diff) * uShadowTintAmt);
-  // a lamp pool is painted as light, not albedo × light (dark asphalt would halve every pool)
-  lit += max(albedo, vec3(0.3)) * uPoolColor * lampAt(wpos);
+  // a lamp's pool, painted as light (nightLight.ts poolOn: the lamp's cream leads, the ground gets
+  // the whole of it, a wall half)
+  if (uLampPower > 0.001) lit += poolOn(albedo, lampAt(wpos), clamp(N.y, -1.0, 1.0));
   // …and between the pools the night's floor, the town's own glow (nothing by day)
   lit += nightFloor(albedo, streetLevel(wpos));
   return lit;

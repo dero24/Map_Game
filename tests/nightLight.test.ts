@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { POOL, poolLight, poolStamp, poolRead, poolStops, FLOOR, floorLight, NIGHT_GRADE, nightGrade, reserved, tonemap, toSrgb, smoothstep } from '../src/render/nightLight';
+import { POOL, poolLight, poolStamp, poolRead, poolStops, poolOn, FLOOR, floorLight, NIGHT_GRADE, nightGrade, reserved, tonemap, toSrgb, smoothstep } from '../src/render/nightLight';
 import { postParams } from '../src/render/post';
 import { lab, lch, lstar, poolFalloff, nightGapPasses } from '../tools/night-core.js';
 
@@ -160,16 +160,23 @@ describe('the street at night, end to end (scene light → the default look → 
   const ASPHALT = [0.117, 0.122, 0.13] as RGB, WALK = [0.48, 0.45, 0.37] as RGB, LAWN = [0.29, 0.4, 0.13] as RGB;
   const sky = [0.0145, 0.0212, 0.0543] as RGB; // the sky's fill on a moonless night (atmosphere.ts)
   const moon = [0.275 * 0.21, 0.381 * 0.21, 0.716 * 0.21] as RGB; // a gibbous moon, high
-  const lit = (alb: RGB, d: number, m = 0) => alb.map((a, i) => a * (sky[i] + moon[i] * m) + floorLight(alb)[i] + Math.max(a, 0.3) * POOL.color[i] * POOL.gain * poolLight(d)) as RGB;
+  const lit = (alb: RGB, d: number, m = 0, up = 1) => alb.map((a, i) => a * (sky[i] + moon[i] * m) + floorLight(alb)[i] + poolOn(alb, poolLight(d), up)[i]) as RGB;
   const gapOf = (alb: RGB, m = 0) => show(lit(alb, 60, m));
 
-  it("the heart is a warm cream (C* ≤ 30), paper-bright", () => {
+  it("the heart is a warm cream (C* ≤ 30), pale and bright", () => {
     for (const alb of [ASPHALT, WALK, LAWN]) {
       const h = labOf(show(lit(alb, 0)));
       expect(h.C).toBeLessThan(26); expect(h.C).toBeGreaterThan(12); // (cream, not white, not orange)
       expect(h.h).toBeGreaterThan(65); expect(h.h).toBeLessThan(100); // (a lawn's a little yellow)
-      expect(h.L).toBeGreaterThan(75);
+      expect(h.L).toBeGreaterThan(72); expect(h.L).toBeLessThan(85); // (pale, but under a lit window's ~90)
     }
+    // the sidewalk you stand on doesn't flare orange: its tan is muted under the lamp
+    expect(labOf(show(lit(WALK, 0))).C).toBeLessThan(21);
+  });
+  it('a passer-by in the heart is lit, not blown out: a wall gets half the light the street does', () => {
+    const coat = [0.45, 0.4, 0.35] as RGB;
+    expect(labOf(show(lit(coat, 0, 0, 0))).L).toBeLessThan(labOf(show(lit(coat, 0))).L - 8);
+    expect(poolOn(coat, 1, -1)).toEqual([0, 0, 0]); // (what faces down: the lamp is overhead)
   });
   it("the gap's ground: the night's floor, L* 10–20 and cool, never black", () => {
     for (const alb of [ASPHALT, WALK, LAWN]) {
