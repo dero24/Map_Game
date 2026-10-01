@@ -21,6 +21,9 @@ export class Arrival {
 
   constructor(private g: GameCtx, private fallback: { name: string; sub: string }) {
     this.el = document.getElementById('arrival')!;
+    // (the card fades on the wall clock, and the place name comes back as it goes — however slow
+    // the frames, which the card's own countdown runs on)
+    this.el.addEventListener('animationend', () => document.body.classList.remove('arriving'));
   }
 
   /** Show a card for wherever you are next (start of the walk, teleports). */
