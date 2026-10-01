@@ -88,10 +88,12 @@ lit windows as the accents. The shapes and the grade's maths are plain functions
   colour): everything but the lights goes under one glaze (`NIGHT_GRADE.tint`, Payne's grey toward
   indigo) — its value kept, most of its own hue (`hue`) given up to the glaze, the darks a little
   deeper (`deep` at black) — so a pool's dim edge, a lawn and a tan sidewalk all go the same blue,
-  as the eye sees them by night. The lights (the brightest channel over `reserve`, red over blue
-  by `warm`: a lamp's heart, a lit window, the moon) are reserved, like paper. `postParams.nightWash`
-  scales it (the default look's 0.5 is all of it). It replaced a 50% multiply by (0.55, 0.62, 1.0),
-  which left a dim amber street amber.
+  as the eye sees them by night. A warm colour under the glaze goes darker as well (`dim`, as blue
+  over orange does on paper, and as reds do first in the dark): a pool's fading edge sinks into the
+  night instead of ringing it in pale blue. The lights (the brightest channel over `reserve`, red
+  over blue by `warm`: a lamp's heart, a lit window, the moon) are reserved, like paper.
+  `postParams.nightWash` scales it (the default look's 0.5 is all of it). It replaced a 50%
+  multiply by (0.55, 0.62, 1.0), which left a dim amber street amber.
 - **Wires** at night take the sky's zenith × 0.6: darker than any sky behind them (`props.ts`
   `wireMaterial`, 73e83ec).
 - **The check**: `tools/night-check.js` (debugging.md) measures the review's night street against

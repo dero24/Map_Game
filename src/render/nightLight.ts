@@ -41,12 +41,15 @@ float poolLight(float g) {
 /** The night grade (post.ts, after the colour grade, on display colour 0–1). Everything but the
  *  lights goes under one indigo glaze: its value kept, most of its own hue given up to the glaze
  *  (by night the eye reads value, not colour — a pool's dim amber edge, a lawn and a tan sidewalk
- *  all go the same blue), the darks a little deeper. The lights — a lamp's heart, a lit window, the
- *  moon — are bright and warm: they're left out of it, like paper reserved for them. */
+ *  all go the same blue), the darks a little deeper. A warm colour under it goes darker too, as a
+ *  blue glaze over orange does on paper (and as reds do first in the dark): a pool's fading edge
+ *  sinks into the night rather than ringing it in pale blue. The lights — a lamp's heart, a lit
+ *  window, the moon — are bright and warm: they're left out of it, like paper reserved for them. */
 export const NIGHT_GRADE = {
   tint: [0.42, 0.68, 1.0] as [number, number, number], // the glaze's hue (Payne's grey toward indigo; display colour)
   hue: 0.85, // how much of a colour's own hue the glaze takes
   deep: 0.22, // the darks' extra depth (at black; nothing by mid-tones)
+  dim: 0.5, // how much darker a warm colour goes under the glaze (red over blue by 0.15 or more)
   reserve: [0.3, 0.56] as [number, number], // the lights: the brightest channel over this ramp…
   warm: [0.03, 0.2] as [number, number], // …and red over blue by this much
 };
@@ -62,9 +65,9 @@ export function reserved(c: RGB, P: NightGradeParams = NIGHT_GRADE) {
 /** The night grade of one display colour. night: 0 day … 1 night; wash: the look's night wash
  *  (postParams.nightWash; the default look's 0.5 is the whole glaze). */
 export function nightGrade(c: RGB, night: number, wash: number, P: NightGradeParams = NIGHT_GRADE): RGB {
-  const L = luma(c), tl = luma(P.tint);
-  const deep = 1 - P.deep * (1 - smoothstep(0, 0.45, L));
-  const k = clamp01(night) * clamp01(wash / 0.5) * (1 - reserved(c, P));
+  const L = luma(c), tl = luma(P.tint), res = reserved(c, P);
+  const deep = (1 - P.deep * (1 - smoothstep(0, 0.45, L))) * (1 - P.dim * smoothstep(0, 0.15, c[0] - c[2]) * (1 - res));
+  const k = clamp01(night) * clamp01(wash / 0.5) * (1 - res);
   return [0, 1, 2].map((i) => {
     const g = (c[i] + ((L * P.tint[i]) / tl - c[i]) * P.hue) * deep;
     return c[i] + (g - c[i]) * k;
@@ -72,12 +75,12 @@ export function nightGrade(c: RGB, night: number, wash: number, P: NightGradePar
 }
 
 /** The same, in the post's composite: uNightGrade = (hue, deep, reserve.x, reserve.y), uNightWarm =
- *  warm ramp, uNightTint = tint. */
+ *  (warm ramp, dim), uNightTint = tint. */
 export const GLSL_NIGHT_GRADE = /* glsl */ `
 vec3 nightGrade(vec3 c, float night, float wash) {
   float L = dot(c, vec3(0.299, 0.587, 0.114));
   float res = smoothstep(uNightWarm.x, uNightWarm.y, c.r - c.b) * smoothstep(uNightGrade.z, uNightGrade.w, max(c.r, max(c.g, c.b)));
-  float deep = 1.0 - uNightGrade.y * (1.0 - smoothstep(0.0, 0.45, L));
+  float deep = (1.0 - uNightGrade.y * (1.0 - smoothstep(0.0, 0.45, L))) * (1.0 - uNightWarm.z * smoothstep(0.0, 0.15, c.r - c.b) * (1.0 - res));
   vec3 g = mix(c, L * uNightTint / dot(uNightTint, vec3(0.299, 0.587, 0.114)), uNightGrade.x) * deep;
   return mix(c, g, clamp(night, 0.0, 1.0) * clamp(wash / 0.5, 0.0, 1.0) * (1.0 - res));
 }`;

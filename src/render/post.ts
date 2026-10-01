@@ -249,7 +249,7 @@ export class WatercolorPost {
       uniform float uWobble, uEdgeDark, uTurb, uGran, uPaper, uInk, uInkDist, uGlow, uVignette, uSat, uNightWash, uNight, uVibrance, uGrade;
       uniform vec3 uPaperColor, uInkColor, uNightTint, uWarm, uGradeShadow, uGradeLight;
       uniform vec4 uNightGrade;
-      uniform vec2 uNightWarm;
+      uniform vec3 uNightWarm;
       uniform float uGolden, uRaw;
       ${GLSL_NIGHT_GRADE}
       uniform sampler2D tExplore, tExploreFar;
@@ -526,7 +526,7 @@ export class WatercolorPost {
         tGhost: { value: null }, tGhostDepth: { value: null }, uGhost: U.uGhost, uBrush: U.uBrush, uRipple: U.uRipple,
         uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() }, uWorldOff: U.uWorldOffset,
         uNightTint: { value: new THREE.Vector3(...NIGHT_GRADE.tint) }, uWarm: { value: new THREE.Color(1.08, 0.97, 0.86) },
-        uNightGrade: { value: new THREE.Vector4(NIGHT_GRADE.hue, NIGHT_GRADE.deep, ...NIGHT_GRADE.reserve) }, uNightWarm: { value: new THREE.Vector2(...NIGHT_GRADE.warm) },
+        uNightGrade: { value: new THREE.Vector4(NIGHT_GRADE.hue, NIGHT_GRADE.deep, ...NIGHT_GRADE.reserve) }, uNightWarm: { value: new THREE.Vector3(...NIGHT_GRADE.warm, NIGHT_GRADE.dim) },
         uVibrance: { value: 0 }, uGrade: { value: 0 }, uGradeShadow: { value: new THREE.Color() }, uGradeLight: { value: new THREE.Color() },
       },
     );
