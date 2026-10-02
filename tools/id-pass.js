@@ -104,15 +104,43 @@ export function idPass(G, subj = null, W = 320) {
   for (let i = 0; i < first.length; i += 4) { if (first[i + 1] > 127) n25++; if (first[i + 2] > 127) n4++; if (first[i + 3] > 127) there++; }
   if (sec) for (let i = 0; i < sec.length; i += 4) if (sec[i] > 127) sub++;
   const N = W * Hh;
-  return { subject: +(sub / N).toFixed(3), near25: +(n25 / N).toFixed(3), near4: +(n4 / N).toFixed(3), world: +(there / N).toFixed(3) };
+  return { subject: +(sub / N).toFixed(3), near25: +(n25 / N).toFixed(3), near4: +(n4 / N).toFixed(3), world: +(there / N).toFixed(3), span: +nearSpan(first, W, Hh).toFixed(3) };
 }
 
-/** What a frame's id pass says is wrong with it ([] when it passes): something at the lens, or a
- *  pose that sees almost no world. */
-export function lensVerdict(seen, { near25 = 0.05, near4 = 0.15, world = 0.2 } = {}) {
+/** The tallest thing at the lens: of the connected pieces within 2.5 m (the id pass's green), the
+ *  most rows of the frame one crosses, as a share of its height. A pole 2 m off splits a frame in
+ *  two at a few % of its pixels — under the area rule, over this one (review round 12, m5). `px`:
+ *  the pass's RGBA bytes (any row order), W × H. */
+export function nearSpan(px, W, H) {
+  const lab = new Int32Array(W * H).fill(-1), stack = [];
+  let best = 0;
+  for (let s = 0; s < W * H; s++) {
+    if (lab[s] >= 0 || px[s * 4 + 1] <= 127) continue;
+    let y0 = H, y1 = -1;
+    lab[s] = s;
+    stack.push(s);
+    while (stack.length) {
+      const i = stack.pop(), x = i % W, y = (i - x) / W;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+      for (const j of [x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1, y > 0 ? i - W : -1, y < H - 1 ? i + W : -1])
+        if (j >= 0 && lab[j] < 0 && px[j * 4 + 1] > 127) { lab[j] = s; stack.push(j); }
+    }
+    best = Math.max(best, (y1 - y0 + 1) / H);
+  }
+  return best;
+}
+
+/** What a frame's id pass says is wrong with it ([] when it passes): something at the lens — over
+ *  5% of the frame within 2.5 m or 15% within 4 m, or a thin thing within 2.5 m crossing 60% of
+ *  its height (`span`: a pole that splits the frame) — or a pose that sees almost no world; with
+ *  `subject` set, a subject under that share of the frame (a walker pose with no walker in it). */
+export function lensVerdict(seen, { near25 = 0.05, near4 = 0.15, world = 0.2, span = 0.6, subject = 0 } = {}) {
   const why = [];
   if (seen.near25 > near25) why.push(`${Math.round(seen.near25 * 100)}% within 2.5 m`);
   else if (seen.near4 > near4) why.push(`${Math.round(seen.near4 * 100)}% within 4 m`);
+  if ((seen.span ?? 0) >= span) why.push(`a thin thing within 2.5 m across ${Math.round(seen.span * 100)}% of the frame's height`);
   if (seen.world < world) why.push(`the world ${Math.round(seen.world * 100)}% of the frame`);
+  if (subject > 0 && seen.subject < subject) why.push(`the subject ${+(seen.subject * 100).toFixed(1)}% of the frame (under ${+(subject * 100).toFixed(1)}%)`);
   return why;
 }
