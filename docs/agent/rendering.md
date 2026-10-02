@@ -293,17 +293,39 @@ kerb (`KERB`: a 15 cm face, a 0.6 m gutter pan), the flags (`FLAG` 1.5 m, a cent
   carriageway is laid in gutter concrete first and its asphalt then 0.6 m narrower, so at a junction
   each street's asphalt covers the others' pans and the pans turn the corners; the drives' aprons
   across the walk (kerb to back, flared 0.6 m at the kerb, drawn over the kerb's face: the kerb cut);
-  tar snakes and sealed patches on every street, the bake's too (`wear`); sand drift along the kerbs
-  and walks within 60 m of a mapped beach (`drift`, its edges binned in 32 m cells).
+  traffic's marks (`traffic`, below); tar snakes and sealed patches on every street, the bake's too
+  (`wear`); sand drift along the kerbs and walks within 60 m of a mapped beach (`drift`, its edges
+  binned in 32 m cells).
+- **The street as traffic wears it** (`traffic`, review round 12 must-fix 2: past the aggregate, a
+  street's texture is its structure). The carriageway's lanes come from `laneLayout` (groundCover.ts,
+  pure): inside the gutter pans, the map's parking lanes (`pk`: 2.2 m parallel, 4.8 m angled) — or,
+  with none mapped, both kerbs parked on a North American street 9.5 m wide or more, as realTile's
+  streets are — and travel lanes of ~3.3 m between (at least one, two on a two-way street 5 m wide).
+  - Each travel lane's two **wheel paths** (`wheelPaths`: the lane's middle ± half a 1.7 m track,
+    0.62 m wide) are erased to `WORN_ALPHA` (0.84) in the alpha: the shader lays them 12% darker and
+    quiets their aggregate (below) — a shade darker and smoother.
+  - The **oil**: smears 0.9–2.3 m long down each lane's middle (about half its 1.6 m stations), drips
+    thick within 20 m of either end of a way (where the traffic waits at a junction), a stain in about
+    half a parking lane's spaces (every 6.3 m, 3 m for angled bays) and two in three of a lot's stalls
+    (`lotLayout`'s stalls, 0.9 m toward the nose: under the engine). One fill, `OIL`.
+  - The **covers** (`COVERS`): a cast-iron manhole (0.66 m) in every junction (all its arms, as the
+    crosswalks judge them) a little way into its first arm, and on the centre line evenly between a
+    way's ends, no more than 95 m apart; valve covers (0.24 m) a few metres into about half a
+    junction's arms, off the centre line, and every ~70 m along a way toward a kerb. One fill, `IRON`.
+  - All from each way's own geometry, counted from its start or found at its nodes, so a slice lays
+    exactly the window's marks; three draws a slice however many streets.
 - **Loose stone** is marked in the fine window's alpha: a gravel or shell yard and a gravel drive
-  are stroked again with `destination-out` at 1 − `STONE_ALPHA` (0.6); everything opaque laid over
-  them puts the alpha back. The ground shader reads it (below); nothing else reads the detail
-  canvas's alpha (the grass mask's "painted" test is `a ≥ 50`).
+  are stroked again with `destination-out` at 1 − `STONE_ALPHA` (0.6); a lane's wheel paths the same
+  at `WORN_ALPHA` (0.84). Everything opaque laid over them puts the alpha back (a translucent patch or
+  drip mostly keeps it). The ground shader reads both (below); nothing else reads the detail canvas's
+  alpha (the grass mask's "painted" test is `a ≥ 50`).
 - Cost: everything is batched a style a path (a few dozen draws a slice); the bake's yards are
   binned in 64 m cells, so a slice looks at its own. `tests/groundPaint.test.ts` checks the flags'
   spacing from the way's start, the kerb/gutter/asphalt widths, the aprons' extent, the yards (no
-  block paving on a street of houses), drift only near a beach, determinism and that a slice draws
-  exactly the window's strokes that reach it.
+  block paving on a street of houses), drift only near a beach, the lanes, wheel paths, oil and covers,
+  determinism and that a slice draws exactly the window's strokes that reach it; and meters a flight:
+  a frame's draws (≤ 80; 67 with traffic's marks, 63 before) and raster (≤ 0.6 of a window a frame,
+  0.586; ≤ 0.25 on average, 0.221).
 
 ### The ground shader's grain (`ground.ts`)
 

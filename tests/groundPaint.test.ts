@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Painter, DetailGround, slices } from '../src/world/groundPaint';
+import { LANE, COVERS, laneLayout, wheelPaths } from '../src/world/groundCover';
+import { lotLayout } from '../src/world/lots';
 import type { Road, WorldJson, TerrainLayer } from '../src/world/data';
 
 // A recording 2D context: every fill and stroke with its style, width and the rings it drew.
@@ -343,7 +345,7 @@ describe('a slice of the window', () => {
 // A residential street running east-west through z = 0 with houses on its north side (front walks
 // and drives to the kerb), a main road across it at x = 60, and a beach to the south.
 describe('the ground underfoot', () => {
-  const S = { joint: '#857f73', face: '#867f77', faceMain: '#8b877c', gutter: '#8b867d', apron: '#c4beb0', drift: '#d8c69a', snake: 'rgba(24,23,22,0.66)', lawn: '#93a964', gravel: '#b9b4a9', shell: '#ddd5c2' };
+  const S = { joint: '#857f73', face: '#867f77', faceMain: '#8b877c', gutter: '#8b867d', apron: '#c4beb0', drift: '#d8c69a', snake: 'rgba(24,23,22,0.66)', lawn: '#93a964', gravel: '#b9b4a9', shell: '#ddd5c2', worn: '#000', oil: 'rgba(32,28,24,0.13)', iron: '#4e4a44' };
   const house = (x: number, z: number): number[] => [x - 5, z - 4, x + 5, z - 4, x + 5, z + 4, x - 5, z + 4].map((v) => Math.round(v * 10));
   const scene = (beachZ: number) => ({
     areas: [{ c: 'beach', o: [[-150, beachZ, 150, beachZ, 150, beachZ + 40, -150, beachZ + 40].map((v) => v * 10)], i: [] }],
@@ -421,6 +423,84 @@ describe('the ground underfoot', () => {
     let n = 0;
     for (const o of a) for (const r of o.rings) if (touches(r, o.width / 2 + 0.05)) (n++, expect(mine.has(id(o, r)), id(o, r).slice(0, 120)).toBe(true));
     expect(n).toBeGreaterThan(100);
-    for (const s of [S.joint, S.apron, S.drift, S.snake, S.gutter, S.face]) expect(part.some((o) => o.style === s), s).toBe(true);
+    for (const s of [S.joint, S.apron, S.drift, S.snake, S.gutter, S.face, S.worn, S.oil, S.iron]) expect(part.some((o) => o.style === s), s).toBe(true);
   });
 });
+
+// ---- A street's structure past the aggregate (review round 12, must-fix 2) ----
+describe('the street as traffic wears it', () => {
+  const S = { worn: '#000', oil: 'rgba(32,28,24,0.13)', iron: '#4e4a44' };
+  const rec = (json: WorldJson, x0 = -100, z0 = -50, x1 = 100, z1 = 50, clip?: [number, number, number, number]) => {
+    const P = new Painter(json, [], () => 2000);
+    const { ctx, ops } = recorder();
+    P.paint(ctx, x0, z0, x1, z1, 6.83, 2, clip);
+    return ops;
+  };
+  const centre = (r: Ring) => [r.reduce((s, p) => s + p[0], 0) / r.length, r.reduce((s, p) => s + p[1], 0) / r.length];
+  it('lays out a street kerb to kerb: two lanes on a residential street, parked kerbs on a wide one, the map\'s parking first', () => {
+    // a 6.5 m residential street inside its gutter pans: a lane each way, nobody parked
+    const res = laneLayout({}, 6.5 - 1.2, true);
+    expect(res.park).toEqual([]);
+    expect(res.travel.map((l) => +l.o.toFixed(3))).toEqual([1.325, -1.325]);
+    // an 11 m main street (Ocean Ave): both kerbs parked, a lane each way between
+    const main = laneLayout({}, 11 - 1.2, true);
+    expect(main.park.map((l) => [+l.o.toFixed(2), l.w])).toEqual([[3.8, 2.2], [-3.8, 2.2]]);
+    expect(main.travel.length).toBe(2);
+    // …but not outside North America, where only mapped parking counts; mapped angled bays on the left
+    expect(laneLayout({}, 9.8, false).park).toEqual([]);
+    const bays = laneLayout({ pk: 2 }, 14, true);
+    expect(bays.park).toEqual([{ o: 7 - LANE.angled / 2, w: LANE.angled, mode: 2 }]);
+    // a one-way service lane: one lane, its wheel paths inside it
+    const one = laneLayout({ ow: 1 }, 4, false);
+    expect(one.travel.length).toBe(1);
+    for (const lane of [...res.travel, ...main.travel, ...one.travel]) for (const o of wheelPaths(lane)) expect(Math.abs(o - lane.o) + LANE.path / 2).toBeLessThan(lane.w / 2);
+  });
+  it('wears each lane two wheel paths (marked smooth in the alpha), streaks its middle with oil, and sets manholes and valve covers down the street', () => {
+    const json = { areas: [], roads: [{ c: 'residential', w: 6.5, p: [-1200, 0, 1200, 0] }], buildings: [] } as unknown as WorldJson;
+    const ops = rec(json);
+    // the wheel paths: erased to WORN_ALPHA along the lanes, ±0.475 and ±2.175 m off the centre line
+    // (each lane's middle ± half a track)
+    const worn = ops.filter((o) => o.op === 'stroke' && o.style === S.worn && o.width === LANE.path).flatMap((o) => o.rings);
+    expect(worn.map((r) => +r[0][1].toFixed(3)).sort((a, b) => a - b)).toEqual([-2.175, -0.475, 0.475, 2.175]);
+    for (const r of worn) expect(r.every((p) => p[1] === r[0][1])).toBe(true); // (straight down the street)
+    // the oil: smears down each lane's middle (1.325 m off the centre line), none in the wheel paths
+    const oil = ops.filter((o) => o.op === 'fill' && o.style === S.oil).flatMap((o) => o.rings).map(centre);
+    expect(oil.length).toBeGreaterThan(40);
+    for (const [, z] of oil) expect(Math.abs(Math.abs(z) - 1.325)).toBeLessThan(0.13);
+    // the covers: manholes on the centre line, evenly between the way's ends (240 m: two), valve covers
+    // toward a kerb (240 m: three)
+    const iron = ops.filter((o) => o.op === 'fill' && o.style === S.iron).flatMap((o) => o.rings);
+    const big = iron.filter((r) => r.length === 14).map(centre), small = iron.filter((r) => r.length === 8).map(centre);
+    expect(big.map(([x, z]) => [Math.round(x), Math.round(z)])).toEqual([[-40, 0], [40, 0]]);
+    expect(small.map(([x]) => Math.round(x) + 0)).toEqual([-80, 0, 80]);
+    for (const [, z] of small) expect(Math.abs(z)).toBeCloseTo(6.5 / 2 - KERB_GUTTER - 1.1, 3);
+    for (const r of iron.filter((r) => r.length === 14)) expect(Math.hypot(r[0][0] - centre(r)[0], r[0][1] - centre(r)[1])).toBeCloseTo(COVERS.manhole, 3);
+  });
+  it('puts a manhole in every junction and valve covers into its arms, the same from every slice', () => {
+    // a residential street ending on a main road at (60, 0), and the main road through the node
+    const json = { areas: [], buildings: [], roads: [{ c: 'residential', w: 6.5, p: [-1000, 0, 600, 0] }, { c: 'primary', w: 11, p: [600, -1000, 600, 0, 600, 1000] }] } as unknown as WorldJson;
+    const ops = rec(json);
+    const iron = ops.filter((o) => o.op === 'fill' && o.style === S.iron).flatMap((o) => o.rings);
+    expect(iron.filter((r) => r.length === 14).map(centre).some(([x, z]) => Math.hypot(x - 60, z) < 1.7)).toBe(true);
+    expect(iron.filter((r) => r.length === 8).map(centre).some(([x, z]) => Math.hypot(x - 60, z) > 3 && Math.hypot(x - 60, z) < 9)).toBe(true);
+    // the same covers from a slice through the junction
+    const part = rec(json, -100, -50, 100, 50, [50, -10, 70, 10]);
+    const key = (r: Ring) => r.map((p) => p.map((v) => v.toFixed(3)).join(',')).join(' ');
+    const whole = new Set(iron.map(key));
+    const mine = part.filter((o) => o.op === 'fill' && o.style === S.iron).flatMap((o) => o.rings);
+    expect(mine.length).toBeGreaterThan(0);
+    for (const r of mine) expect(whole.has(key(r))).toBe(true);
+    for (const r of iron) if (centre(r)[0] > 49 && centre(r)[0] < 71 && Math.abs(centre(r)[1]) < 11) expect(mine.map(key)).toContain(key(r));
+  });
+  it('stains about two in three of a lot\'s stalls under the engine', () => {
+    const lot = [[0, 0], [40, 0], [40, 30], [0, 30]].flatMap(([x, z]) => [x * 10, z * 10]);
+    const json = { areas: [{ c: 'parking', o: [lot], i: [] }], roads: [], buildings: [] } as unknown as WorldJson;
+    const stalls = lotLayout([[0, 0], [40, 0], [40, 30], [0, 30]])!.stalls;
+    const oil = rec(json).filter((o) => o.op === 'fill' && o.style === S.oil).flatMap((o) => o.rings).map(centre);
+    expect(oil.length).toBeGreaterThan(stalls.length * 0.5);
+    expect(oil.length).toBeLessThan(stalls.length * 0.85);
+    // each a little toward its stall's nose
+    for (const [x, z] of oil) expect(stalls.some((s) => Math.abs(Math.hypot(x - s.x, z - s.z) - 0.9) < 0.01)).toBe(true);
+  });
+});
+const KERB_GUTTER = 0.6;

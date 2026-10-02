@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import type { World, TerrainLayer } from './data';
 import { paintMaterial } from '../render/shared';
-import { STONE_ALPHA, type GroundPaint } from './groundPaint';
+import { STONE_ALPHA, WORN_ALPHA, type GroundPaint } from './groundPaint';
 
 // Terrain data texture: R height (m), G signed shore distance (m, + land), B ocean flag, A distance to ocean (m).
 function layerTexture(L: TerrainLayer) {
@@ -184,27 +184,26 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
       // One octave of value noise at wavelength lam (m), kept only where it spans a few pixels
       // (fp: metres a pixel): finer, it would shimmer as you walk, and the brush would wipe it anyway.
       float octv(vec2 p, float lam, float fp) { return (vnoise(p / lam) - 0.5) * smoothstep(1.8, 4.5, lam / fp); }
-      // A paved surface's stones: one round stone in each cell of a jittered grid (it keeps inside its
-      // cell, so no neighbour is looked at), its size and shade the cell's own — lighter than the
-      // surface in about half the cells, darker in most of the rest (x the light, y the dark, 0–1).
-      // Octaves a doubling apart from 3 cm to 1.9 m, each kept while its cells are 3–16 px on screen:
-      // finer, the brush wipes them and they shimmer; coarser, a stone is a blot. So the nearer ground
-      // shows the smaller stones and the further the bigger, and every distance has its aggregate.
-      vec2 stones(vec2 p, float fp) {
-        vec2 g = vec2(0.0);
-        float c = 0.03;
-        for (int i = 0; i < 7; i++) {
-          float s = c / fp, w = smoothstep(3.0, 5.0, s) * (1.0 - smoothstep(10.0, 16.0, s));
-          if (w > 0.0) {
-            vec2 q = p / c + vec2(7.31, 3.17) * float(i), id = floor(q), f = q - id;
-            float h = hash12(id), r = 0.2 + 0.16 * hash12(id + 4.4);
-            vec2 o = 0.3 + 0.4 * vec2(hash12(id + 7.7), hash12(id + 1.9));
-            float k = (1.0 - smoothstep(0.55, 1.0, length(f - o) / r)) * w;
-            g += h < 0.52 ? vec2(k, 0.0) : h < 0.95 ? vec2(0.0, k) : vec2(0.0);
-          }
-          c *= 2.0;
-        }
-        return g;
+      // (value noise's lattice runs north-south and east-west: each octave below turned off it, so no
+      // two line up into a grid)
+      const mat2 TURN = mat2(0.8, 0.6, -0.6, 0.8), TURN2 = mat2(0.39, -0.92, 0.92, 0.39);
+      // A paved surface's aggregate at its real size: one stone in each 2.6 cm cell of a jittered grid
+      // (it keeps inside its cell, so no neighbour is looked at), 1–2 cm across, its shade the cell's
+      // own — lighter than the surface in half the cells, darker in most of the rest (x the light, y the
+      // dark, 0–1). One octave only, kept while a stone spans about two pixels (fpg: the pixel's
+      // footprint on the ground, the geometric mean of its two axes): gone by ~5 m at 540 px tall.
+      // Round 12's octaves a doubling apart up to 1.9 m kept every distance's stones 3–16 px on screen
+      // — 2 cm at your feet, 60 cm by 20 m: cobbles. Past the aggregate the street's texture is its
+      // structure: the paint's wheel paths, oil, covers, patches, tar snakes, joints and flags.
+      vec2 aggregate(vec2 p, float fpg) {
+        float w = smoothstep(1.0, 2.0, 0.017 / fpg);
+        if (w <= 0.0) return vec2(0.0);
+        vec2 q = p / 0.026, id = floor(q), f = q - id;
+        // (one hash a cell: its size and place drawn from it)
+        float h = hash12(id), r = 0.2 + 0.2 * fract(h * 7.31);
+        vec2 o = 0.3 + 0.4 * fract(h * vec2(13.7, 29.3));
+        float k = (1.0 - smoothstep(0.55, 1.0, length(f - o) / r)) * w;
+        return h < 0.5 ? vec2(k, 0.0) : h < 0.92 ? vec2(0.0, k) : vec2(0.0);
       }
       // The open ground's grain: a lighter fleck where an octave's noise peaks, a darker one where it
       // dips (x the light, y the dark, 0–1), each octave kept while its flecks are 3–14 px apart on
@@ -261,12 +260,15 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
         vec2 ud = (xz - uPaintDBox.xy) * uPaintDBox.zw;
         vec2 e = min(ud, 1.0 - ud);
         float wd = smoothstep(0.0, 0.08, min(e.x, e.y));
-        // (the fine window's alpha marks loose stone — a gravel or shell yard, a gravel drive)
-        float stone = 0.0;
+        // (the fine window's alpha marks loose stone — a gravel or shell yard, a gravel drive — and a
+        // lane's wheel paths, worn smooth: a shade darker, their stones quieter)
+        float stone = 0.0, worn = 0.0;
         if (wd > 0.0) {
           vec4 pD = texture2D(uPaintD, ud);
           alb = mix(alb, pD.rgb, wd);
-          stone = wd * (1.0 - smoothstep(${(STONE_ALPHA + 0.1).toFixed(2)}, ${(STONE_ALPHA + 0.3).toFixed(2)}, pD.a));
+          stone = wd * (1.0 - smoothstep(${(STONE_ALPHA + 0.06).toFixed(2)}, ${(STONE_ALPHA + 0.14).toFixed(2)}, pD.a));
+          worn = wd * smoothstep(${(WORN_ALPHA - 0.1).toFixed(2)}, ${(WORN_ALPHA - 0.04).toFixed(2)}, pD.a) * (1.0 - smoothstep(${(WORN_ALPHA + 0.06).toFixed(2)}, ${(WORN_ALPHA + 0.13).toFixed(2)}, pD.a));
+          alb *= 1.0 - 0.12 * worn;
         }
         // Phase I biome wash: greens dry toward straw/ochre (arid, Mediterranean summers),
         // saturate (tropics) or darken/cool (boreal) — painted land cover stays the source.
@@ -320,15 +322,24 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
           float unpaved = (1.0 - stone) * (1.0 - sandy) * smoothstep(0.3, 0.42, rel);
           // (the brush is sized to the frame — 540 px tall its own size — and the stones with it)
           float fpx = fp * max(1.0, uViewport.y / 540.0);
+          // The surface's own broad, low mottle, light and dark, a third of a metre to a metre across
+          // (the land's wash carries it on from 1.1 m): the patchwork of wear and weather on a street or
+          // a slab, thick and thin on a lawn — what a painter lays wet in wet. Each octave only where it
+          // spans a few pixels, the whole of it gone by where the grain ends; its lighter half never
+          // taken again in the light (the bloom).
+          float mot = 0.0;
+          if (paved + unpaved > 0.0) mot = (octv(TURN * xz, 0.32, fp) * 0.6 + octv(TURN2 * xz + 3.1, 0.85, fp) * 0.5) * (1.0 - smoothstep(0.17, 0.29, fp));
           if (paved > 0.0) {
-            // concrete's stones as often lighter than the slab as darker, the darker kept faint: the
-            // brush pools pigment on the dark side of any edge, and a dark fleck pooled is grime. Asphalt
-            // is pale stone in a dark binder, nothing darker. (The broad mottle is the land's wash, above.)
-            vec2 st = stones(xz, fpx);
+            // the aggregate at its real size, near the feet (quieter in a worn wheel path): concrete's
+            // stones as often lighter than the slab as darker, the darker kept faint — the brush pools
+            // pigment on the dark side of any edge, and a dark fleck pooled is grime — and asphalt's
+            // pale stone in a dark binder, nothing darker; on the mottle
+            float fpg = sqrt(length(dFdx(xz)) * length(dFdy(xz))) * max(1.0, uViewport.y / 540.0);
+            vec2 st = aggregate(xz, fpg) * (1.0 - 0.7 * worn);
             float asph = 1.0 - smoothstep(0.16, 0.24, lumS);
-            float spk = paved * mix(st.x * 0.4 - st.y * 0.07, st.x * 0.7, asph);
-            gm *= 1.0 + spk;
-            gp *= 1.0 + spk;
+            float spk = mix(st.x * 0.4 - st.y * 0.07, st.x * 0.7, asph);
+            gm *= 1.0 + paved * (spk + mot * 0.3);
+            gp *= 1.0 + paved * (spk + min(mot, 0.0) * 0.3);
           }
           // loose stone: pebbles of 3.5 cm close up, 9 cm clumps a little further, a dappled wash past
           // them; the gaps between them a shade, not a hole
@@ -348,8 +359,8 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
           if (unpaved > 0.0) {
             vec2 st = grit(xz, fpx);
             float uspk = unpaved * (st.x * 0.18 - st.y * 0.05);
-            gm *= (1.0 + uspk) * (1.0 - greenness * (octv(xz, 0.06, fp) * 0.16 + octv(xz + 2.0, 0.17, fp) * 0.12));
-            gp *= 1.0 + uspk;
+            gm *= (1.0 + uspk + unpaved * mot * 0.24) * (1.0 - greenness * (octv(xz, 0.06, fp) * 0.16 + octv(xz + 2.0, 0.17, fp) * 0.12));
+            gp *= 1.0 + uspk + unpaved * min(mot, 0.0) * 0.24;
           }
         }
         // Ocean beaches read as sand: wind ripples across the wind off the sea in the dry band, the
@@ -369,25 +380,30 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
           if (camD < 60.0) {
             // trampled sand between the dunes and the wet sand: pocked by feet, footprints
             float tramp = smoothstep(11.0, 16.0, T.g) * (1.0 - smoothstep(90.0, 130.0, T.g));
-            float churn = octv(xz, 0.05, fp) + octv(xz + 4.0, 0.14, fp) * 0.9 + octv(xz - 2.0, 0.38, fp) * 0.5;
-            float pock = smoothstep(0.6, 0.86, vnoise(xz / 0.09)) * smoothstep(1.8, 4.5, 0.09 / fp) + smoothstep(0.62, 0.88, vnoise(xz / 0.24 + 3.3)) * smoothstep(1.8, 4.5, 0.24 / fp);
+            float churn = octv(TURN * xz, 0.05, fp) + octv(TURN2 * xz + 4.0, 0.14, fp) * 0.9 + octv(xz - 2.0, 0.38, fp) * 0.5;
+            float pock = smoothstep(0.6, 0.86, vnoise(TURN * xz / 0.09)) * smoothstep(1.8, 4.5, 0.09 / fp) + smoothstep(0.62, 0.88, vnoise(TURN2 * xz / 0.24 + 3.3)) * smoothstep(1.8, 4.5, 0.24 / fp);
             gm *= (1.0 + sandy * tramp * min(churn, 0.0) * 0.3) * (1.0 - sandy * tramp * pock * 0.09);
+            // footprints, one in most 0.62 m cells of a grid turned off north and well jittered (a
+            // straight grid of them reads as a grid)
             float step1 = 0.0;
-            vec2 fc = floor(xz / 0.62), ff = xz / 0.62 - fc;
+            vec2 fq = TURN * xz / 0.62, fc = floor(fq), ff = fq - fc;
             if (hash12(fc + 3.7) < 0.8 * tramp) {
               float a = hash12(fc + 9.1) * 6.2832, ca = cos(a), sa = sin(a);
-              vec2 q = (ff - 0.5 - (vec2(hash12(fc + 1.3), hash12(fc + 2.9)) - 0.5) * 0.4) * 0.62;
+              vec2 q = (ff - 0.5 - (vec2(hash12(fc + 1.3), hash12(fc + 2.9)) - 0.5) * 0.54) * 0.62;
               q = vec2(ca * q.x + sa * q.y, -sa * q.x + ca * q.y) / vec2(0.13, 0.055);
               float r = length(q), vis = smoothstep(1.5, 4.0, 0.1 / fp);
               step1 = 1.0 - smoothstep(0.9, 1.5, r);
               gm *= 1.0 - sandy * vis * 0.3 * (1.0 - smoothstep(0.7, 1.0, r)) * (0.6 + 0.4 * q.y);
             }
-            // its ripples: crests 11 cm apart across the wind, long and gently bending, a crest ending
-            // now and then, broken where a foot came down. A lee a shade darker than the lit face, faint
-            // as ripples are from standing height, and gone by 15 m (and where they come under ~4 px).
-            float ph = dot(xz, sN) / 0.11 + vnoise(xz * 0.45) * 3.0 + vnoise(xz * 1.3 + 4.0) * 0.5, saw = fract(ph);
+            // its ripples: crests across the wind that laid them — onshore, veered 40° as a sea breeze
+            // turns through the day (north of the equator) — 8–20 cm apart, curving, each ending now and
+            // then on its own (a hash a crest: no two broken alike, so no second family of lines across
+            // them), broken where a foot came down. A lee a shade darker than the lit face, faint as
+            // ripples are from standing height, gone by 15 m (and where they come under ~4 px).
+            vec2 wv = vec2(0.766 * sN.x - 0.643 * sN.y, 0.643 * sN.x + 0.766 * sN.y), wt = vec2(-wv.y, wv.x);
+            float ph = dot(xz, wv) / 0.115 + (vnoise(TURN * xz / 0.42) - 0.5) * 1.2 + (vnoise(TURN2 * xz / 1.6 + 2.3) - 0.5) * 3.5, saw = fract(ph), crestN = floor(ph);
             float ripA = dry * (1.0 - smoothstep(0.22, 0.5, fp * 1.3 / 0.11)) * (1.0 - smoothstep(9.0, 15.0, camD)) * (1.0 - step1);
-            ripA *= smoothstep(0.22, 0.4, vnoise(vec2(floor(ph) * 0.61, dot(xz, sT) / 0.8)));
+            ripA *= smoothstep(0.3, 0.5, vnoise(vec2(dot(xz, wt) / 0.45 + hash12(vec2(crestN, 3.1)) * 37.0, crestN * 7.13)));
             float lee = smoothstep(0.7, 0.78, saw) * (1.0 - smoothstep(0.93, 1.0, saw)), crest = smoothstep(0.5, 0.7, saw) * (1.0 - smoothstep(0.7, 0.76, saw));
             gm *= 1.0 + sandy * ripA * (0.025 * crest - 0.11 * lee);
           }

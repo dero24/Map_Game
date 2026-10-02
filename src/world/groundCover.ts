@@ -21,6 +21,49 @@ export const YARD = 5;
 /** A walk within this of a beach takes the sand the wind blows off it. */
 export const DRIFT_REACH = 60;
 
+/** A street's lanes as traffic wears them (review round 12: past the aggregate, a street's texture is
+ *  its structure). Each travel lane's two wheel paths — the tyres' tracks, `track` apart, `path` wide,
+ *  a shade darker and polished smoother — and the oil streak down its middle, `oil` wide, where the
+ *  engines drip; each parking lane's stalls a stain where the engine stood. */
+export const LANE = { width: 3.3, parallel: 2.2, angled: 4.8, track: 1.7, path: 0.62, oil: 0.42 };
+export interface LaneLayout {
+  /** travel lanes: the lane's middle as an offset from the centre line (m, + to the left of the way's
+   *  direction, as the paint's offsetLine counts) and its width */
+  travel: { o: number; w: number }[];
+  /** parking lanes along the kerbs: middle, width, 1 parallel or 2 angled */
+  park: { o: number; w: number; mode: 1 | 2 }[];
+}
+/** A carriageway's lanes, kerb to kerb, inside `inner` m (its asphalt between the gutter pans). The
+ *  parking lanes are the map's (`pk`: left + 4·right, 1 parallel, 2 angled); with none mapped, a wide
+ *  street (9.5 m or more) in North America parks both kerbs, as realTile's streets do (`parkDefault`).
+ *  Travel lanes of about LANE.width share the rest: at least one, two on a two-way street 5 m wide. */
+export function laneLayout(r: { pk?: number; ow?: 1 }, inner: number, parkDefault: boolean): LaneLayout {
+  let pl = r.pk ? r.pk & 3 : 0, pr = r.pk ? (r.pk >> 2) & 3 : 0;
+  if (!r.pk && parkDefault && inner >= 9.5) pl = pr = 1;
+  const width = (m: number) => (m === 2 ? LANE.angled : m === 1 ? LANE.parallel : 0);
+  let left = width(pl), right = width(pr);
+  if (inner - left - right < 3) (left = right = 0), (pl = pr = 0); // (never parked down to under a lane)
+  const travel = inner - left - right;
+  let n = Math.max(1, Math.round(travel / LANE.width));
+  if (!r.ow && n === 1 && travel >= 5) n = 2;
+  const lw = travel / n, h = inner / 2, out: LaneLayout = { travel: [], park: [] };
+  if (pl) out.park.push({ o: h - left / 2, w: left, mode: pl as 1 | 2 });
+  if (pr) out.park.push({ o: -h + right / 2, w: right, mode: pr as 1 | 2 });
+  for (let i = 0; i < n; i++) out.travel.push({ o: h - left - lw * (i + 0.5), w: lw });
+  return out;
+}
+/** A lane's two wheel paths: their middles' offsets (the track, narrowed to keep a narrow lane's
+ *  paths inside it). */
+export const wheelPaths = (lane: { o: number; w: number }): [number, number] => {
+  const t = Math.min(LANE.track / 2, lane.w / 2 - LANE.path / 2 - 0.12);
+  return [lane.o - t, lane.o + t];
+};
+/** Utility covers in the street: a sewer manhole (cast iron, 0.66 m across) in the middle of every
+ *  junction and along the centre line between, no more than `every` m apart (evenly, so a way's are
+ *  the same in every slice of the paint); valve covers (water, gas: 0.24 m) a few metres into a
+ *  junction's arms, off the centre line toward a kerb, and one every `valveEvery` m or so along a way. */
+export const COVERS = { manhole: 0.33, valve: 0.12, every: 95, valveEvery: 70 };
+
 /** A small integer hash in [0, 1). */
 export function hash2(x: number, z: number, salt = 0) {
   let h = (Math.floor(x) * 73856093) ^ (Math.floor(z) * 19349663) ^ (salt * 83492791);

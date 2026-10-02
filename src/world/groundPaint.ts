@@ -10,7 +10,7 @@ import { MINOR, ROAD_RANK, roadPaint, streetSurface } from './roadPalette';
 import { COURT, courtFrame, diamondFrame, surfacePaint, type Sport } from './sports';
 import { makeCanvas, type AnyCanvas } from './canvas';
 import { measureHoods, hoodLookup, hoodKey, type HoodClass } from './hood';
-import { sidewalkBand, KERB, FLAG, CENTRE_JOINT, YARD, DRIFT_REACH, hash2, yardOf, YARDS, segDist, inRing, type Yard } from './groundCover';
+import { sidewalkBand, KERB, FLAG, CENTRE_JOINT, YARD, DRIFT_REACH, hash2, yardOf, YARDS, segDist, inRing, LANE, laneLayout, wheelPaths, COVERS, type Yard } from './groundCover';
 
 // a lot's stall layout, computed once per prepared outline
 const LOTS = new WeakMap<object, LotLayout | null>();
@@ -39,6 +39,12 @@ const YARD_PAINT: Record<Yard, string> = { lawn: '#93a964', gravel: '#b9b4a9', s
 // Loose stone (a gravel or shell yard, a gravel drive) is marked in the fine window's alpha: the
 // ground shader lays its stones where the paint's alpha says so (ground.ts). The rest is opaque.
 export const STONE_ALPHA = 0.6;
+// …and a lane's wheel paths, worn smooth by the tyres, at WORN_ALPHA: the shader lays them a shade
+// darker and quiets their stones (ground.ts). Anything opaque laid over them puts the alpha back.
+export const WORN_ALPHA = 0.84;
+// The street's own marks: oil (a lane's streak, the drips by a junction, a stall's stain) and the
+// cast-iron covers in the carriageway.
+const OIL = 'rgba(32,28,24,0.13)', IRON = '#4e4a44';
 // The sidewalk's flags (a shade each, darker joints), the kerb's face (a shadow line 25% darker than
 // the walk), the gutter pan's grey concrete, a drive's apron where it crosses the walk.
 const FLAG_DARK = 'rgba(70,64,54,0.14)', FLAG_LIGHT = 'rgba(255,251,240,0.16)', JOINT = '#857f73';
@@ -176,8 +182,9 @@ function offsetLine(p: P[], d: number): P[] {
 
 type Box4 = [number, number, number, number]; // x0, z0, x1, z1 (m)
 /** Points every `step` m along a polyline, counted from its start (so any slice of a window finds
- *  the same ones), with its direction there — only those within `pad` of the clip. */
-function stations(p: P[], step: number, clip: Box4, pad: number, fn: (x: number, z: number, tx: number, tz: number) => void) {
+ *  the same ones), with its direction there and how far along it they are — only those within `pad`
+ *  of the clip. */
+function stations(p: P[], step: number, clip: Box4, pad: number, fn: (x: number, z: number, tx: number, tz: number, s: number) => void) {
   let acc = 0;
   for (let i = 0; i + 1 < p.length; i++) {
     const [ax, az] = p[i], [bx, bz] = p[i + 1], L = Math.hypot(bx - ax, bz - az);
@@ -186,11 +193,35 @@ function stations(p: P[], step: number, clip: Box4, pad: number, fn: (x: number,
       const tx = (bx - ax) / L, tz = (bz - az) / L;
       for (let s = Math.ceil(acc / step - 1e-9) * step - acc; s < L - 1e-6; s += step) {
         const x = ax + tx * s, z = az + tz * s;
-        if (x > clip[0] - pad && x < clip[2] + pad && z > clip[1] - pad && z < clip[3] + pad) fn(x, z, tx, tz);
+        if (x > clip[0] - pad && x < clip[2] + pad && z > clip[1] - pad && z < clip[3] + pad) fn(x, z, tx, tz, acc + s);
       }
     }
     acc += L;
   }
+}
+/** A polyline's length and the point and direction `s` m along it. */
+function lengthOf(p: P[]) {
+  let L = 0;
+  for (let i = 0; i + 1 < p.length; i++) L += Math.hypot(p[i + 1][0] - p[i][0], p[i + 1][1] - p[i][1]);
+  return L;
+}
+function pointAt(p: P[], s: number): [number, number, number, number] {
+  for (let i = 0; i + 1 < p.length; i++) {
+    const [ax, az] = p[i], [bx, bz] = p[i + 1], L = Math.hypot(bx - ax, bz - az);
+    if (L < 1e-6) continue;
+    if (s <= L || i + 2 === p.length) { const t = Math.min(s, L) / L; return [ax + (bx - ax) * t, az + (bz - az) * t, (bx - ax) / L, (bz - az) / L]; }
+    s -= L;
+  }
+  return [p[0][0], p[0][1], 1, 0];
+}
+/** An ellipse as a closed polygon (n corners): centred at (x, z), `a` m along (tx, tz), `b` across. */
+function oval(ctx: CanvasRenderingContext2D, x: number, z: number, tx: number, tz: number, a: number, b: number, n = 10) {
+  for (let k = 0; k < n; k++) {
+    const t = (k / n) * Math.PI * 2, u = Math.cos(t) * a, v = Math.sin(t) * b;
+    if (k) ctx.lineTo(x + tx * u - tz * v, z + tz * u + tx * v);
+    else ctx.moveTo(x + tx * u - tz * v, z + tz * u + tx * v);
+  }
+  ctx.closePath();
 }
 /** A walk's flags along a polyline, `o0`..`o1` m off it (both sides, or as signed offsets when
  *  `single`): the joints every FLAG m from the way's start, and the flags a shade darker or lighter
@@ -510,6 +541,8 @@ export class Painter {
     // themselves, each judged by the ground round its own middle: 40 m cells north-up laid lawn in
     // stair-steps through any grid that isn't (Seattle's is turned 32°). Under the areas: a city
     // park stays a park.
+    // (the paved aprons and shopfronts, with their widths, for the fine window's slabs)
+    const slabbed: [P[], number][] = [];
     if (detail) {
       const C = 40, R = 60, near: [Prepared<number>, number, number, number][] = [];
       // the window's census: each footprint's middle and weighted area, in 40 m cells (a window's
@@ -549,7 +582,11 @@ export class Painter {
         // (a quarter of the ground round it built on — or one big building, a store or a block of
         // flats, on its own: its apron is paved whatever stands next to it)
         const d = Math.max(n / (Math.PI * R * R * 0.25), own / 900);
-        if (d >= 1) bands[d < 1.3 ? 0 : d < 1.7 ? 1 : 2].push(f);
+        if (d >= 1) {
+          const b = d < 1.3 ? 0 : d < 1.7 ? 1 : 2;
+          bands[b].push(f);
+          slabbed.push([f.pts[0], 8 + b * 3]);
+        }
       }
       ctx.fillStyle = ctx.strokeStyle = '#b1ab9d';
       ctx.lineJoin = 'round';
@@ -619,7 +656,10 @@ export class Painter {
         ctx.beginPath();
         pathOf(ctx, f.pts[0], true);
         ctx.stroke();
+        slabbed.push([f.pts[0], 3.5]);
       }
+      // …both scored in slabs (the streets' walks lay their own flags over them)
+      if (level === 2) this.slabs(ctx, slabbed, [c0, d0, c1, d1]);
     }
     // Contact shadows / foundations under buildings (grounds the houses in the wash).
     if (detail) {
@@ -747,6 +787,9 @@ export class Painter {
     if (!detail) return;
     // Drives cross the walk on an apron of their own, the kerb cut down to the gutter
     if (fine) this.aprons(ctx, walks, all, clipBox);
+    // …and traffic's own marks on the asphalt: the wheel paths, the oil, the covers (under the
+    // markings, the patches and the tar snakes: they're laid over the street after)
+    if (fine) this.traffic(ctx, list, clip ? all.filter((r) => overlaps(r, c0, d0, c1, d1, 50)) : all, areas, clipBox, region === 'na', kerbed);
     // Markings on the main roads.
     ctx.lineCap = 'butt';
     for (const { item: r, pts } of list) {
@@ -826,6 +869,28 @@ export class Painter {
     }
     paintFlags(ctx, dark, light, joints, centre);
   }
+  // A dense block's paved apron and a shop's frontage scored in 1.5 m slabs square to the building's
+  // own walls — each wall's from its corner, out to the paving's width — each slab a shade of its own:
+  // a plaza's concrete as it's poured, not a blank sheet. (Under the street's walks, which lay their
+  // own flags over it.)
+  private slabs(ctx: CanvasRenderingContext2D, paved: [P[], number][], clip: Box4) {
+    const dark: P[][] = [], light: P[][] = [], joints: P[][] = [], centre: P[][] = [];
+    for (const [ring, w] of paved) {
+      for (let i = 0; i < ring.length; i++) {
+        const a = ring[i], b = ring[(i + 1) % ring.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (L < FLAG) continue;
+        if (Math.max(a[0], b[0]) < clip[0] - w - 2 || Math.min(a[0], b[0]) > clip[2] + w + 2 || Math.max(a[1], b[1]) < clip[1] - w - 2 || Math.min(a[1], b[1]) > clip[3] + w + 2) continue;
+        // (which side of the wall is out: its left, unless that's inside the footprint)
+        const tx = (b[0] - a[0]) / L, tz = (b[1] - a[1]) / L, mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
+        const out = inRing(mx + tz * 0.05, mz - tx * 0.05, ring) ? -1 : 1;
+        for (let o = 0; o < w - 0.3; o += FLAG) {
+          flagRun([a, b], out * o, out * Math.min(w, o + FLAG), clip, dark, light, joints, true);
+          if (o > 0) centre.push([[a[0] + tz * out * o, a[1] - tx * out * o], [b[0] + tz * out * o, b[1] - tx * out * o]]);
+        }
+      }
+    }
+    paintFlags(ctx, dark, light, joints, centre);
+  }
   // …and along the mapped sidewalks and footpaths (their own width, from their own start)
   private mappedFlags(ctx: CanvasRenderingContext2D, list: Prepared<Road>[], clip: Box4) {
     const dark: P[][] = [], light: P[][] = [], joints: P[][] = [], centre: P[][] = [];
@@ -873,6 +938,127 @@ export class Painter {
     if (!n) return;
     ctx.fillStyle = APRON;
     ctx.fill();
+  }
+
+  // Traffic's marks on the asphalt (review round 12: past the aggregate, a street's texture is its
+  // structure). Each travel lane's two wheel paths, worn smooth — marked in the fine window's alpha
+  // (WORN_ALPHA): the shader lays them a shade darker and quiets their stones — the oil streak down its
+  // middle and the drips where cars wait by a junction; a stain in about half the parking spaces, a
+  // lot's stalls and a street's parking lanes; and the cast-iron covers, a manhole in every junction
+  // and along the centre line between, valve covers off it. All from the street's own geometry,
+  // counted from each way's start or found at its nodes, so every slice of the window lays the same
+  // ones; one path a kind, four draws however many streets.
+  private traffic(ctx: CanvasRenderingContext2D, list: Prepared<Road>[], near: Prepared<Road>[], areas: Prepared<Area>[], clip: Box4, na: boolean, kerbed: (r: Road) => boolean) {
+    const worn: P[][] = [];
+    const spots: number[] = []; // x z tx tz a b: an oval, a m along (tx, tz) and b across
+    const covers: number[] = []; // x z r
+    const street = (r: Road) => (ROAD_RANK[r.c] ?? 1) >= 1 && !r.sw && !MINOR.has(r.c) && r.w >= 4 && !streetSurface(r.sf) && !r.br && !r.tu;
+    // (what reaches the clip: a shape within a metre of it, as the slices' test takes it)
+    const inside = (x: number, z: number, pad: number) => x > clip[0] - pad && x < clip[2] + pad && z > clip[1] - pad && z < clip[3] + pad;
+    for (const { item: r, pts } of list) {
+      if (!street(r)) continue;
+      const p = pts[0], L = lengthOf(p), rank = ROAD_RANK[r.c] ?? 1, inner = kerbed(r) ? r.w - 2 * KERB.gutter : r.w;
+      const lanes = laneLayout(r, inner, na && rank >= 2);
+      for (const lane of lanes.travel) {
+        for (const o of wheelPaths(lane)) worn.push(offsetLine(p, o));
+        // the oil streak down the lane's middle: smears a metre or two long, broken, and the drips
+        // thick where the traffic waits — 20 m from either end of the way (a junction, most often)
+        stations(p, 1.6, clip, inner / 2 + 3, (x, z, tx, tz, s) => {
+          const h = hash2(x * 2.1 + lane.o * 7, z * 1.9, 51), wait = s < 20 || s > L - 20, o = lane.o + (hash2(x * 1.3, z * 1.7 + lane.o, 52) - 0.5) * 0.24;
+          if (h < 0.5) spots.push(x + tz * o, z - tx * o, tx, tz, 0.45 + 0.7 * hash2(x, z * 1.3, 53), 0.07 + 0.06 * hash2(x * 1.1, z, 54));
+          else if (h < (wait ? 0.85 : 0.6)) spots.push(x + tz * o, z - tx * o, tx, tz, 0.15 + 0.15 * hash2(x * 0.9, z, 65), 0.1 + 0.08 * hash2(x, z * 0.9, 66));
+        });
+      }
+      // a parking lane: a stain where about every other car stands (its spaces as kerbside.ts's)
+      for (const lane of lanes.park)
+        stations(p, lane.mode === 2 ? 3 : 6.3, clip, inner / 2 + 3, (x, z, tx, tz) => {
+          if (hash2(x * 1.7 + lane.o, z * 2.3, 55) > 0.55) return;
+          const o = lane.o + (hash2(x, z + lane.o, 56) - 0.5) * 0.4, a = 0.3 + 0.25 * hash2(x * 0.7, z, 57), b = 0.2 + 0.12 * hash2(x, z * 0.7, 58);
+          spots.push(x + tz * o, z - tx * o, lane.mode === 2 ? tz : tx, lane.mode === 2 ? -tx : tz, a, b);
+        });
+      // manholes along the centre line, evenly between the way's ends, no more than COVERS.every apart
+      // (its ends are junctions, which have their own); valve covers toward a kerb between them
+      if (rank >= 2) {
+        const k = Math.floor(L / COVERS.every), kv = Math.floor(L / COVERS.valveEvery);
+        for (let i = 1; i <= k; i++) {
+          const [x, z] = pointAt(p, (L * i) / (k + 1));
+          covers.push(x, z, COVERS.manhole);
+        }
+        for (let i = 0; i < kv; i++) {
+          const [x, z, tx, tz] = pointAt(p, (L * (i + 0.5)) / kv), o = (hash2(x, z, 59) < 0.5 ? -1 : 1) * Math.max(0.5, inner / 2 - 1.1);
+          covers.push(x + tz * o, z - tx * o, COVERS.valve);
+        }
+      }
+    }
+    // a lot's stalls: a stain under the engine (the stall's nose end), in about two in three
+    for (const a of areas) {
+      if (a.item.c !== 'parking' || !overlaps(a, clip[0], clip[1], clip[2], clip[3], 5)) continue;
+      for (const st of lotOf(a)?.stalls ?? []) {
+        if (st.hq > 0.66) continue;
+        const nx = -Math.sin(st.yaw), nz = -Math.cos(st.yaw), x = st.x + nx * 0.9, z = st.z + nz * 0.9;
+        if (inside(x, z, 2)) spots.push(x, z, nx, nz, 0.3 + 0.2 * hash2(x * 3, z, 60), 0.2 + 0.1 * hash2(x, z * 3, 61));
+      }
+    }
+    // the junctions (all their arms: the roads within 50 m of the slice): a manhole in the middle,
+    // and a valve cover a few metres into some of the arms
+    const at = new Map<string, { r: Road; p: P[]; i: number }[]>();
+    for (const { item: r, pts } of near) {
+      if (!street(r) || (ROAD_RANK[r.c] ?? 1) < 2) continue;
+      const p = pts[0];
+      for (let i = 0; i < p.length; i++) {
+        const key = `${Math.round(p[i][0] * 10)}_${Math.round(p[i][1] * 10)}`;
+        (at.get(key) ?? at.set(key, []).get(key)!).push({ r, p, i });
+      }
+    }
+    for (const legs of at.values()) {
+      if (legs.reduce((n, l) => n + (l.i > 0 && l.i < l.p.length - 1 ? 2 : 1), 0) < 3 || new Set(legs.map((l) => l.r)).size < 2) continue;
+      const [nx, nz] = legs[0].p[legs[0].i];
+      if (!inside(nx, nz, 12)) continue;
+      let m = 0;
+      for (const { r, p, i } of legs)
+        for (const j of [i - 1, i + 1]) {
+          if (j < 0 || j >= p.length) continue;
+          const dx = p[j][0] - nx, dz = p[j][1] - nz, l = Math.hypot(dx, dz);
+          if (l < 1) continue;
+          const tx = dx / l, tz = dz / l, h = hash2(nx * 3 + j, nz * 3 + i, 62);
+          // (the manhole a little way into the first arm — the sewer's own line, rarely the dead centre)
+          if (!m++) covers.push(nx + tx * 1.6 * h, nz + tz * 1.6 * h, COVERS.manhole);
+          if (h < 0.5 && l > 7) {
+            const d = 3.5 + 3 * hash2(nx + j, nz - i, 63), o = (hash2(nx - j, nz + i, 64) < 0.5 ? -1 : 1) * (0.3 + 0.25 * h * 2) * (r.w / 2);
+            covers.push(nx + tx * d + tz * o, nz + tz * d - tx * o, COVERS.valve);
+          }
+        }
+    }
+    ctx.save();
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'round';
+    if (worn.length) {
+      ctx.beginPath();
+      for (const l of worn) pathOf(ctx, l);
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.globalAlpha = 1 - WORN_ALPHA;
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = LANE.path;
+      ctx.stroke();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
+    }
+    let n = 0;
+    ctx.beginPath();
+    for (let i = 0; i + 5 < spots.length; i += 6) if (inside(spots[i], spots[i + 1], spots[i + 4] + 1)) (oval(ctx, spots[i], spots[i + 1], spots[i + 2], spots[i + 3], spots[i + 4], spots[i + 5]), n++);
+    if (n) {
+      ctx.fillStyle = OIL;
+      ctx.fill();
+    }
+    n = 0;
+    ctx.beginPath();
+    for (let i = 0; i + 2 < covers.length; i += 3) if (inside(covers[i], covers[i + 1], covers[i + 2] + 1)) (oval(ctx, covers[i], covers[i + 1], 1, 0, covers[i + 2], covers[i + 2], covers[i + 2] > 0.2 ? 14 : 8), n++);
+    if (n) {
+      ctx.fillStyle = IRON;
+      ctx.globalAlpha = 0.92;
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   // Sand drift: within DRIFT_REACH of a beach (the map's own beaches, never a town by name) the
