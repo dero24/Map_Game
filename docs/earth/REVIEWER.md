@@ -958,3 +958,141 @@ All five of round 10's must-fixes are built. Two of them move their areas a full
     - Ocean Ave in October and under snow.
   - A finished series is one card that cross-fades between its panels in the sketchbook, and its rarity is the time it took.
   - It's Monet's haystacks as a collection: Animal Crossing's come-back-at-another-hour patience loop, built on a world that runs on its own clock the way Rockstar's do. It rewards exactly what this round made true.
+
+## Round 12 — 2026-10-01 — "The trees grew limbs; the night went floodlit" — 8.5/10 on Sea Bright (expanded scope), NOT PASSED
+
+*"Someone's making lunch in the cottage, and the street trees finally have limbs. Then the night street lights up like a car park, and Center Street turns to cobbles."*
+
+Two of round 11's five must-fixes are closed by their tests and by eye: trees at 5–10 m (15) and people at arm's length (1, 3, 20). Most of the small reads are closed too. The messages weren't done. Night and the ground both overshot again, this time in the other direction: from stage discs to floodlight, and from grime to cobbles. Both overshoots got past my round 11 tests:
+
+- the night test capped the heart's chroma, not its value;
+- the grain test counted dark specks, not their size with distance.
+
+The tests below close both gaps. The overall holds at 8.5: the frames are better at arm's length and worse at night.
+
+`calendar-r12-summer` and `phone-r12-*` hadn't rendered when this was written. I also read the round 11 captures that arrived after that verdict (`phone-r11-*`, `calendar-r11-summer`). Helper sheets are numbered in reading order; "m" frames are `merged-r12`.
+
+- **Scores:**
+  - **The look (Sea Bright): 8.5.** Held. The beach reads as sand at last (8, 16), the walks are cleaner (2, 17), and the nearest trees have limbs (11, 15). But the night is floodlit (3, 13), asphalt reads as cobbles (11, 20, m7), and trees past 30 m are still balls.
+  - **Life and micro detail: 8.5** (from 8). People hold up at arm's length: smooth limbs, shoes on the ground, the lead in hand, the tail carried (20, kit). There's a cook at the stove (6), dogs walked at golden hour and at 22:00 (1, 3), and customers in the café (18). Held back by the dog share and the shoulders (see "Still reads fake" 4–5).
+  - **Structures (bridges): 7.5.** Untouched. The tender houses are still garden sheds (m1, m3).
+  - **Roofs and colour: 7.5.** The five-roof test is owed for the third time.
+  - **Interiors: 8** (from 7.5). The cottage's kitchen has a cooker under its hood, a fridge, wall cabinets and someone making lunch (6). Chairs are spaced (19), and 19's bare floor is down from 48% of the frame to 30%. Held back by flat wall cabinets and bare café tables.
+  - **The game loop and feel: 7.** Unchanged, and still nothing new is a verb. Round 10's first-visit bloom is still Robby's call: pencil on a first arrival until the first Paint, then painted for good.
+  - **Phone presentation: 8.** Held on round 11's helper frames. The merged build hasn't been seen on a phone for two rounds: both `phone-r11` frames are behind the watchdog's report.
+  - **Overall: 8.5/10, NOT PASSED.**
+- **Closed / moved:**
+  - **Round 11 MF1, lamplight: moved and overshot.**
+    - Gone: the stage disc. The heart is a cream at C\* 16–19 with no rim, and frame 3's pool halves at 9.5 m and holds 37% at 12 m.
+    - Overshot:
+      - 3's heart sits at L\* 75.9, 6 L\* under the lit windows (81.9), and its gap is L\* 26.5;
+      - 13's whole street is one olive field: the near ground at L\* 47–55, hue 88–100°;
+      - past 60 m in both frames, pools run only 1.2–1.5× over gaps of L\* 49–59.
+  - **MF2, the grain: moved and overshot.**
+    - Fixed:
+      - the dark speckle is down: 5–8% of the bottom 40% in 2, 10, 11 and 20 (round 11: 8–13%), at 0.35–0.50 blobs/kpx (0.57–0.98);
+      - the pink is gone: 0.0% on 8 and 16 (round 11's 16: 6.2%, 4 blotches);
+      - the sand's marks are gentle: the p5–p95 L\* range on 16 is 6.8 (was 22.0).
+    - Overshot: the stones are screen-sized, so asphalt reads as cobbles, and the near sand shows a grid (MF2).
+  - **MF3, messages: open, not done.** It's now part of MF4.
+  - **MF4, trees at 5–10 m: closed** after nine rounds.
+    - Sky shows through 6–9% of the crown, the longest straight edge is 4–9% of the crown's width, 3–4 limbs enter the crown, and the trunk tapers 1.45–1.5.
+    - The nearest tree in 11 is leafy and ragged.
+    - Open past 30 m (MF3).
+  - **MF5, people at arm's length: closed by its tests.** The lead is 1.9 cm from the hand, shoes are 10.6 cm wide, the tail is carried 47 cm up, and the worst normal break is 23.7°. One new flaw: the shoulders (MF5).
+  - **The small reads:**
+    - Closed:
+      - the kitchens (6);
+      - the chairs (19);
+      - the WC door shut (6);
+      - the ground under the raised house, now a sand pad (5; green under it 22%, from 38%).
+    - Moved: frame 9, the marina. A sailboat, a cruiser and a centre-console are up close, and a few more boats at the far pier.
+    - Unverified: the wakes. The dock's white lozenges are still there (pick-r12a 5; MF5).
+  - **Roof hue: open, third request.**
+- **Reads real:**
+  - **Lunch** (6). A resident at the cooker under the hood, the fridge, the sink under the window, the WC door shut, the sofa. The cottage is lived in.
+  - **Street trees up close** (15; 11's nearest). Forked trunks rise into leafy crowns, with sky through the leaf clusters and broken edges.
+  - **Dogs walked** at golden hour (1), at 22:00 (3), and side on with the lead in hand and the tail up (20).
+  - **Sand that reads as sand** (8, 16, m6). The pink and the dark smudges are gone, and a warm October day has a few sunbathers on it (m6).
+  - **The night's shape** (3). Pools die away with no rim, the wires are silhouettes, and the lit windows are the accents.
+  - **River Street** (m5). A raised house on its pilings over a shell yard, mailboxes, a hydrant, a flag and the wires: a Sea Bright street.
+- **Still reads fake** (most damaging first):
+  1. **The night is floodlit (13, 3).** 13 reads as a lit car park in olive, with no pool you can find. In 3, the ground under your feet competes with the windows. The causes are listed under MF1.
+  2. **Asphalt reads as cobbles (11, 20, 5's road, m5, m7), and the beach has a grid (m6, 16).**
+     - `stones()` keeps an octave for every distance, so each stone stays 3–16 px on screen. In m7 the flecks grow from 4 px near to 10 px far: 2–3 cm at your feet, 30–60 cm by 20 m.
+     - The near sand on m6 carries a second family of lines at right angles (MF2's test).
+  3. **Trees past 30 m are the old balls (11).** And every tree in 15 is the same slingshot: a straight trunk forking into two straight limbs at ~2 m. The grove's crowns go to a dark olive (L\* 30, against the single tree's 56).
+  4. **Dogs fill the street.**
+     - 7 of the 9 walkers within ~15 m of a lens (1, 3, 20, compare-20) walk a dog.
+     - The sim assigns 9% dog walkers, but only the others visit doors: at ~0.07/s while walking, staying 15–110 s by day and four times that at night (`lifeSim.ts` l.1445, l.1485). The street keeps the dogs: roughly 24% of who's outdoors by day and 40% at night, plus the joggers.
+     - Make dog walkers stop at a porch or a café too, or slow the others' visits, until the outdoor share matches the assigned one.
+     - A dog on Sea Bright's beach at 13:00 in July (calendar-r11-summer 1) breaks the town's own rule: no dogs from May 15 to Sept 15. That belongs in a dated ordinance table by municipality, never a place name in code.
+  5. **Arm's length** (MF5): the shoulders, the wall cabinets, the bare café tables. The kerb car at the lens in 1 is still a navy box.
+  6. **The dock's white lozenges** (pick-r12a 5) survived the wake rewrite (MF5).
+  7. **A dark grey disc over the beach** (16; it was behind round 11's tree). If it's a balloon, a backlit envelope should glow, not read as a blot. If not, the id pass should name it.
+  8. **The harness.**
+     - 14's id pass re-posed "people on the street" onto empty sand. A walker pose must fail when no walker covers ≥ 1% of the frame.
+     - A pole at ~2 m splits m5 in two at 3.7% of its pixels, under the 5% rule. A thin occluder crossing ≥ 60% of the frame's height should fail too.
+- **Next must-fix** (ranked by what an hour buys):
+  1. **Night: one value plan, the windows brightest (13, 3).**
+     - The causes, in `nightLight.ts`:
+       - `POOL.gain` 1.8 puts a heart on the filmic shoulder (L\* 75), so its skirt is still L\* 45–50 at 12–15 m;
+       - `FLOOR.strength` 0.16 with `even` 0.85 lifts every gap to L\* ≥ 26 and flattens every surface toward one grey;
+       - `NIGHT_GRADE.fade` 0.8 by luma 0.4 hands the mid-tones their own hue back, so 13's lit lawn and asphalt go olive;
+       - a 22 m `reach` with lamps 30–40 m apart leaves no dark between them.
+     - The fix:
+       - gain ~1.0;
+       - floor ~0.05 with `even` ~0.35;
+       - `fade` ~0.3;
+       - `reach` ~16 m;
+       - reserve the lights by what they are (an emissive flag on windows, lamp heads and headlamps), not by brightness.
+     - *Test* (`night-check`, 3 and 13 both pass):
+       - the heart at L\* 50–62 and ≥ 15 L\* under the lit windows' median, with no ground pixel above that median;
+       - it halves 5–8 m from the lamp's foot, is 10–25% at 12 m, and is within 1.3× its gap by 16 m;
+       - 13: ≥ 2 pools 14–90 m ahead at ≥ 2.5× their gap (today 1);
+       - every gap at L\* 10–20, hue 220–280°, C\* ≤ 10;
+       - kept: the wires, the lens, and the heart's C\* ≤ 30.
+  2. **Aggregate at its real size, and structure past it.**
+     - Asphalt and concrete keep a 1–3 cm stone octave only, gone where a stone spans under 2 px (about 5 m at 960×540).
+     - Past that, a street's texture is structure:
+       - each lane's two wheel paths, a shade darker and smoother;
+       - an oil streak down each lane and parking space;
+       - manholes and valve covers;
+       - the tar snakes, patches, joints and flags it already has.
+     - Beach ripples are curving crests across the wind, broken where walked, never a second family at right angles.
+     - *Test:*
+       - in m7, the median light fleck 10–20 m out is ≤ ⅓ the size of one 2–4 m out (today 2.5× larger);
+       - after a 2 px blur, which removes the aggregate, the bottom 40% keeps a local L\* std ≥ 2.0 in 2, 10, 11, 17, m4 and m7: structure has to carry it;
+       - kept: dark specks ≥ 6 L\* ≤ 6% at ≤ 0.35 blobs/kpx, and no pink;
+       - on m6 and 16, the near sand's column-profile autocorrelation is ≤ 0.2 (m6 today: 0.48 at a 10 px period).
+  3. **Every tree, not only the near ones.**
+     - Bake each species' near model (a few seeds × the season) into the micro layer's hemi-octahedral impostor cards (`render/impostor.ts`). Draw them from 30 m to ~300 m, and the balls only past that.
+     - Vary the scaffold: a leader with 3–5 scaffold limbs at 1.8–3.5 m, angled by species.
+     - *Test:*
+       - in 11, the five nearest trees past 30 m each show sky through ≥ 3% of the crown, with the longest straight silhouette edge ≤ 15% of the crown's width (`tree-metrics`);
+       - at 30 m, near model vs card on the same tree: ΔE2000 ≤ 5 over the crown and silhouette IoU ≥ 0.8;
+       - ≤ +2 draws, an atlas ≤ 2048² on desktop and 1024² on phones, and `__FRAMES__` within the phone budget on Ocean Ave;
+       - in 15, no two neighbours fork within 0.3 m of the same height and 10° of the same angle.
+  4. **Evidence owed, the third time: the messages, a merged-build phone frame, the roofs.**
+     - Every toast and the arrival card fit two lines at 320–390 px with no "…". For example: "Painted out to 1.2 km · 0.35 km²" and "Monmouth County, NJ · 7:42 pm".
+     - In capture mode, the 15 s no-frame watchdog waits 180 s, or the capture runs at DPR 2 with the same CSS viewport.
+     - Run round 10's five-roof test.
+     - *Test:*
+       - `hud-audit` renders the full copy set with no "…";
+       - `phone-r13-portrait` and `-landscape` with no report on screen, ≥ 40° across, the clock ≥ 4.5:1, and the ground passing must-fix 2;
+       - the five roofs' numbers as round 10 specified.
+  5. **Arm's length, round two.**
+     - **Shoulders** (kit 3, 5; 18). Each arm tube's flat top stands proud of the shoulder like an epaulette. Cap the arm with a sphere at a joint inside the torso, so the deltoid rounds into the arm. *Test:* front and side at 1.5 m, no arm vertex above the torso's surface at the shoulder.
+     - **Wall cabinets** (6). They're flat cut-outs in the curtains' own blue, and the two merge. Give them door joints, 30 cm of depth with a shadowed underside, and a colour of their own. *Test:* ΔE ≥ 15 between the cabinets and the curtains; an underside shadow band ≥ 3 px tall and ≥ 10 L\* under the splashback.
+     - **A café set for lunch** (18): a cup, a plate or a glass at every occupied table. *Test:* the id pass counts ≥ 1 piece per occupied table.
+     - **The dock's lozenges** (pick-r12a 5). Name them with an id pass on that frame. *Test:* no white blob (L\* ≥ 85, ≥ 0.2% of the frame) on the water within 15 m of the dock.
+- **Gameplay idea: a dog of your own, who notices.**
+  - The town is full of dogs now, so give the player one: from a mapped shelter (OSM `amenity=animal_shelter`), or the one waiting at the arrival.
+  - It does the noticing. It stops and points at what you haven't painted: a heron in the marsh, a cat on a porch, the boat coming in. It pulls toward the nearest place card. Its nose is the hint system, with no UI.
+  - Other dogs greet it, so their walkers stop and talk. That gives the sim's CHAT a reason, and the meeting is a frame to paint.
+  - It keeps the real rules, from a dated ordinance table plus OSM `dog=*`:
+    - it runs on Sea Bright's beach from Sept 16 to March 14 and waits at the dune crossing in summer;
+    - it stays out of Monmouth Beach's fenced plover nesting areas until Oct 1.
+  - It rides at the bow of your boat and in the balloon's basket, and it's in every painting you make. That's RDR2's horse bond and Nintendogs' attachment, and it makes "notice" something you do with someone.
+
+Sources: [New Jersey Shore dog beach guide (Sea Bright, Monmouth Beach, Long Branch rules)](https://www.aol.com/jersey-shore-dog-beach-guide-090355635.html)
