@@ -60,7 +60,7 @@ import { skyDepth, unprojectDepth, mendDepth } from './render/seen';
 import { SunShadows, shadowParams } from './render/shadows';
 import { applyTier, autoSteps, deviceInfo, isPhoneClass, pickTier, stepsPaid } from './render/quality';
 import { sleepWhenHidden } from './ui/lifecycle';
-import { began, contextLost, contextRestored, diag, diagInit, diagStage, diagTick, errorLine, frameFailed, frameOk, glInfo, glProbe, NO_WEBGL, shaderError, showReport } from './ui/diag';
+import { began, contextLost, contextRestored, diag, diagInit, diagStage, diagTick, errorLine, frameFailed, frameOk, glInfo, glProbe, NO_WEBGL, shaderError, showReport, watchdogSeconds } from './ui/diag';
 import { WalkWorld } from './player/collision';
 import { landingAt } from './player/landing';
 import { Walker, walkParams, setLens } from './player/controller';
@@ -1599,8 +1599,9 @@ async function main() {
   // The watchdog: no frame 15 s after Begin walking, or a context never given back → the report.
   // `?diag=1` opens it once the first frame is up (the GPU's facts, on the phone itself).
   if (!CAPTURE) {
-    const wd = Number(params.get('watchdog'));
-    if (wd > 0) diag.watchdogS = wd; // (a software-GL test rig draws a frame every few seconds)
+    // (a software-GL test rig draws a frame every few seconds: `?watchdog=<s>`, and 180 s in any
+    // page a rig drives — diag.ts watchdogSeconds)
+    diag.watchdogS = watchdogSeconds(params.get('watchdog'), navigator.webdriver === true);
     let asked = params.get('diag') === '1';
     setInterval(() => {
       diagTick();

@@ -283,6 +283,15 @@ export function contextLost() {
 }
 export function contextRestored() { lostAt = 0; lastFrameAt = performance.now(); } // (the restored context gets a fresh window)
 
+/** How long the watchdog waits for a frame (s): `?watchdog=<s>` when given; else 180 in a capture —
+ *  a page a test rig drives (`navigator.webdriver`: the phone frames, mobile-check), where a
+ *  software GPU at DPR 3 draws a frame every 5–20 s and the report would cover the very frame the
+ *  capture is for (review round 12, must-fix 4: both phone-r11 frames were behind it); else 15. */
+export function watchdogSeconds(param: string | null, webdriver: boolean): number {
+  const asked = Number(param);
+  return asked > 0 ? asked : webdriver ? 180 : 15;
+}
+
 /** DOM: once a second — the watchdog: no frame 15 s after Begin walking, frames that stop coming
  *  for 15 s while the page is on screen, or a GPU context not given back within 4 s. */
 export function diagTick(now = performance.now()) {

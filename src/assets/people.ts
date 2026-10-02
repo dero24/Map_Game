@@ -18,8 +18,9 @@
 //
 // The body is indexed (unlike the foundry's other families): a smooth limb needs its rings shared
 // across the joint, and sharing them cuts the vertex shader's work to about a fifth of the same
-// triangles unshared. Joints: hips at 0.87 m, knees at 0.47, ankles at 0.085, shoulders at 1.39,
-// elbows at 1.12. Front toward −z; origin on the ground.
+// triangles unshared. Joints: hips at 0.87 m, knees at 0.47, ankles at 0.085, shoulders at 1.32
+// (inside the torso, capped by the deltoid's round), elbows at 1.12. Front toward −z; origin on the
+// ground.
 import * as THREE from 'three';
 import { TINT, cached, merge } from './core';
 
@@ -55,7 +56,12 @@ export const SHOES: [number, number][] = [
 
 // ---------------------------------------------------------------- the skeleton
 /** The joints of the standing body (metres, front −z, right +x). */
-export const JOINT = { hipX: 0.092, hipY: 0.87, kneeY: 0.47, ankleY: 0.085, shX: 0.2, shY: 1.39, elX: 0.235, elY: 1.12, elZ: 0.01, neckY: 1.47 } as const;
+// (the shoulder joint stands inside the torso's round, under the deltoid — round 12, must-fix 5: at
+// 1.39 on the torso's edge, the arm's round sat on top of the shoulder like an epaulette)
+export const JOINT = { hipX: 0.092, hipY: 0.87, kneeY: 0.47, ankleY: 0.085, shX: 0.185, shY: 1.32, elX: 0.235, elY: 1.12, elZ: 0.01, neckY: 1.47 } as const;
+/** The deltoid: a sphere on the shoulder joint, as wide as the arm's top and inside the torso's
+ *  outline from the front and the side (it turns about its own middle, so a swing never shows it). */
+export const DELTOID = 0.054;
 /** Where a hand grips (the right hand's palm, standing): the lead runs from here. */
 export const GRIP: readonly [number, number, number] = [0.247, 0.815, -0.03];
 
@@ -242,14 +248,14 @@ function buildPerson() {
     ], 8, leg);
     shoe(B, s, leg);
     // the arm, shoulder to wrist: the shirt to mid upper-arm (a short sleeve's hem), then the
-    // sleeve or bare arm through the elbow to the cuff
-    // (its top ring inside the shoulder's round, so no rim shows above the shoulder)
-    const ax = (y: number) => s * (0.192 + (1.38 - y) * 0.16);
+    // sleeve or bare arm through the elbow to the cuff. It hangs from the joint inside the torso
+    // (its axis through the joint and out to the elbow), its open top ring inside the deltoid's round
+    const ax = (y: number) => s * (JOINT.shX + (JOINT.shY - y) * 0.2875);
     B.tube([
-      R([ax(1.385), 1.385, 0.0], 0.047, 0.05, TINTC, 0),
-      R([ax(1.34), 1.34, 0.0], 0.05, 0.054, TINTC, 0),
-      R([ax(1.3), 1.3, 0.003], 0.048, 0.052, TINTC, 0),
-      R([ax(1.3), 1.3, 0.003], 0.048, 0.052, MARK.forearm, 0, true),
+      R([ax(1.325), 1.325, 0.0], 0.046, 0.048, TINTC, 0),
+      R([ax(1.29), 1.29, 0.002], 0.05, 0.054, TINTC, 0),
+      R([ax(1.25), 1.25, 0.004], 0.048, 0.052, TINTC, 0),
+      R([ax(1.25), 1.25, 0.004], 0.048, 0.052, MARK.forearm, 0, true),
       R([ax(1.2), 1.2, 0.008], 0.043, 0.047, MARK.forearm, 0.04),
       // (the elbow, likewise over five rings)
       R([s * 0.231, 1.16, 0.01], 0.041, 0.044, MARK.forearm, 0.2),
@@ -260,8 +266,9 @@ function buildPerson() {
       R([s * 0.243, 0.96, -0.008], 0.033, 0.037, MARK.forearm, 1),
       R([s * 0.245, 0.89, -0.017], 0.027, 0.031, MARK.forearm, 1),
     ], 7, arm);
-    // the shoulder's round (it turns in place about the joint, so the arm's top never shows)
-    B.mesh(new THREE.SphereGeometry(1, 8, 6).scale(0.058, 0.06, 0.06).translate(0.192 * s, 1.37, 0.0), TINTC, arm, 0);
+    // the deltoid: a sphere on the joint (it turns in place about its own middle, so the arm's top
+    // never shows), rounding from inside the torso's shoulder into the arm — never above it
+    B.mesh(new THREE.SphereGeometry(DELTOID, 10, 8).translate(JOINT.shX * s, JOINT.shY, 0.0), TINTC, arm, 0);
     hand(B, s, arm);
   }
   // hips (trousers) and torso (shirt), crotch to the base of the neck
@@ -337,7 +344,8 @@ export function personLiteGeometry() {
     const leg = s > 0 ? 1 : 2, arm = s > 0 ? 5 : 6, x = JOINT.hipX * s;
     B.tube([R([x, 0.93, 0.004], 0.085, 0.088, MARK.pants, 0), R([x, 0.76, 0.004], 0.075, 0.079, MARK.pants, 0), R([x, 0.6, 0.0], 0.064, 0.068, MARK.thigh, 0), R([x, 0.47, -0.004], 0.054, 0.057, MARK.shin, 0.5), R([x, 0.3, 0.006], 0.052, 0.058, MARK.shin, 1), R([x, 0.07, 0.0], 0.038, 0.04, MARK.shin, 1.8)], 4, leg);
     B.mesh(new THREE.BoxGeometry(0.09, 0.075, 0.25).translate(x, 0.0375, -0.05), MARK.shoe, leg, 2, true);
-    B.tube([R([s * 0.19, 1.42, 0.0], 0.055, 0.058, TINTC, 0), R([s * 0.212, 1.28, 0.004], 0.047, 0.051, MARK.forearm, 0), R([s * 0.235, 1.12, 0.01], 0.04, 0.043, MARK.forearm, 0.5), R([s * 0.244, 0.9, -0.016], 0.029, 0.033, MARK.forearm, 1)], 4, arm);
+    // (the arm from the shoulder joint inside the torso, its top rounded off under the shoulder's line)
+    B.tube([R([s * JOINT.shX, JOINT.shY, 0.0], 0.05, 0.053, TINTC, 0), R([s * 0.207, 1.25, 0.004], 0.047, 0.051, MARK.forearm, 0), R([s * 0.235, 1.12, 0.01], 0.04, 0.043, MARK.forearm, 0.5), R([s * 0.244, 0.9, -0.016], 0.029, 0.033, MARK.forearm, 1)], 4, arm, [true, false]);
     B.mesh(new THREE.SphereGeometry(1, 4, 3).scale(0.026, 0.052, 0.038).translate(0.248 * s, 0.826, -0.024), MARK.skin, arm, 1);
   }
   B.tube([

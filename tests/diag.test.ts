@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { browserName, clean, crashFrom, errorLine, formatReport, lostFrom, NO_WEBGL, type DiagState } from '../src/ui/diag';
+import { browserName, clean, crashFrom, errorLine, formatReport, lostFrom, NO_WEBGL, watchdogSeconds, type DiagState } from '../src/ui/diag';
 
 const UA = {
   pixel: 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36',
@@ -144,5 +144,16 @@ describe('errorLine', () => {
     const e = new Error('boom');
     e.stack = 'Error: boom\n    at f (https://h/Map_Game/assets/index-3f2a.js:40:7)';
     expect(errorLine(e)).toBe('boom @index-3f2a.js:40:7');
+  });
+});
+
+describe('watchdogSeconds', () => {
+  it('waits 180 s in a page a test rig drives (the phone frames at DPR 3 on a software GPU), 15 s for a player', () => {
+    expect(watchdogSeconds(null, false)).toBe(15);
+    expect(watchdogSeconds(null, true)).toBe(180);
+    expect(watchdogSeconds('', true)).toBe(180);
+    expect(watchdogSeconds('60', true)).toBe(60); // (?watchdog= always wins)
+    expect(watchdogSeconds('40', false)).toBe(40);
+    expect(watchdogSeconds('nonsense', false)).toBe(15);
   });
 });

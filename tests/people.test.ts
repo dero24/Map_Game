@@ -3,7 +3,7 @@
 // on the body and the pose maths the shader mirrors (src/assets/people.ts POSE_GLSL).
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { personGeometry, personLiteGeometry, walkPose, seatPose, beachPose, downPose, skinPoint, leadHand, atWorld, MARK, type Pose } from '../src/assets/people';
+import { personGeometry, personLiteGeometry, walkPose, seatPose, beachPose, downPose, skinPoint, leadHand, atWorld, MARK, JOINT, DELTOID, type Pose } from '../src/assets/people';
 import { dogLib, dogMaterial, DOG_COLLAR } from '../src/assets/fauna';
 import { CrowdLayer, CROWD_TIERS } from '../src/world/crowdLayer';
 import { CROWD_STRIDE } from '../src/world/crowd';
@@ -205,6 +205,71 @@ describe('people at arm\'s length', () => {
     expect(L.drawn.full + L.drawn.lite).toBe(60); // the same people, only their bodies change
     L.update(0, 0, 13, undefined, 1);
     expect(L.drawn.full).toBe(8);
+  });
+
+  it('shoulders (round 12, must-fix 5): the deltoid rounds into the arm — from the front and the side at 1.5 m, no arm vertex above the torso\'s outline', () => {
+    // the joint stands inside the torso, capped by a sphere on it
+    const torsoAt = (y: number) => { // (the torso tube's half-width at the joint's height: rings 1.30 → 1.34)
+      return 0.19 + ((y - 1.3) / 0.04) * 0.004;
+    };
+    expect(JOINT.shX).toBeLessThan(torsoAt(JOINT.shY) - 0.005);
+    // a camera 1.5 m off, at 1.4 m, looking at the body: the front (−z), each side (±x)
+    const VIEWS: [string, (p: number[]) => [number, number]][] = [
+      ['front', (p) => { const d = p[2] + 1.5; return [p[0] / d, (p[1] - 1.4) / d]; }],
+      ['right side', (p) => { const d = 1.5 - p[0]; return [p[2] / d, (p[1] - 1.4) / d]; }],
+      ['left side', (p) => { const d = 1.5 + p[0]; return [-p[2] / d, (p[1] - 1.4) / d]; }],
+    ];
+    // the torso: the trunk's triangles below the neck (the torso tube, the neck's foot)
+    const tris: number[][] = [];
+    for (let t = 0; t < idx.count; t += 3) {
+      const v = [idx.getX(t), idx.getX(t + 1), idx.getX(t + 2)];
+      if (v.every((i) => part.getX(i) === 0 && pos.getY(i) < 1.47 && pos.getY(i) > 0.9)) tris.push(v);
+    }
+    expect(tris.length).toBeGreaterThan(100);
+    const BIN = 0.0004; // (in the image plane at 1 m: 0.6 mm at 1.5 m)
+    let worst = -Infinity, where = '', checked = 0;
+    const poses: [string, Pose][] = [['rest', walkPose(0, 0, 0, 0, 1)], ...POSES.filter(([n]) => /^(walk|standing|talking|dog walker)/.test(n))];
+    for (const [name, P] of poses) {
+      const { p } = posed(P);
+      for (const [view, proj] of VIEWS) {
+        // the torso's outline: the highest point of it in each column of the image
+        const top = new Map<number, number>();
+        for (const v of tris) {
+          const q = v.map((i) => proj(p[i]));
+          const u0 = Math.min(q[0][0], q[1][0], q[2][0]), u1 = Math.max(q[0][0], q[1][0], q[2][0]);
+          for (let c = Math.ceil(u0 / BIN); c * BIN <= u1; c++) {
+            const u = c * BIN;
+            let hi = -Infinity;
+            for (let e = 0; e < 3; e++) {
+              const a = q[e], b = q[(e + 1) % 3];
+              if ((a[0] - u) * (b[0] - u) > 0) continue;
+              const f = Math.abs(b[0] - a[0]) < 1e-12 ? 1 : (u - a[0]) / (b[0] - a[0]);
+              hi = Math.max(hi, a[1] + (b[1] - a[1]) * Math.max(0, Math.min(1, f)), Math.abs(b[0] - a[0]) < 1e-12 ? Math.max(a[1], b[1]) : -Infinity);
+            }
+            if (hi > (top.get(c) ?? -Infinity)) top.set(c, hi);
+          }
+        }
+        const cols = [...top.keys()], c0 = Math.min(...cols), c1 = Math.max(...cols);
+        // beyond the torso's edge (and over its outermost centimetre), the shoulder's line is the torso's
+        // height there: the corner where the shoulder turns down into the side
+        const edge = (lo: number, hi: number) => { let m = -Infinity; for (let c = lo; c <= hi; c++) m = Math.max(m, top.get(c) ?? -Infinity); return m; };
+        const span = Math.round(0.01 / 1.5 / BIN), eL = edge(c0, c0 + span), eR = edge(c1 - span, c1);
+        for (let i = 0; i < N; i++) {
+          if (part.getX(i) !== 5 && part.getX(i) !== 6) continue;
+          if (pos.getY(i) < JOINT.shY - DELTOID - 0.02) continue; // (the shoulder: the deltoid and the arm's top, wherever the pose swings them)
+          const [u, vv] = proj(p[i]), c = Math.round(u / BIN);
+          // (over the torso, its own outline; its outermost centimetre — the corner where the shoulder
+          // turns down into the side — and beyond, the corner's height)
+          const own = top.get(c) ?? Math.max(top.get(c - 1) ?? -Infinity, top.get(c + 1) ?? -Infinity);
+          const allowed = c <= c0 + span ? Math.max(eL, c >= c0 ? own : -Infinity) : c >= c1 - span ? Math.max(eR, c <= c1 ? own : -Infinity) : own;
+          checked++;
+          const over = (vv - allowed) * 1.5; // (metres at the body)
+          if (over > worst) { worst = over; where = `${name}, ${view}, ${part.getX(i) === 5 ? 'right' : 'left'} arm`; }
+        }
+      }
+    }
+    console.log(`[people] shoulders: ${checked} arm-top vertex views over ${poses.length} poses × 3 views; the highest against the torso's outline ${(worst * 1000).toFixed(1)} mm (${where}); deltoid r ${DELTOID} m at (${JOINT.shX}, ${JOINT.shY})`);
+    expect(worst).toBeLessThanOrEqual(0.001);
   });
 
   it('deterministic: the same body and the same pose every time', () => {
