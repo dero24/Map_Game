@@ -124,6 +124,13 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
     space (a kitchen the stair's wet room cuts in two has it in its biggest part). A fridge with no
     wall for a full-size one is a slim 60 cm one. Of the 82 seeded homes' kitchens, 80 have their
     cooker under a hood, a fridge and ≥ 0.6 m of wall cabinets (two have no wall left for a fridge).
+  - Wall cabinets read as cabinets (review round 12, frame 6: "flat cut-outs in the curtains' own blue,
+    and the two merge"): `WALL_D` (32 cm) off the wall, a 2 cm dark joint between each pair of ~0.6 m
+    doors, a handle on every door and the bottom rail's line, and the shadow they throw on the
+    splashback under them (`SHADOW_DARK`: 5.5 cm at half the splashback's light, 5 cm at three
+    quarters). Their colour keeps its own against the room's curtains (`interiors.ts` job.fab →
+    `Furnisher.fab`; `furnish.ts cabinetColour`: the picked colour, else white, else the next paint at
+    ΔE76 ≥ `CABINET_DE` 22 from the fabric).
   - Dining chairs: a place per ~0.7 m of the table's edge, never under `DINE_PLACE` (0.6 m) —
     `placesAlong`: two a side at 1.2–2.0 m, three from 2.1 m — and one at each end of a table of
     `DINE_ENDS` (1.4 m) or longer where there's room behind it to draw the chair out (the table is
@@ -208,6 +215,12 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 - Ground-floor role follows the business (`useOf`): café (counter, pastry case, bistro sets),
   diner for restaurants/bars (vinyl booths, counter + stools, menu board), office/civic (desks,
   monitors, office chairs), shop for groceries (stocked gondolas).
+- Lunch on the tables (review round 12, frame 18: "a cup, a plate or a glass at every occupied
+  table"): every seat a café, a bar's high tops or a diner's booths offer a customer (`F.npcs` with a
+  seat — the build picks who sits from these) has lunch in front of it — a plate, and a coffee or a
+  glass of water (`furnish.ts lunch`; decor.ts `tableware`, keys `tw:plate`, `tw:cup`, `tw:glass`, chosen
+  by the place, no draw on the room's seed). `tests/interiorHome.test.ts`: every table someone sits at
+  in two cafés, a bar and a diner over three seeds is set.
 - Sun pools: the interior shader traces the sun ray to the outer wall (`uDims`) and lights the
   floor where it passes one of that wall's real window cells (the facade's spacing, sill and head
   for the building's kind) and that wall is the same room's (see "The way in" above).
@@ -368,6 +381,15 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
     the hint steps aside till it has faded. An arrival card (`body.arriving`) is painted smaller
     where the place name stands, on the same wash, and the place name waits till the card's fade
     ends (`animationend` — the wall clock, not the slow frames' game time).
+  - Never cut off (review round 12, must-fix 4: the paint result ended "…you've painted an area…").
+    Every toast is written to fit two lines at 320–390 px — "painted out to 1.2 km · 0.35 km² ·
+    Map: your sketchbook", a milestone ("you've painted an area the size of Central Park") a toast of its
+    own after it — and `toast()` says anything longer in parts, split at its last break that fits (" — ",
+    " · ", ": ", "; "). A phone's arrival card is two lines: the name, then the region written short
+    and the time ("Monmouth County, NJ · 7:42 pm": `geo.ts shortRegion`; `.a-short`/`.a-long`/`.a-more`
+    — the long region and the sky's words are a PC's); a name too long for its line is painted a size
+    smaller (`.a-small`), a region too long for the second steps aside for the time (`.a-tight`). No
+    message carries a literal "…" either. `tools/hud-audit.mjs` renders all of it on its ten phones.
   - The map-data credit on one line along the bottom edge, under the stick and the cluster. The
     words in hints and toasts are the buttons' own (Paint, Land, Map, Go, More, Boost, Burn…).
   - `tools/hud-audit.mjs` checks it: 10 phones × both ways × 7 states × 4 message sets (none, a
@@ -392,6 +414,12 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
   draw for all of them (`life-ped`), the residents and the café guests too, each in its own mesh.
   - Standing (a pause, a chat, a corner) is never frozen: the weight goes over one foot, then the
     other, the free knee easing, the head looking about (`walkPose`'s idle).
+  - **Dog walkers go in at doors too** (`lifeSim.ts`, the visit roll): the dog goes in with them and
+    comes out with them. Only the others visited (round 12, "dogs fill the street"), so the street
+    kept ~23% dog walkers by day where the sim assigns 9%; now the share outdoors is the share
+    assigned (`tests/lifeSim.test.ts`: 10.7% assigned, 11.3% outdoors on a grid town by day). Not
+    done: a beach's no-dogs season as a dated ordinance table by municipality (it belongs in region
+    data, never a place name in code).
   - **Dog walkers** (`PED.DOG`): `life.ts` `walkDog` puts the dog a lead's length ahead and to the
     right, on the walker's own ground, and tells the walker's shader `aAnim.z` = 1 + how far the
     dog has wandered sideways — the right arm holds the lead out toward it. The lead (`LEAD_V` 8
@@ -517,8 +545,8 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   - `kit.ts`: cars (+ gear), boats, planes, rocks;
   - `flora.ts`: 7 tree species × 3 variants (`treeMeta` gives real dims), 12 garden species with growth stages, `plantMix`, `inBloom`;
   - `fauna.ts`: 9 animals (incl. red fox, red-tailed hawk) on one jointed body plan + `birdGeometry` + `critterMaterial`, and the walkers' dog (`dogLib`, `dogMaterial`: the tail carried and wagged side to side, `DOG_COLLAR` for the lead);
-  - `decor.ts`: the furniture family for interiors and terraces (sofa, armchair, bed, tables, chairs, bistro and office chairs, monitor, lamps, café counter, booth, stocked shelves, plants, ceiling fan, storage bench, `cafeSet`), rounded boxes (one bevel segment; plain boxes under 1.5 cm radius) and tapered legs, merged by `mergeDecor` or instanced by `interior/mesh.ts`, plus the plain-box pieces planned rooms repeat (kitchen run, workstation, door frame and leaf, WC, vanity, bath, wardrobe, dresser, bookcase, gondola, washer, lift doors, mailboxes, racking, range), and the way in (coats on their rail, a bordered runner, the console with its lamp, a mirror, skirting stretched to each wall, a ceiling dome lit after dark or all day); per-piece vertex budgets in `tests/foundry.test.ts` (a sofa < 4000, a chair < 1500, the coat rail < 3200);
-  - `people.ts`: one jointed person for walkers and residents — indexed and smooth (1,472 vertices, 2,522 triangles: limbs as tubes through the joints, shoes on soles, rounded hands), skinned in the shader by joint angles (`Pose`, `aSkin`; `POSE_GLSL` mirrors the TypeScript `walkPose`/`seatPose`/`beachPose`/`downPose`/`skinPoint`, which the lead and the helm's skipper use) — and its lite twin (`personLiteGeometry`, 193 vertices, smooth: the beach crowd where people are small on screen). Skin, hair, trouser and shoe palettes, 5 hairstyles, shorts/sleeves by `warmthFor(climate, month)` — all chosen per instance in the shader (`PEOPLE` define in `creatureMaterial`, marker vertex colours `MARK`; `BEACH`: swimwear, bare feet and poses), so a crowd is one draw. Measured in `tests/people.test.ts`: shoes ≤ 14 cm across and never below the ground on their feet, no normal break over 25° along a limb in 69 poses, the lead within 5 cm of the hand, standing weight shifts with planted feet, the dog's tail tip ≥ 15 cm up. Workbench: `/kit.html` → people;
+  - `decor.ts`: the furniture family for interiors and terraces (sofa, armchair, bed, tables, chairs, bistro and office chairs, monitor, lamps, café counter, booth, stocked shelves, plants, ceiling fan, storage bench, `cafeSet`), rounded boxes (one bevel segment; plain boxes under 1.5 cm radius) and tapered legs, merged by `mergeDecor` or instanced by `interior/mesh.ts`, plus the plain-box pieces planned rooms repeat (kitchen run, workstation, door frame and leaf, WC, vanity, bath, wardrobe, dresser, bookcase, gondola, washer, lift doors, mailboxes, racking, range), and the way in (coats on their rail, a bordered runner, the console with its lamp, a mirror, skirting stretched to each wall, a ceiling dome lit after dark or all day), and lunch on a table (`tableware`: a plate, a coffee, a glass of water, each < 500 vertices); per-piece vertex budgets in `tests/foundry.test.ts` (a sofa < 4000, a chair < 1500, the coat rail < 3200), and the wall cabinets checked there (32 cm deep, joints, handles, the shadow band, ΔE to every curtain fabric);
+  - `people.ts`: one jointed person for walkers and residents — indexed and smooth (1,538 vertices, 2,626 triangles: limbs as tubes through the joints, shoes on soles, rounded hands), skinned in the shader by joint angles (`Pose`, `aSkin`; `POSE_GLSL` mirrors the TypeScript `walkPose`/`seatPose`/`beachPose`/`downPose`/`skinPoint`, which the lead and the helm's skipper use) — and its lite twin (`personLiteGeometry`, 193 vertices, smooth: the beach crowd where people are small on screen). Skin, hair, trouser and shoe palettes, 5 hairstyles, shorts/sleeves by `warmthFor(climate, month)` — all chosen per instance in the shader (`PEOPLE` define in `creatureMaterial`, marker vertex colours `MARK`; `BEACH`: swimwear, bare feet and poses), so a crowd is one draw. The shoulder joint stands inside the torso, capped by the deltoid (a sphere on it: `DELTOID`), so the arm rounds into the shoulder (round 12: the arm tube's top stood proud of it like an epaulette). Measured in `tests/people.test.ts`: no arm-top vertex above the torso's outline seen from the front and either side at 1.5 m in 45 poses (10 mm under it at worst); shoes ≤ 14 cm across and never below the ground on their feet, no normal break over 25° along a limb in 69 poses, the lead within 5 cm of the hand, standing weight shifts with planted feet, the dog's tail tip ≥ 15 cm up. Workbench: `/kit.html` → people;
   - `furniture.ts`: mailboxes, beach set, picnic table, car gear + `gearFor`;
   - `micro.ts`: the micro layer's small things (carts, A-frames, porch chairs, flags, hoops, cleats, buoys, beach gear, the mapped picnic tables, boards, cabinets, clocks, channel marks), placed by `world/micro.ts` and drawn real close up, as impostor cards further out (`docs/agent/rendering.md`).
 - Lot dressing (NA): `buildings.ts` lays a generated drive (a 2.9 m strip in `walks`) beside the front walk where the map has no service way near the door, and emits `drives`; `props.ts` parks a car at the house end (never on paved ground or the sidewalk strip). Doors also get hedges or `fence:picket` runs.

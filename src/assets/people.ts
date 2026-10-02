@@ -268,7 +268,7 @@ function buildPerson() {
     ], 7, arm);
     // the deltoid: a sphere on the joint (it turns in place about its own middle, so the arm's top
     // never shows), rounding from inside the torso's shoulder into the arm — never above it
-    B.mesh(new THREE.SphereGeometry(DELTOID, 10, 8).translate(JOINT.shX * s, JOINT.shY, 0.0), TINTC, arm, 0);
+    B.mesh(new THREE.SphereGeometry(DELTOID, 10, 7).translate(JOINT.shX * s, JOINT.shY, 0.0), TINTC, arm, 0);
     hand(B, s, arm);
   }
   // hips (trousers) and torso (shirt), crotch to the base of the neck
