@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { stickAxes } from '../src/player/vehicles';
+import { shortRegion } from '../src/ui/geo';
 
 // The walking stick as a ride's controls (player/vehicles.ts): +y is the stick pulled down.
 describe('stickAxes', () => {
@@ -30,5 +31,15 @@ describe('stickAxes', () => {
       expect(Math.abs(a.x)).toBeLessThanOrEqual(1);
       expect(Math.abs(a.y)).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe('shortRegion (a phone\'s arrival card: "Monmouth County, NJ · 7:42 pm")', () => {
+  it('writes a US state at the end as its postal code, anything else as it is', () => {
+    expect(shortRegion('Monmouth County, New Jersey')).toBe('Monmouth County, NJ');
+    expect(shortRegion('New York')).toBe('NY');
+    expect(shortRegion('King County, Washington')).toBe('King County, WA');
+    expect(shortRegion('Gloucestershire, England')).toBe('Gloucestershire, England');
+    expect(shortRegion('')).toBe('');
   });
 });

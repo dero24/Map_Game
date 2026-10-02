@@ -123,7 +123,7 @@ export class PhotoMode {
     void this.shoot();
   }
   private statusT?: number;
-  /** ' · …the size of Manhattan' the first time your painted area passes one. */
+  /** "you've painted an area the size of Manhattan" the first time your painted area passes one. */
   private milestone() {
     const st = this.g.explore.stats(), km2 = st.km2 + st.photoKm2;
     let said = 0;
@@ -132,7 +132,7 @@ export class PhotoMode {
     for (let i = said; i < MILESTONES.length && km2 >= MILESTONES[i][1]; i++) { hit = MILESTONES[i][0]; said = i + 1; }
     if (!hit) return '';
     try { localStorage.setItem(MS_KEY, String(said)); } catch { /* */ }
-    return ` — you've painted an area the size of ${hit}`;
+    return `you've painted an area the size of ${hit}`;
   }
   /** ' — the pencil is to the north-east': the way with the most unpainted ground (the far record). */
   private pencilWay() {
@@ -217,17 +217,25 @@ export class PhotoMode {
     // a coloured card is a kind you can paint anywhere now (ui/brush.ts)
     const yours = this.com.fresh.some((k) => (PAINTABLE as readonly string[]).includes(k.split(':')[0]));
     const thumbs = document.body.classList.contains('nomouse'); // (a phone names its buttons, not keys)
-    if (painted.length) setTimeout(() => this.g.toast(`almanac: painted in — ${painted.slice(0, 3).join(', ')}${painted.length > 3 ? ` and ${painted.length - 3} more` : ''}${yours ? ` · yours to paint now: ${thumbs ? '✎' : 'B'} for your brush` : ''}`), done ? 2600 : 1800);
+    // (every message two lines at most on a 320 px phone, never cut off: review round 12, must-fix 4 —
+    // "Painted out to 1.2 km · 0.35 km²"; the milestone is a message of its own after it)
+    if (painted.length) setTimeout(() => this.g.toast(`almanac: ${thumbs ? painted[0] : painted.slice(0, 3).join(', ')}${painted.length > (thumbs ? 1 : 3) ? ` + ${painted.length - (thumbs ? 1 : 3)} more` : ''}${yours ? ` · yours to paint now${thumbs ? '' : ': B for your brush'}` : ''}`), done ? 2600 : 1800);
     const seen = await framed;
     // what the shot did, in real terms; a shot that added nothing says where the pencil still is
-    const inWorld = seen?.cells ? `painted in what you framed — out to ${far(seen.reach)} · ${seen.km2 < 1 ? seen.km2.toFixed(2) : seen.km2 < 10 ? seen.km2.toFixed(1) : Math.round(seen.km2)} km² in colour${this.milestone()}`
-      : seen ? `already in colour here${this.pencilWay()}` : '';
+    const ms = seen?.cells ? this.milestone() : '';
+    const inWorld = seen?.cells ? `painted out to ${far(seen.reach)} · ${seen.km2 < 1 ? seen.km2.toFixed(2) : seen.km2 < 10 ? seen.km2.toFixed(1) : Math.round(seen.km2)} km²`
+      : seen ? `already in colour${this.pencilWay()}` : '';
+    const after = (msg: string, ms0: number) => setTimeout(() => this.g.toast(msg), ms0);
     if (done) {
       this.com.complete(done, p.id);
       this.g.sound('chime');
-      this.g.toast(`✦ commission complete — ${done.title}`);
-      if (inWorld) setTimeout(() => this.g.toast(inWorld), painted.length ? 4600 : 2600);
-    } else this.g.toast(inWorld ? `${inWorld} · ${thumbs ? 'Map' : 'M'} for your sketchbook` : `painted into your sketchbook · ${thumbs ? 'Map' : 'M'} to see it`);
+      this.g.toast(`✦ commission done: ${done.title}`);
+      if (inWorld) after(inWorld, painted.length ? 4600 : 2600);
+      if (ms) after(ms, painted.length ? 8200 : 6200);
+    } else {
+      this.g.toast(inWorld ? `${inWorld} · ${thumbs ? 'Map' : 'M'}: your sketchbook` : `painted into your sketchbook · ${thumbs ? 'Map' : 'M'} to see it`);
+      if (ms) after(ms, painted.length ? 5400 : 3600);
+    }
     this.onSaved?.(p);
     this.status();
   }

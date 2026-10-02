@@ -57,6 +57,24 @@ window.__REVIEW__ = async (tag = 'r', opts = {}) => {
     const fly = G.walkParams.fly;
     track = setInterval(() => { const t = at(); if (m.elements[0] === 0) return; const cx = t.x + Math.sin(a) * dist, cz = t.z + Math.cos(a) * dist; G.walker.place(cx, cz, a, -0.05); if (fly) { G.walkParams.fly = true; G.walker.y = t.y + h; } }, 50);
   };
+  // a walker pose: the walkers (life-ped) where `ok`, nearest the spawn first — and the first of them,
+  // followed, that the lens shows at ≥ 1% of the frame (round 12: 14 had re-posed "people on the
+  // street" onto empty sand). None does: the nearest, and the frame is stamped (`walkerSeen`).
+  const walkersNear = (ok) => {
+    let mesh = null; G.scene.traverse((o) => { if (o.name === 'life-ped') mesh = o; });
+    const out = [];
+    if (mesh) for (let i = 0; i < mesh.count; i++) { mesh.getMatrixAt(i, m); if (m.elements[0] === 0) continue; p.setFromMatrixPosition(m); if (ok(p.x, p.z)) out.push({ i, d: Math.hypot(p.x - s.x, p.z - s.z) }); }
+    return { mesh, list: out.sort((a, b) => a.d - b.d).map((w) => w.i) };
+  };
+  const walkerSeen = () => idPass(G, { name: '^life-ped$' }).subject;
+  const followSeen = async ({ mesh, list }, angOf, dist, h) => {
+    for (const i of list.slice(0, 5)) {
+      follow('life-ped', i, dist, h, angOf(mesh, i));
+      await wait(1200);
+      if (walkerSeen() >= 0.01) return;
+    }
+    if (list.length) follow('life-ped', list[0], dist, h, angOf(mesh, list[0]));
+  };
   const ground = (x, z, yaw, pitch = -0.03) => {
     // step off anything solid: spiral out to the nearest spot with 2 m of room
     if (G.walk) for (let r = 0; r < 60 && G.walk.blocked(x, z, 2); r += 2) { const a = r * 1.3; x += Math.sin(a) * 2; z += Math.cos(a) * 2; }
@@ -170,15 +188,12 @@ window.__REVIEW__ = async (tag = 'r', opts = {}) => {
   const [lbx, lbz] = (() => { const o = G.world.json.origin; const K = (Math.PI / 180) * 6378137; return [(-73.9868 - o.lon) * K * Math.cos((o.lat * Math.PI) / 180), (o.lat - 40.3043) * K]; })();
   const C = [
     { label: '13 streamed street at night (Long Branch)', fn: async () => { set(21.5); await G.stream.ensureAround(lbx, lbz); street(lbx, lbz, 0.2); await wait(1500); } },
-    { label: '14 people on the street', fn: async () => {
+    { label: '14 people on the street', walker: true, fn: async () => {
       set(16);
       // life is player-centred: stand at spawn first so the street fills with walkers again
       ground(s.x, s.z, 0); await wait(3500);
-      // the nearest walker on a street (not the beach), followed while the frame settles
-      let mesh = null; G.scene.traverse((o) => { if (o.name === 'life-ped') mesh = o; });
-      let bi = -1, bd = 1e9;
-      if (mesh) for (let i = 0; i < mesh.count; i++) { mesh.getMatrixAt(i, m); if (m.elements[0] === 0) continue; p.setFromMatrixPosition(m); const d = Math.hypot(p.x - s.x, p.z - s.z); if (d < bd && G.world.terrain.sdfAt(p.x, p.z) > 40 && G.world.terrain.oceanDistAt(p.x, p.z) > 90) { bd = d; bi = i; } }
-      if (bi >= 0) follow('life-ped', bi, 5.5, 1.75, 1.2);
+      // the nearest walker on a street (not the beach) that the lens shows, followed while the frame settles
+      await followSeen(walkersNear((x, z) => G.world.terrain.sdfAt(x, z) > 40 && G.world.terrain.oceanDistAt(x, z) > 90), () => 1.2, 5.5, 1.75);
     } },
     { label: '15 street trees, close', fn: () => { set(9.5); const tr = near('trees:', s.x, s.z, 3); if (tr) look({ ...tr, y: tr.y + 3 }, 11, 2, 2.0, 0.1); } },
     { label: '16 the beach at eye level', fn: () => { set(12); if (um) ground(um.x + 9, um.z + 14, 0.55, -0.04); } },
@@ -229,12 +244,10 @@ window.__REVIEW__ = async (tag = 'r', opts = {}) => {
       }
       await wait(1500);
     } },
-    { label: '20 a walker, side on', fn: async () => {
+    { label: '20 a walker, side on', walker: true, fn: async () => {
       set(15); ground(s.x, s.z, 0); await wait(3500);
-      let mesh = null; G.scene.traverse((o) => { if (o.name === 'life-ped') mesh = o; });
-      let bi = -1, bd = 1e9;
-      if (mesh) for (let i = 0; i < mesh.count; i++) { mesh.getMatrixAt(i, m); if (m.elements[0] === 0) continue; p.setFromMatrixPosition(m); const dd = Math.hypot(p.x - s.x, p.z - s.z); if (dd < bd && G.world.terrain.sdfAt(p.x, p.z) > 40) { bd = dd; bi = i; } }
-      if (bi >= 0) { mesh.getMatrixAt(bi, m); const q = new T.Quaternion(), sc = new T.Vector3(); m.decompose(p, q, sc); const yaw = new T.Euler().setFromQuaternion(q, 'YXZ').y; follow('life-ped', bi, 4.5, 1.2, yaw + Math.PI / 2); }
+      // side on: the camera off the walker's own right
+      await followSeen(walkersNear((x, z) => G.world.terrain.sdfAt(x, z) > 40), (mesh, i) => { mesh.getMatrixAt(i, m); const q = new T.Quaternion(), sc = new T.Vector3(); m.decompose(p, q, sc); return new T.Euler().setFromQuaternion(q, 'YXZ').y + Math.PI / 2; }, 4.5, 1.2);
     } },
   ];
   // E: the ecosystem and street physics (fox, hawk, a walker knocked down, a lamp close up)
@@ -253,7 +266,7 @@ window.__REVIEW__ = async (tag = 'r', opts = {}) => {
       crit('hawk', lawn.x + 18, lawn.z, { state: 'soar', y, ty: y, home: { x: lawn.x, z: lawn.z }, t: 999 });
       await wait(300); follow('critter:hawk', 0, 4.5, 0.9, 0.6);
     } },
-    { label: '23 a walker knocked down by a car', fn: async () => {
+    { label: '23 a walker knocked down by a car', walker: true, fn: async () => {
       set(15); ground(s.x, s.z, 0); await wait(3500);
       let mesh = null; G.scene.traverse((o) => { if (o.name === 'life-ped') mesh = o; });
       let bi = -1, bd = 1e9, bp = null;
@@ -266,8 +279,10 @@ window.__REVIEW__ = async (tag = 'r', opts = {}) => {
   // what the frame actually shows — the id pass (tools/id-pass.js, spot-shots' asserts). The round-3/6
   // ray grid (25% of 40 rays within 4 m) let round 10's night street through with a slab filling its
   // lower right. (The ground at your feet is below knee height: it never counts.)
-  const lensSeen = () => idPass(G);
-  const occluder = () => { const why = lensVerdict(lensSeen(), { world: 0 }); return why.length ? why.join(', ') : null; };
+  // (round 12: and a thin thing within 2.5 m across 60% of the frame's height — a pole splitting it; a
+  // walker pose fails with under 1% of the frame walker — the subject pass: life-ped against the world)
+  const lensSeen = (walker) => idPass(G, walker ? { name: '^life-ped$' } : null);
+  const occluder = (walker = false) => { const why = lensVerdict(lensSeen(walker), { world: 0, subject: walker ? 0.01 : 0 }); return why.length ? why.join(', ') : null; };
   // …and a pose that fails it is re-posed: back and aside from where it stood, looking where it
   // looked, on open ground, until it passes (else the least blocked of them)
   const repose = async () => {
@@ -313,9 +328,10 @@ window.__REVIEW__ = async (tag = 'r', opts = {}) => {
       if (o) console.log(`[review] ${label}: ${o} — re-posed: ${(await repose()) ?? 'clear'}`);
     };
     it.after = () => {
-      const o = G.interiors.indoors ? null : occluder(); // (indoors the walls are meant to be near)
-      it.label = o ? `${label}  ⚠ occluder: ${o}` : label;
-      if (o) console.warn('[review] occluder in', label, o);
+      const o = G.interiors.indoors ? null : occluder(!!it.walker); // (indoors the walls are meant to be near)
+      it.label = o ? `${label}  ⚠ ${it.walker && /subject/.test(o) ? 'no walker' : 'occluder'}: ${o}` : label;
+      if (o) console.warn('[review] fails:', label, o);
+      window.__REVIEW_LENS__ = { ...(window.__REVIEW_LENS__ ?? {}), [label.split(' ')[0]]: o ?? 'ok' };
     };
   }
   const settle = opts.settle ?? 45;

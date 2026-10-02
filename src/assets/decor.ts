@@ -218,6 +218,30 @@ export function booth(len: number, fab: number, top: number): Parts {
   return out;
 }
 
+/** Lunch on a table (review round 12, frame 18: "a cup, a plate or a glass at every occupied
+ *  table"), standing on the top at y = 0 — one place: `plate` (a dinner plate with a sandwich and
+ *  greens on it), `cup` (a coffee on its saucer), `glass` (water). Off-whites and colours, never pure
+ *  white, so no instance tint touches them. */
+export type Tableware = 'plate' | 'cup' | 'glass';
+export const TABLEWARE: readonly Tableware[] = ['plate', 'cup', 'glass'];
+export function tableware(kind: Tableware): Parts {
+  if (kind === 'plate') return [
+    P(cyl(0.085, 0.12, 0.016, 0, 0, 0, 14), 'porcelain', 0xf4f1ea),
+    P(rbox(0.1, 0.035, 0.07, 0.012, -0.015, 0.016, 0.0).rotateY(0.5), 'solid', 0xd9a35e), // the sandwich
+    P(ni(new THREE.SphereGeometry(0.035, 6, 3, 0, Math.PI * 2, 0, Math.PI / 2)).scale(1, 0.6, 1).translate(0.05, 0.016, 0.03), 'solid', 0x6e8c4a), // greens
+  ];
+  if (kind === 'cup') return [
+    P(cyl(0.05, 0.068, 0.012, 0, 0, 0, 12), 'porcelain', 0xf1ede4),
+    P(cyl(0.032, 0.042, 0.065, 0, 0.012, 0, 10), 'porcelain', 0xf1ede4),
+    P(cyl(0.038, 0.038, 0.004, 0, 0.07, 0, 10), 'solid', 0x5a3a28), // the coffee
+    P(rbox(0.012, 0.035, 0.03, 0.004, 0.048, 0.03, 0), 'porcelain', 0xf1ede4), // the handle
+  ];
+  return [
+    P(cyl(0.03, 0.036, 0.12, 0, 0, 0, 10), 'glass', 0xcfdfe4),
+    P(cyl(0.031, 0.033, 0.075, 0, 0.004, 0, 10), 'glass', 0xa9c4cc), // the water in it
+  ];
+}
+
 /** A shop shelving unit (the back wall of a shop), stocked by seed. */
 export function shelves(w: number, d: number, h: number, wood: number, stock: number[], seed: number): Parts {
   const out: Parts = [P(rbox(w, h, 0.03, 0.01, 0, 0, d / 2 - 0.015), 'wood', wood)];
@@ -285,8 +309,25 @@ export interface KitchenSpec {
   /** the stretches with a window over them: no wall cabinets there, a low upstand for the splash */
   gaps: [number, number][];
 }
-/** A fridge's width, a cooker's, a wall cabinet's door (m); the wall cabinets hang from WALL_Y. */
-export const FRIDGE_W = 0.72, COOKER_W = 0.6, WALL_Y = 1.45;
+/** A fridge's width, a cooker's, a wall cabinet's door (m); the wall cabinets hang from WALL_Y,
+ *  WALL_D deep off the wall. */
+export const FRIDGE_W = 0.72, COOKER_W = 0.6, WALL_Y = 1.45, WALL_D = 0.32;
+/** The wall cabinet doors' joints: a dark reveal 2 cm wide, so they read from across the room. */
+const JOINT_HEX = 0x4a4540;
+/** How much darker than the splashback the shadow under the wall cabinets is: at their foot, then a
+ *  softer band under that. */
+export const SHADOW_DARK: [number, number] = [0.5, 0.25];
+
+/** CIE L*a*b* of an sRGB hex (D65), and the CIE76 distance between two (a kitchen's cabinets keep a
+ *  colour of their own against the room's curtains: furnish.ts `cabinetColour`). */
+export function labOf(hex: number): [number, number, number] {
+  const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const r = lin(Math.floor(hex / 65536) / 255), g = lin((Math.floor(hex / 256) % 256) / 255), b = lin((hex % 256) / 255);
+  const X = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047, Y = 0.2126 * r + 0.7152 * g + 0.0722 * b, Z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883;
+  const f = (t: number) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))];
+}
+export const deltaE = (a: number, b: number) => { const p = labOf(a), q = labOf(b); return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
 const qk = (x: number) => (Math.round(x * 20) / 20).toFixed(2);
 /** The piece key a kitchen spec draws as (everything that shapes it, to 5 cm). */
 export const kitchenKey = (s: KitchenSpec) => `kitchen:${qk(s.len)}:${qk(s.sink)}:${s.range === null ? 'n' : qk(s.range)}:${s.fridge}:${s.gaps.map(([a, b]) => `${qk(a)}~${qk(b)}`).join(',')}`;
@@ -368,10 +409,22 @@ export function kitchen(s: KitchenSpec, top = 0x4a4540, splash = 0xe9eef0): Part
   out.push(P(box(0.04, 0.3, 0.04, s.sink, 0.92, 0.2), 'porcelain', 0xc0c4c6));
   out.push(P(box(0.04, 0.03, 0.18, s.sink, 1.19, 0.12), 'porcelain', 0xc0c4c6));
   if (s.range !== null) rangeParts(out, s.range);
-  // the wall cabinets: over the base run where the wall is solid, not over the cooker's hood
+  // the wall cabinets: over the base run where the wall is solid, not over the cooker's hood —
+  // WALL_D deep off the wall, their doors' joints and handles on the front, and the shadow they
+  // throw on the splashback under them (review round 12: "flat cut-outs in the curtains' own blue")
   for (const [a, b] of wallCabinets(s)) {
-    out.push(P(box(b - a, 0.72, 0.34, (a + b) / 2, WALL_Y, 0.13), 'solid', T));
-    joins(out, a, b, WALL_Y + 0.04, WALL_Y + 0.68, -0.042);
+    out.push(P(box(b - a, 0.72, WALL_D, (a + b) / 2, WALL_Y, 0.3 - WALL_D / 2), 'solid', T));
+    const front = 0.3 - WALL_D - 0.004, n = Math.max(1, Math.round((b - a) / 0.6));
+    for (let i = 1; i < n; i++) out.push(P(box(0.02, 0.7, 0.008, a + ((b - a) * i) / n, WALL_Y + 0.01, front), 'solid', JOINT_HEX)); // the doors' joints
+    out.push(P(box(b - a - 0.02, 0.012, 0.008, (a + b) / 2, WALL_Y + 0.004, front), 'solid', JOINT_HEX)); // the bottom rail's line
+    // a handle at each door's opening edge, low (a pair opens at the joint between them)
+    for (let i = 0; i < n; i++) {
+      const d0 = a + ((b - a) * i) / n, d1 = a + ((b - a) * (i + 1)) / n, hx = i % 2 === 1 ? d0 + 0.05 : d1 - 0.05;
+      out.push(P(box(0.016, 0.11, 0.022, hx, WALL_Y + 0.05, front - 0.012), 'metal', 0x8a8e90));
+    }
+    // the shadow on the splashback under it: dark at the cabinet's foot, softening down the tiles
+    out.push(P(box(b - a, 0.055, 0.006, (a + b) / 2, WALL_Y - 0.055, 0.289), 'solid', darken(splash, SHADOW_DARK[0])));
+    out.push(P(box(b - a, 0.05, 0.006, (a + b) / 2, WALL_Y - 0.105, 0.289), 'solid', darken(splash, SHADOW_DARK[1])));
   }
   if (s.fridge) {
     const fx = s.fridge < 0 ? x0 + FRIDGE_W / 2 : x1 - FRIDGE_W / 2;

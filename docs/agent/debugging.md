@@ -100,10 +100,30 @@ behaviour.
     [--poses=3,13,13n,day] [--png]` (the page served first) prints each pose's numbers, writes
     `shots/nightcheck-<tag>.{jpg,json}` (`--png`: each pose's frame too, for a diff), exits 1 on a
     failed pose.
-- The id pass is `tools/id-pass.js` (`idPass`, `flatPass`, `lensVerdict`). `review-shots.js` checks
-  every outdoor pose with it — nothing within 2.5 m of the lens over 5% of the frame, nor within 4 m
-  over 15% — and re-poses one that fails (back and aside, looking where it looked; logged as
-  `[review] … re-posed`). Only a pose that still fails is stamped `⚠ occluder`.
+- The id pass is `tools/id-pass.js` (`idPass`, `flatPass`, `lensVerdict`, `nearSpan`). `review-shots.js`
+  checks every outdoor pose with it — nothing within 2.5 m of the lens over 5% of the frame, nor within
+  4 m over 15%, nor a thin thing within 2.5 m crossing 60% of the frame's height (`span`: the tallest
+  connected piece of the 2.5 m mask; round 12's pole split m5 at 3.7% of its pixels) — and re-poses one
+  that fails (back and aside, looking where it looked; logged as `[review] … re-posed`). Only a pose
+  that still fails is stamped `⚠ occluder`. A walker pose (14, 20, 23: `walker: true`) also fails with
+  under 1% of the frame walker (the subject pass on `life-ped`; stamped `⚠ no walker`): it follows the
+  nearest of five walkers the lens shows at ≥ 1% (round 12: 14 had landed on empty sand). Each pose's
+  verdict: `window.__REVIEW_LENS__`. `tests/idPass.test.ts`.
+- Round 10's five-roof test (`tools/roof-check.js`, `?capture=1`): `await __ROOFCHECK__('tag')` builds
+  five 6 × 6 m hip-roofed test houses 60 m over the spawn (grey, clay, blue metal, green metal, brown:
+  the buildings' own material, borrowed from a mounted tile) and reads them raw (`debugParams.rawScene`
+  → post `uRaw`) from above and side on at 12:00 and 18:00 — each roof's sunlit and shaded slope, the
+  grey house's sunlit wall below its sills — against the review's numbers (hue ±12°, ≥ 80% chroma; the
+  grey C\* ≤ 4 sunlit at noon, ≤ 8 in shade; at 18:00 its b\* within 3 of the wall's) →
+  `shots/roofcheck-<tag>.jpg`, every patch outlined.
+- Round 12's arm's length on the frames (`tools/arm-check.js`, `?capture=1`): `await
+  __ARMCHECK__('tag', { only: ['6', '18', 'dock'] })` — 6: the wall cabinets against the curtains (ΔE76
+  of their means in the painted frame; the cabinets found by an albedo-and-height id pass, the curtains
+  by swapping `interiors.fabU` for magenta) and the shadow band under them (px tall, L\* under the
+  tiles); 18: the plates, cups and glasses (`interior:tw:*`) the lens sees on each table a seated
+  resident sits at; dock (pick-r12a 5: 16:00, a boat passing 18 m out): white blobs (L\* ≥ 85, ≥ 0.2%
+  of the frame) on the water within 15 m, each named by id passes of the wakes, the water, the micro
+  layer and the boats → `shots/armcheck-<tag>.jpg`.
 - Debug handles on `window.__GAME__`: `explore`, `commissions`, `photo`, `atlas`, `arrival`,
   `hints`.
 
@@ -142,7 +162,9 @@ behaviour.
   the key limits, float-buffer extensions, the tier, the boot stage, the first shader log and the
   first JS errors. It opens by itself when WebGL can't start, a shader won't compile, the boot
   throws, no frame is drawn 15 s after "Begin walking" or frames stop for 15 s while the page is
-  on screen (`?watchdog=<s>` for slow software-GL rigs), every frame fails, or the GPU context is
+  on screen (`?watchdog=<s>` for slow software-GL rigs; 180 s in any page a rig drives —
+  `navigator.webdriver`, `diag.ts watchdogSeconds` — so a DPR 3 phone capture on SwiftShader isn't
+  shot behind the report: round 12), every frame fails, or the GPU context is
   lost and not returned in 4 s. `?diag=1` opens it on demand (ask a phone user for a screenshot).
   `window.__BOOTDIAG__()` returns it as data.
 - index.html's inline boot guard (a classic script) keeps errors from before the module runs and
@@ -169,8 +191,12 @@ behaviour.
   any: every overlapping pair of HUD boxes, anything off the screen, and anything in the middle of
   the frame — x 15–85%, y 30–62%, the world's while you walk or ride (reviewer round 10). It sets
   the states as `syncTouchControls` does, a toast as main.ts `toast` does (`body.toasting`), an
-  arrival card as `arrival.ts` does (`body.arriving`) and makes the ride readout as `vehicles.ts`
-  does — keep those in step. Run it after any change to the touch layout (style.css); the montage
+  arrival card as `arrival.ts` does (`body.arriving`, its `.a-small`/`.a-tight` steps) and makes the
+  ride readout as `vehicles.ts` does — keep those in step. It also renders the copy set (round 12,
+  must-fix 4): `COPY`, every toast a phone can see in its phone wording with the longest names it
+  fills in, and `ARRIVALS`, the phone's two-line arrival cards — each must show whole (a toast past its
+  two clamped lines, a card past its width or over two lines: the "…"); keep `COPY` in step with the
+  `toast()` calls. Run it after any change to the touch layout (style.css) or to a message; the montage
   shows one phone, this shows them all. A build whose index.html asks for its files from the root
   (an esbuild bundle that links `/src/ui/style.css`): `--dist=<dir> --base=/` (files not in the
   build come from the checkout).

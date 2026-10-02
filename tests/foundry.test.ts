@@ -8,6 +8,7 @@ import { fibCount, fibSphere, hashf, variantAt, tube } from '../src/assets/core'
 import { personGeometry, personLiteGeometry, HAIRSTYLES, MARK, warmthFor } from '../src/assets/people';
 import { dogLib } from '../src/assets/fauna';
 import * as D from '../src/assets/decor';
+import { FABRIC, CABINET_PAINT, CAB_WHITE, cabinetColour } from '../src/world/interior/furnish';
 import { SPORT_PIECES, sportGeometry } from '../src/assets/sport';
 import { TOWER_KINDS, towerGeometry } from '../src/assets/tower';
 import { STALL_KINDS, stallGeometry, STALL_VARIANTS } from '../src/assets/market';
@@ -298,6 +299,10 @@ describe('decor (interior + terrace furniture)', () => {
     ['shelves', D.shelves(1.2, 0.4, 1.8, W, [0xc46a4a, 0x7fa0b8], 7), 2000, [1.2, 0.4], true],
     ['pottedPlant', D.pottedPlant(true), 1500, null, true],
     ['cafeSet', D.cafeSet(0xf1ede4, 0x2a2622, 0x2f4a6a), 2600, null, true],
+    // lunch on a café's tables (review round 12, frame 18): a plate, a coffee, a glass of water
+    ['tableware: plate', D.tableware('plate'), 500, [0.25, 0.25], true],
+    ['tableware: cup', D.tableware('cup'), 500, [0.15, 0.15], true],
+    ['tableware: glass', D.tableware('glass'), 400, [0.08, 0.08], true],
     // the pieces a planned interior repeats (docs/INTERIORS_PLAN.md, Slice 1): plain boxes, instanced by the hundred
     // a home's kitchen (review round 11): the run with its sink, cooker and hood, fridge and wall
     // cabinets; one passing under a window; and a cooker and a fridge on walls of their own
@@ -426,6 +431,46 @@ describe('decor (interior + terrace furniture)', () => {
     expect(st.cooker.length).toBe(1);
     expect(st.hood.length).toBe(1);
     expect(kinds(D.fridge()).fridge.length).toBe(1);
+  });
+  it('wall cabinets read as cabinets (round 12, frame 6): 30 cm deep, door joints and handles, a shadow under them, a colour of their own', () => {
+    const spec: D.KitchenSpec = { len: 3.6, sink: 0.4, range: -1.1, fridge: 1, gaps: [[-0.2, 1.0]] };
+    const parts = D.kitchen(spec), splash = 0xe9eef0;
+    const runs = D.wallCabinets(spec);
+    const body = parts.filter((p) => p.hex === 0xffffff && Math.abs(bb(p.g).min.y - D.WALL_Y) < 0.01 && bb(p.g).max.y - bb(p.g).min.y > 0.7);
+    expect(body.length).toBe(runs.length);
+    for (const p of body) {
+      const b = bb(p.g);
+      expect(b.max.z - b.min.z).toBeGreaterThanOrEqual(0.3); // ≥ 30 cm off the wall
+      expect(b.max.z).toBeLessThanOrEqual(0.3 + 1e-6); // its back on the wall (the splashback's plane)
+      const w = b.max.x - b.min.x, front = b.min.z;
+      // the doors' joints: a dark reveal ≥ 2 cm wide between each pair of ~0.6 m doors, on the front
+      const joints = parts.filter((q) => { const c = bb(q.g); return q.mat === 'solid' && q.hex !== 0xffffff && c.min.x >= b.min.x - 1e-3 && c.max.x <= b.max.x + 1e-3 && c.min.y >= D.WALL_Y && c.max.y - c.min.y > 0.6 && c.max.z <= front + 1e-3; });
+      expect(joints.length).toBe(Math.max(1, Math.round(w / 0.6)) - 1);
+      for (const j of joints) { expect(bb(j.g).max.x - bb(j.g).min.x).toBeGreaterThanOrEqual(0.02 - 1e-6); expect(D.labOf(j.hex)[0]).toBeLessThan(40); }
+      // a handle on every door
+      const handles = parts.filter((q) => { const c = bb(q.g); return q.mat === 'metal' && c.min.x >= b.min.x && c.max.x <= b.max.x && c.min.y > D.WALL_Y && c.max.y < D.WALL_Y + 0.3 && c.max.z <= front; });
+      expect(handles.length).toBe(Math.max(1, Math.round(w / 0.6)));
+      // the shadow they throw on the splashback: right under the cabinet's foot, ≥ 10 L* darker
+      // than the splashback and ≥ 5 cm tall, softening below
+      const band = parts.filter((q) => { const c = bb(q.g); return q.mat === 'solid' && c.max.y <= D.WALL_Y + 1e-6 && c.max.y > D.WALL_Y - 0.12 && Math.abs(c.min.x - b.min.x) < 1e-3 && c.min.z > 0.28; });
+      expect(band.length).toBe(2);
+      const top = band.find((q) => Math.abs(bb(q.g).max.y - D.WALL_Y) < 1e-6)!;
+      expect(bb(top.g).max.y - bb(top.g).min.y).toBeGreaterThanOrEqual(0.05);
+      expect(D.labOf(splash)[0] - D.labOf(top.hex)[0]).toBeGreaterThanOrEqual(10);
+      for (const q of band) expect(D.labOf(q.hex)[0]).toBeLessThan(D.labOf(splash)[0]);
+    }
+    // a colour of their own: never within ΔE 15 of the room's curtains, whatever the fabric and the pick
+    let least = Infinity;
+    for (const fab of FABRIC) for (const pick of [null, ...CABINET_PAINT]) {
+      const c = cabinetColour(pick, fab);
+      least = Math.min(least, D.deltaE(c, fab));
+      expect([CAB_WHITE, ...CABINET_PAINT]).toContain(c);
+    }
+    console.log(`[foundry] wall cabinets vs the curtains: the nearest ΔE76 ${least.toFixed(1)}`);
+    expect(least).toBeGreaterThanOrEqual(15);
+    // the blue that merged with frame 6's blue curtains goes white beside them; kept beside red ones
+    expect(cabinetColour(0x5f7a8c, 0x4f6d8f)).toBe(CAB_WHITE);
+    expect(cabinetColour(0x5f7a8c, 0xa65a44)).toBe(0x5f7a8c);
   });
   it('the skirting is 12 cm of trim white, its back on the wall', () => {
     const b = new THREE.Box3();

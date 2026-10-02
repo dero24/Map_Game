@@ -1442,7 +1442,10 @@ export class LifeSim {
             this.timer[i] = this.rng.range(4, 14);
           }
         } else if (moving && this.rng.float() < dt * 0.05) this.meet(i);
-        else if (moving && !dog && this.rng.float() < dt * 0.07) this.tryVisit(i);
+        // (a dog walker goes in at a door too, the dog with them — the walk home, a café's terrace: review
+        // round 12, "dogs fill the street": with only the others visiting, 7 of 9 walkers near a lens had
+        // a dog, the street keeping ~23% dog walkers by day where the sim assigns 9%)
+        else if (moving && this.rng.float() < dt * 0.07) this.tryVisit(i);
       } else if (st === ST.CROSS) {
         // round the corner to the crosswalk (leg 0), wait there for the light or a gap, over it
         // (leg 1 — the cars on it wait: crossingAt), then on to the next street's sidewalk (leg 2)

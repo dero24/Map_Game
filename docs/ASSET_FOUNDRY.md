@@ -129,9 +129,15 @@ unique vertices and 2,700 triangles (indexed), the crowd's lite person < 300.
     ears and a painted face. Hems are doubled rings: a crisp short sleeve at mid upper-arm,
     shorts just above the knee, a swimsuit top's edge (the chest above it has its own marker,
     `MARK.chest`: the shirt, or bare on the beach).
+  - **Shoulders round into the arm** (round 12). The shoulder joint stands inside the torso
+    (0.185, 1.32), and the arm hangs from it, capped by the deltoid: a sphere on the joint, as wide
+    as the arm's top, which turns about its own middle, so no swing ever shows the tube's open end.
+    On the torso's edge (0.2, 1.39) the old round stood 46 mm proud of the shoulder's outline, an
+    epaulette; now, from the front and either side at 1.5 m, every arm-top vertex in 45 poses stays
+    at least 10 mm under it (`tests/people.test.ts`).
   - **Indexed**, unlike the other families: a smooth limb needs its rings shared across the
     joint, and sharing them cuts the vertex shader to about a fifth of the same triangles
-    unshared. 1,472 vertices and 2,522 triangles (the old faceted body: 1,764 vertices and 588
+    unshared. 1,538 vertices and 2,626 triangles (the old faceted body: 1,764 vertices and 588
     triangles).
   - **Posed by joint angles** (`Pose`: thigh, shin, foot and roll per leg; upper arm, forearm and
     abduction per arm; trunk lean and roll; head yaw and nod; where the hips go). Each limb

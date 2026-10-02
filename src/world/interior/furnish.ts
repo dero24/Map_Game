@@ -17,6 +17,18 @@ export interface Light { x: number; y: number; z: number; w: number; n?: 1 }
 /** [u, v, floor y, yaw, seat height (0: standing), staff (1: placed first)] */
 export type NpcSpot = [number, number, number, number, number?, number?];
 export const FABRIC = [0x5b7fa6, 0xa65a44, 0x6e8c5a, 0xd9c7a0, 0x7a5b8c, 0x3f6f78, 0xc9a24b, 0x8f8f96, 0xc97b6b, 0x4f6d8f];
+/** A kitchen's cabinets: white (most), else painted — sage, blue-grey, sand. */
+export const CAB_WHITE = 0xf2efe6, CABINET_PAINT = [0x9fb3a5, 0x5f7a8c, 0xd9cbb0];
+/** How far (CIE76) a kitchen's cabinets stay from the curtains' fabric (the review asks ΔE ≥ 15 in
+ *  the frame; the albedo keeps a margin over it). */
+export const CABINET_DE = 22;
+/** A kitchen's cabinet colour: the one picked (`painted`, or white), unless it's within CABINET_DE
+ *  of the room's curtains (`fab`, interiors.ts job.fab) — then the next of white and the paints that
+ *  isn't (review round 12, frame 6: "flat cut-outs in the curtains' own blue, and the two merge"). */
+export function cabinetColour(painted: number | null, fab: number): number {
+  const order = [painted ?? CAB_WHITE, CAB_WHITE, ...CABINET_PAINT];
+  return order.find((c) => D.deltaE(c, fab) >= CABINET_DE) ?? CAB_WHITE;
+}
 const STOCK = [0xd9573f, 0xe0a33b, 0x6e8c5a, 0xf2efe6, 0x5b7fa6, 0xc9a24b, 0x8a4a3a];
 const STAFF_AISLE = 0.9; // the working aisle behind a shop, café or bar counter
 /** A place at a dining table: at least this much of its edge (m; 0.6 is the least anyone lays a
@@ -58,6 +70,8 @@ export class Furnisher {
   readonly use: ReturnType<typeof useOf>;
   readonly wood: number;
   readonly doorHex: number;
+  /** The curtains' fabric (interiors.ts job.fab): what a kitchen's cabinets keep their own colour from. */
+  fab = 0xffffff;
   /** (`rng`: a tall building's is reseeded room by room — interiors.ts — so each storey's
    *  furniture is its own, whichever storeys are built with it) */
   constructor(readonly P: Plan, readonly fp: Footprint, readonly L: Layout, readonly m: Mesher, readonly inst: Instancer, public rng: Rng, leaves: LeafSpot[], readonly ceil: (k: number) => number) {
@@ -450,6 +464,16 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
   const homey = ['living', 'bed', 'dining', 'kitchen', 'study', 'great', 'hall', 'landing', 'guest'].includes(R.type);
   const um = (R.r.u0 + R.r.u1) / 2, vm = (R.r.v0 + R.r.v1) / 2;
   const house = F.fp.kind === 'house';
+  /** Lunch at a customer's place (review round 12, frame 18: "a café set for lunch — a cup, a plate
+   *  or a glass at every occupied table"): the plate at (u, v) on a top `top` high, before a diner
+   *  facing `f`, and beside it a coffee or a glass of water (`n`: which, by the place, no draw on the
+   *  room's seed); a bar's high top: a glass, and a plate every other place. */
+  const lunch = (u: number, v: number, top: number, f: P2, n: number, bar = false) => {
+    const side: P2 = [-f[1], f[0]], at = (a: number, b: number): [number, number] => [u + side[0] * a + f[0] * b, v + side[1] * a + f[1] * b];
+    if (!bar || n % 2 === 0) F.put('tw:plate', () => D.tableware('plate'), u, v, top, side);
+    const [cu, cv] = at(0.17, bar ? 0 : 0.06);
+    F.put(bar || n % 3 === 1 ? 'tw:glass' : 'tw:cup', () => D.tableware(bar || n % 3 === 1 ? 'glass' : 'cup'), cu, cv, top, side);
+  };
   // ---- light: a ceiling fan in a beach house's rooms, else a glowing dish (none over the stairs). A
   // home's is a glass dome: lit after dark in a room with windows, all day in one without (a hall) ----
   const home = house || R.unit >= 0;
@@ -595,7 +619,7 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
     const dw = L0.doors.find((x) => x.level === k && x.rooms.includes(R.id));
     const from: P2 = entryRoom && entryRoom.space === R.space ? [P.ud, P.vd] : dw ? (dw.ax === 0 ? [dw.t, dw.c] : [dw.c, dw.t]) : [um, vm];
     const plan = planKitchen(F, R, S, len, from);
-    const cab = rng.float() < 0.6 ? 0xf2efe6 : F.pick([0x9fb3a5, 0x5f7a8c, 0xd9cbb0]);
+    const cab = cabinetColour(rng.float() < 0.6 ? null : F.pick(CABINET_PAINT), F.fab);
     let near: P2 = [um, vm];
     if (plan) {
       const kp = plan.put, sp = plan.spec;
@@ -1113,7 +1137,9 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
       if (four) { F.put('bistro', () => D.bistroChair(0xffffff), uc, vc - rr, y, axFacing([0, 1]), wood); F.put('bistro', () => D.bistroChair(0xffffff), uc, vc + rr, y, axFacing([0, -1]), wood); }
       pendant(uc, vc, t);
       if (lit++ < 3) F.glow(uc, vc, ceilY - 0.9, 0.6);
-      if (t < 4) F.npcs.push([uc - rr, vc, y, yawTo(1, 0), 0.475]);
+      // a customer's seat — and lunch in front of it, whoever the build sits there (interiors.ts
+      // picks the residents from these spots): a plate, and a coffee or a glass of water beside it
+      if (t < 4) { F.npcs.push([uc - rr, vc, y, yawTo(1, 0), 0.475]); lunch(uc - 0.16, vc, y + 0.74, [1, 0], t); }
     }
     wallArt(Math.max(2, Math.min(5, Math.floor(Math.sqrt(area) / 2))));
   };
@@ -1144,7 +1170,7 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
       F.put('highTop', () => D.roundTable(0.36, 1.05, 0x3a2a20), sp.uc, sp.vc, y, [1, 0]);
       F.put('barStool', () => D.roundTable(0.18, 0.78, 0x2a2622), sp.uc - 0.55, sp.vc, y, [1, 0]);
       F.put('barStool', () => D.roundTable(0.18, 0.78, 0x2a2622), sp.uc + 0.55, sp.vc, y, [1, 0]);
-      if (t < 4) F.npcs.push([sp.uc - 0.55, sp.vc, y, yawTo(1, 0), 0.76]);
+      if (t < 4) { F.npcs.push([sp.uc - 0.55, sp.vc, y, yawTo(1, 0), 0.76]); lunch(sp.uc - 0.14, sp.vc, y + 1.05, [1, 0], t, true); }
       if (t < 3) F.glow(sp.uc, sp.vc, y + 2.4, 0.4);
     }
     wallArt(3);
@@ -1156,7 +1182,12 @@ export function* furnishRoom(F: Furnisher, R: Room): Generator<void, void, void>
       if (!bp) break;
       F.claim(k, bp.r);
       F.put(`booth:${vinyl}:${topC}`, () => D.booth(1.25, vinyl, topC), bp.uc, bp.vc, y, bp.ax);
-      if (t < 4) F.npcs.push([bp.uc, bp.vc, y, 0, 0.43]);
+      if (t < 4) {
+        F.npcs.push([bp.uc, bp.vc, y, 0, 0.43]);
+        // lunch on the booth's table, a place on each bench's side (its x along ax, its z across)
+        const ax = bp.ax, az: P2 = [-ax[1], ax[0]];
+        for (const [lx, lz] of [[-0.24, -0.16], [0.22, 0.16]]) lunch(bp.uc + ax[0] * lx + az[0] * lz, bp.vc + ax[1] * lx + az[1] * lz, y + 0.74, [-az[0] * Math.sign(lz), -az[1] * Math.sign(lz)], t + (lz > 0 ? 1 : 0));
+      }
     }
     const cp = F.against(R, S, Math.min(3.4, Math.max(R.r.u1 - R.r.u0, R.r.v1 - R.r.v0) * 0.5), 0.62, { tall: true });
     if (cp && cp.side) {

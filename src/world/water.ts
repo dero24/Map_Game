@@ -9,6 +9,9 @@ export const waterParams = {
   uWaveScale: { value: 1 },
   uSurf: { value: 1 },
   uGlitter: { value: 1 },
+  // the glitter's dashes laid across the view and broken into sparkles near the lens (1), or the old
+  // world-fixed dashes along z (0: what made round 12's "white lozenges" fan across the water at the dock)
+  uGlitterFine: { value: 1 },
   uOceanDeep: { value: new THREE.Color(0x2c4f6e) },
   uOceanShallow: { value: new THREE.Color(0x5fa3a0) },
   uRiverDeep: { value: new THREE.Color(0x3d5a5c) },
@@ -72,7 +75,7 @@ function waterMaterial(tt: TerrainTextures, defines: Record<string, number | str
       }`,
     fragment: /* glsl */ `
       ${GLSL_TERRAIN}
-      uniform float uWaveScale, uSurf, uGlitter, uOpenSea;
+      uniform float uWaveScale, uSurf, uGlitter, uGlitterFine, uOpenSea;
       uniform vec3 uOceanDeep, uOceanShallow, uRiverDeep, uRiverShallow;
       float waves(vec2 p, float t, float ocean) {
         // long swell from the east-southeast on the ocean, wind ripples everywhere
@@ -143,9 +146,20 @@ function waterMaterial(tt: TerrainTextures, defines: Record<string, number | str
         body *= 0.86 + 0.28 * strokes;
         vec3 col = mix(body, skyR, clamp(fres * 0.7, 0.0, 0.62));
         col = mix(col, col * 1.12 + 0.03, strokes * 0.35 * (1.0 - uNight));
-        // glitter: broken horizontal dashes toward the key light (left as bright paper)
+        // glitter: broken horizontal dashes toward the key light (left as bright paper). They lie across
+        // the view — the strokes' two world-fixed frames, blended by the camera's forward — and near the
+        // lens break into sparkles a few tens of centimetres long (a finer octave within ~20 m, the dashes
+        // from ~60 m). World-fixed along z alone (uGlitterFine 0), metres-long dashes fanned across the
+        // water toward the vanishing point at a dock 10 m off: round 12's "white lozenges" (pick-r12a 5).
         float spec = pow(max(dot(R, uKeyDir), 0.0), mix(90.0, 400.0, uNight));
-        float dash = smoothstep(0.55, 0.8, vnoise(vec2(xz.x * 1.3, xz.y * 0.35) + vec2(t * 0.8, t * 0.1)));
+        float dashZ = vnoise(vec2(xz.x * 1.3, xz.y * 0.35) + vec2(t * 0.8, t * 0.1));
+        float dashX = vnoise(vec2(xz.x * 0.35, xz.y * 1.3) + vec2(t * 0.1, t * 0.8));
+        float fineZ = vnoise(vec2(xz.x * 6.0, xz.y * 1.6) + vec2(t * 2.4, t * 0.4) + 13.0);
+        float fineX = vnoise(vec2(xz.x * 1.6, xz.y * 6.0) + vec2(t * 0.4, t * 2.4) + 29.0);
+        float nearG = 1.0 - smoothstep(20.0, 60.0, dist);
+        float across = mix(mix(dashZ, dashX, wx), mix(fineZ, fineX, wx), nearG);
+        // (near, fewer and sparser: a sparkle here and there, never a sheet of them run together)
+        float dash = mix(smoothstep(0.55, 0.8, dashZ), smoothstep(mix(0.62, 0.7, nearG), mix(0.86, 0.92, nearG), across), uGlitterFine);
         col += uKeyColor * spec * dash * 6.0 * uGlitter * sh;
         // surf: bands rolling toward the beach, and a lacy line at the waterline
         float s = max(-sdf, 0.0);

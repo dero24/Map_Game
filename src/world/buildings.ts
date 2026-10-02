@@ -1690,9 +1690,13 @@ float seedOf(float id) { return hash12(vec2(id * 0.0137 + 0.31, id * 0.0071 + 7.
 float aab(float x, float h, float w) { return clamp((h - abs(x)) / max(w, 1e-4) + 0.5, 0.0, 1.0); }
 `;
 
+/** How much of the sky fill's blue a roof greys before it lights the roof (paintLight's skyNeutral,
+ *  by day): roofs face the sky, and its blue fill tinted every grey shingle teal (reviewer round 10). */
+export const ROOF_SKY = 0.6;
 export function buildingMaterial() {
   return paintMaterial({
-    uniforms: { uWindowColor: { value: lin(0xffc27a) }, ...activeBuilding },
+    // (uRoofSky: how much of the sky fill a roof greys — tools/roof-check.js measures it turned)
+    uniforms: { uWindowColor: { value: lin(0xffc27a) }, uRoofSky: { value: ROOF_SKY }, ...activeBuilding },
     vertex: /* glsl */ `
       attribute vec4 aWall;
       attribute vec4 aInfo;
@@ -1711,6 +1715,7 @@ export function buildingMaterial() {
       }`,
     fragment: /* glsl */ `
       uniform vec3 uWindowColor;
+      uniform float uRoofSky;
       uniform float uActiveId, uOpenAmt, uOpenDoorH;
       uniform vec4 uWinStyle;
       uniform vec4 uOpenDoor;
@@ -2133,7 +2138,7 @@ export function buildingMaterial() {
         // roofs face the sky, and its blue fill tinted every grey shingle teal: on a roof the fill
         // is greyed (a touch warm, like sunlit asphalt shingle) — not the roof's own colour, which
         // the aerial photo measured, nor the sun's, which golden hour lays on roofs and walls alike
-        float roofSky = part > 0.5 && part < 1.5 ? 0.6 * (1.0 - uNight) : 0.0;
+        float roofSky = part > 0.5 && part < 1.5 ? uRoofSky * (1.0 - uNight) : 0.0;
         vec3 col = paintLight(alb, N, vWorldPos, sh, ao, roofSky);
         col += glow * uWindowColor * (0.15 + 1.25 * uNight);
         col = mix(col, winCol, winMask);

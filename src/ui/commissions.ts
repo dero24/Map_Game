@@ -148,7 +148,7 @@ export class Commissions {
     }
     if (added) {
       this.save();
-      if (before > 0 || s.done.length) this.g.toast(`✧ new commission — ${s.active[s.active.length - 1].title}`);
+      if (before > 0 || s.done.length) this.g.toast(`✧ new commission: ${s.active[s.active.length - 1].title}`);
     }
   }
 
@@ -169,7 +169,7 @@ export class Commissions {
       const d = this.dist(a);
       if (d < 70 && this.lastNear !== a.id) {
         this.lastNear = a.id;
-        this.g.toast(`✧ ${a.title} — ${document.body.classList.contains('nomouse') ? 'Paint, frame it, paint' : 'P, frame it, Space'}`);
+        this.g.toast(`✧ ${a.title} — ${document.body.classList.contains('nomouse') ? 'frame it, Paint' : 'P, frame it, Space'}`);
         return;
       }
     }
@@ -245,8 +245,8 @@ export class Commissions {
       // the Almanac card remembers where and when
       this.record(`${family}:${type}`);
       const nm = niceName(type, family);
-      // (two lines at most on a phone: "Van, in pencil — paint one to finish it · 2 of 8 cars")
-      this.g.toast(`${nm.charAt(0).toUpperCase()}${nm.slice(1)}, in pencil — paint one to finish it · ${list.length} of ${F.all.length} ${F.label}s`);
+      // (two lines at most on a phone: "Red-tailed hawk in pencil — paint one · 2 of 9 animals")
+      this.g.toast(`${nm.charAt(0).toUpperCase()}${nm.slice(1)} in pencil — paint one · ${list.length} of ${F.all.length} ${F.label}s`);
       this.g.sound('page');
     };
     for (const [prefix, family] of [['parked-cars:', 'car'], ['kerb-cars:', 'car'], ['life-car:', 'car'], ['moored-boats:', 'boat'], ['life-boat:', 'boat'], ['ride-car:', 'car'], ['ride-boat:', 'boat'], ['ride-plane:', 'plane'], ['critter:', 'wildlife'], ['trees:', 'tree'], ['garden:', 'flower'], ['plant:', 'flower'], ['balloon:', 'balloon'], ['ride-balloon:', 'balloon']] as const)
@@ -342,7 +342,7 @@ export class Commissions {
       const w = this.g.walker;
       if (Math.hypot(pl.x - w.x, pl.z - w.z) > 60 || !this.inView(pl.x, this.g.terrain.heightAt(pl.x, pl.z) + 4, pl.z)) continue;
       this.record(pl.key, { name: pl.name, kind: pl.kind });
-      this.g.toast(`almanac: ${pl.name} — a new place card (paint it to finish)`);
+      this.g.toast(`place card: ${pl.name} · paint it to finish`);
       this.g.sound('page');
     }
     const town = this.g.locality(), region = this.g.region();

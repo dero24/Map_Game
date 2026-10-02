@@ -8,7 +8,10 @@
 // · every pair of HUD boxes that overlap, and any box off the screen;
 // · anything of the HUD — a button with its word, the stick's ring, the place, a hint, a toast, a
 //   ride's readout, an arrival card — in the middle of the frame, x 15–85%, y 30–62%: that is the
-//   world's while you walk or ride (reviewer round 10, "a phone is a window, not a slot").
+//   world's while you walk or ride (reviewer round 10, "a phone is a window, not a slot");
+// · any message of the copy set (every toast a phone can see and the arrival cards, with the longest
+//   names they fill in: COPY, ARRIVALS) cut off — a toast past its two lines, a card past its width
+//   or over two lines: the "…" (reviewer round 12, must-fix 4).
 // The states are set the way main.ts syncTouchControls sets them (body classes, body[data-ride],
 // the ride buttons shown), a toast the way main.ts toast() puts it up (body.toasting), an arrival
 // card the way ui/arrival.ts does (body.arriving); the ride readout is made with the inline style
@@ -59,9 +62,50 @@ const server = http.createServer((req, res) => {
 }).listen(PORT, '127.0.0.1');
 
 const HINT = '✧ paint the lighthouse from the end of the jetty at dusk';
-// (the longest toast the game says, and an arrival card)
-const TOAST = "painted in what you framed — out to 1.2 km · 0.35 km² in colour — you've painted an area the size of Central Park · Map for your sketchbook";
-const ARRIVAL = ['Monmouth Beach', 'Monmouth County, New Jersey', '7:42 pm · golden hour · first visit — walk to paint it in'];
+// The copy set (review round 12, must-fix 4: "every toast and the arrival card fit two lines at
+// 320–390 px with no '…'"): every toast a phone can see, in its phone wording, each with the longest
+// names it fills in — keep in step with the toast() calls (main.ts, player/vehicles.ts, ui/brush.ts,
+// ui/commissions.ts, ui/garden.ts, ui/journal.ts, ui/photo.ts). Each is put up as main.ts toast()
+// does and must show whole in its two lines: a clamped one (its text past the box: the "…") fails.
+// (main.ts toast() also splits anything longer at a break, a safety net for names longer than these.)
+const COPY = [
+  // main.ts
+  "no tile service here — you're at the nearest baked town", 'walking over', 'the paint settled — stepped you clear',
+  'a balloon landed on the beach, 2.4 km north-east — fly it', 'your beach grass is in bloom ✿',
+  'almanac stamp: Point Pleasant Beach · Monmouth County, NJ', 'coming down as the street paints in', 'still flying',
+  'the street is still painting in — a moment', 'the real streets are painting in', 'the painting smudged — recovering', 'back to the walk',
+  // player/vehicles.ts (a phone's words)
+  'Burn to rise, Vent to sink · the wind steers: pick a layer', 'the stick drives and steers · hold Boost to go faster',
+  'the stick steers and throttles · hold Boost for more', 'hold Faster for throttle · pull the stick back to climb',
+  'you step out into the sky — Land to come down', 'no dry land within reach — head for shore', 'no street nearby for a car',
+  'a hatchback with a bike on the back pulls up — tap Drive', 'no open water nearby', 'a center-console bobs at the water’s edge — tap Board',
+  'a center-console waits on the water 120 m away', 'a plane swings alongside — tap Board', 'a high-wing plane is waiting on a clear run — tap Board',
+  'no runway here — a plane circles overhead: Fly up, then Board', 'splashdown — the painted sea is forgiving', 'touchdown',
+  'clipped a rooftop — the paint forgives: set down nearby', 'a bump and a skid — down', 'the basket settles — down',
+  // ui/brush.ts
+  'your harlequin balloon — walk over, then tap Step in', 'your center-console — walk out to it to go aboard',
+  // ui/commissions.ts (a landmark's name of 26 letters)
+  '✧ new commission: Paint Sea Bright First Aid Squad at golden hour', '✧ Paint Sea Bright First Aid Squad at golden hour — frame it, Paint',
+  'Black-tailed jackrabbit in pencil — paint one · 12 of 17 animals', 'Harlequin balloon in pencil — paint one · 2 of 4 hot air balloons',
+  'place card: Sea Bright Public Library and Museum · paint it to finish',
+  // ui/garden.ts, ui/journal.ts
+  'seed packet: beach grass', 'can’t plant here — too close to another plant', 'planted beach grass — it grows while you walk', '✦ Rumson–Sea Bright Bridge',
+  // ui/photo.ts
+  'the paint would not dry — try again', 'almanac: black-tailed jackrabbit + 3 more · yours to paint now',
+  '✦ commission done: Paint Sea Bright First Aid Squad at golden hour', 'painted out to 12.5 km · 3.42 km² · Map: your sketchbook',
+  'already in colour — the pencil is to the north-east', 'painted into your sketchbook · Map to see it', "you've painted an area the size of a small town",
+];
+// (a toast for the overlap checks — two lines, as wide as they come — and an arrival card)
+const TOAST = 'painted out to 12.5 km · 3.42 km² · Map: your sketchbook';
+// [name, the region written short, the time] as ui/arrival.ts paints it on a phone (and a PC's long
+// region and sky line, hidden there) — the arrival cards of the copy set: the longest names
+const ARRIVAL = ['Monmouth Beach', 'Monmouth County, NJ', '7:42 pm', 'Monmouth County, New Jersey', ' · golden hour · first visit — walk to paint it in'];
+const ARRIVALS = [
+  ARRIVAL,
+  ['Point Pleasant Beach', 'Ocean County, NJ', '12:05 pm', 'Ocean County, New Jersey', ' · fair · 0.35 km² painted so far'],
+  ['Bourton-on-the-Water', 'Gloucestershire, England', '11:05 am', 'Gloucestershire, England', ' · sea fog · first visit'],
+  ['Saint-Jean-sur-Richelieu', 'Le Haut-Richelieu, Quebec', '10:58 pm', 'Le Haut-Richelieu, Quebec', ' · night · first visit'],
+];
 // the middle of the screen — x 15–85%, y 30–62% — is the world's while you walk or ride (reviewer round 10)
 const BAND = { l: 0.15, r: 0.85, t: 0.3, b: 0.62 };
 const STATES = {
@@ -123,7 +167,14 @@ const MEASURE = ({ s, place, msg, band }) => {
   toast.classList.toggle('show', !!msg.toast);
   arr.replaceChildren();
   if (msg.arrival) {
-    for (const [cls, text] of [['a-name', msg.arrival[0]], ['a-region', msg.arrival[1]], ['a-line', msg.arrival[2]]]) { const d = document.createElement('div'); d.className = cls; d.textContent = text; arr.append(d); }
+    // (as ui/arrival.ts: the name; the region long and short; the time and the PC's sky line — and a
+    // region too long for the phone's line stepped aside, .a-tight)
+    const el = (tag, cls, ...kids) => { const d = document.createElement(tag); d.className = cls; d.append(...kids); return d; };
+    const [name, short, time, long, more] = msg.arrival;
+    arr.append(el('div', 'a-name', name), el('div', 'a-region', el('span', 'a-long', long), el('span', 'a-short', short)), el('div', 'a-line', el('span', 'a-time', time), el('span', 'a-more', more)));
+    arr.classList.remove('a-tight', 'a-small');
+    if (arr.firstElementChild.scrollWidth > arr.firstElementChild.clientWidth + 1) arr.classList.add('a-small'); // (as ui/arrival.ts)
+    if (arr.scrollWidth > arr.clientWidth + 1) arr.classList.add('a-tight');
     arr.style.animation = 'none';
     arr.style.opacity = '1';
   }
@@ -181,11 +232,52 @@ const MEASURE = ({ s, place, msg, band }) => {
   return hits;
 };
 
+// ---- in-page: the copy set, each message put up as the game puts it up, whole or cut off ----
+const COPYCHECK = ({ texts, arrivals }) => {
+  const $ = (id) => document.getElementById(id), b = document.body;
+  b.className = 'touch nomouse walking toasting';
+  b.dataset.ride = '';
+  $('intro')?.classList.add('hidden');
+  $('fatal')?.classList.add('hidden');
+  const toast = $('toast'), arr = $('arrival'), bad = [];
+  toast.style.transition = 'none';
+  toast.classList.add('show');
+  let most = 0;
+  for (const t of texts) {
+    toast.textContent = t;
+    const lh = parseFloat(getComputedStyle(toast).lineHeight) || 16, lines = Math.round(toast.scrollHeight / lh);
+    most = Math.max(most, lines);
+    // (two lines at most, clamped: a third line's text is past the box — what reads as "…")
+    if (toast.scrollHeight > toast.clientHeight + 1 || lines > 2) bad.push(`toast cut off at two lines (${lines} needed): "${t}"`);
+  }
+  toast.classList.remove('show');
+  b.classList.remove('toasting');
+  b.classList.add('arriving');
+  const el = (tag, cls, ...kids) => { const d = document.createElement(tag); d.className = cls; d.append(...kids); return d; };
+  for (const [name, short, time, long, more] of arrivals) {
+    arr.replaceChildren(el('div', 'a-name', name), el('div', 'a-region', el('span', 'a-long', long), el('span', 'a-short', short)), el('div', 'a-line', el('span', 'a-time', time), el('span', 'a-more', more)));
+    arr.classList.remove('a-tight', 'a-small');
+    if (arr.firstElementChild.scrollWidth > arr.firstElementChild.clientWidth + 1) arr.classList.add('a-small'); // (as ui/arrival.ts)
+    if (arr.scrollWidth > arr.clientWidth + 1) arr.classList.add('a-tight'); // (as ui/arrival.ts)
+    arr.style.animation = 'none';
+    arr.style.opacity = '1';
+    arr.classList.add('show');
+    const nm = arr.querySelector('.a-name'), ln = arr.querySelector('.a-time');
+    const tops = [...arr.querySelectorAll('.a-name, .a-short, .a-time')].filter((e) => e.getClientRects().length).map((e) => e.getBoundingClientRect().top).sort((p, q) => p - q);
+    const rows = tops.filter((t, i) => i === 0 || t - tops[i - 1] > 6).length;
+    const cut = arr.scrollWidth > arr.clientWidth + 1 || nm.scrollWidth > nm.clientWidth + 1;
+    if (cut || rows > 2 || !ln.getClientRects().length) bad.push(`arrival card ${cut ? 'cut off' : `on ${rows} lines`}: "${name} / ${short} · ${time}"${arr.classList.contains('a-tight') ? ' (region stepped aside)' : ''}`);
+    arr.classList.remove('show');
+  }
+  b.classList.remove('arriving');
+  return { bad, most };
+};
+
 // (what comes and goes over a state: nothing but its hint; a toast in the hint's place; an arrival card
 // over the place name; both at once)
 const MESSAGES = { '': {}, 'a toast': { toast: TOAST }, 'an arrival card': { arrival: ARRIVAL }, 'a toast and an arrival card': { toast: TOAST, arrival: ARRIVAL } };
 const browser = await chromium.launch({ headless: true });
-let bad = 0, n = 0;
+let bad = 0, n = 0, copyBad = 0, copyN = 0, mostLines = 0;
 for (const name of PHONES)
   for (const side of [false, true]) {
     const base = devices[name];
@@ -203,9 +295,16 @@ for (const name of PHONES)
         if (hits.length) { bad++; console.log(`✗ ${tag}: ${hits.join('; ')}`); }
         else if (args.verbose) console.log(`✓ ${tag}`);
       }
+    // the copy set: every message whole in its two lines on this phone, this way up
+    const cc = await page.evaluate(COPYCHECK, { texts: COPY, arrivals: ARRIVALS });
+    copyN += COPY.length + ARRIVALS.length;
+    mostLines = Math.max(mostLines, cc.most);
+    if (cc.bad.length) { copyBad += cc.bad.length; console.log(`✗ ${name}${side ? ' on its side' : ''} (${dev.viewport.width}×${dev.viewport.height}) · the copy set: ${cc.bad.join('; ')}`); }
+    else if (args.verbose) console.log(`✓ ${name}${side ? ' on its side' : ''} · the copy set: ${COPY.length} toasts and ${ARRIVALS.length} arrival cards whole (at most ${cc.most} lines)`);
     await ctx.close();
   }
 await browser.close();
 server.close();
 console.log(bad ? `${bad} of ${n} layouts overlap or stand in the middle` : `${n} layouts, no overlaps, nothing in the middle`);
-process.exit(bad ? 1 : 0);
+console.log(copyBad ? `${copyBad} of ${copyN} messages cut off ("…") or over two lines` : `${copyN} messages (${COPY.length} toasts, ${ARRIVALS.length} arrival cards × ${PHONES.length} phones × 2 ways up): every one whole, ${mostLines} lines at most`);
+process.exit(bad || copyBad ? 1 : 0);
