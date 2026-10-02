@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LifeSim, PED_STATE } from '../src/sim/lifeSim';
+import { LifeSim, PED_STATE, PED } from '../src/sim/lifeSim';
 import { RANGES, S, MAX_ENTITIES, type LifeInit } from '../src/sim/protocol';
 
 // A tiny synthetic town: a 400 m square loop (a main road + side streets), a beach strip and a bay.
@@ -229,5 +229,59 @@ describe('LifeSim', () => {
     expect(at('desert', 12.5)).toBeLessThan(at('desert', 20)); // and life after sunset
     expect(at('town', 10)).toBeGreaterThan(at('town', 3) * 3); // an ordinary town isn't empty mid-morning
     expect(at('town', 12.5)).toBeGreaterThan(at('desert', 12.5));
+  });
+});
+
+// A grid town: 5 × 5 blocks of 80 m, doors along every street on both sides every 20 m (so a walker
+// anywhere can find one) — the street's share of who's out, not one road's.
+function grid(): LifeInit {
+  const N = 6, B = 80, nodes: [number, number][] = [], edges: [number, number][] = [];
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) nodes.push([i * B, j * B]);
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const a = j * N + i; if (i + 1 < N) edges.push([a, a + 1]); if (j + 1 < N) edges.push([a, a + N]); }
+  const pts: number[] = [], start: number[] = [], count: number[] = [], len: number[] = [], info: number[] = [], en: number[] = [], doors: number[] = [];
+  for (const [a, b] of edges) {
+    const [ax, az] = nodes[a], [bx, bz] = nodes[b], dx = (bx - ax) / B, dz = (bz - az) / B;
+    start.push(pts.length / 3);
+    for (let k = 0; k < 21; k++) pts.push(ax + ((bx - ax) * k) / 20, 1.5, az + ((bz - az) * k) / 20);
+    count.push(21); len.push(B); info.push(2, 6.5, 0, 1); en.push(a, b);
+    for (let t = 10; t < B; t += 20) for (const s of [-1, 1]) { const x = ax + dx * t, z = az + dz * t; doors.push(x - dz * s * 9, 1.8, z + dx * s * 9, x - dz * s * 6, 1.5, z + dx * s * 6); }
+  }
+  const adj: number[][] = nodes.map(() => []);
+  edges.forEach(([a, b], e) => { adj[a].push(e); adj[b].push(e); });
+  const nodeEdgeStart = [0], nodeEdges: number[] = [];
+  for (const l of adj) { nodeEdges.push(...l); nodeEdgeStart.push(nodeEdges.length); }
+  return {
+    seed: 7, bounds: [-50, -50, N * B + 50, N * B + 50],
+    edgePts: new Float32Array(pts), edgeStart: new Int32Array(start), edgeCount: new Int32Array(count), edgeLen: new Float32Array(len),
+    edgeInfo: new Float32Array(info), edgeNodes: new Int32Array(en), nodeEdgeStart: new Int32Array(nodeEdgeStart), nodeEdges: new Int32Array(nodeEdges),
+    beachPts: new Float32Array(0), waterGrid: new Uint8Array(4), waterG: [-50, -50, 400, 2, 2], downtown: [0, 0, 400, 400], seaward: [1, 0],
+    doors: new Float32Array(doors),
+  };
+}
+
+describe('who walks the street (review round 12: "dogs fill the street")', () => {
+  it('dog walkers go in at doors too, so the street keeps the share of dog walkers the sim assigns', { timeout: 30000 }, () => {
+    // (it was ~23% of who's out by day where 9% were assigned: only the others went indoors)
+    const sim = new LifeSim(grid());
+    sim.setEnv({ playerX: 200, playerZ: 200, hour: 14, night: 0, density: 1, wind: 0.5 });
+    const out = new Float32Array(MAX_ENTITIES * S.STRIDE);
+    let all = 0, dogs = 0, outdoors = 0, dogsOut = 0, dogInside = false;
+    for (let t = 0; t < 12000; t++) {
+      sim.step(0.05);
+      if (t % 200 === 0) sim.publish(out);
+      if (t < 3000 || t % 100) continue;
+      for (let i = RANGES.peds[0]; i < RANGES.peds[1]; i++) {
+        if (!sim.active[i] || sim.lights[i] & PED.JOG) continue; // (joggers never stop: counted apart)
+        const dog = (sim.lights[i] & PED.DOG) !== 0, inside = sim.state[i] === PED_STATE.INSIDE;
+        all++; if (dog) dogs++;
+        if (!inside) { outdoors++; if (dog) dogsOut++; }
+        if (dog && inside) dogInside = true;
+      }
+    }
+    const assigned = dogs / all, seen = dogsOut / outdoors;
+    console.log(`[life] dog walkers: ${(assigned * 100).toFixed(1)}% assigned, ${(seen * 100).toFixed(1)}% of who's outdoors`);
+    expect(dogInside).toBe(true);
+    expect(assigned).toBeGreaterThan(0.04);
+    expect(seen / assigned).toBeLessThan(1.3);
   });
 });
