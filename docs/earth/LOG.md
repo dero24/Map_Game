@@ -2,6 +2,54 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-01 (afternoon) — Review round 11 and its fixes: lamplight, grain, trees, people, homes
+
+Round 11 scored Sea Bright **8.5/10, not passed**: "five for five, and three overshot"
+(`docs/earth/REVIEWER.md`). Five helpers took its must-fixes and smaller fakes side by side. Three
+of them were cut off by the session's usage limit; the lead merged their committed work and checked
+it.
+
+- **Lamplight, not stage discs** (`render/nightLight.ts`):
+  - **The pool:** a lamp's own fall-off, `h³/(h² + d²)^1.5` at h = 8 m (half at 6 m, 17% at 12 m),
+    eased out by 22 m, so pools meet faintly. The heart is a pale cream (C\* ~16, not 48–55).
+  - **The glaze:** its reserve is widened, and it no longer bites the pool's own edge.
+  - **The night's floor** of sky glow keeps the street readable.
+  - **Measured** (`night-check` r12):
+    - frame 3: the wires, the lens and 2 pools at ≥ 2.5× pass, but its gap is L\* 26.5 (the
+      moon was up; the test asks 10–20);
+    - frame 13: the gap L\* 18.7 and the heart C\* 19 pass, but the fall-off couldn't be measured
+      from its pose.
+- **The ground's grain from structure** (`ground.ts`): the aggregate is round stones at a fleck's
+  size, pale in asphalt and both ways in concrete. The sand's marks are shadow only. The dark speckle
+  is cut.
+- **Trees up close** (`world/nearTrees.ts`, `render/leafCards.ts`):
+  - **The near model:** within 30 m a tree is the species' limbs to the second order, with a
+    tapering trunk, bark furrows and 8–20 leaf-cluster cards lit as the far crown is. Stems grow on
+    into the crown; trees are bare in winter by their own limbs.
+  - **Cost:** models are grown ahead, one a frame; instanced; capped per tier.
+  - **Measured** at 5, 8 and 10 m (`tools/tree-metrics.py` on the masks):
+    - sky through the crown 9.1, 6.7 and 6.0% (the old crown 0.3%);
+    - longest straight edge 4–9% of the crown's width (old 32.5%);
+    - 3–4 limbs entering the crown;
+    - trunk taper 1.45–1.5.
+- **People at arm's length** (`assets/people.ts`, `render/creature.ts`):
+  - **The body:** one smooth skinned tube per limb, shoes on soles (10.6 cm wide), rounded mitten
+    hands, a nose and ears. It's 1,472 vertices, with no normal break over 23.7°.
+  - **The lead:** the dog walker's hand holds it (within 1.9 cm), the arm follows it, and the dog's
+    tail is carried (47 cm up).
+  - **Movement:** standing people shift their weight every ~12 s, and walkers stand on the ground
+    (they floated 12 cm). The beach crowd's full bodies follow on-screen size.
+- **Homes and small reads:**
+  - **Kitchens:** a home's kitchen has its cooker and hood, a fridge and wall cabinets (80 of 82
+    seeded), with the sink under the window.
+  - **Dining chairs** are spaced at ≥ 0.6 m a place, with ends on long tables.
+  - **WC doors** off living rooms are shut until you step up to them.
+  - **Raised houses** stand on a pad, gravel or sand, never lawn.
+  - **Wakes** are thin broken foam lines that fade, and none over the shallows.
+  - **Frame 9** frames a mapped marina's slips: 8+ boats.
+- **Verified:** typecheck clean; 726 tests plus `hoods` 13; esbuild bundle; the round 12 captures
+  (`shots/*-r12*`).
+
 ## 2026-10-01 (morning) — Review round 10 and its five must-fixes
 
 The expert reviewer (a Nintendo / Rockstar bar) scored Sea Bright's expanded scope **8/10, not
