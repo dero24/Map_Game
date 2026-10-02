@@ -526,6 +526,12 @@ once, from the map and seeds. No place names: a beach is a mapped `beach`, a mar
   at ≥ 0.2% of the frame each (their hulls' boxes projected through the game's lens); it logs the
   count (`[review] 9 marina: …`, `window.__REVIEW_COUNTS__[9]`). No such marina: the old nearest
   cluster.
+- The water's glitter (`water.ts`; round 12, pick-r12a 5: "the dock's white lozenges"): the sun's
+  dashes lie across the view — the dry-brush strokes' two world-fixed frames, blended by the camera's
+  forward — and near the lens (a finer, sparser octave within ~20 m, the dashes from ~60 m) break into
+  sparkles tens of centimetres long. They were world-fixed along z only: metres-long dashes that fanned
+  toward the vanishing point as white lozenges at a dock 10 m off, facing the afternoon sun
+  (`uGlitterFine` 0 draws them as they were, for the A/B in `tools/arm-check.js`).
 - Wakes (`src/world/wakes.ts`; round 11, calendar-autumn 3: "white lozenges fan across the water at
   the house's dock … its foam is too thick and opaque at 10 m"): each arm a ~20 cm line of broken
   white in dashes along it (noise along the track, crawling outward) with a fainter line inside, faint
