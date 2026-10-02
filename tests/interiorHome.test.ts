@@ -212,3 +212,47 @@ describe('a WC off the living room (review round 11: "a WC is in view through th
     throw new Error('no cottage with a WC off its living room');
   }, 120000);
 });
+
+describe('a café set for lunch (review round 12, frame 18: "a cup, a plate or a glass at every occupied table")', () => {
+  it('every table someone sits at has lunch on it — in a café, a bar and a diner — and the build stays in budget', () => {
+    let seated = 0, served = 0;
+    const bad: string[] = [];
+    const shops: [string, Footprint, Door][] = [
+      ['cafe', fpOf(rect(14, 10), 'commercial', 4.4, 'cafe'), doorN(10, 0.5)],
+      ['cafe 9×7', fpOf(rect(9, 7), 'commercial', 4.4, 'cafe', 0.61), doorN(7, -1.2)],
+      ['bar', fpOf(rect(16, 11), 'commercial', 4.4, 'bar'), doorN(11, 1.5)],
+      ['restaurant', fpOf(rect(18, 12), 'commercial', 4.4, 'restaurant'), doorN(12, -2)],
+    ];
+    for (const [use, fp, door] of shops) {
+      for (const seed of [99, 7, 31]) {
+        const { I, pieces, P } = built(fp, door, seed);
+        const tables = pieces.filter((p) => /^(cafeTable:|highTop|booth:)/.test(p.key));
+        const ware = pieces.filter((p) => p.key.startsWith('tw:'));
+        // who sits: the seated residents the build drew (interiors.ts people(): from the furnisher's spots)
+        const J = I as unknown as { mesh: THREE.Object3D | null; npcSeatMat: THREE.Material };
+        const m4 = new THREE.Matrix4(), q = new THREE.Vector3();
+        J.mesh?.traverse((o) => {
+          const im = o as THREE.InstancedMesh;
+          if (!im.isInstancedMesh || im.material !== J.npcSeatMat) return;
+          for (let i = 0; i < im.count; i++) {
+            im.getMatrixAt(i, m4);
+            q.setFromMatrixPosition(m4);
+            const u = (q.x - P.cx) * P.ux + (q.z - P.cz) * P.uz, v = (q.x - P.cx) * P.vx + (q.z - P.cz) * P.vz;
+            const t = tables.map((tb) => ({ tb, d: Math.hypot(tb.u - u, tb.v - v) })).sort((a, b) => a.d - b.d)[0];
+            if (!t || t.d > 1.0) continue; // (on a sofa, at the counter: not at a table)
+            seated++;
+            const on = ware.filter((w) => Math.hypot(w.u - t.tb.u, w.v - t.tb.v) < (t.tb.key.startsWith('booth:') ? 0.7 : 0.45));
+            if (on.length) served++;
+            else bad.push(`${use} seed ${seed}: nothing on the ${t.tb.key} someone sits at`);
+          }
+        });
+        const st = I.lastStats as unknown as { verts?: number; draws?: number } | null;
+        if (st?.verts !== undefined) expect(st.verts, use).toBeLessThanOrEqual(120000);
+        if (st?.draws !== undefined) expect(st.draws, use).toBeLessThanOrEqual(60);
+      }
+    }
+    console.log(`[interiors] lunch: ${served} of ${seated} occupied tables set (two cafés, a bar, a diner × 3 seeds)`);
+    expect(bad).toEqual([]);
+    expect(seated).toBeGreaterThan(5);
+  }, 240000);
+});

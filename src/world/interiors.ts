@@ -826,6 +826,7 @@ export class Interiors {
     // Furniture, room by room (a vast building stops short of the vertex budget: the rooms past it
     // stay bare — a tall building's storeys each at their own share of it)
     const F = new Furnisher(P, fp, L, m, inst, tallB ? storeyRng(-1, 0xf0d5) : rng, leaves, ceil);
+    F.fab = job.fab; // (the curtains' fabric: a kitchen's cabinets keep a colour of their own)
     for (let k = k0; k <= k1; k++) furnishLifts(F, k);
     // skirting round every room first (one instanced piece: it costs no budget, so no room goes without)
     let ns = 0;
