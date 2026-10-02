@@ -388,7 +388,11 @@ async function main() {
       const next = toastRest.shift();
       if (next !== undefined) { say(next); return; }
       el.classList.remove('show');
-      toastGone = window.setTimeout(() => document.body.classList.remove('toasting'), 800); // (its fade)
+      // (the hint comes back once the fade has ended — on the fade's own clock, not a timer's: on a
+      // slow page the two drifted and the hint stood over a toast still fading out)
+      const gone = () => { clearTimeout(toastGone); el.removeEventListener('transitionend', gone); if (!el.classList.contains('show')) document.body.classList.remove('toasting'); };
+      el.addEventListener('transitionend', gone);
+      toastGone = window.setTimeout(gone, 2000); // (no transition ran: display none, reduced motion)
     }, 3200);
   };
   const toast = (msg: string) => { toastRest = []; say(msg); };

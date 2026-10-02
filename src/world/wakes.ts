@@ -211,6 +211,7 @@ export class Wakes {
 
 function wakeMaterial() {
   const m = paintMaterial({
+    uniforms: { uWakeMax: { value: WAKE_MAX } }, // (the foam at its whitest: tools/arm-check.js turns it)
     transparent: true,
     depthWrite: false,
     vertex: /* glsl */ `
@@ -227,6 +228,7 @@ function wakeMaterial() {
         gl_Position = projectionMatrix * viewMatrix * wp;
       }`,
     fragment: /* glsl */ `
+      uniform float uWakeMax;
       varying vec4 vWake; // side (-1..1 across), half-width (m), metres behind the stern, strength (speed, age, the shallows)
       varying float vBeam; // the hull's beam (m)
       void main() {
@@ -248,7 +250,7 @@ function wakeMaterial() {
         float core = 1.0 - smoothstep(ww * 0.45, ww, lat);
         float streak = smoothstep(0.5, 0.74, vnoise(vec2(lat * 3.2, s * 0.3 - t * 0.5)));
         float wash = core * streak * exp(-s / 12.0) * smoothstep(0.0, 1.2, s);
-        float foam = min(${WAKE_MAX.toFixed(2)}, max(max(arm, arm2), max(crest, wash * 0.9)) * k * ${WAKE_MAX.toFixed(2)});
+        float foam = min(uWakeMax, max(max(arm, arm2), max(crest, wash * 0.9)) * k * uWakeMax);
         vec3 foamCol = vec3(0.95, 0.95, 0.92) * (uAmbSky * 0.9 + uKeyColor * 0.5 * max(uKeyDir.y, 0.0) + uLampColor * 0.05);
         gl_FragColor = vec4(applyFog(foamCol, vWorldPos), foam);
       }`,
