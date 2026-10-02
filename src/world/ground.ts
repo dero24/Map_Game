@@ -191,7 +191,7 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
       // (it keeps inside its cell, so no neighbour is looked at), 1–2 cm across, its shade the cell's
       // own — lighter than the surface in half the cells, darker in most of the rest (x the light, y the
       // dark, 0–1). One octave only, kept while a stone spans about two pixels (fpg: the pixel's
-      // footprint on the ground, the geometric mean of its two axes): gone by ~5 m at 540 px tall.
+      // footprint on the ground, the geometric mean of its two axes): gone by ~4 m at 540 px tall.
       // Round 12's octaves a doubling apart up to 1.9 m kept every distance's stones 3–16 px on screen
       // — 2 cm at your feet, 60 cm by 20 m: cobbles. Past the aggregate the street's texture is its
       // structure: the paint's wheel paths, oil, covers, patches, tar snakes, joints and flags.
@@ -322,22 +322,21 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
           float unpaved = (1.0 - stone) * (1.0 - sandy) * smoothstep(0.3, 0.42, rel);
           // (the brush is sized to the frame — 540 px tall its own size — and the stones with it)
           float fpx = fp * max(1.0, uViewport.y / 540.0);
-          // The surface's own broad, low mottle, light and dark, a third of a metre to a metre across
-          // (the land's wash carries it on from 1.1 m): the patchwork of wear and weather on a street or
-          // a slab, thick and thin on a lawn — what a painter lays wet in wet. Each octave only where it
-          // spans a few pixels, the whole of it gone by where the grain ends; its lighter half never
-          // taken again in the light (the bloom).
-          float mot = 0.0;
-          if (paved + unpaved > 0.0) mot = (octv(TURN * xz, 0.32, fp) * 0.6 + octv(TURN2 * xz + 3.1, 0.85, fp) * 0.5) * (1.0 - smoothstep(0.17, 0.29, fp));
           if (paved > 0.0) {
             // the aggregate at its real size, near the feet (quieter in a worn wheel path): concrete's
             // stones as often lighter than the slab as darker, the darker kept faint — the brush pools
             // pigment on the dark side of any edge, and a dark fleck pooled is grime — and asphalt's
-            // pale stone in a dark binder, nothing darker; on the mottle
+            // pale stone in a dark binder, nothing darker…
             float fpg = sqrt(length(dFdx(xz)) * length(dFdy(xz))) * max(1.0, uViewport.y / 540.0);
             vec2 st = aggregate(xz, fpg) * (1.0 - 0.7 * worn);
             float asph = 1.0 - smoothstep(0.16, 0.24, lumS);
             float spk = mix(st.x * 0.4 - st.y * 0.07, st.x * 0.7, asph);
+            // …on the surface's own broad, low mottle, light and dark, a third of a metre to a metre
+            // across (the land's wash carries it on from 1.1 m): the patchwork of wear and weather on a
+            // street or a slab, what a painter lays wet in wet. Each octave only where it spans a few
+            // pixels, the whole of it gone by where the grain ends; its lighter half never taken again
+            // in the light (the bloom).
+            float mot = (octv(TURN * xz, 0.32, fp) * 0.6 + octv(TURN2 * xz + 3.1, 0.85, fp) * 0.5) * (1.0 - smoothstep(0.17, 0.29, fp));
             gm *= 1.0 + paved * (spk + mot * 0.3);
             gp *= 1.0 + paved * (spk + min(mot, 0.0) * 0.3);
           }
@@ -359,8 +358,8 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
           if (unpaved > 0.0) {
             vec2 st = grit(xz, fpx);
             float uspk = unpaved * (st.x * 0.18 - st.y * 0.05);
-            gm *= (1.0 + uspk + unpaved * mot * 0.24) * (1.0 - greenness * (octv(xz, 0.06, fp) * 0.16 + octv(xz + 2.0, 0.17, fp) * 0.12));
-            gp *= 1.0 + uspk + unpaved * min(mot, 0.0) * 0.24;
+            gm *= (1.0 + uspk) * (1.0 - greenness * (octv(xz, 0.06, fp) * 0.16 + octv(xz + 2.0, 0.17, fp) * 0.12));
+            gp *= 1.0 + uspk;
           }
         }
         // Ocean beaches read as sand: wind ripples across the wind off the sea in the dry band, the

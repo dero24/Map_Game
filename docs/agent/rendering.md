@@ -296,6 +296,9 @@ kerb (`KERB`: a 15 cm face, a 0.6 m gutter pan), the flags (`FLAG` 1.5 m, a cent
   traffic's marks (`traffic`, below); tar snakes and sealed patches on every street, the bake's too
   (`wear`); sand drift along the kerbs and walks within 60 m of a mapped beach (`drift`, its edges
   binned in 32 m cells).
+- **Slabs** (`slabs`): a dense block's paved apron and a shop's frontage scored in 1.5 m slabs,
+  square to the building's own walls (each wall's from its corner, out to the paving's width), each
+  slab a shade of its own (`flagRun`), before the streets' walks lay their own flags over them.
 - **The street as traffic wears it** (`traffic`, review round 12 must-fix 2: past the aggregate, a
   street's texture is its structure). The carriageway's lanes come from `laneLayout` (groundCover.ts,
   pure): inside the gutter pans, the map's parking lanes (`pk`: 2.2 m parallel, 4.8 m angled) — or,
@@ -330,25 +333,33 @@ kerb (`KERB`: a 15 cm face, a 0.6 m gutter pan), the flags (`FLAG` 1.5 m, a cent
 ### The ground shader's grain (`ground.ts`)
 
 Near the walker the paint's material gets the texture you'd see standing on it, inferred from the
-paint (its chroma and value) and the stone alpha. The structure is the paint's (flags and joints,
-the kerb's face, the gutter pan, aprons, tar snakes and sealed patches: groundCover.ts and the fine
-window); the shader lays the surface between it:
+paint (its chroma and value) and the fine window's alpha (loose stone, worn wheel paths). The
+structure is the paint's (flags and joints, the kerb's face, the gutter pan, aprons, slabs, wheel
+paths, oil, covers, tar snakes and sealed patches: groundCover.ts and the fine window); the shader
+lays the surface between it:
 
-- **Stones** (`stones`, paved ground): one round stone in each cell of a jittered grid. It keeps
-  inside its cell, so no neighbour is looked at, and its size and shade are the cell's own. The
-  octaves run a doubling apart from 3 cm to 1.9 m, and each is kept only while its cells are 3–16 px
-  on screen. So the nearer ground shows the smaller stones and the further the bigger, two or three
-  octaves at a time (the loop skips the rest), and the aggregate is the same size on screen at every
-  distance. Finer, the brush wipes it and it shimmers; coarser, a stone is a blot. The band is sized
-  to the frame as the brush is: 540 px tall is its own size, and a taller frame (a phone at 1266)
-  widens it in step (`uViewport`).
+- **The aggregate at its real size** (`aggregate`, paved ground): one stone in each 2.6 cm cell of a
+  jittered grid, 1–2 cm across (one hash a cell: its size and place drawn from it). It keeps inside
+  its cell, so no neighbour is looked at. One octave only, kept while a stone spans about two pixels
+  (`fpg`: the pixel's footprint on the ground, the geometric mean of its two axes, scaled to the
+  frame as the brush is — 540 px tall is its own size, a phone at 1266 widens it in step,
+  `uViewport`): full to ~3 m from a standing eye, gone by ~4 m. In a worn wheel path it's 70%
+  quieter.
   - Concrete: about half its stones lighter than the slab (+40%), most of the rest darker but faint
-    (−7%).
-  - Asphalt (`lumS` under ~0.2): pale stone in a dark binder (+70%), nothing darker. There's no
-    speckle field.
+    (−7%). Asphalt (`lumS` under ~0.2): pale stone in a dark binder (+70%), nothing darker.
+  - Round 12's `stones` ran octaves a doubling apart from 3 cm to 1.9 m, each kept while its cells
+    were 3–16 px on screen: every distance had its aggregate at the same size on screen — 2 cm at
+    your feet, 30–60 cm by 20 m. Center Street read as cobbles (review round 12, must-fix 2: in m7
+    the median light fleck 10–20 m out was 2.5× the size of one 2–4 m out).
+  - **The mottle**: the surface's own broad, low patchwork, light and dark, at 0.32 m and 0.85 m
+    (value noise turned off the north–south lattice, `TURN`, so no two octaves line up into a grid;
+    each only where it spans a few pixels, all of it gone where the grain ends), on paved ground
+    (30% of it: ±4% typically, ±16% at most; not on lawns, which keep their own stipple) — the land's
+    wash carries it on at 1.1 m (`wash`, ±8%), everywhere. Its lighter half isn't taken again in the
+    light (the bloom, below).
   - The open ground (`grit`): a lighter fleck where an octave's noise peaks and a darker one where
-    it dips, on the same octaves, fainter (+18%, −5%), under the lawn's mown stipple.
-  - The broad mottle is the land's own wash (`wash`, ±8% at 1.1 m), everywhere.
+    it dips, octaves kept while 3–14 px on screen, fainter (+18%, −5%), under the lawn's mown stipple.
+- **Worn wheel paths** (the fine window's alpha at `WORN_ALPHA`): 12% darker, their aggregate quieter.
 - **Why darks stay faint:** post.ts pools pigment on the darker side of any edge (`uEdgeDark`). A
   pixel 2–3 L* under its 2.4 px blur is deepened by several L* more, and a pale fleck's rim gets the
   same. Round 11's symmetric four-octave grain (±25% albedo, up to 90 cm, plus soft stains) came out
@@ -359,10 +370,18 @@ window); the shader lays the surface between it:
 - **A beach** (warm, light sand by the sea: `sandy`) is all shadow, never a lighter patch:
   - the swells' far sides in a faint shadow, and the land's wash on sand only darkening (capped at
     0.96);
-  - trampled sand with only its darker half, pocks (−9%) and footprints (−30%);
-  - 11 cm ripples across the wind in the dry band: a lee 11% darker and a crest 2.5% lighter, long
-    crests that bend gently, end now and then (a per-crest break) and are broken where a foot came
-    down. They're gone by 15 m, and where the crests come under ~4 px.
+  - trampled sand with only its darker half, pocks (−9%) and footprints (−30%; one in most 0.62 m
+    cells of a grid turned off north and jittered ±27%: a straight grid of them read as a grid);
+  - ripples in the dry band, across the wind that laid them: onshore, veered 40° (a sea breeze turns
+    clockwise through the day north of the equator; from the shore field `sN`, never a place), crests
+    8–20 cm apart (11.5 cm, the phase warped at 0.42 m and 1.6 m) and curving, each ending now and
+    then on its own (`crestN`: a hash a crest, so no two break alike and the breaks never line up into
+    a second family of lines across them), broken where a foot came down. A lee 11% darker, a crest
+    2.5% lighter; gone by 15 m, and where the crests come under ~4 px.
+    - Round 12's crests ran along the shore normal 11 cm apart: looking along a beach, regular lines
+      toward you, and the breaks (one noise across neighbouring crests) a second family across them —
+      a grid (m6's near sand: column-profile autocorrelation 0.48 at 10 px). Veered, the crests cross a
+      view along the beach (the usual one); a view along them still shows lines, but uneven ones.
   - The wrack line's dark clumps with pale shell through them.
 - **Light, and the bloom.** The grain multiplies the albedo (`gm`). Once lit, the ground takes `gp`
   again in proportion to how bright it's lit (`col *= 1 + (gp − 1)·1.15·…`): the tonemap's shoulder
@@ -384,6 +403,17 @@ window); the shader lays the surface between it:
   - on review frames 2, 10, 11, 16, 17, the merged sheet's 4, 6 and 7, and the phone.
   - Structure counts too: the asphalt beside a bright walk and the pooled joints are "dark" by that
     test. Frame 2 holds ~5% of it with no grain at all, and 17's red car ~15%.
+  - Round 12's tests (must-fix 2), all in `/home/claude/agent-notes/metrics/aggregate.py` (`png` cuts a
+    run's 960×540 frames as the montage does; `r12` reads the lead's sheets): the light flecks by
+    ground distance in m7 (≥ 6 L\* over a 3%-wide mean, 8-connected — it gives the review's 2.5× on
+    merged-r12); the bottom 40%'s local std after a 2 px blur (σ 1 and 2, both reported); the near
+    sand's column-profile autocorrelation (the bottom 15–20%, each half and the whole width — it gives
+    the review's 0.48 at 10 px on m6). `ground_montage.py` lays before and after side by side.
+- **Shooting the ground**: after a jump of more than the fine window's reach the window repaints in
+  slices, a slice or two a frame, ~20 frames on SwiftShader, showing the old window till it's whole.
+  A capture that settles fewer frames than that shoots the ground without its kerbs, flags and wear
+  (merged-r12's m4 has no kerb line). `tools/ground-shots.js` (the round-12 ground frames) forces
+  both windows whole after each pose (`paint.detail.update(x, z, true)`).
 
 ## Grass
 
