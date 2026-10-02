@@ -36,6 +36,7 @@ import { AmbientBalloons } from './world/balloons';
 import { windKey } from './world/wind';
 import { propMaterial } from './render/propMaterial';
 import { compass } from './player/place';
+import { shortRegion } from './ui/geo';
 import { Atlas } from './ui/atlas';
 import { PhotoMode } from './ui/photo';
 import { Commissions } from './ui/commissions';
@@ -364,19 +365,33 @@ async function main() {
   };
   // (a phone says one thing at a time under the place name: the toast takes the hint's place, two
   // lines at most, and the hint comes back once it has faded — body.toasting, style.css)
-  let toastTimer = 0, toastGone = 0;
-  const toast = (msg: string) => {
+  // A message that won't fit those two lines is said in parts — split at its last break that fits
+  // (" — ", " · ", ": ", "; "), the rest after it — never cut off with "…" (review round 12, must-fix
+  // 4; the copy itself is written to fit: tools/hud-audit.mjs renders all of it on ten phones).
+  let toastTimer = 0, toastGone = 0, toastRest: string[] = [];
+  const toastFits = (el: HTMLElement) => el.scrollHeight <= el.clientHeight + 1;
+  const say = (msg: string) => {
     const el = $('toast');
     el.textContent = msg;
+    if (document.body.classList.contains('touch') && !toastFits(el)) {
+      for (const b of [...msg.matchAll(/ — | · |: |; /g)].map((m) => m.index!).reverse()) {
+        el.textContent = msg.slice(0, b);
+        if (toastFits(el)) { toastRest.unshift(msg.slice(b).replace(/^ ?[—·:;] ?/, '')); break; }
+      }
+      if (!toastFits(el)) el.textContent = msg; // (no break that fits: as it is)
+    }
     el.classList.add('show');
     document.body.classList.add('toasting');
     clearTimeout(toastTimer);
     clearTimeout(toastGone);
     toastTimer = window.setTimeout(() => {
+      const next = toastRest.shift();
+      if (next !== undefined) { say(next); return; }
       el.classList.remove('show');
       toastGone = window.setTimeout(() => document.body.classList.remove('toasting'), 800); // (its fade)
     }, 3200);
   };
+  const toast = (msg: string) => { toastRest = []; say(msg); };
   const journal = new Journal(world, paint.sliceCanvas, toast);
   await journal.load();
   // Paint as you explore: a global, persistent record of where you've been (pencil elsewhere).
@@ -397,7 +412,7 @@ async function main() {
   // spawn, and say why.
   const atStranded = !!(atLatLon && !VIRTUAL && !params.get('region') && (!regions?.length || best >= 2));
   const atPos = atLatLon && !atStranded ? fromLatLon(json.origin, atLatLon[0], atLatLon[1]) : null;
-  if (atStranded) setTimeout(() => toast('no tile service — that place can\'t stream yet; you\'re at the nearest baked town'), 0);
+  if (atStranded) setTimeout(() => toast('no tile service here — you\'re at the nearest baked town'), 0);
   // Explicit region + a point outside its backdrop: same fix as runtime teleport —
   // drop `region` and let the picker choose (or go virtual) instead of stranding.
   if (atPos && params.get('region')) {
@@ -489,7 +504,7 @@ async function main() {
       location.search = p.toString();
       return;
     }
-    toast('walking over…');
+    toast('walking over');
     await stream.ensureAround(x, z);
     if (!landmark || !viewpoint(x, z)) teleportLocal(x, z);
   };
@@ -554,7 +569,7 @@ async function main() {
       if (!b.landed || landedSaid.has(k)) continue;
       landedSaid.add(k);
       const d = Math.hypot(b.x - walker.x, b.z - walker.z);
-      if (d > 60) toast(`a balloon has come down${world.terrain.oceanDistAt(b.x, b.z) < 80 ? ' on the beach' : ''}, ${d < 950 ? `${Math.round(d / 10) * 10} m` : `${(d / 1000).toFixed(1)} km`} ${compass(b.x - walker.x, b.z - walker.z)} — step in and fly it`);
+      if (d > 60) toast(`a balloon landed${world.terrain.oceanDistAt(b.x, b.z) < 80 ? ' on the beach' : ''}, ${d < 950 ? `${Math.round(d / 10) * 10} m` : `${(d / 1000).toFixed(1)} km`} ${compass(b.x - walker.x, b.z - walker.z)} — fly it`);
     }
   };
 
@@ -672,7 +687,7 @@ async function main() {
   const worldMonth = () => new Date(worldMs).getUTCMonth() + 1;
   const commissions = new Commissions(ctx);
   void commissions.load();
-  commissions.onStamp = (town, region) => { toast(`almanac stamp: ${town}${region ? ` · ${region}` : ''}`); ambience?.ui('chime'); };
+  commissions.onStamp = (town, region) => { toast(`almanac stamp: ${town}${region ? ` · ${shortRegion(region)}` : ''}`); ambience?.ui('chime'); };
   const photo = new PhotoMode(ctx, commissions);
   const atlas = new Atlas(ctx, commissions, () => journal.stamps());
   photo.onSaved = () => void atlas.refreshPages();
@@ -1035,14 +1050,14 @@ async function main() {
     if (!walkParams.fly) { landing = false; walker.setFly(true); return; }
     if (!MOBILE || stream.solidAt(walker.x, walker.z)) { landing = false; walker.setFly(false); return; }
     landing = !landing;
-    toast(landing ? 'coming down as the street paints in…' : 'still flying');
+    toast(landing ? 'coming down as the street paints in' : 'still flying');
   };
   // …and on foot the same: past a built tile (off a fast ride, a slow build) you wait a moment where
   // you stand rather than walk through houses whose walls aren't there yet
   const groundCheck = (dt: number) => {
     if (landing && (!walkParams.fly || stream.solidAt(walker.x, walker.z))) { landing = false; if (walkParams.fly) walker.setFly(false); }
     const bare = !walkParams.fly && !vehicles.driving && !stream.solidAt(walker.x, walker.z);
-    if (bare && groundWait < 1 && groundWait + dt >= 1) toast('the street is still painting in — a moment…');
+    if (bare && groundWait < 1 && groundWait + dt >= 1) toast('the street is still painting in — a moment');
     groundWait = bare ? groundWait + dt : 0;
     walker.waitGround = bare && groundWait < 15; // (a tile that never comes: walk on after 15 s)
   };
@@ -1264,7 +1279,7 @@ async function main() {
   let roadPadT = 0, roadPadD = 1e9; // metres to the nearest mapped street edge (footstep surface)
   let soundScanT = 0, harbourD = 1e9, sailsN = 0, treeCover = 0;
   let paintT = 0, paintSince: number | null = null, paintShown = 0; // "the real streets are painting in" toast
-  const PAINT_MSG = 'the real streets are painting in…';
+  const PAINT_MSG = 'the real streets are painting in';
   const errors = new Map<string, number>();
   const perf = { detail: 0, interior: 0 }; // worst-case ms, for tools/soak.mjs
   (window as unknown as Record<string, unknown>).__PERF__ = perf;
@@ -1586,7 +1601,7 @@ async function main() {
   canvas.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
     contextLost();
-    toast('the painting smudged — recovering…');
+    toast('the painting smudged — recovering');
     // (a phone's GPU ran out: come back lighter — half the tile budget, the far silhouettes and the
     // shadow pass let go — so the restored context isn't filled straight back up to where it failed)
     if (MOBILE) {

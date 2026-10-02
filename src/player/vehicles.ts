@@ -489,7 +489,7 @@ export class Vehicles {
     if (v.kind === 'balloon') {
       // in the basket: you look where you were looking (first person — the look is yours)
       this.o.walker.pitch = Math.max(this.o.walker.pitch, 0.15);
-      this.o.toast(thumbs() ? 'Burn to rise, Vent to sink · let go to hold · the wind steers — pick a layer' // (a phone's toast: two lines)
+      this.o.toast(thumbs() ? 'Burn to rise, Vent to sink · the wind steers: pick a layer' // (a phone's toast: two lines)
         : 'hold Space to burn and rise, C to vent · let go and it holds its height · the wind steers: pick a layer · V the view · E out');
       return;
     }
@@ -588,7 +588,7 @@ export class Vehicles {
       const p = placeCar(this.placeWorld, w.x, w.z, w.yaw, 90);
       if (!p.ok) return this.o.toast('no street nearby for a car');
       const car = this.make('car', p.spot.x, p.spot.z, p.spot.yaw);
-      return this.o.toast(`${/^[aeiou]|^SUV/i.test(modelName(car.model)) ? 'an' : 'a'} ${modelName(car.model)} pulls up — walk over and ${thumbs() ? 'tap Drive' : 'press E'}`);
+      return this.o.toast(`${/^[aeiou]|^SUV/i.test(modelName(car.model)) ? 'an' : 'a'} ${modelName(car.model)} pulls up — ${thumbs() ? 'tap Drive' : 'walk over and press E'}`);
     }
     if (kind === 'boat') {
       // the nearest open water with room for a hull, bow off the land
@@ -633,7 +633,7 @@ export class Vehicles {
     p.v = 48;
     p.throttle = 0.55;
     this.pose(p);
-    this.o.toast(`no clear run here — a plane circles overhead; ${thumbs() ? 'Fly up, then Board' : 'F to fly up, then E'}`);
+    this.o.toast(`no runway here — a plane circles overhead: ${thumbs() ? 'Fly up, then Board' : 'F to fly up, then E'}`);
   }
 
   // ---------------- per-frame ----------------
@@ -836,7 +836,7 @@ export class Vehicles {
     v.pitch = 0;
     v.roll = 0;
     v.airborne = false;
-    this.o.toast(`${why} — the paint forgives you; plane set down nearby`);
+    this.o.toast(`${why} — the paint forgives: set down nearby`);
   }
 
   // ---------------- balloons ----------------

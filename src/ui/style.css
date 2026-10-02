@@ -113,6 +113,7 @@ body.postcard #hint { display: none; }
   background: radial-gradient(ellipse at center, rgba(160, 80, 60, 0.55), rgba(160, 80, 60, 0) 70%); }
 #arrival .a-region { font-size: 18px; opacity: 0.8; }
 #arrival .a-line { font-size: 14px; font-style: italic; opacity: 0.7; margin-top: 6px; }
+#arrival .a-short { display: none; } /* (a phone's: the region written short — ui/arrival.ts) */
 body.postcard #arrival { display: none; }
 #photo { position: fixed; inset: 0; pointer-events: none; z-index: 17; }
 #photo .vf { position: absolute; width: 38px; height: 38px; border: 0 solid rgba(46, 42, 58, 0.55); }
@@ -316,6 +317,14 @@ body.touch #arrival .a-name { font-size: 22px; overflow: hidden; text-overflow: 
 body.touch #arrival .a-name::after { display: none; }
 body.touch #arrival .a-region, body.touch #arrival .a-line { display: inline; font-size: 12px; margin: 0; }
 body.touch #arrival .a-line::before { content: ' · '; }
+/* two lines on a phone, never cut off: the name, then "Monmouth County, NJ · 7:42 pm" (the sky's
+   words and the long region are a PC's); a region too long for the line steps aside for the time
+   (ui/arrival.ts .a-tight; review round 12, must-fix 4) */
+body.touch #arrival .a-long, body.touch #arrival .a-more { display: none; }
+body.touch #arrival .a-short { display: inline; }
+body.touch #arrival.a-tight .a-region { display: none; }
+body.touch #arrival.a-small .a-name { font-size: 16px; }
+body.touch #arrival.a-tight .a-line::before { content: none; }
 body.touch.arriving #hud { visibility: hidden; }
 /* (ODbL: the credit along the bottom edge, in the gap under the stick and the cluster — one line) */
 body.touch #osm-credit { left: 50%; right: auto; top: auto; bottom: calc(3px + var(--sb)); transform: translateX(-50%); white-space: nowrap; font-size: min(10px, 2.7vw); z-index: 10; }

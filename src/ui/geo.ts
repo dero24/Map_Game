@@ -21,6 +21,23 @@ let inflight: Promise<Locality | null> | null = null;
 let offline = false;
 
 type Props = Record<string, string | undefined>;
+
+// (the USPS codes: a region's state written short where room is tight — a phone's arrival card)
+const US_STATES: Record<string, string> = {
+  Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA', Colorado: 'CO', Connecticut: 'CT', Delaware: 'DE', 'District of Columbia': 'DC', Florida: 'FL',
+  Georgia: 'GA', Hawaii: 'HI', Idaho: 'ID', Illinois: 'IL', Indiana: 'IN', Iowa: 'IA', Kansas: 'KS', Kentucky: 'KY', Louisiana: 'LA', Maine: 'ME', Maryland: 'MD',
+  Massachusetts: 'MA', Michigan: 'MI', Minnesota: 'MN', Mississippi: 'MS', Missouri: 'MO', Montana: 'MT', Nebraska: 'NE', Nevada: 'NV', 'New Hampshire': 'NH',
+  'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', Ohio: 'OH', Oklahoma: 'OK', Oregon: 'OR', Pennsylvania: 'PA',
+  'Rhode Island': 'RI', 'South Carolina': 'SC', 'South Dakota': 'SD', Tennessee: 'TN', Texas: 'TX', Utah: 'UT', Vermont: 'VT', Virginia: 'VA', Washington: 'WA',
+  'West Virginia': 'WV', Wisconsin: 'WI', Wyoming: 'WY', 'Puerto Rico': 'PR',
+};
+/** A region written short: a US state at its end as its postal code ("Monmouth County, New Jersey" →
+ *  "Monmouth County, NJ"); anything else as it is. */
+export function shortRegion(region: string): string {
+  const m = /^(.*,\s*)?([^,]+?)\s*$/.exec(region);
+  const code = m ? US_STATES[m[2]] : undefined;
+  return code ? `${m![1] ?? ''}${code}` : region;
+}
 const localityOf = (p: Props) => p.city ?? p.town ?? p.village ?? p.hamlet ?? p.locality ?? p.district ?? p.county ?? p.state ?? '';
 const county = (p: Props) => (p.county && p.countrycode === 'US' && !/county|parish|borough/i.test(p.county) ? `${p.county} County` : p.county);
 const regionOf = (p: Props, skip: string) => [county(p), p.state].filter((s) => s && s !== skip).join(', ') || p.country || '';

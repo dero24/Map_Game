@@ -4,7 +4,7 @@
 // reverse geocoding (geo.ts, cached + throttled); offline the region's own name (meta) stands in.
 // A card also greets you at the start of a walk and after every teleport.
 import type { GameCtx } from './ctx';
-import { reverse, isOffline } from './geo';
+import { reverse, isOffline, shortRegion } from './geo';
 import { postParams } from '../render/post';
 
 export class Arrival {
@@ -65,9 +65,18 @@ export class Arrival {
     const env = this.g.env();
     const sky = env.fog > 0.3 ? 'sea fog' : env.night > 0.6 ? 'night' : env.golden > 0.35 ? 'golden hour' : 'fair';
     const stats = this.g.explore.stats();
-    this.el.innerHTML = `<div class="a-name">${esc(name)}</div><div class="a-region">${esc(region)}</div>`
-      + `<div class="a-line">${((hh + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'am' : 'pm'} · ${sky} · ${first ? (postParams.sketchFar ? 'first visit — walk to paint it in' : 'first visit') : `${stats.km2 + stats.photoKm2 < 1 ? (stats.km2 + stats.photoKm2).toFixed(2) : (stats.km2 + stats.photoKm2).toFixed(1)} km² painted so far`}</div>`;
-    this.el.classList.remove('show');
+    // (a phone paints two lines: the name, then "Monmouth County, NJ · 7:42 pm" — the long region and
+    // the sky's words are a PC's: style.css .a-long / .a-short / .a-more; review round 12, must-fix 4)
+    const time = `${((hh + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'am' : 'pm'}`;
+    const more = ` · ${sky} · ${first ? (postParams.sketchFar ? 'first visit — walk to paint it in' : 'first visit') : `${stats.km2 + stats.photoKm2 < 1 ? (stats.km2 + stats.photoKm2).toFixed(2) : (stats.km2 + stats.photoKm2).toFixed(1)} km² painted so far`}`;
+    this.el.innerHTML = `<div class="a-name">${esc(name)}</div><div class="a-region"><span class="a-long">${esc(region)}</span><span class="a-short">${esc(shortRegion(region))}</span></div>`
+      + `<div class="a-line"><span class="a-time">${time}</span><span class="a-more">${esc(more)}</span></div>`;
+    this.el.classList.remove('show', 'a-tight', 'a-small');
+    // (never cut off with "…" on a phone: a name too long for its line is painted a size smaller; a
+    // region too long for the second line steps aside for the time — tools/hud-audit.mjs does the same)
+    const nm = this.el.firstElementChild as HTMLElement;
+    if (nm.scrollWidth > nm.clientWidth + 1) this.el.classList.add('a-small');
+    if (this.el.scrollWidth > this.el.clientWidth + 1) this.el.classList.add('a-tight');
     void this.el.offsetWidth;
     this.el.classList.add('show');
     // (a phone paints the card where the place name stands, and the place name waits: style.css)
