@@ -7,12 +7,40 @@ rewards exploring, and your home holds it all.** The world stays real, painted a
 Read this before working on gameplay. Track each item in `feature_list.json` (one `in_progress`
 at a time; `passing` only with evidence).
 
-## 1. One camera action
-- Painting happens in place when you take the shot. There is no separate paint window: frame,
-  tap, and the view blooms into colour where you stand.
-- Rename the verbs so they don't compete. **Camera** shoots and paints. **Sketchbook** holds your
-  cards, collection and painted map. Drop "Brush" and "Paint" as separate buttons and words in
-  the HUD, hints, toasts and docs.
+## 1. One brush, one verb: paint
+Today there are two buttons that both sound like painting. **Paint** frames a view and paints it
+in: that's how you collect. **Brush** places things you've painted from life into the world: that's
+how you create. Merge them into **one brush**, because both acts really are painting: you paint the
+world to keep it, and you paint from your sketchbook to make it. The brush is always in hand, and
+there's no separate window or mode.
+
+- **Tap: paint what you see.**
+  - The frame is the screen itself. The view blooms into colour where you stand: a wet wash that
+    dries in a second, with a brush sound.
+  - Whatever was in it (a species, a car, a rare, a building) peels off as a little card and
+    flies into the sketchbook corner. That's the collect.
+  - Nothing to aim and no confirm step.
+- **Hold: paint from your sketchbook.**
+  - A small fan of the things you've collected opens under your thumb, nearest and most recent
+    first.
+  - Drag one into the world and it paints itself in where you let go: a boat on the water, a
+    tree in the yard, a chair in your van. That's the create.
+  - Release on empty air to cancel.
+- **Swipe up, or the corner where the cards land: the sketchbook.**
+  - Your cards, sets and silhouettes still to find, your painted map, and the series.
+  - It's a book you open, not a third tool.
+- **The magic is in the feedback.** Colour spreads from the brush's touch point, cards fly into
+  the corner, the sketchbook corner glows when a set is one short, and a pencil ghost shows where
+  a held item will land.
+- **Desktop:** the left mouse button taps, holding it opens the fan, and `Tab` opens the
+  sketchbook. On phones the brush button sits under the right thumb; on desktop, everything is on
+  the mouse.
+- **Naming:**
+  - In the HUD there is only **the brush** and **the sketchbook**.
+  - "Photo", "Paint" and "Brush" stop being separate words in the HUD, hints, toasts and docs.
+  - The verbs are "paint" (tap) and "paint from your sketchbook" (hold).
+- **Test it with cold players.** A first-time player collects their first card within 60 s and
+  places something within 3 min, without reading a hint longer than one line.
 
 ## 2. Start where you are
 - On first launch, ask "Start near you?". With consent, use city-level location (browser
@@ -46,16 +74,20 @@ at a time; `passing` only with evidence).
 - Upgrades: the same home as a yacht, a plane or a balloon, each a new way to travel.
 - Start small: the van, its interior, and placing three kinds of photographed items.
 
-## 6. Your dog
+## 6. Your dog (later in development)
+Not before the core loop, rares and base are solid.
 - You get a dog, from a mapped animal shelter (OSM `amenity=animal_shelter`) or waiting at your
   arrival.
 - **It notices:** it stops and points at what you haven't painted (a heron, a cat on a porch, a
   boat coming in), and pulls toward the nearest place card or rare. Its nose is the hint system,
   with no UI.
 - Other dogs greet it, so their walkers stop and chat: a frame to paint.
-- **It keeps real rules:** a dated ordinance table of dog seasons and beaches, keyed by
-  municipality as data, plus OSM `dog=*`. Where dogs aren't allowed, it waits at the beach
-  crossing.
+- **Real rules you can break, for fun:**
+  - Beaches know their dog seasons (a dated ordinance table keyed by municipality, as data, plus
+    OSM `dog=*`).
+  - You can take the dog on anyway. The lifeguard blows the whistle, beachgoers react, and the
+    dog steals a sandwich.
+  - Mischief is funny, never punishing, and maybe it earns its own rare card.
 - It rides in the van, at the boat's bow and in the balloon basket, and appears in your
   paintings.
 
@@ -76,13 +108,13 @@ see a silhouette worth walking to. Flying is earned or framed (balloon, seaplane
 plane form), so the ground stays the experience.
 
 ## Order of work
-1. One camera action and the renamed verbs.
+1. One brush (tap to paint, hold to paint from the sketchbook) and the renamed verbs.
 2. Start where you are.
 3. Regional rares, then the Sketchbook silhouettes.
-4. The dog.
-5. The mobile base.
-6. The portal gun.
-7. Series and the bridge.
+4. The mobile base.
+5. The portal gun.
+6. Series and the bridge.
+7. The dog (later).
 
 Alongside these, the visual must-fixes from `docs/earth/REVIEWER.md` round 12 (the night value
 plan, the ground, far trees) still stand.
