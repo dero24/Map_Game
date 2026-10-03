@@ -22,8 +22,14 @@ Newest first. One entry per work session: what changed, what was verified, what'
   nothing missing or floating. `capture.mjs`'s sheet now keeps the shots' aspect (portrait frames
   had been squeezed into 640×360 cells).
 - **Open:**
-  - **Deploy the tile service** (item 2, blocked on Robby): Workers Paid, then `cd worker && npx
-    wrangler deploy`; it also carries tile cache v24 (roof:levels).
+  - ~~Deploy the tile service~~ **Deployed** the same day once Robby took Workers Paid (version
+    c2763604, with tile cache v24). Live: Levittown NY's cell 0_0, 843 footprints measured off Long
+    Island's 2014 survey in 22.2 s, the repeat from the edge cache, no errors in `wrangler tail`.
+    Midtown answered 503 three times: the service's Overpass query for that dense tile times out
+    (the game's direct path asks in quarters; the worker doesn't), so production memory on the
+    densest cell is still unverified.
+  - Pages now builds and deploys on every push to `main` or `feature/*` (`.github/workflows/pages.yml`),
+    as well as on a manual run.
   - Bain's draws four 2.9 m storeys in its measured 12.1 m (a `house` in the pack; MOD-IV says three).
     A measured flat-roofed block on a shopfront street should probably take commercial floor heights.
   - 57% of the shore's houses have fits under the 0.35 bar — a newer survey (NJ's post-2014 flights,

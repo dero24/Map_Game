@@ -1243,7 +1243,7 @@
       "area": "streaming",
       "title": "Everywhere else: the tile service measures a cell on first request and keeps the record in R2 for every device",
       "user_visible_behavior": "In any streamed US town, the first visitor's request has the tile service read the cell's LiDAR once; from then on every device (phone and PC alike) builds the same measured buildings from that record. Until a record exists, or offline / outside the US, buildings come from the improved priors and swap to measured when the record lands.",
-      "status": "blocked",
+      "status": "passing",
       "verification": [
         "prototype: a dense cell (Midtown Manhattan) measured inside a Worker within 128 MB and the CPU limit",
         "worker route GET /measured/<cx>_<cz>.json?olat&olon&v=1 -> R2 m/v1/...; a second request while in flight never starts another measure (202)",
@@ -1257,9 +1257,10 @@
         "prototype Midtown -1_-1 (1,839 footprints): Node lean live +3 MB heap +38 MB buffers, 6.3 s CPU (was 15.5); workerd 9.6 s, record byte-identical to Node (iydluj)",
         "tests/measured.test.ts \"the tile service's records\" (4) and \"enrichTile with a record on its way\" (2)",
         "tools/height-check.mjs against local workerd, Midtown: pixel7 = desktop (15.67 m commercial, 6.08 m house), phone 0 cells read, desktop read only the 3 cells whose /measured failed",
-        "npm run typecheck, npm test (73 files, 767 tests), npm run build — 2026-10-03"
+        "npm run typecheck, npm test (73 files, 767 tests), npm run build — 2026-10-03",
+        "2026-10-03: deployed (cd worker && npx wrangler deploy, version c2763604, Workers Paid; cpu_ms 60000 accepted). Live: /measured/0_0 at Levittown NY (olat 40.734375, olon -73.515625) measured 843 footprints from USGS_LPC_NY_LongIsland_Z18_2014_LAS_2015 in 22.2 s (94 KB), repeat served from the edge cache; wrangler tail showed no memory/CPU errors"
       ],
-      "notes": "Built and verified locally (workerd). Blocked only on the deploy: Robby to confirm Workers Paid is active, then cd worker && npx wrangler deploy (the free plan's 10 ms CPU would fail every measure; cpu_ms needs Paid). After deploy: curl https://map-game-tiles.map-game-tiles.workers.dev/measured/-1_-1.json?olat=40.75&olon=-73.984375&v=1 (expect 200 or 202 then 200), and wrangler tail for exceeded-memory/CPU errors on the first dense cells."
+      "notes": "Deployed 2026-10-03. Not yet seen live on a dense cell: Midtown's /measured answered 503 three times because the service's own Overpass query for that cell's tile times out (the game's direct path asks in quarters; the worker doesn't) — the measure never started, so production memory on Midtown is still unverified (Node + workerd measurements are in the evidence)."
     },
     {
       "id": "measured-fallback-priors",
