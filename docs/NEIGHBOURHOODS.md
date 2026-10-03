@@ -156,6 +156,18 @@ the browser's tile worker (`buildTile`), for baked and streamed tiles alike.
   - Scaling to the lower 48 is adding a line to `HOODS` (a point, what it should read as) and
     re-running the tool; a place too thinly mapped to measure (fills only) is skipped, since the
     game stays neutral there.
+**Heights where nothing is measured (2026-10-03)** — `src/world/priors.ts`, applied in the builder's
+own loop on every feeder. A house with no survey fit, no mapped `height`, `building:levels` or
+`roof:levels` (now read too: `Building.rl`, tile cache v24) takes a measured neighbour's height — one
+of the measured houses of about its size (½–2× its footprint) in its 256 m cell, drawn by its seed —
+else its neighbourhood's storeys: estate 9–11.5 m and Northeast grid 8.6–11 m (two storeys and
+more), a Midwest bungalow grid 6.4–7.8 m, a Northwest craftsman grid 7.2–8.8 m, a tract its cell's
+one model as the recipe draws it (`recipe.ts` `tractCape`: cape 7.2–8 m, a storey and a half; ranch
+5–5.8 m; desert stucco 4.8–5.6 m); a suburb keeps its own mix. The shore's unmeasured houses carried
+Microsoft's ML heights (via Overture; median 4.9 m, 1.3 m under the survey): in three Monmouth Beach
+cells the guessed houses at two storeys and up went 9% → 49%, their measured neighbours being 41%.
+Tests: `tests/priors.test.ts`.
+
 **Real roof colours (2026-09-30)** — per building rather than a per-block-group palette: every
 US roof the NAIP photo shows wears the colour it shows, balanced against the cell's streets (the
 baked shore's own samples balanced per tile). Mapped colours still win; the palette is the floor.

@@ -67,7 +67,7 @@ terrain/DEM, or the LiDAR measure pipeline.
   server proxies `/__tiles/*` to whichever port answers and the game probes that first
   (`?tiles=` explicit overrides, `?tiles=off` disables; no worker → procedural past the bake
   + a toast).
-- Tile cache key: worker R2 `t/v23`, client `&v=23`, and the direct (Overpass) cache's `DIRECT_V` 23 in `tile.worker.ts` — bump all three together when realTile output changes (v23: a bridge's `bridge:structure` → `Road.bs`, drawn by bridges.ts as a truss, an arch, a suspension or a cable-stayed span, and `bridge:movable` → `Road.bm`, a lift or swing span; and the micro layer's furniture — picnic tables, fire rings, grills, planters, boards, recycling, street cabinets, vending machines, clocks, seamarks; v7: named business nodes → `Building.n` / `Building.u`; the worker's Overpass query fetches `node[name][amenity|shop|office]`). **Redeploy the worker** (`cd worker && npx wrangler deploy`) for streamed towns to carry them.
+- Tile cache key: worker R2 `t/v24`, client `&v=24`, and the direct (Overpass) cache's `DIRECT_V` 24 in `tile.worker.ts` — bump all three together when realTile output changes (v24: `roof:levels` → `Building.rl`, its storeys counted in the height; v23: a bridge's `bridge:structure` → `Road.bs`, drawn by bridges.ts as a truss, an arch, a suspension or a cable-stayed span, and `bridge:movable` → `Road.bm`, a lift or swing span; and the micro layer's furniture — picnic tables, fire rings, grills, planters, boards, recycling, street cabinets, vending machines, clocks, seamarks; v7: named business nodes → `Building.n` / `Building.u`; the worker's Overpass query fetches `node[name][amenity|shop|office]`). **Redeploy the worker** (`cd worker && npx wrangler deploy`) for streamed towns to carry them.
 - `?at=lat,lon` beyond every baked backdrop builds a virtual manifest (origin snapped to
   1/64° so players share cell/R2 keys) — `w-<cx>_<cz>` specs stream OSM→TileJson while `s-*`
   synth twins mount instantly and upgrade in place.
@@ -154,6 +154,11 @@ terrain/DEM, or the LiDAR measure pipeline.
   - **Keys:** `MEASURED_V` (`measuredFile.ts`) is the worker's R2 `m/vN` and the client's `&v=N` —
     one constant, both import it. A `VER` bump re-makes records by itself (each carries its `ver`;
     the worker re-measures a stale one). Neither changes `TileJson`: no `t/vN` bump.
+  - **Where nothing is measured** (no record yet, no survey, a fit too poor to use): a house's height
+    is a measured neighbour's, else its neighbourhood's storeys (`priors.ts`, in the builder —
+    `docs/NEIGHBOURHOODS.md` "Heights where nothing is measured"). Mapped `height`,
+    `building:levels` and `roof:levels` always win. Phones still never read a survey: with the
+    sidecar and the service there's no gap that would need it.
   - **Check it in a browser:** `npm run build && node tools/height-check.mjs --device=pixel7
     --at=<lat,lon> --probes=<x,z;…>` (and `--device=desktop --query=measured=0`, which reads
     the survey in the page) — wall top and storeys per probe; the two must print the same.

@@ -204,9 +204,11 @@ export const storeyH = (floors: number) => (floors > 10 ? 3.7 : 3.1);
  *  can't turn a shed into a skyscraper: the floor count wins when the two disagree wildly, and an
  *  unverified tower needs a tower's footprint. Parts (spires, crowns) are exempt from the footprint
  *  test. NaN `h` = no height tag. */
-export function plausibleHeight(h: number, floors: number | null, area: number, part = false): number {
+// `roofLv`: mapped roof:levels — storeys in the roof (attics with dormers, mansards), on top of the
+// building:levels below it: each stands ~2.6 m of roof over the eave.
+export function plausibleHeight(h: number, floors: number | null, area: number, part = false, roofLv = 0): number {
   if (floors && floors > 0) {
-    const est = floors * storeyH(floors) + 1.5;
+    const est = floors * storeyH(floors) + 1.5 + roofLv * 2.6;
     if (!isFinite(h) || h > est * 2 + 20 || h < floors * 1.8) h = est;
   } else if (isFinite(h) && h > 100 && area < 120 && !part) h = 40;
   return isFinite(h) ? Math.min(h, 830) : NaN;
@@ -812,7 +814,9 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         const lv = parseFloat(t['building:levels']);
         const floors = isFinite(lv) && lv > 0 ? lv : null;
         const tagH = parseLen(t.height);
-        let h = plausibleHeight(tagH, floors, area, isPart);
+        const rlv = parseFloat(t['roof:levels']);
+        const roofLv = isFinite(rlv) && rlv > 0 ? Math.min(rlv, 3) : 0;
+        let h = plausibleHeight(tagH, floors, area, isPart, roofLv);
         // bottom of the building above ground (parts: setbacks and overhangs; else pilings)
         const minLv = parseFloat(t['building:min_level']);
         let minH = parseLen(t.min_height);
@@ -822,6 +826,7 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
           const r = (seed % 1000) / 1000;
           h = kind === 'shed' ? 3 + r : kind === 'large' ? 8 + r * 5 : kind === 'commercial' ? 5.5 + r * 3 : 6.5 + r * 3;
           if (isPart) h += minH; // an untagged part stands a storey or two above its base
+          h += roofLv * 2.6; // (a roof the map says has storeys in it)
         }
         if (kind === 'lighthouse') h = 21;
         // four-plus storeys isn't a house or a shed whatever the tag says (towers mapped building=yes)
@@ -844,6 +849,7 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         const rc = parseColour(t['roof:colour']) ?? roofMaterialColour(t['roof:material']);
         if (rc != null) b.rc = rc;
         if (floors) b.fl = Math.round(floors);
+        if (roofLv) b.rl = roofLv;
         if (tagRoof) b.rt = 1;
         if (isFinite(tagH) && Math.abs(tagH - h) < 0.5) b.hq = 1;
         if (t['building:material']) b.ma = String(t['building:material']).toLowerCase().slice(0, 16);

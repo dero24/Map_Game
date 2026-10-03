@@ -12,6 +12,7 @@ import { hash01 } from '../core/rng';
 import { buildRoof, tidyRing, ringArea, offsetRing, type RoofGeom } from './roof';
 import { recipeFor, rowStyle, SIDING, ROOFMAT, type Recipe } from './recipe';
 import { measureHoods, hoodKey, type HoodClass } from './hood';
+import { neighbours, priorHeight } from './priors';
 import { tileRoofs } from './aerial';
 import { activeStyle } from './styles';
 
@@ -1285,6 +1286,9 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
   // cell's from the tile worker, a baked pack's balanced here, one cast per tile. (Streamed tiles
   // carry the map's attribution; a baked tile's `rc` are its region's aerial samples.)
   const seenRoofs = tileRoofs(json.buildings, !(json as { attribution?: string }).attribution);
+  // The measured houses round each guessed one (priors.ts): a house nothing measured or mapped
+  // stands as tall as they do.
+  const nbrs = neighbours(json.buildings);
 
   json.buildings.forEach((bd: Building, bi: number) => {
     const ring = tidy[bi];
@@ -1332,12 +1336,17 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
       bd.k = 'house';
       if (bd.roof === 'flat' && !bd.rt && !bd.ms) bd.roof = 'hip';
     }
+    // a house whose height is a guess (nothing measured, nothing mapped): a measured neighbour's,
+    // else its neighbourhood's storeys (priors.ts) — before the recipe, which reads it (dormers)
+    const cellSeed = Math.floor(cx / 256) * 7919 + Math.floor(cz / 256) * 104729;
+    const ph = priorHeight(bd, cx, cz, Math.abs(ringArea(ring)), nbrs, hood, activeStyle(), cellSeed);
+    if (ph != null) bd.h = ph;
     const rowNA = rowStyle(bd, activeStyle());
     if (rowNA) {
       if (!bd.rt && !bd.ms) bd.roof = 'flat';
       if (bd.h >= 9.5) bd.k = 'large';
     }
-    const rc = recipeFor(bd, activeStyle(), hood, Math.floor(cx / 256) * 7919 + Math.floor(cz / 256) * 104729, seenRoofs[bi]);
+    const rc = recipeFor(bd, activeStyle(), hood, cellSeed, seenRoofs[bi]);
     const kindI = KIND[bd.k] ?? 0;
     // siding code rides in the fraction (the shader's kind tests use ±0.5 bands, so the glass
     // curtain wall, code 5, sits at .46 — still inside its kind's band, still rounds to 5)

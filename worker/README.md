@@ -55,7 +55,7 @@ curl "http://localhost:8787/measured/0_0.json?olat=40.362&olon=-73.9755&v=1"
 
 Local dev is HTTP/1.1: a browser holds six connections to it, so a `/measured` request can queue
 behind slow cold `/tile` calls (the deployed service is HTTP/2). To test the measure path in the
-game, seed R2 (`npx wrangler r2 object put map-game-tiles/t/v23/<olat4>,<olon4>/<cx>_<cz>.json
+game, seed R2 (`npx wrangler r2 object put map-game-tiles/t/v24/<olat4>,<olon4>/<cx>_<cz>.json
 --file=… --local`) and make cold cells fail fast: `npx wrangler dev --var
 OVERPASS_ENDPOINTS:http://127.0.0.1:9/api/interpreter`.
 

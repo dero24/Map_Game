@@ -1267,11 +1267,18 @@
       "area": "world-data",
       "title": "Better height priors where nothing is measured yet: tags first, storeys from the neighbourhood",
       "user_visible_behavior": "Before (or without) a measurement, a building uses its mapped building:levels / height / roof:levels; houses take their neighbourhood archetype's storey count (no blanket one-storey houses where the hood is two-storey).",
-      "status": "not_started",
+      "status": "passing",
       "verification": [
         "tests: priors honour building:levels, height, roof:levels; hood archetype storey defaults per docs/NEIGHBOURHOODS.md; determinism"
       ],
-      "evidence": []
+      "evidence": [
+        "src/world/priors.ts (guessedHouse, neighbours, priorHeight, hoodHeight, housePriors), src/world/buildings.ts (applied in the builder loop before the recipe), src/world/recipe.ts tractCape",
+        "src/world/realTile.ts + scripts/bake.mjs: roof:levels (Building.rl) in plausibleHeight; tile cache v24 (worker t/v24, client &v=24, DIRECT_V 24)",
+        "tests/priors.test.ts (8): \"roof:levels stand on building:levels\", \"a mapped height, levels or roof levels are never a guess\", \"borrows a measured neighbour's height\", \"is deterministic\", \"borrows only from houses of about its size\", \"estates and old grids stand two storeys and more; a suburb keeps its own mix\", \"a tract stands its cell's one model as the recipe draws it\", \"unmeasured houses take their measured neighbours' storeys\" (Monmouth Beach: guessed 2+ storeys 9% -> 49%, measured 41%)",
+        "shots/shore-montage.jpg (RTX 4070, Monmouth Beach street + 22 m oblique, before/after)",
+        "npm run typecheck, npm test (74 files, 775 tests), npm run build — 2026-10-03"
+      ],
+      "notes": "Phones still never read a survey (the optional item): sidecar + service leave no gap. Streamed towns carry roof:levels once the worker is redeployed (t/v24)."
     },
     {
       "id": "measured-parity",

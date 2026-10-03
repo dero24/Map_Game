@@ -263,15 +263,19 @@ for (const row of overture.rows) {
     else if (area < 32 || CLS_SHED.has(tags.building) || CLS_SHED.has(cls) || sub === 'outbuilding') kind = 'shed';
     const seed = hashStr(row.id);
     const floors = row.num_floors ?? (tags['building:levels'] ? parseFloat(tags['building:levels']) : null);
-    // plausible height — mirror of realTile.ts plausibleHeight (real towers keep their height)
+    // plausible height — mirror of realTile.ts plausibleHeight (real towers keep their height;
+    // roof:levels are storeys in the roof, ~2.6 m of roof each)
+    const rlv = parseFloat(tags['roof:levels']);
+    const roofLv = isFinite(rlv) && rlv > 0 ? Math.min(rlv, 3) : 0;
     let h = row.height ?? parseLen(tags.height);
     if (floors && floors > 0) {
-      const est = floors * (floors > 10 ? 3.7 : 3.1) + 1.5;
+      const est = floors * (floors > 10 ? 3.7 : 3.1) + 1.5 + roofLv * 2.6;
       if (h == null || !isFinite(h) || h > est * 2 + 20 || h < floors * 1.8) h = est;
     } else if (h != null && isFinite(h) && h > 100 && area < 120) h = 40;
     if (h == null || !isFinite(h)) {
       const r = (seed % 1000) / 1000;
       h = kind === 'shed' ? 3 + r : kind === 'large' ? 8 + r * 5 : kind === 'commercial' ? 5.5 + r * 3 : 6.5 + r * 3;
+      h += roofLv * 2.6;
     }
     if (kind === 'lighthouse') h = tags.name === 'North Tower' ? 22 : 21;
     if ((kind === 'house' || kind === 'shed') && (h >= 15 || (floors ?? 0) >= 4)) kind = 'large';

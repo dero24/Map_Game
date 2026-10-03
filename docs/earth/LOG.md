@@ -2,6 +2,35 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-03 — Measured heights on every device (3): heights where nothing is measured
+
+The sidecar left 57% of the shore's houses unmeasured (their fits under the 0.35 quality bar: 2,759
+under 0.15, 1,088 in 0.15–0.35, 314 no fit). They kept the pack's heights — 78% of the pack's
+footprints are Microsoft ML Buildings via Overture, a median 4.9 m, 1.3 m under the survey where
+both exist — so a Monmouth Beach street was its measured two-storey houses with every other one a
+bungalow, on every device.
+
+- **Tags first** (`realTile.ts`, the bake's mirror): `roof:levels` now counts — ~2.6 m of roof a
+  storey over `building:levels` (`Building.rl`). `height`, `building:levels` and `roof:levels` are
+  never overridden. TileJson changed: **tile cache v24** (`t/v24`, `&v=24`, `DIRECT_V` 24, together);
+  the deployed worker serves v23 tiles until it's redeployed (graceful: no `rl`, as before).
+- **A measured neighbour's height** (`priors.ts`, in the builder's own loop, every feeder): a house
+  with nothing measured or mapped draws one of the measured houses of about its size (½–2× its
+  footprint) in its 256 m cell (else the tile's), by its own seed — the street's own mix.
+- **Else the neighbourhood's storeys** (`docs/NEIGHBOURHOODS.md`): estate 9–11.5 m, Northeast grid
+  8.6–11 m, Midwest bungalow grid 6.4–7.8, Northwest craftsman 7.2–8.8, a tract its cell's one model
+  (`recipe.ts` `tractCape`, shared: cape 7.2–8, ranch 5–5.8, desert stucco 4.8–5.6); a suburb as before.
+- **Measured** (`tests/priors.test.ts`, 8): three Monmouth Beach cells with the sidecar — 550 guessed,
+  308 measured houses; two storeys and up, guessed **9% → 49%**, measured 41%. Deterministic in any
+  order, idempotent, only from houses of its size; estates and grids ≥ 2 storeys, tracts as the recipe.
+- **Seen** (`shots/shore-montage.jpg`, RTX 4070, before/after with the change stashed): from 22 m
+  over Monmouth Beach the block reads as a mix of one and two storeys instead of a field of
+  bungalows round a few tall houses; at the kerb, the house beside the camera stands two storeys on
+  pilings (its borrowed 9–10 m crossed the builder's near-water pilings rule, which raises the floor,
+  not the total). No broken roofs.
+- Phones still read no survey (item 3's "optional"): with the sidecar and the service there's no gap.
+- 775 tests, typecheck, build.
+
 ## 2026-10-03 — Measured heights on every device (2): the tile service measures streamed cells
 
 Everywhere past the bake (Robby's call: Workers Paid, $5/mo). **Built and verified locally in

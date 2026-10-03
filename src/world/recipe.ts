@@ -209,6 +209,10 @@ export function recipeFor(bd: Building, st: RegionStyle, hood: HoodClass = 'subu
   return o;
 }
 
+/** A tract cell's one model (the builder's plan): a cape (a storey and a half, dormers) or a
+ *  ranch (one storey). The recipe draws it, and the height prior (priors.ts) stands it that tall. */
+export const tractCape = (cellSeed: number) => h(cellSeed, 0x7a) < 0.5;
+
 /** A house's recipe made over by its neighbourhood (mapped colours and materials always win, and
  *  a roof the aerial photo saw keeps its colour). */
 function archetype(r: Recipe, bd: Building, hood: HoodClass, cellSeed: number, st: RegionStyle, seen = false): Recipe {
@@ -263,7 +267,7 @@ function archetype(r: Recipe, bd: Building, hood: HoodClass, cellSeed: number, s
     o.chimney = 0;
   } else if (hood === 'tract') {
     // one model a street cell (the builder's plan), each house its own paint from a narrow range
-    const cape = h(cellSeed, 0x7a) < 0.5;
+    const cape = tractCape(cellSeed);
     if (own) { o.facade = pick(TRACT_FACADES, h(s, 0x7b1)); o.siding = h(s, 0x7b2) < 0.9 ? SIDING.clapboard : SIDING.brick; if (o.siding === SIDING.brick) o.facade = pick(HOUSE_BRICKS, h(s, 0x7b3)); }
     if (ownRoof) o.roof = pick(TRACT_ROOFS, h(cellSeed, 0x7b4));
     o.roofMat = ROOFMAT.asphalt;
