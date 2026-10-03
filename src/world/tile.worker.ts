@@ -17,7 +17,8 @@ import type { SynthResult } from './synth';
 import { setActiveStyle, styleByKey } from './styles';
 import { setMicroDate } from './micro';
 import { setWorldDate } from './calendar';
-import { enrichTile, initLidar, lidarOn, setLidarLog, setLidarPort } from './lidar';
+import { enrichTile, initLidar, lidarOn, setLidarLog, setLidarPort, type PreRec } from './lidar';
+import { bakedMeasured } from './measured';
 import { enrichAerial, initAerial, aerialOn, prefetchAerial, setAerialLog } from './aerialFetch';
 import { setRoofSource } from './aerial';
 import { TAG_ROOF_COLOURS } from './realTile';
@@ -43,6 +44,7 @@ let binInit: ArrayBuffer | null = null; // virtual-region terrain bytes (no terr
 let binPromise: Promise<ArrayBuffer> | null = null;
 let origin: { lat: number; lon: number } | null = null;
 let demOn = false; // H2: fetch Terrarium patches for virtual-region cells
+let measuredOn = false; // precomputed LiDAR records apply (a baked pack's sidecar) — every tier; `?measured=0` off
 let bakedCells: string[] = []; // manifest cell ids — never overridden by a neighbour's DEM overhang
 const demCache = new Map<string, Promise<{ buf: ArrayBuffer; layout: LayerLayout } | null>>();
 const realPatched = new Set<string>(); // cells whose real tile registered its ground in this worker
@@ -591,7 +593,9 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   let lidarLate = false, lidarNew = false;
   if (!syn && lidarOn()) {
     // (a vector twin is a stand-in: up now from priors, its measured rebuild later)
-    const e = await enrichTile(tj, spec.box, msg.relief ? null : vec ? 0 : LIDAR_WAIT, !msg.lite);
+    // (a baked cell's precomputed record rides in its region's sidecar: measured/<id>.json)
+    const pre: PreRec | undefined = measuredOn && !spec.world && !spec.synth && spec.file ? () => bakedMeasured(base, spec.id) : undefined;
+    const e = await enrichTile(tj, spec.box, msg.relief ? null : vec ? 0 : LIDAR_WAIT, !msg.lite, pre);
     lidarLate = e === 'late';
     lidarNew = e === 'done';
   }
@@ -676,10 +680,12 @@ ctx.onmessage = (e: MessageEvent) => {
     setMicroDate(m.date); // (the world's chosen day: the beach's season, the carts' collection day)
     setWorldDate(m.date); // (…the marina's boats, the beach's people, its lot's cars: calendar.ts)
     if (m.demBase) setDemBase(m.demBase);
-    if (m.lidar && m.origin) {
+    // `lidar`: this device measures (desktop); `measured`: precomputed records apply (every tier)
+    measuredOn = !!m.measured;
+    if ((m.lidar || m.measured) && m.origin) {
       setLidarLog((msg) => ctx.postMessage({ kind: 'log', msg }));
       if (m.lidarPort) setLidarPort(m.lidarPort);
-      initLidar(m.origin);
+      initLidar(m.origin, !!m.lidar);
     }
     if (m.fp) initCache(base, m.fp); // same idb database as the page
     const st = m.style ? styleByKey(m.style) : null;

@@ -115,6 +115,32 @@ terrain/DEM, or the LiDAR measure pipeline.
   `detectBuildings`, `detectTrees`), spawned by the stream and wired to the tile worker with
   a MessageChannel; `lidar.ts` (tile worker) owns the IDB cache and applies results.
 - `?lidar=0` disables. Bump `VER` in lidar.ts whenever measure/raster/tree logic changes.
+- **Measured once, for every device.** Phones never read a survey (`quality.ts` `lidar: false`:
+  a city's decode crashed them), so a cell's measurement is made ahead and shipped as the same
+  `Rec` a desktop caches: `enrichTile(…, pre)` applies a precomputed record first, on every tier
+  (`?measured=0` leaves it out — a desktop then measures everything itself, for comparing). Its
+  fits win over a browser's own (`joinRec`); a desktop reads the survey only for what a record
+  lacks (complete = trees + unmapped + ≤3% of footprints missing), a phone never.
+  - **Baked packs: the sidecar** — `public/data/<region>/measured/<cell>.json` + `index.json`
+    (`{v, ver, index, bakeId, cells: {id: fnv36 hash | 0}}`; 0 = open water / no survey). The
+    pack's own files never change. `measured.ts` `bakedMeasured` reads the index once (kept in
+    IndexedDB for offline), then `<cell>.json?h=<hash>` through the tile cache.
+  - **Made by** `node scripts/measure-cells.mjs --region=<id> [--only=a,b] [--resume]`, the
+    runtime's own code through Vite's module runner (`scripts/lib/measure-entry.ts`): `cellPlan`
+    (the same footprints and keys `enrichTile` asks about), `cellRequest`, `measureCell` with
+    `strict` (a failed read throws and is retried 4×, never measured off an older survey instead)
+    and `lean` (nodes streamed into the grid). `--check` verifies the sidecar against the pack
+    offline; `tests/measured.test.ts` does too (ver = `VER`, bakeId = the manifest's, every hash).
+    **Re-run it after a re-bake or a `VER` bump** — the test fails until you do.
+  - **Deterministic:** nodes are added to the grid in node order (float32 ground sums are
+    order-sensitive), so a desktop's own read, the script's and the tile service's agree to the
+    byte: the shore's 216 cells measured twice (once kept, once streamed) are byte-identical.
+  - **Size:** shore 2026-10-03 — 127 records + 89 zeros, 12.4 MB raw / 4.6 MB gzipped (mean
+    36 KB gz a cell, max 80 KB). The buildings are ~4 KB gz a cell; 85% is the survey's trees
+    (up to 12,000 a cell), which phones now plant too — the same trees as a desktop.
+  - **Check it in a browser:** `npm run build && node tools/height-check.mjs --device=pixel7
+    --at=<lat,lon> --probes=<x,z;…>` (and `--device=desktop --query=measured=0`, which reads
+    the survey in the page) — wall top and storeys per probe; the two must print the same.
 
 ## Aerial roof colours (streamed US cells)
 

@@ -37,5 +37,5 @@ describe('procedural stand-in lots', () => {
     }
     expect(houses).toBeGreaterThan(200);
     expect(bad.slice(0, 5)).toEqual([]);
-  });
+  }, 60000); // (2.5 s alone; twice that with the whole suite running beside it)
 });

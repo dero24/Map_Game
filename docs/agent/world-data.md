@@ -34,6 +34,11 @@ Read this when the task touches region definitions, the data pipeline, baking, o
   `raw/<region>/`, archived.
 - `npm run bake -- --region=<id>` → `public/data/<region>/{world.json,terrain.bin,manifest.json,paint.json,
   tiles/*.json}` + `public/data/regions.json`. Debug masks land in `raw/<region>/debug/`.
+- `node scripts/measure-cells.mjs --region=<id>` (after a bake): the pack's LiDAR sidecar,
+  `public/data/<id>/measured/` — every cell's buildings measured once off USGS 3DEP so phones
+  build them as tall as desktops do (`streaming.md` "Measured once, for every device"). ~10–20 MB
+  of survey a cell, a few seconds each; `--check` after. A re-bake (new `bakeId`) or a `VER` bump
+  in `lidar.ts` needs a re-run (`tests/measured.test.ts` fails until then).
 - `fetch-imagery.mjs` samples USDA NAIP aerial photos (public domain, US only) inside every
   footprint → `raw/<region>/roofs.json` (real roof colours; tags/materials still win). Neither
   town has mapped facade/roof colours in OSM/Overture. See "Building colours from real data".

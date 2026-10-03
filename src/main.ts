@@ -277,6 +277,11 @@ async function main() {
   // `?lidar=0` builds from mapped priors only. A phone's tier builds from them too (quality.ts):
   // a city's survey decoded in the tab was hundreds of MB, and each cell built twice; `?lidar=1`.
   stream.lidar = params.get('lidar') === '1' || (params.get('lidar') !== '0' && tier.lidar);
+  // …and every tier applies the measurements already made — a baked pack's sidecar
+  // (scripts/measure-cells.mjs), the tile service's records: a phone's buildings stand as tall
+  // as a desktop's without reading the survey. `?measured=0` leaves them out (a desktop then
+  // measures every cell itself, for comparing).
+  stream.measured = params.get('lidar') !== '0' && params.get('measured') !== '0';
   // Real roof colours on streamed US cells, off the NAIP aerial photo (aerialFetch.ts) — one
   // photo a cell, read once per browser; every tier. `?aerial=0` keeps the palette roofs.
   stream.aerial = aerialRoofs;

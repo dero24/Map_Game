@@ -26,12 +26,18 @@ let origin: LatLon | null = null;
 let lpP: Promise<LazPerf> | null = null;
 let log: (msg: string) => void = (m) => console.info(m);
 export function setCellLog(fn: (msg: string) => void) { log = fn; }
-const lazperf = () =>
-  (lpP ??= (async () => {
-    const bin = atob(WASM_B64), u8 = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-    return createLazPerf({ wasmBinary: u8.buffer });
-  })());
+let lazFactory = async (): Promise<LazPerf> => {
+  const bin = atob(WASM_B64), u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return createLazPerf({ wasmBinary: u8.buffer });
+};
+/** A runtime that may not compile WASM from bytes (a Cloudflare Worker: its module is compiled at
+ *  deploy) hands over its own way to start the decoder. */
+export function setLazPerf(f: () => Promise<LazPerf>) {
+  lazFactory = f;
+  lpP = null;
+}
+const lazperf = () => (lpP ??= lazFactory());
 
 // ---------- EPT reads (session-cached) ----------
 const eptP = new Map<string, Promise<EptInfo>>();
@@ -75,6 +81,37 @@ async function nodesFor(base: string, E: EptInfo, mb: [number, number, number, n
   return { maxD, nodes };
 }
 
+// One LAZ node's returns, in the file's own order: `begin(n)`, then `put(i, X, Y, Z, C)` per point
+// (X, Y in the survey's Mercator metres, Z its elevation, C its class). Kept (Pts) or streamed
+// straight into a grid, a point is the same numbers: Z is float32 either way.
+type Put = (i: number, X: number, Y: number, Z: number, C: number) => void;
+function decode(LP: LazPerf, ab: ArrayBuffer, begin: (n: number) => void, put: Put) {
+  const buf = new Uint8Array(ab);
+  const hd = lasHeader(buf);
+  const src = LP._malloc(buf.length);
+  LP.HEAPU8.set(buf, src);
+  const z = new LP.LASZip();
+  try {
+    z.open(src, buf.length);
+    const n = z.getCount(), len = z.getPointLength(), pf = hd.pf; // header's id, compression bits masked
+    begin(n);
+    const rec = LP._malloc(len);
+    try {
+      let H8 = LP.HEAPU8, dv = new DataView(H8.buffer, rec, len);
+      for (let i = 0; i < n; i++) {
+        z.getPoint(rec);
+        if (LP.HEAPU8.buffer !== H8.buffer) (H8 = LP.HEAPU8), (dv = new DataView(H8.buffer, rec, len)); // wasm memory grew
+        put(i, dv.getInt32(0, true) * hd.sx + hd.ox, dv.getInt32(4, true) * hd.sy + hd.oy, Math.fround(dv.getInt32(8, true) * hd.sz + hd.oz), lasClass(H8, rec, pf));
+      }
+    } finally {
+      LP._free(rec);
+    }
+  } finally {
+    z.delete();
+    LP._free(src);
+  }
+}
+
 // Decoded shallow nodes are shared by every cell under them — keep a few.
 interface Pts { X: Float64Array; Y: Float64Array; Z: Float32Array; C: Uint8Array }
 const ptsCache = new Map<string, Promise<Pts>>();
@@ -83,34 +120,14 @@ function points(url: string, keep: boolean): Promise<Pts> {
   if (hit) return hit;
   const p = (async () => {
     const [ab, LP] = await Promise.all([get(url).then((r) => r.arrayBuffer()), lazperf()]);
-    const buf = new Uint8Array(ab);
-    const hd = lasHeader(buf);
-    const src = LP._malloc(buf.length);
-    LP.HEAPU8.set(buf, src);
-    const z = new LP.LASZip();
-    try {
-      z.open(src, buf.length);
-      const n = z.getCount(), len = z.getPointLength(), pf = hd.pf; // header's id, compression bits masked
-      const rec = LP._malloc(len);
-      const out: Pts = { X: new Float64Array(n), Y: new Float64Array(n), Z: new Float32Array(n), C: new Uint8Array(n) };
-      try {
-        let H8 = LP.HEAPU8, dv = new DataView(H8.buffer, rec, len);
-        for (let i = 0; i < n; i++) {
-          z.getPoint(rec);
-          if (LP.HEAPU8.buffer !== H8.buffer) (H8 = LP.HEAPU8), (dv = new DataView(H8.buffer, rec, len)); // wasm memory grew
-          out.X[i] = dv.getInt32(0, true) * hd.sx + hd.ox;
-          out.Y[i] = dv.getInt32(4, true) * hd.sy + hd.oy;
-          out.Z[i] = dv.getInt32(8, true) * hd.sz + hd.oz;
-          out.C[i] = lasClass(H8, rec, pf);
-        }
-      } finally {
-        LP._free(rec);
-      }
-      return out;
-    } finally {
-      z.delete();
-      LP._free(src);
-    }
+    let out!: Pts;
+    decode(LP, ab, (n) => (out = { X: new Float64Array(n), Y: new Float64Array(n), Z: new Float32Array(n), C: new Uint8Array(n) }), (i, X, Y, Z, C) => {
+      out.X[i] = X;
+      out.Y[i] = Y;
+      out.Z[i] = Z;
+      out.C[i] = C;
+    });
+    return out;
   })();
   if (keep) {
     ptsCache.set(url, p);
@@ -119,12 +136,25 @@ function points(url: string, keep: boolean): Promise<Pts> {
   }
   return p;
 }
+/** Forget every read kept between cells (a long-lived server measures one cell at a time). */
+export function dropCellCaches() {
+  ptsCache.clear();
+  eptP.clear();
+  hierP.clear();
+  hagMem.clear();
+  hagDone.clear();
+}
 
 // ---------- the cell raster ----------
 // Surveys are tried newest first; a survey that fails (404 after an index refresh, S3
 // hiccup) is skipped, not fatal. null = every candidate was read and none had ground
 // returns here (safe to remember); a throw = nothing usable AND something failed (retry).
-export async function hagFor(box: Box, cands: LidarProject[], eptBase: string): Promise<Hag | null> {
+// `strict` (the precompute script, the tile service): any failed read throws instead of moving on
+// to an older survey — a record that's kept for every visitor must never depend on a network hiccup.
+// `lean` (the tile service, in a Worker's 128 MB): each node is decoded straight into the grid as
+// its turn comes, never held as points; only the compressed files in flight are kept. The adds
+// are the same numbers in the same order, so the grid — and every fit — is the same as the kept way.
+export async function hagFor(box: Box, cands: LidarProject[], eptBase: string, strict = false, lean = false): Promise<Hag | null> {
   if (!origin) throw new Error('lidar: no origin');
   const bb = boxLatLon(origin, box);
   const A = mercToLocal(origin, box);
@@ -139,20 +169,35 @@ export async function hagFor(box: Box, cands: LidarProject[], eptBase: string): 
       const { maxD, nodes } = await nodesFor(base, E, mb, (bb.s + bb.n) / 2);
       if (!nodes.length) continue;
       g = new LidarGrid(box.x0 - PAD, box.z0 - PAD, 1, box.x1 + PAD, box.z1 + PAD);
-      let i = 0;
-      const work = async () => {
-        while (i < nodes.length) {
-          const k = nodes[i++];
-          const P = await points(`${base}ept-data/${k}.laz`, +k.split('-')[0] <= maxD - 2);
-          for (let j = 0; j < P.X.length; j++) {
-            const X = P.X[j], Y = P.Y[j];
-            if (X < mb[0] || X > mb[2] || Y < mb[1] || Y > mb[3]) continue;
-            g.add(A.a * X + A.b * Y + A.c, A.d * X + A.e * Y + A.f, P.Z[j], P.C[j]);
-          }
-        }
+      // Up to CONC nodes in flight, but added to the grid in node order: the ground sums are
+      // float32, so the order of the adds decides their last bits — taken as the network
+      // delivered them, two reads of one cell could differ by a centimetre's rounding. In
+      // order, a desktop's own read and the precomputed record (scripts/measure-cells.mjs) agree.
+      const G = g;
+      const add = (X: number, Y: number, Z: number, C: number) => {
+        if (X < mb[0] || X > mb[2] || Y < mb[1] || Y > mb[3]) return;
+        G.add(A.a * X + A.b * Y + A.c, A.d * X + A.e * Y + A.f, Z, C);
       };
-      await Promise.all(Array.from({ length: CONC }, work));
+      const pend: (Promise<Pts | ArrayBuffer> | null)[] = [];
+      const ahead = () => {
+        const k = nodes[pend.length];
+        if (k == null) return;
+        const url = `${base}ept-data/${k}.laz`;
+        const p = lean ? get(url).then((r) => r.arrayBuffer()) : points(url, +k.split('-')[0] <= maxD - 2);
+        p.catch(() => {}); // (rejections surface when their turn is awaited)
+        pend.push(p);
+      };
+      for (let i = 0; i < CONC; i++) ahead();
+      const LP = lean ? await lazperf() : null;
+      for (let i = 0; i < nodes.length; i++) {
+        const P = await pend[i]!;
+        pend[i] = null;
+        ahead();
+        if (lean) decode(LP!, P as ArrayBuffer, () => {}, (_, X, Y, Z, C) => add(X, Y, Z, C));
+        else for (let j = 0, Q = P as Pts; j < Q.X.length; j++) add(Q.X[j], Q.Y[j], Q.Z[j], Q.C[j]);
+      }
     } catch (e) {
+      if (strict) throw e;
       failed = e;
       continue;
     }
@@ -175,6 +220,8 @@ export interface CellReq {
   bld: { k: string; r: number[]; prior?: 'gable' | 'hip' | 'flat'; house: boolean; hm?: number }[]; // rings in 0.1 m ints; hm = mapped height (m)
   mapped: number[][]; // mapped (non-guess) footprint rings, 0.1 m ints — masks for detection
   wantNew: boolean; wantTrees: boolean;
+  strict?: boolean; // the precompute script, the tile service: a failed read throws (see hagFor)
+  lean?: boolean; // the tile service: nodes streamed into the grid, nothing kept after the cell (see hagFor)
 }
 export interface CellRes {
   none?: 1; src?: string; year?: number;
@@ -213,7 +260,7 @@ export async function measureCell(q: CellReq): Promise<CellRes> {
   if (!gp) {
     const t0 = performance.now();
     log(`lidar ${ck}: reading for ${q.bld.length} footprints${q.wantTrees ? ' + trees' : ''}`);
-    hagMem.set(ck, (gp = limited(() => hagFor(q.box, q.cands, q.ept))));
+    hagMem.set(ck, (gp = limited(() => hagFor(q.box, q.cands, q.ept, !!q.strict, !!q.lean))));
     void gp.then((g) => { hagDone.add(ck); log(g ? `lidar ${ck}: ${g.src} read in ${((performance.now() - t0) / 1000).toFixed(1)} s` : `lidar ${ck}: no survey covers this cell`); }, (e) => { log(`lidar ${ck}: unavailable (${e?.message ?? e})`); hagMem.delete(ck); });
     for (const k of hagMem.keys()) {
       if (hagMem.size <= 4) break;
@@ -221,6 +268,7 @@ export async function measureCell(q: CellReq): Promise<CellRes> {
     }
   }
   const G = await gp; // throws on network trouble — the caller builds from priors
+  if (q.lean) hagMem.delete(ck), hagDone.delete(ck); // (nothing outlives the cell: the grid goes with this call)
   if (!G) return { none: 1, fits: [] };
   const out: CellRes = { src: G.src, year: G.year, fits: [], canopy: G.chm ? 'classified' : 'unclassified' };
   const fresh: [string, number[], boolean, number | undefined][] = q.bld.map((b) => {

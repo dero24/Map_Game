@@ -174,6 +174,15 @@ behaviour.
 - `npm run build && node tools/mobile-check.mjs --device=pixel7|iphone|desktop [--query=quality=low]`
   runs all of the below and writes `shots/mobile-<device>.{png,json}`; it exits non-zero on a page
   error or a shader program over the phone limits.
+- `npm run build && node tools/height-check.mjs --device=pixel7|desktop --at=<lat,lon> --probes=<x,z;…>
+  [--query=measured=0]`: the same Pages-like serve, walked to a place; once the ring has settled (no
+  build in flight, no cell waiting on a measurement) it prints each probe's building — wall top above
+  ground and storeys by the interior planner's rule — the ring's detail tiles and their vertex MB, and
+  how many cells this browser read the survey for (`shots/heights-<device>….json`). A phone and a
+  desktop must print the same buildings (`streaming.md` "Measured once, for every device"); a desktop
+  with `--query=measured=0` reads the survey itself, which proves the sidecar against a live read.
+  Probes are local metres in the pack's frame: use a point inside the outline (a vertex average can
+  fall outside an L-shape).
 - Headless mobile checks: Playwright device descriptors (`Pixel 7`, `iPhone 14`) +
   `--use-angle=swiftshader --enable-unsafe-swiftshader`, served under a sub-path with no
   COOP/COEP (like Pages). **Stub `Element.prototype.requestPointerLock`** in those runs: headless

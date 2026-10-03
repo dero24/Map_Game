@@ -1,6 +1,6 @@
 {
   "project": "map_game",
-  "last_updated": "2026-10-01",
+  "last_updated": "2026-10-03",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -983,7 +983,7 @@
       "area": "platform",
       "title": "The game runs on phones, and says why if it can't",
       "user_visible_behavior": "On a phone the game picks a lighter quality tier by itself and renders; if anything fails (no WebGL, a shader, no frame, a lost GPU context, a bundle that won't load) the page shows a readable report you can screenshot, and ?diag=1 shows it on demand.",
-      "status": "in_progress",
+      "status": "blocked",
       "verification": [
         "tests/quality.test.ts, tests/diag.test.ts, tests/pack.test.ts (atlas crop)",
         "tools/mobile-check.mjs (headless, helper agent): Pixel 7 GPU-process peak 1272 → 733–783 MB on the phone tier, world drawn, 0 errors; injected failures each show the report",
@@ -1016,7 +1016,7 @@
         "npm test (50 files, 472 tests, idle machine), npm run build — 2026-09-30",
         "src/player/frame.ts (the lens fitted to the screen: 41° across upright, ≤ 95° on its side, 4:3–16:9 unchanged; tests/frame.test.ts); src/ui/style.css + main.ts toast/arrival slots (the middle band clear); tools/hud-audit.mjs middle-band rule (560 layouts clear); clock 7.45:1 on its paper wash (round 10 must-fix 1)"
       ],
-      "notes": "2026-09-30: controls reviewed and fixed (docs/earth/LOG.md); phones sleep when put away; the NYC crash's memory causes fixed (sign-atlas texture leak, walls never reclaimed, LiDAR ~130 MB a Midtown cell, up to 9 dense cells in the ring); a phone lands only once the street below is built. Verified headless in Sea Bright (Pixel 7 emulation): textures flat at 23–25 over 4 round trips (was 24 → 36), walls flat at 106k (was 263k), landing 12.7 m clear of the house it used to land in. Follow-up the same day: the phone HUD's overlaps fixed (the montage showed 3, an audit of 10 phones found 25 layouts); an unloaded tile's walls purged a slice a frame on every tier (a PC's long hop had left 166k dead walls); sleep re-measured by the life worker's messages (57–59 ticks in 3 s awake, 0 hidden); no page zoom even where the browser ignores the viewport meta (headless pinch: scale stays 1). Still needs a real phone after the next Pages deploy: …/Map_Game/?diag=1 in Manhattan (the tile service and Overpass are unreachable from the agent sandbox), and an iPhone for the gesture-event zoom guard (WebKit isn't installed here)."
+      "notes": "2026-09-30: controls reviewed and fixed (docs/earth/LOG.md); phones sleep when put away; the NYC crash's memory causes fixed (sign-atlas texture leak, walls never reclaimed, LiDAR ~130 MB a Midtown cell, up to 9 dense cells in the ring); a phone lands only once the street below is built. Verified headless in Sea Bright (Pixel 7 emulation): textures flat at 23–25 over 4 round trips (was 24 → 36), walls flat at 106k (was 263k), landing 12.7 m clear of the house it used to land in. Follow-up the same day: the phone HUD's overlaps fixed (the montage showed 3, an audit of 10 phones found 25 layouts); an unloaded tile's walls purged a slice a frame on every tier (a PC's long hop had left 166k dead walls); sleep re-measured by the life worker's messages (57–59 ticks in 3 s awake, 0 hidden); no page zoom even where the browser ignores the viewport meta (headless pinch: scale stays 1). Still needs a real phone after the next Pages deploy: …/Map_Game/?diag=1 in Manhattan (the tile service and Overpass are unreachable from the agent sandbox), and an iPhone for the gesture-event zoom guard (WebKit isn't installed here). 2026-10-03: set to blocked (was in_progress) while the measured-heights items run — what remains is the real-device check above (a real phone on the Pages deploy in Manhattan with ?diag=1, and an iPhone for the gesture-zoom guard), which the agent can't do; unblocks when Robby has run it."
     },
     {
       "id": "photo-paints-frame",
@@ -1207,6 +1207,76 @@
         "src/world/props.ts (lots by season × hour, boats by month), src/world/kerbCars.ts (cars in their hours)",
         "src/render/creature.ts (BEACH), src/assets/people.ts (lite body)"
       ]
+    },
+    {
+      "id": "measured-shore-sidecar",
+      "priority": 0,
+      "area": "world-data",
+      "title": "Shore heights measured once, shipped to every device: the baked pack's LiDAR sidecar",
+      "user_visible_behavior": "In Sea Bright and Monmouth Beach every building stands at its LiDAR-measured height on a phone exactly as on a PC (Bain's Hardware, 1092 Ocean Ave, three storeys on both; Monmouth Beach houses two storeys where the survey says so), with no survey decoded on the phone.",
+      "status": "passing",
+      "verification": [
+        "node scripts/measure-cells.mjs --region=shore (all 216 cells), run twice byte-identical, then --check",
+        "tests/measured.test.ts: sidecar ver === lidar VER, bakeId === manifest bakeId, every hash matches its file, the pack untouched",
+        "phone emulation (tools/mobile-check.mjs / capture) shows shore buildings at their measured heights"
+      ],
+      "evidence": [
+        "src/world/lidar.ts (cellPlan, cellRequest, foldRes, joinRec, enrichTile pre)",
+        "src/world/lidarCell.ts (ordered node adds, strict reads)",
+        "src/world/measured.ts, src/world/measuredFile.ts",
+        "scripts/measure-cells.mjs, scripts/lib/measure-entry.ts",
+        "2026-10-03: --only=0_-1,0_0 measured in 4.5 s / 7.7 s (9 KB, 20 KB); Bain's = 0_-1 #61 (NJ MOD-IV 1092 Ocean Ave \"3SB\", parcel centroid 40.36220,-73.97453) measured 12.08 m flat, q 0.67",
+        "public/data/shore/measured/ (216 cells: 127 records + 81 open water + 8 no-survey zeros; 12.4 MB raw / 4.6 MB gz, mean 36 KB gz a cell, max 80 KB; trees are 85%)",
+        "2026-10-03: two full runs byte-identical (run 1 kept-points decode, run 2 lean streaming decode; 128 files), node scripts/measure-cells.mjs --region=shore --check: ok 216 cells",
+        "tests/measured.test.ts: \"is this runtime's measurement of this pack\", \"every record hashes to its index entry, carries this VER and keys only the cell's own footprints\", \"leaves the pack as it was baked (its tiles still hash to its bakeId)\"",
+        "tools/height-check.mjs (new): Bain's wall 12.57 m flat on pixel7 (sidecar) = desktop reading the survey in-page (?measured=0, 14 cells read) = desktop (sidecar); pixel7 without the sidecar 6.85 m pitched 2 storeys; 5 Monmouth Beach houses identical phone vs desktop own read (8.99/7.74/7.41/8.24/9.38 m), all ~4 m 1 storey before",
+        "phone budget (height-check detailMB): Sea Bright 83 vs 76.2 MB (4 tiles), Monmouth Beach 166.7 vs 162.9 MB (7 tiles), budget 200",
+        "shots/shore-montage.jpg (phone tier, 412x915, RTX 4070): Bain's and a Monmouth Beach street before/after",
+        "src/world/tile.worker.ts: ?measured=0 now reaches the build (it was ignored on desktops)",
+        "npm run typecheck, npm test (73 files, 759 tests), npm run build — 2026-10-03"
+      ],
+      "notes": "Found: Bain's is a house in the pack (no shop mapped on it), so its measured 12.1 m draws as four 2.9 m storeys; NJ MOD-IV says 3 (\"3SB\"). Height right on both devices; the storey split follows the kind."
+    },
+    {
+      "id": "measured-service",
+      "priority": 0,
+      "area": "streaming",
+      "title": "Everywhere else: the tile service measures a cell on first request and keeps the record in R2 for every device",
+      "user_visible_behavior": "In any streamed US town, the first visitor's request has the tile service read the cell's LiDAR once; from then on every device (phone and PC alike) builds the same measured buildings from that record. Until a record exists, or offline / outside the US, buildings come from the improved priors and swap to measured when the record lands.",
+      "status": "not_started",
+      "verification": [
+        "prototype: a dense cell (Midtown Manhattan) measured inside a Worker within 128 MB and the CPU limit",
+        "worker route GET /measured/<cx>_<cz>.json?olat&olon&v=1 -> R2 m/v1/...; a second request while in flight never starts another measure (202)",
+        "tests: serviceMeasured graceful on 202/404/offline/outside coverage; joinRec precedence",
+        "worker/README.md + docs/agent/streaming.md updated; deployed once Robby confirms the paid plan"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "measured-fallback-priors",
+      "priority": 1,
+      "area": "world-data",
+      "title": "Better height priors where nothing is measured yet: tags first, storeys from the neighbourhood",
+      "user_visible_behavior": "Before (or without) a measurement, a building uses its mapped building:levels / height / roof:levels; houses take their neighbourhood archetype's storey count (no blanket one-storey houses where the hood is two-storey).",
+      "status": "not_started",
+      "verification": [
+        "tests: priors honour building:levels, height, roof:levels; hood archetype storey defaults per docs/NEIGHBOURHOODS.md; determinism"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "measured-parity",
+      "priority": 0,
+      "area": "platform",
+      "title": "Phone/desktop height parity, proven: the same h and storeys through enrichTile on both tiers",
+      "user_visible_behavior": "Bain's and Monmouth Beach houses have the same height and storey count on a phone and a PC.",
+      "status": "not_started",
+      "verification": [
+        "tests/: Bain's + a sample of Monmouth Beach houses through enrichTile with measure=false (phone) and measure=true (desktop) using the sidecar give identical h and storeys (the builders' own storey logic)",
+        "npm run build && node tools/mobile-check.mjs --device=pixel7 (shader limits + boot report in phone budget)",
+        "node tools/capture.mjs incl. a phone montage; shots/<region>-montage.jpg reviewed"
+      ],
+      "evidence": []
     }
   ],
   "regions": {

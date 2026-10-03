@@ -2,6 +2,49 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-03 — Measured heights on every device (1): the shore's LiDAR sidecar
+
+Robby: Bain's Hardware (1092 Ocean Ave) is right on a PC but two storeys on a phone, and many
+Monmouth Beach houses are one storey on a phone. Phones never read the survey (`quality.ts`
+`lidar: false` — a city's decode crashed them), so they built from priors. The fix: measure each
+cell once and ship the result to every device. Branch `feature/measured-heights`.
+
+- **The sidecar** (`public/data/shore/measured/`, `scripts/measure-cells.mjs`): every cell of the
+  baked pack measured by the runtime's own code (`cellPlan` → `cellRequest` → `measureCell`, laz-perf
+  through Vite's module runner), one record a cell — the same `Rec` a desktop caches — and an index
+  (`ver`, the project-index date, the pack's `bakeId`, each file's hash or 0). The pack's own files
+  are untouched (its tiles still hash to its `bakeId`: a test).
+  - 216 cells: 127 records, 81 open water, 8 with no survey returns; ~6 s a cell, 4–6 dropped
+    fetches retried, none failed.
+  - **Deterministic:** run twice — once decoding nodes into kept point arrays (the browser's way),
+    once streaming them into the grid (the tile service's way) — byte-identical, all 128 files.
+    Nodes now reach the grid in node order (`lidarCell.ts`: float32 ground sums depend on the order).
+  - **Size:** 12.4 MB raw, 4.6 MB gzipped; mean 36 KB gz a cell, max 80 KB. The buildings are ~4 KB
+    gz a cell; 85% is the survey's trees (up to 12,000 a cell).
+- **The runtime** (`lidar.ts`, `measured.ts`, `tile.worker.ts`): `enrichTile(…, pre)` applies a
+  precomputed record first on every tier; its fits win over a browser's own (`joinRec`); a desktop
+  reads the survey only for what a record lacks, a phone never. `?measured=0` leaves records out
+  (a bug found on the way: the flag never reached the tile worker's build, so a desktop with
+  `?measured=0` still used the sidecar).
+- **Bain's, confirmed:** NJ MOD-IV lists 1092 Ocean Ave as "3SB" (three storeys), parcel centroid
+  40.36220,−73.97453 — the pack's 0_-1 #61 (35.5 × 22.3 m). The survey: 12.08 m, flat, fit 0.67.
+  1096 next door (0_0 #274, "2SB") fits poorly (0.25) and keeps its priors on every device.
+- **Verified** (`tools/height-check.mjs`, new — a Pages-like serve, a device emulation, the built
+  buildings' wall top and storeys at probe points):
+  - Bain's: phone with the sidecar 12.57 m wall, flat; a desktop reading the survey itself in the
+    page (`?measured=0`, 14 cells read) 12.57 m; the phone without it 6.85 m, pitched, 2 storeys.
+  - Five Monmouth Beach houses: phone = desktop's own read exactly (8.99 / 7.74 / 7.41 / 8.24 /
+    9.38 m walls, 2 storeys; the 7.41 m one stands on pilings, 1 storey over them); without the
+    sidecar all five were ~4 m, one storey.
+  - Phone ring budget: Sea Bright 83 MB of vertex data with the sidecar vs 76 MB without (4 tiles);
+    Monmouth Beach 167 MB (7 tiles) — under the phone's 200 MB, which `admitCells` enforces anyway.
+  - `shots/shore-montage.jpg`: Bain's and a Monmouth Beach street on the phone tier, before/after.
+  - `tests/measured.test.ts` (+3): the sidecar is this `VER`'s measurement of this pack, every file
+    hashes to its entry and keys only its cell's footprints (and all of them), the pack unchanged.
+- **Found, not fixed:** Bain's is a `house` in the pack (no shop is mapped on it), so its 12.1 m
+  is drawn as four 2.9 m storeys; MOD-IV says three (an old commercial building's ~4 m floors).
+  The height is right on both devices; the storey split follows the kind.
+
 ## 2026-10-01 (afternoon) — Review round 11 and its fixes: lamplight, grain, trees, people, homes
 
 Round 11 scored Sea Bright **8.5/10, not passed**: "five for five, and three overshot"
