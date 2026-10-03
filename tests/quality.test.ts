@@ -20,8 +20,9 @@ describe('pickTier', () => {
     for (const d of [PIXEL7, IPHONE, IPAD]) {
       const t = pickTier(d);
       expect(t.tier).toBe('phone');
-      expect(t.post.hiDpi).toBe(true); // (up to 1.5×: at CSS pixels a phone's paint was a smear)
-      expect(t.post.paintDetail).toBeGreaterThanOrEqual(0.75);
+      expect(t.post.hiDpi).toBe(true); // (up to 2×: at CSS pixels a phone's paint was a smear)
+      expect(t.post.dpiMax).toBe(2);
+      expect(t.post.paintDetail).toBe(1); // (85% at 1.5× still read blurry, 2026-10-03)
       expect(t.stream.coarseR).toBeGreaterThanOrEqual(6000); // (the middle distance, not haze)
       expect(t.shadow.size).toBe(1024);
       expect(t.paintTex).toBe(2048);

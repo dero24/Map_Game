@@ -41,9 +41,10 @@ export const postParams = {
   inkColor: '#2e2a3a',
   // resolution: the paint (brush) pass runs at this fraction of the frame (0.5 = the old half-res
   // wash; higher = crisper strokes, same brush size on screen); hiDpi renders at the screen's own
-  // pixel density (capped 1.5×) instead of CSS pixels
+  // pixel density (capped at dpiMax: 1.5× on a desktop, 2× on a phone) instead of CSS pixels
   paintDetail: 0.82,
   hiDpi: true,
+  dpiMax: 1.5,
   // colour grade: split-tone shadows/lights toward two hues (the vivid painted-sci-fi look) and a
   // vibrance lift that saturates the dull colours more than the bright ones
   grade: 0.2,
@@ -546,7 +547,7 @@ export class WatercolorPost {
   setSize(w: number, h: number) {
     this.w = w;
     this.h = h;
-    const s = postParams.renderScale * (postParams.hiDpi ? Math.min(1.5, Math.max(1, globalThis.devicePixelRatio || 1)) : 1);
+    const s = postParams.renderScale * (postParams.hiDpi ? Math.min(postParams.dpiMax || 1.5, Math.max(1, globalThis.devicePixelRatio || 1)) : 1);
     const sw = Math.max(4, Math.round(w * s)), sh = Math.max(4, Math.round(h * s));
     this.sceneRT.setSize(sw, sh);
     U.uViewport.value.set(sw, sh);

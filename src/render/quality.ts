@@ -30,7 +30,7 @@ export interface DeviceInfo {
 export interface TierConfig {
   tier: Tier;
   why: string;
-  post: { hiDpi?: boolean; renderScale?: number; paintDetail?: number };
+  post: { hiDpi?: boolean; renderScale?: number; paintDetail?: number; dpiMax?: number };
   shadow: { size?: number; enabled?: boolean };
   stream: { loadR: number; dropR: number; coarseR: number; budgetMB?: number; realConc?: number; coarseMB?: number };
   /** Cap on the ground-paint canvases (groundPaint.ts sizes them min(4096, cap)). */
@@ -97,11 +97,14 @@ const TIERS: Record<Tier, Omit<TierConfig, 'tier' | 'why'>> = {
   // and 4 km of silhouettes left the middle distance to the haze — hi-DPI to 1.5×, 75% paint, a
   // 6 km ring and skyline; the silhouettes stay under coarseMB, and auto quality steps a slow one
   // down once the streaming has settled — and back up when stepping down didn't make it quicker:
-  // 85% paint since the same day, a phone's view still read blurry at 75%)
-  phone: { post: { hiDpi: true, paintDetail: 0.85 }, shadow: { size: 1024 }, stream: { loadR: 900, dropR: 1500, coarseR: 6000, budgetMB: 200, realConc: 2, coarseMB: 90 }, paintTex: 2048, lidar: false, skylineR: 6000, micro: MICRO_TIERS.phone, trees: TREE_TIERS.phone },
+  // 85% paint since the same day, a phone's view still read blurry at 75%; full paint and up to
+  // 2× the CSS pixels since 2026-10-03 — loading and flight got quick, and 85% at 1.5× still read
+  // "super blurry, almost unplayable" on a phone; auto quality still steps a slow one down)
+  phone: { post: { hiDpi: true, paintDetail: 1, dpiMax: 2 }, shadow: { size: 1024 }, stream: { loadR: 900, dropR: 1500, coarseR: 6000, budgetMB: 200, realConc: 2, coarseMB: 90 }, paintTex: 2048, lidar: false, skylineR: 6000, micro: MICRO_TIERS.phone, trees: TREE_TIERS.phone },
   // …and a weak phone (or one whose last visit died): no shadow pass either — every tree, house and
-  // car drawn a second time into the shadow map was half the vertex work of a frame
-  low: { post: { hiDpi: false, paintDetail: 0.5, renderScale: 0.75 }, shadow: { size: 1024, enabled: false }, stream: { loadR: 750, dropR: 1300, coarseR: 2500, budgetMB: 120, realConc: 1, coarseMB: 60 }, paintTex: 1024, lidar: false, skylineR: 3000, micro: MICRO_TIERS.low, trees: TREE_TIERS.low },
+  // car drawn a second time into the shadow map was half the vertex work of a frame (65% paint at
+  // 85% scale since 2026-10-03: half paint at 75% was a smear)
+  low: { post: { hiDpi: false, paintDetail: 0.65, renderScale: 0.85 }, shadow: { size: 1024, enabled: false }, stream: { loadR: 750, dropR: 1300, coarseR: 2500, budgetMB: 120, realConc: 1, coarseMB: 60 }, paintTex: 1024, lidar: false, skylineR: 3000, micro: MICRO_TIERS.low, trees: TREE_TIERS.low },
 };
 const ORDER: Tier[] = ['desktop', 'phone', 'low'];
 const ALIAS: Record<string, Tier> = { desktop: 'desktop', high: 'desktop', phone: 'phone', mobile: 'phone', medium: 'phone', low: 'low', safe: 'low' };
