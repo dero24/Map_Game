@@ -1,6 +1,7 @@
 // map-game tile service (Cloudflare Worker).
 //
 //   GET /tile/<cx>_<cz>.json?olat=<deg>&olon=<deg>
+//   GET /measured/<cx>_<cz>.json?olat=<deg>&olon=<deg>&v=1   (measure.js: the cell's LiDAR, once)
 //
 // One cell of the walking world as TileJson: Overpass elements for the cell's lat/lon
 // bbox (+48 m margin), transformed by src/world/realTile.ts (bundled verbatim), cached in
@@ -11,6 +12,7 @@
 // ~100 uncached queries/day for a proxied service. R2 is what makes this viable — cache
 // hits never touch Overpass (empty cells are cached too: they are valid data, not failures).
 import { osmToTile, makeProjector, overpassQuery } from '../../src/world/realTile';
+import { measured } from './measure';
 
 const CELL = 1024; // game cells, metres (region-local frame anchored at olat/olon)
 const MARGIN = 48; // context ring, same as the bake's TILE_MARGIN
@@ -29,7 +31,7 @@ const CORS = {
   // The game page runs cross-origin-isolated (COEP) in dev — tiles must be CORP-readable.
   'cross-origin-resource-policy': 'cross-origin',
 };
-const USAGE = 'GET /tile/<cx>_<cz>.json?olat=<deg>&olon=<deg> | GET /dem/<z>/<x>/<y>.png | GET /naip?bbox=<w,s,e,n>&size=<W,H>';
+const USAGE = 'GET /tile/<cx>_<cz>.json?olat=<deg>&olon=<deg> | GET /measured/<cx>_<cz>.json?olat=<deg>&olon=<deg>&v=1 | GET /dem/<z>/<x>/<y>.png | GET /naip?bbox=<w,s,e,n>&size=<W,H>';
 const json = (body, init = {}) =>
   new Response(typeof body === 'string' ? body : JSON.stringify(body), {
     ...init,
@@ -45,6 +47,8 @@ export default {
     const dm = url.pathname.match(/^\/dem\/(\d+)\/(\d+)\/(\d+)\.png$/);
     if (dm) return dem(request, env, ctx, url, parseInt(dm[1]), parseInt(dm[2]), parseInt(dm[3]));
     if (url.pathname === '/naip') return naip(request, ctx, url);
+    const mm = url.pathname.match(/^\/measured\/(-?\d+)_(-?\d+)\.json$/);
+    if (mm) return measured(request, env, ctx, url, parseInt(mm[1]), parseInt(mm[2]), { json, tileText: (olat, olon, cx, cz) => tileText(env, olat, olon, cx, cz) });
     const m = url.pathname.match(/^\/tile\/(-?\d+)_(-?\d+)\.json$/);
     if (!m) return json({ error: 'unknown route', usage: USAGE }, { status: 404 });
     return tile(request, env, ctx, url, parseInt(m[1]), parseInt(m[2]));
@@ -132,7 +136,7 @@ async function tile(request, env, ctx, url, cx, cz) {
   // so stale tile payloads can't be served past the edge TTL.
   // v23: bridges' bridge:structure / bridge:movable (Road.bs / Road.bm) and the micro layer's
   // furniture (picnic tables, boards, cabinets, recycling, clocks, seamarks…)
-  const okey = `t/v23/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
+  const okey = tileKey(olat, olon, cx, cz);
   const bucket = env.TILES ?? null; // binding may be absent under `wrangler dev` before the bucket exists
   if (bucket) {
     try {
@@ -152,13 +156,7 @@ async function tile(request, env, ctx, url, cx, cz) {
   const origin = { lat: olat, lon: olon };
   // Cold path, deduplicated: concurrent requests for the same cell share ONE Overpass
   // fetch — otherwise a player cluster would stampede upstream on every miss.
-  let pending = inflight.get(okey);
-  if (!pending) {
-    pending = coldTile(env, okey, cx, cz, box, origin);
-    inflight.set(okey, pending);
-    void pending.finally(() => inflight.delete(okey)); // coldTile never rejects
-  }
-  const out = await pending;
+  const out = await cellBody(env, okey, cx, cz, box, origin);
   if (!out.body) {
     // Negative edge-cache for a minute: an upstream outage shouldn't be retried by every client.
     const resp = json({ error: 'overpass unavailable', detail: out.detail }, { status: 503, headers: { 'cache-control': 'public, max-age=60', 'retry-after': '60' } });
@@ -171,22 +169,63 @@ async function tile(request, env, ctx, url, cx, cz) {
   return json(out.body, { headers: { ...headers, 'x-tile-cache': 'miss' } });
 }
 
+const tileKey = (olat, olon, cx, cz) => `t/v23/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
+// A cell's TileJson text, as /tile answers it (R2, else the cold path), or null — the /measured
+// route measures the buildings the client got from /tile, keyed the same way.
+async function tileText(env, olat, olon, cx, cz) {
+  const okey = tileKey(olat, olon, cx, cz);
+  const bucket = env.TILES ?? null;
+  if (bucket) {
+    const obj = await bucket.get(okey).catch(() => null);
+    if (obj) return obj.text();
+  }
+  const box = { x0: cx * CELL, z0: cz * CELL, x1: cx * CELL + CELL, z1: cz * CELL + CELL };
+  return (await cellBody(env, okey, cx, cz, box, { lat: olat, lon: olon })).body;
+}
+
+// One Overpass fetch per cold cell per isolate. The others asking meanwhile wait for its answer in
+// R2, polled on their own timer: a request whose only pending work is a promise another request
+// will settle is cancelled by the runtime as hung (a 500 — concurrent cold requests for a cell
+// used to get one each). Returns {body,stats} or {body:null,detail}; never rejects.
+const inflight = new Set();
+async function cellBody(env, okey, cx, cz, box, origin) {
+  if (inflight.has(okey)) {
+    const body = await awaitR2(env.TILES ?? null, okey, () => inflight.has(okey));
+    return body ? { body, stats: 'shared' } : { body: null, detail: 'fetched by another request, not stored' };
+  }
+  inflight.add(okey);
+  try {
+    return await coldTile(env, okey, cx, cz, box, origin);
+  } finally {
+    inflight.delete(okey);
+  }
+}
+async function awaitR2(bucket, key, going, ms = 90000) {
+  if (!bucket) return null;
+  for (const t0 = Date.now(); Date.now() - t0 < ms; ) {
+    const was = going();
+    await new Promise((r) => setTimeout(r, 1000));
+    const obj = await bucket.get(key).catch(() => null);
+    if (obj) return obj.text();
+    if (!was) return null; // (its fetch had ended, and nothing was stored: it failed)
+  }
+  return null;
+}
+
 // Cold cells: Overpass -> transform -> R2. Returns {body,stats} or {body:null,detail} —
-// never rejects (the inflight map would leak a rejection into every waiter).
-const inflight = new Map();
+// never rejects.
 // Overpass allows a couple of concurrent queries per client IP; more just earn 429s and
-// timeouts for all of them. One isolate serialises its cold queries through two slots.
+// timeouts for all of them. One isolate serialises its cold queries through two slots — a
+// waiting request polls for a free one on its own timer (handed one by another request's
+// promise, the runtime would cancel it as hung).
 let opSlots = 2;
-const opWait = [];
 async function overpassSlot(fn) {
-  if (opSlots <= 0) await new Promise((r) => opWait.push(r));
-  else opSlots--;
+  while (opSlots <= 0) await new Promise((r) => setTimeout(r, 250));
+  opSlots--;
   try {
     return await fn();
   } finally {
-    const next = opWait.shift();
-    if (next) next();
-    else opSlots++;
+    opSlots++;
   }
 }
 async function coldTile(env, okey, cx, cz, box, origin) {

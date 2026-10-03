@@ -138,6 +138,22 @@ terrain/DEM, or the LiDAR measure pipeline.
   - **Size:** shore 2026-10-03 — 127 records + 89 zeros, 12.4 MB raw / 4.6 MB gzipped (mean
     36 KB gz a cell, max 80 KB). The buildings are ~4 KB gz a cell; 85% is the survey's trees
     (up to 12,000 a cell), which phones now plant too — the same trees as a desktop.
+  - **Streamed cells: the tile service measures them** (`worker/src/measure.js`, `GET
+    /measured/<cx>_<cz>.json?olat&olon&v=1` → R2 `m/v1/…`, `worker/README.md`). The first request
+    for a cell has the service read its survey over the buildings its own `/tile` answer has —
+    keyed like `/tile`, so the record keys the client's footprints — and every tier uses the record
+    from then on. `measured.ts` `serviceMeasured`: one request a cell a session (its relief rebuild
+    awaits the same one), 202s polled for up to 3 minutes, kept in IndexedDB (`measured|v1|VER|…`:
+    a revisit or the cell offline costs nothing), a record of another `VER` ignored, no request at
+    all where `lidar.ts` `surveyed()` finds no survey. A failure isn't remembered (the next build asks).
+  - **While a record is on its way** (the cell's first visitor): `enrichTile` races it against the
+    usual wait, builds from priors ('late') and neither tier reads the survey; the relief rebuild
+    takes the record. Only when the service can't answer (offline, an error, `?tiles=direct`) does
+    a desktop measure the cell itself. A vector twin (stand-in) only peeks (IndexedDB) and, with a
+    service, never reads the survey either — its real twin, built next, gets the record.
+  - **Keys:** `MEASURED_V` (`measuredFile.ts`) is the worker's R2 `m/vN` and the client's `&v=N` —
+    one constant, both import it. A `VER` bump re-makes records by itself (each carries its `ver`;
+    the worker re-measures a stale one). Neither changes `TileJson`: no `t/vN` bump.
   - **Check it in a browser:** `npm run build && node tools/height-check.mjs --device=pixel7
     --at=<lat,lon> --probes=<x,z;…>` (and `--device=desktop --query=measured=0`, which reads
     the survey in the page) — wall top and storeys per probe; the two must print the same.

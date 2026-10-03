@@ -5,6 +5,17 @@ main = "src/index.js"
 compatibility_date = "2025-12-01"
 workers_dev = true
 
+# The /measured route decodes a cell's LiDAR survey in the Worker (src/measure.js): seconds of CPU
+# a cell (Midtown ~8–16 s), once per cell ever — the record is kept in R2. Needs Workers Paid
+# (free is 10 ms); the paid cap is 5 min.
+[limits]
+cpu_ms = 60000
+
+# laz-perf's WASM as a module wrangler compiles at deploy (a Worker can't compile bytes at run time):
+# decoded from the game's own copy (src/vendor/laz-perf/wasm-b64.ts) into .gen/ before each build.
+[build]
+command = "node scripts/gen-wasm.mjs"
+
 # `wrangler r2 bucket create map-game-tiles` once before deploy/dev.
 [[r2_buckets]]
 binding = "TILES"

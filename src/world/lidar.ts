@@ -215,6 +215,8 @@ export function cellPlan(tj: TileJson, box: Box, o: LatLon) {
   const todo = tj.buildings.filter((b, i) => measurable(b) && !hosts.has(i));
   return { ck: cellKeyOf(o, box), todo, keys: todo.map((b) => bKey(o, b)) };
 }
+// Is there a survey near the cell at all (the bundled index — outside the US, open ocean: no)?
+export const surveyed = (o: LatLon, box: Box, idx: LidarIndex = index()) => candidates(idx, boxLatLon(o, box)).length > 0;
 // The LiDAR worker's request for a cell's `missing` footprints (null: no survey near it at all).
 export function cellRequest(tj: TileJson, box: Box, o: LatLon, ck: string, missing: (readonly [Building, string])[], rec: Rec | undefined, idx: LidarIndex = index()): CellReq | null {
   const cands = candidates(idx, boxLatLon(o, box));
@@ -228,9 +230,12 @@ export function cellRequest(tj: TileJson, box: Box, o: LatLon, ck: string, missi
 }
 
 /** A precomputed cell record: a baked pack's sidecar (public/data/<region>/measured/) or the tile
- *  service's (R2 `m/vN/…`) — the same record this module caches, made by scripts/measure-cells.mjs. */
+ *  service's (R2 `m/vN/…`) — the same record this module caches, made by scripts/measure-cells.mjs
+ *  or the tile service's /measured route. */
 export interface MeasuredFile { v: 1; ver: string; index: string; ck: string; id?: string; rec: Rec }
-export type PreRec = () => Promise<Rec | null>;
+/** The cell's precomputed record, or null (none, or none to be had). `peek`: only what's already
+ *  at hand (a lite build — never ask the tile service to measure a distant silhouette). */
+export type PreRec = (peek: boolean) => Promise<Rec | null>;
 // A precomputed record and what this browser measured or cached itself: the precomputed fits win
 // (every device gets the same building), the browser's own fill only what the record lacks.
 export function joinRec(pre: Rec | null | undefined, own: Rec | null | undefined): Rec | undefined {
@@ -250,21 +255,29 @@ const complete = (rec: Rec, missing: number, total: number) => !!rec.t && !!rec.
 // the caller rebuilds when it lands); null waits for it. `fetchOk: false` (lite/LOD builds)
 // only applies what the cache already knows. `pre`: the cell's precomputed record, if any —
 // applied before anything is read, on every tier; a desktop reads the survey only for what it
-// doesn't cover (a phone never does).
+// doesn't cover (a phone never does). A record still on its way (the tile service measuring
+// the cell for its first visitor) is waited for like a measurement: 'late' past `wait`, and
+// neither tier reads the survey meanwhile — every device builds that cell from the one record.
 export async function enrichTile(tj: TileJson, box: Box, wait: number | null, fetchOk = true, pre?: PreRec): Promise<Enrich> {
   if (!lidarOn()) return 'none';
   const { ck, todo, keys } = cellPlan(tj, box, origin!);
-  let rec = recMem.get(ck);
+  let rec = recMem.get(ck), preLate = false;
   if (!rec) {
-    const [stored, p] = await Promise.all([kvGet<Rec>(VER + ck), pre ? pre().catch(() => null) : null]);
-    rec = recMem.get(ck) ?? joinRec(p, stored); // another build may have filled it during the await
-    if (rec) recMem.set(ck, rec);
+    const preP = pre ? pre(!fetchOk).catch(() => null) : null;
+    const raced = preP && wait != null && fetchOk ? Promise.race([preP, new Promise<typeof LATE>((r) => setTimeout(() => r(LATE), wait))]) : preP;
+    const [stored, p] = await Promise.all([kvGet<Rec>(VER + ck), raced]);
+    preLate = p === LATE;
+    rec = recMem.get(ck) ?? joinRec(p === LATE ? null : p, stored); // (another build may have filled it during the await)
+    // (kept for the cell's next builds once the record has had its say — not from a peek, nor
+    // while it's still coming: the relief rebuild asks again)
+    if (rec && (!pre || (fetchOk && !preLate))) recMem.set(ck, rec);
   }
   if (rec?.none) return 'none';
   if (rec) todo.forEach((b, i) => { const m = rec!.m[keys[i]]; if (m) applyMeasure(b, m); });
   if (rec) applyNew(tj, box, ck, rec), applyTrees(tj, ck, rec);
   const missing = todo.map((b, i) => [b, keys[i]] as const).filter(([, k]) => !rec?.m[k]);
   if (rec && complete(rec, missing.length, todo.length)) return 'done';
+  if (preLate && fetchOk) return 'late';
   if (!fetchOk || !measureOk) return rec ? 'done' : 'none';
   // No survey near this cell at all (outside the US, open ocean): settle it now, before
   // queueing behind other cells' reads or racing a timer into a pointless rebuild.

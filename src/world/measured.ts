@@ -7,9 +7,15 @@
 //   costs no request, each file content-hashed into its URL so a regenerated sidecar is never
 //   read stale out of the IndexedDB tile cache.
 //
-// Graceful: no sidecar, offline, a malformed file → null, and the tile builds as before.
+//   streamed cells: the tile service's GET /measured/<cx>_<cz>.json (worker/src/measure.js) — it
+//   measures a cell the first time anyone asks and keeps the record in R2 for everyone.
+//
+// Graceful: no sidecar, offline, no service, outside the survey, a malformed or stale file → null,
+// and the tile builds as before (a desktop then measures it itself).
 import { cachedFetchJson, kvGet, kvPut } from './cache';
-import type { MeasuredFile, Rec } from './lidar';
+import { surveyed, VER, type MeasuredFile, type Rec } from './lidar';
+import { MEASURED_V } from './measuredFile';
+import type { Box } from './data';
 
 /** measured/index.json: what the sidecar covers. `cells[id]`: the record file's content hash,
  *  or 0 — the script settled that no survey covers this cell (or there's nothing on it). */
@@ -60,4 +66,51 @@ export async function bakedMeasured(base: string, id: string): Promise<Rec | nul
   } catch {
     return null;
   }
+}
+
+// ---------- the tile service's records (streamed cells) ----------
+const svcP = new Map<string, Promise<Rec | null>>();
+const SVC_PATIENCE = 180000; // ms of 202s (another request measuring the cell) before giving up for now
+/**
+ * A streamed cell's record from the tile service (`base`: its URL), or null. One request per cell
+ * per session, shared by the cell's builds (its relief rebuild awaits the same one). The first
+ * visitor's request has the service measure the cell — it answers when the record is made; while
+ * another request is making it, 202, asked again every few seconds. Kept in IndexedDB: a revisit,
+ * or the cell offline, costs no request. `peek`: IndexedDB only (a stand-in or a silhouette never
+ * asks the service to measure). A failure isn't remembered: the next build asks again.
+ */
+export async function serviceMeasured(base: string, o: { lat: number; lon: number }, cx: number, cz: number, box: Box, peek: boolean): Promise<Rec | null> {
+  if (!surveyed(o, box)) return NONE; // (no survey near it: nothing to ask for)
+  const key = `measured|v${MEASURED_V}|${VER}|${o.lat.toFixed(4)},${o.lon.toFixed(4)}|${cx}_${cz}`;
+  const kept = await kvGet<Rec>(key);
+  if (kept?.m || peek) return kept?.m ? kept : null;
+  let p = svcP.get(key);
+  if (!p) {
+    const url = `${base}/measured/${cx}_${cz}.json?olat=${o.lat}&olon=${o.lon}&v=${MEASURED_V}`;
+    p = (async () => {
+      const until = Date.now() + SVC_PATIENCE;
+      for (;;) {
+        let r: Response;
+        try {
+          r = await fetch(url);
+        } catch {
+          return null; // offline, refused
+        }
+        if (r.status === 202 && Date.now() < until) {
+          const s = Math.min(30, Math.max(2, Number(r.headers.get('retry-after')) || 8));
+          await new Promise((res) => setTimeout(res, s * 1000));
+          continue;
+        }
+        if (!r.ok) return null; // 422 given up on, 5xx, a service without the route
+        const j = await r.json().catch(() => null);
+        // (a record made by other measure code than this build's — an older service — isn't ours)
+        if (!validFile(j) || j.ver !== VER) return null;
+        void kvPut(key, j.rec);
+        return j.rec;
+      }
+    })();
+    svcP.set(key, p);
+    void p.then((rec) => { if (!rec) svcP.delete(key); });
+  }
+  return p;
 }

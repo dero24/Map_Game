@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeAll } from 'vitest';
-import { joinRec, foldRes, cellPlan, VER, INDEX_MADE, type Rec } from '../src/world/lidar';
-import { measuredText, fnv36 } from '../src/world/measuredFile';
-import { validFile, validIndex } from '../src/world/measured';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { joinRec, foldRes, cellPlan, bKey, enrichTile, initLidar, VER, INDEX_MADE, type Rec } from '../src/world/lidar';
+import { measuredText, fnv36, MEASURED_V } from '../src/world/measuredFile';
+import { validFile, validIndex, serviceMeasured } from '../src/world/measured';
 import type { TileJson } from '../src/world/data';
 
 // (the pack is read off the disk: node's fs, found at run time — the type check knows no node)
@@ -97,4 +97,93 @@ describe('measured: the shore sidecar', () => {
     }
     expect((h >>> 0).toString(36)).toBe(man.bakeId);
   });
+});
+
+// The tile service's records (streamed cells): asked once per cell, patient with a measure in
+// progress, never remembering a failure, never trusting a record made by other measure code — and
+// never asked at all where there's no survey, or by a stand-in (a peek).
+describe('measured: the tile service\'s records', () => {
+  const O = { lat: 40.362, lon: -73.9755 }; // (the shore: surveyed)
+  const box = (cx: number, cz: number) => ({ x0: cx * 1024, z0: cz * 1024, x1: cx * 1024 + 1024, z1: cz * 1024 + 1024 });
+  const file = (rec: Rec, ver = VER) => JSON.stringify({ v: 1, ver, index: INDEX_MADE, ck: 'x', rec });
+  const answer = (status: number, body = '', retry?: string) => new Response(status === 202 ? '{"pending":1}' : body, { status, headers: retry ? { 'retry-after': retry } : {} });
+  let calls: string[] = [];
+  let script: (() => Response | Promise<Response>)[] = [];
+  const realFetch = globalThis.fetch;
+  afterAll(() => void (globalThis.fetch = realFetch));
+  beforeAll(() => {
+    globalThis.fetch = (async (u: string) => {
+      calls.push(String(u));
+      const next = script.shift();
+      if (!next) throw new TypeError('offline');
+      return next();
+    }) as typeof fetch;
+  });
+  const reset = (...s: (() => Response | Promise<Response>)[]) => ((calls = []), (script = s));
+  it('asks once per cell, at the cell\'s URL, and shares the answer', async () => {
+    reset(() => answer(200, file(rec())));
+    const [a, b] = await Promise.all([serviceMeasured('https://svc', O, 3, 4, box(3, 4), false), serviceMeasured('https://svc', O, 3, 4, box(3, 4), false)]);
+    expect(a?.m['40.36231,-73.97446']).toEqual([8.4, 5.9, 2, 0.81]);
+    expect(b).toBe(a);
+    expect(calls).toEqual([`https://svc/measured/3_4.json?olat=40.362&olon=-73.9755&v=${MEASURED_V}`]);
+  });
+  it('waits out a measure in progress (202), then takes the record', async () => {
+    vi.useFakeTimers();
+    try {
+      reset(() => answer(202, '', '2'), () => answer(202, '', '2'), () => answer(200, file(rec())));
+      const p = serviceMeasured('https://svc', O, 5, 5, box(5, 5), false);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect((await p)?.src).toBe('NJ_SNJ_2014');
+      expect(calls.length).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('a failure (offline, an error, a record from other measure code) is null, and asked again next time', async () => {
+    reset();
+    expect(await serviceMeasured('https://svc', O, 6, 6, box(6, 6), false)).toBeNull(); // offline
+    reset(() => answer(503, '{"error":"x"}'));
+    expect(await serviceMeasured('https://svc', O, 6, 6, box(6, 6), false)).toBeNull();
+    reset(() => answer(200, file(rec(), 'lidar|v7|old|')));
+    expect(await serviceMeasured('https://svc', O, 6, 6, box(6, 6), false)).toBeNull();
+    reset(() => answer(200, '<!doctype html>'));
+    expect(await serviceMeasured('https://svc', O, 6, 6, box(6, 6), false)).toBeNull();
+    reset(() => answer(200, file(rec())));
+    expect(await serviceMeasured('https://svc', O, 6, 6, box(6, 6), false)).not.toBeNull();
+    expect(calls.length).toBe(1);
+  });
+  it('never asks where there\'s no survey, nor for a peek', async () => {
+    reset(() => answer(200, file(rec())));
+    expect((await serviceMeasured('https://svc', { lat: 40.75, lon: -60 }, 0, 0, box(0, 0), false))?.none).toBe(1); // (the open Atlantic)
+    expect(await serviceMeasured('https://svc', O, 7, 7, box(7, 7), true)).toBeNull();
+    expect(calls).toEqual([]);
+  });
+});
+
+// A record still on its way (the service measuring the cell for its first visitor): built from
+// priors now ('late'), neither tier reading the survey meanwhile; the relief rebuild takes it.
+describe('measured: enrichTile with a record on its way', () => {
+  const O = { lat: 40.362, lon: -73.9755 };
+  const tile = (cx: number, cz: number): { tj: TileJson; box: TileJson['box'] } => {
+    const x = cx * 10240 + 2000, z = cz * 10240 + 2000;
+    const b = { r: [x, z, x + 120, z, x + 120, z + 90, x, z + 90], h: 4.5, k: 'house', roof: 'hip', s: 1 } as unknown as TileJson['buildings'][number];
+    return { tj: { buildings: [b], roads: [], areas: [], lines: [], points: [] } as unknown as TileJson, box: { x0: cx * 1024, z0: cz * 1024, x1: cx * 1024 + 1024, z1: cz * 1024 + 1024 } };
+  };
+  const recFor = (tj: TileJson): Rec => ({ src: 's', yr: 2014, m: { [bKey(O, tj.buildings[0])]: [9.2, 6.1, 2, 0.8] }, t: [], tc: [], nb: [] });
+  for (const measure of [false, true]) {
+    it(`${measure ? 'a desktop' : 'a phone'}: 'late' past the wait, the measured house on the relief rebuild`, async () => {
+      initLidar(O, measure);
+      const first = tile(measure ? 21 : 20, 3);
+      let land!: (r: Rec | null) => void;
+      const coming = new Promise<Rec | null>((r) => (land = r));
+      const pre = () => coming;
+      expect(await enrichTile(first.tj, first.box, 30, true, pre)).toBe('late');
+      expect(first.tj.buildings[0].h).toBe(4.5); // (priors meanwhile)
+      land(recFor(first.tj));
+      const again = tile(measure ? 21 : 20, 3);
+      expect(await enrichTile(again.tj, again.box, null, true, pre)).toBe('done');
+      expect(again.tj.buildings[0].h).toBe(9.2);
+      expect(again.tj.buildings[0].roof).toBe('gable');
+    });
+  }
 });

@@ -35,7 +35,9 @@ export interface TierConfig {
   stream: { loadR: number; dropR: number; coarseR: number; budgetMB?: number; realConc?: number; coarseMB?: number };
   /** Cap on the ground-paint canvases (groundPaint.ts sizes them min(4096, cap)). */
   paintTex: number;
-  /** Buildings measured from LiDAR (world/lidar.ts). `?lidar=1` / `?lidar=0` overrule it. */
+  /** This device reads the LiDAR survey itself (world/lidar.ts). `?lidar=1` / `?lidar=0` overrule
+   *  it. Without it the buildings are still measured: every tier applies the records made once per
+   *  cell — a baked pack's sidecar, the tile service's (world/measured.ts). */
   lidar: boolean;
   /** How far out the skyline reads a city's towers, m (world/skyline.ts). */
   skylineR: number;

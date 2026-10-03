@@ -172,7 +172,8 @@ export class TileStream {
   setTilesBase(v: string) { this.tilesBase = v; }
   /** Real tiles get LiDAR-measured buildings (lidar.ts) — this device reads the survey itself. Set before the first build. */
   lidar = true;
-  /** Precomputed measurements apply (a baked pack's sidecar, the tile service's R2 records) — every tier. */
+  /** Precomputed measurements apply (a baked pack's sidecar, the tile service's R2 records — it
+   *  measures a streamed cell the first time anyone asks) — every tier. Set before the first build. */
   measured = true;
   /** Real US tiles get real roof colours off the NAIP aerial photo (aerialFetch.ts). Set before the first build. */
   aerial = true;
@@ -571,7 +572,7 @@ export class TileStream {
           console.warn('lidar worker unavailable; measuring on the tile worker', e);
         }
       }
-      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin, origin: this.man.origin, dem: this.demEnabled, demBase: this.tilesBase, style: activeStyle().key, baked: this.man.tiles.map((t) => t.id), lidar: this.lidar, measured: this.measured, lidarPort, fail: new URLSearchParams(location.search).get('fail')?.split(',') ?? [], vector: new URLSearchParams(location.search).get('vector') !== '0', date: new URLSearchParams(location.search).get('date') }, lidarPort ? [lidarPort] : []);
+      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin, origin: this.man.origin, dem: this.demEnabled, demBase: this.tilesBase, style: activeStyle().key, baked: this.man.tiles.map((t) => t.id), lidar: this.lidar, measured: this.measured, measuredBase: this.tilesBase === 'direct' ? '' : this.tilesBase, lidarPort, fail: new URLSearchParams(location.search).get('fail')?.split(',') ?? [], vector: new URLSearchParams(location.search).get('vector') !== '0', date: new URLSearchParams(location.search).get('date') }, lidarPort ? [lidarPort] : []);
       // where roof colours come from (aerial.ts): the pack's aerial samples, the streamed cells' photos
       w.postMessage({ kind: 'roofs', painted: roofSource() === 'painted', aerial: this.aerial, relay: this.tilesBase });
       this.worker = w;

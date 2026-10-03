@@ -4,6 +4,10 @@
 // when a measurement does.
 import type { MeasuredFile, Rec } from './lidar';
 
+/** The tile service's measured records: its R2 keys (`m/vN/…`) and the client's `&v=N` — bump
+ *  together (with a `VER` bump in lidar.ts the records re-make themselves: each carries its `ver`). */
+export const MEASURED_V = 1;
+
 /** FNV-1a over the text, base 36: the sidecar index's per-cell content hash. */
 export function fnv36(s: string): string {
   let h = 0x811c9dc5;

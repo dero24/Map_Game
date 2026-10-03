@@ -1243,14 +1243,23 @@
       "area": "streaming",
       "title": "Everywhere else: the tile service measures a cell on first request and keeps the record in R2 for every device",
       "user_visible_behavior": "In any streamed US town, the first visitor's request has the tile service read the cell's LiDAR once; from then on every device (phone and PC alike) builds the same measured buildings from that record. Until a record exists, or offline / outside the US, buildings come from the improved priors and swap to measured when the record lands.",
-      "status": "not_started",
+      "status": "blocked",
       "verification": [
         "prototype: a dense cell (Midtown Manhattan) measured inside a Worker within 128 MB and the CPU limit",
         "worker route GET /measured/<cx>_<cz>.json?olat&olon&v=1 -> R2 m/v1/...; a second request while in flight never starts another measure (202)",
         "tests: serviceMeasured graceful on 202/404/offline/outside coverage; joinRec precedence",
         "worker/README.md + docs/agent/streaming.md updated; deployed once Robby confirms the paid plan"
       ],
-      "evidence": []
+      "evidence": [
+        "worker/src/measure.js (route, R2 m/v1, 202 marker, lean one-cell-per-isolate), worker/src/index.js (route; no request waits on another's promise), worker/wrangler.toml ([limits] cpu_ms 60000, [build] gen-wasm), worker/scripts/gen-wasm.mjs",
+        "src/world/measured.ts serviceMeasured, src/world/lidar.ts (surveyed, enrichTile late records), src/world/tile.worker.ts, src/world/stream.ts (measuredBase), src/world/measuredFile.ts MEASURED_V",
+        "src/world/lidarCore.ts ringMask a row at a time: bit-identical, 15x faster (tests/measure.test.ts \"ringMask is the per-cell test, sooner\"); shore sidecar re-measured byte-identical",
+        "prototype Midtown -1_-1 (1,839 footprints): Node lean live +3 MB heap +38 MB buffers, 6.3 s CPU (was 15.5); workerd 9.6 s, record byte-identical to Node (iydluj)",
+        "tests/measured.test.ts \"the tile service's records\" (4) and \"enrichTile with a record on its way\" (2)",
+        "tools/height-check.mjs against local workerd, Midtown: pixel7 = desktop (15.67 m commercial, 6.08 m house), phone 0 cells read, desktop read only the 3 cells whose /measured failed",
+        "npm run typecheck, npm test (73 files, 767 tests), npm run build — 2026-10-03"
+      ],
+      "notes": "Built and verified locally (workerd). Blocked only on the deploy: Robby to confirm Workers Paid is active, then cd worker && npx wrangler deploy (the free plan's 10 ms CPU would fail every measure; cpu_ms needs Paid). After deploy: curl https://map-game-tiles.map-game-tiles.workers.dev/measured/-1_-1.json?olat=40.75&olon=-73.984375&v=1 (expect 200 or 202 then 200), and wrangler tail for exceeded-memory/CPU errors on the first dense cells."
     },
     {
       "id": "measured-fallback-priors",

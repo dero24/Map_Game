@@ -2,6 +2,54 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-03 — Measured heights on every device (2): the tile service measures streamed cells
+
+Everywhere past the bake (Robby's call: Workers Paid, $5/mo). **Built and verified locally in
+workerd; not deployed** — waiting on Robby to confirm the paid plan, then `cd worker && npx
+wrangler deploy`.
+
+- **The route** (`worker/src/measure.js`): `GET /measured/<cx>_<cz>.json?olat&olon&v=1`. The first
+  request for a cell reads its survey over the buildings the service's own `/tile` has (keyed like
+  `/tile`, so the record keys the client's footprints) and keeps it in R2 `m/v1/…` for good. While
+  one request measures, the others get 202 (an R2 marker created only if absent; a marker over 4 min
+  old is a dead measure, taken over at most 3 times, then 422). A cell with no survey is settled at
+  once (`none`). A stale-`VER` record is re-made, not served.
+- **Prototype first (Midtown, cell −1_−1: 1,839 footprints, NYC 2017):**
+  - Node, lean (nodes streamed into the grid): live memory ~3 MB JS heap + ~38 MB buffers over the
+    baseline (sampled with a GC each 150 ms; laz-perf's heap 7.4 MB); without the GC the heap reads
+    up to 130 MB — garbage, not live. Worst case I can construct (two surveys overlapping, every
+    raster live) ~90 MB with the bundle: inside 128 MB.
+  - CPU 15.5 s, of which `ringMask` was 8.5 s — rewritten a row at a time (crossings per row, the
+    distance only outside the outline, stopping at the first edge within the pad): bit-identical
+    (tests/measure.test.ts: 200 random outlines × 4 pads, two shore cells' real footprints; the
+    shore's sidecar re-measured to the byte), 15× faster. Midtown now 6.3 s CPU. Desktops gain too.
+  - workerd (`wrangler dev`): 9.6 s end to end, the **same bytes as Node** (`iydluj`). The
+    bundle: 1.12 MB, 341 KB gzipped; laz-perf's WASM compiled at deploy (`[build]` decodes the
+    game's own base64 copy into `worker/.gen/`; a Worker can't compile bytes at run time).
+    `[limits] cpu_ms = 60000`.
+- **No request waits on another's promise.** workerd cancels such a request as hung (a 500). The
+  first local run hit it in my sharing of an in-flight measure — and in the existing `/tile` cold-path
+  dedupe and Overpass slot queue (concurrent cold requests for one cell each got a 500 — also in
+  production). Now: a busy isolate answers `/measured` 202; a cell another request is fetching is
+  awaited in R2 on the asker's own timer; Overpass slots are polled for. Re-run: three concurrent
+  requests → one measures (200, 6.0 s), two get 202 in 0.7 s; 0 hangs.
+- **The client** (`measured.ts` `serviceMeasured`, `lidar.ts`, `tile.worker.ts`): every tier asks
+  for a streamed cell's record (one request a cell a session, 202s polled up to 3 min, kept in
+  IndexedDB, other-`VER` records ignored, no request where no survey). `enrichTile` races a record
+  on its way against the usual wait: priors now ('late'), no survey read on either tier, the relief
+  rebuild applies it; only when the service can't answer does a desktop measure itself. A vector
+  twin only peeks. `MEASURED_V` is one constant both sides import.
+- **Verified in the game** (`tools/height-check.mjs`, the build against local workerd, Midtown):
+  phone and desktop build the measured cell identically — a commercial block 15.67 m (survey
+  15.37 m, prior 6 m), a house 6.08 m (survey 5.58 m, prior 7.8 m); the phone read no survey, the
+  desktop read only the three cells whose `/measured` failed (the service's Overpass was off on
+  purpose — the fallback). Local dev is HTTP/1.1: with slow cold `/tile` calls a browser's six
+  connections queue `/measured` behind them (`worker/README.md` says how to test around it).
+- Tests: `tests/measured.test.ts` +6 (the URL, one request per cell, 202 then 200, failures not
+  remembered, other `VER` / not JSON rejected, no request with no survey or a peek; a record on its
+  way → 'late' then the measured house, phone and desktop), `tests/measure.test.ts` +2 (ringMask).
+  767 tests, typecheck, build.
+
 ## 2026-10-03 — Measured heights on every device (1): the shore's LiDAR sidecar
 
 Robby: Bain's Hardware (1092 Ocean Ave) is right on a PC but two storeys on a phone, and many
