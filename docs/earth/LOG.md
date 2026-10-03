@@ -2,6 +2,33 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-03 — Measured heights on every device (4): parity, proven
+
+- **`tests/parity.test.ts`** (2): Bain's cell (0_-1) and a Monmouth Beach cell (−1_2), each through
+  `enrichTile` as a phone (`initLidar(…, false)`) and as a desktop (`true`), a fresh `lidar.ts` for
+  each, then the real `buildTile`: every footprint's wall top and storeys (the interior planner's
+  count, now exported as `plan.ts` `storeysOf`) identical on both. `fetch` is stubbed to fail and
+  never called: the desktop read no survey. Bain's: 12–13 m, flat, ≥ 3 storeys (a phone without the
+  sidecar: 2 storeys, pitched). Monmouth Beach's #42: 2 storeys (1 without). The cell's share of
+  two-storey-and-up houses rises by more than 20 points.
+- **Phone check** (`tools/mobile-check.mjs --device=pixel7`, the build served like Pages): the phone
+  tier, running, 0 page or console errors, all 87 shader programs inside the phone limits (vertex
+  uniforms 17/256, fragment 45/224, varyings 8/15, samplers 1/16 and 9/16, attributes 12/16). Its
+  9 failed requests are the dev-worker probes and direct-Overpass fallbacks (no tile worker here);
+  its memory sampler needs Linux `ps` (nothing on Windows — as before). The phone ring's vertex data
+  (height-check): 83 MB at Sea Bright, 167 MB at Monmouth Beach, under the tier's 200.
+- **Phone montage** (`shots/shore-montage.jpg`, `capture.mjs --w=412 --h=915 --query=quality=phone`,
+  RTX 4070): ocean golden/noon/morning, bridge, beach, aerial — buildings at their measured heights,
+  nothing missing or floating. `capture.mjs`'s sheet now keeps the shots' aspect (portrait frames
+  had been squeezed into 640×360 cells).
+- **Open:**
+  - **Deploy the tile service** (item 2, blocked on Robby): Workers Paid, then `cd worker && npx
+    wrangler deploy`; it also carries tile cache v24 (roof:levels).
+  - Bain's draws four 2.9 m storeys in its measured 12.1 m (a `house` in the pack; MOD-IV says three).
+    A measured flat-roofed block on a shopfront street should probably take commercial floor heights.
+  - 57% of the shore's houses have fits under the 0.35 bar — a newer survey (NJ's post-2014 flights,
+    if 3DEP has one over the shore) or a looser height-only rule would measure more of them.
+
 ## 2026-10-03 — Measured heights on every device (3): heights where nothing is measured
 
 The sidecar left 57% of the shore's houses unmeasured (their fits under the 0.35 quality bar: 2,759

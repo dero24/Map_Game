@@ -12,6 +12,10 @@ import type { WalkWorld, Floors, Shaft } from '../../player/collision';
 import { useOf, placeOf, hotelOnlyUpstairs, type Place } from '../uses';
 import { makeRng, type Rng } from '../../core/rng';
 
+/** How many storeys a building stands, the planner's way (and so the facade's window rows): every
+ *  floor height from its ground floor to its wall top. Tools and tests count storeys with this. */
+export const storeysOf = (kind: string, top: number, floor0: number) => (kind === 'church' ? 1 : Math.max(1, Math.floor((top - floor0 + 0.2) / floorHeight(kind))));
+
 export type P2 = [number, number];
 export interface Rect { u0: number; u1: number; v0: number; v1: number }
 /** A tall building's stairs are one storey's, stacked: `rep` more copies of it, one every `every`
@@ -1075,7 +1079,7 @@ export function planInterior(fpKey: string, fp: Footprint, door: Door, seed: num
   // building's too: it's built a few storeys at a time round the walker (Interiors), so a
   // 60-storey tower costs what a small building does. Storeys up the tiers on it (a tower on its
   // podium) stand inside them: plates.
-  const storeys = (top: number) => (kindS === 'church' ? 1 : Math.max(1, Math.floor((top - floor0 + 0.2) / floorH)));
+  const storeys = (top: number) => storeysOf(kindS, top, floor0);
   const area = Math.max(1, Math.abs(polyArea(loc)));
   const [ud, vd] = toL(door.wx, door.wz);
   const plates = kindS === 'commercial' || kindS === 'large' ? platesOf(fp, loc, toL, storeys, L, W, ud, vd) : [];

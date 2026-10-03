@@ -37,6 +37,10 @@ behaviour.
 - Extra shots beyond the ocean/bridge set: `houses, porch, shop, sign, raised, roofs,
   doorway, inside, inside-night, stairs, upstairs`. Also `top:x:z:alt` top-down,
   `--eval="…"` to poke `window.__GAME__`. Uses Playwright from `../../shot-harness`.
+- A phone montage: `--w=412 --h=915 --query=quality=phone` (the phone tier at a Pixel 7's CSS size);
+  the sheet keeps the shots' aspect (portrait frames six to a row; it used to squeeze them into
+  640×360 cells). Several poses in one run: an `--eval` that counts its calls
+  (`window.__k=(window.__k||0)+1`) and picks the k-th pose.
 - No Playwright? (agent driving the built-in/live browser): open `?capture=1&region=<id>`,
   then `await import('/tools/inpage-montage.js')` and `await __MONTAGE__([shotName | {label,
   fn(game)}], {save:'x.jpg'})` — the dev server's `/__shot` sink (vite.config.ts, serve-only)

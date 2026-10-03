@@ -1286,13 +1286,20 @@
       "area": "platform",
       "title": "Phone/desktop height parity, proven: the same h and storeys through enrichTile on both tiers",
       "user_visible_behavior": "Bain's and Monmouth Beach houses have the same height and storey count on a phone and a PC.",
-      "status": "not_started",
+      "status": "passing",
       "verification": [
         "tests/: Bain's + a sample of Monmouth Beach houses through enrichTile with measure=false (phone) and measure=true (desktop) using the sidecar give identical h and storeys (the builders' own storey logic)",
         "npm run build && node tools/mobile-check.mjs --device=pixel7 (shader limits + boot report in phone budget)",
         "node tools/capture.mjs incl. a phone montage; shots/<region>-montage.jpg reviewed"
       ],
-      "evidence": []
+      "evidence": [
+        "tests/parity.test.ts: \"Bain's Hardware's cell: every building the same height and storeys on both; Bain's measured\", \"a Monmouth Beach cell: every house the same on both, and two storeys where the survey says so\" (buildTile, plan.ts storeysOf, fetch stubbed and never called)",
+        "src/world/interior/plan.ts storeysOf (the planner's storey count, exported)",
+        "tools/mobile-check.mjs --device=pixel7 (2026-10-03): phone tier, running, 0 page/console errors, 87 programs within phone limits (vU 17/256, fU 45/224, varyings 8/15, samplers 1/16 + 9/16, attributes 12/16)",
+        "shots/shore-montage.jpg: phone tier 412x915 on RTX 4070 (ocean golden/noon/morning, bridge, beach, aerial); tools/capture.mjs keeps portrait aspect",
+        "tools/height-check.mjs: Sea Bright and Monmouth Beach phone = desktop (item 1), Midtown phone = desktop against the local service (item 2)",
+        "npm run typecheck, npm test (75 files, 777 tests), npm run build — 2026-10-03"
+      ]
     }
   ],
   "regions": {
