@@ -52,6 +52,7 @@ const diffList = (a, b, key) => {
   return { onlyA: [...A.keys()].filter((k) => !B.has(k)), onlyB: [...B.keys()].filter((k) => !A.has(k)) };
 };
 let bad = 0;
+let saveIfSame = null; // (--now: a fixture kept only when the answer and ours are the same)
 for (const c of cells) {
   const origin = { lat: c.olat, lon: c.olon };
   const box = { x0: c.cx * CELL, z0: c.cz * CELL, x1: c.cx * CELL + CELL, z1: c.cz * CELL + CELL };
@@ -62,20 +63,52 @@ for (const c of cells) {
   const fx = resolve(FIX, `${name}.raw.json.gz`);
   let theirs = null, how = '';
   if (args.save) {
-    // Overpass as of the extract's own moment (attic data): the same OSM, so every difference is ours
-    const q = RT.overpassQuery(bb).replace('[out:json][timeout:25]', `[out:json][timeout:60][date:"${index.ts}"]`);
-    for (const ep of ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter']) {
-      try {
-        const r = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'map-game extract check (github.com/dero24/Map_Game)' }, signal: AbortSignal.timeout(120000) });
-        if (!r.ok) { console.log(`  ${ep}: ${r.status}`); continue; }
-        const j = await r.json();
-        if (j.remark && /error|timed out/i.test(j.remark)) { console.log(`  ${ep}: ${j.remark.slice(0, 100)}`); continue; }
-        theirs = j; how = `Overpass ${ep.split('/')[2]} as of ${index.ts}`;
+    // Overpass as of the extract's own moment (attic data): the same OSM, so every difference is ours.
+    // (--split=N asks in N×N parts and merges them by element: a dense centre's attic answer runs a
+    // server out of memory whole. It is the same answer — an element is in the box when it's in one of
+    // its parts — and each element comes whole: `out geom` prints all of a way wherever a part cuts it)
+    const N = Math.max(1, Math.round(Number(args.split ?? 1)));
+    const parts = [];
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) parts.push({ s: bb.s + ((bb.n - bb.s) * i) / N, n: i === N - 1 ? bb.n : bb.s + ((bb.n - bb.s) * (i + 1)) / N, w: bb.w + ((bb.e - bb.w) * j) / N, e: j === N - 1 ? bb.e : bb.w + ((bb.e - bb.w) * (j + 1)) / N });
+    // (--now: today's data, with each element's last edit — attic queries are the heaviest Overpass
+    // runs and a busy server refuses them; a difference from an element edited since the snapshot is
+    // explained, any other is ours. Kept as a fixture only when there is none: then it is the
+    // snapshot's answer too)
+    const ask = async (pb) => {
+      const q = args.now
+        ? RT.overpassQuery(pb).replace('[out:json][timeout:25]', '[out:json][timeout:120]').replace('out geom qt;', 'out geom meta qt;')
+        : RT.overpassQuery(pb).replace('[out:json][timeout:25]', `[out:json][timeout:120][date:"${index.ts}"]`);
+      for (const ep of ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter']) {
+        try {
+          const r = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'map-game extract check (github.com/dero24/Map_Game)' }, signal: AbortSignal.timeout(180000) });
+          if (!r.ok) { console.log(`  ${ep}: ${r.status}`); continue; }
+          const j = await r.json();
+          if (j.remark && /error|timed out|out of memory/i.test(j.remark)) { console.log(`  ${ep}: ${j.remark.slice(0, 100)}`); continue; }
+          return { j, host: ep.split('/')[2] };
+        } catch (e) { console.log(`  ${ep}: ${e.message}`); }
+      }
+      return null;
+    };
+    const merged = new Map();
+    let base = null, host = '';
+    for (const pb of parts) {
+      const got = await ask(pb);
+      if (!got) { base = null; break; } // (a part missing is no answer at all)
+      base ??= got.j; host = got.host;
+      for (const e of got.j.elements ?? []) merged.set(`${e.type}${e.id}`, e);
+    }
+    if (base) {
+      theirs = { ...base, elements: [...merged.values()] };
+      how = `Overpass ${host} ${args.now ? `now (${base.osm3s?.timestamp_osm_base ?? '?'})` : `as of ${index.ts}`}${N > 1 ? `, asked in ${N}×${N} parts` : ''}`;
+      const keep = () => {
         mkdirSync(FIX, { recursive: true });
-        writeFileSync(fx, gzipSync(JSON.stringify({ name, origin, box, bb, ts: index.ts, tiles: Object.fromEntries(used), overpass: j, how })));
+        // (without the edit metadata: a fixture is the answer as the cell query prints it)
+        const plain = { ...theirs, elements: theirs.elements.map(({ timestamp, version, changeset, user, uid, ...e }) => e) };
+        writeFileSync(fx, gzipSync(JSON.stringify({ name, origin, box, bb, ts: index.ts, tiles: Object.fromEntries(used), overpass: plain, how })));
         console.log(`  fixture: ${fx.startsWith(ROOT) ? fx.slice(ROOT.length + 1) : fx} (${(readFileSync(fx).length / 1024).toFixed(0)} KB)`);
-        break;
-      } catch (e) { console.log(`  ${ep}: ${e.message}`); }
+      };
+      if (!args.now) keep();
+      else saveIfSame = keep;
     }
   } else if (existsSync(fx)) { const f = JSON.parse(gunzipSync(readFileSync(fx)).toString()); theirs = f.overpass; how = `saved: ${f.how}`; }
   const tjOurs = RT.osmToTile(ours, { id: `${c.cx}_${c.cz}`, box, origin });
@@ -83,11 +116,24 @@ for (const c of cells) {
     const A = ours.elements.map(OT.canonical), B = (theirs.elements ?? []).map(OT.canonical);
     const d = diffList(A, B, (x) => x);
     const tjTheirs = RT.osmToTile(theirs, { id: `${c.cx}_${c.cz}`, box, origin });
-    const same = JSON.stringify(tjOurs) === JSON.stringify(tjTheirs);
+    const same = JSON.stringify({ ...tjOurs, osmBase: 0 }) === JSON.stringify({ ...tjTheirs, osmBase: 0 }); // (osmBase: the data's own timestamp)
     console.log(`${name}: ${ours.elements.length} elements ours, ${(theirs.elements ?? []).length} theirs (${how}) · ${d.onlyA.length} only ours, ${d.onlyB.length} only theirs · TileJson ${same ? 'IDENTICAL' : 'differs'}`);
-    for (const x of d.onlyA.slice(0, 5)) console.log('   ours:  ', x.slice(0, 160));
-    for (const x of d.onlyB.slice(0, 5)) console.log('   theirs:', x.slice(0, 160));
+    // (each difference by element: changed, only ours, only theirs — and, from today's data, whether
+    // Overpass's copy was edited after the snapshot; a way whose node moved keeps its own timestamp)
+    const keyOf = (cs) => cs.slice(0, cs.indexOf(' '));
+    const them = new Map((theirs.elements ?? []).map((e) => [`${e.type[0]}${e.id}`, e]));
+    const a = new Set(d.onlyA.map(keyOf)), b = new Set(d.onlyB.map(keyOf));
+    let explained = 0;
+    for (const k of [...new Set([...a, ...b])].slice(0, 40)) {
+      const t = them.get(k)?.timestamp, after = !!t && t > index.ts;
+      if (after) explained++;
+      const what = a.has(k) && b.has(k) ? 'changed' : a.has(k) ? 'only ours' : 'only theirs';
+      console.log(`   ${k} ${what}${t ? ` (Overpass: edited ${t}${after ? ', after the snapshot' : ''})` : ''}`);
+      if (args.verbose) { for (const x of d.onlyA.filter((x) => keyOf(x) === k)) console.log('     ours:  ', x.slice(0, 300)); for (const x of d.onlyB.filter((x) => keyOf(x) === k)) console.log('     theirs:', x.slice(0, 300)); }
+    }
+    if (!d.onlyA.length && !d.onlyB.length && same) saveIfSame?.();
     if (d.onlyA.length || d.onlyB.length || !same) bad++;
+    saveIfSame = null;
     continue;
   }
   // no raw answer: the service's TileJson, if it was built from Overpass before (an R2 hit)

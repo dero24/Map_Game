@@ -11,7 +11,9 @@
 //     [--work=D:/map_game_osm/us] (the DuckDB file: ~100 GB at its peak for the lower 48)
 //     [--tmp=X:/map_game_tmp] (DuckDB's spill: the pack's sort, ~100 GB) [--out=D:/map_game_osm/out/v1]
 //     [--blocks=106_130,105_130] (pack only these blocks) [--keep] (reuse the tables of a run that got
-//     as far as packing) [--mem=16GB] [--threads=10]
+//     as far as packing) [--mem=16GB] [--threads=10] [--slice-points=10000000] (the geometry's
+//     slices) [--band-lines=8000000] (the packing's bands: lower both with less memory)
+//   UV_THREADPOOL_SIZE=10 (the tiles gzip on libuv's pool) — the US: ~1¾ h of steps, then the packing
 //
 // Lean on disk: the file is read once per kind of element instead of kept whole, each step's table
 // dropped as soon as the next has used it, and each way printed while it's packed rather than stored
@@ -173,7 +175,7 @@ Object.assign(index, { v: 1, ts: TS, tile: T, block: BT, made: new Date().toISOS
 // lower 48) is never asked for: the first US run's 4° bands from −180° to +180°, 90 of them at ~6 min
 // each, would have taken seven hours. A band holds its ways' tags while it joins their geometry, then
 // sorts its printed lines: 40 M lines ran 20 GB out of memory; the densest column is ~9 M)
-const BAND_LINES = Number(arg('band-lines', ['12000000'])[0]);
+const BAND_LINES = Number(arg('band-lines', ['8000000'])[0]); // (8 M at --mem=16GB: 12 M ran out at 14 GB, 40 M at 20 GB)
 const sql = (bx0, bx1) => `SELECT tx // ${BT} bx, ty // ${BT} bym, tx, ty, k, id, s, w, n, e, payload FROM (
     SELECT floor((lon + 180) * ${T})::INT tx, floor((lat + 90) * ${T})::INT ty, 'n' k, id, lat s, lon w, lat n, lon e,
       to_json(struct_pack(type := 'node', id := id, lat := lat, lon := lon, tags := tags))::VARCHAR payload FROM sel_n WHERE sel
@@ -192,14 +194,20 @@ let cols = (await con.runAndReadAll(`SELECT bx, sum(n)::BIGINT n FROM (
     UNION ALL SELECT floor((lon + 180) * ${T})::INT // ${BT}, count(*) FROM sel_n WHERE sel GROUP BY 1
     UNION ALL SELECT tx // ${BT}, count(*) FROM lines_r GROUP BY 1) GROUP BY bx ORDER BY bx`)).getRows().map(([bx, n]) => [Number(bx), Number(n)]);
 if (ONLY) cols = cols.filter(([bx]) => [...ONLY].some((b) => +b.split('_')[0] === bx));
+// (a band already packed — the run stopped part way — is kept as it was cut, whatever --band-lines
+// is now: index.packed lists them, and only the other columns are cut into bands)
+index.packed = index.packed ?? [];
+const packedCols = new Set();
+for (const k of index.packed) { const [a, b] = k.split('-').map(Number); for (const [bx] of cols) if (bx >= a && bx <= b) packedCols.add(bx); }
 const bands = [];
 for (const [bx, n] of cols) {
+  if (packedCols.has(bx)) continue;
   const last = bands.at(-1);
-  if (last && last.n + n <= BAND_LINES) { last.bx1 = bx; last.n += n; } else bands.push({ bx0: bx, bx1: bx, n });
+  const across = last && [...packedCols].some((p) => p > last.bx1 && p < bx); // (never a band over a packed column)
+  if (last && !across && last.n + n <= BAND_LINES) { last.bx1 = bx; last.n += n; } else bands.push({ bx0: bx, bx1: bx, n });
 }
-// (a band already packed — the run stopped part way — is kept: index.packed lists them)
-index.packed = (index.packed ?? []).filter((k) => bands.some((b) => `${b.bx0}-${b.bx1}` === k));
-log(`packing ${cols.length} block columns in ${bands.length} bands (≤ ${(BAND_LINES / 1e6).toFixed(0)} M lines each): ${bands.map((b) => `${b.bx0}–${b.bx1}`).join(', ')}…`);
+if (index.packed.length) log(`kept from the last run: bands ${index.packed.join(', ')}`);
+log(`packing ${cols.length - packedCols.size} block columns in ${bands.length} bands (≤ ${(BAND_LINES / 1e6).toFixed(0)} M lines each): ${bands.map((b) => `${b.bx0}–${b.bx1}`).join(', ')}…`);
 // (a block's tall things and big relations come over a second connection: a query on the streaming
 // one ends its stream — the first run stopped after one vector, 2,048 lines)
 const side = await db.connect();

@@ -108,6 +108,25 @@ own grid, refreshed monthly by a script on his PC.
   ≥ 150 m), its big relations (> 50 KB printed, stored once in their home block, tiles point there) and
   a directory. Lean on disk: the file read once per kind, each step's table dropped once used, each way
   printed while it's packed. New Jersey: 2.5 M elements, 373 MB packed, ~1 min.
+- **The US run** (2026-10-03, on D:, which has the room; C: doesn't): 14.4 M nodes, 144.7 M ways and
+  371 k relations (6,486 big). That's 179 M way-tile lines from 1.5 B points. The steps before
+  packing take ~1¾ h; the way points join (26 min) and the geometry (47 min, 152 slices) are the
+  big ones. Lessons, each paid for once:
+  - **Memory:** `--mem=16GB` on this 32 GB PC. At 20 GB, with the editor and its language server
+    open, Windows paged 5 GB of DuckDB out (28,000 pages a second, every thread waiting). At 14 GB
+    a packing band ran out.
+  - **Geometry** in slices of ~10 M points (`--slice-points`). An ordered list aggregate, or
+    bigger slices, runs out of memory or spills tens of GB.
+  - **Packing bands** are cut by what's in them: at most `--band-lines` printed lines (8 M at
+    16 GB; 40 M ran out of memory at 20 GB), and empty columns are skipped. Every band re-reads all
+    ways' geometry (~1.5 min), so there are as few as memory allows. A stopped run keeps its
+    packed bands (`index.packed`).
+  - **An empty member role** (OSM allows it; Overpass prints `"role": ""`) comes from
+    `ST_ReadOSM` as NULL, and a NULL in a SQL concatenation is NULL. The member vanished, and a
+    relation of only such members packed as the line `null` (526 US relations). Now
+    `coalesce(role, '')`; `tests/osmExtractSql.test.ts` runs the script's own relation SQL, and
+    the packer refuses anything that prints as null.
+  - **DuckDB reserved words** an alias can't be: `ref`, `by`, `role`, `nulls`.
 - **Upload** (`scripts/osm-upload.mjs`): content-addressed keys — `osm/v1/b/<bx>_<by>.<hash>.<part>.bin`
   and `.json` — so an unchanged block is never re-written (R2 bills writes), and the index
   (`osm/v1/index.json`: each block's hash, the snapshot's timestamp, the extract's outline from
