@@ -2,6 +2,96 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-04 — Foundation first (4): the US extract built, proven, live; every ramp; the airport crash
+
+Tier 0's "every tile loads" (docs/GAMEPLAY_VISION.md §17): the whole-US extract built, checked
+against Overpass in every kind of place, and switched on — reversibly.
+
+- **The US extract** (`scripts/osm-extract.mjs` on D:): 14.4 M nodes, 144.7 M ways, 371 k relations
+  (6,486 big), 179 M way-tile lines from 1.5 B points; ~1¾ h of steps, then the packing
+  (31 bands over a night of restarts; 1,481 blocks, 36.5 GB, 10.6 M tiles, 195 M lines). What it took:
+  - **Packing bands** sized by their data: the old 4° strips from −180° to +180° were 90 full
+    re-reads of the ways' geometry (~7 h); a 40 M-line band ran DuckDB out of memory at 20 GB, a 12 M
+    one at 14 GB; at 20 GB with the editor open Windows paged DuckDB (28,000 pages a second, every
+    thread waiting). 16 GB with ≤ 8 M-line bands fits; a stopped run keeps its packed bands.
+  - **An empty member role** — OSM allows it, Overpass prints `"role": ""` — comes from `ST_ReadOSM`
+    as NULL, and NULL in the members' concatenation is NULL: 526 relations lost members (an
+    outline's rings, a site's parts) and 778 tile lines read `null`. Found by measuring the first
+    packed band, before anything was live; now `coalesce(role, '')`, a test that runs the script's
+    own relation SQL in DuckDB (`tests/osmExtractSql.test.ts`, fails on the old SQL), and a packer
+    that refuses anything printed as null.
+  - **Speed:** a block's tall things and big relations read once per band (two whole-table queries
+    a block, ~1.5 s each); a small tile compressed in place (its round trip to libuv's pool, shared
+    with DuckDB's reads, cost ~1.7 ms a tile with the machine idle — hours over ~15 M tiles).
+- **The proof, across the country** (`tools/osm-compare.mjs --now`: today's Overpass with each
+  element's last edit, since the attic queries — the snapshot's own moment — were refused by a busy
+  server; `--split` asks a dense cell in parts and merges them by element):
+  | Cell | Elements each side | Result |
+  |---|---|---|
+  | Downtown Seattle | 6,042 | 7 differ, all edited after the snapshot |
+  | Kings Beach, Lake Tahoe | 732 | 1 differs, edited after |
+  | South Lake Tahoe | 1,338 | identical |
+  | Santa Monica | 2,407 | identical |
+  | Downtown Tucson | 6,402 | identical |
+  | Aspen | 2,004 | identical |
+  | Hays, KS | 2,588 | identical |
+  | St. Louis riverfront | 2,489 | identical |
+  | Asheville | 2,657 | identical |
+  | Miami Beach | 2,180 | identical |
+  | Intercourse, PA | 335 | identical |
+  | Levittown, NY | 1,367 | identical |
+  | Shrewsbury, NJ (two cells) | 203 and 371 | identical |
+  | Bar Harbor, ME | 1,314 | identical |
+
+  That's 15 cells in 12 states. Chicago's lakefront first answered from the backup mirror, whose
+  data was from July, so osm-compare now refuses a mirror older than the snapshot; the main server
+  timed out on that cell, and on Midtown's.
+  The small towns' answers are kept as `tests/fixtures/osm/*.raw.json.gz` (Shrewsbury ×2,
+  Intercourse, Bar Harbor) (both sides through today's `osmToTile`, so the proof outlives
+  builder changes); the cities' (1–2 MB each) on D:.
+- **The tile service's extract path under test** (`tests/osmWorker.test.ts`): an in-memory R2 packed as
+  the extract packs; `/tile` from the extract, marked so in R2 and on the answer; the outline's edge
+  left to Overpass; `/skyline`'s tall rule; a block's directory read once a request (a cell's six tiles
+  read it six times at once).
+- **Every interchange keeps its ramps:** `motorway_link` and `trunk_link` had no width in
+  `realTile.ts` (or the bake's copy), so every on- and off-ramp was dropped — in real cells and the
+  vector twin. Tiles `t/v25` + `&v=25`, so every cell rebuilds once, from the extract.
+- **Go-live** (2026-10-04, late morning): the blocks staged in R2 while the packing ran (only changed blocks: the
+  hashes are content's), the index uploaded (the switch), the worker deployed (`1aef467b`; the one
+  before, `1c95d174`, is the rollback), `tools/must-load.mjs --live` all 11 streamed must-load towns 9/9 cells from the extract (cold, 1.6–13 s), `/skyline` 11,567 tall things over lower Manhattan, the branch pushed
+  (Pages and the new CI). The CI's first run caught a real regression: the re-arrival hook threw
+  on the rescue's null spec, failing the playtest's teleports. Fixed, and the second run is green:
+  typecheck, 850 tests, build, the live must-load check, and the playtest's 6 checks.
+  **Going back is one step** (`docs/agent/streaming.md`): delete the index
+  (Overpass again within ten minutes) or `npx wrangler rollback` (the old service and its cache).
+- **Robby's phone at Monmouth Executive Airport** (Android 10, Chrome 154): the GPU crashed after a
+  teleport, Chrome then refused the site WebGL until restarted, and grass showed blue (DuckDuckGo's
+  browser flashed and crashed). Reproduced headless as a Pixel 7 on the phone tier
+  (`tools/audit48.mjs`, the airport added to its towns):
+  - **The blue ground**, which is also Robby's Shrewsbury report: a streamed cell's ground
+    (`synth.ts realExtras`) was cut away under wetlands as under water, and the flat sheet laid over
+    the hole was one-sided and wound as the map's ring winds. About half faced down, so the sea
+    plane showed through 40 m below, with grass growing on it, wherever New Jersey's land-use
+    survey (`NJ2002LULC`) mapped a wooded swamp. Now only water cuts the ground, the paint colours
+    a wetland, and `faceUp` turns every sheet to the sky. `tests/realExtras.test.ts` fails on the
+    old code; the airport's montage before and after shows the blue gone, all but its one real pond.
+  - **No leak:** 12 teleports, Sea Bright ⇄ the airport ⇄ Shrewsbury. three's geometries (585–913)
+    and textures (26–28) follow the place, and the JS heap after a forced GC stays flat at
+    453–536 MB. Without the forced GC it climbed to 773 MB, but that was garbage not yet collected.
+  - **The weight:** the phone tier carries ~190–245 MB of vertex data (in JS as well as on the GPU)
+    and a ~450–530 MB heap. That's plausibly too much for an Android 10 phone's tab. Next: free the
+    uploaded vertex arrays the CPU never reads again, and Robby's `?diag=1` there after go-live.
+- **The must-load towns under test** (`tests/mustLoad.test.ts`, `tests/fixtures/towns`, ~1 MB): every
+  one built from the extract with land under its spawn, streets, at least half its own outlines
+  standing, and trees. Levittown's point moved onto Jerusalem Avenue; the old one was in Nassau
+  County Basin #30, a recharge basin.
+- **The comparison loop's spots:** 146 in every lower-48 state, 106 with a photo (86 before): a
+  town's centre is its nearest GNIS place of the name (Virginia's first Fredericksburg is a hamlet
+  180 km from the city), a wider last look, the Census's legal suffixes stripped.
+- **Mapillary's map features**, looked at before building on them: a small town is one drive (so
+  "seen on different days" would drop it all), downtown Seattle 473,848 features for ~2.7 km² (one
+  lamp many times over) — the rules merge duplicates instead. Robby: home mailboxes left out.
+
 ## 2026-10-03 — Foundation first (3): our own OSM extract, the audit, the tiers, arriving outside, the comparison loop
 
 Tier 0's audit and "every tile loads" (docs/GAMEPLAY_VISION.md §17), and Tier 1's first tool.
