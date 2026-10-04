@@ -43,17 +43,26 @@ export function covers(idx, bb) {
   return idx.cover.some((r) => corners.every(([x, y]) => inRing(r, x, y)) && !crosses(r, bb));
 }
 
-async function directory(bucket, block, hash) {
+// (one read of a block's directory per request, however many of its tiles the box asks for at once:
+// `pending` is the request's own — never another request's promise, which the runtime would cancel
+// this one for waiting on)
+async function directory(bucket, block, hash, pending) {
   const k = `${block}.${hash}`;
-  let d = dirs.get(k);
-  if (!d) {
-    const o = await bucket.get(`${PFX}/b/${k}.json`);
-    if (!o) throw new Error(`extract directory ${k} missing`);
-    d = await o.json();
-    dirs.set(k, d);
-    if (dirs.size > 8) dirs.delete(dirs.keys().next().value);
+  const d = dirs.get(k);
+  if (d) return d;
+  let p = pending.get(k);
+  if (!p) {
+    p = (async () => {
+      const o = await bucket.get(`${PFX}/b/${k}.json`);
+      if (!o) throw new Error(`extract directory ${k} missing`);
+      const d = await o.json();
+      dirs.set(k, d);
+      if (dirs.size > 8) dirs.delete(dirs.keys().next().value);
+      return d;
+    })();
+    pending.set(k, p);
   }
-  return d;
+  return p;
 }
 async function gunzipRange(bucket, key, at) {
   const o = await bucket.get(key, { range: { offset: at[0], length: at[1] } });
@@ -67,18 +76,19 @@ export async function extractDoc(env, bb) {
   if (!bucket) return null;
   const idx = await getIndex(bucket);
   if (!idx || !covers(idx, bb)) return null;
+  const pending = new Map();
   const src = {
     async tile(block, tile) {
       const hash = idx.blocks[block];
       if (!hash) return null; // a block with nothing in it (open water inside the outline)
-      const d = await directory(bucket, block, hash);
+      const d = await directory(bucket, block, hash, pending);
       const at = d.tiles[tile];
       return at ? gunzipRange(bucket, `${PFX}/b/${block}.${hash}.${at[2] ?? 0}.bin`, at) : null;
     },
     async big(block, id) {
       const hash = idx.blocks[block];
       if (!hash) return null;
-      const d = await directory(bucket, block, hash);
+      const d = await directory(bucket, block, hash, pending);
       const at = d.big?.[id];
       return at ? gunzipRange(bucket, `${PFX}/b/${block}.${hash}.${at[2] ?? 0}.bin`, at) : null;
     },
@@ -107,12 +117,13 @@ export async function skylineDoc(env, bb, q) {
   const idx = await getIndex(bucket);
   if (!idx) return null;
   const rule = tallRule(q);
+  const pending = new Map();
   const seen = new Set(), out = [];
   for (let bx = Math.floor(bb.w + 180); bx <= Math.floor(bb.e + 180); bx++)
     for (let by = Math.floor(bb.s + 90); by <= Math.floor(bb.n + 90); by++) {
       const block = `${bx}_${by}`, hash = idx.blocks[block];
       if (!hash) continue;
-      const d = await directory(bucket, block, hash);
+      const d = await directory(bucket, block, hash, pending);
       if (!d.tall) continue;
       const text = await gunzipRange(bucket, `${PFX}/b/${block}.${hash}.${d.tall[2] ?? 0}.bin`, d.tall);
       for (const line of text.split('\n')) {
