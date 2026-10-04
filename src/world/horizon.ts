@@ -100,22 +100,40 @@ export class Horizon {
     if (this.builtSnow !== null && Math.abs(m - this.builtSnow) > 250 && !this.busy) this.cx = Infinity;
   }
 
-  /** Call per frame with the walker's region position; rebuilds off the frame when due. */
+  /** Why the last build came to nothing (null: it didn't) — for ?diag and the tools. */
+  lastFail: string | null = null;
+  private retryAt = 0;
+  private backoff = 30000;
+
+  /** Call per frame with the walker's region position; rebuilds off the frame when due — and a
+   *  build that came to nothing (a DEM read or the land cover down as the town loads) is tried again
+   *  on a backoff, from 30 s to 10 min: it used to wait for a 5 km walk, and a desktop's first one,
+   *  racing the town's own loads, left most arrivals with no mountains on the horizon at all. */
   update(x: number, z: number) {
-    if (!this.enabled || this.busy || Math.hypot(x - this.cx, z - this.cz) < 5000) return;
+    const moved = Math.hypot(x - this.cx, z - this.cz) >= 5000;
+    const retry = this.lastFail !== null && performance.now() >= this.retryAt;
+    if (!this.enabled || this.busy || (!moved && !retry)) return;
     this.busy = true;
     const cx = Math.round(x / 1000) * 1000, cz = Math.round(z / 1000) * 1000;
     const gen = ++this.gen;
+    const failed = (why: string) => {
+      this.cx = cx; this.cz = cz;
+      this.lastFail = why;
+      this.retryAt = performance.now() + this.backoff;
+      this.backoff = Math.min(600000, this.backoff * 2);
+    };
     void this.build(cx, cz)
       .then((mesh) => {
         if (gen !== this.gen) return;
-        if (!mesh) { this.cx = cx; this.cz = cz; return; } // no DEM here (offline / service down): try again after a walk
+        if (!mesh) return failed('no DEM'); // (offline, the service down, a tile that didn't come)
         for (const c of [...this.group.children]) { this.group.remove(c); (c as THREE.Mesh).geometry.dispose(); }
         this.group.add(mesh);
         this.cx = cx;
         this.cz = cz;
+        this.lastFail = null;
+        this.backoff = 30000;
       })
-      .catch(() => { this.cx = cx; this.cz = cz; })
+      .catch((e) => failed(String((e as Error)?.message ?? e).slice(0, 160)))
       .finally(() => { this.busy = false; });
   }
 
