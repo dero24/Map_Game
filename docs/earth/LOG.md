@@ -2,6 +2,30 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-03 — Foundation first (1): the new gameplay vision merged
+
+Branch `feature/foundation-first`, off `feature/measured-heights` (the last pushed work; it already
+contains `feature/back_to_local_agent_9_30`). Robby's brief: merge the vision, audit the lower 48,
+re-rank the queue into the vision's tiers, then do Tier 0 (foundations) and Tier 1 (looks right
+everywhere) before any gameplay, apart from a throwaway bloom prototype.
+
+- **`docs/GAMEPLAY_VISION.md`** is now Robby's 2026-10-03 doc ("you are the brush"): the world
+  blooms from pencil into colour on first sight; pencil means collectable (tap within ~30 m; only a
+  few at once, always chosen out of sight); rares as data by region; real travel by van, yacht,
+  plane and balloon; the real calendar; your own private layer of the world; one home behind every
+  door; and §17, the order of work: Tier 0 the world loads everywhere and the infrastructure is
+  commercial-safe, Tier 1 it looks right everywhere, Tier 2 the game, Tier 3 polish.
+- **`docs/GAME_DESIGN.md`** marked superseded: a table of what became of each old section, and
+  only the parts that survive kept (why this engine, learning from life and the Almanac, the
+  placement solvers). The full old text is in git at `abc02db`.
+- `docs/agent/gameplay.md` points at the vision (and says the brush is a prototype of placing, and
+  the bloom isn't built yet); `AGENTS.md`'s pointer describes the new doc; `CONSTRUCTION.md`'s
+  banner and `brush.ts`'s header follow.
+- **Baseline:** `npm run init` failed on two CPU-heavy tests timing out at vitest's 5 s default when
+  the whole suite runs in parallel (`measure.test.ts` ringMask's 200 random outlines × 4 pads,
+  `synthSeams.test.ts` street ownership); each passes alone in under 5 s. Both now carry a 60 s
+  limit, like their neighbours. 777 tests, typecheck, build.
+
 ## 2026-10-03 — Measured heights on every device (4): parity, proven
 
 - **`tests/parity.test.ts`** (2): Bain's cell (0_-1) and a Monmouth Beach cell (−1_2), each through

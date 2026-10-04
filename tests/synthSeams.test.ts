@@ -134,7 +134,7 @@ describe('stand-in cells agree at their seams (synth.ts)', () => {
       }
     expect(n).toBeGreaterThan(300);
     expect(bad.length + ' orphans: ' + bad.slice(0, 5).join('; ')).toBe('0 orphans: ');
-  });
+  }, 60000);
 
   it("no building stands on another, across the seam or inside a cell", () => {
     const bad: string[] = [];

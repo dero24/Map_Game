@@ -62,7 +62,7 @@ Context low? Wrap early — write state before polish. A clean handoff beats a r
 
 ## Topic docs — read when the task touches that area
 
-- `docs/GAMEPLAY_VISION.md` — **read before any gameplay work**: one brush (tap to paint, hold to paint from the sketchbook), start in the player's town, regional rares, the portal gun, the mobile base, series, your dog later and the bridge; track each in `feature_list.json`
+- `docs/GAMEPLAY_VISION.md` — **read before any gameplay work**: the world blooms from pencil into colour as you look, pencil means collectable (tap to paint it), regional rares as data, real travel (van, yacht, plane, balloon), your own private layer of the world, one home behind every door; §17 sets the order — **foundations first** (Tier 0: every tile loads, commercial-safe services; Tier 1: looks right everywhere), the game after. Track each in `feature_list.json`. (`docs/GAME_DESIGN.md` is superseded, apart from learning from life, the Almanac and the summoning solvers)
 
 - `docs/agent/world-data.md` — regions, REGIONS spec, fetch/merge/bake, detail zone, `?at=` deep links, NAIP roof imagery
 - `docs/agent/streaming.md` — tile stream + margin semantics, tile worker + BuiltTile packing, terrain packs, real-lite worker (wrangler/R2/virtual manifests), DEM, LiDAR measure pipeline

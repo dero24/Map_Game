@@ -4,6 +4,13 @@ Read this when the task touches building/prop geometry, interiors, collision, ri
 vehicles, ambient life, the asset kit, or the player-facing layer (explore/paint-in, photo mode,
 sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 
+**The game's verbs and direction are `docs/GAMEPLAY_VISION.md`** (read it before any gameplay
+work): the world blooms from pencil into colour on first sight (§1), pencil means collectable —
+tap to paint it within ~30 m (§2), regional rares as data (§3), travel (§4), your own private
+layer of the world (§6), one home behind every vehicle's door (§7), and §17's tiers: foundations
+first, then the world looking right everywhere, then the game. This file describes what is built;
+where the two disagree, the vision is the target and this file is the current state.
+
 ## Buildings
 
 - Walls follow the true footprint; pitched roofs come from a straight skeleton
@@ -598,6 +605,10 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
 
 ## Exploring: the map paints in, and sketch mode (`src/world/explore.ts`)
 
+(The vision's bloom, §1 — everything in view colours on first sight, to the view distance — is
+not built yet; sketch mode below is the nearest thing: it paints where you walk and what photos frame.)
+
+
 - Where you've been is a sparse bitmap on a **global** grid: Web-Mercator metres, 8 m cells,
   32×32-cell blocks. It survives re-anchoring, teleports and region changes. Blocks persist to
   IndexedDB (`map-game-explore`). It's always recorded (`explore.enabled`): the map paints in
@@ -642,7 +653,13 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   pigment deepening — its edge ragged by paper and brush-stroke noise that never reaches bare
   paper or finished paint.
 
-## The brush (`src/ui/brush.ts`, `src/player/place.ts`) — `docs/GAME_DESIGN.md`
+## The brush (`src/ui/brush.ts`, `src/player/place.ts`) — a prototype of placing
+
+Built to the superseded `docs/GAME_DESIGN.md` §4b. Under `docs/GAMEPLAY_VISION.md` collecting is
+a tap on a pencil thing (§2) and placing is "hold to paint from the sketchbook" onto your layer or
+home (§6, §7); the solvers below are what decides where a thing settles. Until those land, this is
+what the code does:
+
 
 - Paint-to-own: a coloured Almanac card (painted from life with P — `Commissions.paintFrame`, which
   records `pt` and `fresh`) is a kind you can paint: `Commissions.owned(families)`. The families the

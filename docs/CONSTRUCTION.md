@@ -1,6 +1,6 @@
 # Player construction — design brainstorm
 
-> Superseded by `docs/GAME_DESIGN.md` (2026-09-28): painting is the verb, earned by painting the real thing from life; placement is aim-and-snap (`src/player/place.ts`); the first slice is the brush (`src/ui/brush.ts`).
+> Superseded by `docs/GAMEPLAY_VISION.md` (2026-10-03), via `docs/GAME_DESIGN.md` (2026-09-28): painting is the verb, earned by painting the real thing from life; placement is aim-and-snap (`src/player/place.ts`); the first slice is the brush (`src/ui/brush.ts`).
 
 Brainstorm notes from 2026-09-27. Not a spec yet — a place for the idea to live while the
 core loop gets discovered (see `feature_list.json` → `traversal-spike`). Related:

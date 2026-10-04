@@ -317,7 +317,7 @@ describe('lidarCore: ringMask is the per-cell test, sooner', () => {
       }
       for (const pad of [1.5, 1, 0.5, 0]) expect(differ(ringMask(g, [ring], pad), perCell(g, [ring], pad))).toBe(0);
     }
-  });
+  }, 60000);
   it('on a real town\'s footprints (two shore cells, the pads measureCell uses)', async () => {
     const { readFileSync } = (await import(/* @vite-ignore */ `node:${'fs'}`)) as { readFileSync(p: URL, e: 'utf8'): string };
     const R = new URL('../public/data/shore/tiles/', import.meta.url);

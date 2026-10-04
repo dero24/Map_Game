@@ -1,4 +1,5 @@
-// The brush (docs/GAME_DESIGN.md §4b, §5): paint anything you've painted from life, anywhere you aim.
+// The brush (a prototype of placing — docs/GAMEPLAY_VISION.md §6–§7; the solvers are docs/GAME_DESIGN.md §5):
+// paint anything you've painted from life, anywhere you aim.
 //
 // B takes it out. The chips along the bottom are the kinds whose Almanac cards you've coloured in
 // (painted with P); the one that fits what you're aiming at comes first (water: a boat; a street:
