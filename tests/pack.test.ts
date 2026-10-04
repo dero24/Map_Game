@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
 import { Terrain, TerrainLayer } from '../src/world/data';
 import { WalkWorld } from '../src/player/collision';
-import { RecWalk, packDeck, unpackDeck, replayOps, matTag, matFromTag, packGroup, buildObject, type BuiltTile } from '../src/world/pack';
+import { RecWalk, packDeck, unpackDeck, replayOps, matTag, matFromTag, packGroup, buildObject, setFreeUploaded, type BuiltTile } from '../src/world/pack';
 import { propMaterial } from '../src/render/propMaterial';
 import { buildingMaterial } from '../src/world/buildings';
 import { wireMaterial, haloMaterial } from '../src/world/props';
@@ -176,6 +176,38 @@ describe('packGroup + buildObject', () => {
     expect(rebuilt[2].renderOrder).toBe(8);
     expect(rebuilt[2].frustumCulled).toBe(false);
     expect((rebuilt[0] as THREE.Mesh).geometry.attributes.position.count).toBe(24);
+  });
+
+  it('a phone lets go of the vertex data the CPU never reads again, once it is on the GPU', () => {
+    const geo = new THREE.BoxGeometry(1, 1, 1);
+    geo.setAttribute('aInfo', new THREE.Float32BufferAttribute(new Float32Array(24 * 4), 4));
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(geo, propMaterial()));
+    const upload = (o: THREE.Object3D) => { for (const a of Object.values((o as THREE.Mesh).geometry.attributes)) (a as THREE.BufferAttribute).onUploadCallback(); };
+    try {
+      // (a desktop: both copies, as ever)
+      setFreeUploaded(false);
+      const kept = buildObject(packGroup(g)[0]) as THREE.Mesh;
+      upload(kept);
+      for (const a of Object.values(kept.geometry.attributes)) expect((a as THREE.BufferAttribute).array).not.toBeNull();
+      // (a phone: before the upload everything is there — the stream weighs it then — after it, only
+      // what's read again: the positions, the ids, the index)
+      setFreeUploaded(true);
+      const m = buildObject(packGroup(g)[0]) as THREE.Mesh;
+      expect(m.geometry.attributes.normal.array).not.toBeNull();
+      upload(m);
+      const at = m.geometry.attributes as Record<string, THREE.BufferAttribute>;
+      expect(at.normal.array).toBeNull();
+      expect(at.uv.array).toBeNull();
+      expect(at.normal.count).toBe(24); // (three draws by the count, kept)
+      expect(at.position.array).not.toBeNull();
+      expect(at.aInfo.array).not.toBeNull();
+      expect(m.geometry.index!.array).not.toBeNull();
+      m.geometry.computeBoundingSphere();
+      expect(Number.isFinite(m.geometry.boundingSphere!.radius)).toBe(true);
+    } finally {
+      setFreeUploaded(false);
+    }
   });
 });
 

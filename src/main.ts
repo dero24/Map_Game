@@ -16,7 +16,7 @@ import { setDemBase } from './world/dem';
 import { virtualRegion } from './world/virtual';
 import { paintGround } from './world/groundPaint';
 import { buildGround, terrainTextures } from './world/ground';
-import { setGndMaterial } from './world/pack';
+import { freesUploaded, setFreeUploaded, setGndMaterial } from './world/pack';
 import { buildWater, waterParams } from './world/water';
 import { nearPlane } from './render/nearPlane';
 import { Wakes } from './world/wakes';
@@ -282,6 +282,8 @@ async function main() {
   // `?lidar=0` builds from mapped priors only. A phone's tier builds from them too (quality.ts):
   // a city's survey decoded in the tab was hundreds of MB, and each cell built twice; `?lidar=1`.
   stream.lidar = params.get('lidar') === '1' || (params.get('lidar') !== '0' && tier.lidar);
+  // A phone's tiles keep their vertex data only on the GPU (pack.ts; `?free=0` keeps both copies)
+  setFreeUploaded(params.get('free') === '1' || (params.get('free') !== '0' && tier.freeArrays));
   // …and every tier applies the measurements already made — a baked pack's sidecar
   // (scripts/measure-cells.mjs), the tile service's records: a phone's buildings stand as tall
   // as a desktop's without reading the survey. `?measured=0` leaves them out (a desktop then
@@ -1640,7 +1642,23 @@ async function main() {
       shadowParams.enabled = false;
     }
   });
-  canvas.addEventListener('webglcontextrestored', () => { contextRestored(); toast('back to the walk'); });
+  canvas.addEventListener('webglcontextrestored', () => {
+    contextRestored();
+    // (tiles that let go of their vertex data once it was on the GPU can't upload it again: the page
+    // reloads where you stand — a tier lighter, as after any lost context: diag's record of it)
+    if (freesUploaded()) {
+      chain++; // (no frame in between: it would ask three to upload what's gone)
+      const [lat, lon] = toLatLon(json.origin, walker.x, walker.z);
+      const p = new URLSearchParams(location.search);
+      p.set('at', `${lat.toFixed(6)},${lon.toFixed(6)}`);
+      p.delete('shot');
+      p.delete('view');
+      toast('the painting smudged — starting it again here');
+      location.replace(`${location.pathname}?${p}`);
+      return;
+    }
+    toast('back to the walk');
+  });
   // The watchdog: no frame 15 s after Begin walking, or a context never given back → the report.
   // `?diag=1` opens it once the first frame is up (the GPU's facts, on the phone itself).
   if (!CAPTURE) {

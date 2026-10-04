@@ -55,12 +55,14 @@ describe('pickTier', () => {
     expect(d.stream.budgetMB).toBeUndefined(); // (no budget: every cell of the ring, as ever)
     expect(d.stream.realConc).toBeUndefined();
     expect(d.stream.coarseMB).toBeUndefined(); // (the silhouette ring uncapped on a PC)
+    expect(d.freeArrays).toBe(false); // (a PC keeps its tiles' vertex data: a lost context restores in place)
     for (const t of [pickTier(PIXEL7), pickTier(IPHONE), pickTier({ ...PIXEL7, memoryGB: 2 })]) {
       expect(t.lidar).toBe(false);
       expect(t.skylineR).toBeLessThan(8000);
       expect(t.stream.budgetMB).toBeGreaterThan(0);
       expect(t.stream.realConc).toBeLessThan(4);
       expect(t.stream.coarseMB).toBeGreaterThan(0);
+      expect(t.freeArrays).toBe(true);
     }
     expect(pickTier({ ...PIXEL7, memoryGB: 2 }).stream.budgetMB!).toBeLessThan(pickTier(PIXEL7).stream.budgetMB!);
   });

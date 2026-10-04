@@ -41,6 +41,9 @@ export interface TierConfig {
   lidar: boolean;
   /** How far out the skyline reads a city's towers, m (world/skyline.ts). */
   skylineR: number;
+  /** The tiles' meshes let go of their vertex data once it's on the GPU (world/pack.ts
+   *  setFreeUploaded): a phone's page carried every vertex twice. `?free=0` / `?free=1` overrule it. */
+  freeArrays: boolean;
   /** The micro layer's budget (world/microLayer.ts): its impostor atlas, its caps, its ranges. */
   micro: MicroTier;
   /** The near trees' budget (world/nearTrees.ts). */
@@ -89,7 +92,7 @@ export const MICRO_TIERS: Record<Tier, MicroTier> = {
 
 const TIERS: Record<Tier, Omit<TierConfig, 'tier' | 'why'>> = {
   // the shipped defaults — nothing changes on a desktop
-  desktop: { post: {}, shadow: {}, stream: { loadR: 1500, dropR: 2400, coarseR: 8000 }, paintTex: 4096, lidar: true, skylineR: 8000, micro: MICRO_TIERS.desktop, trees: TREE_TIERS.desktop },
+  desktop: { post: {}, shadow: {}, stream: { loadR: 1500, dropR: 2400, coarseR: 8000 }, paintTex: 4096, lidar: true, skylineR: 8000, freeArrays: false, micro: MICRO_TIERS.desktop, trees: TREE_TIERS.desktop },
   // CSS-pixel paint (a DPR-3 phone rendered 1.5× its CSS size before), a 60% brush buffer (the
   // Kuwahara radius drops from 7 to ~4 texels: a third of the taps), 1024² shadows, ~half the
   // detail tiles and a 4 km silhouette ring, 2048² ground paint (a quarter of the slice canvas).
@@ -102,11 +105,11 @@ const TIERS: Record<Tier, Omit<TierConfig, 'tier' | 'why'>> = {
   // 85% paint since the same day, a phone's view still read blurry at 75%; full paint and up to
   // 2× the CSS pixels since 2026-10-03 — loading and flight got quick, and 85% at 1.5× still read
   // "super blurry, almost unplayable" on a phone; auto quality still steps a slow one down)
-  phone: { post: { hiDpi: true, paintDetail: 1, dpiMax: 2 }, shadow: { size: 1024 }, stream: { loadR: 900, dropR: 1500, coarseR: 6000, budgetMB: 200, realConc: 2, reliefConc: 1, coarseMB: 90 }, paintTex: 2048, lidar: false, skylineR: 6000, micro: MICRO_TIERS.phone, trees: TREE_TIERS.phone },
+  phone: { post: { hiDpi: true, paintDetail: 1, dpiMax: 2 }, shadow: { size: 1024 }, stream: { loadR: 900, dropR: 1500, coarseR: 6000, budgetMB: 200, realConc: 2, reliefConc: 1, coarseMB: 90 }, paintTex: 2048, lidar: false, skylineR: 6000, freeArrays: true, micro: MICRO_TIERS.phone, trees: TREE_TIERS.phone },
   // …and a weak phone (or one whose last visit died): no shadow pass either — every tree, house and
   // car drawn a second time into the shadow map was half the vertex work of a frame (65% paint at
   // 85% scale since 2026-10-03: half paint at 75% was a smear)
-  low: { post: { hiDpi: false, paintDetail: 0.65, renderScale: 0.85 }, shadow: { size: 1024, enabled: false }, stream: { loadR: 750, dropR: 1300, coarseR: 2500, budgetMB: 120, realConc: 1, reliefConc: 1, coarseMB: 60 }, paintTex: 1024, lidar: false, skylineR: 3000, micro: MICRO_TIERS.low, trees: TREE_TIERS.low },
+  low: { post: { hiDpi: false, paintDetail: 0.65, renderScale: 0.85 }, shadow: { size: 1024, enabled: false }, stream: { loadR: 750, dropR: 1300, coarseR: 2500, budgetMB: 120, realConc: 1, reliefConc: 1, coarseMB: 60 }, paintTex: 1024, lidar: false, skylineR: 3000, freeArrays: true, micro: MICRO_TIERS.low, trees: TREE_TIERS.low },
 };
 const ORDER: Tier[] = ['desktop', 'phone', 'low'];
 const ALIAS: Record<string, Tier> = { desktop: 'desktop', high: 'desktop', phone: 'phone', mobile: 'phone', medium: 'phone', low: 'low', safe: 'low' };

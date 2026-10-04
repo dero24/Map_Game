@@ -9,7 +9,7 @@ import { fetchDem, demLayer, setDemBase, raceNull } from './dem';
 import { cachedFetchJson, manifestFingerprint } from './cache';
 import type { Door, Footprint } from './buildings';
 import { buildTile } from './tileBuild';
-import { buildObject, packGroup, replayOps, unpackDeck, type BuiltTile } from './pack';
+import { buildObject, freesUploaded, packGroup, replayOps, unpackDeck, type BuiltTile } from './pack';
 import { synthTile, realExtras, regionSeed } from './synth';
 import { haloPoints } from './props';
 import { signTexture } from './signs';
@@ -160,6 +160,7 @@ export class TileStream {
   private reveals: { group: THREE.Group; hidden: THREE.Object3D[]; retire: THREE.Group[] }[] = [];
   private sizes = new Map<string, number>(); // what each detail tile weighed when it was last built (the budget's estimates)
   private culled: THREE.Object3D[] = []; // frustum culling off for the frame they appear (see reveal)
+  private culledPrev: THREE.Object3D[] = []; // …and back on a frame later: one mounted between frames is drawn too
   /** Where the last detail mount's time went, ms (tools/hitch-probe.js, soak). */
   lastMount: { id: string; collision: number; objects: number; retire: number; hooks: number } | null = null;
   private lampTex: THREE.CanvasTexture | null = null;
@@ -804,6 +805,7 @@ export class TileStream {
       this.scene.add(group);
       if (hidden.length) this.reveals.push({ group, hidden, retire: retire! });
       else for (const g of retire ?? []) this.dispose(g);
+      if (!retire) this.uploadSoon(group);
       if (tile.lampPts?.length) {
         this.lampPts.set(spec.id, tile.lampPts);
         this.lampDirty = true;
@@ -1067,6 +1069,7 @@ export class TileStream {
       group.add(haloPoints(v3s(tile.lanterns), 7, new THREE.Color(1.0, 0.85, 0.55)));
       group.add(haloPoints(v3s(tile.towers), 1.2, new THREE.Color(1.0, 0.75, 0.45)));
       this.scene.add(group);
+      this.uploadSoon(group);
       const bytes = streamParams.coarseMB > 0 ? vertexBytes(group) : 0;
       this.coarseLoaded.set(spec.id, { spec, group, bytes });
       this.coarseBytes += bytes;
@@ -1115,9 +1118,18 @@ export class TileStream {
   // Show the oldest revealing tile's next meshes (REVEAL_BYTES / REVEAL_OBJS of them), each drawn this frame
   // whether it's in view or not, so its buffers go up now rather than when you turn round; when
   // it's all showing, what it replaced goes.
+  /** (a page that frees its uploaded vertex data, pack.ts) A tile mounted whole — the arrival's ring, a
+   *  silhouette — is drawn its first frame whether or not it's in view, as a revealed one is: uploaded
+   *  now, its CPU copy let go now, not whenever you first turn round to it. */
+  private uploadSoon(root: THREE.Object3D) {
+    if (!freesUploaded()) return;
+    root.traverse((m) => { if (m.frustumCulled && (m as THREE.Mesh).geometry) { m.frustumCulled = false; this.culled.push(m); } });
+  }
+
   private reveal() {
-    for (const o of this.culled) o.frustumCulled = true;
-    this.culled.length = 0;
+    for (const o of this.culledPrev) o.frustumCulled = true;
+    this.culledPrev = this.culled;
+    this.culled = [];
     const r = this.reveals[0];
     if (!r) return;
     let budget = REVEAL_BYTES, n = 0;

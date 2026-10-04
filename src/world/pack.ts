@@ -256,9 +256,23 @@ export function packGroup(root: THREE.Object3D): PObj[] {
   return out;
 }
 
+// A phone's tile meshes let go of each attribute's vertex data once it's on the GPU: the page held
+// every vertex twice (~70 of a phone tier's ~250 MB at an airfield). What the CPU reads again stays:
+// positions (bounds; a building hidden by its id, stream.ts) and the ids; the index; the instance
+// matrices (the near trees read them). A restored GPU context can't upload what was let go, so a
+// page that frees reloads where it stands instead (main.ts).
+const KEEP_ARRAYS = new Set(['position', 'aInfo']);
+let freeUploaded = false;
+export function setFreeUploaded(on: boolean) { freeUploaded = on; }
+export const freesUploaded = () => freeUploaded;
+
 export function buildObject(p: PObj, atlas?: THREE.Texture): THREE.Object3D {
   const g = new THREE.BufferGeometry();
-  for (const [name, a] of Object.entries(p.at)) g.setAttribute(name, new THREE.BufferAttribute(a.a, a.n));
+  for (const [name, a] of Object.entries(p.at)) {
+    const at = new THREE.BufferAttribute(a.a, a.n);
+    if (freeUploaded && !KEEP_ARRAYS.has(name)) at.onUpload(() => { (at as unknown as { array: unknown }).array = null; });
+    g.setAttribute(name, at);
+  }
   if (p.ix) g.setIndex(new THREE.BufferAttribute(p.ix, 1));
   let o: THREE.Object3D;
   if (p.k === 'inst') {
