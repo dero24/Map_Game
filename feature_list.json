@@ -1,6 +1,6 @@
 {
   "project": "map_game",
-  "last_updated": "2026-10-03",
+  "last_updated": "2026-10-04",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -52,7 +52,7 @@
       "id": "every-tile-loads",
       "tier": 0,
       "rank": 2,
-      "status": "in_progress",
+      "status": "passing",
       "area": "world",
       "title": "Every tile loads, or falls back gracefully — no missing land, no land drawn as water, no holes; a fixed must-load town list in the tests",
       "user_visible_behavior": "Wherever you start or go in the lower 48, the ground under you is land where it is land and water where it is water, real streets and buildings arrive, and a cell that can't is a believable stand-in, never a hole.",
@@ -65,15 +65,18 @@
         "tools/audit48.mjs, tools/audit48.js, tools/audit48-towns.json",
         "docs/earth/AUDIT_48.md",
         "src/world/synth.ts (realExtras: only water cuts the ground; faceUp)",
-        "tests/realExtras.test.ts"
+        "tests/realExtras.test.ts",
+        "docs/earth/AUDIT_48.md round 2 (2026-10-04): 19 towns, desktop and phone — all 249 desktop cells real or baked, no stand-ins or failed cells; shots/audit48/<town>-montage.jpg reviewed",
+        "src/world/realTile.ts ringTester + tests/realTile.test.ts (a Great Lake cell's ground 8.8 s → 0.24 s); src/world/stream.ts drainRelief (reliefs queued behind first builds)",
+        "src/world/horizon.ts retry backoff + tests/horizon.test.ts"
       ],
-      "notes": "Audit 2026-10-03 (Overpass down): most cold cells stayed vector twins (Midtown 0/14 real, Intercourse 0/14, Hays 1/14). Shrewsbury's reported dark-blue ground not reproduced at the centre (to check across the ring and on a phone). 2026-10-04: the blue ground found — Robby's at Monmouth Executive Airport and in Shrewsbury: a streamed cell's ground (synth.ts realExtras) was cut away under wetlands like under water, and the sheet over the hole faced down for half of them (their ring's winding): the sea plane showed through, blue, with grass on it. Wetlands are ground now (only water cuts it), every sheet faces up (faceUp); tests/realExtras.test.ts fails on the old code; shots/audit48/monmouthairport-nj-montage.jpg before/after."
+      "notes": "Audit 2026-10-03 (Overpass down): most cold cells stayed vector twins (Midtown 0/14 real, Intercourse 0/14, Hays 1/14). Shrewsbury's reported dark-blue ground not reproduced at the centre (to check across the ring and on a phone). 2026-10-04: the blue ground found — Robby's at Monmouth Executive Airport and in Shrewsbury: a streamed cell's ground (synth.ts realExtras) was cut away under wetlands like under water, and the sheet over the hole faced down for half of them (their ring's winding): the sea plane showed through, blue, with grass on it. Wetlands are ground now (only water cuts it), every sheet faces up (faceUp); tests/realExtras.test.ts fails on the old code; shots/audit48/monmouthairport-nj-montage.jpg before/after. 2026-10-04 round 2 (from our own extract, first visits at t/v25): every desktop ring real, all real by a median 15 s; the slow ones (Chicago past 240 s, Duluth 141 s, reliefs stalling) fixed in 9283adf — Chicago all real 1 s after ready, settled 38 s; Duluth 23 s / 57 s; no cell left late. The desktop horizon ring now retries (ceb0588)."
     },
     {
       "id": "spawn-on-land-outside",
       "tier": 0,
       "rank": 3,
-      "status": "blocked",
+      "status": "passing",
       "area": "world",
       "title": "A ?at= arrival stands outside, on land: never inside a building, never in water",
       "user_visible_behavior": "Arriving anywhere by link, search or teleport, you stand on the street or a path outside, facing the place — not in a restaurant's dining room or a pond.",
@@ -83,9 +86,10 @@
       "evidence": [
         "src/player/landing.ts (lands just past the foot of the nearest door's steps, facing it; was 2.2 m inside)",
         "src/main.ts (re-makes an arrival when the real cell replaces its stand-in under the walker)",
-        "tests/landing.test.ts"
+        "tests/landing.test.ts",
+        "docs/earth/AUDIT_48.md round 2: 38 of 38 runs (19 towns × desktop and phone) arrived outside and on land"
       ],
-      "notes": "Audit 2026-10-03: Bar Harbor ME (44.3876, −68.2045) desktop spawned inside a restaurant's dining room; Levittown NY flagged spawn in water (0.6% water round it). Fixed 2026-10-03 (ff84f22). Blocked on the verification only: audit round 2 (every town's spawn outside and on land, desktop and phone) runs once own-osm-extract is live, so the arrivals land in real cells."
+      "notes": "Audit 2026-10-03: Bar Harbor ME (44.3876, −68.2045) desktop spawned inside a restaurant's dining room; Levittown NY flagged spawn in water (0.6% water round it). Fixed 2026-10-03 (ff84f22). Blocked on the verification only: audit round 2 (every town's spawn outside and on land, desktop and phone) runs once own-osm-extract is live, so the arrivals land in real cells. Verified 2026-10-04 by audit round 2: every arrival outside, on land."
     },
     {
       "id": "playtest-suite",

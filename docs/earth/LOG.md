@@ -2,6 +2,37 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-04 — Foundation first (5): audit round 2 — every cell real; the slow cities; the horizon
+
+The lower-48 audit again (`docs/earth/AUDIT_48.md` round 2), now that every cell comes from our own
+extract: 19 towns, desktop and phone, first visits at t/v25.
+
+- **Every tile loads:** all 249 desktop cells real or baked, no stand-in or failed cell anywhere
+  (round 1: most were vector twins); every one of the 38 arrivals outside and on land.
+  `every-tile-loads` and `spawn-on-land-outside` pass.
+- **A Great Lake's shore cell built in 9 s, now 0.24 s.** The tile carries the lake's whole outline
+  (47,000 vertices, 253 islands) and `realExtras` tested every ground quad against all of it. Now
+  `ringTester` (`realTile.ts`) buckets a big ring's edges by row over the cell, giving the same
+  answers; `tests/realTile.test.ts` compares it with `pointInRing` point for point.
+- **Reliefs wait their turn** (`stream.ts drainRelief`): every mounted cell asked for its relief
+  rebuild at once. Those are 14 whole rebuilds, and they shared the one builder with the cells
+  not up yet, so they ran 110 s and stalled out. Now they queue nearest first, two at a time (one
+  on a phone), and a real cell's waits for the ring's first builds. A failed relief retries.
+  Chicago: every cell real 1 s after ready (it was past the audit's 240 s wait), settled in 38 s
+  (from 244 s), no cell left late. Duluth: 23 s and 57 s (from 141 s and 207 s). The silhouettes
+  build at 1.3 s each (they were taking 33 s).
+- **The desktop's horizon ring** (`horizon.ts`): its first build races the town's own DEM reads, and
+  if one tile came late it waited for a 5 km walk, so most desktop arrivals had no far mountains.
+  It now retries on a backoff (30 s, doubling to 10 min); `tests/horizon.test.ts`. Aspen's ring
+  is up 35 s after ready, and Bar Harbor's montage has Cadillac Mountain again.
+- Round 2's other finds, fixed earlier today (9d364c0): a triangle's gable roof (the NaN chimney at
+  Ely and Santa Monica), and browser Overpass asked though the service answers. The one console
+  error in every run comes from the dev server's local-worker check, so a player never sees it.
+- **Next:** the phone's weight (free the uploaded vertex arrays the CPU never reads again; the stream's
+  budget counts their bytes, so keep the count), Robby's `?diag=1` at the airport, then Tier 1. The
+  audit's looks-right leads are Aspen's lawn-green mountain, a Duluth street frame with no street,
+  and a car parked on a crossing.
+
 ## 2026-10-04 — Foundation first (4): the US extract built, proven, live; every ramp; the airport crash
 
 Tier 0's "every tile loads" (docs/GAMEPLAY_VISION.md §17): the whole-US extract built, checked
