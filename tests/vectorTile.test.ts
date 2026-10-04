@@ -10,6 +10,7 @@ describe('OpenMapTiles → OSM tags', () => {
   it('maps street classes, links, services, bridges; drops ferries', () => {
     expect(wayTags({ class: 'minor' })?.highway).toBe('residential');
     expect(wayTags({ class: 'primary', ramp: 1 })?.highway).toBe('primary_link');
+    expect(wayTags({ class: 'motorway', ramp: 1 })?.highway).toBe('motorway_link');
     expect(wayTags({ class: 'path', subclass: 'steps' })?.highway).toBe('steps');
     const sv = wayTags({ class: 'service', service: 'driveway' })!;
     expect(sv.highway).toBe('service');

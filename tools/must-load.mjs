@@ -25,6 +25,7 @@ const RT = await load('src/world/realTile.ts');
 const VR = await load('src/world/virtual.ts');
 const shore = JSON.parse(readFileSync(resolve(ROOT, 'public/data/shore/manifest.json'), 'utf8'));
 const CELL = 1024, MARGIN = 48;
+const TILE_V = readFileSync(resolve(ROOT, 'src/world/stream.ts'), 'utf8').match(/&v=(d+)`/)[1];
 
 // a town's spawn: the region the game would put it in (the baked shore, else a virtual region at its
 // snapped origin) and the cell the spawn point lies in
@@ -48,7 +49,8 @@ if (args.live) {
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) cells.push([s.cx + dx, s.cz + dz]);
     const t0 = Date.now();
     const res = await Promise.all(cells.map(async ([cx, cz]) => {
-      const r = await fetch(`${SERVICE}/tile/${cx}_${cz}.json?olat=${s.origin.lat}&olon=${s.origin.lon}`, { signal: AbortSignal.timeout(within) }).catch((e) => ({ ok: false, status: e.name }));
+      // (the URL the game asks: its &v — src/world/stream.ts — keys the edge cache)
+      const r = await fetch(`${SERVICE}/tile/${cx}_${cz}.json?olat=${s.origin.lat}&olon=${s.origin.lon}&v=${TILE_V}`, { signal: AbortSignal.timeout(within) }).catch((e) => ({ ok: false, status: e.name }));
       if (!r.ok) return { cx, cz, ok: false, why: r.status };
       const tj = await r.json();
       return { cx, cz, ok: true, src: r.headers.get('x-tile-source'), cache: r.headers.get('x-tile-cache'), b: tj.buildings.length, r: tj.roads.length };

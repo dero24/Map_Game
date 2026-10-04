@@ -326,7 +326,7 @@ log(`buildings ${buildings.length} (skipped ${skipped}); kinds`, buildings.reduc
 log('real attributes', colourStats);
 
 // ---------- 3. Roads, bridges, areas, lines, points ----------
-const ROAD_W = { motorway: 14, trunk: 12, primary: 11, primary_link: 6, secondary: 9, secondary_link: 6, tertiary: 8, tertiary_link: 5, residential: 6.5, unclassified: 6, living_street: 5, service: 4, pedestrian: 5, track: 3, footway: 1.8, path: 1.5, cycleway: 2, steps: 2, bridleway: 2, construction: 5 };
+const ROAD_W = { motorway: 14, motorway_link: 7, trunk: 12, trunk_link: 6.5, primary: 11, primary_link: 6, secondary: 9, secondary_link: 6, tertiary: 8, tertiary_link: 5, residential: 6.5, unclassified: 6, living_street: 5, service: 4, pedestrian: 5, track: 3, footway: 1.8, path: 1.5, cycleway: 2, steps: 2, bridleway: 2, construction: 5 };
 const roads = [];
 for (const e of els) {
   const t = e.tags ?? {};

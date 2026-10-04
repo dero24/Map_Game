@@ -350,7 +350,7 @@ export function sampleRoof(img: Aerial, mask: readonly number[], si: number, sj:
 }
 
 // Streets the photo reads as grey: paved, above ground, wide enough to see.
-const PAVED = new Set(['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'living_street', 'service', 'primary_link', 'secondary_link', 'tertiary_link', 'pedestrian']);
+const PAVED = new Set(['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'living_street', 'service', 'motorway_link', 'trunk_link', 'primary_link', 'secondary_link', 'tertiary_link', 'pedestrian']);
 /** Grey references from the cell's streets: pixels down the middle of each paved street (the
  *  middle 60% of its width, every pixel's length), greenery and deep shade left out. Raw values. */
 export function streetSamples(img: Aerial, roads: readonly { p: number[]; c: string; w: number; br?: unknown; tu?: unknown }[], cap = 12000): RGB[] {

@@ -83,6 +83,17 @@ describe('osmToTile — roads', () => {
     expect(ocean.bs).toBeUndefined();
     expect(t.roads.find((r) => r.c === 'motorway')!.w).toBe(14);
   });
+  it("a motorway's and a trunk's ramps are streets: every interchange keeps its on- and off-ramps", () => {
+    const t = osmToTile(
+      osm(
+        way(1, { highway: 'motorway_link', oneway: 'yes' }, [[100, 100], [400, 300]]),
+        way(2, { highway: 'trunk_link', lanes: '2' }, [[100, 600], [400, 800]]),
+      ),
+      OPTS,
+    );
+    // (one lane and its shoulders; two mapped lanes are 3.2 m each and a metre of gutter — never kerb parking)
+    expect(t.roads.map((r) => [r.c, r.w, r.pk])).toEqual([['motorway_link', 7, undefined], ['trunk_link', 7.4, undefined]]);
+  });
   it('mapped street parking (either scheme) widens the carriageway and marks the kerbs', () => {
     expect(parkSide({ 'parking:both': 'lane' }, 'left')).toBe(1);
     expect(parkSide({ 'parking:right': 'lane', 'parking:right:orientation': 'diagonal' }, 'right')).toBe(2);

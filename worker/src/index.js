@@ -162,6 +162,7 @@ async function tile(request, env, ctx, url, cx, cz) {
   // v23: bridges' bridge:structure / bridge:movable (Road.bs / Road.bm) and the micro layer's
   // furniture (picnic tables, boards, cabinets, recycling, clocks, seamarks…)
   // v24: roof:levels in the height (Building.rl)
+  // v25: motorway and trunk ramps (their links) are streets; every cell from our own extract's snapshot
   const okey = tileKey(olat, olon, cx, cz);
   const bucket = env.TILES ?? null; // binding may be absent under `wrangler dev` before the bucket exists
   if (bucket) {
@@ -196,7 +197,7 @@ async function tile(request, env, ctx, url, cx, cz) {
   return json(out.body, { headers: { ...headers, 'x-tile-cache': 'miss' } });
 }
 
-const tileKey = (olat, olon, cx, cz) => `t/v24/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
+const tileKey = (olat, olon, cx, cz) => `t/v25/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
 // A cell's TileJson text, as /tile answers it (R2, else the cold path), or null — the /measured
 // route measures the buildings the client got from /tile, keyed the same way.
 async function tileText(env, olat, olon, cx, cz) {

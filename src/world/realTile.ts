@@ -341,7 +341,8 @@ export const TAG_ROOF_COLOURS: ReadonlySet<number> = new Set([...Object.values(N
 
 // ---------------- tag tables (port of scripts/bake.mjs) ----------------
 
-const ROAD_W: Record<string, number> = { motorway: 14, trunk: 12, primary: 11, primary_link: 6, secondary: 9, secondary_link: 6, tertiary: 8, tertiary_link: 5, residential: 6.5, unclassified: 6, living_street: 5, service: 4, pedestrian: 5, track: 3, footway: 1.8, path: 1.5, cycleway: 2, steps: 2, bridleway: 2, construction: 5 };
+// (a motorway's or a trunk's ramps are its links — every interchange's on- and off-ramps)
+const ROAD_W: Record<string, number> = { motorway: 14, motorway_link: 7, trunk: 12, trunk_link: 6.5, primary: 11, primary_link: 6, secondary: 9, secondary_link: 6, tertiary: 8, tertiary_link: 5, residential: 6.5, unclassified: 6, living_street: 5, service: 4, pedestrian: 5, track: 3, footway: 1.8, path: 1.5, cycleway: 2, steps: 2, bridleway: 2, construction: 5 };
 const PARK_DEFAULT = new Set(['residential', 'unclassified', 'tertiary', 'secondary']);
 /** Tall structures built from the map's own point (props.ts, assets/tower.ts): a lattice mast (TV,
  *  radio, phone), a water tower, a chimney, a flagpole — trees never grow within 15 m of them
