@@ -2,7 +2,7 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
-## 2026-10-04 — Foundation first (5): audit round 2 — every cell real; the slow cities; the horizon; a phone holds each vertex once
+## 2026-10-04 — Foundation first (5): audit round 2 — every cell real; the slow cities; the horizon; a phone holds each vertex once; the comparison across the lower 48
 
 The lower-48 audit again (`docs/earth/AUDIT_48.md` round 2), now that every cell comes from our own
 extract: 19 towns, desktop and phone, first visits at t/v25.
@@ -40,9 +40,38 @@ extract: 19 towns, desktop and phone, first visits at t/v25.
   (`WEBGL_lose_context`) reloaded at the same spot, the phone montage is unchanged, and
   `tools/mobile-check.mjs` passes. The stream's budgets weigh a tile before its upload, so their
   counts are unchanged.
-- **Next:** Robby's `?diag=1` at the airport on his phone, then Tier 1. The audit's looks-right
-  leads are Aspen's lawn-green mountain, a Duluth street frame with no street, a car parked on a
-  crossing, and the airfield's runways drawn as thin lines.
+- **The real-world comparison runs on real cells** (`real-world-comparison`, Tier 1 #1, unblocked).
+  Making it measure honestly came first:
+  - A streamed cell's ground, roads and area sheets had no names, so the class pass counted every
+    real street as "other". They are now `ground:cell`, `road:ribbons` and `water:area`.
+  - A photo has to be fit: quality 0.4 or better, the sun up, segmented, and a lens of 30° or
+    more. Portland's rain-dark windscreen scored 0.05, and Ashland's "street" was a deer at 5.7°.
+  - The game's lens takes the photo's pitch from Mapillary's computed rotation, whose heading matches
+    the compass exactly. Dash cameras tilt from −10° to +20°, and +3° on average had been reading
+    as too little sky in the game.
+  - Mapillary's computed altitude is too noisy to lift the lens: it raised Oklahoma City's by 47 m
+    over a street photo. Only the roof of a mapped building the photo stands in lifts it now.
+
+  The first national run (`national-1`, 106 photo spots) scored 83, with a mean of 0.689; the baked
+  shore scores 0.85. Across the lower 48, photo against game, in percent:
+
+  | | Sky | Building | Vegetation | Ground | Vehicle | Other |
+  |---|---|---|---|---|---|---|
+  | Photo | 27 | 20 | 14 | 27 | 4 | 9 |
+  | Game | 31 | 27 | 5 | 32 | 4 | 2 |
+
+  - **Vegetation is the gap:** the game shows a third of the photos' vegetation, worst in the
+    South (Tennessee −52 points, Texas −32, Louisiana −31). Los Angeles's street trees and lawns
+    are drawn as plain blocks.
+  - **Street furniture:** "other" (poles, signs, fences, barriers) is a quarter of the photos'.
+  - **Buildings stand too close or too bare:** 7 points too much of the view.
+  - In New York and Portland the opposite happens: a LiDAR crown, or a mapped tree in its pit, right
+    at the lens where the photo shows none.
+  - The montages are `shots/real/<ST>-montage.jpg`.
+- **Next:** Robby's `?diag=1` at the airport on his phone. Then Tier 1 from the comparison, worst
+  first: vegetation in yards and along roads (a third of the photos'), then street furniture. The
+  audit's leads are Aspen's lawn-green mountain, a Duluth street frame with no street, a car parked
+  on a crossing, and the airfield's runways drawn as thin lines.
 
 ## 2026-10-04 — Foundation first (4): the US extract built, proven, live; every ramp; the airport crash
 

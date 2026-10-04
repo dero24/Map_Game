@@ -10,7 +10,8 @@
 //   node tools/real-spots.mjs [--states=NJ,NY] [--per=3] [--recheck]   (needs raw/places: node scripts/build-places.mjs --fetch)
 // A photo must be fit to compare against: Mapillary's quality score ≥ 0.4 (a rain-dark windscreen
 // scored 0.05), taken in daylight (the sun up), and segmented — sky, street or walls, not only the
-// objects Mapillary found in it (poles, signs: every labelled patch of the view 'other'). `--recheck`
+// objects Mapillary found in it (poles, signs: every labelled patch of the view 'other'), and not a
+// close-up (a lens of 30° or more). `--recheck`
 // tries a kept spot's photo against that again and picks anew where it fails (a spot with no fit photo
 // keeps its old one, marked `unfit`).
 // Mapillary: CC BY-SA 4.0 imagery, development use (docs/DATA_SOURCES.md §0); the token is .env's ACCESS_TOKEN.
@@ -69,7 +70,7 @@ for (const [usps, geoid, , , name, lsad, , , , , , lat, lon] of gaz) {
 }
 
 async function images(bb) {
-  const u = `https://graph.mapillary.com/images?fields=id,captured_at,computed_compass_angle,computed_geometry,computed_altitude,camera_type,is_pano,camera_parameters,width,height,creator,quality_score&bbox=${bb.map((v) => v.toFixed(5)).join(',')}&limit=100`;
+  const u = `https://graph.mapillary.com/images?fields=id,captured_at,computed_compass_angle,computed_geometry,computed_altitude,computed_rotation,camera_type,is_pano,camera_parameters,width,height,creator,quality_score&bbox=${bb.map((v) => v.toFixed(5)).join(',')}&limit=100`;
   for (let i = 0; i < 3; i++) {
     const r = await fetch(u, { ...H, signal: AbortSignal.timeout(30000) }).catch(() => null);
     if (r?.ok) return (await r.json()).data ?? [];
@@ -97,7 +98,19 @@ async function segmented(id) {
   }
   return null;
 }
-const fitWhy = async (x, lat, lon) => (x.quality_score != null && x.quality_score < 0.4 ? `quality ${x.quality_score}` : sunAlt(lat, lon, x.captured_at) < 0 ? 'taken in the dark' : (await segmented(x.id)) === false ? 'not segmented' : null);
+// (a lens under 30° is a close-up — Ashland's was a deer at 5.7° — not a view down the street)
+const lensOf = (x) => { const f = x.camera_parameters?.[0], w = x.width, h = x.height; return f > 0 && w > 0 ? (2 * Math.atan((w / Math.max(w, h)) * 0.5 / f) * 180) / Math.PI : null; };
+const fitWhy = async (x, lat, lon) => (x.quality_score != null && x.quality_score < 0.4 ? `quality ${x.quality_score}` : (lensOf(x) ?? 90) < 30 ? 'a close-up lens' : sunAlt(lat, lon, x.captured_at) < 0 ? 'taken in the dark' : (await segmented(x.id)) === false ? 'not segmented' : null);
+// the camera's pitch, degrees up, from Mapillary's computed rotation (OpenSfM: world→camera, the world
+// east-north-up, the camera's z its view): the view is the rotation's third row (its heading matches
+// computed_compass_angle exactly). A dash camera tilts: −10° to +16° across the spots.
+function pitchOf(rv) {
+  if (!Array.isArray(rv) || rv.length !== 3) return null;
+  const t = Math.hypot(...rv);
+  if (!(t > 1e-9)) return 90; // (no rotation: the camera's z is the world's up)
+  const kz = rv[2] / t, up = Math.cos(t) + kz * kz * (1 - Math.cos(t)); // (the view's up component: R[2][2], Rodrigues)
+  return +((Math.asin(Math.max(-1, Math.min(1, up))) * 180) / Math.PI).toFixed(1);
+}
 const usable = (x) => x.camera_type === 'perspective' && !x.is_pano && x.captured_at >= SINCE && x.computed_geometry && isFinite(x.computed_compass_angle) && x.camera_parameters?.[0] > 0;
 async function photoNear(lat, lon, seed, aim = null) {
   // (small first: a dense centre answers "too much data" for a big box — then smaller still)
@@ -119,7 +132,7 @@ async function photoNear(lat, lon, seed, aim = null) {
     // (Mapillary's focal is a share of the image's longer side)
     const along = (side) => 2 * Math.atan((side / Math.max(w, h)) * 0.5 / f) * D;
     const hfov = along(w), vfov = along(h);
-    return { id: pick.id, lat: +plat.toFixed(7), lon: +plon.toFixed(7), heading: +pick.computed_compass_angle.toFixed(2), hfov: +hfov.toFixed(1), vfov: +vfov.toFixed(1), w, h, captured: new Date(pick.captured_at).toISOString(), by: pick.creator?.username ?? '', within: half, q: pick.quality_score ?? null, calt: Number.isFinite(pick.computed_altitude) ? +pick.computed_altitude.toFixed(1) : null };
+    return { id: pick.id, lat: +plat.toFixed(7), lon: +plon.toFixed(7), heading: +pick.computed_compass_angle.toFixed(2), hfov: +hfov.toFixed(1), vfov: +vfov.toFixed(1), w, h, captured: new Date(pick.captured_at).toISOString(), by: pick.creator?.username ?? '', within: half, q: pick.quality_score ?? null, calt: Number.isFinite(pick.computed_altitude) ? +pick.computed_altitude.toFixed(1) : null, pitch: pitchOf(pick.computed_rotation) };
   }
   return null;
 }
@@ -128,11 +141,11 @@ const prev = existsSync(OUT) ? JSON.parse(readFileSync(OUT, 'utf8')) : { spots: 
 const RECHECK = !!args.recheck;
 async function unfitWhy(img) {
   if (!RECHECK) return null;
-  const r = await fetch(`https://graph.mapillary.com/${img.id}?fields=id,quality_score,captured_at,computed_altitude`, { ...H, signal: AbortSignal.timeout(30000) }).catch(() => null);
+  const r = await fetch(`https://graph.mapillary.com/${img.id}?fields=id,quality_score,captured_at,computed_altitude,computed_rotation,camera_parameters,width,height`, { ...H, signal: AbortSignal.timeout(30000) }).catch(() => null);
   if (!r?.ok) return null; // (can't ask: keep it)
   const x = await r.json();
   const why = await fitWhy(x, img.lat, img.lon);
-  if (!why) { img.q = x.quality_score ?? null; img.calt = Number.isFinite(x.computed_altitude) ? +x.computed_altitude.toFixed(1) : null; delete img.unfit; return null; }
+  if (!why) { img.q = x.quality_score ?? null; img.calt = Number.isFinite(x.computed_altitude) ? +x.computed_altitude.toFixed(1) : null; img.pitch = pitchOf(x.computed_rotation); delete img.unfit; return null; }
   console.log(`  ${img.id}: ${why} — picking anew`);
   return why;
 }

@@ -266,15 +266,21 @@
       "title": "The real-world comparison loop: Mapillary photos against game renders from the same spot, heading and field of view, a montage per state, scored, worst fixed first",
       "user_visible_behavior": "(Developer) One command samples seeded spots in every state, fetches an openly licensed street photo for each (Mapillary; never Google Street View), renders the game from the same pose, puts the pairs side by side and scores them — the score history says whether a change made the lower 48 more like itself.",
       "verification": [
-        "First run 2026-10-03, the shore (3 spots, baked): 0.811 / 0.872 / 0.867 — the game shows a quarter or less of the photos' vegetation and a fifth to a third of their poles, signs and furniture"
+        "First run 2026-10-03, the shore (3 spots, baked): 0.811 / 0.872 / 0.867 — the game shows a quarter or less of the photos' vegetation and a fifth to a third of their poles, signs and furniture",
+        "national-1 (2026-10-04, tools/real-scores.json): 106 photo spots in every lower-48 state, 83 scored, mean 0.689 (the baked shore 0.85); photo vs game: vegetation 14% vs 5%, other (street furniture) 9% vs 2%, building 20% vs 27%"
       ],
       "evidence": [
         "tools/real-spots.mjs (seeded spots per state, Mapillary images with their segmentation, cached outside git)",
         "tools/real-compare.mjs (the game from the photo's pose, lens, date and hour; side by side; scored)",
         "tools/class-pass.js (the game's class mix)",
-        "tools/real-scores.json (one entry a run)"
+        "tools/real-scores.json (one entry a run)",
+        "tools/real-spots.mjs (fit photos: quality, daylight, segmented, a 30°+ lens; --recheck; the photo's pitch)",
+        "tools/real-compare.mjs (unscored unfit photos; the lens at the photo's pitch, on a roof it stands in)",
+        "src/world/synth.ts (streamed ground, roads, area sheets named for the class pass)",
+        "shots/real/<ST>-montage.jpg",
+        "docs/agent/debugging.md \"The real-world comparison\""
       ],
-      "notes": "docs/GAMEPLAY_VISION.md §17. Photos cached outside git, never shipped; never unblur faces or plates; NAIP aerial comparison where no photo. Mapillary token from Robby in .env (git-ignored). Blocked 2026-10-03 on own-osm-extract: the per-state run waits for real cells (most new places are vector twins until the extract is live). Unblocked 2026-10-04: the extract is live (every cell real, AUDIT_48 round 2)."
+      "notes": "docs/GAMEPLAY_VISION.md §17. Photos cached outside git, never shipped; never unblur faces or plates; NAIP aerial comparison where no photo. Mapillary token from Robby in .env (git-ignored). Blocked 2026-10-03 on own-osm-extract: the per-state run waits for real cells (most new places are vector twins until the extract is live). Unblocked 2026-10-04: the extract is live (every cell real, AUDIT_48 round 2). 2026-10-04: the loop measures honestly on real cells (named ground; fit photos; pitch) and ran nationally. Worst-first queue from it: vegetation (a third of the photos', worst in the South), then street furniture."
     },
     {
       "id": "place-parity",

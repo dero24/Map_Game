@@ -140,11 +140,12 @@ async function render(s) {
     G.walkParams.fov = img.vfov; // (the lens: the photo's own, vertically — the window is its shape)
     G.walkParams.fly = true;
     const ground = T.heightAt(x, z);
-    G.walker.place(x, z, -img.heading * Math.PI / 180, 0); // (a compass bearing, clockwise from north → the game's yaw)
+    // (a compass bearing, clockwise from north → the game's yaw; the photo's own pitch: a dash camera tilts)
+    G.walker.place(x, z, -img.heading * Math.PI / 180, ((img.pitch ?? 0) * Math.PI) / 180);
     G.walker.y = ground + 2.0; // (Mapillary's cameras ride a car's roof or a walker's hand: 2 m)
-    // …or a deck, a bridge, a road the DEM smooths away: the photo's own height where it's well above
-    // the game's ground (Mapillary's computed altitude: metres above sea level, as the DEM's are)
-    let lift = img.calt != null && img.calt - ground > 4 && img.calt - ground < 80 ? img.calt - ground : 0;
+    // (not Mapillary's computed altitude: national-1 lifted 15 of 83 lenses by it, Oklahoma City's 47 m and
+    // Belvedere's 23 m over photos plainly taken from the street — it's metres-noisy)
+    let lift = 0;
     // (a photo whose place is inside a mapped building was taken from on top of it — a car park's top
     // deck, a roof terrace: Bangor's looks out over a lot from one — the lens stands on its roof)
     const pin = (r, px, pz) => { let ins = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (r[i][1] > pz !== r[j][1] > pz && px < ((r[j][0] - r[i][0]) * (pz - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) ins = !ins; return ins; };
@@ -179,7 +180,7 @@ for (const [st, list] of byState) {
       const sc = unfit ? null : score(ps.shares, g.cls);
       run.spots[s.id] = { score: sc, ...(unfit ? { unscored: unfit } : {}), photo: ps.shares, labelled: ps.labelled, game: g.cls, cell: g.cell, water: g.water, date: g.date, hour: g.hour };
       pairs.push({ s, sc, ps, g, photo: p.jpg.toString('base64'), game: g.shot.toString('base64') });
-      log(`${s.id} ${s.town}: score ${sc ?? `n/a (${unfit})`} · cell ${g.cell}${g.lift ? ` · lens ${g.lift} m up (the photo's height)` : ''}${g.water ? ' (WATER under the lens)' : ''} · photo ${JSON.stringify(ps.shares)} · game ${JSON.stringify(g.cls)}${g.errors.length ? ` · ${g.errors.length} page errors` : ''}`);
+      log(`${s.id} ${s.town}: score ${sc ?? `n/a (${unfit})`} · cell ${g.cell}${g.lift ? ` · lens ${g.lift} m up (on the roof it stands in)` : ''}${g.water ? ' (WATER under the lens)' : ''} · photo ${JSON.stringify(ps.shares)} · game ${JSON.stringify(g.cls)}${g.errors.length ? ` · ${g.errors.length} page errors` : ''}`);
     } catch (e) { log(`${s.id}: failed — ${e.message}`); run.spots[s.id] = { error: String(e.message).slice(0, 200) }; }
   }
   if (!pairs.length) continue;

@@ -370,8 +370,10 @@ hour; each pair scored by the class mix (sky, buildings, vegetation, ground, wat
   signs), which leaves every labelled patch "other". `--recheck` re-tests kept spots and picks
   again; a spot with no fit photo keeps its old one marked `unfit`. The compare tool shows
   unsegmented photos but doesn't score them.
-- **The lens:** 2 m over the game's ground, or the photo's own computed altitude where that is
-  more than 4 m higher (a bridge, a deck), or on the roof of a mapped building the photo stands in.
+- **The lens:** 2 m over the game's ground, at the photo's own heading and pitch (Mapillary's
+  computed rotation: dash cameras tilt −10° to +20°, +3° on average), or on the roof of a mapped
+  building the photo stands in. Not at Mapillary's computed altitude: it's metres-noisy, and it lifted
+  15 of 83 lenses over photos plainly taken from the street. Lenses under 30° (close-ups) are unfit.
   A game frame that's nearly all wall where the photo isn't is a pose the map can't place (Bangor:
   a car-park deck that isn't mapped as a building). Treat it as an outlier, not a renderer bug.
 
