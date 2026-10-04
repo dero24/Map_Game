@@ -84,6 +84,9 @@ for (const c of cells) {
           if (!r.ok) { console.log(`  ${ep}: ${r.status}`); continue; }
           const j = await r.json();
           if (j.remark && /error|timed out|out of memory/i.test(j.remark)) { console.log(`  ${ep}: ${j.remark.slice(0, 100)}`); continue; }
+          // (today's data must be newer than the snapshot: a mirror months behind differs for its own age)
+          const base = j.osm3s?.timestamp_osm_base ?? '';
+          if (args.now && base && base < index.ts) { console.log(`  ${ep}: its data is from ${base}, before the snapshot — no comparison`); continue; }
           return { j, host: ep.split('/')[2] };
         } catch (e) { console.log(`  ${ep}: ${e.message}`); }
       }
