@@ -22,7 +22,7 @@
 import { DuckDBInstance } from '@duckdb/node-api';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
-import { gzip } from 'node:zlib';
+import { gzip, gzipSync } from 'node:zlib';
 import { promisify } from 'node:util';
 import { sqlWhere, queryKeys } from '../src/world/osmQuery.ts';
 import { TILE_PER_DEG as T, BLOCK_TILES as BT, BIG } from '../src/world/osmTiles.ts';
@@ -223,10 +223,14 @@ const add = async (key, bufP) => {
   st.off += b.length;
   return at;
 };
-// tiles compress on libuv's pool (UV_THREADPOOL_SIZE) in order; at most a few hundred in flight
+// tiles compress on libuv's pool (UV_THREADPOOL_SIZE) in order; at most a few hundred in flight. A
+// small tile — most of the US's ~15 M: a field's few lines, a back road — compresses right here:
+// its round trip to the pool (which DuckDB's reads share) cost ~1.7 ms a tile with the machine
+// idle, hours in all, against 0.02 ms done in place (the same zlib: the same bytes either way)
 let chain = Promise.resolve();
 const queue = (tile, text) => {
-  const p = gz(Buffer.from(text), { level: 6 });
+  const buf = Buffer.from(text);
+  const p = buf.length < 65536 ? Promise.resolve(gzipSync(buf, { level: 6 })) : gz(buf, { level: 6 });
   const s = st;
   chain = chain.then(async () => { s.dir[tile] = await add(tile, p); });
   s.pending.push(p);
