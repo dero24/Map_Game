@@ -101,18 +101,21 @@ if (!KEEP) {
       OR id IN (SELECT ref FROM mem WHERE mtype = 'node')`);
   // 6. relations printed with their members' geometry (one join per member type: a LEFT JOIN whose
   //    ON tests the left side's type ran as a nested loop)
+  //    (a member's empty role — OSM allows it; Overpass prints "role": "" — comes from ST_ReadOSM as NULL,
+  //    and NULL in a concatenation is NULL: the member vanished from its relation, a relation of
+  //    only such members printed as null)
   await step('relation members', ['mj', 'tall'], `CREATE OR REPLACE TABLE mj AS
     SELECT mem.rid, mem.mi, mem.mtype, mem.ref,
-      '{"type":"way","ref":' || mem.ref || ',"role":' || to_json(mem.role) || CASE WHEN wg.id IS NULL THEN '' ELSE ',"geometry":' || to_json(wg.geom) END || '}' j,
+      '{"type":"way","ref":' || mem.ref || ',"role":' || to_json(coalesce(mem.role, '')) || CASE WHEN wg.id IS NULL THEN '' ELSE ',"geometry":' || to_json(wg.geom) END || '}' j,
       wg.s, wg.w, wg.n, wg.e
     FROM mem LEFT JOIN wg ON wg.id = mem.ref WHERE mem.mtype = 'way'
     UNION ALL
     SELECT mem.rid, mem.mi, mem.mtype, mem.ref,
-      '{"type":"node","ref":' || mem.ref || ',"role":' || to_json(mem.role) || CASE WHEN np.id IS NULL THEN '' ELSE ',"lat":' || to_json(np.lat) || ',"lon":' || to_json(np.lon) END || '}' j,
+      '{"type":"node","ref":' || mem.ref || ',"role":' || to_json(coalesce(mem.role, '')) || CASE WHEN np.id IS NULL THEN '' ELSE ',"lat":' || to_json(np.lat) || ',"lon":' || to_json(np.lon) END || '}' j,
       np.lat, np.lon, np.lat, np.lon
     FROM mem LEFT JOIN sel_n np ON np.id = mem.ref WHERE mem.mtype = 'node'
     UNION ALL
-    SELECT mem.rid, mem.mi, mem.mtype, mem.ref, '{"type":"relation","ref":' || mem.ref || ',"role":' || to_json(mem.role) || '}' j, NULL, NULL, NULL, NULL
+    SELECT mem.rid, mem.mi, mem.mtype, mem.ref, '{"type":"relation","ref":' || mem.ref || ',"role":' || to_json(coalesce(mem.role, '')) || '}' j, NULL, NULL, NULL, NULL
     FROM mem WHERE mem.mtype NOT IN ('way', 'node')`);
   await step('relation json', ['rj', 'tall'], `CREATE OR REPLACE TABLE rj AS SELECT sel_r.id, min(mj.s) s, min(mj.w) w, max(mj.n) n, max(mj.e) e,
       '{"type":"relation","id":' || sel_r.id || ',"members":[' || string_agg(mj.j, ',' ORDER BY mj.mi) || '],"tags":' || to_json(any_value(sel_r.tags)) || '}' payload
@@ -201,6 +204,7 @@ log(`packing ${cols.length} block columns in ${bands.length} bands (≤ ${(BAND_
 // one ends its stream — the first run stopped after one vector, 2,048 lines)
 const side = await db.connect();
 let block = null, total = 0, nBlocks = 0;
+let tallBy = new Map(), bigBy = new Map(); // (the band being packed: its blocks' tall things and big relations)
 let st = null;
 const startBlock = (key) => { st = { key, parts: [[]], off: 0, dir: {}, pending: [], lines: 0, tile: null, buf: [] }; };
 const add = async (key, bufP) => {
@@ -227,11 +231,14 @@ const endBlock = async () => {
   const w = flushTile();
   if (w) await w;
   await chain;
-  const [bx, by] = st.key.split('_');
-  const tallRows = (await side.runAndReadAll(`SELECT k, id, s, w, n, e, payload FROM tall WHERE bx = ${bx} AND bym = ${by} ORDER BY k, id`)).getRows();
+  const tallRows = tallBy.get(st.key) ?? [];
+  for (const r of tallRows) if (r[6] == null) throw new Error(`tall ${r[0]}${r[1]} printed as null`);
   const tall = tallRows.length ? await add('tall', gz(Buffer.from(tallRows.map((r) => r.join('\t')).join('\n') + '\n'), { level: 6 })) : null;
   const big = {};
-  for (const [id, payload] of (await side.runAndReadAll(`SELECT id, payload FROM bigs WHERE bx = ${bx} AND bym = ${by} ORDER BY id`)).getRows()) big[id] = await add('big', gz(Buffer.from(payload), { level: 6 }));
+  for (const [id, payload] of bigBy.get(st.key) ?? []) {
+    if (payload == null) throw new Error(`big relation ${id} printed as null`);
+    big[id] = await add('big', gz(Buffer.from(payload), { level: 6 }));
+  }
   const bins = st.parts.map((p) => Buffer.concat(p));
   const h = createHash('sha256');
   for (const b of bins) h.update(b);
@@ -250,6 +257,12 @@ const endBlock = async () => {
 for (const band of bands) {
   if (index.packed.includes(`${band.bx0}-${band.bx1}`)) { log(`band ${band.bx0}–${band.bx1} (kept from the last run)`); continue; }
   const t = Date.now();
+  // (the band's tall things and big relations, read once for all its blocks — a query a block over
+  // the whole tables took ~1.5 s, and the US has ~2,000 blocks; in the same order as before)
+  tallBy = new Map(); bigBy = new Map();
+  const group = (m, key, row) => (m.get(key) ?? m.set(key, []).get(key)).push(row);
+  for (const [bx, by, ...r] of (await side.runAndReadAll(`SELECT bx, bym, k, id, s, w, n, e, payload FROM tall WHERE bx BETWEEN ${band.bx0} AND ${band.bx1} ORDER BY bx, bym, k, id`)).getRows()) group(tallBy, `${bx}_${by}`, r);
+  for (const [bx, by, ...r] of (await side.runAndReadAll(`SELECT bx, bym, id, payload FROM bigs WHERE bx BETWEEN ${band.bx0} AND ${band.bx1} ORDER BY bx, bym, id`)).getRows()) group(bigBy, `${bx}_${by}`, r);
   const res = await con.stream(sql(band.bx0, band.bx1));
   for (let empty = 0; ; ) {
     const chunk = await res.fetchChunk();
@@ -261,6 +274,8 @@ for (const band of bands) {
       if (key !== block) { await endBlock(); block = key; startBlock(key); }
       const tile = `${tx}_${ty}`;
       if (tile !== st.tile) { const wait = flushTile(); if (wait) await wait; st.tile = tile; }
+      // (never a "null" line — a NULL anywhere in its SQL concatenation — the service would fall over it)
+      if (payload == null) throw new Error(`${k}${id} printed as null`);
       st.buf.push(`${k}\t${id}\t${s}\t${w}\t${n}\t${e}\t${payload}`);
       st.lines++;
     }
