@@ -56,6 +56,8 @@ window.__MONTAGE__ = async (items, opts = {}) => {
     ctx.drawImage(canvas, x, y, CW, CH);
     ctx.fillText(label, x + 8, y + CH + 16);
   }
+  // (a caller that composes its own sheet — tools/audit48.mjs — takes it as a JPEG data URL)
+  if (opts.dataUrl) return sheet.toDataURL('image/jpeg', opts.quality ?? 0.8);
   if (opts.save) {
     // dev server (vite.config.ts shot-sink) writes it to shots/<save> — read that file.
     const blob = await new Promise((r) => sheet.toBlob(r, 'image/jpeg', 0.82));

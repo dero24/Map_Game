@@ -82,6 +82,55 @@ terrain/DEM, or the LiDAR measure pipeline.
 - The shared transform is `src/world/realTile.ts` (bundled by the worker, unit-tested
   client-side — keep its tag tables in sync with `scripts/bake.mjs`/`lib/colour.mjs`).
 
+## Our own OpenStreetMap extract (the tile service's source; Overpass only a polite fallback)
+
+The public Overpass servers aren't a game's backend (their usage policy; `docs/DATA_SOURCES.md` §0),
+and in October 2026 they mostly didn't answer at all. Robby's call (2026-10-03): our own extract in
+R2, matching Overpass exactly and proven so, packed rather than millions of files, cut on the game's
+own grid, refreshed monthly by a script on his PC.
+
+- **The query, written once** (`src/world/osmQuery.ts`): the cell query's statements. `overpassQuery`
+  is generated from them, byte for byte the old query (`tests/osmQuery.test.ts` keeps a frozen copy);
+  the extract selects with the same list (`sqlWhere` for DuckDB, `matchesQuery` in JS). A new tag the
+  game reads goes into `STATEMENTS` — both sources pick it up together.
+- **The grid** (`src/world/osmTiles.ts`): fixed 1/128° tiles (~0.87 × 0.67 km at 40°N) in 1° blocks,
+  global, so every origin's cells read the same tiles (a game cell's grid depends on where the session
+  started; the extract's doesn't). No state lines: the extract is cut from Geofabrik's whole-US file.
+- **Overpass's rule, reproduced** (`selects`, `assemble`): an element is in a box's answer when a node
+  or a segment of it is inside the box ("at least one point (also points on the segment) is properly
+  inside") — a big lake whose shore never enters the box is not; a relation by any member; full
+  geometry, members in order (`out geom`). Each tile line leads with its bounds, so a reader skips what
+  can't be in its box without parsing it.
+- **The extract** (`scripts/osm-extract.mjs`, DuckDB `ST_ReadOSM`): Geofabrik's file → the query's
+  elements with their geometry → each way's tiles (its line against each tile's envelope, edges
+  included) → a block's tiles gzipped back to back (a part per 200 MB), its tall things (the skylines'
+  layer: buildings ≥ 45 m or 14 storeys, building parts and relations ≥ 45 m, towers and masts
+  ≥ 150 m), its big relations (> 50 KB printed, stored once in their home block, tiles point there) and
+  a directory. Lean on disk: the file read once per kind, each step's table dropped once used, each way
+  printed while it's packed. New Jersey: 2.5 M elements, 373 MB packed, ~1 min.
+- **Upload** (`scripts/osm-upload.mjs`): content-addressed keys — `osm/v1/b/<bx>_<by>.<hash>.<part>.bin`
+  and `.json` — so an unchanged block is never re-written (R2 bills writes), and the index
+  (`osm/v1/index.json`: each block's hash, the snapshot's timestamp, the extract's outline from
+  Geofabrik's `.poly`) goes up last: the service switches in one write, and a directory an isolate
+  held from before still reads the bytes it describes. `--no-index` stages without switching;
+  `--local` fills `wrangler dev`'s R2.
+- **The service** (`worker/src/osm.js`): a cold `/tile` asks the extract first — a box wholly inside
+  the outline (no outline edge crossing it) reads its tiles by range and answers as Overpass would
+  (`x-tile-source: extract`); only a box outside it goes to Overpass, politely: two mirrors, 25 s each,
+  a five-minute rest after three failures, a failure edge-cached ten minutes. `/skyline` serves both
+  skylines from the tall layer (`skyline.ts readTowers`; the browser asks Overpass only on
+  `?tiles=direct`). The browser's own direct-Overpass fallback is gone too: a cell the service can't
+  build keeps its stand-in (the vector twin) and is asked for again later.
+- **The proof** (`tests/osmExtract.test.ts`, `tools/osm-compare.mjs`): real cells' extract tiles and
+  the TileJson the service built from Overpass for the same cell; the extract's, through the same
+  `osmToTile`, must be identical (only `osmBase`, the snapshot's time, differs). `--save` asks Overpass
+  for a box as of the extract's own moment (an attic query) and keeps its raw answer for an
+  element-by-element test, once Overpass answers again.
+- **Refresh, monthly** (on Robby's PC): download Geofabrik's `us-latest.osm.pbf` (12 GB, once — and
+  check its `.md5`), read the timestamp from `us-updates/state.txt`, run the extract, upload (only the
+  changed blocks go up), and the index switches. The R2 TileJson cache (`t/vN`) keeps each cell as it
+  was first built; bump `t/vN` to rebuild every cell from the new extract.
+
 ## DEM terrain
 
 - Worker route `GET /dem/<z>/<x>/<y>.png` proxies Terrarium (S3 has no CORP headers —

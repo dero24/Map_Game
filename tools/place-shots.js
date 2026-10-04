@@ -23,7 +23,10 @@ window.__PLACE__ = async (tag = 'place', opts = {}) => {
   await idle();
 
   // ---- find the place's streets from the map ----
-  const fps = [...G.stream.fpByKey.entries()].filter(([k]) => k[0] !== 's').map(([, f]) => f); // placeholders aren't the place
+  // (a procedural stand-in isn't the place; the vector twin — OpenFreeMap's real streets and
+  // buildings, standing in while a cell's full tile comes — is)
+  const twin = (k) => !!G.stream.loaded.get(String(k).split(':')[0])?.vec;
+  const fps = [...G.stream.fpByKey.entries()].filter(([k]) => k[0] !== 's' || twin(k)).map(([, f]) => f);
   const cen = (f) => { let x = 0, z = 0; for (const p of f.ring) (x += p[0]), (z += p[1]); return [x / f.ring.length, z / f.ring.length]; };
   const shops = fps.filter((f) => f.kind === 'commercial').map((f) => ({ f, c: cen(f), u: useOf(f.name, f.use) }));
   const homes = fps.filter((f) => f.kind === 'house').map((f) => ({ f, c: cen(f) }));
@@ -51,6 +54,10 @@ window.__PLACE__ = async (tag = 'place', opts = {}) => {
   const named = (n) => (s) => (n && s.n === n ? 1 : 0);
   const main = (opts.main && best((s) => named(opts.main)(s) * (1 + near(shops, s, s.w / 2 + 28)) / Math.max(1, s.L / 40))) || best((s) => near(shops, s, s.w / 2 + 28) / Math.max(1, s.L / 40));
   const resi = (opts.resi && best((s) => named(opts.resi)(s) * (1 + near(homes, s, s.w / 2 + 22)) / Math.max(1, s.L / 40))) || best((s) => (s.c === 'residential' ? near(homes, s, s.w / 2 + 22) / Math.max(1, s.L / 40) : 0));
+  // (no shop street or lived-on street found — a place of offices, a park, a farm road: the nearest
+  // street there is, so no frame is left standing at the spawn)
+  const nearestSeg = () => segs.reduce((b, sg) => { const d = Math.hypot((sg.ax + sg.bx) / 2 - x0, (sg.az + sg.bz) / 2 - z0); return !b || d < b.d ? { sg, d } : b; }, null)?.sg;
+  const mainS = main ?? nearestSeg(), resiS = resi ?? nearestSeg();
   // stand at the kerb of a segment, looking along it (or `turn` toward the buildings)
   const kerb = (s, side = 1, turn = 0, back = 0) => {
     // mid-sidewalk (2 m behind the kerb line): a row of parked cars at the kerb stays in front of
@@ -142,14 +149,14 @@ window.__PLACE__ = async (tag = 'place', opts = {}) => {
   };
   const lbl = (s) => (s?.n ? ` (${s.n})` : '');
   const F = [
-    { label: `1 main street, morning${lbl(main)}`, fn: async () => { set(9.5); if (main) kerb(main, 1, 0); await wait(1200); } },
-    { label: `2 main street, looking at the shops${lbl(main)}`, fn: async () => { set(12.5); if (main) kerb(main, -1, 0.9, main.L * 0.5); await wait(1200); } },
-    { label: `3 main street at golden hour${lbl(main)}`, fn: async () => { set(await goldenHour()); if (main) kerb(main, -1, Math.PI); await wait(1200); } },
-    { label: `4 main street at night${lbl(main)}`, fn: async () => { set(21.5); if (main) kerb(main, 1, 0.15); await wait(1200); } },
-    { label: `5 a residential street${lbl(resi)}`, fn: async () => { set(10.5); if (resi) kerb(resi, 1, 0.3); await wait(1200); } },
+    { label: `1 main street, morning${lbl(mainS)}`, fn: async () => { set(9.5); if (mainS) kerb(mainS, 1, 0); await wait(1200); } },
+    { label: `2 main street, looking at the shops${lbl(mainS)}`, fn: async () => { set(12.5); if (mainS) kerb(mainS, -1, 0.9, mainS.L * 0.5); await wait(1200); } },
+    { label: `3 main street at golden hour${lbl(mainS)}`, fn: async () => { set(await goldenHour()); if (mainS) kerb(mainS, -1, Math.PI); await wait(1200); } },
+    { label: `4 main street at night${lbl(mainS)}`, fn: async () => { set(21.5); if (mainS) kerb(mainS, 1, 0.15); await wait(1200); } },
+    { label: `5 a residential street${lbl(resiS)}`, fn: async () => { set(10.5); if (resiS) kerb(resiS, 1, 0.3); await wait(1200); } },
     { label: '6 from the air', fn: async () => {
       set(15);
-      const s = main ?? resi;
+      const s = mainS ?? resiS;
       if (s) {
         // above every roof between the lens and the street (in Midtown 120 m is inside a tower)
         const mx = (s.ax + s.bx) / 2, mz = (s.az + s.bz) / 2, g = G.world.terrain.heightAt(mx, mz);
@@ -160,8 +167,8 @@ window.__PLACE__ = async (tag = 'place', opts = {}) => {
       await wait(1500);
     } },
     { label: `7 the tallest building (${tallest ? Math.round(tallest.top - tallest.base) + ' m' : '—'})`, fn: async () => { set(14); if (tallest) { const [cx, cz] = cen(tallest), P = tallPose(tallest); lookAt(cx, cz, tallest.base + (tallest.top - tallest.base) * 0.55, P.x, P.z, G.world.terrain.heightAt(P.x, P.z) + 1.7); } await wait(1500); } },
-    { label: '8 the horizon', fn: async () => { set(16.5); const h = skyline(); lookAt(x0 + Math.sin(h.yaw) * 1000, z0 + Math.cos(h.yaw) * 1000, h.eye + Math.tan(h.pitch) * 1000, x0, z0, h.eye); F[7].label = `8 the horizon (${h.what})`; await wait(1500); } },
-    { label: '9 inside a café / restaurant', fn: async () => { set(13); const r = await interior(['cafe', 'restaurant', 'bar']); if (typeof r === 'string') F[8].label = `9 inside ${r}`; } },
+    { label: '8 the horizon', fn: async () => { set(16.5); const h = skyline(); lookAt(x0 + Math.sin(h.yaw) * 1000, z0 + Math.cos(h.yaw) * 1000, h.eye + Math.tan(h.pitch) * 1000, x0, z0, h.eye); F.find((f) => f.label.startsWith('8 the horizon')).label = `8 the horizon (${h.what})`; await wait(1500); } },
+    { label: '9 inside a café / restaurant', fn: async () => { set(13); const r = await interior(['cafe', 'restaurant', 'bar']); if (typeof r === 'string') F.find((f) => f.label.startsWith('9 inside')).label = `9 inside ${r}`; } },
   ];
   // Look comparison: opts.looks = ['watercolor', 'fine detail', …] renders opts.frames (default: the
   // morning street, golden hour and the horizon) once per look, a row per look, to
@@ -185,13 +192,19 @@ window.__PLACE__ = async (tag = 'place', opts = {}) => {
     dispatchEvent(new Event('resize'));
     return { res, looks: opts.looks, frames: pick.map((i) => F[i].label) };
   }
+  // opts.only picks frames by index (0-based), opts.extra appends the caller's own — the audit
+  // (tools/audit48.js) takes four of these and a straight-down view; opts.dataUrl returns the sheet
+  if (opts.only || opts.extra) {
+    const keep = [...(opts.only ? opts.only.map((i) => F[i]).filter(Boolean) : F), ...(opts.extra ?? [])];
+    F.splice(0, F.length, ...keep);
+  }
   const poses = [];
   for (const it of F) { const f = it.fn; it.fn = async () => { await f(); await wait(400); await idle(40); poses.push({ f: it.label.slice(0, 18), x: Math.round(G.walker.x), z: Math.round(G.walker.z), y: Math.round(G.walker.y), fly: G.walkParams.fly }); }; }
   // warm-up: the first capture after load can come back blank — pose frame 1 and throw one away
   await F[0].fn(); await wait(3000);
   await window.__MONTAGE__([{ label: 'warm-up', fn: () => {} }], { settle: 20, timers: true, cw: 200, cols: 1 });
   window.__MONTAGE_CLOSE__?.();
-  const res = await window.__MONTAGE__(F, { settle: opts.settle ?? 45, timers: true, cw: 800, cols: 2, save: `place-${tag}.jpg` });
+  const res = await window.__MONTAGE__(F, { settle: opts.settle ?? 45, timers: true, cw: opts.cw ?? 800, cols: opts.cols ?? 2, ...(opts.dataUrl ? { dataUrl: true } : { save: `place-${tag}.jpg` }) });
   window.__MONTAGE_CLOSE__?.();
   return { res, poses, main: main && { n: main.n, c: main.c, w: main.w, shops: near(shops, main, main.w / 2 + 28) }, resi: resi?.n, tallest: tallest && Math.round(tallest.top - tallest.base), shops: shops.length, homes: homes.length };
 };

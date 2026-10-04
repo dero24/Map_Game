@@ -1,0 +1,23 @@
+{
+  "note": "The lower-48 audit's towns (tools/audit48.mjs) and the must-load list (tests/mustLoad.test.ts reads the ones marked mustLoad). Public town centres only: a main street, a park, a station. Kinds after docs/GAMEPLAY_VISION.md §17: coast, inland, mountains, desert, plains, city, suburb, rural.",
+  "towns": [
+    { "id": "shrewsbury-nj", "name": "Shrewsbury, NJ", "kind": "suburb", "at": [40.3296, -74.0617], "mustLoad": true, "why": "Robby's report: the ground drew dark blue with grass on it" },
+    { "id": "seabright-nj", "name": "Sea Bright, NJ", "kind": "coast", "at": [40.3597, -73.975], "mustLoad": true, "why": "the baked gold standard" },
+    { "id": "midtown-ny", "name": "Midtown Manhattan, NY", "kind": "city", "at": [40.7536, -73.9832], "mustLoad": true, "why": "the densest cells; phones' memory" },
+    { "id": "levittown-ny", "name": "Levittown, NY", "kind": "suburb", "at": [40.727, -73.514], "mustLoad": true, "why": "a postwar tract" },
+    { "id": "barharbor-me", "name": "Bar Harbor, ME", "kind": "coast", "at": [44.3876, -68.2045], "mustLoad": false, "why": "New England coast, rock and spruce" },
+    { "id": "intercourse-pa", "name": "Intercourse, PA", "kind": "rural", "at": [40.0377, -76.1052], "mustLoad": true, "why": "farmland" },
+    { "id": "asheville-nc", "name": "Asheville, NC", "kind": "mountains", "at": [35.5951, -82.5515], "mustLoad": false, "why": "Appalachian hills downtown" },
+    { "id": "miamibeach-fl", "name": "Miami Beach, FL", "kind": "coast", "at": [25.7907, -80.13], "mustLoad": true, "why": "barrier island, subtropical" },
+    { "id": "chicago-il", "name": "Chicago Loop, IL", "kind": "city", "at": [41.8819, -87.6278], "mustLoad": true, "why": "towers inland, the lake" },
+    { "id": "columbus-oh", "name": "German Village, Columbus, OH", "kind": "inland", "at": [39.9496, -82.9945], "mustLoad": false, "why": "brick row houses, a Midwest grid" },
+    { "id": "hays-ks", "name": "Hays, KS", "kind": "plains", "at": [38.8792, -99.3268], "mustLoad": true, "why": "a plains town, flat to the horizon" },
+    { "id": "duluth-mn", "name": "Duluth, MN", "kind": "coast", "at": [46.7867, -92.1005], "mustLoad": false, "why": "a lake city on a steep hillside" },
+    { "id": "aspen-co", "name": "Aspen, CO", "kind": "mountains", "at": [39.1911, -106.8175], "mustLoad": true, "why": "high mountains round a small town" },
+    { "id": "moab-ut", "name": "Moab, UT", "kind": "desert", "at": [38.5733, -109.5498], "mustLoad": false, "why": "red-rock desert" },
+    { "id": "tucson-az", "name": "Tucson, AZ", "kind": "desert", "at": [32.2226, -110.9747], "mustLoad": true, "why": "a desert city, the place-parity rounds" },
+    { "id": "ely-nv", "name": "Ely, NV", "kind": "rural", "at": [39.2474, -114.8886], "mustLoad": false, "why": "basin and range, far from anywhere" },
+    { "id": "santamonica-ca", "name": "Santa Monica, CA", "kind": "coast", "at": [34.0158, -118.4965], "mustLoad": true, "why": "the Pacific coast, palms" },
+    { "id": "seattle-wa", "name": "Pike Place, Seattle, WA", "kind": "city", "at": [47.6097, -122.3422], "mustLoad": true, "why": "hills, the Sound, the market" }
+  ]
+}

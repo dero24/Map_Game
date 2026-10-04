@@ -1795,6 +1795,11 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // ---------- curbside mailboxes for the houses with a mapped address ----------
   // North American curbs only (elsewhere the post goes through the door); a street mixes styles,
   // chosen per house by position so neighbouring tiles agree.
+  // A box stands at its own street's kerb, and buildings.ts knows only the plain streets: where a
+  // slip road or a trunk runs past that kerb (a junction's link — Sea Bright's Ocean Avenue at Rumson
+  // Road), the post stood in the link's lane (tools/playtest.js __ROADPOSTS__). A box in any
+  // carriageway is left out, and the hydrant beside it with it.
+  if (extras.mailboxes?.length) extras.mailboxes = extras.mailboxes.filter((b) => { const q = offCarriageway(kerbNear, b.x, b.z, 0.35); return !!q && q[0] === b.x && q[1] === b.z; });
   if (extras.mailboxes?.length && look.region === 'na') {
     const MIX: [MailboxStyle, number][] = [['post', 5], ['rural', 2], ['newspaper', 1.5], ['brick', 1], ['lantern', 1]];
     const MBC = [0x2b2d30, 0x2b2d30, 0xf2efe6, 0x3e5b45, 0x2c3e5c, 0x7a2a26];
