@@ -222,3 +222,30 @@ own grid, refreshed monthly by a script on his PC.
 - `?aerial=0` disables (and shows a baked pack's roofs as they were). Bump `VER` in
   aerialFetch.ts when the reading changes. Details and sources: `world-data.md` "Building colours
   from real data".
+
+## What the tile service costs (Workers Paid; checked 2026-10-03)
+
+The plan: $5 a month includes 10 M requests and 30 M CPU-ms (then $0.30 a million requests, $0.02 a
+million CPU-ms); R2 stores 10 GB free (then $0.015 a GB-month), with 1 M writes (class A, then
+$4.50 a million) and 10 M reads (class B, then $0.36 a million) a month free, and no egress fees. The
+edge cache (`caches.default`) is free but per colo.
+
+- **A first visit somewhere new** asks the service ~300–500 times: the detail ring's tiles (14–25) and
+  their measured heights, the silhouette ring (to 8 km on a PC: ~200 cells; a phone's 4 km: ~50),
+  the DEM tiles under them and the horizon's, the place index's boundary tile and searches, and the
+  two skyline reads. A revisit is IndexedDB and the edge cache: a handful of requests. So the base
+  plan's 10 M requests carry ~20–30 k new-area sessions a month before a cent more.
+- **A cold cell** (first asked at its origin): our own extract's ranged reads (4–9 tiles and a
+  directory an isolate keeps), osmToTile (~0.1–0.5 s CPU), one R2 write (the TileJson, kept for good)
+  — the included CPU and writes cover about a million cold cells a month. Overpass costs nothing but
+  reliability: it is only asked for a cell outside the extract's outline.
+- **R2 storage:** the extract ~20–40 GB, the place index 0.1 GB, the measured heights and the TileJson
+  cache growing with use (tens to hundreds of KB a cell) — a few dollars a month at most.
+- **The one inefficiency:** the TileJson cache is keyed by the session's origin (the ?at= point
+  snapped to 1/64°): two players who start 2 km apart build the same street twice. With the extract a
+  rebuild is cheap; a cell key on a global grid would share it (a `t/vN` change, client and service
+  together).
+- **To check against the dashboard** (Robby): Workers → map-game-tiles → Metrics (requests, CPU time,
+  errors), R2 → map-game-tiles → Metrics (class A/B operations, storage). `x-tile-cache`
+  (`edge`/`r2`/`miss`) and `x-tile-source` (`extract`/`overpass`) on every answer say which path
+  served it.

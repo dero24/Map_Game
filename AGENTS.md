@@ -22,6 +22,10 @@ docs below; read a topic doc only when the task touches that subsystem.
 | Phone HUD audit | `npm run build && node tools/hud-audit.mjs` — the touch HUD's boxes on 10 phones × both ways × 5 states, no overlaps (`docs/agent/debugging.md`) |
 | Tile worker (dev) | `cd worker && npx wrangler dev` (ports 8787–8789) |
 | Region gate | `npm run verify:region -- --region=<id> [--soak=90] [--shots=a,b]` |
+| Lower-48 audit | `node tools/audit48.mjs [--towns=a,b] [--devices=desktop,phone]` → `shots/audit48/<town>-montage.jpg`, `summary.md` (`docs/earth/AUDIT_48.md`) |
+| Must-load towns | `node tools/must-load.mjs --live` (the deployed service answers every must-load town) · `--fixtures` (re-make `tests/fixtures/towns/` from an extract pack) |
+| Our OSM extract | `node scripts/osm-extract.mjs --pbf=<us-latest.osm.pbf> --ts=<state.txt timestamp>` → `node scripts/osm-upload.mjs --pack=… --poly=<us.poly>` · prove it: `node tools/osm-compare.mjs` (`docs/agent/streaming.md`) |
+| Place index | `node scripts/build-places.mjs [--fetch]` → upload `raw/places/out/*` to R2 `places/v<N>/` (`docs/agent/gameplay.md` "geo.ts") |
 
 ## Hard constraints
 

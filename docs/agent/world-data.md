@@ -145,5 +145,5 @@ note means the browser was refused CORS and the relay took over (needs the worke
 ## Deep links
 
 - `?at=lat,lon` picks the region whose slice (then backdrop, then nearest origin) contains the
-  point and spawns there — on a doorstep it places you 2.2 m outside the nearest building's
+  point and spawns there — on a doorstep it places you just outside the nearest building's
   front door.

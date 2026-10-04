@@ -28,3 +28,8 @@ desktop.ini
 .DS_Store
 .idea/
 .tmp_xfer/
+
+# secrets (API tokens: Mapillary, …) — never committed; the tile service keeps its own as wrangler secrets
+.env
+.env.*
+!.env.example

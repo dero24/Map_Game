@@ -1,0 +1,90 @@
+{
+ "note": "tools/real-compare.mjs: per spot, 1 − the total variation between the photo's class mix and the game's (1 = the same mix of sky, buildings, vegetation, ground, water, vehicles). One entry a run.",
+ "runs": [
+  {
+   "at": "2026-10-04T03:37:44.332Z",
+   "commit": "cf359f6",
+   "tag": "first-try",
+   "spots": {
+    "named-bains-hardware": {
+     "score": 0.811,
+     "photo": {
+      "sky": 0.194,
+      "building": 0.205,
+      "vegetation": 0.018,
+      "ground": 0.312,
+      "water": 0,
+      "vehicle": 0.093,
+      "other": 0.177
+     },
+     "labelled": 0.849,
+     "game": {
+      "sky": 0.323,
+      "building": 0.196,
+      "vegetation": 0.005,
+      "ground": 0.288,
+      "water": 0,
+      "vehicle": 0.154,
+      "other": 0.034
+     },
+     "cell": "baked",
+     "water": false,
+     "date": "2026-04-12",
+     "hour": 16.82
+    },
+    "named-monmouth-beach": {
+     "score": 0.872,
+     "photo": {
+      "sky": 0.329,
+      "building": 0.171,
+      "vegetation": 0.046,
+      "ground": 0.367,
+      "water": 0,
+      "vehicle": 0.007,
+      "other": 0.081
+     },
+     "labelled": 0.858,
+     "game": {
+      "sky": 0.312,
+      "building": 0.175,
+      "vegetation": 0.009,
+      "ground": 0.491,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.013
+     },
+     "cell": "baked",
+     "water": false,
+     "date": "2026-04-12",
+     "hour": 16.88
+    },
+    "named-seabright-center": {
+     "score": 0.867,
+     "photo": {
+      "sky": 0.352,
+      "building": 0.065,
+      "vegetation": 0.097,
+      "ground": 0.377,
+      "water": 0,
+      "vehicle": 0.005,
+      "other": 0.103
+     },
+     "labelled": 0.865,
+     "game": {
+      "sky": 0.385,
+      "building": 0.077,
+      "vegetation": 0.026,
+      "ground": 0.466,
+      "water": 0,
+      "vehicle": 0.004,
+      "other": 0.044
+     },
+     "cell": "baked",
+     "water": false,
+     "date": "2026-04-12",
+     "hour": 16.82
+    }
+   }
+  }
+ ]
+}

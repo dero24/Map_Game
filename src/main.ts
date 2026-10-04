@@ -463,6 +463,11 @@ async function main() {
   // elsewhere → the nearest open ground (never the water, a roof or a hedge: tools/playtest.js
   // __TELEPORTS__ found 6 of 8 random map picks round the shore standing on the water, unable to
   // take a step), facing down the nearest street.
+  // An arrival (an ?at= link, the map's "walk here", a search) is made against whatever has mounted —
+  // often a stand-in. When the place's real cell replaces it, the arrival is made again on the real
+  // buildings, as long as you're still standing where you arrived (the audit: Bar Harbor's spawn was
+  // inside a restaurant once its real cell came in under the twin's doorstep).
+  let landed: { x: number; z: number; to: [number, number]; t: number } | null = null;
   const teleportLocal = (x: number, z: number) => {
     const at = landingAt(walk, stream.doors, x, z);
     if (at.door) spawn = { x: at.x, z: at.z, yaw: at.yaw!, y: at.y };
@@ -473,6 +478,7 @@ async function main() {
       spawn = { x: at.x, z: at.z, yaw: isFinite(near.d) ? near.yaw : 0, y: undefined };
     }
     respawn();
+    landed = { x: walker.x, z: walker.z, to: [x, z], t: performance.now() };
   };
   respawn();
 
@@ -549,7 +555,15 @@ async function main() {
         }
       }
   };
-  stream.onMount = () => { if (!vehicles.driving) settleWalker(); };
+  stream.onMount = (spec) => {
+    if (landed && spec.world) {
+      const b = spec.box, [ax, az] = landed.to;
+      const still = Math.hypot(walker.x - landed.x, walker.z - landed.z) < 1.5 && performance.now() - landed.t < 180000;
+      if (!still) landed = null;
+      else if (ax >= b.x0 - 48 && ax <= b.x1 + 48 && az >= b.z0 - 48 && az <= b.z1 + 48 && !vehicles.driving) { teleportLocal(ax, az); return; }
+    }
+    if (!vehicles.driving) settleWalker();
+  };
   let settleT = 1; // …and once a second on foot: whatever put you there (a slow frame, a bad door), you're never shut in
   // Rideable vehicles (E enter/exit; you paint your own with the brush, ui/brush.ts) — the walker rides along.
   // other people's balloons: up at dawn and dusk, down on the beaches (world/balloons.ts)

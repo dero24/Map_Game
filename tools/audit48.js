@@ -45,8 +45,17 @@ window.__AUDIT__ = async (tag = 'audit', opts = {}) => {
   };
   const wait = window.__WAIT__ ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const realWait = opts.realWait ?? 240;
-  let st = state(), firstReal = st.real || st.baked ? 0 : null;
-  for (let i = 0; i < realWait && (st.pending || st.missing || (st.stand && !st.failed && i < 60)); i++) { await wait(1000); st = state(); if (firstReal === null && (st.real || st.baked)) firstReal = i + 1; }
+  let st = state(), firstReal = st.real || st.baked ? 0 : null, allReal = null;
+  // (until the stream is idle — nothing on the wire, nothing to build — for three seconds running: a
+  // phone's ring leaves its far cells out on purpose, its vertex budget)
+  let idleFor = 0;
+  for (let i = 0; i < realWait && idleFor < 3; i++) {
+    idleFor = !S.worldPending && !S.fetching?.size && !S.buildQueue?.length && i > 5 ? idleFor + 1 : 0; // (the detail ring; the silhouettes stream on for minutes)
+    await wait(1000); st = state();
+    if (firstReal === null && (st.real || st.baked)) firstReal = i + 1;
+    if (allReal === null && st.real + st.baked + st.vec === ringKeys.length && !st.pending) allReal = i + 1;
+  }
+  if (allReal === null && st.real + st.baked + st.vec === ringKeys.length) allReal = Math.round((performance.now() - t0) / 1000);
   for (let i = 0; i < 120 && (S.busy || S.worldPending); i++) await wait(500);
   st = state();
   const loadS = r1((performance.now() - t0) / 1000);
@@ -60,6 +69,8 @@ window.__AUDIT__ = async (tag = 'audit', opts = {}) => {
       if (T.sdfAt(x, z) < 0) { water++; if (T.layer(x, z).isOcean?.(x, z)) ocean++; } else land++;
     }
   const spawnWater = T.sdfAt(x0, z0) < 0;
+  // (the arrival: outside, on land — never in a building's rooms)
+  const spawnInside = G.walk.buildingAt(G.walker.x, G.walker.z) >= 0 || !!G.interiors?.indoors;
 
   // ---- the buildings of the ring's cells, and their heights ----
   const fps = [];
@@ -129,8 +140,8 @@ window.__AUDIT__ = async (tag = 'audit', opts = {}) => {
   }
   return {
     tag, at: G.at ?? null, tier: window.__TIER__?.tier ?? null, loadS,
-    ring: { cells: ringKeys.length, real: st.real, vec: st.vec, stand: st.stand, baked: st.baked, failed: st.failed, pending: st.pending, missing: st.missing, flat: st.flat, twin: st.twin, synth: st.synth, firstRealS: firstReal, detail: st.cells },
-    ground: { land, water, ocean, waterShare: r1((100 * water) / (land + water)), spawnWater },
+    ring: { cells: ringKeys.length, real: st.real, vec: st.vec, stand: st.stand, baked: st.baked, failed: st.failed, pending: st.pending, missing: st.missing, flat: st.flat, twin: st.twin, synth: st.synth, firstRealS: firstReal, allRealS: allReal, detail: st.cells },
+    ground: { land, water, ocean, waterShare: r1((100 * water) / (land + water)), spawnWater, spawnInside },
     buildings: { n: near.length, bySrc, kinds, medianH: r1(quantile(hs, 0.5)), p90H: r1(quantile(hs, 0.9)), maxH: r1(Math.max(0, ...hs)), twoPlus: r1((100 * storeys.filter((s) => s >= 2).length) / Math.max(1, storeys.length)) },
     roads: { n: roads, named },
     trees: { n: trees, meshes: treeMeshes },

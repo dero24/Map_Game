@@ -1,0 +1,434 @@
+{
+ "note": "tools/real-spots.mjs: the comparison loop's spots (Mapillary photo ids and poses only — the photos are never kept in the repo or shipped). Photos © their Mapillary contributors, CC BY-SA 4.0.",
+ "made": "2026-10-04",
+ "spots": [
+  {
+   "id": "AZ-largest-0455000",
+   "state": "AZ",
+   "town": "Phoenix, AZ",
+   "kind": "largest",
+   "pop": 1673164,
+   "at": [
+    33.4483771,
+    -112.0740373
+   ],
+   "img": {
+    "id": "1498410353824709",
+    "lat": 33.4490245,
+    "lon": -112.073796,
+    "heading": 28.94,
+    "hfov": 62.9,
+    "vfov": 49.3,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2021-05-29T23:04:01.021Z",
+    "by": "drkludge",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "AZ-mid-0462140",
+   "state": "AZ",
+   "town": "Sahuarita, AZ",
+   "kind": "mid",
+   "pop": 37448,
+   "at": [
+    31.9575818,
+    -110.955646
+   ],
+   "img": null
+  },
+  {
+   "id": "AZ-small-0483090",
+   "state": "AZ",
+   "town": "Willcox, AZ",
+   "kind": "small",
+   "pop": 3217,
+   "at": [
+    32.2528519,
+    -109.8320124
+   ],
+   "img": null
+  },
+  {
+   "id": "KS-largest-2079000",
+   "state": "KS",
+   "town": "Wichita, KS",
+   "kind": "largest",
+   "pop": 400991,
+   "at": [
+    37.6922361,
+    -97.3375448
+   ],
+   "img": {
+    "id": "1996711744209432",
+    "lat": 37.6931996,
+    "lon": -97.3382085,
+    "heading": 10.6,
+    "hfov": 89.9,
+    "vfov": 58.7,
+    "w": 3840,
+    "h": 2160,
+    "captured": "2026-03-24T00:56:12.900Z",
+    "by": "bundlegut",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "KS-mid-2014650",
+   "state": "KS",
+   "town": "Colby, KS",
+   "kind": "mid",
+   "pop": 5539,
+   "at": [
+    39.3958369,
+    -101.0523773
+   ],
+   "img": {
+    "id": "1528410687679214",
+    "lat": 39.3969677,
+    "lon": -101.0515703,
+    "heading": 150.32,
+    "hfov": 119,
+    "vfov": 87.4,
+    "w": 1920,
+    "h": 1080,
+    "captured": "2020-10-17T08:37:25.000Z",
+    "by": "networklanman",
+    "within": 0.002
+   }
+  },
+  {
+   "id": "KS-small-2075825",
+   "state": "KS",
+   "town": "Washington, KS",
+   "kind": "small",
+   "pop": 1075,
+   "at": [
+    39.8180592,
+    -97.0508606
+   ],
+   "img": null
+  },
+  {
+   "id": "ME-largest-2360545",
+   "state": "ME",
+   "town": "Portland, ME",
+   "kind": "largest",
+   "pop": 69568,
+   "at": [
+    43.661471,
+    -70.2553259
+   ],
+   "img": {
+    "id": "104846625701200",
+    "lat": 43.6611744,
+    "lon": -70.2553544,
+    "heading": 246.51,
+    "hfov": 100.4,
+    "vfov": 84,
+    "w": 4000,
+    "h": 3000,
+    "captured": "2022-09-19T18:48:57.000Z",
+    "by": "vorpalblade",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "ME-mid-2302795",
+   "state": "ME",
+   "town": "Bangor, ME",
+   "kind": "mid",
+   "pop": 32446,
+   "at": [
+    44.8011821,
+    -68.7778138
+   ],
+   "img": null
+  },
+  {
+   "id": "ME-small-2330550",
+   "state": "ME",
+   "town": "Hallowell, ME",
+   "kind": "small",
+   "pop": 2619,
+   "at": [
+    44.2859022,
+    -69.7908786
+   ],
+   "img": {
+    "id": "557059878788128",
+    "lat": 44.2849522,
+    "lon": -69.7903472,
+    "heading": 191.11,
+    "hfov": 40.1,
+    "vfov": 30.6,
+    "w": 4000,
+    "h": 3000,
+    "captured": "2019-06-07T11:14:31.000Z",
+    "by": "bfoltahba",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "NJ-largest-3451000",
+   "state": "NJ",
+   "town": "Newark, NJ",
+   "kind": "largest",
+   "pop": 317303,
+   "at": [
+    40.735657,
+    -74.1723667
+   ],
+   "img": {
+    "id": "890384517208827",
+    "lat": 40.7349761,
+    "lon": -74.173314,
+    "heading": 122.23,
+    "hfov": 62.5,
+    "vfov": 49.1,
+    "w": 4080,
+    "h": 3072,
+    "captured": "2026-01-27T21:29:22.357Z",
+    "by": "alrekur",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "NJ-mid-3465490",
+   "state": "NJ",
+   "town": "Salem, NJ",
+   "kind": "mid",
+   "pop": 5369,
+   "at": [
+    39.5717796,
+    -75.4671423
+   ],
+   "img": null
+  },
+  {
+   "id": "NJ-small-3482720",
+   "state": "NJ",
+   "town": "Woodstown, NJ",
+   "kind": "small",
+   "pop": 3757,
+   "at": [
+    39.6515027,
+    -75.3282454
+   ],
+   "img": {
+    "id": "1341345127722422",
+    "lat": 39.6510441,
+    "lon": -75.3290334,
+    "heading": 227.81,
+    "hfov": 75,
+    "vfov": 59.8,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2025-11-07T18:10:31.591Z",
+    "by": "quickness805",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "named-bains-hardware",
+   "state": "NJ",
+   "town": "Bain's Hardware, Sea Bright",
+   "kind": "named",
+   "at": [
+    40.3622,
+    -73.97453
+   ],
+   "img": {
+    "id": "1948650739094906",
+    "lat": 40.3629388,
+    "lon": -73.9741517,
+    "heading": 177.68,
+    "hfov": 89.7,
+    "vfov": 58.5,
+    "w": 2560,
+    "h": 1440,
+    "captured": "2026-04-12T20:49:19.133Z",
+    "by": "DrivingRoundTown",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "named-monmouth-beach",
+   "state": "NJ",
+   "town": "Ocean Avenue, Monmouth Beach",
+   "kind": "named",
+   "at": [
+    40.3335,
+    -73.9818
+   ],
+   "img": {
+    "id": "1143207491267350",
+    "lat": 40.3314369,
+    "lon": -73.9749893,
+    "heading": 182.47,
+    "hfov": 85.9,
+    "vfov": 55.3,
+    "w": 2560,
+    "h": 1440,
+    "captured": "2026-04-12T20:53:13.166Z",
+    "by": "DrivingRoundTown",
+    "within": 0.008
+   }
+  },
+  {
+   "id": "named-seabright-center",
+   "state": "NJ",
+   "town": "Center Street, Sea Bright",
+   "kind": "named",
+   "at": [
+    40.3597,
+    -73.975
+   ],
+   "img": {
+    "id": "1471973994667076",
+    "lat": 40.3605433,
+    "lon": -73.9741537,
+    "heading": 157.52,
+    "hfov": 85.5,
+    "vfov": 54.9,
+    "w": 2560,
+    "h": 1440,
+    "captured": "2026-04-12T20:49:50.266Z",
+    "by": "DrivingRoundTown",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "named-shrewsbury",
+   "state": "NJ",
+   "town": "Broad Street, Shrewsbury",
+   "kind": "named",
+   "at": [
+    40.3297,
+    -74.0617
+   ],
+   "img": null
+  },
+  {
+   "id": "NY-largest-3651000",
+   "state": "NY",
+   "town": "New York, NY",
+   "kind": "largest",
+   "pop": 8478072,
+   "at": [
+    40.7142691,
+    -74.0059729
+   ],
+   "img": {
+    "id": "4387217424622582",
+    "lat": 40.7142922,
+    "lon": -74.0049895,
+    "heading": 311.56,
+    "hfov": 65.8,
+    "vfov": 51.7,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2020-06-07T22:33:32.738Z",
+    "by": "tomjmat",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "NY-mid-3658574",
+   "state": "NY",
+   "town": "Plattsburgh, NY",
+   "kind": "mid",
+   "pop": 19758,
+   "at": [
+    44.6994873,
+    -73.4529124
+   ],
+   "img": {
+    "id": "959002482274112",
+    "lat": 44.6996125,
+    "lon": -73.4523297,
+    "heading": 83.48,
+    "hfov": 68.3,
+    "vfov": 53.9,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2024-05-07T12:24:35.677Z",
+    "by": "Montrose_Lyle",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "NY-small-3608323",
+   "state": "NY",
+   "town": "Brightwaters, NY",
+   "kind": "small",
+   "pop": 3187,
+   "at": [
+    40.7209321,
+    -73.2673399
+   ],
+   "img": null
+  },
+  {
+   "id": "WA-largest-5363000",
+   "state": "WA",
+   "town": "Seattle, WA",
+   "kind": "largest",
+   "pop": 780995,
+   "at": [
+    47.6062095,
+    -122.3320708
+   ],
+   "img": null
+  },
+  {
+   "id": "WA-mid-5320645",
+   "state": "WA",
+   "town": "Edgewood, WA",
+   "kind": "mid",
+   "pop": 13496,
+   "at": [
+    47.2501005,
+    -122.293732
+   ],
+   "img": {
+    "id": "516954609303440",
+    "lat": 47.2497302,
+    "lon": -122.2939703,
+    "heading": 184.08,
+    "hfov": 67.7,
+    "vfov": 53.4,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2020-01-26T20:28:23.527Z",
+    "by": "seataclimo",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "WA-small-5322745",
+   "state": "WA",
+   "town": "Everson, WA",
+   "kind": "small",
+   "pop": 3169,
+   "at": [
+    48.9201171,
+    -122.3426588
+   ],
+   "img": {
+    "id": "125170410564161",
+    "lat": 48.9198196,
+    "lon": -122.3433302,
+    "heading": 75.27,
+    "hfov": 83.3,
+    "vfov": 53.2,
+    "w": 3840,
+    "h": 2160,
+    "captured": "2023-02-20T22:30:47.160Z",
+    "by": "bct",
+    "within": 0.001
+   }
+  }
+ ]
+}
