@@ -75,6 +75,10 @@ class Builder {
   }
   // Triangle with explicit desired facing n; flips winding if needed.
   tri(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, n: THREE.Vector3, wa = Z4, wb = Z4, wc = Z4) {
+    // (a corner off at infinity — a height from an empty list, a division by zero — would cull its
+    // whole 300 m chunk: three's bounding sphere goes NaN and the frustum never takes it. Left out,
+    // and the first one said, with what built it.)
+    if (!Number.isFinite(a.x + a.y + a.z + b.x + b.y + b.z + c.x + c.y + c.z)) return badTri(this.inf[0]);
     const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z, vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
     const d = (uy * vz - uz * vy) * n.x + (uz * vx - ux * vz) * n.y + (ux * vy - uy * vx) * n.z;
     if (d < 0) { this.v(a, n, wa); this.v(c, n, wc); this.v(b, n, wb); }
@@ -97,6 +101,10 @@ class Builder {
   }
 }
 const Z4 = [0, 0, 0, 0];
+let badTris = 0;
+function badTri(id: number) {
+  if (badTris++ === 0) console.warn(`buildings: a non-finite corner in building ${id}, its triangles left out —`, new Error().stack?.split('\n').slice(3, 8).map((l) => l.trim()).join(' <- '));
+}
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const UP = V(0, 1, 0), DOWN = V(0, -1, 0);
 

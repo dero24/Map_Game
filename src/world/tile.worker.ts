@@ -135,7 +135,8 @@ async function directTile(spec: TileSpec): Promise<TileJson> {
 // ---- water from the map, for the placeholder while a real cell is on its way (or 504'd) ----
 // A light query (coastline, lakes, riverbanks) — the one thing a stand-in must not guess from
 // the DEM, which smears a shore into the sea (Elliott Bay became a lawn with trees). Cached per
-// cell like the tiles; asked only where the DEM says the cell could hold water.
+// cell like the tiles; asked only where the DEM says the cell could hold water — and only on
+// ?tiles=direct: with a tile service, the stand-in waits for OpenFreeMap's water or the real cell.
 const waterInflight = new Map<string, Promise<TileJson | null>>();
 function waterTile(spec: TileSpec): Promise<TileJson | null> {
   const k = spec.id.slice(1);
@@ -551,7 +552,9 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
       const wet = mayBeWet(dem);
       let wt = await raceNull(mvtP, msg.relief ? 30000 : 5000);
       const complete = !!wt && !msg.lite; // (the vector tiles carry the ocean: their water is the whole answer — at z14; z12 drops the small harbours)
-      if (!wt && wet) wt = await raceNull(waterTile(spec), msg.relief ? 45000 : 6000);
+      // (Overpass only with no tile service, ?tiles=direct: the service answers the cell itself from
+      // our own extract in seconds, and the public servers aren't every player's backend)
+      if (!wt && wet && !measuredBase) wt = await raceNull(waterTile(spec), msg.relief ? 45000 : 6000);
       if (wt) {
         water = waterBodies(dem, wt, terrain);
         if (water.length || complete) {
