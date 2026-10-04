@@ -142,10 +142,19 @@ async function render(s) {
     const ground = T.heightAt(x, z);
     G.walker.place(x, z, -img.heading * Math.PI / 180, 0); // (a compass bearing, clockwise from north → the game's yaw)
     G.walker.y = ground + 2.0; // (Mapillary's cameras ride a car's roof or a walker's hand: 2 m)
+    // …or a deck, a bridge, a road the DEM smooths away: the photo's own height where it's well above
+    // the game's ground (Mapillary's computed altitude: metres above sea level, as the DEM's are)
+    let lift = img.calt != null && img.calt - ground > 4 && img.calt - ground < 80 ? img.calt - ground : 0;
+    // (a photo whose place is inside a mapped building was taken from on top of it — a car park's top
+    // deck, a roof terrace: Bangor's looks out over a lot from one — the lens stands on its roof)
+    const pin = (r, px, pz) => { let ins = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (r[i][1] > pz !== r[j][1] > pz && px < ((r[j][0] - r[i][0]) * (pz - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) ins = !ins; return ins; };
+    const under = (G.stream.footprints ?? []).find((f) => pin(f.ring, x, z));
+    if (under && under.top + 1.6 > ground + 2 + lift) lift = under.top + 1.6 - ground;
+    if (lift) G.walker.y = ground + lift;
     for (let i = 0; i < 50; i++) await new Promise((r) => requestAnimationFrame(r));
     const { classPass } = await import('/tools/class-pass.js');
     const cls = classPass(G, { W: 256 });
-    return { cell, secs: Math.round((performance.now() - t0) / 1000), water: T.sdfAt(x, z) < 0, cls };
+    return { cell, secs: Math.round((performance.now() - t0) / 1000), water: T.sdfAt(x, z) < 0, cls, lift: Math.round(lift) };
   }, { img, hour, wait: WAIT });
   const shot = await page.screenshot({ type: 'jpeg', quality: 85 });
   await ctx.close();
@@ -166,10 +175,11 @@ for (const [st, list] of byState) {
       const p = await photo(s.img.id);
       const ps = photoShares(p.det, s.img.w, s.img.h);
       const g = await render(s);
-      const sc = segmented(ps) ? score(ps.shares, g.cls) : null;
-      run.spots[s.id] = { score: sc, ...(sc === null ? { unscored: 'the photo has objects only, no segmentation' } : {}), photo: ps.shares, labelled: ps.labelled, game: g.cls, cell: g.cell, water: g.water, date: g.date, hour: g.hour };
+      const unfit = s.img.unfit ?? (segmented(ps) ? null : 'not segmented');
+      const sc = unfit ? null : score(ps.shares, g.cls);
+      run.spots[s.id] = { score: sc, ...(unfit ? { unscored: unfit } : {}), photo: ps.shares, labelled: ps.labelled, game: g.cls, cell: g.cell, water: g.water, date: g.date, hour: g.hour };
       pairs.push({ s, sc, ps, g, photo: p.jpg.toString('base64'), game: g.shot.toString('base64') });
-      log(`${s.id} ${s.town}: score ${sc ?? 'n/a (photo not segmented)'} · cell ${g.cell}${g.water ? ' (WATER under the lens)' : ''} · photo ${JSON.stringify(ps.shares)} · game ${JSON.stringify(g.cls)}${g.errors.length ? ` · ${g.errors.length} page errors` : ''}`);
+      log(`${s.id} ${s.town}: score ${sc ?? `n/a (${unfit})`} · cell ${g.cell}${g.lift ? ` · lens ${g.lift} m up (the photo's height)` : ''}${g.water ? ' (WATER under the lens)' : ''} · photo ${JSON.stringify(ps.shares)} · game ${JSON.stringify(g.cls)}${g.errors.length ? ` · ${g.errors.length} page errors` : ''}`);
     } catch (e) { log(`${s.id}: failed — ${e.message}`); run.spots[s.id] = { error: String(e.message).slice(0, 200) }; }
   }
   if (!pairs.length) continue;
@@ -186,7 +196,7 @@ for (const [st, list] of byState) {
       const p = pairs[i], y = 40 + i * (CH + PAD);
       for (const [k, x] of [['photo', 0], ['game', CW + 30]]) { const im = new Image(); im.src = 'data:image/jpeg;base64,' + p[k]; await im.decode(); const r = Math.min(CW / im.width, CH / im.height); c.drawImage(im, x, y, im.width * r, im.height * r); }
       c.fillStyle = '#3a3346'; c.font = '14px Georgia';
-      c.fillText(`${p.s.town} (${p.s.kind}) · score ${p.sc ?? 'n/a (the photo is not segmented)'} · cell ${p.g.cell} · ${p.g.date} ${p.g.hour.toFixed(1)} h · ${p.s.img.hfov}° lens`, 8, y + CH + 17);
+      c.fillText(`${p.s.town} (${p.s.kind}) · score ${p.sc ?? `n/a (the photo: ${p.s.img.unfit ?? 'not segmented'})`} · cell ${p.g.cell} · ${p.g.date} ${p.g.hour.toFixed(1)} h · ${p.s.img.hfov}° lens`, 8, y + CH + 17);
       const fmt = (o) => Object.entries(o).filter(([, v]) => v >= 0.01).map(([k, v]) => `${k} ${Math.round(v * 100)}`).join(' · ');
       c.font = '12px Georgia';
       c.fillText(`photo: ${fmt(p.ps.shares)}   |   game: ${fmt(p.g.cls)}   ·   photo © ${p.s.img.by || 'a contributor'} / Mapillary, CC BY-SA 4.0, image ${p.s.img.id}`, 8, y + CH + 34);

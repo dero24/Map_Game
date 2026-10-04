@@ -7,7 +7,12 @@
 // pose are kept (tools/real-spots.json, in the repo); the photos themselves are fetched by
 // tools/real-compare.mjs into raw/mapillary/ (git-ignored), never shipped.
 //
-//   node tools/real-spots.mjs [--states=NJ,NY] [--per=3]   (needs raw/places: node scripts/build-places.mjs --fetch)
+//   node tools/real-spots.mjs [--states=NJ,NY] [--per=3] [--recheck]   (needs raw/places: node scripts/build-places.mjs --fetch)
+// A photo must be fit to compare against: Mapillary's quality score ≥ 0.4 (a rain-dark windscreen
+// scored 0.05), taken in daylight (the sun up), and segmented — sky, street or walls, not only the
+// objects Mapillary found in it (poles, signs: every labelled patch of the view 'other'). `--recheck`
+// tries a kept spot's photo against that again and picks anew where it fails (a spot with no fit photo
+// keeps its old one, marked `unfit`).
 // Mapillary: CC BY-SA 4.0 imagery, development use (docs/DATA_SOURCES.md §0); the token is .env's ACCESS_TOKEN.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -64,7 +69,7 @@ for (const [usps, geoid, , , name, lsad, , , , , , lat, lon] of gaz) {
 }
 
 async function images(bb) {
-  const u = `https://graph.mapillary.com/images?fields=id,captured_at,computed_compass_angle,computed_geometry,camera_type,is_pano,camera_parameters,width,height,creator,quality_score&bbox=${bb.map((v) => v.toFixed(5)).join(',')}&limit=100`;
+  const u = `https://graph.mapillary.com/images?fields=id,captured_at,computed_compass_angle,computed_geometry,computed_altitude,camera_type,is_pano,camera_parameters,width,height,creator,quality_score&bbox=${bb.map((v) => v.toFixed(5)).join(',')}&limit=100`;
   for (let i = 0; i < 3; i++) {
     const r = await fetch(u, { ...H, signal: AbortSignal.timeout(30000) }).catch(() => null);
     if (r?.ok) return (await r.json()).data ?? [];
@@ -74,6 +79,25 @@ async function images(bb) {
   return [];
 }
 const SINCE = Date.UTC(2019, 0, 1);
+// the sun's altitude, degrees (a low-precision solar position: a degree or so, plenty for day or night)
+function sunAlt(lat, lon, t) {
+  const R = Math.PI / 180, d = t / 86400000 - 10957.5; // days since J2000
+  const g = (357.529 + 0.98560028 * d) * R, q = 280.459 + 0.98564736 * d;
+  const L = (q + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * R, e = (23.439 - 0.00000036 * d) * R;
+  const dec = Math.asin(Math.sin(e) * Math.sin(L)), ra = Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L));
+  const ha = ((18.697374558 + 24.06570982441908 * d) % 24) * 15 * R + lon * R - ra;
+  return Math.asin(Math.sin(lat * R) * Math.sin(dec) + Math.cos(lat * R) * Math.cos(dec) * Math.cos(ha)) / R;
+}
+// segmented: Mapillary's detections of the image include the view's own classes (null: couldn't ask)
+async function segmented(id) {
+  for (let i = 0; i < 3; i++) {
+    const r = await fetch(`https://graph.mapillary.com/${id}/detections?fields=value&limit=2000`, { ...H, signal: AbortSignal.timeout(30000) }).catch(() => null);
+    if (r?.ok) return ((await r.json()).data ?? []).some((d) => /^(nature--(sky|vegetation|terrain)|construction--(flat--(road|sidewalk)|structure--building))/.test(d.value));
+    await new Promise((res) => setTimeout(res, 2000));
+  }
+  return null;
+}
+const fitWhy = async (x, lat, lon) => (x.quality_score != null && x.quality_score < 0.4 ? `quality ${x.quality_score}` : sunAlt(lat, lon, x.captured_at) < 0 ? 'taken in the dark' : (await segmented(x.id)) === false ? 'not segmented' : null);
 const usable = (x) => x.camera_type === 'perspective' && !x.is_pano && x.captured_at >= SINCE && x.computed_geometry && isFinite(x.computed_compass_angle) && x.camera_parameters?.[0] > 0;
 async function photoNear(lat, lon, seed, aim = null) {
   // (small first: a dense centre answers "too much data" for a big box — then smaller still)
@@ -85,18 +109,33 @@ async function photoNear(lat, lon, seed, aim = null) {
     if (aim) ok = ok.filter((x) => { const [px, py] = x.computed_geometry.coordinates; const b = (Math.atan2((aim[1] - px) * Math.cos((py * Math.PI) / 180), aim[0] - py) * 180) / Math.PI; const d = Math.abs((((b - x.computed_compass_angle) % 360) + 540) % 360 - 180); return d < 25; });
     if (!ok.length) continue;
     ok.sort((a, b) => b.captured_at - a.captured_at || (a.id < b.id ? -1 : 1));
-    const pick = ok.slice(0, 8)[seed % Math.min(8, ok.length)];
+    // (the seed's pick of the newest eight, else the next of them that's fit to compare against)
+    const cands = ok.slice(0, 8), k0 = seed % cands.length;
+    let pick = null;
+    for (let k = 0; k < cands.length && !pick; k++) { const x = cands[(k0 + k) % cands.length], why = await fitWhy(x, lat, lon); if (!why) pick = x; }
+    if (!pick) continue;
     const [plon, plat] = pick.computed_geometry.coordinates;
     const f = pick.camera_parameters[0], w = pick.width, h = pick.height, D = 180 / Math.PI;
     // (Mapillary's focal is a share of the image's longer side)
     const along = (side) => 2 * Math.atan((side / Math.max(w, h)) * 0.5 / f) * D;
     const hfov = along(w), vfov = along(h);
-    return { id: pick.id, lat: +plat.toFixed(7), lon: +plon.toFixed(7), heading: +pick.computed_compass_angle.toFixed(2), hfov: +hfov.toFixed(1), vfov: +vfov.toFixed(1), w, h, captured: new Date(pick.captured_at).toISOString(), by: pick.creator?.username ?? '', within: half };
+    return { id: pick.id, lat: +plat.toFixed(7), lon: +plon.toFixed(7), heading: +pick.computed_compass_angle.toFixed(2), hfov: +hfov.toFixed(1), vfov: +vfov.toFixed(1), w, h, captured: new Date(pick.captured_at).toISOString(), by: pick.creator?.username ?? '', within: half, q: pick.quality_score ?? null, calt: Number.isFinite(pick.computed_altitude) ? +pick.computed_altitude.toFixed(1) : null };
   }
   return null;
 }
 
 const prev = existsSync(OUT) ? JSON.parse(readFileSync(OUT, 'utf8')) : { spots: [] };
+const RECHECK = !!args.recheck;
+async function unfitWhy(img) {
+  if (!RECHECK) return null;
+  const r = await fetch(`https://graph.mapillary.com/${img.id}?fields=id,quality_score,captured_at,computed_altitude`, { ...H, signal: AbortSignal.timeout(30000) }).catch(() => null);
+  if (!r?.ok) return null; // (can't ask: keep it)
+  const x = await r.json();
+  const why = await fitWhy(x, img.lat, img.lon);
+  if (!why) { img.q = x.quality_score ?? null; img.calt = Number.isFinite(x.computed_altitude) ? +x.computed_altitude.toFixed(1) : null; delete img.unfit; return null; }
+  console.log(`  ${img.id}: ${why} — picking anew`);
+  return why;
+}
 const keep = new Map(prev.spots.map((s) => [s.id, s]));
 const NAMED = [
   { id: 'named-bains-hardware', state: 'NJ', town: "Bain's Hardware, Sea Bright", kind: 'named', at: [40.3622, -73.97453], aim: true },
@@ -115,16 +154,18 @@ for (const st of STATES) {
     const id = `${st}-${kind}-${t.geoid}`;
     // (a kept spot is looked for again when its town's centre has moved — the old first-of-its-name pick)
     const was = keep.get(id);
-    if (was?.img && Math.hypot(was.at[0] - t.lat, was.at[1] - t.lon) < 0.01) { spots.push({ ...was, town: `${t.name}, ${st}` }); continue; }
-    const img = await photoNear(t.lat, t.lon, hash(id));
+    const same = was?.img && Math.hypot(was.at[0] - t.lat, was.at[1] - t.lon) < 0.01, why = same ? await unfitWhy(was.img) : null;
+    if (same && !why) { spots.push({ ...was, town: `${t.name}, ${st}` }); continue; }
+    const img = (await photoNear(t.lat, t.lon, hash(id))) ?? (same ? { ...was.img, unfit: why } : null);
     spots.push({ id, state: st, town: `${t.name}, ${st}`, kind, pop: t.pop, at: [t.lat, t.lon], img });
     console.log(`${id}: ${t.name} (${t.pop.toLocaleString()}) → ${img ? `${img.id} ${img.captured.slice(0, 10)} by ${img.by}, ${img.hfov}°, ${Math.round(img.within * 111000)} m box` : 'no photo near (aerial only)'}`);
   }
 }
 for (const n of NAMED) {
   if (!STATES.includes(n.state)) continue;
-  if (keep.has(n.id) && keep.get(n.id).img) { spots.push(keep.get(n.id)); continue; }
-  const img = await photoNear(n.at[0], n.at[1], hash(n.id), n.aim ? [n.at[0], n.at[1]] : null);
+  const was = keep.get(n.id), why = was?.img ? await unfitWhy(was.img) : null;
+  if (was?.img && !why) { spots.push(was); continue; }
+  const img = (await photoNear(n.at[0], n.at[1], hash(n.id), n.aim ? [n.at[0], n.at[1]] : null)) ?? (was?.img ? { ...was.img, unfit: why } : null);
   spots.push({ id: n.id, state: n.state, town: n.town, kind: 'named', at: n.at, img });
   console.log(`${n.id}: ${img ? `${img.id} ${img.captured.slice(0, 10)}` : 'no photo'}`);
 }

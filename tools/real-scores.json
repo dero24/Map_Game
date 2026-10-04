@@ -1143,6 +1143,536 @@
      "hour": 14.5
     }
    }
+  },
+  {
+   "at": "2026-10-04T21:30:14.443Z",
+   "commit": "ac2b650",
+   "tag": "extract-1c-picker",
+   "spots": {
+    "CO-largest-0820000": {
+     "score": 0.753,
+     "photo": {
+      "sky": 0.253,
+      "building": 0.396,
+      "vegetation": 0.038,
+      "ground": 0.239,
+      "water": 0,
+      "vehicle": 0.006,
+      "other": 0.067
+     },
+     "labelled": 0.766,
+     "game": {
+      "sky": 0.138,
+      "building": 0.354,
+      "vegetation": 0.005,
+      "ground": 0.481,
+      "water": 0,
+      "vehicle": 0.012,
+      "other": 0.01
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-06-14",
+     "hour": 6.78
+    },
+    "CO-mid-0875640": {
+     "score": 0.6,
+     "photo": {
+      "sky": 0.615,
+      "building": 0.074,
+      "vegetation": 0.068,
+      "ground": 0.204,
+      "water": 0,
+      "vehicle": 0.006,
+      "other": 0.032
+     },
+     "labelled": 0.989,
+     "game": {
+      "sky": 0.26,
+      "building": 0.056,
+      "vegetation": 0.255,
+      "ground": 0.418,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.011
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-06-21",
+     "hour": 18.57
+    },
+    "IL-largest-1714000": {
+     "score": 0.826,
+     "photo": {
+      "sky": 0.457,
+      "building": 0.042,
+      "vegetation": 0.074,
+      "ground": 0.305,
+      "water": 0,
+      "vehicle": 0.013,
+      "other": 0.108
+     },
+     "labelled": 0.796,
+     "game": {
+      "sky": 0.413,
+      "building": 0.046,
+      "vegetation": 0.022,
+      "ground": 0.444,
+      "water": 0,
+      "vehicle": 0.044,
+      "other": 0.03
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2020-01-14",
+     "hour": 10.62
+    },
+    "IL-mid-1708446": {
+     "score": 0.759,
+     "photo": {
+      "sky": 0.571,
+      "building": 0.063,
+      "vegetation": 0.037,
+      "ground": 0.261,
+      "water": 0,
+      "vehicle": 0.034,
+      "other": 0.034
+     },
+     "labelled": 0.76,
+     "game": {
+      "sky": 0.393,
+      "building": 0.124,
+      "vegetation": 0.001,
+      "ground": 0.295,
+      "water": 0,
+      "vehicle": 0.181,
+      "other": 0.008
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2019-12-22",
+     "hour": 15.1
+    },
+    "IL-small-1742769": {
+     "score": 0.594,
+     "photo": {
+      "sky": 0.459,
+      "building": 0.003,
+      "vegetation": 0.139,
+      "ground": 0.148,
+      "water": 0,
+      "vehicle": 0.002,
+      "other": 0.249
+     },
+     "labelled": 0.897,
+     "game": {
+      "sky": 0.269,
+      "building": 0.003,
+      "vegetation": 0.258,
+      "ground": 0.435,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.034
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2022-12-15",
+     "hour": 11.95
+    },
+    "ME-largest-2360545": {
+     "score": 0.824,
+     "photo": {
+      "sky": 0.267,
+      "building": 0.275,
+      "vegetation": 0.088,
+      "ground": 0.275,
+      "water": 0,
+      "vehicle": 0.043,
+      "other": 0.053
+     },
+     "labelled": 0.78,
+     "game": {
+      "sky": 0.245,
+      "building": 0.262,
+      "vegetation": 0.035,
+      "ground": 0.451,
+      "water": 0,
+      "vehicle": 0.002,
+      "other": 0.005
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-04-14",
+     "hour": 13.5
+    },
+    "ME-mid-2302795": {
+     "score": 0.091,
+     "photo": {
+      "sky": 0.378,
+      "building": 0.046,
+      "vegetation": 0.189,
+      "ground": 0.262,
+      "water": 0.007,
+      "vehicle": 0.032,
+      "other": 0.086
+     },
+     "labelled": 0.973,
+     "game": {
+      "sky": 0.018,
+      "building": 0.956,
+      "vegetation": 0.015,
+      "ground": 0.012,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-07-25",
+     "hour": 15.17
+    },
+    "ME-small-2330550": {
+     "score": 0.796,
+     "photo": {
+      "sky": 0.3,
+      "building": 0.239,
+      "vegetation": 0.09,
+      "ground": 0.175,
+      "water": 0,
+      "vehicle": 0.173,
+      "other": 0.023
+     },
+     "labelled": 0.903,
+     "game": {
+      "sky": 0.336,
+      "building": 0.224,
+      "vegetation": 0.006,
+      "ground": 0.344,
+      "water": 0,
+      "vehicle": 0.078,
+      "other": 0.013
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2021-09-02",
+     "hour": 16.08
+    },
+    "NJ-largest-3451000": {
+     "score": 0.66,
+     "photo": {
+      "sky": 0.133,
+      "building": 0.459,
+      "vegetation": 0.004,
+      "ground": 0.29,
+      "water": 0,
+      "vehicle": 0.038,
+      "other": 0.075
+     },
+     "labelled": 0.93,
+     "game": {
+      "sky": 0.225,
+      "building": 0.308,
+      "vegetation": 0.013,
+      "ground": 0.162,
+      "water": 0,
+      "vehicle": 0.278,
+      "other": 0.015
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-01-27",
+     "hour": 16.48
+    },
+    "NJ-small-3482720": {
+     "score": 0.759,
+     "photo": {
+      "sky": 0.184,
+      "building": 0.039,
+      "vegetation": 0.316,
+      "ground": 0.288,
+      "water": 0,
+      "vehicle": 0.064,
+      "other": 0.108
+     },
+     "labelled": 0.833,
+     "game": {
+      "sky": 0.179,
+      "building": 0.105,
+      "vegetation": 0.246,
+      "ground": 0.463,
+      "water": 0,
+      "vehicle": 0.002,
+      "other": 0.004
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-11-07",
+     "hour": 13.17
+    },
+    "named-bains-hardware": {
+     "score": 0.811,
+     "photo": {
+      "sky": 0.194,
+      "building": 0.205,
+      "vegetation": 0.018,
+      "ground": 0.312,
+      "water": 0,
+      "vehicle": 0.093,
+      "other": 0.177
+     },
+     "labelled": 0.849,
+     "game": {
+      "sky": 0.323,
+      "building": 0.2,
+      "vegetation": 0.005,
+      "ground": 0.289,
+      "water": 0,
+      "vehicle": 0.154,
+      "other": 0.029
+     },
+     "cell": "baked",
+     "water": false,
+     "date": "2026-04-12",
+     "hour": 16.82
+    },
+    "named-monmouth-beach": {
+     "score": 0.874,
+     "photo": {
+      "sky": 0.329,
+      "building": 0.171,
+      "vegetation": 0.046,
+      "ground": 0.367,
+      "water": 0,
+      "vehicle": 0.007,
+      "other": 0.081
+     },
+     "labelled": 0.858,
+     "game": {
+      "sky": 0.312,
+      "building": 0.175,
+      "vegetation": 0.009,
+      "ground": 0.489,
+      "water": 0,
+      "vehicle": 0.003,
+      "other": 0.013
+     },
+     "cell": "baked",
+     "water": false,
+     "date": "2026-04-12",
+     "hour": 16.88
+    },
+    "named-seabright-center": {
+     "score": 0.869,
+     "photo": {
+      "sky": 0.352,
+      "building": 0.065,
+      "vegetation": 0.097,
+      "ground": 0.377,
+      "water": 0,
+      "vehicle": 0.005,
+      "other": 0.103
+     },
+     "labelled": 0.865,
+     "game": {
+      "sky": 0.384,
+      "building": 0.077,
+      "vegetation": 0.026,
+      "ground": 0.465,
+      "water": 0,
+      "vehicle": 0.005,
+      "other": 0.044
+     },
+     "cell": "baked",
+     "water": false,
+     "date": "2026-04-12",
+     "hour": 16.82
+    },
+    "NY-largest-3651000": {
+     "score": 0.538,
+     "photo": {
+      "sky": 0.077,
+      "building": 0.599,
+      "vegetation": 0.02,
+      "ground": 0.236,
+      "water": 0,
+      "vehicle": 0.034,
+      "other": 0.035
+     },
+     "labelled": 0.928,
+     "game": {
+      "sky": 0.06,
+      "building": 0.181,
+      "vegetation": 0.314,
+      "ground": 0.393,
+      "water": 0,
+      "vehicle": 0.044,
+      "other": 0.007
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2020-06-07",
+     "hour": 18.55
+    },
+    "NY-mid-3658574": {
+     "score": 0.706,
+     "photo": {
+      "sky": 0.325,
+      "building": 0.016,
+      "vegetation": 0.263,
+      "ground": 0.225,
+      "water": 0,
+      "vehicle": 0.143,
+      "other": 0.028
+     },
+     "labelled": 0.993,
+     "game": {
+      "sky": 0.303,
+      "building": 0.106,
+      "vegetation": 0.13,
+      "ground": 0.429,
+      "water": 0,
+      "vehicle": 0.008,
+      "other": 0.023
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-05-07",
+     "hour": 8.4
+    },
+    "NY-small-3608323": {
+     "score": null,
+     "unscored": "the photo has objects only, no segmentation",
+     "photo": {
+      "sky": 0,
+      "building": 0,
+      "vegetation": 0,
+      "ground": 0,
+      "water": 0,
+      "vehicle": 0,
+      "other": 1
+     },
+     "labelled": 0.005,
+     "game": {
+      "sky": 0.208,
+      "building": 0.339,
+      "vegetation": 0.04,
+      "ground": 0.377,
+      "water": 0,
+      "vehicle": 0.033,
+      "other": 0.003
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2019-05-16",
+     "hour": 9.13
+    },
+    "PA-largest-4260000": {
+     "score": 0.631,
+     "photo": {
+      "sky": 0,
+      "building": 0.629,
+      "vegetation": 0.282,
+      "ground": 0,
+      "water": 0,
+      "vehicle": 0.085,
+      "other": 0.004
+     },
+     "labelled": 0.993,
+     "game": {
+      "sky": 0,
+      "building": 0.881,
+      "vegetation": 0.001,
+      "ground": 0.117,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2019-12-21",
+     "hour": 10.95
+    },
+    "PA-small-4251744": {
+     "score": null,
+     "unscored": "the photo has objects only, no segmentation",
+     "photo": {
+      "sky": 0,
+      "building": 0,
+      "vegetation": 0,
+      "ground": 0,
+      "water": 0,
+      "vehicle": 0,
+      "other": 1
+     },
+     "labelled": 0.031,
+     "game": {
+      "sky": 0.388,
+      "building": 0.23,
+      "vegetation": 0.003,
+      "ground": 0.237,
+      "water": 0,
+      "vehicle": 0.13,
+      "other": 0.013
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2020-04-20",
+     "hour": 17.55
+    },
+    "WA-mid-5320645": {
+     "score": null,
+     "unscored": "the photo has objects only, no segmentation",
+     "photo": {
+      "sky": 0,
+      "building": 0,
+      "vegetation": 0,
+      "ground": 0,
+      "water": 0,
+      "vehicle": 0,
+      "other": 1
+     },
+     "labelled": 0.001,
+     "game": {
+      "sky": 0.434,
+      "building": 0.017,
+      "vegetation": 0.055,
+      "ground": 0.416,
+      "water": 0,
+      "vehicle": 0.038,
+      "other": 0.04
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2020-01-26",
+     "hour": 12.47
+    },
+    "WA-small-5322745": {
+     "score": 0.562,
+     "photo": {
+      "sky": 0.392,
+      "building": 0.326,
+      "vegetation": 0.01,
+      "ground": 0.198,
+      "water": 0,
+      "vehicle": 0.008,
+      "other": 0.066
+     },
+     "labelled": 0.715,
+     "game": {
+      "sky": 0.112,
+      "building": 0.494,
+      "vegetation": 0,
+      "ground": 0.116,
+      "water": 0,
+      "vehicle": 0.278,
+      "other": 0
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-02-20",
+     "hour": 14.5
+    }
+   }
   }
  ]
 }

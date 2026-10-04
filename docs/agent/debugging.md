@@ -354,6 +354,27 @@ Exit 0 pass, 1 a check failed or the page threw, 2 it couldn't run.
   walking, driving and streaming. Allow ~45 s to `__READY__`; run long checks in the background
   and poll their log.
 
+## The real-world comparison (`tools/real-spots.mjs` → `tools/real-compare.mjs`)
+
+A Mapillary street photo against the game rendered from the same place, heading, lens, date and
+hour; each pair scored by the class mix (sky, buildings, vegetation, ground, water, vehicles)
+— the photo's from Mapillary's segmentation, the game's from `tools/class-pass.js`. Read
+`shots/real/<ST>-montage.jpg`; scores accumulate in `tools/real-scores.json` (one entry a run).
+
+- **The class pass reads the scene's `family:type` names** (`trees:…`, `ground:cell`,
+  `road:ribbons`, `water:area`, `aWall` for buildings). A new mesh family without a name counts as
+  "other": streamed cells' ground did, until 2026-10-04, and every real cell's street scored 0%
+  ground. Name new meshes.
+- **A photo must be fit** (`real-spots.mjs`): Mapillary quality ≥ 0.4 (a rain-dark windscreen
+  scored 0.05), the sun up, and segmented. Some images carry only object detections (poles,
+  signs), which leaves every labelled patch "other". `--recheck` re-tests kept spots and picks
+  again; a spot with no fit photo keeps its old one marked `unfit`. The compare tool shows
+  unsegmented photos but doesn't score them.
+- **The lens:** 2 m over the game's ground, or the photo's own computed altitude where that is
+  more than 4 m higher (a bridge, a deck), or on the roof of a mapped building the photo stands in.
+  A game frame that's nearly all wall where the photo isn't is a pose the map can't place (Bangor:
+  a car-park deck that isn't mapped as a building). Treat it as an outlier, not a renderer bug.
+
 ## Dev-server + worker quirks
 
 - Dev server is HTTP/1.1: slow `/__tiles` calls starve other same-origin fetches — anything
