@@ -44,6 +44,8 @@ const ctx = { waitUntil: () => {} };
 const TS = '2026-10-02T20:21:34Z';
 // New Jersey's corner of the outline (lon, lat), as osm-upload.mjs writes Geofabrik's .poly
 const COVER = [[[-75.6, 38.9], [-73.8, 38.9], [-73.8, 41.4], [-75.6, 41.4], [-75.6, 38.9]]];
+// (the test pack's own outline: the lower 48's box, so every fixture's cell is inside it)
+const PACK_COVER = [[[-125, 24], [-66, 24], [-66, 50], [-125, 50], [-125, 24]]];
 // the skylines' test block, far from the fixtures: tall things packed in its tall section
 const SKY = { s: 39.1, w: -75.4, n: 39.2, e: -75.3 };
 type El = { type: string; id: number; lat?: number; lon?: number; geometry?: { lat: number; lon: number }[]; tags: Record<string, string> };
@@ -77,7 +79,7 @@ beforeAll(async () => {
     const b = { s: Math.min(...pts.map((p) => p.lat)), w: Math.min(...pts.map((p) => p.lon)), n: Math.max(...pts.map((p) => p.lat)), e: Math.max(...pts.map((p) => p.lon)) };
     blockOf(blockKey(tileX(b.w), tileY(b.s))).tall.push(lineOf(e.type[0], e.id, b, JSON.stringify(e)));
   }
-  const index: Record<string, unknown> = { v: 1, ts: TS, tile: 128, block: 128, cover: COVER, blocks: {} };
+  const index: Record<string, unknown> = { v: 1, ts: TS, tile: 128, block: 128, cover: PACK_COVER, blocks: {} };
   for (const [b, B] of blocks) {
     const parts: Uint8Array[] = [];
     let off = 0;
@@ -138,7 +140,7 @@ describe('the tile service reads our own extract (worker/src/osm.js)', () => {
     expect(osm.covers(idx, { s: 40.3, w: -73.81, n: 40.31, e: -73.79 })).toBe(false); // the outline runs through it
     expect(osm.covers(idx, { s: 42, w: -74.1, n: 42.01, e: -74.09 })).toBe(false); // outside
     expect(osm.covers({ cover: [] }, { s: 40.3, w: -74.1, n: 40.31, e: -74.09 })).toBe(false);
-    expect(await osm.extractDoc(env, { s: 40.3, w: -73.81, n: 40.31, e: -73.79 })).toBeNull();
+    expect(await osm.extractDoc(env, { s: 44, w: -66.01, n: 44.01, e: -65.99 })).toBeNull(); // (across the pack's outline)
     expect(await osm.extractDoc({}, fixtures[0].bb)).toBeNull(); // no bucket bound
   });
   it('a box inside the outline over a block with nothing in it is empty ground, not a failure', async () => {

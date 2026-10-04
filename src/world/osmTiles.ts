@@ -83,12 +83,18 @@ export interface TileSource {
 /** A box's answer, as Overpass gives the cell query: every selected element once, by id. */
 export async function assemble(src: TileSource, bb: BBox, timestamp?: string): Promise<OsmDoc & { stats: { tiles: number; lines: number; parsed: number } }> {
   const ts = tilesFor(bb);
-  const texts = await Promise.all(ts.map(([tx, ty]) => src.tile(blockKey(tx, ty), tileKey(tx, ty))));
+  // (one tile's text at a time, the next already on its way: a dense city's nine tiles are ~12 M
+  // characters — two bytes each once a name isn't Latin-1 — and the service's isolate has 128 MB,
+  // shared by whatever cells it is building at once)
+  const get = (i: number) => (i < ts.length ? src.tile(blockKey(ts[i][0], ts[i][1]), tileKey(ts[i][0], ts[i][1])) : Promise.resolve(null));
   const seen = new Set<string>();
   const out: OsmElement[] = [];
   const bigs: { id: number; block: string }[] = [];
   let lines = 0, parsed = 0;
-  for (const text of texts) {
+  let next = get(0);
+  for (let t = 0; t < ts.length; t++) {
+    const text = await next;
+    next = get(t + 1);
     if (!text) continue;
     for (let p = 0; p < text.length; ) {
       let q = text.indexOf('\n', p);

@@ -49,11 +49,12 @@
       "name": "Levittown, NY",
       "kind": "suburb",
       "at": [
-        40.727,
-        -73.514
+        40.72695,
+        -73.51433
       ],
       "mustLoad": true,
-      "why": "a postwar tract"
+      "why": "a postwar tract",
+      "note": "(on Jerusalem Avenue: the old point, 29 m off, was in Nassau County Basin #30, a recharge basin)"
     },
     {
       "id": "barharbor-me",
