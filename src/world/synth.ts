@@ -9,7 +9,7 @@ import type { WaterBody } from './dem';
 import { propMaterial } from '../render/propMaterial';
 import { buildGrid, latticeHeight } from './ground';
 import { MINOR, roadPaint } from './roadPalette';
-import { pointInRing } from './realTile';
+import { pointInRing, ringTester } from './realTile';
 import { activeStyle } from './styles';
 
 // Region seed: stable hash of the manifest id (same bake → same synthetic world).
@@ -504,8 +504,14 @@ export function realExtras(tj: TileJson, terrain: { sdfAt(x: number, z: number):
   };
   // (an island — a hole in its water — keeps its ground; each ring's box is checked first, a lake's
   // outline runs to thousands of vertices and the ground asks once a quad)
-  const ringOf = (f: number[]) => { const r = unpack(f); return { r, b: r.reduce((b, [x, z]) => [Math.min(b[0], x), Math.min(b[1], z), Math.max(b[2], x), Math.max(b[3], z)], [Infinity, Infinity, -Infinity, -Infinity]) }; };
-  const inR = (x: number, z: number, q: { r: [number, number][]; b: number[] }) => x >= q.b[0] && x <= q.b[2] && z >= q.b[1] && z <= q.b[3] && pointInRing(x, z, q.r);
+  // (a big ring — a Great Lake's whole outline rides in every cell on its shore — is tested by row:
+  // ringTester, the same answers)
+  const ringOf = (f: number[]) => {
+    const r = unpack(f);
+    const b = r.reduce((b, [x, z]) => [Math.min(b[0], x), Math.min(b[1], z), Math.max(b[2], x), Math.max(b[3], z)], [Infinity, Infinity, -Infinity, -Infinity]);
+    return { r, b, at: r.length > 64 ? ringTester(r, box.z0 - 64, box.z1 + 64) : (x: number, z: number) => pointInRing(x, z, r) };
+  };
+  const inR = (x: number, z: number, q: ReturnType<typeof ringOf>) => x >= q.b[0] && x <= q.b[2] && z >= q.b[1] && z <= q.b[3] && q.at(x, z);
   // (only water cuts the ground: a wetland — a swamp, a marsh — is land, coloured by the paint. Cut
   // like a lake, its hole was covered by a one-sided sheet that faced down for half of them, by their
   // ring's winding, and the sea plane showed through tens of metres below: blue ground with grass

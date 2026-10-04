@@ -65,6 +65,31 @@ export const pointInRing = (x: number, z: number, r: P2[]) => {
   }
   return inside;
 };
+/** pointInRing — the same answers — for many points against one big ring: its edges bucketed by z
+ *  band over the window [z0, z1], so a point tests only the edges crossing its own row. (A cell on
+ *  a Great Lake carries the lake's whole outline, 47,000 vertices: tested once a ground quad, it cost
+ *  a Chicago cell 8 s of its build.) A point outside the window takes the plain test. */
+export function ringTester(r: P2[], z0: number, z1: number, band = 16): (x: number, z: number) => boolean {
+  const n = Math.max(1, Math.ceil((z1 - z0) / band));
+  const rows: number[][] = [];
+  for (let k = 0; k < n; k++) rows.push([]);
+  const row = (z: number) => Math.min(n - 1, Math.max(0, Math.floor((z - z0) / band)));
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const lo = Math.min(r[i][1], r[j][1]), hi = Math.max(r[i][1], r[j][1]);
+    if (hi < z0 || lo > z1) continue;
+    for (let k = row(lo), b = row(hi); k <= b; k++) rows[k].push(i, j);
+  }
+  return (x, z) => {
+    if (!(z >= z0 && z <= z1)) return pointInRing(x, z, r);
+    const es = rows[row(z)];
+    let inside = false;
+    for (let q = 0; q < es.length; q += 2) {
+      const [xi, zi] = r[es[q]], [xj, zj] = r[es[q + 1]];
+      if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+    }
+    return inside;
+  };
+}
 
 // Drop closing duplicate and near-duplicate / collinear vertices.
 function cleanRing(r: P2[], eps = 0.15): P2[] {

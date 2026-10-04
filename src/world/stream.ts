@@ -27,9 +27,10 @@ export const streamParams = {
   loadR: 1500, // keep tiles this close (3×3 cells and then some)
   dropR: 2400, // drop tiles beyond this
   coarseR: 8000, // silhouette ring: lite builds (meshes only) out to the horizon
-  // (these three a phone's tier sets — a PC's are as they always were: no budgets, four at once)
+  // (these four a phone's tier sets — a PC's: no budgets, four real builds and two reliefs at once)
   budgetMB: 0, // the detail tiles' vertex data kept at once, nearest first (world/budget.ts); 0: no cap
   realConc: 4, // real-lite (tile service) builds in flight at once (the service caches in R2; Overpass slots are per endpoint)
+  reliefConc: 2, // relief rebuilds (a mounted cell's late LiDAR, roof colours, DEM) in flight at once
   coarseMB: 0, // the silhouette ring's vertex data kept at once (the farthest go first); 0: no cap
   // an unloaded tile's walls taken out of the walk world a slice a frame (WalkWorld.purgeSome), not
   // only marked dead: a long walk's walls would otherwise pile up for the whole session
@@ -195,7 +196,8 @@ export class TileStream {
   // Late-DEM relief: s-cells that mounted flat (4 s race lost) re-request a build that
   // awaits the real patch, then swap in place. id → attempts so far (bounded retries).
   private relief = new Map<string, number>();
-  private reliefBusy = new Set<string>();
+  private reliefBusy = new Map<string, number>(); // id → when its rebuild was asked
+  private reliefWant = new Map<string, TileSpec>(); // waiting for a slot (drainRelief)
 
   constructor(
     private base: string,
@@ -494,6 +496,7 @@ export class TileStream {
         void this.fetch(sp).then((p) => { if (p) { this.queued.add(sp.id); this.buildQueue.push(p); } });
       }
     }
+    this.drainRelief(x, z);
     // Cells outside the iteration window aren't visited above — sweep mounts so tiles left
     // behind the corner of the box unload the same way the old manifest-wide loop did.
     for (const [id, a] of [...this.loaded]) if (boxDist2(a.spec.box, x, z) > DROP_R * DROP_R) this.unload(id);
@@ -658,13 +661,41 @@ export class TileStream {
   // version — a synth cell its DEM (real heights), a real cell its LiDAR measurement. The
   // worker awaits the untimed read (shared with twins via its caches); if none ever comes
   // the first mount simply stays, retried a couple of times with backoff.
+  // A relief waits its turn (drainRelief): it is a whole rebuild of the cell, and a city's ring
+  // asked for all fourteen at once — they shared the one builder with the cells not yet up at all,
+  // so Chicago's last real cell came at 123 s, and reliefs ran 110 s and stalled out.
   private relieve(spec: TileSpec) {
+    if (this.reliefBusy.has(spec.id) || (this.relief.get(spec.id) ?? 0) >= 3) return;
+    this.reliefWant.set(spec.id, spec);
+  }
+
+  /** Per frame: start the waiting reliefs, nearest first, up to `reliefConc` at a time — a stand-in's
+   *  ground (its DEM) whenever there's a slot, a real cell's measurements and roof colours only
+   *  while no cell of the ring is still on its first build. (A rebuild stuck on a read for a
+   *  minute keeps running but frees its slot.) */
+  private drainRelief(x: number, z: number) {
+    if (!this.reliefWant.size) return;
+    const now = performance.now();
+    let busy = 0;
+    for (const t of this.reliefBusy.values()) if (now - t < 60000) busy++;
+    if (busy >= streamParams.reliefConc) return;
+    let firsts = this.buildQueue.some((p) => !p.replace);
+    for (const id of this.fetching.keys()) if (id[0] === 'w' || id[0] === 's') firsts = true;
+    const ready = [...this.reliefWant.values()]
+      .filter((s) => { if (this.loaded.get(s.id)?.flat) return true; this.reliefWant.delete(s.id); return false; })
+      .filter((s) => !s.world || !firsts)
+      .sort((a, b) => boxDist2(a.box, x, z) - boxDist2(b.box, x, z));
+    for (const s of ready.slice(0, streamParams.reliefConc - busy)) {
+      this.reliefWant.delete(s.id);
+      this.startRelief(s);
+    }
+  }
+
+  private startRelief(spec: TileSpec) {
     const id = spec.id;
-    if (this.reliefBusy.has(id)) return;
     const n = this.relief.get(id) ?? 0;
-    if (n >= 3) return;
     this.relief.set(id, n + 1);
-    this.reliefBusy.add(id);
+    this.reliefBusy.set(id, performance.now());
     this.build(spec, this.ordOf(spec), false, true)
       .then((tile) => {
         const cur = this.loaded.get(id);
@@ -674,7 +705,10 @@ export class TileStream {
           this.buildQueue.push({ spec, tile, replace: true });
         } else setTimeout(() => { if (this.loaded.get(id)?.flat) this.relieve(spec); }, 12000 * (n + 1));
       })
-      .catch((e) => console.warn('relief build failed', id, e))
+      .catch((e) => {
+        console.warn('relief build failed', id, e);
+        setTimeout(() => { if (this.loaded.get(id)?.flat) this.relieve(spec); }, 12000 * (n + 1));
+      })
       .finally(() => this.reliefBusy.delete(id));
   }
 

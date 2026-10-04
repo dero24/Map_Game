@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { makeProjector, osmToTile, parkSide, type OsmDoc, type OsmElement } from '../src/world/realTile';
+import { makeProjector, osmToTile, parkSide, pointInRing, ringTester, type OsmDoc, type OsmElement } from '../src/world/realTile';
+import { makeRng } from '../src/core/rng';
 import type { Box } from '../src/world/data';
 
 const ORIGIN = { lat: 40.362, lon: -73.9755 }; // Sea Bright — same anchor as the bake
@@ -611,4 +612,47 @@ describe('mapped trees keep their species', () => {
     const t = osmToTile(osm({ type: 'node', id: 901, lat, lon, tags: { natural: 'tree', genus: 'Acer', height: '14 m' } }), OPTS);
     expect([t.points[0].c, t.points[0].sp, t.points[0].h]).toEqual(['tree', 'maple', 14]);
   });
+});
+
+describe('ringTester', () => {
+  it('answers as pointInRing does, inside its window and out, for a big wiggly ring and points on its rows', () => {
+    // (a lake's long shoreline: thousands of vertices, many on the window's band edges and the
+    // points' own rows, and a vertex exactly at the window's edge)
+    const R = makeRng(47464), rng = () => R.float();
+    const ring: [number, number][] = [];
+    const n = 3000;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2, r = 900 + 300 * Math.sin(a * 17) + rng() * 120;
+      const p: [number, number] = [Math.cos(a) * r, Math.sin(a) * r];
+      if (i % 50 === 0) p[1] = Math.round(p[1] / 16) * 16; // on a band edge
+      ring.push(p);
+    }
+    ring[10][1] = -512; // on the window's edge
+    const at = ringTester(ring, -512, 512);
+    let checked = 0, inside = 0;
+    const wrong: string[] = [];
+    for (let k = 0; k < 8000; k++) {
+      const x = (rng() - 0.5) * 2600, z = k % 7 === 0 ? ring[Math.floor(rng() * n)][1] : k % 11 === 0 ? Math.round((rng() - 0.5) * 64) * 16 : (rng() - 0.5) * 2600;
+      const want = pointInRing(x, z, ring);
+      if (at(x, z) !== want) wrong.push(`(${x}, ${z})`);
+      checked++;
+      if (want) inside++;
+    }
+    // (the window's own edges, exactly)
+    for (const z of [-512, 512]) for (let x = -1300; x <= 1300; x += 13) if (at(x, z) !== pointInRing(x, z, ring)) wrong.push(`(${x}, ${z})`);
+    expect(wrong).toEqual([]);
+    expect(checked).toBe(8000);
+    expect(inside).toBeGreaterThan(800);
+  }, 30000);
+
+  it('is fast where the plain test is slow: a lake outline asked once a ground quad', () => {
+    const ring: [number, number][] = [];
+    for (let i = 0; i < 47000; i++) { const a = (i / 47000) * Math.PI * 2; ring.push([Math.cos(a) * 200000, Math.sin(a) * 200000 + 199500]); }
+    const at = ringTester(ring, -64, 1088);
+    const t0 = performance.now();
+    let wet = 0;
+    for (let x = 0; x < 1024; x += 8) for (let z = 0; z < 1024; z += 8) if (at(x, z)) wet++;
+    expect(performance.now() - t0).toBeLessThan(1500);
+    expect(wet).toBeGreaterThan(0);
+  }, 30000);
 });
