@@ -1,24 +1,29 @@
 import { describe, expect, it, beforeAll, vi } from 'vitest';
-import { osmToTile } from '../src/world/realTile';
-import { lineOf, tileX, tileY, blockKey, tileKey } from '../src/world/osmTiles';
+import { osmToTile, type OsmDoc } from '../src/world/realTile';
+import { lineOf, tileX, tileY, blockKey, tileKey, tilesFor } from '../src/world/osmTiles';
 import type { TileJson } from '../src/world/data';
 
 // The tile service's own path through our extract (worker/src/osm.js, worker/src/index.js `/tile` and
 // `/skyline`) over an in-memory R2 packed the way scripts/osm-extract.mjs packs it: per block, its
 // tiles gzipped back to back with a directory, its big relations, its tall section; an index with
-// each block's hash and the extract's outline. The cells are tests/fixtures/osm's real Shrewsbury
-// cells (tests/osmExtract.test.ts): through the service they must come out as the TileJson the
-// service built from Overpass, and say so (x-tile-source: extract).
+// each block's hash and the extract's outline. The cells are tests/fixtures/osm's real cells
+// (tests/osmExtract.test.ts): through the service they must come out as the TileJson Overpass's
+// answer for the same box makes — the one the service built (R2), or today's osmToTile of a saved
+// raw answer — and say so (x-tile-source: extract).
 vi.mock('../worker/src/measure', () => ({ measured: async () => new Response('{}') })); // (LiDAR's WASM isn't needed here)
 
 type Fixture = {
   name: string; origin: { lat: number; lon: number }; box: { x0: number; z0: number; x1: number; z1: number };
-  bb: { s: number; w: number; n: number; e: number }; ts: string; tiles: Record<string, string>; overpassTile?: TileJson;
+  bb: { s: number; w: number; n: number; e: number }; ts: string; tiles: Record<string, string>; overpassTile?: TileJson; overpass?: OsmDoc;
 };
+const idOf = (f: Fixture) => `${f.box.x0 / 1024}_${f.box.z0 / 1024}`;
+/** What Overpass's answer for the fixture's box builds: the service's own build, or today's of the raw answer. */
+const expected = (f: Fixture): TileJson => f.overpassTile ?? osmToTile(f.overpass!, { id: idOf(f), box: f.box, origin: f.origin });
 const fixtures: Fixture[] = [];
 const enc = new TextEncoder(), dec = new TextDecoder();
 const gzip = async (s: string) => new Uint8Array(await new Response(new Blob([s]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
 const objects = new Map<string, { b: Uint8Array; meta?: Record<string, string> }>();
+const packed = new Set<string>(); // the blocks the in-memory pack has
 const reads: string[] = [];
 const puts: { key: string; meta?: Record<string, string> }[] = [];
 const bucket = {
@@ -56,7 +61,7 @@ beforeAll(async () => {
   const fs = (await import(/* @vite-ignore */ `node:${'fs'}`)) as { readdirSync(p: URL): string[]; readFileSync(p: URL): Uint8Array };
   const zlib = (await import(/* @vite-ignore */ `node:${'zlib'}`)) as { gunzipSync(b: Uint8Array): Uint8Array };
   const dir = new URL('./fixtures/osm/', import.meta.url);
-  for (const f of fs.readdirSync(dir).filter((f) => f.endsWith('.tile.json.gz')).sort())
+  for (const f of fs.readdirSync(dir).filter((f) => f.endsWith('.json.gz')).sort())
     fixtures.push(JSON.parse(dec.decode(zlib.gunzipSync(fs.readFileSync(new URL(f, dir))))));
   // the fixtures' tiles and big relations, by block
   const blocks = new Map<string, { tiles: Map<string, string>; big: Map<string, string>; tall: string[] }>();
@@ -88,6 +93,7 @@ beforeAll(async () => {
     objects.set(`osm/v1/b/${b}.${hash}.0.bin`, { b: bin });
     objects.set(`osm/v1/b/${b}.${hash}.json`, { b: enc.encode(JSON.stringify(d)) });
     (index.blocks as Record<string, string>)[b] = hash;
+    packed.add(b);
   }
   objects.set('osm/v1/index.json', { b: enc.encode(JSON.stringify(index)) });
 });
@@ -104,20 +110,24 @@ const noBase = (t: TileJson) => ({ ...t, osmBase: 0 });
 
 describe('the tile service reads our own extract (worker/src/osm.js)', () => {
   it('has the real cells', () => {
-    expect(fixtures.filter((f) => f.overpassTile).length).toBeGreaterThanOrEqual(2);
+    expect(fixtures.length).toBeGreaterThanOrEqual(2);
   });
   it('a cell from the extract is the TileJson the service built from Overpass, a directory read once', async () => {
     const { osm } = await fresh();
-    for (const [i, f] of fixtures.entries()) {
+    const known = new Set<string>();
+    for (const f of fixtures) {
       reads.length = 0;
       const doc = await osm.extractDoc(env, f.bb);
       expect(doc, f.name).not.toBeNull();
       expect(doc.osm3s.timestamp_osm_base).toBe(TS);
-      const tj = osmToTile(doc, { id: `${f.box.x0 / 1024}_${f.box.z0 / 1024}`, box: f.box, origin: f.origin });
-      expect(JSON.parse(JSON.stringify(noBase(tj))), f.name).toEqual(noBase(f.overpassTile!));
-      // (the first cell reads its block's directory once, however many tiles; the next, none: kept)
+      const tj = osmToTile(doc, { id: idOf(f), box: f.box, origin: f.origin });
+      expect(JSON.parse(JSON.stringify(noBase(tj))), f.name).toEqual(JSON.parse(JSON.stringify(noBase(expected(f)))));
+      // (a block's directory is read once, however many of its tiles a cell reads; after that, kept)
+      const blocks = new Set([...tilesFor(f.bb).map(([tx, ty]) => blockKey(tx, ty)), ...Object.keys(f.tiles).filter((k) => k.includes('/big/')).map((k) => k.split('/')[0])].filter((b) => packed.has(b)));
+      const fresh_ = [...blocks].filter((b) => !known.has(b));
+      for (const b of blocks) known.add(b);
       const dirReads = reads.filter((k) => k.endsWith('.json') && k.includes('/b/')).length;
-      expect(dirReads, f.name).toBe(i === 0 ? 1 : 0);
+      expect(dirReads, f.name).toBe(fresh_.length);
       expect(reads.filter((k) => k.includes('.bin')).every((k) => k.includes('@')), 'ranged reads').toBe(true);
     }
   });
@@ -138,14 +148,14 @@ describe('the tile service reads our own extract (worker/src/osm.js)', () => {
   });
   it('/tile answers from the extract, keeps the cell in R2 marked as such, and says so again from R2', async () => {
     const { worker } = await fresh();
-    const f = fixtures.find((f) => f.overpassTile)!;
+    const f = fixtures[0];
     const path = `/tile/${f.box.x0 / 1024}_${f.box.z0 / 1024}.json?olat=${f.origin.lat}&olon=${f.origin.lon}`;
     puts.length = 0;
     const r1 = await worker.fetch(new Request(`https://svc.example${path}`), env, ctx);
     expect(r1.status).toBe(200);
     expect(r1.headers.get('x-tile-source')).toBe('extract');
     expect(r1.headers.get('x-tile-cache')).toBe('miss');
-    expect(noBase(await r1.json())).toEqual(noBase(f.overpassTile!));
+    expect(noBase(await r1.json())).toEqual(JSON.parse(JSON.stringify(noBase(expected(f)))));
     expect(puts.map((p) => [p.key, p.meta?.source])).toEqual([[`t/v25/${f.origin.lat.toFixed(4)},${f.origin.lon.toFixed(4)}/${tileKey(f.box.x0 / 1024, f.box.z0 / 1024)}.json`, 'extract']]);
     const r2 = await worker.fetch(new Request(`https://svc.example${path}`), env, ctx);
     expect([r2.headers.get('x-tile-cache'), r2.headers.get('x-tile-source')]).toEqual(['r2', 'extract']);
