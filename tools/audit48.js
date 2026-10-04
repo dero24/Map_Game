@@ -122,6 +122,21 @@ window.__AUDIT__ = async (tag = 'audit', opts = {}) => {
   const turn = await frameStats(opts.frameMs ?? 5000, true);
   const info = { pendingWhileTimed: state().pending };
 
+  // ---- what the GPU holds (a phone's GPU running out is what crashes it): three's counts, and the
+  //      bytes of every geometry's attributes and every texture's image the scene can reach ----
+  const mem = (() => {
+    const R = G.renderer, geos = new Set(), texs = new Set();
+    G.scene.traverse((o) => {
+      if (o.geometry) geos.add(o.geometry);
+      for (const m of [].concat(o.material ?? [])) for (const v of Object.values(m)) if (v && v.isTexture) texs.add(v);
+      if (o.isInstancedMesh && o.instanceMatrix) geos.add({ attributes: { m: o.instanceMatrix, c: o.instanceColor } });
+    });
+    let vb = 0, tb = 0;
+    for (const g of geos) { for (const a of Object.values(g.attributes ?? {})) vb += a?.array?.byteLength ?? 0; vb += g.index?.array?.byteLength ?? 0; }
+    for (const t of texs) { const im = t.image; const w = im?.width ?? 0, h = im?.height ?? 0; tb += w * h * 4 * (t.generateMipmaps === false ? 1 : 1.33); }
+    return { textures: R.info.memory.textures, geometries: R.info.memory.geometries, programs: R.info.programs?.length ?? 0, calls: R.info.render.calls, triangles: R.info.render.triangles, vertexMB: r1(vb / 1048576), textureMB: r1(tb / 1048576) };
+  })();
+
   // ---- the tile worker's notes: errors, measurements ----
   const wlog = [...(S.workerLog ?? [])];
   const workerErrors = wlog.filter((t) => /error|fail|threw|refused|timeout/i.test(t)).slice(-12);
@@ -147,6 +162,7 @@ window.__AUDIT__ = async (tag = 'audit', opts = {}) => {
     trees: { n: trees, meshes: treeMeshes },
     frames: { stand, turn, ...info },
     detailMB: r1((S.detailBytes ?? 0) / 1048576),
+    mem,
     worker: { errors: workerErrors, measuredNotes: measured },
     sheet,
   };

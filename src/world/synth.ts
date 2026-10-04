@@ -425,7 +425,7 @@ export function roadRibbons(roads: Road[], terrain: { heightAt(x: number, z: num
 // Real-lite tiles (worker-served OSM data) need the same visuals the bake gets from
 // paint/atlas: a ground chunk, asphalt ribbons along the REAL road centrelines, and
 // water sheets over the tile's water/coast areas (the terrain has no shore data here).
-const WET: Record<string, [number, number, number]> = { water: [0.32, 0.44, 0.55], wetland: [0.38, 0.45, 0.4], beach: [0.82, 0.75, 0.58] };
+const WET: Record<string, [number, number, number]> = { water: [0.32, 0.44, 0.55], beach: [0.82, 0.75, 0.58] };
 
 /** A ring clipped to a box (Sutherland–Hodgman, one edge of the box at a time). */
 function clipRing(r: [number, number][], b: Box): [number, number][] {
@@ -448,6 +448,18 @@ function clipRing(r: [number, number][], b: Box): [number, number][] {
 
 /** Flat water sheets for the lakes, ponds and rivers among `bodies`, each at its level and
  *  clipped to `box` (the sea has none: its ground is cut away and the ocean plane shows). */
+/** Every triangle of a flat sheet facing up (+y), whichever way the map's ring winds (earcut keeps the
+ *  ring's own order): a sheet's back is culled, so a sheet wound the other way was a hole. In place. */
+export function faceUp(flat: number[], idx: number[]): number[] {
+  for (let t = 0; t + 2 < idx.length; t += 3) {
+    const a = idx[t] * 2, b = idx[t + 1] * 2, c = idx[t + 2] * 2;
+    // (the face normal's y: (B − A) × (C − A), in the x–z plane)
+    const ny = (flat[b + 1] - flat[a + 1]) * (flat[c] - flat[a]) - (flat[b] - flat[a]) * (flat[c + 1] - flat[a + 1]);
+    if (ny < 0) [idx[t + 1], idx[t + 2]] = [idx[t + 2], idx[t + 1]];
+  }
+  return idx;
+}
+
 export function waterSheets(bodies: WaterBody[], box: Box): THREE.Group {
   const g = new THREE.Group(), col = WET.water;
   for (const w of bodies) {
@@ -462,6 +474,7 @@ export function waterSheets(bodies: WaterBody[], box: Box): THREE.Group {
     }
     const idx = earcut(flat, hIdx.length ? hIdx : undefined);
     if (!idx.length) continue;
+    faceUp(flat, idx);
     const pos: number[] = [], nrm: number[] = [], cc: number[] = [];
     for (let i = 0; i < flat.length; i += 2) (pos.push(flat[i], w.level + 0.06, flat[i + 1]), nrm.push(0, 1, 0), cc.push(col[0], col[1], col[2]));
     const geo = new THREE.BufferGeometry();
@@ -493,7 +506,11 @@ export function realExtras(tj: TileJson, terrain: { sdfAt(x: number, z: number):
   // outline runs to thousands of vertices and the ground asks once a quad)
   const ringOf = (f: number[]) => { const r = unpack(f); return { r, b: r.reduce((b, [x, z]) => [Math.min(b[0], x), Math.min(b[1], z), Math.max(b[2], x), Math.max(b[3], z)], [Infinity, Infinity, -Infinity, -Infinity]) }; };
   const inR = (x: number, z: number, q: { r: [number, number][]; b: number[] }) => x >= q.b[0] && x <= q.b[2] && z >= q.b[1] && z <= q.b[3] && pointInRing(x, z, q.r);
-  const wet = tj.areas.filter((a) => a.c === 'water' || a.c === 'wetland').map((a) => ({ o: a.o.map(ringOf), i: a.i.map(ringOf) }));
+  // (only water cuts the ground: a wetland — a swamp, a marsh — is land, coloured by the paint. Cut
+  // like a lake, its hole was covered by a one-sided sheet that faced down for half of them, by their
+  // ring's winding, and the sea plane showed through tens of metres below: blue ground with grass
+  // growing out of it wherever New Jersey's land-use survey mapped a wooded swamp)
+  const wet = tj.areas.filter((a) => a.c === 'water').map((a) => ({ o: a.o.map(ringOf), i: a.i.map(ringOf) }));
   const inWater = (x: number, z: number) => wet.some((w) => w.o.some((q) => inR(x, z, q)) && !w.i.some((q) => inR(x, z, q)));
   // (a hilly cell's ground is 4 m, fine enough to show its streets' cuts and fills; else 8 m)
   const g = buildGrid({ x0: box.x0, z0: box.z0, x1: box.x1, z1: box.z1, step }, (x, z) => terrain.heightAt(x, z), (x, z) => terrain.sdfAt(x, z) > -45 && !inWater(x, z));
@@ -531,6 +548,7 @@ export function realExtras(tj: TileJson, terrain: { sdfAt(x: number, z: number):
       const holes = inners.length ? inners.reduce<number[]>((hs, _r, i) => [...hs, pts.length + inners.slice(0, i).reduce((n, rr) => n + rr.length, 0)], []) : undefined;
       const idx = earcut(flat, holes);
       if (!idx.length) continue;
+      faceUp(flat, idx);
       const pos: number[] = [], nrm: number[] = [], cc: number[] = [];
       for (const ring of rings)
         for (const [x, z] of ring) {

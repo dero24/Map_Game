@@ -57,9 +57,11 @@
       ],
       "evidence": [
         "tools/audit48.mjs, tools/audit48.js, tools/audit48-towns.json",
-        "docs/earth/AUDIT_48.md"
+        "docs/earth/AUDIT_48.md",
+        "src/world/synth.ts (realExtras: only water cuts the ground; faceUp)",
+        "tests/realExtras.test.ts"
       ],
-      "notes": "Audit 2026-10-03 (Overpass down): most cold cells stayed vector twins (Midtown 0/14 real, Intercourse 0/14, Hays 1/14). Shrewsbury's reported dark-blue ground not reproduced at the centre (to check across the ring and on a phone)."
+      "notes": "Audit 2026-10-03 (Overpass down): most cold cells stayed vector twins (Midtown 0/14 real, Intercourse 0/14, Hays 1/14). Shrewsbury's reported dark-blue ground not reproduced at the centre (to check across the ring and on a phone). 2026-10-04: the blue ground found — Robby's at Monmouth Executive Airport and in Shrewsbury: a streamed cell's ground (synth.ts realExtras) was cut away under wetlands like under water, and the sheet over the hole faced down for half of them (their ring's winding): the sea plane showed through, blue, with grass on it. Wetlands are ground now (only water cuts it), every sheet faces up (faceUp); tests/realExtras.test.ts fails on the old code; shots/audit48/monmouthairport-nj-montage.jpg before/after."
     },
     {
       "id": "spawn-on-land-outside",
