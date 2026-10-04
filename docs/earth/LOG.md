@@ -2,7 +2,7 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
-## 2026-10-04 — Foundation first (5): audit round 2 — every cell real; the slow cities; the horizon
+## 2026-10-04 — Foundation first (5): audit round 2 — every cell real; the slow cities; the horizon; a phone holds each vertex once
 
 The lower-48 audit again (`docs/earth/AUDIT_48.md` round 2), now that every cell comes from our own
 extract: 19 towns, desktop and phone, first visits at t/v25.
@@ -28,10 +28,21 @@ extract: 19 towns, desktop and phone, first visits at t/v25.
 - Round 2's other finds, fixed earlier today (9d364c0): a triangle's gable roof (the NaN chimney at
   Ely and Santa Monica), and browser Overpass asked though the service answers. The one console
   error in every run comes from the dev server's local-worker check, so a player never sees it.
-- **Next:** the phone's weight (free the uploaded vertex arrays the CPU never reads again; the stream's
-  budget counts their bytes, so keep the count), Robby's `?diag=1` at the airport, then Tier 1. The
-  audit's looks-right leads are Aspen's lawn-green mountain, a Duluth street frame with no street,
-  and a car parked on a crossing.
+- **A phone's page holds each vertex once** (`phones`): the page kept every tile vertex in JS as
+  well as on the GPU. On the phone tiers (`quality.ts freeArrays`; `?free=0` / `?free=1` override)
+  each tile attribute now drops its array once uploaded (`pack.ts`), keeping what the CPU reads
+  again: positions, ids, the index, and instance matrices. A tile mounted whole (the arrival ring,
+  a silhouette) is drawn on its first frame whether or not it's in view (`stream.ts uploadSoon`),
+  so it uploads and drops its copy straight away. A restored GPU context can't re-upload what's
+  gone, so a page that frees reloads where you stand, a tier lighter as after any lost context.
+  At the airport on a Pixel 7 the page's array memory went 196 → 136 MB once settled, and 243 →
+  158 MB after a walk round the ring, with no errors. A forced context loss
+  (`WEBGL_lose_context`) reloaded at the same spot, the phone montage is unchanged, and
+  `tools/mobile-check.mjs` passes. The stream's budgets weigh a tile before its upload, so their
+  counts are unchanged.
+- **Next:** Robby's `?diag=1` at the airport on his phone, then Tier 1. The audit's looks-right
+  leads are Aspen's lawn-green mountain, a Duluth street frame with no street, a car parked on a
+  crossing, and the airfield's runways drawn as thin lines.
 
 ## 2026-10-04 — Foundation first (4): the US extract built, proven, live; every ramp; the airport crash
 
