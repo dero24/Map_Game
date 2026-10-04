@@ -2,13 +2,16 @@
 // Our own extract against Overpass, cell by cell (docs/DATA_SOURCES.md §0: "match Overpass exactly,
 // and prove it"). For each sample cell: the extract's answer (src/world/osmTiles.ts `assemble`, read
 // from a local pack — scripts/osm-extract.mjs's output) against an Overpass answer for the same box —
-// a saved raw answer (tests/fixtures/osm/<case>.overpass.json.gz, from `--save`), or, failing that,
-// the TileJson the tile service already built from Overpass (R2) — compared element by element
+// a saved raw answer (tests/fixtures/osm/<case>.raw.json.gz, from `--save`), or, failing that, the
+// TileJson the tile service already built from Overpass (R2) — compared element by element
 // (`canonical`: what osmToTile reads) and as TileJson (osmToTile's own output, field by field).
 //
 //   node tools/osm-compare.mjs --pack=D:/map_game_osm/nj/out --cells=<olat>,<olon>:<cx>_<cz>[;…]
-//     [--save] (ask Overpass for each box as of the extract's timestamp — an attic query — and keep
-//     the raw answer and the box's extract lines as a test fixture: tests/fixtures/osm/)
+//     [--save] (ask Overpass for each box as of the extract's timestamp — an attic query, the same
+//     OSM — and keep the raw answer with the box's extract tiles as one test fixture,
+//     <case>.raw.json.gz: both sides go through today's osmToTile, so it outlives builder changes)
+//     [--out=<dir>] (where --save and --fixture write: tests/fixtures/osm by default; a dense city's
+//     cell is megabytes — keep those outside the repo)
 //     [--fixture] (keep each compared cell — its extract tiles and the Overpass-built TileJson — as
 //     a test fixture, tests/fixtures/osm/<case>.tile.json.gz: tests/osmExtract.test.ts replays it)
 //     [--service=https://map-game-tiles.map-game-tiles.workers.dev] [--name=<case>]
@@ -23,7 +26,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = Object.fromEntries(process.argv.slice(2).map((a) => { const m = a.match(/^--([^=]+)(?:=(.*))?$/); return m ? [m[1], m[2] ?? true] : [a, true]; }));
 const PACK = String(args.pack ?? 'D:/map_game_osm/out/v1');
 const SERVICE = String(args.service ?? 'https://map-game-tiles.map-game-tiles.workers.dev');
-const FIX = resolve(ROOT, 'tests/fixtures/osm');
+const FIX = resolve(ROOT, String(args.out ?? 'tests/fixtures/osm'));
 const { runnerImport } = await import('vite');
 const load = async (p) => (await runnerImport(resolve(ROOT, p), { configFile: false, logLevel: 'error' })).module;
 const RT = await load('src/world/realTile.ts');
@@ -56,7 +59,7 @@ for (const c of cells) {
   used.clear();
   const ours = await OT.assemble(src, bb, index.ts);
   const name = String(args.name ?? `${c.olat.toFixed(4)},${c.olon.toFixed(4)}_${c.cx}_${c.cz}`);
-  const fx = resolve(FIX, `${name}.overpass.json.gz`);
+  const fx = resolve(FIX, `${name}.raw.json.gz`);
   let theirs = null, how = '';
   if (args.save) {
     // Overpass as of the extract's own moment (attic data): the same OSM, so every difference is ours
@@ -69,12 +72,12 @@ for (const c of cells) {
         if (j.remark && /error|timed out/i.test(j.remark)) { console.log(`  ${ep}: ${j.remark.slice(0, 100)}`); continue; }
         theirs = j; how = `Overpass ${ep.split('/')[2]} as of ${index.ts}`;
         mkdirSync(FIX, { recursive: true });
-        writeFileSync(fx, gzipSync(JSON.stringify(j)));
-        writeFileSync(resolve(FIX, `${name}.extract.json.gz`), gzipSync(JSON.stringify({ ts: index.ts, bb, origin, box, tiles: Object.fromEntries(used) })));
+        writeFileSync(fx, gzipSync(JSON.stringify({ name, origin, box, bb, ts: index.ts, tiles: Object.fromEntries(used), overpass: j, how })));
+        console.log(`  fixture: ${fx.startsWith(ROOT) ? fx.slice(ROOT.length + 1) : fx} (${(readFileSync(fx).length / 1024).toFixed(0)} KB)`);
         break;
       } catch (e) { console.log(`  ${ep}: ${e.message}`); }
     }
-  } else if (existsSync(fx)) { theirs = JSON.parse(gunzipSync(readFileSync(fx)).toString()); how = 'saved Overpass answer'; }
+  } else if (existsSync(fx)) { const f = JSON.parse(gunzipSync(readFileSync(fx)).toString()); theirs = f.overpass; how = `saved: ${f.how}`; }
   const tjOurs = RT.osmToTile(ours, { id: `${c.cx}_${c.cz}`, box, origin });
   if (theirs) {
     const A = ours.elements.map(OT.canonical), B = (theirs.elements ?? []).map(OT.canonical);
@@ -105,7 +108,8 @@ for (const c of cells) {
   if (args.fixture) {
     mkdirSync(FIX, { recursive: true });
     writeFileSync(resolve(FIX, `${name}.tile.json.gz`), gzipSync(JSON.stringify({ name, origin, box, bb, ts: index.ts, tiles: Object.fromEntries(used), overpassTile: tj, how: `the tile service's TileJson built from Overpass (osmBase ${tj.osmBase})`, same })));
-    console.log(`  fixture: tests/fixtures/osm/${name}.tile.json.gz`);
+    const ff = resolve(FIX, `${name}.tile.json.gz`);
+    console.log(`  fixture: ${ff.startsWith(ROOT) ? ff.slice(ROOT.length + 1) : ff}`);
   }
 }
 process.exit(bad ? 1 : 0);

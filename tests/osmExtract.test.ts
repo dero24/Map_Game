@@ -43,11 +43,15 @@ describe('our own extract answers as Overpass does (tests/fixtures/osm)', () => 
       expect(JSON.parse(JSON.stringify({ ...tj, osmBase: 0 })), `${f.name} (${f.how})`).toEqual({ ...theirs, osmBase: 0 });
     }
   });
-  it('every raw answer: element for element, what osmToTile reads', async () => {
+  it("every raw answer (Overpass as of the extract's moment): element for element, and the same TileJson", async () => {
     for (const f of fixtures.filter((f) => f.overpass)) {
       const doc = await assemble(sourceOf(f), f.bb, f.ts);
       const ours = doc.elements!.map(canonical).sort(), theirs = (f.overpass!.elements as never[]).map(canonical).sort();
       expect(ours, f.name).toEqual(theirs);
+      // (both through today's osmToTile: the proof holds whatever the builder becomes)
+      const id = `${f.box.x0 / 1024}_${f.box.z0 / 1024}`;
+      const a = osmToTile(doc, { id, box: f.box, origin: f.origin }), b = osmToTile(f.overpass as never, { id, box: f.box, origin: f.origin });
+      expect({ ...a, osmBase: 0 }, f.name).toEqual({ ...b, osmBase: 0 });
     }
   });
 });
