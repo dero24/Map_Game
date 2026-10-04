@@ -556,7 +556,8 @@ async function main() {
       }
   };
   stream.onMount = (spec) => {
-    if (landed && spec.world) {
+    // (spec null: no tile, just the rescue now — tools/playtest.js `settle` asks for it that way)
+    if (landed && spec?.world) {
       const b = spec.box, [ax, az] = landed.to;
       const still = Math.hypot(walker.x - landed.x, walker.z - landed.z) < 1.5 && performance.now() - landed.t < 180000;
       if (!still) landed = null;

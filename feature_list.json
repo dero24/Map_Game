@@ -19,16 +19,18 @@
       "id": "own-osm-extract",
       "tier": 0,
       "rank": 1,
-      "status": "in_progress",
+      "status": "passing",
       "area": "platform",
       "title": "Our own OpenStreetMap extract in R2 — every cell from it, Overpass only a polite fallback",
       "user_visible_behavior": "Anywhere in the lower 48, a new place's real streets, buildings, trees and lamps arrive in seconds, never stuck as stand-ins because the public Overpass servers are busy or down; the skylines come from the same extract.",
       "verification": [
         "tests/osmQuery.test.ts: the Overpass query generated from the one statement list, byte for byte the old",
         "tests/osmTiles.test.ts: the grid, Overpass's box rule, assembly",
-        "tests/osmExtract.test.ts: real cells — the extract's TileJson identical to the service's Overpass builds (osmBase aside)",
-        "tools/osm-compare.mjs on the US pack: the audit's Overpass-built cells identical",
-        "tools/must-load.mjs --live: every must-load town from x-tile-source: extract"
+        "tests/osmExtract.test.ts: real cells' saved Overpass answers (Shrewsbury x2, Intercourse PA, Bar Harbor ME) — element for element, and the same TileJson through today's osmToTile",
+        "tests/osmWorker.test.ts: the service's own extract path (/tile, /skyline, the outline, a directory read once) over an in-memory R2",
+        "tests/osmExtractSql.test.ts: the script's own relation SQL in DuckDB (empty member roles; nothing null)",
+        "tools/osm-compare.mjs --now, 2026-10-04 (today's Overpass, each element's last edit): 15 cells in 12 states identical or different only by elements edited after the snapshot — downtown Seattle 6,042 (7 edited since), Kings Beach 732 (1), South Lake Tahoe 1,338, Santa Monica 2,407, downtown Tucson 6,402, Aspen 2,004, Hays 2,588, St. Louis riverfront 2,489, Asheville 2,657, Miami Beach 2,180, Intercourse 335, Levittown 1,367, Shrewsbury 203 and 371, Bar Harbor 1,314",
+        "tools/must-load.mjs --live, 2026-10-04 after the switch: all 11 streamed must-load towns 9/9 cells from x-tile-source: extract, cold in 1.6–13 s; /skyline: lower Manhattan's 11,567 tall things from the extract"
       ],
       "evidence": [
         "src/world/osmQuery.ts",
@@ -38,15 +40,19 @@
         "worker/src/osm.js",
         "worker/src/index.js (extract first; /skyline)",
         "tools/osm-compare.mjs",
-        "docs/agent/streaming.md \"Our own OpenStreetMap extract\""
+        "docs/agent/streaming.md \"Our own OpenStreetMap extract\"",
+        "tests/osmExtractSql.test.ts",
+        "tests/osmWorker.test.ts",
+        "R2 osm/v1/ (1,481 blocks, 36.5 GB, the index as of 2026-10-02T20:21:34Z)",
+        "worker version 1aef467b (rollback: 1c95d174)"
       ],
-      "notes": "Robby 2026-10-03: option one (R2), packed (not millions of files), match Overpass exactly and prove it with saved answers kept as a test, cut on a global grid from the whole-US file, ODbL on request, monthly refresh by a script on his PC, Overpass only as a polite fallback. New Jersey prototype identical to Overpass on two Shrewsbury cells; the US run under way."
+      "notes": "Robby 2026-10-03: option one (R2), packed (not millions of files), match Overpass exactly and prove it with saved answers kept as a test, cut on a global grid from the whole-US file, ODbL on request, monthly refresh by a script on his PC, Overpass only as a polite fallback. New Jersey prototype identical to Overpass on two Shrewsbury cells; the US run under way. Live 2026-10-04. Going back is one step (docs/agent/streaming.md): delete osm/v1/index.json, or wrangler rollback."
     },
     {
       "id": "every-tile-loads",
       "tier": 0,
       "rank": 2,
-      "status": "not_started",
+      "status": "in_progress",
       "area": "world",
       "title": "Every tile loads, or falls back gracefully — no missing land, no land drawn as water, no holes; a fixed must-load town list in the tests",
       "user_visible_behavior": "Wherever you start or go in the lower 48, the ground under you is land where it is land and water where it is water, real streets and buildings arrive, and a cell that can't is a believable stand-in, never a hole.",

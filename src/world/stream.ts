@@ -290,7 +290,7 @@ export class TileStream {
   get busy() { return this.fetching.size > 0 || this.buildQueue.length > 0 || this.coarseFetching.size > 0 || this.coarseQueue.length > 0; }
   // Fired once a detail tile is fully mounted (visual + collision). main.ts uses it to
   // re-settle the walker when a real tile replaces the synth placeholder underfoot.
-  onMount?: (spec: TileSpec) => void;
+  onMount?: (spec: TileSpec | null) => void;
   // w-* cells still on the wire — drives the "the real streets are painting in" toast.
   get worldPending() {
     let n = 0;
