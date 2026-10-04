@@ -65,15 +65,19 @@
       "id": "spawn-on-land-outside",
       "tier": 0,
       "rank": 3,
-      "status": "not_started",
+      "status": "blocked",
       "area": "world",
       "title": "A ?at= arrival stands outside, on land: never inside a building, never in water",
       "user_visible_behavior": "Arriving anywhere by link, search or teleport, you stand on the street or a path outside, facing the place — not in a restaurant's dining room or a pond.",
       "verification": [
         "tools/audit48.mjs: every town's spawn outside and on land, desktop and phone"
       ],
-      "evidence": [],
-      "notes": "Audit 2026-10-03: Bar Harbor ME (44.3876, −68.2045) desktop spawned inside a restaurant's dining room; Levittown NY flagged spawn in water (0.6% water round it)."
+      "evidence": [
+        "src/player/landing.ts (lands just past the foot of the nearest door's steps, facing it; was 2.2 m inside)",
+        "src/main.ts (re-makes an arrival when the real cell replaces its stand-in under the walker)",
+        "tests/landing.test.ts"
+      ],
+      "notes": "Audit 2026-10-03: Bar Harbor ME (44.3876, −68.2045) desktop spawned inside a restaurant's dining room; Levittown NY flagged spawn in water (0.6% water round it). Fixed 2026-10-03 (ff84f22). Blocked on the verification only: audit round 2 (every town's spawn outside and on land, desktop and phone) runs once own-osm-extract is live, so the arrivals land in real cells."
     },
     {
       "id": "playtest-suite",
@@ -105,15 +109,20 @@
       "id": "worker-costs",
       "tier": 0,
       "rank": 5,
-      "status": "not_started",
+      "status": "passing",
       "area": "platform",
       "title": "Worker costs under control (Workers Paid): cache-hit rate, requests, R2 reads and writes checked and kept efficient",
       "user_visible_behavior": "(Developer) The tile service's monthly bill stays a few dollars as players grow; every repeat visit is a cache hit.",
       "verification": [
-        "docs/agent/streaming.md cost model + the dashboard numbers (Robby)"
+        "docs/agent/streaming.md cost model + the dashboard numbers (Robby)",
+        "Robby's Cloudflare dashboard 2026-10-03: $0.00 billed; R2 2.92 k Class A writes (1 M a month included), 6.11 k Class B reads (10 M), 0.03 GB-month stored; the worker 5.96 k invocations, 2.45 k subrequests (S3 terrain and LiDAR reads, Overpass), median CPU 1.78 ms, 4 errors"
       ],
-      "evidence": [],
-      "notes": "Cost model 2026-10-03: a new-area session ~300–500 requests (10 M a month included); a cold cell from the extract ~0.1–0.5 s CPU and a few R2 reads. The TileJson cache is keyed per session origin — neighbouring starts rebuild the same ground (cheap now; a global cell key would share it)."
+      "evidence": [
+        "docs/agent/streaming.md (the cost model)",
+        "worker/src/index.js (edge cache, R2 TileJson cache, Overpass rest and cached 503s)",
+        "scripts/osm-upload.mjs (packed blocks, content-addressed: a monthly refresh writes only changed blocks)"
+      ],
+      "notes": "Cost model 2026-10-03: a new-area session ~300–500 requests (10 M a month included); a cold cell from the extract ~0.1–0.5 s CPU and a few R2 reads. The TileJson cache is keyed per session origin — neighbouring starts rebuild the same ground (cheap now; a global cell key would share it). Passing 2026-10-03 on Robby's numbers. Re-check the dashboard a month after the extract goes live (cold cells move from Overpass waits to R2 range reads)."
     },
     {
       "id": "phones",
@@ -236,13 +245,20 @@
       "id": "real-world-comparison",
       "tier": 1,
       "rank": 11,
-      "status": "not_started",
+      "status": "blocked",
       "area": "tools",
       "title": "The real-world comparison loop: Mapillary photos against game renders from the same spot, heading and field of view, a montage per state, scored, worst fixed first",
       "user_visible_behavior": "(Developer) One command samples seeded spots in every state, fetches an openly licensed street photo for each (Mapillary; never Google Street View), renders the game from the same pose, puts the pairs side by side and scores them — the score history says whether a change made the lower 48 more like itself.",
-      "verification": [],
-      "evidence": [],
-      "notes": "docs/GAMEPLAY_VISION.md §17. Photos cached outside git, never shipped; never unblur faces or plates; NAIP aerial comparison where no photo. Needs a Mapillary client token (Robby)."
+      "verification": [
+        "First run 2026-10-03, the shore (3 spots, baked): 0.811 / 0.872 / 0.867 — the game shows a quarter or less of the photos' vegetation and a fifth to a third of their poles, signs and furniture"
+      ],
+      "evidence": [
+        "tools/real-spots.mjs (seeded spots per state, Mapillary images with their segmentation, cached outside git)",
+        "tools/real-compare.mjs (the game from the photo's pose, lens, date and hour; side by side; scored)",
+        "tools/class-pass.js (the game's class mix)",
+        "tools/real-scores.json (one entry a run)"
+      ],
+      "notes": "docs/GAMEPLAY_VISION.md §17. Photos cached outside git, never shipped; never unblur faces or plates; NAIP aerial comparison where no photo. Mapillary token from Robby in .env (git-ignored). Blocked 2026-10-03 on own-osm-extract: the per-state run waits for real cells (most new places are vector twins until the extract is live)."
     },
     {
       "id": "place-parity",
@@ -290,7 +306,7 @@
       "user_visible_behavior": "Street lights, poles, hydrants, benches, bins, signs and the like stand where Mapillary's cameras saw them where the map has none; off by a switch for comparing.",
       "verification": [],
       "evidence": [],
-      "notes": "docs/GAMEPLAY_VISION.md §17 (Robby's decision: use it, credit every source). Fills street-furniture-nodes' gaps. 50,000 tile requests a day per app: the worker bakes them into tiles once."
+      "notes": "docs/GAMEPLAY_VISION.md §17 (Robby's decision: use it, credit every source). Fills street-furniture-nodes' gaps. 50,000 tile requests a day per app: the worker bakes them into tiles once. A first look (2026-10-03, z14 tiles of mly_map_feature_point): Sea Bright 886 features + 41 signs, every one from a single drive (first = last seen, 2026-04-12): utility poles 177, street lights 132, traffic signs 219, shop and advertising signs 93, driveways 30, catch basins 27, manholes 14, bins 14, hydrants 5, benches 3, mailboxes 3. Hays KS 247, one drive in 2021. Midtown 57,868; Seattle downtown 473,848 (62,629 \"street lights\" in ~2.7 km²): where many drives overlap, one real object is many features. So the rules need: merge a class within a few metres; \"repeated\" can't mean different days (a one-drive town would get nothing); leave out what moves (cones, temporary signs) and what isn't public (driveways, shop and advertising signs). Ask Robby about residential mailboxes (his list has mailboxes; most US ones are private, at the kerb)."
     },
     {
       "id": "street-furniture-nodes",

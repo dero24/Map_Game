@@ -24,16 +24,17 @@ const index = JSON.parse(readFileSync(`${PACK}/index.json`, 'utf8'));
 const doneFile = `${PACK}/uploaded${args.local ? '.local' : ''}.json`;
 const done = new Set(existsSync(doneFile) ? JSON.parse(readFileSync(doneFile, 'utf8')) : []);
 
-// Geofabrik's .poly: a name, then rings of "lon lat" lines, each closed by END ("!" rings are holes —
-// none in the US file; left out here, so the outline only ever gets smaller, never wrongly larger)
+// Geofabrik's .poly: a name, then rings of "lon lat" lines, each closed by END. A ring named "!…" is
+// a hole — none in the US file, and refused: the service reads the outline as plain rings, so a
+// dropped hole would claim its area as covered
 function readPoly(file) {
   const rings = [];
-  let cur = null, hole = false;
+  let cur = null;
   for (const line of readFileSync(file, 'utf8').split(/\r?\n/).slice(1)) {
     const t = line.trim();
     if (!t) continue;
-    if (t === 'END') { if (cur && !hole) rings.push(cur); cur = null; continue; }
-    if (!cur) { cur = []; hole = t.startsWith('!'); continue; }
+    if (t === 'END') { if (cur) rings.push(cur); cur = null; continue; }
+    if (!cur) { if (t.startsWith('!')) throw new Error(`${file}: ring ${t} is a hole — the service's outline has no holes`); cur = []; continue; }
     const [x, y] = t.split(/\s+/).map(Number);
     cur.push([+x.toFixed(6), +y.toFixed(6)]);
   }

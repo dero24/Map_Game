@@ -8,8 +8,8 @@
 //     on any failure. Cheap: R2 hits after the first run (CI runs it on every push).
 //   node tools/must-load.mjs --fixtures --pack=D:/map_game_osm/out/v1
 //     each streamed town's spawn cell, assembled from a local extract pack exactly as the service does
-//     (src/world/osmTiles.ts → osmToTile), kept as tests/fixtures/towns/<id>.tile.json.gz with today's
-//     counts for tests/mustLoad.test.ts. A baked town (Sea Bright) is read from its pack by the test.
+//     (src/world/osmTiles.ts → osmToTile), kept as tests/fixtures/towns/<id>.tile.json.gz for
+//     tests/mustLoad.test.ts. A baked town (Sea Bright) is read from its pack by the test.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';

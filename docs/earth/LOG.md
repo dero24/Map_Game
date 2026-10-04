@@ -2,6 +2,79 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-03 — Foundation first (3): our own OSM extract, the audit, the tiers, arriving outside, the comparison loop
+
+Tier 0's audit and "every tile loads" (docs/GAMEPLAY_VISION.md §17), and Tier 1's first tool.
+
+- **The lower-48 audit, round 1** (`tools/audit48.mjs` + `audit48.js`, `docs/earth/AUDIT_48.md`): 10
+  towns, each as a desktop and as a phone, with one montage per town. Public Overpass stopped answering
+  during the run, from this PC and from Cloudflare (the OSM forum reports throttling and some instances
+  shut down). Midtown, Intercourse, Miami Beach, the Chicago Loop and German Village had 0 of 14 real
+  cells on the desktop; everything else was the vector twin, which held up (no holes, no land drawn as
+  water). Found: Bar Harbor's arrival was inside a restaurant's dining room, and Levittown's was
+  flagged as in water. Robby's dark-blue ground at Shrewsbury didn't reproduce (at the centre, on the
+  desktop and phone tiers, with the DEM blocked, in January).
+- **The queue re-ranked** (`feature_list.json`, `tools/rerank-features.mjs`): tiers 0–3 from the
+  vision's §17, 90 items. 24 are new: the extract, every-tile-loads, spawn-on-land-outside,
+  worker-costs, the comparison loop, public places, Mapillary objects, round 12's night, ground and
+  trees, the phone look, and §15's gameplay steps. Three are superseded, with reasons:
+  `brush-boat-minute`, `almanac-regional` and `traversal-spike`. One is in_progress: `own-osm-extract`.
+  `npm run init` names the next item by tier.
+- **Our own OSM extract.** Robby's call: R2; packed, not millions of files; match Overpass exactly and
+  prove it with saved answers kept as a test; cut on a global grid from the whole-US file; ODbL on
+  request; a monthly refresh from his PC; Overpass only a polite fallback. The parts:
+  - `src/world/osmQuery.ts` writes the cell query once; `overpassQuery` is generated from it, byte for
+    byte the old one.
+  - `src/world/osmTiles.ts`: 1/128° tiles in 1° blocks, Overpass's box rule, and assembly.
+  - `scripts/osm-extract.mjs` packs Geofabrik's file through DuckDB `ST_ReadOSM`.
+  - `scripts/osm-upload.mjs`: content-addressed keys, only changed blocks uploaded, the index last.
+  - `worker/src/osm.js`: the service reads the extract first, and `/skyline` serves both skylines from
+    its tall layer.
+  - `tools/osm-compare.mjs` compares the extract with Overpass.
+
+  Proof so far: two real Shrewsbury cells built from the extract are **identical** to the TileJson
+  the service built from Overpass (osmBase aside). They're kept as `tests/osmExtract.test.ts`, and in
+  `wrangler dev` the worker's own path gives the same bytes.
+  - The US run hit DuckDB's limits:
+    - An ordered list aggregate over 1.5 B points ran out of memory. Sliced, it ran on one core. In
+      eighths, it spilled 85 GB. Now it's an unordered gather and a list sort in slices of about 10 M
+      points (about 11 s each, no spill).
+    - Big relations got a random home block on ties (`min_by`). Now it's the lowest tile, so a rerun
+      packs the same bytes.
+
+    Each change was checked byte for byte on New Jersey's 10 blocks.
+  - The browser no longer asks Overpass itself, except with `?tiles=direct`. The service tries two
+    mirrors for 25 s each, rests five minutes after three failures, and caches a failure for ten
+    minutes.
+- **Arrive outside** (`src/player/landing.ts`): a link, a search or "walk here" now lands just past
+  the foot of the nearest door's steps, facing the door. It used to land 2.2 m inside, which put
+  arrivals in a Bar Harbor dining room and a Shrewsbury house. `main.ts` re-makes an arrival when the
+  real cell replaces its stand-in under you.
+- **A mailbox out of a slip road's lane** (`src/world/props.ts`): the playtest's posts check found a
+  rural box in the lane of the Ocean Avenue / Rumson Road link. `buildings.ts`'s street index knows
+  only the plain streets, so a box is now left out wherever it lands in any carriageway
+  (`tests/kerbposts.test.ts`, which fails on the old code).
+- **The playtest on every push** (`.github/workflows/playtest.yml`, committed at go-live): typecheck,
+  tests, build and the live must-load check, then the quick suite headless on the shore. Locally 5 of
+  6 checks passed; the sixth, the posts check, found the mailbox above.
+- **Worker costs** (Robby's dashboard, 2026-10-03): $0.00 billed. R2 had 2.92 k writes (1 M
+  included), 6.11 k reads (10 M included) and 0.03 GB-months of storage. The worker served 5.96 k
+  invocations with 2.45 k subrequests (the terrain and LiDAR reads on S3, and Overpass), at a median 1.78 ms of CPU. The
+  cost model is in `docs/agent/streaming.md`.
+- **The real-world comparison loop** (`tools/real-spots.mjs`, `real-compare.mjs`, `class-pass.js`):
+  Mapillary photos against the game from the same pose, lens (Mapillary's focal length), date and
+  hour, scored by class mix (Mapillary's own segmentation against a flat-colour class pass). The
+  token is in `.env`, which git ignores; the photos are for development only and never shipped.
+  - First run, on the shore: scores of 0.81–0.87 (`tools/real-scores.json`). The game shows a quarter
+    or less of the photos' vegetation, a fifth to a third of their "other" (poles, signs, furniture)
+    and more bare ground.
+  - Mapillary's terms are checked (Robby asked): fine for the loop. Street objects are fine too, with
+    the logo and as a separate CC BY-SA layer (`docs/DATA_SOURCES.md` §0).
+
+Next: finish the US extract, compare the audit's Overpass-built cells and save them as fixtures, run
+the must-load fixtures, upload the blocks, deploy the worker, then upload the index (the switch).
+After that: the live must-load check, push (Pages and CI), and audit round 2 on a quiet machine.
+
 ## 2026-10-03 — Foundation first (2): commercial-safe — our own place index, the licence check, credits
 
 Tier 0's "commercial-safe infrastructure" (docs/GAMEPLAY_VISION.md §17).
@@ -30,7 +103,7 @@ Tier 0's "commercial-safe infrastructure" (docs/GAMEPLAY_VISION.md §17).
   - Bugs on the way: two Shrewsburys 2 km apart (borough and township) were folded into one until
     duplicates had to be the same kind; Portland ME had no county (its Census point is in Casco Bay,
     outside the shoreline-clipped county: now the nearest county's shore); a Python edit wrote
-    backspace characters for `` in two regexes (found when the parks' weight was still 39;
+    backspace characters for `\b` in two regexes (found when the parks' weight was still 39;
     rebaked as v3; every edited file scanned for control characters since).
 - **The licence check** (`docs/DATA_SOURCES.md` §0): every source and service, its terms (quoted),
   whether a paid game may use it, its credit, share-alike. Findings:
@@ -3323,8 +3396,8 @@ the same build/pack/mount path as real tiles.
 
 - **src/world/synth.ts** (new): synthTile(spec, seed, terrain) -> a full TileJson +
   extra group (ground chunk + road/sidewalk ribbons). Everything is *field-driven*: a
-  warped street grid (108 m pitch, sine-wandered lines), a low-freq noise town mask for
-  density, lattice-hash h for every choice. No per-tile RNG for layout -> seams are
+  warped street grid (108 m pitch, sine-wandered lines), a low-freq noise town mask for
+  density, lattice-hash h for every choice. No per-tile RNG for layout -> seams are
   structurally impossible; neighbour tiles agree about shared roads/lots by position.
 - **Streaming** (stream.ts): specAt(cx,cz) -> baked manifest tile or {id:s+key, synth:1}
   spec; update() iterates the cell window (not the manifest); radius sweep for drops.
@@ -3333,13 +3406,13 @@ the same build/pack/mount path as real tiles.
   900 m dead zone where nothing loaded); ensureAround enumerates synth cells too;
   synthOrd is cell-hashed (session-independent ids).
 - **Worker** (	ile.worker.ts): init takes seed; spec.synth -> synthTile on-thread
-  (pure JS, no fetches), then the identical uildTile+pack path. In-page fallback same.
+  (pure JS, no fetches), then the identical uildTile+pack path. In-page fallback same.
 - **Ground** (ground.ts/pack.ts): ground material exposed via userData.groundMat ->
   setGndMaterial(); new pack tag 'gnd'; synth tiles emit a ground chunk into extra.
 - **Props** (props.ts): slice containment now uses the tile's own slice box (inSlice)
   so poles/trees/benches emit outside the baked grid; pavedMask bounds clamped for boxes
   fully outside the slice (was negative canvas size).
-- **Buildings** (uildings.ts): landmarks ?? [] (synth has none).
+- **Buildings** (uildings.ts): landmarks ?? [] (synth has none).
 - **Collision/main** (collision.ts, main.ts): walk.bounds widened to �4e6 m �
   walkable  forever, water still gates via height/sdf.
 - **Life** (life.ts): env bounds widened �10 km so gulls/agents aren't slice-trapped;

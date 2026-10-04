@@ -34,7 +34,7 @@ const OUT = arg('out', ['D:/map_game_osm/out/v1'])[0];
 const TS = arg('ts', [''])[0];
 const ONLY = arg('blocks', [''])[0] ? new Set(arg('blocks')[0].split(',')) : null;
 const KEEP = argv.includes('--keep');
-const MEM = arg('mem', ['16GB'])[0], THREADS = arg('threads', ['10'])[0], SLICES = Number(arg('slices', ['8'])[0]);
+const MEM = arg('mem', ['16GB'])[0], THREADS = arg('threads', ['10'])[0], SLICE_PTS = Number(arg('slice-points', ['10000000'])[0]);
 // the skylines' thresholds: the lowest any skyline asks for (skyline.ts TALL/FLOORS, farSkyline.ts MAST)
 const TALL = { h: 45, floors: 14, mast: 150 };
 const PART_MAX = 200e6; // a block past this goes on in another part (wrangler uploads ≤ ~300 MB an object)
@@ -71,10 +71,15 @@ if (!KEEP) {
   await step('way points', ['wj', 'wg'], `CREATE OR REPLACE TABLE wj AS SELECT wn.wid, wn.i, round(n.lat, 7) lat, round(n.lon, 7) lon FROM wn JOIN ${osm('node', 'id, lat, lon')} n ON n.id = wn.nid`);
   await drop('wn');
   // (each way's points gathered unordered — a parallel hash aggregate — then sorted by their index:
-  // a list of structs sorts by its first field. One ordered list aggregate over the US's 1.1 B points
+  // a list of structs sorts by its first field. One ordered list aggregate over the US's 1.5 B points
   // ran out of memory, and sliced it ran on one core; this is the same list, at full speed)
+  // (slices of ~10 M points — New Jersey's whole size, which never spilled: an eighth of the US's
+  // 1.5 B points spilled 85 GB in four minutes; each slice re-reads the points, seconds from an SSD)
   if (!(await has('wg'))) {
     await drop('wg_tmp');
+    const pts = +(await one('SELECT count(*) n FROM wj')).n;
+    const SLICES = Math.max(1, Math.ceil(pts / (SLICE_PTS || 10e6)));
+    log(`geometry: ${pts.toLocaleString()} points in ${SLICES} slices`);
     for (let k = 0; k < SLICES; k++)
       await run(`geometry ${k + 1}/${SLICES}`, `${k ? 'INSERT INTO wg_tmp' : 'CREATE TABLE wg_tmp AS'} SELECT id, list_transform(list_sort(pts), p -> struct_pack(lat := p.lat, lon := p.lon)) geom, s, w, n, e, cnt
         FROM (SELECT wid id, list(struct_pack(i := i, lat := lat, lon := lon)) pts, min(lat) s, min(lon) w, max(lat) n, max(lon) e, count(*) cnt FROM wj WHERE wid % ${SLICES} = ${k} GROUP BY wid)`);
