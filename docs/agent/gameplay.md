@@ -721,11 +721,30 @@ what the code does:
   - Commissions and the spotting log.
   - Almanac: stamps, progress in the current county, and the card grid.
   - Journal: keys, stats and found places (`journal.ts` now renders only this page).
-- `geo.ts`: Photon (komoot) geocoder for search and reverse lookup. It is cached, reverse lookups
-  are throttled to one every 4 s, and it falls back to local streets, buildings and POIs when
-  offline. Never block gameplay on it.
+- `geo.ts`: our own lower-48 place index (Photon is gone: its public server isn't for a commercial
+  game — `docs/DATA_SOURCES.md` §0). `placeIndex.ts` is the pure part, shared by the bake
+  (`scripts/build-places.mjs`), the tile service (`worker/src/places.js`) and the game:
+  - **Search** (`searchRemote`): `GET <tiles>/places/search?q=&lat=&lon=` — the service reads one
+    gzipped shard (the query's rarest word's first three letters) from R2 `places/vN/names.bin` by
+    range and ranks it (standing, name match, nearness); answers are edge-cached. Public-domain names
+    only (USGS GNIS, the US Census): towns, townships, counties, hamlets, parks, peaks, lakes,
+    landmarks — never a street address.
+  - **Reverse** (`reverse`, arrival cards): the 0.25° tile of Census boundaries round the point
+    (`/places/rt/<ix>_<iy>.json`, kept for the session) → the place it's in, else the active county
+    subdivision (a township, a New England town), else the county. At sea there's no town: the card
+    keeps the one you were in.
+  - The base is the tile service (`setPlaceService`, main.ts; the deployed one unless `?places=<url>`
+    or `?places=off`). Offline or past the lower 48 it falls back to the loaded world's streets,
+    named buildings and POIs (`searchLocal` — named buildings only: no house by its address). Never
+    block gameplay on it.
+  - Re-baking: `node scripts/build-places.mjs [--fetch]`, then upload `raw/places/out/*` to R2
+    `places/v<N>/` and deploy with `INDEX_V` (the bake) and `V` (places.js) bumped together; a ranking
+    change alone bumps `RANK_V` (placeIndex.ts) and needs only a deploy.
+- `credits.ts`: the credits screen — every source and service with its credit and licence, opened from
+  the intro, the HUD's credit line and the journal page. `tests/licences.test.ts` fails on an outside
+  host in the code with no credit, and on Photon or Open-Meteo coming back.
 - `hints.ts`: providers return `{key, text, pri, once?}`, and the highest `pri` wins. `once` tips
-  retire after 3 showings (localStorage). `arrival.ts` shows reverse-geocoded town cards at the
+  retire after 3 showings (localStorage). `arrival.ts` shows the place index's town cards at the
   start, on crossing into a new town, and after teleports.
 - Sound (`ambience.ts`): `ui()` for brush, shutter, chime and page; halyards and lapping water
   near moored boats; leaves by tree cover; birdsong by hour; engine models for car, outboard and

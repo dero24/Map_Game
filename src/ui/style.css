@@ -30,7 +30,11 @@ body.postcard #hud, body.postcard .lil-gui, body.postcard #toast { display: none
 .card a { color: #5a4c78; font-size: 13px; }
 #regions { margin: 6px 0 2px; font-size: 13px; font-style: italic; }
 #regions b { text-decoration: underline; font-weight: normal; }
-#credits .card { text-align: left; font-size: 14px; line-height: 1.5; }
+#credits .card { text-align: left; font-size: 14px; line-height: 1.5; max-height: 86vh; overflow-y: auto; max-width: min(640px, 92vw); }
+#credits .credits-list { list-style: none; padding: 0; margin: 8px 0; }
+#credits .credits-list li { margin: 0 0 9px; }
+#credits .lic, #credits .credits-lede { opacity: 0.7; font-size: 12.5px; }
+.journal-credits { margin-top: 18px; font-size: 13px; }
 #credits .card button { display: block; margin: 18px auto 0; }
 
 /* ---- atlas (M): map · sketchbook · commissions · journal ---- */
@@ -328,6 +332,8 @@ body.touch #arrival.a-tight .a-line::before { content: none; }
 body.touch.arriving #hud { visibility: hidden; }
 /* (ODbL: the credit along the bottom edge, in the gap under the stick and the cluster — one line) */
 body.touch #osm-credit { left: 50%; right: auto; top: auto; bottom: calc(3px + var(--sb)); transform: translateX(-50%); white-space: nowrap; font-size: min(10px, 2.7vw); z-index: 10; }
+/* (a phone's line has no room for the credits link: the journal page has it) */
+body.touch #credits-hud, body.touch #credits-hud-sep { display: none; }
 /* The shortest phones upright (an SE): the cluster a size smaller, so the word over it stays below
    the middle of the frame. */
 @media (orientation: portrait) and (max-height: 620px) {

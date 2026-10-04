@@ -2,6 +2,7 @@
 //
 //   GET /tile/<cx>_<cz>.json?olat=<deg>&olon=<deg>
 //   GET /measured/<cx>_<cz>.json?olat=<deg>&olon=<deg>&v=1   (measure.js: the cell's LiDAR, once)
+//   GET /places/search?q=&lat=&lon=  ·  GET /places/rt/<ix>_<iy>.json   (places.js: our own place index)
 //
 // One cell of the walking world as TileJson: Overpass elements for the cell's lat/lon
 // bbox (+48 m margin), transformed by src/world/realTile.ts (bundled verbatim), cached in
@@ -13,6 +14,7 @@
 // hits never touch Overpass (empty cells are cached too: they are valid data, not failures).
 import { osmToTile, makeProjector, overpassQuery } from '../../src/world/realTile';
 import { measured } from './measure';
+import { places } from './places';
 
 const CELL = 1024; // game cells, metres (region-local frame anchored at olat/olon)
 const MARGIN = 48; // context ring, same as the bake's TILE_MARGIN
@@ -31,7 +33,7 @@ const CORS = {
   // The game page runs cross-origin-isolated (COEP) in dev — tiles must be CORP-readable.
   'cross-origin-resource-policy': 'cross-origin',
 };
-const USAGE = 'GET /tile/<cx>_<cz>.json?olat=<deg>&olon=<deg> | GET /measured/<cx>_<cz>.json?olat=<deg>&olon=<deg>&v=1 | GET /dem/<z>/<x>/<y>.png | GET /naip?bbox=<w,s,e,n>&size=<W,H>';
+const USAGE = 'GET /tile/<cx>_<cz>.json?olat=<deg>&olon=<deg> | GET /measured/<cx>_<cz>.json?olat=<deg>&olon=<deg>&v=1 | GET /dem/<z>/<x>/<y>.png | GET /naip?bbox=<w,s,e,n>&size=<W,H> | GET /places/search?q=<text>&lat=<deg>&lon=<deg> | GET /places/rt/<ix>_<iy>.json';
 const json = (body, init = {}) =>
   new Response(typeof body === 'string' ? body : JSON.stringify(body), {
     ...init,
@@ -47,6 +49,10 @@ export default {
     const dm = url.pathname.match(/^\/dem\/(\d+)\/(\d+)\/(\d+)\.png$/);
     if (dm) return dem(request, env, ctx, url, parseInt(dm[1]), parseInt(dm[2]), parseInt(dm[3]));
     if (url.pathname === '/naip') return naip(request, ctx, url);
+    if (url.pathname.startsWith('/places/')) {
+      const r = await places(request, env, ctx, url, { json });
+      if (r) return r;
+    }
     const mm = url.pathname.match(/^\/measured\/(-?\d+)_(-?\d+)\.json$/);
     if (mm) return measured(request, env, ctx, url, parseInt(mm[1]), parseInt(mm[2]), { json, tileText: (olat, olon, cx, cz) => tileText(env, olat, olon, cx, cz) });
     const m = url.pathname.match(/^\/tile\/(-?\d+)_(-?\d+)\.json$/);

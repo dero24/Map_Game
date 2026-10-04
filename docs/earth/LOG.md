@@ -2,6 +2,55 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-03 — Foundation first (2): commercial-safe — our own place index, the licence check, credits
+
+Tier 0's "commercial-safe infrastructure" (docs/GAMEPLAY_VISION.md §17).
+
+- **Photon is gone; our own lower-48 place index** (`scripts/build-places.mjs` → R2 `places/v3/`,
+  `worker/src/places.js`, `src/ui/placeIndex.ts`, `src/ui/geo.ts`):
+  - **Names:** 1,849,206, all public domain — the Census's 31,540 places, 16,153 active county
+    subdivisions (towns, townships), 3,109 counties and the states (2026 gazetteer, ranked by the
+    2024 population estimates); GNIS's populated places and natural features (current, 2026-09);
+    and the public places GNIS retired in 2021 (parks, forests, airports, trails, bridges, dams,
+    towers, hospitals, schools, places of worship, cemeteries, post offices) from its archive. No
+    street addresses; GNIS "Locale" (ranches named for their owners), mines and wells left out.
+  - **Search:** each name filed under each word's first three letters, 8,026 gzipped shards in one
+    95 MB object; `GET /places/search` reads the rarest word's shard by range (median 356 B) and
+    ranks by standing, name match and nearness; edge-cached a day. A national park outranks the
+    hamlet named for it ("Yosemite", "Grand Canyon", "Acadia"); Shrewsbury from the shore is the
+    borough, then the township; "springfield illinois" is Sangamon County's.
+  - **Reverse:** 13,737 tiles of 0.25° (19 MB) of the 2025 cartographic boundaries (clipped to the
+    shoreline), simplified to ~25 m; the game reads the tile round it and finds the place, else the
+    active county subdivision, else the county. At sea there is no town: the arrival card keeps the
+    one you were in (it used to retry every second).
+  - **Live:** deployed (worker `1c95d174`); in the game at `?at=40.3297,-74.0617` the arrival card
+    reads "Shrewsbury · Monmouth County, New Jersey", search and reverse go only to our service.
+  - **Privacy:** the loaded world's own search no longer finds houses by their address (named
+    buildings only), and the search box no longer invites "an address".
+  - Bugs on the way: two Shrewsburys 2 km apart (borough and township) were folded into one until
+    duplicates had to be the same kind; Portland ME had no county (its Census point is in Casco Bay,
+    outside the shoreline-clipped county: now the nearest county's shore); a Python edit wrote
+    backspace characters for `` in two regexes (found when the parks' weight was still 39;
+    rebaked as v3; every edited file scanned for control characters since).
+- **The licence check** (`docs/DATA_SOURCES.md` §0): every source and service, its terms (quoted),
+  whether a paid game may use it, its credit, share-alike. Findings:
+  - **The public Overpass servers are not a game's backend** ("relying on the public instances as
+    backend" for "an app for more than just OSM mappers" — run your own). They are the tile service's
+    cold path today. To replace: Tier 0, "every tile loads" — Robby to decide how (below).
+  - **GitHub Pages** may not host "an online business … or commercial software as a service": fine
+    while the game is free; move before charging (Robby's call).
+  - OSM's share-alike applies to our derived database (the R2 cells): offer it, or the code that
+    rebuilds it, if the game goes public. Weather stays seeded (Open-Meteo never used).
+  - The 3DEP EPT index's source repo has no licence file (its facts are USGS's, public domain).
+- **Credits screen** (`src/ui/credits.ts`): every source with its credit and licence, opened from
+  the intro, the HUD's credit line (desktop; a phone's line has no room, so the journal page has the
+  link) and the journal page. The always-visible OSM/OpenFreeMap line stays.
+- **Tests:** `placeIndex` (17: words, shards, ranking, reverse, even-odd holes, tiles),
+  `placesWorker` (5: the routes over an in-memory R2 packed the bake's way), `licences` (6: every
+  outside host in the code credited or a reference link; Photon and Open-Meteo never come back; every
+  credit shown; §0 records each host; the ODbL line stays). 805 tests, typecheck, build;
+  `tools/hud-audit.mjs` 560 layouts clear (224 failed with the link on a phone's line: hidden there).
+
 ## 2026-10-03 — Foundation first (1): the new gameplay vision merged
 
 Branch `feature/foundation-first`, off `feature/measured-heights` (the last pushed work; it already

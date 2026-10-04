@@ -1,10 +1,11 @@
 // Arrival cards: cross into a new town and its name is painted across the top of the page —
-// "Monmouth Beach / Monmouth County, New Jersey / 7:42 pm · fair · first visit" (a phone paints it
-// smaller, in the place name's spot, so the middle of the view stays clear). The town comes from
-// reverse geocoding (geo.ts, cached + throttled); offline the region's own name (meta) stands in.
+// "<Town> / <County>, <State> / 7:42 pm · fair · first visit" (a phone paints it smaller, in the
+// place name's spot, so the middle of the view stays clear). The town comes from our own place
+// index's Census boundaries (geo.ts); at sea you're still where you were, and offline the region's
+// own name (meta) stands in.
 // A card also greets you at the start of a walk and after every teleport.
 import type { GameCtx } from './ctx';
-import { reverse, isOffline, shortRegion } from './geo';
+import { reverse, shortRegion } from './geo';
 import { postParams } from '../render/post';
 
 export class Arrival {
@@ -42,8 +43,9 @@ export class Arrival {
     const before = this.g.explore.paintedBefore(w.x, w.z); // saved paint, not this visit's bloom
     void Promise.all([reverse(lat, lon), before]).then(([loc, painted]) => {
       const first = !painted;
-      // throttled (or offline mid-walk): look again soon — a greeting waits unless we're truly offline
-      if (!loc && (!wasForced || !isOffline())) { this.lastX = Infinity; if (wasForced) this.force = true; return; }
+      // no town here (out on the water, past the lower 48) or no answer (offline): you're still
+      // where you were — only a greeting (the start, a teleport) says the region's own name
+      if (!loc && !wasForced) return;
       const name = loc?.locality || this.fallback.name;
       const region = loc ? loc.region : this.fallback.sub;
       // a new name must hold for two looks (borders are ragged) unless we were asked to greet

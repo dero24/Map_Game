@@ -36,7 +36,8 @@ import { AmbientBalloons } from './world/balloons';
 import { windKey } from './world/wind';
 import { propMaterial } from './render/propMaterial';
 import { compass } from './player/place';
-import { shortRegion } from './ui/geo';
+import { shortRegion, setPlaceService } from './ui/geo';
+import { initCredits } from './ui/credits';
 import { Atlas } from './ui/atlas';
 import { PhotoMode } from './ui/photo';
 import { Commissions } from './ui/commissions';
@@ -104,6 +105,10 @@ const crashed = diagInit();
 
 async function main() {
   if (TILES_PARAM === null && LOCAL) TILES = await probeLocalTiles();
+  // the place index (search, arrival cards) is the deployed service's R2 unless a remote service is
+  // named (a local `wrangler dev` has no index in its R2); ?places=<url>|off overrides
+  const PLACES = params.get('places');
+  setPlaceService(PLACES === 'off' || (TILES_PARAM === 'off' && !PLACES) ? '' : PLACES ?? (/^https?:\/\//.test(TILES) && !/localhost|127\.0\.0\.1/.test(TILES) ? TILES : DEPLOYED_TILES));
   diagStage('regions');
   const regions = await loadRegions();
   // One consistent world: an unknown ?region= (old per-town links) lands in the listed one.
@@ -1038,8 +1043,7 @@ async function main() {
   // (ctx.lock: no pointer lock without a mouse or trackpad to capture)
   startBtn.onclick = () => { $('intro').classList.add('hidden'); document.body.classList.add('walking'); began(); ctx.lock(); startAudio(); arrival.greet(); };
   canvas.addEventListener('click', () => { if ($('intro').classList.contains('hidden')) { ctx.lock(); startAudio(); } });
-  $('credits-link').onclick = (e) => { e.preventDefault(); $('credits').classList.remove('hidden'); };
-  $('credits-close').onclick = () => $('credits').classList.add('hidden');
+  initCredits([$('credits-link'), $('credits-hud'), $('credits-journal')]);
   // P (▣ on a phone): the brush goes away, and at a viewpoint you face its view first — the summit
   // it names, else the way the map says it looks
   const togglePhoto = () => {

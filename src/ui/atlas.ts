@@ -127,11 +127,11 @@ export class Atlas {
       const [lat, lon] = this.g.toLatLon(r.p[mid] / 10, r.p[mid + 1] / 10);
       items.push({ name: r.n, detail: 'street nearby', lat, lon, kind: 'street' });
     }
+    // named buildings only: no house is found by its street address (docs/GAMEPLAY_VISION.md §17)
     for (const f of this.g.footprints()) {
-      const label = f.name ?? f.addr;
-      if (!label) continue;
+      if (!f.name || f.kind === 'house') continue;
       const [lat, lon] = this.g.toLatLon(f.ring[0][0], f.ring[0][1]);
-      items.push({ name: label, detail: f.name && f.addr ? f.addr : f.kind === 'house' ? 'house' : f.kind, lat, lon, kind: 'building' });
+      items.push({ name: f.name, detail: f.kind, lat, lon, kind: 'building' });
     }
     for (const p of this.g.json.pois ?? []) { const [lat, lon] = this.g.toLatLon(p.x, p.z); items.push({ name: p.name, detail: p.kind, lat, lon, kind: 'poi' }); }
     return items;

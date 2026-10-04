@@ -48,7 +48,7 @@ try {
   const errs = [];
   page.on('pageerror', (e) => errs.push(String(e).slice(0, 300)));
   page.on('console', (m) => {
-    if (m.type() === 'error' && !/overpass|photon|Failed to load resource|net::|nationalmap/i.test(m.text())) errs.push(m.text().slice(0, 300));
+    if (m.type() === 'error' && !/overpass|places|Failed to load resource|net::|nationalmap/i.test(m.text())) errs.push(m.text().slice(0, 300));
     if (/^\[night\]/.test(m.text())) { let what = ''; try { what = JSON.parse(m.text().slice(8)).label; } catch { /* (cut short) */ } console.log(`  (measured ${what} @${((Date.now() - t0) / 1000).toFixed(0)}s)`); }
   });
   await page.goto(`${url}/?capture=1`, { waitUntil: 'domcontentloaded', timeout: 120000 });

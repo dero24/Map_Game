@@ -81,3 +81,15 @@ Then point the game at it: `?tiles=https://map-game-tiles.<account>.workers.dev`
   (and the R2 cache). Cache key: `t/v1/<olat>,<olon>/<cx>_<cz>.json`.
 - **Polar**: `|olat| > 78` rejected — the equirectangular frame degenerates.
 - Attribution header `x-osm-attribution` + `attribution` field in every tile (ODbL).
+
+## Place index (`src/places.js`)
+
+`GET /places/search?q=<text>&lat=<deg>&lon=<deg>[&n=8]` and `GET /places/rt/<ix>_<iy>.json` — our own
+lower-48 place index (USGS GNIS + US Census, public domain; `src/ui/placeIndex.ts`), replacing the
+Photon geocoder. Built by `node scripts/build-places.mjs` into `raw/places/out/`; upload all four
+files to `places/v<N>/` (`npx wrangler r2 object put map-game-tiles/places/v<N>/names.bin
+--file=../raw/places/out/names.bin --remote`, and `names.json`, `rev.bin`, `rev.json`), then deploy
+with `V` here and `INDEX_V` in the bake bumped together — an isolate keeps a directory for an hour,
+and new offsets under an old key would read the wrong bytes. A search reads one gzipped shard by
+range (median 356 B, the largest ~3 MB: "church"); answers are edge-cached a day, keyed on the
+normalized query, the position rounded to 0.1° and `RANK_V`; tiles are immutable for a month.
