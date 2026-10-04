@@ -130,6 +130,16 @@ own grid, refreshed monthly by a script on his PC.
   check its `.md5`), read the timestamp from `us-updates/state.txt`, run the extract, upload (only the
   changed blocks go up), and the index switches. The R2 TileJson cache (`t/vN`) keeps each cell as it
   was first built; bump `t/vN` to rebuild every cell from the new extract.
+- **Going back is one step** (Robby: "keep the switch reversible"), from `worker/`:
+  - **the extract off, the new service kept:** `npx wrangler r2 object delete map-game-tiles/osm/v1/index.json --remote`.
+    Within ten minutes (each isolate's index cache) every new cell goes to Overpass again, politely,
+    as before. Cells already built from the extract stay cached (`x-tile-source: extract`), and the
+    skylines go dark (they read only the extract). To switch back on, put the index back:
+    `node scripts/osm-upload.mjs --pack=… --poly=…`, which uploads only what isn't up yet.
+  - **the old service entirely:** `npx wrangler rollback`, to the version before the extract
+    (`npx wrangler deployments list` names it). That's the pre-extract worker, with its own `t/v24`
+    cache of Overpass-built cells still in R2. The game keeps working against it (the worker ignores
+    `&v`); only the skylines are dark until the extract is back.
 
 ## DEM terrain
 

@@ -3,25 +3,133 @@
  "made": "2026-10-04",
  "spots": [
   {
+   "id": "AL-largest-0137000",
+   "state": "AL",
+   "town": "Huntsville, AL",
+   "kind": "largest",
+   "pop": 230402,
+   "at": [
+    34.7303688,
+    -86.5861037
+   ],
+   "img": {
+    "id": "1349802740334446",
+    "lat": 34.730053,
+    "lon": -86.5875016,
+    "heading": 144.46,
+    "hfov": 79,
+    "vfov": 49.8,
+    "w": 3840,
+    "h": 2160,
+    "captured": "2026-05-31T20:10:14.884Z",
+    "by": "argwx256",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "AL-mid-0109208",
+   "state": "AL",
+   "town": "Brewton, AL",
+   "kind": "mid",
+   "pop": 5129,
+   "at": [
+    31.1051779,
+    -87.0721918
+   ],
+   "img": null
+  },
+  {
+   "id": "AL-small-0133640",
+   "state": "AL",
+   "town": "Hayden, AL",
+   "kind": "small",
+   "pop": 1355,
+   "at": [
+    33.8926003,
+    -86.757773
+   ],
+   "img": null
+  },
+  {
+   "id": "AR-largest-0541000",
+   "state": "AR",
+   "town": "Little Rock, AR",
+   "kind": "largest",
+   "pop": 204774,
+   "at": [
+    34.7464809,
+    -92.2895948
+   ],
+   "img": {
+    "id": "24411984325072914",
+    "lat": 34.754648,
+    "lon": -92.2946773,
+    "heading": 282.82,
+    "hfov": 61.6,
+    "vfov": 48.1,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2025-07-14T00:09:05.326Z",
+    "by": "whitecotton",
+    "within": 0.016
+   }
+  },
+  {
+   "id": "AR-mid-0554200",
+   "state": "AR",
+   "town": "Pea Ridge, AR",
+   "kind": "mid",
+   "pop": 10190,
+   "at": [
+    36.4539626,
+    -94.1152041
+   ],
+   "img": null
+  },
+  {
+   "id": "AR-small-0543670",
+   "state": "AR",
+   "town": "Mammoth Spring, AR",
+   "kind": "small",
+   "pop": 948,
+   "at": [
+    36.4956181,
+    -91.5406968
+   ],
+   "img": {
+    "id": "2972145433063597",
+    "lat": 36.4956855,
+    "lon": -91.5413924,
+    "heading": 141.44,
+    "hfov": 104.3,
+    "vfov": 87.9,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2020-07-29T19:29:33.747Z",
+    "by": "talladega",
+    "within": 0.001
+   }
+  },
+  {
    "id": "AZ-largest-0455000",
    "state": "AZ",
    "town": "Phoenix, AZ",
    "kind": "largest",
    "pop": 1673164,
    "at": [
-    33.4483771,
-    -112.0740373
+    33.572154,
+    -112.090132
    ],
    "img": {
-    "id": "1498410353824709",
-    "lat": 33.4490245,
-    "lon": -112.073796,
-    "heading": 28.94,
-    "hfov": 62.9,
-    "vfov": 49.3,
+    "id": "194972899126042",
+    "lat": 33.5712731,
+    "lon": -112.0891075,
+    "heading": 277.41,
+    "hfov": 65.7,
+    "vfov": 51.7,
     "w": 4032,
     "h": 3024,
-    "captured": "2021-05-29T23:04:01.021Z",
+    "captured": "2019-01-05T20:55:42.395Z",
     "by": "drkludge",
     "within": 0.001
    }
@@ -49,6 +157,690 @@
     -109.8320124
    ],
    "img": null
+  },
+  {
+   "id": "CA-largest-0644000",
+   "state": "CA",
+   "town": "Los Angeles, CA",
+   "kind": "largest",
+   "pop": 3878704,
+   "at": [
+    34.019394,
+    -118.410825
+   ],
+   "img": {
+    "id": "198270058790874",
+    "lat": 34.0197915,
+    "lon": -118.4104113,
+    "heading": 334.05,
+    "hfov": 104.9,
+    "vfov": 88.6,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2020-01-15T20:39:00.130Z",
+    "by": "edmond1",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "CA-mid-0657764",
+   "state": "CA",
+   "town": "Pleasant Hill, CA",
+   "kind": "mid",
+   "pop": 34169,
+   "at": [
+    37.9479786,
+    -122.0607963
+   ],
+   "img": {
+    "id": "947453652725418",
+    "lat": 37.9475607,
+    "lon": -122.0602837,
+    "heading": 183.98,
+    "hfov": 66.5,
+    "vfov": 52.4,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2019-12-18T19:36:30.088Z",
+    "by": "jaimevger",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "CA-small-0605164",
+   "state": "CA",
+   "town": "Belvedere, CA",
+   "kind": "small",
+   "pop": 2080,
+   "at": [
+    37.8727778,
+    -122.4644444
+   ],
+   "img": {
+    "id": "819442320340457",
+    "lat": 37.8767554,
+    "lon": -122.461454,
+    "heading": 306.61,
+    "hfov": 85.8,
+    "vfov": 78.3,
+    "w": 5568,
+    "h": 4872,
+    "captured": "2023-05-05T20:11:25.000Z",
+    "by": "sfbaytrail",
+    "within": 0.004
+   }
+  },
+  {
+   "id": "CO-largest-0820000",
+   "state": "CO",
+   "town": "Denver, CO",
+   "kind": "largest",
+   "pop": 729019,
+   "at": [
+    39.7391536,
+    -104.9847034
+   ],
+   "img": {
+    "id": "2102775570293463",
+    "lat": 39.7400783,
+    "lon": -104.9835214,
+    "heading": 99.74,
+    "hfov": 86.1,
+    "vfov": 60.5,
+    "w": 2560,
+    "h": 1600,
+    "captured": "2026-06-14T11:02:04.400Z",
+    "by": "aftcpics471",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "CO-mid-0875640",
+   "state": "CO",
+   "town": "Superior, CO",
+   "kind": "mid",
+   "pop": 13654,
+   "at": [
+    39.9527634,
+    -105.1685977
+   ],
+   "img": {
+    "id": "1293482758839517",
+    "lat": 39.9530525,
+    "lon": -105.1693619,
+    "heading": 91.76,
+    "hfov": 62.9,
+    "vfov": 49.3,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2025-06-22T00:34:01.393Z",
+    "by": "dgrinbergs",
+    "within": 0.002
+   }
+  },
+  {
+   "id": "CO-small-0837270",
+   "state": "CO",
+   "town": "Holyoke, CO",
+   "kind": "small",
+   "pop": 2296,
+   "at": [
+    40.5844369,
+    -102.3024103
+   ],
+   "img": null
+  },
+  {
+   "id": "CT-largest-0908000",
+   "state": "CT",
+   "town": "Bridgeport, CT",
+   "kind": "largest",
+   "pop": 151599,
+   "at": [
+    41.1670412,
+    -73.2048348
+   ],
+   "img": {
+    "id": "2056871454835417",
+    "lat": 41.1671693,
+    "lon": -73.2051908,
+    "heading": 256.56,
+    "hfov": 93.1,
+    "vfov": 61.4,
+    "w": 1920,
+    "h": 1080,
+    "captured": "2025-02-25T09:49:36.980Z",
+    "by": "ctphotologrow_1",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "CT-mid-0949880",
+   "state": "CT",
+   "town": "Naugatuck, CT",
+   "kind": "mid",
+   "pop": 32116,
+   "at": [
+    41.48593,
+    -73.0506632
+   ],
+   "img": {
+    "id": "1191493112836148",
+    "lat": 41.48544,
+    "lon": -73.0502181,
+    "heading": 342.57,
+    "hfov": 85.5,
+    "vfov": 54.9,
+    "w": 1920,
+    "h": 1080,
+    "captured": "2025-08-15T09:11:08.761Z",
+    "by": "ctphotologrow_1",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "CT-small-0973700",
+   "state": "CT",
+   "town": "Stonington, CT",
+   "kind": "small",
+   "pop": 1012,
+   "at": [
+    41.3359327,
+    -71.9059042
+   ],
+   "img": {
+    "id": "1515784052799245",
+    "lat": 41.3428014,
+    "lon": -71.9079324,
+    "heading": 359.24,
+    "hfov": 78,
+    "vfov": 48.9,
+    "w": 1920,
+    "h": 1080,
+    "captured": "2025-08-16T11:21:21.971Z",
+    "by": "ctphotologrow_1",
+    "within": 0.008
+   }
+  },
+  {
+   "id": "DC-largest-1150000",
+   "state": "DC",
+   "town": "Washington, DC",
+   "kind": "largest",
+   "pop": 702250,
+   "at": [
+    38.8951118,
+    -77.0363658
+   ],
+   "img": {
+    "id": "161432452592623",
+    "lat": 38.8944219,
+    "lon": -77.038294,
+    "heading": 271.67,
+    "hfov": 97.6,
+    "vfov": 65.5,
+    "w": 3840,
+    "h": 2160,
+    "captured": "2019-11-06T12:54:42.000Z",
+    "by": "danbjoseph",
+    "within": 0.008
+   }
+  },
+  {
+   "id": "DE-largest-1077580",
+   "state": "DE",
+   "town": "Wilmington, DE",
+   "kind": "largest",
+   "pop": 73176,
+   "at": [
+    39.7459467,
+    -75.5465889
+   ],
+   "img": {
+    "id": "3017611361843877",
+    "lat": 39.7453941,
+    "lon": -75.5467923,
+    "heading": 207.58,
+    "hfov": 64.5,
+    "vfov": 50.7,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2021-03-06T23:05:39.660Z",
+    "by": "mdroads",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "DE-mid-1024540",
+   "state": "DE",
+   "town": "Elsmere, DE",
+   "kind": "mid",
+   "pop": 6234,
+   "at": [
+    39.7392796,
+    -75.5979812
+   ],
+   "img": {
+    "id": "481539996423090",
+    "lat": 39.7395698,
+    "lon": -75.5987962,
+    "heading": 268.98,
+    "hfov": 63.2,
+    "vfov": 49.5,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2021-02-27T18:15:43.484Z",
+    "by": "mdroads",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "DE-small-1048200",
+   "state": "DE",
+   "town": "Millville, DE",
+   "kind": "small",
+   "pop": 2108,
+   "at": [
+    38.5495569,
+    -75.1232391
+   ],
+   "img": {
+    "id": "1084088582525542",
+    "lat": 38.5504395,
+    "lon": -75.1248084,
+    "heading": 214.03,
+    "hfov": 124.3,
+    "vfov": 109.6,
+    "w": 4000,
+    "h": 3000,
+    "captured": "2022-07-23T08:16:55.000Z",
+    "by": "roadgeek_md99",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "FL-largest-1235000",
+   "state": "FL",
+   "town": "Jacksonville, FL",
+   "kind": "largest",
+   "pop": 1009833,
+   "at": [
+    30.3321838,
+    -81.655651
+   ],
+   "img": {
+    "id": "1056783181523895",
+    "lat": 30.3317861,
+    "lon": -81.6551722,
+    "heading": 13.94,
+    "hfov": 71.5,
+    "vfov": 56.8,
+    "w": 3264,
+    "h": 2448,
+    "captured": "2021-05-01T16:23:09.000Z",
+    "by": "allen",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "FL-mid-1247050",
+   "state": "FL",
+   "town": "Mount Dora, FL",
+   "kind": "mid",
+   "pop": 18261,
+   "at": [
+    28.8024918,
+    -81.644519
+   ],
+   "img": {
+    "id": "1162928207532568",
+    "lat": 28.8005515,
+    "lon": -81.6457787,
+    "heading": 265.16,
+    "hfov": 60.8,
+    "vfov": 47.5,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2021-01-02T18:59:19.601Z",
+    "by": "jasonwi",
+    "within": 0.002
+   }
+  },
+  {
+   "id": "FL-small-1257950",
+   "state": "FL",
+   "town": "Polk City, FL",
+   "kind": "small",
+   "pop": 3076,
+   "at": [
+    28.1825147,
+    -81.8239676
+   ],
+   "img": null
+  },
+  {
+   "id": "GA-largest-1304000",
+   "state": "GA",
+   "town": "Atlanta, GA",
+   "kind": "largest",
+   "pop": 520070,
+   "at": [
+    33.7489954,
+    -84.3879824
+   ],
+   "img": {
+    "id": "942228556439530",
+    "lat": 33.7497909,
+    "lon": -84.3878945,
+    "heading": 308.33,
+    "hfov": 75,
+    "vfov": 33.2,
+    "w": 3716,
+    "h": 1444,
+    "captured": "2022-04-03T23:19:44.500Z",
+    "by": "lordsutch",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "GA-mid-1319336",
+   "state": "GA",
+   "town": "Conyers, GA",
+   "kind": "mid",
+   "pop": 20111,
+   "at": [
+    33.6676103,
+    -84.0176904
+   ],
+   "img": {
+    "id": "447611082979646",
+    "lat": 33.6709729,
+    "lon": -84.0251624,
+    "heading": 316.13,
+    "hfov": 59.3,
+    "vfov": 46.2,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2019-01-22T02:08:09.085Z",
+    "by": "i_drive_alot",
+    "within": 0.008
+   }
+  },
+  {
+   "id": "GA-small-1366024",
+   "state": "GA",
+   "town": "Rochelle, GA",
+   "kind": "small",
+   "pop": 1155,
+   "at": [
+    31.9510105,
+    -83.4562744
+   ],
+   "img": {
+    "id": "193743949961645",
+    "lat": 31.9509322,
+    "lon": -83.4567669,
+    "heading": 104.35,
+    "hfov": 97.9,
+    "vfov": 56.7,
+    "w": 3630,
+    "h": 1706,
+    "captured": "2023-03-04T19:32:32.100Z",
+    "by": "lordsutch",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "IA-largest-1921000",
+   "state": "IA",
+   "town": "Des Moines, IA",
+   "kind": "largest",
+   "pop": 213096,
+   "at": [
+    41.6005448,
+    -93.6091064
+   ],
+   "img": {
+    "id": "1270983194229240",
+    "lat": 41.5948925,
+    "lon": -93.6065918,
+    "heading": 90.51,
+    "hfov": 57.5,
+    "vfov": 44.7,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2024-12-19T17:58:33.066Z",
+    "by": "quickness805",
+    "within": 0.008
+   }
+  },
+  {
+   "id": "IA-mid-1949485",
+   "state": "IA",
+   "town": "Marion, IA",
+   "kind": "mid",
+   "pop": 42542,
+   "at": [
+    42.0341658,
+    -91.5976773
+   ],
+   "img": null
+  },
+  {
+   "id": "IA-small-1982200",
+   "state": "IA",
+   "town": "Wapello, IA",
+   "kind": "small",
+   "pop": 2026,
+   "at": [
+    41.1814193,
+    -91.1854273
+   ],
+   "img": null
+  },
+  {
+   "id": "ID-largest-1608830",
+   "state": "ID",
+   "town": "Boise City, ID",
+   "kind": "largest",
+   "pop": 237963,
+   "at": [
+    43.59805,
+    -116.231596
+   ],
+   "img": {
+    "id": "1745289936596833",
+    "lat": 43.5982635,
+    "lon": -116.2322439,
+    "heading": 356.42,
+    "hfov": 82.1,
+    "vfov": 52.2,
+    "w": 1920,
+    "h": 1080,
+    "captured": "2026-09-10T12:53:40.000Z",
+    "by": "marker_geo",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "ID-mid-1644290",
+   "state": "ID",
+   "town": "Kuna, ID",
+   "kind": "mid",
+   "pop": 29127,
+   "at": [
+    43.4918307,
+    -116.4201223
+   ],
+   "img": {
+    "id": "1278959824144633",
+    "lat": 43.4923977,
+    "lon": -116.4210568,
+    "heading": 180.27,
+    "hfov": 82.2,
+    "vfov": 52.3,
+    "w": 1920,
+    "h": 1080,
+    "captured": "2026-07-27T13:04:42.000Z",
+    "by": "marker_geo",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "ID-small-1678040",
+   "state": "ID",
+   "town": "Sugar City, ID",
+   "kind": "small",
+   "pop": 2395,
+   "at": [
+    43.8729673,
+    -111.7482976
+   ],
+   "img": null
+  },
+  {
+   "id": "IL-largest-1714000",
+   "state": "IL",
+   "town": "Chicago, IL",
+   "kind": "largest",
+   "pop": 2721308,
+   "at": [
+    41.850033,
+    -87.6500523
+   ],
+   "img": {
+    "id": "273672441156345",
+    "lat": 41.852526,
+    "lon": -87.6519857,
+    "heading": 90.69,
+    "hfov": 44,
+    "vfov": 33.7,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2020-01-14T16:37:51.181Z",
+    "by": "lflores151",
+    "within": 0.004
+   }
+  },
+  {
+   "id": "IL-mid-1708446",
+   "state": "IL",
+   "town": "Broadview, IL",
+   "kind": "mid",
+   "pop": 7867,
+   "at": [
+    41.8639201,
+    -87.8533931
+   ],
+   "img": {
+    "id": "422788819111109",
+    "lat": 41.8640785,
+    "lon": -87.8538302,
+    "heading": 271.01,
+    "hfov": 50.6,
+    "vfov": 39,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2019-12-22T21:06:54.466Z",
+    "by": "gdgj92",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "IL-small-1742769",
+   "state": "IL",
+   "town": "Leland Grove, IL",
+   "kind": "small",
+   "pop": 1409,
+   "at": [
+    39.7769953,
+    -89.6792671
+   ],
+   "img": {
+    "id": "829847564789079",
+    "lat": 39.7718092,
+    "lon": -89.6869596,
+    "heading": 178.93,
+    "hfov": 33,
+    "vfov": 25.1,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2022-12-15T17:57:32.979Z",
+    "by": "RCPotts",
+    "within": 0.008
+   }
+  },
+  {
+   "id": "IN-largest-1836003",
+   "state": "IN",
+   "town": "Indianapolis, IN",
+   "kind": "largest",
+   "pop": 891484,
+   "at": [
+    39.7683765,
+    -86.1580423
+   ],
+   "img": {
+    "id": "1407723297495848",
+    "lat": 39.7669917,
+    "lon": -86.1501592,
+    "heading": 280.21,
+    "hfov": 72.2,
+    "vfov": 57.4,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2026-02-11T22:04:06.082Z",
+    "by": "whitecotton",
+    "within": 0.016
+   }
+  },
+  {
+   "id": "IN-mid-1845648",
+   "state": "IN",
+   "town": "McCordsville, IN",
+   "kind": "mid",
+   "pop": 11744,
+   "at": [
+    39.9080952,
+    -85.9227592
+   ],
+   "img": {
+    "id": "743731109631850",
+    "lat": 39.8921635,
+    "lon": -85.9276841,
+    "heading": 237.24,
+    "hfov": 56.8,
+    "vfov": 44.1,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2019-06-10T12:07:07.799Z",
+    "by": "nmixter",
+    "within": 0.016
+   }
+  },
+  {
+   "id": "IN-small-1884734",
+   "state": "IN",
+   "town": "Winamac, IN",
+   "kind": "small",
+   "pop": 2351,
+   "at": [
+    41.0514299,
+    -86.6030648
+   ],
+   "img": {
+    "id": "656815139705212",
+    "lat": 41.0524355,
+    "lon": -86.6035138,
+    "heading": 341.46,
+    "hfov": 65,
+    "vfov": 51,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2023-07-25T16:57:05.219Z",
+    "by": "Montrose_Lyle",
+    "within": 0.001
+   }
   },
   {
    "id": "KS-largest-2079000",
@@ -111,6 +903,222 @@
    "img": null
   },
   {
+   "id": "KY-largest-2148006",
+   "state": "KY",
+   "town": "Louisville/Jefferson County, KY",
+   "kind": "largest",
+   "pop": 640796,
+   "at": [
+    38.165376,
+    -85.647377
+   ],
+   "img": null
+  },
+  {
+   "id": "KY-mid-2154084",
+   "state": "KY",
+   "town": "Mount Sterling, KY",
+   "kind": "mid",
+   "pop": 7588,
+   "at": [
+    38.0564679,
+    -83.9432556
+   ],
+   "img": null
+  },
+  {
+   "id": "KY-small-2181858",
+   "state": "KY",
+   "town": "West Liberty, KY",
+   "kind": "small",
+   "pop": 3257,
+   "at": [
+    37.9214758,
+    -83.2596216
+   ],
+   "img": null
+  },
+  {
+   "id": "LA-largest-2255000",
+   "state": "LA",
+   "town": "New Orleans, LA",
+   "kind": "largest",
+   "pop": 362701,
+   "at": [
+    30.052877,
+    -89.934502
+   ],
+   "img": {
+    "id": "1050436276926711",
+    "lat": 30.0564086,
+    "lon": -89.9308491,
+    "heading": 230.86,
+    "hfov": 81.5,
+    "vfov": 51.7,
+    "w": 1920,
+    "h": 1080,
+    "captured": "2022-09-27T15:58:23.768Z",
+    "by": "2023WR",
+    "within": 0.004
+   }
+  },
+  {
+   "id": "LA-mid-2260880",
+   "state": "LA",
+   "town": "Plaquemine, LA",
+   "kind": "mid",
+   "pop": 5985,
+   "at": [
+    30.2890833,
+    -91.2342744
+   ],
+   "img": {
+    "id": "1411351923553861",
+    "lat": 30.2884523,
+    "lon": -91.2339703,
+    "heading": 141.74,
+    "hfov": 63.1,
+    "vfov": 38.1,
+    "w": 1920,
+    "h": 1080,
+    "captured": "2023-04-28T17:25:30.743Z",
+    "by": "WR2_2023",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "LA-small-2283125",
+   "state": "LA",
+   "town": "Woodworth, LA",
+   "kind": "small",
+   "pop": 1749,
+   "at": [
+    31.1465757,
+    -92.4973598
+   ],
+   "img": {
+    "id": "744616831584394",
+    "lat": 31.1468123,
+    "lon": -92.4962135,
+    "heading": 147.34,
+    "hfov": 56.7,
+    "vfov": 33.8,
+    "w": 1920,
+    "h": 1080,
+    "captured": "2023-03-14T11:33:38.362Z",
+    "by": "WR2_2023",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "MA-largest-2507000",
+   "state": "MA",
+   "town": "Boston, MA",
+   "kind": "largest",
+   "pop": 673458,
+   "at": [
+    42.3584308,
+    -71.0597732
+   ],
+   "img": {
+    "id": "2885682618317477",
+    "lat": 42.3583458,
+    "lon": -71.0601647,
+    "heading": 211.95,
+    "hfov": 64.4,
+    "vfov": 50.5,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2020-01-14T13:45:01.075Z",
+    "by": "burkco297",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "MA-mid-2508130",
+   "state": "MA",
+   "town": "Bridgewater Town, MA",
+   "kind": "mid",
+   "pop": 29167,
+   "at": [
+    41.972376,
+    -70.978773
+   ],
+   "img": null
+  },
+  {
+   "id": "MD-largest-2404000",
+   "state": "MD",
+   "town": "Baltimore, MD",
+   "kind": "largest",
+   "pop": 568271,
+   "at": [
+    39.2903848,
+    -76.6121893
+   ],
+   "img": {
+    "id": "1473626969793692",
+    "lat": 39.289907,
+    "lon": -76.6120756,
+    "heading": 40.1,
+    "hfov": 91.5,
+    "vfov": 75.2,
+    "w": 5184,
+    "h": 3888,
+    "captured": "2022-12-13T14:33:56.847Z",
+    "by": "matthoro",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "MD-mid-2462850",
+   "state": "MD",
+   "town": "Poolesville, MD",
+   "kind": "mid",
+   "pop": 5856,
+   "at": [
+    39.1459392,
+    -77.4169311
+   ],
+   "img": {
+    "id": "503727420816512",
+    "lat": 39.1459165,
+    "lon": -77.4161179,
+    "heading": 299.32,
+    "hfov": 99,
+    "vfov": 66.8,
+    "w": 3840,
+    "h": 2160,
+    "captured": "2021-04-11T10:10:13.000Z",
+    "by": "danbjoseph",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "MD-small-2425425",
+   "state": "MD",
+   "town": "Edmonston, MD",
+   "kind": "small",
+   "pop": 1609,
+   "at": [
+    38.9467777,
+    -76.9310853
+   ],
+   "img": {
+    "id": "1020102099230518",
+    "lat": 38.9505688,
+    "lon": -76.9340565,
+    "heading": 227.93,
+    "hfov": 91.4,
+    "vfov": 75.1,
+    "w": 5184,
+    "h": 3888,
+    "captured": "2023-10-28T15:07:03.000Z",
+    "by": "roadgeek_md99",
+    "within": 0.004
+   }
+  },
+  {
    "id": "ME-largest-2360545",
    "state": "ME",
    "town": "Portland, ME",
@@ -144,7 +1152,19 @@
     44.8011821,
     -68.7778138
    ],
-   "img": null
+   "img": {
+    "id": "1414171529790218",
+    "lat": 44.7978755,
+    "lon": -68.7723399,
+    "heading": 0,
+    "hfov": 60.9,
+    "vfov": 47.7,
+    "w": 4624,
+    "h": 3472,
+    "captured": "2025-07-25T19:10:46.702Z",
+    "by": "possible9598",
+    "within": 0.008
+   }
   },
   {
    "id": "ME-small-2330550",
@@ -167,6 +1187,546 @@
     "h": 3000,
     "captured": "2019-06-07T11:14:31.000Z",
     "by": "bfoltahba",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "MI-largest-2622000",
+   "state": "MI",
+   "town": "Detroit, MI",
+   "kind": "largest",
+   "pop": 645705,
+   "at": [
+    42.331427,
+    -83.0457538
+   ],
+   "img": {
+    "id": "1039527908344636",
+    "lat": 42.3312307,
+    "lon": -83.0462707,
+    "heading": 350.47,
+    "hfov": 43.1,
+    "vfov": 33,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2025-07-31T00:14:53.999Z",
+    "by": "Lanka6359",
+    "within": 0.004
+   }
+  },
+  {
+   "id": "MI-mid-2651900",
+   "state": "MI",
+   "town": "Marquette, MI",
+   "kind": "mid",
+   "pop": 21845,
+   "at": [
+    46.5435442,
+    -87.395417
+   ],
+   "img": {
+    "id": "241225724425193",
+    "lat": 46.5382953,
+    "lon": -87.4015389,
+    "heading": 89.7,
+    "hfov": 90.2,
+    "vfov": 58.9,
+    "w": 3840,
+    "h": 2160,
+    "captured": "2019-10-04T14:58:30.000Z",
+    "by": "z0rg",
+    "within": 0.016
+   }
+  },
+  {
+   "id": "MI-small-2618300",
+   "state": "MI",
+   "town": "Corunna, MI",
+   "kind": "small",
+   "pop": 3014,
+   "at": [
+    42.9819728,
+    -84.1177451
+   ],
+   "img": null
+  },
+  {
+   "id": "MN-largest-2743000",
+   "state": "MN",
+   "town": "Minneapolis, MN",
+   "kind": "largest",
+   "pop": 428579,
+   "at": [
+    44.9799654,
+    -93.2638361
+   ],
+   "img": {
+    "id": "1057912366014860",
+    "lat": 44.9809399,
+    "lon": -93.262959,
+    "heading": 307.81,
+    "hfov": 71.3,
+    "vfov": 56.6,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2025-07-09T00:53:29.082Z",
+    "by": "quickness805",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "MN-mid-2767288",
+   "state": "MN",
+   "town": "Virginia, MN",
+   "kind": "mid",
+   "pop": 8267,
+   "at": [
+    47.5232596,
+    -92.5365713
+   ],
+   "img": {
+    "id": "791552962418479",
+    "lat": 47.5231617,
+    "lon": -92.5372746,
+    "heading": 267.58,
+    "hfov": 89.3,
+    "vfov": 37.2,
+    "w": 2704,
+    "h": 920,
+    "captured": "2021-08-16T18:41:54.093Z",
+    "by": "networklanman",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "MN-small-2739266",
+   "state": "MN",
+   "town": "Madison, MN",
+   "kind": "small",
+   "pop": 1488,
+   "at": [
+    45.0096848,
+    -96.1958765
+   ],
+   "img": null
+  },
+  {
+   "id": "MO-largest-2938000",
+   "state": "MO",
+   "town": "Kansas City, MO",
+   "kind": "largest",
+   "pop": 516032,
+   "at": [
+    39.0997266,
+    -94.5785667
+   ],
+   "img": {
+    "id": "166371025314698",
+    "lat": 39.0992677,
+    "lon": -94.57863,
+    "heading": 196.03,
+    "hfov": 62.9,
+    "vfov": 38,
+    "w": 1280,
+    "h": 720,
+    "captured": "2019-04-10T22:56:36.615Z",
+    "by": "aqua07",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "MO-mid-2939026",
+   "state": "MO",
+   "town": "Kirksville, MO",
+   "kind": "mid",
+   "pop": 17841,
+   "at": [
+    40.1947539,
+    -92.5832496
+   ],
+   "img": {
+    "id": "1286747568760069",
+    "lat": 40.1790525,
+    "lon": -92.5719902,
+    "heading": 178.95,
+    "hfov": 56.1,
+    "vfov": 33.3,
+    "w": 3840,
+    "h": 2160,
+    "captured": "2022-09-28T17:26:01.252Z",
+    "by": "apmwa",
+    "within": 0.016
+   }
+  },
+  {
+   "id": "MO-small-2943468",
+   "state": "MO",
+   "town": "Loch Lloyd, MO",
+   "kind": "small",
+   "pop": 1030,
+   "at": [
+    38.8310575,
+    -94.597737
+   ],
+   "img": null
+  },
+  {
+   "id": "MS-largest-2836000",
+   "state": "MS",
+   "town": "Jackson, MS",
+   "kind": "largest",
+   "pop": 141449,
+   "at": [
+    32.2987573,
+    -90.1848103
+   ],
+   "img": {
+    "id": "992402261302084",
+    "lat": 32.3027917,
+    "lon": -90.1852274,
+    "heading": 209,
+    "hfov": 64.4,
+    "vfov": 50.5,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2020-11-12T21:33:12.166Z",
+    "by": "hdmaps1",
+    "within": 0.008
+   }
+  },
+  {
+   "id": "MS-mid-2815700",
+   "state": "MS",
+   "town": "Corinth, MS",
+   "kind": "mid",
+   "pop": 14219,
+   "at": [
+    34.9342548,
+    -88.5222702
+   ],
+   "img": null
+  },
+  {
+   "id": "MS-small-2871600",
+   "state": "MS",
+   "town": "Sunflower, MS",
+   "kind": "small",
+   "pop": 886,
+   "at": [
+    33.5428954,
+    -90.5370327
+   ],
+   "img": null
+  },
+  {
+   "id": "MT-largest-3006550",
+   "state": "MT",
+   "town": "Billings, MT",
+   "kind": "largest",
+   "pop": 121483,
+   "at": [
+    45.7832856,
+    -108.5006904
+   ],
+   "img": {
+    "id": "151185547018521",
+    "lat": 45.7841989,
+    "lon": -108.499089,
+    "heading": 224.38,
+    "hfov": 85.9,
+    "vfov": 69.9,
+    "w": 4000,
+    "h": 3000,
+    "captured": "2019-06-01T23:36:53.000Z",
+    "by": "chrisbeddow",
+    "within": 0.002
+   }
+  },
+  {
+   "id": "MT-mid-3035600",
+   "state": "MT",
+   "town": "Helena, MT",
+   "kind": "mid",
+   "pop": 34729,
+   "at": [
+    46.5927122,
+    -112.036109
+   ],
+   "img": {
+    "id": "905814228326955",
+    "lat": 46.5915501,
+    "lon": -112.0370132,
+    "heading": 338.93,
+    "hfov": 63.8,
+    "vfov": 50.1,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2024-12-24T20:28:39.035Z",
+    "by": "whitecotton",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "MT-small-3016525",
+   "state": "MT",
+   "town": "Colstrip, MT",
+   "kind": "small",
+   "pop": 2063,
+   "at": [
+    45.8841618,
+    -106.6236368
+   ],
+   "img": null
+  },
+  {
+   "id": "NC-largest-3712000",
+   "state": "NC",
+   "town": "Charlotte, NC",
+   "kind": "largest",
+   "pop": 943476,
+   "at": [
+    35.2270869,
+    -80.8431268
+   ],
+   "img": {
+    "id": "1132133361047875",
+    "lat": 35.2278849,
+    "lon": -80.8437627,
+    "heading": 317.88,
+    "hfov": 71.6,
+    "vfov": 44.2,
+    "w": 4080,
+    "h": 2296,
+    "captured": "2022-09-07T14:54:44.928Z",
+    "by": "JordanAnderson",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "NC-mid-3732640",
+   "state": "NC",
+   "town": "Hope Mills, NC",
+   "kind": "mid",
+   "pop": 18102,
+   "at": [
+    34.9704419,
+    -78.9453056
+   ],
+   "img": {
+    "id": "749015895774912",
+    "lat": 34.9696718,
+    "lon": -78.9452694,
+    "heading": 159.04,
+    "hfov": 62.3,
+    "vfov": 37.5,
+    "w": 1920,
+    "h": 1080,
+    "captured": "2019-01-31T13:40:16.432Z",
+    "by": "lvl5",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "NC-small-3739880",
+   "state": "NC",
+   "town": "McAdenville, NC",
+   "kind": "small",
+   "pop": 936,
+   "at": [
+    35.2593056,
+    -81.0753535
+   ],
+   "img": {
+    "id": "2041243720070838",
+    "lat": 35.2643949,
+    "lon": -81.0812285,
+    "heading": 274.43,
+    "hfov": 103.3,
+    "vfov": 76.6,
+    "w": 2560,
+    "h": 1600,
+    "captured": "2026-04-13T17:13:32.500Z",
+    "by": "aftcpics471",
+    "within": 0.008
+   }
+  },
+  {
+   "id": "ND-largest-3825700",
+   "state": "ND",
+   "town": "Fargo, ND",
+   "kind": "largest",
+   "pop": 136285,
+   "at": [
+    46.8771863,
+    -96.7898034
+   ],
+   "img": {
+    "id": "1311640144208742",
+    "lat": 46.8769381,
+    "lon": -96.789538,
+    "heading": 98.2,
+    "hfov": 101.2,
+    "vfov": 84.8,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2026-04-19T00:40:01.069Z",
+    "by": "decromatic",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "ND-mid-3881180",
+   "state": "ND",
+   "town": "Valley City, ND",
+   "kind": "mid",
+   "pop": 6580,
+   "at": [
+    46.9233129,
+    -98.0031547
+   ],
+   "img": {
+    "id": "793616166445184",
+    "lat": 46.9242753,
+    "lon": -98.0035561,
+    "heading": 81.66,
+    "hfov": 101.2,
+    "vfov": 84.8,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2025-08-17T23:58:56.708Z",
+    "by": "hereitgoes",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "ND-small-3845020",
+   "state": "ND",
+   "town": "Larimore, ND",
+   "kind": "small",
+   "pop": 1239,
+   "at": [
+    47.9066569,
+    -97.6267539
+   ],
+   "img": null
+  },
+  {
+   "id": "NE-largest-3137000",
+   "state": "NE",
+   "town": "Omaha, NE",
+   "kind": "largest",
+   "pop": 489265,
+   "at": [
+    41.2586096,
+    -95.937792
+   ],
+   "img": {
+    "id": "1250650607097799",
+    "lat": 41.2585858,
+    "lon": -95.9386662,
+    "heading": 115.49,
+    "hfov": 80.5,
+    "vfov": 50.9,
+    "w": 2560,
+    "h": 1440,
+    "captured": "2026-04-25T11:29:35.866Z",
+    "by": "kc3910",
+    "within": 0.002
+   }
+  },
+  {
+   "id": "NE-mid-3129925",
+   "state": "NE",
+   "town": "McCook, NE",
+   "kind": "mid",
+   "pop": 7212,
+   "at": [
+    40.2019477,
+    -100.6257077
+   ],
+   "img": {
+    "id": "1014578249256532",
+    "lat": 40.198678,
+    "lon": -100.6279869,
+    "heading": 178.27,
+    "hfov": 101.4,
+    "vfov": 85,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2022-07-09T14:57:02.532Z",
+    "by": "filipb",
+    "within": 0.004
+   }
+  },
+  {
+   "id": "NE-small-3132340",
+   "state": "NE",
+   "town": "Minden, NE",
+   "kind": "small",
+   "pop": 3116,
+   "at": [
+    40.4986252,
+    -98.9478594
+   ],
+   "img": {
+    "id": "172562138119403",
+    "lat": 40.5039578,
+    "lon": -98.9477043,
+    "heading": 254.74,
+    "hfov": 29.5,
+    "vfov": 29.5,
+    "w": 1920,
+    "h": 1920,
+    "captured": "2019-12-20T17:59:08.303Z",
+    "by": "james_mapillary",
+    "within": 0.008
+   }
+  },
+  {
+   "id": "NH-largest-3345140",
+   "state": "NH",
+   "town": "Manchester, NH",
+   "kind": "largest",
+   "pop": 116386,
+   "at": [
+    42.9956397,
+    -71.4547891
+   ],
+   "img": {
+    "id": "578285267805026",
+    "lat": 42.9960707,
+    "lon": -71.4538034,
+    "heading": 344.04,
+    "hfov": 70.2,
+    "vfov": 55.6,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2023-07-05T19:25:29.341Z",
+    "by": "allseasonhiker",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "NH-mid-3318820",
+   "state": "NH",
+   "town": "Dover, NH",
+   "kind": "mid",
+   "pop": 33909,
+   "at": [
+    43.1978624,
+    -70.8736698
+   ],
+   "img": {
+    "id": "3257708127863321",
+    "lat": 43.1983629,
+    "lon": -70.8741099,
+    "heading": 328.3,
+    "hfov": 66.4,
+    "vfov": 52.2,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2023-09-27T17:32:12.000Z",
+    "by": "batterystaple",
     "within": 0.001
    }
   },
@@ -311,6 +1871,138 @@
    "img": null
   },
   {
+   "id": "NM-largest-3502000",
+   "state": "NM",
+   "town": "Albuquerque, NM",
+   "kind": "largest",
+   "pop": 560326,
+   "at": [
+    35.0844909,
+    -106.6511367
+   ],
+   "img": {
+    "id": "1571832986613578",
+    "lat": 35.0854051,
+    "lon": -106.6502391,
+    "heading": 7.03,
+    "hfov": 67.9,
+    "vfov": 53.6,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2022-12-04T21:18:33.913Z",
+    "by": "finneystreetview",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "NM-mid-3543370",
+   "state": "NM",
+   "town": "Los Lunas, NM",
+   "kind": "mid",
+   "pop": 19907,
+   "at": [
+    34.806166,
+    -106.7333599
+   ],
+   "img": {
+    "id": "520985146333402",
+    "lat": 34.8138367,
+    "lon": -106.7404488,
+    "heading": 206.37,
+    "hfov": 68,
+    "vfov": 53.6,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2022-05-15T20:48:53.173Z",
+    "by": "intelsoy",
+    "within": 0.008
+   }
+  },
+  {
+   "id": "NM-small-3535040",
+   "state": "NM",
+   "town": "Jal, NM",
+   "kind": "small",
+   "pop": 2192,
+   "at": [
+    32.1131814,
+    -103.1935127
+   ],
+   "img": null
+  },
+  {
+   "id": "NV-largest-3240000",
+   "state": "NV",
+   "town": "Las Vegas, NV",
+   "kind": "largest",
+   "pop": 678922,
+   "at": [
+    36.233499,
+    -115.264037
+   ],
+   "img": {
+    "id": "180953877141224",
+    "lat": 36.233298,
+    "lon": -115.2647375,
+    "heading": 271.99,
+    "hfov": 66.4,
+    "vfov": 52.3,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2020-02-18T20:32:54.797Z",
+    "by": "matsayz",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "NV-mid-3246000",
+   "state": "NV",
+   "town": "Mesquite, NV",
+   "kind": "mid",
+   "pop": 23599,
+   "at": [
+    36.8055312,
+    -114.0671903
+   ],
+   "img": {
+    "id": "1066749595740282",
+    "lat": 36.8093757,
+    "lon": -114.0708058,
+    "heading": 81.58,
+    "hfov": 91.4,
+    "vfov": 59.9,
+    "w": 1920,
+    "h": 1080,
+    "captured": "2026-08-03T16:13:47.000Z",
+    "by": "bct",
+    "within": 0.004
+   }
+  },
+  {
+   "id": "NV-small-3243000",
+   "state": "NV",
+   "town": "Lovelock, NV",
+   "kind": "small",
+   "pop": 1823,
+   "at": [
+    40.1793537,
+    -118.4734808
+   ],
+   "img": {
+    "id": "9556755744439029",
+    "lat": 40.1775957,
+    "lon": -118.4717917,
+    "heading": 29.14,
+    "hfov": 38.7,
+    "vfov": 22.4,
+    "w": 3840,
+    "h": 2160,
+    "captured": "2025-03-12T21:36:49.000Z",
+    "by": "bct",
+    "within": 0.002
+   }
+  },
+  {
    "id": "NY-largest-3651000",
    "state": "NY",
    "town": "New York, NY",
@@ -368,7 +2060,751 @@
     40.7209321,
     -73.2673399
    ],
+   "img": {
+    "id": "806869280224704",
+    "lat": 40.7248674,
+    "lon": -73.2531399,
+    "heading": 295.38,
+    "hfov": 63.3,
+    "vfov": 49.6,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2019-05-16T13:08:14.751Z",
+    "by": "daalso",
+    "within": 0.016
+   }
+  },
+  {
+   "id": "OH-largest-3918000",
+   "state": "OH",
+   "town": "Columbus, OH",
+   "kind": "largest",
+   "pop": 933263,
+   "at": [
+    39.9611755,
+    -82.9987942
+   ],
+   "img": {
+    "id": "845162817164896",
+    "lat": 39.960336,
+    "lon": -82.9993443,
+    "heading": 247.4,
+    "hfov": 66.8,
+    "vfov": 52.6,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2023-09-09T15:20:04.676Z",
+    "by": "deleted_user",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "OH-mid-3921434",
+   "state": "OH",
+   "town": "Delaware, OH",
+   "kind": "mid",
+   "pop": 46521,
+   "at": [
+    40.2986724,
+    -83.067965
+   ],
+   "img": {
+    "id": "673255656806874",
+    "lat": 40.2987478,
+    "lon": -83.06725,
+    "heading": 96.92,
+    "hfov": 71.2,
+    "vfov": 43.8,
+    "w": 4032,
+    "h": 2268,
+    "captured": "2020-04-23T13:24:22.376Z",
+    "by": "jbthemilker",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "OH-small-3944030",
+   "state": "OH",
+   "town": "Lisbon, OH",
+   "kind": "small",
+   "pop": 2519,
+   "at": [
+    40.7720044,
+    -80.7681336
+   ],
+   "img": {
+    "id": "313021697039835",
+    "lat": 40.772357,
+    "lon": -80.7679942,
+    "heading": 347.05,
+    "hfov": 64.6,
+    "vfov": 39.1,
+    "w": 4032,
+    "h": 2268,
+    "captured": "2019-06-22T17:24:59.290Z",
+    "by": "jbthemilker",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "OK-largest-4055000",
+   "state": "OK",
+   "town": "Oklahoma City, OK",
+   "kind": "largest",
+   "pop": 712919,
+   "at": [
+    35.4675602,
+    -97.5164276
+   ],
+   "img": {
+    "id": "185709750973500",
+    "lat": 35.4683197,
+    "lon": -97.5168345,
+    "heading": 28.92,
+    "hfov": 66.8,
+    "vfov": 52.6,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2023-04-13T21:05:12.695Z",
+    "by": "cbardash",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "OK-mid-4061000",
+   "state": "OK",
+   "town": "Pryor Creek, OK",
+   "kind": "mid",
+   "pop": 9700,
+   "at": [
+    36.299675,
+    -95.311286
+   ],
    "img": null
+  },
+  {
+   "id": "OK-small-4039900",
+   "state": "OK",
+   "town": "Kingston, OK",
+   "kind": "small",
+   "pop": 1477,
+   "at": [
+    33.9987101,
+    -96.7197217
+   ],
+   "img": null
+  },
+  {
+   "id": "OR-largest-4159000",
+   "state": "OR",
+   "town": "Portland, OR",
+   "kind": "largest",
+   "pop": 635749,
+   "at": [
+    45.5234515,
+    -122.6762071
+   ],
+   "img": {
+    "id": "301842178141896",
+    "lat": 45.5239863,
+    "lon": -122.6764788,
+    "heading": 4.57,
+    "hfov": 60.9,
+    "vfov": 47.6,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2019-12-18T19:21:55.183Z",
+    "by": "billwatersiii",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "OR-mid-4103050",
+   "state": "OR",
+   "town": "Ashland, OR",
+   "kind": "mid",
+   "pop": 20935,
+   "at": [
+    42.1945759,
+    -122.7094767
+   ],
+   "img": {
+    "id": "891570884031239",
+    "lat": 42.196258,
+    "lon": -122.7133004,
+    "heading": 122.52,
+    "hfov": 46.3,
+    "vfov": 65.5,
+    "w": 4024,
+    "h": 6048,
+    "captured": "2025-09-08T02:42:24.430Z",
+    "by": "algirdasc",
+    "within": 0.004
+   }
+  },
+  {
+   "id": "OR-small-4123500",
+   "state": "OR",
+   "town": "Enterprise, OR",
+   "kind": "small",
+   "pop": 2083,
+   "at": [
+    45.4262617,
+    -117.2787815
+   ],
+   "img": null
+  },
+  {
+   "id": "PA-largest-4260000",
+   "state": "PA",
+   "town": "Philadelphia, PA",
+   "kind": "largest",
+   "pop": 1573916,
+   "at": [
+    39.952335,
+    -75.163789
+   ],
+   "img": {
+    "id": "245802513992311",
+    "lat": 39.9517097,
+    "lon": -75.16308,
+    "heading": 69.03,
+    "hfov": 62.7,
+    "vfov": 49.1,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2019-12-21T15:57:37.106Z",
+    "by": "agreen824",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "PA-mid-4239784",
+   "state": "PA",
+   "town": "Kingston, PA",
+   "kind": "mid",
+   "pop": 13476,
+   "at": [
+    41.2617481,
+    -75.8968635
+   ],
+   "img": null
+  },
+  {
+   "id": "PA-small-4251744",
+   "state": "PA",
+   "town": "Mount Oliver, PA",
+   "kind": "small",
+   "pop": 3259,
+   "at": [
+    40.414236,
+    -79.9878304
+   ],
+   "img": {
+    "id": "1415457322151277",
+    "lat": 40.4144535,
+    "lon": -79.9881443,
+    "heading": 271.56,
+    "hfov": 67.5,
+    "vfov": 53.2,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2020-04-20T21:33:30.421Z",
+    "by": "abf",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "RI-largest-4459000",
+   "state": "RI",
+   "town": "Providence, RI",
+   "kind": "largest",
+   "pop": 194706,
+   "at": [
+    41.8239891,
+    -71.4128343
+   ],
+   "img": {
+    "id": "784505900393379",
+    "lat": 41.8224372,
+    "lon": -71.4116531,
+    "heading": 35.57,
+    "hfov": 70.5,
+    "vfov": 55.8,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2024-03-04T19:56:31.834Z",
+    "by": "azsr",
+    "within": 0.002
+   }
+  },
+  {
+   "id": "RI-mid-4422960",
+   "state": "RI",
+   "town": "East Providence, RI",
+   "kind": "mid",
+   "pop": 47961,
+   "at": [
+    41.8137116,
+    -71.3700545
+   ],
+   "img": {
+    "id": "1247988279198098",
+    "lat": 41.814672,
+    "lon": -71.3695028,
+    "heading": 295.79,
+    "hfov": 119,
+    "vfov": 87.3,
+    "w": 3840,
+    "h": 2160,
+    "captured": "2023-08-28T14:05:49.833Z",
+    "by": "cpels23",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "SC-largest-4513330",
+   "state": "SC",
+   "town": "Charleston, SC",
+   "kind": "largest",
+   "pop": 157665,
+   "at": [
+    32.7765656,
+    -79.9309216
+   ],
+   "img": {
+    "id": "1050320667351914",
+    "lat": 32.7771809,
+    "lon": -79.9311038,
+    "heading": 356.61,
+    "hfov": 65.9,
+    "vfov": 51.9,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2026-06-15T23:52:42.042Z",
+    "by": "AmericanMapper",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "SC-mid-4579090",
+   "state": "SC",
+   "town": "Woodruff, SC",
+   "kind": "mid",
+   "pop": 5072,
+   "at": [
+    34.7395701,
+    -82.0370466
+   ],
+   "img": null
+  },
+  {
+   "id": "SC-small-4541380",
+   "state": "SC",
+   "town": "Liberty, SC",
+   "kind": "small",
+   "pop": 3352,
+   "at": [
+    34.787891,
+    -82.6923591
+   ],
+   "img": {
+    "id": "3912770802155328",
+    "lat": 34.7869478,
+    "lon": -82.692609,
+    "heading": 172.05,
+    "hfov": 60.3,
+    "vfov": 47.1,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2019-01-31T22:18:26.127Z",
+    "by": "i_drive_alot",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "SD-largest-4659020",
+   "state": "SD",
+   "town": "Sioux Falls, SD",
+   "kind": "largest",
+   "pop": 209289,
+   "at": [
+    43.5499749,
+    -96.700327
+   ],
+   "img": null
+  },
+  {
+   "id": "SD-mid-4669300",
+   "state": "SD",
+   "town": "Watertown, SD",
+   "kind": "mid",
+   "pop": 23492,
+   "at": [
+    44.8994088,
+    -97.1150732
+   ],
+   "img": {
+    "id": "3505507702931547",
+    "lat": 44.896416,
+    "lon": -97.1073723,
+    "heading": 21.34,
+    "hfov": 72.8,
+    "vfov": 57.9,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2026-04-05T19:36:11.090Z",
+    "by": "Milbank",
+    "within": 0.008
+   }
+  },
+  {
+   "id": "SD-small-4640860",
+   "state": "SD",
+   "town": "Marion, SD",
+   "kind": "small",
+   "pop": 880,
+   "at": [
+    43.4230394,
+    -97.2606153
+   ],
+   "img": null
+  },
+  {
+   "id": "TN-largest-4752006",
+   "state": "TN",
+   "town": "Nashville-Davidson, TN",
+   "kind": "largest",
+   "pop": 704963,
+   "at": [
+    36.172178,
+    -86.784602
+   ],
+   "img": {
+    "id": "197046285597698",
+    "lat": 36.1713519,
+    "lon": -86.7855358,
+    "heading": 193.97,
+    "hfov": 65.5,
+    "vfov": 51.5,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2020-01-12T20:35:29.094Z",
+    "by": "maxmartilik",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "TN-mid-4702320",
+   "state": "TN",
+   "town": "Athens, TN",
+   "kind": "mid",
+   "pop": 15050,
+   "at": [
+    35.4428512,
+    -84.5929898
+   ],
+   "img": {
+    "id": "651260032714643",
+    "lat": 35.4419497,
+    "lon": -84.5937987,
+    "heading": 61.05,
+    "hfov": 64,
+    "vfov": 50.2,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2021-12-30T16:47:38.242Z",
+    "by": "geosnapper",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "TN-small-4703680",
+   "state": "TN",
+   "town": "Baxter, TN",
+   "kind": "small",
+   "pop": 2051,
+   "at": [
+    36.1536718,
+    -85.6435909
+   ],
+   "img": {
+    "id": "1546864103488920",
+    "lat": 36.1376702,
+    "lon": -85.6311666,
+    "heading": 266.08,
+    "hfov": 109.7,
+    "vfov": 83.2,
+    "w": 2560,
+    "h": 1600,
+    "captured": "2026-06-08T16:55:23.300Z",
+    "by": "aftcpics471",
+    "within": 0.016
+   }
+  },
+  {
+   "id": "TX-largest-4835000",
+   "state": "TX",
+   "town": "Houston, TX",
+   "kind": "largest",
+   "pop": 2390125,
+   "at": [
+    29.7632836,
+    -95.3632715
+   ],
+   "img": {
+    "id": "1253034014564518",
+    "lat": 29.7635083,
+    "lon": -95.3630162,
+    "heading": 305.73,
+    "hfov": 115.9,
+    "vfov": 100.3,
+    "w": 3616,
+    "h": 2712,
+    "captured": "2026-08-18T23:50:14.000Z",
+    "by": "713tex",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "TX-mid-4811212",
+   "state": "TX",
+   "town": "Bullard, TX",
+   "kind": "mid",
+   "pop": 5070,
+   "at": [
+    32.1398804,
+    -95.320229
+   ],
+   "img": null
+  },
+  {
+   "id": "TX-small-4870868",
+   "state": "TX",
+   "town": "Sullivan City, TX",
+   "kind": "small",
+   "pop": 3900,
+   "at": [
+    26.2775706,
+    -98.563633
+   ],
+   "img": {
+    "id": "1746754502495599",
+    "lat": 26.2773254,
+    "lon": -98.5630955,
+    "heading": 298.31,
+    "hfov": 59.7,
+    "vfov": 46.6,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2024-01-24T17:00:49.253Z",
+    "by": "Montrose_Lyle",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "UT-largest-4967000",
+   "state": "UT",
+   "town": "Salt Lake City, UT",
+   "kind": "largest",
+   "pop": 217783,
+   "at": [
+    40.7607794,
+    -111.8910474
+   ],
+   "img": {
+    "id": "1689000199033264",
+    "lat": 40.7612997,
+    "lon": -111.8909891,
+    "heading": 1.61,
+    "hfov": 97.3,
+    "vfov": 81.1,
+    "w": 4080,
+    "h": 3072,
+    "captured": "2026-06-12T01:32:53.797Z",
+    "by": "HashFerret",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "UT-mid-4981960",
+   "state": "UT",
+   "town": "Washington, UT",
+   "kind": "mid",
+   "pop": 35501,
+   "at": [
+    37.1305373,
+    -113.5082867
+   ],
+   "img": {
+    "id": "761261678636808",
+    "lat": 37.1303788,
+    "lon": -113.5068965,
+    "heading": 279.62,
+    "hfov": 64.7,
+    "vfov": 50.8,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2022-07-09T19:26:20.825Z",
+    "by": "randoogle",
+    "within": 0.002
+   }
+  },
+  {
+   "id": "UT-small-4953010",
+   "state": "UT",
+   "town": "Mount Pleasant, UT",
+   "kind": "small",
+   "pop": 3935,
+   "at": [
+    39.5469073,
+    -111.4554659
+   ],
+   "img": null
+  },
+  {
+   "id": "VA-largest-5182000",
+   "state": "VA",
+   "town": "Virginia Beach, VA",
+   "kind": "largest",
+   "pop": 454808,
+   "at": [
+    36.8529263,
+    -75.977985
+   ],
+   "img": {
+    "id": "538290527536879",
+    "lat": 36.8525624,
+    "lon": -75.9775754,
+    "heading": 172.61,
+    "hfov": 70.5,
+    "vfov": 43.4,
+    "w": 3264,
+    "h": 1836,
+    "captured": "2021-05-14T19:35:12.629Z",
+    "by": "jbthemilker",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "VA-mid-5129744",
+   "state": "VA",
+   "town": "Fredericksburg, VA",
+   "kind": "mid",
+   "pop": 29992,
+   "at": [
+    38.3031837,
+    -77.4605399
+   ],
+   "img": {
+    "id": "908756713089988",
+    "lat": 38.304056,
+    "lon": -77.4598163,
+    "heading": 346.31,
+    "hfov": 58.4,
+    "vfov": 45.5,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2021-10-08T22:00:06.893Z",
+    "by": "guyutetube",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "VA-small-5134064",
+   "state": "VA",
+   "town": "Halifax, VA",
+   "kind": "small",
+   "pop": 1090,
+   "at": [
+    36.7659709,
+    -78.9283441
+   ],
+   "img": {
+    "id": "763730271181037",
+    "lat": 36.765217,
+    "lon": -78.9287794,
+    "heading": 177.1,
+    "hfov": 60.9,
+    "vfov": 47.6,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2020-04-04T23:44:23.824Z",
+    "by": "cpels23",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "VT-largest-5010675",
+   "state": "VT",
+   "town": "Burlington, VT",
+   "kind": "largest",
+   "pop": 44432,
+   "at": [
+    44.4758825,
+    -73.212072
+   ],
+   "img": {
+    "id": "436102022162458",
+    "lat": 44.4769556,
+    "lon": -73.2133534,
+    "heading": 99.01,
+    "hfov": 103.3,
+    "vfov": 86.9,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2024-04-21T19:11:08.166Z",
+    "by": "quickness805",
+    "within": 0.002
+   }
+  },
+  {
+   "id": "VT-mid-5061675",
+   "state": "VT",
+   "town": "St. Albans, VT",
+   "kind": "mid",
+   "pop": 7031,
+   "at": [
+    44.811538,
+    -73.084462
+   ],
+   "img": {
+    "id": "800479870868826",
+    "lat": 44.8115744,
+    "lon": -73.0854794,
+    "heading": 7.13,
+    "hfov": 33.5,
+    "vfov": 60.9,
+    "w": 1030,
+    "h": 2011,
+    "captured": "2019-07-18T09:40:39.200Z",
+    "by": "vtrans_pave",
+    "within": 0.002
+   }
+  },
+  {
+   "id": "VT-small-5046825",
+   "state": "VT",
+   "town": "Morrisville, VT",
+   "kind": "small",
+   "pop": 2392,
+   "at": [
+    44.5617189,
+    -72.5984486
+   ],
+   "img": {
+    "id": "1074451333258232",
+    "lat": 44.5616479,
+    "lon": -72.5985395,
+    "heading": 83.02,
+    "hfov": 67.8,
+    "vfov": 41.4,
+    "w": 4032,
+    "h": 2268,
+    "captured": "2022-10-05T18:50:52.545Z",
+    "by": "jacklehoullier",
+    "within": 0.001
+   }
   },
   {
    "id": "WA-largest-5363000",
@@ -429,6 +2865,162 @@
     "by": "bct",
     "within": 0.001
    }
+  },
+  {
+   "id": "WI-largest-5553000",
+   "state": "WI",
+   "town": "Milwaukee, WI",
+   "kind": "largest",
+   "pop": 563531,
+   "at": [
+    43.0389025,
+    -87.9064736
+   ],
+   "img": null
+  },
+  {
+   "id": "WI-mid-5517975",
+   "state": "WI",
+   "town": "Cudahy, WI",
+   "kind": "mid",
+   "pop": 17704,
+   "at": [
+    42.959738,
+    -87.861471
+   ],
+   "img": {
+    "id": "1238040201051021",
+    "lat": 42.9587258,
+    "lon": -87.8766755,
+    "heading": 292.11,
+    "hfov": 142.6,
+    "vfov": 117.9,
+    "w": 1920,
+    "h": 1080,
+    "captured": "2025-05-01T20:07:28.000Z",
+    "by": "Ewaldauto",
+    "within": 0.016
+   }
+  },
+  {
+   "id": "WI-small-5577750",
+   "state": "WI",
+   "town": "Stratford, WI",
+   "kind": "small",
+   "pop": 1614,
+   "at": [
+    44.8010763,
+    -90.0792975
+   ],
+   "img": null
+  },
+  {
+   "id": "WV-largest-5414600",
+   "state": "WV",
+   "town": "Charleston, WV",
+   "kind": "largest",
+   "pop": 46482,
+   "at": [
+    38.3498195,
+    -81.6326235
+   ],
+   "img": {
+    "id": "310447333816253",
+    "lat": 38.3497909,
+    "lon": -81.6334743,
+    "heading": 216.57,
+    "hfov": 85.4,
+    "vfov": 69.4,
+    "w": 4000,
+    "h": 3000,
+    "captured": "2021-04-03T16:14:39.000Z",
+    "by": "wolfgang8741",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "WV-mid-5466988",
+   "state": "WV",
+   "town": "Ranson, WV",
+   "kind": "mid",
+   "pop": 6035,
+   "at": [
+    39.2951013,
+    -77.8605508
+   ],
+   "img": {
+    "id": "267816898427112",
+    "lat": 39.2948162,
+    "lon": -77.8606444,
+    "heading": 193.2,
+    "hfov": 68.2,
+    "vfov": 53.8,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2020-02-16T15:57:38.196Z",
+    "by": "mdroads",
+    "within": 0.001
+   }
+  },
+  {
+   "id": "WV-small-5463292",
+   "state": "WV",
+   "town": "Philippi, WV",
+   "kind": "small",
+   "pop": 2845,
+   "at": [
+    39.1523198,
+    -80.0403578
+   ],
+   "img": null
+  },
+  {
+   "id": "WY-largest-5613900",
+   "state": "WY",
+   "town": "Cheyenne, WY",
+   "kind": "largest",
+   "pop": 65704,
+   "at": [
+    41.1399814,
+    -104.8202462
+   ],
+   "img": null
+  },
+  {
+   "id": "WY-mid-5645050",
+   "state": "WY",
+   "town": "Laramie, WY",
+   "kind": "mid",
+   "pop": 32957,
+   "at": [
+    41.3113669,
+    -105.5911007
+   ],
+   "img": {
+    "id": "949086512349600",
+    "lat": 41.2969261,
+    "lon": -105.5944953,
+    "heading": 84.32,
+    "hfov": 96.1,
+    "vfov": 79.7,
+    "w": 5184,
+    "h": 3888,
+    "captured": "2021-08-25T13:08:38.460Z",
+    "by": "aidenrohde",
+    "within": 0.016
+   }
+  },
+  {
+   "id": "WY-small-5655345",
+   "state": "WY",
+   "town": "Mountain View, WY",
+   "kind": "small",
+   "pop": 1268,
+   "at": [
+    41.2688392,
+    -110.3398785
+   ],
+   "img": null
   }
  ]
 }

@@ -37,20 +37,29 @@ const pop = new Map();
 // there is one; the Census's internal point can lie in the water: Seattle's in Lake Union, Portland
 // Maine's in Casco Bay)
 const ST = { Alabama: 'AL', Arizona: 'AZ', Arkansas: 'AR', California: 'CA', Colorado: 'CO', Connecticut: 'CT', Delaware: 'DE', 'District of Columbia': 'DC', Florida: 'FL', Georgia: 'GA', Idaho: 'ID', Illinois: 'IL', Indiana: 'IN', Iowa: 'IA', Kansas: 'KS', Kentucky: 'KY', Louisiana: 'LA', Maine: 'ME', Maryland: 'MD', Massachusetts: 'MA', Michigan: 'MI', Minnesota: 'MN', Mississippi: 'MS', Missouri: 'MO', Montana: 'MT', Nebraska: 'NE', Nevada: 'NV', 'New Hampshire': 'NH', 'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', Ohio: 'OH', Oklahoma: 'OK', Oregon: 'OR', Pennsylvania: 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC', 'South Dakota': 'SD', Tennessee: 'TN', Texas: 'TX', Utah: 'UT', Vermont: 'VT', Virginia: 'VA', Washington: 'WA', 'West Virginia': 'WV', Wisconsin: 'WI', Wyoming: 'WY' };
-const centre = new Map();
+const centre = new Map(); // "name|ST" → every GNIS populated place of that name in the state
 for (const l of readFileSync(resolve(ROOT, 'raw/places/Text/DomesticNames_National.txt'), 'utf8').split(/\r?\n/)) {
   const v = l.split('|');
   if (v[2] !== 'Populated Place' || !ST[v[3]]) continue;
   const k = `${v[1]}|${ST[v[3]]}`;
-  if (!centre.has(k)) centre.set(k, [+v[15], +v[16]]);
+  if (!centre.has(k)) centre.set(k, []);
+  centre.get(k).push([+v[15], +v[16]]);
 }
+// (the one nearest the Census place's own point, within ~10 km: a state can have several of a name —
+// Virginia's first Fredericksburg in GNIS is a Rockbridge County hamlet, 180 km from the city)
+const nearest = (cands, lat, lon) => {
+  let best = null, bd = 0.09;
+  for (const c of cands ?? []) { const d = Math.hypot(c[0] - lat, (c[1] - lon) * Math.cos((lat * Math.PI) / 180)); if (d < bd) (bd = d), (best = c); }
+  return best;
+};
 const towns = new Map();
 for (const [usps, geoid, , , name, lsad, , , , , , lat, lon] of gaz) {
   const p = pop.get(geoid);
   if (!p) continue; // (incorporated places only: CDPs have no estimate)
   if (!towns.has(usps)) towns.set(usps, []);
-  const bare = name.replace(/ (city|town|village|borough|municipality|city and borough)$/i, '');
-  const c = centre.get(`${bare}|${usps}`);
+  // (the Census's legal suffixes: "Ranson corporation", "Nashville-Davidson metropolitan government (balance)")
+  const bare = name.replace(/ \(balance\)$/i, '').replace(/ (city|town|village|borough|municipality|city and borough|corporation|metropolitan government|metro government|consolidated government|unified government|urban county)$/i, '');
+  const c = nearest(centre.get(`${bare}|${usps}`), +lat, +lon);
   towns.get(usps).push({ name: bare, geoid, pop: p, lat: c ? c[0] : +lat, lon: c ? c[1] : +lon });
 }
 
@@ -68,7 +77,7 @@ const SINCE = Date.UTC(2019, 0, 1);
 const usable = (x) => x.camera_type === 'perspective' && !x.is_pano && x.captured_at >= SINCE && x.computed_geometry && isFinite(x.computed_compass_angle) && x.camera_parameters?.[0] > 0;
 async function photoNear(lat, lon, seed, aim = null) {
   // (small first: a dense centre answers "too much data" for a big box — then smaller still)
-  for (const half of [0.001, 0.002, 0.004, 0.008]) {
+  for (const half of [0.001, 0.002, 0.004, 0.008, 0.016]) {
     let got = await images([lon - half, lat - half, lon + half, lat + half]);
     for (let h2 = half / 2; got === null && h2 > 0.0001; h2 /= 2) got = await images([lon - h2, lat - h2, lon + h2, lat + h2]);
     if (got === null) got = [];
@@ -104,7 +113,9 @@ for (const st of STATES) {
   const pickTowns = [['largest', list[0]], ['mid', mids[seed % Math.max(1, mids.length)]], ['small', smalls[(seed >>> 8) % Math.max(1, smalls.length)]]].filter(([, t]) => t).slice(0, PER);
   for (const [kind, t] of pickTowns) {
     const id = `${st}-${kind}-${t.geoid}`;
-    if (keep.has(id) && keep.get(id).img) { spots.push(keep.get(id)); continue; }
+    // (a kept spot is looked for again when its town's centre has moved — the old first-of-its-name pick)
+    const was = keep.get(id);
+    if (was?.img && Math.hypot(was.at[0] - t.lat, was.at[1] - t.lon) < 0.01) { spots.push({ ...was, town: `${t.name}, ${st}` }); continue; }
     const img = await photoNear(t.lat, t.lon, hash(id));
     spots.push({ id, state: st, town: `${t.name}, ${st}`, kind, pop: t.pop, at: [t.lat, t.lon], img });
     console.log(`${id}: ${t.name} (${t.pop.toLocaleString()}) → ${img ? `${img.id} ${img.captured.slice(0, 10)} by ${img.by}, ${img.hfov}°, ${Math.round(img.within * 111000)} m box` : 'no photo near (aerial only)'}`);

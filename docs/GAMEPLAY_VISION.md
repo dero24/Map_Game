@@ -569,8 +569,11 @@ Practicalities:
     today;
   - **public things only:** an allowlist of public street-furniture classes (street lights,
     poles, traffic lights, hydrants, manholes, storm drains, benches, public bins, bike racks,
-    mailboxes, parking meters, crosswalks, signs). Nothing on private property and no private
-    data;
+    parking meters, crosswalks, signs). Nothing on private property and no private data.
+    **Home mailboxes are left out** (Robby, 2026-10-03): one stands on a home's own property and
+    marks a private home. Mapillary's mailbox class can't tell them from the public blue USPS
+    collection boxes, so it isn't used at all. The USPS boxes come from OpenStreetMap's
+    `amenity=post_box`, and the game's own kerbside mailboxes still line the streets;
   - **only recent, repeated sightings:** skip objects whose last-seen date is old or that were
     seen only once, so only things that are really there get placed;
   - **Robby's decision (2026-10-03): use it in the game**, crediting every data source. Build it

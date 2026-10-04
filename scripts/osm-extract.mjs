@@ -163,23 +163,40 @@ log('elements', counts);
 const gz = promisify(gzip);
 const index = existsSync(`${OUT}/index.json`) ? JSON.parse(readFileSync(`${OUT}/index.json`, 'utf8')) : { v: 1, blocks: {} };
 Object.assign(index, { v: 1, ts: TS, tile: T, block: BT, made: new Date().toISOString(), sources: [PBF.split(/[\\/]/).pop()] });
-// (in bands of BAND blocks east to west: the US in one ordered pass is a sort of ~100 GB of printed
-// elements; a band's is a fraction of it)
-const BAND = 4;
-const sql = (b0) => `SELECT tx // ${BT} bx, ty // ${BT} bym, tx, ty, k, id, s, w, n, e, payload FROM (
+// (in bands of block columns, west to east: the US in one ordered pass is a sort of ~100 GB of printed
+// elements, a band's a fraction of it. But every band re-reads all the ways' geometry and tags — the
+// join's other side, ~50 GB for the US — so bands are sized by what's in them, at most --band-lines
+// printed lines each, and a column with nothing in it (the Pacific between the Aleutians and the
+// lower 48) is never asked for: the first US run's 4° bands from −180° to +180°, 90 of them at ~6 min
+// each, would have taken seven hours. A band holds its ways' tags while it joins their geometry, then
+// sorts its printed lines: 40 M lines ran 20 GB out of memory; the densest column is ~9 M)
+const BAND_LINES = Number(arg('band-lines', ['12000000'])[0]);
+const sql = (bx0, bx1) => `SELECT tx // ${BT} bx, ty // ${BT} bym, tx, ty, k, id, s, w, n, e, payload FROM (
     SELECT floor((lon + 180) * ${T})::INT tx, floor((lat + 90) * ${T})::INT ty, 'n' k, id, lat s, lon w, lat n, lon e,
       to_json(struct_pack(type := 'node', id := id, lat := lat, lon := lon, tags := tags))::VARCHAR payload FROM sel_n WHERE sel
     UNION ALL
     SELECT swt.tx, swt.ty, 'w', wg.id, wg.s, wg.w, wg.n, wg.e, to_json(struct_pack(type := 'way', id := wg.id, geometry := wg.geom, tags := swg.tags))::VARCHAR
     FROM swt JOIN wg ON wg.id = swt.id JOIN swg ON swg.id = swt.id
-    WHERE swt.tx BETWEEN ${b0 * BT} AND ${(b0 + BAND) * BT - 1}
+    WHERE swt.tx BETWEEN ${bx0 * BT} AND ${(bx1 + 1) * BT - 1}
     UNION ALL
     SELECT tx, ty, k, id, s, w, n, e, payload FROM lines_r)
-  WHERE tx BETWEEN ${b0 * BT} AND ${(b0 + BAND) * BT - 1}
+  WHERE tx BETWEEN ${bx0 * BT} AND ${(bx1 + 1) * BT - 1}
   ${ONLY ? `AND (tx // ${BT}) || '_' || (ty // ${BT}) IN (${[...ONLY].map((b) => `'${b}'`).join(',')})` : ''}
   ORDER BY bx, bym, tx, ty, k, id`;
-const span = await one(`SELECT min(tx) // ${BT} b0, max(tx) // ${BT} b1 FROM swt`);
-log(`packing in bands of ${BAND}° (blocks ${span.b0}–${span.b1})…`);
+// (each block column's printed lines, then the bands: consecutive columns with data, up to BAND_LINES)
+let cols = (await con.runAndReadAll(`SELECT bx, sum(n)::BIGINT n FROM (
+    SELECT tx // ${BT} bx, count(*) n FROM swt GROUP BY 1
+    UNION ALL SELECT floor((lon + 180) * ${T})::INT // ${BT}, count(*) FROM sel_n WHERE sel GROUP BY 1
+    UNION ALL SELECT tx // ${BT}, count(*) FROM lines_r GROUP BY 1) GROUP BY bx ORDER BY bx`)).getRows().map(([bx, n]) => [Number(bx), Number(n)]);
+if (ONLY) cols = cols.filter(([bx]) => [...ONLY].some((b) => +b.split('_')[0] === bx));
+const bands = [];
+for (const [bx, n] of cols) {
+  const last = bands.at(-1);
+  if (last && last.n + n <= BAND_LINES) { last.bx1 = bx; last.n += n; } else bands.push({ bx0: bx, bx1: bx, n });
+}
+// (a band already packed — the run stopped part way — is kept: index.packed lists them)
+index.packed = (index.packed ?? []).filter((k) => bands.some((b) => `${b.bx0}-${b.bx1}` === k));
+log(`packing ${cols.length} block columns in ${bands.length} bands (≤ ${(BAND_LINES / 1e6).toFixed(0)} M lines each): ${bands.map((b) => `${b.bx0}–${b.bx1}`).join(', ')}…`);
 // (a block's tall things and big relations come over a second connection: a query on the streaming
 // one ends its stream — the first run stopped after one vector, 2,048 lines)
 const side = await db.connect();
@@ -230,9 +247,10 @@ const endBlock = async () => {
   st = null;
 };
 // (an ordered stream can hand over an empty chunk before it's done — only no chunk at all is the end)
-for (let b0 = +span.b0; b0 <= +span.b1; b0 += BAND) {
+for (const band of bands) {
+  if (index.packed.includes(`${band.bx0}-${band.bx1}`)) { log(`band ${band.bx0}–${band.bx1} (kept from the last run)`); continue; }
   const t = Date.now();
-  const res = await con.stream(sql(b0));
+  const res = await con.stream(sql(band.bx0, band.bx1));
   for (let empty = 0; ; ) {
     const chunk = await res.fetchChunk();
     if (!chunk) break;
@@ -249,7 +267,9 @@ for (let b0 = +span.b0; b0 <= +span.b1; b0 += BAND) {
   }
   await endBlock();
   block = null;
-  log(`band ${b0}–${b0 + BAND - 1} packed in ${((Date.now() - t) / 1000).toFixed(0)} s`);
+  index.packed.push(`${band.bx0}-${band.bx1}`);
+  writeFileSync(`${OUT}/index.json`, JSON.stringify(index, null, 1));
+  log(`band ${band.bx0}–${band.bx1} (${(band.n / 1e6).toFixed(1)} M lines) packed in ${((Date.now() - t) / 1000).toFixed(0)} s`);
 }
 // (blocks with only tall things, outside every tile's block: none in practice — the tall are tiles' too)
 writeFileSync(`${OUT}/index.json`, JSON.stringify(index, null, 1));
