@@ -25,6 +25,7 @@ docs below; read a topic doc only when the task touches that subsystem.
 | Lower-48 audit | `node tools/audit48.mjs [--towns=a,b] [--devices=desktop,phone]` → `shots/audit48/<town>-montage.jpg`, `summary.md` (`docs/earth/AUDIT_48.md`) |
 | Must-load towns | `node tools/must-load.mjs --live` (the deployed service answers every must-load town) · `--fixtures` (re-make `tests/fixtures/towns/` from an extract pack) |
 | Our OSM extract | `node scripts/osm-extract.mjs --pbf=<us-latest.osm.pbf> --ts=<state.txt timestamp>` → `node scripts/osm-upload.mjs --pack=… --poly=<us.poly>` · prove it: `node tools/osm-compare.mjs` (`docs/agent/streaming.md`) |
+| Real-world comparison | `node tools/real-spots.mjs [--states=NJ,NY]` (Mapillary spots, `.env` token) → `node tools/real-compare.mjs [--states=…]` → `shots/real/<ST>-montage.jpg`, scores in `tools/real-scores.json` (photos stay in git-ignored `raw/mapillary/`) |
 | Place index | `node scripts/build-places.mjs [--fetch]` → upload `raw/places/out/*` to R2 `places/v<N>/` (`docs/agent/gameplay.md` "geo.ts") |
 
 ## Hard constraints
