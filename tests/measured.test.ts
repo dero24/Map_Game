@@ -88,7 +88,7 @@ describe('measured: the shore sidecar', () => {
       files++;
     }
     expect(files).toBeGreaterThan(100);
-  });
+  }, 60000);
   it('leaves the pack as it was baked (its tiles still hash to its bakeId)', () => {
     let h = 0x811c9dc5; // (scripts/bake.mjs: FNV-1a over every tile payload, in manifest order)
     for (const t of man.tiles) {

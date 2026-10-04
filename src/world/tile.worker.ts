@@ -52,8 +52,11 @@ const realPatched = new Set<string>(); // cells whose real tile registered its g
 const realDem = new Map<string, { buf: ArrayBuffer; layout: LayerLayout }>(); // …and that ground
 
 // ---- real-lite, direct: this browser → Overpass → the same osmToTile the tile service runs ----
-// Used when `?tiles=direct` (no service at all) and as the fallback when the service is down or
-// stalls — the player gets the real town either way, never a placeholder for want of a proxy.
+// Only on `?tiles=direct` (a developer with no service at all). It used to be every player's
+// fallback whenever the service was slow — each browser then queried the public Overpass servers
+// itself, uncached for anyone else, which their usage policy asks apps not to do (docs/DATA_SOURCES.md
+// §0). The service answers from our own extract now; when it can't, the cell keeps its stand-in
+// (the vector twin: real streets and buildings) and the stream asks the service again later.
 // Results are cached per cell in IndexedDB (kvPut), so a revisit never re-queries Overpass.
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
 const DIRECT_V = 24; // keep with the tile service's t/vN (realTile output version)
@@ -379,16 +382,18 @@ async function vectorCell(spec: TileSpec): Promise<TileJson | null> {
   return tj;
 }
 
-// The tile service, raced against a stall: after 25 s (or any failure) go direct.
+// The tile service, raced against a stall (90 s: a cold cell it builds from our extract takes a few
+// seconds; one it must ask Overpass for, longer). A failure is the data's, not the worker's: the
+// stand-in stays and the stream retries the cell under its backoff.
 // ?fail=cx_cz,… (a test hook): those real cells answer as a 504 would, so their stand-ins stay
 const failCells = new Set<string>();
 function worldTile(spec: TileSpec): Promise<TileJson> {
   if (failCells.has(spec.id.slice(1))) return Promise.reject(new FetchError('overpass unavailable: forced (?fail)'));
   if (spec.file.startsWith('direct:')) return directTile(spec);
   let timer = 0;
-  const stall = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error('tile service stalled')), 25000) as unknown as number; });
+  const stall = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new FetchError('tile service stalled')), 90000) as unknown as number; });
   return Promise.race([cachedFetchJson(spec.file) as Promise<TileJson>, stall])
-    .catch(() => directTile(spec))
+    .catch((e) => { throw e instanceof FetchError ? e : new FetchError(`tile service: ${(e as Error)?.message ?? e}`); })
     .finally(() => clearTimeout(timer));
 }
 

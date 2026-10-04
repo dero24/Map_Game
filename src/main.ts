@@ -3,7 +3,7 @@ import { loadWorld, loadRegions, loadAtlas, manifestAsWorldJson, fromLatLon, toL
 import { cachedFetchJson, initCache, manifestFingerprint } from './world/cache';
 import { TileStream, streamParams } from './world/stream';
 import { Horizon } from './world/horizon';
-import { Skyline } from './world/skyline';
+import { Skyline, setSkylineSource } from './world/skyline';
 import { FarSkyline } from './world/farSkyline';
 import { KerbCars } from './world/kerbCars';
 import { underRaised, PAD_PAINT } from './world/pads';
@@ -296,6 +296,8 @@ async function main() {
   const horizon = new Horizon(manifest.origin, regionLook, !!tilesBase && params.get('horizon') !== '0');
   worldRoot.add(horizon.group);
   // …and a city's towers past the detail ring (a skyline you can navigate by). `?skyline=0` off.
+  // (the towers come from the tile service's /skyline — our own extract; Overpass only on ?tiles=direct)
+  setSkylineSource(tilesBase, tilesBase === 'direct');
   const skyline = new Skyline(manifest.origin, manifest.cell, !!tilesBase && params.get('skyline') !== '0', tier.skylineR);
   worldRoot.add(skyline.group);
   // …and past it the far skyline: the very tallest towers out to ~60 km at their real distance,

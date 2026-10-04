@@ -11,6 +11,7 @@ import type { Area, Box, Building, Line, Point, Road, TileJson } from './data';
 import { sportOf } from './sports';
 import { inclineOf } from './grade';
 import { worldRegion } from './styles';
+import { overpassStatements } from './osmQuery';
 
 export interface LatLon { lat: number; lon: number }
 export interface OsmNode { lat: number; lon: number }
@@ -530,46 +531,9 @@ const OWN_CTX = 0;
  *  Cloudflare tile service and the in-browser direct path (tile.worker.ts), so both feeders
  *  emit identical tiles. Keep in step with osmToTile when it learns a new tag. */
 export function overpassQuery(bb: { s: number; w: number; n: number; e: number }): string {
+  // (the statements are osmQuery.ts's — the same list our own extract selects with)
   return `[out:json][timeout:25][bbox:${bb.s.toFixed(7)},${bb.w.toFixed(7)},${bb.n.toFixed(7)},${bb.e.toFixed(7)}];(
-  way["highway"];
-  way["building"];
-  relation["building"];
-  way["building:part"];
-  relation["building:part"];
-  way["natural"~"^(water|coastline|beach|sand|wetland|wood|scrub|heath|grassland)$"];
-  way["amenity"="parking"];
-  relation["amenity"="parking"];
-  relation["natural"="water"];
-  way["waterway"="riverbank"];
-  node["natural"="tree"];
-  node["amenity"="bench"];
-  node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp)$"];
-  node["amenity"~"^(waste_basket|post_box|bicycle_parking|drinking_water|vending_machine|recycling|bbq|clock|planter)$"];
-  node["leisure"~"^(picnic_table|firepit)$"];
-  node["tourism"="information"]["information"~"^(board|map)$"];
-  node["man_made"~"^(street_cabinet|planter)$"];
-  node["seamark:type"~"^(buoy_|beacon_|mooring$)"];
-  node["barrier"="bollard"];
-  node["tourism"="viewpoint"];
-  node["playground"];
-  way["playground"];
-  node["emergency"="fire_hydrant"];
-  node["railway"="subway_entrance"];
-  node["man_made"~"^(mast|tower|communications_tower|water_tower|chimney|flagpole)$"];
-  way["man_made"~"^(mast|communications_tower|water_tower|chimney)$"];
-  node["highway"="bus_stop"];
-  node["name"]["amenity"~"^(cafe|restaurant|fast_food|bar|pub|biergarten|ice_cream|bank|pharmacy|post_office|library|nightclub)$"];
-  node["name"]["shop"];
-  node["name"]["office"];
-  way["wall"="seawall"];
-  way["man_made"~"^(groyne|breakwater|pier)$"];
-  way["barrier"~"^(fence|wall|retaining_wall)$"];
-  way["power"="line"];
-  way["railway"~"^(rail|tram|light_rail)$"];
-  way["leisure"~"^(park|pitch|playground|garden|recreation_ground|swimming_pool|golf_course|marina)$"];
-  way["landuse"~"^(forest|farmland|meadow|reservoir|cemetery|basin|quarry|landfill|grass|recreation_ground|village_green)$"];
-  relation["leisure"~"^(park|pitch|playground|garden|recreation_ground)$"];
-  relation["landuse"~"^(forest|farmland|meadow|reservoir|cemetery|basin|quarry|landfill|grass)$"];
+${overpassStatements()}
 );out geom qt;`;
 }
 

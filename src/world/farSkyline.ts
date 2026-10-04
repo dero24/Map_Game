@@ -1,7 +1,8 @@
 // The far skyline: a city's tallest towers at their real distance — Manhattan from a Jersey beach
 // 38 km off, a downtown across a bay, a desert city from the ridge above it. The skyline ring
 // (skyline.ts) draws every tower within 8 km in full; past it the tiles and the horizon ring hold
-// only ground, so a city an hour's drive away was simply not there. One Overpass read of the very
+// only ground, so a city an hour's drive away was simply not there. One read (skyline.ts readTowers:
+// the tile service's /skyline, our own extract) of the very
 // tall (≥ 120 m or 35 storeys, masts ≥ 150 m) within 60 km, through the tiles' own osmToTile so
 // heights and parts match theirs, cached in IndexedDB and re-read after a 15 km walk. Flat-topped
 // prisms, one merged mesh per 8 km sector, drawn in the far layer with the horizon ring: the
@@ -14,8 +15,8 @@ import * as THREE from 'three';
 import earcut from 'earcut';
 import { demSampler } from './dem';
 import { kvGet, kvPut } from './cache';
-import { OVERPASS } from './skyline';
-import { makeProjector, osmToTile, type LatLon, type OsmDoc } from './realTile';
+import { readTowers } from './skyline';
+import { makeProjector, osmToTile, type LatLon } from './realTile';
 import { GLSL_FAR_DEPTH, paintMaterial, U } from '../render/shared';
 import type { Box, TileJson } from './data';
 
@@ -256,19 +257,12 @@ export class FarSkyline {
     const hit = await kvGet<FarTower[]>(key);
     if (hit) return hit;
     const box = { x0: cx - R, z0: cz - R, x1: cx + R, z1: cz + R };
-    const body = 'data=' + encodeURIComponent(farSkylineQuery(makeProjector(this.origin).localToBbox(box)));
-    for (const ep of OVERPASS) {
-      try {
-        const r = await fetch(ep, { method: 'POST', body, headers: { 'content-type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(130000) });
-        if (!r.ok) continue;
-        const j = (await r.json()) as OsmDoc & { remark?: string };
-        if (typeof j.remark === 'string' && /error|timed out|out of memory/i.test(j.remark)) continue;
-        const towers = farTowers(osmToTile(j, { id: 'far-skyline', box, origin: this.origin, margin: 0 }));
-        void kvPut(key, towers);
-        return towers;
-      } catch { /* next mirror */ }
-    }
-    return null;
+    const bb = makeProjector(this.origin).localToBbox(box);
+    const j = await readTowers(bb, { h: TALL, floors: FLOORS, mast: MAST }, () => 'data=' + encodeURIComponent(farSkylineQuery(bb)), 130000);
+    if (!j) return null;
+    const towers = farTowers(osmToTile(j, { id: 'far-skyline', box, origin: this.origin, margin: 0 }));
+    void kvPut(key, towers);
+    return towers;
   }
 
   /** Sectors built a frame apart, then swapped in whole. False when a sector's ground couldn't be
