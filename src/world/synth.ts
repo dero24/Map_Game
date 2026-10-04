@@ -339,6 +339,7 @@ export function synthTile(spec: TileSpec, seed: number, terrain: { sdfAt(x: numb
   if (g.index && g.index.count) {
     const gm = new THREE.Mesh(g, new THREE.ShaderMaterial());
     gm.material.userData.tag = 'gnd'; // matTag resolves this to the shared ground material
+    gm.name = 'ground:cell'; // (the scene's family:type names: the tools' class pass reads them)
     extra.add(gm);
   }
   extra.add(roadRibbons(roads, terrain));
@@ -419,6 +420,7 @@ export function roadRibbons(roads: Road[], terrain: { heightAt(x: number, z: num
   geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   geo.setIndex(idx);
   const m = new THREE.Mesh(geo, propMaterial({ paved: true }));
+  m.name = 'road:ribbons';
   return m;
 }
 
@@ -523,6 +525,7 @@ export function realExtras(tj: TileJson, terrain: { sdfAt(x: number, z: number):
   if (g.index && g.index.count) {
     const gm = new THREE.Mesh(g, new THREE.ShaderMaterial());
     gm.material.userData.tag = 'gnd';
+    gm.name = 'ground:cell';
     extra.add(gm);
   }
   extra.add(roadRibbons(tj.roads, terrain, step));
@@ -567,7 +570,9 @@ export function realExtras(tj: TileJson, terrain: { sdfAt(x: number, z: number):
       geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
       geo.setAttribute('color', new THREE.Float32BufferAttribute(cc, 3));
       geo.setIndex(idx);
-      extra.add(new THREE.Mesh(geo, propMaterial()));
+      const sheet = new THREE.Mesh(geo, propMaterial());
+      sheet.name = `${a.c}:area`; // (water or beach)
+      extra.add(sheet);
     }
   }
   return extra;

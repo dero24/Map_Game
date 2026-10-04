@@ -93,6 +93,9 @@ function photoShares(det, w, h) {
   for (const g of grid) { if (g < 0) continue; count[CLASSES[g]]++; n++; }
   return { shares: Object.fromEntries(CLASSES.map((c) => [c, n ? Math.round((count[c] / n) * 1000) / 1000 : 0])), labelled: Math.round((n / grid.length) * 1000) / 1000 };
 }
+/** A photo Mapillary only found objects in (poles, signs, lamps — no sky, street or walls segmented)
+ *  says nothing of the view's mix: its every labelled patch is 'other'. Shown, not scored. */
+const segmented = (ps) => ps.shares.other < 0.9 && ps.labelled >= 0.3;
 /** 1 − the total variation between two class mixes: 1 identical, 0 nothing in common. */
 const score = (a, b) => Math.round((1 - 0.5 * CLASSES.reduce((s, c) => s + Math.abs((a[c] ?? 0) - (b[c] ?? 0)), 0)) * 1000) / 1000;
 
@@ -163,10 +166,10 @@ for (const [st, list] of byState) {
       const p = await photo(s.img.id);
       const ps = photoShares(p.det, s.img.w, s.img.h);
       const g = await render(s);
-      const sc = score(ps.shares, g.cls);
-      run.spots[s.id] = { score: sc, photo: ps.shares, labelled: ps.labelled, game: g.cls, cell: g.cell, water: g.water, date: g.date, hour: g.hour };
+      const sc = segmented(ps) ? score(ps.shares, g.cls) : null;
+      run.spots[s.id] = { score: sc, ...(sc === null ? { unscored: 'the photo has objects only, no segmentation' } : {}), photo: ps.shares, labelled: ps.labelled, game: g.cls, cell: g.cell, water: g.water, date: g.date, hour: g.hour };
       pairs.push({ s, sc, ps, g, photo: p.jpg.toString('base64'), game: g.shot.toString('base64') });
-      log(`${s.id} ${s.town}: score ${sc} · cell ${g.cell}${g.water ? ' (WATER under the lens)' : ''} · photo ${JSON.stringify(ps.shares)} · game ${JSON.stringify(g.cls)}${g.errors.length ? ` · ${g.errors.length} page errors` : ''}`);
+      log(`${s.id} ${s.town}: score ${sc ?? 'n/a (photo not segmented)'} · cell ${g.cell}${g.water ? ' (WATER under the lens)' : ''} · photo ${JSON.stringify(ps.shares)} · game ${JSON.stringify(g.cls)}${g.errors.length ? ` · ${g.errors.length} page errors` : ''}`);
     } catch (e) { log(`${s.id}: failed — ${e.message}`); run.spots[s.id] = { error: String(e.message).slice(0, 200) }; }
   }
   if (!pairs.length) continue;
@@ -183,7 +186,7 @@ for (const [st, list] of byState) {
       const p = pairs[i], y = 40 + i * (CH + PAD);
       for (const [k, x] of [['photo', 0], ['game', CW + 30]]) { const im = new Image(); im.src = 'data:image/jpeg;base64,' + p[k]; await im.decode(); const r = Math.min(CW / im.width, CH / im.height); c.drawImage(im, x, y, im.width * r, im.height * r); }
       c.fillStyle = '#3a3346'; c.font = '14px Georgia';
-      c.fillText(`${p.s.town} (${p.s.kind}) · score ${p.sc} · cell ${p.g.cell} · ${p.g.date} ${p.g.hour.toFixed(1)} h · ${p.s.img.hfov}° lens`, 8, y + CH + 17);
+      c.fillText(`${p.s.town} (${p.s.kind}) · score ${p.sc ?? 'n/a (the photo is not segmented)'} · cell ${p.g.cell} · ${p.g.date} ${p.g.hour.toFixed(1)} h · ${p.s.img.hfov}° lens`, 8, y + CH + 17);
       const fmt = (o) => Object.entries(o).filter(([, v]) => v >= 0.01).map(([k, v]) => `${k} ${Math.round(v * 100)}`).join(' · ');
       c.font = '12px Georgia';
       c.fillText(`photo: ${fmt(p.ps.shares)}   |   game: ${fmt(p.g.cls)}   ·   photo © ${p.s.img.by || 'a contributor'} / Mapillary, CC BY-SA 4.0, image ${p.s.img.id}`, 8, y + CH + 34);
@@ -194,7 +197,8 @@ for (const [st, list] of byState) {
   }, { pairs, st });
   writeFileSync(resolve(SHOTS, `${st}-montage.jpg`), Buffer.from(sheet, 'base64'));
   await page.close();
-  log(`${st}: shots/real/${st}-montage.jpg · mean score ${(pairs.reduce((a, p) => a + p.sc, 0) / pairs.length).toFixed(3)}`);
+  const scored = pairs.filter((p) => p.sc !== null);
+  log(`${st}: shots/real/${st}-montage.jpg · mean score ${scored.length ? (scored.reduce((a, p) => a + p.sc, 0) / scored.length).toFixed(3) : 'n/a'} (${scored.length} of ${pairs.length} scored)`);
 }
 history.runs.push(run);
 writeFileSync(scoresFile, JSON.stringify(history, null, 1));
