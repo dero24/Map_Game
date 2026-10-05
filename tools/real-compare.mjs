@@ -20,9 +20,10 @@ import net from 'node:net';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = Object.fromEntries(process.argv.slice(2).map((a) => { const m = a.match(/^--([^=]+)(?:=(.*))?$/); return m ? [m[1], m[2] ?? true] : [a, true]; }));
-const env = Object.fromEntries(readFileSync(resolve(ROOT, '.env'), 'utf8').split(/\r?\n/).filter((l) => /=/.test(l) && !l.trim().startsWith('#')).map((l) => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim()]; }));
-const TOKEN = env.ACCESS_TOKEN;
-if (!TOKEN?.startsWith('MLY|')) { console.error('.env: ACCESS_TOKEN (a Mapillary client token) is missing'); process.exit(1); }
+// (the git-ignored .env when there is one; else the environment — a cloud session's settings)
+const env = Object.fromEntries((existsSync(resolve(ROOT, '.env')) ? readFileSync(resolve(ROOT, '.env'), 'utf8') : '').split(/\r?\n/).filter((l) => /=/.test(l) && !l.trim().startsWith('#')).map((l) => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim()]; }));
+const TOKEN = env.ACCESS_TOKEN ?? process.env.ACCESS_TOKEN;
+if (!TOKEN?.startsWith('MLY|')) { console.error('ACCESS_TOKEN (a Mapillary client token) is missing: set it in .env or the environment'); process.exit(1); }
 const H = { headers: { Authorization: `OAuth ${TOKEN}` } };
 const CACHE = resolve(ROOT, 'raw/mapillary');
 mkdirSync(CACHE, { recursive: true });

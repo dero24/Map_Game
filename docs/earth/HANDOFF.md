@@ -82,8 +82,10 @@ Read this first, then the latest `docs/earth/LOG.md` entry ("Regional life (2)")
 - **Against photos:**
   `node tools/real-compare.mjs --kind=green --states=<ST,…> --group=region --tag=<run>` saves
   `shots/real/<region>-montage.jpg`, with scores in `tools/real-scores.json`.
-  - It needs the Mapillary token in `.env`. That file is git-ignored, so a fresh clone won't have
-    it: ask Robby.
+  - It needs the Mapillary token. Locally it's `ACCESS_TOKEN` in the git-ignored `.env`; in a cloud
+    session it's `ACCESS_TOKEN` in the environment's settings. `real-spots` and `real-compare` read
+    either. If it's missing, they say so and stop: ask Robby. Never echo it, write it to a file, or
+    commit it.
 - Visual review reads only the montages.
 
 ## Robby's rules
