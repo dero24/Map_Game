@@ -15,7 +15,7 @@
 import * as THREE from 'three';
 import type { Terrain } from '../world/data';
 import type { WalkWorld } from '../player/collision';
-import { CRITTERS, ROLE, ROLES, critterLib, critterMaterial, faunaMix, type CritterKind, type CritterRole } from '../assets/fauna';
+import { CRITTERS, ROLE, ROLES, critterLib, critterMaterial, faunaMix, swimSink, type CritterKind, type CritterRole } from '../assets/fauna';
 
 // Small animals are drawn a little larger than life (×1.3–2): at painting scale a true-size
 // squirrel dissolves into the grass wash — the same licence an illustrator takes.
@@ -49,7 +49,30 @@ const SPEC: Record<CritterKind, Spec> = {
   mourningdove: { cap: 6, walk: 0.55, flee: 7, fleeR: 7, gaitHz: 2.6, scale: [1.25, 1.45], colors: [0xffffff] },
   crow: { cap: 4, walk: 0.9, flee: 7, fleeR: 13, gaitHz: 1.8, scale: [1.1, 1.25], colors: [0xffffff] },
   pigeon: { cap: 12, walk: 0.6, flee: 5.5, fleeR: 4, gaitHz: 2.6, scale: [1.15, 1.3], colors: [0x9098a4, 0x9098a4, 0x8a929e, 0x6a6e78, 0xb4b0aa] },
+  // the water and big birds (fauna.ts package #12): geese and ducks paddling (walk: their paddling
+  // speed), the heron's patient creep, the gulls' strut; the soarers' `walk` their airspeed
+  canadagoose: { cap: 10, walk: 0.6, flee: 2.5, fleeR: 9, gaitHz: 2, scale: [1.05, 1.15], colors: [0xffffff] },
+  mallard: { cap: 6, walk: 0.5, flee: 2.5, fleeR: 7, gaitHz: 2.6, scale: [1.15, 1.3], colors: [0xffffff] },
+  mallardhen: { cap: 6, walk: 0.5, flee: 2.5, fleeR: 7, gaitHz: 2.6, scale: [1.15, 1.3], colors: [0xffffff] },
+  loon: { cap: 2, walk: 0.4, flee: 2, fleeR: 20, gaitHz: 1.4, scale: [1.05, 1.15], colors: [0x1e2224] }, // (winter grey set at spawn)
+  greatblueheron: { cap: 2, walk: 0.3, flee: 2, fleeR: 22, gaitHz: 0.9, scale: [1.0, 1.1], colors: [0xffffff] },
+  greategret: { cap: 3, walk: 0.35, flee: 2, fleeR: 18, gaitHz: 1, scale: [1.0, 1.1], colors: [0xffffff] },
+  snowyegret: { cap: 4, walk: 0.7, flee: 2.5, fleeR: 14, gaitHz: 2, scale: [1.05, 1.15], colors: [0xffffff] },
+  spoonbill: { cap: 5, walk: 0.4, flee: 2, fleeR: 16, gaitHz: 1.2, scale: [1.0, 1.1], colors: [0xffffff] },
+  sandhillcrane: { cap: 6, walk: 0.5, flee: 2.5, fleeR: 25, gaitHz: 0.9, scale: [1.0, 1.1], colors: [0xffffff] },
+  turkeyvulture: { cap: 5, walk: 7, flee: 14, fleeR: 0, gaitHz: 0.3, scale: [1.0, 1.1], colors: [0xffffff] },
+  baldeagle: { cap: 1, walk: 8, flee: 20, fleeR: 0, gaitHz: 0.3, scale: [1.0, 1.1], colors: [0xffffff] },
+  osprey: { cap: 2, walk: 8, flee: 18, fleeR: 0, gaitHz: 0.4, scale: [1.0, 1.1], colors: [0xffffff] },
+  wildturkey: { cap: 8, walk: 0.7, flee: 4.5, fleeR: 20, gaitHz: 1.6, scale: [0.95, 1.1], colors: [0xffffff] },
+  californiaquail: { cap: 14, walk: 0.8, flee: 5.5, fleeR: 7, gaitHz: 3.8, scale: [1.6, 1.8], colors: [0xffffff] },
+  brownpelican: { cap: 4, walk: 9, flee: 2, fleeR: 14, gaitHz: 1, scale: [1.0, 1.1], colors: [0xffffff] },
+  laughinggull: { cap: 12, walk: 0.9, flee: 3, fleeR: 6, gaitHz: 3, scale: [1.15, 1.3], colors: [0x1e1e22] }, // (the winter's white hood set at spawn)
+  californiagull: { cap: 12, walk: 0.9, flee: 3, fleeR: 6, gaitHz: 3, scale: [1.1, 1.25], colors: [0xffffff] },
 };
+/** The roles that keep together in flocks: geese and ducks, gulls, turkeys and cranes. */
+const FLOCKS = new Set<CritterRole>(['waterfowl', 'gull', 'fowl']);
+/** The soarers that stoop on prey (the vulture never does; the osprey plunges for fish instead). */
+const STOOPS = new Set<CritterKind>(['hawk']);
 // who hunts whom, by role (only animals on the ground can be taken)
 const PREY: Partial<Record<CritterRole, CritterRole[]>> = { predator: ['grazer', 'climber', 'songbird', 'burrower'], raptor: ['grazer', 'climber', 'songbird', 'burrower'] };
 const HUNTED = new Set<CritterRole>(['grazer', 'climber', 'songbird', 'shorebird', 'burrower']);
@@ -57,7 +80,10 @@ const R = (c: { kind: CritterKind }) => ROLE[c.kind];
 /** A moving thing animals give way to: traffic and the player's vehicle (x, z, velocity). */
 export interface Mover { x: number; z: number; vx: number; vz: number }
 
-type State = 'idle' | 'move' | 'flee' | 'climb' | 'perch' | 'fly' | 'drift' | 'stalk' | 'pounce' | 'soar' | 'stoop' | 'rise';
+type State = 'idle' | 'move' | 'flee' | 'climb' | 'perch' | 'fly' | 'drift' | 'stalk' | 'pounce' | 'soar' | 'stoop' | 'rise'
+  // (package #12: a gull wheeling and coming down again, a pelican skimming the waves, an osprey's hover
+  // and plunge, a loon under the water)
+  | 'glide' | 'alight' | 'skim' | 'hover' | 'plunge' | 'dive';
 interface Critter {
   kind: CritterKind; x: number; y: number; z: number; yaw: number; pitch: number;
   state: State; t: number; tx: number; tz: number; ty: number; home?: { x: number; z: number; trunk?: number; r?: number; lean?: [number, number] };
@@ -68,6 +94,8 @@ interface Critter {
   prey?: Critter;                  // a hunter's quarry
   dead?: boolean;
   vig?: number;                    // vigilance 0..1: how early it notices a stalking fox
+  wl?: number;                     // its water's level: a swimmer on it (y below by its sink), a wader at its edge
+  show?: boolean;                  // displaying: a turkey tom strutting, his fan up
 }
 export interface CritterEnv {
   hour: number; night: number; month: number; wind: number; south: boolean;
@@ -133,7 +161,59 @@ export class Critters {
   // never a parking lot or a plaza
   private field(x: number, z: number) { const c = this.terrain.coverAt(x, z); return (c === 30 || c === 10 || c === 20 || c === 40 || c === 60) && this.terrain.oceanDistAt(x, z) > 60 && this.open(x, z, 1.2) && !this.paved(x, z); }
   private shore(x: number, z: number) { const s = this.terrain.sdfAt(x, z); return this.terrain.oceanDistAt(x, z) < 45 && s > 0.5 && s < 14; }
-  private mix(env: CritterEnv) { return faunaMix(env.region ?? 'na', env.climate ?? 'temperate', env.place); }
+  /** The month as the north has it (the south's year turned round): the seasons' casts and colours. */
+  private month(env: CritterEnv) { return env.south ? ((env.month + 5) % 12) + 1 : env.month; }
+  private mix(env: CritterEnv) { return faunaMix(env.region ?? 'na', env.climate ?? 'temperate', env.place, this.month(env)); }
+  // the water: a swimmer's (open water, `deep` metres from the bank; the sea only for a loon), its level
+  // (the sea's 0; a lake's its shore's lowest ground — the level its sheet is laid at, synth.ts)
+  private swimmable(x: number, z: number, deep: number, sea = false) {
+    const s = this.terrain.sdfAt(x, z);
+    return s < -deep && s > -400 && (sea || this.terrain.oceanDistAt(x, z) > 8);
+  }
+  private level(x: number, z: number) {
+    const T = this.terrain;
+    if (T.oceanDistAt(x, z) < 6) return 0;
+    let px = x, pz = z;
+    for (let i = 0; i < 10; i++) {
+      const s = T.sdfAt(px, pz);
+      if (s > 0.5) break;
+      const gx = T.sdfAt(px + 1, pz) - T.sdfAt(px - 1, pz), gz = T.sdfAt(px, pz + 1) - T.sdfAt(px, pz - 1), L = Math.hypot(gx, gz) || 1;
+      const st = Math.max(1, 1 - s);
+      px += (gx / L) * st; pz += (gz / L) * st;
+    }
+    // (the bank's ground round the spot — the bank's only: a sample back over the water reads its bed)
+    let lo = Infinity;
+    for (const [ox, oz] of [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2]]) if (T.sdfAt(px + ox, pz + oz) > 0.5) lo = Math.min(lo, T.heightAt(px + ox, pz + oz));
+    return Math.max(0, lo < Infinity ? lo : T.heightAt(px, pz));
+  }
+  /** At the water's edge, a step in or out (a heron's, an egret's). */
+  private edge(x: number, z: number) { const s = this.terrain.sdfAt(x, z); return s > -2.4 && s < 1.4 && this.walk.buildingAt(x, z) < 0; }
+  /** A gull's ground: the beach, a coastal town's lots and plazas — a California gull's inland lots and fields too. */
+  private gullGround(x: number, z: number, sp: CritterKind) {
+    if (this.shore(x, z)) return true;
+    const lot = this.paved(x, z) && this.walk.buildingAt(x, z) < 0 && !this.walk.blocked(x, z, 0.6) && this.terrain.sdfAt(x, z) > 1;
+    return (lot && this.terrain.oceanDistAt(x, z) < 3000) || (sp === 'californiagull' && (lot || this.field(x, z)));
+  }
+  /** Where this one can go next: on its water, at its edge, on its ground. */
+  private valid(c: Critter, x: number, z: number) {
+    const r = R(c);
+    if (r === 'wader') return this.edge(x, z);
+    if (c.wl !== undefined) return this.swimmable(x, z, c.kind === 'loon' ? 6 : 1.2, c.kind === 'loon' || c.kind === 'brownpelican' || r === 'gull');
+    if (r === 'gull') return this.gullGround(x, z, c.kind);
+    if (c.kind === 'pigeon' && this.paved(x, z)) return this.walk.buildingAt(x, z) < 0 && !this.walk.blocked(x, z, 0.2);
+    return this.open(x, z, 0.2);
+  }
+  /** Its height where it is: on the water by its sink, at the edge knee-deep, else on the ground. */
+  private stand(c: Critter) {
+    if (c.wl === undefined) return this.ground(c.x, c.z);
+    if (R(c) === 'wader') return Math.max(this.ground(c.x, c.z), c.wl - 0.1);
+    return c.wl + 0.06 - swimSink(c.kind) * c.s;
+  }
+  /** A flock's: near one of its own already here (geese, ducks, gulls, turkeys, cranes), on the same footing. */
+  private nearKin(sp: CritterKind) {
+    const kin = this.list.filter((o) => o.kind === sp && (o.state === 'idle' || o.state === 'move'));
+    return kin.length ? kin[Math.floor(this.rnd() * kin.length)] : null;
+  }
   private want(k: CritterRole, env: CritterEnv) {
     if (!this.mix(env)[k]?.length) return 0; // the place has no species for this role
     const h = env.hour, day = env.night < 0.35;
@@ -152,7 +232,12 @@ export class Critters {
       case 'butterfly': return day && summer && env.wind < 0.75 ? 8 : 0;
       case 'firefly': return env.night > 0.6 && warm >= 6 && warm <= 8 ? 26 : 0;
       case 'predator': return town < 0.5 ? 0 : dawnDusk ? 2 : env.night > 0.5 ? 1 : 0;
-      case 'raptor': return day && h > 8 && h < 17.5 ? 1 : 0;
+      // (one raptor where a hawk's alone in the sky; where there are vultures, a few circling with it)
+      case 'raptor': return day && h > 8 && h < 17.5 ? 3 : 0;
+      case 'waterfowl': return day ? (dawnDusk ? 8 : 6) : 0;
+      case 'wader': return day ? (dawnDusk ? 4 : 3) : 0;
+      case 'gull': return day ? 9 : 0;
+      case 'fowl': return day ? Math.round(6 * (0.3 + 0.7 * town)) : 0;
     }
   }
   private place(k: CritterRole, wx: number, wz: number, env: CritterEnv, sp?: CritterKind): Omit<Critter, 'kind' | 'seed' | 'c' | 's'> | null {
@@ -191,9 +276,54 @@ export class Critters {
       } else if (k === 'predator') {
         if (!(this.field(x, z) || (this.terrain.coverAt(x, z) === 10 && this.open(x, z, 1)))) continue;
       } else if (k === 'raptor') {
-        // circles a thermal over open ground, 55–75 m up: at that range the silhouette is the read
-        const y = this.ground(x, z) + 55 + this.rnd() * 20;
-        return { x, y, z, yaw: this.rnd() * 6.28, pitch: 0, state: 'soar', t: 4 + this.rnd() * 6, tx: x, tz: z, ty: y, home: { x: wx + Math.sin(a) * d * 0.7, z: wz + Math.cos(a) * d * 0.7 }, phase: this.rnd(), amt: 0 };
+        // circles a thermal over open ground, 55–75 m up: at that range the silhouette is the read —
+        // an osprey over the water, lower; an eagle near big water; the vultures a kettle on one thermal
+        let home = { x: wx + Math.sin(a) * d * 0.7, z: wz + Math.cos(a) * d * 0.7 }, up = 55 + this.rnd() * 20;
+        if (sp === 'osprey') { if (this.terrain.sdfAt(home.x, home.z) > -8) continue; up = 18 + this.rnd() * 10; }
+        if (sp === 'baldeagle' && this.terrain.sdfAt(home.x, home.z) > 250) continue;
+        const kin = sp === 'turkeyvulture' ? this.list.find((o) => o.kind === sp && o.home) : undefined;
+        if (kin) (home = { x: kin.home!.x, z: kin.home!.z }), (up = kin.ty + (this.rnd() - 0.5) * 16);
+        const y = this.ground(home.x, home.z) + up;
+        return { x, y, z, yaw: this.rnd() * 6.28, pitch: 0, state: 'soar', t: 4 + this.rnd() * 6, tx: x, tz: z, ty: y, home, phase: this.rnd(), amt: 0 };
+      } else if (k === 'waterfowl' || k === 'wader' || k === 'gull' || k === 'fowl') {
+        // a flock comes down by its own (geese, ducks, gulls, a turkey's flock, a crane's family)
+        const kin = k !== 'wader' && sp && this.rnd() < (k === 'fowl' ? 0.85 : 0.65) ? this.nearKin(sp) : null;
+        if (kin) { const ka = this.rnd() * 6.28, kd = 1.5 + this.rnd() * 5; x = kin.x + Math.sin(ka) * kd; z = kin.z + Math.cos(ka) * kd; }
+        const base = { yaw: this.rnd() * 6.28, pitch: 0, t: 1 + this.rnd() * 3, tx: x, tz: z, home, phase: this.rnd(), amt: 0 };
+        if (k === 'waterfowl') {
+          // on the water — a pond, a lake, a river; geese (and a few ducks) grazing the lawns by it
+          const land = kin ? kin.wl === undefined : (sp === 'canadagoose' && this.rnd() < 0.55) || (sp !== 'loon' && this.rnd() < 0.12);
+          if (land) { if (sp === 'loon' || !this.lawn(x, z) || this.terrain.sdfAt(x, z) > 45) continue; }
+          else {
+            if (!this.swimmable(x, z, sp === 'loon' ? 12 : 2, sp === 'loon')) continue;
+            const wl = this.level(x, z);
+            return { ...base, x, z, y: wl, ty: wl, wl, state: 'idle' };
+          }
+        } else if (k === 'wader') {
+          if (!this.edge(x, z)) continue;
+          const wl = this.level(x, z);
+          return { ...base, x, z, y: Math.max(this.ground(x, z), wl - 0.1), ty: 0, wl, state: 'idle' };
+        } else if (k === 'gull') {
+          if (sp === 'brownpelican') {
+            // a line of pelicans skimming the waves along the shore, or a few sitting on the water
+            const s0 = this.terrain.sdfAt(x, z);
+            if (this.terrain.oceanDistAt(x, z) > 4 || s0 > -6 || s0 < -70) continue;
+            // (one behind another in a skimming line; a few rafted up on the water)
+            if (kin?.state === 'skim') { const bx = x, bz = z; x = kin.x + Math.sin(kin.yaw) * (5 + this.rnd() * 2); z = kin.z + Math.cos(kin.yaw) * (5 + this.rnd() * 2); if (this.terrain.sdfAt(x, z) > -4) (x = bx), (z = bz); else return { ...base, x, z, y: kin.ty, ty: kin.ty, yaw: kin.yaw, state: 'skim', t: kin.t + 2 }; }
+            if ((kin && kin.wl !== undefined) || this.rnd() < 0.3) return { ...base, x, z, y: 0, ty: 0, wl: 0, state: 'idle' };
+            const gx = this.terrain.sdfAt(x + 2, z) - this.terrain.sdfAt(x - 2, z), gz = this.terrain.sdfAt(x, z + 2) - this.terrain.sdfAt(x, z - 2);
+            const along = Math.atan2(gz, -gx) + (this.rnd() < 0.5 ? Math.PI : 0); // (square to the shore's slope)
+            return { ...base, x, z, y: 1.4 + this.rnd(), ty: 1.4 + this.rnd(), yaw: along, state: 'skim', t: 25 + this.rnd() * 15 };
+          }
+          if (!this.gullGround(x, z, sp!)) continue;
+          if (this.rnd() < 0.3) {
+            // some on the wing, wheeling over their beach or lot
+            const y = this.ground(x, z) + 6 + this.rnd() * 8;
+            return { ...base, x, z, y, ty: y, home: { x, z }, state: 'glide', t: 6 + this.rnd() * 10 };
+          }
+        } else if (!this.field(x, z)) continue;
+        const y0 = this.ground(x, z);
+        return { ...base, x, z, y: y0, ty: y0, state: 'idle' };
       }
       const y = this.ground(x, z) + (k === 'butterfly' ? 0.6 + this.rnd() : k === 'firefly' ? 0.4 + this.rnd() * 1.6 : 0);
       return { x, y, z, yaw: this.rnd() * 6.28, pitch: 0, state: near ? 'drift' : 'idle', t: 1 + this.rnd() * 3, tx: x, tz: z, ty: y, home, phase: this.rnd(), amt: 0 };
@@ -231,6 +361,10 @@ export class Critters {
           const m = env.south ? ((env.month + 5) % 12) + 1 : env.month;
           if (m >= 11 || m <= 4) c.set(0xf2f0ea);
         }
+        // a loon grey in winter; a laughing gull's black hood gone white from September to March
+        const mo = this.month(env);
+        if (k === 'loon' && (mo >= 10 || mo <= 4)) c.set(0x5e646c);
+        if (k === 'laughinggull' && (mo >= 9 || mo <= 3)) c.set(0xe8e8e4);
         this.list.push({ ...p, kind: k, seed: this.seed, s: S.scale[0] + this.rnd() * (S.scale[1] - S.scale[0]), c, vig: this.rnd() });
         count[k] = (count[k] ?? 0) + 1;
         roleCount[role] = (roleCount[role] ?? 0) + 1;
@@ -239,7 +373,7 @@ export class Critters {
     for (let i = this.list.length - 1; i >= 0; i--) {
       const c = this.list[i];
       const d = Math.hypot(c.x - wx, c.z - wz);
-      const gone = c.dead || d > 95 || (!this.enabled) || (this.want(R(c), env) === 0 && d > 30) || (c.state === 'fly' && c.t <= 0) || (c.state === 'perch' && c.t <= 0 && d > 18);
+      const gone = c.dead || d > 95 || (!this.enabled) || (this.want(R(c), env) === 0 && d > 30) || (c.state === 'fly' && c.t <= 0) || (c.state === 'skim' && c.t <= 0) || (c.state === 'perch' && c.t <= 0 && d > 18);
       if (gone) { this.list.splice(i, 1); continue; }
       this.step(c, dt, wx, wz, d, env);
     }
@@ -270,15 +404,23 @@ export class Critters {
           const p = this.quarry(c, 24);
           if (p) { c.state = 'stalk'; c.prey = p; c.t = 14; this.eco.hunts++; break; }
         }
+        // (a turkey tom in the spring stops to strut, his fan stood up — a third of the flock are toms)
+        if (c.t <= 0 && c.kind === 'wildturkey') c.show = c.seed % 3 === 0 && [3, 4, 5].includes(this.month(env)) && this.rnd() < 0.6;
+        if (c.show && c.t <= 0) { c.t = 4 + this.rnd() * 5; break; }
+        // (gulls come and go: one at rest lifts off now and then, wheels, and comes down again)
+        if (c.t <= 0 && R(c) === 'gull' && c.wl === undefined && this.rnd() < 0.1) { c.state = 'glide'; c.t = 4 + this.rnd() * 8; c.home = { x: c.x, z: c.z }; c.ty = c.y + 4 + this.rnd() * 8; break; }
         if (c.t <= 0) {
+          // (a flock keeps together: half the time the next few steps are toward one of its own)
+          const flock = FLOCKS.has(R(c)) && this.rnd() < 0.5 ? this.list.find((o) => o !== c && o.kind === c.kind && (o.wl === undefined) === (c.wl === undefined) && Math.hypot(o.x - c.x, o.z - c.z) < 25 && Math.hypot(o.x - c.x, o.z - c.z) > 3) : undefined;
           for (let k = 0; k < 4; k++) {
-            const a = this.rnd() * 6.28, r = 2 + this.rnd() * (R(c) === 'browser' ? 8 : 5);
-            const tx = c.x + Math.sin(a) * r, tz = c.z + Math.cos(a) * r;
-            if (!this.open(tx, tz, 0.2)) continue;
+            const a = this.rnd() * 6.28, r = R(c) === 'wader' ? 0.8 + this.rnd() * 2.5 : 2 + this.rnd() * (R(c) === 'browser' ? 8 : 5);
+            const tx = flock ? flock.x + Math.sin(a) * (1.5 + this.rnd() * 2) : c.x + Math.sin(a) * r, tz = flock ? flock.z + Math.cos(a) * (1.5 + this.rnd() * 2) : c.z + Math.cos(a) * r;
+            if (!this.valid(c, tx, tz)) continue;
             if (R(c) === 'shorebird' && !this.shore(tx, tz)) continue;
             c.tx = tx; c.tz = tz; c.state = 'move'; c.t = 6; break;
           }
-          if (c.state === 'idle') c.t = 1 + this.rnd() * 2;
+          // (a heron stands frozen a long while between its slow steps)
+          if (c.state === 'idle') c.t = R(c) === 'wader' ? 4 + this.rnd() * 9 : 1 + this.rnd() * 2;
         }
         break;
       case 'move': case 'flee': {
@@ -294,11 +436,11 @@ export class Critters {
         }
         const step = Math.min(L, speed * dt);
         const nx = c.x + (dx / L) * step, nz = c.z + (dz / L) * step;
-        if (!this.open(nx, nz, 0.15) && !(R(c) === 'climber' && c.state === 'flee')) { c.state = 'idle'; c.t = 0.4; break; }
+        if (!(c.wl !== undefined || R(c) === 'gull' || c.kind === 'pigeon' ? this.valid(c, nx, nz) : this.open(nx, nz, 0.15)) && !(R(c) === 'climber' && c.state === 'flee')) { c.state = 'idle'; c.t = 0.4; break; }
         c.x = nx; c.z = nz;
         c.yaw = Math.atan2(-dx, -dz);
-        c.y = this.ground(c.x, c.z);
-        c.amt = Math.min(1, c.amt + dt * 6);
+        c.y = this.stand(c);
+        c.amt = Math.min(c.wl !== undefined && R(c) !== 'wader' ? 0.3 : 1, c.amt + dt * 6); // (a swimmer's paddling feet, under the water)
         c.phase += dt * S.gaitHz * (c.state === 'flee' ? 2.2 : 1);
         break;
       }
@@ -312,10 +454,81 @@ export class Critters {
         c.amt = 0;
         break;
       case 'fly': {
+        // up and away: a songbird's quick dash; the big birds labour off, heavy and slow
+        const a = Math.atan2(c.x - (c.fx ?? wx), c.z - (c.fz ?? wz)), big = R(c) !== 'songbird';
+        c.x += Math.sin(a) * (big ? 5 : 7) * dt; c.z += Math.cos(a) * (big ? 5 : 7) * dt;
+        c.y += (big ? 1.8 : 2.6) * dt; c.yaw = a + Math.PI; c.pitch = big ? 0.12 : 0.2;
+        c.amt = big ? 1 : 0.2; c.phase += dt * 3;
+        break;
+      }
+      case 'glide': {
+        // a gull wheeling over its beach, a few strokes now and then, then coming down again
+        const h = c.home ?? (c.home = { x: c.x, z: c.z });
+        const Rg = 9 + (c.seed % 997) / 997 * 8;
+        const a = Math.atan2(c.x - h.x, c.z - h.z) + (5 / Rg) * dt;
+        c.x = h.x + Math.sin(a) * Rg; c.z = h.z + Math.cos(a) * Rg;
+        c.y += (c.ty - c.y) * Math.min(1, dt * 0.8);
+        c.yaw = a + Math.PI / 2 + Math.PI; c.roll = 0.28; c.pitch = 0;
+        c.phase += dt * 0.5;
+        c.amt = Math.sin(c.phase * 6.28 * 0.6) > 0.6 ? 1 : 0.1;
+        if (c.t <= 0) {
+          let ok = false;
+          for (let k = 0; k < 6 && !ok; k++) {
+            const la = this.rnd() * 6.28, lr = 3 + this.rnd() * 12, tx = h.x + Math.sin(la) * lr, tz = h.z + Math.cos(la) * lr;
+            if (this.gullGround(tx, tz, c.kind)) (c.tx = tx), (c.tz = tz), (ok = true);
+          }
+          if (ok) (c.state = 'alight'), (c.t = 12), (c.roll = 0);
+          else c.t = 4; // (round again)
+        }
+        break;
+      }
+      case 'alight': {
+        const gy = this.ground(c.tx, c.tz), dx = c.tx - c.x, dz = c.tz - c.z, dy = gy - c.y, L = Math.hypot(dx, dy, dz) || 1;
+        if (L < 0.4 || c.t <= 0) { c.x = c.tx; c.z = c.tz; c.y = gy; c.state = 'idle'; c.t = 1 + this.rnd() * 3; c.pitch = 0; c.amt = 0; break; }
+        const step = Math.min(L, 4 * dt);
+        c.x += dx / L * step; c.y += dy / L * step; c.z += dz / L * step;
+        c.yaw = Math.atan2(-dx, -dz); c.pitch = -0.15; c.amt = L < 3 ? 1 : 0.2; // (wings working as it lands)
+        break;
+      }
+      case 'skim': {
+        // pelicans in a line, a metre or two off the waves on still wings, a few strokes now and then
+        c.x -= Math.sin(c.yaw) * S.walk * dt; c.z -= Math.cos(c.yaw) * S.walk * dt;
+        c.phase += dt * 0.4;
+        c.y = c.ty + Math.sin(c.phase * 3.1) * 0.25;
+        c.amt = Math.sin(c.phase * 6.28 * 0.45) > 0.8 ? 1 : 0;
+        c.pitch = 0; c.roll = 0;
+        break;
+      }
+      case 'hover': {
+        // an osprey hanging on quick beats over the water, head down, looking
+        c.amt = 1; c.pitch = 0.45; c.roll = 0; c.phase += dt;
+        if (c.t <= 0) {
+          if (this.rnd() < 0.6) { c.state = 'plunge'; c.t = 5; c.tx = c.x + Math.sin(c.yaw + Math.PI) * 4; c.tz = c.z + Math.cos(c.yaw + Math.PI) * 4; }
+          else { c.state = 'soar'; c.t = 6 + this.rnd() * 6; }
+        }
+        break;
+      }
+      case 'plunge': {
+        // …and down, wings folded back, feet first into the water; then labouring up with its fish
+        const wl = c.wl ?? this.level(c.tx, c.tz);
+        const dx = c.tx - c.x, dz = c.tz - c.z, dy = wl + 0.2 - c.y, L = Math.hypot(dx, dy, dz) || 1;
+        if (L < 0.6 || c.t <= 0) {
+          this.eco.caught++;
+          const pan = Math.max(-1, Math.min(1, ((c.x - wx) * env.camFwd.z - (c.z - wz) * env.camFwd.x) / Math.max(1, d)));
+          if (d < 60) this.onEvent?.('splash', 'flush', pan, d);
+          c.state = 'rise'; break;
+        }
+        const step = Math.min(L, S.flee * dt);
+        c.x += dx / L * step; c.y += dy / L * step; c.z += dz / L * step;
+        c.yaw = Math.atan2(-dx, -dz); c.pitch = -1.0; c.amt = -1;
+        break;
+      }
+      case 'dive': {
+        // a loon gone under: it swims off below and comes up again well away
         const a = Math.atan2(c.x - (c.fx ?? wx), c.z - (c.fz ?? wz));
-        c.x += Math.sin(a) * 7 * dt; c.z += Math.cos(a) * 7 * dt;
-        c.y += 2.6 * dt; c.yaw = a + Math.PI; c.pitch = 0.2;
-        c.amt = 0.2; c.phase += dt * 3;
+        const nx = c.x + Math.sin(a) * 2.2 * dt, nz = c.z + Math.cos(a) * 2.2 * dt;
+        if (this.valid(c, nx, nz)) (c.x = nx), (c.z = nz);
+        if (c.t <= 0) { c.state = 'idle'; c.t = 2 + this.rnd() * 3; c.y = this.stand(c); }
         break;
       }
       case 'stalk': case 'pounce': {
@@ -338,17 +551,20 @@ export class Critters {
       }
       case 'soar': {
         // wide circles over the thermal, a few wingbeats now and then; sometimes a stoop
-        const h = c.home!;
-        const R = 16 + (c.seed % 997) / 997 * 14;
+        // (a vulture's kettle wider and teetering, rarely a wingbeat; an eagle's wide flat circles; an
+        // osprey's tighter, low over the water, stopping to hover)
+        const h = c.home!, vult = c.kind === 'turkeyvulture';
+        const R = (vult ? 20 : c.kind === 'baldeagle' ? 26 : c.kind === 'osprey' ? 13 : 16) + (c.seed % 997) / 997 * 14;
         const a = Math.atan2(c.x - h.x, c.z - h.z) + (S.walk / R) * dt;
         c.x = h.x + Math.sin(a) * R; c.z = h.z + Math.cos(a) * R;
         c.y += (c.ty - c.y) * Math.min(1, dt * 0.5);
-        c.yaw = a + Math.PI / 2 + Math.PI; c.roll = 0.32; c.pitch = 0;
         c.phase += dt * 0.37;
-        c.amt = Math.sin(c.phase * 6.28 * 0.8) > 0.75 ? 1 : 0;
+        c.yaw = a + Math.PI / 2 + Math.PI; c.roll = vult ? 0.3 + Math.sin(c.phase * 9 + c.seed) * 0.16 : 0.32; c.pitch = 0;
+        c.amt = Math.sin(c.phase * 6.28 * 0.8) > (vult ? 0.97 : 0.75) ? 1 : 0;
         if (c.t <= 0) {
           c.t = 6 + this.rnd() * 8;
-          const p = this.rnd() < 0.45 ? this.quarry(c, 50) : null;
+          if (c.kind === 'osprey' && this.terrain.sdfAt(c.x, c.z) < -4 && this.rnd() < 0.5) { c.state = 'hover'; c.t = 2.5 + this.rnd() * 3; c.wl = this.level(c.x, c.z); break; }
+          const p = STOOPS.has(c.kind) && this.rnd() < 0.45 ? this.quarry(c, 50) : null;
           if (p) { c.state = 'stoop'; c.prey = p; c.t = 6; this.eco.hunts++; }
         }
         break;
@@ -450,10 +666,16 @@ export class Critters {
     const heard = d < 45;
     const role = R(c);
     if (role === 'songbird') { c.state = 'fly'; c.t = 3.5; if (heard) this.onEvent?.(this.sound(c), 'flush', pan, d); }
+    else if (c.kind === 'loon') { c.state = 'dive'; c.t = 5 + this.rnd() * 5; } // (it slips under)
+    else if (role === 'gull' && c.wl === undefined) { c.state = 'glide'; c.t = 5 + this.rnd() * 6; c.home = { x: c.x, z: c.z }; c.ty = this.ground(c.x, c.z) + 5 + this.rnd() * 6; if (heard) this.onEvent?.(this.sound(c), 'flush', pan, d); }
+    else if (role === 'wader' || ((role === 'waterfowl' || role === 'gull' || role === 'fowl') && d < SPEC[c.kind].fleeR * 0.45)) {
+      // the big birds: a heron off at once, heavy; geese, ducks, turkeys and cranes only when pressed
+      c.state = 'fly'; c.t = 6; c.wl = undefined; if (heard) this.onEvent?.(this.sound(c), 'flush', pan, d);
+    }
     else if (role === 'climber' && c.home && Math.hypot(c.home.x - c.x, c.home.z - c.z) < 14) { c.state = 'flee'; c.tx = c.home.x; c.tz = c.home.z; c.t = 4; if (heard) this.onEvent?.(this.sound(c), 'flee', pan, d); }
     else {
       c.state = 'flee';
-      c.t = role === 'browser' || role === 'predator' ? 5 : 1.6;
+      c.t = role === 'browser' || role === 'predator' ? 5 : role === 'waterfowl' || role === 'fowl' ? 3 : 1.6;
       // a burrower dashes a few metres to its hole; everything else runs well clear
       const run = role === 'burrower' ? 4 + this.rnd() * 4 : 40;
       const a = Math.atan2(c.x - fx, c.z - fz) + (this.rnd() - 0.5) * 0.9;
@@ -472,6 +694,7 @@ export class Critters {
     const per = new Map<CritterKind, number>();
     for (const c of this.list) {
       const M = this.meshes.get(c.kind)!;
+      if (c.state === 'dive') continue; // (under the water)
       const i = per.get(c.kind) ?? 0;
       if (i >= M.m.instanceMatrix.count) continue;
       per.set(c.kind, i + 1);
@@ -491,7 +714,8 @@ export class Critters {
       M.m.setMatrixAt(i, this.mat4);
       M.m.setColorAt(i, c.c);
       const role = R(c);
-      const pose = role === 'firefly' ? 3 : c.state === 'fly' || role === 'butterfly' || role === 'raptor' ? 2 : c.amt !== 0 ? 1 : 0;
+      const air = c.state === 'fly' || c.state === 'glide' || c.state === 'alight' || c.state === 'skim';
+      const pose = role === 'firefly' ? 3 : air || role === 'butterfly' || role === 'raptor' ? 2 : c.show && c.state === 'idle' ? 4 : c.amt !== 0 ? 1 : 0;
       M.anim.setXYZ(i, c.phase, c.amt, pose);
     }
     for (const [k, M] of this.meshes) {

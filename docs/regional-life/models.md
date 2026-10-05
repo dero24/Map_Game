@@ -2073,8 +2073,8 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
    and spring wheat on the northern Plains; grown near the walker by the grass field (`grass.ts`
    crops, `cropMaterial`), and the fields' colour far off in the ground's wash (`groundPaint.ts`
    `cropWash`).
-11. **Bird plan extensions and the backyard birds** — **built** 2026-10-05 but for the long neck, swim,
-    bare head and hover, which come with package 12's birds that need them (`docs/earth/LOG.md`
+11. **Bird plan extensions and the backyard birds** — **built** 2026-10-05; the long neck, swim, bare
+    head and hover came with package 12's birds that need them (`docs/earth/LOG.md`
     "Regional life (11)"). The bird plan (`fauna.ts birdGeometry`) gained the marks a bird is known by
     at twenty metres: a hood, a crown cap, a face mask, a necklace, a neck patch, a full breast, wing
     bars and barred wings, a crest swept back or curling forward, the bills (a seed-eater's thick cone,
@@ -2086,11 +2086,22 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
     red cap a TINT), **mourning dove**. Bird rows: **American crow**, **rock pigeon** (each its own
     grey; the town's: weighted by how built-up, on the plaza as well as the grass). Placed by the
     songbird role's regional mix (`REGION_FAUNA`, `faunaMix`).
-12. **Water and big birds.** **Canada goose**, **mallard**, **common loon**; ibis rows **great blue
+12. **Water and big birds** — **built** 2026-10-05 (`docs/earth/LOG.md` "Regional life (12)"). The
+    bird plan's long neck (two tapering pieces with an S, bending at the base to graze or strike), the
+    bills (a duck's flat, a heron's dagger, the spoon, the pelican's pouch, an eagle's hook), a cheek
+    band, a wattle, black wingtips, a broad wing's silver trailing half, a bird with no legs; the
+    critter material's flight modes (`FLIGHT`: soaring, gliding, flapping; each soarer's dihedral) and a
+    display pose (a turkey tom's fan stood up). New roles in the sim (`sim/critters.ts`): `waterfowl`
+    (swimming at the water's own level, `swimSink`; geese grazing the lawns by it; a loon diving),
+    `wader` (at the water's edge, frozen between slow steps, flying off heavy), `gull` (the beach and the
+    coastal lots, wheeling and coming down again; pelicans skimming in lines or rafted), `fowl` (turkey
+    and crane flocks, running before they fly); raptors by species (the vultures' kettle, the eagle by
+    big water, the osprey's hover and plunge). Each in its season (`faunaMix`'s month, `SEASON`). The
+    rows: **Canada goose**, **mallard** (drake and hen), **common loon**; ibis rows **great blue
     heron**, **great egret**, **snowy egret**, **roseate spoonbill**, **sandhill crane**; hawk rows
-    **turkey vulture**, **bald eagle**, **osprey** (with its **nest**, `sign†`); quail rows **wild
-    turkey** and **California quail**; **brown pelican**; gull rows **laughing gull** and
-    **California gull**.
+    **turkey vulture**, **bald eagle**, **osprey** (with its **nest**, `sign†`: `assets/signs.ts`, on a
+    platform pole at the water's edge, props.ts); quail rows **wild turkey** and **California quail**;
+    **brown pelican**; gull rows **laughing gull** and **California gull**.
 13. **Mammals on the existing bases.** First the quad parameters (coat patterns: stripes, rings,
     masks; tail types: paddle, naked, ringed). Fox rows: **raccoon**, **Virginia opossum**, **striped
     skunk**. Squirrel rows: **fox squirrel**, **eastern chipmunk**, **woodchuck**, **American

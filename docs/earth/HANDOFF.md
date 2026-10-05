@@ -121,6 +121,15 @@ The game was smooth and rendering before this work started. Work fast, and keep 
     - Cardinal, blue jay, robin, Steller's jay, Gila woodpecker, mourning dove, crow, pigeon (TINT parts
       painted per bird by `critters.ts SPEC.colors`; `CRITTER_TINT` for portraits); pigeons weighted by
       `urban` and allowed on paved open ground.
+  - **#12, the water and big birds** (2026-10-05; LOG "Regional life (12)"):
+    - `BirdPlan` `neck` (+ `neckCol`, `neckW`), bills `flat`/`dagger`/`spoon`/`pouch`/`hook`, `cheek`,
+      `wattle`, `wingTip`, `trail`, `noLegs`; `FLIGHT` (mode 1 soar, 3 glide; the dihedral) in `uFlap`
+      (vec3); pose 4 = display (the turkey's fan).
+    - The sim's new roles `waterfowl`, `wader`, `gull`, `fowl`; states `glide`, `alight`, `skim`,
+      `hover`, `plunge`, `dive`; `Critter.wl` (its water's level: `level()`, `swimSink`), `show`;
+      `STOOPS`, `FLOCKS`; raptors want 3 where vultures fly.
+    - `faunaMix(…, month)` with `SEASON`; `WATER` per region. `assets/signs.ts` (the nest) placed in
+      props.ts.
 
 ## The bar: detail, variety, variation
 
@@ -258,11 +267,12 @@ in-game look is checked on Robby's PC.
   today — a marsh layer of its own by the water).
 - **#10:** built (2026-10-05). Cotton, peanuts, rice, orchards, vineyards and hay could follow on the
   same field system (a crop each: a calendar row and a geometry).
-- **#11:** built (2026-10-05) but for the bird plan's long neck, swim, bare head and hover — they come
-  with #12's birds (geese and ducks swim; herons and cranes need the neck; the vulture the bare head;
-  the osprey hovers). A scratch bird studio (perched side on, from above, flying; the fold applied on
+- **#11:** built (2026-10-05); the long neck, swimming, the bare head and the hover came with #12. A scratch bird studio (perched side on, from above, flying; the fold applied on
   the CPU) is how the birds were reviewed: the in-page tree studio's pattern with `critterLib`.
-- **#12–#16:** the rest of the wildlife packages (`regional-wildlife`).
+- **#12:** built (2026-10-05). No row yet for the inland gulls (ring-billed, herring: the Great
+  Lakes' and every Midwest parking lot's) — the gull role is empty there.
+- **#13–#16:** the rest of the wildlife packages (`regional-wildlife`): #13 the mammals on the
+  existing bases next (coat patterns and tail types first).
   - The casts go in `faunaMix`, by `CastPlace`.
   - A range-rules test, from `docs/regional-life/ranges.md`.
   - Robby asked for "amazing animation"; each `models.md` row says how its animal moves.

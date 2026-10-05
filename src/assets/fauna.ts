@@ -14,26 +14,42 @@ export type CritterKind =
   | 'squirrel' | 'rabbit' | 'songbird' | 'sandpiper' | 'deer' | 'butterfly' | 'firefly' | 'fox' | 'hawk'
   | 'coyote' | 'jackrabbit' | 'snowshoe' | 'groundSquirrel' | 'muleDeer' | 'roadrunner' | 'quail' | 'ibis'
   // (package #11, docs/regional-life/models.md: the backyard birds)
-  | 'cardinal' | 'bluejay' | 'robin' | 'stellersjay' | 'gilawoodpecker' | 'mourningdove' | 'crow' | 'pigeon';
+  | 'cardinal' | 'bluejay' | 'robin' | 'stellersjay' | 'gilawoodpecker' | 'mourningdove' | 'crow' | 'pigeon'
+  // (package #12: the water and big birds)
+  | 'canadagoose' | 'mallard' | 'mallardhen' | 'loon' | 'greatblueheron' | 'greategret' | 'snowyegret' | 'spoonbill' | 'sandhillcrane'
+  | 'turkeyvulture' | 'baldeagle' | 'osprey' | 'wildturkey' | 'californiaquail' | 'brownpelican' | 'laughinggull' | 'californiagull';
 export const CRITTERS: CritterKind[] = ['squirrel', 'rabbit', 'songbird', 'sandpiper', 'deer', 'butterfly', 'firefly', 'fox', 'hawk', 'coyote', 'jackrabbit', 'snowshoe', 'groundSquirrel', 'muleDeer', 'roadrunner', 'quail', 'ibis',
-  'cardinal', 'bluejay', 'robin', 'stellersjay', 'gilawoodpecker', 'mourningdove', 'crow', 'pigeon'];
+  'cardinal', 'bluejay', 'robin', 'stellersjay', 'gilawoodpecker', 'mourningdove', 'crow', 'pigeon',
+  'canadagoose', 'mallard', 'mallardhen', 'loon', 'greatblueheron', 'greategret', 'snowyegret', 'spoonbill', 'sandhillcrane',
+  'turkeyvulture', 'baldeagle', 'osprey', 'wildturkey', 'californiaquail', 'brownpelican', 'laughinggull', 'californiagull'];
 export const CRITTER_NAME: Record<CritterKind, string> = {
   squirrel: 'squirrel', rabbit: 'rabbit', songbird: 'songbird', sandpiper: 'sandpiper', deer: 'white-tailed deer', butterfly: 'butterfly', firefly: 'firefly', fox: 'red fox', hawk: 'red-tailed hawk',
   coyote: 'coyote', jackrabbit: 'black-tailed jackrabbit', snowshoe: 'snowshoe hare', groundSquirrel: 'ground squirrel', muleDeer: 'mule deer', roadrunner: 'greater roadrunner', quail: 'quail', ibis: 'white ibis',
   cardinal: 'northern cardinal', bluejay: 'blue jay', robin: 'American robin', stellersjay: "Steller's jay", gilawoodpecker: 'Gila woodpecker', mourningdove: 'mourning dove', crow: 'American crow', pigeon: 'rock pigeon',
+  canadagoose: 'Canada goose', mallard: 'mallard', mallardhen: 'mallard (hen)', loon: 'common loon', greatblueheron: 'great blue heron', greategret: 'great egret', snowyegret: 'snowy egret', spoonbill: 'roseate spoonbill', sandhillcrane: 'sandhill crane',
+  turkeyvulture: 'turkey vulture', baldeagle: 'bald eagle', osprey: 'osprey', wildturkey: 'wild turkey', californiaquail: 'California quail', brownpelican: 'brown pelican', laughinggull: 'laughing gull', californiagull: 'California gull',
 };
 
 /** Ecological roles: the sim (sim/critters.ts) gives each role its habitat and behaviour; the
  *  species that fills a role comes from the place (faunaMix) — a desert's grazer is a jackrabbit
  *  (and a roadrunner), a north-woods one a snowshoe hare. New species = a table row, not new code. */
-export type CritterRole = 'climber' | 'burrower' | 'grazer' | 'songbird' | 'shorebird' | 'browser' | 'butterfly' | 'firefly' | 'predator' | 'raptor';
-export const ROLES: CritterRole[] = ['climber', 'burrower', 'grazer', 'songbird', 'shorebird', 'browser', 'butterfly', 'firefly', 'predator', 'raptor'];
+export type CritterRole = 'climber' | 'burrower' | 'grazer' | 'songbird' | 'shorebird' | 'browser' | 'butterfly' | 'firefly' | 'predator' | 'raptor'
+  // (package #12: on the water, at its edge, the gulls of the beach and the lot, the big ground birds)
+  | 'waterfowl' | 'wader' | 'gull' | 'fowl';
+export const ROLES: CritterRole[] = ['climber', 'burrower', 'grazer', 'songbird', 'shorebird', 'browser', 'butterfly', 'firefly', 'predator', 'raptor', 'waterfowl', 'wader', 'gull', 'fowl'];
 export const ROLE: Record<CritterKind, CritterRole> = {
   squirrel: 'climber', groundSquirrel: 'burrower', rabbit: 'grazer', jackrabbit: 'grazer', snowshoe: 'grazer', roadrunner: 'grazer',
   songbird: 'songbird', quail: 'songbird', sandpiper: 'shorebird', ibis: 'shorebird', deer: 'browser', muleDeer: 'browser',
   butterfly: 'butterfly', firefly: 'firefly', fox: 'predator', coyote: 'predator', hawk: 'raptor',
   // (the backyard birds: all on the lawns and the verges, hopping, pecking, flushing)
   cardinal: 'songbird', bluejay: 'songbird', robin: 'songbird', stellersjay: 'songbird', gilawoodpecker: 'songbird', mourningdove: 'songbird', crow: 'songbird', pigeon: 'songbird',
+  // (the water and big birds: swimming, wading, the gulls and the pelican, the turkey and the crane
+  // walking the fields, the vulture, the eagle and the osprey on the wing; the California quail a covey
+  // like the desert's)
+  canadagoose: 'waterfowl', mallard: 'waterfowl', mallardhen: 'waterfowl', loon: 'waterfowl',
+  greatblueheron: 'wader', greategret: 'wader', snowyegret: 'wader', spoonbill: 'wader',
+  laughinggull: 'gull', californiagull: 'gull', brownpelican: 'gull', sandhillcrane: 'fowl', wildturkey: 'fowl',
+  turkeyvulture: 'raptor', baldeagle: 'raptor', osprey: 'raptor', californiaquail: 'songbird',
 };
 export type FaunaMix = Partial<Record<CritterRole, [CritterKind, number][]>>;
 // Species per role by climate (Köppen-ish, the same key the plant and car mixes use). North
@@ -72,11 +88,55 @@ const REGION_FAUNA: Record<EcoRegion | 'pnw-dry', FaunaMix> = {
   ozarks: { ...EAST, grazer: [['rabbit', 1], ['roadrunner', 0.1]], predator: [['fox', 0.8], ['coyote', 0.7]] },
   rockies: { climber: [['squirrel', 1]], burrower: [['groundSquirrel', 1]], grazer: [['rabbit', 0.7], ['snowshoe', 0.5]], songbird: [['songbird', 1], ['robin', 1.2], ['stellersjay', 0.6], ['mourningdove', 0.5], ['crow', 0.3], ['pigeon', 0.2]], shorebird: [['sandpiper', 0.5]], browser: [['muleDeer', 1], ['deer', 0.4]], predator: [['coyote', 1], ['fox', 0.6]], raptor: [['hawk', 1]], butterfly: [['butterfly', 1]] },
   'desert-sw': { ...FAUNA.arid, songbird: [['quail', 1], ['songbird', 0.4], ['mourningdove', 1], ['gilawoodpecker', 0.6], ['pigeon', 0.25]] },
-  'great-basin': { climber: [['squirrel', 0.3]], burrower: [['groundSquirrel', 1]], grazer: [['jackrabbit', 1], ['rabbit', 0.5]], songbird: [['songbird', 1], ['quail', 0.5], ['robin', 0.8], ['mourningdove', 0.9], ['crow', 0.3], ['pigeon', 0.25]], shorebird: [['sandpiper', 0.6]], browser: [['muleDeer', 1]], predator: [['coyote', 1]], raptor: [['hawk', 1]], butterfly: [['butterfly', 0.6]] },
-  california: { ...FAUNA.mediterranean, songbird: [['songbird', 1], ['quail', 0.6], ['robin', 0.7], ['mourningdove', 0.9], ['crow', 0.7], ['pigeon', 0.3]] },
+  'great-basin': { climber: [['squirrel', 0.3]], burrower: [['groundSquirrel', 1]], grazer: [['jackrabbit', 1], ['rabbit', 0.5]], songbird: [['songbird', 1], ['californiaquail', 0.5], ['robin', 0.8], ['mourningdove', 0.9], ['crow', 0.3], ['pigeon', 0.25]], shorebird: [['sandpiper', 0.6]], browser: [['muleDeer', 1]], predator: [['coyote', 1]], raptor: [['hawk', 1]], butterfly: [['butterfly', 0.6]] },
+  california: { ...FAUNA.mediterranean, songbird: [['songbird', 1], ['californiaquail', 0.6], ['robin', 0.7], ['mourningdove', 0.9], ['crow', 0.7], ['pigeon', 0.3]] },
   pnw: { climber: [['squirrel', 1]], grazer: [['rabbit', 1]], songbird: [['songbird', 1], ['robin', 1], ['stellersjay', 0.9], ['crow', 1.1], ['mourningdove', 0.25], ['pigeon', 0.3]], shorebird: [['sandpiper', 1]], browser: [['muleDeer', 1], ['deer', 0.15]], predator: [['coyote', 1], ['fox', 0.5]], raptor: [['hawk', 1]], butterfly: [['butterfly', 0.8]] },
-  'pnw-dry': { climber: [['squirrel', 0.6]], burrower: [['groundSquirrel', 1]], grazer: [['rabbit', 0.6], ['jackrabbit', 0.6]], songbird: [['songbird', 1], ['quail', 0.4], ['robin', 0.9], ['mourningdove', 0.8], ['crow', 0.4], ['pigeon', 0.25]], shorebird: [['sandpiper', 0.5]], browser: [['muleDeer', 1], ['deer', 0.4]], predator: [['coyote', 1]], raptor: [['hawk', 1]], butterfly: [['butterfly', 0.8]] },
+  'pnw-dry': { climber: [['squirrel', 0.6]], burrower: [['groundSquirrel', 1]], grazer: [['rabbit', 0.6], ['jackrabbit', 0.6]], songbird: [['songbird', 1], ['californiaquail', 0.4], ['robin', 0.9], ['mourningdove', 0.8], ['crow', 0.4], ['pigeon', 0.25]], shorebird: [['sandpiper', 0.5]], browser: [['muleDeer', 1], ['deer', 0.4]], predator: [['coyote', 1]], raptor: [['hawk', 1]], butterfly: [['butterfly', 0.8]] },
 };
+// (package #12: the water and the big birds — what's on each region's ponds and lakes, at their edges,
+// on its beaches and parking lots, walking its fields and over its head; the habitat itself (water,
+// the shore, a field) is the sim's, the season faunaMix's `month`)
+type Mix = [CritterKind, number][];
+const DUCKS: Mix = [['canadagoose', 1], ['mallard', 0.9], ['mallardhen', 0.8]];
+const LOONS: Mix = [...DUCKS, ['loon', 0.3]];
+const raptors = (vulture = 1.2, eagle = 0.25, osprey = 0.4): Mix => [['hawk', 1], ['turkeyvulture', vulture], ['baldeagle', eagle], ['osprey', osprey]];
+const WATER: Record<EcoRegion | 'pnw-dry', FaunaMix> = {
+  'new-england': { waterfowl: LOONS, wader: [['greatblueheron', 1], ['greategret', 0.6], ['snowyegret', 0.4]], gull: [['laughinggull', 1]], fowl: [['wildturkey', 1]], raptor: raptors(1, 0.3, 0.5) },
+  'upstate-ny': { waterfowl: LOONS, wader: [['greatblueheron', 1], ['greategret', 0.5]], fowl: [['wildturkey', 1], ['sandhillcrane', 0.2]], raptor: raptors(1, 0.3, 0.4) },
+  'mid-atlantic': { waterfowl: LOONS, wader: [['greatblueheron', 1], ['greategret', 0.9], ['snowyegret', 0.6]], gull: [['laughinggull', 1], ['brownpelican', 0.3]], fowl: [['wildturkey', 1]], raptor: raptors(1.2, 0.25, 0.6) },
+  appalachia: { waterfowl: DUCKS, wader: [['greatblueheron', 1], ['greategret', 0.4]], fowl: [['wildturkey', 1.2], ['sandhillcrane', 0.15]], raptor: raptors(1.4, 0.2, 0.3) },
+  southeast: { waterfowl: [...DUCKS, ['loon', 0.15]], wader: [['greatblueheron', 1], ['greategret', 1], ['snowyegret', 0.7], ['spoonbill', 0.2]], gull: [['laughinggull', 1], ['brownpelican', 0.6]], fowl: [['wildturkey', 1]], raptor: raptors(1.4, 0.25, 0.5) },
+  florida: { waterfowl: [['mallard', 0.6], ['mallardhen', 0.6], ['canadagoose', 0.3], ['loon', 0.15]], wader: [['greatblueheron', 1], ['greategret', 1.2], ['snowyegret', 0.8], ['spoonbill', 0.6]], gull: [['laughinggull', 1.2], ['brownpelican', 1]], fowl: [['sandhillcrane', 1], ['wildturkey', 0.6]], raptor: raptors(1.4, 0.3, 0.8) },
+  gulf: { waterfowl: [...DUCKS, ['loon', 0.1]], wader: [['greatblueheron', 1], ['greategret', 1], ['snowyegret', 0.7], ['spoonbill', 0.4]], gull: [['laughinggull', 1], ['brownpelican', 0.8]], fowl: [['wildturkey', 0.8], ['sandhillcrane', 0.2]], raptor: raptors(1.4, 0.25, 0.6) },
+  texas: { waterfowl: DUCKS, wader: [['greatblueheron', 1], ['greategret', 0.9], ['snowyegret', 0.5], ['spoonbill', 0.3]], gull: [['laughinggull', 0.8], ['brownpelican', 0.5]], fowl: [['wildturkey', 1], ['sandhillcrane', 0.3]], raptor: raptors(1.4, 0.15, 0.3) },
+  plains: { waterfowl: DUCKS, wader: [['greatblueheron', 1], ['greategret', 0.4]], fowl: [['wildturkey', 0.8], ['sandhillcrane', 0.6]], raptor: raptors(1, 0.2, 0.2) },
+  midwest: { waterfowl: LOONS, wader: [['greatblueheron', 1], ['greategret', 0.6]], fowl: [['wildturkey', 1], ['sandhillcrane', 0.4]], raptor: raptors(1, 0.3, 0.4) },
+  ozarks: { waterfowl: DUCKS, wader: [['greatblueheron', 1], ['greategret', 0.5]], fowl: [['wildturkey', 1.3]], raptor: raptors(1.4, 0.2, 0.2) },
+  rockies: { waterfowl: [...DUCKS, ['loon', 0.1]], wader: [['greatblueheron', 1]], fowl: [['wildturkey', 0.8], ['sandhillcrane', 0.4]], raptor: raptors(1, 0.3, 0.4) },
+  'desert-sw': { waterfowl: DUCKS, wader: [['greatblueheron', 0.8], ['greategret', 0.5], ['snowyegret', 0.5]], gull: [['californiagull', 0.4]], fowl: [['sandhillcrane', 0.4], ['wildturkey', 0.3]], raptor: raptors(1.4, 0.1, 0.3) },
+  'great-basin': { waterfowl: DUCKS, wader: [['greatblueheron', 1], ['greategret', 0.5], ['snowyegret', 0.5]], gull: [['californiagull', 1.2]], fowl: [['sandhillcrane', 0.5], ['wildturkey', 0.3]], raptor: raptors(1.2, 0.2, 0.3) },
+  california: { waterfowl: [...DUCKS, ['loon', 0.15]], wader: [['greatblueheron', 1], ['greategret', 1], ['snowyegret', 0.6]], gull: [['californiagull', 1], ['brownpelican', 0.7]], fowl: [['wildturkey', 0.6], ['sandhillcrane', 0.2]], raptor: raptors(1.4, 0.15, 0.4) },
+  pnw: { waterfowl: LOONS, wader: [['greatblueheron', 1.2], ['greategret', 0.3]], gull: [['californiagull', 0.8], ['brownpelican', 0.3]], fowl: [['wildturkey', 0.3], ['sandhillcrane', 0.15]], raptor: raptors(1, 0.5, 0.5) },
+  'pnw-dry': { waterfowl: DUCKS, wader: [['greatblueheron', 1]], gull: [['californiagull', 0.6]], fowl: [['wildturkey', 0.6], ['sandhillcrane', 0.3]], raptor: raptors(1, 0.25, 0.3) },
+};
+for (const k of Object.keys(WATER) as (keyof typeof WATER)[]) REGION_FAUNA[k] = { ...REGION_FAUNA[k], ...WATER[k] };
+const NORTHERN = new Set(['new-england', 'upstate-ny', 'midwest', 'plains', 'rockies', 'pnw', 'pnw-dry', 'great-basin']);
+const months = (m: number, a: number, b: number) => (a <= b ? m >= a && m <= b : m >= a || m <= b);
+/** When a bird is here (month 1–12, the north's: the sim turns the south's year round), by the region's
+ *  table key (ranges.md: who winters where, who only summers): the loons on the northern lakes in summer
+ *  and on the coasts in winter, the vultures, ospreys and egrets gone south for the winter, the
+ *  cranes' migrations, the pelicans' and the laughing gulls' summers in the north. */
+const SEASON: Partial<Record<CritterKind, (eco: string, m: number) => boolean>> = {
+  loon: (e, m) => ['new-england', 'pnw'].includes(e) || (['mid-atlantic', 'southeast', 'gulf', 'florida', 'california', 'texas'].includes(e) ? months(m, 11, 3) : months(m, 4, 10)),
+  turkeyvulture: (e, m) => !NORTHERN.has(e) || months(m, 3, 10),
+  osprey: (e, m) => ['florida', 'gulf'].includes(e) || (NORTHERN.has(e) ? months(m, 4, 9) : months(m, 3, 10)),
+  laughinggull: (e, m) => !['new-england', 'mid-atlantic'].includes(e) || months(m, 4, 10),
+  brownpelican: (e, m) => (e === 'mid-atlantic' ? months(m, 5, 9) : e === 'pnw' ? months(m, 6, 10) : true),
+  sandhillcrane: (e, m) => (e === 'florida' ? true : e === 'plains' ? months(m, 2, 4) || months(m, 10, 11) : ['texas', 'desert-sw', 'california', 'gulf'].includes(e) ? months(m, 11, 2) : months(m, 3, 10)),
+  greategret: (e, m) => !NORTHERN.has(e) || months(m, 4, 10),
+  snowyegret: (e, m) => !['new-england', 'mid-atlantic', 'great-basin'].includes(e) || months(m, 4, 10),
+};
+
 /** The north woods' ecoregions (the Adirondacks and northern New England, Maine's Acadian hills, the
  *  Northwoods of Minnesota, Wisconsin and Michigan): the snowshoe hare's. */
 const NORTH_WOODS = new Set([58, 82, 49, 50]);
@@ -89,12 +149,13 @@ const TEXAS_WEST = new Set([25, 26, 27, 29, 30, 31]);
 
 /** The species cast for a place: role → weighted species (a role missing from the mix simply doesn't
  *  appear). In the lower 48 its region's (`place`: styles.ts castOf), else its climate's. */
-export function faunaMix(region: string, climate: string, place?: { eco: string; l3: number; west: boolean }): FaunaMix {
+export function faunaMix(region: string, climate: string, place?: { eco: string; l3: number; west: boolean }, month?: number): FaunaMix {
   void region; // continents get their own rows here as they come online
   const eco = place?.eco as EcoRegion | undefined;
   if (eco && REGION_FAUNA[eco]) {
     const l3 = place!.l3;
-    let m = REGION_FAUNA[eco === 'pnw' && !place!.west ? 'pnw-dry' : eco];
+    const key = eco === 'pnw' && !place!.west ? 'pnw-dry' : eco;
+    let m = REGION_FAUNA[key];
     if (NORTH_WOODS.has(l3)) m = { ...m, grazer: [...(m.grazer ?? []), ['snowshoe', 0.6]] };
     if (eco === 'plains' && PLAINS_EAST.has(l3)) m = { ...m, firefly: [['firefly', 0.6]] };
     if (eco === 'southeast' && (l3 === 63 || l3 === 75)) m = { ...m, shorebird: [['sandpiper', 1], ['ibis', 0.6]] }; // (the coastal plain's marshes)
@@ -106,6 +167,15 @@ export function faunaMix(region: string, climate: string, place?: { eco: string;
       // (the High and Rolling Plains' dry nights flash no fireflies; the Hill Country and the brush a few)
       const { firefly: _f, ...dry } = m;
       m = { ...dry, burrower: [['groundSquirrel', 0.6]], grazer: [['rabbit', 1], ['jackrabbit', 0.7], ['roadrunner', 0.4]], songbird: [['songbird', 1], ['quail', 0.5], ['mourningdove', 1.2], ['cardinal', 0.4], ['crow', 0.2]], ...(l3 >= 29 ? { firefly: [['firefly', 0.3]] as [CritterKind, number][] } : {}) };
+    }
+    if (month !== undefined) {
+      // (the season's: who's away this month leaves its role to the rest — a role left empty goes)
+      const out: FaunaMix = {};
+      for (const [r, list] of Object.entries(m) as [CritterRole, Mix][]) {
+        const here = list.filter(([k]) => SEASON[k]?.(key, month) ?? true);
+        if (here.length) out[r] = here;
+      }
+      m = out;
     }
     return m;
   }
@@ -143,6 +213,47 @@ const BIRD: Partial<Record<CritterKind, Bird>> = {
   quail: { coat: 0x7a7a82, belly: 0xc8b08a, legC: 0x6a5a4a, beakC: 0x2a2622, legH: 0.018, beakL: 0.012, k: 1.6, plan: { body: [1.05, 0.95, 1.05], tail: [0.04, 0.035], crest: 0x2a2622, head: [0.04, -0.065] } },
   // white, long red legs, the long down-curved bill
   ibis: { coat: 0xf4f2ee, belly: 0xf4f2ee, legC: 0xd86a4a, beakC: 0xd86a4a, legH: 0.1, beakL: 0.1, k: 2.4, plan: { body: [0.75, 0.75, 1.3], curve: 0.55, head: [0.06, -0.075] } },
+  // (package #12, the water and big birds)
+  // a Canada goose: the black stocking of a neck, the white chinstrap, the brown-grey body, the flat bill
+  canadagoose: { coat: 0x7a6c5c, belly: 0xcfc6b8, legC: 0x1e1e20, beakC: 0x1e1e20, legH: 0.03, beakL: 0.022, k: 3.2, plan: { bill: 'flat', hood: 0x1a1a1c, headR: 0.85, neck: [0.1, 0.1, 0.06], neckW: 0.85, cheek: 0xf2f0ea, tail: [0.05, 0.05], tailC: 0x1e1e20, body: [1.0, 0.78, 1.4], wingL: 0.1 } },
+  // a mallard drake: the green head, the white collar, the chestnut breast, the grey flanks, the blue
+  // speculum, the yellow bill; and the hen, mottled brown with the same blue in the wing
+  mallard: { coat: 0x8e8c86, belly: 0x6e3c2a, legC: 0xe08a30, beakC: 0xd8c040, legH: 0.02, beakL: 0.02, k: 2.1, plan: { bill: 'flat', hood: 0x2a6a40, necklace: 0xf2f2ee, breast: true, bars: [0x3a50a0, 1], tail: [0.04, 0.035], tailC: 0x1e1e20, body: [1.0, 0.75, 1.45], head: [0.05, -0.08] } },
+  mallardhen: { coat: 0x8a6a4a, belly: 0x9a7a58, legC: 0xe08a30, beakC: 0xb8803a, legH: 0.02, beakL: 0.02, k: 2.0, plan: { bill: 'flat', hood: 0x7a5a3e, bars: [0x3a50a0, 1], tail: [0.04, 0.035], body: [1.0, 0.75, 1.45], head: [0.05, -0.08] } },
+  // a common loon: long and low on the water, the dagger bill, the back spotted white; summer black or
+  // winter grey (TINT); never on land (no legs to stand on)
+  loon: { coat: 0xffffff, belly: 0xf0f0ec, legC: 0x1e1e20, beakC: 0x1e1e22, legH: 0, beakL: 0.03, k: 3.2, plan: { bill: 'dagger', noLegs: true, bars: [0xf0f0ec, 3], tail: [0.035, 0.03], body: [0.95, 0.62, 1.55], head: [0.042, -0.085] } },
+  // a great blue heron: blue-grey, the white face with its black plume, the long S of a grey neck, the
+  // yellow dagger, legs to the knee in the water
+  greatblueheron: { coat: 0x6e7c8c, belly: 0x8a96a4, legC: 0x5a4a3a, beakC: 0xd8b040, legH: 0.12, beakL: 0.06, k: 3.4, plan: { bill: 'dagger', hood: 0xeeeeea, cap: 0x1e1e22, crest: 0x1e1e22, crestTilt: 1.3, crestL: 0.04, neck: [0.11, 0.3, 0.32], neckCol: 0x9a9aa2, neckW: 0.8, tail: [0.05, 0.05], body: [0.72, 0.72, 1.35], wingL: 0.11 } },
+  // a great egret: all white, the yellow bill, black legs; a snowy egret smaller, the black bill, plumes
+  greategret: { coat: 0xf6f6f2, belly: 0xf6f6f2, legC: 0x1e1e20, beakC: 0xe0c040, legH: 0.12, beakL: 0.055, k: 3.0, plan: { bill: 'dagger', neck: [0.12, 0.28, 0.38], neckW: 0.7, tail: [0.05, 0.05], body: [0.68, 0.7, 1.35], wingL: 0.11 } },
+  snowyegret: { coat: 0xf6f6f2, belly: 0xf6f6f2, legC: 0x1e1e20, beakC: 0x1e1e20, legH: 0.09, beakL: 0.04, k: 2.3, plan: { bill: 'dagger', crest: 0xf6f6f2, crestTilt: 1.2, crestL: 0.03, neck: [0.09, 0.3, 0.35], neckW: 0.7, tail: [0.05, 0.05], body: [0.68, 0.7, 1.35], wingL: 0.1 } },
+  // a roseate spoonbill: bubblegum pink, the red shoulder, the orange tail, the bare greenish head, the
+  // spoon
+  spoonbill: { coat: 0xe88a98, belly: 0xeea0aa, legC: 0xb85a6a, beakC: 0xa8a890, legH: 0.09, beakL: 0.06, k: 2.7, plan: { bill: 'spoon', hood: 0xb4bc98, headR: 0.9, neck: [0.075, 0.45, 0.15], neckCol: 0xf2e4e2, bars: [0xc83a4a, 1], tail: [0.05, 0.04], tailC: 0xd88a60, body: [0.75, 0.72, 1.3], wingL: 0.1 } },
+  // a sandhill crane: tall and grey, the red crown, the white cheek, the neck held up, the bustle
+  sandhillcrane: { coat: 0x8c8a86, belly: 0x9c9a96, legC: 0x2a2a2a, beakC: 0x3a3a3a, legH: 0.14, beakL: 0.045, k: 3.6, plan: { bill: 'dagger', hood: 0x9a9894, cap: 0xc03030, cheek: 0xe8e6e0, neck: [0.12, 0.12, 0.08], neckW: 0.75, tail: [0.08, 0.07], tailC: 0x7a7670, body: [0.72, 0.72, 1.3], wingL: 0.11 } },
+  // a turkey vulture: black-brown, the small bare red head, the ivory hook, the silver trailing half of
+  // the wings, held in a V
+  turkeyvulture: { coat: 0x2a2420, belly: 0x2a2420, legC: 0xb8a090, beakC: 0xe8dcc8, legH: 0.025, beakL: 0.016, k: 3.6, plan: { bill: 'hook', hood: 0xb84030, headR: 0.62, wing: [0.075, 0.17], fingers: 5, trail: 0x8a8884, tail: [0.07, 0.08], body: [0.6, 0.62, 1.45], head: [0.03, -0.085] } },
+  // a bald eagle: dark brown, the white head and tail, the huge yellow hook; flat planks of wings
+  baldeagle: { coat: 0x3a2a1e, belly: 0x3a2a1e, legC: 0xe0c040, beakC: 0xe8c040, legH: 0.025, beakL: 0.018, k: 4.2, plan: { bill: 'hook', hood: 0xf2f2ee, wing: [0.085, 0.17], fingers: 5, tail: [0.08, 0.07], tailC: 0xf2f2ee, body: [0.62, 0.64, 1.45], head: [0.034, -0.088] } },
+  // an osprey: dark above, white below and on the head, the dark stripe through the eye, long narrow
+  // wings
+  osprey: { coat: 0x4a3a2c, belly: 0xf2f0ea, legC: 0x9aa0a8, beakC: 0x1e1e20, legH: 0.025, beakL: 0.016, k: 3.0, plan: { bill: 'hook', hood: 0xf2f0ea, mask: 0x3a2a1e, wing: [0.06, 0.18], fingers: 4, tail: [0.07, 0.07], tailC: 0x6a5a4a, body: [0.56, 0.6, 1.45], head: [0.03, -0.085] } },
+  // a wild turkey: big, bronze-black, the bare blue head on a red neck, the wattle, white-barred wings,
+  // the great fan of a tail tipped chestnut
+  wildturkey: { coat: 0x3a2c22, belly: 0x2e2620, legC: 0x9a8a80, beakC: 0x9a9080, legH: 0.06, beakL: 0.014, k: 4.4, plan: { bill: 'slim', hood: 0x8aa4cc, headR: 0.62, neck: [0.06, 0.15, 0], neckCol: 0xb04a4a, neckW: 0.8, wattle: 0xc03030, barred: [0xe8e0d0, 5], tail: [0.12, 0.1], tailC: 0x4a3a2a, tailTip: 0xa08060, body: [0.95, 0.95, 1.3], wingL: 0.1 } },
+  // a California quail: blue-grey, the scaled buff belly, the black face edged white, the forward-curling
+  // black plume
+  californiaquail: { coat: 0x6a7480, belly: 0xb89a70, legC: 0x6a5a4a, beakC: 0x2a2622, legH: 0.018, beakL: 0.012, k: 1.6, plan: { mask: 0x1a1a1a, cheek: 0xf0f0ee, crest: 0x1a1a1a, crestTilt: -0.95, crestL: 0.042, body: [1.05, 0.95, 1.05], tail: [0.04, 0.035], head: [0.04, -0.065] } },
+  // a brown pelican: grey-brown, the white and yellow head, the long bill with its pouch, the neck
+  brownpelican: { coat: 0x7a7268, belly: 0x6a645c, legC: 0x2a2a2a, beakC: 0xb8a888, legH: 0.03, beakL: 0.075, k: 3.4, plan: { bill: 'pouch', wattle: 0x6a6458, hood: 0xeee4c8, neck: [0.06, 0.25, 0.25], neckCol: 0xe8e2d4, wingL: 0.12, tail: [0.05, 0.04], body: [0.85, 0.8, 1.45] } },
+  // the gulls: white below, the grey mantle, black wingtips; a laughing gull's hood black in summer, white
+  // in winter (TINT), its bill dark red; a California gull's paler, yellow bill, yellow-green legs
+  laughinggull: { coat: 0x5a6068, belly: 0xf4f4f2, legC: 0x6a2a2a, beakC: 0x8a2a2a, legH: 0.03, beakL: 0.022, k: 2.2, plan: { hood: 0xffffff, wingTip: 0x1a1a1c, wingL: 0.11, tail: [0.05, 0.05], tailC: 0xf2f2f0, body: [0.8, 0.75, 1.35] } },
+  californiagull: { coat: 0x9aa2aa, belly: 0xf4f4f2, legC: 0xc0c070, beakC: 0xe0c040, legH: 0.032, beakL: 0.025, k: 2.5, plan: { hood: 0xf4f4f2, wingTip: 0x1a1a1c, wingL: 0.115, tail: [0.05, 0.05], tailC: 0xf2f2f0, body: [0.82, 0.76, 1.35] } },
   // (package #11, the backyard birds — each known at twenty metres by its colour masses, its crest
   // or bill, the way it stands; TINT parts are painted per bird: a female cardinal's tan, a pigeon's
   // own grey, a Gila woodpecker without the male's red cap)
@@ -191,17 +302,20 @@ const still = (g: THREE.BufferGeometry, hex: number, id: number = P.body) => joi
  *  the hawk are parameters over it. */
 /** A broad soaring wing along +x (or −x): widest at the root, a straight leading edge, the
  *  trailing edge sweeping in to fingered tips — a raptor's plank, not a songbird's leaf. */
-function broadWing(chord: number, span: number, side: number) {
+function broadWing(chord: number, span: number, side: number, from = 0, to = 1, lift = 0) {
   const pos: number[] = [];
   const n = 5;
-  const at = (t: number, e: -1 | 1): [number, number, number] => {
-    const w = chord * (1 - 0.42 * t * t);
-    return [side * span * t, 0.02 * span * t * t, e < 0 ? -w * 0.32 : w * 0.68 - (t > 0.8 ? (t - 0.8) * chord * 0.6 * Math.sin(t * 40) : 0)];
+  const at = (t: number, u: number, y: number): [number, number, number] => {
+    const w = chord * (1 - 0.42 * t * t), lead = -w * 0.32, trail = w * 0.68 - (t > 0.8 ? (t - 0.8) * chord * 0.6 * Math.sin(t * 40) : 0);
+    return [side * span * t, 0.02 * span * t * t + y, lead + (trail - lead) * u];
   };
   for (let i = 0; i < n; i++) {
     const t0 = i / n, t1 = (i + 1) / n;
-    const a = at(t0, -1), b = at(t0, 1), c = at(t1, 1), d = at(t1, -1);
-    pos.push(...a, ...b, ...c, ...a, ...c, ...d, ...a, ...c, ...b, ...a, ...d, ...c);
+    for (const y of lift ? [lift, -lift] : [0]) {
+      const a = at(t0, from, y), b = at(t0, to, y), c = at(t1, to, y), d = at(t1, from, y);
+      if (y >= 0) pos.push(...a, ...b, ...c, ...a, ...c, ...d);
+      if (y <= 0) pos.push(...a, ...c, ...b, ...a, ...d, ...c);
+    }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -224,8 +338,9 @@ interface BirdPlan {
   necklace?: number;
   /** a patch on the side of the neck (a pigeon's iridescent green) */
   neckC?: number;
-  /** the bill: a seed-eater's thick cone, a crow's stout dagger, a woodpecker's chisel, a dove's slim */
-  bill?: 'thick' | 'stout' | 'chisel' | 'slim';
+  /** the bill: a seed-eater's thick cone, a crow's stout dagger, a woodpecker's chisel, a dove's slim;
+   *  a duck's flat one, a heron's dagger, a spoonbill's spoon, a pelican's pouch, an eagle's hook */
+  bill?: keyof typeof BILL_R;
   /** bars across the wing (colour, how many: a jay's white bar, a pigeon's two black ones) */
   bars?: [number, number];
   /** barred wings (colour, how many cross-bars: a Gila woodpecker's zebra back — the closed wings lie
@@ -237,8 +352,22 @@ interface BirdPlan {
   wedge?: boolean; tailTip?: number;
   /** the folded wing's length (a crow's longer) */
   wingL?: number;
+  // (package #12, the water and big birds)
+  /** a long neck: its length, its lean forward from upright (radians) and its S (a heron's kink); its
+   *  colour (the head's when absent) and thickness */
+  neck?: [number, number, number]; neckCol?: number; neckW?: number;
+  /** a band across the cheeks and under the chin (a goose's white chinstrap) */
+  cheek?: number;
+  /** a wattle hanging under the bill (a turkey's) */
+  wattle?: number;
+  /** the wing's outer third (a gull's black primaries) */
+  wingTip?: number;
+  /** a broad wing's trailing half (a vulture's silver flight feathers) */
+  trail?: number;
+  /** no legs: a bird only ever on the water (a loon) */
+  noLegs?: boolean;
 }
-const BILL_R = { thick: 0.012, stout: 0.0095, chisel: 0.006, slim: 0.0045 } as const;
+const BILL_R = { thick: 0.012, stout: 0.0095, chisel: 0.006, slim: 0.0045, flat: 0.0095, dagger: 0.0065, spoon: 0.006, pouch: 0.0085, hook: 0.011 } as const;
 /** A tail: narrow at the rump, a squared fan at the tip (or a long wedge to a point), along +z,
  *  lifting a little; double-sided. `from`/`to` (0–1 of its length) cut a piece of it (the tip band). */
 function tailFan(w: number, l: number, wedge: boolean, from = 0, to = 1) {
@@ -306,22 +435,44 @@ function birdGeometry(coat: number, belly: number, legC: number, beakC: number, 
   if (o.breast) parts.push(still(blob(0.055 * 0.93, 31, { lump: 0.03 }).scale(bx, byy, bz).translate(0, by - 0.007, -0.013), belly));
   else parts.push(still(blob(0.04, 31, { detail: 0 }).scale(bx, byy * 0.93, bz * 0.88).translate(0, by - 0.02, -0.01), belly));
   if (o.band !== undefined) parts.push(still(blob(0.036, 33, { detail: 0 }).scale(bx * 1.05, 0.45, 0.6).translate(0, by - 0.022, 0.012), o.band)); // a dark belly band
-  const neck = V3(0, by + 0.02, -0.05);
-  const [hy, hz] = o.head ?? [0.045, -0.07];
+  let neck = V3(0, by + 0.02, -0.05);
+  let [hy, hz] = o.head ?? [0.045, -0.07];
   const hr = o.headR ?? 1, head = o.hood ?? coat;
+  if (o.neck) {
+    // a long neck off the front of the shoulders, the head on its end: two tapering pieces with an
+    // S between them (a heron's), the whole of it bending at the base to graze or strike
+    const [nl, lean, kink] = o.neck, nw = o.neckW ?? 1, nc = o.neckCol ?? head;
+    const base = V3(0, by + 0.055 * byy * 0.45, -0.055 * bz * 0.72);
+    const dir = (a: number) => V3(0, Math.cos(a), -Math.sin(a));
+    const mid = base.clone().addScaledVector(dir(lean + kink), nl / 2), tip = mid.clone().addScaledVector(dir(lean - kink), nl / 2);
+    parts.push(jointed(limb(base, mid, 0.02 * nw, 0.0135 * nw, 5), nc, P.skull, base));
+    parts.push(jointed(limb(mid, tip, 0.0135 * nw, 0.012 * nw, 5), nc, P.skull, base));
+    parts.push(jointed(new THREE.SphereGeometry(0.0135 * nw, 5, 3).translate(mid.x, mid.y, mid.z), nc, P.skull, base));
+    neck = base;
+    hy = tip.y + 0.006 - by; hz = tip.z - 0.008;
+  }
   parts.push(jointed(blob(0.032 * hr, 32, { detail: 0, lump: 0.04 }).translate(0, by + hy, hz), head, P.skull, neck));
   // the neck: the head sits on the shoulders, not floating off the front of the body
-  parts.push(jointed(blob(0.025 * Math.max(0.85, hr), 38, { detail: 0, lump: 0.03 }).scale(bx * 1.15, 1, 1).translate(0, by + 0.012 + hy * 0.45, -0.04 + (hz + 0.04) * 0.55), head, P.skull, neck));
+  if (!o.neck) parts.push(jointed(blob(0.025 * Math.max(0.85, hr), 38, { detail: 0, lump: 0.03 }).scale(bx * 1.15, 1, 1).translate(0, by + 0.012 + hy * 0.45, -0.04 + (hz + 0.04) * 0.55), head, P.skull, neck));
   const face = hz - 0.025 * hr; // (where the bill leaves the face)
   if (o.curve) {
     // a long bill curving down from its base (an ibis): hinge the cone at the face and bend it
     const bill = new THREE.ConeGeometry(0.007, beakL, 4).rotateX(-Math.PI / 2).translate(0, 0, -beakL / 2).rotateX(-o.curve);
     parts.push(jointed(bill.translate(0, by + hy - 0.005, face), beakC, P.skull, neck));
   } else {
-    const beak = new THREE.ConeGeometry(o.bill ? BILL_R[o.bill] : 0.008, beakL, o.bill === 'thick' ? 5 : 4).rotateX(-Math.PI / 2);
-    if (hooked) beak.rotateX(0.5); // a raptor's short down-hooked bill
-    parts.push(jointed(beak.translate(0, by + hy - 0.005 * hr - (hooked ? 0.004 : 0), face - beakL / 2), beakC, P.skull, neck));
+    const b = o.bill, hook = hooked || b === 'hook';
+    const beak = new THREE.ConeGeometry(b ? BILL_R[b] : 0.008, beakL, b === 'thick' || b === 'hook' ? 5 : 4).rotateX(-Math.PI / 2);
+    // (a duck's, a spoonbill's and a pelican's bills flat and broad)
+    if (b === 'flat' || b === 'spoon' || b === 'pouch') beak.scale(b === 'flat' ? 1.5 : 1.2, b === 'flat' ? 0.42 : 0.4, 1);
+    if (hook) beak.rotateX(0.5); // a raptor's short down-hooked bill
+    const by0 = by + hy - 0.005 * hr - (hook ? 0.004 : 0), bz0 = face - beakL / 2;
+    parts.push(jointed(beak.translate(0, by0, bz0), beakC, P.skull, neck));
+    // the spoon at the tip; the pelican's pouch slung under the bill's length
+    if (b === 'spoon') parts.push(jointed(blob(0.011, 39, { detail: 0, lump: 0 }).scale(1.25, 0.3, 1.15).translate(0, by0, face - beakL * 0.92), beakC, P.skull, neck));
+    if (b === 'pouch') parts.push(jointed(blob(0.016, 40, { detail: 0, lump: 0 }).scale(0.75, 0.7, beakL / 0.034).translate(0, by0 - 0.012, bz0 + beakL * 0.08), o.wattle ?? beakC, P.skull, neck));
   }
+  if (o.wattle !== undefined && o.bill !== 'pouch') parts.push(jointed(blob(0.01 * hr, 41, { detail: 0, lump: 0 }).scale(0.7, 1.5, 0.7).translate(0, by + hy - 0.022 * hr, face + 0.004), o.wattle, P.skull, neck));
+  if (o.cheek !== undefined) parts.push(jointed(blob(0.02 * hr, 42, { detail: 0, lump: 0 }).scale(1.7, 0.7, 0.85).translate(0, by + hy - 0.009 * hr, hz + 0.002), o.cheek, P.skull, neck));
   // the face's marks: a mask round the bill and eyes, a crown patch, a necklace, a neck patch
   if (o.mask !== undefined) parts.push(jointed(blob(0.018 * hr, 34, { detail: 0, lump: 0 }).scale(1.45, 0.95, 0.7).translate(0, by + hy - 0.004 * hr, hz - 0.021 * hr), o.mask, P.skull, neck));
   if (o.cap !== undefined) parts.push(jointed(blob(0.016 * hr, 35, { detail: 0, lump: 0 }).scale(1, 0.55, 1.25).translate(0, by + hy + 0.026 * hr, hz + 0.002), o.cap, P.skull, neck));
@@ -345,6 +496,8 @@ function birdGeometry(coat: number, belly: number, legC: number, beakC: number, 
     const sh = o.wing ? V3(s * 0.03, by + 0.02, -0.02) : V3(s * 0.052 * bx, by + 0.02, -0.022);
     const wing = o.wing ? broadWing(o.wing[0], o.wing[1], s) : card(0.05, wl, 0.1, 2).rotateY(s * Math.PI / 2);
     parts.push(jointed(wing.translate(sh.x, sh.y, sh.z), coat, P.wing, sh));
+    if (o.wingTip !== undefined && !o.wing) parts.push(jointed(wingStripe(0.05, wl, 0.1, 0.62, 1).rotateY(s * Math.PI / 2).translate(sh.x, sh.y, sh.z), o.wingTip, P.wing, sh));
+    if (o.trail !== undefined && o.wing) parts.push(jointed(broadWing(o.wing[0], o.wing[1], s, 0.55, 1, 0.0015).translate(sh.x, sh.y, sh.z), o.trail, P.wing, sh));
     if (o.barred && !o.wing) {
       const [bc, nb] = o.barred;
       for (let b = 0; b < nb; b++) {
@@ -371,7 +524,7 @@ function birdGeometry(coat: number, belly: number, legC: number, beakC: number, 
       }
     }
     // (one leg 'fore', one 'hind': GAIT's phase offset makes a hop — both together — or a walk)
-    parts.push(jointed(limb(V3(s * 0.012, by - 0.02, 0.005), V3(s * 0.012, 0, -0.005), 0.004, 0.003, 3), legC, s < 0 ? P.fore : P.hind, V3(s * 0.012, by - 0.02, 0)));
+    if (!o.noLegs) parts.push(jointed(limb(V3(s * 0.012, by - 0.02, 0.005), V3(s * 0.012, 0, -0.005), 0.004, 0.003, 3), legC, s < 0 ? P.fore : P.hind, V3(s * 0.012, by - 0.02, 0)));
     parts.push(jointed(new THREE.SphereGeometry(0.006 * Math.max(0.85, hr), 4, 3).translate(s * 0.02 * hr, by + hy + 0.01 * hr, hz - 0.015 * hr), 0x121010, P.skull, neck));
   }
   return merge(parts);
@@ -492,10 +645,13 @@ export function critterGeometry(kind: CritterKind): THREE.BufferGeometry {
   return scaleGeo(merge(parts), Q?.k ?? 1);
 }
 export const critterLib = (k: CritterKind) => cached(`critter:${k}`, () => critterGeometry(k));
+/** How far below the water a swimming bird's feet sit (its own metres, before its size): its body's
+ *  lower third under, the waterline along its flanks (sim/critters.ts sinks it by this × its scale). */
+export function swimSink(k: CritterKind) { const B = BIRD[k]; return B ? (B.legH + 0.045 - 0.016) * (B.k ?? 1) : 0; }
 /** The painted (TINT) parts' colour in a portrait of the species — the Almanac's card, the kit viewer —
  *  where the sim paints each animal its own: the cardinal's red, the pigeon's grey, the Gila
  *  woodpecker's red cap, a monarch's orange. */
-export const CRITTER_TINT: Partial<Record<CritterKind, number>> = { cardinal: 0xc4302a, pigeon: 0x9098a4, gilawoodpecker: 0xc8302a, butterfly: 0xe8862a };
+export const CRITTER_TINT: Partial<Record<CritterKind, number>> = { cardinal: 0xc4302a, pigeon: 0x9098a4, gilawoodpecker: 0xc8302a, butterfly: 0xe8862a, loon: 0x1e2224, laughinggull: 0x1e1e22 };
 
 // A dog on a lead (life.ts walks it beside its walker): the fox plan a little bigger and
 // stockier, the coat all tintable (white) so the instance colour makes the breed's coat —
@@ -518,7 +674,9 @@ export function dogMaterial() {
 // z wing flap, w head bob (a grazer's head comes up, + ; a bird's dips to peck, −).
 // Limb swing amplitude (radians at full gait) per species.
 export const LIMB: Record<CritterKind, number> = { squirrel: 0.9, rabbit: 0.85, songbird: 0.4, sandpiper: 0.55, deer: 0.38, butterfly: 0, firefly: 0, fox: 0.7, hawk: 0.3, coyote: 0.65, jackrabbit: 0.9, snowshoe: 0.85, groundSquirrel: 0.9, muleDeer: 0.38, roadrunner: 0.75, quail: 0.5, ibis: 0.45,
-  cardinal: 0.4, bluejay: 0.4, robin: 0.55, stellersjay: 0.4, gilawoodpecker: 0.35, mourningdove: 0.5, crow: 0.5, pigeon: 0.5 };
+  cardinal: 0.4, bluejay: 0.4, robin: 0.55, stellersjay: 0.4, gilawoodpecker: 0.35, mourningdove: 0.5, crow: 0.5, pigeon: 0.5,
+  canadagoose: 0.45, mallard: 0.5, mallardhen: 0.5, loon: 0, greatblueheron: 0.35, greategret: 0.35, snowyegret: 0.45, spoonbill: 0.4, sandhillcrane: 0.35,
+  turkeyvulture: 0.2, baldeagle: 0.2, osprey: 0.25, wildturkey: 0.45, californiaquail: 0.5, brownpelican: 0.35, laughinggull: 0.5, californiagull: 0.5 };
 export const GAIT: Record<CritterKind, [number, number, number, number]> = {
   squirrel: [0.5, 0.5, 0, 0.25], rabbit: [0.3, 0.2, 0, 0.2], songbird: [0, 0.3, 1.2, -0.5], sandpiper: [3.14, 0.2, 1.1, -0.35],
   deer: [3.14, 0.4, 0, 0.12], butterfly: [0, 0, 1.3, 0], firefly: [0, 0, 0, 0], fox: [3.14, 0.45, 0, 0.2], hawk: [0, 0.2, 0.55, 0.3],
@@ -528,25 +686,44 @@ export const GAIT: Record<CritterKind, [number, number, number, number]> = {
   // crow, pigeon — one foot then the other, the robin running and stopping, the pigeon's head nodding)
   cardinal: [0, 0.3, 1.2, -0.5], bluejay: [0, 0.35, 1.15, -0.45], robin: [3.14, 0.35, 1.15, -0.6], stellersjay: [0, 0.35, 1.15, -0.45],
   gilawoodpecker: [0, 0.2, 1.1, -0.55], mourningdove: [3.14, 0.15, 1.2, -0.45], crow: [3.14, 0.2, 1.0, -0.35], pigeon: [3.14, 0.2, 1.15, -0.6],
+  // (the water and big birds all walk; a goose's and a turkey's head go right down to graze, a heron's
+  // strikes; the big wings beat slow and deep)
+  canadagoose: [3.14, 0.2, 0.9, -0.9], mallard: [3.14, 0.3, 1.05, -0.7], mallardhen: [3.14, 0.3, 1.05, -0.7], loon: [3.14, 0.1, 0.8, -0.3],
+  greatblueheron: [3.14, 0.1, 0.75, -0.75], greategret: [3.14, 0.1, 0.8, -0.7], snowyegret: [3.14, 0.15, 0.9, -0.7], spoonbill: [3.14, 0.1, 0.85, -0.6], sandhillcrane: [3.14, 0.15, 0.75, -0.7],
+  turkeyvulture: [0, 0.15, 0.4, 0.2], baldeagle: [0, 0.15, 0.5, 0.2], osprey: [0, 0.2, 0.6, 0.2], wildturkey: [3.14, 0.2, 0.9, -0.8], californiaquail: [3.14, 0.2, 1.3, -0.5],
+  brownpelican: [3.14, 0.1, 0.7, -0.3], laughinggull: [3.14, 0.2, 0.85, -0.5], californiagull: [3.14, 0.2, 0.85, -0.5],
 };
 /** Wingbeats (radians a second of the flap's sine; 38 ≈ six a second): the hawk's slow soaring
  *  strokes, a crow's steady rowing, the pigeons' and doves' clatter, the jays' and the robin's. */
-const FLAP: Partial<Record<CritterKind, number>> = { hawk: 6.5, crow: 21, pigeon: 33, mourningdove: 34, bluejay: 30, stellersjay: 30, robin: 36 };
+const FLAP: Partial<Record<CritterKind, number>> = {
+  hawk: 6.5, crow: 21, pigeon: 33, mourningdove: 34, bluejay: 30, stellersjay: 30, robin: 36,
+  // (the big birds' slow strokes; the osprey's hover a quick shallow beat; the ducks' whistling wings)
+  canadagoose: 17, mallard: 30, mallardhen: 30, loon: 26, greatblueheron: 13, greategret: 14, snowyegret: 18, spoonbill: 16, sandhillcrane: 14,
+  turkeyvulture: 8, baldeagle: 9, osprey: 16, wildturkey: 28, californiaquail: 55, brownpelican: 12, laughinggull: 18, californiagull: 17,
+};
+/** How a bird flies: 1 soars (always on the wing: wings held out at its dihedral, flapped by amount,
+ *  folded in a stoop), 3 glides (stands on the ground; on the wing glides, flapped by amount), 0 flaps
+ *  (a songbird); its wings' dihedral when held out (radians: a vulture's V, an eagle's flat plank). */
+const FLIGHT: Partial<Record<CritterKind, [number, number]>> = {
+  hawk: [1, 0.14], turkeyvulture: [1, 0.36], baldeagle: [1, 0.04], osprey: [1, 0.1],
+  greatblueheron: [3, 0.02], greategret: [3, 0.02], snowyegret: [3, 0.04], spoonbill: [3, 0.04], sandhillcrane: [3, 0.06], canadagoose: [3, 0.04],
+  brownpelican: [3, 0.0], laughinggull: [3, 0.1], californiagull: [3, 0.1],
+};
 export const flapOf = (k: CritterKind) => FLAP[k] ?? 38;
 
 /** Painted material for critters: vertex-animated joints driven by the instanced aAnim (phase, amount, pose). */
 export function critterMaterial(kind: CritterKind) {
   const g = GAIT[kind];
   return paintMaterial({
-    uniforms: { uGait: { value: new THREE.Vector4(...g) }, uLimb: { value: LIMB[kind] }, uFlap: { value: new THREE.Vector2(flapOf(kind), kind === 'hawk' ? 1 : kind === 'butterfly' ? 2 : 0) }, uWag: { value: new THREE.Vector2(0, 0) } },
+    uniforms: { uGait: { value: new THREE.Vector4(...g) }, uLimb: { value: LIMB[kind] }, uFlap: { value: new THREE.Vector3(flapOf(kind), kind === 'butterfly' ? 2 : FLIGHT[kind]?.[0] ?? 0, FLIGHT[kind]?.[1] ?? 0.14) }, uWag: { value: new THREE.Vector2(0, 0) } },
     vertex: /* glsl */ `
       attribute vec3 color;
       attribute float aPart;
       attribute vec3 aPivot;
-      attribute vec3 aAnim; // x gait phase (cycles), y gait amount 0..1, z pose (0 idle, 1 moving, 2 flying/climbing, 3 glowing)
+      attribute vec3 aAnim; // x gait phase (cycles), y gait amount 0..1, z pose (0 idle, 1 moving, 2 flying/climbing, 3 glowing, 4 displaying)
       uniform vec4 uGait;
       uniform float uLimb;
-      uniform vec2 uFlap; // x flap rate, y 1 = a soaring bird (wings held out, flap by amount, folded in a stoop), 2 a butterfly (rests wings-up)
+      uniform vec3 uFlap; // x flap rate; y 1 a soaring bird (always on the wing), 2 a butterfly (rests wings-up), 3 a glider (on the wing: held out, flapped by amount); z the wings' dihedral held out
       uniform vec2 uWag; // x > 0: the tail wags side to side (a dog) by this much, y times a second
       varying vec3 vColor;
       varying float vGlow;
@@ -561,17 +738,21 @@ export function critterMaterial(kind: CritterKind) {
         if (aPart > 0.5 && aPart < 1.5) q = rotX(sin(ph) * uLimb * amt) * q;                       // fore limbs
         else if (aPart > 1.5 && aPart < 2.5) q = rotX(sin(ph + uGait.x) * uLimb * amt) * q;        // hind limbs
         else if (aPart > 4.5 && aPart < 5.5) {                                                    // tail
-          if (uWag.x > 0.0) q = rotY(sin(uTime * uWag.y + float(gl_InstanceID) * 2.1) * uWag.x * (0.55 + 0.45 * amt)) * q;
+          if (aAnim.z > 3.5) q = rotX(-1.35 + sin(uTime * 1.7 + aAnim.x * 7.0) * 0.04) * q; // (a strutting tom's fan stood up behind him)
+          else if (uWag.x > 0.0) q = rotY(sin(uTime * uWag.y + float(gl_InstanceID) * 2.1) * uWag.x * (0.55 + 0.45 * amt)) * q;
           else q = rotX(sin(ph * 0.5) * uGait.y * (0.3 + amt) + sin(uTime * 3.1 + aAnim.x * 9.0) * 0.12 * idle) * q;
         }
         else if (aPart > 5.5 && aPart < 6.5) q = rotX((0.5 + 0.5 * sin(uTime * 2.3 + aAnim.x * 17.0)) * uGait.w * idle * step(0.5, fract(uTime * 0.21 + aAnim.x * 3.7)) + sin(ph) * 0.06 * amt) * q; // head: grazing / pecking bobs
         else if (aPart > 6.5 && aPart < 7.5) {                                                  // wings
           float sx = sign(q.x + 1e-4);
-          if (aAnim.z > 1.5 || uFlap.y > 0.5) {
+          bool flying = aAnim.z > 1.5;
+          if ((uFlap.y > 0.5 && uFlap.y < 1.5) || (uFlap.y > 2.5 && flying)) {
+            // soaring or gliding: held out at the bird's dihedral, flapped by amount (a few strokes,
+            // an osprey's hover), folded in a stoop or a plunge
+            q = rotZ(sx * (amt < 0.0 ? -0.85 : uFlap.z + sin(uTime * uFlap.x + aAnim.x * 20.0) * uGait.z * amt)) * q;
+          } else if (flying || (uFlap.y > 1.5 && uFlap.y < 2.5)) {
             // flying: a fast flap (a butterfly at rest holds its wings up)
-            float flap = aAnim.z > 1.5 ? sin(uTime * uFlap.x + aAnim.x * 20.0) * uGait.z : 1.2;
-            if (uFlap.y > 0.5 && uFlap.y < 1.5) flap = amt < 0.0 ? -0.85 : 0.14 + sin(uTime * uFlap.x + aAnim.x * 20.0) * uGait.z * amt; // soar with a shallow dihedral; stoop folded
-            q = rotZ(sx * flap) * q;
+            q = rotZ(sx * (flying ? sin(uTime * uFlap.x + aAnim.x * 20.0) * uGait.z : 1.2)) * q;
           } else {
             // perched: the wing closed along the body's side from the flank — rolled edge-down and
             // leaning in over the back, swept back so the tips cross over the rump, a breath of

@@ -116,9 +116,12 @@ describe('the casts follow the land (regionStyle → broadMix, plantMix, faunaMi
     expect(now.slice(0, before.length)).toEqual(before);
     expect(now.slice(before.length).map(([k]) => k).sort()).toEqual(['dogwood', 'hickory', 'redbud', 'redcedar', 'sweetgum', 'tuliptree']);
     // (its animals as they were; its birds the East's backyard birds, package #11 — the generic songbird
-    // still first, the robin, the cardinal, the jay, the dove, the crow and the town's pigeons with it)
-    const { songbird: birds, ...rest } = shore.fauna, { songbird: old0, ...rest0 } = faunaMix('na', 'temperate');
+    // still first, the robin, the cardinal, the jay, the dove, the crow and the town's pigeons with it —
+    // and package #12's water and big birds: the hawk still first among the raptors)
+    const { songbird: birds, raptor, waterfowl, wader, gull, fowl, ...rest } = shore.fauna, { songbird: old0, raptor: raptor0, ...rest0 } = faunaMix('na', 'temperate');
     expect(rest).toEqual(rest0);
+    expect(raptor![0]).toEqual(raptor0![0]);
+    for (const r of [waterfowl, wader, gull, fowl]) expect(r!.length).toBeGreaterThan(0);
     expect(birds![0]).toEqual(old0![0]);
     expect(birds!.map(([k]) => k)).toEqual(expect.arrayContaining(['robin', 'cardinal', 'bluejay', 'mourningdove', 'crow', 'pigeon']));
   });

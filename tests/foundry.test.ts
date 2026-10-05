@@ -5,6 +5,7 @@ import { TREE_KINDS, TREE_VARIANTS, treeGeometry, PLANT_SPECIES, plantGeometry, 
 import leafCardsSrc from '../src/render/leafCards.ts?raw';
 import { TREE_TIERS } from '../src/render/quality';
 import { CRITTERS, critterGeometry } from '../src/assets/fauna';
+import { ospreyNestGeometry } from '../src/assets/signs';
 import { MAILBOXES, mailboxGeometry, gearGeometry, gearFor, CAR_GEAR, umbrellaGeometry, picnicTableGeometry } from '../src/assets/furniture';
 import { fibCount, fibSphere, hashf, variantAt, tube } from '../src/assets/core';
 import { personGeometry, personLiteGeometry, HAIRSTYLES, MARK, warmthFor } from '../src/assets/people';
@@ -648,6 +649,14 @@ describe('fauna', () => {
     expect(partCount(dog, 5)).toBeGreaterThan(0);
     const hb = new THREE.Box3().setFromBufferAttribute(critterGeometry('hawk').getAttribute('position') as THREE.BufferAttribute);
     expect(hb.max.x - hb.min.x).toBeGreaterThan(0.5); // a raptor's wingspan, not a songbird's
+  });
+  it("the signs of life: the osprey's nest on its pole, finite, standing on its foot, within budget", () => {
+    const g = ospreyNestGeometry();
+    expect(finite(g)).toBe(true);
+    expect(Math.abs(bb(g).min.y)).toBeLessThan(0.05);
+    expect(bb(g).max.y).toBeGreaterThan(7.5); // (the nest atop a 7.5 m pole)
+    expect(bb(g).max.x - bb(g).min.x).toBeGreaterThan(1.6); // (a heap wider than its platform)
+    expect(verts(g)).toBeLessThan(600);
   });
 });
 

@@ -36,6 +36,8 @@ import { playLib, PLAY_KINDS, PLAY_PAINT, PLAY_FOOT, type PlayKind } from '../as
 import { beachSeason, beachLotFill, marinaSeason, windowFor, worldDate } from './calendar';
 import { seaLevel, type Berth } from './docks';
 import { GUARD_SEAT, type Gear, type Stand } from './crowd';
+import { faunaMix } from '../assets/fauna';
+import { ospreyNestGeometry, ospreyNests } from '../assets/signs';
 
 type P = [number, number];
 /** The hours a thing is there for when it's there all day (calendar.ts windows). */
@@ -1557,6 +1559,21 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       beachStands.push({ x, y: terrain.heightAt(x, z), z, yaw: Math.atan2(gx, gz) });
       walk.addLoop([[x - 1, z - 0.9], [x + 1, z - 0.9], [x + 1, z + 0.9], [x - 1, z + 0.9]]);
     }
+
+  // ---------- osprey nests on their platform poles at the water's edge ----------
+  // (models.md's osprey-nest, the `sign†` genome: a marsh's, a river's, a lake's — wherever the place's
+  // raptors include the osprey; the nest stands the year round, the bird is the sim's in its season)
+  if (faunaMix('na', clim, cast0).raptor?.some(([k]) => k === 'osprey')) {
+    const at = ospreyNests(SZ, (x, z) => terrain.sdfAt(x, z), (x, z) => terrain.heightAt(x, z)).filter((n) => inSlice(n.x, n.z) && walk.deckAt(n.x, n.z) === null);
+    if (at.length) {
+      const im = new THREE.InstancedMesh(ospreyNestGeometry().clone(), propMaterial(), at.length);
+      im.name = 'osprey-nest';
+      at.forEach((n, i) => im.setMatrixAt(i, new THREE.Matrix4().compose(V(n.x, n.y, n.z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), n.yaw), V(1, 1, 1))));
+      im.layers.enable(1);
+      im.computeBoundingSphere();
+      group.add(im);
+    }
+  }
 
   // ---------- parked cars at the house end of real driveways ----------
   // keyed type|gear: every car of a type still differs — proportions breathe ±3–4 % per car, paint

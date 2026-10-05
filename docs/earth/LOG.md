@@ -2,6 +2,67 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-05 — Regional life (12): the water and big birds
+
+Package #12 of `docs/regional-life/models.md`: on the ponds and lakes, at their edges, on the beaches and
+the lots, walking the fields and over our heads. Robby asked for "amazing animation"; each bird here moves
+as its row says.
+
+- **The bird plan** (`fauna.ts BirdPlan`): the long neck (`neck`: two tapering pieces with an S, the head
+  on its end, the whole of it bending at the base — a goose grazing, a heron's strike), the bills (`flat`,
+  `dagger`, `spoon`, `pouch`, `hook`), `cheek` (a goose's chinstrap), `wattle`, `wingTip` (a gull's black
+  primaries), `trail` (a vulture's silver flight feathers: `broadWing` takes a chord band), `noLegs` (the
+  loon). The bare heads are a hood and a small head.
+- **How they fly** (`critterMaterial`, `FLIGHT`): soaring (always on the wing, held out at the bird's own
+  dihedral — a vulture's V, a hawk's shallow one, an eagle's flat plank — flapped by amount, folded in a
+  stoop or a plunge), gliding (herons, cranes, geese, gulls, pelicans: they stand on the ground, and on
+  the wing glide with a few strokes), flapping (the rest). `uFlap` is a vec3 now (rate, mode,
+  dihedral). And a display pose (4): a turkey tom's fan stood up behind him.
+- **The seventeen birds**: Canada goose (the black neck, the white chinstrap), mallard drake and hen (the
+  green head and white collar, the chestnut breast; the hen mottled, the same blue speculum), common loon
+  (summer black, winter grey), great blue heron, great and snowy egret, roseate spoonbill, sandhill crane,
+  turkey vulture, bald eagle, osprey, wild turkey, California quail (the plume curling forward), brown
+  pelican, laughing gull (the black hood gone white in winter), California gull. 708–1,008 vertices (the
+  nest 588).
+- **New roles** (`sim/critters.ts`): `waterfowl` — on the water at its own level (the sea's 0; a lake's
+  its bank's lowest ground, as synth.ts lays the sheet), sunk by `swimSink`, paddling, never leaving it;
+  geese grazing the lawns by it; a loon slipping under when you come close and surfacing well away;
+  `wader` — at the water's edge, frozen for seconds between slow steps, off at once and heavy when you
+  come; `gull` — on the beach and a coastal town's lots and plazas (a California gull's inland lots and
+  fields too), lifting off now and then to wheel and come down again (`glide`, `alight`); pelicans
+  skimming the waves in lines (`skim`) or rafted on the water; `fowl` — turkeys and cranes walking the
+  fields in flocks, running from you first and flying only when pressed. Flocks keep together (half a
+  flock bird's steps are toward one of its own) and come down by their own.
+- **Raptors by species**: the vultures a kettle on one thermal, teetering, rarely a wingbeat, and never a
+  stoop (`STOOPS`: the hawk's alone); the eagle only near big water; the osprey low over the water,
+  stopping to hover, then plunging feet-first (a splash, a fish: `eco.caught`).
+- **Where and when** (`fauna.ts WATER`, `SEASON`; `faunaMix` takes the month — the north's, the south's
+  turned round): the spoonbill on the Florida, Gulf and Texas coasts; the laughing gull on the East and
+  Gulf coasts (summer in the north), the California gull in the West and the Great Basin; the pelican on
+  the southern and Californian coasts, a summer visitor to New Jersey and Washington; the loons on the
+  northern lakes in summer and the coasts in winter; the vultures, ospreys and great egrets south for the
+  winter; the cranes resident in Florida, passing through the Plains in March and October, wintering in
+  Texas, the desert and California. The California quail takes the desert quail's place in California,
+  the dry Northwest and the Great Basin.
+- **The osprey's nest** (`assets/signs.ts`, the `sign†` genome's first): a stick heap on a platform pole
+  1–6 m out from the bank, one at most to a 700 m cell, a cell deciding for itself whichever tile asks
+  (`ospreyNests`); props.ts plants them where the place's raptors include the osprey.
+- Reviewed in the scratch bird studio: the goose's neck was a stub and its chinstrap inside its head;
+  the review fixed both.
+
+**Verified:** typecheck; `npm test` 953/953; `tests/waterBirds.test.ts` (new: each region's birds and
+their ranges; each in its season; the plan's parts; on a lake — swimmers at its level and staying on it,
+geese on the lawn, herons at the edge, turkeys in flocks; the loon's dive, the heron's flush, a goose
+paddling off; on a beach — gulls on the sand and wheeling, pelicans skimming, a vulture that never
+stoops, an osprey that hovers and plunges; the strutting tom; the nests at the edge, one to a cell, the
+same however the land is tiled); `tests/foundry.test.ts` (the nest's budget, under 600); shader check 24
+programs, no errors; the shore's playtest (`tools/playtest.mjs --region=shore --quick --swiftshader`): booted,
+overlaps, doors, posts, walkabout and drive passing at commit time.
+
+**Next:** package #13, the mammals on the existing bases (the coat patterns and tail types first: the
+raccoon, opossum, skunk; fox squirrel, chipmunk, woodchuck, beaver with its lodge and dam; the prairie
+dog; antlers and horns, then elk, moose, pronghorn, bighorn).
+
 ## 2026-10-05 — Fix: the shore didn't boot (the fields' wash)
 
 CI's playtest went red on 7db0be9 (package #10): the shore stopped at "paint" with `TypeError: Cannot
