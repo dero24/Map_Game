@@ -77,7 +77,7 @@ export class Furnisher {
   constructor(readonly P: Plan, readonly fp: Footprint, readonly L: Layout, readonly m: Mesher, readonly inst: Instancer, public rng: Rng, leaves: LeafSpot[], readonly ceil: (k: number) => number) {
     this.d = new Draw(P, m);
     this.LP = new LocalPoly(P.loc);
-    this.M = { kind: P.kind, eave: fp.eave, fo: fp.floor0 - fp.base, glass: !!P.glass };
+    this.M = { kind: P.kind, eave: fp.eave, fo: fp.floor0 - fp.base, glass: !!P.glass, shop: !!fp.gf };
     this.plates = (P.plates ?? []).map((p) => ({ from: p.from, LP: new LocalPoly(p.loc), M: { ...this.M, eave: p.eave, glass: !!p.glass } }));
     this.use = fp.kind === 'commercial' ? useOf(fp.name, fp.use) : 'unknown';
     this.wood = WOOD[Math.floor(rng.float() * WOOD.length)];

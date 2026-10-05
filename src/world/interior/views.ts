@@ -18,7 +18,7 @@ const PANE_H = 1.35 - 0.16;
  *  north, clockwise: east 90, south 180) — the facade's own window cells (plan.ts wallWindows) whose
  *  middles open onto that room. The local frame is the plan's; +x east, +z south in the world. */
 export function glassFacing(P: Plan, fp: Footprint, L: Layout, lo = 90, hi = 180, k = 0): RoomGlass[] {
-  const M = { kind: P.kind, eave: fp.eave, fo: fp.floor0 - fp.base, glass: !!P.glass };
+  const M = { kind: P.kind, eave: fp.eave, fo: fp.floor0 - fp.base, glass: !!P.glass, shop: !!fp.gf };
   const loc = P.loc, ccw = polyArea(loc) > 0;
   const acc = new Map<number, { g: number; u: number; v: number; nu: number; nv: number }>();
   for (let i = 0; i < loc.length; i++) {
@@ -63,7 +63,7 @@ export interface Stance { x: number; z: number; yaw: number; pitch: number; feet
  *  where furniture stands (`taken`: the floor it claims, furnish.ts), the light's on that instead. */
 export function poolOn(P: Plan, fp: Footprint, R: Room, sun: [number, number, number], k = 0, taken: readonly Rect[] = []): P2[] {
   if (sun[1] < 0.05) return [];
-  const M = { kind: P.kind, eave: fp.eave, fo: fp.floor0 - fp.base, glass: !!P.glass };
+  const M = { kind: P.kind, eave: fp.eave, fo: fp.floor0 - fp.base, glass: !!P.glass, shop: !!fp.gf };
   const su = sun[0] * P.ux + sun[2] * P.uz, sv = sun[0] * P.vx + sun[2] * P.vz; // (toward the sun, local)
   const loc = P.loc, ccw = polyArea(loc) > 0, r = R.r, out: P2[] = [];
   for (let i = 0; i < loc.length; i++) {
@@ -119,7 +119,7 @@ export function sunniest(homes: readonly { P: Plan; fp: Footprint; L: Layout }[]
 /** Whether a point of room R's floor (local u, v) lies in the sun: the shader's pools — from it toward
  *  the sun and out through a pane of one of the room's own facade window cells (the panes poolOn casts). */
 function sunlit(P: Plan, fp: Footprint, R: Room, sun: [number, number, number], k: number) {
-  const M = { kind: P.kind, eave: fp.eave, fo: fp.floor0 - fp.base, glass: !!P.glass };
+  const M = { kind: P.kind, eave: fp.eave, fo: fp.floor0 - fp.base, glass: !!P.glass, shop: !!fp.gf };
   const su = sun[0] * P.ux + sun[2] * P.uz, sv = sun[0] * P.vx + sun[2] * P.vz, r = R.r;
   const loc = P.loc, ccw = polyArea(loc) > 0;
   const walls: { a: P2; eu: number; ev: number; nu: number; nv: number; len: number; toward: number; W: NonNullable<ReturnType<typeof wallWindows>> }[] = [];

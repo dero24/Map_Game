@@ -213,7 +213,10 @@ export class LocalPoly {
 }
 
 // ---------------- the facade's windows (as the interior walls draw them) ----------------
-export interface WinModel { kind: number; eave: number; fo: number; glass?: boolean }
+/** `shop`: a storefront street floor under apartments (Footprint.gf) — its ground storey glazed as a
+ *  shop's, as the facade draws it (Robby, Brooklyn: the shop window open whole, the interior's wall
+ *  behind it cut a sash window's hole: "just a tiny square") */
+export interface WinModel { kind: number; eave: number; fo: number; glass?: boolean; shop?: boolean }
 /** Window cells on a wall of length `len` at storey fi — the interior walls' windowAt
  *  (buildings.ts GLSL_WINDOWS) with every cell glazed. null: no windows there on that storey. */
 type Wins = { n: number; cellW: number; half: number } | null;
@@ -232,7 +235,7 @@ function windowsOf(len: number, fi: number, M: WinModel): Wins {
   if (k > 4.5 || len <= 2) return null;
   const shop = k > 1.5 && k < 2.5, large = k > 2.5 && k < 3.5, church = k > 3.5;
   const fH = shop ? 3.8 : large ? 3.1 : church ? 60 : 2.9;
-  const store = shop && fi === 0;
+  const store = (shop || !!M.shop) && fi === 0;
   // a curtain wall (buildings.ts): glass from the spandrel to the slab between mullions every
   // 1.5 m from the wall's start — a partition meets it on a mullion
   if (M.glass && !store) return fi * fH >= M.eave - M.fo - 0.25 ? null : { n: Math.max(1, Math.ceil(len / 1.5 - 1e-6)), cellW: 1.5, half: 0.55 };
@@ -1102,7 +1105,7 @@ export function planInterior(fpKey: string, fp: Footprint, door: Door, seed: num
   };
   shape(plates.length > 0);
   if (fp.glass) P.glass = 1;
-  const C: Ctx = { P, LP, M: { kind, eave: fp.eave, fo: fp.floor0 - fp.base, glass: !!fp.glass }, rng, fH: floorH };
+  const C: Ctx = { P, LP, M: { kind, eave: fp.eave, fo: fp.floor0 - fp.base, glass: !!fp.glass, shop: !!fp.gf }, rng, fH: floorH };
   // how much of the outline the rectangles cover; a ragged one keeps the open plan
   const cover = (rectArea(main) + annex.reduce((s, a) => s + rectArea(a), 0)) / area;
   const doorIn = Math.abs(ud - main.u0) < 0.6 && vd > main.v0 + 0.4 && vd < main.v1 - 0.4;

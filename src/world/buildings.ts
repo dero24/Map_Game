@@ -34,6 +34,9 @@ export interface Footprint {
   door?: number;
   pitched?: boolean;
   front?: boolean; // a storefront (shop, or apartments over shops): paved to the kerb
+  /** a storefront street floor under apartments: the facade shader's kind +0.04 (windowAt's `gf`),
+   *  its ground storey glazed as a shop's — the interior's walls cut the same glass (plan.ts) */
+  gf?: 1;
   /** The tiers standing on it (building:part pieces lifted onto this building — a tower on its
    *  podium, a wedding cake's setbacks): outline, bottom and top (absolute). Its storeys go on up
    *  inside them (interior/plan.ts plates). */
@@ -1582,7 +1585,7 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
         }
       }
     }
-    const fp: Footprint = { ring, base, top: wallTop, floor0, raise, name: bd.n, use: bd.u, addr: bd.ad, kind: bd.k, eave: wallTop - base, seed: r1, id, pitched: !!roofG, front: bd.k === 'commercial' || !!bd.gf || (!!bd.u && bd.k !== 'house' && bd.k !== 'shed'), ...(rc.siding === SIDING.glass ? { glass: 1 as const } : {}) };
+    const fp: Footprint = { ring, base, top: wallTop, floor0, raise, name: bd.n, use: bd.u, addr: bd.ad, kind: bd.k, eave: wallTop - base, seed: r1, id, pitched: !!roofG, front: bd.k === 'commercial' || !!bd.gf || (!!bd.u && bd.k !== 'house' && bd.k !== 'shed'), ...(rc.siding === SIDING.glass ? { glass: 1 as const } : {}), ...(bd.gf && (bd.k === 'large' || bd.k === 'house') && rc.siding !== SIDING.glass ? { gf: 1 as const } : {}) };
     // a tier of a taller building (its part, lifted onto the outline or the tier under it): its
     // storeys are the building's too, up inside it
     if (lifted && part && bd.po != null && bd.po >= 0 && !bd.cn) {

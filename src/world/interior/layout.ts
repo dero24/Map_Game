@@ -82,7 +82,7 @@ class Builder {
   private plates: { LP: LocalPoly; M: WinModel }[];
   constructor(readonly P: Plan, readonly fp: Footprint, public rng: Rng) {
     this.LP0 = new LocalPoly(P.loc);
-    this.M0 = { kind: P.kind, eave: fp.eave, fo: fp.floor0 - fp.base, glass: !!P.glass };
+    this.M0 = { kind: P.kind, eave: fp.eave, fo: fp.floor0 - fp.base, glass: !!P.glass, shop: !!fp.gf };
     this.plates = (P.plates ?? []).map((p) => ({ LP: new LocalPoly(p.loc), M: { ...this.M0, eave: p.eave, glass: !!p.glass } }));
   }
   /** Storey k's outline and window model: the footprint's, or its tier's (a tower's storeys). */

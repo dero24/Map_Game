@@ -245,6 +245,8 @@ export class Interiors {
     if (inside >= 0) {
       for (const [fi] of this.plans) if (this.walkId(fi) === inside) { target = fi; break; }
     }
+    // (at a shut door, that door's building: shutDoor holds the focus there)
+    if (target === null && this.leaf !== null) return;
     // An opened (or still-closing) house keeps the focus until its wash has run out —
     // switching mid-open used to snap its windows and door shut in one frame.
     if (target === null && this.active !== null && this.openAmt > 0.001) return;
@@ -288,13 +290,16 @@ export class Interiors {
     }
     const ready = key !== null && key === this.active && !!this.mesh && this.openAmt > 0.5;
     const want = key !== null && !ready && !this.failed.has(key) ? key : null;
+    // (the door you stand at is the one building, whatever stands open beside it: a shop's open
+    // neighbour kept the focus — it stays open while you're within 10 m of it — and the door you
+    // were at stayed shut for good. Robby, Sea Bright: "buildings i cannot go inside anymore")
+    if (want !== null && want !== this.active) this.activate(want);
     if (want === this.leaf) return;
     if (this.leaf !== null) this.walk.removeScope(LEAF_SCOPE);
     this.leaf = want;
     if (want === null) return;
     const d = this.plans.get(want)!.door, tx = -d.nz, tz = d.nx, h = d.w / 2 + 0.2;
     this.walk.withScope(LEAF_SCOPE, () => this.walk.addWall([d.x - tx * h, d.z - tz * h], [d.x + tx * h, d.z + tz * h]));
-    if (want !== this.active && this.openAmt <= 0.001) this.activate(want);
   }
 
   get activeIndex() { return this.active; }
@@ -741,8 +746,10 @@ export class Interiors {
       }
     }
     for (const [ring, y0, y1, eave, glass] of bands) {
-      // (a curtain wall's siding code rides in the kind's fraction, as on the facade: glazed floor to ceiling)
-      m.setInfo(fp.id, kind + (glass ? 0.46 : 0), fp.floor0 - fp.base);
+      // (a curtain wall's siding code rides in the kind's fraction, as on the facade: glazed floor to ceiling;
+      // and +0.04, a storefront floor under apartments, as on the facade — its shop glass cut whole: the
+      // wall behind a Brooklyn shop window cut a sash window's hole, "just a tiny square")
+      m.setInfo(fp.id, kind + (glass ? 0.46 : fp.gf ? 0.04 : 0), fp.floor0 - fp.base);
       for (let i = 0; i < ring.length; i++) {
         const p = ring[i], q = ring[(i + 1) % ring.length];
         const dx = q[0] - p[0], dz = q[1] - p[1], len = Math.hypot(dx, dz);
