@@ -41,7 +41,8 @@ describe('flora', () => {
       // (the shrubs; the rosebay's laurel hell, low and sprawling, and the chaparral's manzanita; the
       // longleaf's grass stage, under a metre; the desert's cacti and shrubs, and its young spears)
       const low = k === 'shrub' || k === 'willowshrub' ? 1.5 : k === 'rosebay' || k === 'manzanita' ? 3.5 : k === 'longleaf' && v === 0 ? 0.6
-        : k === 'pricklypear' || k === 'cholla' ? 0.8 : k === 'creosote' || k === 'sagebrush' ? 1.8 : (k === 'saguaro' || k === 'joshua' || k === 'ocotillo' || k === 'utahjuniper') && v === 0 ? 2.5 : 5;
+        : k === 'pricklypear' || k === 'cholla' ? 0.8 : k === 'creosote' || k === 'sagebrush' || k === 'sawpalmetto' ? 1.2
+          : (['saguaro', 'joshua', 'ocotillo', 'utahjuniper', 'sabal', 'queenpalm', 'canarypalm'] as TreeKind[]).includes(k) && v === 0 ? 2.5 : 5;
       expect(meta.h, `${k}:${v}`).toBeGreaterThan(low);
       expect(meta.h).toBeLessThan(14);
       expect(meta.crownR).toBeGreaterThan(0.5);
@@ -407,6 +408,41 @@ describe('flora', () => {
     expect(treeHeight4('saguaro', 0, 0, false)).toBeGreaterThanOrEqual(2);
     for (const k of ['pricklypear', 'cholla', 'sagebrush'] as const) for (let v = 0; v < TREE_VARIANTS; v++) expect(treeHeight4(k, v, 1, false)).toBeLessThanOrEqual(2.6);
     expect(treeHeight4('joshua', 2, 1, false)).toBeLessThanOrEqual(12);
+  });
+  // Package #8 (models.md build order 8): the palms and the palmettos
+  it("the palms: the cabbage palmetto's round head of folded fans on its booted trunk, the saw palmetto's clumps, the royal palm's crownshaft, the queen's dates, the Canary's crown; every frond above the ground, thrown about in a gust", () => {
+    const coloured = (k: TreeKind, v: number, hex: number) => {
+      const C = treeGeometry(k, v).geo.getAttribute('color'), c = new THREE.Color(hex);
+      let n = 0;
+      for (let i = 0; i < C.count; i++) if (Math.abs(C.getX(i) - c.r) < 1e-4 && Math.abs(C.getY(i) - c.g) < 1e-4 && Math.abs(C.getZ(i) - c.b) < 1e-4) n++;
+      return n;
+    };
+    const PALMS: TreeKind[] = ['sabal', 'sawpalmetto', 'royalpalm', 'queenpalm', 'canarypalm'];
+    for (const k of PALMS) {
+      expect(NEAR_KINDS.has(k)).toBe(false); // (fronds are already fronds: the far model at every distance)
+      expect(MOTION_OF[k]).toBe(4);
+      for (let v = 0; v < TREE_VARIANTS; v++) expect(bb(treeGeometry(k, v).geo).min.y, `${k}:${v} into the ground`).toBeGreaterThan(-0.45);
+    }
+    expect(MOTION_OF.palm).toBe(4);
+    expect(MOTION_OF.fanpalm).toBe(4);
+    // the cabbage palmetto: young, its fans from the ground; grown, the boots up its trunk; a round head —
+    // fans standing up over the crown as well as arching below it
+    expect(treeGeometry('sabal', 0).meta.h).toBeLessThan(4);
+    expect(coloured('sabal', 1, 0x7a6646)).toBeGreaterThan(coloured('sabal', 2, 0x7a6646));
+    const sb = treeGeometry('sabal', 1), top = bb(sb.geo).max.y;
+    expect(top - sb.meta.crownBottom).toBeGreaterThan(1.6);
+    // the saw palmetto's clump wider than it stands
+    const sp = bb(treeGeometry('sawpalmetto', 1).geo);
+    expect(sp.max.x - sp.min.x).toBeGreaterThan(sp.max.y);
+    // the royal palm's green crownshaft and its swollen trunk; the queen palm's orange dates; the Canary
+    // palm's huge crown on its thick trunk
+    for (let v = 0; v < TREE_VARIANTS; v++) expect(coloured('royalpalm', v, 0x5e7c3a), `crownshaft ${v}`).toBeGreaterThan(0);
+    expect(coloured('queenpalm', 2, 0xd8862a)).toBeGreaterThan(0);
+    for (let v = 0; v < TREE_VARIANTS; v++) expect(treeGeometry('canarypalm', v).meta.crownR, `canary ${v}`).toBeGreaterThan(2.5);
+    expect(treeGeometry('canarypalm', 1).meta.trunkR).toBeGreaterThan(2 * treeGeometry('queenpalm', 1).meta.trunkR);
+    // at their heights: the royal the tallest; the saw palmetto under 2.4
+    expect(treeHeight4('royalpalm', 2, 1, false)).toBeGreaterThan(treeHeight4('sabal', 2, 1, false));
+    for (let v = 0; v < TREE_VARIANTS; v++) expect(treeHeight4('sawpalmetto', v, 1, false)).toBeLessThanOrEqual(2.4);
   });
   it('the leaf cards\' flags round-trip: leaf fall, a 3-bit fall hue, a 3-bit blossom, the motion', () => {
     for (const falls of [false, true]) for (let hue = 0; hue < 8; hue++) for (let bloom = 0; bloom < 8; bloom++) for (let motion = 0; motion < 4; motion++) {

@@ -15,8 +15,9 @@ import { makeCanvas } from './canvas';
 import { pointInRing, ringTester } from './realTile';
 import { activeStyle, castOf, pickWeighted, westside as isWestside } from './styles';
 import { hangerLib, hangerMix, HANGERS, HANG_TONES, type HangerType } from '../assets/hangers';
+import { meanTemp } from './season';
 import { caFogBelt, caRedwoodBelt } from './ecoregions';
-import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, broadMix, coniferMix, aspenShare, willowThickets, snagShare, NEEDLED, plantLib, inBloom, SPECIES, STAGES, fallHueOf, DECIDUOUS, BLOSSOM_OF, MOTION_OF, bankMix, redcedarShare, rosebayShare, understoryTrees, SMALL_TREE, treeHeight4, southPineForm, swampMix, swampForm, manzanitaShare, westForm, sequoiaBand, SEQUOIA_GROVE, redwoodCountry, desertMix, desertTrees, STIFF, type PlantSpecies, type TreeKind } from '../assets/flora';
+import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, broadMix, coniferMix, aspenShare, willowThickets, snagShare, NEEDLED, plantLib, inBloom, SPECIES, STAGES, fallHueOf, DECIDUOUS, BLOSSOM_OF, MOTION_OF, bankMix, redcedarShare, rosebayShare, understoryTrees, SMALL_TREE, treeHeight4, southPineForm, swampMix, swampForm, manzanitaShare, westForm, sequoiaBand, SEQUOIA_GROVE, redwoodCountry, desertMix, desertTrees, STIFF, palmMix, palmettoShare, type PlantSpecies, type TreeKind } from '../assets/flora';
 import { MAILBOXES, mailboxLib, beachLib, gearFor, type MailboxStyle, type CarGear } from '../assets/furniture';
 import { variantAt, hashf } from '../assets/core';
 import { cafeSet, mergeDecor } from '../assets/decor';
@@ -853,6 +854,12 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     const m = desertMix(cast0, terrain.heightAt(x, z), latAt(x, z));
     return m.length ? pickOf(m, hashf(Math.floor(x * 3.7) * 7919 + Math.floor(z * 2.9) * 104729 + 307)) : -1;
   };
+  // (package #8: the palms — South Florida's tropical mix, the dry coasts' and the warm deserts' planted
+  // ones where the winter lets them, a January mean above 3.5 °C: never Reno's, Albuquerque's or Denver's —
+  // and the saw palmetto under the southern pines)
+  const PALMS_T = palmMix(cast0, 'tropical'), PALMS_D = palmMix(cast0, 'dry');
+  const palmsGrow = (x: number, z: number) => { const [lat, lon] = toLatLon(json.origin, x, z); return meanTemp(lat, lon, terrain.heightAt(x, z), 20) > 3.5; };
+  const SAWPALMETTO = KI('sawpalmetto');
   const dryTree = (x: number, z: number) => {
     const m = desertTrees(cast0, terrain.heightAt(x, z), latAt(x, z));
     return m.length ? pickOf(m, hashf(Math.floor(x * 2.9) * 104729 + Math.floor(z * 3.3) * 7919 + 311)) : -1;
@@ -897,22 +904,24 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     // (Appalachia's creeks walled in rosebay: the laurel hells)
     if (k === 2 && rosebay && terrain.sdfAt(x, z) < 30 && terrain.oceanDistAt(x, z) > 250 && hashf(Math.floor(x * 3.3) * 104729 + Math.floor(z * 2.7) * 7919 + 223) < rosebayShare(cast0, true, false)) return ROSEBAY;
     // (the chaparral's manzanita, red-stemmed among the scan's shrubs — not down by the creek)
+    if (k === 2 && hashf(Math.floor(x * 3.1) * 104729 + Math.floor(z * 1.9) * 7919 + 233) < palmettoShare(cast0, mapCover(x, z) === 10)) return SAWPALMETTO;
     if (k === 2 && manzanita > 0 && terrain.sdfAt(x, z) > 25 && hashf(Math.floor(x * 2.9) * 7919 + Math.floor(z * 3.9) * 104729 + 229) < manzanita) return MANZANITA;
     // (the dry country's shrubs — and a pine pick where no conifer grows: the low desert has none)
     if (k >= 2 && k <= 4) { const d = dryShrub(x, z); if (d >= 0) return d; }
     if (k > 1) return k;
     if (k === 0 && aspenAt(x, z)) return ASPEN;
     const u = hashf(Math.floor(x * 3.1) * 7919 + Math.floor(z * 2.7) * 104729);
-    // palms by climate: coconut palms in the tropics, Washingtonia fan palms on dry coasts
-    if (tropical && u < 0.75) return 5;
-    if (aridCoast && terrain.oceanDistAt(x, z) < 1500 && u < 0.4) return 8;
+    // palms by climate: the tropics' (coconut, and South Florida's royal, cabbage and queen palms), and the
+    // dry coasts' and the warm deserts' planted fan, queen and Canary palms — where the winter lets them
+    if (tropical && u < 0.75) return pickOf(PALMS_T, u / 0.75);
+    if (aridCoast && u < 0.4 && palmsGrow(x, z)) return pickOf(PALMS_D, u / 0.4);
     // the desert's own shade trees: mesquite and palo verde (a few fan palms in town) — and down a wash or
     // by a river, its gallery of Fremont cottonwoods and willows
     if (desert && terrain.sdfAt(x, z) < 40 && terrain.oceanDistAt(x, z) > 250 && hashf(Math.floor(x * 2.3) * 7919 + Math.floor(z * 1.7) * 104729 + 271) < 0.55) return BANK[pickWeighted(BANK.map(([, w]) => w), hashf(Math.floor(x * 1.3) * 104729 + Math.floor(z * 3.3) * 7919 + 277))][0];
     // (the desert's own trees: the Mojave's Joshua trees, Arizona's saguaros, the piñon-juniper in its band;
     // the Great Basin's towns grow the region's planted shade trees, never mesquite)
     if (desert && u >= 0.14) { const d = dryTree(x, z); if (d >= 0) return d; }
-    if (desert && cast0.eco !== 'great-basin') return u < 0.14 ? 8 : 7;
+    if (desert && cast0.eco !== 'great-basin') return u < 0.14 && palmsGrow(x, z) ? 8 : 7;
     if (birchy && k === 0 && u < 0.35) return 6;
     return broad(k, x, z, ratio, h);
   };
@@ -1380,6 +1389,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     // creosote's dark glossy olive, the piñon's grey-green, the Utah juniper's yellowish grey-green, the
     // Ashe juniper's dark, the sagebrush's silver)
     ocotillo: [0x6e9a3a, 0.6], joshua: [0x7a8c48, 0.6], creosote: [0x5a6a32, 0.6], pinyon: [0x3c5232, 0.55], utahjuniper: [0x6a7a4e, 0.55], ashejuniper: [0x3a5032, 0.6], sagebrush: [0x9aa48c, 0.75],
+    // (package #8: the cabbage palmetto's deep green, the saw palmetto's silver-blue-green, the royal
+    // palm's bright, the queen palm's, the Canary palm's dark olive)
+    sabal: [0x4e6a34, 0.5], sawpalmetto: [0x6a8a64, 0.55], royalpalm: [0x4e7a34, 0.5], queenpalm: [0x5a7e3a, 0.5], canarypalm: [0x566c34, 0.5],
   };
   // Trees from the foundry (assets/flora.ts): one InstancedMesh per species × grown variant.
   // Trunks keep their bark: instance colour only tints foliage (vertex color white there).

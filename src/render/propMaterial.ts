@@ -38,7 +38,8 @@ import { SIGNAL_GLSL } from '../sim/traffic';
 // motion (flora.ts MOTION_OF): 1 an aspen's round leaves trembling on their flat stalks — each leafy
 // vertex shivering fast and small, the crown shimmering as the pale undersides flash, more as the wind
 // rises; 2 the dogwood's flat tiers bobbing, each on its own beat, the outer ends most; 3 the longleaf's
-// long needles tossing in brushes, gust by gust (its grass stage a shivering fountain).
+// long needles tossing in brushes, gust by gust (its grass stage a shivering fountain); 4 a palm's
+// fronds thrown about from its crown in a gust and leaning downwind, the tips most (far models only).
 // Every tree's bark a shade of its own (its number from where it stands).
 // treeLod: a tree's two models (world/nearTrees.ts). 'far' (TREE_LOD 1): a tile's trees, the solid
 // lobed crowns — the near-tree layer marks the trees it draws close up (`aNear`, per instance), and
@@ -160,10 +161,24 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
               // the dogwood's tiers bobbing: each flat tier (a metre or so apart) rising and falling on its
               // own beat, its outer ends most
               p.y += leafF * sin(uTime * 1.7 + floor(position.y * 1.1) * 2.3 + vTree * 6.28) * 0.07 * (0.35 + uWind) * clamp(length(position.xz) / 2.2, 0.0, 1.0);
-            #else
+            #elif MOTION == 3
               // the longleaf's needles tossing: each brush thrown about, gust by gust, more as the wind rises
               float tph = dot(position, vec3(3.1, 2.3, 2.9)) + vTree * 23.0, gust = 0.55 + 0.45 * sin(uTime * 0.9 + vTree * 5.0);
               p += (normal * 0.6 + vec3(sin(uTime * 5.1 + tph * 1.3), 0.0, cos(uTime * 4.3 + tph * 1.1)) * 0.5) * leafF * sin(uTime * 6.5 + tph) * 0.06 * (0.3 + uWind) * gust;
+            #else
+              // a palm's fronds thrown about from its crown, the tips most: leaning downwind (the clouds'
+              // way) as the wind rises, and when a gust comes through — each palm its own, out of step with
+              // the next — tossing and rattling, bent down by it (far models only: no card has this)
+              vec3 hd = position - vec3(0.0, uCrown.x, 0.0);
+              float reach = clamp(length(hd) / max(uCrown.y, 0.5), 0.0, 1.4);
+              float gph = uTime * 0.55 + vTree * 6.28 + dot(origin.xz, vec2(0.011, 0.017));
+              float gust = smoothstep(0.3, 1.0, (0.5 + 0.5 * sin(gph)) * (0.5 + 0.5 * sin(gph * 0.43 + 2.0)) * 1.6);
+              float fph = dot(position, vec3(1.7, 0.9, 1.3));
+              vec3 dw = normalize(transpose(mat3(m)) * vec3(0.88, 0.0, 0.47));
+              float amp = leafF * reach * reach * (0.05 + 0.14 * uWind + 0.4 * gust * (0.3 + uWind));
+              p += dw * amp * (0.65 + 0.35 * sin(uTime * 1.9 + fph));
+              p += vec3(sin(uTime * 7.3 + fph * 2.0), 0.5 * sin(uTime * 5.9 + fph), cos(uTime * 6.7 + fph * 1.7)) * amp * 0.3 * gust;
+              p.y -= amp * 0.35 * gust;
             #endif
           #endif
           #ifdef WEEP

@@ -2,6 +2,50 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-05 — Regional life (8): the palms and the palmettos
+
+Package #8 of `docs/regional-life/models.md`: five kinds appended to `TREE_KINDS` (69–73), three forms
+each, far models only (fronds are already fronds), and a motion for every palm.
+
+- **Fans** (`flora.ts fanFrond`): accordion-pleated, the segments' tips split, the whole fan folded into a
+  shallow V along its middle and arching down at its rim, both faces.
+  - **Cabbage palmetto** (`sabal`): a round head of fans — the young ones standing up over the crown, the
+    old arching below it — on a trunk clad high up in its crisscross boots (an old one's all but fallen),
+    no skirt. v0 young (its fans from the ground), v1 grown, v2 old (tall, slender, leaning).
+  - **Saw palmetto**: stiff fans held up on stalks from stems creeping along the sand; one crown, a clump
+    of three, an old colony.
+- **Feathers** (`featherFrond`: two leaflet cards crossed along the rachis, each side's leaflets
+  hanging): the **royal palm** (a smooth grey column swollen a third of the way up, more on an old one,
+  and its glossy green crownshaft), the **queen palm** (slim, ringed, drooping plumes; an old one's orange
+  dates hanging), the **Canary Island date palm** (a massive trunk patterned in diamonds, its
+  "pineapple" of cut leaf bases, a huge dense crown; young from the ground).
+- Every frond clears the ground (`keepUp`: a trunkless young palm's old fronds lie out over the grass,
+  never into it).
+- **MOTION 4** (far models only): a palm's fronds thrown about from its crown, the tips most, leaning
+  downwind as the wind rises and tossing, rattling and bent down when a gust comes through — each palm on
+  its own beat. The coconut and the fan palm too.
+- **Placement**: `broadMix` + `rangeIn` — the cabbage palmetto on the Carolinas', Georgia's and the Gulf's
+  coast, all of Florida, Houston's coast; the royal palm South Florida's alone; queen, Canary and fan
+  palms in the warm South's towns; `palmMix` — South Florida's tropics (coconut, royal, cabbage, queen,
+  fan) and the dry coasts' and warm deserts' planted palms (California's fan, queen and Canary; Phoenix's)
+  only where January's mean is above 3.5 °C (`season.ts meanTemp`): never Reno's, Albuquerque's or
+  Denver's; `palmettoShare` — saw palmetto under the southern pines' flatwoods. The coconut and fan
+  palms at their own heights at last (8–14 and 10–18 m). Each its own green.
+- Far ≤ 1,488 vertices. The tree studio caught the fans as flat jagged plates (now pleated and folded)
+  and the sabal's head as a stack of discs (now round).
+
+**Verified:** typecheck; `npm test` 926/926; `tests/foundry.test.ts` (no frond into the ground, the sabal's
+boots and round head, the saw palmetto's clump, the royal's crownshaft, the queen's dates, the Canary's
+crown and trunk, motion 4, heights), `tests/streetTrees.test.ts` (the cabbage palmetto from Charleston
+to Houston, never Atlanta, Raleigh or the North; the royal palm only in South Florida's mix; planted
+palms where January allows — Phoenix, Las Vegas, LA, Sacramento — not Reno, Albuquerque, Denver; saw
+palmetto in Florida and on the Georgia coast only; a Florida flatwoods built: pines over palmetto).
+Shader check: 22 programs, no errors. Studio: `shots/trees-p8a.jpg`, `p8b`.
+
+**Next:** #9 the ground layers (bracken, cinnamon fern, bluestems, cordgrass, wildflower drifts:
+bluebonnets, poppies, lupine; kudzu); #10 fields; duckweed; the people work (`people-with-purpose`) when
+Robby calls it.
+
 ## 2026-10-05 — Regional life (7): the desert, the piñon-juniper and the sagebrush sea
 
 Package #7 of `docs/regional-life/models.md` (Robby: "make things detailed, and variety and variation

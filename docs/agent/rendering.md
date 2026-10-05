@@ -273,7 +273,10 @@ the sky between the leaves. Past it, the tiles' own solid crowns, as before.
     card twigs flower all along.
   - **Motion** (`flora.ts MOTION_OF`, the `MOTION` define): 1 the aspen's leaves trembling (and their
     pale undersides flashing), 2 the dogwood's flat tiers bobbing each on its own beat, the outer ends
-    most, 3 the longleaf's needles tossing in gusts (its grass stage a shivering fountain).
+    most, 3 the longleaf's needles tossing in gusts (its grass stage a shivering fountain), 4 (far
+    models only, past the cards' 2 bits) a palm's fronds thrown about from its crown — the tips most
+    (`uCrown`), leaning downwind (the clouds' way, turned into the model's own frame) as the wind rises,
+    tossing and bent down when a gust comes through, each palm on its own beat.
   - **The cards' flags** (`aE.w`, `flora.ts packCardFlags` / `unpackCardFlags`, decoded the same in
     `leafCards.ts`): `falls 1 + 2·hue (3 bits) + 16·blossom (3 bits) + 128·motion (2 bits)`, under 512.
     `tests/foundry.test.ts` round-trips every value and checks the shader's decode text.

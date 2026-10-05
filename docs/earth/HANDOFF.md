@@ -99,6 +99,11 @@ The game was smooth and rendering before this work started. Work fast, and keep 
       the ocotillo's rain leaves (FALL_HUE 8, `rainLeaves`, `uWet` now in the shared GLSL); `STIFF`.
     - `CLUMPS` rows creosote, Utah and Ashe juniper, big sagebrush; `PINES` row piñon.
     - Placement: `desertMix`, `desertTrees`, `pjBand` (props.ts `dryShrub`, `dryTree`).
+  - **#8, the palms** (2026-10-05; LOG "Regional life (8)"):
+    - `fanFrond` (sabal, saw palmetto), `featherFrond` (royal, queen, Canary), `keepUp`; MOTION 4 (far
+      only) for every palm, the old coconut and fan palms too.
+    - Placement: `broadMix` + `rangeIn`, `palmMix` (props.ts `palmsGrow`: January's mean > 3.5 °C),
+      `palmettoShare`.
 
 ## The bar: detail, variety, variation
 
@@ -231,8 +236,7 @@ in-game look is checked on Robby's PC.
   and the gray pine of the blue oak's foothills — both could ride a later package.
 - **#7:** built (2026-10-05). Rarer desert rows (organ pipe, barrels, chain-fruit cholla, bursage)
   can ride a later package on the same genomes.
-- **#8:** palms (cabbage, Washington fan, royal, queen) and saw palmetto. The fronds thrash in a
-  gust.
+- **#8:** built (2026-10-05).
 - **#9:** the ground layers.
 - **#10:** fields.
 - **#11–#16:** the wildlife packages (`regional-wildlife`).

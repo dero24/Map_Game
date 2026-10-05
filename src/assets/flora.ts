@@ -25,7 +25,7 @@ export type TreeKind = 'round' | 'oak' | 'shrub' | 'pine' | 'spruce' | 'palm' | 
   | 'whitepine' | 'ponderosa' | 'lodgepole' | 'redspruce' | 'balsamfir' | 'engelmann' | 'subalpinefir' | 'easthemlock' | 'aspen' | 'willowshrub' | 'snag'
   | 'tuliptree' | 'sweetgum' | 'hickory' | 'buckeye' | 'sycamore' | 'buroak' | 'dogwood' | 'redbud' | 'crapemyrtle' | 'loblolly' | 'longleaf' | 'slashpine' | 'redcedar' | 'rosebay'
   | 'baldcypress' | 'pondcypress' | 'tupelo' | 'cottonwood' | 'fremont'
-  | 'valleyoak' | 'blueoak' | 'redwood' | 'sequoia' | 'manzanita' | 'saguaro' | 'pricklypear' | 'cholla' | 'ocotillo' | 'joshua' | 'creosote' | 'pinyon' | 'utahjuniper' | 'ashejuniper' | 'sagebrush';
+  | 'valleyoak' | 'blueoak' | 'redwood' | 'sequoia' | 'manzanita' | 'saguaro' | 'pricklypear' | 'cholla' | 'ocotillo' | 'joshua' | 'creosote' | 'pinyon' | 'utahjuniper' | 'ashejuniper' | 'sagebrush' | 'sabal' | 'sawpalmetto' | 'royalpalm' | 'queenpalm' | 'canarypalm';
 /** (New kinds go on the end: a kind's index is in the tiles' instance names and the region weights.) */
 export const TREE_KINDS: TreeKind[] = ['round', 'oak', 'shrub', 'pine', 'spruce', 'palm', 'birch', 'mesquite', 'fanpalm', 'maple', 'willow', 'elm', 'poplar', 'magnolia', 'cherry', 'fir', 'cedar', 'hemlock', 'sitka', 'alder', 'vinemaple', 'liveoak', 'plateauoak', 'coastoak',
   'whitepine', 'ponderosa', 'lodgepole', 'redspruce', 'balsamfir', 'engelmann', 'subalpinefir', 'easthemlock', 'aspen', 'willowshrub', 'snag',
@@ -36,7 +36,9 @@ export const TREE_KINDS: TreeKind[] = ['round', 'oak', 'shrub', 'pine', 'spruce'
   // (package #6: California's oaks and redwoods)
   'valleyoak', 'blueoak', 'redwood', 'sequoia', 'manzanita',
   // (package #7: the desert, piñon-juniper and the sagebrush sea)
-  'saguaro', 'pricklypear', 'cholla', 'ocotillo', 'joshua', 'creosote', 'pinyon', 'utahjuniper', 'ashejuniper', 'sagebrush'];
+  'saguaro', 'pricklypear', 'cholla', 'ocotillo', 'joshua', 'creosote', 'pinyon', 'utahjuniper', 'ashejuniper', 'sagebrush',
+  // (package #8: the palms and the palmettos)
+  'sabal', 'sawpalmetto', 'royalpalm', 'queenpalm', 'canarypalm'];
 /** The live oaks (liveoak†): the South's, the Hill Country's plateau oak, California's coast live oak. */
 export const LIVE_OAKS = new Set<TreeKind>(['liveoak', 'plateauoak', 'coastoak']);
 /** The southern pines (package #4): their long needles in fat, brushy tufts up close. */
@@ -74,7 +76,10 @@ export const BLOSSOM_OF: Partial<Record<TreeKind, number>> = { cherry: 1, dogwoo
 /** How each tree's leaves move besides the crown's sway (propMaterial MOTION, the cards' motion
  *  bits): 1 the aspen's leaves trembling on flat stalks, 2 the dogwood's flat tiers bobbing, each tier
  *  on its own beat, 3 the longleaf's long needles tossing (its grass stage a shivering fountain). */
-export const MOTION_OF: Partial<Record<TreeKind, number>> = { aspen: 1, dogwood: 2, longleaf: 3, cottonwood: 1, fremont: 1 }; // (a cottonwood's triangular leaves rattle on their flat stalks as an aspen's do)
+export const MOTION_OF: Partial<Record<TreeKind, number>> = { aspen: 1, dogwood: 2, longleaf: 3, cottonwood: 1, fremont: 1, // (a cottonwood's triangular leaves rattle on their flat stalks as an aspen's do)
+  // (package #8) 4 the palms' fronds thrown about in a gust and leaning downwind, the palmettos' fans
+  // rattling — far models only (the palms have no cards), past the cards' 2 bits
+  palm: 4, fanpalm: 4, sabal: 4, sawpalmetto: 4, royalpalm: 4, queenpalm: 4, canarypalm: 4 };
 /** A standing dead tree: wood only (no leaves, no near model). */
 export const LEAFLESS = new Set<TreeKind>(['snag']);
 /** The leaf cards' flags (world/nearTrees.ts → render/leafCards.ts aE.w): 1 a broadleaf whose leaves
@@ -440,6 +445,41 @@ function fluted(pts: THREE.Vector3[], radii: number[], ribs: number, depth = 0.1
   g.computeVertexNormals();
   return g;
 }
+/** (package #8) A palmate fan on its stalk, along +z from the origin like card(): `n` pleats folded up
+ *  and down across an arc of some 200°, the segments' tips split (every other one a little short),
+ *  the fan arching down `droop` at its rim; both faces, its normals leaned to the sky as card()'s. */
+function fanFrond(R: number, n: number, droop: number, stalk: number) {
+  const pos: number[] = [], c = [0, 0, stalk];
+  const pt = (k: number) => {
+    // (accordion-pleated, and the whole fan folded up into a shallow V along its middle)
+    const a = -1.75 + (3.5 * k) / (2 * n), rr = R * (k % 2 ? 0.84 : 1), fold = (k % 2 ? -1 : 1) * 0.15 * R, x = Math.sin(a) * rr;
+    return [x, fold * (rr / R) + 0.3 * Math.abs(x) - droop * R * (rr / R) ** 2, stalk + Math.cos(a) * rr * 0.92];
+  };
+  for (let k = 0; k < 2 * n; k++) {
+    const A = pt(k), B = pt(k + 1);
+    pos.push(...c, ...A, ...B, ...c, ...B, ...A);
+  }
+  pos.push(0, 0, 0, 0.035, 0, stalk, -0.035, 0, stalk, 0, 0, 0, -0.035, 0, stalk, 0.035, 0, stalk);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  const N = g.getAttribute('normal');
+  for (let i = 0; i < N.count; i++) {
+    const x = N.getX(i) * 0.35, y = Math.abs(N.getY(i)) * 0.35 + 0.65, z = N.getZ(i) * 0.35, L = Math.hypot(x, y, z) || 1;
+    N.setXYZ(i, x / L, y / L, z / L);
+  }
+  return g;
+}
+/** (package #8) A frond's tilt (rotateX(-up)) raised until its tip, `L` out from a crown `headY` up and
+ *  dropping `drop` of its length as it arches, clears the ground: a trunkless young palm's old fronds
+ *  lie out over the ground, never into it. */
+function keepUp(up: number, headY: number, L: number, drop: number) {
+  while (headY + L * Math.sin(up) - drop * L * Math.cos(up) < 0.05 && up < 1.3) up += 0.05;
+  return up;
+}
+/** (package #8) A feather frond along +z: two leaflet cards crossed along the rachis (an X in section,
+ *  each side's leaflets hanging from it as a pinnate frond's do), arching down `bend`. */
+const featherFrond = (w: number, L: number, bend: number, segs = 3) => merge([card(w, L, bend, segs).rotateZ(0.5), card(w, L, bend, segs).rotateZ(-0.5)]);
 /** (package #7) The colour that marks a plant's flowers and fruit as parts of their own: white enough
  *  to read as foliage (propMaterial's leafy test, min ≥ 0.98), a hair off white in blue — the desert's
  *  blossoms (BLOSSOM ≥ 7) show only in their season (treeSeasons.ts bloomNow, fruitNow), and are gone
@@ -1808,6 +1848,109 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
         plan.hang.push(part(new THREE.OctahedronGeometry(0.12, 0).scale(1, 1.6, 1).translate(f.x, f.y, f.z), BLOOM_PART));
       }
     });
+  } else if (kind === 'sabal') {
+    // The cabbage palmetto (sabal; fanpalm row): a round head of arching, folded fans on a trunk clad
+    // high up in its old leaf bases' crisscross "boots" (smooth grey below, where they've fallen), no
+    // skirt. v0 young (its fans straight from the ground, no trunk yet), v1 grown, v2 old (tall, slender,
+    // bare-trunked, a smaller head, a lean)
+    const SB = [{ H: 0.9, R: 0.2, fronds: 16, fan: 1.25 }, { H: 8.0, R: 0.2, fronds: 18, fan: 1.15 }, { H: 11.5, R: 0.17, fronds: 16, fan: 1.0 }][v];
+    trunkR = SB.R;
+    const lean = V3(j(v === 2 ? 1.2 : 0.3), 0, j(v === 2 ? 1.2 : 0.3)), top = V3(lean.x, SB.H, lean.z);
+    leanPer = [lean.x / (SB.H + 0.3), lean.z / (SB.H + 0.3)];
+    if (!v) wood.push(part(tube([V3(0, -0.3, 0), top], [SB.R * 1.3, SB.R * 1.1], 7), 0x7a6646)); // (its bud of leaf bases, low in the grass)
+    if (v > 0) {
+      const at = (t: number) => V3(lean.x * t * t, SB.H * t, lean.z * t * t);
+      wood.push(part(tube([V3(0, -0.3, 0), at(0.3), at(0.6), at(0.85), at(1)], [SB.R * 1.12, SB.R, SB.R * 0.98, SB.R * 1.04, SB.R], 7), 0x8a8478));
+      // the boots: the old leaf bases' split stubs in a crisscross up the trunk's top (an old one's all
+      // fallen but the last few)
+      const from = v === 1 ? 0.35 : 0.82, nb = v === 1 ? 16 : 8;
+      for (let b = 0; b < nb; b++) {
+        const t = from + ((1 - from) * (b + 0.5)) / nb, a = b * GOLDEN * 2;
+        wood.push(part(patch(at(t), a, SB.R * 1.12, 0.16, 0.22), 0x7a6646), part(patch(at(t), a + Math.PI / 2, SB.R * 1.14, 0.12, 0.18), 0x6e5a3e));
+      }
+    }
+    for (let i = 0; i < SB.fronds; i++) {
+      const fan = SB.fan * (0.9 + r.float() * 0.2), stalk = v ? 0.9 : 1.2;
+      // (a round head: the young fans straight up, the old arching out and down below the crown)
+      const a = i * GOLDEN, up = keepUp(1.25 - (i / SB.fronds) * 2.1, SB.H, fan + stalk, (0.45 * fan) / (fan + stalk));
+      const f = fanFrond(fan, 4, 0.45, stalk);
+      f.rotateX(-up);
+      f.rotateY(a);
+      leaf.push(f.translate(top.x, top.y, top.z));
+    }
+    lobe(0.45, V3(top.x, top.y + 0.15, top.z), 3500 + v, 0.9, 0);
+  } else if (kind === 'sawpalmetto') {
+    // Saw palmetto (fanpalm row): no trunk above the ground — clumps of stiff fans on stalks rising from
+    // stems that creep along the sand, under the flatwoods' pines; v0 one crown, v1 a spreading clump of
+    // three, v2 an old colony, its creeping stems bare along the ground
+    const crowns = [1, 3, 4][v], per = [9, 7, 5][v], sides = v === 2 ? 4 : 5;
+    trunkR = 0.1;
+    for (let c = 0; c < crowns; c++) {
+      const a = c * GOLDEN * 2 + j(0.4), d = c ? 0.5 + r.float() * 0.7 : 0;
+      const end = V3(Math.cos(a) * d, 0.25 + r.float() * 0.2, Math.sin(a) * d);
+      // (its stem: creeping out along the sand from the old crown, or a stub of it into the ground)
+      wood.push(part(c ? tube([V3(0, 0.05, 0), V3(Math.cos(a) * d * 0.5, 0.08, Math.sin(a) * d * 0.5), end], [0.09, 0.085, 0.08], sides) : tube([V3(0, -0.15, 0), end], [0.1, 0.09], sides), 0x6e5e48));
+      for (let i = 0; i < per; i++) {
+        const fan = 0.55 + r.float() * 0.12, stalk = 0.6 + r.float() * 0.3;
+        const b = i * GOLDEN + c, up = keepUp(1.25 - (i / per) * 0.95, end.y, fan + stalk, (0.08 * fan) / (fan + stalk)); // (stiff, held up)
+        const f = fanFrond(fan, 4, 0.08, stalk);
+        f.rotateX(-up);
+        f.rotateY(b);
+        leaf.push(f.translate(end.x, end.y, end.z));
+      }
+      lobe(0.6, end.clone().add(V3(0, 0.5, 0)), 3520 + v * 7 + c, 0.8, 0);
+    }
+  } else if (kind === 'royalpalm' || kind === 'queenpalm' || kind === 'canarypalm') {
+    // The feather palms (palm row): the royal palm's smooth concrete-grey column swollen part way up and
+    // its glossy green crownshaft, its fronds arching level; the queen palm's slim ringed trunk and its
+    // drooping plumes (an old one's orange dates hanging); the Canary Island date palm's massive trunk
+    // patterned in diamonds under its "pineapple" of old leaf bases and a huge dense crown. v0 young (the
+    // trunk short or not yet), v1 grown, v2 old (tall, the royal's swelling marked, the Canary's trunk
+    // high)
+    const P = {
+      royalpalm: [{ H: 3.2, R: 0.24, shaft: 1.0, fronds: 12, L: 2.6 }, { H: 9.5, R: 0.3, shaft: 1.6, fronds: 14, L: 3.0 }, { H: 11.0, R: 0.32, shaft: 1.7, fronds: 14, L: 3.0 }],
+      queenpalm: [{ H: 2.6, R: 0.16, shaft: 0, fronds: 12, L: 2.4 }, { H: 8.5, R: 0.17, shaft: 0, fronds: 14, L: 2.7 }, { H: 11.0, R: 0.17, shaft: 0, fronds: 13, L: 2.6 }],
+      canarypalm: [{ H: 1.4, R: 0.45, shaft: 0, fronds: 24, L: 3.2 }, { H: 4.5, R: 0.42, shaft: 0, fronds: 26, L: 3.5 }, { H: 9.0, R: 0.4, shaft: 0, fronds: 24, L: 3.4 }],
+    }[kind][v];
+    trunkR = P.R;
+    const royal = kind === 'royalpalm', queen = kind === 'queenpalm', canary = kind === 'canarypalm';
+    const lean = V3(j(queen ? 0.5 : 0.25), 0, j(queen ? 0.5 : 0.25)), at = (t: number) => V3(lean.x * t * t, P.H * t, lean.z * t * t);
+    leanPer = [lean.x / (P.H + 0.3), lean.z / (P.H + 0.3)];
+    // the trunk: the royal's swelling a third of the way up (more on an old one), the Canary's barrel
+    const sw = royal ? (v === 2 ? 1.35 : 1.18) : 1, ts = [0, 0.3, 0.55, 0.8, 1];
+    const radii = royal ? [P.R * 1.05, P.R * sw, P.R * (1 + (sw - 1) * 0.4), P.R * 0.86, P.R * 0.84] : canary ? [P.R * 1.1, P.R, P.R * 0.98, P.R * 1.0, P.R * 1.12] : [P.R * 1.1, P.R, P.R * 0.95, P.R * 0.9, P.R * 0.88];
+    wood.push(part(tube([V3(0, -0.3, 0), ...ts.slice(1).map(at)], radii, canary ? 9 : 7), royal ? 0xb2aea4 : canary ? 0x7a6a52 : 0x8e877a));
+    let head = at(1);
+    if (royal) {
+      // the crownshaft: a smooth, glossy green column of the fronds' sheaths
+      const sh = head.clone().add(V3(0, P.shaft, 0));
+      wood.push(part(tube([head, head.clone().lerp(sh, 0.5), sh], [P.R * 0.84, P.R * 0.86, P.R * 0.7], 7), 0x5e7c3a));
+      head = sh;
+    }
+    if (canary) {
+      // the "pineapple": the cut leaf bases' knob under the crown, and the trunk's diamonds
+      wood.push(part(blob(P.R * 1.35, 3600 + v, { detail: 0, lump: 0.5, squash: 0.9 }).translate(head.x, head.y + 0.1, head.z), 0x8a6e48));
+      for (let b = 0; b < (v ? 14 : 0); b++) {
+        const t = 0.15 + (0.8 * (b + 0.5)) / 14;
+        wood.push(part(patch(at(t), b * GOLDEN * 2, P.R * 1.05, 0.26, 0.2), 0x5e5040));
+      }
+    }
+    if (queen && v === 2) for (let d = 0; d < 3; d++) {
+      // the queen palm's orange dates in hanging bunches
+      const a = d * 2.1 + j(0.3), p = head.clone().add(V3(Math.cos(a) * 0.45, -0.7, Math.sin(a) * 0.45));
+      wood.push(part(blob(0.22, 3610 + d, { detail: 0, lump: 0.4, squash: 1.5 }).translate(p.x, p.y, p.z), 0xd8862a));
+    }
+    for (let i = 0; i < P.fronds; i++) {
+      // the young up, the old arching out and down — the queen palm's drooping most, the Canary's a
+      // dense fountain
+      const L = P.L * (0.88 + r.float() * 0.24), bend = canary ? 0.35 : queen ? 0.75 : 0.45;
+      const a = i * GOLDEN, f = i / P.fronds, up = keepUp((canary ? 0.9 : royal ? 0.7 : 0.55) - f * (canary ? 1.5 : royal ? 1.25 : 1.55), head.y + 0.1, L, bend);
+      const fr = canary ? card(1.1, L, bend, 3) : featherFrond(royal ? 0.85 : 0.75, L, bend);
+      fr.rotateX(-up);
+      fr.rotateY(a);
+      leaf.push(fr.translate(head.x, head.y + 0.1, head.z));
+    }
+    lobe(0.5, V3(head.x, head.y + 0.2, head.z), 3620 + v, 0.9, 0);
   } else if (isCypress(kind)) {
     // The cypresses (CYPRESSES; cypress†): the fluted foot flaring out to the water, the knees standing
     // up out of it all round, the trunk tapering up through tiers of level boughs, each holding out a flat
@@ -2486,9 +2629,12 @@ const REGION_BROAD: Partial<Record<EcoRegion | 'pnw-dry', [TreeKind, number][]>>
   'mid-atlantic': [['round', 2.5], ['oak', 2], ['maple', 2.6], ['elm', 1.1], ['cherry', 0.6], ['poplar', 0.4], ['tuliptree', 1.0], ['sweetgum', 1.2], ['dogwood', 0.8], ['redbud', 0.4], ['hickory', 0.3], ['redcedar', 0.4], ['crapemyrtle', 0.6]],
   appalachia: [['round', 3], ['oak', 2.6], ['maple', 2.2], ['magnolia', 0.3], ['elm', 0.4], ['cherry', 0.4], ['poplar', 0.2], ['tuliptree', 2.0], ['hickory', 1.0], ['buckeye', 0.6], ['sweetgum', 0.4], ['dogwood', 0.9], ['redbud', 0.6], ['redcedar', 0.4], ['crapemyrtle', 0.4]],
   southeast: [['round', 2.4], ['oak', 3], ['maple', 1.1], ['magnolia', 1.6], ['cherry', 0.4], ['elm', 0.5], ['poplar', 0.2], ['liveoak', 0.5], ['sweetgum', 1.6], ['tuliptree', 0.8], ['dogwood', 1.1], ['redbud', 0.5], ['crapemyrtle', 1.5], ['hickory', 0.4], ['redcedar', 0.3], ['baldcypress', 0.15]],
-  florida: [['round', 2], ['liveoak', 3.2], ['oak', 1.2], ['magnolia', 1.8], ['maple', 0.6], ['fanpalm', 0.8], ['crapemyrtle', 1.0], ['sweetgum', 0.4], ['dogwood', 0.2], ['redbud', 0.15], ['baldcypress', 0.3]],
-  gulf: [['round', 2.4], ['liveoak', 3], ['oak', 1.6], ['magnolia', 1.4], ['maple', 0.8], ['elm', 0.5], ['cherry', 0.3], ['sweetgum', 1.3], ['crapemyrtle', 1.5], ['dogwood', 0.5], ['redbud', 0.4], ['hickory', 0.4], ['baldcypress', 0.4], ['cottonwood', 0.2]],
-  texas: [['round', 1.6], ['liveoak', 2.6], ['oak', 1.4], ['elm', 1.6], ['mesquite', 0.4], ['magnolia', 0.3], ['poplar', 0.2], ['crapemyrtle', 1.5], ['redbud', 0.5], ['hickory', 0.4], ['buroak', 0.25], ['sweetgum', 0.5], ['dogwood', 0.2], ['redcedar', 0.3], ['cottonwood', 0.4], ['baldcypress', 0.2], ['ashejuniper', 1.4]],
+  florida: [['round', 2], ['liveoak', 3.2], ['oak', 1.2], ['magnolia', 1.8], ['maple', 0.6], ['fanpalm', 0.8], ['crapemyrtle', 1.0], ['sweetgum', 0.4], ['dogwood', 0.2], ['redbud', 0.15], ['baldcypress', 0.3],
+    ['sabal', 2.4], ['royalpalm', 0.6], ['queenpalm', 0.6], ['canarypalm', 0.3]],
+  gulf: [['round', 2.4], ['liveoak', 3], ['oak', 1.6], ['magnolia', 1.4], ['maple', 0.8], ['elm', 0.5], ['cherry', 0.3], ['sweetgum', 1.3], ['crapemyrtle', 1.5], ['dogwood', 0.5], ['redbud', 0.4], ['hickory', 0.4], ['baldcypress', 0.4], ['cottonwood', 0.2],
+    ['sabal', 0.8], ['canarypalm', 0.2], ['fanpalm', 0.15], ['queenpalm', 0.2]],
+  texas: [['round', 1.6], ['liveoak', 2.6], ['oak', 1.4], ['elm', 1.6], ['mesquite', 0.4], ['magnolia', 0.3], ['poplar', 0.2], ['crapemyrtle', 1.5], ['redbud', 0.5], ['hickory', 0.4], ['buroak', 0.25], ['sweetgum', 0.5], ['dogwood', 0.2], ['redcedar', 0.3], ['cottonwood', 0.4], ['baldcypress', 0.2], ['ashejuniper', 1.4],
+    ['sabal', 0.5], ['queenpalm', 0.3], ['fanpalm', 0.2]],
   plains: [['round', 2.6], ['oak', 1.2], ['elm', 2.2], ['poplar', 1.6], ['maple', 0.8], ['cherry', 0.2], ['buroak', 1.0], ['redcedar', 0.6], ['redbud', 0.25], ['hickory', 0.1], ['cottonwood', 1.6]],
   midwest: [['round', 2.5], ['oak', 2.2], ['maple', 2.4], ['elm', 1.4], ['cherry', 0.3], ['poplar', 0.6], ['buroak', 1.0], ['hickory', 0.8], ['tuliptree', 0.5], ['buckeye', 0.4], ['redbud', 0.6], ['dogwood', 0.4], ['sweetgum', 0.25], ['redcedar', 0.3], ['cottonwood', 0.4]],
   ozarks: [['round', 2.4], ['oak', 3.4], ['maple', 1.2], ['elm', 0.6], ['cherry', 0.6], ['poplar', 0.2], ['hickory', 1.0], ['redbud', 0.8], ['dogwood', 0.9], ['redcedar', 0.8], ['sweetgum', 0.4], ['buroak', 0.2], ['crapemyrtle', 0.5]],
@@ -2503,7 +2649,8 @@ const MESQUITE_TX = new Set([25, 26, 27, 29, 30, 31]);
 /** The Southeast's coastal plain (the Middle Atlantic and Southern coastal plains, EPA 63, 75): oaks
  *  and magnolias over the Piedmont's tulip poplars, maples and dogwoods (docs/regional-life/05). */
 export const SE_COAST = new Set([63, 75]);
-const SE_COAST_BROAD: [TreeKind, number][] = [['round', 2], ['liveoak', 3.4], ['oak', 1.4], ['magnolia', 2.2], ['maple', 0.7], ['cherry', 0.3], ['elm', 0.4], ['sweetgum', 1.2], ['crapemyrtle', 1.5], ['dogwood', 0.5], ['redcedar', 0.2], ['tuliptree', 0.15], ['baldcypress', 0.3]];
+const SE_COAST_BROAD: [TreeKind, number][] = [['round', 2], ['liveoak', 3.4], ['oak', 1.4], ['magnolia', 2.2], ['maple', 0.7], ['cherry', 0.3], ['elm', 0.4], ['sweetgum', 1.2], ['crapemyrtle', 1.5], ['dogwood', 0.5], ['redcedar', 0.2], ['tuliptree', 0.15], ['baldcypress', 0.3],
+  ['sabal', 1.2], ['canarypalm', 0.2]]; // (package #8: the cabbage palmetto, South Carolina's own tree, on its coast)
 /** Where within its region each of package #4's trees stops (docs/regional-life/ranges.md and each
  *  region's file): 1 it grows here, 0 it doesn't. The crape myrtle hardy to zone 7 — the Mid-Atlantic
  *  only from Delaware and Maryland south, Appalachia's southern valleys; the north woods (EPA 49–51)
@@ -2546,6 +2693,15 @@ function rangeIn(k: TreeKind, p: CastPlace): number {
     case 'sequoia': return p.eco === 'california' ? ([5, 6, 7, 85].includes(p.l3) ? 1 : 0) : 0;
     // (package #7) the Ashe juniper's cedar brakes: the Edwards Plateau, the Cross Timbers' west
     case 'ashejuniper': return p.eco === 'texas' ? (p.l3 === 30 ? 1.6 : p.l3 === 29 ? 0.6 : 0) : 0;
+    // (package #8) the palms where the winters let them: the cabbage palmetto on the Carolinas', Georgia's
+    // and the Gulf's coast (wild north to Cape Fear), all of Florida, the lower Rio Grande; the royal palm
+    // South Florida's alone; the queen palm in Florida's towns, Houston's and south Texas's; the planted
+    // fan palm on the Gulf's coast and in central and south Texas
+    case 'sabal': return p.eco === 'southeast' ? (['SC', 'GA', 'FL'].includes(st) ? 1 : st === 'NC' ? 0.15 : 0) : p.eco === 'gulf' ? ([75, 73, 34].includes(p.l3) ? 1 : 0) : p.eco === 'texas' ? (p.l3 === 34 ? 1 : 0) : 1;
+    case 'royalpalm': return p.eco === 'florida' ? (p.l3 === 76 ? 1 : 0) : 0;
+    case 'queenpalm': return p.eco === 'gulf' ? (p.l3 === 34 ? 1 : 0) : p.eco === 'texas' ? (p.l3 === 31 || p.l3 === 34 ? 1 : 0) : 1;
+    case 'canarypalm': return p.eco === 'gulf' ? (p.l3 === 75 || p.l3 === 34 ? 1 : 0) : 1;
+    case 'fanpalm': return p.eco === 'gulf' ? (p.l3 === 75 || p.l3 === 34 ? 1 : 0) : p.eco === 'texas' ? ([30, 31, 32, 33, 34].includes(p.l3) ? 1 : 0) : 1;
   }
   return 1;
 }
@@ -2852,6 +3008,25 @@ export function desertTrees(p: CastPlace, elev: number, lat: number): [TreeKind,
   if ((p.l3 === 81 || p.l3 === 79) && p.state === 'AZ' && elev < 1250) return [['mesquite', 1.6], ['saguaro', 1]];
   return [];
 }
+// ---------------- package #8 by place: the palms and the palmettos ----------------
+
+/** The palms of a place's warm branches (props.ts regional): `tropical` — the tropics' palms for a
+ *  scan's broadleaf (South Florida's coconut, royal, cabbage, queen and fan palms; elsewhere the
+ *  coconut alone); `dry` — the planted palms of the dry coasts and the warm deserts (California's fan,
+ *  queen and Canary palms, Phoenix's fan and date palms; elsewhere the fan palm). */
+export function palmMix(p: CastPlace, where: 'tropical' | 'dry'): [TreeKind, number][] {
+  if (where === 'tropical') return p.eco === 'florida' ? [['palm', 1.4], ['royalpalm', 0.8], ['sabal', 1.0], ['queenpalm', 0.5], ['fanpalm', 0.4]] : [['palm', 1]];
+  if (p.eco === 'california') return [['fanpalm', 1.2], ['queenpalm', 0.4], ['canarypalm', 0.5]];
+  if (p.eco === 'desert-sw') return [['fanpalm', 1.4], ['queenpalm', 0.3], ['canarypalm', 0.3]];
+  return [['fanpalm', 1]];
+}
+/** Saw palmetto's share of a scan's shrubs: the southern pine flatwoods' floor — all of Florida, the
+ *  coastal plain of Georgia and the Carolinas' south, the Gulf's (more under a wood's pines). */
+export function palmettoShare(p: CastPlace, wood: boolean): number {
+  const st = p.state ?? '';
+  const on = p.eco === 'florida' || (p.eco === 'southeast' && (p.l3 === 75 || (p.l3 === 63 && ['SC', 'GA'].includes(st)))) || (p.eco === 'gulf' && (p.l3 === 75 || p.l3 === 65));
+  return on ? (wood ? 0.6 : 0.4) : 0;
+}
 /** The coast redwood's country, wild: California's Coast Range (EPA 1, the north coast) and south of
  *  it the coast ranges' fog belt (EPA 6 in `belt`, ecoregions.ts caRedwoodBelt: Marin's, the Santa Cruz
  *  Mountains', Big Sur's canyons). */
@@ -2971,7 +3146,7 @@ export function understoryTrees(p: CastPlace): [TreeKind, number][] {
 }
 /** The small trees' tallest (m): a survey's 18 m crown is never a dogwood stretched to fit it. */
 export const SMALL_TREE: Partial<Record<TreeKind, number>> = { dogwood: 10, redbud: 10, crapemyrtle: 9, rosebay: 6.5, manzanita: 7,
-  saguaro: 15, pricklypear: 2.6, cholla: 2.2, ocotillo: 7.5, joshua: 13, creosote: 3.2, pinyon: 11, utahjuniper: 9, ashejuniper: 11, sagebrush: 2.2 };
+  saguaro: 15, pricklypear: 2.6, cholla: 2.2, ocotillo: 7.5, joshua: 13, creosote: 3.2, pinyon: 11, utahjuniper: 9, ashejuniper: 11, sagebrush: 2.2, sawpalmetto: 2.4 };
 /** The manzanita's share of a scan's shrubs (props.ts regional): California's chaparral — the coast
  *  ranges, the foothills, the south's mountains and coast, the Sierra's and the Klamath's slopes (its
  *  greenleaf and pinemat kin) — thin on the valley floor; Arizona's mountains' pointleaf manzanita. */
@@ -3035,6 +3210,17 @@ export function treeHeight4(k: TreeKind, v: number, u: number, wood: boolean): n
     case 'utahjuniper': return v === 0 ? 2 + u * 2 : 3.5 + u * 4.5;
     case 'ashejuniper': return v === 0 ? 3 + u * 2 : 4 + u * 6;
     case 'sagebrush': return v === 0 ? 0.4 + u * 0.4 : v === 1 ? 0.8 + u * 0.6 : 1.2 + u * 0.8;
+    // (package #8: the cabbage palmetto 8–20 m, its young fans from the ground; the royal palm the tallest,
+    // to 28; the queen palm 8–15; the Canary palm's massive trunk 5–18; the saw palmetto under 2; the
+    // coconut palm 8–14 m and the Washington fan palm 10–18, at last their own heights — the models scale
+    // whole, so no taller: their heads would grow past a palm's)
+    case 'sabal': return v === 0 ? 1.5 + u * 2 : v === 1 ? 8 + u * 6 : 12 + u * 8;
+    case 'sawpalmetto': return v === 0 ? 0.8 + u * 0.6 : 1.2 + u * 0.9;
+    case 'royalpalm': return v === 0 ? 4 + u * 4 : v === 1 ? 15 + u * 7 : 20 + u * 8;
+    case 'queenpalm': return v === 0 ? 2.5 + u * 2.5 : v === 1 ? 8 + u * 5 : 11 + u * 4;
+    case 'canarypalm': return v === 0 ? 2 + u * 2 : v === 1 ? 5 + u * 5 : 10 + u * 8;
+    case 'palm': return 8 + u * 6;
+    case 'fanpalm': return 10 + u * 8;
   }
   return 0;
 }

@@ -2038,7 +2038,17 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
    tree**. Shrub row: **creosote**. Pine row: **two-needle piñon**. Clump rows (the models' mesquite
    row in the plan): **Utah juniper**, **Ashe juniper**. Clump row (the mound row): **big
    sagebrush**. (Mesquite and palo verde exist.)
-8. **Palms.** Fanpalm rows: **cabbage palmetto**, **saw palmetto**.
+8. **Palms** — **built** 2026-10-05 (`docs/earth/LOG.md` "Regional life (8)"): the cabbage palmetto
+   (a round head of pleated, V-folded fans, `flora.ts fanFrond`, on a trunk booted high up; young
+   from the ground, grown, old and tall), the saw palmetto (stiff fans on creeping stems; one crown, a
+   clump, an old colony), and the feather palms (`featherFrond`): the royal palm (swollen grey column,
+   green crownshaft), the queen palm (slim, drooping plumes, an old one's dates), the Canary Island
+   date palm (massive trunk, its "pineapple", a huge crown); every frond kept above the ground
+   (`keepUp`); MOTION 4, the fronds thrown about in a gust and leaning downwind (the coconut and fan
+   palms too); placed by `broadMix` + `rangeIn`, `palmMix` (South Florida's tropics, the dry coasts'
+   and warm deserts' planted palms only where January's mean is above 3.5 °C) and `palmettoShare`. The
+   rows: Fanpalm rows: **cabbage palmetto**, **saw palmetto**. Palm rows: **Florida royal palm**,
+   **queen palm**, **Canary Island date palm**.
 9. **The ground layers.** Fern rows: **bracken**, **cinnamon fern**. Clump rows: **big** and
    **little bluestem**, **smooth cordgrass**. Wildflower drifts: **Texas bluebonnet** (spike),
    **California poppy** (stem, cup head), **sky lupine** (spike). The `vine†` genome with **kudzu**.

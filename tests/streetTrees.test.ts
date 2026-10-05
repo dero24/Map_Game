@@ -3,7 +3,8 @@ import { type TileJson } from '../src/world/data';
 import { virtualRegion } from '../src/world/virtual';
 import { setActiveStyle, regionStyle } from '../src/world/styles';
 import { buildTile } from '../src/world/tileBuild';
-import { treeMeta, coniferMix, aspenShare, snagShare, broadMix, rosebayShare, bankMix, redcedarShare, understoryTrees, swampMix, swampForm, manzanitaShare, sequoiaBand, redwoodCountry, westForm, desertMix, desertTrees, pjBand, type TreeKind } from '../src/assets/flora';
+import { treeMeta, coniferMix, aspenShare, snagShare, broadMix, rosebayShare, bankMix, redcedarShare, understoryTrees, swampMix, swampForm, manzanitaShare, sequoiaBand, redwoodCountry, westForm, desertMix, desertTrees, pjBand, palmMix, palmettoShare, type TreeKind } from '../src/assets/flora';
+import { meanTemp } from '../src/world/season';
 import { caRedwoodBelt } from '../src/world/ecoregions';
 import { castOf } from '../src/world/styles';
 
@@ -352,6 +353,29 @@ describe('package #7 by place (flora.ts desertMix, desertTrees, pjBand, coniferM
   });
 });
 
+// Package #8 (models.md build order 8): the palms and the palmettos
+describe('package #8 by place (flora.ts broadMix, palmMix, palmettoShare)', () => {
+  const at = (lat: number, lon: number) => castOf(regionStyle(lat, lon));
+  const has = (m: [string, number][], k: string) => m.some(([kk, w]) => kk === k && w > 0);
+  const COLD: [number, number][] = [[42.36, -71.06], [41.88, -87.63], [47.6, -122.33], [39.74, -104.99], [44.98, -93.27], [35.6, -82.55], [36.16, -86.78]];
+  it("the cabbage palmetto on the Southeast's coast, in Florida and on the Gulf; the royal palm South Florida's alone", () => {
+    for (const [lat, lon] of [[32.78, -79.93], [32.08, -81.09], [27.95, -82.46], [29.95, -90.07], [29.76, -95.37]]) expect(has(broadMix(at(lat, lon)), 'sabal'), `${lat},${lon}`).toBe(true);
+    for (const [lat, lon] of [[33.75, -84.39], [35.78, -78.64], ...COLD]) for (const k of ['sabal', 'royalpalm', 'queenpalm', 'canarypalm']) expect(has(broadMix(at(lat, lon)), k), `${k} at ${lat},${lon}`).toBe(false);
+    expect(has(broadMix(at(27.95, -82.46)), 'royalpalm')).toBe(false); // (Tampa: too cold for it)
+    expect(has(palmMix(at(25.76, -80.19), 'tropical'), 'royalpalm')).toBe(true); // Miami's
+    expect(has(palmMix(at(34.05, -118.24), 'dry'), 'queenpalm')).toBe(true); // Los Angeles's planted palms
+    expect(palmMix(at(36.17, -115.14), 'dry')[0][0]).toBe('fanpalm'); // Las Vegas's
+  });
+  it("planted palms only where the winter lets them: Phoenix, Las Vegas, Los Angeles and Sacramento, not Reno or Albuquerque", () => {
+    for (const [lat, lon, e] of [[33.45, -112.07, 340], [36.17, -115.14, 620], [34.05, -118.24, 90], [38.58, -121.49, 10]] as [number, number, number][]) expect(meanTemp(lat, lon, e, 20), `${lat},${lon}`).toBeGreaterThan(3.5);
+    for (const [lat, lon, e] of [[39.53, -119.81, 1370], [35.08, -106.65, 1620], [39.74, -104.99, 1610]] as [number, number, number][]) expect(meanTemp(lat, lon, e, 20), `${lat},${lon}`).toBeLessThan(3.5);
+  });
+  it('saw palmetto under the southern pines: Florida, the Georgia and Carolina coast, the Gulf; never inland or north', () => {
+    for (const [lat, lon] of [[29.65, -82.32], [28.54, -81.38], [30.44, -84.28], [32.08, -81.09]]) expect(palmettoShare(at(lat, lon), true), `${lat},${lon}`).toBeGreaterThan(0.4);
+    for (const [lat, lon] of [[33.75, -84.39], [35.78, -78.64], [32.78, -96.8], ...COLD]) expect(palmettoShare(at(lat, lon), true), `${lat},${lon}`).toBe(0);
+  });
+});
+
 describe('package #4 in the woods (a mapped wood, built)', () => {
   const wood = async (lat: number, lon: number, cls = 'wood') => {
     setActiveStyle(regionStyle(lat, lon));
@@ -389,6 +413,13 @@ describe('package #4 in the woods (a mapped wood, built)', () => {
     expect(cols.length).toBeGreaterThan(0);
     expect(cols.filter((h) => h > 44).length / cols.length).toBeGreaterThan(0.6);
     for (const k of ['tuliptree', 'sweetgum', 'loblolly', 'whitepine', 'sequoia', 'blueoak']) expect(count(w, k), k).toBe(0);
+  }, 60000);
+  it('a Florida flatwoods: longleaf and slash pine over saw palmetto', async () => {
+    const w = await wood(29.6, -82.45);
+    expect(count(w, 'sawpalmetto')).toBeGreaterThan(0);
+    expect(count(w, 'longleaf') + count(w, 'slashpine')).toBeGreaterThan(0);
+    expect(count(w, 'sawpalmetto')).toBeGreaterThan(count(w, 'shrub') * 0.8); // (the palmetto most of the flatwoods' shrubs; gallberry and wax myrtle the rest)
+    for (const k of ['rosebay', 'sagebrush', 'manzanita']) expect(count(w, k), k).toBe(0);
   }, 60000);
   it("a Sonoran scrub near Tucson: saguaros, chollas, creosote and the rest; no eastern trees, no pitch pine", async () => {
     const w = await wood(32.3, -111.1, 'scrub');
