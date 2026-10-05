@@ -2,6 +2,58 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-05 — Regional life (11): the backyard birds
+
+Package #11 of `docs/regional-life/models.md`, the first wildlife package (`regional-wildlife`): the bird
+plan's extensions and the birds of the lawns and the verges. Robby: "make things detailed, and variety
+and variation matter".
+
+- **The bird plan's marks** (`fauna.ts birdGeometry`, `BirdPlan`): what a bird is known by at twenty
+  metres — a hood, a crown cap, a face mask, a necklace, a neck patch, a full breast, wing bars and
+  barred wings, a crest swept back or curling forward, the bill's shape (a seed-eater's thick cone, a
+  crow's stout dagger, a woodpecker's chisel, a dove's slim), a fanned tail or a dove's long wedge with
+  its tip's colour, the folded wing's length.
+- **Every bird, better** (the shared plan and `critterMaterial`): a neck, so the head sits on the
+  shoulders instead of floating off the body; the wings closed along the flank when perched — rolled
+  edge-down, leaning in over the back, the tips crossing over the rump — where they used to hang to the
+  ground like a skirt; a leg each side (`P.fore`, `P.hind`) so the walkers (robin, dove, crow, pigeon,
+  sandpiper, roadrunner, quail, ibis) walk and the hoppers hop; a peck downward (the head used to toss
+  back); each species' wingbeat (`FLAP`, `flapOf`: the crow's slow rowing, the pigeons' and doves'
+  clatter); a real tail, narrow at the rump and fanned at the tip (it was a sliver: the hawk's red tail
+  shows now). And a bug: the quail rested its wings up like a butterfly (the butterfly test was the
+  flap's amplitude; it's a flag now, `uFlap.y` 2).
+- **The eight birds**: the **northern cardinal** (red, or the female's tan — a TINT; the swept crest, the
+  black mask, the orange-red cone of a bill), the **blue jay** (blue, white below, the black necklace,
+  the pale face, a white bar, white tail corners), the **American robin** (the brick breast, the dark
+  head, the yellow bill; runs and stops), **Steller's jay** (deep blue, the sooty head and tall crest,
+  barred wings), the **Gila woodpecker** (zebra wings, the tan head, the male's red cap — a TINT, the
+  chisel), the **mourning dove** (the small head, the long white-edged wedge, black wing spots), the
+  **American crow** (black, big, wary from 13 m), the **rock pigeon** (plump, each its own grey, the
+  green neck, two black bars, the dark tail band).
+- **Where**: the songbird role's regional mix (`REGION_FAUNA`): the East's robin, cardinal, jay, dove,
+  crow and pigeons; the Plains' doves; Florida's cardinals and doves; Steller's jay in the Rockies, the
+  Northwest and California's conifer country, never the East; the Gila woodpecker in the Sonoran
+  ecoregions only; the generic songbird stays first for the sparrows and finches (its palette loses the
+  cardinal's red for a house finch's rose and a goldfinch's yellow). Pigeons are the town's (`critters.ts`:
+  their weight rises with `urban`, and they come down on the plaza and the parking lot as well as the
+  grass).
+- **Card art**: `CRITTER_TINT` paints a species' portrait (the Almanac's card: a red cardinal, a grey
+  pigeon), shared with the kit viewer.
+- Reviewed in a scratch bird studio (each bird perched side on, from above, flying): it caught the
+  hanging wings, the floating heads, the robin's breast hidden inside its body and the Gila's back bands
+  standing off it like hoops (now barring on the closed wings).
+
+**Verified:** typecheck; `npm test` 944/944; `tests/backyardBirds.test.ts` (new: each region's birds and
+their range limits; each bird's marks and sizes; the plan's tails and legs for every bird; how each
+moves; the town's pigeons on the plaza, few in the country); `tests/ecoregions.test.ts` (the shore's
+animals as they were, its birds the East's). Budgets 684–1,092 vertices (limit 1,600). Shader check: 24
+programs (the critter material added), no errors.
+
+**Next:** package #12, water and big birds (the long neck, swimming, the bare head and the hover go into
+the bird plan with the birds that need them: Canada goose, mallard, loon, the herons and egrets,
+spoonbill, sandhill crane, vulture, bald eagle, osprey, wild turkey, California quail, pelican, gulls);
+smooth cordgrass and duckweed; `people-with-purpose` when Robby calls it.
+
 ## 2026-10-05 — Regional life (10): the fields
 
 Package #10 of `docs/regional-life/models.md`: the farmland planted, field by field, on each crop's

@@ -50,6 +50,15 @@ window.__SHADERS__ = async () => {
     cg.setAttribute('aField', new THREE.InstancedBufferAttribute(new Float32Array([0.5]), 1));
     add(cg, cropMaterial());
   } catch (e) { errors.push('grass: ' + e.message); }
+  // the critters (fauna.ts): a perched bird's closed wings, the hawk soaring, a butterfly, a fox
+  try {
+    const { critterLib, critterMaterial } = await import('/src/assets/fauna.ts');
+    for (const k of ['cardinal', 'hawk', 'butterfly', 'fox']) {
+      const cg = critterLib(k).clone();
+      cg.setAttribute('aAnim', new THREE.InstancedBufferAttribute(new Float32Array([0.3, 0.5, k === 'hawk' ? 2 : 0]), 3));
+      add(cg, critterMaterial(k));
+    }
+  } catch (e) { errors.push('critters: ' + e.message); }
   const far = scene.children.find((o) => o.material?.defines?.TREE_LOD);
   if (far) far.geometry.setAttribute('aNear', new THREE.InstancedBufferAttribute(new Float32Array(1), 1));
   try {

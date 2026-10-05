@@ -11,7 +11,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { BOAT_TYPES, CAR_TYPES, PLANE_TYPES, boatGeometry, boatRecipe, carGeometry, carRecipe, planeGeometry, planeRecipe, rockGeometry, type RockType } from '../assets/kit';
 import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, crownField, DECIDUOUS, fallHueOf, BLOSSOM_OF, MOTION_OF, PLANT_SPECIES, plantGeometry, SPECIES } from '../assets/flora';
 import { NearTrees, nearKinds } from '../world/nearTrees';
-import { CRITTERS, critterLib, critterMaterial, dogLib, dogMaterial, DOG_COLLAR } from '../assets/fauna';
+import { CRITTERS, CRITTER_TINT, ROLE, critterLib, critterMaterial, dogLib, dogMaterial, DOG_COLLAR } from '../assets/fauna';
 import { personLib, personLiteLib, leadHand, atWorld } from '../assets/people';
 import { creatureMaterial } from '../render/creature';
 import { MAILBOXES, mailboxLib, beachLib, CAR_GEAR, gearGeometry } from '../assets/furniture';
@@ -75,7 +75,7 @@ function addCritter(kind: (typeof CRITTERS)[number], x: number, z: number, color
   const anim = new THREE.InstancedBufferAttribute(new Float32Array(3), 3);
   geo.setAttribute('aAnim', anim);
   const m = new THREE.InstancedMesh(geo, critterMaterial(kind), 1);
-  const small = kind === 'deer' ? 1 : kind === 'butterfly' || kind === 'firefly' ? 8 : kind === 'songbird' || kind === 'sandpiper' ? 5 : 3.5;
+  const small = kind === 'deer' ? 1 : kind === 'butterfly' || kind === 'firefly' ? 8 : ROLE[kind] === 'songbird' || kind === 'sandpiper' ? 5 : 3.5;
   m.setMatrixAt(0, new THREE.Matrix4().compose(new THREE.Vector3(x, kind === 'butterfly' || kind === 'firefly' ? 0.6 : 0, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -0.9), new THREE.Vector3(small, small, small)));
   m.setColorAt(0, new THREE.Color(color));
   m.name = `critter-${kind} (shown ×${small})`;
@@ -200,7 +200,7 @@ function build() {
     if (fam === 'plants') for (const gg of [0.15, 0.4, 0.65, 1]) rowOf(PLANT_SPECIES.length, 2.2, (i, x, z) => add(plantGeometry(PLANT_SPECIES[i], seed + 1, gg), x, z, GREENS[i % GREENS.length], `plant-${PLANT_SPECIES[i]} g=${gg}`, 0, mats.foliage), 3);
   }
   if (fam === 'people') buildPeople(seed);
-  if (fam === 'all' || fam === 'wildlife') rowOf(CRITTERS.length, 2.2, (i, x, z) => addCritter(CRITTERS[i], x, z, [0xffffff, 0xffffff, 0xc2302a, 0xffffff, 0xffffff, 0xe8862a, 0xffffff][i]), 5);
+  if (fam === 'all' || fam === 'wildlife') rowOf(CRITTERS.length, 2.2, (i, x, z) => addCritter(CRITTERS[i], x, z, CRITTERS[i] === 'songbird' ? 0xb04a4c : CRITTER_TINT[CRITTERS[i]] ?? 0xffffff), 5);
   if (fam === 'all' || fam === 'rocks') {
     const T: RockType[] = ['boulder', 'riprap', 'stone'];
     rowOf(12, 3, (i, x, z) => add(rockGeometry(T[i % 3], seed * 10 + i), x, z, 0xffffff, `rock-${T[i % 3]}-${seed * 10 + i}`), 5);

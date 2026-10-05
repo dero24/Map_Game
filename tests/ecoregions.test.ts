@@ -115,7 +115,12 @@ describe('the casts follow the land (regionStyle → broadMix, plantMix, faunaMi
     const now = JSON.parse(shore.broad) as [string, number][], before = broadMix({ ...castOf(old) });
     expect(now.slice(0, before.length)).toEqual(before);
     expect(now.slice(before.length).map(([k]) => k).sort()).toEqual(['dogwood', 'hickory', 'redbud', 'redcedar', 'sweetgum', 'tuliptree']);
-    expect(shore.fauna).toEqual(faunaMix('na', 'temperate'));
+    // (its animals as they were; its birds the East's backyard birds, package #11 — the generic songbird
+    // still first, the robin, the cardinal, the jay, the dove, the crow and the town's pigeons with it)
+    const { songbird: birds, ...rest } = shore.fauna, { songbird: old0, ...rest0 } = faunaMix('na', 'temperate');
+    expect(rest).toEqual(rest0);
+    expect(birds![0]).toEqual(old0![0]);
+    expect(birds!.map(([k]) => k)).toEqual(expect.arrayContaining(['robin', 'cardinal', 'bluejay', 'mourningdove', 'crow', 'pigeon']));
   });
   it("the Northwest: the westside's firs, alders and sword fern; the dry side's ponderosa and no bigleaf moss", () => {
     const sea = cast(47.61, -122.33), bend = cast(44.06, -121.31);

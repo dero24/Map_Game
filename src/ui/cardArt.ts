@@ -5,7 +5,7 @@
 // per entry, so a card looks the same every time you open the book.
 import * as THREE from 'three';
 import { carLib, boatLib, planeGeometry, planeRecipe, type CarType, type BoatType, type PlaneType } from '../assets/kit';
-import { critterGeometry, type CritterKind } from '../assets/fauna';
+import { critterGeometry, CRITTER_TINT, type CritterKind } from '../assets/fauna';
 import { treeLib, plantLib, STAGES, type TreeKind, type PlantSpecies } from '../assets/flora';
 import { hashf } from '../assets/core';
 import { balloonGeometry, balloonRecipe, type BalloonPattern } from '../assets/balloon';
@@ -79,7 +79,7 @@ export function makeCardArt(renderer: THREE.WebGLRenderer) {
     const g = g0.clone();
     const col = g.getAttribute('color') as THREE.BufferAttribute | undefined;
     if (col) {
-      const t = new THREE.Color(TINTS[family] ?? 0xcccccc);
+      const t = new THREE.Color((family === 'wildlife' ? CRITTER_TINT[type as CritterKind] : undefined) ?? TINTS[family] ?? 0xcccccc);
       for (let i = 0; i < col.count; i++) if (col.getX(i) > 0.98 && col.getY(i) > 0.98 && col.getZ(i) > 0.98) col.setXYZ(i, t.r, t.g, t.b);
     }
     const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: !!col, side: THREE.DoubleSide }));

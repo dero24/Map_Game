@@ -2073,10 +2073,19 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
    and spring wheat on the northern Plains; grown near the walker by the grass field (`grass.ts`
    crops, `cropMaterial`), and the fields' colour far off in the ground's wash (`groundPaint.ts`
    `cropWash`).
-11. **Bird plan extensions and the backyard birds.** Add the shared bird parts (long neck, bill
-    shapes, swim, bare head, hover). Songbird palette rows: **northern cardinal**, **blue jay**,
-    **American robin**, **Steller's jay**, **Gila woodpecker**, **mourning dove**. Bird rows:
-    **American crow**, **rock pigeon**.
+11. **Bird plan extensions and the backyard birds** — **built** 2026-10-05 but for the long neck, swim,
+    bare head and hover, which come with package 12's birds that need them (`docs/earth/LOG.md`
+    "Regional life (11)"). The bird plan (`fauna.ts birdGeometry`) gained the marks a bird is known by
+    at twenty metres: a hood, a crown cap, a face mask, a necklace, a neck patch, a full breast, wing
+    bars and barred wings, a crest swept back or curling forward, the bills (a seed-eater's thick cone,
+    a crow's stout dagger, a woodpecker's chisel, a dove's slim), a fanned tail or a dove's long wedge
+    with its tip's colour; and for every bird a neck, the wings closed along the flank when perched
+    (the critter material), a leg each side so the walkers walk and the hoppers hop, a peck downward,
+    each species' own wingbeat (`FLAP`). Songbird palette rows: **northern cardinal** (the female's
+    tan a TINT), **blue jay**, **American robin**, **Steller's jay**, **Gila woodpecker** (the male's
+    red cap a TINT), **mourning dove**. Bird rows: **American crow**, **rock pigeon** (each its own
+    grey; the town's: weighted by how built-up, on the plaza as well as the grass). Placed by the
+    songbird role's regional mix (`REGION_FAUNA`, `faunaMix`).
 12. **Water and big birds.** **Canada goose**, **mallard**, **common loon**; ibis rows **great blue
     heron**, **great egret**, **snowy egret**, **roseate spoonbill**, **sandhill crane**; hawk rows
     **turkey vulture**, **bald eagle**, **osprey** (with its **nest**, `sign†`); quail rows **wild

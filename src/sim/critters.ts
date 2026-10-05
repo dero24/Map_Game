@@ -23,7 +23,7 @@ interface Spec { cap: number; walk: number; flee: number; fleeR: number; gaitHz:
 const SPEC: Record<CritterKind, Spec> = {
   squirrel: { cap: 8, walk: 1.6, flee: 5.5, fleeR: 7, gaitHz: 1.6, scale: [1.3, 1.5], colors: [0xffffff] },
   rabbit: { cap: 6, walk: 1.1, flee: 7, fleeR: 9, gaitHz: 1.3, scale: [1.15, 1.35], colors: [0xffffff] },
-  songbird: { cap: 10, walk: 0.7, flee: 6, fleeR: 5, gaitHz: 3, scale: [1.4, 1.7], colors: [0xc2302a, 0x4f7cc0, 0x8a6a4e, 0x7a6a5a, 0x6a7a48] },
+  songbird: { cap: 10, walk: 0.7, flee: 6, fleeR: 5, gaitHz: 3, scale: [1.4, 1.7], colors: [0xb04a4c, 0x4f7cc0, 0x8a6a4e, 0x7a6a5a, 0x6a7a48, 0xd4b232, 0x8a6a4e] }, // (sparrows, finches: a house finch's rose, a bluebird, a goldfinch)
   sandpiper: { cap: 12, walk: 1.4, flee: 3.5, fleeR: 8, gaitHz: 4.5, scale: [1.25, 1.45], colors: [0xffffff] },
   deer: { cap: 3, walk: 1.0, flee: 8, fleeR: 26, gaitHz: 0.9, scale: [0.85, 1.05], colors: [0xffffff] },
   butterfly: { cap: 10, walk: 0.9, flee: 0.9, fleeR: 0, gaitHz: 0, scale: [1.5, 2.1], colors: [0xe8862a, 0xf2d24a, 0x7aa6e0, 0xf6f2e8, 0xd86a9a] },
@@ -38,6 +38,17 @@ const SPEC: Record<CritterKind, Spec> = {
   roadrunner: { cap: 2, walk: 1.8, flee: 6.5, fleeR: 9, gaitHz: 3.2, scale: [1.35, 1.5], colors: [0xffffff] },
   quail: { cap: 12, walk: 0.7, flee: 5, fleeR: 6, gaitHz: 3.5, scale: [1.6, 1.8], colors: [0xffffff] },
   ibis: { cap: 6, walk: 0.8, flee: 3.5, fleeR: 10, gaitHz: 2, scale: [1.1, 1.25], colors: [0xffffff] },
+  // the backyard birds (fauna.ts package #11): the cardinal's pair (two males to a female's tan, the
+  // one people notice), the robin running and stopping across the lawn, the crow wary from farther
+  // off, the pigeons tame and many, each its own grey
+  cardinal: { cap: 4, walk: 0.6, flee: 6, fleeR: 6, gaitHz: 3, scale: [1.35, 1.55], colors: [0xc4302a, 0xc4302a, 0xb0947a] },
+  bluejay: { cap: 4, walk: 0.8, flee: 6.5, fleeR: 7, gaitHz: 2.8, scale: [1.3, 1.5], colors: [0xffffff] },
+  robin: { cap: 8, walk: 1.5, flee: 6, fleeR: 6, gaitHz: 5, scale: [1.3, 1.5], colors: [0xffffff] },
+  stellersjay: { cap: 4, walk: 0.8, flee: 6.5, fleeR: 7, gaitHz: 2.8, scale: [1.25, 1.45], colors: [0xffffff] },
+  gilawoodpecker: { cap: 3, walk: 0.5, flee: 6, fleeR: 6, gaitHz: 3, scale: [1.35, 1.5], colors: [0xc8302a, 0xc8302a, 0xbca88a] },
+  mourningdove: { cap: 6, walk: 0.55, flee: 7, fleeR: 7, gaitHz: 2.6, scale: [1.25, 1.45], colors: [0xffffff] },
+  crow: { cap: 4, walk: 0.9, flee: 7, fleeR: 13, gaitHz: 1.8, scale: [1.1, 1.25], colors: [0xffffff] },
+  pigeon: { cap: 12, walk: 0.6, flee: 5.5, fleeR: 4, gaitHz: 2.6, scale: [1.15, 1.3], colors: [0x9098a4, 0x9098a4, 0x8a929e, 0x6a6e78, 0xb4b0aa] },
 };
 // who hunts whom, by role (only animals on the ground can be taken)
 const PREY: Partial<Record<CritterRole, CritterRole[]>> = { predator: ['grazer', 'climber', 'songbird', 'burrower'], raptor: ['grazer', 'climber', 'songbird', 'burrower'] };
@@ -144,7 +155,7 @@ export class Critters {
       case 'raptor': return day && h > 8 && h < 17.5 ? 1 : 0;
     }
   }
-  private place(k: CritterRole, wx: number, wz: number, env: CritterEnv): Omit<Critter, 'kind' | 'seed' | 'c' | 's'> | null {
+  private place(k: CritterRole, wx: number, wz: number, env: CritterEnv, sp?: CritterKind): Omit<Critter, 'kind' | 'seed' | 'c' | 's'> | null {
     const near = k === 'butterfly' || k === 'firefly';
     for (let tries = 0; tries < 8; tries++) {
       const a = this.rnd() * Math.PI * 2;
@@ -163,7 +174,8 @@ export class Critters {
         z = home.z + Math.cos(ra) * (1.5 + this.rnd() * 3);
         if (!this.open(x, z, 0.3) || this.paved(x, z)) continue; // on the lawn, not in the street
       } else if (k === 'grazer' || k === 'songbird' || k === 'burrower') {
-        if (!this.field(x, z)) continue;
+        // (a pigeon's on the plaza and the parking lot as well as the grass)
+        if (!this.field(x, z) && !(sp === 'pigeon' && this.paved(x, z) && this.open(x, z, 1.2) && this.terrain.oceanDistAt(x, z) > 60)) continue;
       } else if (k === 'shorebird') {
         if (!this.shore(x, z)) continue;
       } else if (k === 'browser') {
@@ -205,10 +217,12 @@ export class Critters {
         const want = Math.min(cap, this.want(role, env));
         if ((roleCount[role] ?? 0) >= want) continue;
         // which of the place's species fills this slot (weighted)
-        let r = this.rnd() * cast.reduce((a, [, w]) => a + w, 0), k = cast[0][0];
-        for (const [sp, w] of cast) { if ((r -= w) <= 0) { k = sp; break; } }
+        // (pigeons are the town's: few in the country, the most of the birds downtown)
+        const wt = (sp: CritterKind, w: number) => sp === 'pigeon' ? w * (0.2 + 3 * Math.min(1, Math.max(0, env.urban ?? 0))) : w;
+        let r = this.rnd() * cast.reduce((a, [sp, w]) => a + wt(sp, w), 0), k = cast[0][0];
+        for (const [sp, w] of cast) { if ((r -= wt(sp, w)) <= 0) { k = sp; break; } }
         if ((count[k] ?? 0) >= SPEC[k].cap) continue;
-        const p = this.place(role, wx, wz, env);
+        const p = this.place(role, wx, wz, env, k);
         if (!p) continue;
         const S = SPEC[k];
         const c = new THREE.Color(S.colors[Math.floor(this.rnd() * S.colors.length)]);
