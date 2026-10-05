@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { TREE_KINDS, TREE_VARIANTS, treeGeometry, PLANT_SPECIES, plantGeometry, plantMix, inBloom, stageOf, STAGES, fallHueOf } from '../src/assets/flora';
+import { TREE_KINDS, TREE_VARIANTS, treeGeometry, PLANT_SPECIES, plantGeometry, plantMix, inBloom, stageOf, STAGES, fallHueOf, NEAR_KINDS, nearTreeGeometry, CARD_STRIDE, LEAF_PICS, leafAtlas } from '../src/assets/flora';
+import { TREE_TIERS } from '../src/render/quality';
 import { CRITTERS, critterGeometry } from '../src/assets/fauna';
 import { MAILBOXES, mailboxGeometry, gearGeometry, gearFor, CAR_GEAR, umbrellaGeometry, picnicTableGeometry } from '../src/assets/furniture';
-import { fibCount, fibSphere, hashf, variantAt } from '../src/assets/core';
-import { personGeometry, HAIRSTYLES, MARK, warmthFor } from '../src/assets/people';
+import { fibCount, fibSphere, hashf, variantAt, tube } from '../src/assets/core';
+import { personGeometry, personLiteGeometry, HAIRSTYLES, MARK, warmthFor } from '../src/assets/people';
 import { dogLib } from '../src/assets/fauna';
 import * as D from '../src/assets/decor';
+import { FABRIC, CABINET_PAINT, CAB_WHITE, cabinetColour } from '../src/world/interior/furnish';
 import { SPORT_PIECES, sportGeometry } from '../src/assets/sport';
 import { TOWER_KINDS, towerGeometry } from '../src/assets/tower';
 import { STALL_KINDS, stallGeometry, STALL_VARIANTS } from '../src/assets/market';
@@ -67,6 +69,50 @@ describe('flora', () => {
     expect(fallHueOf('maple', 0)).toBe(1); // sugar and red maples go scarlet…
     expect(fallHueOf('maple', 2)).toBe(2); // …the bigleaf gold
   });
+  // The Northwest's trees (docs/regional-life/16-pnw.md; Robby: "do northwest")
+  it('the Northwest conifers read as themselves: spires, bare-trunked in the forest, each with its mark', () => {
+    for (const k of ['fir', 'hemlock', 'sitka', 'cedar'] as const) {
+      const open = treeGeometry(k, 0).meta, forest = treeGeometry(k, 1).meta;
+      expect(open.crownR / open.h).toBeLessThan(0.32); // a spire, not a ball
+      expect(open.crownBottom / open.h).toBeLessThan(0.12); // grown in the open: foliage near the ground
+      expect(forest.crownBottom / forest.h).toBeGreaterThan(k === 'cedar' ? 0.15 : 0.22); // in the forest, a bare trunk
+      for (let v = 0; v < TREE_VARIANTS; v++) {
+        const n = nearTreeGeometry(k, v), pics = new Set<number>();
+        for (let i = 0; i < n.cards.length; i += CARD_STRIDE) pics.add(n.cards[i + 6]);
+        // needles up close; the redcedar its own flat sprays
+        expect([...pics].every((p) => (k === 'cedar' ? p === 8 || p === 9 : p >= 4 && p <= 7))).toBe(true);
+      }
+    }
+    // the hemlock that grew on a nurse log stands on stilt roots: wood at the ground a metre out from the trunk
+    const P = treeGeometry('hemlock', 2).geo.getAttribute('position');
+    let out = 0;
+    for (let i = 0; i < P.count; i++) if (P.getY(i) < 0.2) out = Math.max(out, Math.hypot(P.getX(i), P.getZ(i)));
+    expect(out).toBeGreaterThan(0.8);
+    // the old redcedar's candelabra: dead silver wood at the very top
+    const cd = treeGeometry('cedar', 2).plan;
+    expect(Math.max(...cd.boughs.filter((b) => b.col === 0x9e978b).map((b) => b.b.y))).toBeGreaterThan(Math.max(...cd.lobes.map((l) => l.c.y)));
+  });
+  it('the Northwest broadleaves: the red alder narrow on pale stems, the vine maple a sprawl, the bigleaf maple hung with moss', () => {
+    for (let v = 0; v < TREE_VARIANTS; v++) {
+      const a = treeGeometry('alder', v), vm = treeGeometry('vinemaple', v).meta;
+      expect(a.meta.crownR / a.meta.h).toBeLessThan(0.36);
+      expect(a.plan.boughs[0].col).toBe(0xc4bfb3); // pale grey bark
+      expect(vm.crownR / vm.h).toBeGreaterThan(0.55);
+      expect(vm.h).toBeLessThan(7.5);
+    }
+    // moss beards under the bigleaf's limbs and licorice fern along them, in both models
+    const bl = treeGeometry('maple', 2);
+    expect(bl.plan.hang.length).toBeGreaterThanOrEqual(6);
+    const C = bl.geo.getAttribute('color'), moss = new THREE.Color(0x8a9a46);
+    let mossy = 0;
+    for (let i = 0; i < C.count; i++) if (Math.abs(C.getX(i) - moss.r) < 1e-3 && Math.abs(C.getY(i) - moss.g) < 1e-3) mossy++;
+    expect(mossy).toBeGreaterThan(0);
+    const near = nearTreeGeometry('maple', 2), pics = new Set<number>();
+    for (let i = 0; i < near.cards.length; i += CARD_STRIDE) pics.add(near.cards[i + 6]);
+    expect([...pics].every((p) => p === 10 || p === 11)).toBe(true); // the maple's big hands
+    expect(fallHueOf('vinemaple', 0)).toBe(1); // scarlet in October
+    expect(fallHueOf('alder', 0)).toBe(3); // the alder's drop near green
+  });
   it('variants differ', () => {
     const a = bb(treeGeometry('round', 0).geo), b = bb(treeGeometry('round', 1).geo);
     expect(a.max.y === b.max.y && a.max.x === b.max.x).toBe(false);
@@ -84,6 +130,103 @@ describe('flora', () => {
     expect(partCount(plantGeometry('hydrangea', 1, 1), 8)).toBeGreaterThan(0);
     expect(stageOf(0)).toBe(0);
     expect(stageOf(1)).toBe(STAGES - 1);
+  });
+  // The near model (round 11, must-fix 4): within ~30 m a tree is its branch skeleton and 8–20
+  // leaf-cluster cards, grown from the far recipe's own plan (flora.ts nearTreeGeometry)
+  it('near trees: every species with a near model is sane, grounded, deterministic and within budget', () => {
+    let n = 0;
+    for (const k of TREE_KINDS) for (let v = 0; v < TREE_VARIANTS; v++) {
+      if (!NEAR_KINDS.has(k)) continue;
+      n++;
+      const t = nearTreeGeometry(k, v), b = bb(t.wood), cards = t.cards.length / CARD_STRIDE;
+      expect(finite(t.wood)).toBe(true);
+      expect(t.cards.every(Number.isFinite)).toBe(true);
+      expect(b.min.y).toBeLessThanOrEqual(0.01); // the root reaches into the ground…
+      expect(b.min.y).toBeGreaterThan(-0.6); // …and no deeper than the far trunk's
+      expect(cards).toBeGreaterThanOrEqual(8);
+      expect(cards).toBeLessThanOrEqual(20);
+      // ≤ 2,500 vertices a tree: its wood, and four corners a card
+      expect(verts(t.wood) + 4 * cards).toBeLessThanOrEqual(2500);
+      for (let i = 0; i < t.cards.length; i += CARD_STRIDE) {
+        expect(t.cards[i + 3]).toBeGreaterThan(0.2); // half its width, m
+        expect(t.cards[i + 6]).toBeGreaterThanOrEqual(0);
+        expect(t.cards[i + 6]).toBeLessThan(LEAF_PICS);
+        expect(t.cards[i + 7]).toBeGreaterThanOrEqual(0);
+        expect(t.cards[i + 7]).toBeLessThanOrEqual(1);
+      }
+      const again = nearTreeGeometry(k, v);
+      expect(verts(again.wood)).toBe(verts(t.wood));
+      expect(Array.from(again.cards)).toEqual(Array.from(t.cards));
+    }
+    expect(n).toBe(NEAR_KINDS.size * TREE_VARIANTS);
+  });
+  it('near trees: the trunk flares and tapers, limbs reach into the crown, the crown stands where the far one does', () => {
+    for (const k of NEAR_KINDS) for (let v = 0; v < TREE_VARIANTS; v++) {
+      const t = nearTreeGeometry(k, v), far = treeGeometry(k, v);
+      // the trunk's base at least 30% wider than where it meets the crown
+      expect(t.trunk[0]).toBeGreaterThanOrEqual(1.3 * t.trunk[1]);
+      // …and the mesh says so: its widest ring at the ground against the far trunk's
+      const P = t.wood.getAttribute('position');
+      let r0 = 0;
+      for (let i = 0; i < P.count; i++) if (Math.abs(P.getY(i)) < 0.02) r0 = Math.max(r0, Math.hypot(P.getX(i), P.getZ(i)));
+      if (k !== 'birch' && k !== 'mesquite' && !(k === 'maple' && v === 2)) expect(r0).toBeGreaterThan(1.3 * far.meta.trunkR); // (a clump's stems stand apart)
+      // the street and yard broadleaves show at least three limbs going up into the crown
+      if (['round', 'oak', 'maple', 'elm', 'cherry', 'birch', 'mesquite'].includes(k)) expect(t.limbsIn).toBeGreaterThanOrEqual(3);
+      // every card's middle inside the far crown's box, and the cards reach out to fill most of it
+      const lb = new THREE.Box3();
+      for (const l of far.plan.lobes) lb.expandByPoint(l.c.clone().addScalar(-l.r)).expandByPoint(l.c.clone().addScalar(l.r));
+      const cb = new THREE.Box3();
+      for (let i = 0; i < t.cards.length; i += CARD_STRIDE) {
+        const c = new THREE.Vector3(t.cards[i], t.cards[i + 1], t.cards[i + 2]), h = t.cards[i + 3];
+        expect(lb.containsPoint(c)).toBe(true);
+        cb.expandByPoint(c.clone().addScalar(-h * 0.9)).expandByPoint(c.clone().addScalar(h * 0.9));
+      }
+      const fs = lb.getSize(new THREE.Vector3()), ns = cb.getSize(new THREE.Vector3());
+      expect(ns.x / fs.x).toBeGreaterThan(0.85);
+      expect(ns.x / fs.x).toBeLessThan(1.25);
+      expect(ns.y / fs.y).toBeGreaterThan(0.8);
+      expect(ns.y / fs.y).toBeLessThan(1.3);
+    }
+  });
+  it('a tube bends without creasing: no normal turns more than 25° from one ring to the next', () => {
+    // a limb with a 40° knee, tapering
+    const pts = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 2, 0), new THREE.Vector3(0.64, 2.77, 0), new THREE.Vector3(1.29, 3.53, 0)];
+    const g = tube(pts, [0.3, 0.27, 0.24, 0.2, 0.15], 6), N = g.getAttribute('normal'), P = g.getAttribute('position');
+    // each quad: (i,k) (i,k+1) (i+1,k+1) (i,k) (i+1,k+1) (i+1,k) — compare the ring-i corner with the ring-(i+1) corner on the same side
+    let worst = 0;
+    for (let q = 0; q < N.count; q += 6) {
+      const a = new THREE.Vector3(N.getX(q), N.getY(q), N.getZ(q)), b = new THREE.Vector3(N.getX(q + 5), N.getY(q + 5), N.getZ(q + 5));
+      worst = Math.max(worst, (a.angleTo(b) * 180) / Math.PI);
+    }
+    expect(worst).toBeLessThan(25);
+    expect(finite(g)).toBe(true);
+    expect(P.count).toBe(4 * 6 * 6);
+  });
+  it('leaf pictures: deterministic, leafy at the heart, ragged at the rim, with gaps between the leaves', () => {
+    const S = 64, a = leafAtlas(S), b = leafAtlas(S);
+    expect(a.w).toBe(4 * S);
+    expect(a.data.every((x, i) => x === b.data[i])).toBe(true);
+    for (let p = 0; p < LEAF_PICS; p++) {
+      let inN = 0, inC = 0, rimN = 0, rimC = 0;
+      const ox = (p % 4) * S, oy = Math.floor(p / 4) * S;
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+        const u = (x + 0.5 - S / 2) / (S / 2 - 3), v = (y + 0.5 - S / 2) / (S / 2 - 3), r = Math.hypot(u, v), on = a.data[((oy + y) * a.w + ox + x) * 4 + 3] >= 128;
+        if (r < 0.6) (inN++, (inC += on ? 1 : 0));
+        else if (r > 0.85 && r < 1) (rimN++, (rimC += on ? 1 : 0));
+      }
+      expect(inC / inN).toBeGreaterThan(0.5); // a mass of leaves…
+      expect(inC / inN).toBeLessThan(0.97); // …with the sky between some of them
+      expect(rimC / rimN).toBeLessThan(inC / inN); // and thinner at the edge: the outline is leaves
+    }
+  });
+  it('near trees: a phone draws at most 40; every tier within its vertex budget', () => {
+    expect(TREE_TIERS.phone.near).toBeLessThanOrEqual(40);
+    expect(TREE_TIERS.low.near).toBeLessThanOrEqual(TREE_TIERS.phone.near);
+    for (const t of Object.values(TREE_TIERS)) {
+      expect(t.near * 2500).toBeLessThanOrEqual(400000);
+      expect(t.hand).toBeLessThanOrEqual(30);
+      expect(t.band).toBeGreaterThan(0);
+    }
   });
   it('gardens follow the climate and the calendar', () => {
     for (const c of ['tropical', 'arid', 'mediterranean', 'temperate', 'continental', 'boreal', 'polar']) expect(plantMix(c).length).toBeGreaterThan(0);
@@ -143,12 +286,30 @@ describe('people', () => {
     expect(Math.abs(b.min.y)).toBeLessThan(0.02);
     expect(b.max.y).toBeGreaterThan(1.65);
     expect(b.max.y).toBeLessThan(1.85);
-    expect(verts(g)).toBeLessThan(1800); // (headphones joined the wardrobe: 180 vertices)
+    expect(verts(g)).toBeLessThan(1600); // (indexed and smooth: tests/people.test.ts holds it at arm's length)
+    expect(g.getAttribute('aSkin').count).toBe(verts(g));
     for (const id of [1, 2, 5, 6]) expect(partCount(g, id)).toBeGreaterThan(0); // legs and arms swing
     HAIRSTYLES.forEach((_, i) => expect(partCount(g, 9 + i)).toBeGreaterThan(0));
     expect(partCount(g, 14)).toBeGreaterThan(0); // headphones, worn per person
     const col = g.getAttribute('color');
     for (const m of Object.values(MARK)) {
+      let n = 0;
+      for (let i = 0; i < col.count; i++) if (col.getX(i) === m[0] && col.getY(i) === m[1] && col.getZ(i) === m[2]) n++;
+      expect(n).toBeGreaterThan(0);
+    }
+  });
+  it('the lite body (a beach crowd small on screen): the full body\'s joints, parts, skin weights and markers in under 300 vertices', () => {
+    const g = personLiteGeometry(), full = personGeometry();
+    const b = bb(g), bf = bb(full);
+    expect(finite(g)).toBe(true);
+    expect(Math.abs(b.min.y)).toBeLessThan(0.03);
+    expect(Math.abs(b.max.y - bf.max.y)).toBeLessThan(0.12); // (the same height: the same pose)
+    expect(verts(g)).toBeLessThan(300);
+    expect(g.getAttribute('aSkin').count).toBe(verts(g)); // (the shader poses it like the full body)
+    for (const id of [0, 1, 2, 5, 6, 9]) expect(partCount(g, id)).toBeGreaterThan(0);
+    const col = g.getAttribute('color');
+    // (no shoes or thigh band at that size: the clothes' own markers)
+    for (const m of [MARK.skin, MARK.hair, MARK.pants, MARK.shin, MARK.forearm]) {
       let n = 0;
       for (let i = 0; i < col.count; i++) if (col.getX(i) === m[0] && col.getY(i) === m[1] && col.getZ(i) === m[2]) n++;
       expect(n).toBeGreaterThan(0);
@@ -182,8 +343,18 @@ describe('decor (interior + terrace furniture)', () => {
     ['shelves', D.shelves(1.2, 0.4, 1.8, W, [0xc46a4a, 0x7fa0b8], 7), 2000, [1.2, 0.4], true],
     ['pottedPlant', D.pottedPlant(true), 1500, null, true],
     ['cafeSet', D.cafeSet(0xf1ede4, 0x2a2622, 0x2f4a6a), 2600, null, true],
+    // lunch on a café's tables (review round 12, frame 18): a plate, a coffee, a glass of water
+    ['tableware: plate', D.tableware('plate'), 500, [0.25, 0.25], true],
+    ['tableware: cup', D.tableware('cup'), 500, [0.15, 0.15], true],
+    ['tableware: glass', D.tableware('glass'), 400, [0.08, 0.08], true],
     // the pieces a planned interior repeats (docs/INTERIORS_PLAN.md, Slice 1): plain boxes, instanced by the hundred
-    ['kitchenRun', D.kitchenRun(3.9), 800, [3.9, 0.66], true],
+    // a home's kitchen (review round 11): the run with its sink, cooker and hood, fridge and wall
+    // cabinets; one passing under a window; and a cooker and a fridge on walls of their own
+    ['kitchen', D.kitchen({ len: 3.9, sink: -0.6, range: 0.75, fridge: -1, gaps: [] }), 2400, [3.9, 0.7], true],
+    ['kitchen (under a window)', D.kitchen({ len: 3.3, sink: 0.2, range: -0.9, fridge: 1, gaps: [[-0.4, 0.8]] }), 2400, [3.3, 0.7], true],
+    ['kitchen (no cooker or fridge in the run)', D.kitchen({ len: 2.1, sink: 0, range: null, fridge: 0, gaps: [[-0.6, 0.6]] }), 1600, [2.1, 0.7], true],
+    ['stove', D.stove(), 700, [0.62, 0.7], true],
+    ['fridge', D.fridge(), 300, [0.72, 0.7], true],
     ['workstation', D.workstation(), 500, [1.6, 1.4], true],
     ['doorFrame', D.doorFrame(0.9), 200, [1.06, 0.16], true],
     ['doorLeaf', D.doorLeaf(0.8), 350, [0.8, 0.14], true],
@@ -208,7 +379,150 @@ describe('decor (interior + terrace furniture)', () => {
     ['rack', D.rack(2.4), 900, [2.4, 0.6], true],
     ['range', D.range(), 400, [1.2, 0.8], true],
     ['ceilingLight', D.ceilingLight(0.6, 0.24, 0.05), 100, [0.6, 0.24], false],
+    // the deeper archetypes (Slice 4): a supermarket's, a church's, a hotel's, a school's, a
+    // library's, a bank's and a post office's, a gym's
+    ['checkout', D.checkout(4.2), 500, [4.2, 0.84], true],
+    ['cooler', D.cooler(1.9, 3, [0xc46a4a, 0x7fa0b8]), 2600, [1.9, 1.0], true],
+    ['cooler (doors)', D.cooler(1.9, 3, [0xc46a4a, 0x7fa0b8], true), 2600, [1.9, 1.0], true],
+    ['produce', D.produce(2.4, 1.2, 5), 1500, [2.4, 1.2], true],
+    ['pew', D.pew(4.5), 450, [4.5, 0.72], true],
+    ['altar', D.altar(2.0), 500, [2.04, 0.84], true],
+    ['lectern', D.lectern(), 150, [0.55, 0.45], true],
+    ['hotelBed', D.hotelBed(1.6), 600, [2.66, 2.14], true],
+    ['hotelDesk', D.hotelDesk(2.6), 450, [2.6, 1.3], true],
+    ['schoolDesk', D.schoolDesk(), 700, [1.2, 1.0], true],
+    ['whiteboard', D.whiteboard(3.0), 250, [3.06, 0.08], true],
+    ['bookStack', D.bookStack(0.9, 7, [0xc46a4a, 0x7fa0b8]), 4200, [0.9, 0.6], true],
+    ['tellerCounter', D.tellerCounter(4.5), 700, [4.54, 0.72], true],
+    ['queuePosts', D.queuePosts(2.8), 900, [3.1, 0.32], true],
+    ['atm', D.atm(), 200, [0.8, 0.48], true],
+    ['treadmill', D.treadmill(), 350, [0.78, 1.95], true],
+    ['weightBench', D.weightBench(), 900, [1.8, 1.27], true],
+    ['dumbbellRack', D.dumbbellRack(1.8), 1500, [1.8, 0.5], true],
+    ['lockers', D.lockers(1.8), 800, [1.8, 0.46], true],
+    // the way in (review round 10, must-fix 4): coats on their rail, the hall's runner, the console
+    // with its lamp lit, the mirror over it, a metre of skirting, a ceiling light's dome
+    ['coatRail', D.coatRail(1.0, 4, 3), 3200, [1.06, 0.3], true],
+    ['runner', D.runner(3.0, 0.8), 800, [3.12, 0.8], true],
+    ['consoleLamp', D.consoleLamp(1.0), 1200, [1.0, 0.32], true],
+    ['mirror', D.mirror(0.7, 0.9), 250, [0.73, 0.045], true],
+    ['skirting', D.skirting(), 100, [1.0, 0.02], true],
+    ['ceilingDome', D.ceilingDome(0.17, 'lamp'), 500, [0.4, 0.4], false],
   ];
+  it('coats hang as coats: three or more on a rail, rounded, 0.9–1.1 m long, whatever the seed', () => {
+    for (let seed = 0; seed < 32; seed++)
+      for (const n of [3, 4]) {
+        const parts = D.coatRail(1.0, n, seed);
+        // (a coat's body: the fabric part that hangs most of a metre)
+        const bodies = parts.filter((p) => p.mat === 'fabric' && bb(p.g).max.y - bb(p.g).min.y > 0.85);
+        expect(bodies.length).toBe(n);
+        for (const p of bodies) {
+          const b = bb(p.g), len = b.max.y - b.min.y;
+          expect(len).toBeGreaterThanOrEqual(0.9 - 1e-6);
+          expect(len).toBeLessThanOrEqual(1.1 + 1e-6);
+          // rounded: a turned body, many vertices across its width at the waist (a box has two)
+          const pos = p.g.getAttribute('position'), xs = new Set<number>();
+          for (let i = 0; i < pos.count; i++) if (Math.abs(pos.getY(i) - (b.min.y + 0.46 * len)) < 0.01) xs.add(Math.round(pos.getX(i) * 1000) * 10000 + Math.round(pos.getZ(i) * 1000));
+          expect(xs.size).toBeGreaterThanOrEqual(6);
+          // it hangs in front of the wall, from a peg at ~1.66 m
+          expect(b.max.y).toBeGreaterThan(1.6);
+          expect(b.max.z).toBeLessThanOrEqual(0.15 + 1e-6);
+        }
+      }
+    expect(Array.from(D.mergeDecor(D.coatRail(1, 3, 5)).getAttribute('position').array)).toEqual(Array.from(D.mergeDecor(D.coatRail(1, 3, 5)).getAttribute('position').array));
+  });
+  it("a kitchen has its cooker under a hood, a fridge, and wall cabinets over the run — never in a window's stretch", () => {
+    // (the parts by what they are: the cooker's steel body at the floor, the hood's canopy over it, the
+    // fridge's tall body, the wall cabinets — tinted, hung from WALL_Y)
+    const kinds = (parts: D.DecorPart[]) => {
+      const out = { cooker: [] as THREE.Box3[], hood: [] as THREE.Box3[], fridge: [] as THREE.Box3[], wall: [] as THREE.Box3[], base: [] as THREE.Box3[] };
+      for (const p of parts) {
+        const b = bb(p.g), h = b.max.y - b.min.y, w = b.max.x - b.min.x;
+        if (p.mat === 'metal' && b.min.y < 0.01 && h > 0.85) out.cooker.push(b);
+        else if (p.mat === 'metal' && b.min.y > 1.5 && b.min.y < 1.6 && w > 0.55) out.hood.push(b);
+        else if (p.mat === 'porcelain' && h > 1.8) out.fridge.push(b);
+        else if (p.hex === 0xffffff && Math.abs(b.min.y - D.WALL_Y) < 0.01 && h > 0.7) out.wall.push(b);
+        else if (p.hex === 0xffffff && Math.abs(b.min.y - 0.08) < 0.01) out.base.push(b);
+      }
+      return out;
+    };
+    const spec: D.KitchenSpec = { len: 3.6, sink: 0.4, range: -1.1, fridge: 1, gaps: [[-0.2, 1.0]] };
+    const k = kinds(D.kitchen(spec));
+    expect(k.cooker.length).toBe(1);
+    expect(k.hood.length).toBe(1);
+    expect(k.fridge.length).toBe(1);
+    // the hood over the cooker
+    expect((k.hood[0].min.x + k.hood[0].max.x) / 2).toBeCloseTo((k.cooker[0].min.x + k.cooker[0].max.x) / 2, 2);
+    // the fridge at its end (+x), the cooker where the spec put it
+    expect(k.fridge[0].max.x).toBeCloseTo(spec.len / 2 - 0.01, 2);
+    expect((k.cooker[0].min.x + k.cooker[0].max.x) / 2).toBeCloseTo(-1.1, 2);
+    // wall cabinets: some, none over the window's stretch or the hood
+    const wallM = k.wall.reduce((a, b) => a + b.max.x - b.min.x, 0);
+    expect(wallM).toBeGreaterThan(0.6);
+    for (const b of k.wall) {
+      expect(b.max.x <= -0.2 || b.min.x >= 1.0).toBe(true);
+      expect(b.max.x <= -1.4 || b.min.x >= -0.8).toBe(true);
+    }
+    // the base units stop at the cooker (it has its own top) and at the fridge
+    for (const b of k.base) expect(b.max.x <= -1.4 + 1e-3 || b.min.x >= -0.8 - 1e-3).toBe(true);
+    for (const b of k.base) expect(b.max.x).toBeLessThan(spec.len / 2 - D.FRIDGE_W + 1e-3);
+    // the same spec, the same key and the same piece; a different one, another key
+    expect(D.kitchenKey(spec)).toBe(D.kitchenKey({ ...spec, gaps: [[-0.2, 1.0]] }));
+    expect(D.kitchenKey(spec)).not.toBe(D.kitchenKey({ ...spec, range: -1.0 }));
+    expect(Array.from(D.mergeDecor(D.kitchen(spec)).getAttribute('position').array)).toEqual(Array.from(D.mergeDecor(D.kitchen({ ...spec })).getAttribute('position').array));
+    // a cooker and a fridge on walls of their own: the stove has its hood
+    const st = kinds(D.stove());
+    expect(st.cooker.length).toBe(1);
+    expect(st.hood.length).toBe(1);
+    expect(kinds(D.fridge()).fridge.length).toBe(1);
+  });
+  it('wall cabinets read as cabinets (round 12, frame 6): 30 cm deep, door joints and handles, a shadow under them, a colour of their own', () => {
+    const spec: D.KitchenSpec = { len: 3.6, sink: 0.4, range: -1.1, fridge: 1, gaps: [[-0.2, 1.0]] };
+    const parts = D.kitchen(spec), splash = 0xe9eef0;
+    const runs = D.wallCabinets(spec);
+    const body = parts.filter((p) => p.hex === 0xffffff && Math.abs(bb(p.g).min.y - D.WALL_Y) < 0.01 && bb(p.g).max.y - bb(p.g).min.y > 0.7);
+    expect(body.length).toBe(runs.length);
+    for (const p of body) {
+      const b = bb(p.g);
+      expect(b.max.z - b.min.z).toBeGreaterThanOrEqual(0.3); // ≥ 30 cm off the wall
+      expect(b.max.z).toBeLessThanOrEqual(0.3 + 1e-6); // its back on the wall (the splashback's plane)
+      const w = b.max.x - b.min.x, front = b.min.z;
+      // the doors' joints: a dark reveal ≥ 2 cm wide between each pair of ~0.6 m doors, on the front
+      const joints = parts.filter((q) => { const c = bb(q.g); return q.mat === 'solid' && q.hex !== 0xffffff && c.min.x >= b.min.x - 1e-3 && c.max.x <= b.max.x + 1e-3 && c.min.y >= D.WALL_Y && c.max.y - c.min.y > 0.6 && c.max.z <= front + 1e-3; });
+      expect(joints.length).toBe(Math.max(1, Math.round(w / 0.6)) - 1);
+      for (const j of joints) { expect(bb(j.g).max.x - bb(j.g).min.x).toBeGreaterThanOrEqual(0.02 - 1e-6); expect(D.labOf(j.hex)[0]).toBeLessThan(40); }
+      // a handle on every door
+      const handles = parts.filter((q) => { const c = bb(q.g); return q.mat === 'metal' && c.min.x >= b.min.x && c.max.x <= b.max.x && c.min.y > D.WALL_Y && c.max.y < D.WALL_Y + 0.3 && c.max.z <= front; });
+      expect(handles.length).toBe(Math.max(1, Math.round(w / 0.6)));
+      // the shadow they throw on the splashback: right under the cabinet's foot, ≥ 10 L* darker
+      // than the splashback and ≥ 5 cm tall, softening below
+      const band = parts.filter((q) => { const c = bb(q.g); return q.mat === 'solid' && c.max.y <= D.WALL_Y + 1e-6 && c.max.y > D.WALL_Y - 0.12 && Math.abs(c.min.x - b.min.x) < 1e-3 && c.min.z > 0.28; });
+      expect(band.length).toBe(2);
+      const top = band.find((q) => Math.abs(bb(q.g).max.y - D.WALL_Y) < 1e-6)!;
+      expect(bb(top.g).max.y - bb(top.g).min.y).toBeGreaterThanOrEqual(0.05);
+      expect(D.labOf(splash)[0] - D.labOf(top.hex)[0]).toBeGreaterThanOrEqual(10);
+      for (const q of band) expect(D.labOf(q.hex)[0]).toBeLessThan(D.labOf(splash)[0]);
+    }
+    // a colour of their own: never within ΔE 15 of the room's curtains, whatever the fabric and the pick
+    let least = Infinity;
+    for (const fab of FABRIC) for (const pick of [null, ...CABINET_PAINT]) {
+      const c = cabinetColour(pick, fab);
+      least = Math.min(least, D.deltaE(c, fab));
+      expect([CAB_WHITE, ...CABINET_PAINT]).toContain(c);
+    }
+    console.log(`[foundry] wall cabinets vs the curtains: the nearest ΔE76 ${least.toFixed(1)}`);
+    expect(least).toBeGreaterThanOrEqual(15);
+    // the blue that merged with frame 6's blue curtains goes white beside them; kept beside red ones
+    expect(cabinetColour(0x5f7a8c, 0x4f6d8f)).toBe(CAB_WHITE);
+    expect(cabinetColour(0x5f7a8c, 0xa65a44)).toBe(0x5f7a8c);
+  });
+  it('the skirting is 12 cm of trim white, its back on the wall', () => {
+    const b = new THREE.Box3();
+    for (const p of D.skirting()) b.union(bb(p.g));
+    expect(b.max.y).toBeCloseTo(D.SKIRT_H, 2);
+    expect(b.max.z).toBeCloseTo(0.009, 3);
+    for (const p of D.skirting()) for (const sh of [16, 8, 0]) expect((p.hex >> sh) & 255).toBeGreaterThanOrEqual(0xe0); // (trim white)
+  });
   it('every piece is valid, grounded, within its footprint and its vertex budget', () => {
     for (const [name, parts, budget, fp, floor] of cases) {
       let n = 0;
@@ -238,7 +552,14 @@ describe('decor (interior + terrace furniture)', () => {
     for (let seed = 0; seed < 64; seed++) {
       expect(n(D.bookcase(1.0, seed, [0xc46a4a, 0x7fa0b8]))).toBeLessThan(2600);
       expect(n(D.gondola(1.23, seed, [0xc46a4a, 0x7fa0b8]))).toBeLessThan(2600);
+      // (Slice 4's stocked pieces: a cooler's decks, a stack's books, a stand's produce)
+      expect(n(D.cooler(1.9, seed, [0xc46a4a, 0x7fa0b8], seed % 2 === 1))).toBeLessThan(2600);
+      expect(n(D.bookStack(0.9, seed, [0xc46a4a, 0x7fa0b8]))).toBeLessThan(4200);
+      expect(n(D.produce(2.4, 1.2, seed))).toBeLessThan(1500);
     }
+    const stack = (seed: number) => D.mergeDecor(D.bookStack(0.9, seed, [0xc46a4a, 0x7fa0b8])).getAttribute('position').array;
+    expect(Array.from(stack(3))).toEqual(Array.from(stack(3)));
+    expect(Array.from(stack(3))).not.toEqual(Array.from(stack(4)));
     const books = (seed: number) => D.mergeDecor(D.bookcase(1.0, seed, [0xc46a4a, 0x7fa0b8])).getAttribute('position').array;
     expect(Array.from(books(11))).toEqual(Array.from(books(11)));
     expect(Array.from(books(11))).not.toEqual(Array.from(books(12)));
@@ -386,5 +707,37 @@ describe('playgrounds: the pieces a park\'s playground is made of', () => {
     expect(b.max.z).toBeGreaterThan(1.6);
     expect(b.max.y).toBeGreaterThan(2.0);
     expect(bb(playGeometry('swing')).max.y).toBeGreaterThan(2.2);
+  });
+});
+
+import { MICRO_KINDS, microLib } from '../src/assets/micro';
+describe('micro things: the small made objects the micro layer draws (assets/micro.ts)', () => {
+  it('every piece is valid, within its box and under budget; on its foot (a float: at the waterline; a wall mount: at its bracket)', () => {
+    for (const k of MICRO_KINDS) {
+      const g = k.geo(), [w, h, d] = k.box, b = bb(g);
+      expect(finite(g), k.id).toBe(true);
+      expect(verts(g), k.id).toBeLessThanOrEqual(k.budget);
+      expect(b.max.x - b.min.x, k.id).toBeLessThanOrEqual(w);
+      expect(b.max.y - b.min.y, k.id).toBeLessThanOrEqual(h);
+      expect(b.max.z - b.min.z, k.id).toBeLessThanOrEqual(d);
+      if (k.mount === 'float') expect(b.min.y, k.id).toBeGreaterThan(-2.1); // (a buoy's skirt, a marker's pile under the water)
+      else if (!k.mount) expect(Math.abs(b.min.y), k.id).toBeLessThanOrEqual(0.21); // (an umbrella's pole is pushed into the sand)
+      for (const a of ['position', 'normal', 'color']) expect(g.getAttribute(a), `${k.id} ${a}`).toBeDefined();
+      // every collider fits inside the piece's own footprint
+      if (k.solid) expect(k.solid[0] * 2 <= w + 0.01 && k.solid[1] * 2 <= d + 0.01, k.id).toBe(true);
+    }
+    expect(new Set(MICRO_KINDS.map((k) => k.id)).size).toBe(MICRO_KINDS.length);
+  });
+  it('is deterministic, and most pieces take the instance colour somewhere (TINT)', () => {
+    let tinted = 0;
+    for (const k of MICRO_KINDS) {
+      const a = k.geo().getAttribute('position').array, b = k.geo().getAttribute('position').array;
+      expect(Array.from(a)).toEqual(Array.from(b));
+      const c = microLib(k.id)!.getAttribute('color').array as Float32Array;
+      let white = false;
+      for (let i = 0; i + 2 < c.length; i += 3) if (c[i] >= 0.98 && c[i + 1] >= 0.98 && c[i + 2] >= 0.98) white = true;
+      if (white) tinted++;
+    }
+    expect(tinted).toBeGreaterThan(MICRO_KINDS.length * 0.6);
   });
 });

@@ -6,7 +6,9 @@ import { CTL, STOP_BACK, signalState } from './traffic';
 
 export interface LifeEnv { playerX: number; playerZ: number; night: number; hour: number; density: number; wind: number; clock: number; playerYaw?: number }
 
-const ST = { WALK: 0, PAUSE: 1, BEACH: 2, FLY: 3, STAND: 4, LAND: 5, TO_DOOR: 6, INSIDE: 7, FROM_DOOR: 8, DOWN: 9, CHAT: 10, CROSS: 11 } as const;
+const ST = { WALK: 0, PAUSE: 1, BEACH: 2, FLY: 3, STAND: 4, LAND: 5, TO_DOOR: 6, INSIDE: 7, FROM_DOOR: 8, DOWN: 9, CHAT: 10, CROSS: 11, IN_WALK: 12, IN_STAY: 13, IN_OUT: 14 } as const;
+/** Inside the building standing open (`setIndoor`): walking in to a place, there, walking back out. */
+const INDOORS = (st: number) => st === ST.IN_WALK || st === ST.IN_STAY || st === ST.IN_OUT;
 /** The renderer's `amt` for a walker stopped to talk (creature.ts: the talking gesture). */
 export const AMT_CHAT = -4;
 /** A walker's kind, in its `lights` slot (published in FLAGS bits 1+): life.ts draws the dog. */
@@ -49,6 +51,11 @@ export class LifeSim {
   dir: Int8Array; side: Int8Array;
   state: Uint8Array; active: Uint8Array; variant: Uint8Array; lights: Uint8Array;
   door: Int32Array; leg: Uint8Array;
+  /** The place indoors a walker went to (an index into `indoor.spots`; −1: none). */
+  spot: Int16Array;
+  /** The building standing open: its door and free places (world/interiors.ts `Visit`), and which are
+   *  taken. Who walks in by its door goes to one — the same person, on to their place and back out. */
+  private indoor: { dx: number; dz: number; s: Float32Array; taken: Uint8Array } | null = null;
   // nearest car ahead, per (edge, direction) bucket — like the reference engine's neighbor grid, this is
   // what lets the sim scale: car-following is O(Σ bucket²) instead of O(cars²) per tick.
   lead: Int32Array; leadGap: Float32Array;
@@ -76,6 +83,10 @@ export class LifeSim {
   /** The crosswalk's two ends (x, z, x, z) for a walker crossing one street: kerb → kerb. */
   private xp: Float32Array;
   private doorGrid = new Map<number, number[]>();
+  /** On the way between a door's foot and its threshold: the turn of its path (LifeInit.doorPath)
+   *  a walker is making for — up a porch's steps, across a landing — counted from the end it set
+   *  out from. */
+  wp: Uint8Array;
   private drivableLen = 0;
   visits = 0;
 
@@ -104,6 +115,8 @@ export class LifeSim {
     this.dir = new Int8Array(n); this.side = new Int8Array(n);
     this.state = new Uint8Array(n); this.active = new Uint8Array(n); this.variant = new Uint8Array(n); this.lights = new Uint8Array(n);
     this.door = new Int32Array(n).fill(-1); this.leg = new Uint8Array(n);
+    this.wp = new Uint8Array(n);
+    this.spot = new Int16Array(n).fill(-1);
     this.lead = new Int32Array(n).fill(-1); this.leadGap = new Float32Array(n);
     this.nxtE = new Int32Array(n).fill(-1); this.nxtD = new Int8Array(n); this.stopDone = new Int32Array(n); this.waitT = new Float32Array(n); this.holdT = new Float32Array(n);
     this.fromArm = new Int32Array(n).fill(-1);
@@ -179,9 +192,10 @@ export class LifeSim {
   private adopt(o: LifeSim) {
     this.tick = o.tick;
     this.rng = makeRng((this.w.seed ^ (o.tick * 2654435761)) >>> 0);
+    this.indoor = o.indoor;
     const copy = (i: number) => {
       for (const k of ['x', 'y', 'z', 'yaw', 'vx', 'vy', 'vz', 'speed', 'anim', 'amt', 'timer', 'dodge', 'tx', 'ty', 'tz', 'fx', 'fy', 'fz', 's', 'phase', 'radius'] as const) this[k][i] = o[k][i];
-      this.side[i] = o.side[i]; this.state[i] = o.state[i]; this.variant[i] = o.variant[i]; this.lights[i] = o.lights[i]; this.leg[i] = o.leg[i];
+      this.side[i] = o.side[i]; this.state[i] = o.state[i]; this.variant[i] = o.variant[i]; this.lights[i] = o.lights[i]; this.leg[i] = o.leg[i]; this.wp[i] = o.wp[i]; this.spot[i] = o.spot[i];
       this.active[i] = o.active[i];
     };
     // gulls and boats don't ride the road graph: they carry over as they are
@@ -196,11 +210,11 @@ export class LifeSim {
         const st = o.state[i];
         // on the sand, no road needed (walking, or stopped a while to look at the sea)
         if (!car && (st === ST.BEACH || ((st === ST.PAUSE || st === ST.CHAT) && o.edge[i] < 0))) continue;
-        if (!car && (st === ST.TO_DOOR || st === ST.FROM_DOOR || st === ST.INSIDE)) {
+        if (!car && (st === ST.TO_DOOR || st === ST.FROM_DOOR || st === ST.INSIDE || INDOORS(st))) {
           const od = o.door[i], d = od >= 0 ? this.findDoor(o.w.doors[od * 6], o.w.doors[od * 6 + 2]) : -1;
-          if (d >= 0) { this.door[i] = d; continue; }
-          if (st === ST.INSIDE) { this.active[i] = 0; this.y[i] = -1000; continue; } // unseen either way
-          if (st === ST.FROM_DOOR) { this.leg[i] = 1; continue; } // straight back to the pavement
+          if (d >= 0) { this.door[i] = d; this.wp[i] = Math.min(this.wp[i], this.turns(d)); continue; }
+          if (st === ST.INSIDE || INDOORS(st)) { this.active[i] = 0; this.y[i] = -1000; this.spot[i] = -1; continue; } // unseen either way
+          if (st === ST.FROM_DOOR) { this.leg[i] = 1; this.wp[i] = 0; continue; } // straight back to the pavement
           this.state[i] = ST.WALK; // TO_DOOR lost its door: carry on down the street
         }
         const ne = this.nearestEdge(o.x[i], o.z[i], car ? (e) => this.drivable(e) : (e) => this.walkable(e), car ? 6 : 16); // walkers keep to the sidewalk, well off the centre line
@@ -220,6 +234,47 @@ export class LifeSim {
 
   setEnv(e: Partial<LifeEnv>) { Object.assign(this.env, e); }
 
+  /** The building standing open changed (null: none). Those inside one that closed are inside still,
+   *  unseen, and come out when they would have; those inside the new one by its door (gone in before
+   *  it opened) stand at its places at once — the same people, persistent. */
+  setIndoor(v: { door: [number, number]; spots: Float32Array } | null) {
+    for (let i = RANGES.peds[0]; i < RANGES.peds[1]; i++) {
+      if (!this.active[i] || !INDOORS(this.state[i])) continue;
+      this.state[i] = ST.INSIDE; this.spot[i] = -1; this.y[i] = -1000; this.snapPrev(i);
+    }
+    this.indoor = v && v.spots.length >= 4 ? { dx: v.door[0], dz: v.door[1], s: v.spots, taken: new Uint8Array(v.spots.length / 4) } : null;
+    if (!this.indoor) return;
+    for (let i = RANGES.peds[0]; i < RANGES.peds[1]; i++) {
+      if (!this.active[i] || this.state[i] !== ST.INSIDE || !this.byOpenDoor(i)) continue;
+      const k = this.takeSpot(i);
+      if (k < 0) continue;
+      const S = this.indoor.s;
+      this.x[i] = S[k * 4]; this.y[i] = S[k * 4 + 1] + 0.05; this.z[i] = S[k * 4 + 2]; this.yaw[i] = S[k * 4 + 3];
+      this.snapPrev(i);
+      this.state[i] = ST.IN_STAY;
+    }
+  }
+  private byOpenDoor(i: number) {
+    const I = this.indoor, o = this.door[i] * 6, D = this.w.doors;
+    return !!I && this.door[i] >= 0 && Math.hypot(D[o] - I.dx, D[o + 2] - I.dz) < 0.6;
+  }
+  /** A free place for walker i, the nearest the door first (−1: all taken). */
+  private takeSpot(i: number) {
+    const I = this.indoor!, o = this.door[i] * 6, D = this.w.doors;
+    let best = -1, bd = Infinity;
+    for (let k = 0; k < I.taken.length; k++) {
+      if (I.taken[k]) continue;
+      const d = Math.hypot(I.s[k * 4] - D[o], I.s[k * 4 + 2] - D[o + 2]) + this.rng.float() * 3;
+      if (d < bd) (bd = d), (best = k);
+    }
+    if (best >= 0) { I.taken[best] = 1; this.spot[i] = best; }
+    return best;
+  }
+  private freeSpot(i: number) {
+    if (this.indoor && this.spot[i] >= 0 && this.spot[i] < this.indoor.taken.length) this.indoor.taken[this.spot[i]] = 0;
+    this.spot[i] = -1;
+  }
+
   /** A car (the player's) at (x,z) moving (vx,vz): walkers it catches are knocked down — thrown
    *  along with the car, they tumble, lie a moment, get up and walk off. Returns how many. */
   bump(x: number, z: number, vx: number, vz: number) {
@@ -228,7 +283,7 @@ export class LifeSim {
     const fx = vx / sp, fz = vz / sp;
     let n = 0;
     for (let i = RANGES.peds[0]; i < RANGES.peds[1]; i++) {
-      if (!this.active[i] || this.state[i] === ST.INSIDE || this.state[i] === ST.DOWN) continue;
+      if (!this.active[i] || this.state[i] === ST.INSIDE || INDOORS(this.state[i]) || this.state[i] === ST.DOWN) continue;
       const dx = this.x[i] - x, dz = this.z[i] - z;
       const ahead = dx * fx + dz * fz, side = Math.abs(dx * -fz + dz * fx);
       if (ahead < -1.2 || ahead > 2.8 || side > 1.3) continue;
@@ -1181,6 +1236,10 @@ export class LifeSim {
           const fx = D[k * 6 + 3], fz = D[k * 6 + 5];
           const d = Math.hypot(fx - this.x[i], fz - this.z[i]);
           if (d > 26) continue;
+          // a door the walker stands in front of: a straight walk to its foot then never crosses its
+          // wall's line — one round the corner was reached straight through the corner building
+          // (Robby: "people walking sometimes walk through walls of building to other side around corners")
+          if (this.w.doorN && (this.x[i] - D[k * 6]) * this.w.doorN[k * 2] + (this.z[i] - D[k * 6 + 2]) * this.w.doorN[k * 2 + 1] < 0.8) continue;
           const lat = (fx - this.tmp[0]) * -tz + (fz - this.tmp[2]) * tx;
           if (Math.sign(lat) !== side) continue;
           const score = d + this.rng.float() * 12;
@@ -1190,8 +1249,14 @@ export class LifeSim {
     this.door[i] = best;
     this.fx[i] = this.x[i]; this.fy[i] = this.y[i]; this.fz[i] = this.z[i];
     this.state[i] = ST.TO_DOOR;
-    this.leg[i] = 0;
+    this.leg[i] = 0; this.wp[i] = 0;
     this.dodge[i] = 0;
+  }
+
+  /** The turns on door k's way up (0: straight from the foot to the threshold). */
+  private turns(k: number) {
+    const A = this.w.doorPathAt;
+    return A && k >= 0 && k + 1 < A.length ? A[k + 1] - A[k] : 0;
   }
 
   private walkTo(i: number, gx: number, gy: number, gz: number, dt: number) {
@@ -1442,7 +1507,10 @@ export class LifeSim {
             this.timer[i] = this.rng.range(4, 14);
           }
         } else if (moving && this.rng.float() < dt * 0.05) this.meet(i);
-        else if (moving && !dog && this.rng.float() < dt * 0.07) this.tryVisit(i);
+        // (a dog walker goes in at a door too, the dog with them — the walk home, a café's terrace: review
+        // round 12, "dogs fill the street": with only the others visiting, 7 of 9 walkers near a lens had
+        // a dog, the street keeping ~23% dog walkers by day where the sim assigns 9%)
+        else if (moving && this.rng.float() < dt * 0.07) this.tryVisit(i);
       } else if (st === ST.CROSS) {
         // round the corner to the crosswalk (leg 0), wait there for the light or a gap, over it
         // (leg 1 — the cars on it wait: crossingAt), then on to the next street's sidewalk (leg 2)
@@ -1473,24 +1541,51 @@ export class LifeSim {
         }
       } else if (st === ST.TO_DOOR || st === ST.FROM_DOOR) {
         const o = this.door[i] * 6, D = this.w.doors;
+        // the stair legs (to the door from its foot; from the door down to it) walk the door's path
+        // turn by turn: up a porch's steps to the top, then level across the deck — a straight glide
+        // from the ground to the threshold sank into the steps and the deck (Robby: "when walking on
+        // porch into house they fall into the floor then stand normal on floor again")
+        const up = st === ST.TO_DOOR && this.leg[i] === 1, down = st === ST.FROM_DOOR && this.leg[i] === 0;
+        const m = up || down ? this.turns(this.door[i]) : 0, P = this.w.doorPath!;
         let gx: number, gy: number, gz: number;
-        if (this.leg[i] === 0) { gx = D[o + 3]; gy = D[o + 4]; gz = D[o + 5]; }
+        if (this.wp[i] < m) {
+          const t = (this.w.doorPathAt![this.door[i]] + (up ? this.wp[i] : m - 1 - this.wp[i])) * 3;
+          gx = P[t]; gy = P[t + 1]; gz = P[t + 2];
+        } else if (this.leg[i] === 0) { gx = D[o + 3]; gy = D[o + 4]; gz = D[o + 5]; }
         else if (st === ST.TO_DOOR) { gx = D[o]; gy = D[o + 1]; gz = D[o + 2]; }
         else { gx = this.fx[i]; gy = this.fy[i]; gz = this.fz[i]; }
         if (this.walkTo(i, gx, gy, gz, dt)) {
-          if (this.leg[i] === 0) this.leg[i] = 1;
+          if (this.wp[i] < m) this.wp[i]++;
+          else if (this.leg[i] === 0) { this.leg[i] = 1; this.wp[i] = 0; }
           else if (st === ST.TO_DOOR) {
-            // step inside and close the door behind you
-            this.state[i] = ST.INSIDE;
+            // step inside — into the building standing open (on to a free place in it), else close
+            // the door behind you
             this.timer[i] = this.rng.range(15, 110) * (this.env.night > 0.5 ? 4 : 1);
-            this.y[i] = -1000;
-            this.snapPrev(i);
             this.visits++;
+            if (this.byOpenDoor(i) && this.takeSpot(i) >= 0) this.state[i] = ST.IN_WALK;
+            else {
+              this.state[i] = ST.INSIDE;
+              this.y[i] = -1000;
+              this.snapPrev(i);
+            }
           } else {
             this.state[i] = ST.WALK;
             this.door[i] = -1;
           }
         }
+      } else if (st === ST.IN_WALK || st === ST.IN_OUT) {
+        const I = this.indoor, k = this.spot[i], o = this.door[i] * 6, D = this.w.doors;
+        if (!I || k < 0) { this.state[i] = ST.INSIDE; this.y[i] = -1000; this.snapPrev(i); }
+        else if (st === ST.IN_WALK ? this.walkTo(i, I.s[k * 4], I.s[k * 4 + 1], I.s[k * 4 + 2], dt) : this.walkTo(i, D[o], D[o + 1], D[o + 2], dt)) {
+          if (st === ST.IN_WALK) this.state[i] = ST.IN_STAY;
+          else { this.freeSpot(i); this.state[i] = ST.FROM_DOOR; this.leg[i] = 0; this.wp[i] = 0; }
+        }
+      } else if (st === ST.IN_STAY) {
+        // at their place: turned to the shelf, the counter, the window — then back out the door
+        moving = 0;
+        const I = this.indoor, k = this.spot[i];
+        if (I && k >= 0) this.yaw[i] = angLerp(this.yaw[i], I.s[k * 4 + 3], Math.min(1, dt * 3));
+        if ((this.timer[i] -= dt) <= 0) this.state[i] = ST.IN_OUT;
       } else if (st === ST.INSIDE) {
         moving = 0;
         this.y[i] = -1000;
@@ -1500,7 +1595,7 @@ export class LifeSim {
           this.yaw[i] = Math.atan2(-(D[o + 3] - D[o]), -(D[o + 5] - D[o + 2]));
           this.snapPrev(i);
           this.state[i] = ST.FROM_DOOR;
-          this.leg[i] = 0;
+          this.leg[i] = 0; this.wp[i] = 0;
         }
       } else if (st === ST.DOWN) {
         // thrown, sliding to a stop on the ground, then back on their feet

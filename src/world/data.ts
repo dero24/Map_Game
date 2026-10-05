@@ -21,8 +21,10 @@ export interface Building {
   n?: string; // name (from OSM / a POI inside)
   u?: string; // what it's used for: the OSM amenity / shop / office / craft value (language-neutral, uses.ts)
   fc?: number; // real facade colour 0xRRGGBB (tags / materials)
-  rc?: number; // real roof colour 0xRRGGBB (tags / materials / aerial imagery)
+  rc?: number; // real roof colour 0xRRGGBB (tags / materials; a baked pack's aerial samples, aerial.ts tileRoofs)
+  ar?: number; // roof colour read off an aerial photo, its cast taken out (aerial.ts — the tile worker, streamed US cells)
   fl?: number; // mapped number of floors
+  rl?: number; // mapped roof:levels — storeys inside the roof (counted in h: realTile plausibleHeight)
   mh?: number; // mapped min_height (m): the building stands on something (pilings)
   // Simple 3D Buildings (OSM building:part): a tower's setbacks, podium and crown are parts
   // inside one outline. The outline keeps the footprint, door and name; the parts are the shape.
@@ -50,11 +52,16 @@ export interface Building {
  *  `tu`: underground (OSM tunnel=yes/culvert/…, not a building passage) — only the life sim's cars
  *  use it (they drive down into the portal and out of sight); nothing paints or furnishes it.
  *  `ic`: a mapped `incline` (fraction) — grade.ts leaves a street the map says is steep, steep. */
-export interface Road { p: number[]; c: string; w: number; n?: string; ref?: string; br?: 'yes' | 'movable'; l?: number; ow?: 1; sw?: 1; sv?: string; pk?: number; lod?: 1; own?: number; sy?: 1; tu?: 1; ic?: number; sf?: string; sc?: number /* steps: the mapped step_count */ }
+/** `bs`: a bridge's mapped structure (OSM bridge:structure: truss, arch, suspension, cable-stayed…);
+ *  unmapped, a bridge is a beam bridge — girders on piers (bridges.ts). `bm`: how a movable span
+ *  opens (OSM bridge:movable: bascule, lift, swing…); unmapped, a bascule. */
+export interface Road { p: number[]; c: string; w: number; n?: string; ref?: string; br?: 'yes' | 'movable'; bs?: string; bm?: string; l?: number; ow?: 1; sw?: 1; sv?: string; pk?: number; lod?: 1; own?: number; sy?: 1; tu?: 1; ic?: number; sf?: string; sc?: number /* steps: the mapped step_count */ }
 /** `k`: what a pitch is for (sports.ts Sport, or 'playground'); `sf`: its mapped surface (OSM). */
 export interface Area { c: string; o: number[][]; i: number[][]; n?: string; lod?: 1; own?: number; k?: string; sf?: string }
-/** `ft` (fences): 1 iron railing, 2 chain-link, 3 wood/picket — from OSM fence_type; absent = unknown. */
-export interface Line { c: string; p: number[]; w?: number; br?: 1; own?: number; ft?: number }
+/** `ft` (fences): 1 iron railing, 2 chain-link, 3 wood/picket — from OSM fence_type; absent = unknown.
+ *  `gen` (piers): a pier the map didn't draw, added as the tile builds (docks.ts) — a marina's
+ *  finger pier ('slip') or a riverfront house's dock ('dock'); never in a tile file. */
+export interface Line { c: string; p: number[]; w?: number; br?: 1; own?: number; ft?: number; gen?: 'slip' | 'dock' }
 /** `h`: a mapped height (m) — masts, water towers, chimneys, flagpoles. */
 export interface Point { c: string; x: number; z: number; own?: number; h?: number; sp?: string /* a tree's kind (realTile treeKindOf) */; d?: number /* a viewpoint's bearing (°) */ }
 export interface Poi { name: string; kind: string; x: number; z: number; slice: boolean }

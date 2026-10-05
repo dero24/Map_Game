@@ -4,6 +4,13 @@ Read this when the task touches building/prop geometry, interiors, collision, ri
 vehicles, ambient life, the asset kit, or the player-facing layer (explore/paint-in, photo mode,
 sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 
+**The game's verbs and direction are `docs/GAMEPLAY_VISION.md`** (read it before any gameplay
+work): the world blooms from pencil into colour on first sight (§1), pencil means collectable —
+tap to paint it within ~30 m (§2), regional rares as data (§3), travel (§4), your own private
+layer of the world (§6), one home behind every vehicle's door (§7), and §17's tiers: foundations
+first, then the world looking right everywhere, then the game. This file describes what is built;
+where the two disagree, the vision is the target and this file is the current state.
+
 ## Buildings
 
 - Walls follow the true footprint; pitched roofs come from a straight skeleton
@@ -15,6 +22,16 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
     clear of every other footprint (`C.rings`). The order is along the wall, round the side, a
     switchback, then straight out. Round the side also needs a walkway beside the flight, since its
     foot faces the back. None clear: the least-blocked shape.
+  - A raised house's door goes on a wall whose stair stands in the open (`raisedDoorWall` over
+    `doorWalls`, the open walls best-facing first, up to 8); none: the least-blocked one. Every
+    other building keeps `pickDoorWall`'s wall, `doorWalls`' first.
+  - Under a raised house (review round 11, frame 5: "grass grows in the deep shade under the raised
+    house") the ground is a parking pad, gravel or — within 400 m of the sea — sand, never its yard's
+    lawn (`pads.ts` `underRaised`, a hash of where it stands: about two in five a pad). Every mounted
+    tile's go to the painter (`main.ts` `onTile` → `groundPaint.ts` `setPads`, dropped with the tile),
+    which fills the footprint with it after the yards (gravel lays its stones); the grass mask reads
+    only green paint, so no blade grows there (`tests/raisedGround.test.ts`, the mask rastered from
+    the painter's strokes).
 - Buildings inside buildings (`nest.ts`, run first in `buildBuildings`). A standing building
   ≥ 90% inside a larger one rises from its roof as a part of it (`lf`, `pt`, `po`) or, if no
   taller, is hidden (`in: 1`: no walls, footprint or door). This covers towers mapped tier by tier
@@ -60,9 +77,113 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
     white and white-shaded grey parts take the tint) and `interior/furnish.ts` (furniture by room
     type) build the mesh as generator steps the pump runs ≤ 3.5 ms a frame. Piece keys must fully
     determine their geometry (the piece cache is shared across builds).
-  - Budgets (`tests/interiorBudget.test.ts`): no step over 8 ms, ≤ 120k vertices (a house 40k),
-    ≤ 60 draws, a tall building ≤ 3 storeys built; layout rules in `tests/interiorLayout.test.ts`;
-    `npx tsx tools/bench-interiors.mts`.
+  - Budgets (`tests/interiorBudget.test.ts`): no step over 8 ms, ≤ 120k vertices (a house 40k, a
+    supermarket 90k), ≤ 60 draws, a tall building ≤ 3 storeys built; layout rules in
+    `tests/interiorLayout.test.ts`; `npx tsx tools/bench-interiors.mts`. Instanced pieces take up to
+    `MAX_INSTANCED` (47) draws; past it the rarest keys are baked into the merged mesh (the 120 × 40 m
+    flats: 115.6k vertices in 50 draws).
+- The way in (review round 10, must-fix 4: "the front door opens on a home"; `tests/interiorLayout.test.ts`,
+  `interiorBudget.test.ts` "the way in", `tests/helpers/homes.ts`):
+  - A cottage (plan.ts `COTTAGE`: ≤ 110 m² a storey, and wide enough for a living room of 3.2 m
+    beside its stair and a bedroom beside that) has no hall. The strip from the front door is its living
+    room (`Plan.cottage`): the kitchen at the back of it in the same space (no wall), or one `great` room
+    when it's under 6.4 m deep; the stair up an inside wall of it; bedrooms, the bathroom (a WC behind
+    the stair over a storey) off it — off its kitchen end where they can, else near the front, so the
+    living room keeps a long wall for its sofa. Upstairs the landing is the stair's lane and a passage
+    (`Plan.land`, its wall between windows); the rest of the strip is bedrooms.
+  - A bigger house keeps its hall: the stair's foot no more than 40° off the door's axis (a door far
+    across a wide hall pushes the foot further in), the living room on the passage side, opening off
+    the hall through a cased opening of 1.2–1.6 m (`LIVING_OPEN`; no leaf over 1.15 m) whose middle is
+    within 30° of the axis (`LIVING_ANGLE`: t − ud ≥ |v − vd| · cot 30°). A WC along a wide hall's
+    passage side is passed over when it would leave that wall too short for such an opening.
+  - The hall at the front door (`furnish.ts` `wayIn`): a bordered runner down its way past the stair, the
+    console with its lamp lit (always) and a mirror over it on a wall ahead of the door (`bestAgainst`:
+    the best spot by a score, not the first random one), coats on their rail by the door (a cottage hangs
+    them in its living room). Pieces: `decor.ts` `coatRail` (3–4 turned coats of 0.9–1.1 m), `runner`,
+    `consoleLamp`, `mirror`, `skirting`, `ceilingDome`.
+  - Skirting (`skirtRoom`, before the furniture): 12 cm of trim white along every stretch of every room's
+    walls, both faces of a partition, stopping at doorways — one 1 m piece stretched per stretch
+    (`Instancer.put`'s `sx`), so a block of flats' thousands cost one draw.
+  - Ceiling lights in a home: a glass dome, off by day in a room with windows (decor mat `lamp` → part
+    `IP.night`, lit by `uNight`; its `Light.n` weighted by the night in `pickLights`), on all day in one
+    without (a hall, a landing, a WC). Lamps on tables and floors stay lit.
+  - Sun pools come only through the facade's own window cells (spacing, sill, head by kind — a
+    storefront's glass on the ground, a curtain wall's floor to ceiling: `uSunWin`, `uSunWinUp`), and only
+    where the wall the ray leaves by is the same room's (the room map a hand's width inside it): no
+    "morning sun" in a hall with no window.
+  - In the room the front door opens on, the free-standing pieces (the armchair, the big plant) stay off
+    the line from the door to the room's far end: the view in reaches the kitchen and its table.
+- The kitchen and the table (review round 11: "a sink run, with no range, fridge or wall cabinets";
+  "three chairs crowd one side of the table"; "a WC is in view through the living room's left door";
+  `tests/interiorHome.test.ts`):
+  - A home's kitchen is one piece along a wall, `decor.ts` `kitchen(spec)` (`KitchenSpec`: its length,
+    the sink, the cooker — a range set in, its chimney hood over it — the fridge at an end with a
+    cabinet over it, and the stretches with a window over them): base units and the worktop, wall
+    cabinets wherever the wall above is solid, a low upstand under a window. `furnish.ts`
+    `planKitchen` picks its wall and length (from each end of every stretch and every 40 cm, the
+    longest it takes and a few shorter: 30 cm steps in a house, 60 in a block of flats so its kitchens
+    are a few instanced pieces) by `runLayouts` — the run laid out in its own x round its windows,
+    memoized: the fridge and the cooker only on solid wall (never in a window's stretch), the sink
+    under the window where it fits beside the cooker, the most wall cabinets, the far end of the room
+    from the door you come in by. A windowless run keeps its fridge on its left (a mirrored flat's is
+    the same piece turned round). What the run can't hold stands on a wall of its own, as near it as it
+    goes (`stove`, `fridge`: round the corner, an L; else the living room's kitchen end). One kitchen a
+    space (a kitchen the stair's wet room cuts in two has it in its biggest part). A fridge with no
+    wall for a full-size one is a slim 60 cm one. Of the 82 seeded homes' kitchens, 80 have their
+    cooker under a hood, a fridge and ≥ 0.6 m of wall cabinets (two have no wall left for a fridge).
+  - Wall cabinets read as cabinets (review round 12, frame 6: "flat cut-outs in the curtains' own blue,
+    and the two merge"): `WALL_D` (32 cm) off the wall, a 2 cm dark joint between each pair of ~0.6 m
+    doors, a handle on every door and the bottom rail's line, and the shadow they throw on the
+    splashback under them (`SHADOW_DARK`: 5.5 cm at half the splashback's light, 5 cm at three
+    quarters). Their colour keeps its own against the room's curtains (`interiors.ts` job.fab →
+    `Furnisher.fab`; `furnish.ts cabinetColour`: the picked colour, else white, else the next paint at
+    ΔE76 ≥ `CABINET_DE` 22 from the fabric).
+  - Dining chairs: a place per ~0.7 m of the table's edge, never under `DINE_PLACE` (0.6 m) —
+    `placesAlong`: two a side at 1.2–2.0 m, three from 2.1 m — and one at each end of a table of
+    `DINE_ENDS` (1.4 m) or longer where there's room behind it to draw the chair out (the table is
+    placed with that room first, then without).
+  - A WC's or a bathroom's door off a room of the day (living, great room, kitchen, dining) stands
+    shut in its doorway (`mesh.ts` `LeafSpot.shut`; a `leafShut:` piece, MOVING so it stays
+    instanced) and swings into its room as you step up to it — in front of the doorway within a stride,
+    or in the room itself — and shuts again once you've stepped away (`interiors.ts` `swingDoors`, a
+    quarter turn in ~0.25 s). Walking past it along the wall leaves it shut; the doorway is always open
+    in the walk world. Every other leaf stands open as before.
+  - Pose 19 (`tools/review-shots.js`, "morning sun"): of the 'inside' house and its 24 nearest, the room
+    with the most east-to-south glass (`interior/views.ts` `glassFacing`, `sunniest`; of rooms with as
+    much, a room of the day before a bedroom, then the one whose floor takes more of the light), framed
+    where the most sunlit floor is in the lens (`sunRoomView`: from a 40 cm grid and its doorways, never
+    inside its furniture — `Interiors.activeTaken`, the floor it claimed — each turned a little either
+    way and pitched 0.2–0.44 down; a coarse lens of rays through the room's box, its furniture as low
+    blocks, estimates the frame's sunlit floor — `sunlit`: back toward the real sun, `uKeyDir`, through
+    the room's own window cells — its bare floor and its biggest wall, and keeps the most light with
+    neither over about a quarter of the frame). Without the sun: its doorway or far side, looking at the
+    floor a stride in from those windows.
+  - Measuring a frame (an id pass): with `window.__TAG_PIECES__` set, a build's merged mesh carries an
+    `aObj` stream — each piece drawn while furnishing, each baked piece, its own tag; 0 the building
+    (`mesh.ts` `tagging`, `ARCH_KEY` for the pieces that are the building's).
+- Deeper archetypes (Slice 4, `tests/interiorArch.test.ts`): `uses.ts placeOf(name, tag)` says what a
+  building is (its tag first — a pub called "The Library" stays a pub — else its name, several
+  languages) and plan.ts picks the family: `market` (a supermarket, a grocery ≥ 400 m², a pharmacy
+  ≥ 500 m², a tagged shop ≥ 1,500 m² on one storey), `hotel` / `school` (corridor strips: `STRIPS`,
+  the corridor where both bands come out most even; on a storefront's glass the ground storey is
+  `P.pub`, a public floor), a library/bank/post office/gym/pharmacy as its shop floor (a big one an
+  office core round its hall), a church or mosque (`P.place`).
+  - Layout: `backStrip` puts a big floor's back of house at the depth that makes its share (20–25% a
+    supermarket's, 30–40% a restaurant's kitchen) — across the middle it meets no facade; at each
+    side wall it jogs to that wall's pier, the corner between a back room. `bandCuts` picks a band's
+    party walls together on a 10 cm grid (a DP: rooms nearest the width wanted, out-of-range only
+    where no pier allows better; a greedy pick strands the next room in a window).
+  - A big floor is planned round its fixtures (`Layout.fix`: kind, rect, facing, modules): a
+    supermarket's checkouts by the door (lanes on a 2.5 m pitch), produce on the door's other side,
+    the main aisle, gondola runs (1.25 m modules, ≤ 11 a run: a cross aisle every 13.75 m, 1.8 m
+    aisles), chillers and freezers along the back partition; a church's pews (0.91 m pitch, a 1.5 m
+    centre aisle) and altar. `finish` drops a fixture a doorway came to land by.
+  - Rooms: `guest` (bath inboard, the entry passage open to the bedroom, mirrored pairs), `classroom`
+    (50–65 m², the board on a solid end wall), `assembly`, `staff` (a gym's changing room),
+    `narthex`, `prayer` (carpet rows, the mihrab and minbar on the far wall), `library`, `bank`,
+    `post`, `gym`; furnished in `furnish.ts` (`fixtures()` first, then the room's own).
+  - Not done: a dais (the type is there), a qibla from the real bearing, hotels' and gyms' tags
+    (`tourism`, `leisure` aren't in the tile's use tag yet: their names find them).
 - Tall buildings (Slice 3, `tests/interiorTower.test.ts`): plan.ts `tall` — ≥ 5 storeys, or more than
   12,000 m² of floor. Every storey exists: n = floor((top − floor0 + 0.2) ÷ fH), the facade's window
   rows (a 150 m office tower: 39).
@@ -101,8 +222,38 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 - Ground-floor role follows the business (`useOf`): café (counter, pastry case, bistro sets),
   diner for restaurants/bars (vinyl booths, counter + stools, menu board), office/civic (desks,
   monitors, office chairs), shop for groceries (stocked gondolas).
+- Lunch on the tables (review round 12, frame 18: "a cup, a plate or a glass at every occupied
+  table"): every seat a café, a bar's high tops or a diner's booths offer a customer (`F.npcs` with a
+  seat — the build picks who sits from these) has lunch in front of it — a plate, and a coffee or a
+  glass of water (`furnish.ts lunch`; decor.ts `tableware`, keys `tw:plate`, `tw:cup`, `tw:glass`, chosen
+  by the place, no draw on the room's seed). `tests/interiorHome.test.ts`: every table someone sits at
+  in two cafés, a bar and a diner over three seeds is set.
 - Sun pools: the interior shader traces the sun ray to the outer wall (`uDims`) and lights the
-  floor where it passes a window band (0.9–2.25 m, 2.7 m cells).
+  floor where it passes one of that wall's real window cells (the facade's spacing, sill and head
+  for the building's kind) and that wall is the same room's (see "The way in" above).
+- Getting in (Robby, Brooklyn, 2026-10-04):
+  - **Which building.** The door you're walking toward (`Interiors.vel`, your heading smoothed from
+    your steps) counts as up to 8 m nearer. Past 16 m, only a door you're walking straight at counts.
+    The nearest door used to change every few steps along a row of shopfronts, so the one you meant
+    began building at 8 m.
+  - **A shut door** (`shutDoor`, scope −10). Within 2.5 m of a door whose interior isn't open, a leaf
+    stands across its doorway, and that building becomes the one building, built flat out (as a
+    lift's next window is, 14 ms a frame). You stop at a closed door for a moment rather than walk
+    into an empty shell and see through the house until it lands.
+  - **The panes.** A pane opens whole or not at all, decided by your distance to its nearest point
+    (under 6.5–8 m, a per-window threshold) and only on the storeys round yours. The old per-pixel
+    noise around a 4.2 m distance to the pane's centre left a big storefront half-dissolved
+    wherever you stood at that distance.
+- People who go in stay in (`Interiors.visit` → `LifeClient.setIndoor` → `lifeSim.ts` `setIndoor`):
+  - The building standing open publishes its door and the ground storey's free standing places:
+    the residents' unused spots and a 1.2 m grid over the open floor. Both are only in the space the
+    front door opens on, so nobody walks through a partition.
+  - A walker going in by that door walks to a place (`IN_WALK`), stays there turned to the room
+    (`IN_STAY`), and walks back out by the door (`IN_OUT` → `FROM_DOOR`): the same person, seen
+    through the windows and in the room with you.
+  - If the building closes, they're inside still, unseen, and come out when they would have. If it
+    opens again, whoever went in by its door is already standing at a place.
+  - `tests/lifeSim.test.ts` covers it.
 - Only on foot: driving or flying (`interiors.update(..., onFoot)`), no interior activates; a build
   in progress drops, and an open one goes once you're 30 m past its door. A downtown drive used to
   assemble an interior for every door it passed, with 70–200 ms spikes.
@@ -121,6 +272,32 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 - Stairs up a retaining wall (`retaining.ts` `wallStairs` → `stairColliders`): a ramp deck from
   the sidewalk to the landing, walls along its open side and past the landing. A retaining wall's
   own collider stops 0.4 m under its top, so from the landing you step over the coping onto the lot.
+- Road bridges (`world/bridges.ts`, called from `structures.ts`): the road-bridge ways a tile can
+  see, its margin's included, chain where exactly two meet end to end; every tile profiles the
+  whole chain and draws only the ways it owns, so pieces owned by different tiles meet (the
+  Rumson–Sea Bright bascule's tiles meet mid-river: profiled per tile, it sagged to the water there).
+  - The long section (`bridgeProfile`, stations at every vertex and 2 m between): lands on its
+    approach streets at their height + 4 cm; over each run of water stands the clearance (a movable
+    run `CLEAR_MOVABLE`, else `clearOver` the run's shore-to-shore width, measured on past an end
+    in the air so every tile agrees) plus its girders' depth (span/25); clears roads and railways
+    under it; climbs at its class's grade (1.3× off the street); never under the line between its
+    ends; bascule leaves straight heel to heel. Chains are built longest first: one that runs onto
+    another's deck (a ramp onto a viaduct) holds that deck's height where it joins (`Pin`), and
+    neither parapet stands where they meet.
+  - Collision is the deck as drawn: roadway and sidewalks are `table` decks (drawn station heights,
+    exact over the worker boundary) with square ends (`Deck.cut` — a round end hung over the
+    sloping street; where two ways' pieces meet, both end along the drawn mitre; a cut deck reads
+    its height at the nearest point of its centreline); parapets are walls a deck-high band; piers,
+    bascule piers, fenders and towers are walls below the deck. A mapped sidewalk alongside widens
+    the deck (`deckEdges`).
+  - What carries it (`carriedBy`, OSM `bridge:structure` → `Road.bs`, real-lite tiles only — the
+    baked pack has none): girders on piers (beam, the default); through trusses (80 m spans);
+    an arch over a low deck (hangers) or under a high one (columns); a suspension bridge's two
+    towers and cables; a cable-stayed bridge's pylons and stays. A higher OSM `layer` clears the
+    bridge it crosses (`decksUnder`). A movable span is drawn closed (`opensBy`, OSM `bridge:movable` →
+    `Road.bm`): a bascule's steel leaves, its piers, four tender houses (their lamps are `towers`)
+    and timber fenders; a lift span's two towers and the machinery house over each; a swing span's
+    rest piers, the round pier it turns on and the long fender along the river round that.
 
 ## Vehicles
 
@@ -129,6 +306,128 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
   Shift+B boat, N plane) are a developer switch: panel → Debug → free rides.
 - While riding, `Vehicles.update` owns the camera and carries the walker (streaming/life/
   interiors key off it); `walker.update` is skipped.
+- A car's collider is its own body (`carBody`: a capsule as long and wide as its kit recipe, a bike
+  rack adding to the back), moved by `WalkWorld.moveBody` (`bodyPush` per wall). The bumper stops
+  at a wall, and a post or corner brushing its side pushes it aside. It was a 1.05 m circle round
+  the middle, and the nose went 1.15 m into a wall.
+
+## Hot air balloons
+
+- **The family** (`assets/balloon.ts`): a ~2,800 m³ sport balloon from a seed — 12 or 16 scalloped
+  gores, a pattern (gores / bands / chevron / harlequin) in 2–3 colours with a crown band, an inner
+  skin in its own shade (look up from the basket), wicker basket, burner frame, cables; the flame
+  is its own mesh (glow channel). Vertex colour, no tint: the brush picks the colours. Budget
+  < 4,800 vertices (a handful in the sky at once; `tests/balloon.test.ts`).
+- **Physics** (`player/balloonPhysics.ts`, pure): buoyancy of the envelope's hot air in ISA air
+  (L = V·ρ·(1 − Tₐ/T)·g) against weight and quadratic drag, over the balloon's mass plus the air it
+  carries (the seconds of lag you fly by); the burner heats, the fabric cools, the vent dumps. You
+  can't steer: the basket takes up the wind at its height, plus a ±1.5 m/s "fan" (the stick). Let go
+  of burner and vent and the assist holds the height you let go at (`hold`); `Vehicles.holdAt`
+  flies to a height.
+- **Winds aloft** (`world/wind.ts`): four layers (surface, 200, 600, 1,500 m) veering and
+  strengthening with height, seeded by region (0.25°) and the world's UTC hour, eased hour to hour.
+- **Riding** (`vehicles.ts`, kind `balloon`): Space / ▲ burn, C / ▼ vent, WASD / the stick the fan
+  (relative to your look), V / ⤢ first ↔ third person, E / Get out · Jump out (over the side: fly
+  on; the empty balloon holds a while, then comes down on its own). First person is your own look
+  from the basket; photo mode works in the basket (P / ▣) — the best seat for a painting. The
+  burner has a roar (`ambience.ts`). Boarding needs you at the basket, not flying over it.
+- **Other people's balloons** (`world/balloons.ts` `AmbientBalloons`): each ~5 km cell of the real
+  map (0.05°) rolls once per half hour of the world's clock — ~30% at dawn and dusk, ~10% by day,
+  none at night (the world's hour gates it). A flight climbs, cruises on its layer's wind, then
+  comes down on the nearest beach within 2.5 km of where the wind took it (else open ground within
+  800 m, else it flies on out of sight), sits ~8 min envelope up (step in: it's yours —
+  `Vehicles.o.ambient`), and packs away. Off in capture mode (they keep the real clock).
+- **A first visit**: a balloon waits on the nearest beach within 1.5 km of the spawn
+  (`Vehicles.giftBalloon`, once per browser; none inland).
+- **Painting them**: a balloon in frame colours its Almanac card (`balloon:` / `ride-balloon:`;
+  taught from further off than a car); the brush paints one on open ground (`place.ts`
+  `placeBalloon`) in any colours — every ride's swatch row has a free colour picker, a balloon a
+  second one for its stripes.
+
+## Touch controls (phones, tablets)
+
+- `body.touch` (a touch screen) shows the touch UI; `body.nomouse` (no fine pointer: a phone or a
+  tablet) makes hints, toasts and the ride HUD name the touch buttons instead of keys — a
+  touch-screen laptop keeps its key names. Both are set in index.html's boot guard.
+- Walker (`player/controller.ts`): the left 45% of the screen is a floating stick (full push =
+  run; flying, 4× speed), the rest drags the look (scaled by the panel's look sensitivity). The
+  stick is drawn where it rests (`#stick-home`, labelled "walk" until you've walked with it once —
+  `map-game.stick-taught.v1`), comes to the thumb wherever it lands, and follows a thumb that runs
+  past its rim (the origin drags along) — you never have to lift and find it again.
+  `releaseTouches()` drops both (a pinch, the page going to sleep). `waitGround` holds walking
+  while the cell underfoot isn't built (main.ts `groundCheck`); `climb` is Up / Down while flying.
+- The buttons (index.html): every one a drawn SVG icon with its word under it (`data-label`, the
+  `::after`; `syncTouchControls` changes the words — Fly/Land, Up/Down or Burn/Vent). Two places:
+  the bar along the top right (`#tbar`: Go — search, focused in the tap so iOS raises its keyboard;
+  Map — the atlas; More — the drawer: plant, next seed, +1 hour, options; any touch on the world
+  closes it) for what you do now and then, and the cluster under the right thumb (`#tdock`, every
+  button placed from one corner anchor by CSS variables `--big --btn --col --row --dock-b`): Paint
+  (72 px, ink — the game's verb; the same as P: the brush away, a viewpoint faced) in the corner,
+  Fly over it, Brush beside it, Lift over the brush in a lobby. A tick of vibration on every press
+  (Android), and each button shrinks under the finger (`.held` while one is held down).
+- The ride's own button (`#touch-action`, main.ts `touchActionState`): Drive / Board / Step in
+  beside a ride, Get out / Jump out in one — an ink pill over the cluster that pops in; a
+  double-tap on the look side does it too, but gets you out only once stopped. `#ride-touch`
+  holds the held buttons, in the cluster's own places: Boost (car, boat — the corner), Faster /
+  Slower (plane), Up / Down (flying on foot; a balloon's Burn / Vent) beside Paint, View over it
+  in a balloon. A held button lets go when its finger lifts, it disappears, the window blurs or
+  the page sleeps (`bindHold`, `releaseHolds`).
+- Rides on the stick (`vehicles.ts` `stickAxes`): a 0.1 dead zone for steering/banking and 0.25
+  along the throttle/pitch (a thumb steering sideways never touches the pedals), rescaled. Part
+  way cruises at that share of the top speed and brakes that gently; keys are always ±1, so the
+  keyboard's driving is unchanged. Plane: pull the stick back (down) to climb.
+- Pinch: photo mode zooms (its fingers released from stick and look); the atlas map zooms about
+  the fingers (`mapview.ts`). The page itself never zooms (`touch-action` in style.css; iOS's
+  gesture events stopped in index.html — it ignores `user-scalable=no`).
+- Sleep (`ui/lifecycle.ts`): hidden → sound suspended (phones; a PC tab sounds on), the life
+  worker paused (everywhere), held input released; an iPhone's interrupted audio resumes on the
+  next tap.
+- The frame (`player/frame.ts`, reviewer round 10 "a phone is a window, not a slot"):
+  `walkParams.fov` is the lens — the vertical angle on a PC's 4:3–16:9 screen, which those screens
+  keep exactly — and `frameFov(lens, aspect)` fits the camera to the screen's shape. Upright (any
+  tall window) the frame opens taller until it shows 41° across (78° tall at 390×844, where a fixed
+  62° was a 31° slot; at most 84° tall); on its side (or an ultrawide) it stops at 95° across (it
+  showed 105°; the height gives). `setLens(cam, lens)` (controller.ts) is how every camera that
+  follows you sets it — the walker (less the brush's push-in), the chase, the basket — and main.ts's
+  resize, which also runs on a turn of the phone (`screen.orientation` change, or
+  `orientationchange`) and again once the new size has settled. Every zoom turns the lens (photo
+  mode's wheel, pinch and ± buttons; the panel's "field of view"), so the frame follows in
+  proportion: upright, photo zoom runs from a 24° to a 97° tall frame. `tests/frame.test.ts`.
+- The phone HUD (style.css "the phone HUD"; `body[data-ride]` = car / boat / plane / balloon /
+  fly / near, set in `syncTouchControls`). The middle of the frame — x 15–85%, y 30–62% — is the
+  world's: nothing of the HUD stands in it while you walk or ride, toasts included. The place name
+  and the clock sit on a paper wash, the clock in full ink (it was grey at 0.75 — under 4.5:1 on a
+  grey wall).
+  - Upright: the place, then the hint (or a ride's readout — live numbers only — then the hint)
+    read down the top left, clear of the bar; the bar's column keeps to the right 15% (its margin narrows on a
+    narrow phone, its buttons 40 px on a 320-wide one); the word for what you're next to sits just
+    over Fly; an SE's cluster is a size smaller.
+  - On its side: the bar a row; the place, then one message under it; the ride's readout along the
+    bottom like a dashboard, between the stick and the cluster; the cluster a row along the bottom
+    (Lift, Up or Burn beside the brush) with Fly — and the word over it — up the right edge; a
+    smaller stick ring, lower.
+  - A toast (main.ts `toast`, `body.toasting`) takes the hint's place for its few seconds, two lines
+    at most (clamped; its margin is a clear border, so no third line peeks out of the padding), and
+    the hint steps aside till it has faded. An arrival card (`body.arriving`) is painted smaller
+    where the place name stands, on the same wash, and the place name waits till the card's fade
+    ends (`animationend` — the wall clock, not the slow frames' game time).
+  - Never cut off (review round 12, must-fix 4: the paint result ended "…you've painted an area…").
+    Every toast is written to fit two lines at 320–390 px — "painted out to 1.2 km · 0.35 km² ·
+    Map: your sketchbook", a milestone ("you've painted an area the size of Central Park") a toast of its
+    own after it — and `toast()` says anything longer in parts, split at its last break that fits (" — ",
+    " · ", ": ", "; "). A phone's arrival card is two lines: the name, then the region written short
+    and the time ("Monmouth County, NJ · 7:42 pm": `geo.ts shortRegion`; `.a-short`/`.a-long`/`.a-more`
+    — the long region and the sky's words are a PC's); a name too long for its line is painted a size
+    smaller (`.a-small`), a region too long for the second steps aside for the time (`.a-tight`). No
+    message carries a literal "…" either. `tools/hud-audit.mjs` renders all of it on its ten phones.
+  - The map-data credit on one line along the bottom edge, under the stick and the cluster. The
+    words in hints and toasts are the buttons' own (Paint, Land, Map, Go, More, Boost, Burn…).
+  - `tools/hud-audit.mjs` checks it: 10 phones × both ways × 7 states × 4 message sets (none, a
+    toast, an arrival card, both) — every button with its word, no overlaps, nothing in the middle.
+- The options panel (lil-gui, More → Options) on a phone: an opaque sheet across the top leaving
+  the bottom ~300 px (stick, cluster, Get out) in reach — down the left on its side — with a
+  "× Close" pill. lil-gui 0.21's root is `.lil-root` (style.css matches `.root` too), and its theme
+  vars are set on every `.lil-gui` level.
 
 ## Ambient life + sound
 
@@ -140,6 +439,135 @@ sketchbook, commissions, atlas map + search, hints, arrival cards, sound).
 - Pure sim in `src/sim/lifeSim.ts` (testable), worker wrapper `ambient.worker.ts`,
   renderer/client `life.ts`, shared layout `protocol.ts` (SAB when cross-origin isolated,
   transferable copies otherwise). Sound: `src/audio/ambience.ts` (all synthesized).
+- Walkers are the foundry's person (`people.ts`), posed in the shader from `aAnim` (phase,
+  amount — 0 standing, 1 walking, 1.5 running, the knockdown and chat codes — and the lead). One
+  draw for all of them (`life-ped`), the residents and the café guests too, each in its own mesh.
+  - Standing (a pause, a chat, a corner) is never frozen: the weight goes over one foot, then the
+    other, the free knee easing, the head looking about (`walkPose`'s idle).
+  - **Dog walkers go in at doors too** (`lifeSim.ts`, the visit roll): the dog goes in with them and
+    comes out with them. Only the others visited (round 12, "dogs fill the street"), so the street
+    kept ~23% dog walkers by day where the sim assigns 9%; now the share outdoors is the share
+    assigned (`tests/lifeSim.test.ts`: 10.7% assigned, 11.3% outdoors on a grid town by day). Not
+    done: a beach's no-dogs season as a dated ordinance table by municipality (it belongs in region
+    data, never a place name in code).
+  - **Dog walkers** (`PED.DOG`): `life.ts` `walkDog` puts the dog a lead's length ahead and to the
+    right, on the walker's own ground, and tells the walker's shader `aAnim.z` = 1 + how far the
+    dog has wandered sideways — the right arm holds the lead out toward it. The lead (`LEAD_V` 8
+    vertices, four segments sagging a little) runs from `leadHand` — the shader's own pose maths
+    on the CPU, so it ends in the drawn hand (within 2 cm: `tests/people.test.ts`) — to the
+    dog's collar (`DOG_COLLAR`). The dogs draw with `dogMaterial`: the fox's trot, the tail
+    carried and wagged side to side.
+  - Walkers are drawn on the ground under them (`life.ts`, `ground` = `WalkWorld.outdoorNear`, within
+    150 m): the sim walks them 12 cm over their street's own height, and the shoes hovered.
+  - Nobody stands in the first steps in from a front door, or sits within 2.2 m of where you stand
+    once you're in (`interiors.ts` `people`): a resident there was cut in half at the lens of
+    anyone walking in.
+
+## The shore's calendar (`src/world/calendar.ts`) — round 10's must-fix 5
+
+The season and the hour decide how full the marina, the beach and its parking are, everywhere at
+once, from the map and seeds. No place names: a beach is a mapped `beach`, a marina a mapped
+`marina`, a riverfront lot a house with sea-level water within 30 m of its walls.
+
+- **One calendar**: the world's day (`setWorldDate`, from `?date=` — the tile worker at init, the
+  page at boot for in-page builds; else today), `BEACH_SEASON` (moved from micro.ts, which
+  re-exports it), `MARINA_SEASON` (slips taken: July–August 0.9, October 0.55, a temperate winter
+  ~0.22; a warm coast ≥ 0.72, a cold one less), `beachDay(hour)` (one rise, one fall: full 11:30–
+  15:30, about half at six, empty by 20:30), `beachLotFill`, `lifeguardSeason` (the last Monday of
+  May to the first Monday of September; half a year round in the south) and `LIFEGUARD_HOURS`
+  10–17. The month is fixed when a tile builds; the hour moves while you watch.
+- **Windows**: something that comes and goes carries the hours it's there (`windowFor(u, fill)`:
+  there while u < fill(h) — for a one-rise-one-fall day that's one stretch; the lowest keys come
+  first and stay latest, and the count at any hour is exactly the fill). `present(h, a, b)`; [0, 24]
+  is all day, b < a overnight.
+- **The beach lot** (`props.ts`): a lot within 150 m of a mapped beach (none in the tile's context:
+  within 150 m of the open sea) fills by `beachLotFill(hour, season)` — 6% all day and night, then
+  the beach's day × its season (1 October 17:48: ~10%; a July afternoon: full). Each car's record
+  carries its hours (`KERB_STRIDE` 13: … arrive, leave). Its walls go in the builders' scratch walk
+  only (`scratchOnly`: what's placed after keeps off the stall); `kerbCars.ts` draws it, finds it
+  for E and walls it only in its hours — one collision scope a car (−1,000,000 down), in and out of
+  the walk world as it arrives and leaves (`KerbCars.walls` = the walk world; `update(x, z, hour,
+  view)`). One due to arrive or leave within 140 m in front of you waits until you look away (a jump
+  of the clock — a shot, the panel — applies at once); its walls follow what's drawn. Other lots
+  keep the town's fill (built density, `OCCUPANCY`) all day.
+- **Marinas and docks** (`docks.ts` `shoreDocks`, called in `tileBuild.ts` before the structures):
+  - a mapped marina's waterline — the distance-to-water field's zero line through it (or within 6 m
+    of its outline: an outline round the basin is the bulkhead), marching squares on 1.5 m — gets
+    finger piers (`SLIP` 4.5 m apart, `FINGER` 9 m long, 0.9 m wide) where the water is deep and
+    goes on past the tip, never within a slip's width of the map's own piers (their stretch is
+    theirs); a boat from `boatMix` (narrow enough for the slip) lies bow-in in each slip between
+    two fingers. Every tile that sees the marina lays it out whole and builds the fingers rooted on
+    its own ground, so a marina across a tile edge meets itself;
+  - two in five riverfront house lots (sea-level water within 30 m of the walls, nothing between,
+    not the ocean's beach, no mapped pier within 30 m) get a 6–9 m dock off the bulkhead and a boat
+    alongside (`riverfront` counts the lots that could);
+  - the generated piers are the map's `pier` lines with `gen` set (`'slip'`, `'dock'`; never in a
+    tile file): `structures.ts` decks and posts them, the micro layer cleats them; `props.ts` moors
+    their boats at the berths, not along them;
+  - piers (mapped and generated) are built on fine ground only (`pierGround`: the region's 2 m
+    lattice and 150 m round it, or a tile's pack / a streamed cell's DEM — not the 10 m backdrop);
+    boats only on sea-level water (`seaLevel`);
+  - every moored boat (the map's piers too) is in the water at the month's share, keyed by where
+    it lies, and no two hulls overlap (`oneToASpace`).
+- **The beach's people** (`crowd.ts` `beachCrowd`, after the micro layer in `tileBuild.ts` →
+  `BuiltTile.crowd` → `crowdLayer.ts`):
+  - they go where the beach's things are: a person on each chair (`CHAIR`) and towel (`LIE` or
+    `SIT`) of the micro layer's umbrella cells and of the summer beach round the stands (props.ts
+    `beach`), one to three to an umbrella (someone sitting in its shade if no seat is taken), now
+    and then one standing to talk; a third of the parties' kids at the waterline jumping the waves
+    (`PLAY`, 0.56–0.72 scale), some a parent wading waist-deep; a lifeguard on each stand's seat
+    (`GUARD`, `GUARD_SEAT` 2.88 m — the stand gained the seat) in season, 10–17. Each party shares
+    a window over `beachDay`. Out of season there's no gear and nobody on it.
+  - The gear comes and goes with its people: the stands' summer beach (props.ts `beach.gear`) is
+    appended to the tile's micro records, and every umbrella, chair, towel and cooler carries its
+    party's hours in the record's `flags` (`packWindow`; 0 = all day). `microLayer.ts` draws a
+    flagged piece only in its hours (`update(…, camera, hour)`), holding one in front of you like
+    the crowd does. No more empty umbrellas at eight in the morning.
+  - `CrowdLayer` draws every tile's records: the nearest in the full body, the rest in the lite one
+    (`people.ts` `personLiteGeometry`, 193 vertices, smooth, the same joints/parts/markers) out to
+    `farR`, two draws (`beach-people`, `beach-people:lite`; no shadow — the shadow pass would draw
+    the standing body); `CROWD_TIERS`: desktop 120 + 1,400 to 420 m, phone 40 + 280 to 240 m (half
+    `CAPS.peds`), low 20 + 140. `nearR` is for the walking lens: `update(…, lens)` stretches it by
+    the camera's magnification over 62° (main.ts passes tan 31° ÷ tan(fov/2): about 5.5 at the
+    calendar's 12° shot), so who gets the full body follows how big they are on screen — the
+    caps don't move. Refilled every 4 m walked, ~1 minute of the clock or a 10% change of lens;
+    someone due to come or go in front of you within 140 m waits until
+    you look away (a jump of the clock — a shot, the panel — applies at once). `crowd.people()`
+    lists who's drawn (probes).
+  - `creature.ts` `BEACH`: swimwear (bare arms and legs, trunks or a suit in the instance colour,
+    half a top; the guard red), bare feet (the shoe flattened to a foot in skin), and the poses
+    (`people.ts` `beachPose`: joint angles for the chair, the towel — the whole body turned onto
+    its back — the sand, the waves and the stand; heels on the sand, never in it). A standing
+    beach-goer shifts their weight like anyone standing.
+- Tests: `tests/calendar.test.ts` (the curves, windows exact to 2%, the lifeguard dates),
+  `tests/shoreCalendar.test.ts` (on the baked pack: the beach lot ≤ 25% at 17:48 on 1 October and
+  > 85% at 13:00 in July; comers never in the tile's collision; ≥ 8 boats a 100 m of the marina's
+  waterline in October, fingers 4.5 m apart, bow-in; docks on 30–45% of riverfront lots; ≥ 1.2
+  people an umbrella at 13:00 in July, 1–3 under each, a guard in every stand 10–17, none in
+  October, nobody in January; deterministic; the tiers' caps and vertices), `tests/kerbCars.test.ts`
+  (hours, walls, overnight), `tests/foundry.test.ts` (the lite body). Shots:
+  `tools/calendar-shots.js` (`__CALENDAR__(tag, { set: 'autumn' | 'summer' })`: 9 and 12 re-shot
+  with their counts, a house's dock, the 50 m beach pose at 13:00 in July with people and umbrellas
+  in frame, a lifeguard, the kids).
+- Review frame 9 (`tools/review-shots.js`, round 11: "still lands on house docks with about five
+  small boats"): a mapped marina — the loaded tiles' `marina` area with the most moored boats in or
+  within 25 m of its outline (≥ 8), its slips — framed, when the pose is taken, from the stand round
+  them (20–40 m out, 7 m up, every 15°, clear of buildings) where the most of its boats are in the lens
+  at ≥ 0.2% of the frame each (their hulls' boxes projected through the game's lens); it logs the
+  count (`[review] 9 marina: …`, `window.__REVIEW_COUNTS__[9]`). No such marina: the old nearest
+  cluster.
+- The water's glitter (`water.ts`; round 12, pick-r12a 5: "the dock's white lozenges"): the sun's
+  dashes lie across the view — the dry-brush strokes' two world-fixed frames, blended by the camera's
+  forward — and near the lens (a finer, sparser octave within ~20 m, the dashes from ~60 m) break into
+  sparkles tens of centimetres long. They were world-fixed along z only: metres-long dashes that fanned
+  toward the vanishing point as white lozenges at a dock 10 m off, facing the afternoon sun
+  (`uGlitterFine` 0 draws them as they were, for the A/B in `tools/arm-check.js`).
+- Wakes (`src/world/wakes.ts`; round 11, calendar-autumn 3: "white lozenges fan across the water at
+  the house's dock … its foam is too thick and opaque at 10 m"): each arm a ~20 cm line of broken
+  white in dashes along it (noise along the track, crawling outward) with a fainter line inside, faint
+  thin crests across the track, the churn in streaks along it; at most `WAKE_MAX` (55%) white, fading
+  by ~40 m. `wakeFoam` is the shader's TS twin (`tests/wakes.test.ts`). `Wakes.bedAt` (the terrain:
+  main.ts) fades a wake out over water shallower than `SHALLOW` (0.45 → 1.3 m): a dock's sand, a bar.
 
 ## Asset foundry (`src/assets/`, workbench `/kit.html`)
 
@@ -151,12 +579,19 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   - `hashf`, `variantAt`, `validGeometry`, `cached`.
 - Families:
   - `kit.ts`: cars (+ gear), boats, planes, rocks;
-  - `flora.ts`: 7 tree species × 3 variants (`treeMeta` gives real dims), 12 garden species with growth stages, `plantMix`, `inBloom`;
-  - `fauna.ts`: 9 animals (incl. red fox, red-tailed hawk) on one jointed body plan + `birdGeometry` + `critterMaterial`;
-  - `decor.ts`: the furniture family for interiors and terraces (sofa, armchair, bed, tables, chairs, bistro and office chairs, monitor, lamps, café counter, booth, stocked shelves, plants, ceiling fan, storage bench, `cafeSet`), rounded boxes (one bevel segment; plain boxes under 1.5 cm radius) and tapered legs, merged by `mergeDecor` or instanced by `interior/mesh.ts`, plus the plain-box pieces planned rooms repeat (kitchen run, workstation, door frame and leaf, WC, vanity, bath, wardrobe, dresser, bookcase, gondola, washer, lift doors, mailboxes, racking, range); per-piece vertex budgets in `tests/foundry.test.ts` (a sofa < 4000, a chair < 1500);
-  - `people.ts`: one jointed person (~1.4k verts) for walkers and residents. Skin, hair and trouser palettes, 5 hairstyles, shorts/sleeves by `warmthFor(climate, month)` — all chosen per instance in the shader (`PEOPLE` define in `creatureMaterial`, marker vertex colours `MARK`), so a crowd is one draw;
-  - `furniture.ts`: mailboxes, beach set, picnic table, car gear + `gearFor`.
+  - `flora.ts`: 21 tree species × 3 variants (`treeMeta` gives real dims) — among them the Northwest's Douglas fir, western hemlock, Sitka spruce, western redcedar, red alder and vine maple, each in an open-grown, a forest and an old form (`SPIRES`); 12 garden species with growth stages, `plantMix`, `inBloom`; the forest floor's sword fern, salal and Oregon grape (`understoryMix`, grown by `world/understory.ts` under a wood's canopy);
+  - `fauna.ts`: 9 animals (incl. red fox, red-tailed hawk) on one jointed body plan + `birdGeometry` + `critterMaterial`, and the walkers' dog (`dogLib`, `dogMaterial`: the tail carried and wagged side to side, `DOG_COLLAR` for the lead);
+  - `decor.ts`: the furniture family for interiors and terraces (sofa, armchair, bed, tables, chairs, bistro and office chairs, monitor, lamps, café counter, booth, stocked shelves, plants, ceiling fan, storage bench, `cafeSet`), rounded boxes (one bevel segment; plain boxes under 1.5 cm radius) and tapered legs, merged by `mergeDecor` or instanced by `interior/mesh.ts`, plus the plain-box pieces planned rooms repeat (kitchen run, workstation, door frame and leaf, WC, vanity, bath, wardrobe, dresser, bookcase, gondola, washer, lift doors, mailboxes, racking, range), and the way in (coats on their rail, a bordered runner, the console with its lamp, a mirror, skirting stretched to each wall, a ceiling dome lit after dark or all day), and lunch on a table (`tableware`: a plate, a coffee, a glass of water, each < 500 vertices); per-piece vertex budgets in `tests/foundry.test.ts` (a sofa < 4000, a chair < 1500, the coat rail < 3200), and the wall cabinets checked there (32 cm deep, joints, handles, the shadow band, ΔE to every curtain fabric);
+  - `people.ts`: one jointed person for walkers and residents — indexed and smooth (1,538 vertices, 2,626 triangles: limbs as tubes through the joints, shoes on soles, rounded hands), skinned in the shader by joint angles (`Pose`, `aSkin`; `POSE_GLSL` mirrors the TypeScript `walkPose`/`seatPose`/`beachPose`/`downPose`/`skinPoint`, which the lead and the helm's skipper use) — and its lite twin (`personLiteGeometry`, 193 vertices, smooth: the beach crowd where people are small on screen). Skin, hair, trouser and shoe palettes, 5 hairstyles, shorts/sleeves by `warmthFor(climate, month)` — all chosen per instance in the shader (`PEOPLE` define in `creatureMaterial`, marker vertex colours `MARK`; `BEACH`: swimwear, bare feet and poses), so a crowd is one draw. The shoulder joint stands inside the torso, capped by the deltoid (a sphere on it: `DELTOID`), so the arm rounds into the shoulder (round 12: the arm tube's top stood proud of it like an epaulette). Measured in `tests/people.test.ts`: no arm-top vertex above the torso's outline seen from the front and either side at 1.5 m in 45 poses (10 mm under it at worst); shoes ≤ 14 cm across and never below the ground on their feet, no normal break over 25° along a limb in 69 poses, the lead within 5 cm of the hand, standing weight shifts with planted feet, the dog's tail tip ≥ 15 cm up. Workbench: `/kit.html` → people;
+  - `furniture.ts`: mailboxes, beach set, picnic table, car gear + `gearFor`;
+  - `micro.ts`: the micro layer's small things (carts, A-frames, porch chairs, flags, hoops, cleats, buoys, beach gear, the mapped picnic tables, boards, cabinets, clocks, channel marks), placed by `world/micro.ts` and drawn real close up, as impostor cards further out (`docs/agent/rendering.md`).
 - Lot dressing (NA): `buildings.ts` lays a generated drive (a 2.9 m strip in `walks`) beside the front walk where the map has no service way near the door, and emits `drives`; `props.ts` parks a car at the house end (never on paved ground or the sidewalk strip). Doors also get hedges or `fence:picket` runs.
+  - The kerb line: a house's curbside box stands with its post 45 cm behind the kerb's face (the
+    carriageway's edge; `buildings.ts`), a hydrant 60 cm (`props.ts`, 4.2 m along the kerb from a
+    box, and only where that is still 35–100 cm off the kerb's face — not past a bend or the street's
+    end; its mesh is `street:hydrants:kerb`). No house's box within 10 m of a commercial door (the
+    margin's shops by their walls): a shop's sidewalk carries none. The ground the paint lays round
+    them — flags, kerb face, gutter pan, aprons — is `docs/agent/rendering.md` "The ground you walk on".
 - Keeping the way in clear while a tile builds (`tileBuild.ts`): the builders' scratch walk holds,
   unrecorded, the margin buildings' outlines, a 3.2 m apron in front of every door (`doorApron`),
   the tile's own footprints, and its stairs and landings (`deckKeepOut`, with 1.2 m past a flight's
@@ -184,22 +619,31 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
 - Placement:
   - Choose variants by position (`variantAt`) and mixes by region/climate tables (`carMix`, `boatMix`, `plantMix`, `gearFor`). Never per-town lists.
   - Name each InstancedMesh `family:type[:variant]`:
-    - `trees:`, `garden:`, `mailbox:`, `beach:`, `picnic:`, `parked-cars:<type>[:<gear>]`, `moored-boats:`, `rocks:` (tile props);
+    - `trees:`, `garden:`, `mailbox:`, `beach:`, `picnic:`, `parked-cars:<type>[:<gear>]`, `moored-boats:` (the map's piers, a marina's slips and a house's dock alike), `rocks:` (tile props);
     - `critter:` (wildlife);
     - `plant:` (the player's garden).
   - The spotting log, commissions, hints and critter habitat all find things by these prefixes. A vehicle model string may carry gear: `suv+surf`.
 - Wildlife (`src/sim/critters.ts`) is a main-thread sim within ~90 m of the walker. Behaviour is per *role*; the species filling each role comes from `faunaMix(region, climate)` (`env.region/climate` from the region style), so a desert walk meets jackrabbits, quail, a roadrunner and a coyote with no new code. Burrowers dive down a burrow (despawn) when startled. Habitat comes from tree instances, land cover (`field()`: lawn, meadow, shrub, crops, bare desert), the ocean edge and gardens. Behaviours: wander, flee, climb, flush, drift, and the ecosystem states stalk/pounce (fox), soar/stoop/rise (hawk). Threats: the walker, predators, and `env.movers` (traffic from `LifeClient.movers` plus the player's ride via `Vehicles.onMove`). Alarms spread (`alarm` delay). `critters.eco` tallies hunts, catches and scares. Animals are drawn 1.3–2× life size on purpose.
 - Grow verb (`src/ui/garden.ts`): R plants, Shift+R picks the next seed. Plants grow while you play (about 20 min) and while you're away (IndexedDB `map-game-garden`). Each bed adds a collider and clears the grass.
 
-## Paint as you explore (`src/world/explore.ts`)
+## Exploring: the map paints in, and sketch mode (`src/world/explore.ts`)
+
+(The vision's bloom, §1 — everything in view colours on first sight, to the view distance — is
+not built yet; sketch mode below is the nearest thing: it paints where you walk and what photos frame.)
+
 
 - Where you've been is a sparse bitmap on a **global** grid: Web-Mercator metres, 8 m cells,
   32×32-cell blocks. It survives re-anchoring, teleports and region changes. Blocks persist to
-  IndexedDB (`map-game-explore`).
-- A walker-centred R8 texture window (4 km, 8 m texels → `U.uExplore` / `U.uExploreBox`) feeds
-  the post composite, which paints unvisited ground as a paler, slightly desaturated first wash and
-  deepens it with a noisy wet edge as you arrive (`postParams.sketch`, `?sketch=0`). Never a
-  pencil sketch: the world always reads as painted.
+  IndexedDB (`map-game-explore`). It's always recorded (`explore.enabled`): the map paints in
+  where you've walked (mapview.ts), and the atlas, the journal and the arrival cards count it.
+- The world itself is simply painted, near and far — unless **sketch mode** is on
+  (`postParams.sketchFar`, panel "sketch mode", OFF by default; `?sketch=1`, `?loop=paint`): then
+  everywhere you haven't been is a pencil underdrawing to the horizon, walking paints it in round
+  you and a photo paints what it frames. A walker-centred R8 texture window (4 km, 8 m texels →
+  `U.uExplore` / `U.uExploreBox`) and the far window feed the post composite (`uSketch`).
+  (Until 2026-10-01 a lighter "paint as you explore", on by default, laid a pale first wash over
+  the unwalked ground near you. It read as fog in the distance and was removed: the map is where
+  exploring shows.) The arrival card says "walk to paint it in" only in sketch mode.
 - Capture mode keeps regression shots fully painted unless `?sketch=1`.
 - Reveal radius grows with eye height (`revealRadius`), so flying paints wide.
   `paintedBefore(x,z)` reads the saved block, which is how an arrival card knows a first visit.
@@ -208,20 +652,41 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   as blocks load). They feed the far window (`farTexture`, filled only while `explore.far` —
   main sets it with the far sketch). `valueAt` is walked or photo-painted, so the map shows both.
 - Photos paint what they frame (the far sketch only; `ctx.paintView`, called from photo mode's
-  shot): the frame's depth → world points (`render/seen.ts`) → `paintSeen` / `paintSeenSliced`
+  shot): the frame's depth → mended (`mendDepth`: what stands thin in front of the ground — a rope,
+  a post, a wire, a bird, ≤ 6% of the frame — and, riding, the ride itself (nearer than 30 m in a
+  balloon's basket, 70 m in third person, 45 plane, 11 car, 14 boat) are bridged in 1/depth from
+  the ground on both sides, never into the sky; unmended, a basket rope was a streak of canvas
+  from you to the horizon) → world points (`render/seen.ts`) → `paintSeen` / `paintSeenSliced`
   (a slice a frame, ~4 ms). Each sample paints a disc its footprint wide (at least 1.5 cells);
   neighbours on one surface (`joined`: a smooth ramp in 1/depth, so ground at a grazing angle —
   not across a silhouette) are filled between; ground running on into the sky as a plane does
   continues to the sky cut while the terrain keeps it in sight (the sea to the horizon, not a
   plateau's hidden far side). Nearer than `SEEN_SPLIT` (2 km) it paints 8 m cells, past it far
-  cells, out to `SEEN_REACH` (15 km, level). It blooms in over ~2 s, near first. Walks and
-  `stats()` are untouched by it.
+  cells, out to `postParams.photoReach` (panel: "a photo paints out to", default and max
+  `SEEN_REACH` = 22 km, level). The pinholes and hairline gaps a frame's sampling leaves between
+  discs (the far "canvas clouds") are closed (`Stamps.close`: a bare cell with ≥ 5 of 8 stamped
+  neighbours, far cells ≥ 4, twice) — an edge never grows, so what a building hides stays hidden.
+  It blooms over ~2.4 s a cell, the farthest starting 2.2 s late (the colour runs out to the
+  horizon). Walks' `painted` is untouched; `stats().photoKm2` counts what photos brought to full.
+  Measured from a balloon at 150 m over Sea Bright: bare pixels in frame 0.1–0.4% out to 15 km
+  (3–5% before the closing). The shot's toast says the reach and area, or where the pencil still
+  is (`PhotoMode.pencilWay`); a painted-area milestone is said once (`milestone`).
+- Walking paint (the far sketch) soaks in: strokes at 20 Hz (`TICK`), ~1.5 s blank to full
+  underfoot, and the composite paints in two passes — a pale first wash over the pencil, then the
+  pigment deepening — its edge ragged by paper and brush-stroke noise that never reaches bare
+  paper or finished paint.
 
-## The brush (`src/ui/brush.ts`, `src/player/place.ts`) — `docs/GAME_DESIGN.md`
+## The brush (`src/ui/brush.ts`, `src/player/place.ts`) — a prototype of placing
+
+Built to the superseded `docs/GAME_DESIGN.md` §4b. Under `docs/GAMEPLAY_VISION.md` collecting is
+a tap on a pencil thing (§2) and placing is "hold to paint from the sketchbook" onto your layer or
+home (§6, §7); the solvers below are what decides where a thing settles. Until those land, this is
+what the code does:
+
 
 - Paint-to-own: a coloured Almanac card (painted from life with P — `Commissions.paintFrame`, which
   records `pt` and `fresh`) is a kind you can paint: `Commissions.owned(families)`. The families the
-  brush knows are `PAINTABLE` (boat, car; planes once airfields have planes to paint from life).
+  brush knows are `PAINTABLE` (boat, car, balloon — on open ground; planes once airfields have planes to paint from life).
   A painting teaches sparingly: the first, the one most prominent kind (≥ 1.5% of the frame); after
   that only composed ones (≥ 4% each, at most 3, not already painted) — the rest stay pencil.
 - B (✎ on touch) takes it out. Chips: the kinds you own (last used first), the one fitting what you
@@ -258,7 +723,8 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   - `parked-cars:`, `moored-boats:` (tile props); `kerb-cars:` (the city's kerb and lot cars)
   - `life-car:`, `life-boat:` (ambient life)
   - `ride-car:`, `ride-boat:`, `ride-plane:` (player vehicles)
-- `photo.ts`: P frames the view, Space paints a page (the grab happens in `afterRender()`, right
+- `photo.ts`: P frames the view (the zoom turns the lens: the frame follows on every screen, and
+  the millimetres name the lens), Space paints a page (the grab happens in `afterRender()`, right
   after `post.render`, so no `preserveDrawingBuffer` is needed), then a caption is added and it is
   stored via `book.ts` (IndexedDB `map-game-sketchbook`). With the far sketch on, the same shot
   paints everything in frame into the world (`ctx.paintView`; toast "painted in what you framed
@@ -278,11 +744,30 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
   - Commissions and the spotting log.
   - Almanac: stamps, progress in the current county, and the card grid.
   - Journal: keys, stats and found places (`journal.ts` now renders only this page).
-- `geo.ts`: Photon (komoot) geocoder for search and reverse lookup. It is cached, reverse lookups
-  are throttled to one every 4 s, and it falls back to local streets, buildings and POIs when
-  offline. Never block gameplay on it.
+- `geo.ts`: our own lower-48 place index (Photon is gone: its public server isn't for a commercial
+  game — `docs/DATA_SOURCES.md` §0). `placeIndex.ts` is the pure part, shared by the bake
+  (`scripts/build-places.mjs`), the tile service (`worker/src/places.js`) and the game:
+  - **Search** (`searchRemote`): `GET <tiles>/places/search?q=&lat=&lon=` — the service reads one
+    gzipped shard (the query's rarest word's first three letters) from R2 `places/vN/names.bin` by
+    range and ranks it (standing, name match, nearness); answers are edge-cached. Public-domain names
+    only (USGS GNIS, the US Census): towns, townships, counties, hamlets, parks, peaks, lakes,
+    landmarks — never a street address.
+  - **Reverse** (`reverse`, arrival cards): the 0.25° tile of Census boundaries round the point
+    (`/places/rt/<ix>_<iy>.json`, kept for the session) → the place it's in, else the active county
+    subdivision (a township, a New England town), else the county. At sea there's no town: the card
+    keeps the one you were in.
+  - The base is the tile service (`setPlaceService`, main.ts; the deployed one unless `?places=<url>`
+    or `?places=off`). Offline or past the lower 48 it falls back to the loaded world's streets,
+    named buildings and POIs (`searchLocal` — named buildings only: no house by its address). Never
+    block gameplay on it.
+  - Re-baking: `node scripts/build-places.mjs [--fetch]`, then upload `raw/places/out/*` to R2
+    `places/v<N>/` and deploy with `INDEX_V` (the bake) and `V` (places.js) bumped together; a ranking
+    change alone bumps `RANK_V` (placeIndex.ts) and needs only a deploy.
+- `credits.ts`: the credits screen — every source and service with its credit and licence, opened from
+  the intro, the HUD's credit line and the journal page. `tests/licences.test.ts` fails on an outside
+  host in the code with no credit, and on Photon or Open-Meteo coming back.
 - `hints.ts`: providers return `{key, text, pri, once?}`, and the highest `pri` wins. `once` tips
-  retire after 3 showings (localStorage). `arrival.ts` shows reverse-geocoded town cards at the
+  retire after 3 showings (localStorage). `arrival.ts` shows the place index's town cards at the
   start, on crossing into a new town, and after teleports.
 - Sound (`ambience.ts`): `ui()` for brush, shutter, chime and page; halyards and lapping water
   near moored boats; leaves by tree cover; birdsong by hour; engine models for car, outboard and

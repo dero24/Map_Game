@@ -75,10 +75,10 @@ window.__CAROBB__ = async (seconds = 20) => {
       const o = i * S.STRIDE;
       if (snap[o + S.FLAGS] & 1 && snap[o + S.Y] > -500) cars.push({ id: 'm' + i, x: snap[o + S.X], z: snap[o + S.Z], yaw: snap[o + S.YAW] });
     }
-    // parked cars (kerb and lot records, kerbCars.ts: x, y, z, yaw, …) within 500 m of the walker
+    // parked cars (kerb and lot records, kerbCars.ts: x, y, z, yaw, … — 13 floats a car) within 500 m of the walker
     const wx = G.walker.x ?? G.walker.pos?.x ?? 0, wz = G.walker.z ?? G.walker.pos?.z ?? 0;
     for (const [id, t] of G.stream.loaded)
-      if (t.kerb) for (let i = 0, k = 0; i + 11 <= t.kerb.length; i += 11, k++) {
+      if (t.kerb) for (let i = 0, k = 0; i + 13 <= t.kerb.length; i += 13, k++) {
         const x = t.kerb[i], z = t.kerb[i + 2];
         if (Math.abs(x - wx) < 500 && Math.abs(z - wz) < 500) cars.push({ id: `k${id}:${k}`, x, z, yaw: t.kerb[i + 3] });
       }

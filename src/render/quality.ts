@@ -3,6 +3,11 @@
 // a lighter brush pass, a smaller shadow map, smaller ground-paint canvases and a tighter tile
 // ring — the desktop set asked ~3 GB of RAM + GPU memory of a phone (docs/earth/LOG.md, mobile
 // blank page). A weak phone, or one whose last visit here was killed mid-walk, gets 'low'.
+// A city is what kills a phone (Manhattan: its GPU ran out, Chrome crashed and then refused the
+// site WebGL): so a phone also keeps its detail tiles under a memory budget, nearest first
+// (world/stream.ts), builds one or two real tiles at a time, reads a smaller skyline, and
+// measures no LiDAR (decoding a city's survey was hundreds of MB in the tab, and every measured
+// cell was built twice).
 // Knobs the player saved in the panel (panel.ts userKeys) are never overridden.
 //
 // Pure: no DOM at import time — deviceInfo() is the only browser-facing function.
@@ -25,23 +30,86 @@ export interface DeviceInfo {
 export interface TierConfig {
   tier: Tier;
   why: string;
-  post: { hiDpi?: boolean; renderScale?: number; paintDetail?: number };
+  post: { hiDpi?: boolean; renderScale?: number; paintDetail?: number; dpiMax?: number };
   shadow: { size?: number; enabled?: boolean };
-  stream: { loadR: number; dropR: number; coarseR: number };
+  stream: { loadR: number; dropR: number; coarseR: number; budgetMB?: number; realConc?: number; reliefConc?: number; coarseMB?: number };
   /** Cap on the ground-paint canvases (groundPaint.ts sizes them min(4096, cap)). */
   paintTex: number;
+  /** This device reads the LiDAR survey itself (world/lidar.ts). `?lidar=1` / `?lidar=0` overrule
+   *  it. Without it the buildings are still measured: every tier applies the records made once per
+   *  cell — a baked pack's sidecar, the tile service's (world/measured.ts). */
+  lidar: boolean;
+  /** How far out the skyline reads a city's towers, m (world/skyline.ts). */
+  skylineR: number;
+  /** The tiles' meshes let go of their vertex data once it's on the GPU (world/pack.ts
+   *  setFreeUploaded): a phone's page carried every vertex twice. `?free=0` / `?free=1` overrule it. */
+  freeArrays: boolean;
+  /** The micro layer's budget (world/microLayer.ts): its impostor atlas, its caps, its ranges. */
+  micro: MicroTier;
+  /** The near trees' budget (world/nearTrees.ts). */
+  trees: TreeTier;
 }
+
+/** A tier's budget for the near trees (world/nearTrees.ts): within `hand` m a tree is drawn from
+ *  its near model (limbs and leaf cards) — at most `near` of them, nearest first — across a `band`
+ *  of m where the two models trade pixels; re-sorted every `step` m; leaf pictures `atlas` px. */
+export interface TreeTier { near: number; hand: number; band: number; step: number; atlas: number }
+// A desktop draws the near model to 30 m (the reviewer's "today's crowns from about 30 m out"), up
+// to 160 trees — ~300k vertices in a wood; a phone 40 trees to 24 m; a weak phone 20 to 16 m with
+// half-size leaf pictures. (Every near tree is under 2,500 vertices: tests/foundry.test.ts.)
+export const TREE_TIERS: Record<Tier, TreeTier> = {
+  desktop: { near: 160, hand: 30, band: 6, step: 2, atlas: 256 },
+  phone: { near: 40, hand: 24, band: 5, step: 2, atlas: 256 },
+  low: { near: 20, hand: 16, band: 4, step: 3, atlas: 128 },
+};
+
+/** A tier's budget for the micro layer (world/microLayer.ts, render/impostor.ts). */
+export interface MicroTier {
+  /** frames per side of each piece's picture grid; picture size (px) for big (R ≥ 1.2 m) and small pieces */
+  N: number; Fbig: number; Fsmall: number;
+  /** the widest the atlas may be (px) */
+  atlasW: number;
+  /** cards drawn at once (nearest first); 3D pieces at once, and their vertices */
+  cards: number; near: number; nearVerts: number;
+  /** the hand-over range (m); how far cards are drawn (m); the crossfade band (m) */
+  lo: number; hi: number; far: number; band: number;
+  /** pixels per metre at 1 m the hand-over is worked out for (the tier's typical frame) */
+  pxK: number;
+  /** pieces photographed per frame while the atlas fills; re-sort every `step` m */
+  bakePerFrame: number; step: number;
+  /** the 3D pieces cast shadows (the cards only receive them) */
+  castNear: boolean;
+}
+// A desktop draws 64 px pictures of the big pieces (a hoop, a kayak, an umbrella) and 32 px of the
+// rest, cards to 450 m and up to 12k of them, 3D pieces to 25–60 m. A phone halves the pictures (a
+// quarter of the atlas), draws a third of the cards to 260 m and hands over sooner (18–40 m); a
+// weak phone keeps a few hundred cards, the 3D pieces within 14–30 m, and casts no shadows.
+export const MICRO_TIERS: Record<Tier, MicroTier> = {
+  desktop: { N: 8, Fbig: 64, Fsmall: 32, atlasW: 2048, cards: 12000, near: 500, nearVerts: 160000, lo: 25, hi: 60, far: 450, band: 6, pxK: 900, bakePerFrame: 6, step: 3, castNear: true },
+  phone: { N: 8, Fbig: 32, Fsmall: 16, atlasW: 1024, cards: 4000, near: 160, nearVerts: 50000, lo: 18, hi: 40, far: 260, band: 5, pxK: 520, bakePerFrame: 3, step: 3, castNear: true },
+  low: { N: 8, Fbig: 32, Fsmall: 16, atlasW: 1024, cards: 1500, near: 80, nearVerts: 24000, lo: 14, hi: 30, far: 160, band: 4, pxK: 400, bakePerFrame: 2, step: 4, castNear: false },
+};
 
 const TIERS: Record<Tier, Omit<TierConfig, 'tier' | 'why'>> = {
   // the shipped defaults — nothing changes on a desktop
-  desktop: { post: {}, shadow: {}, stream: { loadR: 1500, dropR: 2400, coarseR: 8000 }, paintTex: 4096 },
+  desktop: { post: {}, shadow: {}, stream: { loadR: 1500, dropR: 2400, coarseR: 8000 }, paintTex: 4096, lidar: true, skylineR: 8000, freeArrays: false, micro: MICRO_TIERS.desktop, trees: TREE_TIERS.desktop },
   // CSS-pixel paint (a DPR-3 phone rendered 1.5× its CSS size before), a 60% brush buffer (the
   // Kuwahara radius drops from 7 to ~4 texels: a third of the taps), 1024² shadows, ~half the
-  // detail tiles and a 4 km silhouette ring, 2048² ground paint (a quarter of the slice canvas)
-  phone: { post: { hiDpi: false, paintDetail: 0.6 }, shadow: { size: 1024 }, stream: { loadR: 900, dropR: 1500, coarseR: 4000 }, paintTex: 2048 },
+  // detail tiles and a 4 km silhouette ring, 2048² ground paint (a quarter of the slice canvas).
+  // The ring's detail tiles keep under 200 MB of vertices (a shore town's whole ring is ~110; one
+  // downtown cell can be 100+), two real tiles build at once, and a 4 km skyline
+  // (sharper and farther since 2026-10-01: at CSS pixels and 60% paint a phone's view was a smear,
+  // and 4 km of silhouettes left the middle distance to the haze — hi-DPI to 1.5×, 75% paint, a
+  // 6 km ring and skyline; the silhouettes stay under coarseMB, and auto quality steps a slow one
+  // down once the streaming has settled — and back up when stepping down didn't make it quicker:
+  // 85% paint since the same day, a phone's view still read blurry at 75%; full paint and up to
+  // 2× the CSS pixels since 2026-10-03 — loading and flight got quick, and 85% at 1.5× still read
+  // "super blurry, almost unplayable" on a phone; auto quality still steps a slow one down)
+  phone: { post: { hiDpi: true, paintDetail: 1, dpiMax: 2 }, shadow: { size: 1024 }, stream: { loadR: 900, dropR: 1500, coarseR: 6000, budgetMB: 200, realConc: 2, reliefConc: 1, coarseMB: 90 }, paintTex: 2048, lidar: false, skylineR: 6000, freeArrays: true, micro: MICRO_TIERS.phone, trees: TREE_TIERS.phone },
   // …and a weak phone (or one whose last visit died): no shadow pass either — every tree, house and
-  // car drawn a second time into the shadow map was half the vertex work of a frame
-  low: { post: { hiDpi: false, paintDetail: 0.5, renderScale: 0.75 }, shadow: { size: 1024, enabled: false }, stream: { loadR: 750, dropR: 1300, coarseR: 2500 }, paintTex: 1024 },
+  // car drawn a second time into the shadow map was half the vertex work of a frame (65% paint at
+  // 85% scale since 2026-10-03: half paint at 75% was a smear)
+  low: { post: { hiDpi: false, paintDetail: 0.65, renderScale: 0.85 }, shadow: { size: 1024, enabled: false }, stream: { loadR: 750, dropR: 1300, coarseR: 2500, budgetMB: 120, realConc: 1, reliefConc: 1, coarseMB: 60 }, paintTex: 1024, lidar: false, skylineR: 3000, freeArrays: true, micro: MICRO_TIERS.low, trees: TREE_TIERS.low },
 };
 const ORDER: Tier[] = ['desktop', 'phone', 'low'];
 const ALIAS: Record<string, Tier> = { desktop: 'desktop', high: 'desktop', phone: 'phone', mobile: 'phone', medium: 'phone', low: 'low', safe: 'low' };
@@ -119,6 +187,11 @@ export function autoSteps(ms: number, round: number, post: { hiDpi: boolean; pai
   }
   return out;
 }
+
+/** Did a round's steps pay? Frames at least 12% quicker after them. A phone held back by its
+ *  vertex work or its CPU gets nothing back from fewer pixels — only a blurrier frame (Robby,
+ *  2026-10-01: the paint detail back up, the same speed) — so steps that didn't pay are undone. */
+export const stepsPaid = (before: number, after: number) => after <= before * 0.88;
 
 /** What the browser says about the device (the only DOM-facing part of this module). */
 export function deviceInfo(maxTex?: number): DeviceInfo {

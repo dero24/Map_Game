@@ -3,9 +3,12 @@ name: build + deploy to GitHub Pages
 # The repo holds TypeScript source — the browser needs the vite-built dist/. This builds it
 # and publishes it to Pages. In repo Settings → Pages → Source: pick "GitHub Actions".
 
+# Every push to main or a feature branch builds and publishes (the last push wins — one Pages
+# site), as does a manual run. Branches must also be allowed by the github-pages environment
+# (Settings → Environments → github-pages: main and feature/* are).
 on:
   push:
-    branches: [main]
+    branches: [main, 'feature/*']
   workflow_dispatch:
 
 permissions:

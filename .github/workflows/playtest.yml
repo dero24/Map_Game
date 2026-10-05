@@ -1,0 +1,56 @@
+name: checks + playtest
+
+# On every push and pull request (docs/GAMEPLAY_VISION.md §17, Tier 0 "no glitches"): typecheck,
+# the unit tests and the build, then the gameplay test suite (tools/playtest.mjs, docs/agent/debugging.md
+# "Play checks") played headless on the baked shore with software GL — the walk, the drive, teleports,
+# every door near the start, nested footprints and posts in the road. A failed check fails the run;
+# the report is kept as an artifact either way. (Frame timing and streaming need a real GPU and a
+# warm tile service: they run locally, `node tools/playtest.mjs`.)
+on:
+  push:
+    branches: [main, 'feature/*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      # the deployed tile service answers every must-load town from our own extract (tools/audit48-towns.json)
+      - name: must-load towns, live
+        run: node tools/must-load.mjs --live --within=90
+
+  playtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Playwright isn't a dependency of the game (the tools find it where it is): installed for the run only
+      - run: npm i --no-save playwright@1.48 && npx playwright install --with-deps chromium
+      - name: playtest (quick, software GL, the baked shore)
+        run: node tools/playtest.mjs --url=http://localhost:5173/ --region=shore --quick --swiftshader --seed=1 --out=shots/playtest-ci.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playtest-report
+          path: shots/playtest-ci.json
+          if-no-files-found: warn

@@ -11,6 +11,10 @@ import { RecWalk, packGroup, packDeck, type BuiltTile } from './pack';
 import { canvasBitmap } from './canvas';
 import { crossingPaint } from './kerbside';
 import { buildStairs } from './stairs';
+import { buildMicro } from './micro';
+import { activeStyle } from './styles';
+import { shoreDocks } from './docks';
+import { beachCrowd } from './crowd';
 
 export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec, idBase: number, lite = false): Promise<BuiltTile> {
   // Tunnels leave here: no builder paints, furnishes, parks along, faces a door to or grows grass
@@ -23,10 +27,12 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
   // Only owner-flagged entities emit — margin context exists solely for builders that need it.
   const pj = { ...tj, roads: prim(tj.roads), areas: prim(tj.areas), lines: prim(tj.lines), points: prim(tj.points) } as unknown as WorldJson;
   const world2: World = { json: pj, terrain };
+  // (a bridge is profiled whole, from every span this tile can see — its margin's too)
+  const seen = { roads: tj.roads, lines: tj.lines };
   if (lite) {
     // Coarse ring: silhouettes only — building + structure meshes, no collision, interiors,
     // signs or props. The stream mounts these as display geometry until the detail ring takes over.
-    const structures = buildStructures(world2, w);
+    const structures = buildStructures(world2, w, seen);
     return {
       id: spec.id,
       lod: spec.lod,
@@ -66,10 +72,21 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
     for (const r of deckKeepOut(d)) w.addPolygon(r);
   }
   w.recording = true;
-  const structures = buildStructures(world2, w);
+  // the docks the map didn't draw — a marina's finger piers, a riverfront house's dock — join its
+  // piers (decked by structures, cleated by the micro layer); their boats' berths go to props
+  const docks = shoreDocks({ json: pj, ctx: tj as unknown as WorldJson, terrain, walk: w, footprints: bld.footprints, box: spec.box, climate: activeStyle().climate });
+  if (docks.lines.length) pj.lines = [...pj.lines, ...docks.lines];
+  const ctx = (docks.lines.length ? { ...tj, lines: [...tj.lines, ...docks.lines] } : tj) as unknown as WorldJson;
+  const structures = buildStructures(world2, w, seen);
   const signs = buildSigns(world, bld.signs, w); // full json: intersection signs need context roads
-  const props = buildProps(world2, w, structures.pierSegs, { mailboxes: bld.mailboxes, drives: bld.drives, doors: bld.doors, ctx: tj as unknown as WorldJson, box: spec.box });
+  const props = buildProps(world2, w, structures.pierSegs, { mailboxes: bld.mailboxes, drives: bld.drives, doors: bld.doors, ctx, box: spec.box, hood: bld.hood, berths: docks.berths });
   const stairs = buildStairs(pj.roads, (x, z) => terrain.heightAt(x, z), w); // (every highway=steps a flight you climb)
+  // the small things — carts, chairs, cleats, towels, the mapped picnic tables — for the micro layer,
+  // placed last so they keep off everything above
+  const micro = buildMicro({ world: world2, ctx, walk: w, footprints: bld.footprints, doors: bld.doors, mailboxes: bld.mailboxes, drives: bld.drives, walks: bld.walks, box: spec.box, hood: bld.hood, style: activeStyle() });
+  // the beach's people: on its chairs and towels, at the waterline, up in the lifeguard stands
+  // (the beach's gear comes and goes with them: its micro records carry their hours)
+  const beach = beachCrowd({ micro, gear: props.beach.gear, stands: props.beach.stands, terrain, south: tj.origin.lat < 0 });
   const xing = crossingPaint(tj.roads, pj.points); // (the tile's own crossings, on any street round them)
   const vp = pj.points.filter((p) => p.c === 'viewpoint').flatMap((p) => [p.x, p.z, p.d ?? -1]);
   const plans: BuiltTile['plans'] = [];
@@ -98,6 +115,8 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
     atlas: await canvasBitmap(signs.atlas),
     lampPts: props.lampPts,
     kerb: props.kerb.length ? props.kerb : undefined,
+    micro: beach.micro,
+    crowd: beach.people.length ? beach.people : undefined,
     junc: props.junc.length ? props.junc : undefined,
     ...(xing.length ? { xing } : {}),
     ...(vp.length ? { vp } : {}),

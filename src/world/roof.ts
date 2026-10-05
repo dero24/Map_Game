@@ -292,6 +292,10 @@ export function buildRoof(ring: V2[], style: RoofStyle, pitch: number, overhang:
       gables.push({ a: ia, b: ib, apex: W, h: (tw - o) * pitch, edge: i });
     }
   }
+  // (a gable roof needs slopes between its gables: on a triangle every face met the gable rule
+  // round the one apex, leaving three gable walls, no roof and no peak — the chimney stood at
+  // minus infinity and culled its whole chunk. Fewer than two slopes left: a hip roof instead)
+  if (gables.length && n - gableFace.size < 2) return buildRoof(ring, 'hip', pitch, overhang, maxRise);
   const H = (k: number) => (nodes[k].t - o) * pitch;
   const tris: RoofGeom['tris'] = [];
   let peak: [number, number, number] = [0, -Infinity, 0];

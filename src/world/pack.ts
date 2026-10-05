@@ -5,7 +5,7 @@
 // no-worker fallback: buildTile() runs identically on either thread.
 import * as THREE from 'three';
 import type { Deck, DeckProfile, Floors, WalkWorld } from '../player/collision';
-import { WalkWorld as WalkWorldImpl } from '../player/collision';
+import { WalkWorld as WalkWorldImpl, tableHeight } from '../player/collision';
 import type { Footprint, Door } from './buildings';
 import type { Plan } from './interiors';
 import type { Area, LayerLayout, Road } from './data';
@@ -44,7 +44,7 @@ export interface PObj {
 
 // A walkable deck surface: pts + cumulative length + a height profile. Known profiles cross
 // exactly; anything else falls back to a sampled curve (<5 mm for typical shapes).
-export interface PDeck { pts: P2[]; cum: number[]; hw: number; p?: DeckProfile; h?: Float32Array }
+export interface PDeck { pts: P2[]; cum: number[]; hw: number; p?: DeckProfile; h?: Float32Array; cut?: 1 }
 
 // WalkWorld mutations the builders made while building — replayed verbatim inside the scope.
 export type WalkOp =
@@ -71,6 +71,8 @@ export interface BuiltTile {
   tun?: Road[]; // prim tunnels (Road.tu): the life sim's cars only
   areas?: Area[]; // prim (own-only) areas — the ground paint's parks, lots, pitches
   kerb?: Float32Array; // parked kerb + lot cars as records (kerbCars.ts KERB_STRIDE)
+  micro?: Float32Array; // the small things of the place, for the micro layer (world/micro.ts MICRO_STRIDE)
+  crowd?: Float32Array; // the beach's people, for the crowd layer (world/crowd.ts CROWD_STRIDE)
   junc?: Float32Array; // the tile's junctions and who stops where (src/sim/traffic.ts packJunctions)
   poles: { x: number; z: number; cx: number; cz: number }[];
   atlas?: ImageBitmap; // street-sign atlas
@@ -86,12 +88,12 @@ export interface BuiltTile {
 // ---------------- decks ----------------
 
 export function packDeck(d: Deck): PDeck {
-  if (d.profile) return { pts: d.pts, cum: d.cum, hw: d.halfWidth, p: d.profile };
+  if (d.profile) return { pts: d.pts, cum: d.cum, hw: d.halfWidth, p: d.profile, ...(d.cut ? { cut: 1 as const } : {}) };
   const total = d.cum[d.cum.length - 1];
   const n = Math.max(2, Math.min(97, Math.ceil(total / 1.5) + 1));
   const h = new Float32Array(n);
   for (let i = 0; i < n; i++) h[i] = d.heightAt((total * i) / (n - 1));
-  return { pts: d.pts, cum: d.cum, hw: d.halfWidth, h };
+  return { pts: d.pts, cum: d.cum, hw: d.halfWidth, h, ...(d.cut ? { cut: 1 as const } : {}) };
 }
 
 export function unpackDeck(p: PDeck): Deck {
@@ -105,6 +107,7 @@ export function unpackDeck(p: PDeck): Deck {
     const base = pf.hA + (pf.hB - pf.hA) * t;
     return base + Math.max(0, pf.peak - base) * Math.pow(Math.sin(Math.PI * t), 0.45);
   };
+  else if (pf?.k === 'table') heightAt = tableHeight(p.cum, pf.y);
   else {
     const h = p.h!, n = h.length;
     heightAt = (s) => {
@@ -113,7 +116,7 @@ export function unpackDeck(p: PDeck): Deck {
       return h[i] + (h[i + 1] - h[i]) * (t - i);
     };
   }
-  return { pts: p.pts, cum: p.cum, halfWidth: p.hw, heightAt, profile: p.p };
+  return { pts: p.pts, cum: p.cum, halfWidth: p.hw, heightAt, profile: p.p, ...(p.cut ? { cut: 1 as const } : {}) };
 }
 
 // ---------------- collision ops ----------------
@@ -253,9 +256,23 @@ export function packGroup(root: THREE.Object3D): PObj[] {
   return out;
 }
 
+// A phone's tile meshes let go of each attribute's vertex data once it's on the GPU: the page held
+// every vertex twice (~70 of a phone tier's ~250 MB at an airfield). What the CPU reads again stays:
+// positions (bounds; a building hidden by its id, stream.ts) and the ids; the index; the instance
+// matrices (the near trees read them). A restored GPU context can't upload what was let go, so a
+// page that frees reloads where it stands instead (main.ts).
+const KEEP_ARRAYS = new Set(['position', 'aInfo']);
+let freeUploaded = false;
+export function setFreeUploaded(on: boolean) { freeUploaded = on; }
+export const freesUploaded = () => freeUploaded;
+
 export function buildObject(p: PObj, atlas?: THREE.Texture): THREE.Object3D {
   const g = new THREE.BufferGeometry();
-  for (const [name, a] of Object.entries(p.at)) g.setAttribute(name, new THREE.BufferAttribute(a.a, a.n));
+  for (const [name, a] of Object.entries(p.at)) {
+    const at = new THREE.BufferAttribute(a.a, a.n);
+    if (freeUploaded && !KEEP_ARRAYS.has(name)) at.onUpload(() => { (at as unknown as { array: unknown }).array = null; });
+    g.setAttribute(name, at);
+  }
   if (p.ix) g.setIndex(new THREE.BufferAttribute(p.ix, 1));
   let o: THREE.Object3D;
   if (p.k === 'inst') {

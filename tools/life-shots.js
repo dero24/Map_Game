@@ -15,7 +15,7 @@ window.__LIFE__ = async (tag = 'life', opts = {}) => {
   const wait = window.__WAIT__;
   const { unpackJunctions, CTL } = await import('/src/sim/traffic.ts');
   const { useOf } = await import('/src/world/uses.ts');
-  const set = (h) => { G.setHour(h); G.timeParams.speed = 0; G.postParams.sketch = true; };
+  const set = (h) => { G.setHour(h); G.timeParams.speed = 0; };
   const idle = async (max = 120) => { for (let i = 0; i < max; i++) { const b = typeof G.stream.busy === 'function' ? G.stream.busy() : G.stream.busy; if (!b) return; await wait(250); } };
   const x0 = G.walker.x, z0 = G.walker.z;
   await idle(240);

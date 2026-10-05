@@ -19,11 +19,31 @@ export interface Deck {
   /** A stack (a tower's stair, one flight a storey): `rep` more copies, each `dy` higher. */
   rep?: number;
   dy?: number;
+  /** Square ends: the deck stops at its first and last points. (Otherwise it reaches halfWidth
+   *  past them, round, at its end's height — a bridge's would hang that far over a sloping street.) */
+  cut?: 1;
 }
 export type DeckProfile =
   | { k: 'const'; y: number }
   | { k: 'ramp'; y0: number; y1: number; total: number }
-  | { k: 'arch'; hA: number; hB: number; peak: number; total: number };
+  | { k: 'arch'; hA: number; hB: number; peak: number; total: number }
+  /** a height at each of the deck's points, straight between them (a bridge's deck, as drawn) */
+  | { k: 'table'; y: number[] };
+/** The height at s along a deck from a height at each of its points (`cum`: their distances
+ *  along it), straight between them; level past either end. */
+export function tableHeight(cum: number[], y: number[]) {
+  return (s: number) => {
+    let lo = 0, hi = cum.length - 1;
+    if (s <= cum[0]) return y[0];
+    if (s >= cum[hi]) return y[hi];
+    while (hi - lo > 1) {
+      const m = (lo + hi) >> 1;
+      if (cum[m] <= s) lo = m;
+      else hi = m;
+    }
+    return y[lo] + ((y[hi] - y[lo]) * (s - cum[lo])) / Math.max(1e-9, cum[hi] - cum[lo]);
+  };
+}
 // Stairwell opening: storey `level` has no floor inside `ring`.
 export interface Hole { level: number; ring: P2[] }
 /** A shaft through the storeys (a lift's, a tower's stack of stairwells): storeys `from` … `to`
@@ -47,6 +67,45 @@ export function floorAt(f: Floors, k: number, x: number, z: number) {
 }
 
 const DEAD_SEG: Seg = [0, 0, 0, 0, 0, 0];
+// A dropped scope's walls on their way out of the grid (WalkWorld.purgeRun): its walls' cells
+// gathered (i: walls done), then each cell's list filtered once (it: through the cells).
+interface PurgeJob { ids: number[]; gone: Set<number>; cells: Set<number>; it: Iterator<number> | null; i: number }
+
+/** The push (dx, dz) that takes a capsule — its axis a→b, `r` round it — clear of the wall `s`, or
+ *  null when it's clear. (px, pz): its centre before this step; an axis crossing the wall (a
+ *  turn swinging an end through it) goes back to that side. */
+export function bodyPush(ax: number, az: number, bx: number, bz: number, s: readonly number[], r: number, px: number, pz: number): [number, number] | null {
+  const cx = s[0], cz = s[1], ex = bx - ax, ez = bz - az, fx = s[2] - cx, fz = s[3] - cz;
+  const fl = Math.hypot(fx, fz);
+  // (back out along the wall's normal to (px, pz)'s side, past the deepest end of the axis)
+  const backOut = (): [number, number] => {
+    const wx = fl > 1e-9 ? -fz / fl : -ez, wz = fl > 1e-9 ? fx / fl : ex, wl = Math.hypot(wx, wz) || 1;
+    const nx = wx / wl, nz = wz / wl, side = (px - cx) * nx + (pz - cz) * nz >= 0 ? 1 : -1;
+    const deep = Math.max(0, -Math.min(((ax - cx) * nx + (az - cz) * nz) * side, ((bx - cx) * nx + (bz - cz) * nz) * side));
+    return [nx * side * (deep + r), nz * side * (deep + r)];
+  };
+  const den = ex * fz - ez * fx;
+  if (Math.abs(den) > 1e-12) {
+    const t = ((cx - ax) * fz - (cz - az) * fx) / den, u = ((cx - ax) * ez - (cz - az) * ex) / den;
+    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) return backOut();
+  }
+  // apart: the nearest pair is an end of one against the other (wx, wz: from the wall to the axis)
+  let best = Infinity, ox = 0, oz = 0;
+  const near = (qx: number, qz: number, sx: number, sz: number, vx: number, vz: number, qOnAxis: boolean) => {
+    const l2 = vx * vx + vz * vz, t = l2 > 0 ? Math.max(0, Math.min(1, ((qx - sx) * vx + (qz - sz) * vz) / l2)) : 0;
+    const hx = sx + vx * t, hz = sz + vz * t, wx = qOnAxis ? qx - hx : hx - qx, wz = qOnAxis ? qz - hz : hz - qz, d2 = wx * wx + wz * wz;
+    if (d2 < best) (best = d2), (ox = wx), (oz = wz);
+  };
+  near(ax, az, cx, cz, fx, fz, true);
+  near(bx, bz, cx, cz, fx, fz, true);
+  near(cx, cz, ax, az, ex, ez, false);
+  near(s[2], s[3], ax, az, ex, ez, false);
+  if (best >= r * r) return null;
+  const d = Math.sqrt(best);
+  if (d < 1e-9) return backOut();
+  const k = (r - d) / d;
+  return [ox * k, oz * k];
+}
 
 const inRing = (x: number, z: number, ring: P2[]) => {
   let inside = false;
@@ -74,6 +133,7 @@ export class WalkWorld {
   private curScope = 0;
   private segDead: number[] = [];
   private segFree: number[] = []; // purged wall ids (out of every grid cell), free to reuse
+  private purgeQ: PurgeJob[] = []; // dropped scopes' walls, still in the grid (purgeSome)
   private polyDead: number[] = [];
   private deckDead: number[] = [];
   private scopeIds = new Map<number, { segs: number[]; polys: number[]; decks: number[] }>();
@@ -91,31 +151,56 @@ export class WalkWorld {
   }
   /** Drop scope `id`. `purge`: also take its walls out of the grid and recycle their ids — a scope
    *  that comes and goes all session (an open building's partitions) would otherwise leave a pile
-   *  of tombstones in the cells it covers. */
-  removeScope(id: number, purge = false) {
+   *  of tombstones in the cells it covers. `'later'`: the same, a slice a frame (purgeSome) — a
+   *  streamed tile's tens of thousands of walls took up to 65 ms in one go on a phone. The walls
+   *  stop blocking at once either way. */
+  removeScope(id: number, purge: boolean | 'later' = false) {
     const s = this.scopeIds.get(id);
     if (!s) return;
     for (const i of s.segs) this.segDead[i] = 1;
     for (const i of s.polys) this.polyDead[i] = 1;
     for (const i of s.decks) this.deckDead[i] = 1;
     this.scopeIds.delete(id);
-    if (!purge) return;
-    const cells = new Set<number>();
-    for (const i of s.segs) {
-      const g = this.segs[i];
-      const i0 = Math.floor(Math.min(g[0], g[2]) / this.cell), i1 = Math.floor(Math.max(g[0], g[2]) / this.cell);
-      const j0 = Math.floor(Math.min(g[1], g[3]) / this.cell), j1 = Math.floor(Math.max(g[1], g[3]) / this.cell);
-      for (let a = i0; a <= i1; a++) for (let b = j0; b <= j1; b++) cells.add(a * 73856093 ^ b * 19349663);
+    if (!purge || !s.segs.length) return;
+    const job: PurgeJob = { ids: s.segs, gone: new Set(), cells: new Set(), it: null, i: 0 };
+    if (purge === 'later') this.purgeQ.push(job);
+    else this.purgeRun(job, Infinity);
+  }
+  /** Walls queued by removeScope(id, 'later') leave the grid for up to `ms` a call (a frame's
+   *  share); their ids are reused only once they are out of every cell. */
+  purgeSome(ms = 1.5) {
+    const until = performance.now() + ms;
+    while (this.purgeQ.length && this.purgeRun(this.purgeQ[0], until)) this.purgeQ.shift();
+  }
+  /** Walls still waiting on purgeSome. */
+  get purging() { let n = 0; for (const j of this.purgeQ) n += j.ids.length; return n; }
+  /** One scope's walls out of the grid, in steps small enough to stop at `until`: the cells they
+   *  were filed under (as addWall filed them), then each of those cells filtered once, then their
+   *  ids freed. True once done. */
+  private purgeRun(j: PurgeJob, until: number) {
+    const late = () => until !== Infinity && performance.now() >= until;
+    while (j.i < j.ids.length) {
+      for (const end = Math.min(j.ids.length, j.i + 256); j.i < end; j.i++) {
+        const id = j.ids[j.i], g = this.segs[id];
+        j.gone.add(id);
+        const i0 = Math.floor(Math.min(g[0], g[2]) / this.cell), i1 = Math.floor(Math.max(g[0], g[2]) / this.cell);
+        const j0 = Math.floor(Math.min(g[1], g[3]) / this.cell), j1 = Math.floor(Math.max(g[1], g[3]) / this.cell);
+        for (let a = i0; a <= i1; a++) for (let b = j0; b <= j1; b++) j.cells.add(a * 73856093 ^ b * 19349663);
+      }
+      if (late()) return false;
     }
-    const gone = new Set(s.segs);
-    for (const k of cells) {
-      const l = this.grid.get(k);
-      if (!l) continue;
-      const kept = l.filter((q) => !gone.has(q));
-      if (kept.length) this.grid.set(k, kept);
-      else this.grid.delete(k);
+    const it = (j.it ??= j.cells.values()); // (picks up where the last call stopped)
+    for (let r = it.next(), n = 0; !r.done; r = it.next()) {
+      const l = this.grid.get(r.value);
+      if (l) {
+        const kept = l.filter((q) => !j.gone.has(q));
+        if (kept.length) this.grid.set(r.value, kept);
+        else this.grid.delete(r.value);
+      }
+      if (++n % 64 === 0 && late()) return false;
     }
-    for (const i of s.segs) { this.segs[i] = DEAD_SEG; this.segFree.push(i); }
+    for (const i of j.ids) { this.segs[i] = DEAD_SEG; this.segFree.push(i); }
+    return true;
   }
   private track(rec: 'segs' | 'polys' | 'decks', id: number) {
     const s = this.scopeIds.get(this.curScope);
@@ -252,20 +337,31 @@ export class WalkWorld {
 
   private deckHeights(x: number, z: number, out: number[]) {
     const test = (d: Deck) => {
+      if (d.cut) {
+        // (behind its first point or past its last, square across its ends)
+        const p = d.pts, n = p.length;
+        if ((x - p[0][0]) * (p[1][0] - p[0][0]) + (z - p[0][1]) * (p[1][1] - p[0][1]) < 0) return;
+        if ((x - p[n - 1][0]) * (p[n - 1][0] - p[n - 2][0]) + (z - p[n - 1][1]) * (p[n - 1][1] - p[n - 2][1]) > 0) return;
+      }
+      // (a square-ended deck reads its height where its centreline passes nearest — a bridge's runs
+      // in stretches of every length, and a short one's end reached a long way along the next)
+      let best = d.halfWidth * d.halfWidth, s = NaN;
       for (let i = 0; i + 1 < d.pts.length; i++) {
         const [ax, az] = d.pts[i], [bx, bz] = d.pts[i + 1];
         const dx = bx - ax, dz = bz - az;
         const l2 = dx * dx + dz * dz;
         if (l2 < 1e-6) continue;
         const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2));
-        const ex = ax + dx * t - x, ez = az + dz * t - z;
-        if (ex * ex + ez * ez <= d.halfWidth * d.halfWidth) {
-          const h = d.heightAt(d.cum[i] + Math.sqrt(l2) * t);
-          out.push(h);
-          for (let r = 1; r <= (d.rep ?? 0); r++) out.push(h + r * d.dy!);
-          return;
+        const ex = ax + dx * t - x, ez = az + dz * t - z, e2 = ex * ex + ez * ez;
+        if (e2 <= best) {
+          (best = e2), (s = d.cum[i] + Math.sqrt(l2) * t);
+          if (!d.cut) break;
         }
       }
+      if (Number.isNaN(s)) return;
+      const h = d.heightAt(s);
+      out.push(h);
+      for (let r = 1; r <= (d.rep ?? 0); r++) out.push(h + r * d.dy!);
     };
     for (const id of this.deckGrid.get(Math.floor(x / 50) * 92821 + Math.floor(z / 50)) ?? []) if (!this.deckDead[id]) test(this.decks[id]);
     return out;
@@ -369,6 +465,49 @@ export class WalkWorld {
     let p: P2 = [x, z];
     for (let k = 0; k < n; k++) p = this.move1(p[0], p[1], dx / n, dz / n, r, feetY);
     return p;
+  }
+  /** Move a long body — a car: a capsule round its axis, from `front` metres ahead of (x, z) along
+   *  (ux, uz) to `back` metres behind it, `r` wide each side — by (dx, dz), sliding along walls,
+   *  in pieces like `move`. Its bumper stops at a wall; a post or a wall's end brushing its side or
+   *  a rounded corner pushes it aside rather than catching it. The ground (the water's edge) is
+   *  judged at its centre, as for `move`. A car was one 1.05 m circle round its middle: head on, its
+   *  nose went 1.15 m into the wall before the circle touched. */
+  moveBody(x: number, z: number, dx: number, dz: number, ux: number, uz: number, front: number, back: number, r: number, feetY?: number): P2 {
+    const L = Math.hypot(dx, dz), n = L > r * 0.75 ? Math.min(24, Math.ceil(L / (r * 0.75))) : 1;
+    let p: P2 = [x, z];
+    for (let k = 0; k < n; k++) p = this.moveBody1(p[0], p[1], dx / n, dz / n, ux, uz, front, back, r, feetY);
+    return p;
+  }
+  private moveBody1(x: number, z: number, dx: number, dz: number, ux: number, uz: number, front: number, back: number, r: number, feetY?: number): P2 {
+    let nx = x + dx, nz = z + dz;
+    if (!isFinite(nx) || !isFinite(nz) || !isFinite(ux) || !isFinite(uz)) return [x, z];
+    if ((dx !== 0 || dz !== 0) && !this.walkable(nx, nz)) {
+      if (this.walkable(x + dx, z)) nz = z;
+      else if (this.walkable(x, z + dz)) nx = x;
+      else return [x, z];
+    }
+    const reach = Math.max(front, back) + r;
+    for (let iter = 0; iter < 4; iter++) {
+      const i0 = Math.floor((nx - reach) / this.cell), i1 = Math.floor((nx + reach) / this.cell);
+      const j0 = Math.floor((nz - reach) / this.cell), j1 = Math.floor((nz + reach) / this.cell);
+      let pushed = false;
+      const mark = ++this.markId;
+      for (let i = i0; i <= i1; i++)
+        for (let j = j0; j <= j1; j++) {
+          const l = this.grid.get(i * 73856093 ^ j * 19349663);
+          if (!l) continue;
+          for (const id of l) {
+            if (this.segDead[id] || this.marks[id] === mark) continue;
+            this.marks[id] = mark;
+            const s = this.segs[id];
+            if (feetY !== undefined && (feetY < s[4] || feetY > s[5])) continue;
+            const q = bodyPush(nx + ux * front, nz + uz * front, nx - ux * back, nz - uz * back, s, r, x, z);
+            if (q) (nx += q[0]), (nz += q[1]), (pushed = true);
+          }
+        }
+      if (!pushed) break;
+    }
+    return [nx, nz];
   }
   private move1(x: number, z: number, dx: number, dz: number, r: number, feetY?: number): P2 {
     let nx = x + dx, nz = z + dz;

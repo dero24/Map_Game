@@ -6,7 +6,7 @@ import { osmToTile, overpassQuery, makeProjector, type OsmDoc } from './realTile
 import { buildTile } from './tileBuild';
 import { packGroup, type BuiltTile } from './pack';
 import { synthTile, realExtras, waterSheets } from './synth';
-import { fetchDem, demLayer, setDemBase, raceNull, waterPatch, waterLevel, type WaterBody } from './dem';
+import { fetchDem, demLayer, flatDem, setDemBase, raceNull, waterPatch, waterLevel, type WaterBody } from './dem';
 import { readMvt, ringArea } from './mvt';
 import { vectorToOsm, clipPoly } from './vectorTile';
 import { gradeRoads } from './grade';
@@ -15,11 +15,20 @@ import { findPortals, portalMeshes } from './portals';
 import { shoreGroup } from './shore';
 import type { SynthResult } from './synth';
 import { setActiveStyle, styleByKey } from './styles';
-import { enrichTile, initLidar, lidarOn, setLidarLog, setLidarPort } from './lidar';
+import { setMicroDate } from './micro';
+import { setWorldDate } from './calendar';
+import { enrichTile, initLidar, lidarOn, setLidarLog, setLidarPort, type PreRec } from './lidar';
+import { bakedMeasured, serviceMeasured } from './measured';
+import { enrichAerial, initAerial, aerialOn, prefetchAerial, setAerialLog } from './aerialFetch';
+import { setRoofSource } from './aerial';
+import { TAG_ROOF_COLOURS } from './realTile';
 
 // First visit to a cell: how long a detail build waits for its LiDAR measurement before
 // building from mapped priors (the measured rebuild then swaps in when it lands).
 const LIDAR_WAIT = 3500;
+// …and for its aerial photo (real roof colours, aerialFetch.ts) — fetched from the start of the
+// build, alongside the map data, so it has usually landed by then
+const AERIAL_WAIT = 1500;
 
 interface TileWorkerScope {
   postMessage(msg: unknown, transfer?: Transferable[]): void;
@@ -35,17 +44,22 @@ let binInit: ArrayBuffer | null = null; // virtual-region terrain bytes (no terr
 let binPromise: Promise<ArrayBuffer> | null = null;
 let origin: { lat: number; lon: number } | null = null;
 let demOn = false; // H2: fetch Terrarium patches for virtual-region cells
+let measuredOn = false; // precomputed LiDAR records apply (a baked pack's sidecar, the tile service's) — every tier; `?measured=0` off
+let measuredBase = ''; // the tile service that measures streamed cells ('' = none: direct Overpass, offline)
 let bakedCells: string[] = []; // manifest cell ids — never overridden by a neighbour's DEM overhang
 const demCache = new Map<string, Promise<{ buf: ArrayBuffer; layout: LayerLayout } | null>>();
 const realPatched = new Set<string>(); // cells whose real tile registered its ground in this worker
 const realDem = new Map<string, { buf: ArrayBuffer; layout: LayerLayout }>(); // …and that ground
 
 // ---- real-lite, direct: this browser → Overpass → the same osmToTile the tile service runs ----
-// Used when `?tiles=direct` (no service at all) and as the fallback when the service is down or
-// stalls — the player gets the real town either way, never a placeholder for want of a proxy.
+// Only on `?tiles=direct` (a developer with no service at all). It used to be every player's
+// fallback whenever the service was slow — each browser then queried the public Overpass servers
+// itself, uncached for anyone else, which their usage policy asks apps not to do (docs/DATA_SOURCES.md
+// §0). The service answers from our own extract now; when it can't, the cell keeps its stand-in
+// (the vector twin: real streets and buildings) and the stream asks the service again later.
 // Results are cached per cell in IndexedDB (kvPut), so a revisit never re-queries Overpass.
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-const DIRECT_V = 22; // keep with the tile service's t/vN (realTile output version)
+const DIRECT_V = 25; // keep with the tile service's t/vN (realTile output version)
 // Overpass rate-limits per IP and per server: one query at a time on each mirror, so the three
 // mirrors carry three cells at once. A mirror that answers 429/504 cools down for its
 // retry-after; a query that fails on one mirror moves on to the next free one.
@@ -121,7 +135,8 @@ async function directTile(spec: TileSpec): Promise<TileJson> {
 // ---- water from the map, for the placeholder while a real cell is on its way (or 504'd) ----
 // A light query (coastline, lakes, riverbanks) — the one thing a stand-in must not guess from
 // the DEM, which smears a shore into the sea (Elliott Bay became a lawn with trees). Cached per
-// cell like the tiles; asked only where the DEM says the cell could hold water.
+// cell like the tiles; asked only where the DEM says the cell could hold water — and only on
+// ?tiles=direct: with a tile service, the stand-in waits for OpenFreeMap's water or the real cell.
 const waterInflight = new Map<string, Promise<TileJson | null>>();
 function waterTile(spec: TileSpec): Promise<TileJson | null> {
   const k = spec.id.slice(1);
@@ -309,6 +324,8 @@ function mvtWaterTile(tpl: string, z: number, tx: number, ty: number): Promise<W
 /** A cell's water from the vector tiles covering it, as a slim tile (areas only) — or null when
  *  the CDN can't be reached. Cached per cell like the others. A distant (lite) cell reads z12:
  *  four tiles for the whole ring, not seventy. */
+/** Whether a cell can have the vector tiles' water at all (the open world, the CDN known). */
+function mvtWaterPossible(spec: TileSpec) { return !!origin && (spec.synth || spec.world); }
 async function mvtWater(spec: TileSpec, lite = false): Promise<TileJson | null> {
   if (!origin) return null;
   const [cx, cz] = spec.id.slice(1).split('_').map(Number), z = lite ? 12 : 14;
@@ -366,16 +383,18 @@ async function vectorCell(spec: TileSpec): Promise<TileJson | null> {
   return tj;
 }
 
-// The tile service, raced against a stall: after 25 s (or any failure) go direct.
+// The tile service, raced against a stall (90 s: a cold cell it builds from our extract takes a few
+// seconds; one it must ask Overpass for, longer). A failure is the data's, not the worker's: the
+// stand-in stays and the stream retries the cell under its backoff.
 // ?fail=cx_cz,… (a test hook): those real cells answer as a 504 would, so their stand-ins stay
 const failCells = new Set<string>();
 function worldTile(spec: TileSpec): Promise<TileJson> {
   if (failCells.has(spec.id.slice(1))) return Promise.reject(new FetchError('overpass unavailable: forced (?fail)'));
   if (spec.file.startsWith('direct:')) return directTile(spec);
   let timer = 0;
-  const stall = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error('tile service stalled')), 25000) as unknown as number; });
+  const stall = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new FetchError('tile service stalled')), 90000) as unknown as number; });
   return Promise.race([cachedFetchJson(spec.file) as Promise<TileJson>, stall])
-    .catch(() => directTile(spec))
+    .catch((e) => { throw e instanceof FetchError ? e : new FetchError(`tile service: ${(e as Error)?.message ?? e}`); })
     .finally(() => clearTimeout(timer));
 }
 
@@ -481,15 +500,19 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   // (a real cell's grid is 4 m — fine enough to carry its graded streets; a placeholder's 16 m)
   if (demOn && origin && (spec.synth || spec.world)) demP = demFor(cellKey, spec.box, !msg.lite ? 4 : 16);
   // Relief rebuilds: a synth cell waits for its DEM, a real cell for its LiDAR (below).
+  // (no DEM for good — offline, or a browser that can't read it — still rebuilds when the map's
+  // water can come: the flat ground below takes it)
   if (msg.relief && spec.synth) {
     const d = demP ? await demP : null;
-    if (!d) return null;
+    if (!d && !mvtWaterPossible(spec)) return null;
   }
   // The map's water from the vector tiles (a fifth of a second — cached per cell): a stand-in's
   // only real knowledge of its shore, and a real cell's sea — OSM's coastline is a line, and a
   // cell wholly out on the bay has none to close a sea polygon from (Elliott Bay's south cell
   // was a DEM smear: a lawn under trees); the ocean polygons are the coastline already closed.
   const mvtP = origin && (spec.synth || spec.world) ? mvtWater(spec, !!msg.lite) : null;
+  // A real cell's aerial photo starts now too (it only needs the box): real roof colours.
+  if (spec.world && !msg.lite) prefetchAerial(spec.box);
   // OSM/tile fetch starts first (it's the slow pole); DEM resolves in parallel.
   const tjP: Promise<TileJson> | null = spec.synth
     ? null
@@ -507,6 +530,14 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   const realish = spec.world || !!vec;
   // (a DEM that landed while the vector race ran on still counts)
   let dem = dem0 ?? (demP ? await raceNull(demP, 0) : null);
+  // No ground yet (late, failed, offline, or a browser that can't read the tiles): a flat grid at
+  // the resident stand-in's height, so the map's water still has somewhere to go — a cell out on
+  // the Sound is the Sound, not a flat lawn over it. The real ground comes with the relief rebuild.
+  let flatGround = false;
+  if (!dem && demP && origin && mvtP) {
+    dem = demLayer(flatDem(spec.box, (x, z) => terrain!.heightAt(x, z), msg.lite ? 16 : 4));
+    flatGround = true;
+  }
   // (a stand-in never overwrites the ground its real twin registered in this worker)
   const mayRegister = spec.world || !realPatched.has(cellKey);
   let waterLate = false, water: WaterBody[] | undefined, walls: number[] = [];
@@ -521,14 +552,16 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
       const wet = mayBeWet(dem);
       let wt = await raceNull(mvtP, msg.relief ? 30000 : 5000);
       const complete = !!wt && !msg.lite; // (the vector tiles carry the ocean: their water is the whole answer — at z14; z12 drops the small harbours)
-      if (!wt && wet) wt = await raceNull(waterTile(spec), msg.relief ? 45000 : 6000);
+      // (Overpass only with no tile service, ?tiles=direct: the service answers the cell itself from
+      // our own extract in seconds, and the public servers aren't every player's backend)
+      if (!wt && wet && !measuredBase) wt = await raceNull(waterTile(spec), msg.relief ? 45000 : 6000);
       if (wt) {
         water = waterBodies(dem, wt, terrain);
         if (water.length || complete) {
           dem = waterPatch(dem, water, complete);
           if (mayRegister) terrain.registerPatch(cellKey, new TerrainLayer(dem.buf.slice(0), dem.layout));
         }
-      } else if (wet && !msg.relief) waterLate = true;
+      } else if ((wet || flatGround) && !msg.relief) waterLate = true; // (flat: no way to know it's dry — ask again)
     }
   }
   const syn: SynthResult | null = spec.synth && !vec ? synthTile(spec, seed, terrain) : null;
@@ -566,15 +599,35 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   }
   // Measured buildings: real footprints get LiDAR ridge/eave/roof shape before the builders
   // run. Lite (LOD) builds only use what's already cached; detail builds wait briefly.
-  let lidarLate = false;
+  let lidarLate = false, lidarNew = false;
   if (!syn && lidarOn()) {
-    // (a vector twin is a stand-in: up now from priors, its measured rebuild later)
-    const e = await enrichTile(tj, spec.box, msg.relief ? null : vec ? 0 : LIDAR_WAIT, !msg.lite);
-    // (a real cell's relief rebuild is for its measurements: none, nothing to swap; a stand-in's
-    // is for its ground, and is built whatever the survey says)
-    if (msg.relief && spec.world && e !== 'done') return null;
+    // The cell's precomputed record: a baked cell's rides in its region's sidecar
+    // (measured/<id>.json); a streamed cell's is the tile service's, measured there the first time
+    // anyone asks. A vector twin is a stand-in, up now: it takes a record already kept here, never
+    // asks the service, and — with a service to ask — never reads the survey itself either (its
+    // real twin, built next, gets the record); without one, a desktop measures it as before
+    // (built from priors now, its measured rebuild later).
+    const [cx, cz] = cellKey.split('_').map(Number);
+    const svc = measuredOn && !!measuredBase && !!origin && (spec.world || !!vec);
+    const pre: PreRec | undefined = measuredOn && !spec.world && !spec.synth && spec.file
+      ? () => bakedMeasured(base, spec.id)
+      : svc ? (peek) => serviceMeasured(measuredBase, origin!, cx, cz, spec.box, peek || !!vec) : undefined;
+    const e = await enrichTile(tj, spec.box, msg.relief ? null : vec ? 0 : LIDAR_WAIT, !msg.lite && !(vec && svc), pre);
     lidarLate = e === 'late';
+    lidarNew = e === 'done';
   }
+  // Real roof colours off the cell's aerial photo (after the survey, whose new buildings count
+  // too). A stand-in or a coarse silhouette takes only what this browser already read. (A baked
+  // pack's roofs were read at bake time: aerial.ts tileRoofs balances them as they build.)
+  let aerialLate = false, aerialNew = false;
+  if (realish && !syn && aerialOn()) {
+    const a = await enrichAerial(tj, spec.box, msg.relief ? null : AERIAL_WAIT, !msg.lite && !vec);
+    aerialLate = a === 'late';
+    aerialNew = a === 'done';
+  }
+  // (a real cell's relief rebuild is for its measurements and its roofs: neither, nothing to swap;
+  // a stand-in's is for its ground, and is built whatever the survey says)
+  if (msg.relief && spec.world && (lidarOn() || aerialOn()) && !lidarNew && !aerialNew) return null;
   const tbuf = spec.terrain && !msg.lite ? await cachedFetch(base + spec.terrain.file) : undefined;
   const tile = await buildTile(tj, terrain, spec, msg.idBase, !!msg.lite);
   if (syn) tile.objs.push(...packGroup(syn.extra));
@@ -622,8 +675,9 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   if (shipped) tile.dem = { buf: shipped.buf.slice(0), layout: shipped.layout };
   // Built without data that's still coming (flat while a DEM was expected, or from priors
   // while the LiDAR read runs) — the stream asks for a relief rebuild and swaps it in.
-  else if (demP && spec.synth && !msg.lite) tile.late = 1;
+  if ((!shipped || flatGround) && demP && spec.synth && !msg.lite && !msg.relief) tile.late = 1; // (a relief is the last word: never another)
   if (lidarLate && !msg.lite) tile.late = 1;
+  if (aerialLate && !msg.lite) tile.late = 1; // (its roof colours still on the way)
   if (waterLate && !msg.lite) tile.late = 1; // (its water still on the way: rebuilt when it lands)
   return tile;
 }
@@ -640,15 +694,29 @@ ctx.onmessage = (e: MessageEvent) => {
     if (m.baked) bakedCells = m.baked;
     for (const c of m.fail ?? []) failCells.add(c);
     if (m.vector === false) vecOn = false;
+    setMicroDate(m.date); // (the world's chosen day: the beach's season, the carts' collection day)
+    setWorldDate(m.date); // (…the marina's boats, the beach's people, its lot's cars: calendar.ts)
     if (m.demBase) setDemBase(m.demBase);
-    if (m.lidar && m.origin) {
+    // `lidar`: this device measures (desktop); `measured`: precomputed records apply (every tier)
+    measuredOn = !!m.measured;
+    measuredBase = m.measuredBase ?? '';
+    if ((m.lidar || m.measured) && m.origin) {
       setLidarLog((msg) => ctx.postMessage({ kind: 'log', msg }));
       if (m.lidarPort) setLidarPort(m.lidarPort);
-      initLidar(m.origin);
+      initLidar(m.origin, !!m.lidar);
     }
     if (m.fp) initCache(base, m.fp); // same idb database as the page
     const st = m.style ? styleByKey(m.style) : null;
     if (st) setActiveStyle(st); // Phase I: builders read the region's style (palettes, species, roof habits)
+    return;
+  }
+  if (m.kind === 'roofs') {
+    // where roof colours come from: the baked pack's aerial samples, and the streamed cells' photos
+    setRoofSource(m.painted ? 'painted' : null, TAG_ROOF_COLOURS);
+    if (m.aerial && origin) {
+      setAerialLog((msg) => ctx.postMessage({ kind: 'log', msg }));
+      initAerial(origin, m.relay || undefined);
+    }
     return;
   }
   if (m.kind !== 'build') return;
@@ -665,6 +733,8 @@ ctx.onmessage = (e: MessageEvent) => {
       for (const d of tile.decks) if (d.h) tr.push(d.h.buffer);
       for (const op of tile.ops) if (op.o === 'd' && op.d.h) tr.push(op.d.h.buffer);
       if (tile.atlas) tr.push(tile.atlas);
+      if (tile.micro) tr.push(tile.micro.buffer);
+      if (tile.crowd) tr.push(tile.crowd.buffer);
       if (tile.terr) tr.push(tile.terr);
       if (tile.dem) tr.push(tile.dem.buf);
       ctx.postMessage({ kind: 'built', id: m.id, tile }, tr);

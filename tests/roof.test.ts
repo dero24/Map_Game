@@ -58,6 +58,37 @@ describe('roofs', () => {
     for (const t of r.tris) for (const p of t.p) expect(p[1]).toBeGreaterThanOrEqual(r.lowH - 1e-6);
   });
 
+  it('a triangle asked for gables gets a hip: slopes and a peak, never three gable walls and no roof', () => {
+    // (every face met the gable rule round the one apex: no slopes, the peak left at −∞ — a chimney
+    // built on it stood at minus infinity and culled its chunk; seen at Ely, NV and Santa Monica)
+    const tri: V2[] = [[3.88, -0.88], [-1.29, 4.78], [-1.55, -4.8]];
+    const r = buildRoof(tri, 'gable', 0.6, 0.4, 10)!;
+    expect(r.tris.length).toBeGreaterThan(0);
+    expect(Number.isFinite(r.peak[1])).toBe(true);
+  });
+
+  it('every roof of a thousand random footprints has a finite peak and finite corners', () => {
+    const R = makeRng(20261004), rng = () => R.float();
+    let built = 0;
+    for (let t = 0; t < 1000; t++) {
+      const k = 3 + Math.floor(rng() * 6), ring: V2[] = [];
+      for (let i = 0; i < k; i++) {
+        const a = (i / k) * Math.PI * 2 + (rng() - 0.5) * 0.6, r = 4 + rng() * 10;
+        ring.push([Math.cos(a) * r * (0.5 + rng()), Math.sin(a) * r]);
+      }
+      const tidy = tidyRing(ring);
+      if (!tidy || tidy.length < 3) continue;
+      for (const style of ['gable', 'hip'] as const) {
+        const r = buildRoof(tidy, style, 0.6, 0.4, 10);
+        if (!r) continue;
+        built++;
+        expect(Number.isFinite(r.peak[1]), `${style} on ${JSON.stringify(tidy)}`).toBe(true);
+        for (const tr of r.tris) for (const p of tr.p) expect(p.every(Number.isFinite)).toBe(true);
+      }
+    }
+    expect(built).toBeGreaterThan(1000);
+  });
+
   it('cross-gables an L-shaped house and caps the rise', () => {
     const r = buildRoof(L, 'gable', 0.7, 0.4, 2.5)!;
     expect(r.gables.length).toBe(2);

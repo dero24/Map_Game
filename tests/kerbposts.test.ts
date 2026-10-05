@@ -98,6 +98,27 @@ describe('posts keep out of the carriageway', () => {
     for (const p of found) expect(depth(roads, p.x, p.z), `post ${p.side} m at ${p.x.toFixed(2)},${p.z.toFixed(2)}`).toBeLessThan(0);
   });
 
+  it("a house's kerbside mailbox never stands in a slip road's lane (Sea Bright's Ocean Avenue at Rumson Road)", async () => {
+    // the house faces the avenue; a junction's link (primary_link) runs along the avenue's east kerb
+    // past its walk — buildings.ts finds the house's street among the plain streets and puts the box
+    // at that kerb, which here is the link's lane
+    const lroads: Rd[] = [
+      { p: [m(128), m(20), m(128), m(236)], c: 'primary', w: 11, n: 'Main Avenue' },
+      { p: [m(133.2), m(40), m(134.6), m(115)], c: 'primary_link', w: 6 }, // (it ends before the second house)
+    ];
+    const house = (z: number, s: number) => ({ r: [m(150), m(z - 5), m(160), m(z - 5), m(160), m(z + 5), m(150), m(z + 5)], h: 7, k: 'house', roof: 'flat', s });
+    const ltj = { ...tj, roads: lroads, points: [], buildings: [house(100, 31), house(130, 32)] };
+    const t = await buildTile(ltj as never, terrain, { id: '0_0', box: ltj.box, lod: 0, file: 'x' }, 0);
+    const w = new WalkWorld(terrain, { x0: -50, z0: -50, x1: 300, z1: 300 });
+    replayOps(w, t.ops);
+    for (const [a, b, y0, y1] of t.walls) w.addWall(a, b, y0, y1);
+    const trunks: [number, number][] = []; // (the stub canvas draws no paved mask: trees aren't kept off roads here)
+    for (const o of t.objs) if (/^(trees|garden):/.test(o.n ?? '') && o.im) for (let i = 0; i + 15 < o.im.length; i += 16) trunks.push([o.im[i + 12], o.im[i + 14]]);
+    expect(t.objs.some((o) => /^mailbox:/.test(o.n ?? '')), 'the house past the link keeps its box').toBe(true);
+    const inLane = posts(w).filter((p) => !trunks.some(([x, z]) => Math.hypot(x - p.x, z - p.z) < p.side + 0.3) && depth(lroads, p.x, p.z) > -0.2);
+    expect(inLane.map((p) => `${p.side.toFixed(2)} m at ${p.x.toFixed(2)},${p.z.toFixed(2)}`)).toEqual([]);
+  });
+
   it('offCarriageway: a point in a street steps out past its kerb on its own side; one clear stays put', () => {
     const near = carriagewaysNear(roads as never);
     expect(offCarriageway(near, 60, 100, 0.2)).toEqual([60, 100]);

@@ -11,6 +11,7 @@ import type { Area, Box, Building, Line, Point, Road, TileJson } from './data';
 import { sportOf } from './sports';
 import { inclineOf } from './grade';
 import { worldRegion } from './styles';
+import { overpassStatements } from './osmQuery';
 
 export interface LatLon { lat: number; lon: number }
 export interface OsmNode { lat: number; lon: number }
@@ -64,6 +65,31 @@ export const pointInRing = (x: number, z: number, r: P2[]) => {
   }
   return inside;
 };
+/** pointInRing — the same answers — for many points against one big ring: its edges bucketed by z
+ *  band over the window [z0, z1], so a point tests only the edges crossing its own row. (A cell on
+ *  a Great Lake carries the lake's whole outline, 47,000 vertices: tested once a ground quad, it cost
+ *  a Chicago cell 8 s of its build.) A point outside the window takes the plain test. */
+export function ringTester(r: P2[], z0: number, z1: number, band = 16): (x: number, z: number) => boolean {
+  const n = Math.max(1, Math.ceil((z1 - z0) / band));
+  const rows: number[][] = [];
+  for (let k = 0; k < n; k++) rows.push([]);
+  const row = (z: number) => Math.min(n - 1, Math.max(0, Math.floor((z - z0) / band)));
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const lo = Math.min(r[i][1], r[j][1]), hi = Math.max(r[i][1], r[j][1]);
+    if (hi < z0 || lo > z1) continue;
+    for (let k = row(lo), b = row(hi); k <= b; k++) rows[k].push(i, j);
+  }
+  return (x, z) => {
+    if (!(z >= z0 && z <= z1)) return pointInRing(x, z, r);
+    const es = rows[row(z)];
+    let inside = false;
+    for (let q = 0; q < es.length; q += 2) {
+      const [xi, zi] = r[es[q]], [xj, zj] = r[es[q + 1]];
+      if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+    }
+    return inside;
+  };
+}
 
 // Drop closing duplicate and near-duplicate / collinear vertices.
 function cleanRing(r: P2[], eps = 0.15): P2[] {
@@ -204,9 +230,11 @@ export const storeyH = (floors: number) => (floors > 10 ? 3.7 : 3.1);
  *  can't turn a shed into a skyscraper: the floor count wins when the two disagree wildly, and an
  *  unverified tower needs a tower's footprint. Parts (spires, crowns) are exempt from the footprint
  *  test. NaN `h` = no height tag. */
-export function plausibleHeight(h: number, floors: number | null, area: number, part = false): number {
+// `roofLv`: mapped roof:levels — storeys in the roof (attics with dormers, mansards), on top of the
+// building:levels below it: each stands ~2.6 m of roof over the eave.
+export function plausibleHeight(h: number, floors: number | null, area: number, part = false, roofLv = 0): number {
   if (floors && floors > 0) {
-    const est = floors * storeyH(floors) + 1.5;
+    const est = floors * storeyH(floors) + 1.5 + roofLv * 2.6;
     if (!isFinite(h) || h > est * 2 + 20 || h < floors * 1.8) h = est;
   } else if (isFinite(h) && h > 100 && area < 120 && !part) h = 40;
   return isFinite(h) ? Math.min(h, 830) : NaN;
@@ -332,10 +360,14 @@ const ROOF_MAT: Record<string, number> = {
   glass: 0x9ab3bf, stone: 0x77746e, gravel: 0x9a968c, grass: 0x6b7f4a, eternit: 0x8d8b86,
 };
 const roofMaterialColour = (v: unknown) => (v ? ROOF_MAT[String(v).toLowerCase().replace(/\s/g, '_')] ?? null : null);
+/** Every roof colour a tag can resolve to by name or material — how a baked pack's mapped roof
+ *  colours are told from its aerial samples (aerial.ts tileRoofs). */
+export const TAG_ROOF_COLOURS: ReadonlySet<number> = new Set([...Object.values(NAMED), ...Object.values(ROOF_MAT)]);
 
 // ---------------- tag tables (port of scripts/bake.mjs) ----------------
 
-const ROAD_W: Record<string, number> = { motorway: 14, trunk: 12, primary: 11, primary_link: 6, secondary: 9, secondary_link: 6, tertiary: 8, tertiary_link: 5, residential: 6.5, unclassified: 6, living_street: 5, service: 4, pedestrian: 5, track: 3, footway: 1.8, path: 1.5, cycleway: 2, steps: 2, bridleway: 2, construction: 5 };
+// (a motorway's or a trunk's ramps are its links — every interchange's on- and off-ramps)
+const ROAD_W: Record<string, number> = { motorway: 14, motorway_link: 7, trunk: 12, trunk_link: 6.5, primary: 11, primary_link: 6, secondary: 9, secondary_link: 6, tertiary: 8, tertiary_link: 5, residential: 6.5, unclassified: 6, living_street: 5, service: 4, pedestrian: 5, track: 3, footway: 1.8, path: 1.5, cycleway: 2, steps: 2, bridleway: 2, construction: 5 };
 const PARK_DEFAULT = new Set(['residential', 'unclassified', 'tertiary', 'secondary']);
 /** Tall structures built from the map's own point (props.ts, assets/tower.ts): a lattice mast (TV,
  *  radio, phone), a water tower, a chimney, a flagpole — trees never grow within 15 m of them
@@ -406,7 +438,28 @@ export function furnitureClass(t: Record<string, string>): string | null {
   if (t.barrier === 'bollard') return 'bollard';
   if (t.amenity === 'vending_machine' && /parking_tickets/.test(t.vending ?? '')) return 'meter';
   if (t.tourism === 'viewpoint') return 'viewpoint';
+  // the micro layer's (world/micro.ts): a picnic table, a fire ring, a public grill, a planter, an
+  // information board or map, a recycling container, a street cabinet, a vending machine, a clock
+  // on its post (one on a wall is the wall's)
+  if (t.leisure === 'picnic_table') return 'picnic';
+  if (t.leisure === 'firepit') return 'firepit';
+  if (t.amenity === 'bbq') return 'bbq';
+  if (t.amenity === 'planter' || t.man_made === 'planter') return 'planter';
+  if (t.tourism === 'information' && /^(board|map)$/.test(t.information ?? '')) return 'info';
+  if (t.amenity === 'recycling' && t.recycling_type !== 'centre') return 'recycling';
+  if (t.man_made === 'street_cabinet') return 'cabinet';
+  if (t.amenity === 'vending_machine') return 'vending';
+  if (t.amenity === 'clock' && !/wall/.test(t.support ?? '')) return 'clock';
   return null;
+}
+/** A navigation mark on the water (OpenSeaMap `seamark:type`): a buoy (lateral, cardinal, special,
+ *  a mooring) or a beacon on its pile → its Point class and `sp` = its shape and colour
+ *  ('conical:red', 'can:green', 'mooring:white'), or null. */
+export function seamarkOf(t: Record<string, string>): { c: 'buoy' | 'beacon'; sp: string } | null {
+  const sm = t['seamark:type'];
+  if (!sm || !/^(buoy_|beacon_|mooring$)/.test(sm)) return null;
+  const shape = t[`seamark:${sm}:shape`] ?? (sm === 'mooring' ? 'mooring' : ''), colour = (t[`seamark:${sm}:colour`] ?? '').split(';')[0];
+  return { c: sm.startsWith('beacon') ? 'beacon' : 'buoy', sp: `${shape}:${colour}`.slice(0, 32) };
 }
 /** A playground piece's kind (assets/play.ts PlayKind) from its OSM `playground=*` value. */
 export function playKindOf(v: string | undefined): string | null {
@@ -504,42 +557,9 @@ const OWN_CTX = 0;
  *  Cloudflare tile service and the in-browser direct path (tile.worker.ts), so both feeders
  *  emit identical tiles. Keep in step with osmToTile when it learns a new tag. */
 export function overpassQuery(bb: { s: number; w: number; n: number; e: number }): string {
+  // (the statements are osmQuery.ts's — the same list our own extract selects with)
   return `[out:json][timeout:25][bbox:${bb.s.toFixed(7)},${bb.w.toFixed(7)},${bb.n.toFixed(7)},${bb.e.toFixed(7)}];(
-  way["highway"];
-  way["building"];
-  relation["building"];
-  way["building:part"];
-  relation["building:part"];
-  way["natural"~"^(water|coastline|beach|sand|wetland|wood|scrub|heath|grassland)$"];
-  way["amenity"="parking"];
-  relation["amenity"="parking"];
-  relation["natural"="water"];
-  way["waterway"="riverbank"];
-  node["natural"="tree"];
-  node["amenity"="bench"];
-  node["highway"~"^(traffic_signals|stop|give_way|crossing|street_lamp)$"];
-  node["amenity"~"^(waste_basket|post_box|bicycle_parking|drinking_water|vending_machine)$"];
-  node["barrier"="bollard"];
-  node["tourism"="viewpoint"];
-  node["playground"];
-  way["playground"];
-  node["emergency"="fire_hydrant"];
-  node["railway"="subway_entrance"];
-  node["man_made"~"^(mast|tower|communications_tower|water_tower|chimney|flagpole)$"];
-  way["man_made"~"^(mast|communications_tower|water_tower|chimney)$"];
-  node["highway"="bus_stop"];
-  node["name"]["amenity"~"^(cafe|restaurant|fast_food|bar|pub|biergarten|ice_cream|bank|pharmacy|post_office|library|nightclub)$"];
-  node["name"]["shop"];
-  node["name"]["office"];
-  way["wall"="seawall"];
-  way["man_made"~"^(groyne|breakwater|pier)$"];
-  way["barrier"~"^(fence|wall|retaining_wall)$"];
-  way["power"="line"];
-  way["railway"~"^(rail|tram|light_rail)$"];
-  way["leisure"~"^(park|pitch|playground|garden|recreation_ground|swimming_pool|golf_course|marina)$"];
-  way["landuse"~"^(forest|farmland|meadow|reservoir|cemetery|basin|quarry|landfill|grass|recreation_ground|village_green)$"];
-  relation["leisure"~"^(park|pitch|playground|garden|recreation_ground)$"];
-  relation["landuse"~"^(forest|farmland|meadow|reservoir|cemetery|basin|quarry|landfill|grass)$"];
+${overpassStatements()}
 );out geom qt;`;
 }
 
@@ -636,6 +656,11 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
           points.push(pt);
         }
       }
+      const mark = seamarkOf(t);
+      if (mark && e.lat != null && e.lon != null) {
+        const [x, z] = P.project(e.lat, e.lon);
+        if (inB(x, z, margin)) points.push({ c: mark.c, sp: mark.sp, x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10, own: inB(x, z) ? undefined : OWN_CTX });
+      }
       const sc = STRUCT(t);
       if (sc && e.lat != null && e.lon != null) {
         const [x, z] = P.project(e.lat, e.lon);
@@ -685,6 +710,8 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       if (t.name) r.n = t.name;
       if (t.ref) r.ref = t.ref;
       if (t.bridge && t.bridge !== 'no') r.br = t['bridge:movable'] || t.bridge === 'movable' ? 'movable' : 'yes';
+      if (r.br && t['bridge:structure']) r.bs = String(t['bridge:structure']).toLowerCase().slice(0, 24);
+      if (r.br === 'movable' && t['bridge:movable']) r.bm = String(t['bridge:movable']).toLowerCase().slice(0, 16);
       if (t.layer) r.l = parseInt(t.layer) || 0;
       // underground (Seattle's SR 99 bored tunnel, Boston's Big Dig, the Hudson crossings): not a
       // street across the blocks above — cars dive into the portal and out of sight. A building
@@ -777,7 +804,9 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         const lv = parseFloat(t['building:levels']);
         const floors = isFinite(lv) && lv > 0 ? lv : null;
         const tagH = parseLen(t.height);
-        let h = plausibleHeight(tagH, floors, area, isPart);
+        const rlv = parseFloat(t['roof:levels']);
+        const roofLv = isFinite(rlv) && rlv > 0 ? Math.min(rlv, 3) : 0;
+        let h = plausibleHeight(tagH, floors, area, isPart, roofLv);
         // bottom of the building above ground (parts: setbacks and overhangs; else pilings)
         const minLv = parseFloat(t['building:min_level']);
         let minH = parseLen(t.min_height);
@@ -787,6 +816,7 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
           const r = (seed % 1000) / 1000;
           h = kind === 'shed' ? 3 + r : kind === 'large' ? 8 + r * 5 : kind === 'commercial' ? 5.5 + r * 3 : 6.5 + r * 3;
           if (isPart) h += minH; // an untagged part stands a storey or two above its base
+          h += roofLv * 2.6; // (a roof the map says has storeys in it)
         }
         if (kind === 'lighthouse') h = 21;
         // four-plus storeys isn't a house or a shed whatever the tag says (towers mapped building=yes)
@@ -809,6 +839,7 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
         const rc = parseColour(t['roof:colour']) ?? roofMaterialColour(t['roof:material']);
         if (rc != null) b.rc = rc;
         if (floors) b.fl = Math.round(floors);
+        if (roofLv) b.rl = roofLv;
         if (tagRoof) b.rt = 1;
         if (isFinite(tagH) && Math.abs(tagH - h) < 0.5) b.hq = 1;
         if (t['building:material']) b.ma = String(t['building:material']).toLowerCase().slice(0, 16);

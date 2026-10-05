@@ -19,9 +19,12 @@ export function openGround(walk: WalkWorld, x: number, z: number, clear = 0.45):
 }
 
 /** Doorstep first: within 40 m of a front door whose outside is open (no building, no wall across
- *  it), 2.2 m inside that door, facing in, on its floor. Otherwise the nearest open ground: the map
- *  can land you on the water, a roof or a hedge, where the walker couldn't take a step. (`yaw` is
- *  left to the caller there: it faces down the nearest street.) */
+ *  it), just outside it — 1.2 m past the foot of its steps, on the ground, facing the door (2.2 m out
+ *  from the door itself where that spot isn't open). Outside, never in: a link or a search lands you
+ *  in front of a place, not in a stranger's living room or a restaurant's dining room (the audit,
+ *  2026-10-03: Bar Harbor, Shrewsbury; docs/GAMEPLAY_VISION.md §8 "a public spot"). Otherwise the
+ *  nearest open ground: the map can land you on the water, a roof or a hedge, where the walker
+ *  couldn't take a step. (`yaw` is left to the caller there: it faces down the nearest street.) */
 export function landingAt(walk: WalkWorld, doors: Iterable<Door>, x: number, z: number): Landing {
   let best: Door | null = null, bd = 40 * 40;
   for (const d of doors) {
@@ -32,7 +35,12 @@ export function landingAt(walk: WalkWorld, doors: Iterable<Door>, x: number, z: 
       best = d;
     }
   }
-  if (best) return { x: best.wx - best.nx * 2.2, z: best.wz - best.nz * 2.2, yaw: Math.atan2(best.nx, best.nz), y: best.y, door: best };
+  if (best) {
+    const ok = (px: number, pz: number) => walk.walkable(px, pz) && walk.buildingAt(px, pz) < 0 && !walk.blocked(px, pz, 0.45);
+    const foot = [best.fx + best.nx * 1.2, best.fz + best.nz * 1.2], out = [best.wx + best.nx * 2.2, best.wz + best.nz * 2.2];
+    const [px, pz] = ok(foot[0], foot[1]) ? foot : out;
+    return { x: px, z: pz, yaw: Math.atan2(best.nx, best.nz), y: best.fy, door: best };
+  }
   const [px, pz] = openGround(walk, x, z);
   return { x: px, z: pz };
 }

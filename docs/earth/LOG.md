@@ -2,6 +2,1224 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-04 — Regional life (2): every door, the shop's whole window, the lamps, walkers on the steps, the Northwest in the foundry
+
+Robby, through the day:
+
+- Sea Bright: "some buildings i cannot walk inside like ocean house and angelics or sea bright
+  lizza … it should be all buildings";
+- Brooklyn: "the window still was not all see through … just a tiny square";
+- at night the street lights made "cars and everything glow way too light where it washes it all out";
+- "people walking sometimes walk through walls of building to other side around corners and when
+  walking on porch into house they fall into the floor";
+- "do northwest and stuff that doesnt take hrs of processing", with the foundry's models "detailed
+  and well made with amazing animation" from an exhaustive list.
+
+- **Every door opens** (`getting-in`, commit 1c43ebd). The shut-door leaf waited for the building
+  standing open beside you to hand over, and it never did: the door you stand at is now activated
+  whatever is open next to it. Ocean House failed on the old code and passes on the new; all 20
+  commercial doors near Ocean Avenue let you in.
+- **A shop under flats cuts its whole window** (1c43ebd). The facade knew the ground floor of an
+  apartment block was a shop (`bd.gf`), the interior didn't, so it cut only a sash-sized square.
+  The plan, furnishing, layout and views now read it too (`tests/interiorWindows.test.ts`).
+- **The lamps light the street, not wash it out** (65e873f; `nightLight.ts`). A pool's heart is a
+  lit midtone now (gain 1.8 → 1.2, a cream light, its own colour muted 0.55, a floor of 0.28), so a
+  car or a wall in it keeps its colour. `tests/nightLight.test.ts` holds the heart at L* 55–70 on
+  asphalt.
+- **Walkers keep to open ground** (`walkers-clear-of-walls`, ba9d65f):
+  - Every entrance carries its way up (`Door.path`): the top of a porch's steps; a raised house's
+    landings and flights turn by turn. Walkers walk it, up the steps and level across the deck. On
+    a test porch they were up to 0.7–1.0 m under it; now 0.00 m.
+  - A walker sets out only for a door whose wall it stands in front of (`LifeInit.doorN`). One
+    round the corner, or behind a shallow building, it used to reach straight through the walls.
+- **The Northwest in the foundry** (`regional-flora`, 94ce999; Robby: "do northwest"):
+  - **Six trees**, three grown forms each (open-grown, forest, old), far and near models, all under
+    budget: Douglas fir, western hemlock (its nodding leader, and stilt roots where it grew on a
+    nurse log), Sitka spruce (a buttressed foot), western redcedar (J-shaped boughs, an old one's
+    candelabra of dead spikes), red alder (pale stems), vine maple (a sprawl).
+    - A conifer's clumps are *sprays*: drawn out along the bough, the rim drooping, on tiers that
+      spiral and close up toward the top. The first try was stacked plates on a pole (the studio
+      shots `shots/trees-nw*.jpg`).
+    - New leaf pictures for the cedar's flat sprays and a maple's big hands.
+  - **Moss.** Beards of moss under the bigleaf maple's limbs, licorice fern along them. Moss on the
+    bark as the region's damp (`styles.ts moss`): the westside's trunks green on their wet sides
+    and feet. It first read lime and wrapped every trunk, then went a deep olive, in patches.
+  - **Where.** West of the Cascades' crest (`styles.ts westOfCascades`) the conifers are these, at
+    their real heights (fir and Sitka 25–48 m in a wood), Sitka in the outer coast's fog belt, four
+    in five of a wood's trees conifers. The dry side (Bend, Yakima, Spokane) is now the Mountain
+    West's: no westside moss, and cold winters (it had the marine Northwest's mild ones).
+  - **The forest floor** (`world/understory.ts`): sword fern, salal and Oregon grape under a wood's
+    canopy round the walker, and the lawn grass gives way there. It reads the near-tree layer's
+    crowns (`NearTrees.crownsNear`): every mounted tile's trees, shown yet or not.
+  - Seen: a Seattle old-growth wood (`shots/spots-pnw-wood2.jpg`): fir and cedar trunks with moss
+    on their north sides, sword fern and salal between them. Compared (`pnw-flora-1`): mean 0.683.
+    Seattle's Federal Avenue 0.79 (vegetation 43% against the photo's 59%, fir spires along it).
+- **The model list** (`docs/regional-life/models.md`, compiled by a helper agent from the 16
+  region files): every plant and animal the foundry must build, deduplicated — 1,382: 46 the
+  foundry has, 1,299 rows on a genome, 37 new genomes or body plans — each with its genome, regions,
+  real size, seasons, its animation and behaviour, and a priority. Its 16-package build order puts
+  the Northwest (done today) first.
+- Tests 868 + 3 (`tests/understory.test.ts`), the build, and the montages above.
+- **Next:**
+  - The Hoh and Longmire still stand in meadow: the map draws no wood there. That's the canopy
+    layer, which Robby deferred.
+  - The ground under a wood should be duff and moss, not the lawn wash.
+  - Map OSM genera to the new kinds in `realTile` (Pseudotsuga → fir, Thuja → cedar, Tsuga →
+    hemlock, Picea sitchensis → sitka, Alnus → alder, Acer circinatum → vinemaple) with the next
+    worker cache bump.
+  - Queued bug: an upstairs flat's floor and furniture stand out over a shopfront (the Bonobos
+    building; `upstairs-over-shopfront`).
+  - Then `models.md`'s next packages, and the wildlife with its animation.
+
+## 2026-10-04 — Regional life (1): getting in, people who stay in, the regions' reference, the street trees
+
+Robby, from Brooklyn:
+
+- big shop windows showed the room only through a blob in the middle;
+- a new building's door and windows hadn't opened, and walking in the house was see-through for a
+  second;
+- people who went into buildings vanished.
+
+Then he asked for greenery compared region by region ("upstate NY, PNW moss trees, ferns, Kentucky,
+Florida, Texas, middle America"), plenty of foliage and animals from the foundry, an exhaustive list
+of wildlife per region in a new doc, a plan, the feature list, and to begin iterating.
+
+- **Getting in** (`getting-in`; `docs/agent/gameplay.md`):
+  - **The panes.** A pane opens whole or not at all, decided by your distance to its nearest
+    point, with a per-window threshold, and only on the storeys round yours. The old per-pixel
+    noise round 4.2 m from the pane's centre left big storefronts half-dissolved.
+  - **The door you walk toward** builds first (your heading, smoothed from your steps).
+  - **A shut door.** Within 2.5 m of a door whose interior isn't open, a leaf stands across its
+    doorway and the build runs flat out. A step in stops at the door until the room is ready.
+  - Court Street, Brooklyn, walked in frame by frame: the whole storefront opens from 5 m, and inside
+    is continuous.
+- **People who go in stay in** (`people-persist-indoors`):
+  - The open building publishes its door and the free standing places on its ground storey.
+  - Whoever walks in by that door goes to a place, stays, and walks back out (`IN_WALK` /
+    `IN_STAY` / `IN_OUT`), the same person. A tower's ground floor takes visitors too.
+  - Tested in `tests/lifeSim.test.ts`, and seen live in Brooklyn.
+- **The regions' reference** (`docs/regional-life/`, researched by a helper agent from public
+  sources; `docs/REGIONAL_LIFE.md`, the plan):
+  - 16 regions as EPA ecoregion groups, each with its flora layer by layer and its wildlife, with
+    how common each one is, where and when, and a modelling note.
+  - Each region's signature, the range limits, and the foundry's build order.
+  - The feature list's queue: `regional-greenery` (active), `ecoregions`, `regional-flora` and
+    `regional-wildlife`.
+- **The green spots** (`tools/real-spots.mjs` `GREEN`): 64 curated public streets, parks and
+  roads, 3–6 a region, 40 with a fit photo. `real-compare --kind=green --group=region` gives a
+  montage a region.
+- **What green-1 found, and the fixes:**
+  - **The survey's street trees were dropped** (`props.ts`). A crown over the street slid to a verge
+    still inside the paved mask; one at the kerb line hit a kerb or a door's way in; and the
+    clearance pass narrowed every street tree under a row's eaves to a stick and dropped it.
+    - The trunk now takes the verge past the paved band, else a pit at the kerb, with a step along
+      the street round a stoop.
+    - A crown topping the roof by 3 m overhangs it, and a measured tree is never dropped.
+    - Savannah's Jones Street keeps 30 of the survey's 35 trees within 50 m (it kept 6);
+      `tests/streetTrees.test.ts`.
+  - **The class pass measured a ceiling.** It drew the region's backdrop ground in flat colour, and
+    over streamed cells its shader keeps that under the tiles: wooded cells raised 11 m stood over
+    the lens in the leafy places. It's left out there now. `real-compare` also waits for the lens's
+    cells' reliefs.
+  - **The map's woods grew no forest.** A streamed cell's land cover is the DEM's grassland
+    everywhere. `areaCoverMask` now reads the tile's OSM woods, scrub and lawns first.
+  - **green-2:** the green spots' vegetation went 3% → 24% (the photos show 35%), and the mean
+    score 0.57 → 0.72. Midwest 0.87, California 0.82, the Rockies 0.73.
+- **Next:** forests OSM doesn't draw stay bare: Longmire inside Mount Rainier, the Adirondacks'
+  NY-73, Bend's ponderosa. Neither the LiDAR records (no buildings, no record) nor OSM have them.
+  The real-data answer is the USFS's NLCD Tree Canopy Cover: 30 m, the lower 48, public. Baked
+  into R2 by 1° blocks, it becomes the tree scan's density everywhere. Then the regional flora (§6
+  of `docs/REGIONAL_LIFE.md`).
+
+## 2026-10-04 — Foundation first (5): audit round 2 — every cell real; the slow cities; the horizon; a phone holds each vertex once; the comparison across the lower 48
+
+The lower-48 audit again (`docs/earth/AUDIT_48.md` round 2), now that every cell comes from our own
+extract: 19 towns, desktop and phone, first visits at t/v25.
+
+- **Every tile loads:** all 249 desktop cells real or baked, no stand-in or failed cell anywhere
+  (round 1: most were vector twins); every one of the 38 arrivals outside and on land.
+  `every-tile-loads` and `spawn-on-land-outside` pass.
+- **A Great Lake's shore cell built in 9 s, now 0.24 s.** The tile carries the lake's whole outline
+  (47,000 vertices, 253 islands) and `realExtras` tested every ground quad against all of it. Now
+  `ringTester` (`realTile.ts`) buckets a big ring's edges by row over the cell, giving the same
+  answers; `tests/realTile.test.ts` compares it with `pointInRing` point for point.
+- **Reliefs wait their turn** (`stream.ts drainRelief`): every mounted cell asked for its relief
+  rebuild at once. Those are 14 whole rebuilds, and they shared the one builder with the cells
+  not up yet, so they ran 110 s and stalled out. Now they queue nearest first, two at a time (one
+  on a phone), and a real cell's waits for the ring's first builds. A failed relief retries.
+  Chicago: every cell real 1 s after ready (it was past the audit's 240 s wait), settled in 38 s
+  (from 244 s), no cell left late. Duluth: 23 s and 57 s (from 141 s and 207 s). The silhouettes
+  build at 1.3 s each (they were taking 33 s).
+- **The desktop's horizon ring** (`horizon.ts`): its first build races the town's own DEM reads, and
+  if one tile came late it waited for a 5 km walk, so most desktop arrivals had no far mountains.
+  It now retries on a backoff (30 s, doubling to 10 min); `tests/horizon.test.ts`. Aspen's ring
+  is up 35 s after ready, and Bar Harbor's montage has Cadillac Mountain again.
+- Round 2's other finds, fixed earlier today (9d364c0): a triangle's gable roof (the NaN chimney at
+  Ely and Santa Monica), and browser Overpass asked though the service answers. The one console
+  error in every run comes from the dev server's local-worker check, so a player never sees it.
+- **A phone's page holds each vertex once** (`phones`): the page kept every tile vertex in JS as
+  well as on the GPU. On the phone tiers (`quality.ts freeArrays`; `?free=0` / `?free=1` override)
+  each tile attribute now drops its array once uploaded (`pack.ts`), keeping what the CPU reads
+  again: positions, ids, the index, and instance matrices. A tile mounted whole (the arrival ring,
+  a silhouette) is drawn on its first frame whether or not it's in view (`stream.ts uploadSoon`),
+  so it uploads and drops its copy straight away. A restored GPU context can't re-upload what's
+  gone, so a page that frees reloads where you stand, a tier lighter as after any lost context.
+  At the airport on a Pixel 7 the page's array memory went 196 → 136 MB once settled, and 243 →
+  158 MB after a walk round the ring, with no errors. A forced context loss
+  (`WEBGL_lose_context`) reloaded at the same spot, the phone montage is unchanged, and
+  `tools/mobile-check.mjs` passes. The stream's budgets weigh a tile before its upload, so their
+  counts are unchanged.
+- **The real-world comparison runs on real cells** (`real-world-comparison`, Tier 1 #1, unblocked).
+  Making it measure honestly came first:
+  - A streamed cell's ground, roads and area sheets had no names, so the class pass counted every
+    real street as "other". They are now `ground:cell`, `road:ribbons` and `water:area`.
+  - A photo has to be fit: quality 0.4 or better, the sun up, segmented, and a lens of 30° or
+    more. Portland's rain-dark windscreen scored 0.05, and Ashland's "street" was a deer at 5.7°.
+  - The game's lens takes the photo's pitch from Mapillary's computed rotation, whose heading matches
+    the compass exactly. Dash cameras tilt from −10° to +20°, and +3° on average had been reading
+    as too little sky in the game.
+  - Mapillary's computed altitude is too noisy to lift the lens: it raised Oklahoma City's by 47 m
+    over a street photo. Only the roof of a mapped building the photo stands in lifts it now.
+
+  The first national run (`national-1`, 106 photo spots) scored 83, with a mean of 0.689; the baked
+  shore scores 0.85. Across the lower 48, photo against game, in percent:
+
+  | | Sky | Building | Vegetation | Ground | Vehicle | Other |
+  |---|---|---|---|---|---|---|
+  | Photo | 27 | 20 | 14 | 27 | 4 | 9 |
+  | Game | 31 | 27 | 5 | 32 | 4 | 2 |
+
+  - **Vegetation is the gap:** the game shows a third of the photos' vegetation, worst in the
+    South (Tennessee −52 points, Texas −32, Louisiana −31). Los Angeles's street trees and lawns
+    are drawn as plain blocks.
+  - **Street furniture:** "other" (poles, signs, fences, barriers) is a quarter of the photos'.
+  - **Buildings stand too close or too bare:** 7 points too much of the view.
+  - In New York and Portland the opposite happens: a LiDAR crown, or a mapped tree in its pit, right
+    at the lens where the photo shows none.
+  - The montages are `shots/real/<ST>-montage.jpg`.
+- **Next:** Robby's `?diag=1` at the airport on his phone. Then Tier 1 from the comparison, worst
+  first: vegetation in yards and along roads (a third of the photos'), then street furniture. The
+  audit's leads are Aspen's lawn-green mountain, a Duluth street frame with no street, a car parked
+  on a crossing, and the airfield's runways drawn as thin lines.
+
+## 2026-10-04 — Foundation first (4): the US extract built, proven, live; every ramp; the airport crash
+
+Tier 0's "every tile loads" (docs/GAMEPLAY_VISION.md §17): the whole-US extract built, checked
+against Overpass in every kind of place, and switched on — reversibly.
+
+- **The US extract** (`scripts/osm-extract.mjs` on D:): 14.4 M nodes, 144.7 M ways, 371 k relations
+  (6,486 big), 179 M way-tile lines from 1.5 B points; ~1¾ h of steps, then the packing
+  (31 bands over a night of restarts; 1,481 blocks, 36.5 GB, 10.6 M tiles, 195 M lines). What it took:
+  - **Packing bands** sized by their data: the old 4° strips from −180° to +180° were 90 full
+    re-reads of the ways' geometry (~7 h); a 40 M-line band ran DuckDB out of memory at 20 GB, a 12 M
+    one at 14 GB; at 20 GB with the editor open Windows paged DuckDB (28,000 pages a second, every
+    thread waiting). 16 GB with ≤ 8 M-line bands fits; a stopped run keeps its packed bands.
+  - **An empty member role** — OSM allows it, Overpass prints `"role": ""` — comes from `ST_ReadOSM`
+    as NULL, and NULL in the members' concatenation is NULL: 526 relations lost members (an
+    outline's rings, a site's parts) and 778 tile lines read `null`. Found by measuring the first
+    packed band, before anything was live; now `coalesce(role, '')`, a test that runs the script's
+    own relation SQL in DuckDB (`tests/osmExtractSql.test.ts`, fails on the old SQL), and a packer
+    that refuses anything printed as null.
+  - **Speed:** a block's tall things and big relations read once per band (two whole-table queries
+    a block, ~1.5 s each); a small tile compressed in place (its round trip to libuv's pool, shared
+    with DuckDB's reads, cost ~1.7 ms a tile with the machine idle — hours over ~15 M tiles).
+- **The proof, across the country** (`tools/osm-compare.mjs --now`: today's Overpass with each
+  element's last edit, since the attic queries — the snapshot's own moment — were refused by a busy
+  server; `--split` asks a dense cell in parts and merges them by element):
+  | Cell | Elements each side | Result |
+  |---|---|---|
+  | Downtown Seattle | 6,042 | 7 differ, all edited after the snapshot |
+  | Kings Beach, Lake Tahoe | 732 | 1 differs, edited after |
+  | South Lake Tahoe | 1,338 | identical |
+  | Santa Monica | 2,407 | identical |
+  | Downtown Tucson | 6,402 | identical |
+  | Aspen | 2,004 | identical |
+  | Hays, KS | 2,588 | identical |
+  | St. Louis riverfront | 2,489 | identical |
+  | Asheville | 2,657 | identical |
+  | Miami Beach | 2,180 | identical |
+  | Intercourse, PA | 335 | identical |
+  | Levittown, NY | 1,367 | identical |
+  | Shrewsbury, NJ (two cells) | 203 and 371 | identical |
+  | Bar Harbor, ME | 1,314 | identical |
+
+  That's 15 cells in 12 states. Chicago's lakefront first answered from the backup mirror, whose
+  data was from July, so osm-compare now refuses a mirror older than the snapshot; the main server
+  timed out on that cell, and on Midtown's.
+  The small towns' answers are kept as `tests/fixtures/osm/*.raw.json.gz` (Shrewsbury ×2,
+  Intercourse, Bar Harbor) (both sides through today's `osmToTile`, so the proof outlives
+  builder changes); the cities' (1–2 MB each) on D:.
+- **The tile service's extract path under test** (`tests/osmWorker.test.ts`): an in-memory R2 packed as
+  the extract packs; `/tile` from the extract, marked so in R2 and on the answer; the outline's edge
+  left to Overpass; `/skyline`'s tall rule; a block's directory read once a request (a cell's six tiles
+  read it six times at once).
+- **Every interchange keeps its ramps:** `motorway_link` and `trunk_link` had no width in
+  `realTile.ts` (or the bake's copy), so every on- and off-ramp was dropped — in real cells and the
+  vector twin. Tiles `t/v25` + `&v=25`, so every cell rebuilds once, from the extract.
+- **Go-live** (2026-10-04, late morning): the blocks staged in R2 while the packing ran (only changed blocks: the
+  hashes are content's), the index uploaded (the switch), the worker deployed (`1aef467b`; the one
+  before, `1c95d174`, is the rollback), `tools/must-load.mjs --live` all 11 streamed must-load towns 9/9 cells from the extract (cold, 1.6–13 s), `/skyline` 11,567 tall things over lower Manhattan, the branch pushed
+  (Pages and the new CI). The CI's first run caught a real regression: the re-arrival hook threw
+  on the rescue's null spec, failing the playtest's teleports. Fixed, and the second run is green:
+  typecheck, 850 tests, build, the live must-load check, and the playtest's 6 checks.
+  **Going back is one step** (`docs/agent/streaming.md`): delete the index
+  (Overpass again within ten minutes) or `npx wrangler rollback` (the old service and its cache).
+- **Robby's phone at Monmouth Executive Airport** (Android 10, Chrome 154): the GPU crashed after a
+  teleport, Chrome then refused the site WebGL until restarted, and grass showed blue (DuckDuckGo's
+  browser flashed and crashed). Reproduced headless as a Pixel 7 on the phone tier
+  (`tools/audit48.mjs`, the airport added to its towns):
+  - **The blue ground**, which is also Robby's Shrewsbury report: a streamed cell's ground
+    (`synth.ts realExtras`) was cut away under wetlands as under water, and the flat sheet laid over
+    the hole was one-sided and wound as the map's ring winds. About half faced down, so the sea
+    plane showed through 40 m below, with grass growing on it, wherever New Jersey's land-use
+    survey (`NJ2002LULC`) mapped a wooded swamp. Now only water cuts the ground, the paint colours
+    a wetland, and `faceUp` turns every sheet to the sky. `tests/realExtras.test.ts` fails on the
+    old code; the airport's montage before and after shows the blue gone, all but its one real pond.
+  - **No leak:** 12 teleports, Sea Bright ⇄ the airport ⇄ Shrewsbury. three's geometries (585–913)
+    and textures (26–28) follow the place, and the JS heap after a forced GC stays flat at
+    453–536 MB. Without the forced GC it climbed to 773 MB, but that was garbage not yet collected.
+  - **The weight:** the phone tier carries ~190–245 MB of vertex data (in JS as well as on the GPU)
+    and a ~450–530 MB heap. That's plausibly too much for an Android 10 phone's tab. Next: free the
+    uploaded vertex arrays the CPU never reads again, and Robby's `?diag=1` there after go-live.
+- **The must-load towns under test** (`tests/mustLoad.test.ts`, `tests/fixtures/towns`, ~1 MB): every
+  one built from the extract with land under its spawn, streets, at least half its own outlines
+  standing, and trees. Levittown's point moved onto Jerusalem Avenue; the old one was in Nassau
+  County Basin #30, a recharge basin.
+- **The comparison loop's spots:** 146 in every lower-48 state, 106 with a photo (86 before): a
+  town's centre is its nearest GNIS place of the name (Virginia's first Fredericksburg is a hamlet
+  180 km from the city), a wider last look, the Census's legal suffixes stripped.
+- **Mapillary's map features**, looked at before building on them: a small town is one drive (so
+  "seen on different days" would drop it all), downtown Seattle 473,848 features for ~2.7 km² (one
+  lamp many times over) — the rules merge duplicates instead. Robby: home mailboxes left out.
+
+## 2026-10-03 — Foundation first (3): our own OSM extract, the audit, the tiers, arriving outside, the comparison loop
+
+Tier 0's audit and "every tile loads" (docs/GAMEPLAY_VISION.md §17), and Tier 1's first tool.
+
+- **The lower-48 audit, round 1** (`tools/audit48.mjs` + `audit48.js`, `docs/earth/AUDIT_48.md`): 10
+  towns, each as a desktop and as a phone, with one montage per town. Public Overpass stopped answering
+  during the run, from this PC and from Cloudflare (the OSM forum reports throttling and some instances
+  shut down). Midtown, Intercourse, Miami Beach, the Chicago Loop and German Village had 0 of 14 real
+  cells on the desktop; everything else was the vector twin, which held up (no holes, no land drawn as
+  water). Found: Bar Harbor's arrival was inside a restaurant's dining room, and Levittown's was
+  flagged as in water. Robby's dark-blue ground at Shrewsbury didn't reproduce (at the centre, on the
+  desktop and phone tiers, with the DEM blocked, in January).
+- **The queue re-ranked** (`feature_list.json`, `tools/rerank-features.mjs`): tiers 0–3 from the
+  vision's §17, 90 items. 24 are new: the extract, every-tile-loads, spawn-on-land-outside,
+  worker-costs, the comparison loop, public places, Mapillary objects, round 12's night, ground and
+  trees, the phone look, and §15's gameplay steps. Three are superseded, with reasons:
+  `brush-boat-minute`, `almanac-regional` and `traversal-spike`. One is in_progress: `own-osm-extract`.
+  `npm run init` names the next item by tier.
+- **Our own OSM extract.** Robby's call: R2; packed, not millions of files; match Overpass exactly and
+  prove it with saved answers kept as a test; cut on a global grid from the whole-US file; ODbL on
+  request; a monthly refresh from his PC; Overpass only a polite fallback. The parts:
+  - `src/world/osmQuery.ts` writes the cell query once; `overpassQuery` is generated from it, byte for
+    byte the old one.
+  - `src/world/osmTiles.ts`: 1/128° tiles in 1° blocks, Overpass's box rule, and assembly.
+  - `scripts/osm-extract.mjs` packs Geofabrik's file through DuckDB `ST_ReadOSM`.
+  - `scripts/osm-upload.mjs`: content-addressed keys, only changed blocks uploaded, the index last.
+  - `worker/src/osm.js`: the service reads the extract first, and `/skyline` serves both skylines from
+    its tall layer.
+  - `tools/osm-compare.mjs` compares the extract with Overpass.
+
+  Proof so far: two real Shrewsbury cells built from the extract are **identical** to the TileJson
+  the service built from Overpass (osmBase aside). They're kept as `tests/osmExtract.test.ts`, and in
+  `wrangler dev` the worker's own path gives the same bytes.
+  - The US run hit DuckDB's limits:
+    - An ordered list aggregate over 1.5 B points ran out of memory. Sliced, it ran on one core. In
+      eighths, it spilled 85 GB. Now it's an unordered gather and a list sort in slices of about 10 M
+      points (about 11 s each, no spill).
+    - Big relations got a random home block on ties (`min_by`). Now it's the lowest tile, so a rerun
+      packs the same bytes.
+
+    Each change was checked byte for byte on New Jersey's 10 blocks.
+  - The browser no longer asks Overpass itself, except with `?tiles=direct`. The service tries two
+    mirrors for 25 s each, rests five minutes after three failures, and caches a failure for ten
+    minutes.
+- **Arrive outside** (`src/player/landing.ts`): a link, a search or "walk here" now lands just past
+  the foot of the nearest door's steps, facing the door. It used to land 2.2 m inside, which put
+  arrivals in a Bar Harbor dining room and a Shrewsbury house. `main.ts` re-makes an arrival when the
+  real cell replaces its stand-in under you.
+- **A mailbox out of a slip road's lane** (`src/world/props.ts`): the playtest's posts check found a
+  rural box in the lane of the Ocean Avenue / Rumson Road link. `buildings.ts`'s street index knows
+  only the plain streets, so a box is now left out wherever it lands in any carriageway
+  (`tests/kerbposts.test.ts`, which fails on the old code).
+- **The playtest on every push** (`.github/workflows/playtest.yml`, committed at go-live): typecheck,
+  tests, build and the live must-load check, then the quick suite headless on the shore. Locally 5 of
+  6 checks passed; the sixth, the posts check, found the mailbox above.
+- **Worker costs** (Robby's dashboard, 2026-10-03): $0.00 billed. R2 had 2.92 k writes (1 M
+  included), 6.11 k reads (10 M included) and 0.03 GB-months of storage. The worker served 5.96 k
+  invocations with 2.45 k subrequests (the terrain and LiDAR reads on S3, and Overpass), at a median 1.78 ms of CPU. The
+  cost model is in `docs/agent/streaming.md`.
+- **The real-world comparison loop** (`tools/real-spots.mjs`, `real-compare.mjs`, `class-pass.js`):
+  Mapillary photos against the game from the same pose, lens (Mapillary's focal length), date and
+  hour, scored by class mix (Mapillary's own segmentation against a flat-colour class pass). The
+  token is in `.env`, which git ignores; the photos are for development only and never shipped.
+  - First run, on the shore: scores of 0.81–0.87 (`tools/real-scores.json`). The game shows a quarter
+    or less of the photos' vegetation, a fifth to a third of their "other" (poles, signs, furniture)
+    and more bare ground.
+  - Mapillary's terms are checked (Robby asked): fine for the loop. Street objects are fine too, with
+    the logo and as a separate CC BY-SA layer (`docs/DATA_SOURCES.md` §0).
+
+Next: finish the US extract, compare the audit's Overpass-built cells and save them as fixtures, run
+the must-load fixtures, upload the blocks, deploy the worker, then upload the index (the switch).
+After that: the live must-load check, push (Pages and CI), and audit round 2 on a quiet machine.
+
+## 2026-10-03 — Foundation first (2): commercial-safe — our own place index, the licence check, credits
+
+Tier 0's "commercial-safe infrastructure" (docs/GAMEPLAY_VISION.md §17).
+
+- **Photon is gone; our own lower-48 place index** (`scripts/build-places.mjs` → R2 `places/v3/`,
+  `worker/src/places.js`, `src/ui/placeIndex.ts`, `src/ui/geo.ts`):
+  - **Names:** 1,849,206, all public domain — the Census's 31,540 places, 16,153 active county
+    subdivisions (towns, townships), 3,109 counties and the states (2026 gazetteer, ranked by the
+    2024 population estimates); GNIS's populated places and natural features (current, 2026-09);
+    and the public places GNIS retired in 2021 (parks, forests, airports, trails, bridges, dams,
+    towers, hospitals, schools, places of worship, cemeteries, post offices) from its archive. No
+    street addresses; GNIS "Locale" (ranches named for their owners), mines and wells left out.
+  - **Search:** each name filed under each word's first three letters, 8,026 gzipped shards in one
+    95 MB object; `GET /places/search` reads the rarest word's shard by range (median 356 B) and
+    ranks by standing, name match and nearness; edge-cached a day. A national park outranks the
+    hamlet named for it ("Yosemite", "Grand Canyon", "Acadia"); Shrewsbury from the shore is the
+    borough, then the township; "springfield illinois" is Sangamon County's.
+  - **Reverse:** 13,737 tiles of 0.25° (19 MB) of the 2025 cartographic boundaries (clipped to the
+    shoreline), simplified to ~25 m; the game reads the tile round it and finds the place, else the
+    active county subdivision, else the county. At sea there is no town: the arrival card keeps the
+    one you were in (it used to retry every second).
+  - **Live:** deployed (worker `1c95d174`); in the game at `?at=40.3297,-74.0617` the arrival card
+    reads "Shrewsbury · Monmouth County, New Jersey", search and reverse go only to our service.
+  - **Privacy:** the loaded world's own search no longer finds houses by their address (named
+    buildings only), and the search box no longer invites "an address".
+  - Bugs on the way: two Shrewsburys 2 km apart (borough and township) were folded into one until
+    duplicates had to be the same kind; Portland ME had no county (its Census point is in Casco Bay,
+    outside the shoreline-clipped county: now the nearest county's shore); a Python edit wrote
+    backspace characters for `\b` in two regexes (found when the parks' weight was still 39;
+    rebaked as v3; every edited file scanned for control characters since).
+- **The licence check** (`docs/DATA_SOURCES.md` §0): every source and service, its terms (quoted),
+  whether a paid game may use it, its credit, share-alike. Findings:
+  - **The public Overpass servers are not a game's backend** ("relying on the public instances as
+    backend" for "an app for more than just OSM mappers" — run your own). They are the tile service's
+    cold path today. To replace: Tier 0, "every tile loads" — Robby to decide how (below).
+  - **GitHub Pages** may not host "an online business … or commercial software as a service": fine
+    while the game is free; move before charging (Robby's call).
+  - OSM's share-alike applies to our derived database (the R2 cells): offer it, or the code that
+    rebuilds it, if the game goes public. Weather stays seeded (Open-Meteo never used).
+  - The 3DEP EPT index's source repo has no licence file (its facts are USGS's, public domain).
+- **Credits screen** (`src/ui/credits.ts`): every source with its credit and licence, opened from
+  the intro, the HUD's credit line (desktop; a phone's line has no room, so the journal page has the
+  link) and the journal page. The always-visible OSM/OpenFreeMap line stays.
+- **Tests:** `placeIndex` (17: words, shards, ranking, reverse, even-odd holes, tiles),
+  `placesWorker` (5: the routes over an in-memory R2 packed the bake's way), `licences` (6: every
+  outside host in the code credited or a reference link; Photon and Open-Meteo never come back; every
+  credit shown; §0 records each host; the ODbL line stays). 805 tests, typecheck, build;
+  `tools/hud-audit.mjs` 560 layouts clear (224 failed with the link on a phone's line: hidden there).
+
+## 2026-10-03 — Foundation first (1): the new gameplay vision merged
+
+Branch `feature/foundation-first`, off `feature/measured-heights` (the last pushed work; it already
+contains `feature/back_to_local_agent_9_30`). Robby's brief: merge the vision, audit the lower 48,
+re-rank the queue into the vision's tiers, then do Tier 0 (foundations) and Tier 1 (looks right
+everywhere) before any gameplay, apart from a throwaway bloom prototype.
+
+- **`docs/GAMEPLAY_VISION.md`** is now Robby's 2026-10-03 doc ("you are the brush"): the world
+  blooms from pencil into colour on first sight; pencil means collectable (tap within ~30 m; only a
+  few at once, always chosen out of sight); rares as data by region; real travel by van, yacht,
+  plane and balloon; the real calendar; your own private layer of the world; one home behind every
+  door; and §17, the order of work: Tier 0 the world loads everywhere and the infrastructure is
+  commercial-safe, Tier 1 it looks right everywhere, Tier 2 the game, Tier 3 polish.
+- **`docs/GAME_DESIGN.md`** marked superseded: a table of what became of each old section, and
+  only the parts that survive kept (why this engine, learning from life and the Almanac, the
+  placement solvers). The full old text is in git at `abc02db`.
+- `docs/agent/gameplay.md` points at the vision (and says the brush is a prototype of placing, and
+  the bloom isn't built yet); `AGENTS.md`'s pointer describes the new doc; `CONSTRUCTION.md`'s
+  banner and `brush.ts`'s header follow.
+- **Baseline:** `npm run init` failed on two CPU-heavy tests timing out at vitest's 5 s default when
+  the whole suite runs in parallel (`measure.test.ts` ringMask's 200 random outlines × 4 pads,
+  `synthSeams.test.ts` street ownership); each passes alone in under 5 s. Both now carry a 60 s
+  limit, like their neighbours. 777 tests, typecheck, build.
+
+## 2026-10-03 — Measured heights on every device (4): parity, proven
+
+- **`tests/parity.test.ts`** (2): Bain's cell (0_-1) and a Monmouth Beach cell (−1_2), each through
+  `enrichTile` as a phone (`initLidar(…, false)`) and as a desktop (`true`), a fresh `lidar.ts` for
+  each, then the real `buildTile`: every footprint's wall top and storeys (the interior planner's
+  count, now exported as `plan.ts` `storeysOf`) identical on both. `fetch` is stubbed to fail and
+  never called: the desktop read no survey. Bain's: 12–13 m, flat, ≥ 3 storeys (a phone without the
+  sidecar: 2 storeys, pitched). Monmouth Beach's #42: 2 storeys (1 without). The cell's share of
+  two-storey-and-up houses rises by more than 20 points.
+- **Phone check** (`tools/mobile-check.mjs --device=pixel7`, the build served like Pages): the phone
+  tier, running, 0 page or console errors, all 87 shader programs inside the phone limits (vertex
+  uniforms 17/256, fragment 45/224, varyings 8/15, samplers 1/16 and 9/16, attributes 12/16). Its
+  9 failed requests are the dev-worker probes and direct-Overpass fallbacks (no tile worker here);
+  its memory sampler needs Linux `ps` (nothing on Windows — as before). The phone ring's vertex data
+  (height-check): 83 MB at Sea Bright, 167 MB at Monmouth Beach, under the tier's 200.
+- **Phone montage** (`shots/shore-montage.jpg`, `capture.mjs --w=412 --h=915 --query=quality=phone`,
+  RTX 4070): ocean golden/noon/morning, bridge, beach, aerial — buildings at their measured heights,
+  nothing missing or floating. `capture.mjs`'s sheet now keeps the shots' aspect (portrait frames
+  had been squeezed into 640×360 cells).
+- **Open:**
+  - ~~Deploy the tile service~~ **Deployed** the same day once Robby took Workers Paid (version
+    c2763604, with tile cache v24). Live: Levittown NY's cell 0_0, 843 footprints measured off Long
+    Island's 2014 survey in 22.2 s, the repeat from the edge cache, no errors in `wrangler tail`.
+    Midtown answered 503 three times: the service's Overpass query for that dense tile times out
+    (the game's direct path asks in quarters; the worker doesn't), so production memory on the
+    densest cell is still unverified.
+  - Pages now builds and deploys on every push to `main` or `feature/*` (`.github/workflows/pages.yml`),
+    as well as on a manual run.
+  - Bain's draws four 2.9 m storeys in its measured 12.1 m (a `house` in the pack; MOD-IV says three).
+    A measured flat-roofed block on a shopfront street should probably take commercial floor heights.
+  - 57% of the shore's houses have fits under the 0.35 bar — a newer survey (NJ's post-2014 flights,
+    if 3DEP has one over the shore) or a looser height-only rule would measure more of them.
+
+## 2026-10-03 — Measured heights on every device (3): heights where nothing is measured
+
+The sidecar left 57% of the shore's houses unmeasured (their fits under the 0.35 quality bar: 2,759
+under 0.15, 1,088 in 0.15–0.35, 314 no fit). They kept the pack's heights — 78% of the pack's
+footprints are Microsoft ML Buildings via Overture, a median 4.9 m, 1.3 m under the survey where
+both exist — so a Monmouth Beach street was its measured two-storey houses with every other one a
+bungalow, on every device.
+
+- **Tags first** (`realTile.ts`, the bake's mirror): `roof:levels` now counts — ~2.6 m of roof a
+  storey over `building:levels` (`Building.rl`). `height`, `building:levels` and `roof:levels` are
+  never overridden. TileJson changed: **tile cache v24** (`t/v24`, `&v=24`, `DIRECT_V` 24, together);
+  the deployed worker serves v23 tiles until it's redeployed (graceful: no `rl`, as before).
+- **A measured neighbour's height** (`priors.ts`, in the builder's own loop, every feeder): a house
+  with nothing measured or mapped draws one of the measured houses of about its size (½–2× its
+  footprint) in its 256 m cell (else the tile's), by its own seed — the street's own mix.
+- **Else the neighbourhood's storeys** (`docs/NEIGHBOURHOODS.md`): estate 9–11.5 m, Northeast grid
+  8.6–11 m, Midwest bungalow grid 6.4–7.8, Northwest craftsman 7.2–8.8, a tract its cell's one model
+  (`recipe.ts` `tractCape`, shared: cape 7.2–8, ranch 5–5.8, desert stucco 4.8–5.6); a suburb as before.
+- **Measured** (`tests/priors.test.ts`, 8): three Monmouth Beach cells with the sidecar — 550 guessed,
+  308 measured houses; two storeys and up, guessed **9% → 49%**, measured 41%. Deterministic in any
+  order, idempotent, only from houses of its size; estates and grids ≥ 2 storeys, tracts as the recipe.
+- **Seen** (`shots/shore-montage.jpg`, RTX 4070, before/after with the change stashed): from 22 m
+  over Monmouth Beach the block reads as a mix of one and two storeys instead of a field of
+  bungalows round a few tall houses; at the kerb, the house beside the camera stands two storeys on
+  pilings (its borrowed 9–10 m crossed the builder's near-water pilings rule, which raises the floor,
+  not the total). No broken roofs.
+- Phones still read no survey (item 3's "optional"): with the sidecar and the service there's no gap.
+- 775 tests, typecheck, build.
+
+## 2026-10-03 — Measured heights on every device (2): the tile service measures streamed cells
+
+Everywhere past the bake (Robby's call: Workers Paid, $5/mo). **Built and verified locally in
+workerd; not deployed** — waiting on Robby to confirm the paid plan, then `cd worker && npx
+wrangler deploy`.
+
+- **The route** (`worker/src/measure.js`): `GET /measured/<cx>_<cz>.json?olat&olon&v=1`. The first
+  request for a cell reads its survey over the buildings the service's own `/tile` has (keyed like
+  `/tile`, so the record keys the client's footprints) and keeps it in R2 `m/v1/…` for good. While
+  one request measures, the others get 202 (an R2 marker created only if absent; a marker over 4 min
+  old is a dead measure, taken over at most 3 times, then 422). A cell with no survey is settled at
+  once (`none`). A stale-`VER` record is re-made, not served.
+- **Prototype first (Midtown, cell −1_−1: 1,839 footprints, NYC 2017):**
+  - Node, lean (nodes streamed into the grid): live memory ~3 MB JS heap + ~38 MB buffers over the
+    baseline (sampled with a GC each 150 ms; laz-perf's heap 7.4 MB); without the GC the heap reads
+    up to 130 MB — garbage, not live. Worst case I can construct (two surveys overlapping, every
+    raster live) ~90 MB with the bundle: inside 128 MB.
+  - CPU 15.5 s, of which `ringMask` was 8.5 s — rewritten a row at a time (crossings per row, the
+    distance only outside the outline, stopping at the first edge within the pad): bit-identical
+    (tests/measure.test.ts: 200 random outlines × 4 pads, two shore cells' real footprints; the
+    shore's sidecar re-measured to the byte), 15× faster. Midtown now 6.3 s CPU. Desktops gain too.
+  - workerd (`wrangler dev`): 9.6 s end to end, the **same bytes as Node** (`iydluj`). The
+    bundle: 1.12 MB, 341 KB gzipped; laz-perf's WASM compiled at deploy (`[build]` decodes the
+    game's own base64 copy into `worker/.gen/`; a Worker can't compile bytes at run time).
+    `[limits] cpu_ms = 60000`.
+- **No request waits on another's promise.** workerd cancels such a request as hung (a 500). The
+  first local run hit it in my sharing of an in-flight measure — and in the existing `/tile` cold-path
+  dedupe and Overpass slot queue (concurrent cold requests for one cell each got a 500 — also in
+  production). Now: a busy isolate answers `/measured` 202; a cell another request is fetching is
+  awaited in R2 on the asker's own timer; Overpass slots are polled for. Re-run: three concurrent
+  requests → one measures (200, 6.0 s), two get 202 in 0.7 s; 0 hangs.
+- **The client** (`measured.ts` `serviceMeasured`, `lidar.ts`, `tile.worker.ts`): every tier asks
+  for a streamed cell's record (one request a cell a session, 202s polled up to 3 min, kept in
+  IndexedDB, other-`VER` records ignored, no request where no survey). `enrichTile` races a record
+  on its way against the usual wait: priors now ('late'), no survey read on either tier, the relief
+  rebuild applies it; only when the service can't answer does a desktop measure itself. A vector
+  twin only peeks. `MEASURED_V` is one constant both sides import.
+- **Verified in the game** (`tools/height-check.mjs`, the build against local workerd, Midtown):
+  phone and desktop build the measured cell identically — a commercial block 15.67 m (survey
+  15.37 m, prior 6 m), a house 6.08 m (survey 5.58 m, prior 7.8 m); the phone read no survey, the
+  desktop read only the three cells whose `/measured` failed (the service's Overpass was off on
+  purpose — the fallback). Local dev is HTTP/1.1: with slow cold `/tile` calls a browser's six
+  connections queue `/measured` behind them (`worker/README.md` says how to test around it).
+- Tests: `tests/measured.test.ts` +6 (the URL, one request per cell, 202 then 200, failures not
+  remembered, other `VER` / not JSON rejected, no request with no survey or a peek; a record on its
+  way → 'late' then the measured house, phone and desktop), `tests/measure.test.ts` +2 (ringMask).
+  767 tests, typecheck, build.
+
+## 2026-10-03 — Measured heights on every device (1): the shore's LiDAR sidecar
+
+Robby: Bain's Hardware (1092 Ocean Ave) is right on a PC but two storeys on a phone, and many
+Monmouth Beach houses are one storey on a phone. Phones never read the survey (`quality.ts`
+`lidar: false` — a city's decode crashed them), so they built from priors. The fix: measure each
+cell once and ship the result to every device. Branch `feature/measured-heights`.
+
+- **The sidecar** (`public/data/shore/measured/`, `scripts/measure-cells.mjs`): every cell of the
+  baked pack measured by the runtime's own code (`cellPlan` → `cellRequest` → `measureCell`, laz-perf
+  through Vite's module runner), one record a cell — the same `Rec` a desktop caches — and an index
+  (`ver`, the project-index date, the pack's `bakeId`, each file's hash or 0). The pack's own files
+  are untouched (its tiles still hash to its `bakeId`: a test).
+  - 216 cells: 127 records, 81 open water, 8 with no survey returns; ~6 s a cell, 4–6 dropped
+    fetches retried, none failed.
+  - **Deterministic:** run twice — once decoding nodes into kept point arrays (the browser's way),
+    once streaming them into the grid (the tile service's way) — byte-identical, all 128 files.
+    Nodes now reach the grid in node order (`lidarCell.ts`: float32 ground sums depend on the order).
+  - **Size:** 12.4 MB raw, 4.6 MB gzipped; mean 36 KB gz a cell, max 80 KB. The buildings are ~4 KB
+    gz a cell; 85% is the survey's trees (up to 12,000 a cell).
+- **The runtime** (`lidar.ts`, `measured.ts`, `tile.worker.ts`): `enrichTile(…, pre)` applies a
+  precomputed record first on every tier; its fits win over a browser's own (`joinRec`); a desktop
+  reads the survey only for what a record lacks, a phone never. `?measured=0` leaves records out
+  (a bug found on the way: the flag never reached the tile worker's build, so a desktop with
+  `?measured=0` still used the sidecar).
+- **Bain's, confirmed:** NJ MOD-IV lists 1092 Ocean Ave as "3SB" (three storeys), parcel centroid
+  40.36220,−73.97453 — the pack's 0_-1 #61 (35.5 × 22.3 m). The survey: 12.08 m, flat, fit 0.67.
+  1096 next door (0_0 #274, "2SB") fits poorly (0.25) and keeps its priors on every device.
+- **Verified** (`tools/height-check.mjs`, new — a Pages-like serve, a device emulation, the built
+  buildings' wall top and storeys at probe points):
+  - Bain's: phone with the sidecar 12.57 m wall, flat; a desktop reading the survey itself in the
+    page (`?measured=0`, 14 cells read) 12.57 m; the phone without it 6.85 m, pitched, 2 storeys.
+  - Five Monmouth Beach houses: phone = desktop's own read exactly (8.99 / 7.74 / 7.41 / 8.24 /
+    9.38 m walls, 2 storeys; the 7.41 m one stands on pilings, 1 storey over them); without the
+    sidecar all five were ~4 m, one storey.
+  - Phone ring budget: Sea Bright 83 MB of vertex data with the sidecar vs 76 MB without (4 tiles);
+    Monmouth Beach 167 MB (7 tiles) — under the phone's 200 MB, which `admitCells` enforces anyway.
+  - `shots/shore-montage.jpg`: Bain's and a Monmouth Beach street on the phone tier, before/after.
+  - `tests/measured.test.ts` (+3): the sidecar is this `VER`'s measurement of this pack, every file
+    hashes to its entry and keys only its cell's footprints (and all of them), the pack unchanged.
+- **Found, not fixed:** Bain's is a `house` in the pack (no shop is mapped on it), so its 12.1 m
+  is drawn as four 2.9 m storeys; MOD-IV says three (an old commercial building's ~4 m floors).
+  The height is right on both devices; the storey split follows the kind.
+
+## 2026-10-01 (afternoon) — Review round 11 and its fixes: lamplight, grain, trees, people, homes
+
+Round 11 scored Sea Bright **8.5/10, not passed**: "five for five, and three overshot"
+(`docs/earth/REVIEWER.md`). Five helpers took its must-fixes and smaller fakes side by side. Three
+of them were cut off by the session's usage limit; the lead merged their committed work and checked
+it.
+
+- **Lamplight, not stage discs** (`render/nightLight.ts`):
+  - **The pool:** a lamp's own fall-off, `h³/(h² + d²)^1.5` at h = 8 m (half at 6 m, 17% at 12 m),
+    eased out by 22 m, so pools meet faintly. The heart is a pale cream (C\* ~16, not 48–55).
+  - **The glaze:** its reserve is widened, and it no longer bites the pool's own edge.
+  - **The night's floor** of sky glow keeps the street readable.
+  - **Measured** (`night-check` r12):
+    - frame 3: the wires, the lens and 2 pools at ≥ 2.5× pass, but its gap is L\* 26.5 (the
+      moon was up; the test asks 10–20);
+    - frame 13: the gap L\* 18.7 and the heart C\* 19 pass, but the fall-off couldn't be measured
+      from its pose.
+- **The ground's grain from structure** (`ground.ts`): the aggregate is round stones at a fleck's
+  size, pale in asphalt and both ways in concrete. The sand's marks are shadow only. The dark speckle
+  is cut.
+- **Trees up close** (`world/nearTrees.ts`, `render/leafCards.ts`):
+  - **The near model:** within 30 m a tree is the species' limbs to the second order, with a
+    tapering trunk, bark furrows and 8–20 leaf-cluster cards lit as the far crown is. Stems grow on
+    into the crown; trees are bare in winter by their own limbs.
+  - **Cost:** models are grown ahead, one a frame; instanced; capped per tier.
+  - **Measured** at 5, 8 and 10 m (`tools/tree-metrics.py` on the masks):
+    - sky through the crown 9.1, 6.7 and 6.0% (the old crown 0.3%);
+    - longest straight edge 4–9% of the crown's width (old 32.5%);
+    - 3–4 limbs entering the crown;
+    - trunk taper 1.45–1.5.
+- **People at arm's length** (`assets/people.ts`, `render/creature.ts`):
+  - **The body:** one smooth skinned tube per limb, shoes on soles (10.6 cm wide), rounded mitten
+    hands, a nose and ears. It's 1,472 vertices, with no normal break over 23.7°.
+  - **The lead:** the dog walker's hand holds it (within 1.9 cm), the arm follows it, and the dog's
+    tail is carried (47 cm up).
+  - **Movement:** standing people shift their weight every ~12 s, and walkers stand on the ground
+    (they floated 12 cm). The beach crowd's full bodies follow on-screen size.
+- **Homes and small reads:**
+  - **Kitchens:** a home's kitchen has its cooker and hood, a fridge and wall cabinets (80 of 82
+    seeded), with the sink under the window.
+  - **Dining chairs** are spaced at ≥ 0.6 m a place, with ends on long tables.
+  - **WC doors** off living rooms are shut until you step up to them.
+  - **Raised houses** stand on a pad, gravel or sand, never lawn.
+  - **Wakes** are thin broken foam lines that fade, and none over the shallows.
+  - **Frame 9** frames a mapped marina's slips: 8+ boats.
+- **Verified:** typecheck clean; 726 tests plus `hoods` 13; esbuild bundle; the round 12 captures
+  (`shots/*-r12*`).
+
+## 2026-10-01 (morning) — Review round 10 and its five must-fixes
+
+The expert reviewer (a Nintendo / Rockstar bar) scored Sea Bright's expanded scope **8/10, not
+passed**: "real at thirty metres, bare at three" (`docs/earth/REVIEWER.md`, round 10). The lead fixed
+the small items itself; five helpers took the five must-fixes side by side, merged here.
+
+- **The lead's fixes (73e83ec):**
+  - **Roofs keep their own hue.** On a roof the sky fill's blue is greyed (`paintLight` with
+    `skyNeutral` 0.6 by day) instead of 40% of the roof's own colour being taken out. Aerial
+    greens and blues may reach 0.14 saturation.
+  - **Night wires are silhouettes** (`uSkyZenith × 0.6`). A fixed navy was ten times the night
+    zenith's light: the wires read as searchlights.
+  - **The lamp window waits:**
+    - it repaints at most every 1.5 s for tiles coming and going (each repaint is a 1024² canvas
+      and its upload);
+    - the canyon field is blurred at quarter size, which was most of a repaint's 0.1–0.25 s on a
+      CPU canvas.
+    - Tests: `lampWindow` (4).
+- **1. A phone is a window, not a slot** (`player/frame.ts`):
+  - **Field of view:** the lens is fitted to the screen. An upright phone sees 41° across
+    (it was 31°); one on its side is capped at 95° (it was 105°). 4:3–16:9 screens are exactly as
+    before.
+  - **Toasts** sit under the place name, two lines at most ("Van, in pencil — paint one to finish
+    it · 2 of 8 cars").
+  - **The place name and clock** sit on a paper wash. The clock reads 7.45:1 against the world
+    behind it (it was 3.09).
+  - **HUD audit:** `tools/hud-audit.mjs` keeps the middle band (x 15–85%, y 30–62%) clear: 560
+    layouts, all clear.
+- **2. Night that reads as night** (`render/nightLight.ts`):
+  - **Lamp pools:** each lamp's pool has a bright warm heart (`exp(−(d/5.2)³)`) and real dark
+    between lamps. The lamp map now carries distance, not a 2 m blur of light.
+  - **The grade:** one indigo night glaze in the post leaves the lights alone and sinks a pool's
+    warm edge, the way blue over orange does. The night's floor is blue, not sand-warm.
+  - **The review's occluder check** uses spot-shots' id pass (`tools/id-pass.js`).
+  - **`tools/night-check.mjs`** measures frame 3 the reviewer's way.
+- **3. The ground you walk on** (`groundCover.ts`, `groundPaint.ts`, `ground.ts`):
+  - **In the detail window:**
+    - sidewalk flags every 1.5 m, with a centre joint on wide walks;
+    - a dark kerb face and a 0.6 m gutter pan that turns the corners;
+    - drive aprons, tar snakes and patches;
+    - yards of lawn, gravel or crushed shell, by neighbourhood and distance to the sea;
+    - sand drift near beaches.
+  - **The ground shader** adds mottle, pebbles and the beach's ripples, footprints and wrack near
+    the walker, faded by pixel footprint.
+  - **Measured:** the bottom 40%'s texture is 2.6–4.2 (the reviewer asked ≥ 2.5; it was 0.8–1.5).
+  - **Placement:** lawn things never on paving; mailboxes and hydrants 45–60 cm behind the kerb
+    face.
+- **4. The front door opens on a home** (`interior/*`, `decor.ts`):
+  - **Cottages** (≤ 110 m² a storey) open into the living room: 40 of 40 seeded.
+  - **Bigger houses** keep a hall with the stair in view and a cased opening to the living room.
+  - **New pieces:** skirting, coats on a rail, a runner, a lit console lamp, a mirror, ceiling
+    domes.
+  - **Sun pools** come only through real windows, in the room they light.
+  - **Pose 19** picks the sunniest room. Frame 6 shows 10 pieces with its largest bare plane at
+    15%; frame 19 is 8–11% sun pool.
+- **5. The shore keeps one calendar** (`calendar.ts`, `docks.ts`, `crowd.ts`, `crowdLayer.ts`):
+  - **Marinas** get finger piers every 4.5 m, with boats at the month's share: 27.9 boats per
+    100 m of waterline in October.
+  - **Riverfront docks:** 40% of riverfront lots get a dock and a boat.
+  - **Beach people** in season sit under the umbrellas: 219 people for 80 umbrellas at the 50 m
+    pose, 13:00 on 15 July.
+  - **Kids** jump waves at the waterline. **Lifeguards** are on duty Memorial Day to Labor Day,
+    10:00–17:00.
+  - **Beach lots** fill by season × hour: 13% on an October evening, 98% at a July lunchtime.
+- **Verified:**
+  - Typecheck clean.
+  - The full suite: 674 tests, plus `hoods` 13.
+  - esbuild bundle.
+  - Each helper's measurements and montages, plus the round 11 captures.
+- **Next:** round 11 with the reviewer.
+
+## 2026-10-01 (small hours) — The flying hitch, whole bridges, roofs from the photo, the small things
+
+Four of Robby's reports (2026-09-30 21:50), taken by four helpers working side by side and
+merged here.
+
+- **The flying hitch** (`groundPaint.ts` `DetailGround`). Robby: "every ~2 seconds, even flying
+  slow, it locks up for half a second".
+  - **What it was:** the ground-paint windows repainted their whole 2048² canvas whenever you were
+    66 m from the detail window's middle: three `blur(6px)` passes over the land cover, every road,
+    lot and footprint, then a 16 MB upload. At the default 40 m/s that's every 1.65 s; the 1.6 km
+    window did the same every 352 m.
+  - **Why the probes missed it:** the script only records those draws (6–10 ms). The browser
+    rasters them at the upload, which a probe with rendering off never reaches.
+  - **The fix:** a window now slides. What it still shows is copied across, and only the strip it
+    moved onto, plus the blur's band, is painted, a slice a frame, on an OffscreenCanvas. The new
+    picture is swapped in when the move is whole.
+  - **Measured:** a headless flight with rendering on went from a worst frame of 11.0 s to 4.6 s
+    (now a tile mount), p90 from 4.16 to 3.01 s.
+  - **Tests:** `groundPaint.test.ts` (10), with a canvas that meters its blur. The playtest's frame
+    check flies too (R.35), and `tools/hitch-probe.js` gains `sync`, which waits for the GPU.
+- **Bridges stand whole** (`bridges.ts`, new). Robby: "the bridge in Sea Bright looks collapsed".
+  - **What it was:** each tile profiled only its own piece of the Rumson–Sea Bright bridge, as an
+    arch of its own. The deck dropped to ~0.2 m over the channel, a V in the river, and walkers on
+    the mapped sidewalk stood on the water.
+  - **The fix:** every tile profiles the whole bridge from every way it can see, then draws only
+    its own. The deck:
+    - lands on the approach streets within centimetres;
+    - holds level over the channel: 3.5 m under a movable span, rising with the width of the water
+      for a fixed bridge;
+    - never dips below the line between its ends.
+  - **What a bridge is made of:** slab and girders, sidewalks, parapets with railings, piers into
+    the riverbed, abutments.
+    - `bridge:movable`: a bascule (tender houses, timber fenders), a lift span or a swing span.
+    - `bridge:structure`: a truss, an arch, a suspension or a cable-stayed span.
+  - **Collision** is the deck as drawn.
+  - **Tests:** `bridges.test.ts` (23), including a fixture cut from the baked pack. The tiles'
+    two pieces of Sea Bright's bridge meet to the millimetre, and none of the pack's 33 road
+    bridges dips.
+- **Roofs wear the colour the aerial photo sees** (`aerial.ts`, `aerialFetch.ts`).
+  - **What it was:** 25,770 of the shore pack's 27,161 buildings carry a NAIP roof sample, but with
+    the photo's green cast in it. The renderer folded every green and blue to one warm grey: 97% of
+    the shore's roofs were the same grey.
+  - **The baked pack:** each tile's samples are white-balanced as it builds (the cast fitted per
+    tile), and `aerialRoof` keeps the hue. Clay red reads as tile, a blue or green as painted
+    metal. Mapped `roof:colour` still wins.
+  - **Streamed US cells** read their own roofs off NAIP in the tile worker: the USGS National Map
+    ImageServer (public domain, no key), or the tile service's new `/naip` relay if a browser is
+    refused. The result is cached per cell. `?aerial=0` shows the old roofs.
+  - **Walls** have no real data beyond rare tags. The street-level plan (Mapillary) is in
+    `docs/agent/world-data.md`.
+- **The micro layer** (`render/impostor.ts`, `world/micro.ts`, `world/microLayer.ts`,
+  `assets/micro.ts`). Robby: detail "as much as we want … 2D–3D assets that always face the user".
+  - **What's placed:** 37 small things, deterministic by position:
+    - carts at the kerb on the area's collection day;
+    - porch chairs, flags, A-frames and planters;
+    - beach umbrellas, chairs and towels, by season;
+    - cleats, dock boxes and buoys;
+    - the OSM picnic tables, boards, cabinets and seamarks.
+  - **How it's drawn:** real 3D close up, hemi-octahedral impostor cards from 25–60 m, +2 draw
+    calls for all of it.
+  - **Caps:** cards per tier 12k / 4k / 1.5k; atlas 2048² on desktop, 1024² on phones.
+  - **Tests:** `impostor` (11), `micro` (11), `foundry` (+2).
+- **Tile cache keys:** `t/v23`, `&v=23`, `DIRECT_V` 23 (the bridge tags `bs`/`bm` and the micro
+  furniture). **Robby: redeploy the worker** (`cd worker && npx wrangler deploy`). It also carries
+  the `/naip` relay.
+- **Verified:**
+  - Typecheck clean.
+  - The full suite: 605 tests, plus `hoods` 13 through its container stand-in.
+  - esbuild bundle.
+  - The four helpers' before/after montages, and a merged sheet (`shots/merged-a.jpg`).
+- **Next:** the expert reviewer's round on all of it. Then trees and people on impostor cards
+  (1.15, 9.5), and wall colours from street-level photos.
+
+## 2026-10-01 (night) — No more pale distance; a sharp frame on phones
+
+- **"Paint as you explore" is gone** (Robby: it laid a pale colour over the distance, which
+  read as the fog he'd complained about). It was the lighter of two paint modes: a pale first wash
+  over the ground you hadn't walked. The world is now simply painted, near and far. Exploring shows
+  on the map, which always paints in where you've walked; the atlas and journal still count it.
+- **Sketch mode** is the other mode and is unchanged: pencil to the horizon, painted as you walk
+  or photograph. It's named that in the panel ("sketch mode: pencil till you walk or photograph
+  it"). `?sketch=1`, `?loop=paint`.
+- **Phones keep the sharp frame** (`quality.ts` `stepsPaid`, main.ts auto quality). Auto quality
+  used to drop a phone's paint detail and hi-DPI whenever the frame was over 25 ms, whether or not
+  pixels were the problem. Now each round's steps are measured by the next and undone unless the
+  frames got 12% quicker; Robby saw no speed difference raising it back by hand. The phone tier's
+  paint detail is 85% (from 75%).
+
+## 2026-10-01 (later) — The far skyline: the city across the bay
+
+A helper's draft (2026-09-28), merged onto today's code.
+
+- **What it is** (`world/farSkyline.ts`): one Overpass read of the very tall — 120 m or 35 storeys,
+  masts from 150 m — within 60 km, through the tiles' own `osmToTile`. The towers are flat-topped
+  prisms, one merged mesh per 8 km sector on the bare-earth DEM, cached in IndexedDB and re-read
+  after a 15 km walk. Real-lite tiles only (`?farskyline=0` off).
+- **How it looks:** the earth's curve with standard refraction lowers the towers. The sea's bulge
+  hides their bases: from a Jersey beach, Manhattan's lowest ~100 m. The day's air takes them
+  toward the sky. Clear air shows them faintly out to ~75 km; the usual haze barely; a hazy day or
+  sea fog not at all. Towers the skyline ring or the detail tiles already draw are left to them.
+- **The far layer** has a depth of its own (`shared.ts` `farDepth`, linear to 150 km). The towers
+  write it, the horizon ring tests against it (a nearer ridge hides a tower), and a hook clears it
+  before the near world draws.
+- **The paint kept them** (`post.ts`): a tower at 40 km is a stroke a few pixels wide, and the brush
+  smeared it into the sky. Towers mark themselves in alpha (0.5) and the composite lays them back as
+  drawn.
+- Tests: `tests/farSkyline.test.ts` (7). Visual: the container reaches neither Overpass nor the
+  DEM, so it ran on a stand-in read of Manhattan's tallest at their real places. A debug block
+  showed the layer draws, behind the beach's crest and the jetty. At true scale the city is a few
+  pixels from the beach, so the real check is on the deploy, from a balloon on a clear day.
+
+## 2026-10-01 — Deeper archetypes: supermarkets, hotels, schools, churches, libraries, banks
+
+Interiors Slice 4 (docs/INTERIORS_PLAN.md §5), finishing a helper's groundwork that the usage
+limit stopped (its decor pieces, `placeOf`, the hotel and school strips in plan.ts).
+
+- **What a building is** (`uses.ts` `placeOf`): its OSM tag first, else its name (several languages);
+  plan.ts turns that into a family — `market`, `hotel`, `school`, a library/bank/post office/gym/
+  pharmacy floor, a church or a mosque.
+- **Back of house at its share** (`layout.ts` `backStrip`): a storefront's side walls are glass with
+  piers 0.35 m wide every 3.4–5 m, so a partition straight across could only land a cell's depth
+  either way of what it wanted. It now stands at the depth that makes the area and jogs at each side
+  wall to its pier; the corner is a back room. Supermarket 22.5% (§2: 20–25%); restaurant kitchens
+  30.9–35% (§2: 30–40%; they were 26–46%).
+- **A supermarket planned round its fixtures** (`Layout.fix`): checkouts at the door with lanes
+  toward it, produce on the door's other side, the main aisle, gondola runs with 1.8 m aisles and a
+  cross aisle every 13.75 m, chillers and freezers along the back partition. 60×40 m: 6 checkouts,
+  42 runs, 10 cold cases, 27k vertices (budget 90k).
+- **Hotels and schools**: corridor storeys with en-suite guest rooms (bath inboard, passage open to
+  the bedroom, mirrored pairs) and classrooms; the ground storey a lobby with its breakfast room or a
+  hall and office — or, on a storefront, a public floor (lobby, bar, breakfast room; a school's hall
+  and dining hall) with its kitchen behind.
+- **Walls chosen together** (`bandCuts`): a greedy pick put a party wall on a pier's far edge, and
+  the next room had no pier in range — 13 of 31 rooms on a hotel's back band came out too narrow for
+  a bathroom. A DP over a 10 cm grid now picks the band's walls together: 60×18 m hotel 27–31 rooms
+  of 25–35 m² a storey, all with a bathroom; classrooms 51–64 m².
+- **Churches** get a narthex, pews (0.91 m pitch, 1.5 m centre aisle) and an altar; a mosque a
+  carpeted prayer hall with its mihrab and minbar; a church that became a library is its reading
+  room. A library, a bank, a post office, a gym and a pharmacy furnish their floors (stacks; teller
+  counters and queue posts; treadmills by the glass).
+- Fixes on the way: slivers a lift or core left became unreachable "rooms" (now dropped); piece keys
+  that shared a key with different geometry (the shared cache would have mixed them).
+- **Tests:** `tests/interiorArch.test.ts` (16, all failing on the old code: no `market`, no `fix`,
+  no hotel rooms); `interiorBudget.test.ts` +5 cases (a supermarket ≤ 90k); foundry budgets for the
+  18 pieces. Full suite passes (hoods through its cloud shim).
+- **Visual:** test buildings registered live by the Sea Bright spawn, shot in SwiftShader
+  (`shots/synthin-{a,b,c}.jpg`): the supermarket, a hotel corridor, room and breakfast room, a school
+  corridor, classroom and hall, the nave, a restaurant, the library, bank, gym and prayer hall. The
+  pews read as one black mass under the nave's high lamps (now oak to walnut) and the gym's rubber
+  floor as a void (lightened). (Grass and a pole that poke through two of them are the test
+  placement's: open ground near the spawn, no footprint to clear them.)
+- **Next:** a dais for the chancel; the qibla from the real bearing; `tourism`/`leisure` into the
+  tile's use tag (a cache bump); lifts in five-storey blocks whose core slot has no pier.
+
+## 2026-10-01 — Stand-in cells agree at their seams; a car stops at its bumper; raised doors on the wall with room
+
+Finishes the work of a helper that the usage limit cut short on 2026-09-29 (after (af)). It is
+merged onto `feature/updated-controls-for-mobile` as `feature/back_to_local_agent_9_30`.
+
+- **Stand-in cells agree at their edges** (`synth.ts` `standInLots`). A stand-in placed its lots
+  greedily, in the order it walked its own streets, so two neighbouring cells kept different lots
+  in the strip they share: about a third of them. Buildings came out doubled, overlapping or missing
+  along the seam, and doubled walls flicker.
+  - Every lot is now a pure function of its position. Along a street they're kept in turn. Where
+    two streets' lots clash (a corner, the next block), the higher-ranked lot by hash wins in two
+    rounds of "outranks every undecided rival". A lot's fate depends only on candidates within
+    `LOT_REACH`, so any tile with that much ground round its window gets the same lots as its
+    neighbour, lot for lot.
+  - Streets are emitted 140 m past the box on every side. A street line wanders 26 m off its grid
+    line, so stretches just past the far edge had belonged to no tile.
+  - `tests/synthSeams.test.ts` (5): two neighbours built in both orders and alone have identical
+    margins; no footprint is doubled or overlapping across the seam; no lot stands in a street.
+  - Procedural Midtown, headless: 5,119 buildings, 0 nested, 0 touching.
+- **A car stops at its bumper** (`collision.ts` `moveBody`/`bodyPush`, `vehicles.ts` `carBody`).
+  A car's collider was one 1.05 m circle round its middle, so head on its nose went 1.15 m into a
+  wall. It is now a capsule as long and wide as the car's own model (kit recipe; a bike rack adds
+  to the back). It slides along walls, and a post or a corner brushing its side pushes it aside
+  instead of catching it.
+  - `tests/carBody.test.ts` (8): head-on, glancing, past a post, through a doorway's width, turning
+    against a wall.
+  - The `__DRIVE__` check measures the stall from the bumper.
+  - Procedural Midtown: 486 m driven, 0 clips, 0 inside.
+- **A raised house's door goes on a wall its stair has room at** (`buildings.ts` `doorWalls`,
+  `raisedStair`, `raisedDoorWall`).
+  - On a tight lot every stair shape from the street wall ran into a neighbour, a garage or the
+    street, so the door up there couldn't be reached. Now the house tries its other open walls
+    (best-facing first, up to 8). If none fits, it takes the least-blocked one.
+  - Any other building's door is the same wall as before.
+  - `tests/raisedStairs.test.ts` (+1).
+- Tests: 515 pass, including `hoods.test.ts` run here with file reads standing in for vite's
+  `import.meta.glob`. Typecheck clean.
+- Left from the helper's list: pilings on Grand Pointe Way (Sea Bright) stand over the road's
+  modelled width. The house outlines and the road width estimate disagree there. Not yet looked at.
+
+## 2026-10-02 (later) — Weather to test against; fog now and then, anywhere
+
+- The owner liked the odd random fog — kept, rarer: drifting fog 'rare, anywhere' (default; about
+  one hour in eleven, lighter than a coast's, plus the coastal morning marine layer), 'coastal
+  mornings' or 'never' (panel Weather → drifting fog).
+- Weather presets (panel Weather → weather preset): clear, fair, hazy summer, marine layer, thick
+  fog, overcast, blustery, snow day, or drifting — checked in the game by choosing each in the
+  panel's own dropdown.
+- tests/interiorTower.test.ts: a 30 s limit (its 39-storey plans take 5–6 s on a slow machine — the
+  "failures" of the last sessions); 501 tests pass.
+
+## 2026-10-02 — The white wall: fog along the sight line; a phone's view sharper and farther
+
+- **Reported** (a phone over Seattle, 250–300 m up): past ~1 km everything sank into a flat white
+  sheet, tower tops standing clear of it; with the paint on, a smear.
+- **Why the sheet**: `applyFog` fogged a point by the density of its own layer (thick near the
+  ground, a ~33 m scale) times the whole distance — from a balloon or a hill, the sight line
+  mostly crosses thin air, but distant streets were fogged as if it hugged the ground the whole
+  way. Now the mean density along the sight line, eye height to point height (`layerMean`, exact).
+  At street level eye and point share a layer: Sea Bright's street view before/after identical.
+- **…and the sea fog**: auto weather rolled a sea-fog layer over every town a third of the time
+  (0.30 over inland Seattle when shot). Now a marine layer: coastal (oceanD < ~500 m), mornings,
+  gone by 11.
+- **A phone, sharper and farther** (quality.ts phone tier): hi-DPI paint (≤ 1.5×) and a canvas at
+  that ratio on phones only (setPixelRatio 1 stretched a DPR-3 screen ~3×), paint detail 0.75, a
+  6 km silhouette ring and skyline (under coarseMB). Auto quality now measures once the ring
+  has streamed in (≤ 40 s wait) — measured during the burst, a phone that holds 60 fps after was
+  stepped down for good. (SwiftShader here is slow enough to step down: sharpness is for a real
+  phone to show.)
+- **Evidence**: shots/phone-view-montage.jpg (Pixel 7 emulation, network trusted): Queen Anne at
+  250 m before — a white wall past 1 km; after — the water and the far shore. hud-audit 140 clean;
+  483 tests (interiorTower's 5 s timeouts excluded — they fail on the previous commit here too).
+
+## 2026-10-01 (night) — Paint-as-you-explore only when picked; the open world's sea without a canvas
+
+- **No bleed**: the far sketch (pencil to the horizon, photos painting the frame) is off unless
+  picked — it's on trial; the near "paint as you explore" wash stays ON by default (the owner's
+  call). Either lights the composite's `uSketch`; the far one no longer needs the near one ticked. Walks are recorded
+  regardless (atlas, journal, arrival cards); the arrival card says "walk to paint it in" only with
+  a look picked.
+- **Puget Sound white on an iPhone** (reported; no iPhone or WebKit here to reproduce). Emulated on
+  a phone, the open world's unbuilt Sound is the stand-in: a flat 3 m plain in haze. Three ways it
+  stayed that plain, all fixed:
+  1. `dem.ts` decoded Terrarium through createImageBitmap + OffscreenCanvas — which a worker on
+     iOS < 16.4 doesn't have: no DEM, ever. Now `terrariumFromPng` reads the PNG bytes itself
+     (three's bundled fflate; exact vs pngjs on two real tiles; tests encode all five filters); the
+     canvas is the fallback. Also no colour management anywhere: the same heights on every device.
+  2. A stand-in's water needed a DEM to press into: no DEM in time, no sea. `flatDem` gives it a
+     flat grid at the stand-in height to take the map's water, marked late for its relief.
+  3. The relief rebuild returned nothing when the DEM never came, and flat ground never asked
+     again for late water. Now it rebuilds with the flat ground and the water, once (no re-late).
+- Seen end to end, once the harness was fixed: the emulations' "stall" was the harness — its
+  Chromium didn't trust this container's proxy CA (net::ERR_CERT_AUTHORITY_INVALID), so every DEM
+  and vector-tile fetch failed and only flat stand-ins could build. With `ignoreHTTPSErrors`, the
+  ground under a camera over the Sound reads −6 m / sdf −60 (sea) within 3 minutes, and from 300 m
+  over Magnolia the Sound is water with boats on it, fading into pale haze to the horizon (maybe
+  the "white" reported — no far shore shows; to look at with the reporter's screenshot).
+  (Real cells meanwhile fail and retry: the tile service's Overpass upstream is still down.)
+- tests 501 (interiorTower's 5 s timeouts on the freshly restarted container fail on the previous
+  commit too), typecheck, build.
+
+## 2026-10-01 (evening) — A photo sees past the ropes: no more streaks out to the horizon
+
+- **The streaks** (a phone, photos from a balloon, the atlas map): straight bands of canvas fanning
+  from where you stood out across the bay. A photo paints what its depth readback saw, and in the
+  basket the ropes and posts run up the frame — each a column of samples 3 m away, hiding the
+  ground behind it from the basket to the horizon: a radial line of unpainted world per rope.
+  (Poles, wires and birds did the same, smaller; in third person the envelope a wedge.)
+- **Fix** (`render/seen.ts` `mendDepth`, called in main.ts `paintView` before unprojecting):
+  along each row and column, a run that stands well in front of ground on both sides — thin (≤ 6%
+  of the frame), or nearer than the ride's reach up in one (balloon 30 m / 70 m third person, plane
+  45, car 11, boat 14) — is bridged by the line through its two sides in 1/depth (exact for flat
+  ground). Never into the sky; a building wider than thin still hides what's behind it on foot.
+- **Tests**: seen.test.ts (ropes bridged to within 1% of the open ground; the sky and a 40 m house
+  kept; an envelope seen through with `near`), explore.test.ts (a basket photo: the ropes' lines
+  of sight bare 1–8 km out without the mend, none with it). 498 tests, typecheck, build.
+- Streaks already in a save stay until a photo covers them again — one from the same spot does.
+- **The live site** builds from `main` (pages.yml, or a manual run of it on a branch): the options
+  panel's close (2026-10-01 later) reaches the phone only once it's deployed again.
+
+## 2026-10-01 (later) — The options panel on a phone: it closes, and Get out stays in reach
+
+- **Couldn't close it**: lil-gui 0.21 names its root `.lil-root`; style.css still said `.lil-gui.root`,
+  so none of the phone rules matched — no close button, no sizing, no scrolling (and the cream theme
+  never reached the desktop panel either). Selectors now match both; the theme is set on every
+  level (0.21 declares its dark defaults on each nested folder, so a root-only theme left pale text
+  on cream). The close is a "× Close" pill.
+- **No Get out with it open**: `touchActionState` returned nothing while the panel was up, and the
+  panel covered the right edge top to bottom. Now, upright, it's an opaque sheet across the top
+  that always leaves the bottom ~300 px — the stick and the corner cluster — free; on its side it
+  runs down the left, clear of the cluster; and the ride's button stays.
+- **Verified** (real game, Pixel 7 emulation, both ways, by touch): More → Options opens it; the
+  Close pill is the element under the finger; a car summoned with the panel up — Drive reachable,
+  driving, Get out and Boost reachable, got out; Close hides it. hud-audit 140 layouts clean,
+  495 tests, typecheck, build.
+
+## 2026-10-01 — Phone controls rebuilt: a stick you can see, Paint under your thumb, every button named
+
+- **What a phone showed** (real game, Pixel 7, both ways): six identical unlabelled circles —
+  ✈ ⌂ ☰ ▣ ✎ ⋯ — stacked down the right edge (a 3 × 2 block in the corner on its side); Paint, the
+  game's verb, looked like everything else; ⌂ read as "home", not "go anywhere"; and the walking
+  stick was invisible until a thumb happened to land in the empty left half.
+- **Now** (index.html, style.css "the phone HUD", controller.ts, main.ts): each hand has one job.
+  The left thumb walks — the stick is drawn where it rests ("walk" in it until you've used it
+  once), comes to your thumb, and follows a thumb that runs past its rim, so you never lift to find
+  it. The right thumb looks and does — a cluster in the corner: Paint (72 px, ink) in the corner,
+  Fly (Land while flying) over it, Brush beside it, Lift in a lobby, and what you're next to (Board /
+  Drive / Step in / Get out) as an ink pill over them that pops in. Riding, the ride's buttons take
+  the same places (Boost in the corner; Faster / Slower; Up / Down — Burn / Vent in a balloon — beside
+  Paint; View over it). Go / Map / More sit along the top right, out of the way. Every button is a
+  drawn icon with its word under it; hints and toasts use those words (Paint, Land, Map, Boost…),
+  and the brush's hint no longer says P and B on a phone. Buttons shrink under the finger (and stay
+  pressed while held), and tick on Android. The place name, the hint and a ride's readout read down
+  the top left; the credit is one line along the bottom.
+- **Verified**: `tools/hud-audit.mjs` (now per button with its word, the stick's ring, and a
+  by-a-lift state; `--shots` writes every layout) — 140 layouts (10 phones × both ways × 7 states),
+  no overlaps. Real game on a Pixel 7 emulation, both ways, driven by touch: the stick walked ~7 m
+  and followed the thumb past its rim, its "walk" cleared, Fly turned to Land and took off.
+  typecheck, 495 tests (interiorTower's 5 s timeout under load passes alone), build.
+
+## 2026-09-30 (night) — A house on a tile line built once; the shore test on streamed tiles only
+
+- **Tile ownership is half-open** (`scripts/lib/tiles.mjs` `ownsPoint`): a building centred exactly
+  on a tile line was owned — and built — by both tiles (the Rumson playtest's one overlap: seed
+  41723065 at x = −3072 in −4_−2 and −3_−2). Four such entities in the shore pack; the raw inputs
+  aren't in this checkout, so the pack was patched by the same rule (the second copy → `own: 0`)
+  and `bakeId` recomputed by the bake's own FNV recipe (it reproduced the old id exactly before
+  the patch). tests/tiles.test.ts pins the edge (fails on the old rule).
+- **The shore test measured files nothing streams**: `public/data/shore/tiles/` holds 72 tile
+  files the manifest doesn't list (`-7_*`, `-8_*`, from the same bake commit — 2.9 MB shipped,
+  never loaded), and Red Bank lies in them, past the backdrop. tests/hoods.test.ts now reads only
+  manifest tiles; Long Branch's north end (grid) and Oceanport (suburb) replace Red Bank, which
+  moves to the real-lite fixtures (`nj-grid`) — it streams, as the deep link that set the montage
+  camera down in stand-ins showed. The leftover files are left in place (worth removing once
+  someone confirms nothing else reads them).
+
+## 2026-09-30 (evening) — Neighbourhoods, phase 1; the phone's silhouette ring budgeted
+
+- **Why Rumson read like its neighbours** (docs/NEIGHBOURHOODS.md): one style table for every town
+  in a region, every look decision a per-house hash from it; lot size and era — the two things
+  the eye reads first — reached nothing; a big house (> 700 m²) became a flat-roofed block; and
+  OSM maps almost none of Rumson's houses (one in the reference square), so the game had LiDAR
+  footprints and fixed-size fills there.
+- **Phase 1, client-side** (no tile-service redeploy): `world/hood.ts` measures each 256 m cell's
+  homes (footprint, spacing, uniformity) → estate / old grid / tract / suburb; recipes, drives,
+  frontage hedges and canopy follow (estates: shingle and white clapboard under slate, steep roofs,
+  dormers, long privet hedges, 3× trees; old grids: painted Victorians with bays; tracts: one model
+  a cell). The neutral path is today's recipe exactly; the shore keeps its look. The old grid
+  and the tract are regional (by the style's `sub`/family): Midwest brick bungalows, Northwest
+  craftsman, desert stucco-and-tile tracts.
+- **Real places, tested**: the baked pack's towns (Rumson → estate at 45% of homes vs < 5% for
+  Fair Haven, Monmouth Beach; Fair Haven → grid — see the night entry: Red Bank was measured from
+  unstreamed leftover files, now replaced) and frozen real-lite tiles
+  from three more states (Levittown NY → tract, Portage Park IL → grid, Wallingford WA → grid).
+  AZ / CT / TX are listed but the tile service 503'd all day — re-run `tools/hood-fixtures.mjs`.
+- **Montage** (shots/shore-montage.jpg, before / after, street and 60 m): Rumson (Dogwood Lane,
+  Buena Vista Ave) reads more wooded, with privet hedge runs along the frontages — a modest change
+  from these views, since the houses stand back in the trees; Fair Haven and the shore unchanged.
+  Red Bank's deep link (`?at=40.3478,-74.0636`) is past the shore pack, so it streams — and the
+  tile service's 503s set it in procedural stand-ins; not yet seen by eye.
+- **The phone's silhouette ring budgeted** (`coarseMB` 90 / 60 MB): the Manhattan run below found
+  it at 171–190 MB — three times the detail tiles.
+- **Manhattan on a phone** (headless Pixel 7, phone tier, four hops round Midtown): 0 lost GPU
+  contexts, 0 errors, peak renderer 1,006 MB, GPU process 724 MB. The public Overpass servers
+  were down (the tile service answered 503 for uncached cells), so the detail tiles were the
+  procedural stand-ins — the real-tile run is still owed. Re-run with the cap: the silhouette ring
+  held at 86–89 MB every hop (was 171–190), 0 lost contexts, 0 errors; peak renderer 1,021 MB
+  (JS heap and page textures dominate it now), GPU process 694 MB. The tile service still
+  answered 503 for Midtown at the end of the day.
+
+## 2026-09-30 (later) — Balloons, painting to the horizon, and the core loop reviewed
+
+- **Paint as you walk, smoother** (the far sketch). The walk's colour stepped in at 10 Hz in big
+  jumps — near you each pixel popped. Now strokes at 20 Hz, ~1.5 s blank to full underfoot
+  (`bloomRate`), and the composite paints in two passes: a pale first wash over the pencil, then
+  the pigment deepening, its edge ragged by paper and brush-stroke noise that never touches bare
+  paper or finished paint. (The walker pin in tests/explore.test.ts re-pinned on purpose.)
+- **A photo paints the whole frame.** Measured headless from 150 m over Sea Bright (the rendered
+  frame re-read at 480×270, each visible pixel's paint cell checked): bare pixels were 0.1–0.2%
+  within 2 km, **3.0% at 4–8 km, 5.2% at 8–15 km and 99% past 15 km** — the "canvas clouds" were
+  the far field's sampling gaps and everything past the reach. Now a closing pass over the stamps
+  (`Stamps.close`), a 48 km far window, reach up to 22 km under your control (panel: "a photo
+  paints out to"), a 384 readback on a PC: **0.1–0.4% out to 15 km**, 22% past it (past 22 km).
+  The bloom is slower (2.4 s a cell, the farthest 2.2 s late) so the colour is seen running out;
+  the viewfinder's marks lift and the brush sounds through the run, a chime as it lands.
+- **Hot air balloons** (docs/agent/gameplay.md "Hot air balloons"): a foundry family
+  (`assets/balloon.ts`), real buoyancy physics with the lag kept readable (`balloonPhysics.ts`),
+  winds aloft that veer with height (`wind.ts`), first person in the basket with third person on
+  V / ⤢, Space / ▲ burn, C / ▼ vent, an assist that holds the height you let go at, photo mode in
+  the basket. Other people's balloons fly at dawn and dusk and come down on beaches (step in:
+  yours); on a first visit one waits on the nearest beach (Sea Bright's). Paint one from life and
+  the brush paints your own on open ground.
+- **Any colour**: every ride's swatch row in the brush has a free colour picker; a balloon a
+  second one for its stripes.
+- **The core loop reviewed** (docs/CORE_LOOP_REVIEW.md, a designer's read of the code). Built from
+  its list: photo paint counted (`stats().photoKm2`, the journal, the arrival card); the shot says
+  its reach and area, or where the pencil still is; the held breath; area milestones; the balloon
+  and its card; `?loop=paint` starts in this loop.
+- **Neighbourhoods** — research only so far: docs/NEIGHBOURHOODS.md (why Rumson reads like its
+  neighbours, the open data that tells them apart, the model, a test framework, phases).
+- Verified: typecheck; `npm test` 481 tests in 51 files; build; tools/hud-audit.mjs 120 layouts
+  (with a balloon state); the montage (shots/shore-montage.jpg: the beach balloon, someone's
+  balloon aloft and down on the beach, the basket at 160 m, the envelope from inside, third
+  person, pencil before / colour after a photo — 199 km² out to 22 km — phones in the basket); PC
+  playtest (drive, walkabout) pass with the same numbers as before.
+
+## 2026-09-30 — Phones: the touch controls reviewed, a game that sleeps when put away, the city that crashed Chrome
+
+- **The touch controls (the entry below), reviewed and fixed.**
+  - Photo mode had stopped WASD walking on a PC (it set `walker.holdMove`), and leaving it let go of
+    a lift ride's hold mid-ride. A pinch now just takes its two fingers off the stick and the look
+    drag (`Walker.releaseTouches`); the stick walks while you frame, as WASD does.
+  - The ride stick had no dead zone: steering sideways wandered into full throttle or the brakes,
+    and a plane's nose never settled. `vehicles.ts` `stickAxes`: 0.1 steer, 0.25 throttle, rescaled;
+    part way cruises at that share of the top speed and brakes that gently. Keys are ±1, so the
+    keyboard drives exactly as before.
+  - A double-tap on the look side could throw you out of a car at speed (two missed taps by the
+    boost button): it gets you out only once stopped. The ride's button says Drive / Board /
+    Get out / Jump out.
+  - Touch "Fly up/down" did nothing unless the stick was pushed too (climbing rides on the movement,
+    as Space/C do on a PC — left as it is there). ▲ ▼ now climb and sink on their own
+    (`walker.climb`) and sit beside the dock while flying, not in a drawer over the view.
+  - The ⋯ drawer never closed: a touch on the world closes it, and it closes behind the map, a
+    photo, the brush or the panel. ▣ does what P does (the brush away, a viewpoint faced). ⌂
+    focuses the search in the tap (the only way an iPhone raises its keyboard). A phone's hints and
+    toasts name its buttons (`body.nomouse`; a touch-screen laptop keeps its key names). Held
+    buttons let go when they disappear, the window blurs or the page sleeps.
+  - The page never zooms (`touch-action`; iOS's gesture events, since iOS ignores
+    `user-scalable=no`): a pinch had zoomed the page, hiding the controls with no way back. The
+    atlas map pinch-zooms instead (`mapview.ts`).
+- **The phone HUD, from the montage and a geometry audit.** The montage showed three overlaps;
+  an audit of the HUD's boxes (the production CSS on 10 phone sizes, upright and on their side,
+  walking / beside a ride / driving a car / flying a plane / flying on foot, a long hint up) found
+  25 overlapping layouts, mostly on a phone's side. Now none:
+  - On its side the hint was centred and pinned to the dock's edge at once with its text on one
+    line, so its pill came out narrower than the text; it wraps now, centred over the place name
+    (a long street name ran under it), over Get out while riding, clear of ▲ ▼ while flying. Get
+    out sat 2 px over ⇧. The ride's readout sits beside the ride's buttons (a plane's ran over
+    + −), the place name ends short of it, and the map-data credit runs along the top edge (the
+    dock and a ride's buttons covered its end).
+  - Upright, the ride's readout sat over the place name: it moves to the free corner under the
+    dock; the place name keeps the left half while riding. The hint ends short of ▲ ▼, ⇧, + − or
+    Drive beside the dock (`body[data-ride]`).
+  - A phone's readout shows the live numbers only; how to drive is the toast as you get in (the
+    two lines of instructions were what ran into everything). A PC's readout is unchanged.
+- **Sleep when put away** (`ui/lifecycle.ts`): hidden → sound suspended (phones; a PC tab sounds
+  on), the life worker paused (everywhere: it ticked at 20 Hz for a page nobody could see), held
+  input released; back on screen it picks up (an iPhone's interrupted sound on the next tap).
+- **Walking out through a wall after a flight (Robby, on a phone).** Reproduced headless: a flight
+  faster than a phone builds tiles lands over a cell of silhouettes — no walls, no footprints — so
+  the search for open ground saw nothing and came down inside a house (dead centre); until its tile
+  came (23 s under SwiftShader) nothing held you in. A phone now hovers ("coming down as the street
+  paints in…") until the cell is built and lands on open ground (12.7 m clear of the same house),
+  and on foot waits where it stands (`stream.solidAt`, main.ts `groundCheck`).
+- **The Manhattan crash.** On a phone Chrome died in NYC, then refused the site WebGL (the red
+  report at the bottom). Found and fixed:
+  - Every tile's sign atlas leaked on unload, on every platform: GPU textures 24 → 36 over four
+    round trips in Sea Bright (the scene holds 19). Now disposed with the tile: 23–25.
+  - Collision walls were tombstoned, never reclaimed: 263k walls (211k dead) after four round
+    trips on a phone; one long hop on a PC left 166k dead. They leave the walk world now, on every
+    platform, a slice a frame (`WalkWorld.purgeSome`, ~1.5 ms; a tile's walls at once took 65 ms
+    on a phone): flat at 106k on the phone run.
+  - LiDAR in the tab: one Midtown cell (NY_NewYorkCity) measured +130 MB RSS in Node with the game's
+    own `measureCell`, two read at once, and each measured cell built twice. Phones build from the
+    mapped heights (`?lidar=1` forces it).
+  - The phone ring held up to nine 1 km cells, and a downtown cell is ~100 MB of vertices. A
+    200 MB budget (low: 120), nearest first (`world/budget.ts`); Sea Bright's whole ring (97 MB) is
+    untouched. Real builds 2 at a time (low 1), no teleport building the whole ring at once, a 4 km
+    skyline (low 3).
+  - A lost GPU context on a phone sheds memory before it's given back, and the next load in the
+    tab steps down a tier. WebGL that won't start says how to get it back (close the browser and
+    reopen: Chrome blocks a site's WebGL after a GPU crash).
+- Verified: typecheck; `npm test` 472 tests in 50 files on an idle machine (lifecycle, budget,
+  touchControls and the wall purge added; diag/quality extended) — under five SwiftShader browsers
+  three heavy tests time out at 5 s, all pass with a longer timeout; build. Headless Pixel 7, Sea
+  Bright, phone tier, four 3.5 km round trips: textures 23–25 (was 24 → 36), walls 106k flat (was
+  263k), renderer peak 1,165 MB (was 1,285), GPU process 881 MB (was 949), 0 page errors.
+  - Sleep, counted by the life worker's messages (not frames): 57–59 ticks in 3 s awake, 0
+    hidden, 50–59 back, phone and PC; a phone's sound running → suspended → running, a PC's
+    running throughout; a held stick let go.
+  - The wall purge: a 19k-wall tile took 7.5–34.5 ms at once in Node; sliced, at most 1.56–1.73 ms
+    a frame (7–10 ms in all). In the page every dead wall was freed and reused (phone 50,375, PC
+    95,971), none left queued.
+  - No page zoom: the viewport meta rewritten to allow zoom (Android's force-zoom; an iPhone
+    ignores it anyway), two-finger spreads on the intro card, the world, the map and the
+    sketchbook stayed at scale 1; with `touch-action` back to auto the card and the sketchbook
+    zoomed 4.9×. (iOS's gesture events can't be tried here: no WebKit.)
+  - `tools/hud-audit.mjs`: 100 layouts, no overlaps (25 before). The montage
+    (`shots/shore-montage.jpg`, 11 states upright and on its side) reviewed.
+  - `mobile-check`: Pixel 7, iPhone and desktop boot, 0 page/console errors, 72–75 programs
+    within the phone limits. PC playtest (drive, walkabout): pass, the same numbers as with the
+    purge off (296 m at up to 38 km/h, 0 clips; 146 m through a door and out, 0 stuck).
+  - The flight repro and the on-foot wait (stick held: 0 m until the cell was built, then walking)
+    as above.
+- **Not verifiable here:** the tile service, Overpass and OpenFreeMap are blocked from the agent
+  sandbox, so no real Manhattan tiles loaded; the budget was exercised in Sea Bright only. Needs a
+  real phone after the next Pages deploy (Manhattan, `?diag=1`).
+
+## 2026-09-29 — Mobile control parity
+
+- Kept the existing walking thumbstick behavior intact and reused its axes for vehicles.
+- Added contextual enter/exit controls plus a deliberate double-tap gesture in the look area
+  when the same interaction is available. Added touch boost and plane throttle controls.
+- Added a More drawer for planting, seed cycling, time skip, and flight controls, plus a mobile
+  Options drawer with developer controls and ride summoning behind the existing debug toggle.
+- Added touch controls for photo zoom, light-time steps, and frame visibility; pinch-to-zoom;
+  brush rotation; and mobile guidance for the existing lift and map controls.
+- Verified with `npm run init` (47 test files, 450 tests), `npm run build`, and Pixel 7/iPhone
+  mobile-check runs. Both device emulations booted in phone quality with shader limits in range
+  and zero page or console errors. Reviewed `shots/shore-montage.jpg`; OSM credit remains visible.
+- Headless emulation is not a physical-device check. Tile-health probes and some map requests
+  could not reach local tile/Overpass services; repeat the real-phone check after Pages deploy.
+- The feature queue had 12 pre-existing `in_progress` items, contrary to its one-active-item
+  invariant. Selected `phones` for this work and returned the other 11 to `not_started`, keeping
+  their notes/evidence, so `npm run init` can validate the queue. No staging, commit, or push.
+
 ## 2026-09-29 (af) — Towers you can ride up, and a test suite that plays the game
 
 Two helper agents worked in their own copies while the main session merged and committed (ae).
@@ -2468,8 +3686,8 @@ the same build/pack/mount path as real tiles.
 
 - **src/world/synth.ts** (new): synthTile(spec, seed, terrain) -> a full TileJson +
   extra group (ground chunk + road/sidewalk ribbons). Everything is *field-driven*: a
-  warped street grid (108 m pitch, sine-wandered lines), a low-freq noise town mask for
-  density, lattice-hash h for every choice. No per-tile RNG for layout -> seams are
+  warped street grid (108 m pitch, sine-wandered lines), a low-freq noise town mask for
+  density, lattice-hash h for every choice. No per-tile RNG for layout -> seams are
   structurally impossible; neighbour tiles agree about shared roads/lots by position.
 - **Streaming** (stream.ts): specAt(cx,cz) -> baked manifest tile or {id:s+key, synth:1}
   spec; update() iterates the cell window (not the manifest); radius sweep for drops.
@@ -2478,13 +3696,13 @@ the same build/pack/mount path as real tiles.
   900 m dead zone where nothing loaded); ensureAround enumerates synth cells too;
   synthOrd is cell-hashed (session-independent ids).
 - **Worker** (	ile.worker.ts): init takes seed; spec.synth -> synthTile on-thread
-  (pure JS, no fetches), then the identical uildTile+pack path. In-page fallback same.
+  (pure JS, no fetches), then the identical uildTile+pack path. In-page fallback same.
 - **Ground** (ground.ts/pack.ts): ground material exposed via userData.groundMat ->
   setGndMaterial(); new pack tag 'gnd'; synth tiles emit a ground chunk into extra.
 - **Props** (props.ts): slice containment now uses the tile's own slice box (inSlice)
   so poles/trees/benches emit outside the baked grid; pavedMask bounds clamped for boxes
   fully outside the slice (was negative canvas size).
-- **Buildings** (uildings.ts): landmarks ?? [] (synth has none).
+- **Buildings** (uildings.ts): landmarks ?? [] (synth has none).
 - **Collision/main** (collision.ts, main.ts): walk.bounds widened to �4e6 m �
   walkable  forever, water still gates via height/sdf.
 - **Life** (life.ts): env bounds widened �10 km so gulls/agents aren't slice-trapped;

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { makeProjector, osmToTile, parkSide, type OsmDoc, type OsmElement } from '../src/world/realTile';
+import { makeProjector, osmToTile, parkSide, pointInRing, ringTester, type OsmDoc, type OsmElement } from '../src/world/realTile';
+import { makeRng } from '../src/core/rng';
 import type { Box } from '../src/world/data';
 
 const ORIGIN = { lat: 40.362, lon: -73.9755 }; // Sea Bright — same anchor as the bake
@@ -59,12 +60,16 @@ describe('osmToTile — roads', () => {
       osm(
         way(1, { highway: 'residential', name: 'Ocean Avenue', oneway: 'yes' }, [[10, 500], [300, 500], [700, 500]]), // starts inside -> owns
         way(2, { highway: 'service' }, [[2000, 500], [2500, 500]]), // entirely outside -> dropped
-        way(3, { highway: 'secondary', bridge: 'yes', layer: '1' }, [[-500, 100], [-100, 100], [400, 100]]), // first vertex far outside -> context
+        way(3, { highway: 'secondary', bridge: 'yes', layer: '1', 'bridge:structure': 'Truss' }, [[-500, 100], [-100, 100], [400, 100]]), // first vertex far outside -> context
         way(4, { highway: 'motorway' }, [[512, -30], [512, 300]]),
+        way(5, { highway: 'tertiary', bridge: 'movable', 'bridge:movable': 'swing' }, [[600, 700], [640, 700]]),
       ),
       OPTS,
     );
-    expect(t.roads).toHaveLength(3);
+    expect(t.roads).toHaveLength(4);
+    const swing = t.roads.find((r) => r.c === 'tertiary')!;
+    expect(swing.br).toBe('movable');
+    expect(swing.bm).toBe('swing'); // (how it opens: bridges.ts turns it on a pier mid-channel)
     const ocean = t.roads.find((r) => r.n === 'Ocean Avenue')!;
     expect(ocean.c).toBe('residential');
     expect(ocean.w).toBeCloseTo(6.5 + 4.4, 1); // a North American street parks both kerbs by default
@@ -75,7 +80,20 @@ describe('osmToTile — roads', () => {
     expect(bridge.own).toBe(0);
     expect(bridge.br).toBe('yes');
     expect(bridge.l).toBe(1);
+    expect(bridge.bs).toBe('truss'); // (how it's built: bridges.ts draws its trusses)
+    expect(ocean.bs).toBeUndefined();
     expect(t.roads.find((r) => r.c === 'motorway')!.w).toBe(14);
+  });
+  it("a motorway's and a trunk's ramps are streets: every interchange keeps its on- and off-ramps", () => {
+    const t = osmToTile(
+      osm(
+        way(1, { highway: 'motorway_link', oneway: 'yes' }, [[100, 100], [400, 300]]),
+        way(2, { highway: 'trunk_link', lanes: '2' }, [[100, 600], [400, 800]]),
+      ),
+      OPTS,
+    );
+    // (one lane and its shoulders; two mapped lanes are 3.2 m each and a metre of gutter — never kerb parking)
+    expect(t.roads.map((r) => [r.c, r.w, r.pk])).toEqual([['motorway_link', 7, undefined], ['trunk_link', 7.4, undefined]]);
   });
   it('mapped street parking (either scheme) widens the carriageway and marks the kerbs', () => {
     expect(parkSide({ 'parking:both': 'lane' }, 'left')).toBe(1);
@@ -172,7 +190,8 @@ describe('osmToTile — buildings', () => {
     ), OPTS);
     const at = (x: number) => t.points.find((p) => Math.abs(p.x - x) < 1)?.c;
     expect([100, 120, 140, 160, 180].map(at)).toEqual(['xing', 'xing_l', 'xing_u', 'xing_u', 'xing']);
-    expect([200, 220, 240, 260, 280, 300, 320, 340, 360].map(at)).toEqual(['lamp', 'bin', 'postbox', 'bikerack', undefined, 'drinking', 'bollard', 'meter', undefined]);
+    // (a drinks machine is the micro layer's: world/micro.ts draws it where it stands in the open)
+    expect([200, 220, 240, 260, 280, 300, 320, 340, 360].map(at)).toEqual(['lamp', 'bin', 'postbox', 'bikerack', undefined, 'drinking', 'bollard', 'meter', 'vending']);
   });
 
   it('a business node inside a building names it and says what it is used for', () => {
@@ -593,4 +612,47 @@ describe('mapped trees keep their species', () => {
     const t = osmToTile(osm({ type: 'node', id: 901, lat, lon, tags: { natural: 'tree', genus: 'Acer', height: '14 m' } }), OPTS);
     expect([t.points[0].c, t.points[0].sp, t.points[0].h]).toEqual(['tree', 'maple', 14]);
   });
+});
+
+describe('ringTester', () => {
+  it('answers as pointInRing does, inside its window and out, for a big wiggly ring and points on its rows', () => {
+    // (a lake's long shoreline: thousands of vertices, many on the window's band edges and the
+    // points' own rows, and a vertex exactly at the window's edge)
+    const R = makeRng(47464), rng = () => R.float();
+    const ring: [number, number][] = [];
+    const n = 3000;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2, r = 900 + 300 * Math.sin(a * 17) + rng() * 120;
+      const p: [number, number] = [Math.cos(a) * r, Math.sin(a) * r];
+      if (i % 50 === 0) p[1] = Math.round(p[1] / 16) * 16; // on a band edge
+      ring.push(p);
+    }
+    ring[10][1] = -512; // on the window's edge
+    const at = ringTester(ring, -512, 512);
+    let checked = 0, inside = 0;
+    const wrong: string[] = [];
+    for (let k = 0; k < 8000; k++) {
+      const x = (rng() - 0.5) * 2600, z = k % 7 === 0 ? ring[Math.floor(rng() * n)][1] : k % 11 === 0 ? Math.round((rng() - 0.5) * 64) * 16 : (rng() - 0.5) * 2600;
+      const want = pointInRing(x, z, ring);
+      if (at(x, z) !== want) wrong.push(`(${x}, ${z})`);
+      checked++;
+      if (want) inside++;
+    }
+    // (the window's own edges, exactly)
+    for (const z of [-512, 512]) for (let x = -1300; x <= 1300; x += 13) if (at(x, z) !== pointInRing(x, z, ring)) wrong.push(`(${x}, ${z})`);
+    expect(wrong).toEqual([]);
+    expect(checked).toBe(8000);
+    expect(inside).toBeGreaterThan(800);
+  }, 30000);
+
+  it('is fast where the plain test is slow: a lake outline asked once a ground quad', () => {
+    const ring: [number, number][] = [];
+    for (let i = 0; i < 47000; i++) { const a = (i / 47000) * Math.PI * 2; ring.push([Math.cos(a) * 200000, Math.sin(a) * 200000 + 199500]); }
+    const at = ringTester(ring, -64, 1088);
+    const t0 = performance.now();
+    let wet = 0;
+    for (let x = 0; x < 1024; x += 8) for (let z = 0; z < 1024; z += 8) if (at(x, z)) wet++;
+    expect(performance.now() - t0).toBeLessThan(1500);
+    expect(wet).toBeGreaterThan(0);
+  }, 30000);
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LifeSim, PED_STATE } from '../src/sim/lifeSim';
+import { LifeSim, PED_STATE, PED } from '../src/sim/lifeSim';
 import { RANGES, S, MAX_ENTITIES, type LifeInit } from '../src/sim/protocol';
 
 // A tiny synthetic town: a 400 m square loop (a main road + side streets), a beach strip and a bay.
@@ -120,6 +120,44 @@ describe('LifeSim', () => {
     expect(sawExit).toBe(true);
   });
 
+  it("who walks in by the open building's door goes on in to a place, and stays inside through a close and a reopen", { timeout: 15000 }, () => {
+    // (Robby: "people going into buildings disappear — it all needs to be persistent")
+    const sim = new LifeSim(town());
+    sim.setEnv({ playerX: -900, playerZ: -900, hour: 14, night: 0, density: 1, wind: 0.5 });
+    const D = town().doors;
+    // the first walker on a door's final approach: their building opens, three places inside it
+    let i = -1;
+    for (let t = 0; t < 20000 && i < 0; t++) {
+      sim.step(0.05);
+      for (let k = RANGES.peds[0]; k < RANGES.peds[1]; k++) if (sim.active[k] && sim.state[k] === PED_STATE.TO_DOOR && sim.leg[k] === 1) { i = k; break; }
+    }
+    expect(i).toBeGreaterThanOrEqual(0);
+    const o = sim.door[i] * 6, dx = D[o], dz = D[o + 2], inward = Math.sign(D[o + 2] - D[o + 5]);
+    const spots = new Float32Array([dx - 2, 1.8, dz + inward * 4, 0, dx, 1.8, dz + inward * 6, 0, dx + 2, 1.8, dz + inward * 4, 0]);
+    sim.setIndoor({ door: [dx, dz], spots });
+    const atSpot = () => [0, 1, 2].some((k) => Math.hypot(sim.x[i] - spots[k * 4], sim.z[i] - spots[k * 4 + 2]) < 0.35);
+    let stayed = false;
+    for (let t = 0; t < 2000 && !stayed; t++) {
+      sim.step(0.05);
+      if (sim.state[i] === PED_STATE.IN_WALK || sim.state[i] === PED_STATE.IN_STAY) expect(sim.y[i]).toBeGreaterThan(1); // seen, on the floor inside
+      if (sim.state[i] === PED_STATE.IN_STAY) stayed = atSpot();
+    }
+    expect(stayed).toBe(true);
+    // the building closes (you walked off): they're inside still, unseen
+    sim.setIndoor(null);
+    expect(sim.state[i]).toBe(PED_STATE.INSIDE);
+    sim.step(0.05);
+    expect(sim.y[i]).toBeLessThan(-500);
+    // it opens again: there they are, at a place, at once
+    sim.setIndoor({ door: [dx, dz], spots });
+    expect(sim.state[i]).toBe(PED_STATE.IN_STAY);
+    expect(atSpot()).toBe(true);
+    // and in time they walk back out by the door, and on down the street
+    let out = false;
+    for (let t = 0; t < 12000 && !out; t++) { sim.step(0.05); out = sim.state[i] === PED_STATE.FROM_DOOR || sim.state[i] === PED_STATE.WALK; }
+    expect(out).toBe(true);
+  });
+
   it('boats stay on the water', () => {
     const { sim } = run(1200);
     for (let i = RANGES.boats[0]; i < RANGES.boats[1]; i++) {
@@ -229,5 +267,139 @@ describe('LifeSim', () => {
     expect(at('desert', 12.5)).toBeLessThan(at('desert', 20)); // and life after sunset
     expect(at('town', 10)).toBeGreaterThan(at('town', 3) * 3); // an ordinary town isn't empty mid-morning
     expect(at('town', 12.5)).toBeGreaterThan(at('desert', 12.5));
+  });
+});
+
+// A grid town: 5 × 5 blocks of 80 m, doors along every street on both sides every 20 m (so a walker
+// anywhere can find one) — the street's share of who's out, not one road's.
+function grid(): LifeInit {
+  const N = 6, B = 80, nodes: [number, number][] = [], edges: [number, number][] = [];
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) nodes.push([i * B, j * B]);
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const a = j * N + i; if (i + 1 < N) edges.push([a, a + 1]); if (j + 1 < N) edges.push([a, a + N]); }
+  const pts: number[] = [], start: number[] = [], count: number[] = [], len: number[] = [], info: number[] = [], en: number[] = [], doors: number[] = [];
+  for (const [a, b] of edges) {
+    const [ax, az] = nodes[a], [bx, bz] = nodes[b], dx = (bx - ax) / B, dz = (bz - az) / B;
+    start.push(pts.length / 3);
+    for (let k = 0; k < 21; k++) pts.push(ax + ((bx - ax) * k) / 20, 1.5, az + ((bz - az) * k) / 20);
+    count.push(21); len.push(B); info.push(2, 6.5, 0, 1); en.push(a, b);
+    for (let t = 10; t < B; t += 20) for (const s of [-1, 1]) { const x = ax + dx * t, z = az + dz * t; doors.push(x - dz * s * 9, 1.8, z + dx * s * 9, x - dz * s * 6, 1.5, z + dx * s * 6); }
+  }
+  const adj: number[][] = nodes.map(() => []);
+  edges.forEach(([a, b], e) => { adj[a].push(e); adj[b].push(e); });
+  const nodeEdgeStart = [0], nodeEdges: number[] = [];
+  for (const l of adj) { nodeEdges.push(...l); nodeEdgeStart.push(nodeEdges.length); }
+  return {
+    seed: 7, bounds: [-50, -50, N * B + 50, N * B + 50],
+    edgePts: new Float32Array(pts), edgeStart: new Int32Array(start), edgeCount: new Int32Array(count), edgeLen: new Float32Array(len),
+    edgeInfo: new Float32Array(info), edgeNodes: new Int32Array(en), nodeEdgeStart: new Int32Array(nodeEdgeStart), nodeEdges: new Int32Array(nodeEdges),
+    beachPts: new Float32Array(0), waterGrid: new Uint8Array(4), waterG: [-50, -50, 400, 2, 2], downtown: [0, 0, 400, 400], seaward: [1, 0],
+    doors: new Float32Array(doors),
+  };
+}
+
+describe('who walks the street (review round 12: "dogs fill the street")', () => {
+  it('dog walkers go in at doors too, so the street keeps the share of dog walkers the sim assigns', { timeout: 30000 }, () => {
+    // (it was ~23% of who's out by day where 9% were assigned: only the others went indoors)
+    const sim = new LifeSim(grid());
+    sim.setEnv({ playerX: 200, playerZ: 200, hour: 14, night: 0, density: 1, wind: 0.5 });
+    const out = new Float32Array(MAX_ENTITIES * S.STRIDE);
+    let all = 0, dogs = 0, outdoors = 0, dogsOut = 0, dogInside = false;
+    for (let t = 0; t < 12000; t++) {
+      sim.step(0.05);
+      if (t % 200 === 0) sim.publish(out);
+      if (t < 3000 || t % 100) continue;
+      for (let i = RANGES.peds[0]; i < RANGES.peds[1]; i++) {
+        if (!sim.active[i] || sim.lights[i] & PED.JOG) continue; // (joggers never stop: counted apart)
+        const dog = (sim.lights[i] & PED.DOG) !== 0, inside = sim.state[i] === PED_STATE.INSIDE;
+        all++; if (dog) dogs++;
+        if (!inside) { outdoors++; if (dog) dogsOut++; }
+        if (dog && inside) dogInside = true;
+      }
+    }
+    const assigned = dogs / all, seen = dogsOut / outdoors;
+    console.log(`[life] dog walkers: ${(assigned * 100).toFixed(1)}% assigned, ${(seen * 100).toFixed(1)}% of who's outdoors`);
+    expect(dogInside).toBe(true);
+    expect(assigned).toBeGreaterThan(0.04);
+    expect(seen / assigned).toBeLessThan(1.3);
+  });
+});
+
+// Robby, 2026-10-04: "people walking sometimes walk through walls of building to other side around
+// corners and when walking on porch into house they fall into the floor then stand normal on floor again"
+describe('walkers keep to open ground', () => {
+  it('climb a porch: up its steps, then level across the deck — never sinking into either', { timeout: 30000 }, () => {
+    // town()'s shopfronts given porches: the deck 1.1 m up, 2 m deep before the wall, its steps 1 m
+    // from the foot (9 m back from the road) to the deck's edge (10 m)
+    const w = town(), n = w.doors.length / 6, path: number[] = [], at = [0];
+    for (let k = 0; k < n; k++) {
+      const s = Math.sign(w.doors[k * 6 + 2]);
+      w.doors[k * 6 + 1] = 2.6;
+      path.push(w.doors[k * 6], 2.6, 10 * s);
+      at.push(path.length / 3);
+    }
+    w.doorPath = new Float32Array(path); w.doorPathAt = new Int32Array(at);
+    w.doorN = new Float32Array(Array.from({ length: n }, (_, k) => [0, -Math.sign(w.doors[k * 6 + 2])]).flat());
+    const profile = (z: number) => { const a = Math.abs(z); return a >= 10 ? 2.6 : a <= 9 ? 1.5 : 1.5 + 1.1 * (a - 9); };
+    const sim = new LifeSim(w);
+    sim.setEnv({ playerX: 200, playerZ: 0, hour: 14, night: 0, density: 1, wind: 0.5 });
+    let onSteps = 0, worst = 0;
+    for (let t = 0; t < 9000; t++) {
+      sim.step(0.05);
+      for (let i = RANGES.peds[0]; i < RANGES.peds[1]; i++) {
+        const st = sim.state[i];
+        // (the stair legs: up from the foot to the door, down from the door to the foot)
+        if (!sim.active[i] || !((st === PED_STATE.TO_DOOR && sim.leg[i] === 1) || (st === PED_STATE.FROM_DOOR && sim.leg[i] === 0))) continue;
+        const a = Math.abs(sim.z[i]);
+        if (a < 9.05 || a > 12) continue;
+        onSteps++;
+        worst = Math.max(worst, profile(sim.z[i]) - sim.y[i]);
+      }
+    }
+    console.log(`[life] porch: ${onSteps} samples on the steps and deck, deepest ${worst.toFixed(2)} m under`);
+    expect(onSteps).toBeGreaterThan(50);
+    expect(worst).toBeLessThan(0.08); // (a step's nosing, at most — a straight glide was 0.7 m under)
+  });
+
+  it('never set out for a door round the corner, through its building', { timeout: 30000 }, () => {
+    // grid()'s blocks with a door every 10 m down every street (both sides, 9 m back): the buildings
+    // fill each block more than 9.5 m from its streets
+    const crossings = (normals: boolean) => {
+      const w = grid(), N = 6, B = 80, doors: number[] = [], nrm: number[] = [];
+      for (let e = 0; e < w.edgeNodes.length / 2; e++) {
+        const a = w.edgeNodes[e * 2], b = w.edgeNodes[e * 2 + 1];
+        const ax = (a % N) * B, az = Math.floor(a / N) * B, dx = ((b % N) * B - ax) / B, dz = (Math.floor(b / N) * B - az) / B;
+        for (let t = 5; t < B; t += 10) for (const s of [-1, 1]) {
+          const x = ax + dx * t, z = az + dz * t;
+          doors.push(x - dz * s * 9, 1.8, z + dx * s * 9, x - dz * s * 6, 1.5, z + dx * s * 6);
+          nrm.push(dz * s, -dx * s);
+        }
+      }
+      w.doors = new Float32Array(doors);
+      if (normals) w.doorN = new Float32Array(nrm);
+      const sim = new LifeSim(w);
+      sim.setEnv({ playerX: 200, playerZ: 200, hour: 14, night: 0, density: 1, wind: 0.5 });
+      const was = new Uint8Array(sim.state.length);
+      const inBlock = (x: number, z: number) => { const u = ((x % B) + B) % B, v = ((z % B) + B) % B; return u > 9.5 && u < B - 9.5 && v > 9.5 && v < B - 9.5; };
+      let set = 0, through = 0;
+      for (let t = 0; t < 6000; t++) {
+        sim.step(0.05);
+        for (let i = RANGES.peds[0]; i < RANGES.peds[1]; i++) {
+          if (sim.state[i] === PED_STATE.TO_DOOR && was[i] !== PED_STATE.TO_DOOR) {
+            set++;
+            const o = sim.door[i] * 6, fx = w.doors[o + 3], fz = w.doors[o + 5];
+            let hit = false;
+            for (let k = 1; k < 20 && !hit; k++) hit = inBlock(sim.fx[i] + ((fx - sim.fx[i]) * k) / 20, sim.fz[i] + ((fz - sim.fz[i]) * k) / 20);
+            if (hit) through++;
+          }
+          was[i] = sim.state[i];
+        }
+      }
+      return { set, through };
+    };
+    const before = crossings(false), after = crossings(true);
+    console.log(`[life] corners: ${before.through}/${before.set} set out through a building without the wall's side, ${after.through}/${after.set} with it`);
+    expect(before.through).toBeGreaterThan(0); // (the test sees the glitch)
+    expect(after.set).toBeGreaterThan(30);
+    expect(after.through).toBe(0);
   });
 });

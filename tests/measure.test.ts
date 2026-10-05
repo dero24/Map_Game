@@ -271,3 +271,61 @@ describe('lidarCore: a mast is not a tree', () => {
     expect(detectTrees(g, H, none, box, true).length).toBe(0);
   });
 });
+
+// ringMask a row at a time must be the mask the per-cell test made, to the bit: the unmapped
+// buildings and trees found behind it are in every precomputed record (a baked pack's sidecar,
+// the tile service's R2) — a different mask would make records the runtime no longer reproduces.
+describe('lidarCore: ringMask is the per-cell test, sooner', () => {
+  type G = { x0: number; z0: number; res: number; w: number; h: number };
+  // (the version every record so far was made with: every edge tested at every cell)
+  const perCell = (g: G, rings: P2[][], pad: number) => {
+    const m = new Uint8Array(g.w * g.h);
+    for (const r of rings) {
+      let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+      for (const [x, z] of r) (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z));
+      const i0 = Math.max(0, Math.floor((x0 - pad - g.x0) / g.res)), i1 = Math.min(g.w - 1, Math.floor((x1 + pad - g.x0) / g.res));
+      const j0 = Math.max(0, Math.floor((z0 - pad - g.z0) / g.res)), j1 = Math.min(g.h - 1, Math.floor((z1 + pad - g.z0) / g.res));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const x = g.x0 + (i + 0.5) * g.res, z = g.z0 + (j + 0.5) * g.res;
+        let inside = false, d = Infinity;
+        for (let a = 0, b = r.length - 1; a < r.length; b = a++) {
+          const [xa, za] = r[a], [xb, zb] = r[b];
+          if (za > z !== zb > z && x < ((xb - xa) * (z - za)) / (zb - za) + xa) inside = !inside;
+          if (pad > 0) {
+            const dx = xb - xa, dz = zb - za, L2 = dx * dx + dz * dz || 1e-9;
+            const t = Math.max(0, Math.min(1, ((x - xa) * dx + (z - za) * dz) / L2));
+            d = Math.min(d, Math.hypot(x - xa - t * dx, z - za - t * dz));
+          }
+        }
+        if (inside || d <= pad) m[j * g.w + i] = 1;
+      }
+    }
+    return m;
+  };
+  const differ = (a: Uint8Array, b: Uint8Array) => { let n = 0; for (let k = 0; k < a.length; k++) if (a[k] !== b[k]) n++; return n; };
+  it('on outlines of every shape: concave, doubled vertices, slivers, at every pad', () => {
+    let s = 12345;
+    const rnd = () => ((s = (Math.imul(s, 1103515245) + 12345) >>> 0) / 4294967296);
+    const g = { x0: -20.3, z0: -19.7, res: 1, w: 160, h: 160 };
+    for (let trial = 0; trial < 200; trial++) {
+      const n = 3 + Math.floor(rnd() * 40), cx = rnd() * 100, cz = rnd() * 100, R = 0.5 + rnd() * 40;
+      const ring: P2[] = [];
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2, rr = R * (0.3 + rnd());
+        ring.push([Math.round((cx + Math.cos(a) * rr) * 10) / 10, Math.round((cz + Math.sin(a) * rr) * 10) / 10]);
+        if (rnd() < 0.1) ring.push([...ring[ring.length - 1]] as P2);
+      }
+      for (const pad of [1.5, 1, 0.5, 0]) expect(differ(ringMask(g, [ring], pad), perCell(g, [ring], pad))).toBe(0);
+    }
+  }, 60000);
+  it('on a real town\'s footprints (two shore cells, the pads measureCell uses)', async () => {
+    const { readFileSync } = (await import(/* @vite-ignore */ `node:${'fs'}`)) as { readFileSync(p: URL, e: 'utf8'): string };
+    const R = new URL('../public/data/shore/tiles/', import.meta.url);
+    for (const [id, cx, cz] of [['0_0', 0, 0], ['-1_2', -1, 2]] as const) {
+      const tj = JSON.parse(readFileSync(new URL(`${id}.json`, R), 'utf8')) as { buildings: { r: number[]; gen?: string }[] };
+      const rings = tj.buildings.filter((b) => b.gen !== 'fill').map((b) => { const r: P2[] = []; for (let i = 0; i + 1 < b.r.length; i += 2) r.push([b.r[i] / 10, b.r[i + 1] / 10]); return r; });
+      const g = { x0: cx * 1024 - 12, z0: cz * 1024 - 12, res: 1, w: 1048, h: 1048 };
+      for (const pad of [1.5, 1]) expect(differ(ringMask(g, rings, pad), perCell(g, rings, pad)), `${id} pad ${pad}`).toBe(0);
+    }
+  }, 60000);
+});

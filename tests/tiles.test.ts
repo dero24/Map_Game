@@ -49,6 +49,14 @@ describe('partitionEntities', () => {
     for (const s of [1, 2, 3]) expect(counts.get(s)).toBe(1);
   });
 
+  it('a house centred exactly on a tile line is owned once (the half-open edge)', () => {
+    const onLine = { r: [10180, 5000, 10300, 5000, 10300, 5100, 10180, 5100], h: 7, k: 'house', roof: 'gable', s: 9 }; // centroid x = 1024.0
+    const owners = partitionEntities({ buildings: [onLine] }, specs).filter((p: { tile: { buildings: { own?: number }[] } }) => p.tile.buildings.some((b) => b.own !== 0));
+    expect(owners.map((p: { spec: { id: string } }) => p.spec.id)).toEqual(['1_0']);
+    const pt = partitionEntities({ points: [{ c: 'tree', x: 1024, z: 1024 }] }, tileSpecs({ x0: 0, z0: 0, x1: 2048, z1: 2048 }, SLICE));
+    expect(pt.filter((p: { tile: { points: { own?: number }[] } }) => p.tile.points.some((q) => q.own !== 0)).length).toBe(1);
+  });
+
   it('marks margin context with own:0', () => {
     const t00 = byId('0_0');
     const seamHouse = t00.buildings.find((b: { s: number }) => b.s === 2);

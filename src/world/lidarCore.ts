@@ -336,26 +336,53 @@ export function hagAt(g: Hag, x: number, z: number): number {
 export interface TreeHit { x: number; z: number; h: number; r: number }
 // Cells of the grid inside (or within `pad` m of) any ring — building footprints, so a roof
 // peak is never read as a tree top.
+// A row at a time: where the outline crosses the row is worked out once (the same expression
+// the per-cell crossing test used — a cell is inside when an odd number of crossings lie east of
+// it), and the distance to the outline only for cells outside it, stopping at the first edge
+// within `pad`. The same mask as testing every edge at every cell, ~15× sooner — a Midtown cell's
+// two masks were 8 s of its measurement (tests/measure.test.ts holds the two to the bit).
 export function ringMask(g: { x0: number; z0: number; res: number; w: number; h: number }, rings: [number, number][][], pad: number): Uint8Array {
   const m = new Uint8Array(g.w * g.h);
+  const far2 = pad * pad * (1 + 1e-9) + 1e-12; // (a squared distance past this is past `pad`, however hypot rounds)
+  let xs = new Float64Array(64);
   for (const r of rings) {
+    const n = r.length;
     let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
     for (const [x, z] of r) (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z));
     const i0 = Math.max(0, Math.floor((x0 - pad - g.x0) / g.res)), i1 = Math.min(g.w - 1, Math.floor((x1 + pad - g.x0) / g.res));
     const j0 = Math.max(0, Math.floor((z0 - pad - g.z0) / g.res)), j1 = Math.min(g.h - 1, Math.floor((z1 + pad - g.z0) / g.res));
-    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
-      const x = g.x0 + (i + 0.5) * g.res, z = g.z0 + (j + 0.5) * g.res;
-      let inside = false, d = Infinity;
-      for (let a = 0, b = r.length - 1; a < r.length; b = a++) {
-        const [xa, za] = r[a], [xb, zb] = r[b];
-        if (za > z !== zb > z && x < ((xb - xa) * (z - za)) / (zb - za) + xa) inside = !inside;
-        if (pad > 0) {
+    if (xs.length < n) xs = new Float64Array(n);
+    for (let j = j0; j <= j1; j++) {
+      const z = g.z0 + (j + 0.5) * g.res;
+      let c = 0;
+      for (let a = 0, b = n - 1; a < n; b = a++) {
+        const xa = r[a][0], za = r[a][1], xb = r[b][0], zb = r[b][1];
+        if (za > z !== zb > z) xs[c++] = ((xb - xa) * (z - za)) / (zb - za) + xa;
+      }
+      const X = xs.subarray(0, c).sort();
+      let p = 0; // crossings at or west of x
+      for (let i = i0; i <= i1; i++) {
+        const k = j * g.w + i;
+        if (m[k]) continue;
+        const x = g.x0 + (i + 0.5) * g.res;
+        while (p < c && X[p] <= x) p++;
+        if ((c - p) & 1) {
+          m[k] = 1;
+          continue;
+        }
+        if (!(pad > 0)) continue;
+        for (let a = 0, b = n - 1; a < n; b = a++) {
+          const xa = r[a][0], za = r[a][1], xb = r[b][0], zb = r[b][1];
           const dx = xb - xa, dz = zb - za, L2 = dx * dx + dz * dz || 1e-9;
           const t = Math.max(0, Math.min(1, ((x - xa) * dx + (z - za) * dz) / L2));
-          d = Math.min(d, Math.hypot(x - xa - t * dx, z - za - t * dz));
+          const ex = x - xa - t * dx, ez = z - za - t * dz;
+          if (ex * ex + ez * ez > far2) continue;
+          if (Math.hypot(ex, ez) <= pad) {
+            m[k] = 1;
+            break;
+          }
         }
       }
-      if (inside || d <= pad) m[j * g.w + i] = 1;
     }
   }
   return m;

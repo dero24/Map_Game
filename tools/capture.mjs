@@ -80,9 +80,12 @@ try {
 
   // Contact sheet: all shots composited into one JPEG inside the page (no deps).
   // Agents should read THIS file instead of opening each PNG.
-  const cols = Math.min(3, taken.length);
-  const sheet = await page.evaluate(async ({ items, cols }) => {
-    const CW = 640, CH = 360, PAD = 26;
+  // (cells keep the shots' aspect: a phone's portrait frames side by side, six to a row, not
+  // squeezed into landscape cells; a landscape capture is 640×360 three to a row, as always)
+  const ar = W / H, cols = Math.min(ar >= 1 ? 3 : 6, taken.length);
+  const CW = ar >= 1 ? 640 : Math.round(640 * ar), CH = ar >= 1 ? Math.round(640 / ar) : 640;
+  const sheet = await page.evaluate(async ({ items, cols, CW, CH }) => {
+    const PAD = 26;
     const rows = Math.ceil(items.length / cols);
     const cv = document.createElement('canvas');
     cv.width = cols * CW;
@@ -101,7 +104,7 @@ try {
       ctx.fillText(items[i].name, x + 8, y + CH + 17);
     }
     return cv.toDataURL('image/jpeg', 0.72).split(',')[1];
-  }, { items: taken, cols });
+  }, { items: taken, cols, CW, CH });
   const sheetOut = resolve(ROOT, 'shots', `${REGION}-montage.jpg`);
   writeFileSync(sheetOut, Buffer.from(sheet, 'base64'));
   console.log(`montage: ${sheetOut}  <- read this one image for review`);

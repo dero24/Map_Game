@@ -1,80 +1,99 @@
-// Place names for the map search, arrival cards and sketchbook captions.
-// Online: Photon (komoot's OpenStreetMap geocoder — CORS-enabled, no key; light use only, so every
-// answer is cached and reverse lookups are throttled). Offline or rate-limited: everything falls back
-// to what the loaded world already knows (named streets, named buildings, baked POIs) — the game
-// never waits on the network to be playable.
+// Place names for the map search, arrival cards and sketchbook captions — from our own lower-48
+// place index (placeIndex.ts: USGS GNIS and US Census names and boundaries, public domain), served
+// by the tile service (worker/src/places.js) out of R2. No third-party geocoder and no street
+// addresses. Offline, or past the lower 48: everything falls back to what the loaded world already
+// knows (named streets, named buildings, baked POIs) — the game never waits on the network to be
+// playable.
+import { localityIn, tileOf, tileKey, type RevTile, type Locality } from './placeIndex';
+export type { Locality } from './placeIndex';
 
 export interface Place {
-  name: string; // "Monmouth Beach" / "Ocean Avenue" / "St. George's by-the-River"
-  detail: string; // "Monmouth County, New Jersey"
+  name: string; // a town, a park, a street, a named building
+  detail: string; // "borough · <County>, <ST>"
   lat: number;
   lon: number;
-  kind: string; // city / town / street / house / poi / local-road / coords …
-  local?: boolean; // answered from the loaded world, not the geocoder
+  kind: string; // borough / city / park / summit / street / building / poi / coords …
+  local?: boolean; // answered from the loaded world, not the index
 }
-export interface Locality { locality: string; region: string; street?: string }
 
-const PHOTON = 'https://photon.komoot.io';
-const rcache = new Map<string, Locality | null>();
-let lastReverse = 0;
-let inflight: Promise<Locality | null> | null = null;
+let base = ''; // the tile service ('' — none: the loaded world answers alone)
+/** Where the place index lives: the tile service's base URL (main.ts, at boot). */
+export function setPlaceService(url: string) { base = /^https?:\/\//.test(url) ? url.replace(/\/$/, '') : ''; }
+
+const tiles = new Map<string, RevTile | null>();
+const inflight = new Map<string, Promise<RevTile | null>>();
 let offline = false;
+let lastFail = -Infinity;
 
-type Props = Record<string, string | undefined>;
-const localityOf = (p: Props) => p.city ?? p.town ?? p.village ?? p.hamlet ?? p.locality ?? p.district ?? p.county ?? p.state ?? '';
-const county = (p: Props) => (p.county && p.countrycode === 'US' && !/county|parish|borough/i.test(p.county) ? `${p.county} County` : p.county);
-const regionOf = (p: Props, skip: string) => [county(p), p.state].filter((s) => s && s !== skip).join(', ') || p.country || '';
-
-/** The town/neighbourhood at a point (cached per ~300 m; at most one request every 4 s). */
-export async function reverse(lat: number, lon: number): Promise<Locality | null> {
-  const k = `${lat.toFixed(3)},${lon.toFixed(3)}`;
-  if (rcache.has(k)) return rcache.get(k)!;
-  if (inflight) return inflight;
-  if (offline && Date.now() - lastReverse < 60000) return null;
-  if (Date.now() - lastReverse < 4000) return null;
-  lastReverse = Date.now();
-  inflight = (async () => {
-    try {
-      const r = await fetch(`${PHOTON}/reverse?lat=${lat.toFixed(5)}&lon=${lon.toFixed(5)}&lang=en&limit=1`, { signal: AbortSignal.timeout(6000) });
-      if (!r.ok) throw new Error(String(r.status));
-      const j = (await r.json()) as { features?: { properties: Props }[] };
-      const p = j.features?.[0]?.properties;
-      offline = false;
-      const loc = p && localityOf(p) ? { locality: localityOf(p), region: regionOf(p, localityOf(p)), street: p.street } : null;
-      rcache.set(k, loc);
-      return loc;
-    } catch {
-      offline = true;
-      return null;
-    } finally {
-      inflight = null;
-    }
-  })();
-  return inflight;
+async function revTile(ix: number, iy: number): Promise<RevTile | null> {
+  const k = tileKey(ix, iy);
+  if (tiles.has(k)) return tiles.get(k)!;
+  if (!base) return null;
+  // a failure waits a while before asking again (offline, or the service down)
+  if (performance.now() - lastFail < 30000) return null;
+  let p = inflight.get(k);
+  if (!p) {
+    p = (async () => {
+      try {
+        const r = await fetch(`${base}/places/rt/${k}.json`, { signal: AbortSignal.timeout(8000) });
+        if (!r.ok) throw new Error(String(r.status));
+        const t = (await r.json()) as RevTile;
+        tiles.set(k, t);
+        offline = false;
+        return t;
+      } catch {
+        offline = true;
+        lastFail = performance.now();
+        return null;
+      } finally {
+        inflight.delete(k);
+      }
+    })();
+    inflight.set(k, p);
+  }
+  return p;
 }
 
-/** Search the geocoder near a point. Throws on network failure (the caller falls back to local). */
+/** The town at a point: the Census place, else the township or town, else the county (null at
+ *  sea, past the lower 48, or offline). One boundary tile per 0.25°, kept for the session. */
+export async function reverse(lat: number, lon: number): Promise<Locality | null> {
+  const [ix, iy] = tileOf(lat, lon);
+  return localityIn(await revTile(ix, iy), lat, lon);
+}
+
+/** Search the index near a point. Throws when the service can't answer (the caller falls back to
+ *  the loaded world). */
 export async function searchRemote(q: string, near: { lat: number; lon: number }): Promise<Place[]> {
-  const url = `${PHOTON}/api/?q=${encodeURIComponent(q)}&lat=${near.lat.toFixed(4)}&lon=${near.lon.toFixed(4)}&limit=8&lang=en`;
-  const r = await fetch(url, { signal: AbortSignal.timeout(7000) });
-  if (!r.ok) throw new Error(`geocoder ${r.status}`);
-  const j = (await r.json()) as { features?: { properties: Props; geometry: { coordinates: [number, number] } }[] };
-  const seen = new Set<string>();
-  const out: Place[] = [];
-  for (const f of j.features ?? []) {
-    const p = f.properties;
-    const street = p.housenumber && p.street ? `${p.housenumber} ${p.street}` : undefined;
-    const name = p.name ?? street ?? p.street ?? localityOf(p);
-    if (!name) continue;
-    const loc = localityOf(p);
-    const detail = [street && p.name ? street : undefined, loc !== name ? loc : undefined, p.state, loc === name ? p.country : undefined].filter(Boolean).join(', ');
-    const [lon, lat] = f.geometry.coordinates;
-    const key = `${name}|${lat.toFixed(3)}|${lon.toFixed(3)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({ name, detail, lat, lon, kind: p.osm_value ?? p.type ?? 'place' });
+  if (!base) throw new Error('no place service');
+  const url = `${base}/places/search?q=${encodeURIComponent(q)}&lat=${near.lat.toFixed(2)}&lon=${near.lon.toFixed(2)}&n=8`;
+  let r: Response;
+  try {
+    r = await fetch(url, { signal: AbortSignal.timeout(7000) });
+  } catch (e) {
+    offline = true;
+    throw e;
   }
-  return out;
+  if (!r.ok) throw new Error(`places ${r.status}`);
+  offline = false;
+  const j = (await r.json()) as { results?: Place[] };
+  return (j.results ?? []).map((p) => ({ name: p.name, detail: p.detail, lat: p.lat, lon: p.lon, kind: p.kind }));
+}
+
+// (the USPS codes: a region's state written short where room is tight — a phone's arrival card)
+const US_STATES: Record<string, string> = {
+  Alabama: 'AL', Alaska: 'AK', Arizona: 'AZ', Arkansas: 'AR', California: 'CA', Colorado: 'CO', Connecticut: 'CT', Delaware: 'DE', 'District of Columbia': 'DC', Florida: 'FL',
+  Georgia: 'GA', Hawaii: 'HI', Idaho: 'ID', Illinois: 'IL', Indiana: 'IN', Iowa: 'IA', Kansas: 'KS', Kentucky: 'KY', Louisiana: 'LA', Maine: 'ME', Maryland: 'MD',
+  Massachusetts: 'MA', Michigan: 'MI', Minnesota: 'MN', Mississippi: 'MS', Missouri: 'MO', Montana: 'MT', Nebraska: 'NE', Nevada: 'NV', 'New Hampshire': 'NH',
+  'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY', 'North Carolina': 'NC', 'North Dakota': 'ND', Ohio: 'OH', Oklahoma: 'OK', Oregon: 'OR', Pennsylvania: 'PA',
+  'Rhode Island': 'RI', 'South Carolina': 'SC', 'South Dakota': 'SD', Tennessee: 'TN', Texas: 'TX', Utah: 'UT', Vermont: 'VT', Virginia: 'VA', Washington: 'WA',
+  'West Virginia': 'WV', Wisconsin: 'WI', Wyoming: 'WY', 'Puerto Rico': 'PR',
+};
+/** A region written short: a US state at its end as its postal code ("<County>, New Jersey" →
+ *  "<County>, NJ"); anything else as it is. */
+export function shortRegion(region: string): string {
+  const m = /^(.*,\s*)?([^,]+?)\s*$/.exec(region);
+  const code = m ? US_STATES[m[2]] : undefined;
+  return code ? `${m![1] ?? ''}${code}` : region;
 }
 
 /** "40.36, -73.97" → a place, or null. */

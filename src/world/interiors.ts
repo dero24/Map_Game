@@ -24,8 +24,8 @@ import { pedGeo, creatureMaterial } from '../sim/life';
 import * as D from '../assets/decor';
 import { toW, unstack, plateAt, storeyAt, ringOf, atriumEdges, liftCars, type Plan, type Rect, type Lift } from './interior/plan';
 import { layoutSteps, registerLayout, type Layout, type Room } from './interior/layout';
-import { Mesher, Draw, Instancer, IP, WOOD, roomMapGen, drawStairs, drawPartitionsGen, pieceGeo, type RoomMap } from './interior/mesh';
-import { Furnisher, furnishRoom, furnishLifts, FABRIC, type Light, type NpcSpot } from './interior/furnish';
+import { Mesher, Draw, Instancer, IP, WOOD, roomMapGen, drawStairs, drawPartitionsGen, pieceGeo, placeM, type RoomMap } from './interior/mesh';
+import { Furnisher, furnishRoom, furnishLifts, skirtRoom, FABRIC, type Light, type NpcSpot } from './interior/furnish';
 
 export { planInterior, registerPlan, unstack, LocalPoly, type Plan, type Flight, type Lift } from './interior/plan';
 export { layoutInterior, registerLayout, type Layout, type Room } from './interior/layout';
@@ -36,11 +36,13 @@ type P2 = [number, number];
 const SCOPES = [-7, -8];
 /** The lift car's floor while you ride (player/lift.ts): its own collision scope. */
 const CAR_SCOPE = -9;
+/** A shut front door's leaf (`shutDoor`): its own scope. */
+const LEAF_SCOPE = -10;
 /** A lift car's inside (liftCar): 2.1 m across, 1.6 m deep, standing 0.12 m behind the shaft's face. */
 const CAR = { w: 2.1, d: 1.6, gap: 0.12 };
 const NPC_MAX = 12; // residents an interior shows at once (the shared ped geometry's aAnim covers this many)
 /** Draw calls an interior may take for its instanced pieces (the budget is 60 all told). */
-const MAX_INSTANCED = 44;
+const MAX_INSTANCED = 47;
 /** Vertices past which no more rooms are furnished (the budget is 120k: a room's worth of margin). */
 const FURNISH_MAX = 110000;
 /** A tall building's storey stops furnishing past this many of its own merged vertices (a third of
@@ -52,6 +54,8 @@ const ROOM_NAME: Partial<Record<Room['type'], string>> = {
   dining: 'dining room', bath: 'bathroom', bed: 'bedroom', study: 'study', utility: 'utility room', closet: 'closet',
   store: 'storeroom', open: 'open-plan office', meeting: 'meeting room', lift: 'elevator lobby', shop: 'shop floor',
   stock: 'stockroom', cafe: 'café', bar: 'bar', diner: 'dining room', galley: 'kitchen', church: 'nave', great: 'living room',
+  guest: 'guest room', classroom: 'classroom', assembly: 'school hall', staff: 'staff room', narthex: 'vestibule', prayer: 'prayer hall',
+  library: 'library', bank: 'banking hall', post: 'post office', gym: 'gym',
 };
 
 /** A build: an activation's, or a tall building's next window. What it made waits here until it
@@ -67,10 +71,23 @@ interface Job {
   inst: Instancer | null;
   lights: Light[];
   leaves: Furnisher['liftLeaves'];
+  swing: Swing[];
+  taken: (readonly Rect[])[];
   stats: InteriorStats | null;
   fab: number;
   dims: [number, number];
+  /** Where people who walk in from the street stand (see `visit`). */
+  visit: Visit | null;
 }
+/** The building standing open, for the people outside (sim/lifeSim.ts `setIndoor`): its front door,
+ *  and the ground storey's free standing places — world x, y (the floor), z, and the yaw a walker
+ *  faces there. Whoever walks in by that door goes to one and stays; nobody vanishes at the door. */
+export interface Visit { door: [number, number]; spots: Float32Array }
+/** A door that stands shut and swings open as you come to it (a WC's off the living room): its
+ *  leaf's InstancedMesh (by name) and instance, its storey, its hinge (local), its wall (axis, line,
+ *  the doorway's middle along it and width, which way its room is), the leaf's x shut (across the
+ *  doorway) and open (into its room), the room it serves, and how far open it is (0 … 1). */
+interface Swing { key: string; idx: number; level: number; hu: number; hv: number; ax: 0 | 1; c: number; t: number; w: number; side: -1 | 1; shut: P2; open: P2; y: number; room: Rect; amt?: number; mesh?: THREE.InstancedMesh | null }
 
 export class Interiors {
   readonly group = new THREE.Group();
@@ -91,6 +108,10 @@ export class Interiors {
   readonly roomInfoU = { value: new THREE.Vector4(0, 0, 10, 1) }; // u of cell 0, v of cell 0, cells per m, rows per storey
   readonly roomDimU = { value: new THREE.Vector4(1, 1, 0, 0) }; // columns, storeys, the first storey's index
   readonly fabU = { value: new THREE.Color() };
+  /** The facade's window cells as the sun comes through them (buildings.ts windowAt): spacing, sill,
+   *  head, a pane's share of its cell — the ground storey's, and the ones above it. */
+  readonly sunWinU = { value: new THREE.Vector4(2.7, 0.9, 2.25, 0.5) };
+  readonly sunWinUpU = { value: new THREE.Vector4(2.7, 0.9, 2.25, 0.5) };
   private mat: THREE.ShaderMaterial;
   private npcMat = creatureMaterial({ LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1 });
   // residents in chairs, on sofas, in booths and on bar stools sit (INDOOR: they don't leave at dusk)
@@ -102,6 +123,7 @@ export class Interiors {
   private openAmt = 0;
   private opened = false; // hysteresis state for the facade openings (see update)
   private layout: Layout | null = null;
+  private taken: (readonly Rect[])[] = [];
   private scope = 0; // the standing build's collision scope (0: none)
   private roomTex: RoomMap | null = null;
   private inst: Instancer | null = null;
@@ -117,6 +139,14 @@ export class Interiors {
   onStairs = false;
   /** A lift ride's doors are shut: build the next window flat out (player/lift.ts). */
   hurry = false;
+  /** The building standing open's door and free places, for the people who walk in (`Visit`); `visitV`
+   *  counts its changes. */
+  visit: Visit | null = null;
+  visitV = 0;
+  /** The front door shut in the walker's way while its building isn't ready (`shutDoor`). */
+  private leaf: string | null = null;
+  /** The walker's heading (smoothed from their steps): the door they walk toward opens first. */
+  private vel = { x: 0, z: 0, px: NaN, pz: NaN };
   /** A lift ride has the walker (stepping into the car, riding, stepping out: player/lift.ts) — they
    *  cross the shaft's wall on purpose, so nothing may "settle" them out of it meanwhile (main.ts). */
   riding = false;
@@ -129,6 +159,8 @@ export class Interiors {
   private car: THREE.Group | null = null;
   private carAt: { li: number; car: number; k: number } | null = null;
   private carLamp: Light | null = null;
+  /** The standing build's doors that stand shut and swing open as you come to them. */
+  private swing: Swing[] = [];
 
   constructor(private walk: WalkWorld) {
     this.group.name = 'interiors';
@@ -175,9 +207,18 @@ export class Interiors {
       const k = this.storeyFor(TP, feet);
       if (k !== this.want) this.recentre(k);
     }
-    this.pump(this.hurry ? 14 : 3.5);
+    if (Number.isFinite(this.vel.px) && dt > 0) {
+      const k = Math.min(1, dt * 3), sx = (x - this.vel.px) / dt, sz = (z - this.vel.pz) / dt;
+      if (Math.hypot(sx, sz) < 20) (this.vel.x += (sx - this.vel.x) * k), (this.vel.z += (sz - this.vel.z) * k); // (a teleport's jump isn't a step)
+    }
+    this.vel.px = x; this.vel.pz = z;
+    // (walking up to a door whose building isn't built yet: its build runs flat out, as a lift's does)
+    const AP = this.active !== null ? this.plans.get(this.active) : undefined;
+    const near = !!AP && !this.mesh && Math.hypot(AP.door.x - x, AP.door.z - z) < 6;
+    this.pump(this.hurry || near ? 14 : 3.5);
     const inside = this.walk.interiorAt(x, z, feet);
     this.indoors = inside >= 0 && inside === this.walkId(this.active);
+    this.shutDoor(x, z, onFoot);
     // Windows + door become real openings as you come close: a hysteresis switch (open < 8 m,
     // close > 10 m), only once the interior mesh exists, and a short time-based wash (~0.3 s,
     // world-anchored noise in the facade shader). (A tall building's next window building behind
@@ -195,6 +236,7 @@ export class Interiors {
       const lv = (feet - P.floor0) / P.floorH;
       this.onStairs = Math.abs(lv - Math.round(lv)) > 0.06;
     } else this.onStairs = false;
+    if (P && this.swing.length) this.swingDoors(P, x, z, feet, dt);
     if ((this.timer -= dt) > 0) return;
     this.timer = 0.2;
     this.pickLights(x, feet + 1.4, z);
@@ -203,27 +245,69 @@ export class Interiors {
     if (inside >= 0) {
       for (const [fi] of this.plans) if (this.walkId(fi) === inside) { target = fi; break; }
     }
+    // (at a shut door, that door's building: shutDoor holds the focus there)
+    if (target === null && this.leaf !== null) return;
     // An opened (or still-closing) house keeps the focus until its wash has run out —
     // switching mid-open used to snap its windows and door shut in one frame.
     if (target === null && this.active !== null && this.openAmt > 0.001) return;
     if (target === null) {
-      let best = 16;
+      // the nearest door — and the one you're walking toward before a nearer one you pass: on a
+      // street of shopfronts the nearest door changed every few steps, and the one you meant to go
+      // in by only started building at 8 m (Robby: "the windows and doors don't load at all", then
+      // the house see-through for a second as you walked in)
+      let best = 24;
+      const sp = Math.hypot(this.vel.x, this.vel.z);
       const gx = Math.floor(x / 25), gz = Math.floor(z / 25);
       for (let a = -1; a <= 1; a++)
         for (let b = -1; b <= 1; b++)
           for (const fi of this.doorGrid.get((gx + a) * 92821 + gz + b) ?? []) {
             const d = this.plans.get(fi)!.door;
-            const dist = Math.hypot(d.x - x, d.z - z) - (fi === this.active ? 3 : 0);
-            if (dist < best) (best = dist), (target = fi);
+            const dd = Math.hypot(d.x - x, d.z - z);
+            const toward = sp > 0.5 && dd > 0.1 ? ((d.x - x) * this.vel.x + (d.z - z) * this.vel.z) / (dd * sp) : 0;
+            // (past 16 m only one you're walking straight at)
+            const dist = dd - (fi === this.active ? 3 : 0) - 8 * Math.max(0, toward - 0.5);
+            if (dist < best && (dd < 16 || toward > 0.85)) (best = dist), (target = fi);
           }
     }
     if (target !== this.active && !(target !== null && this.failed.has(target))) this.activate(target);
+  }
+
+  /** A front door stays shut until its building stands ready inside: within 2.5 m of a door whose
+   *  interior isn't open, a leaf across its doorway (its own collision scope), and that building
+   *  becomes the one building, flat out. You stop at a closed door for a moment rather than walk into
+   *  an empty shell and see through the house until it lands. */
+  private shutDoor(x: number, z: number, onFoot: boolean) {
+    let key: string | null = null, bd = 2.5;
+    if (onFoot && !this.indoors) {
+      const gx = Math.floor(x / 25), gz = Math.floor(z / 25);
+      for (let a = -1; a <= 1; a++)
+        for (let b = -1; b <= 1; b++)
+          for (const fi of this.doorGrid.get((gx + a) * 92821 + gz + b) ?? []) {
+            const d = this.plans.get(fi)!.door;
+            const dd = Math.hypot(d.x - x, d.z - z);
+            if (dd < bd) (bd = dd), (key = fi);
+          }
+    }
+    const ready = key !== null && key === this.active && !!this.mesh && this.openAmt > 0.5;
+    const want = key !== null && !ready && !this.failed.has(key) ? key : null;
+    // (the door you stand at is the one building, whatever stands open beside it: a shop's open
+    // neighbour kept the focus — it stays open while you're within 10 m of it — and the door you
+    // were at stayed shut for good. Robby, Sea Bright: "buildings i cannot go inside anymore")
+    if (want !== null && want !== this.active) this.activate(want);
+    if (want === this.leaf) return;
+    if (this.leaf !== null) this.walk.removeScope(LEAF_SCOPE);
+    this.leaf = want;
+    if (want === null) return;
+    const d = this.plans.get(want)!.door, tx = -d.nz, tz = d.nx, h = d.w / 2 + 0.2;
+    this.walk.withScope(LEAF_SCOPE, () => this.walk.addWall([d.x - tx * h, d.z - tz * h], [d.x + tx * h, d.z + tz * h]));
   }
 
   get activeIndex() { return this.active; }
   get activePlan() { return this.active !== null ? this.plans.get(this.active) ?? null : null; }
   /** The laid-out rooms of the building standing open (null while none is). */
   get activeLayout() { return this.layout; }
+  /** The floor the open building's furniture stands on, storey by storey (furnish.ts claims). */
+  get activeTaken(): readonly (readonly Rect[])[] { return this.taken; }
   /** The storeys standing built (a tall building's window; the whole building otherwise). */
   get built() { return this.win; }
   fpOf(key: string | null) { return key !== null ? this.fps.get(key) : undefined; }
@@ -350,12 +434,43 @@ export class Interiors {
   }
   private walkIds = new Map<string, number>();
   private walkId(fi: string | null) { return fi !== null ? this.walkIds.get(fi) ?? -2 : -2; }
+  /** A shut door (a WC's off the living room) swings open into its room as you step up to it — in
+   *  front of the doorway, within a stride of it, or in the room it serves — on its storey and
+   *  indoors, and shuts again once you've stepped away (a quarter turn in ~0.25 s; walking past it
+   *  along the wall leaves it shut). The doorway is always open in the walk world: the leaf is out of
+   *  your way before you reach it. */
+  private swingDoors(P: Plan, x: number, z: number, feet: number, dt: number) {
+    const u = (x - P.cx) * P.ux + (z - P.cz) * P.uz, v = (x - P.cx) * P.vx + (z - P.cz) * P.vz, k = storeyAt(P, feet);
+    const touched = new Set<THREE.InstancedMesh>();
+    for (const q of this.swing) {
+      if (!q.mesh) continue;
+      const was = q.amt ?? 0, held = was > 0.5;
+      // (along the wall from the doorway's middle; out from the wall on the side you come from)
+      const a = Math.abs((q.ax === 0 ? u : v) - q.t), out = -q.side * ((q.ax === 0 ? v : u) - q.c);
+      const m = held ? 0.3 : 0, r = q.room;
+      const inRoom = u > r.u0 - m && u < r.u1 + m && v > r.v0 - m && v < r.v1 + m;
+      const near = this.indoors && q.level === k && (inRoom || (a < q.w / 2 + (held ? 0.5 : 0.2) && out > -0.2 && out < (held ? 1.6 : 1.1)));
+      const amt = Math.max(0, Math.min(1, was + Math.max(-dt * 4, Math.min(dt * 4, (near ? 1 : 0) - was))));
+      if (amt === was) continue;
+      q.amt = amt;
+      // (a quarter turn about the hinge: its x from across the doorway to into the room, the leaf a
+      // hair into the room as it opens, as the open leaves stand)
+      const th = (amt * Math.PI) / 2, c = Math.cos(th), s = Math.sin(th);
+      const ax: P2 = [q.shut[0] * c + q.open[0] * s, q.shut[1] * c + q.open[1] * s];
+      q.mesh.instanceMatrix.array.set(placeM(P, q.hu + q.open[0] * 0.02 * s, q.hv + q.open[1] * 0.02 * s, q.y, ax), q.idx * 16);
+      touched.add(q.mesh);
+    }
+    for (const m of touched) m.instanceMatrix.needsUpdate = true;
+  }
 
   private pickLights(x: number, y: number, z: number) {
-    const ls = (this.carLamp ? [this.carLamp, ...this.lights] : this.lights.slice()).sort((a, b) => (a.x - x) ** 2 + ((a.y - y) * 2.5) ** 2 + (a.z - z) ** 2 - ((b.x - x) ** 2 + ((b.y - y) * 2.5) ** 2 + (b.z - z) ** 2));
+    // (a ceiling light in a room with windows is off by day: it comes on as the light goes)
+    const night = Math.min(1, Math.max(0, (U.uNight.value - 0.1) / 0.5));
+    const all = this.carLamp ? [this.carLamp, ...this.lights] : this.lights;
+    const ls = (night > 0.02 ? all.slice() : all.filter((l) => !l.n)).sort((a, b) => (a.x - x) ** 2 + ((a.y - y) * 2.5) ** 2 + (a.z - z) ** 2 - ((b.x - x) ** 2 + ((b.y - y) * 2.5) ** 2 + (b.z - z) ** 2));
     for (let i = 0; i < 8; i++) {
       const l = ls[i];
-      this.lightsU.value[i].set(l?.x ?? 0, l?.y ?? -999, l?.z ?? 0, l?.w ?? 0);
+      this.lightsU.value[i].set(l?.x ?? 0, l?.y ?? -999, l?.z ?? 0, (l?.w ?? 0) * (l?.n ? night : 1));
     }
   }
 
@@ -412,6 +527,8 @@ export class Interiors {
   private standUp(job: Job, mesh: THREE.Object3D) {
     this.dropStanding();
     this.mesh = mesh;
+    this.visit = job.visit;
+    this.visitV++;
     this.group.add(mesh);
     this.scope = job.scope;
     this.layout = job.layout;
@@ -422,6 +539,7 @@ export class Interiors {
     if (job.roomTex) { this.roomInfoU.value.copy(job.roomTex.info); this.roomDimU.value.copy(job.roomTex.dim); }
     this.inst = job.inst;
     this.lights = job.lights;
+    this.taken = job.taken;
     // (the lift doors a ride slides: each leaf's instance and its resting place)
     this.leafAt.clear();
     this.leafMesh = (mesh.getObjectByName('interior:liftLeaf') as THREE.InstancedMesh | undefined) ?? null;
@@ -434,6 +552,8 @@ export class Interiors {
         this.leafAt.set(key, l);
       }
     }
+    // (the doors that swing as you come to them: each leaf's instance, shut)
+    this.swing = job.swing.map((q) => ({ ...q, amt: 0, mesh: (mesh.getObjectByName(q.key) as THREE.InstancedMesh | undefined) ?? null }));
     this.fabU.value.set(job.fab);
     this.dimsU.value.set(job.dims[0], job.dims[1]);
     if (job.stats) this.lastStats = job.stats;
@@ -441,6 +561,7 @@ export class Interiors {
   }
   /** The standing build goes (its mesh, walls, room map and pieces). */
   private dropStanding() {
+    if (this.visit) { this.visit = null; this.visitV++; }
     if (this.mesh) {
       this.group.remove(this.mesh);
       this.mesh.traverse((o) => {
@@ -458,9 +579,11 @@ export class Interiors {
     this.inst?.release();
     this.inst = null;
     this.layout = null;
+    this.taken = [];
     this.win = null;
     this.leafMesh = null;
     this.leafAt.clear();
+    this.swing = [];
   }
   /** An unfinished build goes: whatever it had made (walls in its scope, a room map, pieces). */
   private dropJob(job: Job) {
@@ -488,7 +611,7 @@ export class Interiors {
     this.pending = this.job(this.active!, P, fp, k);
   }
   private job(fi: string, P: Plan, fp: Footprint, k: number): Job {
-    const job: Job = { fi, k: P.tall ? k : -1, win: this.windowOf(P, P.tall ? k : -1), scope: SCOPES[0] === this.scope ? SCOPES[1] : SCOPES[0], gen: null!, layout: null, roomTex: null, inst: null, lights: [], leaves: [], stats: null, fab: 0xffffff, dims: [P.L / 2, P.W / 2] };
+    const job: Job = { fi, k: P.tall ? k : -1, win: this.windowOf(P, P.tall ? k : -1), scope: SCOPES[0] === this.scope ? SCOPES[1] : SCOPES[0], gen: null!, layout: null, roomTex: null, inst: null, lights: [], leaves: [], swing: [], taken: [], stats: null, fab: 0xffffff, dims: [P.L / 2, P.W / 2], visit: null };
     job.gen = this.steps(P, fp, job);
     return job;
   }
@@ -526,6 +649,13 @@ export class Interiors {
     this.dimsU.value.set(P.L / 2, P.W / 2);
     this.levelsU.value.set(P.floor0, P.levels > 1 ? P.floorH : P.ceilTop - P.floor0, P.door.wx, P.door.wz);
     this.doorU.value.set(P.door.y, P.door.w / 2, P.door.h, P.up === 'office' ? 0 : 1); // (an office's windows: no curtains)
+    // (the sun through the windows the facade has: plan.ts windowsOf — a storefront's glass on the
+    // ground, a curtain wall's floor to ceiling, a church's tall lancets, everyone else's sashes)
+    const sash: [number, number, number, number] = fp.kind === 'large' ? [2.2, 0.9, 2.25, 0.5] : fp.kind === 'church' ? [3.4, 0.9, 4.3, 0.4] : [2.7, 0.9, 2.25, 0.5];
+    const glass: [number, number, number, number] = [1.5, 0.93, P.floorH - 0.05, 0.94];
+    const store: [number, number, number, number] = [3.4, 0.45, 2.75, 0.78];
+    this.sunWinUpU.value.fromArray(P.glass ? glass : sash);
+    this.sunWinU.value.fromArray(fp.kind === 'commercial' ? store : P.glass ? glass : sash);
     // a tall building builds round the walker's storey (at the door: the ground)
     const k = P.tall ? this.storeyFor(P, this.at?.feet ?? P.floor0) : -1;
     this.want = k;
@@ -616,8 +746,10 @@ export class Interiors {
       }
     }
     for (const [ring, y0, y1, eave, glass] of bands) {
-      // (a curtain wall's siding code rides in the kind's fraction, as on the facade: glazed floor to ceiling)
-      m.setInfo(fp.id, kind + (glass ? 0.46 : 0), fp.floor0 - fp.base);
+      // (a curtain wall's siding code rides in the kind's fraction, as on the facade: glazed floor to ceiling;
+      // and +0.04, a storefront floor under apartments, as on the facade — its shop glass cut whole: the
+      // wall behind a Brooklyn shop window cut a sash window's hole, "just a tiny square")
+      m.setInfo(fp.id, kind + (glass ? 0.46 : fp.gf ? 0.04 : 0), fp.floor0 - fp.base);
       for (let i = 0; i < ring.length; i++) {
         const p = ring[i], q = ring[(i + 1) % ring.length];
         const dx = q[0] - p[0], dz = q[1] - p[1], len = Math.hypot(dx, dz);
@@ -685,10 +817,20 @@ export class Interiors {
     yield;
     for (const lf of leaves) {
       if (++nd % 250 === 0) yield;
+      const w = Math.round(lf.w * 20) / 20;
+      if (lf.shut) {
+        // a WC's or a bathroom's door off a room of the day: shut in its doorway, from the hinge across
+        // to the far jamb (it swings into the room it serves as you come to it: swingDoors)
+        const hu = lf.ax === 0 ? lf.hinge : lf.c, hv = lf.ax === 0 ? lf.c : lf.hinge;
+        const across = Math.sign(lf.t - lf.hinge) || 1;
+        const shut: P2 = lf.ax === 0 ? [across, 0] : [0, across], open: P2 = lf.ax === 0 ? [0, lf.side] : [lf.side, 0];
+        const idx = inst.put(`leafShut:${w}`, () => D.doorLeaf(w - 0.04), hu, hv, fl(lf.level), shut, leafHex);
+        job.swing.push({ key: `interior:leafShut:${w}`, idx, level: lf.level, hu, hv, ax: lf.ax, c: lf.c, t: lf.t, w: lf.w, side: lf.side, shut, open, y: fl(lf.level), room: lf.room ?? { u0: 0, u1: 0, v0: 0, v1: 0 } });
+        continue;
+      }
       // the leaf's x runs from the hinge into the room
       const [uc, vc] = lf.ax === 0 ? [lf.hinge, lf.c + lf.side * 0.02] : [lf.c + lf.side * 0.02, lf.hinge];
       const ax: P2 = lf.ax === 0 ? [0, lf.side] : [lf.side, 0];
-      const w = Math.round(lf.w * 20) / 20;
       inst.put(`leaf:${w}`, () => D.doorLeaf(w - 0.04), uc, vc, fl(lf.level), ax, leafHex);
     }
     yield;
@@ -754,9 +896,18 @@ export class Interiors {
     // Furniture, room by room (a vast building stops short of the vertex budget: the rooms past it
     // stay bare — a tall building's storeys each at their own share of it)
     const F = new Furnisher(P, fp, L, m, inst, tallB ? storeyRng(-1, 0xf0d5) : rng, leaves, ceil);
+    F.fab = job.fab; // (the curtains' fabric: a kitchen's cabinets keep a colour of their own)
     for (let k = k0; k <= k1; k++) furnishLifts(F, k);
+    // skirting round every room first (one instanced piece: it costs no budget, so no room goes without)
+    let ns = 0;
+    for (const R of L.rooms) {
+      skirtRoom(F, R);
+      if (++ns % 24 === 0) yield;
+    }
+    yield;
     const nth = new Map<number, number>();
     let lv = -1, lvBase = 0;
+    m.furn = true; // (a tagged build: each thing drawn from here is a piece of its own — mesh.ts `tagging`)
     for (const R of L.rooms) {
       if (m.n + inst.uniqueVerts() > FURNISH_MAX) break;
       if (tallB) {
@@ -769,6 +920,7 @@ export class Interiors {
       yield* furnishRoom(F, R);
       yield; // one room's furniture done
     }
+    m.furn = false;
 
     // Assemble: the merged mesh, one InstancedMesh per repeated piece; then the residents.
     const group = new THREE.Group();
@@ -783,7 +935,7 @@ export class Interiors {
     const ang = Math.atan2(P.uz, P.ux);
     /** Up to n residents on these spots, drawn with r: staff first (a shop is never unattended),
      *  then customers / residents at random. */
-    const people = (spots: NpcSpot[], r: Rng, n: number) => {
+    const people = (spots: NpcSpot[], r: Rng, n: number): Set<number> => {
       const used = new Set<number>();
       const staff = spots.map((sp, k) => (sp[5] ? k : -1)).filter((k) => k >= 0);
       for (let i = 0; i < n; i++) {
@@ -792,6 +944,10 @@ export class Interiors {
         if (used.has(k)) continue;
         used.add(k);
         const [u, v, y, yaw, seat] = spots[k];
+        // nobody stands in the first steps in from the front door, nor sits within reach of where
+        // you stand once you're in: a resident there was cut in half at the lens of anyone walking in
+        const du = u - P.ud, dv = v - P.vd;
+        if (Math.abs(y - P.floor0) < 0.5 && ((!seat && du > -0.5 && du < 3 && Math.abs(dv) < 1) || Math.hypot(du - 2.2, dv) < 2.2)) continue;
         const w = toW(P, u, v);
         const col = new THREE.Color(SH[Math.floor(r.float() * SH.length)]);
         const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -ang + yaw + (seat ? r.range(-0.15, 0.15) : r.range(-0.4, 0.4)));
@@ -815,7 +971,9 @@ export class Interiors {
           }
         }
       }
+      return used;
     };
+    let took: Set<number> | null = null;
     if (tallB) {
       // (a storey's own few, from its own seed: NPC_MAX shared by the window's storeys)
       const per = Math.floor(NPC_MAX / 3);
@@ -824,7 +982,42 @@ export class Interiors {
         const r = storeyRng(k, 0x9e0);
         people(spots, r, Math.min(per, spots.length, busy ? 1 + Math.floor(r.float() * 3) : 1 + Math.floor(r.float() * 2)));
       }
-    } else people(F.npcs, rng, Math.min(NPC_MAX, F.npcs.length, busy ? 2 + Math.floor(rng.float() * 6) : 1 + Math.floor(rng.float() * 3)));
+    } else took = people(F.npcs, rng, Math.min(NPC_MAX, F.npcs.length, busy ? 2 + Math.floor(rng.float() * 6) : 1 + Math.floor(rng.float() * 3)));
+    // (a tower's window with its ground storey: its open floor takes visitors too — the grid's places,
+    // clear of the residents standing there; Midtown's shops are all in towers)
+    if (tallB && k0 === 0) took = new Set(F.npcs.map((_, k) => k));
+    // (the ground storey's standing places the residents left free — none in the first steps in from
+    // the door — for whoever walks in from the street; a tall building's window keeps its own people)
+    if (took && L) {
+      // (only the space the front door opens on — the shop floor, a cottage's living room: they walk
+      // straight to their place, never through a partition into the back room or someone's flat)
+      const door = L.rooms.find((r) => r.level === 0 && P.ud + 0.8 >= r.r.u0 && P.ud + 0.8 <= r.r.u1 && P.vd >= r.r.v0 && P.vd <= r.r.v1);
+      const inFront = (u: number, v: number) => !!door && L.rooms.some((r) => r.level === 0 && r.space === door.space && u >= r.r.u0 + 0.3 && u <= r.r.u1 - 0.3 && v >= r.r.v0 + 0.3 && v <= r.r.v1 - 0.3);
+      const vs: number[] = [];
+      const taken: P2[] = stand.map(([m4]) => [m4.elements[12], m4.elements[14]]);
+      const put = (u: number, v: number, y: number, yaw: number) => {
+        const du = u - P.ud, dv = v - P.vd;
+        if (du > -0.5 && du < 3 && Math.abs(dv) < 1) return; // (not in the first steps in from the door)
+        const w = toW(P, u, v);
+        if (taken.some((t) => Math.hypot(t[0] - w[0], t[1] - w[1]) < 0.8)) return;
+        taken.push(w);
+        const fu = -Math.sin(yaw), fv = -Math.cos(yaw), fx = fu * P.ux + fv * P.vx, fz = fu * P.uz + fv * P.vz;
+        vs.push(w[0], y, w[1], Math.atan2(-fx, -fz));
+      };
+      F.npcs.forEach(([u, v, y, yaw, seat, staff], k) => {
+        if (!took!.has(k) && !seat && !staff && Math.abs(y - P.floor0) <= 0.5 && inFront(u, v)) put(u, v, y, yaw);
+      });
+      // …and the open floor: a 1.2 m grid over the space, wherever no furniture stands, each place
+      // facing the nearer long side of its room (where the shelves and the counter are)
+      for (const R of door ? L.rooms.filter((r) => r.level === 0 && r.space === door.space) : [])
+        for (let u = R.r.u0 + 0.7; u <= R.r.u1 - 0.7 && vs.length < 40; u += 1.2)
+          for (let v = R.r.v0 + 0.7; v <= R.r.v1 - 0.7 && vs.length < 40; v += 1.2) {
+            if (!F.freeAt(0, { u0: u - 0.3, u1: u + 0.3, v0: v - 0.3, v1: v + 0.3 })) continue;
+            const toV1 = R.r.v1 - v < v - R.r.v0;
+            put(u, v, P.floor0, Math.atan2(0, toV1 ? -1 : 1) + (rng.float() - 0.5) * 0.8);
+          }
+      job.visit = vs.length ? { door: [P.door.x, P.door.z], spots: new Float32Array(vs) } : null;
+    }
     let npcDraws = 0;
     for (const [list, mt] of [[stand, this.npcMat], [sit, this.npcSeatMat]] as const) {
       if (!list.length) continue;
@@ -836,6 +1029,7 @@ export class Interiors {
     }
     job.lights = F.lights;
     job.leaves = F.liftLeaves;
+    job.taken = Array.from({ length: P.levels }, (_, k) => F.taken(k));
     job.stats = { verts: m.n + verts, draws: main.length + meshes.length + npcDraws, instances: meshes.reduce((a, im) => a + im.count, 0), texels: rm.texels, rooms: L.rooms.length, storeys: k1 - k0 + 1 };
     return group;
   }
@@ -865,6 +1059,7 @@ function interiorMaterial(I: Interiors) {
     uniforms: {
       uLights: I.lightsU, uFrame: I.frameU, uDims: I.dimsU, uLevels: I.levelsU, uDoor: I.doorU,
       uRoomMap: I.roomMapU, uRoomPal: I.roomPalU, uRoomInfo: I.roomInfoU, uRoomDim: I.roomDimU, uFab: I.fabU, uWindowColor: { value: lin(0xffc27a) },
+      uSunWin: I.sunWinU, uSunWinUp: I.sunWinUpU,
     },
     vertex: /* glsl */ `
       attribute vec3 color;
@@ -891,7 +1086,7 @@ function interiorMaterial(I: Interiors) {
       }`,
     fragment: /* glsl */ `
       uniform vec4 uLights[8];
-      uniform vec4 uFrame, uLevels, uDoor, uRoomInfo, uRoomDim;
+      uniform vec4 uFrame, uLevels, uDoor, uRoomInfo, uRoomDim, uSunWin, uSunWinUp;
       uniform vec2 uDims;
       uniform sampler2D uRoomMap, uRoomPal;
       uniform vec3 uWindowColor, uFab;
@@ -972,7 +1167,7 @@ function interiorMaterial(I: Interiors) {
           else if (style > 2.5 && style < 3.5) { vec2 g = fract(vec2(dot(vWorldPos.xz, ua) + dot(vWorldPos.xz, va), vWorldPos.y) / 0.18) - 0.5; alb = mix(alb, alb * 0.72, step(length(g), 0.12)); }
           else if (style > 3.5 && style < 4.5 && yl < 1.3) { vec2 g = fract(vec2(dot(vWorldPos.xz, ua) + dot(vWorldPos.xz, va), vWorldPos.y) / 0.15); alb = mix(vec3(0.95, 0.96, 0.95), vec3(0.78, 0.8, 0.8), step(0.93, max(g.x, g.y))); gloss = 0.25; }
           else if (style > 4.5 && yl < 1.1) alb = mix(vec3(0.55, 0.4, 0.28), vec3(0.62, 0.46, 0.32), step(0.5, fract(dot(vWorldPos.xz, ua + va) / 0.6)));
-          if (yl < 0.12) alb = vec3(0.45, 0.36, 0.28); // baseboard
+          if (yl < 0.12) alb = vec3(0.93, 0.92, 0.88); // (under the skirting boards: trim white)
           alb *= 0.96 + 0.06 * vnoise(vWorldPos.xz * 3.0 + vWorldPos.y * 2.0);
         } else if (part < 1.5) {
           alb = RB.rgb;
@@ -1020,11 +1215,15 @@ function interiorMaterial(I: Interiors) {
           float g = vnoise(vec2(dot(vWorldPos.xz, ua) * 1.5 + vWorldPos.y * 1.5, dot(vWorldPos.xz, va) * 20.0 + vWorldPos.y * 20.0));
           alb *= 0.88 + 0.22 * g;
           gloss = 0.1;
-        } else if (part > 11.5) {
+        } else if (part > 11.5 && part < 12.5) {
           // railing panel: top rail, bottom rail, balusters
           float u = vWall.x, v = vWall.y, h = vWall.w;
           bool solid = v > h - 0.07 || v < 0.06 || fract(u / 0.12) < 0.3;
           if (!solid) discard;
+        } else if (part > 12.5) {
+          // a ceiling light's glass in a room with windows: off by day, lit as the light goes
+          emis = smoothstep(0.1, 0.6, uNight);
+          gloss = 0.3;
         }
         alb = pigment(alb, vWorldPos);
         // daylight spilling in from the windows + warm lamps (lamps light only their own storey)
@@ -1049,8 +1248,10 @@ function interiorMaterial(I: Interiors) {
         }
         vec3 col = alb * (amb + lamp * (0.55 + 0.6 * uNight));
         // Sun through the windows: follow the ray toward the sun to the outer wall it leaves by,
-        // and light this point if it passes through a pane (house windows: 0.9–2.25 m above the
-        // floor, one per ~2.7 m of wall). Warm pools on the floorboards, slanting up the walls.
+        // and light this point if it passes through one of that wall's panes — the facade's own
+        // window cells (n = floor((len − 0.6) ÷ spacing) to a wall, a pane centred in each, the sill
+        // and head of the building's kind) — and the wall it leaves by is this room's: no pool in a
+        // hall with no window (a partition stands between). Warm pools on the floor, up the walls.
         if (uKeyDir.y > 0.04 && uNight < 0.5) {
           vec2 sd = vec2(dot(uKeyDir.xz, ua), dot(uKeyDir.xz, va));
           float hl = length(sd);
@@ -1060,11 +1261,21 @@ function interiorMaterial(I: Interiors) {
             float tv = hd.y > 0.0 ? (uDims.y - pv) / hd.y : hd.y < 0.0 ? (-uDims.y - pv) / hd.y : 1e9;
             float t = min(tu, tv);
             float hitY = yl + t * uKeyDir.y / hl;
-            float along = tu < tv ? pv + t * hd.y : pu + t * hd.x;
-            float cellW = 2.7, cu = (fract(along / cellW) - 0.5) * cellW;
+            // (the cells are symmetric about a wall's middle: measured from either end, they're the same)
+            float halfW = tu < tv ? uDims.y : uDims.x;
+            float along = (tu < tv ? pv + t * hd.y : pu + t * hd.x) + halfW;
+            vec4 SW = lvl + uRoomDim.z < 0.5 ? uSunWin : uSunWinUp;
+            float nW = max(1.0, floor((2.0 * halfW - 0.6) / SW.x)), cellW = 2.0 * halfW / nW;
+            // (the glass: the pane less its 8 cm frame, as the wall cuts it)
+            float hw = 0.5 * (SW.w > 0.6 ? cellW * SW.w : min(SW.w < 0.45 ? 1.1 : 1.0, cellW * SW.w)) - 0.08;
+            float cu = (fract(along / cellW) - 0.5) * cellW;
             // a crisp window shape with its muntin cross (sash bars) printed in the light
-            float pane = (1.0 - smoothstep(0.455, 0.475, abs(cu))) * smoothstep(0.9, 0.92, hitY) * (1.0 - smoothstep(2.23, 2.25, hitY));
-            pane *= smoothstep(0.018, 0.03, abs(cu)) * smoothstep(0.018, 0.03, abs(hitY - 1.575));
+            float pane = (1.0 - smoothstep(hw - 0.02, hw, abs(cu))) * smoothstep(SW.y + 0.07, SW.y + 0.09, hitY) * (1.0 - smoothstep(SW.z - 0.09, SW.z - 0.07, hitY));
+            pane *= smoothstep(0.018, 0.03, abs(cu)) * smoothstep(0.018, 0.03, abs(hitY - 0.5 * (SW.y + SW.z)));
+            // the room it leaves by: the room map a hand's width inside that wall
+            vec2 ex = vec2(pu, pv) + hd * max(0.0, t - 0.25);
+            ivec2 te = ivec2(int(clamp(floor((ex.x - uRoomInfo.x) * uRoomInfo.z), 0.0, uRoomDim.x - 1.0)), int(clamp(floor((ex.y - uRoomInfo.y) * uRoomInfo.z), 0.0, uRoomInfo.w - 1.0) + lvl * uRoomInfo.w));
+            pane *= step(abs(float(int(texelFetch(uRoomMap, te, 0).r * 255.0 + 0.5) - ri)), 0.5);
             float sun = pane * step(t, 7.0) * max(dot(N, uKeyDir), 0.0) * (1.0 - smoothstep(0.2, 0.5, uNight));
             col += alb * uKeyColor * sun * 1.5;
           }

@@ -14,7 +14,7 @@ import type { Point, Road } from '../world/data';
 
 /** Road class → rank (drivable ≥ 2). The life sim's speeds and route choice read the same table. */
 export const RANK: Record<string, number> = {
-  primary: 5, trunk: 5, primary_link: 4, secondary: 4, secondary_link: 3, tertiary: 3, tertiary_link: 3,
+  primary: 5, trunk: 5, primary_link: 4, trunk_link: 4, secondary: 4, secondary_link: 3, tertiary: 3, tertiary_link: 3,
   residential: 2, unclassified: 2, living_street: 2, pedestrian: 1, footway: 0, path: 0,
 };
 

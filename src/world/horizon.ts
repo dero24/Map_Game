@@ -1,16 +1,17 @@
 // The horizon ring: real terrain from just inside the coarse tile ring (~6 km) out to 125 km, so
 // the mountains a place is known by stand on its skyline — the Santa Catalinas over Tucson,
 // Rainier over Seattle, the Watchungs behind a Jersey town. Two low-zoom Terrarium reads (z10
-// near, z9 far) become a polar mesh drawn right after the sky with no depth, back to front:
-// whatever is nearer (the tiles) paints over it, and its own nearer rings paint over its
-// farther ones. Earth curvature drops the far rim; an aerial-perspective wash takes it toward
-// the sky. Rebuilt when you walk more than 5 km from its centre. Deterministic: a pure function
-// of the DEM and the centre.
+// near, z9 far) become a polar mesh drawn right after the sky, back to front: whatever is nearer
+// (the tiles) paints over it, and its own nearer rings paint over its farther ones. It writes no
+// depth, but tests the far layer's own (shared.ts farDepth): a ridge in front of the far
+// skyline's towers hides them, the ground behind them doesn't. Earth curvature drops the far
+// rim; an aerial-perspective wash takes it toward the sky. Rebuilt when you walk more than 5 km
+// from its centre. Deterministic: a pure function of the DEM and the centre.
 import * as THREE from 'three';
 import { demSampler } from './dem';
 import { makeProjector, type LatLon } from './realTile';
 import { landcoverAround } from './peaks';
-import { paintMaterial } from '../render/shared';
+import { GLSL_FAR_DEPTH, paintMaterial } from '../render/shared';
 import type { RegionStyle } from './styles';
 
 // (two reads: z10, ~90 m a pixel, out to 60 km; z9 beyond, to 125 km — Rainier stands 95 km from
@@ -34,6 +35,7 @@ export function horizonMaterial(haze = 1) {
   const m = paintMaterial({
     uniforms: { uHaze: { value: haze } },
     vertex: /* glsl */ `
+      ${GLSL_FAR_DEPTH}
       attribute vec3 color;
       varying vec3 vCol;
       void main() {
@@ -42,7 +44,8 @@ export function horizonMaterial(haze = 1) {
         vNormalW = normalize(mat3(modelMatrix) * normal);
         vCol = color;
         gl_Position = projectionMatrix * viewMatrix * wp;
-        gl_Position.z = gl_Position.w * 0.99999; // past the camera's far plane: pin to it, never clip
+        // past the camera's far plane: never clipped, and at its true distance in the far layer
+        gl_Position.z = farDepth(distance(wp.xyz, cameraPosition)) * gl_Position.w;
       }`,
     fragment: /* glsl */ `
       varying vec3 vCol;
@@ -69,7 +72,8 @@ export function horizonMaterial(haze = 1) {
       }`,
     depthWrite: false,
   });
-  m.depthTest = false;
+  // (depth-tested: the only depth written before it is the far skyline's — see farSkyline.ts)
+  m.depthTest = true;
   return m;
 }
 
@@ -96,22 +100,40 @@ export class Horizon {
     if (this.builtSnow !== null && Math.abs(m - this.builtSnow) > 250 && !this.busy) this.cx = Infinity;
   }
 
-  /** Call per frame with the walker's region position; rebuilds off the frame when due. */
+  /** Why the last build came to nothing (null: it didn't) — for ?diag and the tools. */
+  lastFail: string | null = null;
+  private retryAt = 0;
+  private backoff = 30000;
+
+  /** Call per frame with the walker's region position; rebuilds off the frame when due — and a
+   *  build that came to nothing (a DEM read or the land cover down as the town loads) is tried again
+   *  on a backoff, from 30 s to 10 min: it used to wait for a 5 km walk, and a desktop's first one,
+   *  racing the town's own loads, left most arrivals with no mountains on the horizon at all. */
   update(x: number, z: number) {
-    if (!this.enabled || this.busy || Math.hypot(x - this.cx, z - this.cz) < 5000) return;
+    const moved = Math.hypot(x - this.cx, z - this.cz) >= 5000;
+    const retry = this.lastFail !== null && performance.now() >= this.retryAt;
+    if (!this.enabled || this.busy || (!moved && !retry)) return;
     this.busy = true;
     const cx = Math.round(x / 1000) * 1000, cz = Math.round(z / 1000) * 1000;
     const gen = ++this.gen;
+    const failed = (why: string) => {
+      this.cx = cx; this.cz = cz;
+      this.lastFail = why;
+      this.retryAt = performance.now() + this.backoff;
+      this.backoff = Math.min(600000, this.backoff * 2);
+    };
     void this.build(cx, cz)
       .then((mesh) => {
         if (gen !== this.gen) return;
-        if (!mesh) { this.cx = cx; this.cz = cz; return; } // no DEM here (offline / service down): try again after a walk
+        if (!mesh) return failed('no DEM'); // (offline, the service down, a tile that didn't come)
         for (const c of [...this.group.children]) { this.group.remove(c); (c as THREE.Mesh).geometry.dispose(); }
         this.group.add(mesh);
         this.cx = cx;
         this.cz = cz;
+        this.lastFail = null;
+        this.backoff = 30000;
       })
-      .catch(() => { this.cx = cx; this.cz = cz; })
+      .catch((e) => failed(String((e as Error)?.message ?? e).slice(0, 160)))
       .finally(() => { this.busy = false; });
   }
 
@@ -203,7 +225,7 @@ export class Horizon {
     g.computeVertexNormals();
     const mesh = new THREE.Mesh(g, this.mat);
     mesh.frustumCulled = false;
-    mesh.renderOrder = -9; // right after the sky dome (-10), before anything with depth
+    mesh.renderOrder = -9; // after the sky (-10) and the far skyline's towers (-9.5); before anything near
     mesh.name = 'horizon:ring';
     return mesh;
   }

@@ -9,7 +9,9 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
-export type DecorMat = 'fabric' | 'wood' | 'metal' | 'porcelain' | 'glass' | 'solid' | 'glow';
+/** `glow`: a lamp's shade or bulb, always lit; `lamp`: a ceiling light's glass, lit after dark only (a
+ *  room with windows has its ceiling light off by day). */
+export type DecorMat = 'fabric' | 'wood' | 'metal' | 'porcelain' | 'glass' | 'solid' | 'glow' | 'lamp';
 export interface DecorPart { g: THREE.BufferGeometry; mat: DecorMat; hex: number }
 type Parts = DecorPart[];
 
@@ -216,6 +218,30 @@ export function booth(len: number, fab: number, top: number): Parts {
   return out;
 }
 
+/** Lunch on a table (review round 12, frame 18: "a cup, a plate or a glass at every occupied
+ *  table"), standing on the top at y = 0 — one place: `plate` (a dinner plate with a sandwich and
+ *  greens on it), `cup` (a coffee on its saucer), `glass` (water). Off-whites and colours, never pure
+ *  white, so no instance tint touches them. */
+export type Tableware = 'plate' | 'cup' | 'glass';
+export const TABLEWARE: readonly Tableware[] = ['plate', 'cup', 'glass'];
+export function tableware(kind: Tableware): Parts {
+  if (kind === 'plate') return [
+    P(cyl(0.085, 0.12, 0.016, 0, 0, 0, 14), 'porcelain', 0xf4f1ea),
+    P(rbox(0.1, 0.035, 0.07, 0.012, -0.015, 0.016, 0.0).rotateY(0.5), 'solid', 0xd9a35e), // the sandwich
+    P(ni(new THREE.SphereGeometry(0.035, 6, 3, 0, Math.PI * 2, 0, Math.PI / 2)).scale(1, 0.6, 1).translate(0.05, 0.016, 0.03), 'solid', 0x6e8c4a), // greens
+  ];
+  if (kind === 'cup') return [
+    P(cyl(0.05, 0.068, 0.012, 0, 0, 0, 12), 'porcelain', 0xf1ede4),
+    P(cyl(0.032, 0.042, 0.065, 0, 0.012, 0, 10), 'porcelain', 0xf1ede4),
+    P(cyl(0.038, 0.038, 0.004, 0, 0.07, 0, 10), 'solid', 0x5a3a28), // the coffee
+    P(rbox(0.012, 0.035, 0.03, 0.004, 0.048, 0.03, 0), 'porcelain', 0xf1ede4), // the handle
+  ];
+  return [
+    P(cyl(0.03, 0.036, 0.12, 0, 0, 0, 10), 'glass', 0xcfdfe4),
+    P(cyl(0.031, 0.033, 0.075, 0, 0.004, 0, 10), 'glass', 0xa9c4cc), // the water in it
+  ];
+}
+
 /** A shop shelving unit (the back wall of a shop), stocked by seed. */
 export function shelves(w: number, d: number, h: number, wood: number, stock: number[], seed: number): Parts {
   const out: Parts = [P(rbox(w, h, 0.03, 0.01, 0, 0, d / 2 - 0.015), 'wood', wood)];
@@ -269,26 +295,154 @@ export function cafeSet(topHex: number, chairHex: number, parasol: number | null
 const T = 0xffffff;
 const box = (w: number, h: number, d: number, x: number, y: number, z: number) => ni(new THREE.BoxGeometry(w, h, d)).translate(x, y + h / 2, z);
 
-/** A fitted kitchen along a wall, `len` long: base units with a worktop, sink, hob and oven, wall
- *  units and a hood above, a tall fridge at the end. Cabinet fronts take the tint. */
-export function kitchenRun(len: number, top = 0x4a4540, splash = 0xe9eef0): Parts {
-  const fr = 0.8, run = Math.max(1.2, len - fr - 0.05), x0 = -len / 2;
-  const out: Parts = [
-    P(box(run, 0.08, 0.56, x0 + run / 2, 0, 0.02), 'solid', 0x2e2a26), // plinth
-    P(box(run, 0.8, 0.6, x0 + run / 2, 0.08, 0), 'solid', T), // base units
-    P(box(run + 0.02, 0.04, 0.64, x0 + run / 2, 0.88, -0.01), 'porcelain', top), // worktop
-    P(box(run, 0.53, 0.015, x0 + run / 2, 0.92, 0.3), 'porcelain', splash), // backsplash
-    P(box(run, 0.75, 0.36, x0 + run / 2, 1.45, 0.12), 'solid', T), // wall units
-  ];
-  for (let x = x0 + 0.5; x < x0 + run - 0.1; x += 0.5) out.push(P(box(0.012, 0.66, 0.01, x, 0.14, -0.305), 'solid', 0x8d8a84)); // door joins
-  const sink = x0 + run * 0.35, hob = x0 + run * 0.72;
-  out.push(P(box(0.6, 0.06, 0.4, sink, 0.865, -0.02), 'porcelain', 0x8e969a));
-  out.push(P(box(0.04, 0.28, 0.04, sink, 0.92, 0.2), 'porcelain', 0xc0c4c6));
-  out.push(P(box(0.64, 0.012, 0.56, hob, 0.92, -0.01), 'solid', 0x222326));
-  out.push(P(box(0.6, 0.6, 0.012, hob, 0.15, -0.31), 'glass', 0x2a2b2e)); // oven door
-  out.push(P(box(0.76, 0.1, 0.4, hob, 1.35, 0.1), 'porcelain', 0xb8bcbf)); // hood
-  out.push(P(box(fr, 1.9, 0.62, x0 + run + 0.05 + fr / 2, 0, 0), 'porcelain', 0xe4e5e1)); // fridge
-  out.push(P(box(0.04, 0.7, 0.03, x0 + run + 0.05 + fr - 0.1, 0.9, -0.325), 'metal', 0x8a8e90));
+/** A home's fitted kitchen along one wall (review round 11: "the kitchen in view is a sink run, with
+ *  no range, fridge or wall cabinets"). Everything in the piece's x, −len/2 … len/2: */
+export interface KitchenSpec {
+  len: number;
+  /** the sink's middle (under the window, where the run has one) */
+  sink: number;
+  /** the cooker's middle — a range set into the run, its hood over it — or null: it stands on
+   *  another wall of the room (`stove`) */
+  range: number | null;
+  /** the fridge at the run's left (−1) or right (+1) end, or on another wall (0: `fridge`) */
+  fridge: -1 | 0 | 1;
+  /** the stretches with a window over them: no wall cabinets there, a low upstand for the splash */
+  gaps: [number, number][];
+}
+/** A fridge's width, a cooker's, a wall cabinet's door (m); the wall cabinets hang from WALL_Y,
+ *  WALL_D deep off the wall. */
+export const FRIDGE_W = 0.72, COOKER_W = 0.6, WALL_Y = 1.45, WALL_D = 0.32;
+/** The wall cabinet doors' joints: a dark reveal 2 cm wide, so they read from across the room. */
+const JOINT_HEX = 0x4a4540;
+/** How much darker than the splashback the shadow under the wall cabinets is: at their foot, then a
+ *  softer band under that. */
+export const SHADOW_DARK: [number, number] = [0.5, 0.25];
+
+/** CIE L*a*b* of an sRGB hex (D65), and the CIE76 distance between two (a kitchen's cabinets keep a
+ *  colour of their own against the room's curtains: furnish.ts `cabinetColour`). */
+export function labOf(hex: number): [number, number, number] {
+  const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const r = lin(Math.floor(hex / 65536) / 255), g = lin((Math.floor(hex / 256) % 256) / 255), b = lin((hex % 256) / 255);
+  const X = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047, Y = 0.2126 * r + 0.7152 * g + 0.0722 * b, Z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883;
+  const f = (t: number) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))];
+}
+export const deltaE = (a: number, b: number) => { const p = labOf(a), q = labOf(b); return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
+const qk = (x: number) => (Math.round(x * 20) / 20).toFixed(2);
+/** The piece key a kitchen spec draws as (everything that shapes it, to 5 cm). */
+export const kitchenKey = (s: KitchenSpec) => `kitchen:${qk(s.len)}:${qk(s.sink)}:${s.range === null ? 'n' : qk(s.range)}:${s.fridge}:${s.gaps.map(([a, b]) => `${qk(a)}~${qk(b)}`).join(',')}`;
+/** The stretches of [a, b] left once `cut` is taken out (each at least `min` long). */
+function stretchesOf(a: number, b: number, cut: [number, number][], min: number): [number, number][] {
+  let segs: [number, number][] = [[a, b]];
+  for (const [c0, c1] of cut) segs = segs.flatMap(([s0, s1]) => (c1 <= s0 || c0 >= s1 ? [[s0, s1]] : [[s0, c0], [c1, s1]]) as [number, number][]);
+  return segs.filter(([s0, s1]) => s1 - s0 >= min);
+}
+/** A run of doors `y0`–`y1` high on the front (z) of [a, b]: the joins between them, ~0.5–0.6 m apart. */
+function joins(out: Parts, a: number, b: number, y0: number, y1: number, z: number) {
+  const n = Math.max(1, Math.round((b - a) / 0.6));
+  for (let i = 1; i < n; i++) out.push(P(box(0.012, y1 - y0, 0.01, a + ((b - a) * i) / n, y0, z), 'solid', 0x8d8a84));
+}
+/** The cooker: a range's oven and hob in steel, its glass door and handle, the knobs, four rings, the
+ *  backguard; a chimney hood over it to the cabinet tops. x across, the back at +z. */
+function rangeParts(out: Parts, x: number, hood = true) {
+  const st = 0xb8bcbf;
+  out.push(P(box(COOKER_W - 0.01, 0.9, 0.6, x, 0, 0), 'metal', st)); // the body
+  out.push(P(box(COOKER_W - 0.03, 0.012, 0.52, x, 0.9, -0.03), 'solid', 0x222326)); // the hob
+  for (const [dx, dz] of [[-0.14, -0.15], [0.14, -0.15], [-0.14, 0.1], [0.14, 0.1]]) out.push(P(box(0.17, 0.014, 0.17, x + dx, 0.905, dz), 'metal', 0x3a3b3e)); // the rings
+  out.push(P(box(COOKER_W - 0.01, 0.13, 0.04, x, 0.9, 0.27), 'metal', 0xc8ccce)); // the backguard
+  out.push(P(box(0.46, 0.38, 0.012, x, 0.2, -0.305), 'glass', 0x2a2b2e)); // the oven's door
+  out.push(P(box(0.48, 0.024, 0.03, x, 0.64, -0.325), 'metal', 0x8a8e90)); // its handle
+  out.push(P(box(0.5, 0.04, 0.02, x, 0.755, -0.305), 'solid', 0x2a2b2e)); // the knobs' strip
+  if (!hood) return;
+  out.push(P(box(COOKER_W + 0.02, 0.1, 0.5, x, 1.58, 0.05), 'metal', st)); // the hood's canopy
+  out.push(P(box(0.3, 2.17 - 1.68, 0.26, x, 1.68, 0.17), 'metal', 0xc8ccce)); // its chimney, up to the cabinet tops
+}
+/** The fridge (a fixed off-white), its two doors and handles; `w` wide (a flat's slim one: 0.6 m). */
+function fridgeParts(out: Parts, x: number, w = FRIDGE_W) {
+  out.push(P(box(w - 0.02, 1.85, 0.64, x, 0, -0.01), 'porcelain', 0xe6e7e2));
+  out.push(P(box(w - 0.04, 0.014, 0.01, x, 1.16, -0.335), 'solid', 0x8d8a84)); // the freezer's door below
+  out.push(P(box(0.03, 0.55, 0.03, x + w / 2 - 0.09, 1.25, -0.345), 'metal', 0x8a8e90));
+  out.push(P(box(0.03, 0.4, 0.03, x + w / 2 - 0.09, 0.62, -0.345), 'metal', 0x8a8e90));
+}
+/** A spec back from its key (tests, probes). */
+export function kitchenSpecOf(key: string): KitchenSpec | null {
+  const m = /^kitchen:([-\d.]+):([-\d.]+):(n|[-\d.]+):(-?\d):(.*)$/.exec(key);
+  if (!m) return null;
+  return { len: +m[1], sink: +m[2], range: m[3] === 'n' ? null : +m[3], fridge: +m[4] as -1 | 0 | 1, gaps: m[5] ? m[5].split(',').map((g) => g.split('~').map(Number) as [number, number]) : [] };
+}
+/** The base run's ends: the run less the fridge. */
+const baseOf = (s: KitchenSpec): [number, number] => [s.fridge < 0 ? -s.len / 2 + FRIDGE_W + 0.02 : -s.len / 2, s.fridge > 0 ? s.len / 2 - FRIDGE_W - 0.02 : s.len / 2];
+/** Where a kitchen's wall cabinets hang (x): over the base run where the wall is solid — not in a
+ *  window's stretch, not over the cooker's hood — each stretch 30 cm or more; and the one over the
+ *  fridge (`fridge` set). */
+export function wallCabinets(s: KitchenSpec, fridge = false): [number, number][] {
+  const [b0, b1] = baseOf(s);
+  const cut: [number, number][] = s.gaps.map(([a, b]): [number, number] => [a - 0.02, b + 0.02]);
+  if (s.range !== null) cut.push([s.range - COOKER_W / 2 - 0.02, s.range + COOKER_W / 2 + 0.02]);
+  const out = stretchesOf(b0, b1, cut, 0.3);
+  if (fridge && s.fridge) out.push(s.fridge < 0 ? [-s.len / 2, -s.len / 2 + FRIDGE_W] : [s.len / 2 - FRIDGE_W, s.len / 2]);
+  return out;
+}
+/** A fitted kitchen (`KitchenSpec`): base units on a plinth with the worktop, the sink and its tap,
+ *  the cooker set in with its hood, the fridge at an end with a cabinet over it, wall cabinets along
+ *  the rest where the wall above is solid, a tiled splashback between (a low upstand under a window).
+ *  Cabinet fronts take the tint. */
+export function kitchen(s: KitchenSpec, top = 0x4a4540, splash = 0xe9eef0): Parts {
+  const x0 = -s.len / 2, x1 = s.len / 2;
+  const [b0, b1] = baseOf(s);
+  const rg: [number, number] | null = s.range === null ? null : [s.range - COOKER_W / 2, s.range + COOKER_W / 2];
+  const out: Parts = [];
+  // the plinth, the carcass and the worktop either side of the cooker (it has its own top)
+  for (const [a, b] of stretchesOf(b0, b1, rg ? [rg] : [], 0.05)) {
+    out.push(P(box(b - a, 0.08, 0.56, (a + b) / 2, 0, 0.02), 'solid', 0x2e2a26));
+    out.push(P(box(b - a, 0.8, 0.6, (a + b) / 2, 0.08, 0), 'solid', T));
+    out.push(P(box(b - a + 0.01, 0.04, 0.64, (a + b) / 2, 0.88, -0.01), 'porcelain', top));
+    joins(out, a, b, 0.14, 0.82, -0.305);
+    out.push(P(box(b - a - 0.02, 0.01, 0.01, (a + b) / 2, 0.7, -0.305), 'solid', 0x8d8a84)); // the drawers' line
+  }
+  // the splashback: tiled up to the wall cabinets, a low upstand where a window's over the worktop
+  const glass = s.gaps.map(([a, b]): [number, number] => [a - 0.02, b + 0.02]);
+  for (const [a, b] of stretchesOf(b0, b1, glass, 0.05)) out.push(P(box(b - a, 0.53, 0.015, (a + b) / 2, 0.92, 0.3), 'porcelain', splash));
+  for (const [a, b] of glass) { const c0 = Math.max(a, b0), c1 = Math.min(b, b1); if (c1 - c0 > 0.05) out.push(P(box(c1 - c0, 0.1, 0.015, (c0 + c1) / 2, 0.92, 0.3), 'porcelain', splash)); }
+  // the sink, its tap and spout
+  out.push(P(box(0.56, 0.06, 0.4, s.sink, 0.865, -0.02), 'porcelain', 0x8e969a));
+  out.push(P(box(0.04, 0.3, 0.04, s.sink, 0.92, 0.2), 'porcelain', 0xc0c4c6));
+  out.push(P(box(0.04, 0.03, 0.18, s.sink, 1.19, 0.12), 'porcelain', 0xc0c4c6));
+  if (s.range !== null) rangeParts(out, s.range);
+  // the wall cabinets: over the base run where the wall is solid, not over the cooker's hood —
+  // WALL_D deep off the wall, their doors' joints and handles on the front, and the shadow they
+  // throw on the splashback under them (review round 12: "flat cut-outs in the curtains' own blue")
+  for (const [a, b] of wallCabinets(s)) {
+    out.push(P(box(b - a, 0.72, WALL_D, (a + b) / 2, WALL_Y, 0.3 - WALL_D / 2), 'solid', T));
+    const front = 0.3 - WALL_D - 0.004, n = Math.max(1, Math.round((b - a) / 0.6));
+    for (let i = 1; i < n; i++) out.push(P(box(0.02, 0.7, 0.008, a + ((b - a) * i) / n, WALL_Y + 0.01, front), 'solid', JOINT_HEX)); // the doors' joints
+    out.push(P(box(b - a - 0.02, 0.012, 0.008, (a + b) / 2, WALL_Y + 0.004, front), 'solid', JOINT_HEX)); // the bottom rail's line
+    // a handle at each door's opening edge, low (a pair opens at the joint between them)
+    for (let i = 0; i < n; i++) {
+      const d0 = a + ((b - a) * i) / n, d1 = a + ((b - a) * (i + 1)) / n, hx = i % 2 === 1 ? d0 + 0.05 : d1 - 0.05;
+      out.push(P(box(0.016, 0.11, 0.022, hx, WALL_Y + 0.05, front - 0.012), 'metal', 0x8a8e90));
+    }
+    // the shadow on the splashback under it: dark at the cabinet's foot, softening down the tiles
+    out.push(P(box(b - a, 0.055, 0.006, (a + b) / 2, WALL_Y - 0.055, 0.289), 'solid', darken(splash, SHADOW_DARK[0])));
+    out.push(P(box(b - a, 0.05, 0.006, (a + b) / 2, WALL_Y - 0.105, 0.289), 'solid', darken(splash, SHADOW_DARK[1])));
+  }
+  if (s.fridge) {
+    const fx = s.fridge < 0 ? x0 + FRIDGE_W / 2 : x1 - FRIDGE_W / 2;
+    fridgeParts(out, fx);
+    out.push(P(box(FRIDGE_W, 0.3, 0.6, fx, 1.88, 0.0), 'solid', T)); // a cabinet over it
+  }
+  return out;
+}
+/** A cooker on a wall of its own (the run had no solid stretch for it): the range and its hood. */
+export function stove(): Parts {
+  const out: Parts = [];
+  rangeParts(out, 0);
+  return out;
+}
+/** A fridge on a wall of its own (`w`: a slim one where the wall is short). */
+export function fridge(w = FRIDGE_W): Parts {
+  const out: Parts = [];
+  fridgeParts(out, 0, w);
   return out;
 }
 
@@ -517,6 +671,385 @@ export function range(): Parts {
   const out: Parts = [P(box(1.2, 0.9, 0.8, 0, 0, 0), 'metal', 0xb8bcbf), P(box(1.2, 0.5, 0.04, 0, 0.9, 0.38), 'metal', 0xc8ccce)];
   for (let i = 0; i < 6; i++) out.push(P(box(0.24, 0.02, 0.24, -0.4 + (i % 3) * 0.4, 0.9, -0.15 + Math.floor(i / 3) * 0.32), 'solid', 0x222326));
   return out;
+}
+
+// ---- deeper archetypes (docs/INTERIORS_PLAN.md, Slice 4): the pieces a supermarket, a hotel, a
+// school, a church, a library, a bank, a post office and a gym repeat — plain boxes again, instanced
+// by the dozen; white (0xffffff) parts take the instance's tint ----
+/** A seeded stream (stock on shelves, books, produce): the same piece for the same seed. */
+const seeded = (seed: number) => {
+  let s = seed >>> 0;
+  return () => ((s = (Math.imul(s ^ (s >>> 15), 2246822519) + 0x9e3779b9) >>> 0) / 4294967296);
+};
+/** A supermarket checkout, `len` along x: the counter (tint), its belt at the entry end (−x), the
+ *  scanner and the till's screen, the card reader on the customer's side (−z: the lane), the bagging
+ *  shelf at the exit end (+x), the lane's numbered light on its pole. The cashier stands at +z. */
+export function checkout(len = 4.2): Parts {
+  const x0 = -len / 2;
+  return [
+    P(box(len, 0.08, 0.76, 0, 0, 0), 'solid', 0x2e2c2a),
+    P(box(len, 0.8, 0.8, 0, 0.08, 0), 'solid', T),
+    P(box(len + 0.02, 0.04, 0.84, 0, 0.88, 0), 'solid', 0x3a3b3e),
+    P(box(len * 0.5, 0.025, 0.52, x0 + 0.15 + len * 0.25, 0.92, -0.06), 'solid', 0x1c1d20), // the belt
+    P(box(0.36, 0.012, 0.36, x0 + len * 0.62, 0.92, -0.05), 'glass', 0x8fb0b8), // the scanner
+    P(box(0.05, 0.34, 0.05, x0 + len * 0.62 + 0.3, 0.92, 0.3), 'metal', 0x3a3b3e),
+    P(box(0.34, 0.24, 0.03, x0 + len * 0.62 + 0.3, 1.2, 0.26), 'glass', 0x22252a), // the till's screen
+    P(box(0.1, 0.16, 0.08, x0 + len * 0.62 + 0.05, 0.92, -0.36), 'solid', 0x2c2e33), // card reader
+    P(box(0.9, 0.035, 0.74, len / 2 - 0.47, 0.8, -0.02), 'metal', 0xb8bcbf), // bagging shelf, a step down
+    P(box(0.05, 1.45, 0.05, x0 + 0.08, 0.92, 0.36), 'metal', 0x8a8e90), // the lane light
+    P(box(0.3, 0.22, 0.08, x0 + 0.08, 2.37, 0.36), 'glow', 0xfff1d0),
+  ];
+}
+/** A supermarket's refrigerated case `len` long, 1 m deep, backed onto a wall (+z): an open
+ *  multi-deck (dairy, drinks) — or, with `doors`, a reach-in freezer behind glass doors — its decks
+ *  stocked by seed, the canopy's light strip glowing. */
+export function cooler(len: number, seed: number, stock: number[], doors = false): Parts {
+  const d = 1.0, rnd = seeded(seed);
+  const out: Parts = [
+    P(box(len, 0.34, d - 0.05, 0, 0, 0.02), 'solid', 0x9a9690), // the plinth
+    P(box(len, 1.92, 0.08, 0, 0.34, d / 2 - 0.04), 'metal', 0xdfe3e4), // the back
+    P(box(len, 0.2, d * 0.62, 0, 2.06, d / 2 - d * 0.31), 'solid', T), // the canopy (tint)
+    P(box(len - 0.1, 0.025, 0.08, 0, 2.03, -0.05), 'glow', 0xf4fbff),
+  ];
+  for (const s of [-1, 1]) out.push(P(box(0.05, 2.26, d, s * (len / 2 - 0.025), 0, 0), 'solid', T));
+  for (let r = 0; r < 5; r++) {
+    // decks, deeper toward the bottom (the bottom one is the well)
+    const y = 0.34 + r * 0.36, dep = r === 0 ? 0.8 : 0.62 - r * 0.04, z = d / 2 - 0.08 - dep / 2;
+    out.push(P(box(len - 0.12, 0.02, dep, 0, y, z), 'metal', 0xc8ccce));
+    let x = -len / 2 + 0.08;
+    while (x < len / 2 - 0.16) {
+      const iw = Math.min(0.12 + rnd() * 0.16, len / 2 - 0.07 - x), ih = 0.12 + rnd() * 0.16;
+      if (rnd() > 0.08) out.push(P(box(iw, Math.min(ih, 0.3), dep * 0.8, x + iw / 2, y + 0.02, z), 'solid', stock[Math.floor(rnd() * stock.length)]));
+      x += iw + 0.02;
+    }
+  }
+  if (doors) {
+    out.push(P(box(len - 0.1, 1.64, 0.02, 0, 0.36, -d / 2 + 0.02), 'glass', 0xcfe0e4));
+    for (let x = -len / 2 + 0.75; x < len / 2 - 0.2; x += 0.75) out.push(P(box(0.04, 1.64, 0.04, x, 0.36, -d / 2 + 0.03), 'metal', 0x8a8e90));
+  } else out.push(P(box(len - 0.1, 0.12, 0.03, 0, 0.34, -d / 2 + 0.06), 'glass', 0xcfe0e4)); // the well's front lip
+  return out;
+}
+/** A produce stand, w × d: a timber table (tint) tilted toward the customer (−z), crates of fruit
+ *  and vegetables in rows on it, each heaped. */
+export function produce(w: number, d: number, seed: number): Parts {
+  const rnd = seeded(seed);
+  const FRUIT = [0xc9412e, 0xe0a33b, 0x6e9c3a, 0xe8d05a, 0x8a3a5a, 0x4f7a2f, 0xd9733b];
+  const out: Parts = [P(box(w, 0.62, d, 0, 0, 0), 'wood', T), P(box(w - 0.1, 0.05, d - 0.1, 0, 0.62, 0), 'wood', 0x7a5236)];
+  const nx = Math.max(1, Math.floor(w / 0.55)), nz = Math.max(1, Math.floor(d / 0.45));
+  for (let i = 0; i < nx; i++)
+    for (let j = 0; j < nz; j++) {
+      const x = -w / 2 + (i + 0.5) * (w / nx), z = -d / 2 + (j + 0.5) * (d / nz), y = 0.67 + (j / Math.max(1, nz - 1)) * 0.16;
+      out.push(P(box(w / nx - 0.06, 0.1, d / nz - 0.06, x, y, z), 'wood', 0xb89468));
+      const heap = ni(new THREE.IcosahedronGeometry(0.19, 0)).scale((w / nx - 0.1) / 0.38, 0.45, (d / nz - 0.1) / 0.38).translate(x, y + 0.13, z);
+      out.push(P(heap, 'fabric', FRUIT[Math.floor(rnd() * FRUIT.length)]));
+    }
+  return out;
+}
+/** A pew `len` long (x), its back at +z: the seat, the back (a shade leaning), the carved ends, a
+ *  hymnal shelf and the kneeler for the row behind. All tint: the church's wood. */
+export function pew(len: number): Parts {
+  const out: Parts = [
+    P(box(len, 0.05, 0.42, 0, 0.4, -0.06), 'wood', T),
+    P(box(len - 0.02, 0.1, 0.4, 0, 0.3, -0.06), 'wood', T), // the seat's apron
+    P(box(len, 0.02, 0.1, 0, 0.8, 0.26), 'wood', T), // the hymnal shelf (the row behind's)
+    P(box(len, 0.07, 0.14, 0, 0.1, 0.33), 'fabric', 0x8c2f2a), // the kneeler
+  ];
+  const back = box(len, 0.52, 0.045, 0, 0.44, 0.17);
+  back.rotateX(-0.1);
+  out.push(P(back, 'wood', T));
+  for (const s of [-1, 1]) {
+    out.push(P(box(0.07, 0.95, 0.6, s * (len / 2 - 0.035), 0, 0.0), 'wood', T));
+    out.push(P(box(0.08, 0.06, 0.64, s * (len / 2 - 0.035), 0.95, 0.0), 'wood', T)); // its cap
+  }
+  if (len > 3.2) out.push(P(box(0.06, 0.3, 0.36, 0, 0.1, -0.06), 'wood', T));
+  return out;
+}
+/** An altar w wide (its back at +z): a stone table under its cloth and frontal, a cross on a stand
+ *  between two candles (they glow). */
+export function altar(w = 2.0, frontal = 0x8c2f2a): Parts {
+  return [
+    P(box(w, 0.98, 0.8, 0, 0, 0), 'solid', 0xf2eee4),
+    P(box(w + 0.04, 0.02, 0.84, 0, 0.98, 0), 'fabric', 0xf6f2e6),
+    P(box(w * 0.6, 0.62, 0.012, 0, 0.3, -0.407), 'fabric', frontal),
+    P(box(0.05, 0.62, 0.05, 0, 1.0, 0.2), 'metal', 0xc9a74a),
+    P(box(0.34, 0.05, 0.05, 0, 1.44, 0.2), 'metal', 0xc9a74a),
+    P(box(0.14, 0.03, 0.14, 0, 1.0, 0.2), 'metal', 0xc9a74a),
+    ...[-0.6, 0.6].flatMap((x) => [P(box(0.06, 0.26, 0.06, x * (w / 2), 1.0, 0.15), 'porcelain', 0xf6f1de), P(box(0.03, 0.05, 0.03, x * (w / 2), 1.26, 0.15), 'glow', 0xffd890)]),
+  ];
+}
+/** A lectern: a column on a foot, its reading desk sloping toward the reader (−z). */
+export function lectern(wood = 0x6f4b33): Parts {
+  const top = box(0.55, 0.04, 0.42, 0, 0, 0);
+  top.rotateX(0.35).translate(0, 1.1, 0);
+  return [P(box(0.5, 0.06, 0.4, 0, 0, 0), 'wood', wood), P(box(0.12, 1.06, 0.12, 0, 0.06, 0), 'wood', wood), P(top, 'wood', wood)];
+}
+/** A hotel room's bed wall: a double bed (its runner and cushions tint), the upholstered headboard
+ *  (tint) wider than the bed, a nightstand and a lamp either side (the lamps glow). Its back (+z)
+ *  on the wall; w: the bed's width. */
+export function hotelBed(w = 1.6): Parts {
+  const wood = 0x5a4232, L = 2.05;
+  const out: Parts = [
+    P(box(w, 0.3, L, 0, 0.05, -0.02), 'wood', wood),
+    P(box(w - 0.04, 0.26, L - 0.08, 0, 0.35, -0.04), 'fabric', 0xf4f2ec), // the mattress, made up in white
+    P(box(w + 0.03, 0.05, 0.62, 0, 0.6, -L / 2 + 0.55), 'fabric', T), // the runner across the foot
+    P(box(w + 0.9, 1.2, 0.08, 0, 0.1, L / 2 + 0.02), 'fabric', T), // the headboard
+  ];
+  for (const s of [-1, 1]) {
+    out.push(P(box(w / 2 - 0.14, 0.16, 0.34, s * (w / 4), 0.61, L / 2 - 0.3), 'fabric', 0xfbfaf6)); // pillows
+    out.push(P(box(0.46, 0.55, 0.42, s * (w / 2 + 0.3), 0, L / 2 - 0.21), 'wood', wood)); // nightstand
+    out.push(P(box(0.1, 0.3, 0.1, s * (w / 2 + 0.3), 0.55, L / 2 - 0.2), 'metal', 0x3a3530));
+    out.push(P(box(0.26, 0.2, 0.26, s * (w / 2 + 0.3), 0.85, L / 2 - 0.2), 'glow', 0xfff1d0));
+  }
+  return out;
+}
+/** A hotel room's desk wall, `len` long (its back at +z): the long console (tint) with the desk at
+ *  one end — its chair in front (−z) — the TV over the middle, the luggage rack at the other end. */
+export function hotelDesk(len = 2.6): Parts {
+  const x0 = -len / 2, dw = 1.1;
+  return [
+    P(box(len, 0.04, 0.5, 0, 0.74, 0), 'wood', T),
+    P(box(0.04, 0.74, 0.46, x0 + 0.02, 0, 0), 'wood', T),
+    P(box(0.04, 0.74, 0.46, len / 2 - 0.02, 0, 0), 'wood', T),
+    P(box(len - dw - 0.1, 0.5, 0.46, x0 + dw + 0.05 + (len - dw - 0.1) / 2, 0.24, 0), 'wood', T), // the drawers under the TV
+    P(box(1.0, 0.58, 0.04, 0.2, 1.1, 0.22), 'glass', 0x1c1d22), // the TV on the wall
+    P(box(0.42, 0.04, 0.42, x0 + dw / 2, 0.44, -0.55), 'fabric', 0x3a3b3e), // the desk chair
+    P(box(0.42, 0.42, 0.05, x0 + dw / 2, 0.48, -0.75), 'fabric', 0x3a3b3e),
+    P(box(0.05, 0.44, 0.05, x0 + dw / 2 - 0.18, 0, -0.55), 'metal', 0x2a2b2e),
+    P(box(0.05, 0.44, 0.05, x0 + dw / 2 + 0.18, 0, -0.55), 'metal', 0x2a2b2e),
+    P(box(0.3, 0.3, 0.2, x0 + dw / 2 + 0.25, 0.78, 0.1), 'porcelain', 0xd8d2c4), // a lamp's base
+    P(box(0.26, 0.18, 0.26, x0 + dw / 2 + 0.25, 1.08, 0.1), 'glow', 0xfff1d0),
+  ];
+}
+/** A pupil's double desk (1.2 × 0.5 m laminate top on steel legs, a book rack under it) with its
+ *  two chairs behind it (−z): the pupils look along +z, to the board. The chairs take the tint. */
+export function schoolDesk(): Parts {
+  const out: Parts = [P(box(1.2, 0.03, 0.5, 0, 0.7, 0), 'wood', 0xd9cbb0), P(box(1.1, 0.02, 0.36, 0, 0.56, 0.02), 'metal', 0x8d9296)];
+  for (const [x, z] of [[-0.56, -0.21], [0.56, -0.21], [-0.56, 0.21], [0.56, 0.21]]) out.push(P(box(0.03, 0.7, 0.03, x, 0, z), 'metal', 0x6a6e72));
+  for (const x of [-0.3, 0.3]) {
+    out.push(P(box(0.38, 0.03, 0.36, x, 0.42, -0.5), 'solid', T));
+    out.push(P(box(0.38, 0.28, 0.02, x, 0.56, -0.69), 'solid', T));
+    for (const dx of [-0.17, 0.17]) out.push(P(box(0.02, 0.42, 0.34, x + dx, 0, -0.5), 'metal', 0x6a6e72));
+  }
+  return out;
+}
+/** A whiteboard w wide on the wall (its back at +z), in an aluminium frame with a pen tray. */
+export function whiteboard(w = 3.0): Parts {
+  return [
+    P(box(w, 1.2, 0.02, 0, 0.9, 0.02), 'porcelain', 0xf6f7f4),
+    P(box(w + 0.05, 0.03, 0.04, 0, 2.1, 0.01), 'metal', 0xb8bcbf),
+    P(box(w + 0.05, 0.03, 0.04, 0, 0.87, 0.01), 'metal', 0xb8bcbf),
+    P(box(0.03, 1.26, 0.04, -w / 2 - 0.01, 0.87, 0.01), 'metal', 0xb8bcbf),
+    P(box(0.03, 1.26, 0.04, w / 2 + 0.01, 0.87, 0.01), 'metal', 0xb8bcbf),
+    P(box(w * 0.6, 0.03, 0.08, 0, 0.87, -0.03), 'metal', 0xb8bcbf),
+  ];
+}
+/** A library's double-sided stack `len` long (0.6 m deep, 1.9 m high): its panels (tint) and four
+ *  shelves a side of books, filled by seed. */
+export function bookStack(len: number, seed: number, spines: number[]): Parts {
+  const rnd = seeded(seed), h = 1.9, d = 0.6;
+  const out: Parts = [P(box(len, h, 0.03, 0, 0, 0), 'wood', T), P(box(0.035, h, d, -len / 2 + 0.0175, 0, 0), 'wood', T), P(box(0.035, h, d, len / 2 - 0.0175, 0, 0), 'wood', T), P(box(len, 0.03, d, 0, h - 0.03, 0), 'wood', T)];
+  for (const side of [-1, 1])
+    for (let r = 0; r < 4; r++) {
+      const y = 0.08 + r * 0.44;
+      out.push(P(box(len - 0.07, 0.02, d / 2 - 0.03, 0, y, side * (d / 4)), 'wood', T));
+      let x = -len / 2 + 0.05;
+      while (x < len / 2 - 0.12) {
+        const bw = 0.035 + rnd() * 0.05, bh = 0.2 + rnd() * 0.13;
+        if (rnd() > 0.15) out.push(P(box(bw, bh, d / 2 - 0.1, x + bw / 2, y + 0.02, side * (d / 4 + 0.02)), 'fabric', spines[Math.floor(rnd() * spines.length)]));
+        x += bw + 0.008;
+      }
+    }
+  return out;
+}
+/** A service counter `len` long — a bank's tellers, a post office's windows (its staff at +z): the
+ *  counter (tint) under a stone top, a glass screen along it on posts, a window every ~1.5 m (its
+ *  opening under the screen, the teller's screen behind). */
+export function tellerCounter(len = 4.5): Parts {
+  const n = Math.max(1, Math.round(len / 1.5));
+  const out: Parts = [
+    P(box(len, 1.06, 0.66, 0, 0, 0), 'wood', T),
+    P(box(len + 0.04, 0.04, 0.72, 0, 1.06, 0), 'solid', 0xd8d2c4),
+    P(box(len, 0.62, 0.012, 0, 1.3, 0.02), 'glass', 0xcfe0e4),
+  ];
+  for (let i = 0; i <= n; i++) out.push(P(box(0.04, 0.9, 0.04, -len / 2 + (i * len) / n, 1.1, 0.02), 'metal', 0x8a8e90));
+  for (let i = 0; i < n; i++) {
+    const x = -len / 2 + ((i + 0.5) * len) / n;
+    out.push(P(box(0.46, 0.3, 0.03, x, 1.12, 0.26), 'glass', 0x22252a));
+    out.push(P(box(0.3, 0.14, 0.02, x, 1.94, 0.02), 'glow', 0xfff1d0)); // the window's number
+  }
+  return out;
+}
+/** Queue posts: stanchions every 1.4 m along `len` (x), a belt between each pair. */
+export function queuePosts(len = 2.8): Parts {
+  const n = Math.max(1, Math.round(len / 1.4)), out: Parts = [];
+  for (let i = 0; i <= n; i++) {
+    const x = -len / 2 + (i * len) / n;
+    out.push(P(cyl(0.16, 0.16, 0.03, x, 0, 0, 10), 'metal', 0x3a3b3e), P(cyl(0.025, 0.025, 0.95, x, 0.03, 0, 6), 'metal', 0xb8bcbf));
+    if (i < n) out.push(P(box(len / n - 0.06, 0.05, 0.01, x + len / (2 * n), 0.88, 0), 'fabric', 0x8c2f2a));
+  }
+  return out;
+}
+/** A cash machine set into the wall (its back at +z): the fascia, its lit screen and keypad. */
+export function atm(): Parts {
+  return [P(box(0.8, 1.75, 0.3, 0, 0, 0.05), 'metal', 0x6a7078), P(box(0.34, 0.26, 0.02, 0, 1.25, -0.11), 'glow', 0x9fd6ff), P(box(0.3, 0.02, 0.2, 0, 0.98, -0.18), 'solid', 0x2c2e33), P(box(0.7, 0.12, 0.02, 0, 1.6, -0.11), 'glow', 0xfff1d0)];
+}
+/** A treadmill: its deck and belt, the uprights and the lit console at the front (+z: the runner
+ *  looks that way). */
+export function treadmill(): Parts {
+  return [
+    P(box(0.78, 0.2, 1.9, 0, 0, -0.05), 'solid', 0x3a3b3e),
+    P(box(0.54, 0.012, 1.62, 0, 0.2, -0.1), 'solid', 0x1c1d20),
+    P(box(0.05, 1.12, 0.06, -0.34, 0.2, 0.84), 'metal', 0x8a8e90),
+    P(box(0.05, 1.12, 0.06, 0.34, 0.2, 0.84), 'metal', 0x8a8e90),
+    P(box(0.74, 0.26, 0.16, 0, 1.3, 0.82), 'solid', T),
+    P(box(0.4, 0.16, 0.01, 0, 1.35, 0.735), 'glow', 0x9fd6ff),
+    P(box(0.04, 0.04, 0.5, -0.36, 1.1, 0.55), 'metal', 0xb8bcbf),
+    P(box(0.04, 0.04, 0.5, 0.36, 1.1, 0.55), 'metal', 0xb8bcbf),
+  ];
+}
+/** A weight bench with its barbell racked (the bench along z, the bar across x). */
+export function weightBench(): Parts {
+  const bar = cyl(0.015, 0.015, 1.8, 0, -0.9, 0, 6).rotateZ(Math.PI / 2).translate(0, 1.12, 0.45);
+  const plate = (x: number) => cyl(0.22, 0.22, 0.05, 0, -0.025, 0, 12).rotateZ(Math.PI / 2).translate(x, 1.12, 0.45);
+  return [
+    P(box(0.3, 0.1, 1.2, 0, 0.42, 0), 'fabric', T),
+    P(box(0.06, 0.42, 0.06, 0, 0, -0.5), 'metal', 0x3a3b3e),
+    P(box(0.06, 0.42, 0.06, 0, 0, 0.45), 'metal', 0x3a3b3e),
+    P(box(0.5, 0.04, 0.3, 0, 0, 0.45), 'metal', 0x3a3b3e),
+    P(box(0.05, 1.14, 0.05, -0.28, 0, 0.45), 'metal', 0x3a3b3e),
+    P(box(0.05, 1.14, 0.05, 0.28, 0, 0.45), 'metal', 0x3a3b3e),
+    P(bar, 'metal', 0xc8ccce),
+    P(plate(-0.7), 'metal', 0x2a2b2e),
+    P(plate(0.7), 'metal', 0x2a2b2e),
+  ];
+}
+/** A dumbbell rack `len` long (its back at +z): two sloping tiers, a pair of dumbbells to a slot. */
+export function dumbbellRack(len = 1.8): Parts {
+  const out: Parts = [P(box(len, 0.06, 0.5, 0, 0.3, 0), 'metal', 0x3a3b3e), P(box(len, 0.06, 0.4, 0, 0.72, 0.05), 'metal', 0x3a3b3e)];
+  for (const s of [-1, 1]) out.push(P(box(0.06, 0.78, 0.5, s * (len / 2 - 0.03), 0, 0), 'metal', 0x3a3b3e));
+  const n = Math.max(2, Math.floor(len / 0.3));
+  for (const [y, z] of [[0.36, -0.08], [0.78, 0.05]] as const)
+    for (let i = 0; i < n; i++) {
+      const x = -len / 2 + (i + 0.5) * (len / n), r = 0.05 + (i / n) * 0.05;
+      out.push(P(box(0.24, 2 * r, 2 * r, x, y, z), 'solid', 0x1c1d20), P(box(0.12, 0.03, 0.03, x, y + r - 0.015, z), 'metal', 0xb8bcbf));
+    }
+  return out;
+}
+/** A bank of lockers `len` long (its back at +z), two tiers of doors (tint) with their vents. */
+export function lockers(len = 1.8): Parts {
+  const n = Math.max(1, Math.round(len / 0.4)), out: Parts = [P(box(len, 1.8, 0.45, 0, 0.08, 0), 'metal', T), P(box(len, 0.08, 0.4, 0, 0, 0.02), 'solid', 0x2e2c2a)];
+  for (let i = 1; i < n; i++) out.push(P(box(0.012, 1.76, 0.01, -len / 2 + (i * len) / n, 0.1, -0.226), 'metal', 0x5a5e62));
+  out.push(P(box(len - 0.02, 0.012, 0.01, 0, 0.98, -0.226), 'metal', 0x5a5e62));
+  for (let i = 0; i < n; i++) for (const y of [0.8, 1.7]) out.push(P(box(0.14, 0.04, 0.01, -len / 2 + ((i + 0.5) * len) / n, y, -0.228), 'metal', 0x3a3b3e));
+  return out;
+}
+
+// ---- the way in (review round 10, must-fix 4: "the front door opens on a home"): coats hanging on
+// their rail, a bordered runner, the console with its lamp lit, a mirror over it, the skirting
+// round every wall, a ceiling light's glass dome. Back at +z, as every wall piece ----
+/** An open tube from y0 to y0 + h (a sleeve, a rod): no end caps — nobody looks up a sleeve. */
+const tube = (r0: number, r1: number, h: number, segs = 6) => ni(new THREE.CylinderGeometry(r1, r0, h, segs, 1, true)).translate(0, h / 2, 0);
+/** A turned shape from (radius, height) pairs. */
+const turned = (pts: [number, number][], segs: number) => ni(new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(Math.max(0.001, r), y)), segs));
+/** Coats a hall's rail holds: navy, brick, mustard, olive, charcoal, rust, slate, oatmeal. */
+export const COATS = [0x3f5a78, 0x8c3a2e, 0xc9a24b, 0x5f6e4a, 0x34322f, 0xb8604a, 0x6f7f8f, 0xd8cfb8];
+/** One coat hanging from its peg, `len` long from the collar to the hem: a rounded body that narrows
+ *  at the waist and flares a touch to the hem, sloping shoulders, its sleeves down its sides, a
+ *  collar — flattened against the wall the way a coat hangs. Its middle at (x, z), its hem at y0. */
+function coat(len: number, hex: number, x: number, z: number, y0: number): Parts {
+  const L = len, body = turned([[0.225, 0], [0.215, 0.14 * L], [0.188, 0.46 * L], [0.205, 0.72 * L], [0.192, 0.86 * L], [0.12, 0.95 * L], [0.045, L]], 8).scale(1, 1, 0.5);
+  const out: Parts = [P(body.translate(x, y0, z), 'fabric', hex)];
+  for (const s of [-1, 1]) {
+    const sl = tube(0.056, 0.05, 0.6 * L).rotateZ(s * 0.07).translate(x + s * 0.2, y0 + 0.28 * L, z - 0.015);
+    out.push(P(sl, 'fabric', darken(hex, 0.08)));
+  }
+  out.push(P(box(0.17, 0.07, 0.1, x, y0 + L - 0.1, z - 0.02), 'fabric', darken(hex, 0.15))); // the collar
+  return out;
+}
+/** A coat rail by the front door, `w` wide, its back on the wall at 1.66 m: the board and its pegs,
+ *  a hat shelf over it with a hat on it, and `n` coats (≥ 3) of 0.9–1.1 m hanging from the pegs, in
+ *  colours and lengths by `seed`. 0.3 m deep. */
+export function coatRail(w = 1.0, n = 3, seed = 1): Parts {
+  const rnd = seeded(seed), zw = 0.15;
+  const out: Parts = [
+    P(box(w, 0.1, 0.025, 0, 1.62, zw - 0.0125), 'wood', T),
+    P(box(w + 0.06, 0.025, 0.24, 0, 1.86, zw - 0.12), 'wood', T), // the hat shelf
+  ];
+  for (const s of [-1, 1]) out.push(P(box(0.025, 0.14, 0.2, s * (w / 2 - 0.06), 1.72, zw - 0.1), 'wood', T)); // its brackets
+  // (crowded the way a rail is: each coat half over the next, every other one a little proud of it)
+  const pitch = (w - 0.5) / Math.max(1, n - 1);
+  for (let i = 0; i < n; i++) {
+    const x = -w / 2 + 0.25 + i * pitch, len = 0.9 + rnd() * 0.2;
+    out.push(P(box(0.024, 0.024, 0.07, x, 1.655, zw - 0.06), 'metal', 0xc9a74a)); // the peg
+    out.push(...coat(len, COATS[Math.floor(rnd() * COATS.length)], x + (rnd() - 0.5) * 0.02, zw - 0.135 - (i % 2) * 0.02, 1.69 - len));
+  }
+  // a hat on the shelf
+  const hx = (rnd() - 0.5) * (w - 0.4);
+  out.push(P(turned([[0.17, 0], [0.17, 0.012], [0.1, 0.02], [0.096, 0.1], [0.07, 0.12], [0.001, 0.125]], 10).scale(1, 1, 0.9).translate(hx, 1.885, zw - 0.12), 'fabric', COATS[Math.floor(rnd() * COATS.length)]));
+  return out;
+}
+/** A hall runner `len` × `w` lying on the floor (x along it): its field (tint), a border round it, a
+ *  pale pinstripe inside the border, diamonds down the middle, a fringe at each end. */
+export function runner(len: number, w = 0.8, border = 0x8c2f2a, figure = 0xe9dcc0): Parts {
+  const t = 0.008, b = Math.min(0.12, w * 0.16), fl = len - 2 * b, fw = w - 2 * b;
+  const out: Parts = [
+    P(box(fl, t, fw, 0, 0, 0), 'fabric', T),
+    P(box(len, t, b, 0, 0, -w / 2 + b / 2), 'fabric', border), P(box(len, t, b, 0, 0, w / 2 - b / 2), 'fabric', border),
+    P(box(b, t, fw, -len / 2 + b / 2, 0, 0), 'fabric', border), P(box(b, t, fw, len / 2 - b / 2, 0, 0), 'fabric', border),
+  ];
+  for (const s of [-1, 1]) {
+    out.push(P(box(fl - 0.06, 0.002, 0.022, 0, t, s * (fw / 2 - 0.045)), 'fabric', figure)); // the pinstripe
+    out.push(P(box(0.06, 0.003, w - 0.06, s * (len / 2 + 0.03), 0, 0), 'fabric', 0xefe8d8)); // the fringe
+  }
+  const nd = Math.max(1, Math.min(7, Math.floor(fl / 0.62)));
+  for (let i = 0; i < nd; i++) {
+    const d = Math.min(0.3, fw * 0.55) / Math.SQRT2;
+    out.push(P(box(d, 0.002, d, 0, t, 0).rotateY(Math.PI / 4).translate(-fl / 2 + (i + 0.5) * (fl / nd), 0, 0), 'fabric', i % 2 ? figure : border));
+  }
+  return out;
+}
+/** A hall console `w` wide, 0.32 m deep, 0.8 m high (its wood the tint): top, an apron with a drawer,
+ *  a shelf low down with books on it, slim legs — its table lamp lit at one end (a turned ceramic
+ *  base, a drum shade), a bowl for the keys at the other. */
+export function consoleLamp(w = 1.0, base = 0x7fa0b8, shade = 0xfff1d0): Parts {
+  const d = 0.32, h = 0.8, lx = -w / 2 + 0.2;
+  const out: Parts = [
+    P(box(w, 0.03, d, 0, h - 0.03, 0), 'wood', T),
+    P(box(w - 0.07, 0.1, d - 0.05, 0, h - 0.13, 0), 'wood', T),
+    P(box(0.12, 0.02, 0.012, 0, h - 0.09, -d / 2 + 0.02), 'metal', 0xc9a74a), // the drawer's pull
+    P(box(w - 0.08, 0.02, d - 0.07, 0, 0.16, 0), 'wood', T),
+    P(box(0.24, 0.045, 0.17, w / 2 - 0.2, 0.18, 0), 'fabric', 0x8c3a2e), P(box(0.21, 0.04, 0.16, w / 2 - 0.21, 0.225, 0.005), 'fabric', 0x3f5a78),
+  ];
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) out.push(P(cyl(0.015, 0.02, h - 0.03, sx * (w / 2 - 0.04), 0, sz * (d / 2 - 0.04), 6), 'wood', T));
+  out.push(P(turned([[0.03, 0], [0.075, 0.04], [0.085, 0.13], [0.05, 0.24], [0.02, 0.27]], 10).translate(lx, h, 0.02), 'porcelain', base));
+  out.push(P(cyl(0.008, 0.008, 0.08, lx, h + 0.27, 0.02, 5), 'metal', 0xc9a74a));
+  out.push(P(turned([[0.15, 0], [0.12, 0.2]], 12).translate(lx, h + 0.33, 0.02), 'glow', shade));
+  out.push(P(turned([[0.001, 0], [0.08, 0.005], [0.12, 0.05]], 10).translate(w / 2 - 0.22, h, 0), 'porcelain', 0xe9e2d0)); // the bowl
+  return out;
+}
+/** A mirror `w` × `h` hung on the wall (its bottom at y = 0): a moulded frame (tint) round the glass. */
+export function mirror(w = 0.7, h = 0.9): Parts {
+  const t = 0.055, d = 0.035;
+  return [
+    P(box(w, t, d, 0, 0, 0), 'wood', T), P(box(w + 0.03, t, d + 0.006, 0, h - t, 0), 'wood', T),
+    P(box(t, h - 2 * t, d, -w / 2 + t / 2, t, 0), 'wood', T), P(box(t, h - 2 * t, d, w / 2 - t / 2, t, 0), 'wood', T),
+    P(box(w - 2 * t + 0.01, h - 2 * t + 0.01, 0.006, 0, t - 0.005, 0.006), 'glass', 0xd6e0e4),
+  ];
+}
+/** Skirting a metre long — its instances stretch it along x to each wall's length — 12 cm high, its
+ *  back on the wall: the board and a moulded top, trim white. */
+export const SKIRT_H = 0.12;
+export function skirting(hex = 0xf4f1ea): Parts {
+  return [P(box(1, 0.104, 0.013, 0, 0, 0.0025), 'solid', hex), P(box(1, 0.016, 0.018, 0, 0.104, 0), 'solid', hex)];
+}
+/** A ceiling light's glass dome under a brass rim, hanging from its top (y = 0.12): `lamp` lit only
+ *  after dark (a room with windows), `glow` always (a hall without one). */
+export function ceilingDome(r = 0.17, mat: 'glow' | 'lamp' = 'glow'): Parts {
+  const h = 0.12;
+  return [
+    P(cyl(r + 0.025, r + 0.025, 0.02, 0, h - 0.02, 0, 14), 'metal', 0xc9a74a),
+    P(turned([[0.001, 0], [r * 0.55, 0.012], [r * 0.88, h * 0.4], [r, h - 0.02]], 14), mat, 0xfff3d8),
+  ];
 }
 
 /** Merge a piece into one vertex-coloured geometry (for props outside: café terraces). */

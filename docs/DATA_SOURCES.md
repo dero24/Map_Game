@@ -8,9 +8,63 @@ what we do with it today, and how the whole pipeline scales from one town to the
 Legend for status: ✅ placed from real data today · 🟡 fetched but drawn generically (or only
 partly used) · ❌ not yet fetched · 🧪 procedural stand-in (no real position yet).
 
-Last reviewed 2026-09-28 (u). Licences are summarised, not legal advice — check each source's terms
-before shipping a new one, and keep attribution in the HUD/credits (ODbL requires the
-`© OpenStreetMap contributors` credit to stay visible).
+Last reviewed 2026-10-03 (foundation first: the commercial-use check, §0). Licences are summarised,
+not legal advice — check each source's terms before shipping a new one, and keep attribution in the
+HUD/credits (ODbL requires the `© OpenStreetMap contributors` credit to stay visible).
+
+---
+
+## 0. Licences and services: commercial use, checked 2026-10-03
+
+Robby's rule (2026-10-03): get it right at the start, not before launch. Every source and service
+the game or its tile service uses, whether a paid game may use it, and the credit it needs. Not legal
+advice — the terms are summarised and quoted; re-check a source's terms before relying on it for
+something new. The credits screen (`src/ui/credits.ts`) shows every row's credit;
+`tests/licences.test.ts` fails if the code names an outside host that has no row here and no credit,
+and if Photon or Open-Meteo ever come back.
+
+| Source / service | Host(s) | Used for | Licence / terms | Commercial game? | Credit | Share-alike | Status |
+|---|---|---|---|---|---|---|---|
+| OpenStreetMap data | `www.openstreetmap.org` (credit link) | streets, buildings, land use, trees, everything mapped | ODbL 1.0 | Yes | "© OpenStreetMap contributors" visible (the HUD line, always) | **Yes, on the derived database**: our TileJson cells (R2 `t/vN`) are a derivative database — if the game is public, the derived data (or how to rebuild it: the repo's `realTile.ts`) must be offered under ODbL. The rendered game is a Produced Work under any licence | in use |
+| Overpass API, public instances | `overpass-api.de`, `overpass.kumi.systems`, `overpass.private.coffee` | the tile service's cold path; the browser's direct fallback | overpass-api.de's usage policy: "a maximum of about 10000 requests per day … below about 1 GB per day"; and "setting up an app for more than just OSM mappers and relying on the public instances as backend" is named as the case where "only running your own instance sustainably serves your mission". kumi.systems and private.coffee publish no commercial terms | **No, not as a game's backend** | as OSM | — | **to replace** (Tier 0, "every tile loads"): our own OSM extract cut into R2, or our own Overpass. Until then the R2 cache keeps each cell to one query per origin, the vector twin covers what Overpass can't answer, and the audit (`docs/earth/AUDIT_48.md`) shows the cost: most cold cells don't arrive |
+| OpenFreeMap vector tiles | `tiles.openfreemap.org`, `openfreemap.org` | the sea and lakes of every streamed cell; the vector twin (real streets and buildings while a cell loads) | free public instance: commercial use "Yes", "no limits on the number of map views or requests" | Yes | "OpenFreeMap © OpenMapTiles Data from OpenStreetMap" | ODbL data | in use |
+| OpenMapTiles schema | `www.openmaptiles.org`, `openmaptiles.org` | the vector tiles' layers | design CC BY 4.0, code BSD-3 | Yes | "© OpenMapTiles © OpenStreetMap contributors" | — | in use (credited with OpenFreeMap) |
+| Terrain Tiles (Mapzen/Tilezen terrarium, AWS Open Data) | `s3.amazonaws.com` (`elevation-tiles-prod`), via the tile service's `/dem` | ground heights | US sources public domain (3DEP/NED, SRTM, GMTED2010, ETOPO1); some non-US sources CC BY; tile code MIT | Yes | "3DEP, SRTM, GMTED2010 data courtesy of the U.S. Geological Survey; ETOPO1: NOAA NCEI" (Tilezen joerd `attribution.md`) | — | in use |
+| USGS 3DEP LiDAR (EPT on AWS) | `s3-us-west-2.amazonaws.com` (`usgs-lidar-public`) | measured building heights, tree crowns | public domain (US government) | Yes | courtesy USGS (not required; credited) | — | in use |
+| 3DEP EPT boundaries index | `raw.githubusercontent.com` (hobuinc/usgs-lidar `resources.geojson`, bake time only) | which survey covers a cell (`src/world/lidar-index.json`) | the repo has no licence file; the facts in it (each USGS project's name and outline) are USGS's own, public domain | Yes (low risk) | — | — | in use; can be rebuilt from each EPT's own `ept.json` if ever needed |
+| USDA NAIP aerial photos via the USGS National Map | `imagery.nationalmap.gov` | roof colours | public domain | Yes | "USDA NAIP via the USGS National Map" | — | in use |
+| ESA WorldCover 2021 | `esa-worldcover.s3.eu-central-1.amazonaws.com` | land cover (the baked shore only) | CC BY 4.0 | Yes | "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium" | — | in use (bake) |
+| Overture Maps buildings | `overturemaps.org` (bake: GeoParquet via DuckDB) | the baked shore's footprints | ODbL (buildings theme: OSM, Microsoft ML Buildings, Esri Community Maps) | Yes | "© OpenStreetMap contributors, Overture Maps Foundation" | ODbL | in use (bake) |
+| USGS GNIS (Domestic Names, and the 2021 archive's public places) | `prd-tnm.s3.amazonaws.com` (bake time) | the place index: towns, hamlets, parks, peaks, lakes, landmarks | public domain | Yes | credited | — | **new**: replaces Photon |
+| US Census Bureau: 2026 gazetteer, 2025 cartographic boundaries, 2024 population estimates | `www2.census.gov` (bake time) | the place index: towns, townships, counties; reverse lookups (a point's town, county and state) | public domain | Yes | credited | — | **new**: replaces Photon |
+| Our place index (R2 `places/vN`, the tile service's `/places/*`) | `map-game-tiles.map-game-tiles.workers.dev` | map search, arrival cards, sketchbook captions | ours, from the two rows above | Yes | — | — | **new** |
+| Cloudflare Workers + R2 | `map-game-tiles.map-game-tiles.workers.dev` | the tile service, the measured heights, the place index | Workers Paid (Robby, 2026-10-03) | Yes | — | — | in use |
+| GitHub Pages | `dero24.github.io` | hosting the game | GitHub's terms: Pages is "not intended for or allowed to be used as a free web-hosting service to run your online business, e-commerce site, or any other website that is primarily directed at either facilitating commercial transactions or providing commercial software as a service (SaaS)" | Fine while the game is free; **not for a paid game** | — | — | in use; **move before charging** (e.g. Cloudflare Pages or Workers static assets on the paid plan) — Robby's call |
+| Photon (komoot) | (removed) | was: search and reverse lookups | public server: "please be fair - extensive usage will be throttled", no commercial terms | No | — | — | **removed 2026-10-03** (`src/ui/geo.ts` now reads our own index) |
+| Open-Meteo | (never used) | — | the free API is non-commercial | No | — | — | never used: weather is seeded per day and region. A real-weather option later would use the NWS API (`api.weather.gov`, public domain), fetched by the tile service once per area per hour |
+| Mapillary (images, detected objects) | (not yet) | Tier 1: the photo comparison loop (development only); street objects behind a switch | images CC BY-SA 4.0; commercial use for "development of … applications"; API apps must "materially supplement"; no real-time navigation; logo linked to mapillary.com for data via the API or tiles (docs/GAMEPLAY_VISION.md §17 "Mapillary licence") | Comparison loop: yes. Shipped objects: Robby's decision — yes, behind a switch | Mapillary logo + link in the HUD | images, and probably derived positions — so the objects live in **their own layer** (CC BY-SA), never merged into the OSM tiles (ODbL): each shareable under its own licence if asked | token in `.env` (git-ignored; the worker's as a wrangler secret), checked 2026-10-03; **never** Mapillary Vistas or other research datasets, never imagery in the game itself, never unblurring faces or plates, never marketed as navigation |
+| KartaView | (not yet) | the photo loop's fallback | CC BY-SA 4.0 | as Mapillary | credit | yes | not yet |
+| Google Street View, Google/Apple/Bing imagery, Esri World Imagery | — | — | terms forbid this use | No | — | — | **never** |
+| Code: three.js, lil-gui, idb, laz-perf | bundled | rendering, settings panel, IndexedDB, LAZ decoding | MIT, MIT, ISC, Apache 2.0 | Yes | their notices with the build (credits screen) | — | in use |
+| Fonts | — | — | system fonts only (Georgia and the platform's serifs) | — | — | — | nothing to license |
+
+**Still to check when they're added** (none is in use): per-agency GTFS feeds (each agency's own
+terms), per-city tree inventories (each city's), Recreation.gov RIDB (its API terms), FAA airport
+data and OurAirports (public domain / public domain-like), DOE AFDC chargers (public, API key),
+PAD-US and NPS boundaries (public domain), NOAA charts (public domain), Wikidata (CC0).
+
+**Place names** (the index, 2026-10-03): `scripts/build-places.mjs` bakes 1.85 M names of the lower
+48 and DC — the Census's 31,540 places, 16,153 active county subdivisions (New England towns,
+townships), 3,109 counties and the states, ranked by 2024 population; GNIS's populated places
+(neighbourhoods, hamlets) and natural features (summits, lakes, islands, beaches, falls…) from the
+current file; and the public places GNIS retired in 2021 (parks, forests, airports, trails,
+bridges, dams, towers, hospitals, schools, places of worship, cemeteries, post offices) from its
+2021 archive. No street addresses, no ranches or farms named for their owners (GNIS "Locale" is
+left out), no mines or wells. Each name is filed under each word's first three letters (8,026
+gzipped shards in one 95 MB R2 object, read by range); reverse lookups read 0.25° tiles of the
+Census boundaries simplified to ~25 m (13,737 tiles, 19 MB). Search ranks by standing, how well the
+name matches, and nearness; a national park outranks the hamlet named for it. The game's own
+search of the loaded world finds streets and named buildings, never a house by its address.
 
 ---
 
@@ -40,8 +94,8 @@ before shipping a new one, and keep attribution in the HUD/credits (ODbL require
 | 19 | **Mapillary** (street-level photos + detected map features) | Reference photos for reviews; detected traffic signs, street lights, benches, hydrants, crosswalks, manholes *with positions* | CC BY-SA 4.0 (free API token) | Crowd-sourced, dense in cities | ❌ — fills OSM's street-furniture gaps |
 | 20 | **All the Places** | Brand store locations scraped from store finders (a chain's real storefronts) | CC0 | Weekly | ❌ |
 | 21 | **Wikidata / Wikimedia Commons** | Landmark facts (heights, dates, architects), photos for reference | CC0 / per image | Live | ❌ |
-| 22 | **Open-Meteo** / **NWS api.weather.gov** | Today's real weather at the place | CC BY 4.0 (free API is non-commercial) / public domain | Live | ❌ (weather is simulated) |
-| 23 | **Photon** (komoot, OSM geocoder) | Search: "Space Needle" → coordinates | ODbL data | Live | ✅ (`src/ui/geo.ts`) |
+| 22 | **NWS api.weather.gov** (never Open-Meteo's free API: non-commercial) | Today's real weather at the place | public domain | Live | ❌ (weather is seeded; a later option, §0) |
+| 23 | **Our own place index** (USGS GNIS + US Census, §0) — replaced Photon 2026-10-03 | Search: "Space Needle" → coordinates; reverse: the town and county at a point | public domain | GNIS every other month; Census yearly | ✅ (`src/ui/geo.ts`, `src/ui/placeIndex.ts`, `worker/src/places.js`, `scripts/build-places.mjs`) |
 | 24 | **ESA Ocean Colour CCI** (Forel-Ule index climatology) | The colour of the water on every coast: the scale from indigo ocean to green sounds to brown estuaries | CC BY 4.0 | 4 km monthly composites | 🟡 read by hand into coarse per-climate/per-subregion palettes (`styles.ts WaterLook`: Puget Sound green-steel, the Keys' turquoise, the Gulf's olive) — next: a baked byte grid per coast |
 | 25 | **NOAA CUDEM** (Continuously Updated DEM, topobathy) | Land *and* sea floor at 1/9″ (~3 m) along the coasts: seawalls, beaches, harbour depths | Public domain | Most of the US coast | ❌ — the fix for DEM smears at the waterline and for real shallows under the water shader |
 
@@ -169,7 +223,7 @@ cheapest big win for "a street that feels mapped".
 | Transit | **GTFS** | buses/trams/ferries on real routes and times; crowds at stops before arrivals |
 | Who lives/works here | **Census blocks, ACS, LODES** | sidewalk crowds by hour: downtown fills 9–5, residential streets in the evening; kids near schools after 3 pm; age mix for walkers |
 | Shops open | OSM `opening_hours` | lit interiors, shoppers in doorways only when open |
-| Weather | Open-Meteo / NWS | rain in Seattle when it's raining in Seattle (opt-in) |
+| Weather | seeded; NWS later (never Open-Meteo's free API) | rain in Seattle when it's raining in Seattle (opt-in) |
 | Neighbourhood names | Who's On First, OSM `place=neighbourhood/suburb/quarter` | arrival cards, map labels, "you're in Queen Anne" |
 
 ---

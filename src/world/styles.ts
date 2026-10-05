@@ -36,6 +36,9 @@ export interface RegionStyle {
   treeDensity: number; // multiplier on the procedural tree scan
   greens: number[]; // canopy palette
   biome: [number, number, number, number]; // ground: dry (0..1), lush, cold/dark, reserved
+  /** Moss on the trees' bark, 0–1 (propMaterial, U.uMoss): the westside Northwest's trunks wrapped
+   *  in it, a damp Eastern wood's north sides green, a desert's bare. */
+  moss: number;
   water: WaterLook;
 }
 
@@ -85,8 +88,18 @@ const LEFT: Box[] = [
 /** North American building-culture subregion (coarse boxes, like the climate ones): the brick
  *  South and Midwest, the clapboard Northeast, the mountain West, the shingle-and-cedar Northwest.
  *  California and the desert Southwest are already their own families (stucco / adobe). */
+/** The Cascades' crest, south to north (lat, lon): west of it the marine Northwest — fir, cedar and
+ *  moss, mild wet winters — and east of it the dry side, the Mountain West's ponderosa, juniper and
+ *  sage under cold winters (docs/regional-life/16-pnw.md). */
+const CASCADE_CREST: [number, number][] = [[42, -122.2], [43, -122.1], [44, -121.85], [45.3, -121.7], [46.2, -121.5], [47.4, -121.4], [48.5, -121.1], [49, -120.8]];
+export function westOfCascades(lat: number, lon: number) {
+  const C = CASCADE_CREST;
+  let crest = lat <= C[0][0] ? C[0][1] : C[C.length - 1][1];
+  for (let i = 0; i + 1 < C.length; i++) if (lat >= C[i][0] && lat <= C[i + 1][0]) crest = C[i][1] + ((lat - C[i][0]) / (C[i + 1][0] - C[i][0])) * (C[i + 1][1] - C[i][1]);
+  return lon < crest;
+}
 export function naSub(lat: number, lon: number): string {
-  if (lon <= -117 && lat >= 42) return 'pnw';
+  if (lon <= -117 && lat >= 42) return westOfCascades(lat, lon) ? 'pnw' : 'mountain';
   if (lon > -117 && lon <= -104) return 'mountain';
   if (lat < 36.8 && lon > -104) return 'south';
   if (lon > -104 && lon < -84.5) return 'midwest';
@@ -199,22 +212,24 @@ const PAL: Record<Family, Pick<RegionStyle, 'facadeHouse' | 'facadeShop' | 'faca
 };
 
 // Vegetation per climate. Tree kinds: round deciduous, oak, shrub, pine, spruce.
-const VEG: Record<Climate, Pick<RegionStyle, 'trees' | 'treeDensity' | 'greens' | 'biome'>> = {
-  temperate: { trees: [5.5, 2.5, 1, 1.4, 0.6], treeDensity: 1, greens: [0x4d6a31, 0x5b7536, 0x6a823e, 0x55703a, 0x72893f, 0x3f5a2e], biome: [0, 0, 0, 0] },
-  continental: { trees: [4, 2, 1, 2, 2.5], treeDensity: 1, greens: [0x4a6630, 0x56703a, 0x3f5a2e, 0x61793a, 0x4e6a3e], biome: [0.05, 0, 0.1, 0] },
-  boreal: { trees: [1, 0, 1, 3, 7], treeDensity: 1.2, greens: [0x3a5230, 0x2f4a2e, 0x46603a, 0x2e4630, 0x566e3e], biome: [0, 0, 0.35, 0] },
-  polar: { trees: [0, 0, 3, 0, 1], treeDensity: 0.15, greens: [0x5a6a48, 0x4e5e42, 0x66704e], biome: [0.25, 0, 0.55, 0] },
-  mediterranean: { trees: [2, 1.5, 3, 3.5, 0], treeDensity: 0.7, greens: [0x5f6f38, 0x6e7a3e, 0x55653a, 0x7a8045, 0x4a5a34], biome: [0.45, 0, 0, 0] },
-  arid: { trees: [0.3, 0, 6, 1, 0], treeDensity: 0.22, greens: [0x6e7442, 0x7d7a48, 0x5f6a3e, 0x8a8452], biome: [0.9, 0, 0, 0] },
-  tropical: { trees: [6, 1.5, 3, 0.2, 0], treeDensity: 1.25, greens: [0x3f7a2e, 0x4a8a34, 0x2f6a2a, 0x5a9a3a, 0x3a6e30], biome: [0, 0.6, 0, 0] },
+const VEG: Record<Climate, Pick<RegionStyle, 'trees' | 'treeDensity' | 'greens' | 'biome' | 'moss'>> = {
+  temperate: { trees: [5.5, 2.5, 1, 1.4, 0.6], treeDensity: 1, greens: [0x4d6a31, 0x5b7536, 0x6a823e, 0x55703a, 0x72893f, 0x3f5a2e], biome: [0, 0, 0, 0], moss: 0.25 },
+  continental: { trees: [4, 2, 1, 2, 2.5], treeDensity: 1, greens: [0x4a6630, 0x56703a, 0x3f5a2e, 0x61793a, 0x4e6a3e], biome: [0.05, 0, 0.1, 0], moss: 0.2 },
+  boreal: { trees: [1, 0, 1, 3, 7], treeDensity: 1.2, greens: [0x3a5230, 0x2f4a2e, 0x46603a, 0x2e4630, 0x566e3e], biome: [0, 0, 0.35, 0], moss: 0.35 },
+  polar: { trees: [0, 0, 3, 0, 1], treeDensity: 0.15, greens: [0x5a6a48, 0x4e5e42, 0x66704e], biome: [0.25, 0, 0.55, 0], moss: 0.1 },
+  mediterranean: { trees: [2, 1.5, 3, 3.5, 0], treeDensity: 0.7, greens: [0x5f6f38, 0x6e7a3e, 0x55653a, 0x7a8045, 0x4a5a34], biome: [0.45, 0, 0, 0], moss: 0.1 },
+  arid: { trees: [0.3, 0, 6, 1, 0], treeDensity: 0.22, greens: [0x6e7442, 0x7d7a48, 0x5f6a3e, 0x8a8452], biome: [0.9, 0, 0, 0], moss: 0 },
+  tropical: { trees: [6, 1.5, 3, 0.2, 0], treeDensity: 1.25, greens: [0x3f7a2e, 0x4a8a34, 0x2f6a2a, 0x5a9a3a, 0x3a6e30], biome: [0, 0.6, 0, 0], moss: 0.3 },
 };
 
 // Subregions whose woods aren't their climate's: the Pacific Northwest — Douglas fir and cedar
 // (the spruce and pine kinds) among bigleaf maples, dense, dark and lush even in late summer;
 // the Mountain West's pines, spruce and aspen.
-const SUB_VEG: Record<string, Partial<Pick<RegionStyle, 'trees' | 'treeDensity' | 'greens' | 'biome'>>> = {
-  pnw: { trees: [3, 0.8, 1, 1.6, 4.5], treeDensity: 1.25, greens: [0x3d6632, 0x4a7539, 0x33582e, 0x56803e, 0x2f4f2c, 0x5f8a44], biome: [0, 0.35, 0.05, 0] },
-  mountain: { trees: [1.5, 0.3, 2, 3.5, 3], treeDensity: 0.8 },
+const SUB_VEG: Record<string, Partial<Pick<RegionStyle, 'trees' | 'treeDensity' | 'greens' | 'biome' | 'moss'>>> = {
+  // (the westside's trunks and limbs wrapped in moss: one of the mossiest places on Earth)
+  pnw: { trees: [3, 0.8, 1, 1.6, 4.5], treeDensity: 1.25, greens: [0x3d6632, 0x4a7539, 0x33582e, 0x56803e, 0x2f4f2c, 0x5f8a44], biome: [0, 0.35, 0.05, 0], moss: 1 },
+  mountain: { trees: [1.5, 0.3, 2, 3.5, 3], treeDensity: 0.8, moss: 0.1 },
+  south: { moss: 0.35 }, // (the humid South's north sides; its Spanish moss hangs, a model of its own)
 };
 
 // Water per climate (temperate is the original shore's Atlantic: baked NJ must not change), then

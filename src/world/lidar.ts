@@ -24,15 +24,20 @@ import { RS, type CellReq, type CellRes } from './lidarCell';
 type LatLon = { lat: number; lon: number };
 // Cache key version: bump when measure/raster/detection logic changes; the index snapshot
 // date is part of the key too, so a regenerated index re-checks cells it once found uncovered.
-const VER = `lidar|v8|${(INDEX as unknown as { made?: string }).made ?? ''}|`;
+export const INDEX_MADE = (INDEX as unknown as { made?: string }).made ?? '';
+export const VER = `lidar|v8|${INDEX_MADE}|`;
 
-let on = false;
+let on = false, measureOk = false;
 let origin: LatLon | null = null;
-export function initLidar(o: LatLon) {
+// `measure`: this device reads the survey itself (a desktop). Without it (phones) only
+// precomputed records apply — a baked pack's sidecar, the tile service's R2 — and the cache.
+export function initLidar(o: LatLon, measure = true) {
   on = true;
   origin = o;
+  measureOk = measure;
 }
 export const lidarOn = () => on && !!origin;
+export const lidarMeasures = () => measureOk;
 // Where notes go (the tile worker forwards them to the page console).
 let log: (msg: string) => void = (m) => console.info(m);
 export function setLidarLog(fn: (msg: string) => void) { log = fn; }
@@ -67,7 +72,7 @@ function cellWork(q: CellReq): Promise<CellRes> {
 }
 
 // ---------- per-tile enrichment ----------
-interface Rec {
+export interface Rec {
   src?: string; yr?: number; none?: 1;
   m: Record<string, number[]>; // building fits by centroid lat/lon: [h, eav, rs, q] or [] (unmeasurable)
   t?: number[]; // trees: [Δlat µdeg, Δlon µdeg, h dm, crown r dm]… from the cell-key centre
@@ -76,15 +81,15 @@ interface Rec {
 }
 const recMem = new Map<string, Rec>();
 
-function cellKeyOf(box: Box) {
-  const [lat, lon] = unprojectLocal(origin!, (box.x0 + box.x1) / 2, (box.z0 + box.z1) / 2);
+export function cellKeyOf(o: LatLon, box: Box) {
+  const [lat, lon] = unprojectLocal(o, (box.x0 + box.x1) / 2, (box.z0 + box.z1) / 2);
   return `${lat.toFixed(4)},${lon.toFixed(4)}`;
 }
-function bKey(b: Building) {
+export function bKey(o: LatLon, b: Building) {
   let x = 0, z = 0;
   const n = b.r.length / 2;
   for (let i = 0; i < b.r.length; i += 2) (x += b.r[i]), (z += b.r[i + 1]);
-  const [lat, lon] = unprojectLocal(origin!, x / n / 10, z / n / 10);
+  const [lat, lon] = unprojectLocal(o, x / n / 10, z / n / 10);
   return `${lat.toFixed(5)},${lon.toFixed(5)}`;
 }
 // Trees ride in the record as lat/lon offsets (origin-independent), out to local ints on the tile.
@@ -200,44 +205,89 @@ export function applyMeasure(b: Building, m: number[]) {
 export type Enrich = 'done' | 'late' | 'none';
 const LATE = Symbol('late');
 
-// `wait`: ms to wait for a first-time measurement before building from priors (→ 'late':
-// the caller rebuilds when it lands); null waits for it. `fetchOk: false` (lite/LOD builds)
-// only applies what the cache already knows.
-export async function enrichTile(tj: TileJson, box: Box, wait: number | null, fetchOk = true): Promise<Enrich> {
-  if (!lidarOn()) return 'none';
-  // (nor an outline its parts stand on — as a podium it's capped under them; measured, the
-  // survey's roof over the parts would stretch it back up into one prism)
+// What a cell's measurement covers: its measurable footprints (not the outlines parts stand
+// on — as a podium it's capped under them; measured, the survey's roof over the parts would
+// stretch it back up into one prism) and their keys. The precompute script
+// (scripts/measure-cells.mjs) plans a cell with this same function, so its records key the
+// same footprints the runtime asks about.
+export function cellPlan(tj: TileJson, box: Box, o: LatLon) {
   const hosts = new Set(tj.buildings.flatMap((b) => (b.pt && b.po != null ? [b.po] : [])));
   const todo = tj.buildings.filter((b, i) => measurable(b) && !hosts.has(i));
-  const ck = cellKeyOf(box);
-  let rec = recMem.get(ck);
+  return { ck: cellKeyOf(o, box), todo, keys: todo.map((b) => bKey(o, b)) };
+}
+// Is there a survey near the cell at all (the bundled index — outside the US, open ocean: no)?
+export const surveyed = (o: LatLon, box: Box, idx: LidarIndex = index()) => candidates(idx, boxLatLon(o, box)).length > 0;
+// The LiDAR worker's request for a cell's `missing` footprints (null: no survey near it at all).
+export function cellRequest(tj: TileJson, box: Box, o: LatLon, ck: string, missing: (readonly [Building, string])[], rec: Rec | undefined, idx: LidarIndex = index()): CellReq | null {
+  const cands = candidates(idx, boxLatLon(o, box));
+  if (!cands.length) return null;
+  return {
+    ck, box, origin: o, cands: cands.map(({ n, y, b }) => ({ n, y, b, r: [] })), ept: idx.ept,
+    bld: missing.map(([b, k]) => ({ k, r: b.r, prior: b.roof === 'gable' || b.roof === 'hip' || b.roof === 'flat' ? b.roof : undefined, house: b.k === 'house', hm: b.hq ? b.h : undefined })),
+    mapped: tj.buildings.filter((b) => b.gen !== 'fill').map((b) => b.r),
+    wantNew: !rec?.nb, wantTrees: !rec?.t,
+  };
+}
+
+/** A precomputed cell record: a baked pack's sidecar (public/data/<region>/measured/) or the tile
+ *  service's (R2 `m/vN/…`) — the same record this module caches, made by scripts/measure-cells.mjs
+ *  or the tile service's /measured route. */
+export interface MeasuredFile { v: 1; ver: string; index: string; ck: string; id?: string; rec: Rec }
+/** The cell's precomputed record, or null (none, or none to be had). `peek`: only what's already
+ *  at hand (a lite build — never ask the tile service to measure a distant silhouette). */
+export type PreRec = (peek: boolean) => Promise<Rec | null>;
+// A precomputed record and what this browser measured or cached itself: the precomputed fits win
+// (every device gets the same building), the browser's own fill only what the record lacks.
+export function joinRec(pre: Rec | null | undefined, own: Rec | null | undefined): Rec | undefined {
+  if (!pre) return own ?? undefined;
+  if (pre.none || !own || own.none) return { ...pre, m: { ...pre.m } };
+  const r: Rec = { ...pre, m: { ...pre.m } };
+  for (const [k, m] of Object.entries(own.m)) r.m[k] ??= m;
+  if (!r.nb && own.nb) r.nb = own.nb;
+  if (!r.t && own.t) r.t = own.t;
+  r.tc ??= own.tc;
+  return r;
+}
+// What a precomputed record covers, so a desktop knows whether to read the survey itself.
+const complete = (rec: Rec, missing: number, total: number) => !!rec.t && !!rec.nb && (!missing || missing <= total * 0.03);
+
+// `wait`: ms to wait for a first-time measurement before building from priors (→ 'late':
+// the caller rebuilds when it lands); null waits for it. `fetchOk: false` (lite/LOD builds)
+// only applies what the cache already knows. `pre`: the cell's precomputed record, if any —
+// applied before anything is read, on every tier; a desktop reads the survey only for what it
+// doesn't cover (a phone never does). A record still on its way (the tile service measuring
+// the cell for its first visitor) is waited for like a measurement: 'late' past `wait`, and
+// neither tier reads the survey meanwhile — every device builds that cell from the one record.
+export async function enrichTile(tj: TileJson, box: Box, wait: number | null, fetchOk = true, pre?: PreRec): Promise<Enrich> {
+  if (!lidarOn()) return 'none';
+  const { ck, todo, keys } = cellPlan(tj, box, origin!);
+  let rec = recMem.get(ck), preLate = false;
   if (!rec) {
-    const stored = await kvGet<Rec>(VER + ck);
-    rec = recMem.get(ck) ?? stored; // another build may have filled it during the await
-    if (rec) recMem.set(ck, rec);
+    const preP = pre ? pre(!fetchOk).catch(() => null) : null;
+    const raced = preP && wait != null && fetchOk ? Promise.race([preP, new Promise<typeof LATE>((r) => setTimeout(() => r(LATE), wait))]) : preP;
+    const [stored, p] = await Promise.all([kvGet<Rec>(VER + ck), raced]);
+    preLate = p === LATE;
+    rec = recMem.get(ck) ?? joinRec(p === LATE ? null : p, stored); // (another build may have filled it during the await)
+    // (kept for the cell's next builds once the record has had its say — not from a peek, nor
+    // while it's still coming: the relief rebuild asks again)
+    if (rec && (!pre || (fetchOk && !preLate))) recMem.set(ck, rec);
   }
   if (rec?.none) return 'none';
-  const keys = todo.map(bKey);
   if (rec) todo.forEach((b, i) => { const m = rec!.m[keys[i]]; if (m) applyMeasure(b, m); });
   if (rec) applyNew(tj, box, ck, rec), applyTrees(tj, ck, rec);
   const missing = todo.map((b, i) => [b, keys[i]] as const).filter(([, k]) => !rec?.m[k]);
-  if (rec?.t && rec.nb && (!missing.length || missing.length <= todo.length * 0.03)) return 'done';
-  if (!fetchOk) return rec ? 'done' : 'none';
+  if (rec && complete(rec, missing.length, todo.length)) return 'done';
+  if (preLate && fetchOk) return 'late';
+  if (!fetchOk || !measureOk) return rec ? 'done' : 'none';
   // No survey near this cell at all (outside the US, open ocean): settle it now, before
   // queueing behind other cells' reads or racing a timer into a pointless rebuild.
-  const cands = candidates(index(), boxLatLon(origin!, box));
-  if (!cands.length) {
+  const q = cellRequest(tj, box, origin!, ck, missing, rec);
+  if (!q) {
     rec = { none: 1, m: {} };
     recMem.set(ck, rec);
     void kvPut(VER + ck, rec);
     return 'none';
   }
-  const q: CellReq = {
-    ck, box, origin: origin!, cands: cands.map(({ n, y, b }) => ({ n, y, b, r: [] })), ept: index().ept,
-    bld: missing.map(([b, k]) => ({ k, r: b.r, prior: b.roof === 'gable' || b.roof === 'hip' || b.roof === 'flat' ? b.roof : undefined, house: b.k === 'house', hm: b.hq ? b.h : undefined })),
-    mapped: tj.buildings.filter((b) => b.gen !== 'fill').map((b) => b.r),
-    wantNew: !rec?.nb, wantTrees: !rec?.t,
-  };
   const job = cellWork(q);
   let res: CellRes | typeof LATE;
   try {
@@ -261,9 +311,9 @@ export async function enrichTile(tj: TileJson, box: Box, wait: number | null, fe
   return 'done';
 }
 
-// Fold a worker result into the cell record (and persist it).
-function merge(ck: string, r: CellRes): Rec {
-  const rec = recMem.get(ck) ?? { m: {} };
+// Fold a worker result into a cell record (pure: the precompute script folds the same way).
+export function foldRes(prev: Rec | undefined, r: CellRes): Rec {
+  const rec: Rec = prev ?? { m: {} };
   if (r.none) {
     if (!Object.keys(rec.m).length && !rec.nb) rec.none = 1;
   } else {
@@ -273,6 +323,11 @@ function merge(ck: string, r: CellRes): Rec {
     if (r.t && !rec.t) rec.t = r.t;
     if (r.tc) rec.tc ??= r.tc;
   }
+  return rec;
+}
+// …and keep it (memory + IndexedDB).
+function merge(ck: string, r: CellRes): Rec {
+  const rec = foldRes(recMem.get(ck), r);
   recMem.set(ck, rec);
   void kvPut(VER + ck, rec);
   return rec;

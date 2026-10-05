@@ -103,3 +103,21 @@ export function placeCar(w: PlaceWorld, ax: number, az: number, facing: number, 
   if (best) return { ok: true, spot: best };
   return { ok: false, why: near && near.d < 3000 ? `a car needs a street — the nearest is ${dist(near.d)} ${compass(near.x - ax, near.z - az)}` : 'a car needs a street — there is none nearby' };
 }
+
+/** Open ground for a balloon: dry, level enough, off the roads, and clear of buildings for the
+ *  envelope's width (it's ~17 m across when it's up). */
+export function balloonRoom(w: PlaceWorld, x: number, z: number, room = 9) {
+  const h = w.height(x, z);
+  if (!(h > 0.3) || w.sdf(x, z) < 3 || w.building(x, z) >= 0) return false;
+  for (let a = 0; a < 8; a++) {
+    const qx = x + Math.sin((a / 8) * Math.PI * 2) * room, qz = z + Math.cos((a / 8) * Math.PI * 2) * room;
+    if (w.building(qx, qz) >= 0 || Math.abs(w.height(qx, qz) - h) > 2.5) return false;
+  }
+  return true;
+}
+/** A balloon near where you aimed: the nearest open ground with room for it. */
+export function placeBalloon(w: PlaceWorld, ax: number, az: number, facing: number, reach = 30): Placement {
+  for (const [x, z, d] of rings(ax, az, facing, 0, reach, 3))
+    if (balloonRoom(w, x, z) && (!w.free || w.free(x, z))) return { ok: true, spot: { x, z, yaw: facing, d } };
+  return { ok: false, why: 'a balloon needs open ground — a field, a beach, a park' };
+}

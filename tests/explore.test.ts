@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { Explore, revealRadius, bloomRate, joined, clipSegment, type SeenPaint } from '../src/world/explore';
 import { fromLatLon, toLatLon } from '../src/world/data';
 import { parseLatLon, searchLocal } from '../src/ui/geo';
-import { unprojectDepth, skyDepth, type SeenGrid } from '../src/render/seen';
+import { unprojectDepth, skyDepth, mendDepth, type SeenGrid } from '../src/render/seen';
 import { camera, planeFrame } from './helpers/frame';
 
 describe('paint as you explore', () => {
@@ -40,8 +40,8 @@ describe('paint as you explore', () => {
 
 describe('a photo paints what it frames (paintSeen, the far window)', () => {
   const O = { lat: 40.36, lon: -73.97 };
-  // ~3 s of frames at (x, z): every bloom is in by then
-  const settle = (e: Explore, x = 0, z = 0, h = 1.6) => { for (let i = 0; i < 60; i++) e.update(x, z, h, 1 / 20); };
+  // ~6 s of frames at (x, z): every bloom is in by then (the farthest start 2.2 s late and take 2.4 s)
+  const settle = (e: Explore, x = 0, z = 0, h = 1.6) => { for (let i = 0; i < 120; i++) e.update(x, z, h, 1 / 20); };
   const photo = (e: Explore, g: SeenGrid, eye = { x: 0, z: 0 }) => { const r = e.paintSeen(g, eye); settle(e, eye.x, eye.z); return r; };
   // a hand-made grid: samples at world (x, z) on the ground, view depth = how far north they are
   const grid = (w: number, h: number, at: (i: number, j: number) => [number, number] | null, foot: number): SeenGrid => {
@@ -118,6 +118,24 @@ describe('a photo paints what it frames (paintSeen, the far window)', () => {
     expect(e.texelAt(0, -2000, true)).toBe(0);
   });
 
+  it('a photo from a balloon basket leaves no streaks behind its ropes (mendDepth)', () => {
+    const cam = camera([0, 300, 0], -12, 0, 62, 9 / 16), w = 144, h = 256, cut = skyDepth(cam.near, cam.far);
+    const ropes = [-0.5, 0.6].map((x) => new THREE.Box3(new THREE.Vector3(x - 0.03, 280, -3.2), new THREE.Vector3(x + 0.03, 320, -3.1)));
+    const shoot = (mend: boolean) => {
+      const e = new Explore(O);
+      e.enabled = false;
+      e.far = true;
+      const d = planeFrame(cam, w, h, ropes, cut);
+      if (mend) mendDepth(d, w, h, { thin: Math.round(h * 0.06), near: 30 });
+      photo(e, unprojectDepth(d, w, h, cam.projectionMatrixInverse.elements, cam.matrixWorld.elements, { x: 0, y: 0, z: 0 }, cut));
+      return e;
+    };
+    // along each rope's line of sight, from 1 to 8 km out
+    const along = (e: Explore) => { let bare = 0; for (const x of [-0.5, 0.6]) for (let d = 1000; d <= 8000; d += 500) if (e.valueAt((x / 3.15) * d, -d) < 255) bare++; return bare; };
+    expect(along(shoot(false))).toBeGreaterThan(5); // (the streaks, as a phone saw them)
+    expect(along(shoot(true))).toBe(0);
+  });
+
   it('the far window shows the fine cells you walked, past the fine window', () => {
     const e = new Explore(O);
     e.far = true;
@@ -157,8 +175,9 @@ describe('a photo paints what it frames (paintSeen, the far window)', () => {
   });
 
   it('walker paint is unchanged, byte for byte', () => {
-    // pinned from the implementation before photos could paint (2026-09-29): the texture window
-    // after a stroll, a run that re-centres it and a low flight
+    // pinned 2026-09-30 when the walk's bloom slowed into a wash (20 Hz strokes, ~1.5 s underfoot):
+    // the texture window after a (very fast) stroll, a run that re-centres it and a low flight —
+    // too quick for any cell to reach "painted", which a real walk does (the tests above)
     const e = new Explore(O);
     let x = 0, z = 0, bloomed = 0;
     e.onBloom = (n) => (bloomed += n);
@@ -168,10 +187,10 @@ describe('a photo paints what it frames (paintSeen, the far window)', () => {
     const d = e.texture.image.data as Uint8Array;
     let hash = 0x811c9dc5;
     for (let i = 0; i < d.length; i++) hash = Math.imul(hash ^ d[i], 0x01000193) >>> 0;
-    expect(hash).toBe(3282984800);
-    expect(e.stats().painted).toBe(2828);
-    expect(bloomed).toBe(2828);
-    expect([e.valueAt(x, z), e.valueAt(48, 20), e.valueAt(900, -360)]).toEqual([145, 255, 18]);
+    expect(hash).toBe(2619836985);
+    expect(e.stats().painted).toBe(0);
+    expect(bloomed).toBe(0);
+    expect([e.valueAt(x, z), e.valueAt(48, 20), e.valueAt(900, -360)]).toEqual([70, 137, 6]);
   });
 });
 

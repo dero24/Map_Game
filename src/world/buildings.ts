@@ -11,6 +11,9 @@ import { paintMaterial, lin } from '../render/shared';
 import { hash01 } from '../core/rng';
 import { buildRoof, tidyRing, ringArea, offsetRing, type RoofGeom } from './roof';
 import { recipeFor, rowStyle, SIDING, ROOFMAT, type Recipe } from './recipe';
+import { measureHoods, hoodKey, type HoodClass } from './hood';
+import { neighbours, priorHeight } from './priors';
+import { tileRoofs } from './aerial';
 import { activeStyle } from './styles';
 
 type P2 = [number, number];
@@ -31,6 +34,9 @@ export interface Footprint {
   door?: number;
   pitched?: boolean;
   front?: boolean; // a storefront (shop, or apartments over shops): paved to the kerb
+  /** a storefront street floor under apartments: the facade shader's kind +0.04 (windowAt's `gf`),
+   *  its ground storey glazed as a shop's — the interior's walls cut the same glass (plan.ts) */
+  gf?: 1;
   /** The tiers standing on it (building:part pieces lifted onto this building — a tower on its
    *  podium, a wedding cake's setbacks): outline, bottom and top (absolute). Its storeys go on up
    *  inside them (interior/plan.ts plates). */
@@ -72,6 +78,10 @@ class Builder {
   }
   // Triangle with explicit desired facing n; flips winding if needed.
   tri(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, n: THREE.Vector3, wa = Z4, wb = Z4, wc = Z4) {
+    // (a corner off at infinity — a height from an empty list, a division by zero — would cull its
+    // whole 300 m chunk: three's bounding sphere goes NaN and the frustum never takes it. Left out,
+    // and the first one said, with what built it.)
+    if (!Number.isFinite(a.x + a.y + a.z + b.x + b.y + b.z + c.x + c.y + c.z)) return badTri(this.inf[0]);
     const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z, vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
     const d = (uy * vz - uz * vy) * n.x + (uz * vx - ux * vz) * n.y + (ux * vy - uy * vx) * n.z;
     if (d < 0) { this.v(a, n, wa); this.v(c, n, wc); this.v(b, n, wb); }
@@ -94,6 +104,10 @@ class Builder {
   }
 }
 const Z4 = [0, 0, 0, 0];
+let badTris = 0;
+function badTri(id: number) {
+  if (badTris++ === 0) console.warn(`buildings: a non-finite corner in building ${id}, its triangles left out —`, new Error().stack?.split('\n').slice(3, 8).map((l) => l.trim()).join(' <- '));
+}
 const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const UP = V(0, 1, 0), DOWN = V(0, -1, 0);
 
@@ -282,8 +296,10 @@ class RingGrid {
 }
 
 // ---------------- doors, steps, porches ----------------
-// x,z,y: threshold just outside; wx,wz: centre of the opening in the wall; fx,fy,fz: foot of the steps.
-export interface Door { x: number; z: number; y: number; nx: number; nz: number; fx: number; fz: number; fy: number; b: number; w: number; h: number; wx: number; wz: number; col: number; street?: string; porch?: boolean; kind?: string; name?: string; use?: string }
+// x,z,y: threshold just outside; wx,wz: centre of the opening in the wall; fx,fy,fz: foot of the steps;
+// path: the way up between them (x,y,z turns: the top of a flight, a landing), foot first — straight
+// from the foot to the door when absent (a stoop's steps run straight up to it).
+export interface Door { x: number; z: number; y: number; nx: number; nz: number; fx: number; fz: number; fy: number; path?: number[]; b: number; w: number; h: number; wx: number; wz: number; col: number; street?: string; porch?: boolean; kind?: string; name?: string; use?: string }
 export interface Colliders { walls: [P2, P2, number, number][]; decks: Deck[] }
 export interface SignSpec { x: number; z: number; y: number; tx: number; tz: number; nx: number; nz: number; w: number; h: number; text: string; style: 'shop' | 'number'; color: number }
 export interface Mailbox { x: number; z: number; yaw: number }
@@ -291,6 +307,7 @@ export interface Mailbox { x: number; z: number; yaw: number }
 export interface Drive { x: number; z: number; yaw: number }
 
 interface Ctx {
+  estate?: boolean; // the house stands in estate country (hood.ts): long drives to big houses
   b: Builder;
   col: Colliders;
   streets: StreetIndex;
@@ -362,10 +379,12 @@ function doorOpen(ring: P2[], i: number, u: number, w: number, solid: RingGrid) 
   return true;
 }
 
-// Pick the wall that faces the street (or a mapped OSM entrance) for the front door — among the
-// walls whose outside is open (`solid`: the walkable buildings round it). None open: no door (the
-// building stays solid, never a place to be shut in).
-function pickDoorWall(ring: P2[], seed: number, kind: string, streets: StreetIndex, entrances: P2[], solid: RingGrid | null = null) {
+type DoorWall = { i: number; u: number; len: number };
+// The walls a front door can go on, best first: one a mapped OSM entrance stands at, then the rest by
+// how squarely they face the nearest street — among the walls whose outside is open (`solid`: the
+// walkable buildings round it). None open: no door (the building stays solid, never a place to be
+// shut in). Lazy: most buildings take the first.
+function* doorWalls(ring: P2[], seed: number, kind: string, streets: StreetIndex, entrances: P2[], solid: RingGrid | null = null): Generator<DoorWall> {
   const w = doorWide(kind);
   // where along a wall the door goes: the middle for a shop or a church, a seeded spot for the
   // rest — or, where that spot opens onto a neighbour, the first place along it that doesn't
@@ -380,7 +399,8 @@ function pickDoorWall(ring: P2[], seed: number, kind: string, streets: StreetInd
     }
     return -1;
   };
-  let best: { i: number; score: number; u: number } | null = null;
+  const scored: { i: number; score: number; len: number }[] = [];
+  const mapped = new Set<number>();
   for (let i = 0; i < ring.length; i++) {
     const p = ring[i], q = ring[(i + 1) % ring.length];
     const dx = q[0] - p[0], dz = q[1] - p[1], len = Math.hypot(dx, dz);
@@ -389,7 +409,11 @@ function pickDoorWall(ring: P2[], seed: number, kind: string, streets: StreetInd
     for (const [ex, ez] of entrances) {
       const t = ((ex - p[0]) * dx + (ez - p[1]) * dz) / (len * len);
       const px = p[0] + dx * t, pz = p[1] + dz * t;
-      if (t > 0.1 && t < 0.9 && Math.hypot(px - ex, pz - ez) < 2.5 && (!solid || doorOpen(ring, i, t * len, w, solid))) return { i, u: t * len, len };
+      if (t > 0.1 && t < 0.9 && Math.hypot(px - ex, pz - ez) < 2.5 && (!solid || doorOpen(ring, i, t * len, w, solid))) {
+        mapped.add(i);
+        yield { i, u: t * len, len };
+        break;
+      }
     }
     const mx = (p[0] + q[0]) / 2, mz = (p[1] + q[1]) / 2;
     const r = streets.nearest(mx + nx * 2, mz + nz * 2);
@@ -398,13 +422,117 @@ function pickDoorWall(ring: P2[], seed: number, kind: string, streets: StreetInd
       const ddx = r[0] - mx, ddz = r[1] - mz, dl = Math.hypot(ddx, ddz) || 1;
       score += r[2] - 14 * ((ddx * nx + ddz * nz) / dl);
     } else score += 60;
-    if (best && score >= best.score) continue;
-    const u = spot(i, len);
-    if (u >= 0) best = { i, score, u };
+    scored.push({ i, score, len });
   }
-  if (!best) return null;
-  const p = ring[best.i], q = ring[(best.i + 1) % ring.length];
-  return { i: best.i, u: best.u, len: Math.hypot(q[0] - p[0], q[1] - p[1]) };
+  // (a stable sort: of two walls facing the street alike, the first round the ring)
+  scored.sort((a, b) => a.score - b.score);
+  for (const { i, len } of scored) {
+    if (mapped.has(i)) continue;
+    const u = spot(i, len);
+    if (u >= 0) yield { i, u, len };
+  }
+}
+/** The wall for the front door (doorWalls' first), or null: no wall opens onto open ground. */
+function pickDoorWall(ring: P2[], seed: number, kind: string, streets: StreetIndex, entrances: P2[], solid: RingGrid | null = null): DoorWall | null {
+  for (const w of doorWalls(ring, seed, kind, streets, entrances, solid)) return w;
+  return null;
+}
+
+type SideWrap = { cx: number; cz: number; dx: number; dz: number; sx: number; sz: number };
+type StairShape = { k: 'parallel' | 'side' | 'dogleg' | 'straight'; d: number; hit: number; side?: SideWrap };
+/** A raised house's stair down from a door on `wall`: the shape it takes (`pick`; `hit` > 0 — how
+ *  many of its samples stand in a footprint or a street — when none stands in the open) and its
+ *  measures. Stairs hug the house: one flight along the wall when it fits, else a switchback (two
+ *  half-flights along the wall, the second outside the first, a landing between). Straight out
+ *  toward the street only when the wall is too short even for that — on the shore's tight lots a
+ *  straight flight lands on the sidewalk.
+ *    Each shape is taken where its flight stands in the open — no other footprint and no street's
+ *  carriageway under it or on the metre of ground past its foot you step off onto. On the shore's
+ *  tight lots the side wrap ran its stair down the 40 cm between two houses (inside the neighbour),
+ *  or landed it against a shed, and a house at the kerb ran it across the street: the door above
+ *  was shut, or cars drove into it. In order — along the wall, round the side, a switchback,
+ *  straight out — the first in the open; none: the one least in the way. */
+function raisedStair(C: Ctx, B: BInfo, wall: DoorWall) {
+  const p = B.ring[wall.i], q = B.ring[(wall.i + 1) % B.ring.length];
+  const len = wall.len, u = wall.u;
+  const tx = (q[0] - p[0]) / len, tz = (q[1] - p[1]) / len;
+  const nx = tz, nz = -tx; // outward for a CCW ring
+  const at = (uu: number, out: number): P2 => [p[0] + tx * uu + nx * out, p[1] + tz * uu + nz * out];
+  const wide = doorWide(B.kind);
+  const g = C.world.terrain.heightAt(p[0] + tx * u + nx * 3, p[1] + tz * u + nz * 3);
+  const rise = B.floor0 - g;
+  const nSteps = Math.max(2, Math.round(rise / 0.19));
+  const total = (nSteps - 1) * 0.27;
+  const sw = 1.1, D = 1.35;
+  const spaceR = len - (u + wide / 2 + 0.45), spaceL = u - wide / 2 - 0.45;
+  const inStreet = (x: number, z: number) => { const r = C.streets.nearest(x, z, 12, true); return !!r && r[2] < r[3] / 2; };
+  const hits = (x0: number, z0: number, dx: number, dz: number, L: number) => {
+    const px = -dz, pz = dx, n = Math.max(1, Math.ceil(L / 0.5));
+    let k = 0;
+    for (let i = 0; i <= n; i++)
+      for (const w of [-sw / 2, 0, sw / 2]) {
+        const x = x0 + dx * ((L * i) / n) + px * w, z = z0 + dz * ((L * i) / n) + pz * w;
+        if (C.rings.hit(x, z, B.ring) || inStreet(x, z)) k++;
+      }
+    return k;
+  };
+  const space = (d: number) => (d > 0 ? spaceR : spaceL), pref = spaceR >= spaceL ? [1, -1] : [-1, 1];
+  const outA = 0.08 + sw / 2, half = Math.ceil(nSteps / 2);
+  const shapes: StairShape[] = [];
+  for (const d of pref) {
+    if (space(d) < total + 0.3) continue;
+    const [x0, z0] = at(u + d * (wide / 2 + 0.45), outA);
+    shapes.push({ k: 'parallel', d, hit: hits(x0, z0, tx * d, tz * d, total + 1) });
+  }
+  // Side-wrap: the landing runs to the house corner and the flight goes down along the side
+  // wall toward the back — how narrow raised shore houses actually do it (the door on the
+  // street gable, the stair along the side). Needs a convex corner and a long enough side, and
+  // a walk beside the flight (its foot is met from the street, not only from the back yards).
+  {
+    const R = B.ring, n = R.length;
+    for (const d of pref) {
+      const c = d > 0 ? R[(wall.i + 1) % n] : R[wall.i];
+      const o = d > 0 ? R[(wall.i + 2) % n] : R[(wall.i - 1 + n) % n];
+      const sl = Math.hypot(o[0] - c[0], o[1] - c[1]);
+      if (sl < total + 0.4) continue;
+      const dx = (o[0] - c[0]) / sl, dz = (o[1] - c[1]) / sl;
+      if (dx * nx + dz * nz > -0.7) continue; // the side wall must run back from the street wall
+      let sx = -dz, sz = dx;
+      if (sx * tx * d + sz * tz * d < 0) (sx = -sx), (sz = -sz); // outward from the side wall
+      const cu = d > 0 ? len : 0;
+      let hit = hits(c[0] + sx * outA, c[1] + sz * outA, dx, dz, total + 1) + hits(c[0] + sx * (outA + sw), c[1] + sz * (outA + sw), dx, dz, total + 1);
+      for (const e of [0.3, sw / 2, sw + 0.1]) for (const o2 of [0.2, D / 2, D - 0.2]) { const [x, z] = at(cu + d * e, o2); if (C.rings.hit(x, z, B.ring) || inStreet(x, z)) hit++; }
+      shapes.push({ k: 'side', d, hit, side: { cx: c[0], cz: c[1], dx, dz, sx, sz } });
+    }
+  }
+  for (const d of pref) {
+    if (space(d) < half * 0.27 + sw + 0.4) continue;
+    const lbd = u + d * (wide / 2 + 0.45), uA = lbd + d * (half - 1) * 0.27;
+    const [ax, az] = at(lbd, outA), [bx, bz] = at(uA, 0.08 + sw * 1.5 + 0.12);
+    shapes.push({ k: 'dogleg', d, hit: hits(ax, az, tx * d, tz * d, (half - 1) * 0.27) + hits(bx, bz, -tx * d, -tz * d, Math.max(0.3, (nSteps - half - 1) * 0.27) + 1) });
+  }
+  {
+    const [x0, z0] = at(u, D);
+    shapes.push({ k: 'straight', d: pref[0], hit: hits(x0, z0, nx, nz, total + 1) });
+  }
+  const pick = shapes.find((s) => s.hit === 0) ?? shapes.reduce((a, s) => (s.hit < a.hit ? s : a));
+  return { pick, g, rise, nSteps, total, sw, D };
+}
+
+/** A raised house's door: on the wall `doorWalls` puts first when its stair stands in the open;
+ *  else on the next wall whose stair does (a tight lot, the neighbours close on both sides and a
+ *  garage in front: every way down from the street wall ran into something, and the door up there
+ *  couldn't be reached); none does: the wall whose stair is least in the way, the street's on a tie.
+ *  (Up to `max` walls tried: a detailed outline has dozens.) */
+function raisedDoorWall(C: Ctx, B: BInfo, walls: Iterable<DoorWall>, max = 8): DoorWall | null {
+  let best: { w: DoorWall; hit: number } | null = null, n = 0;
+  for (const w of walls) {
+    const hit = raisedStair(C, B, w).pick.hit;
+    if (hit === 0) return w;
+    if (!best || hit < best.hit) best = { w, hit };
+    if (++n >= max) break;
+  }
+  return best?.w ?? null;
 }
 
 function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: number }, porch: boolean): Door {
@@ -452,79 +580,14 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
   b.setInfo(B.id, kindI, PART.trim, B.fo);
 
   let fx = cx + nx * 1.4, fz = cz + nz * 1.4, fy = floorY;
+  const path: number[] = [];
+  const turn = (pt: P2, y: number) => path.push(pt[0], y, pt[1]);
   const concrete = lin(0xc8c1b3), wood = lin(0xa8998a);
   const gAt = (out: number, du = 0) => terrain.heightAt(cx + nx * out + tx * du, cz + nz * out + tz * du);
 
   if (B.raise > 0.5) {
     // Raised on pilings: a landing at the door and a railed stair down to the ground.
-    const g = gAt(3);
-    const rise = floorY - g;
-    const nSteps = Math.max(2, Math.round(rise / 0.19));
-    const total = (nSteps - 1) * 0.27;
-    const sw = 1.1, D = 1.35;
-    const spaceR = len - (u + wide / 2 + 0.45), spaceL = u - wide / 2 - 0.45;
-    // Stairs hug the house: one flight along the wall when it fits, else a switchback (two
-    // half-flights along the wall, the second outside the first, a landing between). Straight
-    // out toward the street only when the wall is too short even for that — on the shore's
-    // tight lots a straight flight lands on the sidewalk.
-    // Each shape is taken where its flight stands in the open — no other footprint and no street's
-    // carriageway under it or on the metre of ground past its foot you step off onto. On the shore's
-    // tight lots the side wrap ran its stair down the 40 cm between two houses (inside the
-    // neighbour), or landed it against a shed, and a house at the kerb ran it across the street: the
-    // door above was shut, or cars drove into it. In order — along the wall, round the side, a
-    // switchback, straight out — the first in the open; none: the one least in the way.
-    const inStreet = (x: number, z: number) => { const r = C.streets.nearest(x, z, 12, true); return !!r && r[2] < r[3] / 2; };
-    const hits = (x0: number, z0: number, dx: number, dz: number, L: number) => {
-      const px = -dz, pz = dx, n = Math.max(1, Math.ceil(L / 0.5));
-      let k = 0;
-      for (let i = 0; i <= n; i++)
-        for (const w of [-sw / 2, 0, sw / 2]) {
-          const x = x0 + dx * ((L * i) / n) + px * w, z = z0 + dz * ((L * i) / n) + pz * w;
-          if (C.rings.hit(x, z, B.ring) || inStreet(x, z)) k++;
-        }
-      return k;
-    };
-    type SideWrap = { cx: number; cz: number; dx: number; dz: number; sx: number; sz: number };
-    const space = (d: number) => (d > 0 ? spaceR : spaceL), pref = spaceR >= spaceL ? [1, -1] : [-1, 1];
-    const outA = 0.08 + sw / 2, half = Math.ceil(nSteps / 2);
-    const shapes: { k: 'parallel' | 'side' | 'dogleg' | 'straight'; d: number; hit: number; side?: SideWrap }[] = [];
-    for (const d of pref) {
-      if (space(d) < total + 0.3) continue;
-      const [x0, z0] = at(u + d * (wide / 2 + 0.45), outA);
-      shapes.push({ k: 'parallel', d, hit: hits(x0, z0, tx * d, tz * d, total + 1) });
-    }
-    // Side-wrap: the landing runs to the house corner and the flight goes down along the side
-    // wall toward the back — how narrow raised shore houses actually do it (the door on the
-    // street gable, the stair along the side). Needs a convex corner and a long enough side, and
-    // a walk beside the flight (its foot is met from the street, not only from the back yards).
-    {
-      const R = B.ring, n = R.length;
-      for (const d of pref) {
-        const c = d > 0 ? R[(wall.i + 1) % n] : R[wall.i];
-        const o = d > 0 ? R[(wall.i + 2) % n] : R[(wall.i - 1 + n) % n];
-        const sl = Math.hypot(o[0] - c[0], o[1] - c[1]);
-        if (sl < total + 0.4) continue;
-        const dx = (o[0] - c[0]) / sl, dz = (o[1] - c[1]) / sl;
-        if (dx * nx + dz * nz > -0.7) continue; // the side wall must run back from the street wall
-        let sx = -dz, sz = dx;
-        if (sx * tx * d + sz * tz * d < 0) (sx = -sx), (sz = -sz); // outward from the side wall
-        const cu = d > 0 ? len : 0;
-        let hit = hits(c[0] + sx * outA, c[1] + sz * outA, dx, dz, total + 1) + hits(c[0] + sx * (outA + sw), c[1] + sz * (outA + sw), dx, dz, total + 1);
-        for (const e of [0.3, sw / 2, sw + 0.1]) for (const o2 of [0.2, D / 2, D - 0.2]) { const [x, z] = at(cu + d * e, o2); if (C.rings.hit(x, z, B.ring) || inStreet(x, z)) hit++; }
-        shapes.push({ k: 'side', d, hit, side: { cx: c[0], cz: c[1], dx, dz, sx, sz } });
-      }
-    }
-    for (const d of pref) {
-      if (space(d) < half * 0.27 + sw + 0.4) continue;
-      const lbd = u + d * (wide / 2 + 0.45), uA = lbd + d * (half - 1) * 0.27;
-      const [ax, az] = at(lbd, outA), [bx, bz] = at(uA, 0.08 + sw * 1.5 + 0.12);
-      shapes.push({ k: 'dogleg', d, hit: hits(ax, az, tx * d, tz * d, (half - 1) * 0.27) + hits(bx, bz, -tx * d, -tz * d, Math.max(0.3, (nSteps - half - 1) * 0.27) + 1) });
-    }
-    {
-      const [x0, z0] = at(u, D);
-      shapes.push({ k: 'straight', d: pref[0], hit: hits(x0, z0, nx, nz, total + 1) });
-    }
-    const pick = shapes.find((q) => q.hit === 0) ?? shapes.reduce((a, q) => (q.hit < a.hit ? q : a));
+    const { pick, g, rise, nSteps, sw, D } = raisedStair(C, B, wall);
     const parallel = pick.k === 'parallel', dogleg = pick.k === 'dogleg', side = pick.side ?? null;
     let dir = pick.d;
     let la: number, lb: number; // landing extent along the wall
@@ -553,6 +616,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
       const out = 0.08 + sw / 2;
       const sx0 = side.cx + side.sx * out, sz0 = side.cz + side.sz * out;
       st = stairFlight(C, sx0, sz0, side.dx, side.dz, sw, floorY, g, wood);
+      turn([sx0, sz0], floorY);
       const P3 = (pt: P2) => V(pt[0], floorY, pt[1]);
       railPanel(b, P3(at(l0, D)), P3(at(l1, D)), 0.95);
       railPanel(b, P3(at(la, 0.05)), P3(at(la, D)), 0.95);
@@ -581,6 +645,8 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
       const uEnd = uA + dir * sw; // far edge of the mid landing
       const [bx, bz] = at(uA, outB);
       st = stairFlight(C, bx, bz, -tx * dir, -tz * dir, sw, midY, g, wood);
+      // (up flight B, across the mid landing, up flight A)
+      turn([bx, bz], midY); turn(at(uA + (dir * sw) / 2, outB), midY); turn(at(uA + (dir * sw) / 2, outA), midY); turn(at(uA, outA), midY); turn(at(lb, outA), floorY);
       // rails: door landing's outer edge up to flight A, the mid landing's far end and outer side
       const P3 = (pt: P2, y: number) => V(pt[0], y, pt[1]);
       railPanel(b, P3(at(l0, D), floorY), P3(at(l1, D), floorY), 0.95);
@@ -593,6 +659,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
       const ue = lb, out = 0.08 + sw / 2;
       const [sx, sz] = at(ue, out);
       st = stairFlight(C, sx, sz, tx * dir, tz * dir, sw, floorY, g, wood);
+      turn([sx, sz], floorY);
       // rail along the landing's outer edge and far end
       const A = at(l0, D), Bp = at(l1, D), Cp = at(la, 0.05);
       const P3 = (pt: P2) => V(pt[0], floorY, pt[1]);
@@ -604,6 +671,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
     } else {
       const [sx, sz] = at(u, D);
       st = stairFlight(C, sx, sz, nx, nz, sw, floorY, g, wood);
+      turn([sx, sz], floorY);
       const P3 = (pt: P2) => V(pt[0], floorY, pt[1]);
       railPanel(b, P3(at(l0, D)), P3(at(u - sw / 2, D)), 0.95);
       railPanel(b, P3(at(u + sw / 2, D)), P3(at(l1, D)), 0.95);
@@ -666,6 +734,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
       const st = stairFlight(C, sx, sz, nx, nz, 1.3, deckY, gFront, concrete, rise > 0.6);
       (fx = st.fx), (fz = st.fz), (fy = gFront);
     } else (fx = at(u, D + 0.8)[0]), (fz = at(u, D + 0.8)[1]), (fy = gFront);
+    turn(at(u, D), deckY); // (the top of the steps: then level across the deck)
   } else {
     // Stoop: a landing slab and steps down to the walk.
     const g = gAt(1.2);
@@ -708,12 +777,13 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
       const ex = st[0] + (ddx / dl) * edge, ez = st[1] + (ddz / dl) * edge;
       C.walks.push(fx, fz, ex, ez, B.kind === 'commercial' ? 2.0 : 1.1);
       if (B.kind === 'house' && dl > edge + 3) { // every house with a walk to the street gets a curbside box (props.ts picks the style, NA only)
-        const mx = st[0] + (ddx / dl) * (edge + 0.5) + (-ddz / dl) * 0.9, mz = st[1] + (ddz / dl) * (edge + 0.5) + (ddx / dl) * 0.9;
+        // (its post 45 cm behind the kerb's face — the box's door over the gutter, where the carrier reaches it)
+        const mx = st[0] + (ddx / dl) * (edge - 0.15) + (-ddz / dl) * 0.9, mz = st[1] + (ddz / dl) * (edge - 0.15) + (ddx / dl) * 0.9;
         if (!C.rings.hit(mx, mz, B.ring)) C.mail.push({ x: mx, z: mz, yaw: Math.atan2(-ddx, -ddz) });
         // Lot dressing: most North American houses have a drive beside the walk. Where the map
         // has none (no service way near the door), lay a 2.9 m strip to the street 6 m to one side
         // and park a car at its house end (props.ts) — only if the strip is clear of every house.
-        if (activeStyle().region === 'na' && r(0xd71e) < 0.62 && Math.abs(ringArea(B.ring)) < 280 && !C.streets.minorNear(fx, fz, 14)) {
+        if (activeStyle().region === 'na' && r(0xd71e) < (C.estate ? 0.9 : 0.62) && Math.abs(ringArea(B.ring)) < (C.estate ? 1500 : 280) && !C.streets.minorNear(fx, fz, 14)) {
           const ux = ddx / dl, uz = ddz / dl, px = -uz, pz = ux;
           for (const side of r(0xd7) < 0.5 ? [-1, 1] : [1, -1]) {
             const off = 6.0 * side;
@@ -735,7 +805,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
       }
     }
   }
-  return { x: cx + nx * 0.2, z: cz + nz * 0.2, y: floorY, nx, nz, fx, fz, fy, b: B.bi, w: wide, h: tall, wx: cx, wz: cz, col: doorHex, street, porch: porch && B.raise <= 0.5, kind: B.kind, name: B.name, use: B.use };
+  return { x: cx + nx * 0.2, z: cz + nz * 0.2, y: floorY, nx, nz, fx, fz, fy, b: B.bi, w: wide, h: tall, wx: cx, wz: cz, col: doorHex, street, porch: porch && B.raise <= 0.5, kind: B.kind, name: B.name, use: B.use, ...(path.length ? { path } : {}) };
 }
 
 // Is there room for a porch on this wall (no neighbours, not onto the street)?
@@ -1162,6 +1232,8 @@ export interface BuildingsResult {
   drives: Drive[];
   walks: number[]; // x0 z0 x1 z1 width per front walk (and generated drives, 2.9 m)
   pilings: { x: number; z: number; ang: number }[];
+  /** the neighbourhood class at a point (hood.ts, measured from this tile's houses) — props read it */
+  hood: (x: number, z: number) => HoodClass;
 }
 
 // Convex hull (monotone chain), oriented like `like` so buildRoof sees the same winding.
@@ -1223,6 +1295,21 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
   json.buildings.forEach((bd, bi) => { const r = tidy[bi]; if (r && near(r[0][0], r[0][1], 80) && (bd.lf ?? 0) <= 1.5 && !(bd.pt && bd.po != null)) solid.add(r); });
   // Margin-context buildings (own:0): neighbours' shapes, for scratch-walk seeds in the tile worker.
   const ctxRings: P2[][] = json.buildings.map((bd, bi) => (bd.own === 0 ? tidy[bi] : null)).filter((r): r is P2[] => !!r);
+  // The neighbourhood each house stands in (hood.ts): measured from this tile's own houses. By the
+  // sea the shore keeps its own look (Sea Bright's cottages are the gold standard) unless it's
+  // estate country.
+  const hoods = measureHoods(json.buildings);
+  const hoodAt = (x: number, z: number): HoodClass => {
+    const k = hoods.get(hoodKey(x, z))?.klass ?? 'suburb';
+    return k !== 'estate' && k !== 'suburb' && terrain.oceanDistAt(x, z) < 800 ? 'suburb' : k;
+  };
+  // Real roof colours read off aerial photos, the photo's cast taken out (aerial.ts): a streamed
+  // cell's from the tile worker, a baked pack's balanced here, one cast per tile. (Streamed tiles
+  // carry the map's attribution; a baked tile's `rc` are its region's aerial samples.)
+  const seenRoofs = tileRoofs(json.buildings, !(json as { attribution?: string }).attribution);
+  // The measured houses round each guessed one (priors.ts): a house nothing measured or mapped
+  // stands as tall as they do.
+  const nbrs = neighbours(json.buildings);
 
   json.buildings.forEach((bd: Building, bi: number) => {
     const ring = tidy[bi];
@@ -1263,12 +1350,24 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     // Every look decision comes from the recipe: pure f(bd.s, region style, real data).
     // North American rows (walk-ups, brownstones): flat roofs behind a cornice, apartments inside —
     // unless the survey measured or the map says otherwise (recipe.ts rowStyle)
+    const hood = activeStyle().region === 'na' ? hoodAt(cx, cz) : 'suburb';
+    // an estate house is a house, however big its footprint (the map's area rule made Rumson's
+    // mansions flat-roofed blocks): pitched, with its door and its drive
+    if (hood === 'estate' && bd.k === 'large' && !bd.at && bd.h <= 13 && (bd.fl ?? 2) <= 3 && Math.abs(ringArea(ring)) <= 1500) {
+      bd.k = 'house';
+      if (bd.roof === 'flat' && !bd.rt && !bd.ms) bd.roof = 'hip';
+    }
+    // a house whose height is a guess (nothing measured, nothing mapped): a measured neighbour's,
+    // else its neighbourhood's storeys (priors.ts) — before the recipe, which reads it (dormers)
+    const cellSeed = Math.floor(cx / 256) * 7919 + Math.floor(cz / 256) * 104729;
+    const ph = priorHeight(bd, cx, cz, Math.abs(ringArea(ring)), nbrs, hood, activeStyle(), cellSeed);
+    if (ph != null) bd.h = ph;
     const rowNA = rowStyle(bd, activeStyle());
     if (rowNA) {
       if (!bd.rt && !bd.ms) bd.roof = 'flat';
       if (bd.h >= 9.5) bd.k = 'large';
     }
-    const rc = recipeFor(bd, activeStyle());
+    const rc = recipeFor(bd, activeStyle(), hood, cellSeed, seenRoofs[bi]);
     const kindI = KIND[bd.k] ?? 0;
     // siding code rides in the fraction (the shader's kind tests use ±0.5 bands, so the glass
     // curtain wall, code 5, sits at .46 — still inside its kind's band, still rounds to 5)
@@ -1496,7 +1595,7 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
         }
       }
     }
-    const fp: Footprint = { ring, base, top: wallTop, floor0, raise, name: bd.n, use: bd.u, addr: bd.ad, kind: bd.k, eave: wallTop - base, seed: r1, id, pitched: !!roofG, front: bd.k === 'commercial' || !!bd.gf || (!!bd.u && bd.k !== 'house' && bd.k !== 'shed'), ...(rc.siding === SIDING.glass ? { glass: 1 as const } : {}) };
+    const fp: Footprint = { ring, base, top: wallTop, floor0, raise, name: bd.n, use: bd.u, addr: bd.ad, kind: bd.k, eave: wallTop - base, seed: r1, id, pitched: !!roofG, front: bd.k === 'commercial' || !!bd.gf || (!!bd.u && bd.k !== 'house' && bd.k !== 'shed'), ...(rc.siding === SIDING.glass ? { glass: 1 as const } : {}), ...(bd.gf && (bd.k === 'large' || bd.k === 'house') && rc.siding !== SIDING.glass ? { gf: 1 as const } : {}) };
     // a tier of a taller building (its part, lifted onto the outline or the tier under it): its
     // storeys are the building's too, up inside it
     if (lifted && part && bd.po != null && bd.po >= 0 && !bd.cn) {
@@ -1507,10 +1606,11 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     if (!owns) return; // parts belong to their outline's footprint; floating pieces have none
     if (inZone) footprints.push(fp);
     if (inSlice && !bd.lod && bd.k !== 'shed' && inZone) {
-      const wall = pickDoorWall(ring, seed, bd.k, streets, entrances, solid);
+      const C: Ctx = { b, col: colliders, streets, rings, world, signs, mail: mailboxes, walks, drives, estate: hood === 'estate' };
+      const B: BInfo = { ring, base, floor0, raise, eave: wallTop, kind: bd.k, seed, id, fo, roofCol, roofMat: rc.roofMat === ROOFMAT.tile ? ROOFMAT.metal : rc.roofMat, addr: bd.ad, name: bd.n, use: bd.u, bi: footprints.length - 1 };
+      // (a raised house goes round to a wall its stair has room at: raisedDoorWall)
+      const wall = raise > 0.5 ? raisedDoorWall(C, B, doorWalls(ring, seed, bd.k, streets, entrances, solid)) : pickDoorWall(ring, seed, bd.k, streets, entrances, solid);
       if (wall) {
-        const C: Ctx = { b, col: colliders, streets, rings, world, signs, mail: mailboxes, walks, drives };
-        const B: BInfo = { ring, base, floor0, raise, eave: wallTop, kind: bd.k, seed, id, fo, roofCol, roofMat: rc.roofMat === ROOFMAT.tile ? ROOFMAT.metal : rc.roofMat, addr: bd.ad, name: bd.n, use: bd.u, bi: footprints.length - 1 };
         const porch = bd.k === 'house' && raise === 0 && r2 < 0.5 && porchFits(C, B, wall);
         const d = buildEntrance(C, B, wall, porch);
         // the black iron fire escape down the front of a North American brick walk-up
@@ -1547,7 +1647,20 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     m.layers.enable(1);
     group.add(m);
   }
-  return { group, footprints, ctxRings, lanterns, material, doors, colliders, signs, mailboxes, drives, walks, pilings };
+  // A house's kerb box never stands on a shop's sidewalk: none within 10 m of a commercial door (the
+  // margin's shops by their walls — their doors are the next tile's to make)
+  const shopDoors = doors.filter((d) => d.kind === 'commercial');
+  const shopWalls = json.buildings.filter((bd) => bd.own === 0 && bd.k === 'commercial' && !bd.lod).map((bd) => bd.r);
+  const nearShop = (x: number, z: number) => shopDoors.some((d) => Math.hypot(d.wx - x, d.wz - z) < 10) || shopWalls.some((r) => {
+    for (let i = 0, j = r.length - 2; i + 1 < r.length; j = i, i += 2) {
+      const ax = r[j] / 10, az = r[j + 1] / 10, dx = r[i] / 10 - ax, dz = r[i + 1] / 10 - az, L2 = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
+      if (Math.hypot(ax + dx * t - x, az + dz * t - z) < 10) return true;
+    }
+    return false;
+  });
+  for (let i = mailboxes.length - 1; i >= 0; i--) if (nearShop(mailboxes[i].x, mailboxes[i].z)) mailboxes.splice(i, 1);
+  return { group, footprints, ctxRings, lanterns, material, doors, colliders, signs, mailboxes, drives, walks, pilings, hood: hoodAt };
 }
 
 // The building you're visiting: its door stands open and its windows become real openings (a short
@@ -1607,9 +1720,13 @@ float seedOf(float id) { return hash12(vec2(id * 0.0137 + 0.31, id * 0.0071 + 7.
 float aab(float x, float h, float w) { return clamp((h - abs(x)) / max(w, 1e-4) + 0.5, 0.0, 1.0); }
 `;
 
+/** How much of the sky fill's blue a roof greys before it lights the roof (paintLight's skyNeutral,
+ *  by day): roofs face the sky, and its blue fill tinted every grey shingle teal (reviewer round 10). */
+export const ROOF_SKY = 0.6;
 export function buildingMaterial() {
   return paintMaterial({
-    uniforms: { uWindowColor: { value: lin(0xffc27a) }, ...activeBuilding },
+    // (uRoofSky: how much of the sky fill a roof greys — tools/roof-check.js measures it turned)
+    uniforms: { uWindowColor: { value: lin(0xffc27a) }, uRoofSky: { value: ROOF_SKY }, ...activeBuilding },
     vertex: /* glsl */ `
       attribute vec4 aWall;
       attribute vec4 aInfo;
@@ -1628,6 +1745,7 @@ export function buildingMaterial() {
       }`,
     fragment: /* glsl */ `
       uniform vec3 uWindowColor;
+      uniform float uRoofSky;
       uniform float uActiveId, uOpenAmt, uOpenDoorH;
       uniform vec4 uWinStyle;
       uniform vec4 uOpenDoor;
@@ -1847,18 +1965,21 @@ export function buildingMaterial() {
             alb = mix(alb, trimCol, barM * nearW);
             alb = mix(alb, shadeCol * (0.92 + 0.08 * step(0.02, fract(W.cy * 4.0)) * fineL), shadeM * nearW);
             glow += shadeM * lit * 0.55 * nearW;
-            // Real room behind: see straight in through the sash bars — but only at the windows
-            // you're actually near (per-window distance, washed edge). From the street the visited
-            // house keeps its glass like its neighbours; from indoors the facade is back-facing
-            // anyway, so the interior wall's own hole is what you look through.
-            if (innerM > 0.5 && barM < 0.5 && cut) {
-              float wd = 0.0;
-              if (dot(vTan, vTan) > 0.5) {
-                vec3 Tw = normalize(vec3(vTan.x, 0.0, vTan.y));
-                vec3 wc = vWorldPos - Tw * W.cu - vec3(0.0, W.cy, 0.0);
-                wd = length(wc - (cameraPosition + uWorldOffset));
-              }
-              if (wd < 4.2 + 1.6 * vnoise3(vWorldPos * 2.2)) discard;
+            // Real room behind: see straight in through the sash bars — at the windows you're near.
+            // From the street the visited house keeps its far glass like its neighbours; from indoors
+            // the facade is back-facing anyway, so the interior wall's own hole is what you look
+            // through. A pane opens whole or not at all: by the eye's distance to its nearest point
+            // (a storefront's middle stands metres from its edge), each pane its own threshold — not
+            // per-pixel noise, which left a big pane half-dissolved wherever you stood at its distance
+            // (Robby, Brooklyn) — and only on the storeys round the walker's (a tall building builds
+            // three). The opening's own wash (uOpenAmt, ~0.3 s) still dissolves it in.
+            if (innerM > 0.5 && barM < 0.5 && cut && dot(vTan, vTan) > 0.5) {
+              vec3 Tw = normalize(vec3(vTan.x, 0.0, vTan.y));
+              vec3 wc = vWorldPos - Tw * W.cu - vec3(0.0, W.cy, 0.0);
+              vec3 eye = cameraPosition + uWorldOffset, e = eye - wc;
+              vec3 q = wc + Tw * clamp(dot(e, Tw), -gw, gw) + vec3(0.0, clamp(e.y, -gh, gh), 0.0);
+              float ks = floor((wc.y - uOpenDoor.y) / W.floorH + 0.5), kc = floor((eye.y - 1.5 - uOpenDoor.y) / W.floorH + 0.5);
+              if (abs(ks - kc) < 1.5 && length(eye - q) < 6.5 + 1.5 * fract(W.h1 * 13.7)) discard;
             }
             float glassM = innerM * (1.0 - barM) * (1.0 - shadeM) * nearW;
             if (glassM > 0.001) {
@@ -2047,10 +2168,11 @@ export function buildingMaterial() {
         alb = snowOn(alb, N, vWorldPos, 1.0); // roofs, sills and porch floors white in a snowy winter
         alb = pigment(alb, vWorldPos);
         float sh = shadowAt(vWorldPos, N);
-        vec3 col = paintLight(alb, N, vWorldPos, sh, ao);
-        // roofs face the sky, so the blue sky fill tints every grey shingle teal; take most of
-        // that chroma back out (a touch warm, like sunlit asphalt shingle)
-        if (part > 0.5 && part < 1.5) { float rl = dot(col, vec3(0.2126, 0.7152, 0.0722)); col = mix(col, rl * vec3(1.04, 1.0, 0.94), 0.4 * (1.0 - uNight)); }
+        // roofs face the sky, and its blue fill tinted every grey shingle teal: on a roof the fill
+        // is greyed (a touch warm, like sunlit asphalt shingle) — not the roof's own colour, which
+        // the aerial photo measured, nor the sun's, which golden hour lays on roofs and walls alike
+        float roofSky = part > 0.5 && part < 1.5 ? uRoofSky * (1.0 - uNight) : 0.0;
+        vec3 col = paintLight(alb, N, vWorldPos, sh, ao, roofSky);
         col += glow * uWindowColor * (0.15 + 1.25 * uNight);
         col = mix(col, winCol, winMask);
         gl_FragColor = vec4(applyFog(col, vWorldPos), 1.0);

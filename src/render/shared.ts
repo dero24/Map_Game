@@ -1,6 +1,7 @@
 // Shared uniforms + GLSL chunks for every painted material. Uniform objects are shared by reference,
 // so updating U.* once per frame updates every material.
 import * as THREE from 'three';
+import { POOL, GLSL_POOL, FLOOR, GLSL_FLOOR } from './nightLight';
 
 const v3 = (x = 0, y = 0, z = 0) => ({ value: new THREE.Vector3(x, y, z) });
 export const HOLE_MAX = 32;
@@ -34,6 +35,13 @@ export const U = {
   uLampMap: { value: null as THREE.Texture | null },
   uLampBox: { value: new THREE.Vector4(0, 0, 1, 1) },
   uLampBaseY: { value: 0 }, // ground height around the walker: lamp pools light the street, not roofs
+  // a pool (nightLight.ts POOL): the lamp's height and the pool's reach in the map (both as painted
+  // there), the heart's gain over the pool's colour, and the map's headroom
+  uLampPool: { value: new THREE.Vector4(POOL.height, POOL.reach, POOL.gain, POOL.headroom) },
+  uPoolColor: { value: new THREE.Vector3(...POOL.color) }, // the pools' light (linear): a warm cream
+  // the night's floor (nightLight.ts FLOOR): the town's glow at street level, its colour (linear) and
+  // strength; it goes with uNight, so it's nothing by day
+  uNightFloor: { value: new THREE.Vector4(...FLOOR.color, FLOOR.strength) },
   // Paint-as-you-explore window (src/world/explore.ts): R8 paint amount per 8 m texel, box = x0 z0 1/w 1/h.
   uExplore: { value: null as THREE.Texture | null },
   uExploreBox: { value: new THREE.Vector4(0, 0, 1 / 4096, 1 / 4096) },
@@ -47,7 +55,7 @@ export const U = {
   // Floating origin: the world root renders shifted by -uWorldOffset so the camera stays near 0.
   // Shaders add it back where they need true region/world coords.
   uWorldOffset: { value: new THREE.Vector3() },
-  uLampColor: c3(0xffb86a),
+  uLampColor: c3(0xffb86a), // (a warm note the sea's foam keeps, day and night; the pools' own light is uPoolColor)
   uLampPower: { value: 0 },
   uPigment: { value: 0.22 },
   uPigmentScale: { value: 0.35 },
@@ -59,6 +67,7 @@ export const U = {
   uAutumn: { value: 0 },
   uTurn: { value: 0 }, // season.ts turn: the autumn's progress, each tree turning at its own point
   uBloom: { value: 0 }, // spring blossom on the flowering trees (season.ts bloom)
+  uMoss: { value: 0 }, // moss on the trees' bark, the region's (styles.ts moss)
   // Phase I biome wash for the ground: x = dryness (greens → straw/ochre), y = lushness,
   // z = cold/dark (boreal/polar greens). Set once per region from styles.ts.
   uBiome: { value: new THREE.Vector4(0, 0, 0, 0) },
@@ -105,11 +114,12 @@ uniform sampler2D uShadowMap;
 uniform mat4 uShadowMatrix;
 uniform float uShadowOn, uShadowTexel, uShadowStrength;
 uniform sampler2D uLampMap;
-uniform vec4 uLampBox;
+uniform vec4 uLampBox, uLampPool;
 uniform float uLampBaseY;
-uniform vec3 uLampColor;
+uniform vec3 uLampColor, uPoolColor;
+uniform vec4 uNightFloor;
 uniform float uLampPower, uPigment, uPigmentScale, uWind;
-uniform float uSnow, uLeafFall, uAutumn, uTurn, uBloom;
+uniform float uSnow, uLeafFall, uAutumn, uTurn, uBloom, uMoss;
 uniform vec4 uBiome;
 uniform vec4 uSliceBox;
 uniform vec4 uHoleBox, uHoleInfo;
@@ -159,14 +169,23 @@ float canyonAt(vec3 wpos) {
   if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
   return texture2D(uLampMap, uv).g * (1.0 - smoothstep(0.0, 45.0, wpos.y - uLampBaseY));
 }
-float lampAt(vec3 wpos) {
-  if (uLampPower <= 0.001) return 0.0;
+// How much of the street's own light reaches a point: all of it up to 1.5 m over the local ground,
+// none by 10.5 m — the lamps' pools and the night's floor light the street, not the roofs. (Relative
+// to the local ground, not sea level: streamed towns sit on real (DEM) terrain, and an absolute clamp
+// blacked out every pool more than ~10 m above the sea.)
+float streetLevel(vec3 wpos) { return clamp(1.0 - max(wpos.y - uLampBaseY - 1.5, 0.0) / 9.0, 0.0, 1.0); }
+${GLSL_POOL}
+${GLSL_FLOOR}
+// The street lamps' pools (0–1 of a lone heart) at a point: their light, added up in the lamp map —
+// a pale glow under each lamp that dies away, meeting the next one's faintly (nightLight.ts).
+float lampField(vec3 wpos) {
   vec2 uv = (wpos.xz - uLampBox.xy) * uLampBox.zw;
   if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
-  // relative to the local ground, not sea level: streamed towns sit on real (DEM) terrain, and
-  // an absolute clamp blacked out every pool more than ~10 m above the sea
-  float h = clamp(1.0 - max(wpos.y - uLampBaseY - 1.5, 0.0) / 9.0, 0.0, 1.0);
-  return pow(texture2D(uLampMap, uv).r, 1.6) * uLampPower * h; // a tight heart, dark gaps between poles
+  return poolLight(texture2D(uLampMap, uv).r) * streetLevel(wpos);
+}
+float lampAt(vec3 wpos) {
+  if (uLampPower <= 0.001) return 0.0;
+  return lampField(wpos) * uLampPower * uLampPool.z;
 }
 
 // Pigment turbulence (Bousseau et al.): density variation anchored to world space.
@@ -198,35 +217,55 @@ float snowKeep(vec3 alb) {
 
 // Two-wash lighting: a light wash where the key light lands, one cool glaze where it doesn't.
 // Wrapped terminator so low sun still warms horizontal ground (a painter's golden hour, not a photometer's).
-vec3 paintLight(vec3 albedo, vec3 N, vec3 wpos, float shadow, float ao) {
+// skyNeutral: how much of the sky fill's blue to grey out before it lights the albedo (roofs face
+// the sky, and a blue fill turned every grey shingle teal) — the surface keeps its own hue, the
+// sun keeps its colour, the shade keeps the cool glaze every other surface has
+vec3 paintLight(vec3 albedo, vec3 N, vec3 wpos, float shadow, float ao, float skyNeutral) {
   float ndl = dot(N, uKeyDir);
   float lowSun = 1.0 - smoothstep(0.05, 0.45, uKeyDir.y);
   float wrap = 0.15 + 0.25 * lowSun * step(0.7, N.y);
   float diff = smoothstep(-wrap, 0.55, ndl) * shadow;
   vec3 hemi = mix(uAmbGround, uAmbSky, N.y * 0.5 + 0.5) * (1.0 - 0.45 * canyonAt(wpos));
+  hemi = mix(hemi, dot(hemi, vec3(0.2126, 0.7152, 0.0722)) * vec3(1.03, 1.0, 0.96), skyNeutral);
   vec3 lit = albedo * (uKeyColor * diff + hemi * ao);
   // shadows are a transparent cool glaze: shift the hue toward the shadow tint but keep the value
   // (multiplying by a dark tint is what painters call mud)
   float lt = dot(uShadowTint, vec3(0.2126, 0.7152, 0.0722));
   vec3 glaze = mix(vec3(1.0), uShadowTint / max(lt, 1e-3), 0.4);
   lit = mix(lit, lit * glaze, (1.0 - diff) * uShadowTintAmt);
-  // a lamp pool is painted as light, not albedo × light (dark asphalt would halve every pool)
-  lit += max(albedo, vec3(0.3)) * uLampColor * lampAt(wpos);
+  // a lamp's pool, painted as light (nightLight.ts poolOn: the lamp's cream leads, the ground gets
+  // the whole of it, a wall half)
+  if (uLampPower > 0.001) lit += poolOn(albedo, lampAt(wpos), clamp(N.y, -1.0, 1.0));
+  // …and between the pools the night's floor, the town's own glow (nothing by day)
+  lit += nightFloor(albedo, streetLevel(wpos));
   return lit;
 }
+vec3 paintLight(vec3 albedo, vec3 N, vec3 wpos, float shadow, float ao) { return paintLight(albedo, N, wpos, shadow, ao, 0.0); }
 
 vec3 fogColorDir(vec3 dir) {
   float s = pow(max(dot(dir, uSunDir), 0.0), 6.0);
   return mix(uFogColor, uFogSunColor, s * 0.6);
 }
 uniform vec3 uWorldOffset;
+// The mean of exp(−k·h) over a straight line from height a to b (exact: the air thins with
+// height, and a sight line crosses every layer between the two ends).
+float layerMean(float k, float a, float b) {
+  float dh = b - a;
+  return abs(k * dh) < 1e-3 ? exp(-k * 0.5 * (a + b)) : (exp(-k * a) - exp(-k * b)) / (k * dh);
+}
 vec3 applyFog(vec3 col, vec3 wpos) {
   vec3 v = wpos - (cameraPosition + uWorldOffset);
   float d = length(v);
-  // height above the ground you're standing on (not sea level): a mile-high town keeps its haze
-  float h = max(wpos.y - max(uLampBaseY, 0.0), 0.0);
-  float dens = uFogDensity * (1.0 + uSeaFog * 12.0 * exp(-h * 0.08)) ;
-  float f = 1.0 - exp(-d * dens * exp(-h * uFogFalloff * (1.0 - uSeaFog * 0.7)));
+  // heights above the ground you're standing on (not sea level): a mile-high town keeps its haze.
+  // The haze thins upward, so what fogs a point is the air along the whole sight line to it —
+  // from the eye's height to the point's — not the point's own low, thick layer taken the whole
+  // way: from a balloon or a hill, distant streets were drowned under a flat white sheet while the
+  // towers' tops rose clear out of it. (At street level, eye and point share a layer: as before.)
+  float base = max(uLampBaseY, 0.0);
+  float h = max(wpos.y - base, 0.0), he = max(wpos.y - v.y - base, 0.0);
+  float k = uFogFalloff * (1.0 - uSeaFog * 0.7);
+  float mean = layerMean(k, he, h) + uSeaFog * 12.0 * layerMean(k + 0.08, he, h);
+  float f = 1.0 - exp(-d * uFogDensity * mean);
   return mix(col, fogColorDir(v / max(d, 1e-3)), clamp(f, 0.0, 1.0));
 }
 `;
@@ -243,6 +282,15 @@ mat4 worldMat() {
   return modelMatrix;
 #endif
 }
+`;
+
+// The far layer (horizon.ts's ring, farSkyline.ts's towers) lies out past the camera's far plane:
+// it keeps a depth of its own, linear in true distance to 150 km, so it sorts among itself and is
+// never clipped. The far skyline clears that depth before the near world draws, which then paints
+// over the whole layer as it always has.
+export const FAR_DEPTH_M = 150000;
+export const GLSL_FAR_DEPTH = /* glsl */ `
+float farDepth(float d) { return min(d / ${FAR_DEPTH_M.toFixed(1)}, 0.9999) * 2.0 - 1.0; }
 `;
 
 // Helper to build a painted ShaderMaterial wired to the shared uniforms.

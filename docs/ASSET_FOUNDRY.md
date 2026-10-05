@@ -70,23 +70,39 @@ vertices are what it costs. There are four axes, cheapest first:
 | **Add-ons as model keys** — `parked-cars:suv:surf` | +1 draw per used combo | surfboards, kayaks, roof racks, roof boxes, hitch bikes |
 | **State / time** — growth stage, bloom season | a rebuild when the state changes | gardens bloom by the real calendar; your plants grow |
 
-Vertex budgets (checked by `tests/foundry.test.ts`): trees < 1,500 (most around 800–1,200);
+Vertex budgets (checked by `tests/foundry.test.ts`): trees < 1,500 (most around 800–1,200), and
+a tree's near model (its limbs and leaf cards, the nearest 160 on a desktop, 40 on a phone) ≤ 2,500;
 garden plants in the world use a `lite` genome under 900 (usually 250–840; the full version is
-for plants you grow and the workbench); animals < 1,600; cars about 1,800.
+for plants you grow and the workbench); animals < 1,600; cars about 1,800; a person < 1,600
+unique vertices and 2,700 triangles (indexed), the crowd's lite person < 300.
 
 ## Families
 
-- **Trees** (`flora.ts`): round, oak, shrub, pine, spruce, palm, birch.
+- **Trees** (`flora.ts`): round, oak, shrub, pine, spruce, palm, birch, mesquite, fan palm, maple, willow, elm, poplar, magnolia, cherry, and the Northwest's Douglas fir, western redcedar, western hemlock, Sitka spruce, red alder and vine maple.
+  - **The Northwest's conifers** (`SPIRES`) are one build with three grown forms each: open-grown (foliage near the ground), forest (a long bare trunk with dead stubs) and old (a broken top, a candelabra of dead spikes, buttresses). Each bough's clump is a *spray*: the lobe drawn out along its bough and its rim drooping, so a tier reads as hanging foliage, not a plate; the tiers close up toward the top and spiral round the trunk. Their marks: the hemlock's nodding leader and the stilt roots of one grown on a nurse log, the Sitka's buttressed foot, the redcedar's J-shaped boughs.
+  - **Hangers**: moss beards under the bigleaf maple's limbs and licorice fern along them (`TreePlan.hang`, drawn by both models), on the older vine maples too. Moss on the bark itself is a shader term by the region's damp (`docs/agent/rendering.md`).
   - Trunk, forks at the golden angle, then crown lobes on a Fibonacci sphere (or conical whorls, or fronds).
   - `treeMeta` reports height, crown radius, crown bottom and trunk radius, so LiDAR-measured trees scale to their real size and the building clearance uses the real crown.
   - Regional reading: palms where it's warm by the sea, birches up north.
-- **Garden plants** (`flora.ts`): twelve species in six growth forms — mound, clipped, rosette, spike, clump and stem.
+  - **Two models per tree.** The recipe grows a *plan* (`TreePlan`: every bough from → to with its radii and bark, every crown lobe's middle, radius and squash). The far model is drawn from it as before — solid lobes, under 1,500 vertices, thousands a tile. Within ~30 m the **near model** (`nearTreeGeometry`, round 11's must-fix 4) is grown from the *same* plan, so it stands where the far tree stands with the same crown:
+    - the trunk a smooth tube (`core.ts` `tube`: rings carried along the path without twist, normals leaning with the taper — no crease at a knee) that flares at the root to half again its girth and tapers to its fork, the base ≥ 1.3× where it meets the crown;
+    - the recipe's scaffold limbs as tubes (a stem or limb that ended in the open — a birch's side stems, hidden in the far model — grows on into the nearest cluster, thinning), and a **second order** of branches: one from the nearest limb out into each leaf cluster, arching up, ending inside it — so ≥ 3 pieces of wood go up into a street tree's crown;
+    - the crown as **8–20 leaf-cluster cards**, one per far lobe (where it was, as big, as squashed; a shrub's few split until there are 8), each card showing one of 12 painted leaf pictures (`leafAtlas`: sprays of almond leaves on twigs, alternating along them, a darker heart, a ragged rim with gaps between the leaves — or needle tufts for the conifers, the redcedar's flat lacy sprays hanging from their midribs, a maple's five-lobed hands for the bigleaf and the vine maple; `picsOf`), drawn by `render/leafCards.ts`;
+    - **≤ 2,500 vertices** a tree (wood + four corners a card; most 1,000–1,900), checked with validation, determinism, the taper, the limbs and the crown's fit to the far one in `tests/foundry.test.ts`.
+    - Palms and the willow keep their far model at every distance (fronds and tresses already). `NEAR_KINDS` lists the rest.
+  - The leaf pictures are painted in JS, deterministic, a picture a frame while the world boots (`leafAtlasJob`): 4 × 3 cells of 256 px (128 on a weak phone), A coverage, R the leaf's shade, G leaf/twig, B a number per leaf for autumn.
+- **Garden plants** (`flora.ts`): twelve species in six growth forms — mound, clipped, rosette, spike, clump and stem. The forest floor's sword fern, salal and Oregon grape grow on the same forms but are never a garden's (`understoryMix`, `world/understory.ts`).
   - Each species has a climate weighting (`plantMix`) and a bloom season (`inBloom`, flipped in the southern hemisphere).
   - Growth stages 0–7 go from sprout, to leafing out, to blossoms opening from about 60% grown.
   - World beds line the house fronts on open ground only.
 - **Fauna** (`fauna.ts` + `sim/critters.ts`): 17 species on two body plans. Four-legged species are rows in `QUAD` over four base builds (squirrel, rabbit, deer, fox) — scale, coat / belly / stocking / tail-tip colours, ear size, tail fullness: coyote, black-tailed jackrabbit, snowshoe hare (TINT coat: brown in summer, white in winter), ground squirrel, mule deer. Birds are rows in `BIRD` over `birdGeometry` — colours, legs, bill length and curve, crest, tail, wing plan, scale: songbird, sandpiper, red-tailed hawk (3.3×, broad fingered wings, soars via `uFlap`), greater roadrunner, quail, white ibis. **A new species is a table row.**
   - **Roles and the regional cast.** Behaviour belongs to a role (`ROLE`: climber, burrower, grazer, songbird, shorebird, browser, predator, raptor, butterfly, firefly); `faunaMix(region, climate)` says which species fill each role in a place — the same key the plant and car mixes use. Temperate: squirrel, rabbit, songbird, sandpiper, white-tailed deer, red fox. Arid: ground squirrel, jackrabbit + roadrunner, quail, mule deer, coyote, no fireflies. Boreal: snowshoe hare. Tropical: + white ibis. Other continents fall back to their climate's North American cast until they get rows.
   - Limbs, tail, head and wings carry `aPart` plus an `aPivot` joint.
+  - **The walkers' dog** (`dogLib`, `dogMaterial`) is the fox plan 1.18× with every coat colour
+    tintable, drawn 0.75–1.3× (a terrier to a shepherd). It carries its tail: a tapering tube up
+    off the rump and curving back, wagged side to side about its root (`uWag`), never swung up
+    and down — the fox's drooping brush dragged on the ground like a fifth leg. The smallest
+    dog's tail tip rides 47 cm up. `DOG_COLLAR` is where the lead clips on.
   - `critterMaterial` swings them in the vertex shader from a per-instance `aAnim` (gait phase, amount, pose), with per-species gait offsets (bound vs walk) and limb amplitude.
   - Behaviour comes from habitat:
     - squirrels at trees (they bolt up the trunk);
@@ -101,16 +117,71 @@ for plants you grow and the workbench); animals < 1,600; cars about 1,800.
   - They form one ecosystem: the fox stalks (a slow creep) and pounces; the hawk stoops on animals in the open; prey freeze a beat (shorter for the watchful — per-animal vigilance) then flee the fox, the stoop, the walker or a moving car (the faster it comes, the sooner they go); an alarm spreads through a flock or warren and to other small prey nearby. Tested in `tests/critters.test.ts`.
   - Budgets: every species < 1600 verts (`tests/foundry.test.ts` walks `CRITTERS`).
   - Small animals are drawn 1.3–2× life size, an illustrator's licence: at painting scale a true-size squirrel dissolves into the grass.
-- **People** (`people.ts`): one jointed body for every walker and resident (hips, knees,
-  shoulders; ~1.4k vertices), varied per instance on the GPU: skin, hair and trouser palettes,
-  five hairstyles (the unworn ones collapse), shorts and short sleeves by the region's warmth
-  (climate × season). Gait: thighs swing about the hip, the knee folds on the forward swing, arms
-  counter-swing; standing people shift their weight. A whole crowd is one instanced draw.
+- **People** (`people.ts`): one jointed body for every walker and resident, varied per instance
+  on the GPU: skin, hair, trouser and shoe palettes, five hairstyles (the unworn ones collapse),
+  shorts and short sleeves by the region's warmth (climate × season). A whole crowd is one
+  instanced draw.
+  - **Built to hold up at arm's length** (round 11). Each limb is one smooth tube, hip through
+    knee to ankle and shoulder through elbow to wrist, its rings shared so it shades round and
+    bends at the joint instead of breaking there. The feet are shoes: a rounded upper on a 1.8 cm
+    sole, 10.6 cm across and 27 cm long, toes turned out 5°, from eight upper-and-sole pairs
+    (white sneakers, black trainers on white soles, brown and tan leather, navy, grey and red
+    trainers, dark brown on a crepe sole — never a black block). The
+    hands are rounded mittens with a thumb; the head is an egg narrowing to the jaw, with a nose,
+    ears and a painted face. Hems are doubled rings: a crisp short sleeve at mid upper-arm,
+    shorts just above the knee, a swimsuit top's edge (the chest above it has its own marker,
+    `MARK.chest`: the shirt, or bare on the beach).
+  - **Shoulders round into the arm** (round 12). The shoulder joint stands inside the torso
+    (0.185, 1.32), and the arm hangs from it, capped by the deltoid: a sphere on the joint, as wide
+    as the arm's top, which turns about its own middle, so no swing ever shows the tube's open end.
+    On the torso's edge (0.2, 1.39) the old round stood 46 mm proud of the shoulder's outline, an
+    epaulette; now, from the front and either side at 1.5 m, every arm-top vertex in 45 poses stays
+    at least 10 mm under it (`tests/people.test.ts`).
+  - **Indexed**, unlike the other families: a smooth limb needs its rings shared across the
+    joint, and sharing them cuts the vertex shader to about a fifth of the same triangles
+    unshared. 1,538 vertices and 2,626 triangles (the old faceted body: 1,764 vertices and 588
+    triangles).
+  - **Posed by joint angles** (`Pose`: thigh, shin, foot and roll per leg; upper arm, forearm and
+    abduction per arm; trunk lean and roll; head yaw and nod; where the hips go). Each limb
+    vertex carries `aSkin`, how far it follows the bone below (0 thigh … 1 shin … 2 foot), and
+    turns about the joint by its share of the bend — a hinge, not a blend of two transforms, so
+    a deep knee or elbow stays round. Positions and normals both turn.
+  - **One set of pose maths, run twice.** `walkPose`, `seatPose`, `beachPose`, `downPose` and
+    `skinPoint` in TypeScript, and `POSE_GLSL` line for line in the shader. The CPU uses its twin
+    to put a dog's lead in the walker's hand (`leadHand`) and to bake the helm's skipper
+    (`posedPerson`); `tests/people.test.ts` measures shoes, joints and the lead on it.
+  - **The gait**: the thigh swings ±21°, the knee folds up to 64° in the swing (its curve half a
+    radian ahead, so it bends before the toe leaves and is straight before the heel lands), the
+    foot lands on its heel, lies flat and rolls onto its toes, and the hips ride as high as the
+    lower sole allows — so one shoe is always on the ground and none ever sinks (a 4.5 cm bob,
+    lowest at double support). Arms counter-swing, elbows easing on the forward swing; a runner
+    leans in with elbows up.
+  - **Standing still** shifts the weight: the hips go over one foot for a few seconds, then the
+    other, the free knee eases forward with its foot where it stood, the shoulders counter-tilt,
+    the head looks about. Residents talk with their hands; a dog walker holds the lead out toward
+    the dog, the arm following it.
+  - **The lite twin** (`personLiteGeometry`: 193 vertices and 322 triangles, indexed and smooth —
+    four- and six-sided tubes, a round head under a cap of hair, mittens and shoes; it was boxes
+    and an octahedron, a faceted mannequin as soon as a long lens enlarged it) has the same
+    joints, parts, skin weights and markers. It draws a beach crowd only where people are small on
+    screen (`crowdLayer.ts`: the full body's radius grows with the lens's magnification, so a 12°
+    shot at 50 m gets full bodies).
+    The `BEACH` shader poses either: in a beach chair, lying on a towel, sitting on the sand, a
+    kid jumping the waves, a lifeguard on the stand — barefoot, the shoe flattened to a foot
+    (`world/crowd.ts`, `docs/agent/gameplay.md` "The shore's calendar").
 - **Furniture** (`furniture.ts`):
   - five mailbox styles, North American curbs only;
   - summer beaches (umbrellas, towels, chairs) around the lifeguard stands;
   - picnic tables;
   - car gear, chosen by `gearFor` (coastal → surfboards and kayaks).
+- **Micro things** (`micro.ts`): the small made objects of a lived-in place — trash and
+  recycling carts, A-frames, planters, newspaper boxes, kerb pedestals, signs, Adirondack chairs,
+  grills, fire rings, AC units, birdbaths, house flags, lawn and realtor signs, hoops, bikes,
+  kayaks, surfboards, coolers, cleats, dock boxes, life rings, crab traps, mooring balls, pot
+  floats, channel buoys and markers, and the map's picnic tables, boards, cabinets, recycling,
+  vending machines and clocks. Placed per tile by `world/micro.ts` (real data first, then a fill
+  keyed by position, house, shop, beach, pier); drawn by the micro layer — 3D close up,
+  hemi-octahedral impostor cards beyond 25–60 m, two draws for all of them.
 - **Vehicles and rocks** (`kit.ts`), unchanged in shape. Cars now carry gear keys and per-car proportions and fade, both for driveway cars and for moving traffic.
 
 ## Time: the Grow verb
@@ -144,7 +215,8 @@ collectible the moment it exists.
 
 - More families: docks and piers from the same recipe, playgrounds, fences and gates, lifeguard stands, porch furniture, laundry lines, flags.
 - Per-instance vertex AO (ASSET_FIDELITY §3).
-- Impostor or billboard LOD for trees beyond ~1 km.
+- Impostor LOD for trees beyond ~1 km and people beyond ~60 m: the micro layer's `ImpostorAtlas` + card shader (`render/impostor.ts`) take any foundry geometry.
+- Near trees: per-species leaf shapes (lobed oak, palmate maple, the magnolia's big glossy leaf), a third order of twigs for the bare winter form, the willow's tresses and the palms on the near layer.
 - Seasonal foliage colour (autumn crowns from the same calendar that drives bloom).
 - More animals by region: pelicans and herons on southern coasts, moose up north, lizards in the desert.
 - Construction tiers 2–4 (dock/boat, structures, sketch-to-build) on the same recipe vocabulary.

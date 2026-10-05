@@ -9,9 +9,9 @@ import { toW, LocalPoly, type Plan, type Rect, type Flight } from './plan';
 import type { Layout, Room } from './layout';
 
 export type P2 = [number, number];
-/** Part ids for the interior shader. */
-export const IP = { wall: 0, floor: 1, ceil: 2, solid: 3, glow: 4, art: 5, part: 6, fabric: 7, rug: 8, porcelain: 9, glass: 10, wood: 11, rail: 12 } as const;
-export const DM: Record<D.DecorMat, number> = { fabric: IP.fabric, wood: IP.wood, metal: IP.porcelain, porcelain: IP.porcelain, glass: IP.glass, solid: IP.solid, glow: IP.glow };
+/** Part ids for the interior shader. (`night`: a ceiling light's glass, lit after dark only.) */
+export const IP = { wall: 0, floor: 1, ceil: 2, solid: 3, glow: 4, art: 5, part: 6, fabric: 7, rug: 8, porcelain: 9, glass: 10, wood: 11, rail: 12, night: 13 } as const;
+export const DM: Record<D.DecorMat, number> = { fabric: IP.fabric, wood: IP.wood, metal: IP.porcelain, porcelain: IP.porcelain, glass: IP.glass, solid: IP.solid, glow: IP.glow, lamp: IP.night };
 
 const LIN = new Map<number, [number, number, number]>();
 const tmpC = new THREE.Color();
@@ -25,7 +25,13 @@ export const lin3 = (hex: number): [number, number, number] => {
 /** Vertices in one draw: a big interior's mesh is several (a multiple of 3, so no triangle straddles
  *  two, and growing a stream never copies more than half of one). */
 const CHUNK = 3 * 32768;
-interface Streams { pos: Float32Array; nrm: Float32Array; col: Float32Array; wall: Float32Array; info: Float32Array; out: Float32Array; n: number }
+interface Streams { pos: Float32Array; nrm: Float32Array; col: Float32Array; wall: Float32Array; info: Float32Array; out: Float32Array; obj?: Float32Array; n: number }
+/** (tools that count what a frame shows — cloud/home.mjs's id pass) With `__TAG_PIECES__` set on the
+ *  page, each vertex of an interior's merged mesh carries the piece it belongs to in an `aObj`
+ *  attribute (0: the building itself). Unset: no stream, no cost. */
+const tagging = () => (globalThis as { __TAG_PIECES__?: boolean }).__TAG_PIECES__ === true;
+/** Pieces that are the building's, not its furnishing (door casings and leaves, skirting, lift doors). */
+export const ARCH_KEY = /^(frame:|leaf:|leafShut:|skirt|lift(Frame|Leaf|Button))/;
 
 /** Vertex streams for the interior material: position, normal, colour, aWall, aInfo, aOut. */
 export class Mesher {
@@ -36,6 +42,12 @@ export class Mesher {
   private sealed: Streams[] = [];
   pos = new Float32Array(0); nrm = new Float32Array(0); col = new Float32Array(0);
   wall = new Float32Array(0); info = new Float32Array(0); out = new Float32Array(0);
+  private objS: Float32Array | null = null;
+  /** The piece the next vertices belong to (0: the building), and whether the next primitive drawn
+   *  starts a piece of its own (the furnishing: on while a build furnishes its rooms). */
+  obj = 0;
+  furn = false;
+  private tagN = 0;
   private c: [number, number, number] = [1, 1, 1];
   private cs: [number, number, number] = [1, 1, 1]; // (colorLin's own: `c` may be a cached lin3 colour)
   private inf = [0, 0, IP.solid, 0];
@@ -43,22 +55,29 @@ export class Mesher {
   constructor(cap = 8192) {
     let c = CHUNK;
     while (c / 2 >= cap && c > 96) c /= 2;
+    if (tagging()) this.objS = new Float32Array(0);
     this.grow(c);
   }
+  /** A new piece starts (while furnishing, a tagged build: see `tagging`). */
+  next() { if (this.furn && this.objS) this.obj = ++this.tagN; }
+  /** The next vertices are one piece of their own (`on`), or the building's. */
+  piece(on: boolean) { if (this.objS) this.obj = on ? ++this.tagN : 0; }
   private grow(cap: number) {
     const used = this.n - this.i0;
     const g = (a: Float32Array, k: number) => { const b = new Float32Array(cap * k); b.set(a.subarray(0, used * k)); return b; };
     this.pos = g(this.pos, 3); this.nrm = g(this.nrm, 3); this.col = g(this.col, 3);
     this.wall = g(this.wall, 4); this.info = g(this.info, 4); this.out = g(this.out, 2);
+    if (this.objS) this.objS = g(this.objS, 1);
     this.cap = cap;
   }
   private more() {
     if (this.cap < CHUNK) { this.grow(Math.min(CHUNK, this.cap * 2)); return; }
     // (a full chunk: sealed as it is, the next one starts empty — nothing is copied)
-    this.sealed.push({ pos: this.pos, nrm: this.nrm, col: this.col, wall: this.wall, info: this.info, out: this.out, n: this.cap });
+    this.sealed.push({ pos: this.pos, nrm: this.nrm, col: this.col, wall: this.wall, info: this.info, out: this.out, ...(this.objS ? { obj: this.objS } : {}), n: this.cap });
     this.i0 = this.n;
     this.pos = new Float32Array(0); this.nrm = new Float32Array(0); this.col = new Float32Array(0);
     this.wall = new Float32Array(0); this.info = new Float32Array(0); this.out = new Float32Array(0);
+    if (this.objS) this.objS = new Float32Array(0);
     this.grow(CHUNK);
   }
   color(hex: number) { this.c = lin3(hex); return this; }
@@ -76,6 +95,7 @@ export class Mesher {
     else { this.wall[i * 4] = 0; this.wall[i * 4 + 1] = 0; this.wall[i * 4 + 2] = 0; this.wall[i * 4 + 3] = 0; }
     this.info[i * 4] = this.inf[0]; this.info[i * 4 + 1] = this.inf[1]; this.info[i * 4 + 2] = this.inf[2]; this.info[i * 4 + 3] = this.inf[3];
     this.out[i * 2] = this.o[0]; this.out[i * 2 + 1] = this.o[1];
+    if (this.objS) this.objS[i] = this.obj;
   }
   /** A triangle facing n (the winding follows it). */
   tri(a: ArrayLike<number>, b: ArrayLike<number>, c: ArrayLike<number>, n: ArrayLike<number>, wa?: ArrayLike<number>, wb?: ArrayLike<number>, wc?: ArrayLike<number>) {
@@ -102,7 +122,7 @@ export class Mesher {
   }
   /** The streams as geometry: one per chunk (a piece or a small interior: just one). */
   geometries(): THREE.BufferGeometry[] {
-    const cur: Streams = { pos: this.pos, nrm: this.nrm, col: this.col, wall: this.wall, info: this.info, out: this.out, n: this.n - this.i0 };
+    const cur: Streams = { pos: this.pos, nrm: this.nrm, col: this.col, wall: this.wall, info: this.info, out: this.out, ...(this.objS ? { obj: this.objS } : {}), n: this.n - this.i0 };
     return [...this.sealed, cur].filter((S) => S.n > 0 || !this.sealed.length).map((S) => {
       const g = new THREE.BufferGeometry(), n = S.n;
       g.setAttribute('position', new THREE.BufferAttribute(S.pos.subarray(0, n * 3), 3));
@@ -111,6 +131,7 @@ export class Mesher {
       g.setAttribute('aWall', new THREE.BufferAttribute(S.wall.subarray(0, n * 4), 4));
       g.setAttribute('aInfo', new THREE.BufferAttribute(S.info.subarray(0, n * 4), 4));
       g.setAttribute('aOut', new THREE.BufferAttribute(S.out.subarray(0, n * 2), 2));
+      if (S.obj) g.setAttribute('aObj', new THREE.BufferAttribute(S.obj.subarray(0, n), 1));
       g.computeBoundingSphere();
       return g;
     });
@@ -128,6 +149,7 @@ export class Draw {
   W(u: number, v: number) { return toW(this.P, u, v); }
   /** An axis-aligned box in the local frame (no bottom face unless asked). */
   box(u0: number, u1: number, v0: number, v1: number, y0: number, y1: number, hex: number, part: number = IP.solid, bottom = false) {
+    this.m.next();
     if (u1 < u0) [u0, u1] = [u1, u0];
     if (v1 < v0) [v0, v1] = [v1, v0];
     const m = this.m, P = this.P;
@@ -145,6 +167,7 @@ export class Draw {
   /** A partition slab along axis ax from a0 to a1, centred on c, `half` thick either side: its two
    *  faces (the top meets the ceiling), and an end cap only where asked (a free end). */
   slab(ax: 0 | 1, a0: number, a1: number, c: number, half: number, y0: number, y1: number, hex: number, part: number, capA: boolean, capB: boolean) {
+    this.m.next();
     const m = this.m, P = this.P;
     m.part(part).color(hex);
     const X = (a: number, cc: number) => (ax === 0 ? P.cx + P.ux * a + P.vx * cc : P.cx + P.ux * cc + P.vx * a);
@@ -168,6 +191,7 @@ export class Draw {
   }
   /** A flat quad lying in the local frame with (s,t) texture coords in aWall (rugs). */
   flatQuad(u0: number, u1: number, v0: number, v1: number, y: number, hex: number, part: number, style: number) {
+    this.m.next();
     this.m.part(part).color(hex);
     const c = [this.W(u0, v0), this.W(u1, v0), this.W(u1, v1), this.W(u0, v1)];
     const L = u1 - u0, Wd = v1 - v0;
@@ -175,6 +199,7 @@ export class Draw {
   }
   /** A vertical panel from (ua, va) to (ub, vb), y0..y1 at a and yb0..yb1 at b, two-sided (both faces). */
   panel(ua: number, va: number, ub: number, vb: number, y0: number, y1: number, hex: number, part: number, yb0 = y0, yb1 = y1, twoSided = true) {
+    this.m.next();
     const a = this.W(ua, va), b = this.W(ub, vb);
     const nx = b[1] - a[1], nz = -(b[0] - a[0]), l = Math.hypot(nx, nz) || 1;
     this.m.part(part).color(hex);
@@ -183,6 +208,7 @@ export class Draw {
   }
   /** A railing panel (balusters via the shader) between two local points, rising from y to yb. */
   rail(ua: number, va: number, ub: number, vb: number, y: number, h: number, yb = y) {
+    this.m.next();
     const a = this.W(ua, va), b = this.W(ub, vb);
     const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
     if (L < 0.05) return;
@@ -228,24 +254,31 @@ export function pieceGeo(key: string, make: () => D.DecorPart[]): THREE.BufferGe
 }
 
 interface Rec { key: string; geo: THREE.BufferGeometry; m: number[]; c: number[] }
-/** Pieces that move once they're built (a lift's door leaves: a ride slides them open): always an
- *  InstancedMesh of their own, never baked into the merged mesh, so their instances can be moved. */
+/** Pieces that move once they're built (a lift's door leaves: a ride slides them open; a WC's shut
+ *  door swings as you come to it): always an InstancedMesh of their own, never baked into the merged
+ *  mesh, so their instances can be moved. */
 export const MOVING = new Set(['liftLeaf']);
+export const moving = (key: string) => MOVING.has(key) || key.startsWith('leafShut:');
+/** A piece's instance matrix (column-major): at local (uc, vc), height y, its x along ax (its back,
+ *  +z, turned with it: a proper rotation about y), stretched `sx` times along x. */
+export function placeM(P: Plan, uc: number, vc: number, y: number, ax: P2, sx = 1): number[] {
+  const [px, pz] = toW(P, uc, vc);
+  // piece x → ax, piece z → (−ax.v, ax.u)
+  const axw = [P.ux * ax[0] + P.vx * ax[1], P.uz * ax[0] + P.vz * ax[1]];
+  const azw = [P.ux * -ax[1] + P.vx * ax[0], P.uz * -ax[1] + P.vz * ax[0]];
+  return [axw[0] * sx, 0, axw[1] * sx, 0, 0, 1, 0, 0, azw[0], 0, azw[1], 0, px, y, pz, 1];
+}
 /** Repeated pieces: one InstancedMesh per key (≥ 2 of them), a single one baked into the main mesh. */
 export class Instancer {
   private recs = new Map<string, Rec>();
   constructor(readonly P: Plan) {}
-  /** Put piece `key` at local (uc, vc), height y, its x axis along ax (its back, +z, turns with it).
-   *  Returns its index among the pieces of that key (its instance, once instanced). */
-  put(key: string, make: () => D.DecorPart[], uc: number, vc: number, y: number, ax: P2, tint = 0xffffff): number {
+  /** Put piece `key` at local (uc, vc), height y, its x axis along ax (its back, +z, turns with it),
+   *  stretched `sx` times along x (a skirting board's metre to its wall's length). Returns its index
+   *  among the pieces of that key (its instance, once instanced). */
+  put(key: string, make: () => D.DecorPart[], uc: number, vc: number, y: number, ax: P2, tint = 0xffffff, sx = 1): number {
     let r = this.recs.get(key);
     if (!r) { r = { key, geo: pieceGeo(key, make), m: [], c: [] }; this.recs.set(key, r); inUse.set(key, (inUse.get(key) ?? 0) + 1); }
-    const P = this.P;
-    const [px, pz] = toW(P, uc, vc);
-    // piece x → ax, piece z → (−ax.v, ax.u): a proper rotation about y
-    const axw = [P.ux * ax[0] + P.vx * ax[1], P.uz * ax[0] + P.vz * ax[1]];
-    const azw = [P.ux * -ax[1] + P.vx * ax[0], P.uz * -ax[1] + P.vz * ax[0]];
-    r.m.push(axw[0], 0, axw[1], 0, 0, 1, 0, 0, azw[0], 0, azw[1], 0, px, y, pz, 1);
+    r.m.push(...placeM(this.P, uc, vc, y, ax, sx));
     const t = lin3(tint);
     r.c.push(t[0], t[1], t[2]);
     return r.m.length / 16 - 1;
@@ -270,7 +303,7 @@ export class Instancer {
   /** Build the instanced meshes (a step at a time); singles (and the rarest keys past `maxDraws`)
    *  are baked into `main`. (y0, y1: the storeys built — a tower's window — else the building.) */
   *finishGen(main: Mesher, mat: THREE.Material, maxDraws: number, y0 = this.P.floor0, y1 = this.P.ceilTop): Generator<void, { meshes: THREE.InstancedMesh[]; verts: number }, void> {
-    const recs = [...this.recs.values()].sort((a, b) => Number(MOVING.has(b.key)) - Number(MOVING.has(a.key)) || b.m.length - a.m.length);
+    const recs = [...this.recs.values()].sort((a, b) => Number(moving(b.key)) - Number(moving(a.key)) || b.m.length - a.m.length);
     const meshes: THREE.InstancedMesh[] = [];
     let verts = 0, baked = 0, placed = 0;
     const m4 = new THREE.Matrix4();
@@ -279,7 +312,7 @@ export class Instancer {
     const sphere = new THREE.Sphere(new THREE.Vector3(P.cx, y0 + hh, P.cz), Math.hypot(P.L / 2, P.W / 2, hh) + 1);
     for (const r of recs) {
       const n = r.m.length / 16;
-      if (MOVING.has(r.key) || (n >= 2 && meshes.length < maxDraws)) {
+      if (moving(r.key) || (n >= 2 && meshes.length < maxDraws)) {
         const im = new THREE.InstancedMesh(r.geo, mat, n);
         im.instanceMatrix.array.set(r.m);
         im.instanceMatrix.needsUpdate = true;
@@ -290,6 +323,7 @@ export class Instancer {
         verts += r.geo.getAttribute('position').count;
         if ((placed += n) > 3000) { placed = 0; yield; }
       } else for (let i = 0; i < n; i++) {
+        main.piece(!ARCH_KEY.test(r.key)); // (a tagged build: each baked piece its own — the building's own as the building)
         bake(main, r.geo, m4.fromArray(r.m, i * 16), r.c[i * 3], r.c[i * 3 + 1], r.c[i * 3 + 2]);
         if ((baked += r.geo.getAttribute('position').count) > 12000) { baked = 0; yield; }
       }
@@ -329,13 +363,17 @@ const CARPET = [0xb9ae9a, 0x9aa3a0, 0xa89080, 0x8d9aa8, 0xc4b8a2];
  *  big tiles / lino. */
 export function paintFor(type: Room['type'], rnd: () => number): { wall: number; style: number; floor: number; ft: number } {
   const wet = type === 'bath' || type === 'wc' || type === 'kitchen' || type === 'galley' || type === 'utility';
-  const trade = type === 'shop' || type === 'cafe' || type === 'church' || type === 'bar' || type === 'diner';
-  const plainT = type === 'corridor' || type === 'stair' || type === 'lobby' || type === 'open' || type === 'meeting' || type === 'lift' || type === 'store' || type === 'stock';
+  const trade = type === 'shop' || type === 'cafe' || type === 'church' || type === 'bar' || type === 'diner' || type === 'library' || type === 'bank' || type === 'narthex';
+  const plainT = type === 'corridor' || type === 'stair' || type === 'lobby' || type === 'open' || type === 'meeting' || type === 'lift' || type === 'store' || type === 'stock'
+    || type === 'classroom' || type === 'assembly' || type === 'staff' || type === 'post' || type === 'gym' || type === 'prayer';
   const wall = WALL_PAINT[Math.floor(rnd() * WALL_PAINT.length)];
   const style = wet ? 4 : trade ? 5 : plainT ? (type === 'lobby' && rnd() < 0.5 ? 5 : 0) : [0, 1, 1, 2, 3][Math.floor(rnd() * 5)];
-  const ft = wet ? 1 : type === 'shop' || type === 'lobby' || type === 'open' || type === 'stock' || type === 'store' || type === 'lift' || type === 'stair' ? 3
-    : type === 'corridor' || type === 'meeting' ? (rnd() < 0.6 ? 2 : 3) : type === 'bed' && rnd() < 0.35 ? 2 : 0;
-  const floor = ft === 1 ? [0xe8e4da, 0xd9e2e4, 0xefe9dc][Math.floor(rnd() * 3)] : ft === 2 ? CARPET[Math.floor(rnd() * CARPET.length)] : ft === 3 ? [0xcfc8b8, 0xc2c6c4, 0xd8d0c0][Math.floor(rnd() * 3)] : WOOD[Math.floor(rnd() * WOOD.length)];
+  // (a guest room's, a library's and a prayer hall's carpet; a classroom's lino, a school hall's
+  // boards; a gym's dark rubber)
+  const ft = wet ? 1 : type === 'shop' || type === 'lobby' || type === 'open' || type === 'stock' || type === 'store' || type === 'lift' || type === 'stair' || type === 'classroom' || type === 'staff' || type === 'post' || type === 'bank' || type === 'narthex' || type === 'gym' ? 3
+    : type === 'corridor' || type === 'meeting' ? (rnd() < 0.6 ? 2 : 3) : (type === 'bed' && rnd() < 0.35) || type === 'guest' || type === 'library' || type === 'prayer' ? 2 : 0;
+  const floor = type === 'gym' ? 0x5d6266 : type === 'prayer' ? [0x8c2f2a, 0x2f5a46, 0x6a2a3a][Math.floor(rnd() * 3)]
+    : ft === 1 ? [0xe8e4da, 0xd9e2e4, 0xefe9dc][Math.floor(rnd() * 3)] : ft === 2 ? CARPET[Math.floor(rnd() * CARPET.length)] : ft === 3 ? [0xcfc8b8, 0xc2c6c4, 0xd8d0c0][Math.floor(rnd() * 3)] : WOOD[Math.floor(rnd() * WOOD.length)];
   return { wall, style, floor, ft };
 }
 
@@ -484,13 +522,17 @@ const grow = (r: Rect, m: number): Rect => ({ u0: r.u0 - m, u1: r.u1 + m, v0: r.
 // ---------------- partitions and doorways ----------------
 export const DOOR_H = 2.1;
 /** Where a doorway's leaf stands open: into the room it serves (not the hall or corridor it opens
- *  from), hinged at the jamb nearer that room's corner. */
-export interface LeafSpot { level: number; ax: 0 | 1; c: number; hinge: number; side: -1 | 1; w: number }
+ *  from), hinged at the jamb nearer that room's corner. `t`: the doorway's middle along its wall.
+ *  `shut`: a WC's or a bathroom's door off a room of the day stands shut (it opens as you come to it). */
+export interface LeafSpot { level: number; ax: 0 | 1; c: number; t: number; hinge: number; side: -1 | 1; w: number; shut?: 1; room?: Rect }
+/** The rooms a front door opens on and you sit in: a WC or a bathroom off one keeps its door shut
+ *  (review round 11: "a WC is in view through the living room's left door"). */
+const DAY = new Set(['living', 'great', 'kitchen', 'dining']);
 export function* drawPartitionsGen(d: Draw, P: Plan, L: Layout, ceil: (k: number) => number, wallHex = 0xffffff): Generator<void, { leaves: LeafSpot[] }, void> {
   const f = (k: number) => P.floor0 + k * P.floorH;
   const M = P.main;
   const leaves: LeafSpot[] = [];
-  const circ = new Set(['hall', 'landing', 'corridor', 'lobby', 'open', 'shop', 'cafe', 'bar', 'diner', 'stair']);
+  const circ = new Set(['hall', 'landing', 'corridor', 'lobby', 'open', 'shop', 'cafe', 'bar', 'diner', 'stair', 'narthex', 'library', 'bank', 'post', 'gym', 'assembly', 'prayer']);
   const LP = new LocalPoly(P.loc);
   // (the walls by storey, axis and line, to a decimetre)
   const lines = new Map<number, Layout['walls']>();
@@ -529,13 +571,17 @@ export function* drawPartitionsGen(d: Draw, P: Plan, L: Layout, ceil: (k: number
   for (const dw of L.doors) {
     if (dw.w > 1.15) continue; // a wide opening: cased, no leaf
     const [ra, rb] = dw.rooms.map((i) => L.rooms[i]);
-    // the leaf swings into the room that isn't circulation (a flat's own door: into the flat)
-    const into = circ.has(ra.type) && !circ.has(rb.type) ? rb : circ.has(rb.type) && !circ.has(ra.type) ? ra : (ra.r.u1 - ra.r.u0) * (ra.r.v1 - ra.r.v0) < (rb.r.u1 - rb.r.u0) * (rb.r.v1 - rb.r.v0) ? ra : rb;
+    // the leaf swings into the room that isn't circulation (a flat's own door: into the flat), a
+    // WC's or a bathroom's into it
+    const wet = (r: Room) => r.type === 'wc' || r.type === 'bath';
+    const into = wet(ra) !== wet(rb) ? (wet(ra) ? ra : rb) : circ.has(ra.type) && !circ.has(rb.type) ? rb : circ.has(rb.type) && !circ.has(ra.type) ? ra : (ra.r.u1 - ra.r.u0) * (ra.r.v1 - ra.r.v0) < (rb.r.u1 - rb.r.u0) * (rb.r.v1 - rb.r.v0) ? ra : rb;
     const side: -1 | 1 = (dw.ax === 0 ? (into.r.v0 + into.r.v1) / 2 : (into.r.u0 + into.r.u1) / 2) > dw.c ? 1 : -1;
     // hinge on the jamb nearer the room's own corner, so the leaf lies back along its wall
     const rm = dw.ax === 0 ? (into.r.u0 + into.r.u1) / 2 : (into.r.v0 + into.r.v1) / 2;
     const hinge = dw.t > rm ? dw.t + dw.w / 2 : dw.t - dw.w / 2;
-    leaves.push({ level: dw.level, ax: dw.ax, c: dw.c, hinge, side, w: dw.w });
+    const other = into === ra ? rb : ra;
+    const shut = wet(into) && DAY.has(other.type);
+    leaves.push({ level: dw.level, ax: dw.ax, c: dw.c, t: dw.t, hinge, side, w: dw.w, ...(shut ? { shut: 1 as const, room: { ...into.r } } : {}) });
   }
   return { leaves };
 }

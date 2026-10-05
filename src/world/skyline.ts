@@ -1,20 +1,51 @@
 // The skyline ring: a city's towers past the 1.5 km detail ring. The streamed tiles are the city up
 // close; beyond them the coarse ring is procedural, so from Midtown the Empire State Building,
 // from Queen Anne the Seattle skyline, from a Miami beach the condo wall would simply not be there.
-// One Overpass read of every tall building (≥ 45 m or 14+ storeys) and tall building part within
-// 8 km — through the same osmToTile transform as the tiles, so heights, parts, colours and recipes
-// match — built as lite silhouettes per 1024 m cell. A cell's towers hide the moment its real tile mounts
-// (no doubled walls); the read is cached in IndexedDB like the direct tiles, and re-read when you
-// walk more than 4 km from where it was taken. Nothing in a town without towers: an empty read.
+// One read of every tall building (≥ 45 m or 14+ storeys) and tall building part within 8 km (a
+// phone: 3–4 km — Manhattan's towers are thousands), from the tile service's /skyline (our own
+// extract's tall layer; Overpass only on ?tiles=direct) — through the same osmToTile transform
+// as the tiles, so heights, parts, colours and recipes match — built as lite silhouettes per 1024 m
+// cell. A cell's towers hide the moment its real tile mounts (no doubled walls); the read is cached
+// in IndexedDB like the direct tiles, and re-read when you walk more than half that from where it
+// was taken. Nothing in a town without towers: an empty read.
 import * as THREE from 'three';
 import { buildBuildings } from './buildings';
 import { demSampler } from './dem';
 import { kvGet, kvPut } from './cache';
 import { makeProjector, osmToTile, type LatLon, type OsmDoc } from './realTile';
-import type { Building, Terrain, TileJson, World, WorldJson } from './data';
+import type { Box, Building, Terrain, TileJson, World, WorldJson } from './data';
 
-const R = 8000, TALL = 45, FLOORS = 14, SKY_V = 2;
-const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
+const TALL = 45, FLOORS = 14, SKY_V = 2;
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+
+// Where the skylines' towers come from (main.ts): the tile service's /skyline — our own extract's
+// tall layer, no request leaves Cloudflare — or, only with ?tiles=direct (a developer with no
+// service), the public Overpass servers, as before.
+let service = '', direct = false;
+export function setSkylineSource(base: string, allowDirect: boolean) {
+  service = /^https?:\/\//.test(base) ? base.replace(/\/$/, '') : '';
+  direct = allowDirect;
+}
+/** A box's tall things, as Overpass answers the skyline queries (the thresholds are the query's),
+ *  or null when nothing can answer. */
+export async function readTowers(bb: { s: number; w: number; n: number; e: number }, q: { h: number; floors: number; mast: number }, overpassBody: () => string, timeoutMs: number): Promise<OsmDoc | null> {
+  if (service) {
+    const box = `s=${bb.s.toFixed(5)}&w=${bb.w.toFixed(5)}&n=${bb.n.toFixed(5)}&e=${bb.e.toFixed(5)}`;
+    const r = await fetch(`${service}/skyline?${box}&h=${q.h}&floors=${q.floors}&mast=${q.mast}`, { signal: AbortSignal.timeout(timeoutMs) }).catch(() => null);
+    return r?.ok ? ((await r.json()) as OsmDoc) : null;
+  }
+  if (!direct) return null;
+  for (const ep of OVERPASS) {
+    try {
+      const r = await fetch(ep, { method: 'POST', body: overpassBody(), headers: { 'content-type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(timeoutMs) });
+      if (!r.ok) continue;
+      const j = (await r.json()) as OsmDoc & { remark?: string };
+      if (typeof j.remark === 'string' && /error|timed out|out of memory/i.test(j.remark)) continue;
+      return j;
+    } catch { /* next mirror */ }
+  }
+  return null;
+}
 
 export function skylineQuery(bb: { s: number; w: number; n: number; e: number }) {
   const b = `${bb.s.toFixed(5)},${bb.w.toFixed(5)},${bb.n.toFixed(5)},${bb.e.toFixed(5)}`;
@@ -28,13 +59,18 @@ export function skylineQuery(bb: { s: number; w: number; n: number; e: number })
 
 export class Skyline {
   readonly group = new THREE.Group();
+  /** The ground its towers cover: the box of its latest read, set as that read's towers build (null
+   *  before one). The far skyline (farSkyline.ts) leaves every tower in it to this ring and the
+   *  tiles inside it. */
+  box: Box | null = null;
   private cells = new Map<string, THREE.Group>();
   private cx = Infinity;
   private cz = Infinity;
   private busy = false;
   private gen = 0;
 
-  constructor(private origin: LatLon, private cell: number, private enabled: boolean) {
+  /** `R`: how far out the towers are read, m — 8 km; a phone's quality tier reads nearer (quality.ts). */
+  constructor(private origin: LatLon, private cell: number, private enabled: boolean, private R = 8000) {
     this.group.name = 'skyline';
   }
 
@@ -44,35 +80,33 @@ export class Skyline {
     // a cell's towers stay until its real tile has mounted, however close you come — hiding
     // them by distance made a city melt away as you flew in faster than its tiles streamed
     for (const [k, g] of this.cells) g.visible = !realLoaded(k);
-    if (this.busy || Math.hypot(x - this.cx, z - this.cz) < 4000) return;
+    if (this.busy || Math.hypot(x - this.cx, z - this.cz) < this.R / 2) return;
     this.busy = true;
     const cx = Math.round(x / 2000) * 2000, cz = Math.round(z / 2000) * 2000;
     const gen = ++this.gen;
     void this.read(cx, cz)
-      .then((tj) => (gen === this.gen && tj ? this.build(tj) : undefined))
+      .then((tj) => {
+        if (gen !== this.gen || !tj) return;
+        this.box = { x0: cx - this.R, z0: cz - this.R, x1: cx + this.R, z1: cz + this.R };
+        return this.build(tj);
+      })
       .catch(() => {})
       .finally(() => { this.cx = cx; this.cz = cz; this.busy = false; });
   }
 
   private async read(cx: number, cz: number): Promise<TileJson | null> {
     const P = makeProjector(this.origin);
-    const key = `sky${SKY_V}|${this.origin.lat.toFixed(4)},${this.origin.lon.toFixed(4)}|${cx}_${cz}`;
+    const R = this.R;
+    const key = `sky${SKY_V}${R !== 8000 ? `r${R}` : ''}|${this.origin.lat.toFixed(4)},${this.origin.lon.toFixed(4)}|${cx}_${cz}`;
     const hit = await kvGet<TileJson>(key);
     if (hit) return hit;
     const box = { x0: cx - R, z0: cz - R, x1: cx + R, z1: cz + R };
-    const body = 'data=' + encodeURIComponent(skylineQuery(P.localToBbox(box)));
-    for (const ep of OVERPASS) {
-      try {
-        const r = await fetch(ep, { method: 'POST', body, headers: { 'content-type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(70000) });
-        if (!r.ok) continue;
-        const j = (await r.json()) as OsmDoc & { remark?: string };
-        if (typeof j.remark === 'string' && /error|timed out|out of memory/i.test(j.remark)) continue;
-        const tj = osmToTile(j, { id: 'skyline', box, origin: this.origin, margin: 0 });
-        void kvPut(key, tj);
-        return tj;
-      } catch { /* next mirror */ }
-    }
-    return null;
+    const bb = P.localToBbox(box);
+    const j = await readTowers(bb, { h: TALL, floors: FLOORS, mast: 0 }, () => 'data=' + encodeURIComponent(skylineQuery(bb)), 70000);
+    if (!j) return null;
+    const tj = osmToTile(j, { id: 'skyline', box, origin: this.origin, margin: 0 });
+    void kvPut(key, tj);
+    return tj;
   }
 
   private async build(tj: TileJson) {

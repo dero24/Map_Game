@@ -17,6 +17,15 @@ behaviour.
     (`other`: unwrapped code, GC), and renders that compiled or uploaded (`+prog`, `+geo`, `+tex`).
   - `deep: true` adds the fine-grained wrappers (walk-world adds, interior registration). They
     inflate the numbers they measure.
+  - `sync: true` waits for the GPU after each frame (a 1-pixel `readPixels`), so the GPU's work is
+    counted in the frame that queued it (`gpu (sync)`). Use it whenever a hitch might be canvas or
+    upload work.
+    - The JS timers miss that work. A 2D canvas is recorded when it's drawn and only rastered when
+      it's read: its blur and its strokes run in the GPU process at the texture upload, or on the
+      main thread where the browser rasters canvases on the CPU.
+    - The ground paint's old full repaint recorded in ~6 ms but cost ~4 s headless (SwiftShader)
+      and 2.5–3.5 s on a CPU canvas.
+    - A probe that stubs the render out (`norender`) hides all of it.
   - To drive: `V = __GAME__.vehicles; V.summon('car'); V.enter(V.list.at(-1))`.
   - The car goes through buildings: the probe moves it, bypassing collision.
 
@@ -28,6 +37,10 @@ behaviour.
 - Extra shots beyond the ocean/bridge set: `houses, porch, shop, sign, raised, roofs,
   doorway, inside, inside-night, stairs, upstairs`. Also `top:x:z:alt` top-down,
   `--eval="…"` to poke `window.__GAME__`. Uses Playwright from `../../shot-harness`.
+- A phone montage: `--w=412 --h=915 --query=quality=phone` (the phone tier at a Pixel 7's CSS size);
+  the sheet keeps the shots' aspect (portrait frames six to a row; it used to squeeze them into
+  640×360 cells). Several poses in one run: an `--eval` that counts its calls
+  (`window.__k=(window.__k||0)+1`) and picks the k-th pose.
 - No Playwright? (agent driving the built-in/live browser): open `?capture=1&region=<id>`,
   then `await import('/tools/inpage-montage.js')` and `await __MONTAGE__([shotName | {label,
   fn(game)}], {save:'x.jpg'})` — the dev server's `/__shot` sink (vite.config.ts, serve-only)
@@ -49,7 +62,7 @@ behaviour.
     sky). `window.__SPOTKIT__` pokes one pose by hand.
   - A subject `name` matches the mesh's own name or a parent's (`retaining-walls`, `retaining-steps`,
     `player-vehicles`, `trees:`).
-- Sketch look in shots: capture mode is fully painted unless the URL has `&sketch=1`.
+- Sketch mode in shots: capture mode is fully painted unless the URL has `&sketch=1` (sketch mode on).
 - The brush's readability (reviewer round 9): with the brush out and a sketch showing on a
   `?capture=1` page, `await import('/tools/brush-check.js'); await __BRUSHCHECK__()` paints it in
   and returns the sketch's share of the frame, its visible share at the sketch and through the wash
@@ -57,6 +70,64 @@ behaviour.
   sketch → dry over its pixels (CIE76 + CIEDE2000), with pass flags (≥ 2%, ≥ 70%, ≥ 25). Painted
   rides persist (`map-game.vehicles.v1` in localStorage) — clear it between runs or they crowd the
   water the next sketch wants.
+- The night street, measured (reviewer rounds 10 and 11): on a `?capture=1` page,
+  `await import('/tools/night-check.js'); await __NIGHTCHECK__('tag'[, poses])` poses the review's
+  night frames — 3, its night street (`ocean-night` at 22:00), and 13, its streamed street at night
+  (Long Branch at 21:30, the review's own pose; where no tile service answers, the synth stand-in) —
+  and measures each on the painted frame (the paper margin left off) → `shots/nightcheck-<tag>.jpg`
+  (each frame, then the same frame with what was measured drawn on it) and the numbers, with pass
+  flags. Every pose is measured on everything; each judges what the review asks of it (3: band,
+  pools, wires, lens; 13: heart, gap, fall-off, wires, lens):
+  - the lens: the id pass (below);
+  - wires against the sky: a wire-only mask (the wires drawn alone, flat, against the world's
+    depth) and the frame with and without them — their mean L\* ≤ the sky's + 2;
+  - the band: the bottom 40% of the frame, C\* ≤ 22 (no orange carpet where you stand in a pool);
+  - the heart: the ground in the pools' hearts (the lamp field the shaders read ≥ 0.6), C\* ≤ 30;
+  - the gap: the ground past the pools' reach (field ≤ 0.02) in the lower half, L\* 10–20 and hue
+    220–280° (the night's floor: never black);
+  - the fall-off: the nearest pool 14–70 m ahead, sampled every metre along the line from its heart
+    toward you; its own light over the floor (the same line past its reach) halves no nearer than
+    5 m and is still ≥ 8% of the heart at 12 m (also: the steepest L\* drop per metre, any rise);
+  - the pools down the street: each lamp ahead in a 25 m corridor whose heart is in sight, its
+    heart's luminance against the ground between it and the next pool ≥ 12 m further on — ≥ 2 pools
+    at ≥ 2.5×.
+  - "The ground" is what faces up (screen-space normal) within 2 m of the street's level; each pose
+    first sets the street's level (`U.uLampBaseY`, which the stream eases 5% a frame) to where the
+    walker stands, as the game holds it once it has caught up after a long jump.
+  - Pose keys: `3`, `13`, `center` (Center Street at 22:00), `day` (frame 2: the morning the night
+    must leave alone); `3n`/`13n` move to the next night with the moon down (the floor alone);
+    `13n@0.12` sets the floor's strength in the page (`G.U.uNightFloor.w`) for that pose.
+  - `opts.variants: [{ name, apply(G) }]` measures knobs turned in the page (`G.U.uLampPool`,
+    `G.U.uPoolColor`, `G.U.uNightFloor`, the post's `uNightGrade`/`uNightFade`) without re-posing.
+    The pure parts are `tools/night-core.js` (tests/nightCheck.test.ts).
+  - Headless: `node tools/night-check.mjs --url=http://localhost:5173/ [--tag=n] [--swiftshader]
+    [--poses=3,13,13n,day] [--png]` (the page served first) prints each pose's numbers, writes
+    `shots/nightcheck-<tag>.{jpg,json}` (`--png`: each pose's frame too, for a diff), exits 1 on a
+    failed pose.
+- The id pass is `tools/id-pass.js` (`idPass`, `flatPass`, `lensVerdict`, `nearSpan`). `review-shots.js`
+  checks every outdoor pose with it — nothing within 2.5 m of the lens over 5% of the frame, nor within
+  4 m over 15%, nor a thin thing within 2.5 m crossing 60% of the frame's height (`span`: the tallest
+  connected piece of the 2.5 m mask; round 12's pole split m5 at 3.7% of its pixels) — and re-poses one
+  that fails (back and aside, looking where it looked; logged as `[review] … re-posed`). Only a pose
+  that still fails is stamped `⚠ occluder`. A walker pose (14, 20, 23: `walker: true`) also fails with
+  under 1% of the frame walker (the subject pass on `life-ped`; stamped `⚠ no walker`): it follows the
+  nearest of five walkers the lens shows at ≥ 1% (round 12: 14 had landed on empty sand). Each pose's
+  verdict: `window.__REVIEW_LENS__`. `tests/idPass.test.ts`.
+- Round 10's five-roof test (`tools/roof-check.js`, `?capture=1`): `await __ROOFCHECK__('tag')` builds
+  five 6 × 6 m hip-roofed test houses 60 m over the spawn (grey, clay, blue metal, green metal, brown:
+  the buildings' own material, borrowed from a mounted tile) and reads them raw (`debugParams.rawScene`
+  → post `uRaw`) from above and side on at 12:00 and 18:00 — each roof's sunlit and shaded slope, the
+  grey house's sunlit wall below its sills — against the review's numbers (hue ±12°, ≥ 80% chroma; the
+  grey C\* ≤ 4 sunlit at noon, ≤ 8 in shade; at 18:00 its b\* within 3 of the wall's) →
+  `shots/roofcheck-<tag>.jpg`, every patch outlined.
+- Round 12's arm's length on the frames (`tools/arm-check.js`, `?capture=1`): `await
+  __ARMCHECK__('tag', { only: ['6', '18', 'dock'] })` — 6: the wall cabinets against the curtains (ΔE76
+  of their means in the painted frame; the cabinets found by an albedo-and-height id pass, the curtains
+  by swapping `interiors.fabU` for magenta) and the shadow band under them (px tall, L\* under the
+  tiles); 18: the plates, cups and glasses (`interior:tw:*`) the lens sees on each table a seated
+  resident sits at; dock (pick-r12a 5: 16:00, a boat passing 18 m out): white blobs (L\* ≥ 85, ≥ 0.2%
+  of the frame) on the water within 15 m, each named by id passes of the wakes, the water, the micro
+  layer and the boats → `shots/armcheck-<tag>.jpg`.
 - Debug handles on `window.__GAME__`: `explore`, `commissions`, `photo`, `atlas`, `arrival`,
   `hints`.
 
@@ -70,11 +141,34 @@ behaviour.
   rings 750/1300/2500 m.
   A knob saved in the panel (`userKeys`) always wins. `?quality=desktop|phone|low` forces a tier;
   `window.__TIER__` says which one ran and what it set.
+- A city is what kills a phone (Manhattan filled its GPU; Chrome crashed, then refused the site
+  WebGL). So the phone/low tiers also: keep the detail tiles under `streamParams.budgetMB` of
+  vertex data (200 / 120; `world/budget.ts` admits cells nearest first, the cell you stand in
+  always; the rest keep their silhouettes), build 2 / 1 real tiles at once (`realConc`), keep the silhouette ring under 90 / 60 MB
+  (`coarseMB`), read a 4 / 3 km skyline, and measure no LiDAR (`?lidar=1` forces it). A PC's are unchanged (no budget,
+  4 at once, LiDAR, 8 km). `stream.detailBytes` is the budget's measure. On every platform now: a
+  tile's sign atlas is disposed with it (it leaked on every unload), and an unloaded tile's walls
+  leave the walk world ~1.5 ms a frame (`purge`, `WalkWorld.purgeSome`; they were tombstoned for
+  good — one long hop left 166k dead walls on a PC, and purging a tile's at once took 65 ms on a
+  phone).
+- A lost GPU context on a phone sheds memory at once (budget halved, silhouettes to `dropR`, no
+  shadow pass) and the next load in the tab steps down a tier (`diag.lostBefore`). WebGL that
+  won't start says how to get it back (`NO_WEBGL`: the browser may have blocked the site after a
+  crash — close it completely and reopen).
+- Phones sleep when put away (`ui/lifecycle.ts`, `window.__SLEEP__`): sound suspended, the life
+  worker paused (on a PC too — it ticked on in hidden tabs), held input released. Never under
+  `?capture=1`.
+- A phone lands (✈) only once the cell under it is built (`stream.solidAt`), and on foot waits
+  where it stands until it is: before that its buildings are silhouettes with no walls (a fast
+  flight landed inside a house and walked out through its wall). Tested headless: fly to an
+  unbuilt cell, press ✈, check `walkParams.fly` holds until `solidAt`, then the landing is outside.
 - The boot report (`src/ui/diag.ts`, shown in `#fatal`): browser, WebGL version + GPU string,
   the key limits, float-buffer extensions, the tier, the boot stage, the first shader log and the
   first JS errors. It opens by itself when WebGL can't start, a shader won't compile, the boot
   throws, no frame is drawn 15 s after "Begin walking" or frames stop for 15 s while the page is
-  on screen (`?watchdog=<s>` for slow software-GL rigs), every frame fails, or the GPU context is
+  on screen (`?watchdog=<s>` for slow software-GL rigs; 180 s in any page a rig drives —
+  `navigator.webdriver`, `diag.ts watchdogSeconds` — so a DPR 3 phone capture on SwiftShader isn't
+  shot behind the report: round 12), every frame fails, or the GPU context is
   lost and not returned in 4 s. `?diag=1` opens it on demand (ask a phone user for a screenshot).
   `window.__BOOTDIAG__()` returns it as data.
 - index.html's inline boot guard (a classic script) keeps errors from before the module runs and
@@ -84,6 +178,15 @@ behaviour.
 - `npm run build && node tools/mobile-check.mjs --device=pixel7|iphone|desktop [--query=quality=low]`
   runs all of the below and writes `shots/mobile-<device>.{png,json}`; it exits non-zero on a page
   error or a shader program over the phone limits.
+- `npm run build && node tools/height-check.mjs --device=pixel7|desktop --at=<lat,lon> --probes=<x,z;…>
+  [--query=measured=0]`: the same Pages-like serve, walked to a place; once the ring has settled (no
+  build in flight, no cell waiting on a measurement) it prints each probe's building — wall top above
+  ground and storeys by the interior planner's rule — the ring's detail tiles and their vertex MB, and
+  how many cells this browser read the survey for (`shots/heights-<device>….json`). A phone and a
+  desktop must print the same buildings (`streaming.md` "Measured once, for every device"); a desktop
+  with `--query=measured=0` reads the survey itself, which proves the sidecar against a live read.
+  Probes are local metres in the pack's frame: use a point inside the outline (a vertex average can
+  fall outside an L-shape).
 - Headless mobile checks: Playwright device descriptors (`Pixel 7`, `iPhone 14`) +
   `--use-angle=swiftshader --enable-unsafe-swiftshader`, served under a sub-path with no
   COOP/COEP (like Pages). **Stub `Element.prototype.requestPointerLock`** in those runs: headless
@@ -91,6 +194,25 @@ behaviour.
   grows ~40 MB/s — it reproduces on a blank page and OOM-kills the tab within minutes (phones
   have no pointer lock). SwiftShader draws a frame every few seconds on 2 CPUs: poll
   `__RENDER_INFO__.frames`, click `#start` via `evaluate`, and allow minutes for screenshots.
+- `npm run build && node tools/hud-audit.mjs [--phones="Pixel 7,iPhone SE"] [--verbose] [--shots=shots/hud]`: the phone
+  HUD's geometry — the built CSS and markup (every script file blocked, so no WebGL: a minute or two)
+  on 10 phones from a 320-wide SE to a Pro Max, upright and on their side, walking / by a lift /
+  beside a ride / driving / flying a plane / flying on foot / in a balloon, a long hint and place
+  name up, each with nothing else, a toast (the longest the game says), an arrival card, and both.
+  Each button is measured with the word under it, and the stick's resting ring counts.
+  `--shots` writes a PNG of every layout (the HUD over a blank page) to look at. Listed, exit 1 if
+  any: every overlapping pair of HUD boxes, anything off the screen, and anything in the middle of
+  the frame — x 15–85%, y 30–62%, the world's while you walk or ride (reviewer round 10). It sets
+  the states as `syncTouchControls` does, a toast as main.ts `toast` does (`body.toasting`), an
+  arrival card as `arrival.ts` does (`body.arriving`, its `.a-small`/`.a-tight` steps) and makes the
+  ride readout as `vehicles.ts` does — keep those in step. It also renders the copy set (round 12,
+  must-fix 4): `COPY`, every toast a phone can see in its phone wording with the longest names it
+  fills in, and `ARRIVALS`, the phone's two-line arrival cards — each must show whole (a toast past its
+  two clamped lines, a card past its width or over two lines: the "…"); keep `COPY` in step with the
+  `toast()` calls. Run it after any change to the touch layout (style.css) or to a message; the montage
+  shows one phone, this shows them all. A build whose index.html asks for its files from the root
+  (an esbuild bundle that links `/src/ui/style.css`): `--dist=<dir> --base=/` (files not in the
+  build come from the checkout).
 
 ## Play checks (`tools/playtest.js`)
 
@@ -178,8 +300,10 @@ and puts the walker back.
   tile service or Overpass down, rate limits) is counted as `offline`, not failed: stand-ins cover
   those cells. Counts the frames over 50 and 100 ms meanwhile (`mountHitches`: the 100 ms ones
   that mounted a tile) without judging them.
-- `await __FRAMES__({ seconds: 8, budget })`: the page's own frames standing, then walking down the
-  street: p50/p95/p99 of the intervals, each frame's work (rAF to the end of the post pass), the
+- `await __FRAMES__({ seconds: 8, budget })`: the page's own frames standing, walking down the
+  street, then flying straight and level 80 m up at the default flying speed (`fly: false` skips it;
+  a walk never gets the 66 m that moves the ground paint's window): p50/p95/p99 of the intervals,
+  each frame's work (rAF to the end of the post pass), the
   frames over 50 and 100 ms, long tasks. Budgets (ms): `desktop` p50 20 · p95 34 · p99 50 · two
   100 ms hitches a minute; `phone` 34 · 50 · 100 · six; `soft` (SwiftShader, picked by itself)
   fails only a page that has all but stopped (a median frame over a minute, p99 over two: tens of
@@ -229,6 +353,29 @@ Exit 0 pass, 1 a check failed or the page threw, 2 it couldn't run.
   worker, Overpass or DEM); elsewhere (`--at=`) the world is procedural stand-ins, still good for
   walking, driving and streaming. Allow ~45 s to `__READY__`; run long checks in the background
   and poll their log.
+
+## The real-world comparison (`tools/real-spots.mjs` → `tools/real-compare.mjs`)
+
+A Mapillary street photo against the game rendered from the same place, heading, lens, date and
+hour; each pair scored by the class mix (sky, buildings, vegetation, ground, water, vehicles)
+— the photo's from Mapillary's segmentation, the game's from `tools/class-pass.js`. Read
+`shots/real/<ST>-montage.jpg`; scores accumulate in `tools/real-scores.json` (one entry a run).
+
+- **The class pass reads the scene's `family:type` names** (`trees:…`, `ground:cell`,
+  `road:ribbons`, `water:area`, `aWall` for buildings). A new mesh family without a name counts as
+  "other": streamed cells' ground did, until 2026-10-04, and every real cell's street scored 0%
+  ground. Name new meshes.
+- **A photo must be fit** (`real-spots.mjs`): Mapillary quality ≥ 0.4 (a rain-dark windscreen
+  scored 0.05), the sun up, and segmented. Some images carry only object detections (poles,
+  signs), which leaves every labelled patch "other". `--recheck` re-tests kept spots and picks
+  again; a spot with no fit photo keeps its old one marked `unfit`. The compare tool shows
+  unsegmented photos but doesn't score them.
+- **The lens:** 2 m over the game's ground, at the photo's own heading and pitch (Mapillary's
+  computed rotation: dash cameras tilt −10° to +20°, +3° on average), or on the roof of a mapped
+  building the photo stands in. Not at Mapillary's computed altitude: it's metres-noisy, and it lifted
+  15 of 83 lenses over photos plainly taken from the street. Lenses under 30° (close-ups) are unfit.
+  A game frame that's nearly all wall where the photo isn't is a pose the map can't place (Bangor:
+  a car-park deck that isn't mapped as a building). Treat it as an outlier, not a renderer bug.
 
 ## Dev-server + worker quirks
 

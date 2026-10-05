@@ -1,6 +1,6 @@
 {
   "project": "map_game",
-  "last_updated": "2026-09-29",
+  "last_updated": "2026-10-04",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -10,57 +10,622 @@
     "not_started": "Work has not begun.",
     "in_progress": "The feature is the current active task (at most one).",
     "blocked": "Cannot proceed until the documented blocker clears.",
-    "passing": "Verification ran and evidence is recorded."
+    "passing": "Verification ran and evidence is recorded.",
+    "superseded": "Replaced by a newer item or by docs/GAMEPLAY_VISION.md; kept for its history (see stale_reason)."
   },
   "history_note": "Completed work is tracked in docs/earth/LOG.md + git log — do not duplicate it here. This file is the forward-looking queue. Ordering rule: git commits beat docs when they disagree.",
   "features": [
     {
-      "id": "people-doing-things",
-      "priority": 1,
-      "area": "gameplay",
-      "title": "People doing things: conversations, window shopping, waiting for the light, staff at work, residents who sit properly",
-      "user_visible_behavior": "Walkers stop to talk face to face (gesturing, nodding) and part together, linger at shop windows, wait at signalled corners for their green; cafes, bars and shops have staff behind the counter with customers waiting and regulars on stools; residents sit on the cushion (not in it), facing their table or room, and a cook has company at the counter; city streets are busy (the crowd gathers round the walker by street density). They cross at the painted crosswalk on the walk or in a real gap (never through a car); some walk dogs on leads, some jog (a running pose), some wear headphones.",
-      "status": "in_progress",
+      "id": "own-osm-extract",
+      "tier": 0,
+      "rank": 1,
+      "status": "passing",
+      "area": "platform",
+      "title": "Our own OpenStreetMap extract in R2 — every cell from it, Overpass only a polite fallback",
+      "user_visible_behavior": "Anywhere in the lower 48, a new place's real streets, buildings, trees and lamps arrive in seconds, never stuck as stand-ins because the public Overpass servers are busy or down; the skylines come from the same extract.",
       "verification": [
-        "tests/lifeSim.test.ts: walkers stop to talk face to face; tests/traffic.test.ts: walkers wait for the light",
-        "shots/life-*.jpg frames 5-10",
-        "tests/traffic.test.ts: waits at its kerb on the crosswalk for the light; tools/street-shots.js __STREET__ -> shots/street-q3.jpg (crosswalk, dog walker, jogger, squirrels, downtown animal counts)"
+        "tests/osmQuery.test.ts: the Overpass query generated from the one statement list, byte for byte the old",
+        "tests/osmTiles.test.ts: the grid, Overpass's box rule, assembly",
+        "tests/osmExtract.test.ts: real cells' saved Overpass answers (Shrewsbury x2, Intercourse PA, Bar Harbor ME) — element for element, and the same TileJson through today's osmToTile",
+        "tests/osmWorker.test.ts: the service's own extract path (/tile, /skyline, the outline, a directory read once) over an in-memory R2",
+        "tests/osmExtractSql.test.ts: the script's own relation SQL in DuckDB (empty member roles; nothing null)",
+        "tools/osm-compare.mjs --now, 2026-10-04 (today's Overpass, each element's last edit): 15 cells in 12 states identical or different only by elements edited after the snapshot — downtown Seattle 6,042 (7 edited since), Kings Beach 732 (1), South Lake Tahoe 1,338, Santa Monica 2,407, downtown Tucson 6,402, Aspen 2,004, Hays 2,588, St. Louis riverfront 2,489, Asheville 2,657, Miami Beach 2,180, Intercourse 335, Levittown 1,367, Shrewsbury 203 and 371, Bar Harbor 1,314",
+        "tools/must-load.mjs --live, 2026-10-04 after the switch: all 11 streamed must-load towns 9/9 cells from x-tile-source: extract, cold in 1.6–13 s; /skyline: lower Manhattan's 11,567 tall things from the extract"
       ],
       "evidence": [
-        "src/sim/lifeSim.ts (CHAT, window shopping, kerbWait, sizeBubble)",
-        "src/render/creature.ts (SEATED pose, talk gesture for walkers)",
-        "src/world/interiors.ts (yawTo, staff aisles, seat heights)",
-        "src/sim/lifeSim.ts (planCross, crossWait, crossingAt, CROSS legs), src/sim/life.ts (dogs on leads), src/assets/people.ts (headphones)"
+        "src/world/osmQuery.ts",
+        "src/world/osmTiles.ts",
+        "scripts/osm-extract.mjs",
+        "scripts/osm-upload.mjs",
+        "worker/src/osm.js",
+        "worker/src/index.js (extract first; /skyline)",
+        "tools/osm-compare.mjs",
+        "docs/agent/streaming.md \"Our own OpenStreetMap extract\"",
+        "tests/osmExtractSql.test.ts",
+        "tests/osmWorker.test.ts",
+        "R2 osm/v1/ (1,481 blocks, 36.5 GB, the index as of 2026-10-02T20:21:34Z)",
+        "worker version 1aef467b (rollback: 1c95d174)"
       ],
-      "notes": "Open: bags, strollers, bikes, kids, canes, couples; persistence into interiors (R.10); greetings/queues; people LOD so the caps can grow."
+      "notes": "Robby 2026-10-03: option one (R2), packed (not millions of files), match Overpass exactly and prove it with saved answers kept as a test, cut on a global grid from the whole-US file, ODbL on request, monthly refresh by a script on his PC, Overpass only as a polite fallback. New Jersey prototype identical to Overpass on two Shrewsbury cells; the US run under way. Live 2026-10-04. Going back is one step (docs/agent/streaming.md): delete osm/v1/index.json, or wrangler rollback."
     },
     {
-      "id": "traffic-control",
-      "priority": 1,
-      "area": "gameplay",
-      "title": "Cars follow traffic: signals, stop signs, all-way stops and give-way, from one junction analysis",
-      "user_visible_behavior": "Signalled junctions cycle (the lit lens is the one the traffic obeys); cars stop at the line on red, come to a full stop at stop signs and take turns at all-way stops, give way to the main road, slow for corners, never block a junction; stop and give-way signs stand at every controlled arm; mapped OSM control wins, the rule of the road fills the rest. Cars wait behind the crosswalk for anyone crossing their street or the one they turn into; left turns yield to oncoming traffic at lights too; lanes zip at merges; no two cars ever share a spot.",
+      "id": "every-tile-loads",
+      "tier": 0,
+      "rank": 2,
       "status": "passing",
+      "area": "world",
+      "title": "Every tile loads, or falls back gracefully — no missing land, no land drawn as water, no holes; a fixed must-load town list in the tests",
+      "user_visible_behavior": "Wherever you start or go in the lower 48, the ground under you is land where it is land and water where it is water, real streets and buildings arrive, and a cell that can't is a believable stand-in, never a hole.",
       "verification": [
-        "tests/traffic.test.ts: rule of the road (NA all-way / minor stop / signals for two main roads / T stems; EU give-way), mapped signal and stop nodes win, one-way arms, ownership + packing, phase timing (never both green), a car stops on red behind the line and goes on green, full stop at a stop sign then pulls out, walkers wait at the corner",
-        "tools/life-shots.js __LIFE__(tag) -> shots/life-<tag>.jpg (junction from above, lenses, stop sign, night)",
-        "in-page count: Sea Bright ~25 % of cars standing at any moment, queued 8-27 m from junction centres, no growth over a minute",
-        "tests/traffic.test.ts (q): a walker lets the car coming go by then crosses; a car waits at the line for someone crossing; a 3-minute busy grid has 0 walker-in-car and 0 fused-car ticks and no car stuck > 150 s"
+        "tests/mustLoad.test.ts: the must-load towns (tools/audit48-towns.json) build with land under the spawn, streets, buildings and trees",
+        "tools/must-load.mjs --live in CI",
+        "tools/audit48.mjs: the lower-48 audit, montage per town"
       ],
       "evidence": [
-        "src/sim/traffic.ts",
-        "shots/life-seabright4.jpg",
-        "shots/life-nyc.jpg"
+        "tools/audit48.mjs, tools/audit48.js, tools/audit48-towns.json",
+        "docs/earth/AUDIT_48.md",
+        "src/world/synth.ts (realExtras: only water cuts the ground; faceUp)",
+        "tests/realExtras.test.ts",
+        "docs/earth/AUDIT_48.md round 2 (2026-10-04): 19 towns, desktop and phone — all 249 desktop cells real or baked, no stand-ins or failed cells; shots/audit48/<town>-montage.jpg reviewed",
+        "src/world/realTile.ts ringTester + tests/realTile.test.ts (a Great Lake cell's ground 8.8 s → 0.24 s); src/world/stream.ts drainRelief (reliefs queued behind first builds)",
+        "src/world/horizon.ts retry backoff + tests/horizon.test.ts"
       ],
-      "notes": "Open: protected left phases, buses on route=bus, parking manoeuvres, curved turn paths through the box. Tile cache v14 (stop/give-way points) - redeploy the worker."
+      "notes": "Audit 2026-10-03 (Overpass down): most cold cells stayed vector twins (Midtown 0/14 real, Intercourse 0/14, Hays 1/14). Shrewsbury's reported dark-blue ground not reproduced at the centre (to check across the ring and on a phone). 2026-10-04: the blue ground found — Robby's at Monmouth Executive Airport and in Shrewsbury: a streamed cell's ground (synth.ts realExtras) was cut away under wetlands like under water, and the sheet over the hole faced down for half of them (their ring's winding): the sea plane showed through, blue, with grass on it. Wetlands are ground now (only water cuts it), every sheet faces up (faceUp); tests/realExtras.test.ts fails on the old code; shots/audit48/monmouthairport-nj-montage.jpg before/after. 2026-10-04 round 2 (from our own extract, first visits at t/v25): every desktop ring real, all real by a median 15 s; the slow ones (Chicago past 240 s, Duluth 141 s, reliefs stalling) fixed in 9283adf — Chicago all real 1 s after ready, settled 38 s; Duluth 23 s / 57 s; no cell left late. The desktop horizon ring now retries (ceb0588)."
+    },
+    {
+      "id": "spawn-on-land-outside",
+      "tier": 0,
+      "rank": 3,
+      "status": "passing",
+      "area": "world",
+      "title": "A ?at= arrival stands outside, on land: never inside a building, never in water",
+      "user_visible_behavior": "Arriving anywhere by link, search or teleport, you stand on the street or a path outside, facing the place — not in a restaurant's dining room or a pond.",
+      "verification": [
+        "tools/audit48.mjs: every town's spawn outside and on land, desktop and phone"
+      ],
+      "evidence": [
+        "src/player/landing.ts (lands just past the foot of the nearest door's steps, facing it; was 2.2 m inside)",
+        "src/main.ts (re-makes an arrival when the real cell replaces its stand-in under the walker)",
+        "tests/landing.test.ts",
+        "docs/earth/AUDIT_48.md round 2: 38 of 38 runs (19 towns × desktop and phone) arrived outside and on land"
+      ],
+      "notes": "Audit 2026-10-03: Bar Harbor ME (44.3876, −68.2045) desktop spawned inside a restaurant's dining room; Levittown NY flagged spawn in water (0.6% water round it). Fixed 2026-10-03 (ff84f22). Blocked on the verification only: audit round 2 (every town's spawn outside and on land, desktop and phone) runs once own-osm-extract is live, so the arrivals land in real cells. Verified 2026-10-04 by audit round 2: every arrival outside, on land."
+    },
+    {
+      "id": "playtest-suite",
+      "tier": 0,
+      "rank": 4,
+      "status": "passing",
+      "priority": 0,
+      "area": "platform",
+      "title": "Gameplay test suite: walk, drive, teleport, stream, frames, doors, nesting, flicker, altitude",
+      "user_visible_behavior": "(Developer) One command plays the game headless and fails on a glitch: walks streets and into buildings and up their stairs, drives routes, teleports, streams a ring, times frames, walks into every door, finds nested buildings, surfaces fighting and posts in car lanes.",
+      "verification": [
+        "Self-tests: each check catches its planted failure (walkabout 9, drive 5, teleports 5, streaming 4, frames 1, roadposts 1; flicker 1)",
+        "tests/playtest.test.ts (23): the pure core (seeded rng, A*, road graph, carriageway index, frame stats)",
+        "Headless, cloud mirror: Sea Bright walkabout 846 m / 4 buildings in and out / 1 staircase, drive 477 m, teleports 6/6, streaming 12/12, overlaps 0 nested, doors 0 shut of 80; procedural Midtown the same with 0 failures",
+        "2026-10-01: __DRIVE__ with the car's own body (tests/carBody.test.ts, 8): procedural Midtown 486 m, 0 clips",
+        "CI on every push (.github/workflows/playtest.yml), 2026-10-04 run 37222981156: checks (typecheck, 850 tests, build, tools/must-load.mjs --live) and the quick playtest headless on the shore (SwiftShader) all green; its first run (37222688732) caught a real regression — the re-arrival hook threw on the rescue's null spec (teleports)"
+      ],
+      "evidence": [
+        "tools/playtest.js",
+        "tools/playtest-core.js",
+        "tools/playtest.mjs",
+        "docs/agent/debugging.md",
+        "src/player/landing.ts",
+        "src/player/collision.ts (moveBody, bodyPush)",
+        "src/player/vehicles.ts (carBody, carMove)",
+        ".github/workflows/playtest.yml"
+      ],
+      "notes": "Found and fixed: posts in car lanes (props.ts offCarriageway, signs.ts), stand-in houses across streets (synth.ts), teleports into water (landing.ts), a raised house's stair across the street (buildings.ts). Next: run it live on Manhattan and Queen Anne; phone budgets on a real phone. Tier 0 (2026-10-03): .github/workflows/playtest.yml plays the quick suite headless (SwiftShader, the baked shore) on every push and PR, with the typecheck, tests and build. Locally 2026-10-03: 5 of 6 checks passed; posts failed on a rural mailbox in a junction link's lane (Sea Bright's Ocean Avenue at Rumson Road) — fixed (props.ts drops a box in any carriageway; tests/kerbposts.test.ts)."
+    },
+    {
+      "id": "worker-costs",
+      "tier": 0,
+      "rank": 5,
+      "status": "passing",
+      "area": "platform",
+      "title": "Worker costs under control (Workers Paid): cache-hit rate, requests, R2 reads and writes checked and kept efficient",
+      "user_visible_behavior": "(Developer) The tile service's monthly bill stays a few dollars as players grow; every repeat visit is a cache hit.",
+      "verification": [
+        "docs/agent/streaming.md cost model + the dashboard numbers (Robby)",
+        "Robby's Cloudflare dashboard 2026-10-03: $0.00 billed; R2 2.92 k Class A writes (1 M a month included), 6.11 k Class B reads (10 M), 0.03 GB-month stored; the worker 5.96 k invocations, 2.45 k subrequests (S3 terrain and LiDAR reads, Overpass), median CPU 1.78 ms, 4 errors"
+      ],
+      "evidence": [
+        "docs/agent/streaming.md (the cost model)",
+        "worker/src/index.js (edge cache, R2 TileJson cache, Overpass rest and cached 503s)",
+        "scripts/osm-upload.mjs (packed blocks, content-addressed: a monthly refresh writes only changed blocks)"
+      ],
+      "notes": "Cost model 2026-10-03: a new-area session ~300–500 requests (10 M a month included); a cold cell from the extract ~0.1–0.5 s CPU and a few R2 reads. The TileJson cache is keyed per session origin — neighbouring starts rebuild the same ground (cheap now; a global cell key would share it). Passing 2026-10-03 on Robby's numbers. Re-check the dashboard a month after the extract goes live (cold cells move from Overpass waits to R2 range reads)."
+    },
+    {
+      "id": "phones",
+      "tier": 0,
+      "rank": 6,
+      "status": "passing",
+      "priority": 0,
+      "area": "platform",
+      "title": "The game runs on phones, and says why if it can't",
+      "user_visible_behavior": "On a phone the game picks a lighter quality tier by itself and renders; if anything fails (no WebGL, a shader, no frame, a lost GPU context, a bundle that won't load) the page shows a readable report you can screenshot, and ?diag=1 shows it on demand.",
+      "verification": [
+        "tests/quality.test.ts, tests/diag.test.ts, tests/pack.test.ts (atlas crop)",
+        "tools/mobile-check.mjs (headless, helper agent): Pixel 7 GPU-process peak 1272 → 733–783 MB on the phone tier, world drawn, 0 errors; injected failures each show the report",
+        "LIVE pane at 375×812: the report on ?diag=1 reads 'quality phone (touch screen)', the world drawing",
+        "Touch controls rebuilt (2026-10-01): visible stick that follows the thumb, a Paint-first corner cluster, a Go/Map/More bar, drawn icons with words; tools/hud-audit.mjs 140 layouts (10 phones x both ways x 7 states) no overlaps; real game on Pixel 7 emulation driven by touch: stick walks and follows, Fly -> Land"
+      ],
+      "evidence": [
+        "src/render/quality.ts",
+        "src/ui/diag.ts",
+        "index.html (inline guard)",
+        "src/world/signs.ts (cropped atlases)",
+        "src/sim/life.ts (live-slot counts)",
+        "src/world/stream.ts (streamParams)",
+        "src/player/controller.ts, src/player/vehicles.ts (shared thumbstick vehicle control and touch interaction)",
+        "src/main.ts, index.html, src/ui/style.css (mobile action tray, double-tap interaction, safe-area layouts)",
+        "src/ui/panel.ts (mobile options and developer tools drawer)",
+        "src/ui/photo.ts, src/ui/brush.ts (touch photo tools and brush rotation)",
+        "npm run init (47 test files, 450 tests) and npm run build",
+        "tools/mobile-check.mjs --device=pixel7|iphone: phone tier, no page/console errors, shader limits within caps",
+        "shots/shore-montage.jpg (Pixel 7 and iPhone touch layouts reviewed)",
+        "src/ui/lifecycle.ts + tests/lifecycle.test.ts (sleep when hidden: sound, the life worker, held input)",
+        "src/world/budget.ts + tests/budget.test.ts (a phone's detail tiles under a vertex budget, nearest first)",
+        "src/player/vehicles.ts stickAxes + tests/touchControls.test.ts (ride stick dead zones; keys unchanged)",
+        "src/world/stream.ts (sign atlases disposed with their tiles; budget; realConc; solidAt)",
+        "src/player/collision.ts purgeSome + tests/walk.test.ts: an unloaded tile's walls leave the grid ~1.5 ms a frame, every tier (a 19k-wall tile: 7.5–34.5 ms at once, at most 1.73 ms a frame sliced)",
+        "src/render/quality.ts (+ tests/quality.test.ts): phone/low tiers — budget 200/120 MB, LiDAR off, 4/3 km skyline",
+        "src/ui/diag.ts lostFrom/NO_WEBGL (+ tests/diag.test.ts): a lost GPU context steps a phone down; how to get WebGL back",
+        "index.html + src/ui/style.css: no page zoom (touch-action; iOS gesture events); src/ui/mapview.ts pinch",
+        "tools/hud-audit.mjs: the phone HUD's boxes on 10 phones, upright and on their side, 5 states each — 100 layouts, no overlaps (25 overlapped before)",
+        "npm test (50 files, 472 tests, idle machine), npm run build — 2026-09-30",
+        "src/player/frame.ts (the lens fitted to the screen: 41° across upright, ≤ 95° on its side, 4:3–16:9 unchanged; tests/frame.test.ts); src/ui/style.css + main.ts toast/arrival slots (the middle band clear); tools/hud-audit.mjs middle-band rule (560 layouts clear); clock 7.45:1 on its paper wash (round 10 must-fix 1)",
+        "src/world/pack.ts setFreeUploaded + src/render/quality.ts freeArrays + tests/pack.test.ts, tests/quality.test.ts (a phone tier's tiles keep their vertex data only on the GPU)",
+        "src/world/stream.ts uploadSoon (a tile mounted whole is drawn its first frame in or out of view, so it uploads and lets go at once); src/main.ts (a restored context on a freeing page reloads where you stand)"
+      ],
+      "notes": "2026-09-30: controls reviewed and fixed (docs/earth/LOG.md); phones sleep when put away; the NYC crash's memory causes fixed (sign-atlas texture leak, walls never reclaimed, LiDAR ~130 MB a Midtown cell, up to 9 dense cells in the ring); a phone lands only once the street below is built. Verified headless in Sea Bright (Pixel 7 emulation): textures flat at 23–25 over 4 round trips (was 24 → 36), walls flat at 106k (was 263k), landing 12.7 m clear of the house it used to land in. Follow-up the same day: the phone HUD's overlaps fixed (the montage showed 3, an audit of 10 phones found 25 layouts); an unloaded tile's walls purged a slice a frame on every tier (a PC's long hop had left 166k dead walls); sleep re-measured by the life worker's messages (57–59 ticks in 3 s awake, 0 hidden); no page zoom even where the browser ignores the viewport meta (headless pinch: scale stays 1). Still needs a real phone after the next Pages deploy: …/Map_Game/?diag=1 in Manhattan (the tile service and Overpass are unreachable from the agent sandbox), and an iPhone for the gesture-event zoom guard (WebKit isn't installed here). 2026-10-03: set to blocked (was in_progress) while the measured-heights items run — what remains is the real-device check above (a real phone on the Pages deploy in Manhattan with ?diag=1, and an iPhone for the gesture-zoom guard), which the agent can't do; unblocks when Robby has run it. Tier 0 (2026-10-03): what's left needs a real phone — Robby, on the Pages deploy: ?diag=1 in Manhattan, and an iPhone for the gesture-zoom guard. Robby 2026-10-04, a real phone (Android 10, Chrome 154, 8 GB, 8 cores, 385×824 @3.75x), on the Pages build: after teleporting to Monmouth Executive Airport NJ (40.1867, −74.1249) the GPU crashed; reloading, Chrome had switched WebGL off for the site (the boot report: webgl2 and webgl1 unavailable) until the browser was restarted; some grass showed blue; in DuckDuckGo's browser the page flashed and the browser crashed. Next: reproduce at the airport on the phone tier (tools/audit48.mjs --towns=monmouthairport-nj, tools/mobile-check.mjs) — GPU memory across a teleport, and what the blue is. 2026-10-04, reproduced headless (Pixel 7 emulation, the phone tier, this PC's GPU): the blue grass was the wetland ground bug (fixed, every-tile-loads); no leak across 12 teleports Sea Bright ⇄ the airport ⇄ Shrewsbury — three's geometries 585–913 and textures 26–28 by place, the JS heap after a forced GC 453–536 MB, flat (without the GC it climbed to 773: garbage not yet collected). What a phone carries is the weight: ~190–245 MB of vertex data the scene reaches (kept in JS as well as on the GPU) and a ~450–530 MB heap; an Android 10 phone's tab running out there is plausible. Next: free uploaded vertex arrays the CPU never reads again on the phone tier, measure the renderer process on a phone, and Robby's ?diag=1 at the airport after go-live. 2026-10-04: the page held every tile vertex twice (JS and GPU). A phone's tiles now let go of the JS copy once uploaded: at Monmouth Executive Airport (Pixel 7, phone tier) the page's array memory 196 → 136 MB settled, 243 → 158 MB after a walk round the ring; no errors; the phone montage unchanged; tools/mobile-check.mjs clean. A lost and restored GPU context reloads the page where you stand (a tier lighter, diag's record), checked with WEBGL_lose_context. Still to do: Robby's ?diag=1 at the airport on his phone; the real-device look (phone-look). Blocked 2026-10-04 on the real device: Robby's ?diag=1 report at the airport on his Android 10 phone, now the freeing build is live (https://dero24.github.io/Map_Game/?at=40.1867,-74.1249&diag=1). 2026-10-04: Robby, on his phone after the freeing build: \"its working great on mobile right now as well\". Passing on his word (the ?diag report was the planned check)."
+    },
+    {
+      "id": "own-place-index",
+      "tier": 0,
+      "rank": 7,
+      "status": "passing",
+      "area": "platform",
+      "title": "Our own lower-48 place index (USGS GNIS + US Census) replaces Photon",
+      "user_visible_behavior": "Map search finds towns, townships, counties, parks, peaks, lakes and landmarks across the lower 48; arrival cards name the town and county where you are; no street addresses; offline the loaded world still answers.",
+      "verification": [
+        "tests/placeIndex.test.ts (17)",
+        "tests/placesWorker.test.ts (5)",
+        "in the game at ?at=40.3297,-74.0617: arrival card \"Shrewsbury · Monmouth County, New Jersey\"; search and reverse only to our service"
+      ],
+      "evidence": [
+        "scripts/build-places.mjs",
+        "src/ui/placeIndex.ts",
+        "src/ui/geo.ts",
+        "worker/src/places.js",
+        "R2 places/v3 (deployed 2026-10-03)"
+      ],
+      "notes": "1.85 M public-domain names; 8,026 shards; 13,737 boundary tiles. Re-bake: INDEX_V + places.js V together."
+    },
+    {
+      "id": "licence-check",
+      "tier": 0,
+      "rank": 8,
+      "status": "passing",
+      "area": "platform",
+      "title": "A licence check for every data source and service, recorded; anything not for a commercial game swapped",
+      "user_visible_behavior": "(Developer) docs/DATA_SOURCES.md §0 says, for every source and service, whether a paid game may use it and the credit it needs; the code can't name an uncredited host.",
+      "verification": [
+        "tests/licences.test.ts (6): every outside host credited or a reference link; Photon and Open-Meteo never return; §0 records each host"
+      ],
+      "evidence": [
+        "docs/DATA_SOURCES.md §0",
+        "src/ui/credits.ts"
+      ],
+      "notes": "Findings: public Overpass is not a game backend (→ own-osm-extract); GitHub Pages is not for a paid game (Robby: keep it while building; move before charging); weather stays seeded."
+    },
+    {
+      "id": "credits-screen",
+      "tier": 0,
+      "rank": 9,
+      "status": "passing",
+      "area": "ui",
+      "title": "A credits screen listing every source with its credit, plus the always-visible HUD credit",
+      "user_visible_behavior": "From the intro, the HUD's credit line (desktop) and the map's journal page, a card lists every data source and service with its licence and credit; the OpenStreetMap credit stays on screen.",
+      "verification": [
+        "tests/licences.test.ts: every credit shown; the ODbL line stays",
+        "tools/hud-audit.mjs: 560 layouts clear"
+      ],
+      "evidence": [
+        "src/ui/credits.ts",
+        "index.html #osm-credit, #credits"
+      ],
+      "notes": "Mapillary's logo joins the HUD line when its objects are used."
+    },
+    {
+      "id": "traversal-spike",
+      "tier": 0,
+      "rank": 10,
+      "status": "superseded",
+      "priority": 1,
+      "area": "core",
+      "title": "Fast traversal spike (~25 m/s)",
+      "user_visible_behavior": "Riding/flying at speed stays smooth — streaming, worker throughput and DEM latency hold up.",
+      "verification": [
+        "node tools/soak.mjs --region=shore --seconds=120 while traversing at speed — stalls/hitches reported",
+        "npm run typecheck && npm test"
+      ],
+      "evidence": [],
+      "notes": "Core-gameplay seed per OPEN_WORLD.md. Answers two questions at once: does the pipeline survive 25 m/s, and does fast traversal feel good enough to anchor the gameplay loop? Do this before deciding the loop.",
+      "stale_reason": "2026-10-03: The loop it was to decide is decided (docs/GAMEPLAY_VISION.md). Its streaming question — does the pipeline keep up at 25 m/s — is every-tile-loads' at driving speed (drive-hitch passed; the van's self-drive will lean on it)."
+    },
+    {
+      "id": "real-world-comparison",
+      "tier": 1,
+      "rank": 11,
+      "status": "passing",
+      "area": "tools",
+      "title": "The real-world comparison loop: Mapillary photos against game renders from the same spot, heading and field of view, a montage per state, scored, worst fixed first",
+      "user_visible_behavior": "(Developer) One command samples seeded spots in every state, fetches an openly licensed street photo for each (Mapillary; never Google Street View), renders the game from the same pose, puts the pairs side by side and scores them — the score history says whether a change made the lower 48 more like itself.",
+      "verification": [
+        "First run 2026-10-03, the shore (3 spots, baked): 0.811 / 0.872 / 0.867 — the game shows a quarter or less of the photos' vegetation and a fifth to a third of their poles, signs and furniture",
+        "national-1 (2026-10-04, tools/real-scores.json): 106 photo spots in every lower-48 state, 83 scored, mean 0.689 (the baked shore 0.85); photo vs game: vegetation 14% vs 5%, other (street furniture) 9% vs 2%, building 20% vs 27%"
+      ],
+      "evidence": [
+        "tools/real-spots.mjs (seeded spots per state, Mapillary images with their segmentation, cached outside git)",
+        "tools/real-compare.mjs (the game from the photo's pose, lens, date and hour; side by side; scored)",
+        "tools/class-pass.js (the game's class mix)",
+        "tools/real-scores.json (one entry a run)",
+        "tools/real-spots.mjs (fit photos: quality, daylight, segmented, a 30°+ lens; --recheck; the photo's pitch)",
+        "tools/real-compare.mjs (unscored unfit photos; the lens at the photo's pitch, on a roof it stands in)",
+        "src/world/synth.ts (streamed ground, roads, area sheets named for the class pass)",
+        "shots/real/<ST>-montage.jpg",
+        "docs/agent/debugging.md \"The real-world comparison\""
+      ],
+      "notes": "docs/GAMEPLAY_VISION.md §17. Photos cached outside git, never shipped; never unblur faces or plates; NAIP aerial comparison where no photo. Mapillary token from Robby in .env (git-ignored). Blocked 2026-10-03 on own-osm-extract: the per-state run waits for real cells (most new places are vector twins until the extract is live). Unblocked 2026-10-04: the extract is live (every cell real, AUDIT_48 round 2). 2026-10-04: the loop measures honestly on real cells (named ground; fit photos; pitch) and ran nationally. Worst-first queue from it: vegetation (a third of the photos', worst in the South), then street furniture. 2026-10-04: the loop is built and runs nationally (national-1) and by region over curated green spots (tools/real-spots.mjs GREEN, --kind=green --group=region); the worst-first fixing continues as regional-greenery."
+    },
+    {
+      "id": "place-parity",
+      "tier": 1,
+      "rank": 12,
+      "status": "not_started",
+      "priority": 2,
+      "area": "world",
+      "title": "Place parity: hometowns that look like themselves (towers, rows, horizons, street furniture, sound)",
+      "user_visible_behavior": "Streamed cities stand at their real heights with setbacks, glass or masonry towers, water tanks and fire escapes; row houses are brick with flat roofs in North American cities; mountains stand on the horizon and towers on the skyline; signals, hydrants, subway entrances, crosswalks and main-street lamps come from the map; cities sound like cities and deserts like deserts; houses are clad by subregion; American streets are parked nose to tail (kerbs and striped lots, a per-car level of detail); parks, lots and pitches paint in streamed towns; bus stops, streetcar rails and trolleybus wires come from the map; the date brings its season — snow, bare trees, autumn colour, a moving snowline.",
+      "verification": [
+        "tests: realTile (heights, parts, rows, storefront floors, street parking, bus stops), styles, lots (stall layout), kerbCars (LOD tiers, drive-off lookup), season (normals, snow, leaves, snowline), kit (lite car budget), pack (DECID/PAVED survive the pack)",
+        "tools/place-shots.js __PLACE__(tag, { main, resi }) -> shots/place-*.jpg vs docs/earth/PLACE_REFERENCES.md; __PLACE__(tag, { looks }) -> shots/looks-*.jpg",
+        "reviewer place-parity rounds: NYC 5 -> 6/10, Tucson 5 -> 6 -> 6.5/10"
+      ],
+      "evidence": [
+        "148 tests pass (check config); device tsconfig typecheck clean",
+        "shots/place-tucson.jpg (round 4)",
+        "shots/place-nyc.jpg (round 3b)",
+        "shots/place-burlington-jan.jpg",
+        "shots/looks-tucson.jpg",
+        "shots/place-nyc-r3.jpg (round 4: Hudson visible in the far field, aerial above the roofs)"
+      ],
+      "notes": "Tile cache v14 (stop/give-way points, fence types) - the worker needs a redeploy. (p): iron railings in dense cores, thinner street-tree trunks, DEM rivers show water in the far field, aerial pose above the roofs. Open: ridge detail on far mountains, zero-setback barrio fronts, buses on route=bus, snowbanks, window pixel mosaics, Seattle + Miami rounds. (u) The horizon ring reaches 125 km (z10 to 60 km, z9 beyond) and summits see over the haze: Rainier (95 km from Kerry Park) was past the old 70 km rim. Pose pending: Kerry Park 47.6295, -122.3599, bearing 152."
+    },
+    {
+      "id": "public-places",
+      "tier": 1,
+      "rank": 13,
+      "status": "not_started",
+      "area": "world",
+      "title": "Public places from the vision's table: airports and airfields, gas stations and chargers, rest areas, campgrounds, marinas and ferry terminals first; then parks, beaches, trails, landmarks and the rest",
+      "user_visible_behavior": "Airfields with runways (the plane lands there later), gas stations with pumps under their canopies and chargers, rest areas, campgrounds, marinas and ferry terminals are drawn where they are; parks, beaches, trails, viewpoints, lighthouses, stations, museums, historic sites and civic buildings read as what they are.",
+      "verification": [],
+      "evidence": [],
+      "notes": "OpenStreetMap first (the extract), public US government data to fill gaps (FAA, DOE AFDC, RIDB, PAD-US…) — each licence checked first (DATA_SOURCES §0). Public places and data only."
+    },
+    {
+      "id": "mapillary-objects",
+      "tier": 1,
+      "rank": 14,
+      "status": "not_started",
+      "area": "world",
+      "title": "Mapillary's detected street objects behind a switch: public classes only, recent and repeated sightings, cached by the worker, Mapillary logo credit",
+      "user_visible_behavior": "Street lights, poles, hydrants, benches, bins, signs and the like stand where Mapillary's cameras saw them where the map has none; off by a switch for comparing.",
+      "verification": [],
+      "evidence": [],
+      "notes": "docs/GAMEPLAY_VISION.md §17 (Robby's decision: use it, credit every source). Fills street-furniture-nodes' gaps. 50,000 tile requests a day per app: the worker bakes them into tiles once. A first look (2026-10-03, z14 tiles of mly_map_feature_point): Sea Bright 886 features + 41 signs, every one from a single drive (first = last seen, 2026-04-12): utility poles 177, street lights 132, traffic signs 219, shop and advertising signs 93, driveways 30, catch basins 27, manholes 14, bins 14, hydrants 5, benches 3, mailboxes 3. Hays KS 247, one drive in 2021. Midtown 57,868; Seattle downtown 473,848 (62,629 \"street lights\" in ~2.7 km²): where many drives overlap, one real object is many features. So the rules need: merge a class within a few metres; \"repeated\" can't mean different days (a one-drive town would get nothing); leave out what moves (cones, temporary signs) and what isn't public (driveways, shop and advertising signs). Robby 2026-10-03: home mailboxes left out (a home's own property, a private home); Mapillary's mailbox class is not used — public USPS collection boxes come from OSM amenity=post_box (docs/GAMEPLAY_VISION.md §17)."
+    },
+    {
+      "id": "street-furniture-nodes",
+      "tier": 1,
+      "rank": 15,
+      "status": "not_started",
+      "priority": 1,
+      "area": "world",
+      "title": "Street furniture exactly where the map puts it: crossings, lamps, bins, post boxes, racks, fountains, bollards, pay stations",
+      "user_visible_behavior": "Mapped crossings are painted where they are (ladder bars or two lines by their markings, nothing where unmarked) and the junction's inferred crosswalk steps aside; each mapped street lamp is a mast with its arm over the street and its pool of light; bins, blue post boxes, bike racks with bikes locked on, drinking fountains, bollards and parking pay stations stand on their nodes, facing the street.",
+      "verification": [
+        "tests/realTile.test.ts: every class from its tags (crossing markings, racks but not bike sheds, pay stations but not drinks machines); the query asks for them",
+        "tests/kerbside.test.ts crossingPaint: on the street, square to it, with its style",
+        "tests/foundry.test.ts street furniture: valid, grounded, footprint, budgets"
+      ],
+      "evidence": [
+        "src/world/realTile.ts furnitureClass + overpassQuery",
+        "src/assets/street.ts",
+        "src/world/props.ts (mapped lamps, mapped small furniture, mapped bins)",
+        "src/world/kerbside.ts crossingPaint",
+        "src/world/groundPaint.ts crosswalks",
+        "src/world/micro.ts + src/world/microLayer.ts + src/render/impostor.ts (the micro layer: mapped picnic tables, fire rings, grills, planters, boards, recycling, cabinets, vending, clocks, seamarks, plus seeded fill; +2 draws; tile cache v23); tests/micro.test.ts (11), tests/impostor.test.ts (11)"
+      ],
+      "notes": "Blocked on frames from real (Overpass) cells: the vector twin keeps no lamps, crossing markings or hydrants, and Overpass was down for most of (v) (it answered again at the end). Test: 3rd & Pike from a real cell — mapped lamps with arms over the street, ladder crossings where marked. Unblocked by own-osm-extract (2026-10-03): real cells come from our own extract, whatever Overpass is doing — lamps, crossing markings and hydrants included. Mapillary objects fill the gaps (mapillary-objects)."
+    },
+    {
+      "id": "night-ground-far-trees",
+      "tier": 1,
+      "rank": 16,
+      "status": "not_started",
+      "area": "render",
+      "title": "Review round 12's must-fixes: the night value plan, the ground, far trees",
+      "user_visible_behavior": "Night reads as night with lamplight that pools and falls off; the ground underfoot has its real texture; far trees read as trees, not blobs.",
+      "verification": [
+        "tools/night-check.mjs",
+        "docs/earth/REVIEWER.md round 12"
+      ],
+      "evidence": [
+        "commit 65e873f: the street lamp pools no longer wash cars and walls out — the heart a lit midtone (nightLight.ts POOL gain 1.8 → 1.2, a cream light, mute 0.55, floor 0.28), what stands in it keeps its colour; tests/nightLight.test.ts holds the heart's L* (asphalt 55–70). Robby, 2026-10-04: \"the illumination of street lights makes cars and everything glow way too light where it washes it all out\"."
+      ],
+      "notes": "docs/earth/REVIEWER.md round 12; j1-lamp-pools folds in."
+    },
+    {
+      "id": "j1-lamp-pools",
+      "tier": 1,
+      "rank": 17,
+      "status": "not_started",
+      "priority": 2,
+      "area": "presentation",
+      "title": "Verify night lamp pools everywhere (past slice + streamed)",
+      "user_visible_behavior": "Streets stay lit at night on streamed tiles and in the baked backdrop — not just inside the slice.",
+      "verification": [
+        "npm run typecheck && npm test",
+        "node tools/capture.mjs --shots=ocean-night,inside-night --montage=only — read shots/shore-montage.jpg",
+        "Night shot on a streamed tile past the backdrop (e.g. ?at= west of the bake) — lamps lit"
+      ],
+      "evidence": [
+        "src/render/nightLight.ts (pools with a heart and a gap: the lamp map carries distance; one indigo night grade), stream.ts repaintLamps (distance cones; repaints throttled to 1.5 s for tiles), shared.ts lampField; tools/night-check.mjs; tests/nightLight (12), nightCheck (14), lampWindow (4) (round 10 must-fix 2)"
+      ],
+      "notes": "Mostly shipped in 6260066: tiles ship lampPts + walker-centred 2 km lamp map paints on every streamed tile. What remains is verification + any backdrop coverage gap past the slice. Close it with evidence or fix what's missing. Folds into night-ground-far-trees (Tier 1)."
+    },
+    {
+      "id": "phone-look",
+      "tier": 1,
+      "rank": 18,
+      "status": "not_started",
+      "area": "render",
+      "title": "Phone sharpness and look checked on real devices after the new defaults",
+      "user_visible_behavior": "On a real phone the painting is as sharp and as coloured as on a PC, within the phone's frame budget.",
+      "verification": [],
+      "evidence": [],
+      "notes": "Needs Robby's phone (the Pages deploy)."
+    },
+    {
+      "id": "gpu-benchmark",
+      "tier": 1,
+      "rank": 19,
+      "status": "not_started",
+      "priority": 2,
+      "area": "render",
+      "title": "Boot GPU benchmark → quality tier",
+      "user_visible_behavior": "Best defaults on every machine without touching settings: a 2 s benchmark at first boot picks render scale, Kuwahara radius, grass density, shadows and life caps.",
+      "verification": [
+        "tier chosen on a low and a high GPU",
+        "soak holds 55+ fps on the chosen tier"
+      ],
+      "evidence": [],
+      "notes": "Reviewer scale-out step 1 (IMMERSION_BACKLOG 1.7/9.1). Tier 1 with phone-look: a measured tier choice for phones."
+    },
+    {
+      "id": "interiors-rooms",
+      "tier": 1,
+      "rank": 20,
+      "status": "not_started",
+      "priority": 1,
+      "area": "gameplay",
+      "title": "Interiors at real scale (docs/INTERIORS_PLAN.md): rooms, not halls; towers you ride up",
+      "user_visible_behavior": "Walk into a house and you're in a hall with the stair beside it; off it a living room, kitchen, dining room or study and a WC; upstairs a landing, bathroom and bedrooms sized like real ones. Apartment blocks have corridors and flats; offices a core, desk rows by the glass and meeting rooms; shops aisles and a back of house. Every room is reachable, you're never shut in, and the HUD names the room. In a tower every storey exists: lifts in the core (L to choose a floor, a real ride with doors and a floor display), stairs in their shafts, a double-height lobby in big offices, glass floor to ceiling in curtain-walled towers, and the HUD says which floor of how many.",
+      "verification": [
+        "tests/interiorLayout.test.ts (14) and tests/interiorBudget.test.ts (14): houses 3–6 rooms a storey in 320/320, bedroom minimums, corridors ≥ 1.5 m, rooms ≤ 38 m², office cores 15–30% and desks within 13.5 m of glass, every room reached from the door, no wall on a window, ≤ 120k vertices, ≤ 60 draws, no build step over 8 ms",
+        "tools/bench-interiors.mts: worst build step 47–1,243 ms → ~1 ms; house 43k → 30k vertices; supermarket 1.1 M → 12k",
+        "LIVE Sea Bright (shots/int-seabright.jpg, shots/tour-seabright-house.jpg): hall + stair, living, kitchen, dining, study; landing, bedroom, bath",
+        "tests/interiorTower.test.ts (18): 39 storeys with lobby and shaft holes, lift 0 → 23 lands at floor0 + 23 × fH, stair 23 → 24 walkable, ≤ 3 storeys / 120k vertices / 60 draws built, podium storey 10 has no floor outside the tower, storeys identical whichever set is built",
+        "Bench: tower plan 2.0 KB / 0.05 ms; worst build step 0.6–1.9 ms; shots/mid-montage.jpg (lobby, lift, floor 20 day and night, stair shaft, glass tower, podium) on a Manhattan-like grid through the real pipeline",
+        "tests/interiorArch.test.ts (15): supermarkets at six sizes — aisles ≥ 1.5 m between every pair of fixtures, gondola runs ≤ 15 m, checkouts within 3 m of the front and before the aisles, 20–25% back of house; restaurant kitchens 30–40% at eight sizes; 60×18 m hotels ≥ 24 rooms of 25–35 m² a storey each with its bath; classrooms 50–65 m² with WCs on every storey, a hall and an office; pews at 0.91 m either side of a 1.5 m aisle; a mosque without pews; every room reachable; no wall on a window",
+        "tests/interiorBudget.test.ts +5 (supermarket ≤ 90k: 27k; hotel, school, restaurant, church, library) and shots/synthin-a.jpg (the supermarket from the door, an aisle, the checkouts, the cold cases)"
+      ],
+      "evidence": [
+        "src/world/interior/{plan,layout,mesh,furnish}.ts",
+        "src/world/interiors.ts",
+        "src/player/collision.ts (withScope, removeScope purge)",
+        "src/assets/decor.ts (17 new pieces)",
+        "src/player/lift.ts",
+        "src/ui/lift.ts",
+        "src/player/collision.ts (Floors.shafts, tiers)",
+        "src/world/uses.ts (placeOf)",
+        "src/world/interior/layout.ts (backStrip, bandCuts, marketStorey, stripStorey, pubStorey, churchStorey, Layout.fix)",
+        "src/assets/decor.ts (18 Slice 4 pieces)",
+        "src/world/interior/plan.ts + layout.ts (cottages open into the living room 40/40; bigger houses: stair in the door's view, cased living opening), furnish.ts (the way in: runner, console lamp, mirror, coats; skirting everywhere; domes), interior/views.ts (sun pools through real windows; pose 19 the sunniest room); tests/interiorLayout (19), interiorBudget (24), foundry (29) (round 10 must-fix 4)"
+      ],
+      "notes": "Slice 3 (towers) done 2026-09-29 (af). Next: see it in real Midtown; slice 2 (data in: building/tourism/amenity archetypes, party walls), plant floors and sky lobbies, lifts for 5–7-storey blocks over shops. Slice 4 (deeper archetypes: supermarket, restaurant kitchen, hotel, school, church/mosque, library, bank, post office, gym, pharmacy) done 2026-10-01. Next: a chancel's dais, qibla from the real bearing, tourism/leisure use tags (cache bump), lifts in 5–7-storey blocks."
+    },
+    {
+      "id": "city-doors",
+      "tier": 1,
+      "rank": 21,
+      "status": "not_started",
+      "priority": 0,
+      "area": "gameplay",
+      "title": "Every front door opens: no building inside a building, nothing across the way in",
+      "user_visible_behavior": "Downtown, a tower mapped tier by tier is one building with one door, never a building standing inside another; twin copies and seam copies are gone (no flickering walls). Walk up to any front door (up a raised shore house's stair, past the fence, the parked cars, the racks and the hydrants) and in.",
+      "verification": [
+        "tests/nest.test.ts (6), tests/seams.test.ts (2), tests/doorway.test.ts (5), tests/raisedStairs.test.ts (2): door, roof and stair tests checked to fail on the old code",
+        "LIVE Manhattan, 7 real cells (__DOORS__): real doors blocked 14 → 3 of 295, stand-ins 22 → 8 of 205; nested pairs 98 → 8 (all Grand Central's partial overlaps)",
+        "Cloud mirror, the whole baked region (tools/playtest.js __DOORS__ with the flood): 4 of 1,857 blocked (was 31 of the nearest 300)",
+        "2026-10-01: stand-in seams a pure function of position (tests/synthSeams.test.ts, 5); procedural Midtown 5,119 buildings, 0 nested, 0 touching, 0 of 80 doors shut; raised houses take a wall with stair room (tests/raisedStairs.test.ts +1)"
+      ],
+      "evidence": [
+        "src/world/nest.ts",
+        "src/world/seams.ts",
+        "src/world/stream.ts (reconcileSeams, stand-in footprint scopes)",
+        "src/world/tileBuild.ts (door aprons, own footprints, deck keep-outs in the scratch walk)",
+        "src/world/buildings.ts (doorOpen probes; raised-stair shape by clearance)",
+        "src/world/props.ts (fence gates and deck gaps, banded fences, kerb cars, own-ground props, rooftop structures, flag beside a door)",
+        "src/world/synth.ts (standInLots)",
+        "src/world/buildings.ts (doorWalls, raisedStair, raisedDoorWall)"
+      ],
+      "notes": "Left: Grand Central-type partial overlaps; 3 Manhattan doors; stand-in door quality; lots with no room for a raised house's stair (choose another wall)."
+    },
+    {
+      "id": "towers-structures",
+      "tier": 1,
+      "rank": 22,
+      "status": "not_started",
+      "priority": 2,
+      "area": "world",
+      "title": "Tall structures from the map: masts, water towers, chimneys, flagpoles; no trees on structures",
+      "user_visible_behavior": "Queen Anne's broadcast masts stand in red and white with beacons at night; small towns have their water towers; no tree grows on a roof or up a mast.",
+      "verification": [
+        "tests/foundry.test.ts towers (budgets, unit height)",
+        "tests/realTile.test.ts tall structures",
+        "tools/grade-audit.js __TREES__"
+      ],
+      "evidence": [
+        "src/assets/tower.ts",
+        "src/world/props.ts (towers, onStructure)",
+        "src/world/realTile.ts STRUCT"
+      ],
+      "notes": "Queen Anne frames await Overpass. __TREES__ downtown: 14 LiDAR crowns over 45 m (stadium light towers) and 20 on raised plazas remain. 2026-09-29 (ae): one mapped inside a building stands on its roof (rooftop-sized unless mapped; a height past the roof counts from the street); a flag at a door stands beside it (tests/doorway.test.ts)."
+    },
+    {
+      "id": "harness-asserts-see",
+      "tier": 1,
+      "rank": 23,
+      "status": "not_started",
+      "priority": 2,
+      "area": "tools",
+      "title": "Capture asserts that see: the subject's visible pixels and near occluders from an id render",
+      "user_visible_behavior": "Every pinned frame is checked on what the lens actually sees — the subject covering at least its share of the frame (5% by default, occlusion included), nothing within 2.5 m over 5% or within 4 m over 15%, the world at least 20% of the frame — and a frame that fails is re-posed round its subject until it passes; only what still fails is stamped under the frame on the contact sheet.",
+      "verification": [
+        "tools/spot-shots.js on streamed Queen Anne (shots/spots-r10-walls.jpg): 7 poses; the six that must pass pass (a parked car re-posed to its side at 6 m, 19.5% of the frame; the steps to a lot 8.1% as their own mesh); a pose facing the sky with repose:false fails with subject 0% and world under 20%"
+      ],
+      "evidence": [
+        "tools/spot-shots.js (idPass: world pass with near-lens channels + subject pass against its depth; check; repose; carPose; __SPOTKIT__)"
+      ],
+      "notes": "Reviewer round 9 must-fix 4. Open: the boat frames through the id pass (tools/brush-check.js has its own mask pass)."
+    },
+    {
+      "id": "altitude-depth",
+      "tier": 1,
+      "rank": 24,
+      "status": "not_started",
+      "priority": 1,
+      "area": "rendering",
+      "title": "Flying high, the ground holds still (no blue/green flashing)",
+      "user_visible_behavior": "Fly up over a coast or a city: land and water stay put, however high.",
+      "verification": [
+        "tests/nearPlane.test.ts (4): a depth step under 5 cm straight down and under 20 cm three times as far out at 300–3,000 m (the old fixed near: ~1 m at 2 km)",
+        "Cloud mirror: __ALTITUDE__/__FLYOVER__ over Sea Bright at 400–3,000 m flicker-free (also with the old near plane: not reproduced there)"
+      ],
+      "evidence": [
+        "src/render/nearPlane.ts",
+        "src/main.ts (per-frame near)",
+        "src/world/water.ts (sea polygon offset)"
+      ],
+      "notes": "Robby to say where he saw it (city, height) — then reproduce with __ALTITUDE__ there."
+    },
+    {
+      "id": "measured-shore-sidecar",
+      "tier": 1,
+      "rank": 25,
+      "status": "passing",
+      "priority": 0,
+      "area": "world-data",
+      "title": "Shore heights measured once, shipped to every device: the baked pack's LiDAR sidecar",
+      "user_visible_behavior": "In Sea Bright and Monmouth Beach every building stands at its LiDAR-measured height on a phone exactly as on a PC (Bain's Hardware, 1092 Ocean Ave, three storeys on both; Monmouth Beach houses two storeys where the survey says so), with no survey decoded on the phone.",
+      "verification": [
+        "node scripts/measure-cells.mjs --region=shore (all 216 cells), run twice byte-identical, then --check",
+        "tests/measured.test.ts: sidecar ver === lidar VER, bakeId === manifest bakeId, every hash matches its file, the pack untouched",
+        "phone emulation (tools/mobile-check.mjs / capture) shows shore buildings at their measured heights"
+      ],
+      "evidence": [
+        "src/world/lidar.ts (cellPlan, cellRequest, foldRes, joinRec, enrichTile pre)",
+        "src/world/lidarCell.ts (ordered node adds, strict reads)",
+        "src/world/measured.ts, src/world/measuredFile.ts",
+        "scripts/measure-cells.mjs, scripts/lib/measure-entry.ts",
+        "2026-10-03: --only=0_-1,0_0 measured in 4.5 s / 7.7 s (9 KB, 20 KB); Bain's = 0_-1 #61 (NJ MOD-IV 1092 Ocean Ave \"3SB\", parcel centroid 40.36220,-73.97453) measured 12.08 m flat, q 0.67",
+        "public/data/shore/measured/ (216 cells: 127 records + 81 open water + 8 no-survey zeros; 12.4 MB raw / 4.6 MB gz, mean 36 KB gz a cell, max 80 KB; trees are 85%)",
+        "2026-10-03: two full runs byte-identical (run 1 kept-points decode, run 2 lean streaming decode; 128 files), node scripts/measure-cells.mjs --region=shore --check: ok 216 cells",
+        "tests/measured.test.ts: \"is this runtime's measurement of this pack\", \"every record hashes to its index entry, carries this VER and keys only the cell's own footprints\", \"leaves the pack as it was baked (its tiles still hash to its bakeId)\"",
+        "tools/height-check.mjs (new): Bain's wall 12.57 m flat on pixel7 (sidecar) = desktop reading the survey in-page (?measured=0, 14 cells read) = desktop (sidecar); pixel7 without the sidecar 6.85 m pitched 2 storeys; 5 Monmouth Beach houses identical phone vs desktop own read (8.99/7.74/7.41/8.24/9.38 m), all ~4 m 1 storey before",
+        "phone budget (height-check detailMB): Sea Bright 83 vs 76.2 MB (4 tiles), Monmouth Beach 166.7 vs 162.9 MB (7 tiles), budget 200",
+        "shots/shore-montage.jpg (phone tier, 412x915, RTX 4070): Bain's and a Monmouth Beach street before/after",
+        "src/world/tile.worker.ts: ?measured=0 now reaches the build (it was ignored on desktops)",
+        "npm run typecheck, npm test (73 files, 759 tests), npm run build — 2026-10-03"
+      ],
+      "notes": "Found: Bain's is a house in the pack (no shop mapped on it), so its measured 12.1 m draws as four 2.9 m storeys; NJ MOD-IV says 3 (\"3SB\"). Height right on both devices; the storey split follows the kind."
+    },
+    {
+      "id": "measured-service",
+      "tier": 1,
+      "rank": 26,
+      "status": "passing",
+      "priority": 0,
+      "area": "streaming",
+      "title": "Everywhere else: the tile service measures a cell on first request and keeps the record in R2 for every device",
+      "user_visible_behavior": "In any streamed US town, the first visitor's request has the tile service read the cell's LiDAR once; from then on every device (phone and PC alike) builds the same measured buildings from that record. Until a record exists, or offline / outside the US, buildings come from the improved priors and swap to measured when the record lands.",
+      "verification": [
+        "prototype: a dense cell (Midtown Manhattan) measured inside a Worker within 128 MB and the CPU limit",
+        "worker route GET /measured/<cx>_<cz>.json?olat&olon&v=1 -> R2 m/v1/...; a second request while in flight never starts another measure (202)",
+        "tests: serviceMeasured graceful on 202/404/offline/outside coverage; joinRec precedence",
+        "worker/README.md + docs/agent/streaming.md updated; deployed once Robby confirms the paid plan"
+      ],
+      "evidence": [
+        "worker/src/measure.js (route, R2 m/v1, 202 marker, lean one-cell-per-isolate), worker/src/index.js (route; no request waits on another's promise), worker/wrangler.toml ([limits] cpu_ms 60000, [build] gen-wasm), worker/scripts/gen-wasm.mjs",
+        "src/world/measured.ts serviceMeasured, src/world/lidar.ts (surveyed, enrichTile late records), src/world/tile.worker.ts, src/world/stream.ts (measuredBase), src/world/measuredFile.ts MEASURED_V",
+        "src/world/lidarCore.ts ringMask a row at a time: bit-identical, 15x faster (tests/measure.test.ts \"ringMask is the per-cell test, sooner\"); shore sidecar re-measured byte-identical",
+        "prototype Midtown -1_-1 (1,839 footprints): Node lean live +3 MB heap +38 MB buffers, 6.3 s CPU (was 15.5); workerd 9.6 s, record byte-identical to Node (iydluj)",
+        "tests/measured.test.ts \"the tile service's records\" (4) and \"enrichTile with a record on its way\" (2)",
+        "tools/height-check.mjs against local workerd, Midtown: pixel7 = desktop (15.67 m commercial, 6.08 m house), phone 0 cells read, desktop read only the 3 cells whose /measured failed",
+        "npm run typecheck, npm test (73 files, 767 tests), npm run build — 2026-10-03",
+        "2026-10-03: deployed (cd worker && npx wrangler deploy, version c2763604, Workers Paid; cpu_ms 60000 accepted). Live: /measured/0_0 at Levittown NY (olat 40.734375, olon -73.515625) measured 843 footprints from USGS_LPC_NY_LongIsland_Z18_2014_LAS_2015 in 22.2 s (94 KB), repeat served from the edge cache; wrangler tail showed no memory/CPU errors"
+      ],
+      "notes": "Deployed 2026-10-03. Not yet seen live on a dense cell: Midtown's /measured answered 503 three times because the service's own Overpass query for that cell's tile times out (the game's direct path asks in quarters; the worker doesn't) — the measure never started, so production memory on Midtown is still unverified (Node + workerd measurements are in the evidence)."
+    },
+    {
+      "id": "measured-parity",
+      "tier": 1,
+      "rank": 27,
+      "status": "passing",
+      "priority": 0,
+      "area": "platform",
+      "title": "Phone/desktop height parity, proven: the same h and storeys through enrichTile on both tiers",
+      "user_visible_behavior": "Bain's and Monmouth Beach houses have the same height and storey count on a phone and a PC.",
+      "verification": [
+        "tests/: Bain's + a sample of Monmouth Beach houses through enrichTile with measure=false (phone) and measure=true (desktop) using the sidecar give identical h and storeys (the builders' own storey logic)",
+        "npm run build && node tools/mobile-check.mjs --device=pixel7 (shader limits + boot report in phone budget)",
+        "node tools/capture.mjs incl. a phone montage; shots/<region>-montage.jpg reviewed"
+      ],
+      "evidence": [
+        "tests/parity.test.ts: \"Bain's Hardware's cell: every building the same height and storeys on both; Bain's measured\", \"a Monmouth Beach cell: every house the same on both, and two storeys where the survey says so\" (buildTile, plan.ts storeysOf, fetch stubbed and never called)",
+        "src/world/interior/plan.ts storeysOf (the planner's storey count, exported)",
+        "tools/mobile-check.mjs --device=pixel7 (2026-10-03): phone tier, running, 0 page/console errors, 87 programs within phone limits (vU 17/256, fU 45/224, varyings 8/15, samplers 1/16 + 9/16, attributes 12/16)",
+        "shots/shore-montage.jpg: phone tier 412x915 on RTX 4070 (ocean golden/noon/morning, bridge, beach, aerial); tools/capture.mjs keeps portrait aspect",
+        "tools/height-check.mjs: Sea Bright and Monmouth Beach phone = desktop (item 1), Midtown phone = desktop against the local service (item 2)",
+        "npm run typecheck, npm test (75 files, 777 tests), npm run build — 2026-10-03"
+      ]
     },
     {
       "id": "paint-your-walk",
+      "tier": 1,
+      "rank": 28,
+      "status": "passing",
       "priority": 1,
       "area": "core",
       "title": "Paint your walk — the world paints in as you explore, a sketchbook, hints, arrival cards, map + search, sound",
       "user_visible_behavior": "Unvisited places are a pencil sketch that blooms into watercolor as you arrive, and your painted map is the record of every walk. Photo mode becomes a sketchbook with gentle commissions from real places plus spotting logs (boat/car/plane types). Context hints ('E — drive this car'), arrival cards when you enter a new town, an M map screen with address/place search + teleport, and a richer synthesized soundscape (halyards, lapping water, wind in trees, crickets, birdsong, engines, brush strokes).",
-      "status": "passing",
       "verification": [
         "npm run typecheck && npm test",
         "Montage: sketch→paint transition (unexplored vs explored), photo mode frame, sketchbook page, map screen with search results, arrival card, hint pill",
@@ -78,198 +643,14 @@
       "notes": "From the 2026-09-27 gameplay brainstorm (ideas 1+2 plus the agreed UX list and ideas 5). Everything region-agnostic: explored store is a sparse world-cell bitmap (not the slice), commissions come from real POIs/landmarks/kit types near the walker, geocoding degrades to local street/POI search when offline. Remaining before 'passing': npm run build + node tools/soak.mjs --region=shore --seconds=90 on the Windows toolchain. BLOCKED (2026-09-27): only the Windows-toolchain checks remain (npm run build + soak); moved aside so kit-variety can be the single active item."
     },
     {
-      "id": "traversal-spike",
-      "priority": 1,
-      "area": "core",
-      "title": "Fast traversal spike (~25 m/s)",
-      "user_visible_behavior": "Riding/flying at speed stays smooth — streaming, worker throughput and DEM latency hold up.",
-      "status": "not_started",
-      "verification": [
-        "node tools/soak.mjs --region=shore --seconds=120 while traversing at speed — stalls/hitches reported",
-        "npm run typecheck && npm test"
-      ],
-      "evidence": [],
-      "notes": "Core-gameplay seed per OPEN_WORLD.md. Answers two questions at once: does the pipeline survive 25 m/s, and does fast traversal feel good enough to anchor the gameplay loop? Do this before deciding the loop."
-    },
-    {
-      "id": "j1-lamp-pools",
-      "priority": 2,
-      "area": "presentation",
-      "title": "Verify night lamp pools everywhere (past slice + streamed)",
-      "user_visible_behavior": "Streets stay lit at night on streamed tiles and in the baked backdrop — not just inside the slice.",
-      "status": "not_started",
-      "verification": [
-        "npm run typecheck && npm test",
-        "node tools/capture.mjs --shots=ocean-night,inside-night --montage=only — read shots/shore-montage.jpg",
-        "Night shot on a streamed tile past the backdrop (e.g. ?at= west of the bake) — lamps lit"
-      ],
-      "evidence": [],
-      "notes": "Mostly shipped in 6260066: tiles ship lampPts + walker-centred 2 km lamp map paints on every streamed tile. What remains is verification + any backdrop coverage gap past the slice. Close it with evidence or fix what's missing."
-    },
-    {
-      "id": "j1-road-ribbon",
-      "priority": 3,
-      "area": "presentation",
-      "title": "Road-ribbon geometry to match ground paint (curb height)",
-      "user_visible_behavior": "Roads have real geometry at curb height instead of only painted ground.",
-      "status": "not_started",
-      "verification": [
-        "npm run typecheck && npm test",
-        "node tools/capture.mjs --shots=houses,porch --montage=only — read shots/shore-montage.jpg"
-      ],
-      "evidence": [],
-      "notes": ""
-    },
-    {
-      "id": "vehicle-polish",
-      "priority": 4,
-      "area": "life",
-      "title": "Vehicle polish",
-      "user_visible_behavior": "Riding vehicles feel finished — handling, camera, sound.",
-      "status": "not_started",
-      "verification": [
-        "npm run typecheck && npm test",
-        "node tools/soak.mjs --region=shore --seconds=90 — stalls/hitches/errors"
-      ],
-      "evidence": [],
-      "notes": "Tree trunk collision already shipped in 6260066 (walk.addLoop on trunks)."
-    },
-    {
-      "id": "l-cross-gable",
-      "priority": 5,
-      "area": "buildings",
-      "title": "Cross-gable ridge axis in buildRoof",
-      "user_visible_behavior": "L/T-shaped measured buildings get correct intersecting ridges instead of a single ridge.",
-      "status": "not_started",
-      "verification": [
-        "npm run typecheck && npm test (roof.ts is unit-tested — extend tests)",
-        "Montage over a LiDAR-covered area showing cross-gable footprints"
-      ],
-      "evidence": [],
-      "notes": "Last remaining item from phase L per docs/earth/OPEN_WORLD.md revised order."
-    },
-    {
-      "id": "j2-rest",
-      "priority": 6,
-      "area": "buildings",
-      "title": "J2 rest — vertex AO, banded roofs, rounded props, bay glazing, garages",
-      "user_visible_behavior": "Buildings show AO grounding, mansard/gambrel roofs where appropriate, glazed bays, garages.",
-      "status": "not_started",
-      "verification": [
-        "npm run typecheck && npm test",
-        "node tools/capture.mjs --shots=houses,roofs,doorway --montage=only — read shots/shore-montage.jpg"
-      ],
-      "evidence": [],
-      "notes": "Designs in docs/ASSET_FIDELITY.md §2–3."
-    },
-    {
-      "id": "k-life",
-      "priority": 7,
-      "area": "life",
-      "title": "Life + ambience per region style",
-      "user_visible_behavior": "Vehicle mix, driving side, pedestrian density and animal species follow the region's style LUT.",
-      "status": "not_started",
-      "verification": [
-        "npm run typecheck && npm test (lifeSim determinism tests still pass)",
-        "Soak + montage in two regions with different styles"
-      ],
-      "evidence": [],
-      "notes": "Phase K. vehicle mix + driving side already live in styles.ts."
-    },
-    {
-      "id": "l-full",
-      "priority": 8,
-      "area": "data",
-      "title": "L full — multi-plane roofs (bd.rp) + national LoD2/lidar adapters",
-      "user_visible_behavior": "Measured buildings outside the US get fitted roofs too (NL AHN, UK EA, DK, FR IGN).",
-      "status": "not_started",
-      "verification": [
-        "npm run typecheck && npm test",
-        "node tools/verify-region.mjs --region=<covered-region>"
-      ],
-      "evidence": [],
-      "notes": "Same EPT/COG pattern as the 3DEP path."
-    },
-    {
-      "id": "bug-flicker",
-      "priority": 98,
-      "area": "rendering",
-      "title": "Window-sill/door flicker",
-      "user_visible_behavior": "No z-fighting shimmer on sills/doors at distance.",
-      "status": "passing",
-      "verification": [
-        "Montage at a flicker-prone distance — compare before/after contact sheets"
-      ],
-      "evidence": [
-        "commit 51d1cc8 — root cause fixed (varyings made flat, window asset rebuilt)"
-      ],
-      "notes": "Fix committed in 51d1cc8. Confirm visually on the next montage; reopen if shimmer persists."
-    },
-    {
-      "id": "bug-dem-seam",
-      "priority": 99,
-      "area": "streaming",
-      "title": "Late-DEM seam between placeholder and DEM-hilled cells",
-      "user_visible_behavior": "Flat-built s-cells beside DEM cells no longer look sunken.",
-      "status": "passing",
-      "verification": [
-        "Walk a synth→real boundary where DEM arrived late — no visible shelf"
-      ],
-      "evidence": [
-        "commit 51d1cc8 — seam fix shipped"
-      ],
-      "notes": "Fix committed in 51d1cc8. Confirm at a known seam site; reopen if the shelf is still visible."
-    },
-    {
-      "id": "k-life-districts",
-      "priority": 9,
-      "area": "life",
-      "title": "Seam-stitched life districts — ambient life across tile boundaries",
-      "user_visible_behavior": "Pedestrians/vehicles/animals don't pop or reset at tile borders — life districts span boundaries seamlessly.",
-      "status": "not_started",
-      "verification": [
-        "npm run typecheck && npm test (lifeSim determinism holds)",
-        "Soak across a tile boundary — no agent resets/pops at the seam"
-      ],
-      "evidence": [],
-      "notes": "Carried over from retired PROGRESS.md. Belongs to phase K."
-    },
-    {
-      "id": "atlas-journal",
-      "priority": 11,
-      "area": "core",
-      "title": "Atlas journaling + humanity map",
-      "user_visible_behavior": "The in-game journal records where you've been; a humanity map visualizes coverage.",
-      "status": "not_started",
-      "verification": [
-        "npm run typecheck && npm test",
-        "Montage of journal UI"
-      ],
-      "evidence": [],
-      "notes": "Far-horizon (Phase 5 territory per retired PROGRESS.md). The journal exists — this is improvements + the map layer."
-    },
-    {
-      "id": "hero-region-02",
-      "priority": 6,
-      "area": "data",
-      "title": "Second baked hero region — pick for style contrast",
-      "user_visible_behavior": "A second flagship place with a visibly different look (climate/palette/species) than the Jersey Shore.",
-      "status": "not_started",
-      "verification": [
-        "One REGIONS entry in scripts/config.mjs → npm run fetch → merge-raw if needed → npm run bake",
-        "npm run verify:region -- --region=<id> exits 0 (static checks + --soak=90 + --shots)",
-        "Montage shows the style LUT actually differentiating the region"
-      ],
-      "evidence": [],
-      "notes": "Coverage is already infinite via the tile worker — new bakes are hero regions for style-variety testing, not coverage. Pick a place with a different Köppen zone (desert SW, Pacific NW, Gulf Coast). This is the real test of the lower-48 factory."
-    },
-    {
       "id": "kit-variety",
+      "tier": 1,
+      "rank": 29,
+      "status": "passing",
       "priority": 1,
       "area": "presentation",
       "title": "Asset Foundry — recipe+seed variety for everything, critters, plants that grow",
       "user_visible_behavior": "Every family of thing in the world comes from one foundry: trees (more species, several grown variants each), garden plants that bloom by season, mailboxes/beach gear/street furniture in regional styles, cars that differ within a type (proportions, fade, roof racks, surfboards, kayaks), wildlife (squirrels, rabbits, songbirds, sandpipers, deer, butterflies) that lives and flees, and a Grow verb: plant a seed and watch it grow across sessions.",
-      "status": "passing",
       "verification": [
         "npm run typecheck && npm test (tests/kit.test.ts + tests/foundry.test.ts: every family validates, determinism, growth monotonic)",
         "/kit.html: every family, variants, growth slider, critter animation",
@@ -286,11 +667,13 @@
     },
     {
       "id": "aaa-look-pass",
+      "tier": 1,
+      "rank": 30,
+      "status": "passing",
       "priority": 1,
       "area": "render",
       "title": "AAA look + play pass on the hero region (reviewer loop)",
       "user_visible_behavior": "Default settings look painted and calm: no pencil horizon, no swimming blotches, mown lawns, luminous shadows, real people, soft trees, dressed lots, lamp-lit streamed streets; traffic and walkers never reset while driving; the Almanac (pencil → painted cards, place cards, town stamps) gives the walk an hour-to-hour home.",
-      "status": "passing",
       "verification": [
         "tsc + tests (110) pass",
         "tools/review-shots.js montages r1–r9 reviewed by the expert reviewer subagent — round 5: 8.5/10 PASS (docs/earth/REVIEWER.md)"
@@ -302,209 +685,14 @@
       "notes": "Carried forward (P0): night pool rhythm, Ocean Ave downtown dressing, interior sun pools + foundry furniture, tree-lobe silhouette noise, flaky frame-14 walker pick."
     },
     {
-      "id": "gpu-benchmark",
-      "priority": 2,
-      "area": "render",
-      "title": "Boot GPU benchmark → quality tier",
-      "user_visible_behavior": "Best defaults on every machine without touching settings: a 2 s benchmark at first boot picks render scale, Kuwahara radius, grass density, shadows and life caps.",
-      "status": "not_started",
-      "verification": [
-        "tier chosen on a low and a high GPU",
-        "soak holds 55+ fps on the chosen tier"
-      ],
-      "evidence": [],
-      "notes": "Reviewer scale-out step 1 (IMMERSION_BACKLOG 1.7/9.1)."
-    },
-    {
-      "id": "streamed-parity-harness",
-      "priority": 3,
-      "area": "tooling",
-      "title": "Streamed-parity review harness on 3 random US towns",
-      "user_visible_behavior": "Any US town streamed in looks as finished as the hero region (lamps, ground paint, lot dressing, trees, people).",
-      "status": "passing",
-      "verification": [
-        "review-shots poses (street, night, lawn, trees, aerial) run at 3 random ?at= towns per round and reviewed"
-      ],
-      "evidence": [
-        "tools/place-shots.js: nine poses anywhere (main street x4, residential, aerial, tallest, horizon, a cafe), hidden-pane frame pump, waits for real tiles, golden hour from the sun",
-        "reviewed: Tucson, Midtown NYC (shots/place-*.jpg)"
-      ],
-      "notes": "Reviewer scale-out step 2 — the DEM lamp-clamp bug showed inland towns break in ways Sea Bright can't."
-    },
-    {
-      "id": "almanac-regional",
-      "priority": 4,
-      "area": "gameplay",
-      "title": "Almanac regional sets + streamed POI place cards + condition variants",
-      "user_visible_behavior": "Every region has its own card set (ecoregion species, state architecture, dishes); place cards appear in every streamed town; condition variants (heron at dawn, lighthouse in fog).",
-      "status": "not_started",
-      "verification": [
-        "cards differ between NJ and a desert-SW ?at= town",
-        "streamed w-* tiles carry named POIs"
-      ],
-      "evidence": [],
-      "notes": "Almanac v1.1 shipped in aaa-look-pass. IMMERSION_BACKLOG 6.1 / 8.1."
-    },
-    {
-      "id": "local-plates-interiors",
-      "priority": 5,
-      "area": "gameplay",
-      "title": "Local Plates + restaurant, café and home interiors",
-      "user_visible_behavior": "Walk into a real diner/café/pizza place (OSM amenity+cuisine): archetype interior (booths, counter, pastry case), order, paint the dish; homes get sun pools and real (non-crate) furniture.",
-      "status": "in_progress",
-      "verification": [
-        "interior montage: diner, café, home at noon and night",
-        "reviewer round"
-      ],
-      "evidence": [
-        "shots/review-r17-d.jpg frames 18 (zoned café: counter, pendants, 2.2 m table pitch) and 19 (house, morning sun pools with muntins)",
-        "decor.ts foundry family (incl. ceiling fan, storage bench)"
-      ],
-      "notes": "(u) Big floorplates: a lobby at the door and rooms every ~10 m for offices, civic buildings and apartment blocks (tests/walk.test.ts big floorplates), seven painted rooms a storey, desk pods and lobby seating; supermarkets stay open floors. Frames pending (device offline). The user's explicit ask and the one hero-region area the reviewer did not pass. IMMERSION_BACKLOG 3.x, 6.2. 2026-09-27: furniture foundry (decor.ts), café/diner/office/shop roles by useOf, interior sun pools. Ordering + painting the dish still to do."
-    },
-    {
-      "id": "downtown-life",
-      "priority": 4,
-      "area": "gameplay",
-      "title": "Ocean Ave downtown: café terraces, seated guests, curbside parking, more walkers",
-      "user_visible_behavior": "Commercial streets have café tables with parasols and seated people by day, parked cars at the curb and busier sidewalks; shop windows show goods on stands.",
-      "status": "passing",
-      "verification": [
-        "r11 montage d frame 17",
-        "typecheck + tests"
-      ],
-      "evidence": [
-        "shots/review-r17-a.jpg frame 2 (curbside cars + walkers in the morning)",
-        "shots/review-r17-d.jpg frame 17 (terrace + seated guests)",
-        "per-building storefronts: fascia / solid awning / rare stripes"
-      ],
-      "notes": "Driven by uses.ts (name + POI kind), never per-town lists."
-    },
-    {
-      "id": "ecosystem-physics",
-      "priority": 4,
-      "area": "gameplay",
-      "title": "Wildlife ecosystem + cars knock walkers down",
-      "user_visible_behavior": "A fox stalks and pounces on rabbits and songbirds at dusk, a hawk circles and stoops by day, animals bolt from traffic and alarm their neighbours; your car knocks walkers over, and they get up and walk on.",
-      "status": "passing",
-      "verification": [
-        "tests/critters.test.ts (4)",
-        "tests/lifeSim.test.ts knockdown",
-        "r11 montage e"
-      ],
-      "evidence": [
-        "tests/critters.test.ts (4) + lifeSim knockdown (sprawl → sit up → walk back, no teleport)",
-        "shots/review-r17-e.jpg"
-      ],
-      "notes": "Next: animals crossing roads (and road kill avoidance by AI traffic), dogs on leads with walkers, gulls stealing chips."
-    },
-    {
-      "id": "regional-cast-and-uses",
-      "priority": 3,
-      "area": "gameplay",
-      "title": "Scaling pass: regional wildlife cast, language-neutral business uses, street rhythms, furniture budgets",
-      "user_visible_behavior": "Each climate has its own animals (desert: coyote, jackrabbit, roadrunner, quail, ground squirrel, mule deer; north woods: snowshoe hare; tropics: ibis); shops and cafés are recognised from map tags in any language; towns keep their own daily rhythm.",
-      "status": "passing",
-      "verification": [
-        "tests: critters (desert cast, coyote hunt, burrow, winter hare), uses, realTile business join, lifeSim rhythms, decor budgets",
-        "streamed desert town ?at=32.2290,-110.9618",
-        "shots/review-r18-f*.jpg"
-      ],
-      "evidence": [
-        "126 tests pass",
-        "arid/adobe stream spawned coyote, ground squirrel, jackrabbit, quail, hawk"
-      ],
-      "notes": "Worker redeploy needed for v7 tiles (business nodes). Other continents fall back to NA climate casts until they get faunaMix rows."
-    },
-    {
-      "id": "place-parity",
-      "priority": 2,
-      "area": "world",
-      "title": "Place parity: hometowns that look like themselves (towers, rows, horizons, street furniture, sound)",
-      "user_visible_behavior": "Streamed cities stand at their real heights with setbacks, glass or masonry towers, water tanks and fire escapes; row houses are brick with flat roofs in North American cities; mountains stand on the horizon and towers on the skyline; signals, hydrants, subway entrances, crosswalks and main-street lamps come from the map; cities sound like cities and deserts like deserts; houses are clad by subregion; American streets are parked nose to tail (kerbs and striped lots, a per-car level of detail); parks, lots and pitches paint in streamed towns; bus stops, streetcar rails and trolleybus wires come from the map; the date brings its season — snow, bare trees, autumn colour, a moving snowline.",
-      "status": "in_progress",
-      "verification": [
-        "tests: realTile (heights, parts, rows, storefront floors, street parking, bus stops), styles, lots (stall layout), kerbCars (LOD tiers, drive-off lookup), season (normals, snow, leaves, snowline), kit (lite car budget), pack (DECID/PAVED survive the pack)",
-        "tools/place-shots.js __PLACE__(tag, { main, resi }) -> shots/place-*.jpg vs docs/earth/PLACE_REFERENCES.md; __PLACE__(tag, { looks }) -> shots/looks-*.jpg",
-        "reviewer place-parity rounds: NYC 5 -> 6/10, Tucson 5 -> 6 -> 6.5/10"
-      ],
-      "evidence": [
-        "148 tests pass (check config); device tsconfig typecheck clean",
-        "shots/place-tucson.jpg (round 4)",
-        "shots/place-nyc.jpg (round 3b)",
-        "shots/place-burlington-jan.jpg",
-        "shots/looks-tucson.jpg",
-        "shots/place-nyc-r3.jpg (round 4: Hudson visible in the far field, aerial above the roofs)"
-      ],
-      "notes": "Tile cache v14 (stop/give-way points, fence types) - the worker needs a redeploy. (p): iron railings in dense cores, thinner street-tree trunks, DEM rivers show water in the far field, aerial pose above the roofs. Open: ridge detail on far mountains, zero-setback barrio fronts, buses on route=bus, snowbanks, window pixel mosaics, Seattle + Miami rounds. (u) The horizon ring reaches 125 km (z10 to 60 km, z9 beyond) and summits see over the haze: Rainier (95 km from Kerry Park) was past the old 70 km rim. Pose pending: Kerry Park 47.6295, -122.3599, bearing 152."
-    },
-    {
-      "id": "tunable-looks",
-      "priority": 3,
-      "area": "render",
-      "title": "Tunable looks + a chosen default: paint detail, HiDPI, vibrance + colour grade, look presets",
-      "user_visible_behavior": "The ` panel opens with a Look section; the default is 'watercolor HD' (chosen side by side on real places); the Sep 27 default is kept as 'classic (Sep 27 default)'; others: watercolor, fine detail, vivid painted (sci-fi), storybook soft, classic half-res, and the cleaner clean vibrant, clean HD, gouache and dreamy pastel (knobs: clean edges, soft glow, clarity, contrast). Watercolor → '…far away too' turns on the pencil underdrawing at every distance you haven't walked.",
-      "status": "passing",
-      "verification": [
-        "__PLACE__('tucson', { looks }) -> shots/looks-tucson.jpg compared frame by frame",
-        "panel Look presets apply and persist (diffs only — a new default reaches players who never touched the knob)",
-        "(ac) shots/looks-kerry3.jpg: the six looks at Kerry Park 16:00 through the same pose; shots/sketchfar.jpg: sketchFar off / on / after painting 150 m round you"
-      ],
-      "evidence": [
-        "post.ts postParams (watercolor HD) + LOOKS",
-        "docs/earth/LOOK_DEFAULTS.md",
-        "shots/looks-tucson.jpg",
-        "post.ts crisp, softGlow, clarity, contrast, sketchFar (hatch), sketchReach; explore.ts revealRadius(h, reach); panel.ts"
-      ],
-      "notes": "The player tunes; tell Claude which knobs to lock and they become the shipped default."
-    },
-    {
-      "id": "seasons",
-      "priority": 2,
-      "area": "world",
-      "title": "Seasons: snow, bare trees, autumn colour and the snowline follow the date",
-      "user_visible_behavior": "Pick a day of the year (panel, ?day=N or ?date=YYYY-MM-DD): a northern town in January is under snow with ploughed streets, bare maples and snow-topped conifers; October colours the leaves; the far mountains whiten with the season.",
-      "status": "passing",
-      "verification": [
-        "tests/season.test.ts: January normals within a few degrees for NYC, Boston, Seattle, Tucson, Miami, Atlanta, Minneapolis; snow/leaf/autumn/snowline by place and date",
-        "__PLACE__('burlington-jan') on ?day=25"
-      ],
-      "evidence": [
-        "src/world/season.ts",
-        "shots/place-burlington-jan.jpg"
-      ],
-      "notes": "Climatology, not weather: no storms or thaws yet. (p): ploughed asphalt keeps ~15 % (wet dark tracks), sidewalks shovelled to a patchy path, snow stays blue after dark. Snowbanks along ploughed kerbs are open."
-    },
-    {
-      "id": "tree-species",
-      "priority": 2,
-      "area": "world",
-      "title": "Trees by species: maple, weeping willow, elm, poplar/cypress, magnolia, flowering cherry",
-      "user_visible_behavior": "Streets and yards mix round trees and oaks with dense maples (scarlet in October), vase elms under broad domes (gold), columnar poplars, and flowering cherries (pink in April); weeping willows stand by ponds and rivers with curtains that swing in the wind; the South has dark evergreen magnolias; a Mediterranean hill has dark cypresses. Oaks spread broad and low from heavy limbs, maples are full eggs down near the lawn (and the Northwest's three-stemmed bigleaf, gold in autumn); autumn turns tree by tree, the first maples by late September. A mapped tree with a genus, species or common name is that tree at its mapped height, and a LiDAR crown under it takes its species.",
-      "status": "passing",
-      "verification": [
-        "tests/foundry.test.ts: every species x variant sane, grounded, deterministic, < 1,500 vertices; willow curtain to near the ground, poplar a column, cherry low and spreading, magnolia to the lawn, elm not a lollipop",
-        "tests/season.test.ts: cherries blossom in spring, not in autumn",
-        "tools/tree-shots.js __TREES__ -> shots/trees-p1..3.jpg; __SPECIES__ -> shots/species-seabright.jpg (counts within 600 m of Sea Bright)",
-        "tests/foundry.test.ts: the oak half again as wide as it is tall, never a lollipop; the maple's crown lower and fuller than the round tree's; the bigleaf broad; fall hues by variant",
-        "tests/realTile.test.ts mapped trees keep their species (genus, Latin, common names; bigleaf maple, palo verde; conifers by leaf type); tests/pack.test.ts: FALL_HUE/BLOSSOM/WEEP survive the pack; tests/season.test.ts: the turning only goes one way"
-      ],
-      "evidence": [
-        "src/assets/flora.ts",
-        "src/world/props.ts (broad mix by region, water, LiDAR crown ratio)",
-        "src/render/propMaterial.ts (FALL_HUE, BLOSSOM, WEEP)",
-        "src/world/season.ts (bloom)",
-        "src/world/realTile.ts treeKindOf; src/world/props.ts kindOfSp/mappedSpecies; src/world/season.ts turn; src/world/pack.ts matTag"
-      ],
-      "notes": "(u) oak and maple reshaped, autumn per tree (propMaterial DECID onset) — built while the device was offline; frames pending. Next: live oak, sycamore, dogwood, cedar; leaf cards with real phyllotaxis at close range; potted plants (R.6)."
-    },
-    {
       "id": "hill-streets",
+      "tier": 1,
+      "rank": 31,
+      "status": "passing",
       "priority": 1,
       "area": "world",
       "title": "Streets and cars on hills: graded streets, retaining walls, painted streets near, true-section ribbons far, cars on four wheels",
       "user_visible_behavior": "On Seattle's Queen Anne and downtown grades the streets lie on the ground and are built the way a road engineer would (no 50% ramps where the DEM smeared a bluff; junctions level; retaining walls where a street is cut into the hill), and every car — driving or parked — rides the same ground you see, on its four wheels, nose up the hill.",
-      "status": "passing",
       "verification": [
         "tests/tiles.test.ts: ribbons follow a crest, ride over the 8 m lattice in a sag, latticeHeight = the ground mesh",
         "__SPOTS__ Queen Anne top-down / 300 m out (shots/spots-qa-after.jpg)",
@@ -537,11 +725,13 @@
     },
     {
       "id": "tunnels-canopies-coasts",
+      "tier": 1,
+      "rank": 32,
+      "status": "passing",
       "priority": 1,
       "area": "world",
       "title": "What's under, over and beside the street: tunnels, canopies, coastlines",
       "user_visible_behavior": "SR 99's tunnel isn't a motorway across downtown — cars dive into the portal and vanish; a filling station's canopy is an open roof on posts you can walk under; Elliott Bay is water right up to the piers and Pike Place Market has its ground.",
-      "status": "passing",
       "verification": [
         "tests/realTile.test.ts: tunnel/building passage/indoor/rail, canopies, coast with a pier loop, coast turning inside the cell",
         "tests/traffic.test.ts: a tunnel dives from its portal and nobody walks it"
@@ -556,11 +746,13 @@
     },
     {
       "id": "courts-and-fields",
+      "tier": 1,
+      "rank": 33,
+      "status": "passing",
       "priority": 1,
       "area": "world",
       "title": "Courts and fields from the map: lines and gear by sport",
       "user_visible_behavior": "A mapped basketball court has its key, arcs and two hoops (a half court one); tennis, pickleball and volleyball courts their lines and nets (a block of courts each its own); soccer fields their boxes and goals (kids' goals on small fields); diamonds their infield, mound, bases and backstop.",
-      "status": "passing",
       "verification": [
         "tests/foundry.test.ts sport: every piece valid, grounded, in budget; sport tags; court fits (one, four side by side, half court); home plate at a fan's point"
       ],
@@ -573,27 +765,14 @@
       "notes": "American football, skate parks and playground equipment are next (docs/DATA_SOURCES.md §2.3)."
     },
     {
-      "id": "open-data-catalogue",
-      "priority": 1,
-      "area": "docs",
-      "title": "The open-data catalogue: sources, every neighbourhood feature, the scale plan",
-      "user_visible_behavior": "docs/DATA_SOURCES.md (and the claude.ai project copy) lists the best open source for everything the game places, the exact OSM tags, what's placed today, the fallback ladder and the offline cell pipeline.",
-      "status": "passing",
-      "verification": [
-        "reviewed against the code's live sources (overpassQuery, dem.ts, lidar-index, fetch-imagery, fetch-worldcover, geo.ts)"
-      ],
-      "evidence": [
-        "docs/DATA_SOURCES.md"
-      ],
-      "notes": "The doc's §5 is the work order for R.19."
-    },
-    {
       "id": "map-water",
+      "tier": 1,
+      "rank": 34,
+      "status": "passing",
       "priority": 1,
       "area": "world",
       "title": "Water from the map, never the DEM: vector-tile sea and lakes for every cell",
       "user_visible_behavior": "Elliott Bay is water even when a cell's map data fails to load: no lawn, no trees, no town on the bay; islands stay land, lakes lie flat at their real level, the sun's glitter is clean.",
-      "status": "passing",
       "verification": [
         "tests/mvt.test.ts: a hand-encoded vector tile decodes (layers, tags, rings, winding); sheets clip to the cell and leave islands dry",
         "tests/dem.test.ts waterPatch/waterLevel: sea below the datum, islands dry, nodes at cell centres, lake level from the flattened DEM, the map as truth",
@@ -610,31 +789,14 @@
       "notes": "OpenFreeMap (OpenMapTiles schema) — credited in the HUD. The vector twin landed (vector-twin)."
     },
     {
-      "id": "towers-structures",
-      "priority": 2,
-      "area": "world",
-      "title": "Tall structures from the map: masts, water towers, chimneys, flagpoles; no trees on structures",
-      "user_visible_behavior": "Queen Anne's broadcast masts stand in red and white with beacons at night; small towns have their water towers; no tree grows on a roof or up a mast.",
-      "status": "in_progress",
-      "verification": [
-        "tests/foundry.test.ts towers (budgets, unit height)",
-        "tests/realTile.test.ts tall structures",
-        "tools/grade-audit.js __TREES__"
-      ],
-      "evidence": [
-        "src/assets/tower.ts",
-        "src/world/props.ts (towers, onStructure)",
-        "src/world/realTile.ts STRUCT"
-      ],
-      "notes": "Queen Anne frames await Overpass. __TREES__ downtown: 14 LiDAR crowns over 45 m (stadium light towers) and 20 on raised plazas remain. 2026-09-29 (ae): one mapped inside a building stands on its roof (rooftop-sized unless mapped; a height past the roof counts from the street); a flag at a door stands beside it (tests/doorway.test.ts)."
-    },
-    {
       "id": "vector-twin",
+      "tier": 1,
+      "rank": 35,
+      "status": "passing",
       "priority": 1,
       "area": "world",
       "title": "The vector twin: a real cell from OpenFreeMap's vector tiles when Overpass is slow or down",
       "user_visible_behavior": "A streamed cell shows its real streets (names, classes, bridges, tunnels), its buildings at their mapped heights, its parks, water and named shops within a second, graded and watered like any real cell, whatever Overpass is doing; the full OSM tile replaces it when it lands.",
-      "status": "passing",
       "verification": [
         "tests/vectorTile.test.ts (30): tag tables, clipping, stitching across tile edges, buildings kept once, re-noding (overshoot/shortfall/snap), names along the length",
         "tests/mvt.test.ts: int64 values (a tunnel's layer -1)",
@@ -649,11 +811,13 @@
     },
     {
       "id": "pike-market",
+      "tier": 1,
+      "rank": 36,
+      "status": "passing",
       "priority": 1,
       "area": "world",
       "title": "Markets from the map: stalls, awnings, vendors and crowds; brick and sett streets",
       "user_visible_behavior": "Under Pike Place's arcades (any amenity=marketplace building or canopy against one) stalls of produce, flowers, fish, bread and crafts stand along the street faces under striped awnings, a vendor behind each and shoppers in front; brick and sett streets are painted in their courses.",
-      "status": "passing",
       "verification": [
         "tests/foundry.test.ts market stalls (budgets, awning slope, tint)",
         "tests/realTile.test.ts street surfaces",
@@ -671,33 +835,165 @@
       "notes": "Round 8 MF1 test met: lens mid-street at the Corner Market NW and SE, >= 8 stalls and >= 15 people (market2 1-2; reviewer round 8b: 'mostly closed'). Next (round 8b must-fix 2): open the hall — the claimed building an arcade to the street with stalls inside and its name on a sign, goods from the POIs, no blank frontage over 15 m; the Hillclimb as a visible flight (the twin's steps there run flat along the waterfront); cars at walking pace on market streets; brick needs Overpass's surface tag."
     },
     {
-      "id": "street-furniture-nodes",
+      "id": "us-time-zones",
+      "tier": 1,
+      "rank": 37,
+      "status": "passing",
       "priority": 1,
       "area": "world",
-      "title": "Street furniture exactly where the map puts it: crossings, lamps, bins, post boxes, racks, fountains, bollards, pay stations",
-      "user_visible_behavior": "Mapped crossings are painted where they are (ladder bars or two lines by their markings, nothing where unmarked) and the junction's inferred crosswalk steps aside; each mapped street lamp is a mast with its arm over the street and its pool of light; bins, blue post boxes, bike racks with bikes locked on, drinking fountains, bollards and parking pay stations stand on their nodes, facing the street.",
-      "status": "blocked",
+      "title": "The clock a place keeps: US time zones with summer time",
+      "user_visible_behavior": "Anywhere in the lower 48 the clock is the place's own zone with daylight saving (Arizona apart), so 18:20 in Seattle on 28 September is golden hour, not dusk; elsewhere the longitude zone.",
       "verification": [
-        "tests/realTile.test.ts: every class from its tags (crossing markings, racks but not bike sheds, pay stations but not drinks machines); the query asks for them",
-        "tests/kerbside.test.ts crossingPaint: on the street, square to it, with its style",
-        "tests/foundry.test.ts street furniture: valid, grounded, footprint, budgets"
+        "tests/tz.test.ts: 26 cities, Mexico excluded, summer time (Seattle 18:20 PDT)",
+        "Live (v): Kerry Park at 18:20 lit gold (shots/spots-r8-market2.jpg 5)"
       ],
       "evidence": [
-        "src/world/realTile.ts furnitureClass + overpassQuery",
-        "src/assets/street.ts",
-        "src/world/props.ts (mapped lamps, mapped small furniture, mapped bins)",
-        "src/world/kerbside.ts crossingPaint",
-        "src/world/groundPaint.ts crosswalks"
+        "src/world/tz.ts",
+        "src/world/virtual.ts (zoneAt)",
+        "src/ui/panel.ts (zone names)"
       ],
-      "notes": "Blocked on frames from real (Overpass) cells: the vector twin keeps no lamps, crossing markings or hydrants, and Overpass was down for most of (v) (it answered again at the end). Test: 3rd & Pike from a real cell — mapped lamps with arms over the street, ladder crossings where marked."
+      "notes": "Zone lines are smoothed: a town within ~20 km of one may land on the wrong side."
+    },
+    {
+      "id": "neighbourhoods",
+      "tier": 1,
+      "rank": 38,
+      "status": "passing",
+      "priority": 1,
+      "area": "world",
+      "title": "Neighbourhoods that look like themselves: estates, old grids and tracts, measured from the map",
+      "user_visible_behavior": "Walk from Fair Haven into Rumson and the town changes: big shingle and white clapboard houses under slate, far apart behind privet hedges and long drives, deep in trees. Fair Haven's and Long Branch's older streets are painted houses with bays close together; a postwar tract repeats one model down the street. Chicago's old grid is brick bungalows, Seattle's craftsman, a desert tract stucco under tile. Sea Bright is unchanged.",
+      "verification": [
+        "tests/hoods.test.ts (13): classification on synthetic streets; fills/context excluded; the suburb path equals the old recipe exactly; each archetype and its regional variants; the shore's towns from the baked pack (Rumson west → estate 45% vs < 5% for Fair Haven, Long Branch, Monmouth Beach; Fair Haven, north Long Branch → grid; Oceanport, Monmouth Beach → suburb; manifest tiles only); real-lite fixtures Levittown NY → tract, Portage Park IL → grid, Wallingford WA → grid",
+        "shots/shore-montage.jpg: Rumson / Fair Haven / Sea Bright, before and after, street and 60 m (reviewed: Rumson more wooded with hedge runs; the rest unchanged). Red Bank streams (past the shore pack) and the tile service 503'd, so it showed stand-ins — not yet seen by eye"
+      ],
+      "evidence": [
+        "src/world/hood.ts",
+        "src/world/recipe.ts",
+        "src/world/buildings.ts",
+        "src/world/props.ts",
+        "tools/hood-fixtures.mjs",
+        "tests/fixtures/hoods/",
+        "docs/NEIGHBOURHOODS.md",
+        "src/world/aerial.ts + src/world/aerialFetch.ts (roof colours off the NAIP photo: the baked samples white-balanced per tile, streamed US cells read in the tile worker; worker /naip relay); src/world/recipe.ts (aerialRoof, clay tile / painted metal); tests/aerial.test.ts (20)"
+      ],
+      "notes": "Phase 1 only (client-side). Gilbert AZ / Greenwich CT / Sugar Land TX fixtures owed (the tile service 503'd); streamed suburbs where OSM has few houses are still fixed-size fills (66 of 67 near Rumson off the baked pack) — Phase 2 (Microsoft/Overture footprints, ACS era) is what fixes those."
+    },
+    {
+      "id": "bridges",
+      "tier": 1,
+      "rank": 39,
+      "status": "passing",
+      "priority": 1,
+      "area": "world",
+      "title": "Bridges that stand whole: one profile per bridge, built the way the map says",
+      "user_visible_behavior": "The Rumson–Sea Bright bridge is level over the channel on piers, with its bascule's tender houses and fenders, and lands on Rumson Road at both ends; walkers and cars use its sidewalks and roadway. Every road bridge in the bake has no dip; tagged bridges draw as trusses, arches, suspension or cable-stayed spans, and lift and swing spans.",
+      "verification": [
+        "tests/bridges.test.ts (23): no sag below the end-to-end line, ends on the approaches, straight leaves, grades, clearance, tiles' pieces meet, collision = drawn deck, determinism; a fixture cut from the baked pack",
+        "shots/bridge-before.jpg / bridge-after.jpg (helper worktree) and shots/merged-a.jpg"
+      ],
+      "evidence": [
+        "src/world/bridges.ts",
+        "src/world/structures.ts, src/world/tileBuild.ts (margin roads)",
+        "src/player/collision.ts, src/world/pack.ts (exact deck height table, square deck ends)",
+        "src/world/data.ts, src/world/realTile.ts (Road.bs / Road.bm; tile cache v23)"
+      ]
+    },
+    {
+      "id": "micro-layer",
+      "tier": 1,
+      "rank": 40,
+      "status": "passing",
+      "priority": 1,
+      "area": "rendering",
+      "title": "The small things of a place on impostor cards: dense micro detail for two draws",
+      "user_visible_behavior": "Kerb carts on collection day, porch chairs and flags, café A-frames, beach umbrellas and towels in season, cleats and buoys at the docks, and every mapped picnic table, board and seamark; real 3D close up and painted cards beyond 25–60 m, with no visible switch.",
+      "verification": [
+        "tests/impostor.test.ts (11), tests/micro.test.ts (11), tests/foundry.test.ts (+2)",
+        "shots/shore-micro-before.jpg / after / compare (helper worktree) and shots/merged-a.jpg",
+        "draw calls +2 measured in game (252→254 … 978→980)"
+      ],
+      "evidence": [
+        "src/render/impostor.ts",
+        "src/world/micro.ts, src/world/microLayer.ts, src/assets/micro.ts",
+        "src/render/propMaterial.ts (fade), src/render/quality.ts (MICRO_TIERS)",
+        "src/world/realTile.ts (micro furniture classes; tile cache v23)"
+      ]
+    },
+    {
+      "id": "measured-fallback-priors",
+      "tier": 1,
+      "rank": 41,
+      "status": "passing",
+      "priority": 1,
+      "area": "world-data",
+      "title": "Better height priors where nothing is measured yet: tags first, storeys from the neighbourhood",
+      "user_visible_behavior": "Before (or without) a measurement, a building uses its mapped building:levels / height / roof:levels; houses take their neighbourhood archetype's storey count (no blanket one-storey houses where the hood is two-storey).",
+      "verification": [
+        "tests: priors honour building:levels, height, roof:levels; hood archetype storey defaults per docs/NEIGHBOURHOODS.md; determinism"
+      ],
+      "evidence": [
+        "src/world/priors.ts (guessedHouse, neighbours, priorHeight, hoodHeight, housePriors), src/world/buildings.ts (applied in the builder loop before the recipe), src/world/recipe.ts tractCape",
+        "src/world/realTile.ts + scripts/bake.mjs: roof:levels (Building.rl) in plausibleHeight; tile cache v24 (worker t/v24, client &v=24, DIRECT_V 24)",
+        "tests/priors.test.ts (8): \"roof:levels stand on building:levels\", \"a mapped height, levels or roof levels are never a guess\", \"borrows a measured neighbour's height\", \"is deterministic\", \"borrows only from houses of about its size\", \"estates and old grids stand two storeys and more; a suburb keeps its own mix\", \"a tract stands its cell's one model as the recipe draws it\", \"unmeasured houses take their measured neighbours' storeys\" (Monmouth Beach: guessed 2+ storeys 9% -> 49%, measured 41%)",
+        "shots/shore-montage.jpg (RTX 4070, Monmouth Beach street + 22 m oblique, before/after)",
+        "npm run typecheck, npm test (74 files, 775 tests), npm run build — 2026-10-03"
+      ],
+      "notes": "Phones still never read a survey (the optional item): sidecar + service leave no gap. Streamed towns carry roof:levels once the worker is redeployed (t/v24)."
+    },
+    {
+      "id": "seasons",
+      "tier": 1,
+      "rank": 42,
+      "status": "passing",
+      "priority": 2,
+      "area": "world",
+      "title": "Seasons: snow, bare trees, autumn colour and the snowline follow the date",
+      "user_visible_behavior": "Pick a day of the year (panel, ?day=N or ?date=YYYY-MM-DD): a northern town in January is under snow with ploughed streets, bare maples and snow-topped conifers; October colours the leaves; the far mountains whiten with the season.",
+      "verification": [
+        "tests/season.test.ts: January normals within a few degrees for NYC, Boston, Seattle, Tucson, Miami, Atlanta, Minneapolis; snow/leaf/autumn/snowline by place and date",
+        "__PLACE__('burlington-jan') on ?day=25"
+      ],
+      "evidence": [
+        "src/world/season.ts",
+        "shots/place-burlington-jan.jpg"
+      ],
+      "notes": "Climatology, not weather: no storms or thaws yet. (p): ploughed asphalt keeps ~15 % (wet dark tracks), sidewalks shovelled to a patchy path, snow stays blue after dark. Snowbanks along ploughed kerbs are open."
+    },
+    {
+      "id": "tree-species",
+      "tier": 1,
+      "rank": 43,
+      "status": "passing",
+      "priority": 2,
+      "area": "world",
+      "title": "Trees by species: maple, weeping willow, elm, poplar/cypress, magnolia, flowering cherry",
+      "user_visible_behavior": "Streets and yards mix round trees and oaks with dense maples (scarlet in October), vase elms under broad domes (gold), columnar poplars, and flowering cherries (pink in April); weeping willows stand by ponds and rivers with curtains that swing in the wind; the South has dark evergreen magnolias; a Mediterranean hill has dark cypresses. Oaks spread broad and low from heavy limbs, maples are full eggs down near the lawn (and the Northwest's three-stemmed bigleaf, gold in autumn); autumn turns tree by tree, the first maples by late September. A mapped tree with a genus, species or common name is that tree at its mapped height, and a LiDAR crown under it takes its species.",
+      "verification": [
+        "tests/foundry.test.ts: every species x variant sane, grounded, deterministic, < 1,500 vertices; willow curtain to near the ground, poplar a column, cherry low and spreading, magnolia to the lawn, elm not a lollipop",
+        "tests/season.test.ts: cherries blossom in spring, not in autumn",
+        "tools/tree-shots.js __TREES__ -> shots/trees-p1..3.jpg; __SPECIES__ -> shots/species-seabright.jpg (counts within 600 m of Sea Bright)",
+        "tests/foundry.test.ts: the oak half again as wide as it is tall, never a lollipop; the maple's crown lower and fuller than the round tree's; the bigleaf broad; fall hues by variant",
+        "tests/realTile.test.ts mapped trees keep their species (genus, Latin, common names; bigleaf maple, palo verde; conifers by leaf type); tests/pack.test.ts: FALL_HUE/BLOSSOM/WEEP survive the pack; tests/season.test.ts: the turning only goes one way"
+      ],
+      "evidence": [
+        "src/assets/flora.ts",
+        "src/world/props.ts (broad mix by region, water, LiDAR crown ratio)",
+        "src/render/propMaterial.ts (FALL_HUE, BLOSSOM, WEEP)",
+        "src/world/season.ts (bloom)",
+        "src/world/realTile.ts treeKindOf; src/world/props.ts kindOfSp/mappedSpecies; src/world/season.ts turn; src/world/pack.ts matTag"
+      ],
+      "notes": "(u) oak and maple reshaped, autumn per tree (propMaterial DECID onset) — built while the device was offline; frames pending. Next: live oak, sycamore, dogwood, cedar; leaf cards with real phyllotaxis at close range; potted plants (R.6)."
     },
     {
       "id": "kerbside-parking",
+      "tier": 1,
+      "rank": 44,
+      "status": "passing",
       "priority": 2,
       "area": "world",
       "title": "The kerb as the rules draw it: clearances from the map, four in five spaces taken downtown",
       "user_visible_behavior": "Parked cars leave street corners, driveway and alley mouths, crosswalks, hydrants (15 ft, their own kerb) and bus zones clear; downtown kerbs and lots are four-fifths full, suburbs sparse, country roads empty; far parked cars stand on the ground you see.",
-      "status": "passing",
       "verification": [
         "tests/kerbside.test.ts (6): corners, curb cuts, crossings mapped or implied by a footway, hydrant and bus zone on their own kerb only, parking with the traffic (both driving sides), occupancy by density, determinism",
         "Live (v) on the vector twins: kerbs lined on Queen Anne's side streets and downtown (shots/spots-r8-qa.jpg 4, 6 — reviewer round 8: 'full kerbs'); none along a market street (spots-r8-market2.jpg)"
@@ -711,11 +1007,13 @@
     },
     {
       "id": "water-looks",
+      "tier": 1,
+      "rank": 45,
+      "status": "passing",
       "priority": 2,
       "area": "world",
       "title": "Water with its own colour, lakes that shimmer, foam along every coast",
       "user_visible_behavior": "Puget Sound is green-steel, the Keys turquoise, the Gulf olive (the NJ shore keeps its Atlantic); lakes ripple and hold the sky like the sea; lace foam runs along every streamed seawall and beach.",
-      "status": "passing",
       "verification": [
         "tests/styles.test.ts: the shore's water unchanged, the Sound green-steel, the Keys turquoise, the Gulf different, keys carry it",
         "tests/shore.test.ts: distance from the land, the strip along the coast only, none for all-land/all-sea/lakes, each cell its own part",
@@ -735,12 +1033,543 @@
       "notes": "Next: a baked Forel-Ule grid (ESA OC-CCI) in place of the palettes; lace on lake shores; a wake at eye level with its boat in frame (reviewer should-fix)."
     },
     {
+      "id": "landmark-parts",
+      "tier": 1,
+      "rank": 46,
+      "status": "passing",
+      "priority": 2,
+      "area": "world",
+      "title": "Landmarks drawn by their parts: the Space Needle's saucer on its legs, up close and on the skyline",
+      "user_visible_behavior": "The Space Needle is a slim core with its saucer and halo at the top, not a 40 m-wide column. From across town the skyline ring shows the same shape.",
+      "verification": [
+        "tests/realTile.test.ts: an outline a lifted part overhangs (the Needle: a saucer over a slim core) is drawn by its parts (hp); the unmapped-podium case is unchanged",
+        "Live, ?tiles=direct at Seattle Center: shots/needle-fix.jpg (140 m, 260 m, 420 m)"
+      ],
+      "evidence": [
+        "src/world/realTile.ts (part join: overhang rule)",
+        "src/world/lidar.ts (no measuring an outline its parts stand on)",
+        "src/world/skyline.ts (tall parts read and kept with their outlines, SKY_V 2)",
+        "DIRECT_V 22, worker t/v22, stream &v=22"
+      ],
+      "notes": "Needs the tile worker redeployed (npx wrangler deploy in worker/). The vector stand-in may still show an outline prism for a moment where OpenMapTiles leaves its hide_3d unset. Colours come from the host's recipe; the landmarks pass should give the Needle its white steel."
+    },
+    {
+      "id": "block-paving",
+      "tier": 1,
+      "rank": 47,
+      "status": "passing",
+      "priority": 2,
+      "area": "render",
+      "title": "Dense blocks paved round their buildings in the grid's own orientation",
+      "user_visible_behavior": "Downtown ground is paved out from each building to the kerb whatever way the street grid is turned (Seattle's is 32° off north) — no lawn in stair-steps through the sidewalks; houses keep their lawns; a lone big building gets its apron.",
+      "verification": [
+        "tests/groundPaint.test.ts (3): a turned grid paved from building outlines only (no squares), houses unpaved, a lone large building's apron",
+        "Live (v): downtown Seattle from 45 m (shots/spots-r8-final.jpg 5 — reviewer round 8: 'blocks paved to the building line')"
+      ],
+      "evidence": [
+        "src/world/groundPaint.ts (Painter, density bands)",
+        "src/world/groundCover.ts + groundPaint.ts (flags, kerb face, gutter pan, aprons, tar snakes, yards by neighbourhood, sand drift) and ground.ts (texture near the walker); micro.ts placement on unpaved ground; tests/groundPaint (14), micro (12) (round 10 must-fix 3)"
+      ],
+      "notes": "Sea Bright to be re-shot after the change (baked NJ unchanged by design; the paving runs on streamed tiles)."
+    },
+    {
+      "id": "horizon-landcover",
+      "tier": 1,
+      "rank": 48,
+      "status": "passing",
+      "priority": 2,
+      "area": "world",
+      "title": "Far mountains as the map knows them: glaciers and bare rock on the horizon ring",
+      "user_visible_behavior": "From Kerry Park, Mount Rainier stands at its true height on the skyline with its glaciers white and its rock bare, above a darker, bluer range; the snow carries through the haze.",
+      "verification": [
+        "tests/peaks.test.ts: ice and rock polygons from the landcover layer, a nunatak hole stays rock",
+        "Live (v): the Needle in front of downtown with Rainier to its right at its true height (shots/spots-r8-kerry-zoom.jpg 1 — reviewer round 8)"
+      ],
+      "evidence": [
+        "src/world/peaks.ts (ofmTile, landcoverAround, coverIndex)",
+        "src/world/horizon.ts (max-filtered ring, ice/rock/snow colours)"
+      ],
+      "notes": "Open (round 8 MF5): Rainier's ice lit above its sky, alpenglow at sunset; more ring resolution toward big relief."
+    },
+    {
+      "id": "viewpoint-views",
+      "tier": 1,
+      "rank": 49,
+      "status": "passing",
+      "priority": 2,
+      "area": "world",
+      "title": "A mapped viewpoint's view kept open",
+      "user_visible_behavior": "At a tourism=viewpoint the trees in front of it (its mapped direction, else downhill) are cut back under the sightline, so the view the map promises is there; the coin-op viewer faces it.",
+      "verification": [
+        "tests/views.test.ts (2): the direction from the map or the slope; the allowance under the sightline",
+        "Live (v): Kerry Park's postcard open to the Needle and Rainier (shots/spots-r8-kerry.jpg, spots-r8-market2.jpg 5)"
+      ],
+      "evidence": [
+        "src/world/views.ts",
+        "src/world/props.ts (viewpoint corridor, viewer yaw)"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "tunable-looks",
+      "tier": 1,
+      "rank": 50,
+      "status": "passing",
+      "priority": 3,
+      "area": "render",
+      "title": "Tunable looks + a chosen default: paint detail, HiDPI, vibrance + colour grade, look presets",
+      "user_visible_behavior": "The ` panel opens with a Look section; the default is 'watercolor HD' (chosen side by side on real places); the Sep 27 default is kept as 'classic (Sep 27 default)'; others: watercolor, fine detail, vivid painted (sci-fi), storybook soft, classic half-res, and the cleaner clean vibrant, clean HD, gouache and dreamy pastel (knobs: clean edges, soft glow, clarity, contrast). Watercolor → '…far away too' turns on the pencil underdrawing at every distance you haven't walked.",
+      "verification": [
+        "__PLACE__('tucson', { looks }) -> shots/looks-tucson.jpg compared frame by frame",
+        "panel Look presets apply and persist (diffs only — a new default reaches players who never touched the knob)",
+        "(ac) shots/looks-kerry3.jpg: the six looks at Kerry Park 16:00 through the same pose; shots/sketchfar.jpg: sketchFar off / on / after painting 150 m round you"
+      ],
+      "evidence": [
+        "post.ts postParams (watercolor HD) + LOOKS",
+        "docs/earth/LOOK_DEFAULTS.md",
+        "shots/looks-tucson.jpg",
+        "post.ts crisp, softGlow, clarity, contrast, sketchFar (hatch), sketchReach; explore.ts revealRadius(h, reach); panel.ts"
+      ],
+      "notes": "The player tunes; tell Claude which knobs to lock and they become the shipped default."
+    },
+    {
+      "id": "bug-flicker",
+      "tier": 1,
+      "rank": 51,
+      "status": "passing",
+      "priority": 98,
+      "area": "rendering",
+      "title": "Window-sill/door flicker",
+      "user_visible_behavior": "No z-fighting shimmer on sills/doors at distance.",
+      "verification": [
+        "Montage at a flicker-prone distance — compare before/after contact sheets"
+      ],
+      "evidence": [
+        "commit 51d1cc8 — root cause fixed (varyings made flat, window asset rebuilt)"
+      ],
+      "notes": "Fix committed in 51d1cc8. Confirm visually on the next montage; reopen if shimmer persists."
+    },
+    {
+      "id": "bloom",
+      "tier": 2,
+      "rank": 60,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "The bloom: a seen map, the pencil-to-colour composite, the first-sight wash (a throwaway prototype first, to prove the feel)",
+      "user_visible_behavior": "Somewhere new is a pencil sketch; the moment it's in view it washes into watercolour as far as you can see, once, for good.",
+      "verification": [],
+      "evidence": [],
+      "notes": "docs/GAMEPLAY_VISION.md §1, §15 step 1. The only gameplay allowed before tiers 0–1 pass: a small throwaway prototype."
+    },
+    {
+      "id": "pencil-collecting",
+      "tier": 2,
+      "rank": 61,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "Pencil collecting: tap to paint, the card into the sketchbook, the out-of-sight rhythm, cards as moments",
+      "user_visible_behavior": "A few things nearby stay in pencil; tap one within ~30 m and it paints in and flies into the sketchbook as a card of that moment.",
+      "verification": [],
+      "evidence": [],
+      "notes": "docs/GAMEPLAY_VISION.md §2, §15 step 2."
+    },
+    {
+      "id": "van-home-start",
+      "tier": 2,
+      "rank": 62,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "The van-home start and placing at home: wake in the van, \"Start near you?\", step out; the first card placed at home",
+      "user_visible_behavior": "You wake in a small van that's bigger inside; with consent the game starts at a public spot in your town; your first card goes on its shelf.",
+      "verification": [],
+      "evidence": [],
+      "notes": "docs/GAMEPLAY_VISION.md §7, §8, §15 step 3. City-level location only, never stored (privacy: ask Robby before building). Includes the five-rule combine prototype at home (§15 step 3, §6.5)."
+    },
+    {
+      "id": "placing-in-world",
+      "tier": 2,
+      "rank": 64,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "Placing things in the world: your own layer, ride what you've painted, light the bridge, plank the creek, near in full and far as flat paintings, the camp kit",
+      "user_visible_behavior": "Hold to paint from the sketchbook: a boat settles on water, lanterns on the bridge, a plank across the creek — on your own private layer, kept until you take it back.",
+      "verification": [],
+      "evidence": [
+        "src/ui/brush.ts (the prototype)",
+        "src/player/place.ts (the solvers)"
+      ],
+      "notes": "docs/GAMEPLAY_VISION.md §6, §15 step 4. Supersedes brush-boat-minute."
+    },
+    {
+      "id": "regional-rares",
+      "tier": 2,
+      "rank": 68,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "Regional rares as data, sketchbook silhouettes, sets, then moment rares",
+      "user_visible_behavior": "Each state and town has its own things worth finding; the sketchbook shows what's still missing and when.",
+      "verification": [],
+      "evidence": [],
+      "notes": "docs/GAMEPLAY_VISION.md §3, §15 step 5. Folds in almanac-regional."
+    },
+    {
+      "id": "van-travel",
+      "tier": 2,
+      "rank": 71,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "Van travel: call it, drive it, fuel, self-drive, sleep legs with planned stops and arrival cards",
+      "user_visible_behavior": "Tell the map where to go; drive or sleep in the back and wake at a stop chosen for a reason.",
+      "verification": [],
+      "evidence": [],
+      "notes": "docs/GAMEPLAY_VISION.md §4, §15 step 6. Needs public-places (gas stations, rest areas)."
+    },
+    {
+      "id": "growing-home",
+      "tier": 2,
+      "rank": 73,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "Growing the home: rooms, windows that show the vehicle's view, miniatures, outdoor rooms",
+      "user_visible_behavior": "Add rooms where you like; every window shows the vehicle's real view; a lighthouse as a model on a shelf; a backyard inside.",
+      "verification": [],
+      "evidence": [],
+      "notes": "docs/GAMEPLAY_VISION.md §7, §15 step 7."
+    },
+    {
+      "id": "special-vehicles",
+      "tier": 2,
+      "rank": 75,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "The other special vehicles: yacht, plane, balloon, each earned in the world",
+      "user_visible_behavior": "Earn a yacht at a marina, a plane at an airfield, a balloon at a festival: the same home behind every door.",
+      "verification": [],
+      "evidence": [],
+      "notes": "docs/GAMEPLAY_VISION.md §4, §15 step 8. Needs public-places (airfields, marinas)."
+    },
+    {
+      "id": "portal-gun",
+      "tier": 2,
+      "rank": 77,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "The portal gun (legendary)",
+      "user_visible_behavior": "A one-off find that opens a portal to anywhere you've painted, your portals, or home.",
+      "verification": [],
+      "evidence": [],
+      "notes": "docs/GAMEPLAY_VISION.md §9, §15 step 9."
+    },
+    {
+      "id": "series-bridge-postcards",
+      "tier": 2,
+      "rank": 78,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "Series, the bridge on its real schedule, postcards",
+      "user_visible_behavior": "Three hours or seasons of one view as one card; the bridge opens when you sound for it; send a painting to a friend.",
+      "verification": [],
+      "evidence": [],
+      "notes": "docs/GAMEPLAY_VISION.md §11, §13, §15 step 10."
+    },
+    {
+      "id": "the-dog",
+      "tier": 2,
+      "rank": 80,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "The dog (later)",
+      "user_visible_behavior": "Adopt a dog from a mapped shelter; its nose finds pencil things; beach rules to break, for fun.",
+      "verification": [],
+      "evidence": [],
+      "notes": "docs/GAMEPLAY_VISION.md §10, §15 step 11."
+    },
+    {
+      "id": "friends-visits",
+      "tier": 2,
+      "rank": 81,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "Friends and visits",
+      "user_visible_behavior": "A friend steps into your home or walks a town with you and sees your layer while visiting.",
+      "verification": [],
+      "evidence": [],
+      "notes": "docs/GAMEPLAY_VISION.md §13, §15 step 12. Needs accounts (ask Robby: privacy)."
+    },
+    {
+      "id": "brush-boat-minute",
+      "tier": 2,
+      "rank": 100,
+      "status": "superseded",
+      "priority": 1,
+      "area": "gameplay",
+      "title": "The brush, slice 1 (docs/GAME_DESIGN.md §14): paint a kind from life, then paint one where you aim — the boat minute at Sea Bright",
+      "user_visible_behavior": "Paint a moored skiff (or any boat or car) from life with P and its Almanac card colours in; B takes out the brush: the kinds you own are chips (the one that fits what you aim at first — water a boat, a street a car), a pencil sketch of it snaps to the nearest spot that fits (open water with its bow off the land; the lane going your way), click (tap it, on a phone) and the colour washes in from where you touched it — rub to hurry it — and when it dries it's real, saved where you painted it; E to board. A kind you haven't painted from life is a pencil chip that says where the nearest real one is. V/N no longer summon (a developer switch in the panel keeps them).",
+      "verification": [
+        "tests/place.test.ts (boat: at the aim on open water, bow off the land; from the beach, the nearest water with room; inland, which way the water is; car: in the lane going your way, past a house at the kerb, never on a footpath; compass words)",
+        "tests/brush.test.ts (a painting colours the cards of the kinds in frame and they become paintable; pencil cards and unknown kinds never are; newest first)",
+        "Offline render through the game's watercolour pass: pencil sketch / half washed / finished, skiff and pickup (scratch/glsl/brush.ts)",
+        "LIVE (Robby's computer, Sea Bright marina): P at the moorings coloured 5 boat cards; B → skiff chip first, the sketch 3 m off the aim clear of the moored boats, wash → real (shots/brush-minute-noon.jpg); boarded from the shallows, 12 m/s (shots/brush-sail.jpg); after a reload both painted skiffs where they were left; the two prompts seen. Phone (375×812 touch emulation): ✎ opens it, tap the water moves the sketch, tap the sketch paints it, rubbing hurries it; the bar clear of the buttons, the place name and the map credit",
+        "Round 9 must-fix 1, measured with tools/brush-check.js __BRUSHCHECK__ (a mask pass: the sketch's share of the frame, hidden share through the wash, ΔE sketch→dry on its own pixels): phone 375×812 — 3.42% of the frame, 86.7% visible, ΔE76 49.6 / ΔE2000 30.6; pane — 3.73%, 86.4%, 44.3 / 29.1 (bars: ≥2%, ≥70%, ≥25). Walked aboard from the bank in 0.62 s, helmsman at the tiller; the churn as wide as the transom at 12 m/s (shots/brush-r9-desktop2.jpg, brush-r9-phone.jpg, brush-r9-sail7.jpg)"
+      ],
+      "evidence": [
+        "src/player/place.ts, src/ui/brush.ts, src/render/propMaterial.ts (wash), src/player/vehicles.ts (build/paint/defaultColor, summons behind debugParams.summons), src/ui/commissions.ts (owned, fresh, kerb cars paintable), src/ui/photo.ts (the 'yours to paint now' line), src/player/controller.ts (holdLook), src/main.ts, src/ui/panel.ts, index.html",
+        "src/render/post.ts (the sketch pass: ghostRT, tGhost/tGhostDepth composite, boiling graphite line, bleed, uBrush paling, uRipple, the uGhost.w harness mask), src/render/propMaterial.ts (wash: paper + strokes, wet → dry via uWash), src/render/shared.ts (uBrush, uGhost, uRipple), src/ui/brush.ts (overlay scene, solve: view/bar/occlusion/hull room, drying: ripple, push-in, settle), src/player/place.ts (Hull), src/assets/kit.ts (boatDims), src/world/wakes.ts (track vertex, transom-wide churn), src/audio/ambience.ts ('settle'), src/player/controller.ts (zoom), tools/brush-check.js"
+      ],
+      "notes": "Round 9 must-fix 1 done and measured; from must-fix 2 done: one card first, walk in to board, snap where you can step aboard, the helmsman. Open: Rumson's landing lit; three cold players spawn → Rumson dock < 90 s (real phone + desktop). Planes wait for airfields with planes to paint from life.",
+      "stale_reason": "2026-10-03: docs/GAME_DESIGN.md §14's slice; the vision replaces the brush-from-life slices with pencil collecting (§2) and placing on your own layer (§6): placing-in-world. The brush code stays as the prototype of placing."
+    },
+    {
+      "id": "almanac-regional",
+      "tier": 2,
+      "rank": 101,
+      "status": "superseded",
+      "priority": 4,
+      "area": "gameplay",
+      "title": "Almanac regional sets + streamed POI place cards + condition variants",
+      "user_visible_behavior": "Every region has its own card set (ecoregion species, state architecture, dishes); place cards appear in every streamed town; condition variants (heron at dawn, lighthouse in fog).",
+      "verification": [
+        "cards differ between NJ and a desert-SW ?at= town",
+        "streamed w-* tiles carry named POIs"
+      ],
+      "evidence": [],
+      "notes": "Almanac v1.1 shipped in aaa-look-pass. IMMERSION_BACKLOG 6.1 / 8.1.",
+      "stale_reason": "2026-10-03: Folded into regional-rares (docs/GAMEPLAY_VISION.md §3): rares as data by region, silhouettes, sets."
+    },
+    {
+      "id": "people-doing-things",
+      "tier": 3,
+      "rank": 102,
+      "status": "not_started",
+      "priority": 1,
+      "area": "gameplay",
+      "title": "People doing things: conversations, window shopping, waiting for the light, staff at work, residents who sit properly",
+      "user_visible_behavior": "Walkers stop to talk face to face (gesturing, nodding) and part together, linger at shop windows, wait at signalled corners for their green; cafes, bars and shops have staff behind the counter with customers waiting and regulars on stools; residents sit on the cushion (not in it), facing their table or room, and a cook has company at the counter; city streets are busy (the crowd gathers round the walker by street density). They cross at the painted crosswalk on the walk or in a real gap (never through a car); some walk dogs on leads, some jog (a running pose), some wear headphones.",
+      "verification": [
+        "tests/lifeSim.test.ts: walkers stop to talk face to face; tests/traffic.test.ts: walkers wait for the light",
+        "shots/life-*.jpg frames 5-10",
+        "tests/traffic.test.ts: waits at its kerb on the crosswalk for the light; tools/street-shots.js __STREET__ -> shots/street-q3.jpg (crosswalk, dog walker, jogger, squirrels, downtown animal counts)"
+      ],
+      "evidence": [
+        "src/sim/lifeSim.ts (CHAT, window shopping, kerbWait, sizeBubble)",
+        "src/render/creature.ts (SEATED pose, talk gesture for walkers)",
+        "src/world/interiors.ts (yawTo, staff aisles, seat heights)",
+        "src/sim/lifeSim.ts (planCross, crossWait, crossingAt, CROSS legs), src/sim/life.ts (dogs on leads), src/assets/people.ts (headphones)"
+      ],
+      "notes": "Open: bags, strollers, bikes, kids, canes, couples; persistence into interiors (R.10); greetings/queues; people LOD so the caps can grow."
+    },
+    {
+      "id": "j1-road-ribbon",
+      "tier": 3,
+      "rank": 103,
+      "status": "not_started",
+      "priority": 3,
+      "area": "presentation",
+      "title": "Road-ribbon geometry to match ground paint (curb height)",
+      "user_visible_behavior": "Roads have real geometry at curb height instead of only painted ground.",
+      "verification": [
+        "npm run typecheck && npm test",
+        "node tools/capture.mjs --shots=houses,porch --montage=only — read shots/shore-montage.jpg"
+      ],
+      "evidence": [],
+      "notes": ""
+    },
+    {
+      "id": "vehicle-polish",
+      "tier": 3,
+      "rank": 104,
+      "status": "not_started",
+      "priority": 4,
+      "area": "life",
+      "title": "Vehicle polish",
+      "user_visible_behavior": "Riding vehicles feel finished — handling, camera, sound.",
+      "verification": [
+        "npm run typecheck && npm test",
+        "node tools/soak.mjs --region=shore --seconds=90 — stalls/hitches/errors"
+      ],
+      "evidence": [],
+      "notes": "Tree trunk collision already shipped in 6260066 (walk.addLoop on trunks)."
+    },
+    {
+      "id": "l-cross-gable",
+      "tier": 3,
+      "rank": 105,
+      "status": "not_started",
+      "priority": 5,
+      "area": "buildings",
+      "title": "Cross-gable ridge axis in buildRoof",
+      "user_visible_behavior": "L/T-shaped measured buildings get correct intersecting ridges instead of a single ridge.",
+      "verification": [
+        "npm run typecheck && npm test (roof.ts is unit-tested — extend tests)",
+        "Montage over a LiDAR-covered area showing cross-gable footprints"
+      ],
+      "evidence": [],
+      "notes": "Last remaining item from phase L per docs/earth/OPEN_WORLD.md revised order."
+    },
+    {
+      "id": "local-plates-interiors",
+      "tier": 3,
+      "rank": 106,
+      "status": "not_started",
+      "priority": 5,
+      "area": "gameplay",
+      "title": "Local Plates + restaurant, café and home interiors",
+      "user_visible_behavior": "Walk into a real diner/café/pizza place (OSM amenity+cuisine): archetype interior (booths, counter, pastry case), order, paint the dish; homes get sun pools and real (non-crate) furniture.",
+      "verification": [
+        "interior montage: diner, café, home at noon and night",
+        "reviewer round"
+      ],
+      "evidence": [
+        "shots/review-r17-d.jpg frames 18 (zoned café: counter, pendants, 2.2 m table pitch) and 19 (house, morning sun pools with muntins)",
+        "decor.ts foundry family (incl. ceiling fan, storage bench)"
+      ],
+      "notes": "(u) Big floorplates: a lobby at the door and rooms every ~10 m for offices, civic buildings and apartment blocks (tests/walk.test.ts big floorplates), seven painted rooms a storey, desk pods and lobby seating; supermarkets stay open floors. Frames pending (device offline). The user's explicit ask and the one hero-region area the reviewer did not pass. IMMERSION_BACKLOG 3.x, 6.2. 2026-09-27: furniture foundry (decor.ts), café/diner/office/shop roles by useOf, interior sun pools. Ordering + painting the dish still to do."
+    },
+    {
+      "id": "j2-rest",
+      "tier": 3,
+      "rank": 107,
+      "status": "not_started",
+      "priority": 6,
+      "area": "buildings",
+      "title": "J2 rest — vertex AO, banded roofs, rounded props, bay glazing, garages",
+      "user_visible_behavior": "Buildings show AO grounding, mansard/gambrel roofs where appropriate, glazed bays, garages.",
+      "verification": [
+        "npm run typecheck && npm test",
+        "node tools/capture.mjs --shots=houses,roofs,doorway --montage=only — read shots/shore-montage.jpg"
+      ],
+      "evidence": [],
+      "notes": "Designs in docs/ASSET_FIDELITY.md §2–3."
+    },
+    {
+      "id": "hero-region-02",
+      "tier": 3,
+      "rank": 108,
+      "status": "not_started",
+      "priority": 6,
+      "area": "data",
+      "title": "Second baked hero region — pick for style contrast",
+      "user_visible_behavior": "A second flagship place with a visibly different look (climate/palette/species) than the Jersey Shore.",
+      "verification": [
+        "One REGIONS entry in scripts/config.mjs → npm run fetch → merge-raw if needed → npm run bake",
+        "npm run verify:region -- --region=<id> exits 0 (static checks + --soak=90 + --shots)",
+        "Montage shows the style LUT actually differentiating the region"
+      ],
+      "evidence": [],
+      "notes": "Coverage is already infinite via the tile worker — new bakes are hero regions for style-variety testing, not coverage. Pick a place with a different Köppen zone (desert SW, Pacific NW, Gulf Coast). This is the real test of the lower-48 factory."
+    },
+    {
+      "id": "k-life",
+      "tier": 3,
+      "rank": 109,
+      "status": "not_started",
+      "priority": 7,
+      "area": "life",
+      "title": "Life + ambience per region style",
+      "user_visible_behavior": "Vehicle mix, driving side, pedestrian density and animal species follow the region's style LUT.",
+      "verification": [
+        "npm run typecheck && npm test (lifeSim determinism tests still pass)",
+        "Soak + montage in two regions with different styles"
+      ],
+      "evidence": [],
+      "notes": "Phase K. vehicle mix + driving side already live in styles.ts."
+    },
+    {
+      "id": "l-full",
+      "tier": 3,
+      "rank": 110,
+      "status": "not_started",
+      "priority": 8,
+      "area": "data",
+      "title": "L full — multi-plane roofs (bd.rp) + national LoD2/lidar adapters",
+      "user_visible_behavior": "Measured buildings outside the US get fitted roofs too (NL AHN, UK EA, DK, FR IGN).",
+      "verification": [
+        "npm run typecheck && npm test",
+        "node tools/verify-region.mjs --region=<covered-region>"
+      ],
+      "evidence": [],
+      "notes": "Same EPT/COG pattern as the 3DEP path."
+    },
+    {
+      "id": "k-life-districts",
+      "tier": 3,
+      "rank": 111,
+      "status": "not_started",
+      "priority": 9,
+      "area": "life",
+      "title": "Seam-stitched life districts — ambient life across tile boundaries",
+      "user_visible_behavior": "Pedestrians/vehicles/animals don't pop or reset at tile borders — life districts span boundaries seamlessly.",
+      "verification": [
+        "npm run typecheck && npm test (lifeSim determinism holds)",
+        "Soak across a tile boundary — no agent resets/pops at the seam"
+      ],
+      "evidence": [],
+      "notes": "Carried over from retired PROGRESS.md. Belongs to phase K."
+    },
+    {
+      "id": "atlas-journal",
+      "tier": 3,
+      "rank": 112,
+      "status": "not_started",
+      "priority": 11,
+      "area": "core",
+      "title": "Atlas journaling + humanity map",
+      "user_visible_behavior": "The in-game journal records where you've been; a humanity map visualizes coverage.",
+      "verification": [
+        "npm run typecheck && npm test",
+        "Montage of journal UI"
+      ],
+      "evidence": [],
+      "notes": "Far-horizon (Phase 5 territory per retired PROGRESS.md). The journal exists — this is improvements + the map layer."
+    },
+    {
+      "id": "traffic-control",
+      "tier": 3,
+      "rank": 113,
+      "status": "passing",
+      "priority": 1,
+      "area": "gameplay",
+      "title": "Cars follow traffic: signals, stop signs, all-way stops and give-way, from one junction analysis",
+      "user_visible_behavior": "Signalled junctions cycle (the lit lens is the one the traffic obeys); cars stop at the line on red, come to a full stop at stop signs and take turns at all-way stops, give way to the main road, slow for corners, never block a junction; stop and give-way signs stand at every controlled arm; mapped OSM control wins, the rule of the road fills the rest. Cars wait behind the crosswalk for anyone crossing their street or the one they turn into; left turns yield to oncoming traffic at lights too; lanes zip at merges; no two cars ever share a spot.",
+      "verification": [
+        "tests/traffic.test.ts: rule of the road (NA all-way / minor stop / signals for two main roads / T stems; EU give-way), mapped signal and stop nodes win, one-way arms, ownership + packing, phase timing (never both green), a car stops on red behind the line and goes on green, full stop at a stop sign then pulls out, walkers wait at the corner",
+        "tools/life-shots.js __LIFE__(tag) -> shots/life-<tag>.jpg (junction from above, lenses, stop sign, night)",
+        "in-page count: Sea Bright ~25 % of cars standing at any moment, queued 8-27 m from junction centres, no growth over a minute",
+        "tests/traffic.test.ts (q): a walker lets the car coming go by then crosses; a car waits at the line for someone crossing; a 3-minute busy grid has 0 walker-in-car and 0 fused-car ticks and no car stuck > 150 s"
+      ],
+      "evidence": [
+        "src/sim/traffic.ts",
+        "shots/life-seabright4.jpg",
+        "shots/life-nyc.jpg"
+      ],
+      "notes": "Open: protected left phases, buses on route=bus, parking manoeuvres, curved turn paths through the box. Tile cache v14 (stop/give-way points) - redeploy the worker."
+    },
+    {
+      "id": "open-data-catalogue",
+      "tier": 3,
+      "rank": 114,
+      "status": "passing",
+      "priority": 1,
+      "area": "docs",
+      "title": "The open-data catalogue: sources, every neighbourhood feature, the scale plan",
+      "user_visible_behavior": "docs/DATA_SOURCES.md (and the claude.ai project copy) lists the best open source for everything the game places, the exact OSM tags, what's placed today, the fallback ladder and the offline cell pipeline.",
+      "verification": [
+        "reviewed against the code's live sources (overpassQuery, dem.ts, lidar-index, fetch-imagery, fetch-worldcover, geo.ts)"
+      ],
+      "evidence": [
+        "docs/DATA_SOURCES.md"
+      ],
+      "notes": "The doc's §5 is the work order for R.19."
+    },
+    {
       "id": "traffic-integrity",
+      "tier": 3,
+      "rank": 115,
+      "status": "passing",
       "priority": 1,
       "area": "sim",
       "title": "Traffic that never drives through itself: junction approaches whole, box checks that look ahead, one car to a parking space",
       "user_visible_behavior": "Where the map draws a crosswalk on every arm of every junction (Seattle, most big US cities) cars still stop at the lines, queue behind each other and take their turn in the box; no moving car overlaps another, and no two parked cars share a space.",
-      "status": "passing",
       "verification": [
         "tests/traffic.test.ts mapped crosswalks: no approach split within 34 m of a junction (a mid-block crossing still joins); a 3×3 grid with a crosswalk on every arm, 3 busy minutes: 0 overlapping cars (was 8,053 pair-ticks)",
         "tests/kerbside.test.ts one car to a space: a bend's inside kerb, a lot drawn up to the street",
@@ -757,11 +1586,13 @@
     },
     {
       "id": "traffic-flow",
+      "tier": 3,
+      "rank": 116,
+      "status": "passing",
       "priority": 1,
       "area": "sim",
       "title": "Traffic that flows: junction control from the tags, junction clusters as one, no car spawned in view",
       "user_visible_behavior": "On Queen Anne the side streets' corners are uncontrolled or circles (as mapped) and the arterials have priority, so traffic moves: most cars are rolling at any moment, an arterial runs at speed between its signals, and no car appears out of nowhere in front of you.",
-      "status": "passing",
       "verification": [
         "tests/traffic.test.ts: where the map marks its signs an unmarked corner is OPEN (no sign), a minor arm gives way unsigned, no signs mapped at all keeps the rule of the road; an open corner: a lone car rolls through (> 3 m/s), two at once take turns (the one on the right first) and never touch; nothing pops into view (130 → 0 on a test grid)",
         "Live, Queen Anne (16 real cells), __CARPROBE__ with the clock ticking: 150 s 0 overlaps, 63% stopped, 2.0 m/s, longest 56 s; 300 s 2 junction pairs, 66%, 61 s (tools/grade-audit.js: setEnv({ clock }) every step)",
@@ -778,11 +1609,13 @@
     },
     {
       "id": "drive-hitch",
+      "tier": 3,
+      "rank": 117,
+      "status": "passing",
       "priority": 1,
       "area": "perf",
       "title": "Driving through a city without a hitch every couple of seconds (Robby, Seattle)",
       "user_visible_behavior": "Teleport to downtown Seattle and drive: new blocks stream in without the game freezing every few seconds. The traffic's streets update a moment later, and a new block appears over a few frames with the old one standing in until it's whole.",
-      "status": "passing",
       "verification": [
         "tools/hitch-probe.js __HITCH__ in the pane, downtown Seattle (14 real cells), a car moved 15 m/s for 30 s: longest frame 503 ms (traffic graph rebuilt in one go: 491 ms) → 81–83 ms; grass 1,513 → 172–209 ms per 30 s; mount ~20 ms (collision 12) with the upload spread over ~0.5 s; traffic rebuilt twice with no spike",
         "scratch/lifeinit/bench.mts: the sliced, integer-keyed rebuild gives a byte-identical LifeInit to the old one (cold, warm, after a ground change, sliced; longest slice ~4 ms); warm 152 → 32 ms on the bench city",
@@ -796,17 +1629,20 @@
         "src/world/groundPaint.ts (merged lists per tile set, walks per tile)",
         "src/world/data.ts (Terrain patch memo, genIn)",
         "src/world/roadBounds.ts",
-        "tools/hitch-probe.js"
+        "tools/hitch-probe.js",
+        "src/world/groundPaint.ts (DetailGround slides: the uncovered strip painted a slice a frame on an OffscreenCanvas, swapped in when whole — the flying hitch, 2026-10-01); tests/groundPaint.test.ts (10); tools/hitch-probe.js sync; tools/playtest.js flight phase"
       ],
       "notes": "Left: the GPU. The downtown ring draws ~15M triangles in ~1,800 calls a frame. Buildings are 76 bytes a vertex, non-indexed, 1.3M vertices a tile, and rockeries 390k vertices a tile. Next: LOD and lighter vertices, then a phone budget. Collision walls are tombstoned but never compacted over a long drive."
     },
     {
       "id": "never-shut-in",
+      "tier": 3,
+      "rank": 118,
+      "status": "passing",
       "priority": 1,
       "area": "gameplay",
       "title": "Never shut in a building: doors only onto open ground, no walking through walls",
       "user_visible_behavior": "Every front door opens onto open ground: never onto a neighbouring building's wall, so a building you go into is always one you can walk out of. A slow frame or a fast car no longer carries you through a wall. If you ever end up inside a solid building, the game steps you out within a second, and it never yanks you out of a room you walked into.",
-      "status": "passing",
       "verification": [
         "tests/pack.test.ts: a house built against the back of another: every door's outside lies in no footprint, and the rear house's door isn't in the shared wall (it was: fails without the fix)",
         "tests/walk.test.ts: a 0.6 m step from 0.33 m and a car's 1.9 m step stop at the wall (in one piece they ended inside); touching vs blocked inside rooms",
@@ -820,181 +1656,60 @@
       "notes": "Synth stand-ins can still put a door onto a real neighbour's building across a cell edge until the real cell lands (they can't know it)."
     },
     {
-      "id": "landmark-parts",
-      "priority": 2,
-      "area": "world",
-      "title": "Landmarks drawn by their parts: the Space Needle's saucer on its legs, up close and on the skyline",
-      "user_visible_behavior": "The Space Needle is a slim core with its saucer and halo at the top, not a 40 m-wide column. From across town the skyline ring shows the same shape.",
+      "id": "balloons",
+      "tier": 3,
+      "rank": 119,
       "status": "passing",
-      "verification": [
-        "tests/realTile.test.ts: an outline a lifted part overhangs (the Needle: a saucer over a slim core) is drawn by its parts (hp); the unmapped-podium case is unchanged",
-        "Live, ?tiles=direct at Seattle Center: shots/needle-fix.jpg (140 m, 260 m, 420 m)"
-      ],
-      "evidence": [
-        "src/world/realTile.ts (part join: overhang rule)",
-        "src/world/lidar.ts (no measuring an outline its parts stand on)",
-        "src/world/skyline.ts (tall parts read and kept with their outlines, SKY_V 2)",
-        "DIRECT_V 22, worker t/v22, stream &v=22"
-      ],
-      "notes": "Needs the tile worker redeployed (npx wrangler deploy in worker/). The vector stand-in may still show an outline prism for a moment where OpenMapTiles leaves its hide_3d unset. Colours come from the host's recipe; the landmarks pass should give the Needle its white steel."
-    },
-    {
-      "id": "block-paving",
-      "priority": 2,
-      "area": "render",
-      "title": "Dense blocks paved round their buildings in the grid's own orientation",
-      "user_visible_behavior": "Downtown ground is paved out from each building to the kerb whatever way the street grid is turned (Seattle's is 32° off north) — no lawn in stair-steps through the sidewalks; houses keep their lawns; a lone big building gets its apron.",
-      "status": "passing",
-      "verification": [
-        "tests/groundPaint.test.ts (3): a turned grid paved from building outlines only (no squares), houses unpaved, a lone large building's apron",
-        "Live (v): downtown Seattle from 45 m (shots/spots-r8-final.jpg 5 — reviewer round 8: 'blocks paved to the building line')"
-      ],
-      "evidence": [
-        "src/world/groundPaint.ts (Painter, density bands)"
-      ],
-      "notes": "Sea Bright to be re-shot after the change (baked NJ unchanged by design; the paving runs on streamed tiles)."
-    },
-    {
-      "id": "horizon-landcover",
-      "priority": 2,
-      "area": "world",
-      "title": "Far mountains as the map knows them: glaciers and bare rock on the horizon ring",
-      "user_visible_behavior": "From Kerry Park, Mount Rainier stands at its true height on the skyline with its glaciers white and its rock bare, above a darker, bluer range; the snow carries through the haze.",
-      "status": "passing",
-      "verification": [
-        "tests/peaks.test.ts: ice and rock polygons from the landcover layer, a nunatak hole stays rock",
-        "Live (v): the Needle in front of downtown with Rainier to its right at its true height (shots/spots-r8-kerry-zoom.jpg 1 — reviewer round 8)"
-      ],
-      "evidence": [
-        "src/world/peaks.ts (ofmTile, landcoverAround, coverIndex)",
-        "src/world/horizon.ts (max-filtered ring, ice/rock/snow colours)"
-      ],
-      "notes": "Open (round 8 MF5): Rainier's ice lit above its sky, alpenglow at sunset; more ring resolution toward big relief."
-    },
-    {
-      "id": "viewpoint-views",
-      "priority": 2,
-      "area": "world",
-      "title": "A mapped viewpoint's view kept open",
-      "user_visible_behavior": "At a tourism=viewpoint the trees in front of it (its mapped direction, else downhill) are cut back under the sightline, so the view the map promises is there; the coin-op viewer faces it.",
-      "status": "passing",
-      "verification": [
-        "tests/views.test.ts (2): the direction from the map or the slope; the allowance under the sightline",
-        "Live (v): Kerry Park's postcard open to the Needle and Rainier (shots/spots-r8-kerry.jpg, spots-r8-market2.jpg 5)"
-      ],
-      "evidence": [
-        "src/world/views.ts",
-        "src/world/props.ts (viewpoint corridor, viewer yaw)"
-      ],
-      "notes": ""
-    },
-    {
-      "id": "us-time-zones",
-      "priority": 1,
-      "area": "world",
-      "title": "The clock a place keeps: US time zones with summer time",
-      "user_visible_behavior": "Anywhere in the lower 48 the clock is the place's own zone with daylight saving (Arizona apart), so 18:20 in Seattle on 28 September is golden hour, not dusk; elsewhere the longitude zone.",
-      "status": "passing",
-      "verification": [
-        "tests/tz.test.ts: 26 cities, Mexico excluded, summer time (Seattle 18:20 PDT)",
-        "Live (v): Kerry Park at 18:20 lit gold (shots/spots-r8-market2.jpg 5)"
-      ],
-      "evidence": [
-        "src/world/tz.ts",
-        "src/world/virtual.ts (zoneAt)",
-        "src/ui/panel.ts (zone names)"
-      ],
-      "notes": "Zone lines are smoothed: a town within ~20 km of one may land on the wrong side."
-    },
-    {
-      "id": "harness-asserts-see",
-      "priority": 2,
-      "area": "tools",
-      "title": "Capture asserts that see: the subject's visible pixels and near occluders from an id render",
-      "user_visible_behavior": "Every pinned frame is checked on what the lens actually sees — the subject covering at least its share of the frame (5% by default, occlusion included), nothing within 2.5 m over 5% or within 4 m over 15%, the world at least 20% of the frame — and a frame that fails is re-posed round its subject until it passes; only what still fails is stamped under the frame on the contact sheet.",
-      "status": "in_progress",
-      "verification": [
-        "tools/spot-shots.js on streamed Queen Anne (shots/spots-r10-walls.jpg): 7 poses; the six that must pass pass (a parked car re-posed to its side at 6 m, 19.5% of the frame; the steps to a lot 8.1% as their own mesh); a pose facing the sky with repose:false fails with subject 0% and world under 20%"
-      ],
-      "evidence": [
-        "tools/spot-shots.js (idPass: world pass with near-lens channels + subject pass against its depth; check; repose; carPose; __SPOTKIT__)"
-      ],
-      "notes": "Reviewer round 9 must-fix 4. Open: the boat frames through the id pass (tools/brush-check.js has its own mask pass)."
-    },
-    {
-      "id": "brush-boat-minute",
       "priority": 1,
       "area": "gameplay",
-      "title": "The brush, slice 1 (docs/GAME_DESIGN.md §14): paint a kind from life, then paint one where you aim — the boat minute at Sea Bright",
-      "user_visible_behavior": "Paint a moored skiff (or any boat or car) from life with P and its Almanac card colours in; B takes out the brush: the kinds you own are chips (the one that fits what you aim at first — water a boat, a street a car), a pencil sketch of it snaps to the nearest spot that fits (open water with its bow off the land; the lane going your way), click (tap it, on a phone) and the colour washes in from where you touched it — rub to hurry it — and when it dries it's real, saved where you painted it; E to board. A kind you haven't painted from life is a pencil chip that says where the nearest real one is. V/N no longer summon (a developer switch in the panel keeps them).",
-      "status": "in_progress",
+      "title": "Hot air balloons: fly one, watch others land on the beach, paint the world from up high",
+      "user_visible_behavior": "A balloon waits on the nearest beach on a first visit; others go up at dawn and dusk and come down on beaches (step in: it's yours). In the basket (first person, V / ⤢ for third): hold Space / ▲ to burn and rise, C / ▼ to vent; let go and it holds its height; the wind at each height blows a different way. P from the basket paints the whole view to the horizon. Paint a balloon from life and the brush paints your own anywhere open, in any colours.",
       "verification": [
-        "tests/place.test.ts (boat: at the aim on open water, bow off the land; from the beach, the nearest water with room; inland, which way the water is; car: in the lane going your way, past a house at the kerb, never on a footpath; compass words)",
-        "tests/brush.test.ts (a painting colours the cards of the kinds in frame and they become paintable; pencil cards and unknown kinds never are; newest first)",
-        "Offline render through the game's watercolour pass: pencil sketch / half washed / finished, skiff and pickup (scratch/glsl/brush.ts)",
-        "LIVE (Robby's computer, Sea Bright marina): P at the moorings coloured 5 boat cards; B → skiff chip first, the sketch 3 m off the aim clear of the moored boats, wash → real (shots/brush-minute-noon.jpg); boarded from the shallows, 12 m/s (shots/brush-sail.jpg); after a reload both painted skiffs where they were left; the two prompts seen. Phone (375×812 touch emulation): ✎ opens it, tap the water moves the sketch, tap the sketch paints it, rubbing hurries it; the bar clear of the buttons, the place name and the map credit",
-        "Round 9 must-fix 1, measured with tools/brush-check.js __BRUSHCHECK__ (a mask pass: the sketch's share of the frame, hidden share through the wash, ΔE sketch→dry on its own pixels): phone 375×812 — 3.42% of the frame, 86.7% visible, ΔE76 49.6 / ΔE2000 30.6; pane — 3.73%, 86.4%, 44.3 / 29.1 (bars: ≥2%, ≥70%, ≥25). Walked aboard from the bank in 0.62 s, helmsman at the tiller; the churn as wide as the transom at 12 m/s (shots/brush-r9-desktop2.jpg, brush-r9-phone.jpg, brush-r9-sail7.jpg)"
+        "tests/balloon.test.ts (9): level temperature 65–95 °C, lift-off and a real climb rate, the lag, the assist holds, wind + fan, never through the ground; winds veer and strengthen, deterministic, eased; the family valid and in budget, brush colours",
+        "headless Sea Bright (shots/shore-montage.jpg 2026-09-30): the gift on the beach 57 m from the sea, someone's balloon aloft and one landed on the beach (clock scanned), 160 m up in the basket, looking up into the envelope, third person, a photo from the basket (181 km² out to 22 km), phone upright and on its side",
+        "tools/hud-audit.mjs: 'in a balloon' state on 10 phones × both ways, no overlaps"
       ],
       "evidence": [
-        "src/player/place.ts, src/ui/brush.ts, src/render/propMaterial.ts (wash), src/player/vehicles.ts (build/paint/defaultColor, summons behind debugParams.summons), src/ui/commissions.ts (owned, fresh, kerb cars paintable), src/ui/photo.ts (the 'yours to paint now' line), src/player/controller.ts (holdLook), src/main.ts, src/ui/panel.ts, index.html",
-        "src/render/post.ts (the sketch pass: ghostRT, tGhost/tGhostDepth composite, boiling graphite line, bleed, uBrush paling, uRipple, the uGhost.w harness mask), src/render/propMaterial.ts (wash: paper + strokes, wet → dry via uWash), src/render/shared.ts (uBrush, uGhost, uRipple), src/ui/brush.ts (overlay scene, solve: view/bar/occlusion/hull room, drying: ripple, push-in, settle), src/player/place.ts (Hull), src/assets/kit.ts (boatDims), src/world/wakes.ts (track vertex, transom-wide churn), src/audio/ambience.ts ('settle'), src/player/controller.ts (zoom), tools/brush-check.js"
+        "src/assets/balloon.ts",
+        "src/player/balloonPhysics.ts",
+        "src/world/wind.ts",
+        "src/world/balloons.ts",
+        "src/player/vehicles.ts (kind balloon: balloonFly, drift, basketCam, giftBalloon, ambient boarding)",
+        "src/ui/brush.ts (balloon family, any-colour picker, stripe colour), src/player/place.ts placeBalloon",
+        "src/ui/commissions.ts (balloon cards), src/ui/cardArt.ts, src/audio/ambience.ts (burner)"
       ],
-      "notes": "Round 9 must-fix 1 done and measured; from must-fix 2 done: one card first, walk in to board, snap where you can step aboard, the helmsman. Open: Rumson's landing lit; three cold players spawn → Rumson dock < 90 s (real phone + desktop). Planes wait for airfields with planes to paint from life."
+      "notes": "From the core-loop review (docs/CORE_LOOP_REVIEW.md). Later: an altimeter strip with tappable wind layers (Vehicles.holdAt exists), sea breeze on coasts, a drift line on the atlas."
     },
     {
-      "id": "interiors-rooms",
+      "id": "shore-calendar",
+      "tier": 3,
+      "rank": 120,
+      "status": "passing",
       "priority": 1,
       "area": "gameplay",
-      "title": "Interiors at real scale (docs/INTERIORS_PLAN.md): rooms, not halls; towers you ride up",
-      "user_visible_behavior": "Walk into a house and you're in a hall with the stair beside it; off it a living room, kitchen, dining room or study and a WC; upstairs a landing, bathroom and bedrooms sized like real ones. Apartment blocks have corridors and flats; offices a core, desk rows by the glass and meeting rooms; shops aisles and a back of house. Every room is reachable, you're never shut in, and the HUD names the room. In a tower every storey exists: lifts in the core (L to choose a floor, a real ride with doors and a floor display), stairs in their shafts, a double-height lobby in big offices, glass floor to ceiling in curtain-walled towers, and the HUD says which floor of how many.",
-      "status": "in_progress",
+      "title": "The shore keeps one calendar: marinas, docks, beach people, lifeguards and lots by season and hour",
+      "user_visible_behavior": "A mapped marina is full of boats in finger slips (fewer in October); riverfront houses have their docks; on a July afternoon people sit under the umbrellas and kids jump waves, a lifeguard sits in each stand from 10 to 5 in season, and the beach lot fills by the season and the hour (nearly empty on an October evening).",
       "verification": [
-        "tests/interiorLayout.test.ts (14) and tests/interiorBudget.test.ts (14): houses 3–6 rooms a storey in 320/320, bedroom minimums, corridors ≥ 1.5 m, rooms ≤ 38 m², office cores 15–30% and desks within 13.5 m of glass, every room reached from the door, no wall on a window, ≤ 120k vertices, ≤ 60 draws, no build step over 8 ms",
-        "tools/bench-interiors.mts: worst build step 47–1,243 ms → ~1 ms; house 43k → 30k vertices; supermarket 1.1 M → 12k",
-        "LIVE Sea Bright (shots/int-seabright.jpg, shots/tour-seabright-house.jpg): hall + stair, living, kitchen, dining, study; landing, bedroom, bath",
-        "tests/interiorTower.test.ts (18): 39 storeys with lobby and shaft holes, lift 0 → 23 lands at floor0 + 23 × fH, stair 23 → 24 walkable, ≤ 3 storeys / 120k vertices / 60 draws built, podium storey 10 has no floor outside the tower, storeys identical whichever set is built",
-        "Bench: tower plan 2.0 KB / 0.05 ms; worst build step 0.6–1.9 ms; shots/mid-montage.jpg (lobby, lift, floor 20 day and night, stair shaft, glass tower, podium) on a Manhattan-like grid through the real pipeline"
+        "tests/calendar.test.ts (5), tests/shoreCalendar.test.ts (9) on the baked pack: lot fill, marina, docks, crowd, out of season, determinism, budgets",
+        "tools/calendar-shots.js (frames 9 and 12 re-shot; the 50 m beach pose in July)"
       ],
       "evidence": [
-        "src/world/interior/{plan,layout,mesh,furnish}.ts",
-        "src/world/interiors.ts",
-        "src/player/collision.ts (withScope, removeScope purge)",
-        "src/assets/decor.ts (17 new pieces)",
-        "src/player/lift.ts",
-        "src/ui/lift.ts",
-        "src/player/collision.ts (Floors.shafts, tiers)"
-      ],
-      "notes": "Slice 3 (towers) done 2026-09-29 (af). Next: see it in real Midtown; slice 2 (data in: building/tourism/amenity archetypes, party walls), plant floors and sky lobbies, lifts for 5–7-storey blocks over shops."
-    },
-    {
-      "id": "phones",
-      "priority": 0,
-      "area": "platform",
-      "title": "The game runs on phones, and says why if it can't",
-      "user_visible_behavior": "On a phone the game picks a lighter quality tier by itself and renders; if anything fails (no WebGL, a shader, no frame, a lost GPU context, a bundle that won't load) the page shows a readable report you can screenshot, and ?diag=1 shows it on demand.",
-      "status": "in_progress",
-      "verification": [
-        "tests/quality.test.ts, tests/diag.test.ts, tests/pack.test.ts (atlas crop)",
-        "tools/mobile-check.mjs (headless, helper agent): Pixel 7 GPU-process peak 1272 → 733–783 MB on the phone tier, world drawn, 0 errors; injected failures each show the report",
-        "LIVE pane at 375×812: the report on ?diag=1 reads 'quality phone (touch screen)', the world drawing"
-      ],
-      "evidence": [
-        "src/render/quality.ts",
-        "src/ui/diag.ts",
-        "index.html (inline guard)",
-        "src/world/signs.ts (cropped atlases)",
-        "src/sim/life.ts (live-slot counts)",
-        "src/world/stream.ts (streamParams)"
-      ],
-      "notes": "Needs a real phone after the next Pages deploy: …/Map_Game/?diag=1."
+        "src/world/calendar.ts",
+        "src/world/docks.ts",
+        "src/world/crowd.ts, src/world/crowdLayer.ts",
+        "src/world/props.ts (lots by season × hour, boats by month), src/world/kerbCars.ts (cars in their hours)",
+        "src/render/creature.ts (BEACH), src/assets/people.ts (lite body)"
+      ]
     },
     {
       "id": "photo-paints-frame",
+      "tier": 3,
+      "rank": 121,
+      "status": "passing",
       "priority": 2,
       "area": "gameplay",
       "title": "In paint-as-you-walk mode, a photo paints everything it frames, even the far distance",
       "user_visible_behavior": "With Watercolor → '…far away too' on, taking a photo (P, Space) colours in everything visible in the frame — the street, the far shore, the city on the horizon — blooming in over a couple of seconds; it stays painted.",
-      "status": "in_progress",
       "verification": [
         "tests/explore.test.ts (+6), tests/seen.test.ts (depth → world points, joins, footprint discs, far cells)",
         "LIVE Sea Bright: ctx.paintView() from Ocean Ave painted 729 cells out to 1.6 km"
@@ -1003,70 +1718,423 @@
         "src/render/seen.ts",
         "src/world/explore.ts (far cells, far window, paintSeen)",
         "src/render/post.ts (readSeen, far window in the sketchFar branch)",
-        "src/ui/photo.ts"
+        "src/ui/photo.ts",
+        "2026-09-30: stamp closing (Stamps.close), a 48 km far window, reach up to 22 km (postParams.photoReach, panel 'a photo paints out to'), a 384 readback on a PC — headless from 150 m over Sea Bright: bare pixels in frame 0.1–0.4% out to 15 km (was 3–5%), 0.1–0.2% within 2 km",
+        "shots/shore-montage.jpg 2026-09-30: pencil before / colour to the horizon after one photo from a balloon"
       ],
-      "notes": "Frames of the before/after still to shoot; the sketchbook page keeps the pencil frame from before the bloom."
+      "notes": "2026-09-30: the leftover 'canvas clouds' were the far field's sampling gaps (closed) and everything past 15 km (the reach, now 22 km and yours to set). The bloom is slower (2.4 s a cell, the farthest 2.2 s late) so the colour is seen running out; photo paint is counted apart from walks (stats().photoKm2). The sketchbook page keeps the pencil frame from before the bloom."
     },
     {
-      "id": "city-doors",
-      "priority": 0,
+      "id": "streamed-parity-harness",
+      "tier": 3,
+      "rank": 122,
+      "status": "passing",
+      "priority": 3,
+      "area": "tooling",
+      "title": "Streamed-parity review harness on 3 random US towns",
+      "user_visible_behavior": "Any US town streamed in looks as finished as the hero region (lamps, ground paint, lot dressing, trees, people).",
+      "verification": [
+        "review-shots poses (street, night, lawn, trees, aerial) run at 3 random ?at= towns per round and reviewed"
+      ],
+      "evidence": [
+        "tools/place-shots.js: nine poses anywhere (main street x4, residential, aerial, tallest, horizon, a cafe), hidden-pane frame pump, waits for real tiles, golden hour from the sun",
+        "reviewed: Tucson, Midtown NYC (shots/place-*.jpg)"
+      ],
+      "notes": "Reviewer scale-out step 2 — the DEM lamp-clamp bug showed inland towns break in ways Sea Bright can't."
+    },
+    {
+      "id": "regional-cast-and-uses",
+      "tier": 3,
+      "rank": 123,
+      "status": "passing",
+      "priority": 3,
       "area": "gameplay",
-      "title": "Every front door opens: no building inside a building, nothing across the way in",
-      "user_visible_behavior": "Downtown, a tower mapped tier by tier is one building with one door, never a building standing inside another; twin copies and seam copies are gone (no flickering walls). Walk up to any front door (up a raised shore house's stair, past the fence, the parked cars, the racks and the hydrants) and in.",
-      "status": "in_progress",
+      "title": "Scaling pass: regional wildlife cast, language-neutral business uses, street rhythms, furniture budgets",
+      "user_visible_behavior": "Each climate has its own animals (desert: coyote, jackrabbit, roadrunner, quail, ground squirrel, mule deer; north woods: snowshoe hare; tropics: ibis); shops and cafés are recognised from map tags in any language; towns keep their own daily rhythm.",
       "verification": [
-        "tests/nest.test.ts (6), tests/seams.test.ts (2), tests/doorway.test.ts (5), tests/raisedStairs.test.ts (2): door, roof and stair tests checked to fail on the old code",
-        "LIVE Manhattan, 7 real cells (__DOORS__): real doors blocked 14 → 3 of 295, stand-ins 22 → 8 of 205; nested pairs 98 → 8 (all Grand Central's partial overlaps)",
-        "Cloud mirror, the whole baked region (tools/playtest.js __DOORS__ with the flood): 4 of 1,857 blocked (was 31 of the nearest 300)"
+        "tests: critters (desert cast, coyote hunt, burrow, winter hare), uses, realTile business join, lifeSim rhythms, decor budgets",
+        "streamed desert town ?at=32.2290,-110.9618",
+        "shots/review-r18-f*.jpg"
       ],
       "evidence": [
-        "src/world/nest.ts",
-        "src/world/seams.ts",
-        "src/world/stream.ts (reconcileSeams, stand-in footprint scopes)",
-        "src/world/tileBuild.ts (door aprons, own footprints, deck keep-outs in the scratch walk)",
-        "src/world/buildings.ts (doorOpen probes; raised-stair shape by clearance)",
-        "src/world/props.ts (fence gates and deck gaps, banded fences, kerb cars, own-ground props, rooftop structures, flag beside a door)"
+        "126 tests pass",
+        "arid/adobe stream spawned coyote, ground squirrel, jackrabbit, quail, hawk"
       ],
-      "notes": "Left: Grand Central-type partial overlaps; 3 Manhattan doors; stand-in door quality; lots with no room for a raised house's stair (choose another wall)."
+      "notes": "Worker redeploy needed for v7 tiles (business nodes). Other continents fall back to NA climate casts until they get faunaMix rows."
     },
     {
-      "id": "altitude-depth",
-      "priority": 1,
-      "area": "rendering",
-      "title": "Flying high, the ground holds still (no blue/green flashing)",
-      "user_visible_behavior": "Fly up over a coast or a city: land and water stay put, however high.",
-      "status": "in_progress",
+      "id": "downtown-life",
+      "tier": 3,
+      "rank": 124,
+      "status": "passing",
+      "priority": 4,
+      "area": "gameplay",
+      "title": "Ocean Ave downtown: café terraces, seated guests, curbside parking, more walkers",
+      "user_visible_behavior": "Commercial streets have café tables with parasols and seated people by day, parked cars at the curb and busier sidewalks; shop windows show goods on stands.",
       "verification": [
-        "tests/nearPlane.test.ts (4): a depth step under 5 cm straight down and under 20 cm three times as far out at 300–3,000 m (the old fixed near: ~1 m at 2 km)",
-        "Cloud mirror: __ALTITUDE__/__FLYOVER__ over Sea Bright at 400–3,000 m flicker-free (also with the old near plane: not reproduced there)"
+        "r11 montage d frame 17",
+        "typecheck + tests"
       ],
       "evidence": [
-        "src/render/nearPlane.ts",
-        "src/main.ts (per-frame near)",
-        "src/world/water.ts (sea polygon offset)"
+        "shots/review-r17-a.jpg frame 2 (curbside cars + walkers in the morning)",
+        "shots/review-r17-d.jpg frame 17 (terrace + seated guests)",
+        "per-building storefronts: fascia / solid awning / rare stripes"
       ],
-      "notes": "Robby to say where he saw it (city, height) — then reproduce with __ALTITUDE__ there."
+      "notes": "Driven by uses.ts (name + POI kind), never per-town lists."
     },
     {
-      "id": "playtest-suite",
-      "priority": 0,
-      "area": "platform",
-      "title": "Gameplay test suite: walk, drive, teleport, stream, frames, doors, nesting, flicker, altitude",
-      "user_visible_behavior": "(Developer) One command plays the game headless and fails on a glitch: walks streets and into buildings and up their stairs, drives routes, teleports, streams a ring, times frames, walks into every door, finds nested buildings, surfaces fighting and posts in car lanes.",
-      "status": "in_progress",
+      "id": "ecosystem-physics",
+      "tier": 3,
+      "rank": 125,
+      "status": "passing",
+      "priority": 4,
+      "area": "gameplay",
+      "title": "Wildlife ecosystem + cars knock walkers down",
+      "user_visible_behavior": "A fox stalks and pounces on rabbits and songbirds at dusk, a hawk circles and stoops by day, animals bolt from traffic and alarm their neighbours; your car knocks walkers over, and they get up and walk on.",
       "verification": [
-        "Self-tests: each check catches its planted failure (walkabout 9, drive 5, teleports 5, streaming 4, frames 1, roadposts 1; flicker 1)",
-        "tests/playtest.test.ts (23): the pure core (seeded rng, A*, road graph, carriageway index, frame stats)",
-        "Headless, cloud mirror: Sea Bright walkabout 846 m / 4 buildings in and out / 1 staircase, drive 477 m, teleports 6/6, streaming 12/12, overlaps 0 nested, doors 0 shut of 80; procedural Midtown the same with 0 failures"
+        "tests/critters.test.ts (4)",
+        "tests/lifeSim.test.ts knockdown",
+        "r11 montage e"
       ],
       "evidence": [
-        "tools/playtest.js",
-        "tools/playtest-core.js",
-        "tools/playtest.mjs",
-        "docs/agent/debugging.md",
-        "src/player/landing.ts"
+        "tests/critters.test.ts (4) + lifeSim knockdown (sprawl → sit up → walk back, no teleport)",
+        "shots/review-r17-e.jpg"
       ],
-      "notes": "Found and fixed: posts in car lanes (props.ts offCarriageway, signs.ts), stand-in houses across streets (synth.ts), teleports into water (landing.ts), a raised house's stair across the street (buildings.ts). Next: run it live on Manhattan and Queen Anne; phone budgets on a real phone."
+      "notes": "Next: animals crossing roads (and road kill avoidance by AI traffic), dogs on leads with walkers, gulls stealing chips."
+    },
+    {
+      "id": "bug-dem-seam",
+      "tier": 3,
+      "rank": 126,
+      "status": "passing",
+      "priority": 99,
+      "area": "streaming",
+      "title": "Late-DEM seam between placeholder and DEM-hilled cells",
+      "user_visible_behavior": "Flat-built s-cells beside DEM cells no longer look sunken.",
+      "verification": [
+        "Walk a synth→real boundary where DEM arrived late — no visible shelf"
+      ],
+      "evidence": [
+        "commit 51d1cc8 — seam fix shipped"
+      ],
+      "notes": "Fix committed in 51d1cc8. Confirm at a known seam site; reopen if the shelf is still visible."
+    },
+    {
+      "id": "getting-in",
+      "tier": 1,
+      "rank": 11.1,
+      "status": "passing",
+      "area": "gameplay",
+      "title": "Getting in: a storefront opens whole, the door you walk toward is ready, never a see-through house",
+      "user_visible_behavior": "Walking up to a building, its windows open onto the room whole (no half-dissolved pane), the door you are heading for opens when you reach it, and you never walk into an empty, see-through shell.",
+      "verification": [
+        "Court Street, Brooklyn walk-in montage: the whole storefront shows the shop from 5 m; inside continuous",
+        "shut door: a step into the doorway stops at the door until the interior opens, then goes through (in-page check)"
+      ],
+      "evidence": [
+        "src/world/buildings.ts (a pane opens whole: nearest-point distance, per-window threshold, storeys round the walker)",
+        "src/world/interiors.ts (heading-aware door choice; shutDoor leaf, scope -10; flat-out build near the door)",
+        "docs/agent/gameplay.md \"Getting in\"",
+        "commit 4aaeebb",
+        "commit 1c43ebd: every door opens — the one you stand at is activated even when an open neighbour holds the slot (the shut-door leaf deadlocked with it: Sea Bright's Ocean House failed on the old code, passes on the new; all 20 commercial doors near Ocean Avenue enterable).",
+        "commit 1c43ebd: apartments over a shop (bd.gf) cut their whole storefront inside too — the interior had no gf flag, so a Brooklyn shopfront under flats opened as a tiny square (tests/interiorWindows.test.ts)."
+      ],
+      "notes": "Robby, 2026-10-04: \"the windows are big but only a small portion is see through\"; \"the windows and doors dont load at all … I can see through the house like clipping for 1 second\". Robby, 2026-10-04: \"in sea bright why are there some buildings i cannot walk inside like ocean house\"; \"those big window buildings in brooklyn the window still was not all see through … just a tiny square\"."
+    },
+    {
+      "id": "people-persist-indoors",
+      "tier": 1,
+      "rank": 11.2,
+      "status": "passing",
+      "area": "gameplay",
+      "title": "People who go into a building stay there: seen inside, and back out the door",
+      "user_visible_behavior": "Someone who walks into the building you are visiting goes to a place inside and stays — through the windows and in the room with you — and walks back out the door; nobody vanishes at a door.",
+      "verification": [
+        "tests/lifeSim.test.ts: in by the open door, to a place, inside through a close and a reopen, back out",
+        "live: Court Street, Brooklyn — a walker went in and stood inside the open building for the rest of the watch"
+      ],
+      "evidence": [
+        "src/sim/lifeSim.ts (IN_WALK / IN_STAY / IN_OUT, setIndoor)",
+        "src/world/interiors.ts (Visit: the door and free places)",
+        "src/sim/life.ts, src/sim/ambient.worker.ts, src/main.ts",
+        "commits 4aaeebb, 779197f"
+      ],
+      "notes": "Robby, 2026-10-04: \"people going into buildings dissappear it all needs to be persistent\"."
+    },
+    {
+      "id": "regional-greenery",
+      "tier": 1,
+      "rank": 11.4,
+      "status": "blocked",
+      "area": "world",
+      "title": "Greenery as dense and as regional as the photos: yards, verges, street trees, tree lines, woodlots, the far field",
+      "user_visible_behavior": "Every region is as green as its street photos — leafy suburbs, tree-lined country roads, woods — and the trees are the region's own.",
+      "verification": [
+        "tools/real-compare.mjs --kind=green --group=region: every region's vegetation share within 5 points of its photos; montages reviewed",
+        "national run: downtowns not over-planted"
+      ],
+      "evidence": [
+        "docs/REGIONAL_LIFE.md (the plan)",
+        "tools/real-spots.mjs GREEN (64 curated green spots, 16 regions)",
+        "src/world/props.ts (the survey's street trees kept: verge past the paved band, kerb pits, steps round stoops, overhanging crowns, measured trees never dropped; areaCoverMask: the map's woods)",
+        "tests/streetTrees.test.ts",
+        "tools/class-pass.js (no backdrop ceiling over streamed cells)",
+        "green-2 (tools/real-scores.json): green spots vegetation 3% -> 24% (photos 35%), mean 0.57 -> 0.72"
+      ],
+      "notes": "national-1: the game shows 5% vegetation where the photos show 14%. The WorldCover scan gives a built-up cell a 3.5% chance of a tree per 9 m cell (a leafy suburb ~4 trees/ha vs 25-45 real); rural roads lose their tree lines; the far field is thin. 2026-10-04 green-2: 24% of the photos' 35%. Still bare: forests neither OSM nor the LiDAR records hold (Longmire, NY-73 in the Adirondacks, Bend) - next, the USFS NLCD Tree Canopy Cover (30 m, public) baked into R2 by 1° blocks as the tree scan's density. Blocked 2026-10-04 on the national canopy layer: Robby, \"do northwest and stuff that doesnt take hrs of processing at the moment\" — the USFS canopy bake waits. 2026-10-04 handoff (docs/earth/HANDOFF.md): first in the cloud session's order — confirm with Robby before the R2 upload / worker deploy."
+    },
+    {
+      "id": "ecoregions",
+      "tier": 1,
+      "rank": 11.45,
+      "status": "not_started",
+      "area": "world",
+      "title": "Regions as data: EPA Level III ecoregions → 16 regions, so casts follow the land, not coarse boxes",
+      "user_visible_behavior": "Kentucky and Ohio, Savannah and Raleigh, Austin and Phoenix each get their own plants and animals.",
+      "verification": [
+        "a baked lat/lon grid of EPA Level III codes (public domain) and a code → region table; tests: known towns resolve to their regions"
+      ],
+      "evidence": [],
+      "notes": "docs/REGIONAL_LIFE.md §2."
+    },
+    {
+      "id": "regional-flora",
+      "tier": 1,
+      "rank": 11.5,
+      "status": "in_progress",
+      "area": "assets",
+      "title": "The regional flora: live oak and Spanish moss, the PNW conifers and moss on bark, aspen and ponderosa, the eastern hardwoods and flowering understory, bald cypress, cottonwood, the desert, piñon-juniper-sage, palms and palmetto, ferns and ground layers",
+      "user_visible_behavior": "A place's trees and plants are the ones that grow there, layer by layer, through the seasons.",
+      "verification": [
+        "tests/foundry.test.ts: each family validated with a vertex budget",
+        "range rules: none placed out of range",
+        "green-spot montages by region"
+      ],
+      "evidence": [
+        "docs/regional-life/ (the reference)",
+        "commit 94ce999 — the Pacific Northwest package (docs/regional-life/models.md build order #1): Douglas fir, western hemlock, Sitka spruce, western redcedar, red alder and vine maple in the foundry, three grown forms each (open-grown, forest, old), far + near models, validated and under budget (tests/foundry.test.ts: the conifers read as spires, bare-trunked in the forest; the hemlock's stilt roots, the cedar's candelabra; the alder narrow, the vine maple a sprawl).",
+        "Moss on bark as a region term (styles.ts moss, U.uMoss: the westside 1, the dry side 0.1); moss beards and licorice fern on the bigleaf maple; leaf pictures for the cedar's sprays and the maples' hands.",
+        "Placement: west of the Cascade crest (styles.ts westOfCascades) the conifers are the Northwest's at real heights (fir and Sitka 25–48 m in a wood), Sitka in the outer coast's fog belt, four in five of a wood's trees conifers; the dry side is now the Mountain West's (tests/streetTrees.test.ts \"the Northwest's woods\").",
+        "The forest floor (world/understory.ts): sword fern, salal and Oregon grape under a wood's canopy round the walker, the lawn grass giving way there (tests/understory.test.ts).",
+        "Comparison pnw-flora-1 (real-compare --kind=green --states=WA,OR): mean 0.683 over 4 scored spots; Seattle's Federal Ave 0.79 (vegetation 43% vs the photo's 59%) with fir spires and mossy trunks; Longmire still 12% vs 60% — no mapped wood there (the canopy layer). In-game: shots/spots-pnw-wood2.jpg (a Seattle old-growth wood), shots/spots-pnw-hoh.jpg."
+      ],
+      "notes": "Build order: docs/REGIONAL_LIFE.md §6. Started 2026-10-04 with the Pacific Northwest (Robby: \"do northwest\"): detailed, well-made foundry models from the exhaustive list in docs/REGIONAL_LIFE.md §6. 2026-10-04: the Northwest done (trees, moss, the forest floor). Next packages: models.md build order #2 on (live oak + Spanish moss; aspen + ponderosa for the Rockies and the dry side; the eastern hardwoods and flowering understory; the desert). Also: the ground under a wood painted as duff and moss, not lawn; OSM genus → the new kinds in realTile (Pseudotsuga→fir, Thuja→cedar, Tsuga→hemlock, Picea sitchensis→sitka, Alnus→alder, Acer circinatum→vinemaple) with the next worker cache bump."
+    },
+    {
+      "id": "regional-wildlife",
+      "tier": 1,
+      "rank": 11.6,
+      "status": "not_started",
+      "area": "assets",
+      "title": "The regional wildlife: each region's cast with how common each animal is, where and when; the new families; regional rares as data",
+      "user_visible_behavior": "You meet the animals of the place — cardinals and fox squirrels in Ohio, an alligator in a Florida retention pond, elk in Estes Park, a roadrunner in Tucson — and a rare one is a find.",
+      "verification": [
+        "tests/foundry.test.ts budgets for each new animal",
+        "range rules test (ranges.md)",
+        "casts by region reviewed in montages"
+      ],
+      "evidence": [
+        "docs/regional-life/ (the reference)"
+      ],
+      "notes": "Build order: docs/REGIONAL_LIFE.md §6; rares tie to docs/GAMEPLAY_VISION.md §3. Robby, 2026-10-04: models from the foundry, detailed, with \"amazing animation\"; an exhaustive list first."
+    },
+    {
+      "verification": [
+        "npx vitest run tests/lifeSim.test.ts -t \"open ground\""
+      ],
+      "evidence": [
+        "2026-10-04: a walker sets out only for a door whose wall it stands in front of (LifeInit.doorN, the facade side, 0.8 m) — never one round the corner or on the far side of a shallow building, reached straight through it. Test grid with a door every 10 m: 1 of 1958 set out through a building without the check, 0 of 1967 with it.",
+        "2026-10-04: every entrance carries its way up (Door.path: the top of a porch's steps; a raised house's landing, side, parallel and dogleg flights turn by turn) and walkers walk it — up the steps, level across the deck. Test porch (1.1 m deck, 1 m of steps): 102,948 samples on the stair legs, deepest 0.00 m under the steps or the deck (a straight glide was 0.7–1.0 m under).",
+        "npm test 864/864, npm run build OK."
+      ],
+      "notes": "Robby, 2026-10-04: \"people walking sometimes walk through walls of building to other side around corners and when walking on porch into house they fall into the floor then stand normal on floor again\".",
+      "id": "walkers-clear-of-walls",
+      "tier": 1,
+      "rank": 11.3,
+      "status": "passing",
+      "area": "life",
+      "title": "Walkers keep to open ground: never through a building at a corner, up a porch's steps rather than through its deck",
+      "user_visible_behavior": "People walking the streets go round buildings, never through their walls at a corner; someone going into a house climbs its porch steps and walks its deck, never sinking into the floor and popping up."
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "fun-movement",
+      "tier": 2,
+      "status": "not_started",
+      "title": "Moving is fun (§11.1): a small hop, wade and swim, the bike; then surfing, kayaks and paddleboards, the skateboard, sleds",
+      "user_visible_behavior": "Hop a low fence or onto a dock, wade and swim where the map says beach or water, ride a bike — moving is a pleasure in itself.",
+      "area": "gameplay",
+      "rank": 63
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "combine-cards",
+      "tier": 2,
+      "status": "not_started",
+      "title": "Combine (§6.5): cards as tagged ingredients — drag onto a card, a preview, tap to keep; tag rules as data, mutations and Discoveries, crafted things in the world, the \"alive\" budget",
+      "user_visible_behavior": "Drag one card onto another and something new appears — never a failure, sometimes a surprise nobody authored.",
+      "area": "gameplay",
+      "rank": 65
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "place-activities",
+      "tier": 2,
+      "status": "not_started",
+      "title": "Things to do at real places (§11.2): fishing, hoops and the ice cream shop first; then mini golf, skimming stones, a rally, bowling, the picnic table, cooking",
+      "user_visible_behavior": "Every mapped court, pier and ice cream shop has a short, cozy thing to do there, with a card for doing it well.",
+      "area": "gameplay",
+      "rank": 66
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "town-regulars",
+      "tier": 2,
+      "status": "not_started",
+      "title": "People who remember you (§11.4): a few named regulars per town, commissions and gifts, the travelling friend",
+      "user_visible_behavior": "The café owner remembers what you painted and asks you to paint her boat at sunset.",
+      "area": "gameplay",
+      "rank": 67
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "events-calendar",
+      "tier": 2,
+      "status": "not_started",
+      "title": "Events: the world's own calendar (§11.7) — calendar rules, markets and opening hours, festivals, nature's calendar, weather, sports seasons; event kits from the foundry",
+      "user_visible_behavior": "Fireworks over the park on July 4, the farmers market on its real day, low tide, first snow.",
+      "area": "gameplay",
+      "rank": 69
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "today-in-town",
+      "tier": 2,
+      "status": "not_started",
+      "title": "\"Today in your town\" (§11.6): a card of what today brings — what turned to pencil, today's events, a commission",
+      "user_visible_behavior": "Every session opens with something to do.",
+      "area": "gameplay",
+      "rank": 70
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "old-sketchbook",
+      "tier": 2,
+      "status": "not_started",
+      "title": "The old sketchbook (§11.3): riddle pages of real places across America, as data by region; paint the view at the right time",
+      "user_visible_behavior": "A found sketchbook gives the road trip a direction and an ending.",
+      "area": "gameplay",
+      "rank": 72
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "self-expression",
+      "tier": 2,
+      "status": "not_started",
+      "title": "Self-expression (§11.8): outfits from your travels, van paint jobs, a painting style per painting",
+      "user_visible_behavior": "A fisherman's sweater from Maine, a cowboy hat from Texas; a van painted your way.",
+      "area": "gameplay",
+      "rank": 74
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "skill-challenges",
+      "tier": 2,
+      "status": "not_started",
+      "title": "Small optional skill challenges (§11.5): land the balloon on a target, dock the yacht, glide the plane in, surf a long wave",
+      "user_visible_behavior": "Doing it well earns a gold card; never punishing.",
+      "area": "gameplay",
+      "rank": 76
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "long-term-goals",
+      "tier": 2,
+      "status": "not_started",
+      "title": "Long-term goals (§11.9): a state's painted map, a masterpiece per region, the gallery museum, the 48-state journey",
+      "user_visible_behavior": "Twenty hours in, there is still a reason to cross the country.",
+      "area": "gameplay",
+      "rank": 79
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "Alongside from §15 step 2.",
+      "id": "music",
+      "tier": 2,
+      "status": "not_started",
+      "title": "Music (§11.10): soft themes by region, time and weather from Robby's Sound Studio, fading for real-place moments",
+      "user_visible_behavior": "Calm, sparse music that changes as you travel.",
+      "area": "gameplay",
+      "rank": 82
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "Alongside from §15 step 2, as they fit.",
+      "id": "smaller-things",
+      "tier": 2,
+      "status": "not_started",
+      "title": "The smaller things (§11.11): controller support, weather as play, far-off things that catch your eye",
+      "user_visible_behavior": "A gamepad works; puddles splash; a balloon on the horizon pulls you toward it.",
+      "area": "gameplay",
+      "rank": 83
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "A dev-time tool: it also speeds the regional flora and fauna and the event kits.",
+      "id": "recipe-maker",
+      "tier": 2,
+      "status": "not_started",
+      "title": "The recipe maker (§11.7): a parts library, recipes as JSON, a dev tool that turns a keyword into a recipe, checks, a preview page, a shared recipe table",
+      "user_visible_behavior": "Hundreds of event-kit, rare and furniture models, made quickly and reviewed.",
+      "area": "assets",
+      "rank": 84
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "After §15 step 11; needs the recipe maker, a keyword filter, a daily cost cap and an on/off switch.",
+      "id": "paint-anything",
+      "tier": 2,
+      "status": "not_started",
+      "title": "\"Paint anything\" (§6.5 rule 11, later): a player names a thing and its recipe is made once, validated and shared",
+      "user_visible_behavior": "Name a lobster trap and one appears — the same for every player.",
+      "area": "gameplay",
+      "rank": 85
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "Seen 2026-10-04 while fixing the Brooklyn storefronts: the upstairs flat's floor and furniture protruded over the shopfront of the Bonobos building. Not yet investigated.",
+      "id": "upstairs-over-shopfront",
+      "tier": 1,
+      "rank": 11.8,
+      "status": "not_started",
+      "area": "interiors",
+      "title": "An upstairs flat over a shop stays inside its walls: no floor or furniture standing out over the shopfront",
+      "user_visible_behavior": "Walking past a shop with flats above (the Bonobos building), nothing of the upstairs — floor slab, sofa, shelves — pokes out over the shop's windows or the sidewalk."
     }
   ],
   "regions": {
@@ -1103,5 +2171,12 @@
         ]
       }
     ]
+  },
+  "tiers": {
+    "0": "Foundations: every tile loads (or falls back gracefully), commercial-safe infrastructure, phones, no glitches.",
+    "1": "It looks right everywhere: the real-world comparison loop first, then place parity, public places, Mapillary objects, night/ground/far trees.",
+    "2": "The game (§15 order): the bloom, pencil collecting, the van-home, placing things, rares, travel, the home, the special vehicles, the portal gun, series, the dog, friends. Waits for tiers 0–1, except a throwaway bloom prototype.",
+    "3": "Polish and later: kept, not deleted.",
+    "note": "docs/GAMEPLAY_VISION.md §17: the whole lower 48 loading everywhere, looking right everywhere, on PC and phone — then a game on top. Work the lowest tier first; within a tier, by rank. Re-ranked 2026-10-03 against the lower-48 audit (docs/earth/AUDIT_48.md)."
   }
 }

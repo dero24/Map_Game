@@ -20,6 +20,18 @@ terrain/DEM, or the LiDAR measure pipeline.
   stand-in twin, its coarse silhouette, a flat first build — is handed over (`retire`) and stays
   on screen until the new tile is whole. `ensureAround` (spawn) mounts all at once.
   `TileStream.lastMount` says where the last mount's time went.
+- A phone's budget (`streamParams.budgetMB`, set by its quality tier; 0 on a PC = no budget):
+  each detail tile's vertex data is measured when it mounts (`TileArt.bytes`, remembered per id
+  for the next visit), and `world/budget.ts` `admitCells` keeps the ring's cells nearest first
+  while they fit — the cell you stand in (and within 150 m) always; a built cell counts 150 m
+  nearer (no flip-flop). A cell past the budget unloads to its silhouette; queued builds for it
+  are dropped; `ensureAround` leaves real tiles to `update()` (a teleport into Midtown built the
+  whole ring at once). `realConc` caps real builds in flight (4 on a PC). `coarseMB` (phone 90, low 60, a PC none) caps the silhouette ring's vertex data: over it the farthest silhouettes go and nothing past that distance is fetched until the ring is under ~70% (`coarseCut`) — Midtown's stand-in silhouettes were 175–190 MB of a phone's ring, three times its detail tiles. `purge` (all tiers)
+  takes an unloaded tile's walls out of the walk world a slice a frame (`removeScope(id, 'later')`
+  → `WalkWorld.purgeSome`, ~1.5 ms, from `update()`); they stop blocking at once, and their ids
+  are reused only once out of every grid cell.
+- `TileStream.dispose` frees a tile's sign atlas with its geometry (`group.userData.atlas`) — it
+  was the one per-tile texture, and it leaked on every unload.
 - The walker's neighbourhood grids (`houseGrid`, `shopGrid`, `cityGrid`, `pavedIndex`) are
   summed from each tile's own, worked out once per tile (they were rebuilt from every footprint
   and segment in the ring on every mount).
@@ -34,7 +46,8 @@ terrain/DEM, or the LiDAR measure pipeline.
   tags → `buildObject` recreates meshes/materials on mount; canvas work ships as
   `ImageBitmap` (sign atlas; per-tile lamp pools are composited into `U.uLampMap` by the
   stream); collision ships as `WalkOp`s replayed inside the scope; deck heights ship as exact
-  `DeckProfile` params (ramp/const/arch on the `Deck` interface).
+  `DeckProfile` params (ramp/const/arch/table on the `Deck` interface; a bridge's `table` is its
+  drawn heights, its `cut` its square ends).
 
 ## Terrain packs
 
@@ -54,22 +67,112 @@ terrain/DEM, or the LiDAR measure pipeline.
   server proxies `/__tiles/*` to whichever port answers and the game probes that first
   (`?tiles=` explicit overrides, `?tiles=off` disables; no worker → procedural past the bake
   + a toast).
-- Tile cache key: worker R2 `t/v7`, client `&v=7` — bump both when realTile output changes (v7: named business nodes → `Building.n` / `Building.u`; the worker's Overpass query fetches `node[name][amenity|shop|office]`). **Redeploy the worker** (`cd worker && npx wrangler deploy`) for streamed towns to carry business names and uses.
+- Tile cache key: worker R2 `t/v24`, client `&v=24`, and the direct (Overpass) cache's `DIRECT_V` 24 in `tile.worker.ts` — bump all three together when realTile output changes (v24: `roof:levels` → `Building.rl`, its storeys counted in the height; v23: a bridge's `bridge:structure` → `Road.bs`, drawn by bridges.ts as a truss, an arch, a suspension or a cable-stayed span, and `bridge:movable` → `Road.bm`, a lift or swing span; and the micro layer's furniture — picnic tables, fire rings, grills, planters, boards, recycling, street cabinets, vending machines, clocks, seamarks; v7: named business nodes → `Building.n` / `Building.u`; the worker's Overpass query fetches `node[name][amenity|shop|office]`). **Redeploy the worker** (`cd worker && npx wrangler deploy`) for streamed towns to carry them.
 - `?at=lat,lon` beyond every baked backdrop builds a virtual manifest (origin snapped to
   1/64° so players share cell/R2 keys) — `w-<cx>_<cz>` specs stream OSM→TileJson while `s-*`
   synth twins mount instantly and upgrade in place.
+- A stand-in's lots are a pure function of position (`synth.ts` `standInLots`): kept in turn along
+  each street, clashes between streets settled by hash rank in two rounds, so any tile with
+  `LOT_REACH` of ground round its window keeps the same lots as its neighbour, lot for lot. Placed
+  greedily in each tile's own street order, neighbours had disagreed on a third of the lots they
+  share: doubled, overlapping or missing buildings along the seam. `tests/synthSeams.test.ts`.
 - Deployed: live at `https://map-game-tiles.map-game-tiles.workers.dev` (R2 bound as TILES).
   Production defaults to it; localhost prefers `wrangler dev` and falls back to it. Redeploy:
   `cd worker && npx wrangler deploy`.
 - The shared transform is `src/world/realTile.ts` (bundled by the worker, unit-tested
   client-side — keep its tag tables in sync with `scripts/bake.mjs`/`lib/colour.mjs`).
 
+## Our own OpenStreetMap extract (the tile service's source; Overpass only a polite fallback)
+
+The public Overpass servers aren't a game's backend (their usage policy; `docs/DATA_SOURCES.md` §0),
+and in October 2026 they mostly didn't answer at all. Robby's call (2026-10-03): our own extract in
+R2, matching Overpass exactly and proven so, packed rather than millions of files, cut on the game's
+own grid, refreshed monthly by a script on his PC.
+
+- **The query, written once** (`src/world/osmQuery.ts`): the cell query's statements. `overpassQuery`
+  is generated from them, byte for byte the old query (`tests/osmQuery.test.ts` keeps a frozen copy);
+  the extract selects with the same list (`sqlWhere` for DuckDB, `matchesQuery` in JS). A new tag the
+  game reads goes into `STATEMENTS` — both sources pick it up together.
+- **The grid** (`src/world/osmTiles.ts`): fixed 1/128° tiles (~0.87 × 0.67 km at 40°N) in 1° blocks,
+  global, so every origin's cells read the same tiles (a game cell's grid depends on where the session
+  started; the extract's doesn't). No state lines: the extract is cut from Geofabrik's whole-US file.
+- **Overpass's rule, reproduced** (`selects`, `assemble`): an element is in a box's answer when a node
+  or a segment of it is inside the box ("at least one point (also points on the segment) is properly
+  inside") — a big lake whose shore never enters the box is not; a relation by any member; full
+  geometry, members in order (`out geom`). Each tile line leads with its bounds, so a reader skips what
+  can't be in its box without parsing it.
+- **The extract** (`scripts/osm-extract.mjs`, DuckDB `ST_ReadOSM`): Geofabrik's file → the query's
+  elements with their geometry → each way's tiles (its line against each tile's envelope, edges
+  included) → a block's tiles gzipped back to back (a part per 200 MB), its tall things (the skylines'
+  layer: buildings ≥ 45 m or 14 storeys, building parts and relations ≥ 45 m, towers and masts
+  ≥ 150 m), its big relations (> 50 KB printed, stored once in their home block, tiles point there) and
+  a directory. Lean on disk: the file read once per kind, each step's table dropped once used, each way
+  printed while it's packed. New Jersey: 2.5 M elements, 373 MB packed, ~1 min.
+- **The US run** (2026-10-03, on D:, which has the room; C: doesn't): 14.4 M nodes, 144.7 M ways and
+  371 k relations (6,486 big). That's 179 M way-tile lines from 1.5 B points. The steps before
+  packing take ~1¾ h; the way points join (26 min) and the geometry (47 min, 152 slices) are the
+  big ones. Lessons, each paid for once:
+  - **Memory:** `--mem=16GB` on this 32 GB PC. At 20 GB, with the editor and its language server
+    open, Windows paged 5 GB of DuckDB out (28,000 pages a second, every thread waiting). At 14 GB
+    a packing band ran out.
+  - **Geometry** in slices of ~10 M points (`--slice-points`). An ordered list aggregate, or
+    bigger slices, runs out of memory or spills tens of GB.
+  - **Packing bands** are cut by what's in them: at most `--band-lines` printed lines (8 M at
+    16 GB; 40 M ran out of memory at 20 GB), and empty columns are skipped. Every band re-reads all
+    ways' geometry (~1.5 min), so there are as few as memory allows. A stopped run keeps its
+    packed bands (`index.packed`).
+  - **An empty member role** (OSM allows it; Overpass prints `"role": ""`) comes from
+    `ST_ReadOSM` as NULL, and a NULL in a SQL concatenation is NULL. The member vanished, and a
+    relation of only such members packed as the line `null` (526 US relations). Now
+    `coalesce(role, '')`; `tests/osmExtractSql.test.ts` runs the script's own relation SQL, and
+    the packer refuses anything that prints as null.
+  - **DuckDB reserved words** an alias can't be: `ref`, `by`, `role`, `nulls`.
+- **Upload** (`scripts/osm-upload.mjs`): content-addressed keys — `osm/v1/b/<bx>_<by>.<hash>.<part>.bin`
+  and `.json` — so an unchanged block is never re-written (R2 bills writes), and the index
+  (`osm/v1/index.json`: each block's hash, the snapshot's timestamp, the extract's outline from
+  Geofabrik's `.poly`) goes up last: the service switches in one write, and a directory an isolate
+  held from before still reads the bytes it describes. `--no-index` stages without switching;
+  `--local` fills `wrangler dev`'s R2.
+- **The service** (`worker/src/osm.js`): a cold `/tile` asks the extract first — a box wholly inside
+  the outline (no outline edge crossing it) reads its tiles by range and answers as Overpass would
+  (`x-tile-source: extract`); only a box outside it goes to Overpass, politely: two mirrors, 25 s each,
+  a five-minute rest after three failures, a failure edge-cached ten minutes. `/skyline` serves both
+  skylines from the tall layer (`skyline.ts readTowers`; the browser asks Overpass only on
+  `?tiles=direct`). The browser's own direct-Overpass fallback is gone too: a cell the service can't
+  build keeps its stand-in (the vector twin) and is asked for again later.
+- **The proof** (`tests/osmExtract.test.ts`, `tools/osm-compare.mjs`): real cells' extract tiles and
+  the TileJson the service built from Overpass for the same cell; the extract's, through the same
+  `osmToTile`, must be identical (only `osmBase`, the snapshot's time, differs). `--save` asks Overpass
+  for a box as of the extract's own moment (an attic query) and keeps its raw answer for an
+  element-by-element test, once Overpass answers again.
+- **Refresh, monthly** (on Robby's PC): download Geofabrik's `us-latest.osm.pbf` (12 GB, once — and
+  check its `.md5`), read the timestamp from `us-updates/state.txt`, run the extract, upload (only the
+  changed blocks go up), and the index switches. The R2 TileJson cache (`t/vN`) keeps each cell as it
+  was first built; bump `t/vN` to rebuild every cell from the new extract.
+- **Going back is one step** (Robby: "keep the switch reversible"), from `worker/`:
+  - **the extract off, the new service kept:** `npx wrangler r2 object delete map-game-tiles/osm/v1/index.json --remote`.
+    Within ten minutes (each isolate's index cache) every new cell goes to Overpass again, politely,
+    as before. Cells already built from the extract stay cached (`x-tile-source: extract`), and the
+    skylines go dark (they read only the extract). To switch back on, put the index back:
+    `node scripts/osm-upload.mjs --pack=… --poly=…`, which uploads only what isn't up yet.
+  - **the old service entirely:** `npx wrangler rollback`, to the version before the extract
+    (`npx wrangler deployments list` names it). That's the pre-extract worker, with its own `t/v24`
+    cache of Overpass-built cells still in R2. The game keeps working against it (the worker ignores
+    `&v`); only the skylines are dark until the extract is back.
+
 ## DEM terrain
 
 - Worker route `GET /dem/<z>/<x>/<y>.png` proxies Terrarium (S3 has no CORP headers —
   module-worker fetches must go through the proxy).
 - `src/world/dem.ts` decodes z14 PNGs → 64×64 grid at 16 m pitch → a synthetic `TerrainLayer`
-  (heights f32-cm; sdf/flags derive from elevation — sea nodes = water).
+  (heights f32-cm; sdf/flags derive from elevation — sea nodes = water). The PNG is read byte for
+  byte (`terrariumFromPng`: IDAT inflated with three's bundled fflate, the scanline filters
+  undone) — no canvas, so no colour management, the same heights on every device, and a worker
+  without OffscreenCanvas (iPhones before iOS 16.4) still gets its ground; the canvas path is only
+  the fallback for a PNG it doesn't take.
+- A virtual cell whose DEM is late or failed is built on `flatDem` (the same lattice at the
+  stand-in's height) so the map's water still presses into it — a cell out on the Sound is sea,
+  not a flat lawn over it; a stand-in built so is marked `late` for its relief rebuild.
 - The worker registers the patch before `buildTile` so props/ground/interiors sit on real
   heights; `BuiltTile.dem` ships a copy to the main thread, which registers it under the cell
   key with `demHolders` refcounting so the s→w swap can't drop terrain.
@@ -90,3 +193,88 @@ terrain/DEM, or the LiDAR measure pipeline.
   `detectBuildings`, `detectTrees`), spawned by the stream and wired to the tile worker with
   a MessageChannel; `lidar.ts` (tile worker) owns the IDB cache and applies results.
 - `?lidar=0` disables. Bump `VER` in lidar.ts whenever measure/raster/tree logic changes.
+- **Measured once, for every device.** Phones never read a survey (`quality.ts` `lidar: false`:
+  a city's decode crashed them), so a cell's measurement is made ahead and shipped as the same
+  `Rec` a desktop caches: `enrichTile(…, pre)` applies a precomputed record first, on every tier
+  (`?measured=0` leaves it out — a desktop then measures everything itself, for comparing). Its
+  fits win over a browser's own (`joinRec`); a desktop reads the survey only for what a record
+  lacks (complete = trees + unmapped + ≤3% of footprints missing), a phone never.
+  - **Baked packs: the sidecar** — `public/data/<region>/measured/<cell>.json` + `index.json`
+    (`{v, ver, index, bakeId, cells: {id: fnv36 hash | 0}}`; 0 = open water / no survey). The
+    pack's own files never change. `measured.ts` `bakedMeasured` reads the index once (kept in
+    IndexedDB for offline), then `<cell>.json?h=<hash>` through the tile cache.
+  - **Made by** `node scripts/measure-cells.mjs --region=<id> [--only=a,b] [--resume]`, the
+    runtime's own code through Vite's module runner (`scripts/lib/measure-entry.ts`): `cellPlan`
+    (the same footprints and keys `enrichTile` asks about), `cellRequest`, `measureCell` with
+    `strict` (a failed read throws and is retried 4×, never measured off an older survey instead)
+    and `lean` (nodes streamed into the grid). `--check` verifies the sidecar against the pack
+    offline; `tests/measured.test.ts` does too (ver = `VER`, bakeId = the manifest's, every hash).
+    **Re-run it after a re-bake or a `VER` bump** — the test fails until you do.
+  - **Deterministic:** nodes are added to the grid in node order (float32 ground sums are
+    order-sensitive), so a desktop's own read, the script's and the tile service's agree to the
+    byte: the shore's 216 cells measured twice (once kept, once streamed) are byte-identical.
+  - **Size:** shore 2026-10-03 — 127 records + 89 zeros, 12.4 MB raw / 4.6 MB gzipped (mean
+    36 KB gz a cell, max 80 KB). The buildings are ~4 KB gz a cell; 85% is the survey's trees
+    (up to 12,000 a cell), which phones now plant too — the same trees as a desktop.
+  - **Streamed cells: the tile service measures them** (`worker/src/measure.js`, `GET
+    /measured/<cx>_<cz>.json?olat&olon&v=1` → R2 `m/v1/…`, `worker/README.md`). The first request
+    for a cell has the service read its survey over the buildings its own `/tile` answer has —
+    keyed like `/tile`, so the record keys the client's footprints — and every tier uses the record
+    from then on. `measured.ts` `serviceMeasured`: one request a cell a session (its relief rebuild
+    awaits the same one), 202s polled for up to 3 minutes, kept in IndexedDB (`measured|v1|VER|…`:
+    a revisit or the cell offline costs nothing), a record of another `VER` ignored, no request at
+    all where `lidar.ts` `surveyed()` finds no survey. A failure isn't remembered (the next build asks).
+  - **While a record is on its way** (the cell's first visitor): `enrichTile` races it against the
+    usual wait, builds from priors ('late') and neither tier reads the survey; the relief rebuild
+    takes the record. Only when the service can't answer (offline, an error, `?tiles=direct`) does
+    a desktop measure the cell itself. A vector twin (stand-in) only peeks (IndexedDB) and, with a
+    service, never reads the survey either — its real twin, built next, gets the record.
+  - **Keys:** `MEASURED_V` (`measuredFile.ts`) is the worker's R2 `m/vN` and the client's `&v=N` —
+    one constant, both import it. A `VER` bump re-makes records by itself (each carries its `ver`;
+    the worker re-measures a stale one). Neither changes `TileJson`: no `t/vN` bump.
+  - **Where nothing is measured** (no record yet, no survey, a fit too poor to use): a house's height
+    is a measured neighbour's, else its neighbourhood's storeys (`priors.ts`, in the builder —
+    `docs/NEIGHBOURHOODS.md` "Heights where nothing is measured"). Mapped `height`,
+    `building:levels` and `roof:levels` always win. Phones still never read a survey: with the
+    sidecar and the service there's no gap that would need it.
+  - **Check it in a browser:** `npm run build && node tools/height-check.mjs --device=pixel7
+    --at=<lat,lon> --probes=<x,z;…>` (and `--device=desktop --query=measured=0`, which reads
+    the survey in the page) — wall top and storeys per probe; the two must print the same.
+
+## Aerial roof colours (streamed US cells)
+
+- `src/world/aerialFetch.ts` (tile worker IO) + `aerial.ts` (pure): a real cell's USDA NAIP photo
+  is fetched from the start of its build (`prefetchAerial`), read after the LiDAR enrichment
+  (`enrichAerial` → `Building.ar`), cached per cell in IndexedDB (`aerial|vN|…`); waits 1.5 s on
+  a first visit, else `late` → relief rebuild. Direct from USGS, else the tile service's `/naip`
+  relay. Baked tiles never fetch: `tileRoofs` balances their baked samples as they build.
+- `?aerial=0` disables (and shows a baked pack's roofs as they were). Bump `VER` in
+  aerialFetch.ts when the reading changes. Details and sources: `world-data.md` "Building colours
+  from real data".
+
+## What the tile service costs (Workers Paid; checked 2026-10-03)
+
+The plan: $5 a month includes 10 M requests and 30 M CPU-ms (then $0.30 a million requests, $0.02 a
+million CPU-ms); R2 stores 10 GB free (then $0.015 a GB-month), with 1 M writes (class A, then
+$4.50 a million) and 10 M reads (class B, then $0.36 a million) a month free, and no egress fees. The
+edge cache (`caches.default`) is free but per colo.
+
+- **A first visit somewhere new** asks the service ~300–500 times: the detail ring's tiles (14–25) and
+  their measured heights, the silhouette ring (to 8 km on a PC: ~200 cells; a phone's 4 km: ~50),
+  the DEM tiles under them and the horizon's, the place index's boundary tile and searches, and the
+  two skyline reads. A revisit is IndexedDB and the edge cache: a handful of requests. So the base
+  plan's 10 M requests carry ~20–30 k new-area sessions a month before a cent more.
+- **A cold cell** (first asked at its origin): our own extract's ranged reads (4–9 tiles and a
+  directory an isolate keeps), osmToTile (~0.1–0.5 s CPU), one R2 write (the TileJson, kept for good)
+  — the included CPU and writes cover about a million cold cells a month. Overpass costs nothing but
+  reliability: it is only asked for a cell outside the extract's outline.
+- **R2 storage:** the extract ~20–40 GB, the place index 0.1 GB, the measured heights and the TileJson
+  cache growing with use (tens to hundreds of KB a cell) — a few dollars a month at most.
+- **The one inefficiency:** the TileJson cache is keyed by the session's origin (the ?at= point
+  snapped to 1/64°): two players who start 2 km apart build the same street twice. With the extract a
+  rebuild is cheap; a cell key on a global grid would share it (a `t/vN` change, client and service
+  together).
+- **To check against the dashboard** (Robby): Workers → map-game-tiles → Metrics (requests, CPU time,
+  errors), R2 → map-game-tiles → Metrics (class A/B operations, storage). `x-tile-cache`
+  (`edge`/`r2`/`miss`) and `x-tile-source` (`extract`/`overpass`) on every answer say which path
+  served it.

@@ -11,6 +11,7 @@
 import type { Box, LayerLayout } from './data';
 import { makeProjector, type LatLon } from './realTile';
 import { makeCanvas } from './canvas';
+import { unzlibSync } from 'three/examples/jsm/libs/fflate.module.js';
 
 const Z = 14;
 const PITCH = 16; // m between samples — 65×65 nodes per cell; enough for walkable hills
@@ -52,7 +53,13 @@ async function demTile(tx: number, ty: number, z = Z): Promise<Float32Array | nu
       const url = demBase === 'direct' ? `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${tx0}/${ty}.png` : `${demBase}/dem/${z}/${tx0}/${ty}.png`;
       const r = await fetch(url, { signal: AbortSignal.timeout(10000), mode: 'cors' });
       if (!r.ok) return null;
-      const bmp = await createImageBitmap(await r.blob());
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      // the PNG read byte for byte, no canvas: the same heights on every device (no colour
+      // management), and a worker without OffscreenCanvas — an iPhone before iOS 16.4 — still
+      // gets its ground and its sea (it had none: every open-world cell stood flat on the water)
+      const own = terrariumFromPng(bytes);
+      if (own) return own;
+      const bmp = await createImageBitmap(new Blob([bytes]));
       const w = bmp.width, hh = bmp.height; // close() zeroes these — read dims first
       const cv = makeCanvas(w, hh); // (OffscreenCanvas where there is one: older iOS has none)
       const g = cv.getContext('2d') as OffscreenCanvasRenderingContext2D;
@@ -275,6 +282,65 @@ export function waterLevel(layer: { buf: ArrayBuffer; layout: LayerLayout }, w: 
   }
   const hs = w.ring.map(([x, z]) => heightAt(x, z)).sort((a, b) => a - b);
   return Math.max(0, hs[Math.floor(hs.length * 0.1)] ?? 0);
+}
+
+/** A Terrarium tile's heights straight from its PNG bytes (8-bit RGB or RGBA, not interlaced — what
+ *  Terrarium serves): the zlib stream inflated, each scanline's filter undone, h = R·256 + G + B/256
+ *  − 32768. null for anything else (the canvas path takes it). Pure. */
+export function terrariumFromPng(png: Uint8Array): Float32Array | null {
+  const u32 = (o: number) => ((png[o] << 24) | (png[o + 1] << 16) | (png[o + 2] << 8) | png[o + 3]) >>> 0;
+  if (png.length < 33 || png[0] !== 0x89 || png[1] !== 0x50 || png[2] !== 0x4e || png[3] !== 0x47) return null;
+  let w = 0, h = 0, bpp = 0;
+  const idat: Uint8Array[] = [];
+  let len = 0;
+  for (let o = 8; o + 8 <= png.length;) {
+    const n = u32(o), type = String.fromCharCode(png[o + 4], png[o + 5], png[o + 6], png[o + 7]);
+    const body = png.subarray(o + 8, o + 8 + n);
+    if (type === 'IHDR') {
+      w = u32(o + 8);
+      h = u32(o + 12);
+      const depth = body[8], color = body[9], interlace = body[12];
+      if (depth !== 8 || interlace !== 0 || (color !== 2 && color !== 6)) return null;
+      bpp = color === 6 ? 4 : 3;
+    } else if (type === 'IDAT') { idat.push(body); len += n; }
+    else if (type === 'IEND') break;
+    o += 12 + n;
+  }
+  if (w !== 256 || h !== 256 || !bpp || !idat.length) return null;
+  const z = new Uint8Array(len);
+  for (let k = 0, at = 0; k < idat.length; at += idat[k].length, k++) z.set(idat[k], at);
+  let raw: Uint8Array;
+  try { raw = unzlibSync(z); } catch { return null; }
+  const stride = w * bpp;
+  if (raw.length < h * (stride + 1)) return null;
+  const px = new Uint8Array(h * stride);
+  for (let y = 0; y < h; y++) {
+    const f = raw[y * (stride + 1)], src = y * (stride + 1) + 1, row = y * stride, up = row - stride;
+    for (let i = 0; i < stride; i++) {
+      const a = i >= bpp ? px[row + i - bpp] : 0, b = y ? px[up + i] : 0, c = y && i >= bpp ? px[up + i - bpp] : 0;
+      let v = raw[src + i];
+      if (f === 1) v += a;
+      else if (f === 2) v += b;
+      else if (f === 3) v += (a + b) >> 1;
+      else if (f === 4) { const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c); v += pa <= pb && pa <= pc ? a : pb <= pc ? b : c; }
+      else if (f !== 0) return null;
+      px[row + i] = v & 255;
+    }
+  }
+  const out = new Float32Array(w * h);
+  for (let k = 0; k < w * h; k++) out[k] = px[k * bpp] * 256 + px[k * bpp + 1] + px[k * bpp + 2] / 256 - 32768;
+  return out;
+}
+
+/** A cell's ground grid with no elevation to go on (the DEM late, failed or offline) — the same
+ *  lattice fetchDem lays, at the height `at` gives (the resident stand-in): somewhere to press the
+ *  map's water into, so a cell out on the bay is the bay, not a lawn at 3 m. */
+export function flatDem(cellBox: Box, at: (x: number, z: number) => number, pitch = PITCH): DemGrid {
+  const OVER = 96, box = { x0: cellBox.x0 - OVER, z0: cellBox.z0 - OVER, x1: cellBox.x1 + OVER, z1: cellBox.z1 + OVER };
+  const nx = Math.round((box.x1 - box.x0) / pitch), nz = Math.round((box.z1 - box.z0) / pitch);
+  const heights = new Float32Array(nx * nz);
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) heights[j * nx + i] = Math.max(1, at(box.x0 + (i + 0.5) * pitch, box.z0 + (j + 0.5) * pitch));
+  return { heights, x0: box.x0, z0: box.z0, pitch, nx, nz };
 }
 
 export function demLayer(d: DemGrid): { buf: ArrayBuffer; layout: LayerLayout } {

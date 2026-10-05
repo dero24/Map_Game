@@ -46,7 +46,7 @@ describe('teleport landing', () => {
     expect(openGround(w, 60, 30)).toEqual([60, 30]);
   });
 
-  it('puts you 2.2 m inside the nearest door whose outside is open, never one onto a wall', () => {
+  it('puts you just outside the nearest door whose outside is open, facing it — never inside, never at one onto a wall', () => {
     const w = new WalkWorld(terrain, bounds);
     // a house (x 100..110, z −5..5) with its door in the south wall, facing +z
     w.addPolygon([[100, -5], [110, -5], [110, 5], [100, 5]], { floor0: 0.5, floorH: 3, levels: 1 }, { x: 105, z: 5, w: 1 });
@@ -54,8 +54,10 @@ describe('teleport landing', () => {
     const at = landingAt(w, [door], 104, 20);
     expect(at.door).toBe(door);
     expect(at.x).toBeCloseTo(105, 6);
-    expect(at.z).toBeCloseTo(2.8, 6);
+    expect(at.z).toBeCloseTo(6.4 + 1.2, 6); // (1.2 m past the foot of its steps)
     expect(at.y).toBe(0.5);
+    expect(w.buildingAt(at.x, at.z)).toBe(-1); // outside
+    expect(-Math.sin(at.yaw!) * (105 - at.x) + -Math.cos(at.yaw!) * (5 - at.z)).toBeGreaterThan(0); // facing the door
     // a wall across its outside: that door is skipped
     w.addWall([100, 5.9], [110, 5.9]);
     const shut = landingAt(w, [door], 104, 20);

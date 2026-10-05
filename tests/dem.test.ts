@@ -124,3 +124,79 @@ describe('waterPatch below the datum', () => {
     expect(L.flags[0] & 1).toBe(0);
   });
 });
+
+// Terrarium straight from its PNG (no canvas: every device the same heights; an old iPhone's worker,
+// which has no OffscreenCanvas, reads them too). A tiny encoder here writes each scanline with a
+// different filter, so all five are undone.
+import { terrariumFromPng, flatDem } from '../src/world/dem';
+import { zlibSync } from 'three/examples/jsm/libs/fflate.module.js';
+describe('terrariumFromPng', () => {
+  const crcT = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = (b: Uint8Array) => { let c = 0xffffffff; for (const x of b) c = crcT[(c ^ x) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (type: string, data: Uint8Array) => {
+    const out = new Uint8Array(12 + data.length), dv = new DataView(out.buffer);
+    dv.setUint32(0, data.length);
+    for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+    out.set(data, 8);
+    dv.setUint32(8 + data.length, crc(out.subarray(4, 8 + data.length)));
+    return out;
+  };
+  const encode = (heights: Float32Array, bpp: 3 | 4) => {
+    const w = 256, stride = w * bpp, px = new Uint8Array(w * w * bpp);
+    heights.forEach((m, k) => { const v = Math.round((m + 32768) * 256); px.set([v >> 16, (v >> 8) & 255, v & 255], k * bpp); if (bpp === 4) px[k * bpp + 3] = 255; });
+    const raw = new Uint8Array(w * (stride + 1));
+    for (let y = 0; y < w; y++) {
+      const f = y % 5, row = y * stride;
+      raw[y * (stride + 1)] = f;
+      for (let i = 0; i < stride; i++) {
+        const a = i >= bpp ? px[row + i - bpp] : 0, b = y ? px[row - stride + i] : 0, c = y && i >= bpp ? px[row - stride + i - bpp] : 0;
+        const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+        const pred = f === 0 ? 0 : f === 1 ? a : f === 2 ? b : f === 3 ? (a + b) >> 1 : pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+        raw[y * (stride + 1) + 1 + i] = (px[row + i] - pred) & 255;
+      }
+    }
+    const ihdr = new Uint8Array(13), dv = new DataView(ihdr.buffer);
+    dv.setUint32(0, w); dv.setUint32(4, w);
+    ihdr.set([8, bpp === 4 ? 6 : 2, 0, 0, 0], 8);
+    const z = zlibSync(raw), half = z.length >> 1; // (two IDATs: a stream split across chunks)
+    const parts = [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', z.subarray(0, half)), chunk('IDAT', z.subarray(half)), chunk('IEND', new Uint8Array(0))];
+    const out = new Uint8Array(parts.reduce((s, q) => s + q.length, 0));
+    parts.reduce((at, q) => (out.set(q, at), at + q.length), 0);
+    return out;
+  };
+  // a coast: sea floor to −120 m, a shore, hills to 1,400 m (a basin at 4,392 m for R's high byte)
+  const field = () => Float32Array.from({ length: 256 * 256 }, (_, k) => { const x = k % 256, y = (k / 256) | 0; return Math.round((-120 + x * 6 + Math.sin(y * 0.2) * 80 + (x > 200 && y < 20 ? 3000 : 0)) * 256) / 256; });
+
+  it('reads the heights exactly, RGB or RGBA, every filter', () => {
+    const f = field();
+    for (const bpp of [3, 4] as const) {
+      const got = terrariumFromPng(encode(f, bpp))!;
+      expect(got).not.toBeNull();
+      let worst = 0;
+      for (let k = 0; k < f.length; k++) worst = Math.max(worst, Math.abs(got[k] - f[k]));
+      expect(worst).toBeLessThan(1e-3);
+    }
+  });
+
+  it('hands anything else to the canvas path (null), never a wrong grid', () => {
+    expect(terrariumFromPng(new Uint8Array([1, 2, 3]))).toBeNull();
+    const png = encode(field(), 3);
+    png[8 + 8 + 8] = 16; // (IHDR bit depth → 16)
+    expect(terrariumFromPng(png)).toBeNull();
+  });
+});
+
+describe('flatDem: somewhere for the sea to go when the ground is late', () => {
+  it("lays the fetchDem lattice at the stand-in height, and the map's sea presses into it", () => {
+    const box = { x0: 0, z0: 0, x1: 1024, z1: 1024 };
+    const g = flatDem(box, () => 3, 16);
+    expect(g.nx).toBe(Math.round((1024 + 192) / 16));
+    expect(g.x0).toBe(-96);
+    expect(Math.min(...g.heights)).toBe(3);
+    const sea = waterPatch(demLayer(g), [{ ring: [[-100, -100], [600, -100], [600, 1200], [-100, 1200]] }], true);
+    const L = new TerrainLayer(sea.buf, sea.layout);
+    expect(L.heightAt(200, 500)).toBeLessThan(0); // (out on the water: below the datum)
+    expect(L.sdfAt(200, 500)).toBeLessThan(0);
+    expect(L.heightAt(900, 500)).toBeCloseTo(3, 0); // (the land stays land)
+  });
+});

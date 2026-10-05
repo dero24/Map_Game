@@ -19,8 +19,14 @@ docs below; read a topic doc only when the task touches that subsystem.
 | Freeze hunt | `node tools/soak.mjs --region=<id> --seconds=120` |
 | Visual check | `node tools/capture.mjs --shots=<names> [--region=<id>]` → `shots/<region>-montage.jpg` |
 | Phone check | `npm run build && node tools/mobile-check.mjs --device=pixel7\|iphone` — Pages-like serve, device emulation, shader limits audit, boot report (`docs/agent/debugging.md`) |
+| Phone HUD audit | `npm run build && node tools/hud-audit.mjs` — the touch HUD's boxes on 10 phones × both ways × 5 states, no overlaps (`docs/agent/debugging.md`) |
 | Tile worker (dev) | `cd worker && npx wrangler dev` (ports 8787–8789) |
 | Region gate | `npm run verify:region -- --region=<id> [--soak=90] [--shots=a,b]` |
+| Lower-48 audit | `node tools/audit48.mjs [--towns=a,b] [--devices=desktop,phone]` → `shots/audit48/<town>-montage.jpg`, `summary.md` (`docs/earth/AUDIT_48.md`) |
+| Must-load towns | `node tools/must-load.mjs --live` (the deployed service answers every must-load town) · `--fixtures` (re-make `tests/fixtures/towns/` from an extract pack) |
+| Our OSM extract | `node scripts/osm-extract.mjs --pbf=<us-latest.osm.pbf> --ts=<state.txt timestamp>` → `node scripts/osm-upload.mjs --pack=… --poly=<us.poly>` · prove it: `node tools/osm-compare.mjs` (`docs/agent/streaming.md`) |
+| Real-world comparison | `node tools/real-spots.mjs [--states=NJ,NY]` (Mapillary spots, `.env` token) → `node tools/real-compare.mjs [--states=…]` → `shots/real/<ST>-montage.jpg`, scores in `tools/real-scores.json` (photos stay in git-ignored `raw/mapillary/`) |
+| Place index | `node scripts/build-places.mjs [--fetch]` → upload `raw/places/out/*` to R2 `places/v<N>/` (`docs/agent/gameplay.md` "geo.ts") |
 
 ## Hard constraints
 
@@ -61,6 +67,11 @@ Context low? Wrap early — write state before polish. A clean handoff beats a r
 
 ## Topic docs — read when the task touches that area
 
+- `docs/earth/HANDOFF.md` — **picking up from another session? read it first**: where the work stands, what comes next and in what order (the lower 48 alive: canopy layer, ecoregions, the flora and wildlife packages), how to check it, Robby's rules
+
+- `docs/GAMEPLAY_VISION.md` — **read before any gameplay work**: the world blooms from pencil into colour as you look, pencil means collectable (tap to paint it), regional rares as data, real travel (van, yacht, plane, balloon), your own private layer of the world, one home behind every door; §17 sets the order — **foundations first** (Tier 0: every tile loads, commercial-safe services; Tier 1: looks right everywhere), the game after. Track each in `feature_list.json`. (`docs/GAME_DESIGN.md` is superseded, apart from learning from life, the Almanac and the summoning solvers)
+
+- `docs/REGIONAL_LIFE.md` — **read before any flora, fauna or greenery work**: the 16 regions, what the foundry has and lacks, how greenery is measured (the green spots), the build order; the reference per region (plants layer by layer, wildlife with how common, signatures, range limits) is `docs/regional-life/`
 - `docs/agent/world-data.md` — regions, REGIONS spec, fetch/merge/bake, detail zone, `?at=` deep links, NAIP roof imagery
 - `docs/agent/streaming.md` — tile stream + margin semantics, tile worker + BuiltTile packing, terrain packs, real-lite worker (wrangler/R2/virtual manifests), DEM, LiDAR measure pipeline
 - `docs/agent/rendering.md` — styles/recipe, shader + material conventions, ground paint, grass

@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { GLSL_NOISE, U } from './shared';
 import { GLSL_PACK_DEPTH, unpackDepth } from './seen';
+import { GLSL_NIGHT_GRADE, NIGHT_GRADE } from './nightLight';
 
 export const postParams = {
   enabled: true,
@@ -28,18 +29,22 @@ export const postParams = {
   vignette: 0.45,
   boilFps: 0,
   nightWash: 0.5,
-  sketch: true, // paint as you explore: unvisited places are a paler first wash that deepens as you arrive
-  // …all the way out (a developer switch, off for now): every place you haven't been — the far
-  // distance too — is a pencil underdrawing on paper, and walking paints it in round you
+  // sketch mode (off by default): every place you haven't been, to the horizon, is a pencil
+  // underdrawing on paper; walking paints it in round you and a photo paints what it frames. Off,
+  // the world is simply painted — the map (mapview.ts) is where what you've explored shows.
+  // (There used to be a lighter 'paint as you explore' that laid a pale first wash over the
+  // unwalked ground near you: it read as fog, and it's gone.)
   sketchFar: false,
   sketchReach: 45, // m painted round you on foot (a plane paints wider)
+  photoReach: 22000, // m out to which a photo paints what it frames (the far sketch; at most SEEN_REACH)
   paperColor: '#f8f4ea',
   inkColor: '#2e2a3a',
   // resolution: the paint (brush) pass runs at this fraction of the frame (0.5 = the old half-res
   // wash; higher = crisper strokes, same brush size on screen); hiDpi renders at the screen's own
-  // pixel density (capped 1.5×) instead of CSS pixels
+  // pixel density (capped at dpiMax: 1.5× on a desktop, 2× on a phone) instead of CSS pixels
   paintDetail: 0.82,
   hiDpi: true,
+  dpiMax: 1.5,
   // colour grade: split-tone shadows/lights toward two hues (the vivid painted-sci-fi look) and a
   // vibrance lift that saturates the dull colours more than the bright ones
   grade: 0.2,
@@ -244,7 +249,11 @@ export class WatercolorPost {
       uniform float uNear, uFar, uTime, uBoil;
       uniform float uWobble, uEdgeDark, uTurb, uGran, uPaper, uInk, uInkDist, uGlow, uVignette, uSat, uNightWash, uNight, uVibrance, uGrade;
       uniform vec3 uPaperColor, uInkColor, uNightTint, uWarm, uGradeShadow, uGradeLight;
+      uniform vec4 uNightGrade;
+      uniform vec2 uNightWarm;
+      uniform vec3 uNightFade;
       uniform float uGolden, uRaw;
+      ${GLSL_NIGHT_GRADE}
       uniform sampler2D tExplore, tExploreFar;
       uniform vec4 uExploreBox, uExploreFarBox;
       uniform float uSketch, uSketchFar, uCrisp, uSoftGlow, uClarity, uContrast;
@@ -290,6 +299,10 @@ export class WatercolorPost {
         vec3 sc = tonemap(texture2D(tScene, uv + wob * 0.5).rgb);
         float hi = smoothstep(0.08, 0.3, dot(sc - c, vec3(0.33))) * smoothstep(0.5, 0.85, dot(sc, vec3(0.33)));
         c = mix(c, sc, hi);
+        // the far skyline's towers (alpha 0.5, farSkyline.ts; no depth: the near world's is all there
+        // is) are a stroke a few pixels wide on the horizon — the brush would smear them into the sky
+        float farA = texture2D(tScene, uv).a;
+        c = mix(c, sc, (1.0 - smoothstep(0.06, 0.14, abs(farA - 0.5))) * step(0.99999, texture2D(tDepth, uv).r));
         // the cleaner looks lay the unbrushed frame back over the paint: crisp edges, flat colour
         c = mix(c, sc, uCrisp);
         // clarity: the paint's local contrast lifted against its own small blur (clean, crisp forms)
@@ -328,15 +341,13 @@ export class WatercolorPost {
         float dL = (L0 - L0 * L0) * (turb * uTurb * 2.2 + (0.55 - p) * uGran * 1.6);
         c *= clamp((L0 - dL) / max(L0, 1e-3), 0.0, 2.0);
 
-        // paint as you explore: close by, where you haven't walked yet, the colour is still a first,
-        // paler wash (a little desaturated, lifted toward the paper); it deepens with a soft wet
-        // edge as you arrive. Subtle on purpose — the world always reads as painted, never a sketch.
+        // sketch mode: where you haven't been, at any distance, the page is still a pencil
+        // underdrawing; colour blooms in round you as you walk, a wet noisy edge with pigment pooled
+        // at its rim. The sky and the far layer (horizon, far skyline) stay painted. Out of sketch
+        // mode the world is simply painted, near and far.
         float sketchAmt = 0.0;
-        if (uSketch > 0.001 && geo && uSketchFar > 0.5) {
-          // …all the way out (a developer switch): where you haven't been, at any distance, the page
-          // is still a pencil underdrawing; colour blooms in round you as you walk, a wet noisy edge
-          // with pigment pooled at its rim. The sky and the far layer (horizon, far skyline) stay
-          // painted. Past the fine window (4 km, 8 m) the far one (~32 km, 64 m) says what's painted
+        if (uSketch > 0.001 && geo) {
+          // Past the fine window (4 km, 8 m) the far one (~32 km, 64 m) says what's painted
           // (R what a photo framed, G the share you walked), blended over the fine one's last
           // ~200 m; inside it, what a photo painted far off shows too.
           vec2 eu = (wp.xz - uExploreBox.xy) * uExploreBox.zw;
@@ -346,13 +357,25 @@ export class WatercolorPost {
           vec2 ef = min(fe.x, fe.y) > 0.0 ? texture2D(tExploreFar, fu).rg : vec2(0.0);
           float e = max(ef.r, ef.g);
           if (inFine > 0.0) e = mix(e, max(texture2D(tExplore, eu).r, ef.r), inFine);
+          // Painting in, in two passes like a painter's: a pale first wash runs over the pencil, then
+          // the pigment deepens into it. The edge is ragged by the paper (fbm) and by brush strokes
+          // (long, thin noise laid one way); none of that noise reaches bare paper (e = 0) or finished
+          // paint (e = 1), so a painted place is always wholly painted.
           float n = fbm(wp.xz * 0.03) - 0.5 + (vnoise(wp.xz * 0.35 + wp.y) - 0.5) * 0.3;
-          float rev = smoothstep(0.34, 0.66, e + n * 0.5);
-          sketchAmt = (1.0 - rev) * uSketch;
+          vec2 sd = vec2(0.8, 0.6);
+          float stroke = vnoise(vec2(dot(wp.xz, sd) * 0.09, dot(wp.xz, vec2(-sd.y, sd.x)) * 0.9 + wp.y * 0.3)) - 0.5;
+          float v = e + (n * 0.75 + stroke * 0.35) * sin(3.14159 * clamp(e, 0.0, 1.0));
+          float wash = smoothstep(0.06, 0.42, v) * uSketch;
+          float rev = smoothstep(0.36, 0.88, v);
+          sketchAmt = 1.0 - wash;
+          float Lw = dot(c, vec3(0.299, 0.587, 0.114));
+          vec3 firstWash = mix(mix(vec3(Lw), c, 0.5), vec3(0.965, 0.95, 0.915), 0.22);
           float rim = rev * (1.0 - rev) * 4.0 * uSketch;
-          c = mix(c, c * c * 1.15, rim * 0.35);
+          vec3 wet = mix(c, c * c * 1.15, rim * 0.35); // pigment pooled at the wet edge
+          vec3 c0 = c; // (the pencil's tones come from the finished colour)
+          c = mix(firstWash, wet, rev);
           if (sketchAmt > 0.001) {
-            float L = dot(c, vec3(0.299, 0.587, 0.114));
+            float L = Lw;
             float tone = 1.0 - smoothstep(0.12, 0.92, L);
             vec2 hq = nuv * uRes.y; // view-anchored, like the paper noise
             float g = hatch(hq, 0.8, 6.5, 1.1) * smoothstep(0.3, 0.5, tone);
@@ -362,25 +385,8 @@ export class WatercolorPost {
             g *= (0.55 + 0.45 * p) * (1.0 - 0.55 * smoothstep(250.0, 1400.0, linZ(dS)));
             vec3 graphite = vec3(0.33, 0.32, 0.37);
             vec3 sk = mix(vec3(0.965, 0.95, 0.915), graphite, g * 0.55 + tone * 0.1);
-            sk = mix(sk, c, 0.1); // the faintest colour note, like a first wash
+            sk = mix(sk, c0, 0.1); // the faintest colour note, like a first wash
             c = mix(c, sk, sketchAmt);
-          }
-        } else if (uSketch > 0.001 && geo) {
-          vec2 eu = (wp.xz - uExploreBox.xy) * uExploreBox.zw;
-          float e = (eu.x > 0.0 && eu.y > 0.0 && eu.x < 1.0 && eu.y < 1.0) ? texture2D(tExplore, eu).r : 0.0;
-          float n = fbm(wp.xz * 0.03) - 0.5;
-          float rev = smoothstep(0.3, 0.7, e + n * 0.35);
-          // Only near you: the bloom is the moment of arriving, so the first wash lives in a ring
-          // just past your reveal radius and fades out by ~160 m. Far away the world is always
-          // finished watercolour (a paler horizon read as "not loaded"); the atlas map is where
-          // unvisited stays pencil.
-          float camD = length(wp - (uCamWorld[3].xyz + uWorldOff));
-          sketchAmt = (1.0 - rev) * uSketch * (1.0 - smoothstep(60.0, 160.0, camD));
-          if (sketchAmt > 0.001) {
-            float L = dot(c, vec3(0.299, 0.587, 0.114));
-            vec3 first = mix(vec3(L), c, 0.62);             // a first wash: less saturated…
-            first = mix(first, vec3(0.965, 0.95, 0.915), 0.14); // …and lighter, more paper showing
-            c = mix(c, first, sketchAmt);
           }
         }
 
@@ -486,11 +492,10 @@ export class WatercolorPost {
           c = 1.0 - (1.0 - c) * (1.0 - hiG * uSoftGlow * 0.5);
         }
 
-        // glazes: indigo by night, a whisper of warm sienna at golden hour
-        // warm light (windows, lamps) is left out of the night glaze, like reserved paper
-        // only genuinely bright warm light (windows, lamp hearts) is exempt — a dim amber street keeps its indigo night
-        float warmth = smoothstep(0.05, 0.3, c.r - c.b) * smoothstep(0.4, 0.75, dot(c, vec3(0.33)));
-        c = mix(c, c * uNightTint, uNightWash * uNight * (1.0 - warmth * 0.85));
+        // glazes: indigo by night (nightLight.ts: one cool wash over all but the lights — a lamp's
+        // heart, a lit window — which are left out of it like reserved paper, a pool's glow handing
+        // over to the night through a warm grey), a whisper of warm sienna at golden hour
+        c = nightGrade(c, uNight, uNightWash);
         c = mix(c, c * uWarm, uGolden * 0.25);
 
         // paper: tint, tooth, embossed light
@@ -522,7 +527,9 @@ export class WatercolorPost {
         tExplore: U.uExplore, uExploreBox: U.uExploreBox, tExploreFar: U.uExploreFar, uExploreFarBox: U.uExploreFarBox, uSketch: { value: 0 }, uSketchFar: { value: 0 }, uCrisp: { value: 0 }, uSoftGlow: { value: 0 }, uClarity: { value: 0 }, uContrast: { value: 0 },
         tGhost: { value: null }, tGhostDepth: { value: null }, uGhost: U.uGhost, uBrush: U.uBrush, uRipple: U.uRipple,
         uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() }, uWorldOff: U.uWorldOffset,
-        uNightTint: { value: new THREE.Color(0.55, 0.62, 1.0) }, uWarm: { value: new THREE.Color(1.08, 0.97, 0.86) },
+        uNightTint: { value: new THREE.Vector3(...NIGHT_GRADE.tint) }, uWarm: { value: new THREE.Color(1.08, 0.97, 0.86) },
+        uNightGrade: { value: new THREE.Vector4(NIGHT_GRADE.hue, NIGHT_GRADE.deep, ...NIGHT_GRADE.reserve) }, uNightWarm: { value: new THREE.Vector2(...NIGHT_GRADE.warm) },
+        uNightFade: { value: new THREE.Vector3(NIGHT_GRADE.fade, ...NIGHT_GRADE.fadeAt) },
         uVibrance: { value: 0 }, uGrade: { value: 0 }, uGradeShadow: { value: new THREE.Color() }, uGradeLight: { value: new THREE.Color() },
       },
     );
@@ -540,7 +547,7 @@ export class WatercolorPost {
   setSize(w: number, h: number) {
     this.w = w;
     this.h = h;
-    const s = postParams.renderScale * (postParams.hiDpi ? Math.min(1.5, Math.max(1, globalThis.devicePixelRatio || 1)) : 1);
+    const s = postParams.renderScale * (postParams.hiDpi ? Math.min(postParams.dpiMax || 1.5, Math.max(1, globalThis.devicePixelRatio || 1)) : 1);
     const sw = Math.max(4, Math.round(w * s)), sh = Math.max(4, Math.round(h * s));
     this.sceneRT.setSize(sw, sh);
     U.uViewport.value.set(sw, sh);
@@ -682,7 +689,7 @@ export class WatercolorPost {
     c.uGolden.value = golden;
     c.uExposure.value = P.exposure;
     c.uRaw.value = raw ? 1 : 0;
-    c.uSketch.value = P.sketch && U.uExplore.value ? 1 : 0;
+    c.uSketch.value = P.sketchFar && U.uExplore.value ? 1 : 0; // (sketch mode, once the explore record is up)
     c.uSketchFar.value = P.sketchFar ? 1 : 0;
     c.uCrisp.value = P.crisp;
     c.uSoftGlow.value = P.softGlow;

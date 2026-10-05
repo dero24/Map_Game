@@ -101,9 +101,9 @@ bevels and one or two signature details per object.
 | 2.5 | House near detail: door hardware, house numbers (`addr:housenumber`), gutters and downspouts, AC units, hose reels, window boxes, porch furniture, flags, wreaths | ⬜ P1 | new `facade-kit` family, keyed by style and region |
 | 2.6 | Windows: bigger house sash (0.9×1.5), paired mulled units, fewer blanks, curtains and blinds in the glass | 🟡 P1 | buildings.ts |
 | 2.7 | Storefronts: per-building sign fascia / solid trade-colour awning / rare stripes; signage from OSM `name`; displays lifted into the glass; café terraces with seated guests; curbside parking | 🟡 P1 | wares by `shop=*` still generic |
-| 2.8 | Lot dressing for every house: driveway, parked car, hedge or fence, walk gap, trash cans on collection day | 🟡 P0 | mailboxes, drives + cars, hedges, picket fences ✅; trash day ⬜ |
+| 2.8 | Lot dressing for every house: driveway, parked car, hedge or fence, walk gap, trash cans on collection day | 🟡 P0 | mailboxes, drives + cars, hedges, picket fences ✅; trash and recycling carts at the kerb on the round's collection day, porch chairs, flags, hoops, AC units, grills (micro layer) ✅ |
 | 2.9 | Fences and gates family: picket, split-rail, chain link, privacy, adobe wall, stone wall (by region) | 🟡 P1 | pickets only in clapboard country; rendered yard walls + wrought iron in adobe/stucco towns ✅; mapped fences by OSM `fence_type` (iron railing, chain-link, timber), untyped in dense cores = iron ✅ (p) |
-| 2.10 | Street furniture: benches, bins, bike racks, hydrants, parking meters, bus shelters, newspaper boxes | 🟡 P1 | benches, poles, lamps; OSM hydrants, traffic-signal masts, subway entrances ✅; main-street acorn posts ✅; steel masts in dense cores ✅ |
+| 2.10 | Street furniture: benches, bins, bike racks, hydrants, parking meters, bus shelters, newspaper boxes | 🟡 P1 | benches, poles, lamps; OSM hydrants, traffic-signal masts, subway entrances ✅; main-street acorn posts ✅; steel masts in dense cores ✅; newspaper boxes, A-frames, planters, kerb pedestals; OSM picnic tables, boards, cabinets, recycling, vending, clocks (micro layer) ✅ |
 | 2.11 | Parking lots: stall striping, cars at ~60% occupancy, cart corrals | ⬜ P0 | fixes the aerial "ghost lots" |
 | 2.12a | Sand surface: shore-parallel ripples, wrack line, footprint stipple (from the shore distance field) | ✅ | ground.ts |
 | 2.12b | Beach props: dune fence, dune grass (not lawn), shells and sea glass, lifeguard stands everywhere | 🟡 P0 | umbrellas, towels, stands ✅ |
@@ -116,7 +116,7 @@ bevels and one or two signature details per object.
 | 2.17 | Trees 3: per-branch wind, leaf flutter, fall colour, bare winter form | ⬜ P2 | |
 | 2.18 | Shrubs and groundcover by region: sagebrush, creosote, palmetto, azalea, rhododendron, prairie grasses | 🟡 P1 | plantMix has 12 species |
 | 2.19 | Rocks and minerals by lithology: granite, sandstone, red rock, basalt, limestone, glacial erratics, coquina | 🟡 P1 | rocks exist but are not regional |
-| 2.20 | Water details: buoys, crab-pot floats, channel markers, bridge fenders | ⬜ P2 | |
+| 2.20 | Water details: buoys, crab-pot floats, channel markers, bridge fenders | 🟡 P2 | moorings and pot floats off piers, cleats, dock boxes, life rings; OSM seamarks (nuns, cans, markers) (micro layer) ✅; timber fenders round movable spans' piers (bridges.ts) ✅ |
 | 2.21 | **Furniture (decor) family**: sofa, armchair, bed, tables, chairs, bistro/office chairs, monitor, lamps, café counter, booth, shelves, plants, ceiling fan, storage bench, café set — tested, per-piece vertex budgets | ✅ | `src/assets/decor.ts` |
 
 ## 3. Interiors — P1
@@ -244,7 +244,7 @@ Reference photos + per-place trait tables: `docs/earth/PLACE_REFERENCES.md`. Har
 | P.8 | Urban sidewalk grammar: paved dense blocks + neighbourhoods ✅, tree pits + bins ✅, storefront aprons ✅; sidewalk sheds, newspaper boxes ⬜ | 🟡 | P1 |
 | P.9 | Road width model: carriageway + parking lanes from `width` / `lanes` / `parking:*`; NA town streets park both kerbs; striped lots with cars; a per-car LOD (kerbCars.ts) | ✅ | 2026-09-27 (o) |
 | P.9b | Worn asphalt (cracks, sealed patches) ✅ on streamed streets; lane paint wear, oil stains in parking lanes, manholes ⬜ | 🟡 | P1 |
-| P.9c | Instanced LOD everywhere: the kerbCars manager pattern for driveway cars, trees (impostors past ~300 m), props | ⬜ | P1 |
+| P.9c | Instanced LOD everywhere: the kerbCars manager pattern for driveway cars, trees (impostors past ~300 m), props | 🟡 | P1 — the micro layer's hemi-octahedral impostors (render/impostor.ts) take any foundry piece: the small things ✅; trees, people, the older props ⬜ |
 | P.10 | House cladding by North American subregion (brick South / Midwest, clapboard Northeast, cedar Northwest) | ✅ | styles.ts `naSub` |
 | P.11 | Hydrants / yield signs / kerb paint by state; US-flag banners on main-street lamps in summer | ⬜ | P2 |
 | P.12 | Agave, yucca, saguaro, gravel yards for the desert; mesquite/palo verde foliage tints ✅ | 🟡 | P1 |
@@ -287,7 +287,7 @@ Reference photos + per-place trait tables: `docs/earth/PLACE_REFERENCES.md`. Har
 | R.11 | People variety: dog walkers (dogs on leads), joggers, headphones, bags, strollers, bikes, kids, elderly with canes, couples holding hands, delivery riders | 🟡 (q) dog walkers, joggers, headphones; bags, strollers, bikes, kids, canes, couples next | **P0** |
 | R.12 | More water traffic: boats of every kind in realistic colours and shapes (fishing, sail, kayak, ferry, tug, barge, jet ski), routes on real channels | ⬜ | P1 |
 | R.13 | Cars need detail: headlights / tail lights (lit at night), grilles, mirrors, window frames, plates, varied wheels | ⬜ | P1 |
-| R.14 | Bridges: decks with real thickness, piers, railings, trusses / arches by type (OSM `bridge:structure`), approach ramps | ⬜ | P1 |
+| R.14 | Bridges: decks with real thickness, piers, railings, trusses / arches by type (OSM `bridge:structure`), approach ramps | ✅ | P1 — 2026-10-01 (bridges.ts): one profile per bridge across tiles, level over the channel, landing on the approach streets; slab, girders, parapets, piers, abutments; bascule / lift / swing spans with tender houses or towers; truss, arch, suspension, cable-stayed by tag. Footbridges, bridge lamps, traffic gates ⬜ |
 | R.15 | Crosswalks where people stop for cars (they walk through cars now) and cars stop for people on the walk phase | ✅ (q) kerb → painted crosswalk → kerb, the walk phase / real gaps, cars wait behind the crosswalk — 0 walker-in-car ticks in the busy grid | **P0** |
 | R.16 | Seattle's hills: roads broken on steep terrain → roads graded along their length (profile smoothing), terrain cut/fill under them, retaining walls where the grade breaks | 🟡 (t) graded like a road engineer would: smoothed profiles, a hard grade per class (24% residential … 8% motorway), junctions a short block apart meet halfway, every junction a plateau, nearest-point targets; retaining walls on cuts > 0.6 m (gaps for crossings, steps, driveways, buildings). Audit: downtown 2,425 ways, 47 over 25% — seams with loading cells, Colman Dock's ramps, I-5's trench and lids. Next: trenches, lids and portals (I-5, SR 99). (u) portals: a headwall round a dark mouth where a street goes under; trenches and lids still open | **P0** |
 | R.17 | NYC: towers disappear when flying at them (skyline hand-off to detail tiles) — still seen | ✅ (r) skyline stood on a surface-model DEM (towers 30–40 m too tall until their tile swapped in); towers straddling a cell edge lost their shaft; stale LiDAR shrank new towers — all fixed, tile cache v15 | P0 |

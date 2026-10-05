@@ -72,7 +72,64 @@ const reachable = (w: WalkWorld, d: Door) => {
   return false;
 };
 
+/** Can the walker get from the street's sidewalk (the line z = `z0`, x0…x1) to the door's rooms, by
+ *  its own moves over the ground round the lot (35 cm steps sliding on walls, climbing up to 75 cm
+ *  a step)? Returns how near to the door it got (0: in). */
+const fromStreet = (w: WalkWorld, d: Door, box: { x0: number; z0: number; x1: number; z1: number }, z0: number) => {
+  const S = 0.35, nx = Math.ceil((box.x1 - box.x0) / S), nz = Math.ceil((box.z1 - box.z0) / S);
+  const home = w.buildingAt(d.wx - d.nx * 0.7, d.wz - d.nz * 0.7), feet = new Map<number, number>(), q: [number, number][] = [];
+  const at = (i: number, j: number) => [box.x0 + i * S, box.z0 + j * S];
+  const j0 = Math.round((z0 - box.z0) / S);
+  for (let i = 0; i <= nx; i++) { const [x, z] = at(i, j0); if (!w.blocked(x, z, 0.32)) { feet.set(i * 10000 + j0, w.surfaceAt(x, z, 1.5)); q.push([i, j0]); } }
+  let nearest = Infinity;
+  for (let h = 0; h < q.length; h++) {
+    const [i, j] = q[h], f0 = feet.get(i * 10000 + j)!, [x, z] = at(i, j);
+    nearest = Math.min(nearest, Math.hypot(x - d.wx, z - d.wz));
+    if (home >= 0 && w.buildingAt(x, z) === home && (x - d.wx) * d.nx + (z - d.wz) * d.nz < -0.5) return 0;
+    for (const [di, dj] of [[0, -1], [1, 0], [-1, 0], [0, 1]]) {
+      const ni = i + di, nj = j + dj, k = ni * 10000 + nj;
+      if (ni < 0 || nj < 0 || ni > nx || nj > nz || feet.has(k)) continue;
+      const [bx, bz] = at(ni, nj), [mx, mz] = w.move(x, z, bx - x, bz - z, 0.32, f0);
+      if (Math.abs(mx - bx) + Math.abs(mz - bz) > 0.03) continue;
+      const f1 = w.surfaceAt(bx, bz, f0);
+      if (f1 - f0 > 0.75) continue;
+      feet.set(k, f1);
+      q.push([ni, nj]);
+    }
+  }
+  return nearest;
+};
+
 describe("a raised house's stair stands in the open, and you can climb it to the door", () => {
+  it('a lot with no room for a stair at the street wall: the door goes round to a wall with room, and you can get to it from the street', async () => {
+    // neighbours 50 cm off both sides, a garage 2.3 m in front of the street wall (the street is
+    // Ocean Ave, z = 132): along the wall, round the side, a switchback and straight out all run
+    // into something; the back yard is open
+    const A = { r: rect(100, 100, 106, 114), h: 9, k: 'house', roof: 'gable', s: 3, mh: 3 };
+    const east = { r: rect(106.5, 100, 114, 114), h: 8, k: 'house', roof: 'gable', s: 4 }, west = { r: rect(92, 100, 99.5, 114), h: 8, k: 'house', roof: 'gable', s: 5 };
+    const garage = { r: rect(97, 116.3, 109, 121), h: 3, k: 'shed', roof: 'flat', s: 8 };
+    const isA = (f: { ring: [number, number][] }) => f.ring.some(([x]) => Math.abs(x - 100) < 0.3) && f.ring.some(([x]) => Math.abs(x - 106) < 0.3);
+    const area = { x0: 75, z0: 85, x1: 131, z1: 131 };
+    {
+      const { t, w } = await mount(tileOf([A, east, west, garage]));
+      const fa = t.fps.find(isA)!;
+      expect(fa.raise).toBeGreaterThan(2);
+      expect(fa.door !== undefined).toBe(true);
+      const d = t.doors[fa.door!];
+      expect(d.nz).toBeLessThan(-0.9); // (round the back: the yard is open)
+      expect(fromStreet(w, d, area, 130)).toBe(0);
+      for (const pd of t.decks) for (const [x, z] of unpackDeck(pd).pts) for (const n of [east, west, garage]) expect(pip(x, z, n.r)).toBe(false);
+    }
+    // …and with room in front (no garage), the door stays on the street wall
+    {
+      const { t, w } = await mount(tileOf([A, east, west]));
+      const d = t.doors[t.fps.find(isA)!.door!];
+      expect(d.nz).toBeGreaterThan(0.9);
+      expect(fromStreet(w, d, area, 130)).toBe(0);
+    }
+  });
+
+
   it('between two close neighbours: the stair goes where there is room (never inside the house next door)', async () => {
     const A = { r: rect(100, 100, 108, 114), h: 9, k: 'house', roof: 'gable', s: 3, mh: 3 };
     const east = { r: rect(108.5, 100, 116, 114), h: 8, k: 'house', roof: 'gable', s: 4 }, west = { r: rect(92, 100, 99.5, 114), h: 8, k: 'house', roof: 'gable', s: 5 };

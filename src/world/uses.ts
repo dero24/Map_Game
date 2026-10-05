@@ -51,3 +51,43 @@ export function useOf(name?: string, tag?: string): Use {
 }
 /** Places people sit outside of when the weather allows. */
 export const terraceUse = (u: Use) => u === 'cafe' || u === 'restaurant' || u === 'bar';
+
+// What a public building is inside (docs/INTERIORS_PLAN.md Slice 4): the archetypes whose rooms a
+// visitor recognises — a supermarket's aisles and checkouts, a hotel's corridors of rooms, a
+// school's classrooms, a library's stacks, a bank's counter. Finer than `useOf` (whose coarse uses
+// the terraces and shop windows keep): null when the building's data doesn't say.
+export type Place = 'supermarket' | 'hotel' | 'school' | 'library' | 'bank' | 'post' | 'pharmacy' | 'gym' | 'mosque';
+const PLACE_TAG: Record<string, Place> = {
+  supermarket: 'supermarket', hypermarket: 'supermarket', wholesale: 'supermarket',
+  hotel: 'hotel', motel: 'hotel', hostel: 'hotel', guest_house: 'hotel', apartment_hotel: 'hotel',
+  school: 'school', kindergarten: 'school', college: 'school', university: 'school', language_school: 'school', music_school: 'school', childcare: 'school', prep_school: 'school',
+  library: 'library', bank: 'bank', bureau_de_change: 'bank', post_office: 'post', pharmacy: 'pharmacy', chemist: 'pharmacy',
+  fitness_centre: 'gym', gym: 'gym', sports_centre: 'gym',
+};
+// Name hints, several languages; the order matters ("University Library" is a library, "Hotel
+// Bank Street" a hotel only when nothing else in the name speaks first — so the specific ones go
+// first). Words that name something else in another language stay out ("librería": a bookshop).
+const HOTEL = /(\bhotel\b|h[oô]tel\b|\bmotel\b|\bhostel\b|\bhostal\b|\balbergo\b|\bpension\b|\bposada\b|guest ?house|bed (and|&) breakfast|\bb ?& ?b\b|\bsuites\b|\binn\b|\bresort\b|\blodging\b)/i;
+const PLACE_NAME: [Place, RegExp][] = [
+  ['library', /(library|biblioteca|biblioth[èe]que|bibliothek|bibliotheek)/i],
+  ['post', /(post office|postamt|\bla poste\b|correos|correios|ufficio postale|postkantoor|bureau de poste)/i],
+  ['bank', /(\bbank\b|\bbanco\b|\bbanque\b|\bbanca\b|sparkasse|volksbank|credit union|caja de ahorros|\bcaixa\b|savings (and|&) loan)/i],
+  ['pharmacy', /(pharmacy|pharmacie|farmacia|farm[áa]cia|apotheke|apotheek|drug ?store|\bchemist)/i],
+  ['school', /(school|escuela|[ée]cole|schule|scuola|escola|colegio|col[ée]gio|academy|academia|acad[ée]mie|kindergarten|preschool|pre-school|elementary|lyc[ée]e|\bcollege\b|coll[èe]ge|universit|learning cent(er|re)|early childhood|montessori)/i],
+  ['gym', /(\bgym\b|fitness|crossfit|\byoga\b|pilates|health club|boxing|martial arts|karate|taekwondo|jiu.?jitsu|\bjudo\b|\bdojo\b|gimnasio)/i],
+  ['mosque', /(mosque|masjid|mezquita|mosqu[ée]e|moschee|islamic cent(er|re)|\bjami\b|\bcami\b)/i],
+];
+/** The archetype a building's rooms follow, from its OSM amenity / shop / office / leisure value
+ *  (`tag`, Building.u) or, failing that, its name. A tagged building takes its tag's archetype —
+ *  a pub called "The Library" stays a pub — except that a hotel's name wins over the restaurant or
+ *  bar mapped inside it. null: nothing says. */
+export function placeOf(name?: string, tag?: string): Place | null {
+  if (tag) return PLACE_TAG[tag] ?? (name && HOTEL.test(name) ? 'hotel' : null);
+  if (!name) return null;
+  if (HOTEL.test(name) && !PLACE_NAME.slice(0, 2).some(([, re]) => re.test(name))) return 'hotel';
+  for (const [p, re] of PLACE_NAME) if (re.test(name)) return p;
+  return null;
+}
+/** "Inn", "Lodging" and "Resort" name a pub or a club as often as a hotel: a hotel only with rooms
+ *  upstairs (the plan's call, which knows the storeys). */
+export const hotelOnlyUpstairs = (name?: string) => !!name && /\b(inn|resort|lodging)\b/i.test(name) && !/(\bhotel\b|h[oô]tel\b|\bmotel\b|\bhostel\b|\bsuites\b|guest ?house|bed (and|&) breakfast)/i.test(name);
