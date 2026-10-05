@@ -2,6 +2,66 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-04 — Regional life (1): getting in, people who stay in, the regions' reference, the street trees
+
+Robby, from Brooklyn:
+
+- big shop windows showed the room only through a blob in the middle;
+- a new building's door and windows hadn't opened, and walking in the house was see-through for a
+  second;
+- people who went into buildings vanished.
+
+Then he asked for greenery compared region by region ("upstate NY, PNW moss trees, ferns, Kentucky,
+Florida, Texas, middle America"), plenty of foliage and animals from the foundry, an exhaustive list
+of wildlife per region in a new doc, a plan, the feature list, and to begin iterating.
+
+- **Getting in** (`getting-in`; `docs/agent/gameplay.md`):
+  - **The panes.** A pane opens whole or not at all, decided by your distance to its nearest
+    point, with a per-window threshold, and only on the storeys round yours. The old per-pixel
+    noise round 4.2 m from the pane's centre left big storefronts half-dissolved.
+  - **The door you walk toward** builds first (your heading, smoothed from your steps).
+  - **A shut door.** Within 2.5 m of a door whose interior isn't open, a leaf stands across its
+    doorway and the build runs flat out. A step in stops at the door until the room is ready.
+  - Court Street, Brooklyn, walked in frame by frame: the whole storefront opens from 5 m, and inside
+    is continuous.
+- **People who go in stay in** (`people-persist-indoors`):
+  - The open building publishes its door and the free standing places on its ground storey.
+  - Whoever walks in by that door goes to a place, stays, and walks back out (`IN_WALK` /
+    `IN_STAY` / `IN_OUT`), the same person. A tower's ground floor takes visitors too.
+  - Tested in `tests/lifeSim.test.ts`, and seen live in Brooklyn.
+- **The regions' reference** (`docs/regional-life/`, researched by a helper agent from public
+  sources; `docs/REGIONAL_LIFE.md`, the plan):
+  - 16 regions as EPA ecoregion groups, each with its flora layer by layer and its wildlife, with
+    how common each one is, where and when, and a modelling note.
+  - Each region's signature, the range limits, and the foundry's build order.
+  - The feature list's queue: `regional-greenery` (active), `ecoregions`, `regional-flora` and
+    `regional-wildlife`.
+- **The green spots** (`tools/real-spots.mjs` `GREEN`): 64 curated public streets, parks and
+  roads, 3–6 a region, 40 with a fit photo. `real-compare --kind=green --group=region` gives a
+  montage a region.
+- **What green-1 found, and the fixes:**
+  - **The survey's street trees were dropped** (`props.ts`). A crown over the street slid to a verge
+    still inside the paved mask; one at the kerb line hit a kerb or a door's way in; and the
+    clearance pass narrowed every street tree under a row's eaves to a stick and dropped it.
+    - The trunk now takes the verge past the paved band, else a pit at the kerb, with a step along
+      the street round a stoop.
+    - A crown topping the roof by 3 m overhangs it, and a measured tree is never dropped.
+    - Savannah's Jones Street keeps 30 of the survey's 35 trees within 50 m (it kept 6);
+      `tests/streetTrees.test.ts`.
+  - **The class pass measured a ceiling.** It drew the region's backdrop ground in flat colour, and
+    over streamed cells its shader keeps that under the tiles: wooded cells raised 11 m stood over
+    the lens in the leafy places. It's left out there now. `real-compare` also waits for the lens's
+    cells' reliefs.
+  - **The map's woods grew no forest.** A streamed cell's land cover is the DEM's grassland
+    everywhere. `areaCoverMask` now reads the tile's OSM woods, scrub and lawns first.
+  - **green-2:** the green spots' vegetation went 3% → 24% (the photos show 35%), and the mean
+    score 0.57 → 0.72. Midwest 0.87, California 0.82, the Rockies 0.73.
+- **Next:** forests OSM doesn't draw stay bare: Longmire inside Mount Rainier, the Adirondacks'
+  NY-73, Bend's ponderosa. Neither the LiDAR records (no buildings, no record) nor OSM have them.
+  The real-data answer is the USFS's NLCD Tree Canopy Cover: 30 m, the lower 48, public. Baked
+  into R2 by 1° blocks, it becomes the tree scan's density everywhere. Then the regional flora (§6
+  of `docs/REGIONAL_LIFE.md`).
+
 ## 2026-10-04 — Foundation first (5): audit round 2 — every cell real; the slow cities; the horizon; a phone holds each vertex once; the comparison across the lower 48
 
 The lower-48 audit again (`docs/earth/AUDIT_48.md` round 2), now that every cell comes from our own

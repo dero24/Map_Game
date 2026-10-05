@@ -1871,9 +1871,13 @@
       ],
       "evidence": [
         "docs/REGIONAL_LIFE.md (the plan)",
-        "tools/real-spots.mjs GREEN (64 curated green spots, 16 regions)"
+        "tools/real-spots.mjs GREEN (64 curated green spots, 16 regions)",
+        "src/world/props.ts (the survey's street trees kept: verge past the paved band, kerb pits, steps round stoops, overhanging crowns, measured trees never dropped; areaCoverMask: the map's woods)",
+        "tests/streetTrees.test.ts",
+        "tools/class-pass.js (no backdrop ceiling over streamed cells)",
+        "green-2 (tools/real-scores.json): green spots vegetation 3% -> 24% (photos 35%), mean 0.57 -> 0.72"
       ],
-      "notes": "national-1: the game shows 5% vegetation where the photos show 14%. The WorldCover scan gives a built-up cell a 3.5% chance of a tree per 9 m cell (a leafy suburb ~4 trees/ha vs 25-45 real); rural roads lose their tree lines; the far field is thin."
+      "notes": "national-1: the game shows 5% vegetation where the photos show 14%. The WorldCover scan gives a built-up cell a 3.5% chance of a tree per 9 m cell (a leafy suburb ~4 trees/ha vs 25-45 real); rural roads lose their tree lines; the far field is thin. 2026-10-04 green-2: 24% of the photos' 35%. Still bare: forests neither OSM nor the LiDAR records hold (Longmire, NY-73 in the Adirondacks, Bend) - next, the USFS NLCD Tree Canopy Cover (30 m, public) baked into R2 by 1° blocks as the tree scan's density."
     },
     {
       "id": "ecoregions",
