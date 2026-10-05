@@ -6,7 +6,8 @@ or per-region style.
 ## Style + recipe
 
 - `src/world/styles.ts` — `regionStyle(lat,lon)`, `meta.style`, `setActiveStyle` on main +
-  tile worker.
+  tile worker. In the lower 48 the key carries the place's region of life (`world-data.md` "Regions of
+  life"): the tree weights and moss by region (`ECO_VEG`), `westside()`, `castOf()` for the casts.
 - `src/world/recipe.ts` — `recipeFor(bd, style)`: every per-building look decision, a pure
   f(bd.s, style, fc/rc).
 - Facade shader codes: siding in the fraction of `vInfo.y` (kind + code/10), roof material in
@@ -426,8 +427,16 @@ lays the surface between it:
   the westside Northwest's sword fern, salal and Oregon grape; ferns in the damp Eastern and
   northern woods) under a wood's canopy on open ground. Rebuilt where a tile mounts.
 - Moss on bark (`propMaterial`, FOLIAGE with a crown field): `U.uMoss` from the region's style
-  (`styles.ts moss`: the westside Northwest 1, the humid South 0.35, a desert 0) greens a tree's
+  (`styles.ts moss`, by region: the westside Northwest 1, Appalachia's coves and the Gulf 0.45, New
+  England 0.4, the Southeast 0.35, the Plains 0.1, a desert 0) greens a tree's
   wood on its wet sides first — up, north and the foot — in patches, a deep olive.
+- Hangers (`propMaterial({ hang })`, the HANG define; `assets/hangers.ts`): per vertex `aHang` =
+  (depth below its anchor, or minus its height above the limb; the strand's length; its phase; 0 a
+  strand, 1 a stiff tuft, 2 a fern frond). A strand rides its tree's sway from its anchor's height,
+  then swings in the world as a pendulum of its own length (ω ≈ 2.4/√L), its tip most (k^1.35), a
+  ripple running down it as the wind rises, the curtain leaning downwind (the clouds' way) and its tip
+  lifting on the arc. A fern frond curls down to the bark and greys with `1 − uWet`. White vertices
+  take the instance colour: each tree's moss its own tone.
 
 ## The brush's sketch pass
 

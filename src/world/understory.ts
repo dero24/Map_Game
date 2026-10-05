@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { plantLib, understoryMix, inBloom, STAGES, type PlantSpecies } from '../assets/flora';
 import { merge } from '../assets/core';
 import { propMaterial } from '../render/propMaterial';
-import { activeStyle, pickWeighted } from './styles';
+import { activeStyle, castOf, pickWeighted } from './styles';
 import { worldDate } from './calendar';
 import type { Terrain } from './data';
 import type { WalkWorld } from '../player/collision';
@@ -84,7 +84,7 @@ export class UnderstoryField {
   }
 
   update(x: number, z: number) {
-    if (!this.enabled || !understoryMix(activeStyle().sub, activeStyle().climate).mix.length) { if (this.cells.size) this.invalidate(); return; }
+    if (!this.enabled || !understoryMix(castOf(activeStyle())).mix.length) { if (this.cells.size) this.invalidate(); return; }
     const R = this.radius;
     const want = new Set<string>();
     this.queue.length = 0;
@@ -108,7 +108,7 @@ export class UnderstoryField {
   }
 
   private build(cx: number, cz: number): THREE.Mesh | null {
-    const st = activeStyle(), { mix, density } = understoryMix(st.sub, st.climate);
+    const { mix, density } = understoryMix(castOf(activeStyle()));
     const x0 = cx * CELL, z0 = cz * CELL;
     const crowns = this.crowns(x0 + CELL / 2, z0 + CELL / 2, CELL * 0.75 + 30);
     if (crowns.length < 3) return null;

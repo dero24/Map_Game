@@ -20,7 +20,8 @@ How to use it:
 
 **The count:** 1,382 models — 46 the foundry has, 1,299 rows on a genome (new parameters), and
 37 new genomes or body plans (each introduced by one row). The Northwest package (build order 1)
-is built (2026-10-04, commit 94ce999); the rest is to do.
+is built (2026-10-04, commit 94ce999), and the live oaks with their hangers (build order 2,
+2026-10-05); the rest is to do.
 
 [REGIONAL_LIFE.md §6](../REGIONAL_LIFE.md#6-what-the-foundry-builds-in-order) orders the work by
 family. This list is the same order broken into rows: its P1 rows are §6's families plus each
@@ -1963,9 +1964,15 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
    alder** (birch with white-blotched bark). The understory: **sword fern** (fern), **salal** and
    **Oregon grape** (mound). The `surface†` term: **moss on bark** and **moss on boulders**, and
    **moss carpets** in ground paint.
-2. **Live oaks and their hangers.** The `liveoak†` genome with **southern live oak**, then
-   **plateau** and **coast live oak**. On `hanger†`: **Spanish moss**, **resurrection fern**, **ball
-   moss** and **lace lichen**.
+2. **Live oaks and their hangers** — **built** 2026-10-05 (`docs/earth/LOG.md` "Regional life (3)"):
+   the live oaks as `flora.ts OAKS` (a tree kind each, three grown forms: the southern live oak's
+   grand open-grown umbrella with limbs resting on the ground, its street oak arching over, an old
+   gnarled one; the plateau oak's single trunk, mott of three and pair; the coast live oak's round
+   dome, two leaning trunks and an old one), the hangers as their own layer, `assets/hangers.ts`
+   (grown on each tree's boughs and crown, instanced with the trees that carry them, the region's
+   range rules in `hangerMix`), the strands' pendulum swing in `propMaterial` `hang`. The `liveoak†`
+   genome with **southern live oak**, then **plateau** and **coast live oak**. On `hanger†`: **Spanish
+   moss**, **resurrection fern**, **ball moss** and **lace lichen**.
 3. **Northern and mountain forests on the existing genomes.** Pine rows: **eastern white pine**,
    **ponderosa**, **lodgepole**. Spruce rows: **red spruce**, **balsam fir**, **Engelmann spruce**,
    **subalpine fir**. `conifer†` row: **eastern hemlock**. Birch rows: **quaking aspen** (with its

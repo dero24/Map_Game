@@ -27,7 +27,7 @@ export type PMat =
   | { t: 'signs' }
   | { t: 'halo'; size: number; color: number }
   | { t: 'people'; seated: boolean }
-  | { t: 'prop'; o: { wind?: boolean; bob?: boolean; foliage?: boolean; decid?: boolean; paved?: boolean; signal?: boolean; emissive?: number; emissiveNight?: boolean; crown?: [number, number]; fallHue?: number; blossom?: boolean; weep?: boolean } }
+  | { t: 'prop'; o: { wind?: boolean; bob?: boolean; foliage?: boolean; decid?: boolean; paved?: boolean; signal?: boolean; emissive?: number; emissiveNight?: boolean; crown?: [number, number]; fallHue?: number; blossom?: boolean; weep?: boolean; hang?: boolean } }
   | { t: 'gnd' } // region ground material (shared; set via setGndMaterial at boot)
   | { t: 'lake' } // a lake's sheet: the water shader at its own level (water.ts lakeMaterial)
   | { t: 'shore' }; // a coast's foam strip (shore.ts, water.ts shoreMaterial)
@@ -186,7 +186,7 @@ export function matTag(m: THREE.Material): PMat {
       o: {
         wind: !!d.WIND, bob: !!d.BOB, foliage: !!d.FOLIAGE, ...(d.DECID ? { decid: true } : {}), ...(d.PAVED ? { paved: true } : {}), ...(d.SIGNAL ? { signal: true } : {}),
         // (a species' autumn, a cherry's blossom, a willow's sway: the tree shader's own defines)
-        ...(d.FALL_HUE ? { fallHue: +d.FALL_HUE } : {}), ...(d.BLOSSOM ? { blossom: true } : {}), ...(d.WEEP ? { weep: true } : {}),
+        ...(d.FALL_HUE ? { fallHue: +d.FALL_HUE } : {}), ...(d.BLOSSOM ? { blossom: true } : {}), ...(d.WEEP ? { weep: true } : {}), ...(d.HANG ? { hang: true } : {}),
         emissive: d.EMISSIVE ? (u.uEmissive.value as THREE.Color).getHex() : undefined,
         emissiveNight: u.uEmNight?.value === 1,
         ...(d.FOLIAGE && u.uCrown && u.uCrown.value.y > 0 ? { crown: [u.uCrown.value.x, u.uCrown.value.y] as [number, number] } : {}),

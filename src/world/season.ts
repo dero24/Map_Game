@@ -91,3 +91,14 @@ export function dayOfYear(ms: number): number {
   const d = new Date(ms), start = Date.UTC(d.getUTCFullYear(), 0, 1);
   return Math.floor((ms - start) / 86400000) + 1;
 }
+
+/** The day's clouds when the weather runs by itself (main.ts autoWeather): a slow beat of fair and
+ *  overcast spells, the same for everyone. `t`: the world's hours. */
+export const autoCloud = (t: number) => 0.3 + 0.3 * Math.sin(t * 0.37 + 1.3) * Math.sin(t * 0.11);
+/** How wet the trees are at world hour `t`: 1 through a wet spell (the heaviest overcast, when it
+ *  rains), drying over the next day or two (e-folding 30 h) — the resurrection fern greens within hours
+ *  of rain and curls brown in a dry spell (assets/hangers.ts). */
+export function wetness(t: number): number {
+  for (let h = 0; h <= 120; h += 2) if (autoCloud(t - h) > 0.47) return Math.exp(-h / 30);
+  return 0;
+}

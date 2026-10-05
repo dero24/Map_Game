@@ -113,6 +113,36 @@ describe('flora', () => {
     expect(fallHueOf('vinemaple', 0)).toBe(1); // scarlet in October
     expect(fallHueOf('alder', 0)).toBe(3); // the alder's drop near green
   });
+  // The live oaks (docs/regional-life/models.md build order #2; liveoak†): the South's spreading twice
+  // as wide as it stands on limbs that rest on the ground, the Hill Country's mott, California's
+  // round dark dome on snaking limbs
+  it('the live oaks read as themselves: umbrellas twice as wide as they stand, limbs resting on the ground', () => {
+    for (const k of ['liveoak', 'plateauoak', 'coastoak'] as const) {
+      for (let v = 0; v < TREE_VARIANTS; v++) {
+        const t = treeGeometry(k, v);
+        expect((2 * t.meta.crownR) / t.meta.h, `${k}:${v}`).toBeGreaterThan(k === 'liveoak' && v !== 1 ? 2.2 : 1.6);
+        expect(t.meta.crownBottom / t.meta.h, `${k}:${v}`).toBeLessThan(0.45); // (a canopy you walk under, its rim low)
+        // evergreen: they keep their leaves through the winter
+        expect(fallHueOf(k, v)).toBe(0);
+      }
+    }
+    // the grand old southern live oak and the gnarled one: a limb comes down to the ground far out from
+    // the trunk, and rises again
+    for (const v of [0, 2]) {
+      const wood = treeGeometry('liveoak', v).plan.boughs.filter((b) => b.a.y > 0.05);
+      expect(wood.some((b) => b.b.y < 0.3 && Math.hypot(b.b.x, b.b.z) > 3.5)).toBe(true);
+    }
+    // the Hill Country's mott: three trunks out of one root crown
+    expect(treeGeometry('plateauoak', 1).plan.boughs.filter((b) => b.a.y < 0).length).toBe(3);
+    // the coast live oak's dome rounder than the southern's flat umbrella
+    const sq = (k: 'liveoak' | 'coastoak') => treeGeometry(k, 0).plan.lobes.reduce((m, l) => m + l.sq, 0) / treeGeometry(k, 0).plan.lobes.length;
+    expect(sq('coastoak')).toBeGreaterThan(sq('liveoak'));
+    // their near models wear small leaves
+    for (const k of ['liveoak', 'plateauoak', 'coastoak'] as const) {
+      const n = nearTreeGeometry(k, 0);
+      for (let i = 0; i < n.cards.length; i += CARD_STRIDE) expect([0, 1]).toContain(n.cards[i + 6]);
+    }
+  });
   it('variants differ', () => {
     const a = bb(treeGeometry('round', 0).geo), b = bb(treeGeometry('round', 1).geo);
     expect(a.max.y === b.max.y && a.max.x === b.max.x).toBe(false);

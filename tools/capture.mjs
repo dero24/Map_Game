@@ -10,6 +10,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import net from 'node:net';
+import { proxyArgs } from './pw-proxy.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const req = createRequire(resolve(ROOT, '../../shot-harness/package.json'));
@@ -42,7 +43,7 @@ if (!(await portOpen(PORT))) {
 
 const browser = await chromium.launch({
   headless: true,
-  args: ['--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--use-angle=d3d11', '--force-color-profile=srgb', '--force-device-scale-factor=1', '--mute-audio', '--disable-frame-rate-limit'],
+  args: ['--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--use-angle=d3d11', '--force-color-profile=srgb', '--force-device-scale-factor=1', '--mute-audio', '--disable-frame-rate-limit', ...proxyArgs()],
 });
 const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
 const logs = [];

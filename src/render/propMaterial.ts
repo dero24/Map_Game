@@ -25,6 +25,12 @@ import { SIGNAL_GLSL } from '../sim/traffic';
 // draws whole); across the band uFade.x it gives way pixel by pixel on the ordered dither the cards
 // use the other way round (render/impostor.ts), so the two never both draw a pixel, nor leave one.
 // uFade.y: 0 by distance, 1 cards only (this draws nothing), 2 never hand over.
+// hang: a tree's hangers (assets/hangers.ts): `aHang` = (depth below the anchor — negative: height
+// above the limb —, the strand's length, its phase, what it is: 0 a strand, 1 a stiff tuft, 2 a
+// resurrection fern frond). A strand swings in the world as a pendulum of its own length, its tip
+// most, out of step with its neighbours, a ripple running down it as the wind rises, the curtain
+// leaning downwind; it rides its tree's own sway from its anchor. The fern greens and opens with
+// uWet and curls brown in a dry spell.
 // treeLod: a tree's two models (world/nearTrees.ts). 'far' (TREE_LOD 1): a tile's trees, the solid
 // lobed crowns — the near-tree layer marks the trees it draws close up (`aNear`, per instance), and
 // for those this gives way to the near model across the hand-over band on the same ordered dither
@@ -43,8 +49,9 @@ const GLSL_TREE_LOD = /* glsl */ `
     if (L.z > 0.5) return L.z > 1.5 ? 0.0 : 1.0;
     return clamp((d - L.x + L.y * 0.5) / max(L.y, 1e-3), 0.0, 1.0);
   }`;
-export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean; signal?: boolean; fallHue?: number; blossom?: boolean; weep?: boolean; wash?: boolean; fade?: boolean; treeLod?: 'far' | 'near' } = {}) {
+export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean; signal?: boolean; fallHue?: number; blossom?: boolean; weep?: boolean; wash?: boolean; fade?: boolean; treeLod?: 'far' | 'near'; hang?: boolean } = {}) {
   const defines: Record<string, number> = {};
+  if (opts.hang) defines.HANG = 1;
   if (opts.treeLod) defines.TREE_LOD = opts.treeLod === 'far' ? 1 : 2;
   if (opts.fade) defines.FADE = 1;
   if (opts.wash) defines.WASH = 1;
@@ -81,6 +88,10 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
       uniform vec4 uFade;
       flat varying float vFade;
       #endif
+      #ifdef HANG
+      attribute vec4 aHang;
+      uniform float uWet;
+      #endif
       #ifdef TREE_LOD
       uniform vec4 uTreeLod, uTreeMask;
       flat varying float vLodFar;
@@ -116,7 +127,12 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
         #endif
         vTree = fract(sin(dot(origin.xz + uWorldOffset.xz, vec2(12.9898, 78.233))) * 43758.5453);
         #ifdef WIND
+          #ifdef HANG
+            float sway = max(p.y + aHang.x - 1.5, 0.0) * 0.012 * (0.4 + uWind); // (its tree's sway, at the anchor)
+            if (aHang.w > 1.5) p.y -= max(-aHang.x, 0.0) * (1.0 - uWet) * 0.6; // (a dry fern's fronds curl down to the bark)
+          #else
           float sway = max(p.y - 1.5, 0.0) * 0.012 * (0.4 + uWind);
+          #endif
           p.x += sin(uTime * 1.3 + origin.x * 0.21 + origin.z * 0.17) * sway;
           p.z += cos(uTime * 1.1 + origin.z * 0.19) * sway * 0.7;
           #ifdef WEEP
@@ -131,6 +147,22 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
           p.y += sin(uTime * 0.9 + ph) * 0.07 * (0.5 + uWind);
         #endif
         vec4 wp = m * vec4(p, 1.0);
+        #ifdef HANG
+          if (aHang.w < 0.5 && aHang.y > 0.0) {
+            // the strand as a pendulum in the world: its length there (the tree's scale), its own
+            // swing (slow for the long ones), out of step with its neighbours and with the next tree's
+            float sc = length(m[0].xyz), L = max(aHang.y * sc, 0.2), k = clamp(aHang.x / max(aHang.y, 1e-3), 0.0, 1.0);
+            float w = 2.4 / sqrt(L + 0.25), ph = aHang.z + dot(origin.xz + uWorldOffset.xz, vec2(0.37, 0.23));
+            float air = 0.3 + 0.7 * uWind, amp = L * (0.045 + 0.14 * uWind) * pow(k, 1.35);
+            vec2 sw = vec2(sin(uTime * w + ph), 0.7 * sin(uTime * w * 0.83 + ph * 1.7 + 1.3)) * amp;
+            // a ripple running down toward the tip in a gust: the strands twist and part
+            sw += vec2(sin(uTime * w * 2.9 - k * 4.0 + ph * 2.3), cos(uTime * w * 2.3 - k * 3.0 + ph * 1.1)) * (0.02 + 0.03 * uWind) * L * k * k * air;
+            // the curtain leaning downwind (the clouds' way)
+            sw += vec2(0.88, 0.47) * (0.1 * uWind * L * pow(k, 1.6));
+            wp.xz += sw;
+            wp.y += dot(sw, sw) / (2.0 * L); // (a pendulum's tip rises as it swings out)
+          }
+        #endif
         #ifdef BOB
           // gentle roll
           wp.y += sin(uTime * 0.7 + ph * 1.7) * 0.04 * p.x;
@@ -156,6 +188,10 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
           // instance colour tints only the white-painted parts (foliage, hulls); trunks keep their brown
           float tintable = step(0.98, min(color.r, min(color.g, color.b)));
           vColor = mix(color, color * instanceColor, tintable);
+          #ifdef HANG
+            // the resurrection fern: green within hours of rain, curled grey-brown in a dry spell
+            if (aHang.w > 1.5) vColor = mix(vec3(0.36, 0.29, 0.19), vColor, uWet);
+          #endif
           #ifdef SIGNAL
             // which lens is this vertex (1 red, 2 amber, 3 green), and is it the one lit now
             float lens = color.r > 2.0 * color.g && color.r > 2.0 * color.b ? 1.0

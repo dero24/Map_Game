@@ -61,6 +61,8 @@ interface Critter {
 export interface CritterEnv {
   hour: number; night: number; month: number; wind: number; south: boolean;
   region?: string; climate?: string; // the place's cast (faunaMix); temperate North America when absent
+  /** In the lower 48, the place's region and ecoregion (styles.ts castOf): its own cast. */
+  place?: { eco: string; l3: number; west: boolean };
   camFwd: THREE.Vector3;
   trees: (x: number, z: number, r: number) => { x: number; z: number; trunk?: number; r?: number; lean?: [number, number] }[];
   gardens: (x: number, z: number, r: number) => { x: number; z: number }[];
@@ -120,7 +122,7 @@ export class Critters {
   // never a parking lot or a plaza
   private field(x: number, z: number) { const c = this.terrain.coverAt(x, z); return (c === 30 || c === 10 || c === 20 || c === 40 || c === 60) && this.terrain.oceanDistAt(x, z) > 60 && this.open(x, z, 1.2) && !this.paved(x, z); }
   private shore(x: number, z: number) { const s = this.terrain.sdfAt(x, z); return this.terrain.oceanDistAt(x, z) < 45 && s > 0.5 && s < 14; }
-  private mix(env: CritterEnv) { return faunaMix(env.region ?? 'na', env.climate ?? 'temperate'); }
+  private mix(env: CritterEnv) { return faunaMix(env.region ?? 'na', env.climate ?? 'temperate', env.place); }
   private want(k: CritterRole, env: CritterEnv) {
     if (!this.mix(env)[k]?.length) return 0; // the place has no species for this role
     const h = env.hour, day = env.night < 0.35;

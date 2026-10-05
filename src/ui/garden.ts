@@ -29,7 +29,7 @@ export class Garden {
   onClear: ((x: number, z: number) => void) | null = null;
   private dug = new Set<string>();
 
-  constructor(private g: GameCtx, private walk: WalkWorld, private climate: string) {
+  constructor(private g: GameCtx, private walk: WalkWorld, private climate: string, private eco = '') {
     this.group.name = 'garden';
     try { if (typeof indexedDB !== 'undefined') this.db = openDB('map-game-garden', 1, { upgrade: (d) => d.createObjectStore('plants', { keyPath: 'id' }) }); } catch { this.db = null; }
   }
@@ -47,7 +47,7 @@ export class Garden {
 
   /** The seed R would plant here. */
   get nextSpecies(): PlantSpecies {
-    const mix = plantMix(this.climate);
+    const mix = plantMix(this.climate, this.eco);
     return mix[this.packet % mix.length][0];
   }
   cycle() { this.packet++; this.g.toast(`seed packet: ${SPECIES[this.nextSpecies].label}`); }

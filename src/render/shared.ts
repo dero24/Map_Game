@@ -68,6 +68,9 @@ export const U = {
   uTurn: { value: 0 }, // season.ts turn: the autumn's progress, each tree turning at its own point
   uBloom: { value: 0 }, // spring blossom on the flowering trees (season.ts bloom)
   uMoss: { value: 0 }, // moss on the trees' bark, the region's (styles.ts moss)
+  // how wet the trees are, 0 a dry spell … 1 just rained (main.ts from the day's weather): the
+  // resurrection fern greens and opens with it (assets/hangers.ts)
+  uWet: { value: 1 },
   // Phase I biome wash for the ground: x = dryness (greens → straw/ochre), y = lushness,
   // z = cold/dark (boreal/polar greens). Set once per region from styles.ts.
   uBiome: { value: new THREE.Vector4(0, 0, 0, 0) },

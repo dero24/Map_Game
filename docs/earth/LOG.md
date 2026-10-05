@@ -2,6 +2,86 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-05 — Regional life (3), the cloud session: regions as data
+
+Robby, handing over to a cloud session (`docs/earth/HANDOFF.md`): "i want to make sure all these
+places look alive lower 48 look alive with correct vegetatation and animals and all that". Then: "create
+a new branch for yourself" (this session's work is on `feature/lower48-alive`, off
+`feature/foundation-first`); and, the session having no Cloudflare or Mapillary keys, "you should just
+create all the 3d models for everywhere based on our procedural 3d asset generator foundry", with
+"animation like for spanish moss and other things … really good too and we want alot of variety even
+per species, color, all that".
+
+- **No keys in the cloud box.** The container has neither `CLOUDFLARE_API_TOKEN` nor the Mapillary
+  `ACCESS_TOKEN` (Robby's `.env` is on his PC, which a cloud session can't see). They go in the
+  environment's settings (a new session picks them up); until then the canopy layer's upload and
+  deploy and the green-spot comparison wait, and the foundry work goes on.
+- **Regions as data** (`ecoregions`; `docs/agent/world-data.md` "Regions of life"):
+  - The EPA's Level III ecoregions with state boundaries (public domain) baked by
+    `scripts/bake-ecoregions.mjs` into `src/world/ecoGrid.ts`: two byte grids over the lower 48 at
+    0.05° (the ecoregion code and the state at each cell's centre), run-length coded, 69 KB.
+  - `world/ecoregions.ts` `ecoAt(lat, lon)` → the region of `docs/REGIONAL_LIFE.md` §2, the code and
+    the state. The code table, then the state lines each region file draws ("Covers"): NYC and Long
+    Island the Mid-Atlantic's, the Front Range cities the Rockies', Tallahassee and the Panhandle the
+    Gulf's, the Texas Panhandle Texas's, Flagstaff the Great Basin's, Spokane the Northwest's dry
+    side. A coast or a key the cells miss takes the nearest land (the Outer Banks are a kilometre
+    wide).
+  - The place rides the style key (`…/<region>.<l3>.<state>`), so the tile worker has it without
+    the grid. The casts read it: the tree weights and moss by region (`styles.ts ECO_VEG`), the
+    broadleaf street and yard trees (`flora.ts broadMix`), the gardens (`plantMix`), the forest
+    floor (`understoryMix`), the animals (`faunaMix`). The range rules ride the casts: fireflies flash
+    only east of the Plains (Seattle and Denver had them), the ibis keeps to the Southern coasts, the
+    Northwest's deer is the black-tailed, the snowshoe hare lives in the north woods.
+  - Kentucky (Appalachia) and Ohio (the Midwest), Savannah's coastal plain (oaks, magnolias, ibis)
+    and Raleigh's Piedmont, Austin and Phoenix each get their own. The shore keeps its look exactly
+    (the Mid-Atlantic is its original set).
+  - Credited: `src/ui/credits.ts`, `docs/DATA_SOURCES.md`.
+  - Tests 882 (+11: `tests/ecoregions.test.ts`, ~190 towns the region files name), typecheck, build.
+- **Live oaks and their hangers** (`regional-flora`, `models.md` build order #2):
+  - **Three live oaks, three grown forms each** (`flora.ts OAKS`), all under budget (far ≤ 1,494, near
+    ≤ 1,862 vertices):
+    - the southern live oak: the grand open-grown one 2.5× as wide as it stands, limbs resting on
+      the ground and rising again; a street oak arching over (the live oak alley); an old, gnarled,
+      leaning one with a limb broken short;
+    - the Hill Country's plateau oak: one trunk, a mott of three, a pair;
+    - California's coast live oak: a round dark dome on snaking limbs, two leaning trunks, an old one
+      with a limb along the ground.
+    - Evergreen (they keep their leaves, never the autumn tint), small leaves up close, each its own
+      green: the South's deep olive, the plateau's dusty olive, the coast's near-black.
+  - **Hangers, a layer of their own** (`assets/hangers.ts`): Spanish moss, resurrection fern, ball
+    moss and lace lichen, grown on each tree's own limbs and crown undersides, in two loads (a light
+    dressing, a heavy one), each tree its own tone. Instanced on the trees' own matrices
+    (`hang:<type>:<kind>:<v>:<load>`), so the region decides which and how heavy and the tree stays
+    as it is.
+    - **The motion** (`propMaterial` `hang`): a strand rides its tree's sway from its anchor, then
+      swings in the world as a pendulum of its own length (the long ones slow), its tip most, out of
+      step with its neighbours so the curtain twists and parts; a ripple runs down it as the wind
+      rises; the curtain leans downwind and its tip lifts on the arc.
+    - **The fern** greens and opens after the wet spells and curls grey-brown in a dry one
+      (`season.ts wetness`, from the day's clouds; `U.uWet`).
+    - **Where** (`hangerMix`, `docs/regional-life/ranges.md`): Spanish moss on the coastal plain from
+      SE Virginia to East Texas, heaviest on the Southern coast and in the Delta's swamps, never in the
+      Piedmont uplands, north of Virginia Beach or in the West (Baltimore's coastal plain caught it
+      first: it's EPA 65 too); resurrection fern on the South's live oaks; ball moss in central and
+      south Texas, Florida and the Gulf coast (never the Delta north of the Gulf states); lace lichen
+      in California's fog belt only.
+  - **Placed by region** (`broadMix`): the southern live oak on the Southeast's coastal plain, in
+    Florida, on the Gulf and in East Texas (a few planted in the Piedmont and SE Virginia), 10–20 m;
+    the plateau oak in the Hill Country, the Cross Timbers and the brush country; the coast live oak
+    across California. In live oak country a mapped "oak" is most likely the live oak.
+  - Studio: `shots/trees-liveoak*.jpg`, `trees-plateau2.jpg`, `trees-coast2.jpg`,
+    `trees-liveoak-hung4.jpg` (the moss's first try was wisps hidden in the crowns: broader, longer
+    strands from the lobes' undersides now hang as grey curtains).
+  - Tests: `tests/hangers.test.ts` (budgets, anchoring, the range rules, the wet clock), the live oaks
+    in `tests/foundry.test.ts`.
+- **Tools behind a proxy:** `tools/pw-proxy.mjs` hands Chromium the session's egress proxy as launch
+  flags (node and curl read `HTTPS_PROXY`, Chromium doesn't; Playwright's own `proxy` option sent
+  localhost through it too, which the proxy refuses) and trusts the certificates node is told to
+  (`NODE_EXTRA_CA_CERTS`); `capture.mjs` and `real-compare.mjs` use it.
+- **The tree studio without the game** (`tools/tree-studio.mjs`, a blank `tools/studio.html`): seconds
+  where `/kit.html` took minutes under software GL; trees spaced by their crowns (a live oak is three
+  street trees wide); `--extra=/tools/studio-hangers.js` dresses them with their hangers.
+
 ## 2026-10-04 — Regional life (2): every door, the shop's whole window, the lamps, walkers on the steps, the Northwest in the foundry
 
 Robby, through the day:

@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { makeRng } from '../core/rng';
 import { TINT, P, part, merge, limb, tube, blob, card, lathe, fibSphere, fibCount, taper, GOLDEN, cached, bounds } from './core';
+import type { EcoRegion } from '../world/ecoregions';
 
 const V3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const BARK = 0x6b5a48, BARK_DARK = 0x5d4a3a, BIRCH = 0xe4dfd2, PALM = 0x8a7458, MESQ = 0x4f4034, PALOVERDE = 0x8f9c5a;
@@ -20,9 +21,11 @@ const FIR_BARK = 0x5b4a3c, HEMLOCK_BARK = 0x5f4b3f, SITKA_BARK = 0x787168, CEDAR
 
 // ================================================================ trees
 // Index order matches the region style table's `trees` weights (styles.ts) and the old kinds.
-export type TreeKind = 'round' | 'oak' | 'shrub' | 'pine' | 'spruce' | 'palm' | 'birch' | 'mesquite' | 'fanpalm' | 'maple' | 'willow' | 'elm' | 'poplar' | 'magnolia' | 'cherry' | 'fir' | 'cedar' | 'hemlock' | 'sitka' | 'alder' | 'vinemaple';
+export type TreeKind = 'round' | 'oak' | 'shrub' | 'pine' | 'spruce' | 'palm' | 'birch' | 'mesquite' | 'fanpalm' | 'maple' | 'willow' | 'elm' | 'poplar' | 'magnolia' | 'cherry' | 'fir' | 'cedar' | 'hemlock' | 'sitka' | 'alder' | 'vinemaple' | 'liveoak' | 'plateauoak' | 'coastoak';
 /** (New kinds go on the end: a kind's index is in the tiles' instance names and the region weights.) */
-export const TREE_KINDS: TreeKind[] = ['round', 'oak', 'shrub', 'pine', 'spruce', 'palm', 'birch', 'mesquite', 'fanpalm', 'maple', 'willow', 'elm', 'poplar', 'magnolia', 'cherry', 'fir', 'cedar', 'hemlock', 'sitka', 'alder', 'vinemaple'];
+export const TREE_KINDS: TreeKind[] = ['round', 'oak', 'shrub', 'pine', 'spruce', 'palm', 'birch', 'mesquite', 'fanpalm', 'maple', 'willow', 'elm', 'poplar', 'magnolia', 'cherry', 'fir', 'cedar', 'hemlock', 'sitka', 'alder', 'vinemaple', 'liveoak', 'plateauoak', 'coastoak'];
+/** The live oaks (liveoak†): the South's, the Hill Country's plateau oak, California's coast live oak. */
+export const LIVE_OAKS = new Set<TreeKind>(['liveoak', 'plateauoak', 'coastoak']);
 /** The conifers that wear needle tufts up close (the cedar wears its own flat sprays). */
 export const NEEDLED = new Set<TreeKind>(['pine', 'spruce', 'fir', 'hemlock', 'sitka']);
 /** How each broadleaf turns in autumn (propMaterial): 0 mixed, 1 red (maples, cherries, the vine
@@ -73,6 +76,38 @@ const SPIRES: Record<'fir' | 'hemlock' | 'sitka' | 'cedar', Spire[]> = {
     { H: 11.8, bare: 0.1, R0: 2.9, Rt: 0.3, rings: [3, 3, 3, 2, 2, 2, 1], trunkR: 0.27, bark: CEDAR_BARK, lift: 0, droop: 0, lobe: 0.5, sq: 0.8, stretch: 1.3, bend: 0.65, jit: 0.25, buttress: 4, stubs: 0, top: 'nod', j: true },
     { H: 12.4, bare: 0.3, R0: 2.4, Rt: 0.3, rings: [3, 3, 2, 2, 2, 1], trunkR: 0.27, bark: CEDAR_BARK, lift: 0, droop: 0, lobe: 0.52, sq: 0.8, stretch: 1.3, bend: 0.65, jit: 0.25, buttress: 4, stubs: 2, top: 'nod', j: true },
     { H: 12.8, bare: 0.28, R0: 2.5, Rt: 0.7, rings: [3, 3, 2, 2, 2, 2], trunkR: 0.29, bark: CEDAR_BARK, lift: 0, droop: 0, lobe: 0.52, sq: 0.8, stretch: 1.3, bend: 0.65, jit: 0.28, buttress: 4, stubs: 1, top: 'snag', j: true },
+  ],
+};
+
+// the live oaks' barks: the southern live oak's near-black blocky furrows, the plateau oak's dark grey,
+// the coast live oak's grey going dark and furrowed with age
+const LIVEOAK_BARK = 0x403a33, PLATEAU_BARK = 0x57524a, COASTOAK_BARK = 0x6a645a;
+/** The live oaks' three grown forms each (liveoak†; docs/regional-life/05, 08, 15): a short, massive
+ *  trunk dividing low (`fork`) — or a mott's two or three trunks from one root crown (`stems`) — into
+ *  heavy limbs that climb (`up`), level off and sweep out (`reach`), their outer third coming down
+ *  again (`droop`); some come down to rest on the ground and rise again (`rest`); the coast live oak's
+ *  limbs snake sideways (`snake`). Billows along each limb's middle and at its end, the rim lower than
+ *  the middle, and a broad dome over the fork: an umbrella twice as wide as it stands, never a ball.
+ *  The southern live oak: v0 the grand old open-grown oak, v1 a street oak arching over (the live oak
+ *  alley), v2 old and gnarled, leaning, a limb broken short. The plateau oak: v0 one trunk, v1 a
+ *  mott of three, v2 two. The coast live oak: v0 a broad round dome, v1 two leaning trunks, v2 old,
+ *  a limb along the ground. */
+type Oak = { H: number; stems: number; fork: number; trunkR: number; limbs: number; reach: [number, number]; up: number; droop: number; rest: number; snake: number; billow: number; dome: number; sq: number; lean: number; bark: number; stub?: boolean };
+const OAKS: Record<'liveoak' | 'plateauoak' | 'coastoak', Oak[]> = {
+  liveoak: [
+    { H: 8.6, stems: 1, fork: 1.7, trunkR: 0.5, limbs: 5, reach: [7.0, 8.4], up: 2.2, droop: 1.6, rest: 2, snake: 0.4, billow: 2.45, dome: 3.3, sq: 0.7, lean: 0.2, bark: LIVEOAK_BARK },
+    { H: 9.0, stems: 1, fork: 2.0, trunkR: 0.4, limbs: 4, reach: [5.4, 6.6], up: 2.1, droop: 1.3, rest: 0, snake: 0.35, billow: 2.3, dome: 3.0, sq: 0.72, lean: 0.3, bark: LIVEOAK_BARK },
+    { H: 8.0, stems: 1, fork: 1.4, trunkR: 0.55, limbs: 5, reach: [6.0, 9.0], up: 1.8, droop: 1.4, rest: 1, snake: 0.6, billow: 2.3, dome: 2.9, sq: 0.68, lean: 0.6, bark: LIVEOAK_BARK, stub: true },
+  ],
+  plateauoak: [
+    { H: 7.4, stems: 1, fork: 1.3, trunkR: 0.32, limbs: 4, reach: [3.8, 4.8], up: 2.0, droop: 0.9, rest: 0, snake: 0.4, billow: 1.95, dome: 2.6, sq: 0.72, lean: 0.25, bark: PLATEAU_BARK },
+    { H: 7.0, stems: 3, fork: 1.6, trunkR: 0.22, limbs: 4, reach: [3.0, 4.2], up: 2.2, droop: 0.7, rest: 0, snake: 0.5, billow: 1.8, dome: 2.4, sq: 0.74, lean: 0.9, bark: PLATEAU_BARK },
+    { H: 7.8, stems: 2, fork: 1.5, trunkR: 0.3, limbs: 4, reach: [4.2, 5.6], up: 2.0, droop: 1.0, rest: 1, snake: 0.5, billow: 2.0, dome: 2.6, sq: 0.7, lean: 0.6, bark: PLATEAU_BARK },
+  ],
+  coastoak: [
+    { H: 9.0, stems: 1, fork: 1.5, trunkR: 0.4, limbs: 5, reach: [4.6, 5.8], up: 2.8, droop: 0.9, rest: 0, snake: 0.9, billow: 2.3, dome: 3.4, sq: 0.8, lean: 0.3, bark: COASTOAK_BARK },
+    { H: 8.4, stems: 2, fork: 1.2, trunkR: 0.3, limbs: 4, reach: [4.4, 5.6], up: 2.6, droop: 0.8, rest: 0, snake: 1.1, billow: 2.15, dome: 3.0, sq: 0.82, lean: 1.0, bark: COASTOAK_BARK },
+    { H: 8.2, stems: 1, fork: 1.1, trunkR: 0.48, limbs: 5, reach: [5.0, 7.0], up: 2.2, droop: 1.2, rest: 1, snake: 1.0, billow: 2.2, dome: 3.0, sq: 0.78, lean: 0.5, bark: COASTOAK_BARK, stub: true },
   ],
 };
 
@@ -638,6 +673,60 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
       if (v && i % 2 === 0) drape(knee, tip, 0.04, 1, 0);
     }
     lobe(1.0, V3(j(0.3), 4.4, j(0.3)), 1440 + v, 0.6, 0);
+  } else if (kind === 'liveoak' || kind === 'plateauoak' || kind === 'coastoak') {
+    // The live oaks (OAKS): the trunk (or a mott's trunks) to the fork, the limbs off it, the billows
+    // and the dome. The southern live oak's limbs sweep out twice as far as the tree stands, the outer
+    // ends low and some resting on the ground; the plateau oak small and dense; the coast live oak's
+    // limbs snaking under a round dome.
+    const O = OAKS[kind][v], bark = O.bark, ki = TREE_KINDS.indexOf(kind);
+    trunkR = O.trunkR;
+    const a0 = r.float() * Math.PI * 2;
+    const forks: THREE.Vector3[] = [];
+    for (let s = 0; s < O.stems; s++) {
+      // (one trunk leans its own way; a mott's trunks lean out from one root crown)
+      const a = O.stems > 1 ? a0 + (s * 2 * Math.PI) / O.stems + j(0.35) : a0 + Math.PI + j(0.4), ca = Math.cos(a), sa = Math.sin(a);
+      const off = O.stems > 1 ? 0.28 : 0, R = O.trunkR * (s ? 0.86 : 1);
+      const foot = V3(ca * off, -0.3, sa * off), mid = V3(ca * (off + O.lean * 0.4), O.fork * 0.5, sa * (off + O.lean * 0.4)), fork = V3(ca * (off + O.lean), O.fork + j(0.15), sa * (off + O.lean));
+      wood.push(twig(foot, mid, R, R * 0.9, 7, bark), twig(mid, fork, R * 0.9, R * 0.78, 7, bark));
+      if (!s) leanPer = [fork.x / (O.fork + 0.3), fork.z / (O.fork + 0.3)];
+      forks.push(fork);
+    }
+    const rests = new Set<number>();
+    for (let i = 0; i < O.rest; i++) rests.add((i * 2 + 1) % O.limbs);
+    for (let i = 0; i < O.limbs; i++) {
+      const F = forks[i % forks.length];
+      const a = a0 + i * GOLDEN + j(0.25), ca = Math.cos(a), sa = Math.sin(a);
+      const L = O.reach[0] + r.float() * (O.reach[1] - O.reach[0]);
+      // the limb's way out, wandering sideways (the coast live oak's snake)
+      const wob = r.float() * 6.28;
+      const at = (t: number, y: number) => V3(F.x + ca * L * t - sa * Math.sin(t * 4.2 + wob) * O.snake * t, y, F.z + sa * L * t + ca * Math.sin(t * 4.2 + wob) * O.snake * t);
+      const rest = rests.has(i);
+      // up off the fork, levelling, and the outer third down again — or, resting, down to the ground
+      // two thirds of the way out and up again at the end
+      const p1 = at(0.28, F.y + O.up * (rest ? 0.45 : 0.85) + j(0.2));
+      const p2 = rest ? at(0.66, 0.16) : at(0.6, F.y + O.up + j(0.25));
+      const p3 = rest ? at(1, 1.0 + r.float() * 0.5) : at(1, F.y + O.up - O.droop + j(0.3)); // (a long sag down to the ground and a gentle rise)
+      // (a resting limb stays heavy all the way to the ground: it is the oak's biggest wood)
+      const R0 = O.trunkR * (O.stems > 1 ? 0.78 : 0.62), k1 = rest ? 0.86 : 0.72, k2 = rest ? 0.66 : 0.46, k3 = rest ? 0.3 : 0.2;
+      wood.push(twig(F, p1, R0, R0 * k1, 5, bark), twig(p1, p2, R0 * k1, R0 * k2, 4, bark), twig(p2, p3, R0 * k2, R0 * k3, 3, bark));
+      // the billows (the near model grows its branches out into them): one over the limb's middle, and
+      // at its end a cluster a little lower — a big one and a smaller one off its side — the
+      // umbrella's lumpy rim, never a plate
+      const sd = r.float() < 0.5 ? 1 : -1, sid = V3(-sa * sd, 0, ca * sd);
+      lobe(O.billow * (0.95 + r.float() * 0.15), p1.clone().lerp(p2, 0.55).add(V3(0, O.billow * 0.5, 0)), 1500 + ki * 53 + v * 29 + i * 3, O.sq, 0);
+      lobe(O.billow * (0.85 + r.float() * 0.15), p3.clone().add(V3(ca * 0.3, O.billow * 0.32, sa * 0.3)), 1501 + ki * 53 + v * 29 + i * 3, O.sq, 0);
+      lobe(O.billow * (0.6 + r.float() * 0.12), p3.clone().lerp(p2, 0.3).add(sid.clone().multiplyScalar(O.billow * 0.75)).add(V3(0, O.billow * 0.55, 0)), 1502 + ki * 53 + v * 29 + i * 3, O.sq * 1.05, 0);
+    }
+    // the dome over the fork: a broad crown and a second billow beside it, lifting the middle
+    const dm = forks.reduce((m, f) => m.add(f), V3(0, 0, 0)).multiplyScalar(1 / forks.length);
+    lobe(O.dome, V3(dm.x + j(0.4), O.H - O.dome * O.sq, dm.z + j(0.4)), 1590 + ki * 7 + v, O.sq * 0.92, 0);
+    const da = a0 + GOLDEN * 0.5;
+    lobe(O.dome * 0.72, V3(dm.x + Math.cos(da) * O.dome * 0.85, O.H - O.dome * O.sq * 1.25, dm.z + Math.sin(da) * O.dome * 0.85), 1597 + ki * 7 + v, O.sq, 0);
+    if (O.stub) {
+      // a limb broken short long ago, its end silvered
+      const a = a0 + Math.PI * 0.5, F = forks[0], tip = F.clone().add(V3(Math.cos(a) * 1.7, 0.7, Math.sin(a) * 1.7));
+      wood.push(twig(F, tip, O.trunkR * 0.36, O.trunkR * 0.3, 5, SNAG));
+    }
   }
 
   const leafGeo = merge(leaf.map((g) => part(g, TINT)));
@@ -678,7 +767,7 @@ export const crownField = (m: TreeMeta): [number, number] => [m.crownBottom + 0.
 // silhouette its far model was tuned to: the oak's billows at its limbs' ends, the elm's vase, the
 // pine's windswept tufts. Palms and the willow keep their far model at every distance: their
 // leaves are already fronds and tresses.
-export const NEAR_KINDS = new Set<TreeKind>(['round', 'oak', 'shrub', 'pine', 'spruce', 'birch', 'mesquite', 'maple', 'elm', 'poplar', 'magnolia', 'cherry', 'fir', 'cedar', 'hemlock', 'sitka', 'alder', 'vinemaple']);
+export const NEAR_KINDS = new Set<TreeKind>(['round', 'oak', 'shrub', 'pine', 'spruce', 'birch', 'mesquite', 'maple', 'elm', 'poplar', 'magnolia', 'cherry', 'fir', 'cedar', 'hemlock', 'sitka', 'alder', 'vinemaple', 'liveoak', 'plateauoak', 'coastoak']);
 /** A leaf card: its middle (x, y, z, model space), half its width, height : width, its turn in the
  *  picture plane (0–1 of a turn), its picture (LEAF_PICS) and how deep in the crown it sits
  *  (0 on the rim … 1 at the heart). */
@@ -688,7 +777,7 @@ export const CARD_STRIDE = 8;
 export const LEAF_PICS = 12;
 /** Which pictures a tree's cards show (two or four, card by card). */
 export const picsOf = (kind: TreeKind, v: number, big: boolean): number[] =>
-  NEEDLED.has(kind) ? [4, 5, 6, 7] : kind === 'cedar' ? [8, 9] : kind === 'vinemaple' || (kind === 'maple' && v === 2) ? [10, 11] : big ? [0, 1] : [2, 3];
+  NEEDLED.has(kind) ? [4, 5, 6, 7] : kind === 'cedar' ? [8, 9] : kind === 'vinemaple' || (kind === 'maple' && v === 2) ? [10, 11] : big || LIVE_OAKS.has(kind) ? [0, 1] : [2, 3]; // (a live oak's small, leathery leaves)
 export interface NearTree {
   /** the branch skeleton: trunk, limbs, branches — non-indexed, bark colours, aPart 0 */
   wood: THREE.BufferGeometry;
@@ -744,14 +833,16 @@ export function nearTreeGeometry(kind: TreeKind, v: number): NearTree {
   }
 
   // every run resampled into a gently crooked curve (a ring every ~0.8 m, each nudged off the
-  // straight line), the trunk with its root flare: wide where it meets the ground, tapering up
+  // straight line), the trunk with its root flare: wide where it meets the ground, tapering up (a live
+  // oak's long sprawl a ring every ~1.6 m and a side fewer: its limbs reach three times as far)
+  const coarse = LIVE_OAKS.has(kind);
   const wood: THREE.BufferGeometry[] = [], trunks: { p: THREE.Vector3[]; r: number[] }[] = [];
   const axis: { p: THREE.Vector3; r: number; trunk: boolean }[] = []; // where a branch may start
   for (const run of runs) {
     const P: THREE.Vector3[] = [], R: number[] = [];
     for (let s = 0; s + 1 < run.p.length; s++) {
       const a = run.p[s], b = run.p[s + 1], L = a.distanceTo(b);
-      const steps = Math.max(1, Math.min(run.trunk ? 5 : 3, Math.round(L / 0.8)));
+      const steps = Math.max(1, Math.min(run.trunk ? 5 : coarse ? 2 : 3, Math.round(L / (coarse ? 1.6 : 0.8))));
       const d = b.clone().sub(a).normalize(), side = new THREE.Vector3(-d.z, 0, d.x);
       if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
       side.normalize();
@@ -772,7 +863,7 @@ export function nearTreeGeometry(kind: TreeKind, v: number): NearTree {
       P.splice(1, 0, ...flare.map(([y]) => at(y)));
       R.splice(0, 1, r0 * 1.55, ...flare.map(([y, f]) => r0 * (f as number) * (1 - 0.15 * (y as number) / Math.max(1, top.y))));
     }
-    const sides = run.trunk ? (trunks.length ? 6 : 8) : R[0] > 0.12 ? 6 : 5; // (a clump's second and third stems a little plainer)
+    const sides = run.trunk ? (trunks.length ? 6 : coarse ? 7 : 8) : R[0] > 0.12 && !coarse ? 6 : 5; // (a clump's second and third stems a little plainer)
     if (run.trunk) trunks.push({ p: P, r: R });
     wood.push(part(tube(P, R, sides), run.col));
     P.forEach((p, i) => axis.push({ p, r: R[i], trunk: run.trunk }));
@@ -1065,19 +1156,110 @@ export const STAGES = 8; // 0 sprout … 7 full bloom
 /** growth in [0,1] → stage index */
 export const stageOf = (g: number) => Math.max(0, Math.min(STAGES - 1, Math.floor(g * STAGES)));
 
-/** The region's garden: species weights for its climate (always non-empty). */
-export function plantMix(climate: string): [PlantSpecies, number][] {
+// The lower 48's gardens, region by region (docs/regional-life/: each file's street and yard plants),
+// from the species the foundry has — each flora package adds its own (models.md build order): the
+// Mid-Atlantic's blue hydrangeas, the Midwest's coneflowers and daylilies, the Plains' sunflowers,
+// Florida's hibiscus, the desert's agave, California's lavender and roses.
+const REGION_GARDEN: Partial<Record<EcoRegion, [PlantSpecies, number][]>> = {
+  'new-england': [['hydrangea', 4], ['rose', 2], ['daylily', 3], ['hosta', 3], ['coneflower', 1], ['boxwood', 2], ['fern', 1]],
+  'upstate-ny': [['daylily', 3], ['hosta', 3], ['hydrangea', 2], ['rose', 2], ['coneflower', 2], ['boxwood', 1]],
+  'mid-atlantic': [['hydrangea', 5], ['rose', 3], ['daylily', 3], ['hosta', 2], ['boxwood', 2], ['beachgrass', 1]],
+  appalachia: [['daylily', 3], ['hosta', 2], ['rose', 2], ['hydrangea', 2], ['boxwood', 2], ['coneflower', 1], ['fern', 1]],
+  southeast: [['hydrangea', 3], ['boxwood', 2], ['rose', 2], ['daylily', 2], ['hosta', 1]],
+  florida: [['hibiscus', 6], ['agave', 1], ['rose', 1]],
+  gulf: [['hibiscus', 2], ['hydrangea', 2], ['rose', 2], ['daylily', 2], ['boxwood', 1]],
+  texas: [['rose', 2], ['lavender', 1], ['agave', 2], ['sunflower', 1], ['coneflower', 2]],
+  plains: [['sunflower', 4], ['coneflower', 4], ['daylily', 2], ['rose', 1]],
+  midwest: [['daylily', 3], ['hosta', 3], ['coneflower', 3], ['rose', 2], ['hydrangea', 2], ['sunflower', 1]],
+  ozarks: [['coneflower', 3], ['daylily', 2], ['rose', 2], ['hosta', 1], ['hydrangea', 1]],
+  rockies: [['rose', 1], ['lavender', 1], ['daylily', 2], ['coneflower', 2], ['sunflower', 1]],
+  'desert-sw': [['agave', 6], ['lavender', 2], ['rose', 1]],
+  'great-basin': [['lavender', 2], ['rose', 2], ['daylily', 1], ['agave', 1], ['sunflower', 1]],
+  california: [['lavender', 4], ['rose', 3], ['agave', 2], ['hibiscus', 1]],
+  pnw: [['hydrangea', 3], ['rose', 3], ['fern', 2], ['hosta', 2], ['lavender', 1]],
+};
+/** The region's garden: its species weights — the lower 48's region's own, else its climate's (always
+ *  non-empty). */
+export function plantMix(climate: string, eco = ''): [PlantSpecies, number][] {
+  const r = REGION_GARDEN[eco as EcoRegion];
+  if (r) return r;
   const m = PLANT_SPECIES.map((s) => [s, SPECIES[s].climates[climate] ?? 0] as [PlantSpecies, number]).filter(([, w]) => w > 0);
   return m.length ? m : [['boxwood', 1], ['rose', 1]];
 }
+/** Where a place is, for its casts: the climate, the lower 48's region and ecoregion ('' and 0
+ *  elsewhere), and whether it's the Northwest's westside (styles.ts westside). */
+export interface CastPlace { climate: string; sub: string; eco: string; l3: number; west: boolean; state?: string }
 /** The region's forest floor (world/understory.ts): which plants grow under a wood's canopy, and how
  *  thickly (the share of 1.8 m spots that grow one). The westside Northwest's sword fern, salal and
- *  Oregon grape; ferns in the damp Eastern and northern woods; nothing elsewhere yet (each region's
- *  ground layer is docs/regional-life/models.md's to add). */
-export function understoryMix(sub: string, climate: string): { mix: [PlantSpecies, number][]; density: number } {
-  if (sub === 'pnw' && climate !== 'arid' && climate !== 'continental') return { mix: [['swordfern', 7], ['salal', 3], ['oregongrape', 1.2]], density: 0.6 };
-  if ((sub === 'northeast' && climate !== 'arid') || climate === 'boreal') return { mix: [['fern', 1]], density: 0.22 };
+ *  Oregon grape (and the redwood coast's sword fern); ferns in the damp Eastern, Southern and northern
+ *  woods; nothing yet in the dry West (each region's ground layer is docs/regional-life/models.md's
+ *  to add). */
+export function understoryMix(p: CastPlace): { mix: [PlantSpecies, number][]; density: number } {
+  if (p.west) return { mix: [['swordfern', 7], ['salal', 3], ['oregongrape', 1.2]], density: 0.6 };
+  if (p.eco === 'california' && p.l3 === 1) return { mix: [['swordfern', 1]], density: 0.45 }; // under the redwoods
+  const fern = ({ 'new-england': 0.24, 'upstate-ny': 0.24, appalachia: 0.26, 'mid-atlantic': 0.22, southeast: 0.14, gulf: 0.14, florida: 0.1, ozarks: 0.16, midwest: p.l3 === 49 || p.l3 === 50 ? 0.22 : 0.12 } as Partial<Record<string, number>>)[p.eco];
+  if (fern) return { mix: [['fern', 1]], density: fern };
+  if (p.eco) return { mix: [], density: 0 };
+  if ((p.sub === 'northeast' && p.climate !== 'arid') || p.climate === 'boreal') return { mix: [['fern', 1]], density: 0.22 };
   return { mix: [], density: 0 };
+}
+
+// The lower 48's broadleaf street, yard and wood trees, region by region (docs/regional-life/: each
+// file's canopy and street-tree tables), from the kinds the foundry has — each flora package adds
+// its own (models.md build order): New England's and upstate New York's sugar and red maples,
+// the South's magnolias, Texas's cedar elms and (west of the Balcones) mesquite, the Plains' elms and
+// poplar windbreaks, the Northwest's red alder and bigleaf maple.
+const REGION_BROAD: Partial<Record<EcoRegion | 'pnw-dry', [TreeKind, number][]>> = {
+  'new-england': [['round', 2], ['oak', 1.8], ['maple', 3.2], ['elm', 0.8], ['cherry', 0.4], ['poplar', 0.3]],
+  'upstate-ny': [['round', 2], ['oak', 1.4], ['maple', 3.4], ['elm', 0.9], ['cherry', 0.4], ['poplar', 0.4]],
+  'mid-atlantic': [['round', 2.5], ['oak', 2], ['maple', 2.6], ['elm', 1.1], ['cherry', 0.6], ['poplar', 0.4]],
+  appalachia: [['round', 3], ['oak', 2.6], ['maple', 2.2], ['magnolia', 0.3], ['elm', 0.4], ['cherry', 0.4], ['poplar', 0.2]],
+  southeast: [['round', 2.4], ['oak', 3], ['maple', 1.1], ['magnolia', 1.6], ['cherry', 0.4], ['elm', 0.5], ['poplar', 0.2], ['liveoak', 0.5]],
+  florida: [['round', 2], ['liveoak', 3.2], ['oak', 1.2], ['magnolia', 1.8], ['maple', 0.6], ['fanpalm', 0.8]],
+  gulf: [['round', 2.4], ['liveoak', 3], ['oak', 1.6], ['magnolia', 1.4], ['maple', 0.8], ['elm', 0.5], ['cherry', 0.3]],
+  texas: [['round', 1.6], ['liveoak', 2.6], ['oak', 1.4], ['elm', 1.6], ['mesquite', 0.4], ['magnolia', 0.3], ['poplar', 0.2]],
+  plains: [['round', 2.6], ['oak', 1.2], ['elm', 2.2], ['poplar', 1.6], ['maple', 0.8], ['cherry', 0.2]],
+  midwest: [['round', 2.5], ['oak', 2.2], ['maple', 2.4], ['elm', 1.4], ['cherry', 0.3], ['poplar', 0.6]],
+  ozarks: [['round', 2.4], ['oak', 3.4], ['maple', 1.2], ['elm', 0.6], ['cherry', 0.6], ['poplar', 0.2]],
+  rockies: [['round', 2], ['oak', 0.4], ['poplar', 1.8], ['maple', 1]],
+  'great-basin': [['round', 2], ['oak', 0.3], ['poplar', 1.6], ['maple', 0.8], ['elm', 1.2]],
+  california: [['round', 1.6], ['coastoak', 2.4], ['oak', 1.2], ['poplar', 1.4], ['magnolia', 0.3]],
+  pnw: [['round', 2], ['oak', 0.6], ['maple', 3], ['cherry', 0.9], ['poplar', 0.7], ['elm', 0.3], ['alder', 2.4], ['vinemaple', 0.4]],
+  'pnw-dry': [['round', 1.6], ['oak', 0.4], ['poplar', 1.8], ['maple', 1], ['elm', 0.6]],
+};
+/** Texas west of the Balcones and the Cross Timbers' west: mesquite country (EPA 25–27, 29–31). */
+const MESQUITE_TX = new Set([25, 26, 27, 29, 30, 31]);
+/** The Southeast's coastal plain (the Middle Atlantic and Southern coastal plains, EPA 63, 75): oaks
+ *  and magnolias over the Piedmont's tulip poplars, maples and dogwoods (docs/regional-life/05). */
+export const SE_COAST = new Set([63, 75]);
+const SE_COAST_BROAD: [TreeKind, number][] = [['round', 2], ['liveoak', 3.4], ['oak', 1.4], ['magnolia', 2.2], ['maple', 0.7], ['cherry', 0.3], ['elm', 0.4]];
+/** Texas by ecoregion: the Hill Country, the Cross Timbers and the brush country's plateau live oak
+ *  (EPA 29–31) and the coast's, the Blackland's and the Piney Woods' southern live oak (32–35); the
+ *  Panhandle's plains (25–27) have neither — elms, cottonwoods and windbreaks. */
+const TX_PLATEAU = new Set([29, 30, 31]), TX_PLAINS = new Set([25, 26, 27]);
+/** A place's broadleaf trees past the round and oak a scan keeps (props.ts `broad`): [kind, weight].
+ *  In the lower 48 its region's (the tropics and the desert keep their climate's: palms, mesquite);
+ *  elsewhere its climate's and subregion's. */
+export function broadMix(p: CastPlace): [TreeKind, number][] {
+  if (p.eco && p.climate !== 'tropical' && p.climate !== 'arid' && p.climate !== 'polar') {
+    const r = p.eco === 'southeast' && SE_COAST.has(p.l3) ? SE_COAST_BROAD : REGION_BROAD[p.eco === 'pnw' && !p.west ? 'pnw-dry' : (p.eco as EcoRegion)];
+    if (r && p.eco === 'texas') {
+      // (west of the Balcones mesquite country; the plateau oak in the Hill Country, none on the plains)
+      return r.map(([k, w]) => [k === 'liveoak' && TX_PLATEAU.has(p.l3) ? 'plateauoak' : k, k === 'mesquite' && MESQUITE_TX.has(p.l3) ? 2.4 : k === 'liveoak' && TX_PLAINS.has(p.l3) ? 0 : k === 'liveoak' && TX_PLATEAU.has(p.l3) ? 3.2 : w] as [TreeKind, number]).filter(([, w]) => w > 0);
+    }
+    // (southeast Virginia's coastal plain: the live oak's northern edge, a few planted)
+    if (r && p.eco === 'mid-atlantic' && p.l3 === 63 && p.state === 'VA') return [...r, ['liveoak', 0.6]];
+    if (r) return r;
+  }
+  const c = p.climate, sub = p.sub;
+  return c === 'mediterranean' ? [['round', 1.6], ['oak', 2.2], ['poplar', 1.4], ['magnolia', 0.3]]
+    : c === 'tropical' ? [['round', 3], ['magnolia', 1]]
+      : c === 'arid' || c === 'polar' ? [['round', 1]]
+        : sub === 'south' ? [['round', 2.4], ['oak', 3], ['maple', 1.1], ['magnolia', 1.6], ['cherry', 0.4], ['elm', 0.5], ['poplar', 0.2]]
+          : sub === 'pnw' ? REGION_BROAD.pnw!
+            : sub === 'mountain' ? [['round', 2], ['oak', 0.4], ['poplar', 1.8], ['maple', 1]]
+              : sub === 'midwest' ? [['round', 2.5], ['oak', 2.2], ['maple', 2.4], ['elm', 1.4], ['cherry', 0.3], ['poplar', 0.6]]
+                : [['round', 2.5], ['oak', 2], ['maple', 2.6], ['elm', 1.1], ['cherry', 0.6], ['poplar', 0.4]]; // the Northeast (and temperate elsewhere)
 }
 /** Is a species flowering in this month? (south = southern hemisphere, seasons flip) */
 export function inBloom(sp: PlantSpecies, month: number, south = false) {

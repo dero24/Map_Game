@@ -38,20 +38,22 @@ has none.
 
 | Family | Now |
 |---|---|
-| Trees (`flora.ts` `TREE_KINDS`) | 21: round, oak, shrub, pine, spruce, palm, birch, mesquite, fan palm, maple, willow, elm, poplar, magnolia, cherry, and (2026-10-04) the Northwest's Douglas fir, western redcedar, western hemlock, Sitka spruce, red alder, vine maple — 3 variants each, autumn colour by kind; moss on bark by region |
+| Trees (`flora.ts` `TREE_KINDS`) | 24: round, oak, shrub, pine, spruce, palm, birch, mesquite, fan palm, maple, willow, elm, poplar, magnolia, cherry, and (2026-10-04) the Northwest's Douglas fir, western redcedar, western hemlock, Sitka spruce, red alder, vine maple, and (2026-10-05) the southern live oak, the plateau live oak and the coast live oak — 3 variants each, autumn colour by kind; moss on bark by region |
+| Hangers (`assets/hangers.ts`) | (2026-10-05) Spanish moss, resurrection fern, ball moss, lace lichen: grown on each tree's limbs, two loads, a tone per tree, the strands swinging as pendulums; where by `hangerMix` (ranges.md) |
 | Garden plants (`SPECIES`) | 12: hydrangea, rose, hibiscus, daylily, beach grass, lavender, coneflower, sunflower, hosta, agave, fern, boxwood; and the forest floor's sword fern, salal and Oregon grape (`understoryMix`, `world/understory.ts`) |
 | Animals (`fauna.ts` `CRITTERS`) | 17: squirrel, rabbit, songbird, sandpiper, deer, butterfly, firefly, fox, hawk, coyote, jackrabbit, snowshoe hare, ground squirrel, mule deer, roadrunner, quail, ibis — plus the life sim's gulls, dogs and people |
 
-**How a place picks its cast now:** `styles.ts` `regionStyle`, made of:
-
-- a climate class (temperate, continental, boreal, polar, Mediterranean, arid, tropical) from coarse
-  latitude/longitude boxes;
-- a North American subregion (`naSub`: PNW, mountain, south, midwest, northeast);
-- five tree weights (round, oak, shrub, pine, spruce) and a density per climate, nudged per subregion;
-- `faunaMix(region, climate)`, the climate's cast.
-
-Kentucky and Ohio get the same woods, Savannah and Raleigh the same yards, Austin and Phoenix the
-same arid kit.
+**How a place picks its cast now** (2026-10-05, `ecoregions`): `styles.ts` `regionStyle` carries the
+place's region of life — one of the sixteen below, its EPA ecoregion and its state, from a grid
+baked off the EPA's map (`world/ecoregions.ts`; `docs/agent/world-data.md` "Regions of life"). The
+casts read it: the tree kinds' weights and the moss (`styles.ts ECO_VEG`), the broadleaf street and
+yard trees (`flora.ts broadMix`), the gardens (`plantMix`), the forest floor (`understoryMix`) and the
+animals (`fauna.ts faunaMix`, with the range rules). Kentucky's woods are Appalachia's and Ohio's the
+Midwest's; Savannah's coastal plain has oaks, magnolias and ibis where Raleigh's Piedmont has
+tulip-tree country; Austin is Texas and Phoenix the desert; fireflies flash only east of the Plains.
+Outside the lower 48 the casts fall back to the climate's (a climate class from coarse boxes, the
+North American subregion `naSub`). The casts are the kinds the foundry has; each package adds its own
+to its regions' rows.
 
 **Missing, the worst first (by what the photos show):**
 
@@ -146,9 +148,9 @@ Each step lands with its comparison numbers and a reviewed montage, and is track
 
    Fix it with the data first (OSM's woods and scrub, WorldCover, LiDAR crowns), then priors per
    region. The target is the vegetation share per region.
-3. **Regions as data** (`ecoregions`). A baked lat/lon → EPA Level III grid (public domain, about
-   0.05°) and a code → region table, so `regionStyle` carries the region key and `plantMix` /
-   `faunaMix` read it.
+3. **Regions as data** (`ecoregions`) — **done** 2026-10-05. A baked lat/lon → EPA Level III grid
+   (public domain, 0.05°) and a code → region table with the reference's state lines, so
+   `regionStyle` carries the region key and the casts read it.
 4. **The regional flora** (`regional-flora`). The new tree and plant families in §1's list, each
    with real dimensions, variants, autumn and winter looks, validation and a vertex budget. Then:
    - the layers: canopy, understory, ground cover, and hangers such as Spanish moss strands and moss

@@ -11,13 +11,18 @@
 // Every feeder uses it: baked regions derive their style from the manifest origin (or an
 // explicit meta.style), virtual ?at= manifests emit meta.style, and the tile worker receives
 // the key at init — so synth, hybrid, real-lite and baked tiles in one session agree.
+//
+// In the lower 48 the key also carries where the place is in the land's life (world/ecoregions.ts:
+// the region of docs/REGIONAL_LIFE.md §2, the EPA ecoregion and the state), which the casts read —
+// the trees' species and mix, the moss, the gardens, the forest floor, the animals.
+import { ecoAt, PNW_DRY, type EcoRegion } from './ecoregions';
 
 export type Climate = 'tropical' | 'arid' | 'mediterranean' | 'temperate' | 'continental' | 'boreal' | 'polar';
 export type Family = 'clapboard' | 'brick' | 'nordic' | 'stucco' | 'adobe' | 'tropical' | 'eastasian';
 export type WorldRegion = 'na' | 'latam' | 'eu' | 'mena' | 'africa' | 'sasia' | 'easia' | 'seasia' | 'oceania' | 'north';
 
 export interface RegionStyle {
-  key: string; // `${climate}/${family}/${L|R}` — what meta.style stores
+  key: string; // `${climate}/${family}/${L|R}/${region}/${sub}/${eco}.${l3}.${state}` — what meta.style stores
   climate: Climate;
   family: Family;
   region: WorldRegion;
@@ -40,6 +45,13 @@ export interface RegionStyle {
    *  in it, a damp Eastern wood's north sides green, a desert's bare. */
   moss: number;
   water: WaterLook;
+  /** Where the place is in the lower 48's life (world/ecoregions.ts): one of the sixteen regions
+   *  whose plants and animals belong there — '' outside the lower 48, where the casts fall back to
+   *  the climate's. */
+  eco: EcoRegion | '';
+  /** Its EPA Level III ecoregion (1–85; 0 outside) and its state's postal code ('' outside). */
+  l3: number;
+  state: string;
 }
 
 /** The colour of a region's water, sRGB: the sea's deep and shallow washes, and fresh water's
@@ -225,12 +237,40 @@ const VEG: Record<Climate, Pick<RegionStyle, 'trees' | 'treeDensity' | 'greens' 
 // Subregions whose woods aren't their climate's: the Pacific Northwest — Douglas fir and cedar
 // (the spruce and pine kinds) among bigleaf maples, dense, dark and lush even in late summer;
 // the Mountain West's pines, spruce and aspen.
-const SUB_VEG: Record<string, Partial<Pick<RegionStyle, 'trees' | 'treeDensity' | 'greens' | 'biome' | 'moss'>>> = {
+type Veg = Partial<Pick<RegionStyle, 'trees' | 'treeDensity' | 'greens' | 'biome' | 'moss'>>;
+const SUB_VEG: Record<string, Veg> = {
   // (the westside's trunks and limbs wrapped in moss: one of the mossiest places on Earth)
   pnw: { trees: [3, 0.8, 1, 1.6, 4.5], treeDensity: 1.25, greens: [0x3d6632, 0x4a7539, 0x33582e, 0x56803e, 0x2f4f2c, 0x5f8a44], biome: [0, 0.35, 0.05, 0], moss: 1 },
   mountain: { trees: [1.5, 0.3, 2, 3.5, 3], treeDensity: 0.8, moss: 0.1 },
   south: { moss: 0.35 }, // (the humid South's north sides; its Spanish moss hangs, a model of its own)
 };
+// …and in the lower 48, the region's own (docs/regional-life/): the tree kinds' weights where its
+// woods aren't its climate's — New England's white pine and hemlock among the maples, Appalachia's
+// cove hardwoods, the Southeast's and the Gulf's loblolly and longleaf, Texas's oaks and brush, the
+// Ozarks' oak-hickory, the Great Basin's juniper and piñon, the Northwest's dry side's ponderosa —
+// and moss on the bark by the region's damp. (The Mid-Atlantic is the shore's original look.)
+const ECO_VEG: Partial<Record<EcoRegion | 'pnw-dry', Veg>> = {
+  'new-england': { trees: [4.2, 2, 1, 2.6, 2], moss: 0.4 },
+  'upstate-ny': { trees: [4.8, 1.8, 1, 2, 2], moss: 0.4 },
+  appalachia: { trees: [5.5, 3, 1, 1, 0.5], moss: 0.45 },
+  southeast: { trees: [4, 2.6, 1, 3, 0], moss: 0.35 },
+  florida: { moss: 0.35 },
+  gulf: { trees: [4.5, 2.6, 1, 2.4, 0], moss: 0.45 },
+  texas: { trees: [3, 4.2, 2.2, 0.6, 0], moss: 0.15 },
+  plains: { trees: [5, 1.4, 2, 0.6, 0.6], moss: 0.1 },
+  midwest: { trees: [5.5, 3, 1, 0.8, 0.6], moss: 0.25 },
+  ozarks: { trees: [4.2, 4, 1, 1.2, 0], moss: 0.3 },
+  rockies: { moss: 0.15 },
+  'desert-sw': { moss: 0 },
+  'great-basin': { trees: [0.8, 0.2, 5.5, 1.6, 0.4], moss: 0.05 },
+  california: { moss: 0.15 },
+  'pnw-dry': { trees: [1.2, 0.3, 2.2, 4.2, 0.6], treeDensity: 0.8, moss: 0.1 },
+};
+/** The westside Northwest: west of the Cascades' crest (naSub) and, in the lower 48, not in a dry-side
+ *  ecoregion — the Douglas fir, cedar and hemlock, the moss, the sword fern. (The Cascades' ecoregion
+ *  straddles the crest: its east-slope towns are the crest line's to call.) */
+export const westside = (s: Pick<RegionStyle, 'sub' | 'eco' | 'l3' | 'climate'>) =>
+  s.sub === 'pnw' && s.climate !== 'arid' && s.climate !== 'continental' && (!s.eco || (s.eco === 'pnw' && !PNW_DRY.has(s.l3)));
 
 // Water per climate (temperate is the original shore's Atlantic: baked NJ must not change), then
 // per climate + subregion where the coast's water isn't its climate's.
@@ -253,17 +293,24 @@ const SUB_WATER: Record<string, WaterLook> = {
 
 const cache = new Map<string, RegionStyle>();
 
-/** The full style for a meta.style key (`climate/family/L|R`), or null if malformed. */
+/** The full style for a meta.style key (`climate/family/L|R/region/sub/eco.l3.state`), or null if malformed. */
 export function styleByKey(key: string): RegionStyle | null {
   const hit = cache.get(key);
   if (hit) return hit;
-  const [c, f, side, reg, sub] = key.split('/');
+  const [c, f, side, reg, sub, place] = key.split('/');
   if (!(c in VEG) || !(f in PAL)) return null;
+  const [e, l3, state] = (place ?? '').split('.');
+  const eco = (ECO_REGION_SET.has(e) ? e : '') as EcoRegion | '';
+  const base = { sub: sub ?? '', eco, l3: eco ? +l3 || 0 : 0, climate: c as Climate };
   const water = SUB_WATER[`${c}/${sub ?? ''}`] ?? WATER[c as Climate];
-  const s: RegionStyle = { key, climate: c as Climate, family: f as Family, region: (reg as WorldRegion) || 'na', sub: sub ?? '', driveLeft: side === 'L', ...PAL[f as Family], ...VEG[c as Climate], ...(SUB_VEG[sub ?? ''] ?? {}), water };
+  const veg = eco === 'pnw' && !westside(base) ? 'pnw-dry' : eco;
+  const s: RegionStyle = { key, climate: c as Climate, family: f as Family, region: (reg as WorldRegion) || 'na', sub: sub ?? '', driveLeft: side === 'L', ...PAL[f as Family], ...VEG[c as Climate], ...(SUB_VEG[sub ?? ''] ?? {}), ...((veg && ECO_VEG[veg]) || {}), water, eco, l3: base.l3, state: eco ? state ?? '' : '' };
   cache.set(key, s);
   return s;
 }
+const ECO_REGION_SET = new Set<string>(['new-england', 'upstate-ny', 'mid-atlantic', 'appalachia', 'southeast', 'florida', 'gulf', 'texas', 'plains', 'midwest', 'ozarks', 'rockies', 'desert-sw', 'great-basin', 'california', 'pnw']);
+/** A place's key segment: its region, ecoregion and state — '' outside the lower 48. */
+const placeOf = (lat: number, lon: number) => { const e = ecoAt(lat, lon); return e ? `${e.region}.${e.l3}.${e.state}` : ''; };
 
 export function regionStyle(lat: number, lon: number): RegionStyle {
   const climate = climateAt(lat, lon);
@@ -271,17 +318,30 @@ export function regionStyle(lat: number, lon: number): RegionStyle {
   const family = familyOf(climate, region);
   const left = any(lat, lon, LEFT);
   const sub = region === 'na' ? naSub(lat, lon) : '';
-  return styleByKey(`${climate}/${family}/${left ? 'L' : 'R'}/${region}${sub ? '/' + sub : ''}`)!;
+  const place = region === 'na' ? placeOf(lat, lon) : '';
+  return styleByKey(`${climate}/${family}/${left ? 'L' : 'R'}/${region}${sub || place ? '/' + sub : ''}${place ? '/' + place : ''}`)!;
 }
 
-/** meta.style wins (lets a baked region pin its look); else derive from the origin. */
+/** Where a place is, for the foundry's casts (flora.ts broadMix / understoryMix, fauna.ts faunaMix):
+ *  its climate and subregion, its region and ecoregion in the lower 48, the Northwest's westside. */
+export const castOf = (s: RegionStyle) => ({ climate: s.climate as string, sub: s.sub, eco: s.eco as string, l3: s.l3, west: westside(s), state: s.state });
+
+/** meta.style wins (lets a baked region pin its look); else derive from the origin. A key pinned
+ *  before the regions (five segments) takes its place in the land's life from the origin. */
 export function styleFor(meta: { style?: string } | undefined | null, origin: { lat: number; lon: number }): RegionStyle {
-  return (meta?.style && styleByKey(meta.style)) || regionStyle(origin.lat, origin.lon);
+  const pinned = meta?.style ? styleByKey(meta.style) : null;
+  if (pinned && !pinned.eco && pinned.region === 'na' && pinned.key.split('/').length < 6) {
+    const place = placeOf(origin.lat, origin.lon);
+    if (place) return styleByKey(`${pinned.key.split('/').slice(0, 5).concat(['', '', '', '', '']).slice(0, 5).join('/')}/${place}`) ?? pinned;
+  }
+  return pinned || regionStyle(origin.lat, origin.lon);
 }
 
 // One region per page/worker — builders read the active style without threading it through
 // every signature. Set once at init (main thread + tile worker) before any tile builds.
-let active: RegionStyle = regionStyle(40.36, -73.97); // NJ shore = the original look
+// (the NJ shore's original look, by key: a lat/lon lookup here would bake the ecoregion grid into every
+// bundle that reads a style — the tile worker gets its place in the key)
+let active: RegionStyle = styleByKey('temperate/clapboard/R/na/northeast')!;
 export function setActiveStyle(s: RegionStyle) { active = s; }
 export function activeStyle(): RegionStyle { return active; }
 

@@ -9,7 +9,7 @@ import { KerbCars } from './world/kerbCars';
 import { underRaised, PAD_PAINT } from './world/pads';
 import { MicroLayer } from './world/microLayer';
 import { NearTrees } from './world/nearTrees';
-import { seasonAt, dayOfYear } from './world/season';
+import { seasonAt, dayOfYear, autoCloud, wetness } from './world/season';
 import { setWorldDate } from './world/calendar';
 import { CrowdLayer, CROWD_TIERS } from './world/crowdLayer';
 import { setDemBase } from './world/dem';
@@ -21,7 +21,7 @@ import { buildWater, waterParams } from './world/water';
 import { nearPlane } from './render/nearPlane';
 import { Wakes } from './world/wakes';
 import { activeBuilding, type Door, type Footprint } from './world/buildings';
-import { styleFor, setActiveStyle } from './world/styles';
+import { styleFor, setActiveStyle, castOf } from './world/styles';
 import { setRoofSource } from './world/aerial';
 import { TAG_ROOF_COLOURS } from './world/realTile';
 import { Vehicles } from './player/vehicles';
@@ -221,6 +221,7 @@ async function main() {
   activeBuilding.uWinStyle.value.set(regionLook.windowCode, regionLook.shutterP, 0, 0);
   U.uBiome.value.set(...regionLook.biome);
   U.uMoss.value = regionLook.moss;
+  const regionCast = castOf(regionLook); // (the lower 48's region: its trees, gardens and animals)
   const townName = meta?.name ?? 'town';
   const shoreLabel = meta?.shoreLabel ?? 'the beach';
   const tz = meta?.tz ?? 'America/New_York';
@@ -704,7 +705,7 @@ async function main() {
   // wildlife + your garden (assets/fauna.ts, assets/flora.ts)
   const critters = new Critters(world.terrain, walk);
   worldRoot.add(critters.group);
-  const garden = new Garden(ctx, walk, regionLook.climate);
+  const garden = new Garden(ctx, walk, regionLook.climate, regionLook.eco);
   worldRoot.add(garden.group);
   void garden.load();
   critters.onEvent = (kind, what, pan, dist) => ambience?.critter(kind, what, pan, dist);
@@ -1417,7 +1418,8 @@ async function main() {
 
     if (weatherParams.autoWeather) {
       const t = worldMs / 3.6e6; // hours
-      weatherParams.cloud = 0.3 + 0.3 * Math.sin(t * 0.37 + 1.3) * Math.sin(t * 0.11);
+      weatherParams.cloud = autoCloud(t);
+      U.uWet.value = wetness(t); // (the resurrection fern: green after the wet spells, curled in the dry)
       // sea fog as the coast has it: a marine layer some mornings, by the water — burned off by
       // late morning, never inland (it rolled over every town a third of the time, a white sheet
       // under the towers on a clear day)
@@ -1611,7 +1613,7 @@ async function main() {
     movers.length = 0;
     for (const m of life.movers) movers.push(m);
     if (rideMoving-- > 0) movers.push(rideMover);
-    critters.update(dt, walker.x, walker.z, { hour: timeParams.hour, night: U.uNight.value, month: worldMonth(), south, wind: weather.wind, region: regionLook.region, climate: regionLook.climate, camFwd: fwd, trees: (x, z, r) => within(nearTrees, x, z, r), gardens: (x, z, r) => within(nearGardens, x, z, r), movers, paved: pavedAt, urban: townHere });
+    critters.update(dt, walker.x, walker.z, { hour: timeParams.hour, night: U.uNight.value, month: worldMonth(), south, wind: weather.wind, region: regionLook.region, climate: regionLook.climate, place: regionCast, camFwd: fwd, trees: (x, z, r) => within(nearTrees, x, z, r), gardens: (x, z, r) => within(nearGardens, x, z, r), movers, paved: pavedAt, urban: townHere });
     garden.update(dt, worldMonth(), south);
     frames++;
     if (frames === 3) (window as unknown as Record<string, unknown>).__READY__ = true;

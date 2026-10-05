@@ -4,7 +4,8 @@
 //   on any dev page:  await import('/tools/tree-shots.js'); await __TREES__('tag', ['willow', …])
 //
 // Saves shots/trees-<tag>.jpg through the dev server's /__shot sink.
-window.__TREES__ = async (tag = 'all', kinds = null) => {
+// opts.extra(kind, v, THREE) → meshes to stand with each tree (its hangers, say)
+window.__TREES__ = async (tag = 'all', kinds = null, opts = {}) => {
   const THREE = await import('three');
   const { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta } = await import('/src/assets/flora.ts');
   const list = kinds ?? TREE_KINDS;
@@ -23,8 +24,7 @@ window.__TREES__ = async (tag = 'all', kinds = null) => {
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
   const greens = [0x4d6a31, 0x5b7536, 0x6a823e];
-  let x = 0;
-  const gap = 7;
+  let x = 0, first = -1, last = 0, left = 0;
   for (const k of list) {
     for (let v = 0; v < TREE_VARIANTS; v++) {
       const g = treeLib(k, v).clone();
@@ -32,14 +32,21 @@ window.__TREES__ = async (tag = 'all', kinds = null) => {
       const green = new THREE.Color(greens[v % greens.length]);
       for (let i = 0; i < c.count; i++) if (c.getX(i) > 0.98 && c.getY(i) > 0.98 && c.getZ(i) > 0.98) c.setXYZ(i, green.r, green.g, green.b);
       const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }));
-      m.position.set(x + v * gap, 0, 0);
+      // (each tree a crown's width from the last: a live oak spreads three times a street tree's)
+      const half = Math.max(3.5, treeMeta(k, v).crownR + 0.5);
+      x += half;
+      if (first < 0) (first = x), (left = x - half);
+      m.position.set(x, 0, 0);
+      last = x;
+      x += half;
       scene.add(m);
+      if (opts.extra) for (const e of await opts.extra(k, v, THREE)) { e.position.set(m.position.x, 0, 0); scene.add(e); }
     }
-    x += TREE_VARIANTS * gap + 4;
+    x += 4;
   }
   const cam = new THREE.PerspectiveCamera(30, W / H, 0.5, 1000);
-  const mid = (x - 4 - gap) / 2;
-  const dist = Math.max(26, x * 0.8); // (the row's width across the frame, at eye level)
+  const right = x - 4, mid = (left + right) / 2;
+  const dist = Math.max(26, (right - left + 2) * 0.95); // (the row's whole crowns across the frame, at eye level)
   cam.position.set(mid, 5, dist);
   cam.lookAt(mid, 4.8, 0);
   renderer.render(scene, cam);

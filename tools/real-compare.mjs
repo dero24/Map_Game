@@ -17,6 +17,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import net from 'node:net';
+import { proxyArgs } from './pw-proxy.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = Object.fromEntries(process.argv.slice(2).map((a) => { const m = a.match(/^--([^=]+)(?:=(.*))?$/); return m ? [m[1], m[2] ?? true] : [a, true]; }));
@@ -110,7 +111,7 @@ if (!(await portOpen(PORT))) {
 }
 const req = createRequire(resolve(ROOT, '../../shot-harness/package.json'));
 const { chromium } = req('playwright');
-const browser = await chromium.launch({ headless: true, args: ['--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--use-angle=d3d11', '--force-color-profile=srgb', '--mute-audio'] });
+const browser = await chromium.launch({ headless: true, args: ['--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--use-angle=d3d11', '--force-color-profile=srgb', '--mute-audio', ...proxyArgs()] });
 
 async function render(s) {
   const img = s.img, aspect = img.w / img.h, W = 1024, Hh = Math.round(W / aspect);

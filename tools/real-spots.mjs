@@ -179,7 +179,7 @@ const GREEN = [
   { id: 'green-southeast-rutledge-avenue-charleston', region: 'southeast', state: 'SC', town: "Rutledge Avenue, Charleston", kind: 'green', at: [32.77, -79.935] },
   { id: 'green-southeast-inman-park-atlanta', region: 'southeast', state: 'GA', town: "Inman Park, Atlanta", kind: 'green', at: [33.758, -84.354] },
   { id: 'green-southeast-trinity-park-durham', region: 'southeast', state: 'NC', town: "Trinity Park, Durham", kind: 'green', at: [36.008, -78.905] },
-  { id: 'green-florida-centerville-road-tallahassee', region: 'florida', state: 'FL', town: "Centerville Road, Tallahassee", kind: 'green', at: [30.52, -84.24] },
+  { id: 'green-florida-centerville-road-tallahassee', region: 'gulf', state: 'FL', town: "Centerville Road, Tallahassee", kind: 'green', at: [30.52, -84.24] },
   { id: 'green-florida-main-highway-coconut-grove', region: 'florida', state: 'FL', town: "Main Highway, Coconut Grove", kind: 'green', at: [25.728, -80.243] },
   { id: 'green-florida-interlachen-avenue-winter-park', region: 'florida', state: 'FL', town: "Interlachen Avenue, Winter Park", kind: 'green', at: [28.596, -81.35] },
   { id: 'green-florida-eaton-street-key-west', region: 'florida', state: 'FL', town: "Eaton Street, Key West", kind: 'green', at: [24.559, -81.8] },

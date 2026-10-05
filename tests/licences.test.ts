@@ -7,7 +7,7 @@ import dataSources from '../docs/DATA_SOURCES.md?raw';
 // commercial game never come back (docs/GAMEPLAY_VISION.md §17).
 const code = import.meta.glob(['../src/**/*.ts', '../src/**/*.js', '../worker/src/*.js', '../index.html', '!../src/vendor/**'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 // (hosts only ever written in comments or as reference links, never fetched)
-const REFERENCE = new Set(['github.com', 'emscripten.org', 'threejs.org', 'www.usgs.gov', 'www.census.gov', 'www.cloudflare.com', 'registry.opendata.aws', 'naip-usdaonline.hub.arcgis.com']);
+const REFERENCE = new Set(['github.com', 'emscripten.org', 'threejs.org', 'www.usgs.gov', 'www.census.gov', 'www.epa.gov', 'www.cloudflare.com', 'registry.opendata.aws', 'naip-usdaonline.hub.arcgis.com']);
 const LOCAL = /^(localhost|127\.0\.0\.1|x|svc\.example|[\w-]+\.invalid|[\w.-]+\.example)$/;
 
 describe('licences: every source and service is recorded and credited', () => {

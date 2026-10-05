@@ -27,6 +27,7 @@ docs below; read a topic doc only when the task touches that subsystem.
 | Our OSM extract | `node scripts/osm-extract.mjs --pbf=<us-latest.osm.pbf> --ts=<state.txt timestamp>` → `node scripts/osm-upload.mjs --pack=… --poly=<us.poly>` · prove it: `node tools/osm-compare.mjs` (`docs/agent/streaming.md`) |
 | Real-world comparison | `node tools/real-spots.mjs [--states=NJ,NY]` (Mapillary spots, `.env` token) → `node tools/real-compare.mjs [--states=…]` → `shots/real/<ST>-montage.jpg`, scores in `tools/real-scores.json` (photos stay in git-ignored `raw/mapillary/`) |
 | Place index | `node scripts/build-places.mjs [--fetch]` → upload `raw/places/out/*` to R2 `places/v<N>/` (`docs/agent/gameplay.md` "geo.ts") |
+| Ecoregion grid | `node scripts/bake-ecoregions.mjs` → `src/world/ecoGrid.ts` (EPA Level III, public domain; `docs/agent/world-data.md` "Regions of life") |
 
 ## Hard constraints
 

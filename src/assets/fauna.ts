@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { P, part, merge, limb, blob, card, cached, taper } from './core';
 import { paintMaterial } from '../render/shared';
+import type { EcoRegion } from '../world/ecoregions';
 
 export type CritterKind =
   | 'squirrel' | 'rabbit' | 'songbird' | 'sandpiper' | 'deer' | 'butterfly' | 'firefly' | 'fox' | 'hawk'
@@ -41,9 +42,60 @@ const FAUNA: Record<string, FaunaMix> = {
   mediterranean: { climber: [['squirrel', 1]], burrower: [['groundSquirrel', 0.7]], grazer: [['rabbit', 1], ['jackrabbit', 0.3]], songbird: [['songbird', 1], ['quail', 0.6]], shorebird: [['sandpiper', 1]], browser: [['muleDeer', 1]], predator: [['coyote', 1], ['fox', 0.3]], raptor: [['hawk', 1]], butterfly: [['butterfly', 1]] },
   tropical: { climber: [['squirrel', 1]], grazer: [['rabbit', 1]], songbird: [['songbird', 1]], shorebird: [['sandpiper', 1], ['ibis', 1]], browser: [['deer', 0.6]], predator: [['fox', 0.5]], raptor: [['hawk', 1]], butterfly: [['butterfly', 1.3]], firefly: [['firefly', 0.6]] },
 };
-/** The species cast for a place: role → weighted species (a role missing from the mix simply doesn't appear). */
-export function faunaMix(region: string, climate: string): FaunaMix {
+// …and in the lower 48, each region's own cast (docs/regional-life/: each file's wildlife, how common
+// each animal is), from the species the foundry has — each wildlife package adds its own (models.md
+// build order #11–#16). The range rules (docs/regional-life/ranges.md) are this table's: fireflies
+// that flash only east of the Plains; the white ibis on the Southern coasts and in Florida; the
+// roadrunner, the jackrabbit and the quail in the dry West and the southern Plains; the Northwest's
+// deer the black-tailed (a mule deer); the snowshoe hare in the north woods.
+const EAST: FaunaMix = FAUNA.temperate; // (the Mid-Atlantic's: the shore's cast as it was)
+const REGION_FAUNA: Record<EcoRegion | 'pnw-dry', FaunaMix> = {
+  'new-england': { ...EAST, predator: [['fox', 1], ['coyote', 0.7]] },
+  'upstate-ny': { ...EAST, predator: [['fox', 1], ['coyote', 0.7]] },
+  'mid-atlantic': EAST,
+  appalachia: { ...EAST, predator: [['fox', 1], ['coyote', 0.5]] },
+  southeast: { ...EAST, predator: [['fox', 1], ['coyote', 0.5]] },
+  florida: { climber: [['squirrel', 1]], grazer: [['rabbit', 1]], songbird: [['songbird', 1]], shorebird: [['sandpiper', 1], ['ibis', 1.4]], browser: [['deer', 0.5]], predator: [['fox', 0.4], ['coyote', 0.3]], raptor: [['hawk', 1]], butterfly: [['butterfly', 1.3]], firefly: [['firefly', 0.6]] },
+  gulf: { ...EAST, shorebird: [['sandpiper', 1], ['ibis', 0.8]], predator: [['fox', 0.8], ['coyote', 0.6]] },
+  texas: { ...EAST, shorebird: [['sandpiper', 1], ['ibis', 0.3]], predator: [['coyote', 1], ['fox', 0.4]], butterfly: [['butterfly', 1.2]], firefly: [['firefly', 0.7]] },
+  plains: { climber: [['squirrel', 0.8]], burrower: [['groundSquirrel', 1]], grazer: [['rabbit', 1], ['jackrabbit', 0.6]], songbird: [['songbird', 1]], shorebird: [['sandpiper', 0.6]], browser: [['deer', 1], ['muleDeer', 0.6]], predator: [['coyote', 1], ['fox', 0.5]], raptor: [['hawk', 1]], butterfly: [['butterfly', 1]] },
+  midwest: { ...EAST, predator: [['fox', 1], ['coyote', 0.6]], firefly: [['firefly', 1.2]] },
+  ozarks: { ...EAST, grazer: [['rabbit', 1], ['roadrunner', 0.1]], predator: [['fox', 0.8], ['coyote', 0.7]] },
+  rockies: { climber: [['squirrel', 1]], burrower: [['groundSquirrel', 1]], grazer: [['rabbit', 0.7], ['snowshoe', 0.5]], songbird: [['songbird', 1]], shorebird: [['sandpiper', 0.5]], browser: [['muleDeer', 1], ['deer', 0.4]], predator: [['coyote', 1], ['fox', 0.6]], raptor: [['hawk', 1]], butterfly: [['butterfly', 1]] },
+  'desert-sw': FAUNA.arid,
+  'great-basin': { climber: [['squirrel', 0.3]], burrower: [['groundSquirrel', 1]], grazer: [['jackrabbit', 1], ['rabbit', 0.5]], songbird: [['songbird', 1], ['quail', 0.5]], shorebird: [['sandpiper', 0.6]], browser: [['muleDeer', 1]], predator: [['coyote', 1]], raptor: [['hawk', 1]], butterfly: [['butterfly', 0.6]] },
+  california: FAUNA.mediterranean,
+  pnw: { climber: [['squirrel', 1]], grazer: [['rabbit', 1]], songbird: [['songbird', 1]], shorebird: [['sandpiper', 1]], browser: [['muleDeer', 1], ['deer', 0.15]], predator: [['coyote', 1], ['fox', 0.5]], raptor: [['hawk', 1]], butterfly: [['butterfly', 0.8]] },
+  'pnw-dry': { climber: [['squirrel', 0.6]], burrower: [['groundSquirrel', 1]], grazer: [['rabbit', 0.6], ['jackrabbit', 0.6]], songbird: [['songbird', 1], ['quail', 0.4]], shorebird: [['sandpiper', 0.5]], browser: [['muleDeer', 1], ['deer', 0.4]], predator: [['coyote', 1]], raptor: [['hawk', 1]], butterfly: [['butterfly', 0.8]] },
+};
+/** The north woods' ecoregions (the Adirondacks and northern New England, Maine's Acadian hills, the
+ *  Northwoods of Minnesota, Wisconsin and Michigan): the snowshoe hare's. */
+const NORTH_WOODS = new Set([58, 82, 49, 50]);
+/** The tallgrass Plains east of the 98th meridian (the Flint Hills, the Cross Timbers, the Central
+ *  Irregular Plains, the Western Corn Belt, the Red River Valley): fireflies still flash there. */
+const PLAINS_EAST = new Set([28, 29, 40, 47, 48]);
+/** Texas west of the Balcones (the High Plains, the Rolling Plains, the Edwards Plateau, the brush
+ *  country): the roadrunner's, the jackrabbit's and the quail's. */
+const TEXAS_WEST = new Set([25, 26, 27, 29, 30, 31]);
+
+/** The species cast for a place: role → weighted species (a role missing from the mix simply doesn't
+ *  appear). In the lower 48 its region's (`place`: styles.ts castOf), else its climate's. */
+export function faunaMix(region: string, climate: string, place?: { eco: string; l3: number; west: boolean }): FaunaMix {
   void region; // continents get their own rows here as they come online
+  const eco = place?.eco as EcoRegion | undefined;
+  if (eco && REGION_FAUNA[eco]) {
+    const l3 = place!.l3;
+    let m = REGION_FAUNA[eco === 'pnw' && !place!.west ? 'pnw-dry' : eco];
+    if (NORTH_WOODS.has(l3)) m = { ...m, grazer: [...(m.grazer ?? []), ['snowshoe', 0.6]] };
+    if (eco === 'plains' && PLAINS_EAST.has(l3)) m = { ...m, firefly: [['firefly', 0.6]] };
+    if (eco === 'southeast' && (l3 === 63 || l3 === 75)) m = { ...m, shorebird: [['sandpiper', 1], ['ibis', 0.6]] }; // (the coastal plain's marshes)
+    if (eco === 'texas' && TEXAS_WEST.has(l3)) {
+      // (the High and Rolling Plains' dry nights flash no fireflies; the Hill Country and the brush a few)
+      const { firefly: _f, ...dry } = m;
+      m = { ...dry, burrower: [['groundSquirrel', 0.6]], grazer: [['rabbit', 1], ['jackrabbit', 0.7], ['roadrunner', 0.4]], songbird: [['songbird', 1], ['quail', 0.5]], ...(l3 >= 29 ? { firefly: [['firefly', 0.3]] as [CritterKind, number][] } : {}) };
+    }
+    return m;
+  }
   return FAUNA[climate] ?? FAUNA.temperate;
 }
 

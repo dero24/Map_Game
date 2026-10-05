@@ -1,6 +1,6 @@
 {
   "project": "map_game",
-  "last_updated": "2026-10-04",
+  "last_updated": "2026-10-05",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -1887,15 +1887,24 @@
       "id": "ecoregions",
       "tier": 1,
       "rank": 11.45,
-      "status": "not_started",
+      "status": "passing",
       "area": "world",
       "title": "Regions as data: EPA Level III ecoregions → 16 regions, so casts follow the land, not coarse boxes",
       "user_visible_behavior": "Kentucky and Ohio, Savannah and Raleigh, Austin and Phoenix each get their own plants and animals.",
       "verification": [
-        "a baked lat/lon grid of EPA Level III codes (public domain) and a code → region table; tests: known towns resolve to their regions"
+        "a baked lat/lon grid of EPA Level III codes (public domain) and a code → region table; tests: known towns resolve to their regions",
+        "tests/ecoregions.test.ts: ~190 towns named in the 16 region files resolve to their regions; coasts and keys take the nearest land; the Northwest splits at the Cascades",
+        "tests/ecoregions.test.ts: the casts differ — Kentucky and Ohio, Savannah and Raleigh, Austin and Phoenix; fireflies only east of the Plains; the shore keeps its look"
       ],
-      "evidence": [],
-      "notes": "docs/REGIONAL_LIFE.md §2."
+      "evidence": [
+        "scripts/bake-ecoregions.mjs → src/world/ecoGrid.ts: the EPA us_eco_l3_state_boundaries shapefile (1,631 polygons, Albers → lat/lon) scan-filled to two 520×1180 byte grids at 0.05° (ecoregion code, state), run-length coded, 69 KB base64; 327,245 land cells",
+        "src/world/ecoregions.ts: ecoAt(lat, lon) → { region, l3, state }; the §2 code table plus the region files’ state lines (RULES); nearest land within ~50 km for a coast",
+        "styles.ts: the place rides the style key (…/sub/<region>.<l3>.<state>); ECO_VEG tree weights and moss by region; westside() = the crest line and not a dry-side ecoregion; castOf(); the tile worker never bakes the grid in (1,452 KB, +5 KB)",
+        "The casts read it: flora.ts broadMix (REGION_BROAD; Texas’s mesquite west of the Balcones; the Southeast coastal plain’s oaks and magnolias), plantMix(climate, eco) (REGION_GARDEN), understoryMix (ferns by region; the redwood coast’s sword fern), fauna.ts faunaMix(region, climate, place) (REGION_FAUNA: fireflies only east of the Plains, ibis on the Southern coasts, black-tailed deer on the westside, the snowshoe in the north woods)",
+        "Credited (src/ui/credits.ts, docs/DATA_SOURCES.md): US EPA Level III Ecoregions, public domain",
+        "Tests 882 (+11, tests/ecoregions.test.ts; understory.test.ts reads the place), typecheck, build"
+      ],
+      "notes": "docs/REGIONAL_LIFE.md §2; docs/agent/world-data.md \"Regions of life\". Done 2026-10-05 in the cloud session (Robby: \"i want to make sure all these places look alive lower 48 … with correct vegetatation and animals and all that\"). The region groupings were checked against the EPA list and each region file’s Covers line: 1 in California, 15 in Washington, 25–27 in Texas, 22 and 23 in New Mexico and Arizona, 40 and 47 by state, 61 and 83 by state, 63 and 45 in Virginia and the Carolinas, 65 and 75 along the Gulf all follow the reference’s state lines. The green spot \"Centerville Road, Tallahassee\" is the Gulf’s (06: \"The Panhandle and Tallahassee are region 7\"), relabelled in tools/real-spots.mjs."
     },
     {
       "id": "regional-flora",
@@ -1916,9 +1925,10 @@
         "Moss on bark as a region term (styles.ts moss, U.uMoss: the westside 1, the dry side 0.1); moss beards and licorice fern on the bigleaf maple; leaf pictures for the cedar's sprays and the maples' hands.",
         "Placement: west of the Cascade crest (styles.ts westOfCascades) the conifers are the Northwest's at real heights (fir and Sitka 25–48 m in a wood), Sitka in the outer coast's fog belt, four in five of a wood's trees conifers; the dry side is now the Mountain West's (tests/streetTrees.test.ts \"the Northwest's woods\").",
         "The forest floor (world/understory.ts): sword fern, salal and Oregon grape under a wood's canopy round the walker, the lawn grass giving way there (tests/understory.test.ts).",
-        "Comparison pnw-flora-1 (real-compare --kind=green --states=WA,OR): mean 0.683 over 4 scored spots; Seattle's Federal Ave 0.79 (vegetation 43% vs the photo's 59%) with fir spires and mossy trunks; Longmire still 12% vs 60% — no mapped wood there (the canopy layer). In-game: shots/spots-pnw-wood2.jpg (a Seattle old-growth wood), shots/spots-pnw-hoh.jpg."
+        "Comparison pnw-flora-1 (real-compare --kind=green --states=WA,OR): mean 0.683 over 4 scored spots; Seattle's Federal Ave 0.79 (vegetation 43% vs the photo's 59%) with fir spires and mossy trunks; Longmire still 12% vs 60% — no mapped wood there (the canopy layer). In-game: shots/spots-pnw-wood2.jpg (a Seattle old-growth wood), shots/spots-pnw-hoh.jpg.",
+        "2026-10-05 — the live oaks and their hangers (docs/regional-life/models.md build order #2): flora.ts OAKS — the southern live oak (grand, alley, gnarled), the plateau oak (one trunk, a mott of three, a pair), the coast live oak (round dome, two leaning trunks, old) — far ≤ 1,494, near ≤ 1,862 vertices; assets/hangers.ts — Spanish moss, resurrection fern, ball moss, lace lichen grown on each tree’s limbs, two loads, a tone per tree, each ≤ 2,000 vertices, the strands’ pendulum swing in propMaterial hang, the fern greening with season.ts wetness; hangerMix by ranges.md (tests/hangers.test.ts); placed by region in flora.ts broadMix and props.ts (heights 10–20 m, a mapped oak in live oak country most likely the live oak). Studio: shots/trees-liveoak3.jpg, trees-plateau2.jpg, trees-coast2.jpg, trees-liveoak-hung4.jpg."
       ],
-      "notes": "Build order: docs/REGIONAL_LIFE.md §6. Started 2026-10-04 with the Pacific Northwest (Robby: \"do northwest\"): detailed, well-made foundry models from the exhaustive list in docs/REGIONAL_LIFE.md §6. 2026-10-04: the Northwest done (trees, moss, the forest floor). Next packages: models.md build order #2 on (live oak + Spanish moss; aspen + ponderosa for the Rockies and the dry side; the eastern hardwoods and flowering understory; the desert). Also: the ground under a wood painted as duff and moss, not lawn; OSM genus → the new kinds in realTile (Pseudotsuga→fir, Thuja→cedar, Tsuga→hemlock, Picea sitchensis→sitka, Alnus→alder, Acer circinatum→vinemaple) with the next worker cache bump."
+      "notes": "Build order: docs/REGIONAL_LIFE.md §6. Started 2026-10-04 with the Pacific Northwest (Robby: \"do northwest\"): detailed, well-made foundry models from the exhaustive list in docs/REGIONAL_LIFE.md §6. 2026-10-04: the Northwest done (trees, moss, the forest floor). Next packages: models.md build order #2 on (live oak + Spanish moss; aspen + ponderosa for the Rockies and the dry side; the eastern hardwoods and flowering understory; the desert). Also: the ground under a wood painted as duff and moss, not lawn; OSM genus → the new kinds in realTile (Pseudotsuga→fir, Thuja→cedar, Tsuga→hemlock, Picea sitchensis→sitka, Alnus→alder, Acer circinatum→vinemaple) with the next worker cache bump. 2026-10-05 (the cloud session): Robby, \"ensure animation like for spanish moss and other things are really good too and we want alot of variety even per species, color, all that\" — package #2 built: three live oaks × three forms, the hanger layer with the pendulum swing, per-tree tones and loads. Next: #3 northern and mountain forests."
     },
     {
       "id": "regional-wildlife",

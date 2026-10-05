@@ -27,6 +27,8 @@ export const CREDITS: Credit[] = [
     hosts: ['esa-worldcover.org', 'esa-worldcover.s3.eu-central-1.amazonaws.com'] },
   { what: 'Place names: the map search', credit: 'USGS Geographic Names Information System (GNIS)', licence: 'public domain', link: 'https://www.usgs.gov/us-board-on-geographic-names', hosts: ['prd-tnm.s3.amazonaws.com'] },
   { what: 'Towns and counties: search and arrival cards', credit: 'U.S. Census Bureau: gazetteer, cartographic boundaries, population estimates', licence: 'public domain', link: 'https://www.census.gov/geographies.html', hosts: ['www2.census.gov'] },
+  { what: 'Which plants and animals belong where: the regions of the lower 48', credit: 'U.S. Environmental Protection Agency: Level III Ecoregions of the Continental United States', licence: 'public domain', link: 'https://www.epa.gov/eco-research/level-iii-and-iv-ecoregions-continental-united-states',
+    hosts: ['dmap-prod-oms-edc.s3.us-east-1.amazonaws.com'] },
   { what: 'Hosting the tiles and the place index', credit: 'Cloudflare Workers and R2', licence: 'paid service', link: 'https://www.cloudflare.com', hosts: ['map-game-tiles.map-game-tiles.workers.dev'] },
   { what: 'Rendering and storage', credit: 'three.js (MIT) · lil-gui (MIT) · idb (ISC) · laz-perf (Apache 2.0)', licence: 'MIT, ISC, Apache 2.0', link: 'https://threejs.org' },
 ];
