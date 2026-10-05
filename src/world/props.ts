@@ -12,6 +12,7 @@ import { makeRng, hash01 } from '../core/rng';
 import { carMix, boatMix, carLib, boatLib, boatRecipe, carRecipe, pickFrom, CAR_TYPES, type BoatType, type CarType } from '../assets/kit';
 import type { Mailbox, Door, Drive } from './buildings';
 import { makeCanvas } from './canvas';
+import { pointInRing, ringTester } from './realTile';
 import { activeStyle, pickWeighted } from './styles';
 import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, plantLib, inBloom, SPECIES, STAGES, fallHueOf, DECIDUOUS, type PlantSpecies } from '../assets/flora';
 import { MAILBOXES, mailboxLib, beachLib, gearFor, type MailboxStyle, type CarGear } from '../assets/furniture';
@@ -263,6 +264,34 @@ function pavedMask(world: World, zone: { x0: number; z0: number; x1: number; z1:
   };
 }
 
+/** The land cover the map draws (WorldCover's classes: 10 tree, 20 shrub, 30 grass), from the tile's
+ *  own OSM areas — woods and forests, scrub and heath, parks, lawns and golf — at 4 m; 0 where it
+ *  draws none. A streamed cell's ground layer comes from the DEM, whose cover is grassland everywhere
+ *  (dem.ts demLayer): without this the tree scan planted a forest a grassland's 5% (Longmire, inside
+ *  Mount Rainier's old growth, stood on an open lawn). */
+function areaCoverMask(world: World, zone: { x0: number; z0: number; x1: number; z1: number }) {
+  // (polygons, not a canvas: a point a 9 m scan cell — the big rings tested by row, ringTester)
+  type R = { b: [number, number, number, number]; at: (x: number, z: number) => boolean };
+  const ring = (f: number[]): R => {
+    const r = unpackPts(f);
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (const [x, z] of r) (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z));
+    return { b: [x0, z0, x1, z1], at: r.length > 64 ? ringTester(r, zone.z0 - 8, zone.z1 + 8) : (x, z) => pointInRing(x, z, r) };
+  };
+  const inR = (q: R, x: number, z: number) => x >= q.b[0] && x <= q.b[2] && z >= q.b[1] && z <= q.b[3] && q.at(x, z);
+  // (strongest first: a wood inside a park is a wood)
+  const CODE: Record<string, number> = { wood: 10, scrub: 20, wetland: 20, grass: 30, golf: 30, pitch: 30 };
+  const areas = world.json.areas
+    .filter((a) => CODE[a.c])
+    .map((a) => ({ code: CODE[a.c], o: a.o.map(ring), i: a.i.map(ring) }))
+    .filter((a) => a.o.some((q) => q.b[2] >= zone.x0 && q.b[0] <= zone.x1 && q.b[3] >= zone.z0 && q.b[1] <= zone.z1))
+    .sort((p, q) => p.code - q.code);
+  return (x: number, z: number) => {
+    for (const a of areas) if (a.o.some((q) => inR(q, x, z)) && !a.i.some((q) => inR(q, x, z))) return a.code;
+    return 0;
+  };
+}
+
 // Night halos around lamp heads and lanterns (soft wet blooms, additive). Module-level so the
 // tile worker's packed objects can be rebuilt with the same material on the main thread.
 export function haloMaterial(size: number, color: THREE.Color) {
@@ -410,6 +439,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     ? { x0: extras.box.x0 - 8, z0: extras.box.z0 - 8, x1: extras.box.x1 + 8, z1: extras.box.z1 + 8 }
     : big;
   const paved = pavedMask({ json: ctxJson, terrain }, maskZone);
+  const mapCover = areaCoverMask({ json: ctxJson, terrain }, maskZone);
   /** Walls only the builders see — the tile's scratch walk's (pack.ts RecWalk), not shipped with it:
    *  a car that comes and goes keeps its stall clear of what's placed after it, and the main thread
    *  walls it only while it's there (kerbCars.ts). */
@@ -823,7 +853,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       if (extras.box && (x < extras.box.x0 || x >= extras.box.x1 || z < extras.box.z0 || z >= extras.box.z1)) continue;
       const jx = x + rng.float() * G, jz = z + rng.float() * G;
       if (lidarCovered(jx, jz)) continue;
-      const cov = terrain.coverAt(jx, jz);
+      const cov = mapCover(jx, jz) || terrain.coverAt(jx, jz); // (the map's own woods first)
       const beachy = terrain.oceanDistAt(jx, jz) < 90;
       const pr = cov === 10 ? 0.85 : beachy ? 0 : cov === 50 ? 0.035 : cov === 30 ? 0.05 : cov === 20 ? 0.3 : 0;
       // (estate country is old trees round big lawns; an old grid's street trees are mature too)

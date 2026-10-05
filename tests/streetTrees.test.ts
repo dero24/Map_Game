@@ -77,3 +77,31 @@ describe("the survey's street trees", () => {
     expect(kept).toBeGreaterThanOrEqual(Math.ceil(want * 0.8));
   }, 30000);
 });
+
+describe("the map's own woods", () => {
+  it('a wood or forest the map draws grows a forest on a streamed cell with no survey', async () => {
+    // (a streamed cell's ground is the DEM's, its cover grassland everywhere: Longmire, inside Mount
+    // Rainier's old growth, stood on an open lawn)
+    setActiveStyle(regionStyle(AT[0], AT[1]));
+    const sq = (x0: number, z0: number, x1: number, z1: number) => [m(x0), m(z0), m(x1), m(z0), m(x1), m(z1), m(x0), m(z1)];
+    const tj = {
+      version: 1, id: '0_0', lod: 0, box: { x0: 0, z0: 0, x1: 256, z1: 256 },
+      origin: { lat: AT[0], lon: AT[1] }, slice: { x0: 0, z0: 0, x1: 256, z1: 256 }, backdrop: { x0: 0, z0: 0, x1: 256, z1: 256 },
+      landmarks: [], buildings: [], roads: [], lines: [], points: [],
+      areas: [{ c: 'wood', o: [sq(20, 20, 120, 120)], i: [] }],
+    } as unknown as TileJson;
+    const built = await buildTile(tj, terrain, { id: 'w0_0', box: tj.box, lod: 0, file: '', world: 1 }, 0);
+    let inWood = 0, outside = 0;
+    for (const o of built.objs as { n?: string; im?: Float32Array }[]) {
+      if (!o.n?.startsWith('trees:') || !o.im) continue;
+      for (let i = 0; i + 15 < o.im.length; i += 16) {
+        const x = o.im[i + 12], z = o.im[i + 14];
+        if (x > 20 && x < 120 && z > 20 && z < 120) inWood++;
+        else if (x > 140 && z > 140) outside++;
+      }
+    }
+    // a hectare of wood: a forest (the scan's 85% a 9 m cell is ~100 a hectare); open ground stays open
+    expect(inWood).toBeGreaterThan(60);
+    expect(outside).toBeLessThan(inWood / 4);
+  }, 30000);
+});
