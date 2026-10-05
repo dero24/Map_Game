@@ -142,7 +142,7 @@
       "id": "phones",
       "tier": 0,
       "rank": 6,
-      "status": "blocked",
+      "status": "passing",
       "priority": 0,
       "area": "platform",
       "title": "The game runs on phones, and says why if it can't",
@@ -181,7 +181,7 @@
         "src/world/pack.ts setFreeUploaded + src/render/quality.ts freeArrays + tests/pack.test.ts, tests/quality.test.ts (a phone tier's tiles keep their vertex data only on the GPU)",
         "src/world/stream.ts uploadSoon (a tile mounted whole is drawn its first frame in or out of view, so it uploads and lets go at once); src/main.ts (a restored context on a freeing page reloads where you stand)"
       ],
-      "notes": "2026-09-30: controls reviewed and fixed (docs/earth/LOG.md); phones sleep when put away; the NYC crash's memory causes fixed (sign-atlas texture leak, walls never reclaimed, LiDAR ~130 MB a Midtown cell, up to 9 dense cells in the ring); a phone lands only once the street below is built. Verified headless in Sea Bright (Pixel 7 emulation): textures flat at 23–25 over 4 round trips (was 24 → 36), walls flat at 106k (was 263k), landing 12.7 m clear of the house it used to land in. Follow-up the same day: the phone HUD's overlaps fixed (the montage showed 3, an audit of 10 phones found 25 layouts); an unloaded tile's walls purged a slice a frame on every tier (a PC's long hop had left 166k dead walls); sleep re-measured by the life worker's messages (57–59 ticks in 3 s awake, 0 hidden); no page zoom even where the browser ignores the viewport meta (headless pinch: scale stays 1). Still needs a real phone after the next Pages deploy: …/Map_Game/?diag=1 in Manhattan (the tile service and Overpass are unreachable from the agent sandbox), and an iPhone for the gesture-event zoom guard (WebKit isn't installed here). 2026-10-03: set to blocked (was in_progress) while the measured-heights items run — what remains is the real-device check above (a real phone on the Pages deploy in Manhattan with ?diag=1, and an iPhone for the gesture-zoom guard), which the agent can't do; unblocks when Robby has run it. Tier 0 (2026-10-03): what's left needs a real phone — Robby, on the Pages deploy: ?diag=1 in Manhattan, and an iPhone for the gesture-zoom guard. Robby 2026-10-04, a real phone (Android 10, Chrome 154, 8 GB, 8 cores, 385×824 @3.75x), on the Pages build: after teleporting to Monmouth Executive Airport NJ (40.1867, −74.1249) the GPU crashed; reloading, Chrome had switched WebGL off for the site (the boot report: webgl2 and webgl1 unavailable) until the browser was restarted; some grass showed blue; in DuckDuckGo's browser the page flashed and the browser crashed. Next: reproduce at the airport on the phone tier (tools/audit48.mjs --towns=monmouthairport-nj, tools/mobile-check.mjs) — GPU memory across a teleport, and what the blue is. 2026-10-04, reproduced headless (Pixel 7 emulation, the phone tier, this PC's GPU): the blue grass was the wetland ground bug (fixed, every-tile-loads); no leak across 12 teleports Sea Bright ⇄ the airport ⇄ Shrewsbury — three's geometries 585–913 and textures 26–28 by place, the JS heap after a forced GC 453–536 MB, flat (without the GC it climbed to 773: garbage not yet collected). What a phone carries is the weight: ~190–245 MB of vertex data the scene reaches (kept in JS as well as on the GPU) and a ~450–530 MB heap; an Android 10 phone's tab running out there is plausible. Next: free uploaded vertex arrays the CPU never reads again on the phone tier, measure the renderer process on a phone, and Robby's ?diag=1 at the airport after go-live. 2026-10-04: the page held every tile vertex twice (JS and GPU). A phone's tiles now let go of the JS copy once uploaded: at Monmouth Executive Airport (Pixel 7, phone tier) the page's array memory 196 → 136 MB settled, 243 → 158 MB after a walk round the ring; no errors; the phone montage unchanged; tools/mobile-check.mjs clean. A lost and restored GPU context reloads the page where you stand (a tier lighter, diag's record), checked with WEBGL_lose_context. Still to do: Robby's ?diag=1 at the airport on his phone; the real-device look (phone-look). Blocked 2026-10-04 on the real device: Robby's ?diag=1 report at the airport on his Android 10 phone, now the freeing build is live (https://dero24.github.io/Map_Game/?at=40.1867,-74.1249&diag=1)."
+      "notes": "2026-09-30: controls reviewed and fixed (docs/earth/LOG.md); phones sleep when put away; the NYC crash's memory causes fixed (sign-atlas texture leak, walls never reclaimed, LiDAR ~130 MB a Midtown cell, up to 9 dense cells in the ring); a phone lands only once the street below is built. Verified headless in Sea Bright (Pixel 7 emulation): textures flat at 23–25 over 4 round trips (was 24 → 36), walls flat at 106k (was 263k), landing 12.7 m clear of the house it used to land in. Follow-up the same day: the phone HUD's overlaps fixed (the montage showed 3, an audit of 10 phones found 25 layouts); an unloaded tile's walls purged a slice a frame on every tier (a PC's long hop had left 166k dead walls); sleep re-measured by the life worker's messages (57–59 ticks in 3 s awake, 0 hidden); no page zoom even where the browser ignores the viewport meta (headless pinch: scale stays 1). Still needs a real phone after the next Pages deploy: …/Map_Game/?diag=1 in Manhattan (the tile service and Overpass are unreachable from the agent sandbox), and an iPhone for the gesture-event zoom guard (WebKit isn't installed here). 2026-10-03: set to blocked (was in_progress) while the measured-heights items run — what remains is the real-device check above (a real phone on the Pages deploy in Manhattan with ?diag=1, and an iPhone for the gesture-zoom guard), which the agent can't do; unblocks when Robby has run it. Tier 0 (2026-10-03): what's left needs a real phone — Robby, on the Pages deploy: ?diag=1 in Manhattan, and an iPhone for the gesture-zoom guard. Robby 2026-10-04, a real phone (Android 10, Chrome 154, 8 GB, 8 cores, 385×824 @3.75x), on the Pages build: after teleporting to Monmouth Executive Airport NJ (40.1867, −74.1249) the GPU crashed; reloading, Chrome had switched WebGL off for the site (the boot report: webgl2 and webgl1 unavailable) until the browser was restarted; some grass showed blue; in DuckDuckGo's browser the page flashed and the browser crashed. Next: reproduce at the airport on the phone tier (tools/audit48.mjs --towns=monmouthairport-nj, tools/mobile-check.mjs) — GPU memory across a teleport, and what the blue is. 2026-10-04, reproduced headless (Pixel 7 emulation, the phone tier, this PC's GPU): the blue grass was the wetland ground bug (fixed, every-tile-loads); no leak across 12 teleports Sea Bright ⇄ the airport ⇄ Shrewsbury — three's geometries 585–913 and textures 26–28 by place, the JS heap after a forced GC 453–536 MB, flat (without the GC it climbed to 773: garbage not yet collected). What a phone carries is the weight: ~190–245 MB of vertex data the scene reaches (kept in JS as well as on the GPU) and a ~450–530 MB heap; an Android 10 phone's tab running out there is plausible. Next: free uploaded vertex arrays the CPU never reads again on the phone tier, measure the renderer process on a phone, and Robby's ?diag=1 at the airport after go-live. 2026-10-04: the page held every tile vertex twice (JS and GPU). A phone's tiles now let go of the JS copy once uploaded: at Monmouth Executive Airport (Pixel 7, phone tier) the page's array memory 196 → 136 MB settled, 243 → 158 MB after a walk round the ring; no errors; the phone montage unchanged; tools/mobile-check.mjs clean. A lost and restored GPU context reloads the page where you stand (a tier lighter, diag's record), checked with WEBGL_lose_context. Still to do: Robby's ?diag=1 at the airport on his phone; the real-device look (phone-look). Blocked 2026-10-04 on the real device: Robby's ?diag=1 report at the airport on his Android 10 phone, now the freeing build is live (https://dero24.github.io/Map_Game/?at=40.1867,-74.1249&diag=1). 2026-10-04: Robby, on his phone after the freeing build: \"its working great on mobile right now as well\". Passing on his word (the ?diag report was the planned check)."
     },
     {
       "id": "own-place-index",
@@ -1150,7 +1150,7 @@
     {
       "id": "bloom",
       "tier": 2,
-      "rank": 52,
+      "rank": 60,
       "status": "not_started",
       "area": "gameplay",
       "title": "The bloom: a seen map, the pencil-to-colour composite, the first-sight wash (a throwaway prototype first, to prove the feel)",
@@ -1162,7 +1162,7 @@
     {
       "id": "pencil-collecting",
       "tier": 2,
-      "rank": 53,
+      "rank": 61,
       "status": "not_started",
       "area": "gameplay",
       "title": "Pencil collecting: tap to paint, the card into the sketchbook, the out-of-sight rhythm, cards as moments",
@@ -1174,19 +1174,19 @@
     {
       "id": "van-home-start",
       "tier": 2,
-      "rank": 54,
+      "rank": 62,
       "status": "not_started",
       "area": "gameplay",
       "title": "The van-home start and placing at home: wake in the van, \"Start near you?\", step out; the first card placed at home",
       "user_visible_behavior": "You wake in a small van that's bigger inside; with consent the game starts at a public spot in your town; your first card goes on its shelf.",
       "verification": [],
       "evidence": [],
-      "notes": "docs/GAMEPLAY_VISION.md §7, §8, §15 step 3. City-level location only, never stored (privacy: ask Robby before building)."
+      "notes": "docs/GAMEPLAY_VISION.md §7, §8, §15 step 3. City-level location only, never stored (privacy: ask Robby before building). Includes the five-rule combine prototype at home (§15 step 3, §6.5)."
     },
     {
       "id": "placing-in-world",
       "tier": 2,
-      "rank": 55,
+      "rank": 64,
       "status": "not_started",
       "area": "gameplay",
       "title": "Placing things in the world: your own layer, ride what you've painted, light the bridge, plank the creek, near in full and far as flat paintings, the camp kit",
@@ -1201,7 +1201,7 @@
     {
       "id": "regional-rares",
       "tier": 2,
-      "rank": 56,
+      "rank": 68,
       "status": "not_started",
       "area": "gameplay",
       "title": "Regional rares as data, sketchbook silhouettes, sets, then moment rares",
@@ -1213,7 +1213,7 @@
     {
       "id": "van-travel",
       "tier": 2,
-      "rank": 57,
+      "rank": 71,
       "status": "not_started",
       "area": "gameplay",
       "title": "Van travel: call it, drive it, fuel, self-drive, sleep legs with planned stops and arrival cards",
@@ -1225,7 +1225,7 @@
     {
       "id": "growing-home",
       "tier": 2,
-      "rank": 58,
+      "rank": 73,
       "status": "not_started",
       "area": "gameplay",
       "title": "Growing the home: rooms, windows that show the vehicle's view, miniatures, outdoor rooms",
@@ -1237,7 +1237,7 @@
     {
       "id": "special-vehicles",
       "tier": 2,
-      "rank": 59,
+      "rank": 75,
       "status": "not_started",
       "area": "gameplay",
       "title": "The other special vehicles: yacht, plane, balloon, each earned in the world",
@@ -1249,7 +1249,7 @@
     {
       "id": "portal-gun",
       "tier": 2,
-      "rank": 60,
+      "rank": 77,
       "status": "not_started",
       "area": "gameplay",
       "title": "The portal gun (legendary)",
@@ -1261,7 +1261,7 @@
     {
       "id": "series-bridge-postcards",
       "tier": 2,
-      "rank": 61,
+      "rank": 78,
       "status": "not_started",
       "area": "gameplay",
       "title": "Series, the bridge on its real schedule, postcards",
@@ -1273,7 +1273,7 @@
     {
       "id": "the-dog",
       "tier": 2,
-      "rank": 62,
+      "rank": 80,
       "status": "not_started",
       "area": "gameplay",
       "title": "The dog (later)",
@@ -1285,7 +1285,7 @@
     {
       "id": "friends-visits",
       "tier": 2,
-      "rank": 63,
+      "rank": 81,
       "status": "not_started",
       "area": "gameplay",
       "title": "Friends and visits",
@@ -1297,7 +1297,7 @@
     {
       "id": "brush-boat-minute",
       "tier": 2,
-      "rank": 64,
+      "rank": 100,
       "status": "superseded",
       "priority": 1,
       "area": "gameplay",
@@ -1320,7 +1320,7 @@
     {
       "id": "almanac-regional",
       "tier": 2,
-      "rank": 65,
+      "rank": 101,
       "status": "superseded",
       "priority": 4,
       "area": "gameplay",
@@ -1337,7 +1337,7 @@
     {
       "id": "people-doing-things",
       "tier": 3,
-      "rank": 66,
+      "rank": 102,
       "status": "not_started",
       "priority": 1,
       "area": "gameplay",
@@ -1359,7 +1359,7 @@
     {
       "id": "j1-road-ribbon",
       "tier": 3,
-      "rank": 67,
+      "rank": 103,
       "status": "not_started",
       "priority": 3,
       "area": "presentation",
@@ -1375,7 +1375,7 @@
     {
       "id": "vehicle-polish",
       "tier": 3,
-      "rank": 68,
+      "rank": 104,
       "status": "not_started",
       "priority": 4,
       "area": "life",
@@ -1391,7 +1391,7 @@
     {
       "id": "l-cross-gable",
       "tier": 3,
-      "rank": 69,
+      "rank": 105,
       "status": "not_started",
       "priority": 5,
       "area": "buildings",
@@ -1407,7 +1407,7 @@
     {
       "id": "local-plates-interiors",
       "tier": 3,
-      "rank": 70,
+      "rank": 106,
       "status": "not_started",
       "priority": 5,
       "area": "gameplay",
@@ -1426,7 +1426,7 @@
     {
       "id": "j2-rest",
       "tier": 3,
-      "rank": 71,
+      "rank": 107,
       "status": "not_started",
       "priority": 6,
       "area": "buildings",
@@ -1442,7 +1442,7 @@
     {
       "id": "hero-region-02",
       "tier": 3,
-      "rank": 72,
+      "rank": 108,
       "status": "not_started",
       "priority": 6,
       "area": "data",
@@ -1459,7 +1459,7 @@
     {
       "id": "k-life",
       "tier": 3,
-      "rank": 73,
+      "rank": 109,
       "status": "not_started",
       "priority": 7,
       "area": "life",
@@ -1475,7 +1475,7 @@
     {
       "id": "l-full",
       "tier": 3,
-      "rank": 74,
+      "rank": 110,
       "status": "not_started",
       "priority": 8,
       "area": "data",
@@ -1491,7 +1491,7 @@
     {
       "id": "k-life-districts",
       "tier": 3,
-      "rank": 75,
+      "rank": 111,
       "status": "not_started",
       "priority": 9,
       "area": "life",
@@ -1507,7 +1507,7 @@
     {
       "id": "atlas-journal",
       "tier": 3,
-      "rank": 76,
+      "rank": 112,
       "status": "not_started",
       "priority": 11,
       "area": "core",
@@ -1523,7 +1523,7 @@
     {
       "id": "traffic-control",
       "tier": 3,
-      "rank": 77,
+      "rank": 113,
       "status": "passing",
       "priority": 1,
       "area": "gameplay",
@@ -1545,7 +1545,7 @@
     {
       "id": "open-data-catalogue",
       "tier": 3,
-      "rank": 78,
+      "rank": 114,
       "status": "passing",
       "priority": 1,
       "area": "docs",
@@ -1562,7 +1562,7 @@
     {
       "id": "traffic-integrity",
       "tier": 3,
-      "rank": 79,
+      "rank": 115,
       "status": "passing",
       "priority": 1,
       "area": "sim",
@@ -1585,7 +1585,7 @@
     {
       "id": "traffic-flow",
       "tier": 3,
-      "rank": 80,
+      "rank": 116,
       "status": "passing",
       "priority": 1,
       "area": "sim",
@@ -1608,7 +1608,7 @@
     {
       "id": "drive-hitch",
       "tier": 3,
-      "rank": 81,
+      "rank": 117,
       "status": "passing",
       "priority": 1,
       "area": "perf",
@@ -1635,7 +1635,7 @@
     {
       "id": "never-shut-in",
       "tier": 3,
-      "rank": 82,
+      "rank": 118,
       "status": "passing",
       "priority": 1,
       "area": "gameplay",
@@ -1656,7 +1656,7 @@
     {
       "id": "balloons",
       "tier": 3,
-      "rank": 83,
+      "rank": 119,
       "status": "passing",
       "priority": 1,
       "area": "gameplay",
@@ -1681,7 +1681,7 @@
     {
       "id": "shore-calendar",
       "tier": 3,
-      "rank": 84,
+      "rank": 120,
       "status": "passing",
       "priority": 1,
       "area": "gameplay",
@@ -1702,7 +1702,7 @@
     {
       "id": "photo-paints-frame",
       "tier": 3,
-      "rank": 85,
+      "rank": 121,
       "status": "passing",
       "priority": 2,
       "area": "gameplay",
@@ -1725,7 +1725,7 @@
     {
       "id": "streamed-parity-harness",
       "tier": 3,
-      "rank": 86,
+      "rank": 122,
       "status": "passing",
       "priority": 3,
       "area": "tooling",
@@ -1743,7 +1743,7 @@
     {
       "id": "regional-cast-and-uses",
       "tier": 3,
-      "rank": 87,
+      "rank": 123,
       "status": "passing",
       "priority": 3,
       "area": "gameplay",
@@ -1763,7 +1763,7 @@
     {
       "id": "downtown-life",
       "tier": 3,
-      "rank": 88,
+      "rank": 124,
       "status": "passing",
       "priority": 4,
       "area": "gameplay",
@@ -1783,7 +1783,7 @@
     {
       "id": "ecosystem-physics",
       "tier": 3,
-      "rank": 89,
+      "rank": 125,
       "status": "passing",
       "priority": 4,
       "area": "gameplay",
@@ -1803,7 +1803,7 @@
     {
       "id": "bug-dem-seam",
       "tier": 3,
-      "rank": 90,
+      "rank": 126,
       "status": "passing",
       "priority": 99,
       "area": "streaming",
@@ -1860,8 +1860,8 @@
     {
       "id": "regional-greenery",
       "tier": 1,
-      "rank": 11.5,
-      "status": "in_progress",
+      "rank": 11.6,
+      "status": "blocked",
       "area": "world",
       "title": "Greenery as dense and as regional as the photos: yards, verges, street trees, tree lines, woodlots, the far field",
       "user_visible_behavior": "Every region is as green as its street photos — leafy suburbs, tree-lined country roads, woods — and the trees are the region's own.",
@@ -1877,12 +1877,12 @@
         "tools/class-pass.js (no backdrop ceiling over streamed cells)",
         "green-2 (tools/real-scores.json): green spots vegetation 3% -> 24% (photos 35%), mean 0.57 -> 0.72"
       ],
-      "notes": "national-1: the game shows 5% vegetation where the photos show 14%. The WorldCover scan gives a built-up cell a 3.5% chance of a tree per 9 m cell (a leafy suburb ~4 trees/ha vs 25-45 real); rural roads lose their tree lines; the far field is thin. 2026-10-04 green-2: 24% of the photos' 35%. Still bare: forests neither OSM nor the LiDAR records hold (Longmire, NY-73 in the Adirondacks, Bend) - next, the USFS NLCD Tree Canopy Cover (30 m, public) baked into R2 by 1° blocks as the tree scan's density."
+      "notes": "national-1: the game shows 5% vegetation where the photos show 14%. The WorldCover scan gives a built-up cell a 3.5% chance of a tree per 9 m cell (a leafy suburb ~4 trees/ha vs 25-45 real); rural roads lose their tree lines; the far field is thin. 2026-10-04 green-2: 24% of the photos' 35%. Still bare: forests neither OSM nor the LiDAR records hold (Longmire, NY-73 in the Adirondacks, Bend) - next, the USFS NLCD Tree Canopy Cover (30 m, public) baked into R2 by 1° blocks as the tree scan's density. Blocked 2026-10-04 on the national canopy layer: Robby, \"do northwest and stuff that doesnt take hrs of processing at the moment\" — the USFS canopy bake waits."
     },
     {
       "id": "ecoregions",
       "tier": 1,
-      "rank": 11.6,
+      "rank": 11.7,
       "status": "not_started",
       "area": "world",
       "title": "Regions as data: EPA Level III ecoregions → 16 regions, so casts follow the land, not coarse boxes",
@@ -1896,8 +1896,8 @@
     {
       "id": "regional-flora",
       "tier": 1,
-      "rank": 11.7,
-      "status": "not_started",
+      "rank": 11.4,
+      "status": "in_progress",
       "area": "assets",
       "title": "The regional flora: live oak and Spanish moss, the PNW conifers and moss on bark, aspen and ponderosa, the eastern hardwoods and flowering understory, bald cypress, cottonwood, the desert, piñon-juniper-sage, palms and palmetto, ferns and ground layers",
       "user_visible_behavior": "A place's trees and plants are the ones that grow there, layer by layer, through the seasons.",
@@ -1909,12 +1909,12 @@
       "evidence": [
         "docs/regional-life/ (the reference)"
       ],
-      "notes": "Build order: docs/REGIONAL_LIFE.md §6."
+      "notes": "Build order: docs/REGIONAL_LIFE.md §6. Started 2026-10-04 with the Pacific Northwest (Robby: \"do northwest\"): detailed, well-made foundry models from the exhaustive list in docs/REGIONAL_LIFE.md §6."
     },
     {
       "id": "regional-wildlife",
       "tier": 1,
-      "rank": 11.8,
+      "rank": 11.5,
       "status": "not_started",
       "area": "assets",
       "title": "The regional wildlife: each region's cast with how common each animal is, where and when; the new families; regional rares as data",
@@ -1927,7 +1927,187 @@
       "evidence": [
         "docs/regional-life/ (the reference)"
       ],
-      "notes": "Build order: docs/REGIONAL_LIFE.md §6; rares tie to docs/GAMEPLAY_VISION.md §3."
+      "notes": "Build order: docs/REGIONAL_LIFE.md §6; rares tie to docs/GAMEPLAY_VISION.md §3. Robby, 2026-10-04: models from the foundry, detailed, with \"amazing animation\"; an exhaustive list first."
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "Robby, 2026-10-04: \"people walking sometimes walk through walls of building to other side around corners and when walking on porch into house they fall into the floor then stand normal on floor again\".",
+      "id": "walkers-clear-of-walls",
+      "tier": 1,
+      "rank": 11.3,
+      "status": "not_started",
+      "area": "life",
+      "title": "Walkers keep to open ground: never through a building at a corner, up a porch's steps rather than through its deck",
+      "user_visible_behavior": "People walking the streets go round buildings, never through their walls at a corner; someone going into a house climbs its porch steps and walks its deck, never sinking into the floor and popping up."
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "fun-movement",
+      "tier": 2,
+      "status": "not_started",
+      "title": "Moving is fun (§11.1): a small hop, wade and swim, the bike; then surfing, kayaks and paddleboards, the skateboard, sleds",
+      "user_visible_behavior": "Hop a low fence or onto a dock, wade and swim where the map says beach or water, ride a bike — moving is a pleasure in itself.",
+      "area": "gameplay",
+      "rank": 63
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "combine-cards",
+      "tier": 2,
+      "status": "not_started",
+      "title": "Combine (§6.5): cards as tagged ingredients — drag onto a card, a preview, tap to keep; tag rules as data, mutations and Discoveries, crafted things in the world, the \"alive\" budget",
+      "user_visible_behavior": "Drag one card onto another and something new appears — never a failure, sometimes a surprise nobody authored.",
+      "area": "gameplay",
+      "rank": 65
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "place-activities",
+      "tier": 2,
+      "status": "not_started",
+      "title": "Things to do at real places (§11.2): fishing, hoops and the ice cream shop first; then mini golf, skimming stones, a rally, bowling, the picnic table, cooking",
+      "user_visible_behavior": "Every mapped court, pier and ice cream shop has a short, cozy thing to do there, with a card for doing it well.",
+      "area": "gameplay",
+      "rank": 66
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "town-regulars",
+      "tier": 2,
+      "status": "not_started",
+      "title": "People who remember you (§11.4): a few named regulars per town, commissions and gifts, the travelling friend",
+      "user_visible_behavior": "The café owner remembers what you painted and asks you to paint her boat at sunset.",
+      "area": "gameplay",
+      "rank": 67
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "events-calendar",
+      "tier": 2,
+      "status": "not_started",
+      "title": "Events: the world's own calendar (§11.7) — calendar rules, markets and opening hours, festivals, nature's calendar, weather, sports seasons; event kits from the foundry",
+      "user_visible_behavior": "Fireworks over the park on July 4, the farmers market on its real day, low tide, first snow.",
+      "area": "gameplay",
+      "rank": 69
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "today-in-town",
+      "tier": 2,
+      "status": "not_started",
+      "title": "\"Today in your town\" (§11.6): a card of what today brings — what turned to pencil, today's events, a commission",
+      "user_visible_behavior": "Every session opens with something to do.",
+      "area": "gameplay",
+      "rank": 70
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "old-sketchbook",
+      "tier": 2,
+      "status": "not_started",
+      "title": "The old sketchbook (§11.3): riddle pages of real places across America, as data by region; paint the view at the right time",
+      "user_visible_behavior": "A found sketchbook gives the road trip a direction and an ending.",
+      "area": "gameplay",
+      "rank": 72
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "self-expression",
+      "tier": 2,
+      "status": "not_started",
+      "title": "Self-expression (§11.8): outfits from your travels, van paint jobs, a painting style per painting",
+      "user_visible_behavior": "A fisherman's sweater from Maine, a cowboy hat from Texas; a van painted your way.",
+      "area": "gameplay",
+      "rank": 74
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "skill-challenges",
+      "tier": 2,
+      "status": "not_started",
+      "title": "Small optional skill challenges (§11.5): land the balloon on a target, dock the yacht, glide the plane in, surf a long wave",
+      "user_visible_behavior": "Doing it well earns a gold card; never punishing.",
+      "area": "gameplay",
+      "rank": 76
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "",
+      "id": "long-term-goals",
+      "tier": 2,
+      "status": "not_started",
+      "title": "Long-term goals (§11.9): a state's painted map, a masterpiece per region, the gallery museum, the 48-state journey",
+      "user_visible_behavior": "Twenty hours in, there is still a reason to cross the country.",
+      "area": "gameplay",
+      "rank": 79
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "Alongside from §15 step 2.",
+      "id": "music",
+      "tier": 2,
+      "status": "not_started",
+      "title": "Music (§11.10): soft themes by region, time and weather from Robby's Sound Studio, fading for real-place moments",
+      "user_visible_behavior": "Calm, sparse music that changes as you travel.",
+      "area": "gameplay",
+      "rank": 82
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "Alongside from §15 step 2, as they fit.",
+      "id": "smaller-things",
+      "tier": 2,
+      "status": "not_started",
+      "title": "The smaller things (§11.11): controller support, weather as play, far-off things that catch your eye",
+      "user_visible_behavior": "A gamepad works; puddles splash; a balloon on the horizon pulls you toward it.",
+      "area": "gameplay",
+      "rank": 83
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "A dev-time tool: it also speeds the regional flora and fauna and the event kits.",
+      "id": "recipe-maker",
+      "tier": 2,
+      "status": "not_started",
+      "title": "The recipe maker (§11.7): a parts library, recipes as JSON, a dev tool that turns a keyword into a recipe, checks, a preview page, a shared recipe table",
+      "user_visible_behavior": "Hundreds of event-kit, rare and furniture models, made quickly and reviewed.",
+      "area": "assets",
+      "rank": 84
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "After §15 step 11; needs the recipe maker, a keyword filter, a daily cost cap and an on/off switch.",
+      "id": "paint-anything",
+      "tier": 2,
+      "status": "not_started",
+      "title": "\"Paint anything\" (§6.5 rule 11, later): a player names a thing and its recipe is made once, validated and shared",
+      "user_visible_behavior": "Name a lobster trap and one appears — the same for every player.",
+      "area": "gameplay",
+      "rank": 85
     }
   ],
   "regions": {
