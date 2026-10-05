@@ -110,6 +110,15 @@ per species, color, all that".
 - **The tree studio without the game** (`tools/tree-studio.mjs`, a blank `tools/studio.html`): seconds
   where `/kit.html` took minutes under software GL; trees spaced by their crowns (a live oak is three
   street trees wide); `--extra=/tools/studio-hangers.js` dresses them with their hangers.
+- **Wrap-up and handoff.** Robby: wrap up and hand off to a new session on this branch, "and also to
+  know to make things derailed [detailed] and variety and variation matter"; and "it doesnt need to do
+  the slow captures as we want rapid but great development … just review a faster way like the code
+  itself or screenshots if that works". `docs/earth/HANDOFF.md` is rewritten for it: review by reading
+  the code, typecheck and the touched test files, the tree studio when it works; CI (typecheck, the
+  full tests, build, playtest on every `feature/*` push) does the heavy checking; nothing that needs
+  the missing Cloudflare/Mapillary keys. Package #4 (the eastern hardwoods, the flowering understory,
+  the southern pines) is designed there but not started, with the bar for detail and variety every
+  package must clear. The Savannah in-game capture was stopped unfinished and isn't carried over.
 
 ## 2026-10-04 — Regional life (2): every door, the shop's whole window, the lamps, walkers on the steps, the Northwest in the foundry
 
