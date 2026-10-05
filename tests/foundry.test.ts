@@ -251,12 +251,54 @@ describe('flora', () => {
     expect(pics('redcedar')).toEqual([8, 9]); // scale-leaf sprays
     expect(pics('sycamore')).toEqual([10, 11]); // big maple-like hands
     expect(picsOf('crapemyrtle', 0, false)).toEqual([0, 1]); // small leaves
-    expect(LEAF_PICS).toBe(24);
+    expect(LEAF_PICS).toBe(28);
     // the small trees never taller than they grow; the tulip tree the tallest hardwood in a cove
     for (const k of Object.keys(SMALL_TREE) as TreeKind[]) for (let v = 0; v < TREE_VARIANTS; v++) expect(treeHeight4(k, v, 1, true)).toBeLessThanOrEqual(SMALL_TREE[k]!);
     expect(treeHeight4('tuliptree', 0, 1, true)).toBeGreaterThan(treeHeight4('sweetgum', 0, 1, true));
     expect(treeHeight4('longleaf', 0, 1, true)).toBeLessThan(1);
     expect(treeHeight4('round', 0, 0.5, true)).toBe(0); // (props.ts sizes the older kinds itself)
+  });
+  // Package #5 (models.md build order 5): the swamps and the rivers
+  it('the swamps and rivers: the cypress on its fluted foot among its knees, the tupelo on its bottle, the cottonwoods broad', () => {
+    const groundReach = (k: TreeKind, v: number, y0: number, y1: number) => {
+      const P = treeGeometry(k, v).geo.getAttribute('position');
+      let r = 0;
+      for (let i = 0; i < P.count; i++) if (P.getY(i) > y0 && P.getY(i) < y1) r = Math.max(r, Math.hypot(P.getX(i), P.getZ(i)));
+      return r;
+    };
+    for (let v = 0; v < TREE_VARIANTS; v++) {
+      const bc = treeGeometry('baldcypress', v);
+      // the flaring foot: wood at knee height twice the trunk's girth out; the knees standing round it
+      expect(groundReach('baldcypress', v, 0.1, 0.5), `foot ${v}`).toBeGreaterThan(1.7 * bc.meta.trunkR);
+      const C = bc.geo.getAttribute('color'), knee = new THREE.Color(0x8e7a66);
+      let kneeV = 0;
+      for (let i = 0; i < C.count; i++) if (Math.abs(C.getX(i) - knee.r) < 1e-3 && Math.abs(C.getY(i) - knee.g) < 1e-3) kneeV++;
+      expect(kneeV, `knees ${v}`).toBeGreaterThanOrEqual(4 * 18);
+    }
+    // young a cone with its sprays near the ground; grown in the swamp flat-topped high on its trunk
+    const y0 = treeGeometry('baldcypress', 0).meta, y1 = treeGeometry('baldcypress', 1).meta;
+    expect(y0.crownBottom / y0.h).toBeLessThan(0.15);
+    expect(y1.crownBottom / y1.h).toBeGreaterThan(0.3);
+    expect(y1.crownR / y1.h).toBeGreaterThan(y0.crownR / y0.h);
+    expect(treeGeometry('pondcypress', 2).meta.h).toBeLessThan(7.5); // the dwarf cypress
+    // the water tupelo's swollen bottle foot
+    const tp = treeGeometry('tupelo', 0);
+    expect(groundReach('tupelo', 0, 0.1, 0.5)).toBeGreaterThan(1.8 * tp.meta.trunkR);
+    // the cottonwoods broad, their leaves rattling; Fremont's bark pale
+    for (const k of ['cottonwood', 'fremont'] as const) {
+      for (let v = 0; v < TREE_VARIANTS; v++) expect(treeGeometry(k, v).meta.crownR / treeGeometry(k, v).meta.h, `${k} ${v}`).toBeGreaterThan(0.38);
+      expect(MOTION_OF[k]).toBe(1);
+      expect(fallHueOf(k, 0)).toBe(2); // gold
+    }
+    const lum = (c: number) => ((c >> 16) & 255) + ((c >> 8) & 255) + (c & 255);
+    expect(lum(treeGeometry('fremont', 0).plan.boughs[0].col)).toBeGreaterThan(lum(treeGeometry('cottonwood', 0).plan.boughs[0].col) + 60);
+    // seasons: all bare in winter; the cypresses russet, the swamp tupelo scarlet, the water tupelo rusty
+    for (const k of ['baldcypress', 'pondcypress', 'tupelo', 'cottonwood', 'fremont'] as const) expect(DECIDUOUS.has(k)).toBe(true);
+    expect([fallHueOf('baldcypress', 1), fallHueOf('tupelo', 0), fallHueOf('tupelo', 1)]).toEqual([6, 6, 1]);
+    // their own leaves up close: the cypress's feathers, the cottonwood's triangles
+    const pics = (k: TreeKind) => { const n = nearTreeGeometry(k, 1), q = new Set<number>(); for (let i = 0; i < n.cards.length; i += CARD_STRIDE) q.add(n.cards[i + 6]); return [...q].sort((a, b) => a - b); };
+    expect(pics('baldcypress')).toEqual([24, 25]);
+    expect(pics('cottonwood')).toEqual([26, 27]);
   });
   it('the leaf cards\' flags round-trip: leaf fall, a 3-bit fall hue, a 3-bit blossom, the motion', () => {
     for (const falls of [false, true]) for (let hue = 0; hue < 8; hue++) for (let bloom = 0; bloom < 6; bloom++) for (let motion = 0; motion < 4; motion++) {

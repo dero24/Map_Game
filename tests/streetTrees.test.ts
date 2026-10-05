@@ -3,7 +3,7 @@ import { type TileJson } from '../src/world/data';
 import { virtualRegion } from '../src/world/virtual';
 import { setActiveStyle, regionStyle } from '../src/world/styles';
 import { buildTile } from '../src/world/tileBuild';
-import { treeMeta, coniferMix, aspenShare, snagShare, broadMix, rosebayShare, bankMix, redcedarShare, understoryTrees, type TreeKind } from '../src/assets/flora';
+import { treeMeta, coniferMix, aspenShare, snagShare, broadMix, rosebayShare, bankMix, redcedarShare, understoryTrees, swampMix, swampForm, type TreeKind } from '../src/assets/flora';
 import { castOf } from '../src/world/styles';
 
 // The survey's street trees stand (props.ts, the LiDAR trees): a crown measured over the street has
@@ -242,6 +242,29 @@ describe('package #4 by place (flora.ts broadMix, coniferMix, rosebayShare, bank
     expect(redcedarShare(at(39.74, -104.99))).toBe(0);
     expect(understoryTrees(at(35.6, -82.55)).map(([k]) => k).sort()).toEqual(['dogwood', 'redbud']);
     expect(understoryTrees(at(47.6, -122.33))).toEqual([]);
+  });
+});
+
+// Package #5 (models.md build order 5): the swamps and the rivers
+describe('package #5 by place (flora.ts swampMix, bankMix)', () => {
+  const at = (lat: number, lon: number) => castOf(regionStyle(lat, lon));
+  const kinds = (p: ReturnType<typeof at>) => [...swampMix(p).mix, ...bankMix(p), ...broadMix(p)].filter(([, w]) => w > 0).map(([k]) => k);
+  const NORTH_WEST: [number, number][] = [[42.36, -71.06], [44.48, -73.21], [40.74, -74.17], [41.88, -87.63], [44.98, -93.27], [46.88, -96.79], [47.6, -122.33], [45.52, -122.68], [37.77, -122.42], [39.74, -104.99], [33.45, -112.07], [40.76, -111.89]];
+  it('the bald cypress only in the South\'s swamps and rivers, the Delta and the Chesapeake\'s south', () => {
+    for (const [lat, lon] of NORTH_WEST) for (const k of ['baldcypress', 'pondcypress', 'tupelo']) expect(kinds(at(lat, lon)), `${k} at ${lat},${lon}`).not.toContain(k);
+    // the Atchafalaya, the Okefenokee's coast, Houston's bayous, north Florida, the Hill Country's rivers
+    for (const [lat, lon] of [[30.3, -91.7], [32.08, -81.09], [29.76, -95.37], [29.65, -82.32], [29.88, -98.8]]) expect(swampMix(at(lat, lon)).mix.map(([k]) => k), `${lat},${lon}`).toContain('baldcypress');
+    // Florida's domes of pond cypress; the dwarf cypress only on South Florida's marl prairie
+    expect(swampMix(at(29.65, -82.32)).mix[0][0]).toBe('pondcypress');
+    expect(swampForm('pondcypress', 0.1, true, at(29.65, -82.32))).not.toBe(2);
+    expect(swampForm('pondcypress', 0.1, true, at(25.9, -81.0))).toBe(2);
+  });
+  it("the cottonwood along the Plains' rivers, Fremont's down the Southwest's washes — never the other's", () => {
+    const bank = (lat: number, lon: number) => bankMix(at(lat, lon)).map(([k]) => k);
+    for (const [lat, lon] of [[41.26, -95.94], [39.05, -95.68], [39.74, -104.99], [41.88, -87.63]]) expect(bank(lat, lon), `${lat},${lon}`).toContain('cottonwood');
+    for (const [lat, lon] of [[33.45, -112.07], [32.22, -110.97], [40.76, -111.89], [38.58, -121.49]]) expect(bank(lat, lon), `${lat},${lon}`).toContain('fremont');
+    for (const [lat, lon] of [[33.45, -112.07], [47.6, -122.33], [42.36, -71.06]]) expect(bank(lat, lon), `${lat},${lon}`).not.toContain('cottonwood');
+    for (const [lat, lon] of [[41.26, -95.94], [41.88, -87.63], [33.75, -84.39], [47.6, -122.33], [40.8, -124.16]]) expect(bank(lat, lon), `${lat},${lon}`).not.toContain('fremont');
   });
 });
 

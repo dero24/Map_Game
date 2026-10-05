@@ -21,8 +21,9 @@ How to use it:
 **The count:** 1,382 models — 46 the foundry has, 1,299 rows on a genome (new parameters), and
 37 new genomes or body plans (each introduced by one row). The Northwest package (build order 1)
 is built (2026-10-04, commit 94ce999), the live oaks with their hangers (build order 2,
-2026-10-05), the northern and mountain forests (build order 3, 2026-10-05) and the eastern hardwoods,
-the flowering understory and the southern pines (build order 4, 2026-10-05); the rest is to do.
+2026-10-05), the northern and mountain forests (build order 3, 2026-10-05), the eastern hardwoods,
+the flowering understory and the southern pines (build order 4, 2026-10-05) and the swamps and rivers'
+trees (build order 5, 2026-10-05; duckweed still to do); the rest is to do.
 
 [REGIONAL_LIFE.md §6](../REGIONAL_LIFE.md#6-what-the-foundry-builds-in-order) orders the work by
 family. This list is the same order broken into rows: its P1 rows are §6's families plus each
@@ -1998,7 +1999,13 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
    rows: **flowering dogwood**, **eastern redbud**. Mesquite row: **crape myrtle**. Shrub rows:
    **rhododendron**, **rosebay rhododendron**; mound row: **azalea**. Southern pines: **loblolly**,
    **longleaf**, **slash**. Poplar row: **eastern red cedar**.
-5. **Swamps and rivers.** The `cypress†` genome with **bald cypress**, **cypress knees** and **water
+5. **Swamps and rivers** — **built** 2026-10-05 but for duckweed (`docs/earth/LOG.md` "Regional life
+   (5)"): the cypresses as `flora.ts CYPRESSES` (a fluted, flaring foot as a shell round the trunk, knees
+   round it, tiers of level boughs with flat feathery sprays; bald cypress young, grown in the swamp,
+   ancient; pond cypress tall, the dome's hat, the marl prairie's dwarf), the water tupelo on the leader
+   plan with its swollen bottle foot, the cottonwoods as `OAKS` rows with leaves that rattle; placed by
+   `swampMix`, `swampForm` and `bankMix`. Still open: **duckweed** (a water-surface paint, not a tree).
+   The rows: the `cypress†` genome with **bald cypress**, **cypress knees** and **water
    tupelo**; **duckweed** on the water. Oak rows: **eastern/plains cottonwood** and **Fremont
    cottonwood**.
 6. **California's oaks and redwoods.** Oak rows: **valley oak**, **blue oak**. `conifer†` row:

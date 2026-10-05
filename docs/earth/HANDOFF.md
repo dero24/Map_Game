@@ -79,6 +79,11 @@ The game was smooth and rendering before this work started. Work fast, and keep 
     - 24 leaf pictures. Rhododendron and azalea in the gardens.
     - Placement: `broadMix` + `rangeIn`, `coniferMix`'s southern pines, `bankMix`, `redcedarShare`,
       `rosebayShare`, `understoryTrees`, `treeHeight4`, `SMALL_TREE`.
+  - **#5, the swamps and the rivers** (2026-10-05; LOG "Regional life (5)"), all but duckweed:
+    - `CYPRESSES` (the `cypress†` genome): bald cypress and pond cypress, a fluted foot shell
+      (`flaredFoot`) and knees. Water tupelo on `LEADERS` with `foot`. Cottonwood and Fremont as `OAKS`
+      rows, `MOTION` 1.
+    - Placement: `swampMix`, `swampForm`, `bankMix` (cottonwoods, Fremont's, cypress).
 
 ## The bar: detail, variety, variation
 
@@ -205,7 +210,8 @@ blended animation, a built-in rig and clip maker — its notes say what the code
 In a cloud session that work is tested headless (`tests/lifeSim.test.ts`) and on the kit page; the
 in-game look is checked on Robby's PC.
 
-- **#5:** bald cypress (knees, buttresses in water, rusty fall) and the cottonwoods.
+- **#5:** built (2026-10-05) but for **duckweed** on the swamps' still water — a water-surface paint
+  (`world/water.ts`), not a tree: a lime carpet in summer, gone in winter, parting in a wake.
 - **#6:** California's valley, blue and black oaks; coast redwood; giant sequoia.
 - **#7:** the desert: saguaro, Joshua tree, ocotillo, creosote, cholla, palo verde, mesquite,
   piñon-juniper, sagebrush.

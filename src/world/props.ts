@@ -16,7 +16,7 @@ import { pointInRing, ringTester } from './realTile';
 import { activeStyle, castOf, pickWeighted, westside as isWestside } from './styles';
 import { hangerLib, hangerMix, HANGERS, HANG_TONES, type HangerType } from '../assets/hangers';
 import { caFogBelt } from './ecoregions';
-import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, broadMix, coniferMix, aspenShare, willowThickets, snagShare, NEEDLED, plantLib, inBloom, SPECIES, STAGES, fallHueOf, DECIDUOUS, BLOSSOM_OF, MOTION_OF, bankMix, redcedarShare, rosebayShare, understoryTrees, SMALL_TREE, treeHeight4, southPineForm, type PlantSpecies, type TreeKind } from '../assets/flora';
+import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, broadMix, coniferMix, aspenShare, willowThickets, snagShare, NEEDLED, plantLib, inBloom, SPECIES, STAGES, fallHueOf, DECIDUOUS, BLOSSOM_OF, MOTION_OF, bankMix, redcedarShare, rosebayShare, understoryTrees, SMALL_TREE, treeHeight4, southPineForm, swampMix, swampForm, type PlantSpecies, type TreeKind } from '../assets/flora';
 import { MAILBOXES, mailboxLib, beachLib, gearFor, type MailboxStyle, type CarGear } from '../assets/furniture';
 import { variantAt, hashf } from '../assets/core';
 import { cafeSet, mergeDecor } from '../assets/decor';
@@ -795,6 +795,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   const TULIP = KI('tuliptree'), HICKORY = KI('hickory'), SYCAMORE = KI('sycamore'), BUROAK = KI('buroak');
   const LOBLOLLY = KI('loblolly'), LONGLEAF = KI('longleaf'), SLASHPINE = KI('slashpine'), REDCEDAR = KI('redcedar'), ROSEBAY = KI('rosebay');
   const SOUTH_PINE = new Set([LOBLOLLY, LONGLEAF, SLASHPINE]);
+  const PONDCYPRESS = KI('pondcypress');
   /** (a kind's height cap, when it is a small tree: a survey's tall crown is never one) */
   const smallMax = (k: number) => SMALL_TREE[TREE_KINDS[k]] ?? Infinity;
   // the northern and mountain conifers (package #3): grown forms like the Northwest's (open-grown, a
@@ -842,6 +843,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // old fields' redcedars (flora.ts understoryTrees, redcedarShare)
   const UNDER: [number, number][] = understoryTrees(cast0).map(([kind, w]) => [TREE_KINDS.indexOf(kind), w]);
   const cedarField = redcedarShare(cast0);
+  // the swamp country's woods by the water: bald cypress, pond cypress and water tupelo (flora.ts swampMix)
+  const SWAMP = swampMix(cast0), SWAMP_K: [number, number][] = SWAMP.mix.map(([kind, w]) => [TREE_KINDS.indexOf(kind), w]);
   // (the region's own in the lower 48 — flora.ts broadMix, from docs/regional-life/ — else the climate's)
   const BROAD: [number, number][] = broadMix(castOf(look0())).map(([kind, w]) => [TREE_KINDS.indexOf(kind), w]);
   const regionLiveOak = BROAD.find(([kk, w]) => w > 0 && (kk === LIVEOAK || kk === PLATEAUOAK || kk === COASTOAK))?.[0] ?? -1;
@@ -875,7 +878,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     // palms by climate: coconut palms in the tropics, Washingtonia fan palms on dry coasts
     if (tropical && u < 0.75) return 5;
     if (aridCoast && terrain.oceanDistAt(x, z) < 1500 && u < 0.4) return 8;
-    // the desert's own shade trees: mesquite and palo verde (a few fan palms in town)
+    // the desert's own shade trees: mesquite and palo verde (a few fan palms in town) — and down a wash or
+    // by a river, its gallery of Fremont cottonwoods and willows
+    if (desert && terrain.sdfAt(x, z) < 40 && terrain.oceanDistAt(x, z) > 250 && hashf(Math.floor(x * 2.3) * 7919 + Math.floor(z * 1.7) * 104729 + 271) < 0.55) return BANK[pickWeighted(BANK.map(([, w]) => w), hashf(Math.floor(x * 1.3) * 104729 + Math.floor(z * 3.3) * 7919 + 277))][0];
     if (desert) return u < 0.14 ? 8 : 7;
     if (birchy && k === 0 && u < 0.35) return 6;
     return broad(k, x, z, ratio, h);
@@ -947,10 +952,17 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       }
       // (an old field, a fence line, a glade: the redcedars that take them over)
       if ((cov === 20 || cov === 30) && k !== 2 && hashf(Math.floor(jx * 1.9) * 104729 + Math.floor(jz * 2.9) * 7919 + 251) < cedarField) k = REDCEDAR;
+      // (a wood by fresh water in the swamp country: the cypresses and tupelos standing in it, thickest at
+      // the water's edge)
+      const swampy = SWAMP.share > 0 && cov === 10 && k !== 2 && terrain.oceanDistAt(jx, jz) > 150 ? terrain.sdfAt(jx, jz) : Infinity;
+      if (swampy < 45 && hashf(Math.floor(jx * 2.1) * 7919 + Math.floor(jz * 1.3) * 104729 + 281) < SWAMP.share * (swampy < 15 ? 1.3 : 0.8))
+        k = SWAMP_K[pickWeighted(SWAMP_K.map(([, w]) => w), hashf(Math.floor(jx * 3.1) * 104729 + Math.floor(jz * 2.3) * 7919 + 283))][0];
       let v = variantAt(jx, jz, TREE_VARIANTS, 11);
       if (k === MAPLE && v === 2 && !westside) v = 0; // (the bigleaf maple is the Northwest's westside's alone)
       if (NW_CONIFER.has(k) || NORTH_CONIFER.has(k)) v = nwForm(jx, jz, cov === 10);
       if (SOUTH_PINE.has(k)) v = southPineForm(TREE_KINDS[k], hashf(Math.floor(jx * 2.7) * 7919 + Math.floor(jz * 3.1) * 104729 + 257), cov === 10, cast0);
+      const sf = swampForm(TREE_KINDS[k], hashf(Math.floor(jx * 1.7) * 7919 + Math.floor(jz * 2.9) * 104729 + 287), swampy < 25, cast0);
+      if (sf >= 0) v = sf;
       // (a wood's dead: the Rockies' beetle-killed lodgepole and spruce, the East's adelgid-killed
       // hemlocks, the drowned trunks of a beaver pond — grey spikes, bare limbs, snapped stumps)
       if (cov === 10 && k !== 2 && k !== WILLOWSHRUB) {
@@ -1108,6 +1120,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       // (a measured longleaf is grown as tall as the survey says: a grass stage under 1.5 m, a bottlebrush
       // to 7, the old tree above; the other southern pines as their wood has them)
       if (k === LONGLEAF) v = h < 1.5 ? 0 : h < 7 ? 1 : 2;
+      else if (k === PONDCYPRESS && v === 2 && h > 7) v = 1; // (the dwarf cypress never stretched to a tall crown)
       else if (SOUTH_PINE.has(k)) v = southPineForm(TREE_KINDS[k], hashf(Math.floor(x * 2.7) * 7919 + Math.floor(z * 3.1) * 104729 + 257), mapCover(x, z) === 10 && !walk.blocked(x, z, 14), cast0);
       const tm = treeMeta(TREE_KINDS[k], v);
       const mh = tm.h, mr = tm.crownR;
@@ -1311,6 +1324,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     tuliptree: [0x6a8a3a, 0.4], sweetgum: [0x46682e, 0.4], hickory: [0x63803a, 0.35], buckeye: [0x5a7a36, 0.35], sycamore: [0x6d8a4a, 0.4], buroak: [0x46602e, 0.45],
     dogwood: [0x5d7f3e, 0.4], redbud: [0x5a7e4a, 0.4], crapemyrtle: [0x4a6a32, 0.4], loblolly: [0x56693a, 0.5], longleaf: [0x5e7a38, 0.5], slashpine: [0x3f5e34, 0.5],
     redcedar: [0x2c4630, 0.6], rosebay: [0x2f4c2e, 0.6],
+    baldcypress: [0x6a8a3c, 0.45], pondcypress: [0x5e7e3a, 0.45], tupelo: [0x4e6c34, 0.4], cottonwood: [0x6a8a42, 0.35], fremont: [0x7a9440, 0.4],
   };
   // Trees from the foundry (assets/flora.ts): one InstancedMesh per species × grown variant.
   // Trunks keep their bark: instance colour only tints foliage (vertex color white there).

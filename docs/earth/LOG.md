@@ -2,6 +2,57 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-05 — Regional life (5): the swamps and the rivers
+
+Robby, after #4: "continue on what you were originally doing you were killing it just make note of
+person thing" — the people work is `people-with-purpose` in `feature_list.json`; the vegetation goes
+on. Package #5 of `docs/regional-life/models.md`: five kinds appended to `TREE_KINDS` (49–53), three
+forms each.
+
+- **The cypresses** (`flora.ts CYPRESSES`, the `cypress†` genome): the foot a fluted, flaring shell round
+  the trunk (`flaredFoot`: twice as many points as ribs, so the flutes come out sharp; drawn by both
+  models outside the near trunk's own flare), knees standing up round it out to three metres (tall ones
+  nearer), tiers of level boughs each holding out a flat feathery spray.
+  - **Bald cypress**: v0 young, a cone of soft sprays to the ground; v1 grown in the swamp, flat-topped on
+    level limbs among its knees; v2 ancient, a massive fluted foot, its top broken off beside the flat
+    crown that took over, crooked and dead limbs.
+  - **Pond cypress**: v0 tall and narrow on ascending limbs; v1 a dome's tree with its rounded hat; v2 the
+    dwarf cypress of South Florida's marl prairie, stunted and gnarled.
+  - Deciduous ("bald"): lime-green in spring, russet in late fall, bare and grey in winter; the heaviest
+    Spanish moss of any host.
+- **Water tupelo** on the leader plan with a swollen bottle foot (`Leader.foot`): v0 standing in the
+  water, v1 the swamp tupelo (level limbs, the first scarlet of the fall), v2 old with a ribbed foot.
+- **The cottonwoods** as `OAKS` rows: eastern and plains (v0 the prairie's lone landmark forked low into
+  great climbing limbs, v1 the bottomland's tall clean trunk, v2 old and ragged on two trunks); Fremont
+  (pale bark going near white on its limbs; spreading over a wash, three trunks, old). Their triangular
+  leaves rattle on flat stalks (`MOTION` 1, the aspen's); gold in the fall.
+- **Leaf pictures** 24 → 28: the cypress's feathers (a midrib with soft needles combed out in two rows),
+  the cottonwood's toothed triangles on long flat stalks.
+- **Placement**: `swampMix` — a wood by fresh water in the swamp country (the Gulf, the Southeast's
+  coastal plains, Florida, East Texas and the Hill Country's rivers, the Chesapeake's south, southern
+  Illinois) grows bald cypress, water tupelo and (Florida's domes) pond cypress, thickest at the water's
+  edge; `swampForm` puts the old ones out in the water, the dwarf cypress only on the marl prairie
+  (EPA 76). `bankMix` now also lines the Plains', the Midwest's, Texas's and the Rockies' rivers with
+  cottonwoods, and the Southwest's washes, the Basin's and California's valleys with Fremont's — the
+  desert at last has its riparian gallery (`regional`'s desert branch: a wash's trees). Planted bald
+  cypress in Southern towns; cottonwoods in Plains towns. Heights: the bald cypress 24–36 m in the
+  swamp, the dwarf 2.5–5 m, the cottonwood 18–34 m. Each its own green.
+- **The near model** treats the cypresses' long limbs as the oak plan's (a ring every ~1.6 m, a side
+  fewer). Far ≤ 1,476 vertices, near ≤ 1,938.
+- The tree studio caught the old cottonwood's and the old Fremont's top dome floating above their
+  crowns (the model too tall for its limbs): lowered.
+
+**Verified:** typecheck; `npm test` 910/910; `tests/foundry.test.ts` (the fluted foot and the knees, young cone vs swamp
+flat top, the dwarf, the tupelo's bottle, the cottonwoods broad and rattling, Fremont's pale bark, the
+leaf pictures), `tests/streetTrees.test.ts` (no cypress or tupelo in the North or the West; bald cypress
+in the Atchafalaya, on the Georgia coast, in Houston, north Florida and the Hill Country; the dwarf only
+on the marl prairie; cottonwood on the Plains' rivers and Fremont's in the Southwest's washes, never the
+other's), `tests/hangers.test.ts`, `tests/nearTrees.test.ts`, `tests/ecoregions.test.ts`. Studio:
+`shots/trees-s1.jpg`, `trees-s2.jpg`.
+
+**Next:** duckweed on the swamps' still water (a water-surface paint); #6 California's oaks and
+redwoods.
+
 ## 2026-10-05 — Regional life (4): the eastern hardwoods, the flowering understory, the southern pines
 
 Robby's bar for every package: "make things detailed, and variety and variation matter", "rapid but great

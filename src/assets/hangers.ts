@@ -243,7 +243,8 @@ const MOSS_STATES = new Set(['NC', 'SC', 'GA', 'FL', 'AL', 'MS', 'LA', 'TX', 'AR
  *  water hickories (round; the hickory), the elms, the bottomland sycamores and sweetgums, the swamp's
  *  red maples and willows; magnolias and crape myrtles seldom. */
 const MOSS_HOST: Partial<Record<TreeKind, number>> = { liveoak: 1, oak: 0.55, round: 0.35, elm: 0.3, willow: 0.25, maple: 0.2, magnolia: 0.1, plateauoak: 0.4,
-  sycamore: 0.25, hickory: 0.2, sweetgum: 0.15, buroak: 0.3, crapemyrtle: 0.05 };
+  sycamore: 0.25, hickory: 0.2, sweetgum: 0.15, buroak: 0.3, crapemyrtle: 0.05,
+  baldcypress: 0.9, pondcypress: 0.75, tupelo: 0.45, cottonwood: 0.1 }; // (package #5: the cypress swamp's grey curtains)
 /** Central and south Texas, where ball moss greys the live oaks and the cedar elms (EPA 30–34). */
 const BALL_TX = new Set([30, 31, 32, 33, 34]);
 
