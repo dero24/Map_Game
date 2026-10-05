@@ -74,6 +74,35 @@ per species, color, all that".
     strands from the lobes' undersides now hang as grey curtains).
   - Tests: `tests/hangers.test.ts` (budgets, anchoring, the range rules, the wet clock), the live oaks
     in `tests/foundry.test.ts`.
+- **The northern and mountain forests** (`regional-flora`, `models.md` build order #3): eleven new kinds,
+  three forms each, all under budget (far ≤ 1,398, near ≤ 2,200):
+  - **pines** (`flora.ts PINES`): the eastern white pine's layered tiers (the old giant flagged downwind,
+    flat-topped), the ponderosa (a young "blackjack", the orange-trunked mature tree with its open crown,
+    the old "yellow-belly" column), the lodgepole (a straight pole, a small crown);
+  - **spruces and firs** (`SPIRES` rows): red spruce, balsam fir, Engelmann spruce, subalpine fir (the
+    narrowest steeple), and the eastern hemlock (broad, nodding, its third greyed by the adelgid);
+  - **quaking aspen**: a white stem with dark eyes, a narrow crown whose round leaves tremble on their
+    flat stalks — the far crown's leafy vertices shiver and its colour shimmers as the pale undersides
+    flash (`propMaterial` flutter), the near cards rock fast and shimmer the same (leaf-card flag 16);
+    gold in September;
+  - **willow thickets** on red, gold or purple stems, and the **snag**: a dead spike, a dead ash's bare
+    limbs, a beaver pond's snapped trunk with a woodpecker's hole.
+  - **Placed by place** (`coniferMix`, `aspenShare`, `willowThickets`, `snagShare`): the West by elevation
+    band, in a Colorado tree-line's metres (`bandElevation`: ~110 m lower a degree north) — ponderosa in
+    the foothills (Missoula, Bend, Spokane, Flagstaff, the Black Hills), lodgepole and Douglas fir in the
+    montane, Engelmann spruce and subalpine fir above 2,900 m; aspen in clonal groves (whole 35 m
+    patches) in the montane band and the north woods; the Northeast's white pine, red spruce, balsam fir
+    and hemlock (pitch pine on the sandy coast, the Smokies' spruce-fir summits above 1,500 m); willow
+    thickets by fresh water in the North and the mountains; snags in a wood — beetle-killed lodgepole
+    and spruce in the Rockies, adelgid-killed hemlocks in the East, drowned trunks by a beaver pond.
+    Never a western conifer east of the Plains (tests).
+  - **The dry side is ponderosa country** now ("Bend: ponderosa and juniper"): the Northwest test that
+    said "none of the westside conifers" there asks for no hemlock, cedar or Sitka, and ponderosa over the
+    interior's Douglas fir (18–32 m, not the westside's giants).
+  - Studio: `shots/trees-pines3.jpg`, `trees-spruces3.jpg`, `trees-north3.jpg`. Shaders: all five
+    programs compile (`tools/shader-check.js`).
+  - Tests 893: the new conifers by place and band, the Adirondacks' and Asheville's woods
+    (`tests/streetTrees.test.ts`), the foundry's budgets for every new kind.
 - **Tools behind a proxy:** `tools/pw-proxy.mjs` hands Chromium the session's egress proxy as launch
   flags (node and curl read `HTTPS_PROXY`, Chromium doesn't; Playwright's own `proxy` option sent
   localhost through it too, which the proxy refuses) and trusts the certificates node is told to

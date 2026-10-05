@@ -20,8 +20,8 @@ How to use it:
 
 **The count:** 1,382 models — 46 the foundry has, 1,299 rows on a genome (new parameters), and
 37 new genomes or body plans (each introduced by one row). The Northwest package (build order 1)
-is built (2026-10-04, commit 94ce999), and the live oaks with their hangers (build order 2,
-2026-10-05); the rest is to do.
+is built (2026-10-04, commit 94ce999), the live oaks with their hangers (build order 2,
+2026-10-05) and the northern and mountain forests (build order 3, 2026-10-05); the rest is to do.
 
 [REGIONAL_LIFE.md §6](../REGIONAL_LIFE.md#6-what-the-foundry-builds-in-order) orders the work by
 family. This list is the same order broken into rows: its P1 rows are §6's families plus each
@@ -1973,7 +1973,12 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
    range rules in `hangerMix`), the strands' pendulum swing in `propMaterial` `hang`. The `liveoak†`
    genome with **southern live oak**, then **plateau** and **coast live oak**. On `hanger†`: **Spanish
    moss**, **resurrection fern**, **ball moss** and **lace lichen**.
-3. **Northern and mountain forests on the existing genomes.** Pine rows: **eastern white pine**,
+3. **Northern and mountain forests on the existing genomes** — **built** 2026-10-05 (`docs/earth/LOG.md`
+   "Regional life (3)"): the pines as `flora.ts PINES` (tiers of boughs ending in needle tufts), the
+   spruces, firs and eastern hemlock as `SPIRES` rows, the aspen (a white stem with dark eyes, its
+   leaves trembling: `propMaterial` flutter), the willow thickets (coloured stems), the `snag` (three
+   dead forms), placed by `coniferMix` (the West by elevation band), `aspenShare` (clonal groves),
+   `willowThickets` and `snagShare`. Pine rows: **eastern white pine**,
    **ponderosa**, **lodgepole**. Spruce rows: **red spruce**, **balsam fir**, **Engelmann spruce**,
    **subalpine fir**. `conifer†` row: **eastern hemlock**. Birch rows: **quaking aspen** (with its
    flutter), the shrub row **willow thickets**, and the dead **snag** state for beaver ponds,

@@ -21,20 +21,26 @@ const FIR_BARK = 0x5b4a3c, HEMLOCK_BARK = 0x5f4b3f, SITKA_BARK = 0x787168, CEDAR
 
 // ================================================================ trees
 // Index order matches the region style table's `trees` weights (styles.ts) and the old kinds.
-export type TreeKind = 'round' | 'oak' | 'shrub' | 'pine' | 'spruce' | 'palm' | 'birch' | 'mesquite' | 'fanpalm' | 'maple' | 'willow' | 'elm' | 'poplar' | 'magnolia' | 'cherry' | 'fir' | 'cedar' | 'hemlock' | 'sitka' | 'alder' | 'vinemaple' | 'liveoak' | 'plateauoak' | 'coastoak';
+export type TreeKind = 'round' | 'oak' | 'shrub' | 'pine' | 'spruce' | 'palm' | 'birch' | 'mesquite' | 'fanpalm' | 'maple' | 'willow' | 'elm' | 'poplar' | 'magnolia' | 'cherry' | 'fir' | 'cedar' | 'hemlock' | 'sitka' | 'alder' | 'vinemaple' | 'liveoak' | 'plateauoak' | 'coastoak'
+  | 'whitepine' | 'ponderosa' | 'lodgepole' | 'redspruce' | 'balsamfir' | 'engelmann' | 'subalpinefir' | 'easthemlock' | 'aspen' | 'willowshrub' | 'snag';
 /** (New kinds go on the end: a kind's index is in the tiles' instance names and the region weights.) */
-export const TREE_KINDS: TreeKind[] = ['round', 'oak', 'shrub', 'pine', 'spruce', 'palm', 'birch', 'mesquite', 'fanpalm', 'maple', 'willow', 'elm', 'poplar', 'magnolia', 'cherry', 'fir', 'cedar', 'hemlock', 'sitka', 'alder', 'vinemaple', 'liveoak', 'plateauoak', 'coastoak'];
+export const TREE_KINDS: TreeKind[] = ['round', 'oak', 'shrub', 'pine', 'spruce', 'palm', 'birch', 'mesquite', 'fanpalm', 'maple', 'willow', 'elm', 'poplar', 'magnolia', 'cherry', 'fir', 'cedar', 'hemlock', 'sitka', 'alder', 'vinemaple', 'liveoak', 'plateauoak', 'coastoak',
+  'whitepine', 'ponderosa', 'lodgepole', 'redspruce', 'balsamfir', 'engelmann', 'subalpinefir', 'easthemlock', 'aspen', 'willowshrub', 'snag'];
 /** The live oaks (liveoak†): the South's, the Hill Country's plateau oak, California's coast live oak. */
 export const LIVE_OAKS = new Set<TreeKind>(['liveoak', 'plateauoak', 'coastoak']);
 /** The conifers that wear needle tufts up close (the cedar wears its own flat sprays). */
-export const NEEDLED = new Set<TreeKind>(['pine', 'spruce', 'fir', 'hemlock', 'sitka']);
+export const NEEDLED = new Set<TreeKind>(['pine', 'spruce', 'fir', 'hemlock', 'sitka', 'whitepine', 'ponderosa', 'lodgepole', 'redspruce', 'balsamfir', 'engelmann', 'subalpinefir', 'easthemlock']);
 /** How each broadleaf turns in autumn (propMaterial): 0 mixed, 1 red (maples, cherries, the vine
  *  maple), 2 gold, 3 drab (the alder's leaves fall near green, an olive brown). */
-export const FALL_HUE: Partial<Record<TreeKind, number>> = { maple: 1, cherry: 1, willow: 2, elm: 2, poplar: 2, birch: 2, vinemaple: 1, alder: 3 };
+export const FALL_HUE: Partial<Record<TreeKind, number>> = { maple: 1, cherry: 1, willow: 2, elm: 2, poplar: 2, birch: 2, vinemaple: 1, alder: 3, aspen: 2, willowshrub: 2 };
 /** How a grown variant turns: the bigleaf maple (maple variant 2) goes gold, not scarlet. */
 export const fallHueOf = (k: TreeKind, v: number) => (k === 'maple' && v === 2 ? 2 : FALL_HUE[k] ?? 0);
 /** Broadleaves that colour and drop their leaves (magnolias and the palms keep theirs). */
-export const DECIDUOUS = new Set<TreeKind>(['round', 'oak', 'birch', 'shrub', 'maple', 'willow', 'elm', 'poplar', 'cherry', 'alder', 'vinemaple']);
+export const DECIDUOUS = new Set<TreeKind>(['round', 'oak', 'birch', 'shrub', 'maple', 'willow', 'elm', 'poplar', 'cherry', 'alder', 'vinemaple', 'aspen', 'willowshrub']);
+/** Leaves that tremble on flat stalks — the aspen grove's shimmer (propMaterial flutter). */
+export const FLUTTER = new Set<TreeKind>(['aspen']);
+/** A standing dead tree: wood only (no leaves, no near model). */
+export const LEAFLESS = new Set<TreeKind>(['snag']);
 export const TREE_VARIANTS = 3;
 /** `lean`: the trunk's horizontal drift per metre of height (model space) — where the bark is. */
 export interface TreeMeta { h: number; crownR: number; crownBottom: number; trunkR: number; lean: [number, number] }
@@ -56,7 +62,12 @@ export interface TreePlan { boughs: Bough[]; lobes: Lobe[]; hang: THREE.BufferGe
  *  top, a candelabra of dead spikes), J-shaped boughs, stilt roots. v0 grown in the open (foliage near
  *  the ground), v1 in the forest, v2 old. */
 type Spire = { H: number; bare: number; R0: number; Rt: number; rings: number[]; trunkR: number; bark: number; lift: number; droop: number; lobe: number; sq: number; stretch: number; bend: number; jit: number; buttress: number; stubs: number; top: 'spire' | 'nod' | 'broken' | 'snag'; j?: boolean; stilts?: boolean };
-const SPIRES: Record<'fir' | 'hemlock' | 'sitka' | 'cedar', Spire[]> = {
+// the northern and mountain conifers' barks: the eastern hemlock's furrowed cinnamon-brown, red
+// spruce's grey-brown scales, balsam fir's smooth grey with its resin blisters, Engelmann spruce's thin
+// russet scales, subalpine fir's pale grey
+const EHEMLOCK_BARK = 0x5a4636, RSPRUCE_BARK = 0x6a5a4a, BALSAM_BARK = 0x857d70, ENGELMANN_BARK = 0x72604e, SUBALPINE_BARK = 0x8c867a;
+type SpireKind = 'fir' | 'hemlock' | 'sitka' | 'cedar' | 'easthemlock' | 'redspruce' | 'balsamfir' | 'engelmann' | 'subalpinefir';
+const SPIRES: Record<SpireKind, Spire[]> = {
   fir: [
     { H: 12.2, bare: 0.12, R0: 2.6, Rt: 0.3, rings: [3, 3, 3, 2, 2, 2, 2, 1], trunkR: 0.24, bark: FIR_BARK, lift: 0.2, droop: 0.2, lobe: 0.5, sq: 0.62, stretch: 1.3, bend: 0.45, jit: 0.35, buttress: 0, stubs: 0, top: 'spire' },
     { H: 12.8, bare: 0.42, R0: 2.0, Rt: 0.3, rings: [3, 3, 2, 2, 2, 2, 1, 1], trunkR: 0.24, bark: FIR_BARK, lift: 0.2, droop: 0.22, lobe: 0.52, sq: 0.62, stretch: 1.3, bend: 0.5, jit: 0.42, buttress: 0, stubs: 4, top: 'spire' },
@@ -77,7 +88,40 @@ const SPIRES: Record<'fir' | 'hemlock' | 'sitka' | 'cedar', Spire[]> = {
     { H: 12.4, bare: 0.3, R0: 2.4, Rt: 0.3, rings: [3, 3, 2, 2, 2, 1], trunkR: 0.27, bark: CEDAR_BARK, lift: 0, droop: 0, lobe: 0.52, sq: 0.8, stretch: 1.3, bend: 0.65, jit: 0.25, buttress: 4, stubs: 2, top: 'nod', j: true },
     { H: 12.8, bare: 0.28, R0: 2.5, Rt: 0.7, rings: [3, 3, 2, 2, 2, 2], trunkR: 0.29, bark: CEDAR_BARK, lift: 0, droop: 0, lobe: 0.52, sq: 0.8, stretch: 1.3, bend: 0.65, jit: 0.28, buttress: 4, stubs: 1, top: 'snag', j: true },
   ],
+  // (package #3, the northern and mountain conifers) Eastern hemlock: broader and denser than the
+  // western, its boughs level with drooping tips, the leader nodding; the third thinned and greying, as
+  // the woolly adelgid leaves them
+  easthemlock: [
+    { H: 12.0, bare: 0.08, R0: 2.9, Rt: 0.3, rings: [3, 3, 3, 2, 2, 2, 2, 1], trunkR: 0.24, bark: EHEMLOCK_BARK, lift: 0.04, droop: 0.32, lobe: 0.54, sq: 0.66, stretch: 1.25, bend: 0.6, jit: 0.25, buttress: 0, stubs: 0, top: 'nod' },
+    { H: 12.4, bare: 0.34, R0: 2.4, Rt: 0.3, rings: [3, 3, 2, 2, 2, 2, 1, 1], trunkR: 0.25, bark: EHEMLOCK_BARK, lift: 0.04, droop: 0.34, lobe: 0.54, sq: 0.66, stretch: 1.25, bend: 0.62, jit: 0.25, buttress: 0, stubs: 3, top: 'nod' },
+    { H: 11.6, bare: 0.24, R0: 2.5, Rt: 0.3, rings: [3, 2, 2, 2, 2, 2, 1], trunkR: 0.24, bark: EHEMLOCK_BARK, lift: 0.02, droop: 0.38, lobe: 0.42, sq: 0.62, stretch: 1.2, bend: 0.65, jit: 0.45, buttress: 0, stubs: 5, top: 'broken' },
+  ],
+  // Red spruce: a narrow spire, yellow-green, its boughs short and a little upswept
+  redspruce: [
+    { H: 12.4, bare: 0.1, R0: 1.7, Rt: 0.2, rings: [3, 3, 3, 2, 2, 2, 2, 1], trunkR: 0.2, bark: RSPRUCE_BARK, lift: 0.12, droop: 0.2, lobe: 0.56, sq: 0.66, stretch: 1.2, bend: 0.42, jit: 0.2, buttress: 0, stubs: 0, top: 'spire' },
+    { H: 12.8, bare: 0.38, R0: 1.5, Rt: 0.2, rings: [3, 3, 2, 2, 2, 2, 1, 1], trunkR: 0.21, bark: RSPRUCE_BARK, lift: 0.12, droop: 0.22, lobe: 0.56, sq: 0.66, stretch: 1.2, bend: 0.45, jit: 0.22, buttress: 0, stubs: 4, top: 'spire' },
+    { H: 12.6, bare: 0.3, R0: 1.9, Rt: 0.4, rings: [3, 3, 2, 2, 2, 2, 1], trunkR: 0.23, bark: RSPRUCE_BARK, lift: 0.08, droop: 0.26, lobe: 0.54, sq: 0.66, stretch: 1.25, bend: 0.5, jit: 0.3, buttress: 0, stubs: 3, top: 'broken' },
+  ],
+  // Balsam fir: a dark, narrow, near-perfect spire, dense, its boughs level (the Christmas tree)
+  balsamfir: [
+    { H: 11.0, bare: 0.09, R0: 1.55, Rt: 0.15, rings: [3, 3, 3, 3, 2, 2, 2, 1], trunkR: 0.17, bark: BALSAM_BARK, lift: 0.1, droop: 0.12, lobe: 0.6, sq: 0.7, stretch: 1.1, bend: 0.3, jit: 0.1, buttress: 0, stubs: 0, top: 'spire' },
+    { H: 11.4, bare: 0.3, R0: 1.35, Rt: 0.15, rings: [3, 3, 3, 2, 2, 2, 1, 1], trunkR: 0.17, bark: BALSAM_BARK, lift: 0.1, droop: 0.14, lobe: 0.6, sq: 0.7, stretch: 1.1, bend: 0.32, jit: 0.12, buttress: 0, stubs: 3, top: 'spire' },
+    { H: 10.6, bare: 0.14, R0: 1.75, Rt: 0.18, rings: [3, 3, 3, 3, 2, 2, 1], trunkR: 0.18, bark: BALSAM_BARK, lift: 0.08, droop: 0.16, lobe: 0.58, sq: 0.7, stretch: 1.12, bend: 0.34, jit: 0.15, buttress: 0, stubs: 1, top: 'spire' },
+  ],
+  // Engelmann spruce: a narrow dark blue-green spire, the lower boughs hanging; in the old one a broken top
+  engelmann: [
+    { H: 13.0, bare: 0.08, R0: 1.8, Rt: 0.2, rings: [3, 3, 3, 3, 2, 2, 2, 1], trunkR: 0.22, bark: ENGELMANN_BARK, lift: 0, droop: 0.36, lobe: 0.52, sq: 0.66, stretch: 1.3, bend: 0.6, jit: 0.2, buttress: 0, stubs: 0, top: 'spire' },
+    { H: 13.2, bare: 0.36, R0: 1.55, Rt: 0.2, rings: [3, 3, 3, 2, 2, 2, 1, 1], trunkR: 0.23, bark: ENGELMANN_BARK, lift: 0, droop: 0.38, lobe: 0.52, sq: 0.66, stretch: 1.3, bend: 0.62, jit: 0.22, buttress: 0, stubs: 4, top: 'spire' },
+    { H: 12.6, bare: 0.28, R0: 1.9, Rt: 0.5, rings: [3, 3, 2, 2, 2, 2, 1], trunkR: 0.25, bark: ENGELMANN_BARK, lift: 0, droop: 0.4, lobe: 0.5, sq: 0.64, stretch: 1.3, bend: 0.65, jit: 0.32, buttress: 0, stubs: 3, top: 'broken' },
+  ],
+  // Subalpine fir: the narrowest spire of all, a church steeple of short dense boughs
+  subalpinefir: [
+    { H: 12.6, bare: 0.1, R0: 1.15, Rt: 0.1, rings: [3, 3, 3, 3, 2, 2, 2, 1], trunkR: 0.18, bark: SUBALPINE_BARK, lift: 0.05, droop: 0.24, lobe: 0.62, sq: 0.76, stretch: 1.1, bend: 0.4, jit: 0.14, buttress: 0, stubs: 0, top: 'spire' },
+    { H: 12.8, bare: 0.3, R0: 1.0, Rt: 0.1, rings: [3, 3, 3, 2, 2, 2, 2, 1], trunkR: 0.18, bark: SUBALPINE_BARK, lift: 0.05, droop: 0.26, lobe: 0.62, sq: 0.76, stretch: 1.1, bend: 0.42, jit: 0.16, buttress: 0, stubs: 3, top: 'spire' },
+    { H: 12.2, bare: 0.12, R0: 0.95, Rt: 0.08, rings: [3, 3, 3, 3, 2, 2, 2, 1], trunkR: 0.17, bark: SUBALPINE_BARK, lift: 0.06, droop: 0.22, lobe: 0.66, sq: 0.8, stretch: 1.05, bend: 0.36, jit: 0.12, buttress: 0, stubs: 1, top: 'spire' },
+  ],
 };
+const isSpire = (k: TreeKind): k is SpireKind => k in SPIRES;
 
 // the live oaks' barks: the southern live oak's near-black blocky furrows, the plateau oak's dark grey,
 // the coast live oak's grey going dark and furrowed with age
@@ -108,6 +152,38 @@ const OAKS: Record<'liveoak' | 'plateauoak' | 'coastoak', Oak[]> = {
     { H: 9.0, stems: 1, fork: 1.5, trunkR: 0.4, limbs: 5, reach: [4.6, 5.8], up: 2.8, droop: 0.9, rest: 0, snake: 0.9, billow: 2.3, dome: 3.4, sq: 0.8, lean: 0.3, bark: COASTOAK_BARK },
     { H: 8.4, stems: 2, fork: 1.2, trunkR: 0.3, limbs: 4, reach: [4.4, 5.6], up: 2.6, droop: 0.8, rest: 0, snake: 1.1, billow: 2.15, dome: 3.0, sq: 0.82, lean: 1.0, bark: COASTOAK_BARK },
     { H: 8.2, stems: 1, fork: 1.1, trunkR: 0.48, limbs: 5, reach: [5.0, 7.0], up: 2.2, droop: 1.2, rest: 1, snake: 1.0, billow: 2.2, dome: 3.0, sq: 0.78, lean: 0.5, bark: COASTOAK_BARK, stub: true },
+  ],
+};
+
+// the pines' barks: the white pine's dark grey furrows, the ponderosa's orange-cinnamon jigsaw plates
+// (a young one's near-black "blackjack"), the lodgepole's thin grey-brown scales; the aspen's white,
+// its dark eyes; the willow thickets' coloured stems (red, gold, purple: they glow in a bare winter)
+const WPINE_BARK = 0x4c463e, PONDEROSA_BARK = 0xa0643c, BLACKJACK_BARK = 0x4a3c32, LODGEPOLE_BARK = 0x6e5e4c, ASPEN_BARK = 0xd8d6c6, ASPEN_EYE = 0x2c2824;
+const WILLOW_STEMS = [0x9a3a2c, 0xb08a3a, 0x6a3a4a];
+/** The pines' three grown forms each (package #3): tiers of boughs up the trunk from `bare` of its
+ *  height, each bough ending in its tuft of needles (a spray drawn out along it), `reach` from the
+ *  foot of the crown to its top, rising by `rise` a metre out; the top a leader's point, an old tree's
+ *  flat crown or a ponderosa's rounded one; the old white pine's limbs flagged to one side.
+ *  Eastern white pine: v0 open-grown (tiers near the ground), v1 a forest tree (a clean trunk, the
+ *  tiers in its top half), v2 the old giant (flagged, flat-topped). Ponderosa: v0 a young "blackjack",
+ *  v1 mature (an open crown high on an orange trunk), v2 the old "yellow-belly" (a tall bare column,
+ *  a flat top). Lodgepole: v0 open-grown, v1 a pole in a dense stand, v2 between. */
+type Pine = { H: number; bare: number; trunkR: number; bark: number; tiers: number[]; reach: [number, number]; rise: number; tuft: number; sq: number; top: 'point' | 'flat' | 'round'; flag?: number; lean: number };
+const PINES: Record<'whitepine' | 'ponderosa' | 'lodgepole', Pine[]> = {
+  whitepine: [
+    { H: 11.5, bare: 0.08, trunkR: 0.22, bark: WPINE_BARK, tiers: [3, 3, 3, 3, 2, 2], reach: [3.2, 0.8], rise: 0.05, tuft: 1.25, sq: 0.56, top: 'point', lean: 0.15 },
+    { H: 12.6, bare: 0.45, trunkR: 0.25, bark: WPINE_BARK, tiers: [3, 3, 3, 2, 2, 1], reach: [2.8, 0.8], rise: 0.04, tuft: 1.2, sq: 0.56, top: 'point', lean: 0.15 },
+    { H: 13.0, bare: 0.35, trunkR: 0.34, bark: WPINE_BARK, tiers: [3, 3, 3, 2, 2, 2], reach: [3.6, 1.6], rise: 0.08, tuft: 1.35, sq: 0.54, top: 'flat', flag: 0.75, lean: 0.25 },
+  ],
+  ponderosa: [
+    { H: 10.5, bare: 0.18, trunkR: 0.22, bark: BLACKJACK_BARK, tiers: [3, 3, 3, 2, 2, 1], reach: [2.2, 0.6], rise: 0.25, tuft: 1.05, sq: 0.75, top: 'point', lean: 0.1 },
+    { H: 12.4, bare: 0.52, trunkR: 0.3, bark: PONDEROSA_BARK, tiers: [3, 3, 2, 2, 1], reach: [2.6, 1.0], rise: 0.4, tuft: 1.25, sq: 0.8, top: 'round', lean: 0.15 },
+    { H: 13.0, bare: 0.62, trunkR: 0.38, bark: PONDEROSA_BARK, tiers: [3, 3, 2, 2], reach: [3.0, 1.6], rise: 0.3, tuft: 1.3, sq: 0.72, top: 'flat', lean: 0.12 },
+  ],
+  lodgepole: [
+    { H: 11.0, bare: 0.25, trunkR: 0.17, bark: LODGEPOLE_BARK, tiers: [3, 3, 2, 2, 2, 1], reach: [1.6, 0.5], rise: 0.15, tuft: 0.85, sq: 0.8, top: 'point', lean: 0.1 },
+    { H: 12.2, bare: 0.65, trunkR: 0.15, bark: LODGEPOLE_BARK, tiers: [3, 2, 2, 2, 1], reach: [1.3, 0.4], rise: 0.12, tuft: 0.8, sq: 0.85, top: 'point', lean: 0.08 },
+    { H: 11.6, bare: 0.48, trunkR: 0.16, bark: LODGEPOLE_BARK, tiers: [3, 2, 2, 2, 2, 1], reach: [1.5, 0.45], rise: 0.14, tuft: 0.82, sq: 0.82, top: 'point', lean: 0.1 },
   ],
 };
 
@@ -541,7 +617,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
       const a = k * ((2 * Math.PI) / 3) + 0.5 + r.float() * 0.6, rr = 1.3 + r.float() * 0.5;
       lobe(0.95 + r.float() * 0.2, V3(lean.x + Math.cos(a) * rr, cy - 1.15 - r.float() * 0.25, lean.z + Math.sin(a) * rr), 897 + v * 5 + k, 0.9, 0);
     }
-  } else if (kind === 'fir' || kind === 'hemlock' || kind === 'sitka' || kind === 'cedar') {
+  } else if (isSpire(kind)) {
     // The Northwest's conifers (docs/regional-life/16-pnw.md), one build: a trunk up to the leader and
     // tiers of boughs round it, each bough carrying its clump of foliage — the species in how they
     // stand (SPIRES). Douglas fir: an irregular, clumpy spire, gaps between the clumps; in the forest a
@@ -673,6 +749,110 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
       if (v && i % 2 === 0) drape(knee, tip, 0.04, 1, 0);
     }
     lobe(1.0, V3(j(0.3), 4.4, j(0.3)), 1440 + v, 0.6, 0);
+  } else if (kind === 'whitepine' || kind === 'ponderosa' || kind === 'lodgepole') {
+    const P = PINES[kind][v], ki = TREE_KINDS.indexOf(kind);
+    trunkR = P.trunkR;
+    const H = P.H + j(0.3), lean = V3(j(P.lean), 0, j(P.lean));
+    leanPer = [lean.x / H, lean.z / H];
+    const axis = (y: number) => V3((lean.x * y) / H, y, (lean.z * y) / H);
+    const topY = P.top === 'flat' ? H - 0.6 : H - 0.4;
+    wood.push(twig(V3(0, -0.3, 0), axis(H * 0.5), P.trunkR, P.trunkR * 0.7, 6, P.bark), twig(axis(H * 0.5), axis(topY), P.trunkR * 0.7, P.trunkR * 0.25, 5, P.bark));
+    const y0 = H * P.bare, y1 = topY - 0.3, T = P.tiers.length, flagDir = r.float() * Math.PI * 2;
+    for (let t = 0; t < T; t++) {
+      const f = T > 1 ? t / (T - 1) : 0, y = y0 + (y1 - y0) * f, reach = P.reach[0] + (P.reach[1] - P.reach[0]) * f;
+      for (let k = 0; k < P.tiers[t]; k++) {
+        let a = t * GOLDEN + (k * 2 * Math.PI) / P.tiers[t] + j(0.3), short = 1;
+        if (P.flag) {
+          // (the old white pine's limbs flagged downwind: pulled round to one side, the windward ones short)
+          const d = Math.atan2(Math.sin(a - flagDir), Math.cos(a - flagDir));
+          a = flagDir + d * (1 - P.flag * 0.6);
+          if (Math.abs(d) > 1.7) short = 0.5;
+        }
+        const ca = Math.cos(a), sa = Math.sin(a), L = reach * (0.85 + r.float() * 0.3) * short;
+        const from = axis(y), tip = from.clone().add(V3(ca * L, P.rise * L + j(0.15), sa * L));
+        wood.push(twig(from, tip, Math.max(0.035, P.trunkR * 0.32 * (1 - f * 0.5)), 0.03, 3, P.bark));
+        // its tuft of needles: a spray drawn out along the bough
+        lobe(P.tuft * (0.9 + r.float() * 0.2) * (1 - 0.25 * f), tip.clone().add(V3(0, P.tuft * 0.15, 0)), 1700 + ki * 61 + v * 37 + t * 5 + k, P.sq, 0, { dir: a, stretch: 1.25, bend: 0.2 });
+      }
+    }
+    if (P.top === 'point') lobe(P.tuft * 0.55, axis(H - 0.5), 1790 + ki * 7 + v, 1.6, 0);
+    else lobe(P.tuft * (P.top === 'flat' ? 1.3 : 1.1), axis(topY + 0.15), 1790 + ki * 7 + v, P.top === 'flat' ? 0.45 : 0.7, 0);
+  } else if (kind === 'aspen') {
+    // quaking aspen: one straight white stem (the third, two of a clone), dark "eyes" where its lower
+    // branches fell, and a narrow oval crown high on it of small round leaves that tremble on their
+    // flat stalks (propMaterial flutter) — lime green in late May, gold in September, bare and white
+    // in the winter grove
+    trunkR = 0.13;
+    const stems = v === 2 ? 2 : 1, H = (v === 0 ? 10.4 : 11.6) + j(0.4);
+    for (let s = 0; s < stems; s++) {
+      const a = r.float() * Math.PI * 2, off = s ? 0.9 : 0, base = V3(Math.cos(a) * off, -0.3, Math.sin(a) * off);
+      const top = V3(base.x + j(0.3), H * (s ? 0.88 : 1) - 2.4, base.z + j(0.3)), mid = base.clone().lerp(top, 0.5);
+      const R = trunkR * (s ? 0.85 : 1);
+      wood.push(twig(base, mid, R, R * 0.85, 6, ASPEN_BARK), twig(mid, top, R * 0.85, R * 0.4, 5, ASPEN_BARK));
+      if (!s) leanPer = [top.x / H, top.z / H];
+      // the eyes: dark scars up the bare stem, drawn by both models
+      for (let e = 0; e < 4; e++) {
+        const y = 1.4 + e * ((top.y * 0.62 - 1.4) / 4) + j(0.2), t = (y - base.y) / (top.y - base.y), c = base.clone().lerp(top, t);
+        const ea = r.float() * Math.PI * 2, ex = Math.cos(ea), ez = Math.sin(ea), rr = R * (1 - 0.3 * t) * 1.04;
+        const g = new THREE.BufferGeometry(), w = 0.1, h = 0.07;
+        const P0 = [c.x + ex * rr, c.y, c.z + ez * rr], tx = -ez * w, tz = ex * w;
+        const q = [[P0[0] - tx, P0[1], P0[2] - tz], [P0[0], P0[1] + h, P0[2]], [P0[0] + tx, P0[1], P0[2] + tz], [P0[0], P0[1] - h, P0[2]]];
+        g.setAttribute('position', new THREE.Float32BufferAttribute([...q[0], ...q[1], ...q[2], ...q[0], ...q[2], ...q[3], ...q[0], ...q[2], ...q[1], ...q[0], ...q[3], ...q[2]], 3));
+        g.computeVertexNormals();
+        plan.hang.push(part(g, ASPEN_EYE));
+      }
+      for (let k = 0; k < 3; k++) {
+        const b = a + k * 2.1 + r.float() * 0.5;
+        wood.push(twig(top.clone().add(V3(0, -1.5, 0)), top.clone().add(V3(Math.cos(b) * 0.9, 0.9, Math.sin(b) * 0.9)), R * 0.35, R * 0.12, 3, ASPEN_BARK));
+      }
+      const n = stems > 1 ? 6 : 9, rx = stems > 1 ? 1.2 : 1.5, ry = 2.6, cy = top.y + 0.9;
+      for (let i = 0; i < n; i++) {
+        const u = fibSphere(i, n, -0.6, r.float() * 6);
+        lobe(0.95 * (0.9 + r.float() * 0.2), V3(top.x + u.x * rx * 0.75, cy + u.y * ry * 0.72, top.z + u.z * rx * 0.75), 1860 + v * 31 + s * 13 + i, 0.95, 0);
+      }
+    }
+    lobe(1.2, V3(0, H - 1.3, 0), 1890 + v, 1.1, 0);
+  } else if (kind === 'willowshrub') {
+    // a willow thicket (and red-osier dogwood, its look-alike): a dense clump of thin stems fanning up
+    // from one base, coloured — red, gold, purple — and glowing in a bare winter, narrow leaves in sprays
+    // along their upper half; along every mountain creek and northern bog, the moose's browse
+    trunkR = 0.06;
+    const col = WILLOW_STEMS[v], H = 3.4 + j(0.3);
+    for (let i = 0; i < 8; i++) {
+      const a = i * GOLDEN + r.float() * 0.5, ca = Math.cos(a), sa = Math.sin(a), out = 0.6 + r.float() * 1.0, h = H * (0.65 + r.float() * 0.35);
+      const base = V3(ca * 0.12, -0.2, sa * 0.12), tip = V3(ca * out, h, sa * out), mid = base.clone().lerp(tip, 0.5).add(V3(-ca * 0.1, 0, -sa * 0.1));
+      wood.push(twig(base, mid, 0.05, 0.035, 3, col), twig(mid, tip, 0.035, 0.012, 3, col));
+      lobe(0.62 + r.float() * 0.2, mid.clone().lerp(tip, 0.62), 1920 + v * 17 + i, 0.85, 0, { dir: a, stretch: 1.5, bend: 0.2 });
+    }
+    lobe(1.0, V3(j(0.2), H * 0.72, j(0.2)), 1950 + v, 0.85, 0);
+  } else if (kind === 'snag') {
+    // a standing dead tree, grey all year: v0 a dead conifer's spike with its dead stubs (beetle-kill,
+    // an adelgid's ghost hemlock), v1 a dead broadleaf's bare limbs (an ash the borer took), v2 a
+    // drowned trunk snapped off in a beaver pond, a woodpecker's hole in it
+    trunkR = v === 1 ? 0.26 : v === 2 ? 0.28 : 0.2;
+    const H = v === 2 ? 5.5 + j(0.4) : 11.5 + j(0.6), lean = V3(j(0.4), 0, j(0.4));
+    leanPer = [lean.x / H, lean.z / H];
+    const axis = (y: number) => V3((lean.x * y) / H, y, (lean.z * y) / H);
+    wood.push(twig(V3(0, -0.3, 0), axis(H * 0.5), trunkR, trunkR * 0.75, 6, SNAG), twig(axis(H * 0.5), axis(H), trunkR * 0.75, v === 0 ? 0.03 : trunkR * 0.55, 5, SNAG));
+    if (v === 0) {
+      for (let k = 0; k < 10; k++) {
+        const y = 2.0 + k * ((H - 2.6) / 10) + j(0.2), a = k * GOLDEN + r.float() * 0.4, L = (1.3 - (k / 10) * 0.9) * (0.7 + r.float() * 0.5);
+        wood.push(twig(axis(y), axis(y).add(V3(Math.cos(a) * L, -0.15 * L, Math.sin(a) * L)), 0.045, 0.012, 3, SNAG));
+      }
+    } else if (v === 1) {
+      for (let k = 0; k < 3; k++) {
+        const a = k * 2.1 + r.float() * 0.6, from = axis(H * (0.55 + k * 0.1)), knee = from.clone().add(V3(Math.cos(a) * 1.4, 1.5, Math.sin(a) * 1.4)), tip = knee.clone().add(V3(Math.cos(a + 0.4) * 1.0, 1.3 - k * 0.3, Math.sin(a + 0.4) * 1.0));
+        wood.push(twig(from, knee, trunkR * 0.45, trunkR * 0.3, 4, SNAG), twig(knee, tip, trunkR * 0.3, 0.025, 3, SNAG));
+        wood.push(twig(knee, knee.clone().add(V3(Math.cos(a - 1) * 0.7, 0.8, Math.sin(a - 1) * 0.7)), 0.04, 0.012, 3, SNAG));
+      }
+    } else {
+      // the snapped top's splinters, and the woodpecker's hole
+      for (let k = 0; k < 2; k++) { const a = k * 3 + r.float(); wood.push(twig(axis(H - 0.1), axis(H - 0.1).add(V3(Math.cos(a) * 0.1, 0.6 + k * 0.3, Math.sin(a) * 0.1)), 0.06, 0.01, 3, SNAG)); }
+      const c = axis(H * 0.62), g = new THREE.BufferGeometry(), hr = 0.09, ox = trunkR * 0.68 * 1.05;
+      g.setAttribute('position', new THREE.Float32BufferAttribute([c.x + ox, c.y - hr, c.z - hr, c.x + ox, c.y + hr, c.z - hr, c.x + ox, c.y + hr, c.z + hr, c.x + ox, c.y - hr, c.z - hr, c.x + ox, c.y + hr, c.z + hr, c.x + ox, c.y - hr, c.z + hr], 3));
+      g.computeVertexNormals();
+      plan.hang.push(part(g, 0x1e1a16));
+    }
   } else if (kind === 'liveoak' || kind === 'plateauoak' || kind === 'coastoak') {
     // The live oaks (OAKS): the trunk (or a mott's trunks) to the fork, the limbs off it, the billows
     // and the dome. The southern live oak's limbs sweep out twice as far as the tree stands, the outer
@@ -729,12 +909,13 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
     }
   }
 
-  const leafGeo = merge(leaf.map((g) => part(g, TINT)));
-  const geo = merge([...wood, ...plan.hang, leafGeo]);
-  const bb = bounds(geo), lb = bounds(leafGeo);
+  // (a snag has no leaves: its "crown" is its wood's reach)
+  const leafGeo = leaf.length ? merge(leaf.map((g) => part(g, TINT))) : null;
+  const geo = merge([...wood, ...plan.hang, ...(leafGeo ? [leafGeo] : [])]);
+  const bb = bounds(geo), lb = leafGeo ? bounds(leafGeo) : (() => { const w = bounds(geo); return { min: V3(w.min.x, w.max.y * 0.5, w.min.z), max: w.max }; })();
   const meta: TreeMeta = {
     h: bb.max.y,
-    crownR: Math.max(lb.max.x - lb.min.x, lb.max.z - lb.min.z) / 2,
+    crownR: Math.max(leafGeo ? 0 : 0.6, Math.max(lb.max.x - lb.min.x, lb.max.z - lb.min.z) / 2), // (a snapped snag's "crown" is a trunk's width; it still stands for a tree)
     crownBottom: Math.max(0.3, lb.min.y),
     trunkR,
     lean: leanPer,
@@ -767,7 +948,8 @@ export const crownField = (m: TreeMeta): [number, number] => [m.crownBottom + 0.
 // silhouette its far model was tuned to: the oak's billows at its limbs' ends, the elm's vase, the
 // pine's windswept tufts. Palms and the willow keep their far model at every distance: their
 // leaves are already fronds and tresses.
-export const NEAR_KINDS = new Set<TreeKind>(['round', 'oak', 'shrub', 'pine', 'spruce', 'birch', 'mesquite', 'maple', 'elm', 'poplar', 'magnolia', 'cherry', 'fir', 'cedar', 'hemlock', 'sitka', 'alder', 'vinemaple', 'liveoak', 'plateauoak', 'coastoak']);
+export const NEAR_KINDS = new Set<TreeKind>(['round', 'oak', 'shrub', 'pine', 'spruce', 'birch', 'mesquite', 'maple', 'elm', 'poplar', 'magnolia', 'cherry', 'fir', 'cedar', 'hemlock', 'sitka', 'alder', 'vinemaple', 'liveoak', 'plateauoak', 'coastoak',
+  'whitepine', 'ponderosa', 'lodgepole', 'redspruce', 'balsamfir', 'engelmann', 'subalpinefir', 'easthemlock', 'aspen', 'willowshrub']); // (the snag is wood alone: its far model at every distance)
 /** A leaf card: its middle (x, y, z, model space), half its width, height : width, its turn in the
  *  picture plane (0–1 of a turn), its picture (LEAF_PICS) and how deep in the crown it sits
  *  (0 on the rim … 1 at the heart). */
@@ -902,7 +1084,7 @@ export function nearTreeGeometry(kind: TreeKind, v: number): NearTree {
     const M = S.p.clone().lerp(E, 0.5).add(V3((rng.float() - 0.5) * 0.12 * L, 0.12 * L, (rng.float() - 0.5) * 0.12 * L));
     const r0 = Math.min(0.11, Math.max(0.025, Math.min(S.r * 0.55, 0.03 + 0.025 * L))), r1 = Math.max(0.012, r0 * 0.3);
     // (inside a Northwest conifer's dense clumps a three-sided twig does: there's little to see of it)
-    wood.push(part(tube([S.p.clone(), M, E], [r0, (r0 + r1) * 0.55, r1], kind in SPIRES ? 3 : r0 > 0.06 ? 5 : 4), plan.boughs[0].col));
+    wood.push(part(tube([S.p.clone(), M, E], [r0, (r0 + r1) * 0.55, r1], isSpire(kind) ? 3 : r0 > 0.06 ? 5 : 4), plan.boughs[0].col));
     if (reaches(S.p, E)) limbsIn++;
   }
   // the trunk's girth at the ground and where it meets the crown (the first stem's)
@@ -1380,3 +1562,74 @@ export function plantGeometry(sp: PlantSpecies, seed: number, g: number, bloom =
 export const plantLib = (sp: PlantSpecies, v: number, stage: number, bloom = true, lite = false) =>
   cached(`plant:${sp}:${v}:${stage}:${bloom ? 1 : 0}:${lite ? 1 : 0}`, () => plantGeometry(sp, v + 1, (stage + 1) / STAGES, bloom, lite));
 
+
+// ---------------- the northern and mountain conifers by place (models.md build order #3) ----------------
+
+/** Where a scan's generic conifer stands, in a Colorado tree-line's metres: real elevation, its bands
+ *  ~110 m lower a degree north (Montana's ponderosa grows where Arizona's would be desert scrub). */
+export const bandElevation = (elev: number, lat: number) => elev + (lat - 39) * 110;
+/** The West's mountain bands (docs/regional-life/12-rockies.md), in bandElevation's metres. */
+export const BANDS = { ponderosaFloor: 1450, montane: 2450, subalpine: 2900 } as const;
+const WEST_MOUNTAINS = new Set(['rockies', 'great-basin', 'desert-sw', 'california']);
+/** What the scan's generic `pine` or `spruce` becomes here (props.ts regional): the region's own
+ *  conifers by weight — the West's by elevation band, the Northeast's white pine, red spruce, balsam
+ *  fir and eastern hemlock, the north woods' — or [] to keep the generic kind (the South's pines are
+ *  the next package's). `west`-side Northwest conifers are props.ts's own (nwConifer). */
+export function coniferMix(p: CastPlace, kind: 'pine' | 'spruce', elev: number, lat: number, coast = false): [TreeKind, number][] {
+  const pine = kind === 'pine';
+  const dry = p.eco === 'pnw' && !p.west;
+  if (WEST_MOUNTAINS.has(p.eco) || dry) {
+    // (the desert's and the basin's floors keep theirs: piñon and juniper are package #7's)
+    if (p.eco === 'california' && p.l3 !== 5 && p.l3 !== 4 && p.l3 !== 9 && p.l3 !== 78) return [];
+    const z = bandElevation(elev, lat);
+    if ((p.eco === 'desert-sw' || p.eco === 'great-basin') && z < BANDS.ponderosaFloor) return [];
+    // (the Front Range's foothills: Douglas fir on the north slopes among the ponderosa; the drier
+    // foothills of the Northwest's dry side, the Great Basin and the desert's mountains mostly ponderosa)
+    if (z < BANDS.montane) return pine ? [['ponderosa', 1]] : p.eco === 'rockies' ? [['fir', 0.6], ['ponderosa', 0.4]] : [['ponderosa', 0.65], ['fir', 0.35]];
+    if (z < BANDS.subalpine) return pine ? [['lodgepole', 0.55], ['ponderosa', 0.45]] : [['fir', 0.5], ['engelmann', 0.25], ['subalpinefir', 0.25]];
+    return pine ? [['lodgepole', 1]] : [['engelmann', 0.55], ['subalpinefir', 0.45]];
+  }
+  switch (p.eco) {
+    case 'new-england':
+      // (pitch pine on the sandy coast — Cape Cod, the islands — white pine inland)
+      return pine ? (coast ? [['pine', 0.65], ['whitepine', 0.35]] : [['whitepine', 0.8], ['pine', 0.2]]) : [['easthemlock', 0.45], ['redspruce', 0.4], ['balsamfir', 0.3]];
+    case 'upstate-ny':
+      return pine ? [['whitepine', 0.85], ['pine', 0.15]] : p.l3 === 58 ? [['redspruce', 0.4], ['balsamfir', 0.4], ['easthemlock', 0.3]] : [['easthemlock', 0.5], ['redspruce', 0.25], ['balsamfir', 0.25]];
+    case 'mid-atlantic':
+      return pine ? [['pine', 0.75], ['whitepine', 0.25]] : [['easthemlock', 0.5], ['spruce', 0.5]];
+    case 'appalachia':
+      // (the Smokies' and the Black Mountains' spruce-fir summits above ~1,500 m)
+      return pine ? [['whitepine', 0.55], ['pine', 0.45]] : elev > 1500 ? [['redspruce', 0.75], ['balsamfir', 0.25]] : [['easthemlock', 0.7], ['redspruce', 0.3]];
+    case 'midwest':
+      return p.l3 === 49 || p.l3 === 50 || p.l3 === 51
+        ? (pine ? [['whitepine', 0.6], ['pine', 0.4]] : [['balsamfir', 0.5], ['spruce', 0.3], ['easthemlock', 0.2]])
+        : (pine ? [['whitepine', 0.3], ['pine', 0.7]] : []);
+    case 'plains':
+      // (the Pine Ridge's and the Niobrara's ponderosa; windbreak pines and blue spruce elsewhere)
+      return pine && (p.l3 === 25 || p.l3 === 43 || p.l3 === 44) ? [['ponderosa', 0.6], ['pine', 0.4]] : [];
+  }
+  return [];
+}
+/** Where quaking aspen stands in for a scan's round broadleaf: the West's montane band (its groves gold
+ *  against the dark spruce), and among the north woods' birches. The share of round picks it takes. */
+export function aspenShare(p: CastPlace, elev: number, lat: number): number {
+  if (WEST_MOUNTAINS.has(p.eco) || (p.eco === 'pnw' && !p.west)) {
+    const z = bandElevation(elev, lat);
+    return z > 2150 && z < 3300 ? 0.5 : z > 1750 && z <= 2150 ? 0.2 : 0;
+  }
+  if (p.eco === 'new-england' || p.eco === 'upstate-ny') return p.l3 === 58 || p.l3 === 82 ? 0.2 : 0.08;
+  if (p.eco === 'midwest' && (p.l3 === 49 || p.l3 === 50)) return 0.25;
+  return 0;
+}
+/** Where willow thickets crowd the creeks and bogs: the West's mountains and dry side, the North. */
+export const willowThickets = (p: CastPlace) => WEST_MOUNTAINS.has(p.eco) && p.eco !== 'desert-sw' || (p.eco === 'pnw' && !p.west) || p.eco === 'new-england' || p.eco === 'upstate-ny' || (p.eco === 'midwest' && (p.l3 === 49 || p.l3 === 50 || p.l3 === 51)) || p.eco === 'plains';
+/** Standing dead trees in a wood (models.md `snag`): the Rockies' beetle-killed lodgepole and spruce,
+ *  the East's hemlocks the adelgid took, the North's drowned beaver-pond trunks — the share of a
+ *  wood's trees of `kind` that stand dead here (and `wet`: beside fresh water). */
+export function snagShare(p: CastPlace, kind: TreeKind, wet: boolean): number {
+  const west = WEST_MOUNTAINS.has(p.eco) || (p.eco === 'pnw' && !p.west);
+  if (west && (kind === 'lodgepole' || kind === 'engelmann' || kind === 'subalpinefir')) return 0.1;
+  if (kind === 'easthemlock' && (p.eco === 'appalachia' || p.eco === 'mid-atlantic' || (p.eco === 'new-england' && p.l3 === 59))) return 0.14;
+  if (wet && (p.eco === 'new-england' || p.eco === 'upstate-ny' || (p.eco === 'midwest' && (p.l3 === 49 || p.l3 === 50)) || west)) return 0.12;
+  return 0;
+}

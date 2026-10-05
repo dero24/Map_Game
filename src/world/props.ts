@@ -16,7 +16,7 @@ import { pointInRing, ringTester } from './realTile';
 import { activeStyle, castOf, pickWeighted, westside as isWestside } from './styles';
 import { hangerLib, hangerMix, HANGERS, HANG_TONES, type HangerType } from '../assets/hangers';
 import { caFogBelt } from './ecoregions';
-import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, broadMix, plantLib, inBloom, SPECIES, STAGES, fallHueOf, DECIDUOUS, type PlantSpecies } from '../assets/flora';
+import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, broadMix, coniferMix, aspenShare, willowThickets, snagShare, NEEDLED, plantLib, inBloom, SPECIES, STAGES, fallHueOf, DECIDUOUS, FLUTTER, type PlantSpecies } from '../assets/flora';
 import { MAILBOXES, mailboxLib, beachLib, gearFor, type MailboxStyle, type CarGear } from '../assets/furniture';
 import { variantAt, hashf } from '../assets/core';
 import { cafeSet, mergeDecor } from '../assets/decor';
@@ -789,6 +789,12 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   const MAPLE = 9, WILLOW = 10, ELM = 11, POPLAR = 12, MAGNOLIA = 13, CHERRY = 14;
   const FIR = 15, CEDAR = 16, HEMLOCK = 17, SITKA = 18, ALDER = 19, VINEMAPLE = 20;
   const LIVEOAK = 21, PLATEAUOAK = 22, COASTOAK = 23;
+  const WHITEPINE = 24, PONDEROSA = 25, LODGEPOLE = 26, ASPEN = 32, WILLOWSHRUB = 33, SNAG = 34;
+  // the northern and mountain conifers (package #3): grown forms like the Northwest's (open-grown, a
+  // forest tree, an old one), and the needled kinds a town keeps only where the region is conifer
+  // country
+  const NORTH_CONIFER = new Set([24, 25, 26, 27, 28, 29, 30, 31]);
+  const NEEDLE_K = new Set(TREE_KINDS.map((kk, i) => (NEEDLED.has(kk) || kk === 'cedar' ? i : -1)).filter((i) => i >= 0));
   const isLiveOak = (k: number) => k === LIVEOAK || k === PLATEAUOAK || k === COASTOAK;
   // the region's live oak, if it has one (flora.ts broadMix: the South's, the Hill Country's plateau
   // oak, California's coast live oak) — a mapped "oak" there is most likely it
@@ -807,6 +813,24 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   /** A Northwest conifer's grown form: the forest's bare-trunked ones (an old giant one in three)
    *  under a closed canopy, the open-grown one (foliage to the ground) in yards and parks. */
   const nwForm = (x: number, z: number, forest: boolean) => forest ? (variantAt(x, z, 10, 13) < 3 ? 2 : 1) : variantAt(x, z, 10, 13) < 7 ? 0 : 1;
+  // The region's own conifers for a scan's generic pine or spruce (flora.ts coniferMix: the West's by
+  // elevation band, the Northeast's white pine, red spruce, balsam fir and hemlock, the north woods'),
+  // aspen groves (clonal: whole patches of a scan's round trees, aspenShare), willow thickets by fresh
+  // water, and the snags that stand dead in a wood (snagShare). Position hashes only: the scan's
+  // random sequence stays as it was.
+  const cast0 = castOf(look0());
+  const latAt = (x: number, z: number) => toLatLon(json.origin, x, z)[0];
+  const conifer = (k: number, x: number, z: number) => {
+    const mix = coniferMix(cast0, k === 3 ? 'pine' : 'spruce', terrain.heightAt(x, z), latAt(x, z), terrain.oceanDistAt(x, z) < 3000);
+    if (!mix.length) return -1;
+    return TREE_KINDS.indexOf(mix[pickWeighted(mix.map(([, w]) => w), hashf(Math.floor(x * 2.1) * 104729 + Math.floor(z * 1.7) * 7919 + 503))][0]);
+  };
+  const aspenAt = (x: number, z: number) => {
+    const share = aspenShare(cast0, terrain.heightAt(x, z), latAt(x, z));
+    // (a grove is one clone: a 35 m patch where nearly every round tree is an aspen)
+    return share > 0 && hashf(Math.floor(x / 35) * 7919 + Math.floor(z / 35) * 104729 + 401) < share * 1.4 && hashf(Math.floor(x * 3.7) * 7919 + Math.floor(z * 2.3) * 104729 + 409) < 0.85;
+  };
+  const thickets = willowThickets(cast0);
   // (the region's own in the lower 48 — flora.ts broadMix, from docs/regional-life/ — else the climate's)
   const BROAD: [number, number][] = broadMix(castOf(look0())).map(([kind, w]) => [TREE_KINDS.indexOf(kind), w]);
   const regionLiveOak = BROAD.find(([kk, w]) => w > 0 && (kk === LIVEOAK || kk === PLATEAUOAK || kk === COASTOAK))?.[0] ?? -1;
@@ -822,7 +846,11 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     if (westside && (k === 3 || k === 4)) return nwConifer(x, z);
     // (a low clump under the firs: the vine maple)
     if (westside && k === 2 && hashf(Math.floor(x * 1.3) * 104729 + Math.floor(z * 3.7) * 7919 + 5) < 0.45) return VINEMAPLE;
+    if (k === 3 || k === 4) { const c = conifer(k, x, z); if (c >= 0) return c; }
+    // (willow thickets crowd the creeks and bogs of the North and the mountains)
+    if (k === 2 && thickets && terrain.sdfAt(x, z) < 22 && terrain.oceanDistAt(x, z) > 250 && hashf(Math.floor(x * 2.9) * 104729 + Math.floor(z * 3.1) * 7919 + 211) < 0.6) return WILLOWSHRUB;
     if (k > 1) return k;
+    if (k === 0 && aspenAt(x, z)) return ASPEN;
     const u = hashf(Math.floor(x * 3.1) * 7919 + Math.floor(z * 2.7) * 104729);
     // palms by climate: coconut palms in the tropics, Washingtonia fan palms on dry coasts
     if (tropical && u < 0.75) return 5;
@@ -888,7 +916,13 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       if (westside && cov === 10 && (k === 0 || k === 1) && hashf(Math.floor(jx * 3.3) * 104729 + Math.floor(jz * 2.1) * 7919 + 77) < 0.7) k = nwConifer(jx, jz);
       let v = variantAt(jx, jz, TREE_VARIANTS, 11);
       if (k === MAPLE && v === 2 && !westside) v = 0; // (the bigleaf maple is the Northwest's westside's alone)
-      if (NW_CONIFER.has(k)) v = nwForm(jx, jz, cov === 10);
+      if (NW_CONIFER.has(k) || NORTH_CONIFER.has(k)) v = nwForm(jx, jz, cov === 10);
+      // (a wood's dead: the Rockies' beetle-killed lodgepole and spruce, the East's adelgid-killed
+      // hemlocks, the drowned trunks of a beaver pond — grey spikes, bare limbs, snapped stumps)
+      if (cov === 10 && k !== 2 && k !== WILLOWSHRUB) {
+        const wet = terrain.sdfAt(jx, jz) < 30 && terrain.oceanDistAt(jx, jz) > 250;
+        if (hashf(Math.floor(jx * 1.3) * 7919 + Math.floor(jz * 1.9) * 104729 + 607) < snagShare(cast0, TREE_KINDS[k], wet)) (v = NEEDLE_K.has(k) ? 0 : wet ? 2 : 1), (k = SNAG);
+      }
       // the Northwest's at their real heights: Douglas fir and Sitka spruce 25–48 m in the forest, hemlock
       // and cedar 20–40 m (a yard's 14–30 and 12–26), red alder 12–22 m, vine maple 3.5–7 m
       const hu = rng.float();
@@ -896,6 +930,14 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       // plateau oak 6–11 m; the coast live oak 8–16 m)
       const h = k === 2 ? 2.4 + hu * 1.6 : k === VINEMAPLE ? 3.5 + hu * 3.5 : k === ALDER ? (cov === 10 ? 12 + hu * 10 : 9 + hu * 7)
         : k === LIVEOAK ? (cov === 10 ? 13 + hu * 7 : 10 + hu * 8) : k === PLATEAUOAK ? 6 + hu * 5 : k === COASTOAK ? (cov === 10 ? 10 + hu * 8 : 8 + hu * 7)
+          // (the northern and mountain conifers at their real heights: white pine the tallest of the
+          // East, 20–32 m in a wood; ponderosa 18–32; lodgepole 15–24; Engelmann spruce 18–32; red
+          // spruce and hemlock 14–28; balsam and subalpine fir smaller; aspen 10–18; willow 1.5–4)
+          : k === WHITEPINE || k === PONDEROSA || k === 28 ? (cov === 10 ? 19 + hu * 13 : 11 + hu * 12) : k === LODGEPOLE ? (cov === 10 ? 15 + hu * 9 : 9 + hu * 7)
+            : k === 27 || k === 31 ? (cov === 10 ? 15 + hu * 12 : 8 + hu * 9) : k === 29 || k === 30 ? (cov === 10 ? 11 + hu * 9 : 6 + hu * 6)
+              : k === ASPEN ? (cov === 10 ? 11 + hu * 7 : 8 + hu * 6) : k === WILLOWSHRUB ? 1.6 + hu * 2.4
+                : k === SNAG ? (v === 2 ? 3 + hu * 3 : 8 + hu * 9) // (a snapped beaver-pond trunk 3–6 m; a dead spire or ash its tree's height)
+        : k === FIR && !westside ? (cov === 10 ? 18 + hu * 14 : 12 + hu * 10) // (the interior's Douglas fir: 18–32 m, not the westside's giants)
         : k === FIR || k === SITKA ? (cov === 10 ? 25 + hu * 23 : 14 + hu * 16) : k === HEMLOCK || k === CEDAR ? (cov === 10 ? 20 + hu * 20 : 12 + hu * 14)
           : (k >= 3 ? 7 : 8) + hu * 7;
       const s = h / treeMeta(TREE_KINDS[k], v).h;
@@ -1013,7 +1055,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       // the upper half or more. Conifers only where the region is mostly conifer, and no model
       // whose bare trunk would be stretched into a lollipop by the measured height.
       if (k !== 2 && walk.blocked(x, z, 14)) {
-        if ((k === 3 || k === 4) && conifer <= 0.5) k = r / h > 0.42 ? 1 : 0;
+        if (NEEDLE_K.has(k) && conifer <= 0.5) k = r / h > 0.42 ? 1 : 0;
         if (k !== 7 && k !== 8 && k !== 5 && treeMeta(TREE_KINDS[k], v).crownBottom / treeMeta(TREE_KINDS[k], v).h > 0.56) k = regional(r / h > 0.42 ? 1 : 0, x, z, r / h);
         v = variantAt(x, z, TREE_VARIANTS, 11);
       }
@@ -1234,7 +1276,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       // palms, magnolias and the desert legumes keep theirs
       const kind = TREE_KINDS[k];
       const decid = DECIDUOUS.has(kind);
-      const im = new THREE.InstancedMesh(treeLib(kind, v).clone(), propMaterial({ wind: true, foliage: true, crown, decid, fallHue: fallHueOf(kind, v), blossom: kind === 'cherry', weep: kind === 'willow' }), list.length);
+      const im = new THREE.InstancedMesh(treeLib(kind, v).clone(), propMaterial({ wind: true, foliage: true, crown, decid, fallHue: fallHueOf(kind, v), blossom: kind === 'cherry', weep: kind === 'willow', flutter: FLUTTER.has(kind) }), list.length);
       im.name = `trees:${kind}:${v}`;
       // a species' own green over the region's: the desert legumes a dusty grey-green (palo verde a
       // thin yellow-green), the willow a soft yellow-green, the magnolia dark and glossy, the
@@ -1250,7 +1292,14 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
                   : kind === 'sitka' ? [new THREE.Color(0x3c584c), 0.5] : kind === 'cedar' ? [new THREE.Color(0x4f6e34), 0.45]
                     : kind === 'vinemaple' ? [new THREE.Color(0x7a9a44), 0.45] : kind === 'alder' ? [new THREE.Color(0x55703a), 0.25]
                       // the live oaks dark and leathery: the South's deep olive, the plateau oak's dusty olive, the coast live oak's near-black green
-                      : kind === 'liveoak' ? [new THREE.Color(0x35502e), 0.5] : kind === 'plateauoak' ? [new THREE.Color(0x4d5e36), 0.5] : kind === 'coastoak' ? [new THREE.Color(0x2c4426), 0.55] : null;
+                      : kind === 'liveoak' ? [new THREE.Color(0x35502e), 0.5] : kind === 'plateauoak' ? [new THREE.Color(0x4d5e36), 0.5] : kind === 'coastoak' ? [new THREE.Color(0x2c4426), 0.55]
+                        // the northern and mountain conifers: the white pine's soft blue-green, the ponderosa's
+                        // yellow-green, the lodgepole's, red spruce's yellow-green, balsam fir's near-black, Engelmann's
+                        // blue-green, subalpine fir's, hemlock's dark; the aspen's bright, the willow's grey-green
+                        : kind === 'whitepine' ? [new THREE.Color(0x4a6a5a), 0.5] : kind === 'ponderosa' ? [new THREE.Color(0x5a6e3a), 0.45] : kind === 'lodgepole' ? [new THREE.Color(0x46603a), 0.45]
+                          : kind === 'redspruce' ? [new THREE.Color(0x4a6232), 0.45] : kind === 'balsamfir' ? [new THREE.Color(0x2a4230), 0.6] : kind === 'engelmann' ? [new THREE.Color(0x34504a), 0.55]
+                            : kind === 'subalpinefir' ? [new THREE.Color(0x3a5640), 0.5] : kind === 'easthemlock' ? [new THREE.Color(0x2e4a32), 0.55]
+                              : kind === 'aspen' ? [new THREE.Color(0x7a9a46), 0.45] : kind === 'willowshrub' ? [new THREE.Color(0x7a9452), 0.4] : null;
       list.forEach((t, i) => { im.setMatrixAt(i, t.m); im.setColorAt(i, own ? t.c.clone().lerp(own[0] as THREE.Color, own[1] as number) : t.c); });
       im.layers.enable(1);
       im.computeBoundingSphere();

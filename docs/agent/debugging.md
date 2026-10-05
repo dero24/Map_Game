@@ -62,6 +62,14 @@ behaviour.
     sky). `window.__SPOTKIT__` pokes one pose by hand.
   - A subject `name` matches the mesh's own name or a parent's (`retaining-walls`, `retaining-steps`,
     `player-vehicles`, `trees:`).
+- **Software GL (a cloud session's SwiftShader):** a frame takes seconds and spot-shots' asserts tens of
+  minutes. `--w=800 --h=450`, and `tools/light-shots.js` (`__LIGHT__('tag', poses)` → `shots/light-<tag>.jpg`):
+  the same poses without the id passes or re-posing. Chromium behind the session's egress proxy gets it
+  from `tools/pw-proxy.mjs` (capture.mjs, real-compare.mjs, tree-studio.mjs).
+- **The tree studio headless:** `node tools/tree-studio.mjs --tag=x --kinds=a,b [--extra=/tools/studio-hangers.js]`
+  → `shots/trees-<tag>.jpg` (a blank page, `tools/studio.html`: seconds, where `/kit.html` took minutes).
+- **Shaders compile:** `await import('/tools/shader-check.js'); await __SHADERS__()` on any dev page builds
+  and draws every tree and hanger material variant and the leaf cards once → `{ programs, errors }`.
 - Sketch mode in shots: capture mode is fully painted unless the URL has `&sketch=1` (sketch mode on).
 - The brush's readability (reviewer round 9): with the brush out and a sketch showing on a
   `?capture=1` page, `await import('/tools/brush-check.js'); await __BRUSHCHECK__()` paints it in

@@ -36,7 +36,7 @@ describe('flora', () => {
       const b = bb(geo);
       expect(finite(geo)).toBe(true);
       expect(b.min.y).toBeLessThanOrEqual(0.01); // the trunk reaches into the ground
-      expect(meta.h).toBeGreaterThan(k === 'shrub' ? 1.5 : 5);
+      expect(meta.h).toBeGreaterThan(k === 'shrub' || k === 'willowshrub' ? 1.5 : 5);
       expect(meta.h).toBeLessThan(14);
       expect(meta.crownR).toBeGreaterThan(0.5);
       expect(meta.crownBottom).toBeLessThan(meta.h);

@@ -3,7 +3,8 @@ import { type TileJson } from '../src/world/data';
 import { virtualRegion } from '../src/world/virtual';
 import { setActiveStyle, regionStyle } from '../src/world/styles';
 import { buildTile } from '../src/world/tileBuild';
-import { treeMeta, type TreeKind } from '../src/assets/flora';
+import { treeMeta, coniferMix, aspenShare, snagShare, type TreeKind } from '../src/assets/flora';
+import { castOf } from '../src/world/styles';
 
 // The survey's street trees stand (props.ts, the LiDAR trees): a crown measured over the street has
 // its trunk at the kerb — on the verge past the paved band, or in a pit where the sidewalk runs wall
@@ -143,13 +144,59 @@ describe("the Northwest's woods", () => {
     expect(inland.sitka?.n ?? 0).toBe(0); // (no fog belt on the Sound)
     expect(coast.sitka?.n ?? 0).toBeGreaterThan(0);
   }, 60000);
-  it('east of the crest the dry side is the Mountain West: none of the westside conifers, no moss', async () => {
+  it("east of the crest the dry side is the Mountain West: ponderosa country, none of the westside's own conifers, no moss", async () => {
     expect(regionStyle(44.06, -121.31).sub).toBe('mountain');
     expect(regionStyle(46.6, -120.5).sub).toBe('mountain');
     expect(regionStyle(47.6, -122.33).sub).toBe('pnw');
     expect(regionStyle(47.6, -122.33).moss).toBeGreaterThan(0.8);
     expect(regionStyle(44.06, -121.31).moss).toBeLessThan(0.2);
     const dry = await wood([44.06, -121.31]);
-    expect(['fir', 'hemlock', 'cedar', 'sitka'].reduce((s, c) => s + (dry[c]?.n ?? 0), 0)).toBe(0);
+    expect(['hemlock', 'cedar', 'sitka'].reduce((s, c) => s + (dry[c]?.n ?? 0), 0)).toBe(0);
+    // (Bend: "ponderosa and juniper" — docs/regional-life/16-pnw.md; the interior's Douglas fir a few)
+    expect(dry.ponderosa?.n ?? 0).toBeGreaterThan(dry.fir?.n ?? 0);
   }, 60000);
+  // The northern and mountain forests (docs/regional-life/models.md build order #3)
+  it("the Adirondacks' woods: white pine, red spruce, balsam fir and hemlock — never the West's conifers", async () => {
+    const k = await wood([44.28, -73.98]);
+    expect(k.whitepine?.n ?? 0).toBeGreaterThan(0);
+    expect((k.redspruce?.n ?? 0) + (k.balsamfir?.n ?? 0)).toBeGreaterThan(0);
+    for (const w of ['ponderosa', 'lodgepole', 'engelmann', 'subalpinefir', 'fir']) expect(k[w]?.n ?? 0, w).toBe(0);
+    const ash = await wood([35.6, -82.55]); // Asheville's coves
+    expect(ash.easthemlock?.n ?? 0).toBeGreaterThan(0);
+  }, 60000);
+});
+
+describe('the northern and mountain conifers by place (flora.ts coniferMix)', () => {
+  const at = (lat: number, lon: number) => castOf(regionStyle(lat, lon));
+  const kinds = (m: [string, number][]) => m.map(([k]) => k);
+  it('the West by elevation band: the foothills ponderosa, the montane lodgepole and Douglas fir, the subalpine spruce and fir', () => {
+    const co = at(39.74, -104.99); // the Front Range
+    expect(kinds(coniferMix(co, 'pine', 1700, 39.74))).toEqual(['ponderosa']);
+    expect(kinds(coniferMix(co, 'pine', 2700, 39.74))).toContain('lodgepole');
+    expect(kinds(coniferMix(co, 'spruce', 2700, 39.74))).toContain('fir');
+    expect(kinds(coniferMix(co, 'spruce', 3200, 39.74)).sort()).toEqual(['engelmann', 'subalpinefir']);
+    // the bands sit lower up north: Missoula's valley is ponderosa, Montana's 2,600 m subalpine
+    const mt = at(46.87, -113.99);
+    expect(kinds(coniferMix(mt, 'pine', 980, 46.87))).toEqual(['ponderosa']);
+    expect(kinds(coniferMix(mt, 'spruce', 2600, 46.87)).sort()).toEqual(['engelmann', 'subalpinefir']);
+    // Flagstaff's plateau a ponderosa forest; Tucson's desert floor keeps its own (piñon and juniper to come)
+    expect(kinds(coniferMix(at(35.2, -111.65), 'pine', 2100, 35.2))).toEqual(['ponderosa']);
+    expect(coniferMix(at(32.22, -110.97), 'pine', 800, 32.22)).toEqual([]);
+  });
+  it("never a western conifer east of the Plains; the East's own by region", () => {
+    for (const [lat, lon] of [[44.28, -73.98], [42.36, -71.06], [35.6, -82.55], [40.36, -73.97], [46.79, -92.1], [38.04, -84.5], [32.08, -81.09]])
+      for (const kind of ['pine', 'spruce'] as const) for (const elev of [50, 600, 1800])
+        for (const w of kinds(coniferMix(at(lat, lon), kind, elev, lat))) expect(['ponderosa', 'lodgepole', 'engelmann', 'subalpinefir', 'fir'], `${w} at ${lat},${lon}`).not.toContain(w);
+    expect(kinds(coniferMix(at(42.36, -71.06), 'pine', 30, 42.36))).toContain('whitepine');
+    expect(kinds(coniferMix(at(35.6, -82.55), 'spruce', 1800, 35.6))).toContain('redspruce'); // the Smokies' spruce-fir summits
+  });
+  it('aspen groves in the mountains and the north woods; snags where beetles, the adelgid and beavers kill', () => {
+    expect(aspenShare(at(39.19, -106.82), 2400, 39.19)).toBeGreaterThan(0.3); // Aspen
+    expect(aspenShare(at(32.08, -81.09), 10, 32.08)).toBe(0);
+    expect(aspenShare(at(41.88, -87.63), 180, 41.88)).toBe(0);
+    expect(snagShare(at(39.19, -106.82), 'lodgepole', false)).toBeGreaterThan(0);
+    expect(snagShare(at(35.6, -82.55), 'easthemlock', false)).toBeGreaterThan(0);
+    expect(snagShare(at(44.28, -73.98), 'round', true)).toBeGreaterThan(0); // a beaver pond
+    expect(snagShare(at(32.08, -81.09), 'liveoak', true)).toBe(0);
+  });
 });

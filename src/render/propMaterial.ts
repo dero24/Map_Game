@@ -31,6 +31,8 @@ import { SIGNAL_GLSL } from '../sim/traffic';
 // most, out of step with its neighbours, a ripple running down it as the wind rises, the curtain
 // leaning downwind; it rides its tree's own sway from its anchor. The fern greens and opens with
 // uWet and curls brown in a dry spell.
+// flutter: an aspen's round leaves trembling on their flat stalks — each leafy vertex shivering fast and
+// small, the crown shimmering as the pale undersides flash, more as the wind rises.
 // treeLod: a tree's two models (world/nearTrees.ts). 'far' (TREE_LOD 1): a tile's trees, the solid
 // lobed crowns — the near-tree layer marks the trees it draws close up (`aNear`, per instance), and
 // for those this gives way to the near model across the hand-over band on the same ordered dither
@@ -49,9 +51,10 @@ const GLSL_TREE_LOD = /* glsl */ `
     if (L.z > 0.5) return L.z > 1.5 ? 0.0 : 1.0;
     return clamp((d - L.x + L.y * 0.5) / max(L.y, 1e-3), 0.0, 1.0);
   }`;
-export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean; signal?: boolean; fallHue?: number; blossom?: boolean; weep?: boolean; wash?: boolean; fade?: boolean; treeLod?: 'far' | 'near'; hang?: boolean } = {}) {
+export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean; signal?: boolean; fallHue?: number; blossom?: boolean; weep?: boolean; wash?: boolean; fade?: boolean; treeLod?: 'far' | 'near'; hang?: boolean; flutter?: boolean } = {}) {
   const defines: Record<string, number> = {};
   if (opts.hang) defines.HANG = 1;
+  if (opts.flutter) defines.FLUTTER = 1;
   if (opts.treeLod) defines.TREE_LOD = opts.treeLod === 'far' ? 1 : 2;
   if (opts.fade) defines.FADE = 1;
   if (opts.wash) defines.WASH = 1;
@@ -135,6 +138,11 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
           #endif
           p.x += sin(uTime * 1.3 + origin.x * 0.21 + origin.z * 0.17) * sway;
           p.z += cos(uTime * 1.1 + origin.z * 0.19) * sway * 0.7;
+          #ifdef FLUTTER
+            // the aspen's leaves trembling: each leafy vertex shivers along its normal, fast and small
+            float leafF = step(0.98, min(color.r, min(color.g, color.b)));
+            p += normal * leafF * sin(uTime * 13.0 + dot(position, vec3(4.1, 3.3, 2.7)) + vTree * 31.0) * 0.035 * (0.5 + uWind);
+          #endif
           #ifdef WEEP
             // a willow's curtain: the further down a strand, the more it swings
             float hang = step(0.98, min(color.r, min(color.g, color.b))) * max(0.0, uCrown.x + 0.5 - p.y) * 0.06 * (0.5 + uWind);
@@ -323,6 +331,13 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
             float hi = uCrown.y > 0.0 ? smoothstep(uCrown.x - uCrown.y, uCrown.x + uCrown.y, vLocal.y) : 0.5;
             float turn = smoothstep(onset - 0.02, onset + 0.22, uTurn * 1.25 + 0.14 * (hi - 0.5) + 0.12 * (vnoise3(vWorldPos * 0.8) - 0.5)) * smoothstep(0.0, 0.04, uTurn);
             alb = mix(alb, fall * (0.8 + 0.4 * fbm3(vWorldPos * 0.9)), turn);
+          }
+        #endif
+        #ifdef FLUTTER
+          // the grove's shimmer: the leaves' pale undersides flashing, patch by patch, as they turn
+          if (vLeafy > 0.5) {
+            float fl = sin(uTime * 9.0 + dot(vWorldPos, vec3(5.1, 3.7, 4.3)) + vTree * 17.0) * sin(uTime * 5.3 + dot(vWorldPos, vec3(-2.3, 4.1, 3.1)));
+            alb = mix(alb, mix(vec3(0.66, 0.72, 0.5), alb * 1.3, 0.5), clamp(fl, 0.0, 1.0) * (0.12 + 0.22 * uWind));
           }
         #endif
         #ifdef BLOSSOM

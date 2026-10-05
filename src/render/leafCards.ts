@@ -14,7 +14,8 @@
 // Per card (instanced): aC (middle, region frame; half its width, m) · aD (height : width, turn in
 // the picture plane 0–1, picture, depth in the crown 0 rim … 1 heart) · aT (the tree's foot, region
 // frame; its sway at the card's height) · aK (the crown's middle, region frame; its radius) · aE
-// (the tree's green, linear; flags: 1 broadleaf that falls, + 2 × fall hue, + 8 blossom).
+// (the tree's green, linear; flags: 1 broadleaf that falls, + 2 × fall hue, + 8 blossom, + 16 leaves
+// that tremble — the aspen's).
 import * as THREE from 'three';
 import { paintMaterial, GLSL_NOISE } from './shared';
 import { TREE_LOD_U, TREE_MASK_U } from './propMaterial';
@@ -94,6 +95,8 @@ export function leafCardMaterial(tex: THREE.Texture) {
         // each card turned a little (never so far its leaves' lit sides face down) and every other one
         // mirrored, so the few pictures don't repeat; and rocking a little in the wind
         float ang = (fract(aD.y * 2.0) - 0.5) * 0.9 + sin(uTime * 1.9 + aD.y * 37.0 + foot.x * 0.7) * 0.06 * (0.3 + uWind);
+        // (an aspen's leaves tremble on their flat stalks: the card shivers, fast and small)
+        if (aE.w >= 16.0) ang += sin(uTime * 11.0 + aD.y * 53.0 + foot.z * 0.9) * 0.1 * (0.4 + uWind);
         float cs = cos(ang), sn = sin(ang);
         vec2 k = vec2(aD.y > 0.5 ? -aCorner.x : aCorner.x, aCorner.y);
         vec2 q = vec2(k.x * cs - k.y * sn, k.x * sn + k.y * cs);
@@ -139,7 +142,7 @@ export function leafCardMaterial(tex: THREE.Texture) {
         if (t.a < mix(0.5, 0.35, clamp(lod / 3.0, 0.0, 1.0))) discard;
         if (uTreeMask.w > 0.5) { gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0); return; }
         float flags = vInfo.z;
-        float falls = mod(flags, 2.0), hue = mod(floor(flags / 2.0), 4.0), bloom = floor(flags / 8.0);
+        float falls = mod(flags, 2.0), hue = mod(floor(flags / 2.0), 4.0), bloom = mod(floor(flags / 8.0), 2.0), flut = floor(flags / 16.0);
         float vTree = vInfo.w;
         bool twig = t.g < 0.5;
         if (falls > 0.5 && uLeafFall > 0.0) {
@@ -162,6 +165,11 @@ export function leafCardMaterial(tex: THREE.Texture) {
         vec3 N = normalize(mix(cN, bulge, 0.25));
         vec3 alb = twig ? vec3(0.15, 0.105, 0.068) * (0.9 + 0.4 * t.r) : vTint * (0.48 + 0.75 * t.r); // (twigs: the bark's brown)
         alb *= vMottle;
+        if (!twig && flut > 0.5) {
+          // the aspen grove's shimmer: the leaves' pale undersides flashing as they turn (propMaterial flutter)
+          float fl = sin(uTime * 9.0 + dot(vWorldPos, vec3(5.1, 3.7, 4.3)) + t.b * 20.0) * sin(uTime * 5.3 + dot(vWorldPos, vec3(-2.3, 4.1, 3.1)));
+          alb = mix(alb, mix(vec3(0.66, 0.72, 0.5), alb * 1.3, 0.5), clamp(fl, 0.0, 1.0) * (0.14 + 0.24 * uWind));
+        }
         // underside and heart in shade (the far crown's underside AO, and deeper toward the middle)
         float ao = mix(0.55, 1.0, smoothstep(vCrown.y - vCrown.w, vCrown.y + 0.3 * vCrown.w, vWorldPos.y));
         ao *= 1.0 - 0.25 * smoothstep(0.4, 1.0, vInfo.y); // (the rim's cards as lit as the far crown's skin)
