@@ -16,7 +16,7 @@ import { pointInRing, ringTester } from './realTile';
 import { activeStyle, castOf, pickWeighted, westside as isWestside } from './styles';
 import { hangerLib, hangerMix, HANGERS, HANG_TONES, type HangerType } from '../assets/hangers';
 import { caFogBelt } from './ecoregions';
-import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, broadMix, coniferMix, aspenShare, willowThickets, snagShare, NEEDLED, plantLib, inBloom, SPECIES, STAGES, fallHueOf, DECIDUOUS, FLUTTER, type PlantSpecies } from '../assets/flora';
+import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, broadMix, coniferMix, aspenShare, willowThickets, snagShare, NEEDLED, plantLib, inBloom, SPECIES, STAGES, fallHueOf, DECIDUOUS, BLOSSOM_OF, MOTION_OF, bankMix, redcedarShare, rosebayShare, understoryTrees, SMALL_TREE, treeHeight4, southPineForm, type PlantSpecies, type TreeKind } from '../assets/flora';
 import { MAILBOXES, mailboxLib, beachLib, gearFor, type MailboxStyle, type CarGear } from '../assets/furniture';
 import { variantAt, hashf } from '../assets/core';
 import { cafeSet, mergeDecor } from '../assets/decor';
@@ -786,10 +786,17 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // Past round and oak, the broadleaf mix of the region and the spot: maples and elms up north,
   // magnolias in the South, cherries in PNW and town yards, columnar poplars (on a Mediterranean
   // hill, the cypress), willows where fresh water is close. Indices are TREE_KINDS'.
-  const MAPLE = 9, WILLOW = 10, ELM = 11, POPLAR = 12, MAGNOLIA = 13, CHERRY = 14;
+  const MAPLE = 9, ELM = 11, POPLAR = 12, MAGNOLIA = 13, CHERRY = 14;
   const FIR = 15, CEDAR = 16, HEMLOCK = 17, SITKA = 18, ALDER = 19, VINEMAPLE = 20;
   const LIVEOAK = 21, PLATEAUOAK = 22, COASTOAK = 23;
   const WHITEPINE = 24, PONDEROSA = 25, LODGEPOLE = 26, ASPEN = 32, WILLOWSHRUB = 33, SNAG = 34;
+  // package #4 (the eastern hardwoods, the flowering understory, the southern pines): by name
+  const KI = (k: TreeKind) => TREE_KINDS.indexOf(k);
+  const TULIP = KI('tuliptree'), HICKORY = KI('hickory'), SYCAMORE = KI('sycamore'), BUROAK = KI('buroak');
+  const LOBLOLLY = KI('loblolly'), LONGLEAF = KI('longleaf'), SLASHPINE = KI('slashpine'), REDCEDAR = KI('redcedar'), ROSEBAY = KI('rosebay');
+  const SOUTH_PINE = new Set([LOBLOLLY, LONGLEAF, SLASHPINE]);
+  /** (a kind's height cap, when it is a small tree: a survey's tall crown is never one) */
+  const smallMax = (k: number) => SMALL_TREE[TREE_KINDS[k]] ?? Infinity;
   // the northern and mountain conifers (package #3): grown forms like the Northwest's (open-grown, a
   // forest tree, an old one), and the needled kinds a town keeps only where the region is conifer
   // country
@@ -830,25 +837,38 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     // (a grove is one clone: a 35 m patch where nearly every round tree is an aspen)
     return share > 0 && hashf(Math.floor(x / 35) * 7919 + Math.floor(z / 35) * 104729 + 401) < share * 1.4 && hashf(Math.floor(x * 3.7) * 7919 + Math.floor(z * 2.3) * 104729 + 409) < 0.85;
   };
-  const thickets = willowThickets(cast0);
+  const thickets = willowThickets(cast0), rosebay = rosebayShare(cast0, true, false) > 0;
+  // the eastern woods' understory (a scan's shrub under a wood's canopy): dogwoods and redbuds; the
+  // old fields' redcedars (flora.ts understoryTrees, redcedarShare)
+  const UNDER: [number, number][] = understoryTrees(cast0).map(([kind, w]) => [TREE_KINDS.indexOf(kind), w]);
+  const cedarField = redcedarShare(cast0);
   // (the region's own in the lower 48 — flora.ts broadMix, from docs/regional-life/ — else the climate's)
   const BROAD: [number, number][] = broadMix(castOf(look0())).map(([kind, w]) => [TREE_KINDS.indexOf(kind), w]);
   const regionLiveOak = BROAD.find(([kk, w]) => w > 0 && (kk === LIVEOAK || kk === PLATEAUOAK || kk === COASTOAK))?.[0] ?? -1;
   /** `ratio`: a measured crown's radius / height (LiDAR) — slim reads columnar, broad spreading. */
-  const broad = (k: number, x: number, z: number, ratio = 0) => {
+  // (a stream's bank: the willow, and in sycamore country the sycamore — flora.ts bankMix)
+  const BANK: [number, number][] = bankMix(cast0).map(([kind, w]) => [TREE_KINDS.indexOf(kind), w]);
+  /** `h`: the tree's height when it is known (a survey's): the small trees only where it is small. */
+  const broad = (k: number, x: number, z: number, ratio = 0, h = 0) => {
     const u = hashf(Math.floor(x * 1.7) * 104729 + Math.floor(z * 2.3) * 7919 + 17), u2 = hashf(Math.floor(x * 2.9) * 7919 + Math.floor(z * 1.3) * 104729 + 29);
-    if (clim !== 'arid' && clim !== 'polar' && terrain.sdfAt(x, z) < 28 && terrain.oceanDistAt(x, z) > 250 && u < 0.4) return WILLOW; // a bank
+    if (clim !== 'arid' && clim !== 'polar' && terrain.sdfAt(x, z) < 28 && terrain.oceanDistAt(x, z) > 250 && u < 0.4) return BANK[pickWeighted(BANK.map(([, w]) => w), u / 0.4)][0]; // a bank
     if (u2 < 0.35) return k; // (the caller's round / oak stands)
-    const ws = BROAD.map(([kk, w]) => w * (!ratio ? 1 : ratio < 0.3 ? (kk === POPLAR ? 6 : kk === ELM || kk === 1 || kk === CHERRY || isLiveOak(kk) ? 0.2 : 1) : ratio > 0.45 ? (kk === POPLAR || kk === MAGNOLIA ? 0.1 : kk === 1 || kk === ELM ? 1.8 : isLiveOak(kk) ? 2.4 : 1) : 1));
-    return BROAD[pickWeighted(ws, u)][0];
+    // (a measured crown's shape: slim reads columnar — the poplar, the redcedar, the tulip tree's and the
+    // hickory's tall ovals — broad spreading: the oaks, the sycamore)
+    const slimK = (kk: number) => kk === POPLAR ? 6 : kk === REDCEDAR ? 3 : kk === TULIP || kk === HICKORY ? 1.8 : kk === ELM || kk === 1 || kk === CHERRY || isLiveOak(kk) || kk === SYCAMORE || kk === BUROAK ? 0.2 : 1;
+    const broadK = (kk: number) => kk === POPLAR || kk === MAGNOLIA || kk === REDCEDAR ? 0.1 : kk === 1 || kk === ELM || kk === BUROAK || kk === SYCAMORE ? 1.8 : isLiveOak(kk) ? 2.4 : 1;
+    const ws = BROAD.map(([kk, w]) => w * (!ratio ? 1 : ratio < 0.3 ? slimK(kk) : ratio > 0.45 ? broadK(kk) : 1) * (h > smallMax(kk) * 1.15 ? 0 : 1));
+    return ws.some((w) => w > 0) ? BROAD[pickWeighted(ws, u)][0] : k;
   };
-  const regional = (k: number, x: number, z: number, ratio = 0) => {
+  const regional = (k: number, x: number, z: number, ratio = 0, h = 0) => {
     if (westside && (k === 3 || k === 4)) return nwConifer(x, z);
     // (a low clump under the firs: the vine maple)
     if (westside && k === 2 && hashf(Math.floor(x * 1.3) * 104729 + Math.floor(z * 3.7) * 7919 + 5) < 0.45) return VINEMAPLE;
     if (k === 3 || k === 4) { const c = conifer(k, x, z); if (c >= 0) return c; }
     // (willow thickets crowd the creeks and bogs of the North and the mountains)
     if (k === 2 && thickets && terrain.sdfAt(x, z) < 22 && terrain.oceanDistAt(x, z) > 250 && hashf(Math.floor(x * 2.9) * 104729 + Math.floor(z * 3.1) * 7919 + 211) < 0.6) return WILLOWSHRUB;
+    // (Appalachia's creeks walled in rosebay: the laurel hells)
+    if (k === 2 && rosebay && terrain.sdfAt(x, z) < 30 && terrain.oceanDistAt(x, z) > 250 && hashf(Math.floor(x * 3.3) * 104729 + Math.floor(z * 2.7) * 7919 + 223) < rosebayShare(cast0, true, false)) return ROSEBAY;
     if (k > 1) return k;
     if (k === 0 && aspenAt(x, z)) return ASPEN;
     const u = hashf(Math.floor(x * 3.1) * 7919 + Math.floor(z * 2.7) * 104729);
@@ -858,7 +878,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     // the desert's own shade trees: mesquite and palo verde (a few fan palms in town)
     if (desert) return u < 0.14 ? 8 : 7;
     if (birchy && k === 0 && u < 0.35) return 6;
-    return broad(k, x, z, ratio);
+    return broad(k, x, z, ratio, h);
   };
   // When a tile box is provided the scan only walks cells this tile owns — neighbours cover
   // the rest. Without one (legacy single-tile worlds) it covers slice + margin as before.
@@ -914,9 +934,23 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       // (a westside wood is conifer country: four trees in five Douglas fir, hemlock, cedar or Sitka;
       // the rest its alders, bigleaf maples and vine maples)
       if (westside && cov === 10 && (k === 0 || k === 1) && hashf(Math.floor(jx * 3.3) * 104729 + Math.floor(jz * 2.1) * 7919 + 77) < 0.7) k = nwConifer(jx, jz);
+      // (an eastern wood's understory where the scan has a shrub under the canopy: Appalachia's laurel
+      // hells of rosebay on its slopes, the dogwoods and redbuds that flower under the April woods)
+      if (k === 2 && cov === 10) {
+        const uu = hashf(Math.floor(jx * 2.3) * 104729 + Math.floor(jz * 3.7) * 7919 + 233);
+        if (uu < rosebayShare(cast0, false, true)) k = ROSEBAY;
+        else {
+          let acc = 0;
+          const u2 = hashf(Math.floor(jx * 3.9) * 7919 + Math.floor(jz * 1.7) * 104729 + 239);
+          for (const [kk, w] of UNDER) if (k === 2 && u2 < (acc += w)) k = kk;
+        }
+      }
+      // (an old field, a fence line, a glade: the redcedars that take them over)
+      if ((cov === 20 || cov === 30) && k !== 2 && hashf(Math.floor(jx * 1.9) * 104729 + Math.floor(jz * 2.9) * 7919 + 251) < cedarField) k = REDCEDAR;
       let v = variantAt(jx, jz, TREE_VARIANTS, 11);
       if (k === MAPLE && v === 2 && !westside) v = 0; // (the bigleaf maple is the Northwest's westside's alone)
       if (NW_CONIFER.has(k) || NORTH_CONIFER.has(k)) v = nwForm(jx, jz, cov === 10);
+      if (SOUTH_PINE.has(k)) v = southPineForm(TREE_KINDS[k], hashf(Math.floor(jx * 2.7) * 7919 + Math.floor(jz * 3.1) * 104729 + 257), cov === 10, cast0);
       // (a wood's dead: the Rockies' beetle-killed lodgepole and spruce, the East's adelgid-killed
       // hemlocks, the drowned trunks of a beaver pond — grey spikes, bare limbs, snapped stumps)
       if (cov === 10 && k !== 2 && k !== WILLOWSHRUB) {
@@ -928,7 +962,10 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       const hu = rng.float();
       // (the live oaks: the South's 10–18 m in a yard and up to 20 m in a wood, twice as wide; the
       // plateau oak 6–11 m; the coast live oak 8–16 m)
-      const h = k === 2 ? 2.4 + hu * 1.6 : k === VINEMAPLE ? 3.5 + hu * 3.5 : k === ALDER ? (cov === 10 ? 12 + hu * 10 : 9 + hu * 7)
+      // (package #4's at theirs: flora.ts treeHeight4 — the tulip tree 26–40 m in a cove, the dogwood 4–9,
+      // the longleaf's grass stage under a metre)
+      const h4 = treeHeight4(TREE_KINDS[k], v, hu, cov === 10);
+      const h = h4 > 0 ? h4 : k === 2 ? 2.4 + hu * 1.6 : k === VINEMAPLE ? 3.5 + hu * 3.5 : k === ALDER ? (cov === 10 ? 12 + hu * 10 : 9 + hu * 7)
         : k === LIVEOAK ? (cov === 10 ? 13 + hu * 7 : 10 + hu * 8) : k === PLATEAUOAK ? 6 + hu * 5 : k === COASTOAK ? (cov === 10 ? 10 + hu * 8 : 8 + hu * 7)
           // (the northern and mountain conifers at their real heights: white pine the tallest of the
           // East, 20–32 m in a wood; ponderosa 18–32; lodgepole 15–24; Engelmann spruce 18–32; red
@@ -944,7 +981,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       const m = new THREE.Matrix4().compose(V(jx, g - 0.2, jz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(s * (0.85 + rng.float() * 0.3), s * (k === 2 ? 1.3 : 1), s * (0.85 + rng.float() * 0.3)));
       const c = new THREE.Color(rng.pick(green));
       if (k === 4) c.lerp(new THREE.Color(0x2e4630), 0.55); // spruces run dark
-      else if (rng.float() < 0.12 && !NW_CONIFER.has(k) && !isLiveOak(k)) c.lerp(new THREE.Color(0xb59a3e), 0.45); // first hints of autumn (the live oaks keep theirs)
+      else if (rng.float() < 0.12 && DECIDUOUS.has(TREE_KINDS[k])) c.lerp(new THREE.Color(0xb59a3e), 0.45); // first hints of autumn (on the trees that turn: never a pine, a live oak, a magnolia)
       trees.push({ m, c, k, v });
     }
   // The map's own species (natural=tree + genus / species / taxon, realTile treeKindOf): a mapped
@@ -989,9 +1026,10 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     }
     if (onStructure(x, z)) continue;
     let [k, v] = p.sp ? kindOfSp(p.sp, x, z) : [-1, 0];
-    if (k < 0) (k = regional(rng.float() < 0.6 ? 0 : 1, x, z)), (v = variantAt(x, z, TREE_VARIANTS, 11));
+    if (k < 0) (k = regional(rng.float() < 0.6 ? 0 : 1, x, z, 0, p.h ?? 0)), (v = variantAt(x, z, TREE_VARIANTS, 11));
     if (k === MAPLE && v === 2 && !westside && !p.sp?.endsWith(':2')) v = 0;
-    const s = (p.h ?? (k === 2 ? 3 : 9)) / treeMeta(TREE_KINDS[k], v).h;
+    // (a small tree the map gives no height: its own, not a street tree's 9 m)
+    const s = (p.h ?? (k === 2 ? 3 : smallMax(k) < Infinity ? treeHeight4(TREE_KINDS[k], v, hashf(Math.floor(x * 3.1) * 7919 + Math.floor(z * 2.3) * 104729 + 263), false) : 9)) / treeMeta(TREE_KINDS[k], v).h;
     trees.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(s, s, s)), c: new THREE.Color(rng.pick(green)), k, v });
   }
 
@@ -1049,14 +1087,14 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       else if (slim && rng.float() < Math.min(1, conifer * 3)) k = look.trees[4] > look.trees[3] ? 4 : 3;
       else if (!slim && conifer > 0.6 && rng.float() < 0.5) k = look.trees[4] > look.trees[3] ? 4 : 3;
       else k = r / h > 0.42 || rng.float() < look.trees[1] / Math.max(0.01, look.trees[0] + look.trees[1]) ? 1 : 0;
-      k = regional(k, x, z, r / h);
+      k = regional(k, x, z, r / h, h);
       let v = variantAt(x, z, TREE_VARIANTS, 11);
       // In town, silhouette decides: street and yard trees are broadleaf with the crown filling
       // the upper half or more. Conifers only where the region is mostly conifer, and no model
       // whose bare trunk would be stretched into a lollipop by the measured height.
       if (k !== 2 && walk.blocked(x, z, 14)) {
         if (NEEDLE_K.has(k) && conifer <= 0.5) k = r / h > 0.42 ? 1 : 0;
-        if (k !== 7 && k !== 8 && k !== 5 && treeMeta(TREE_KINDS[k], v).crownBottom / treeMeta(TREE_KINDS[k], v).h > 0.56) k = regional(r / h > 0.42 ? 1 : 0, x, z, r / h);
+        if (k !== 7 && k !== 8 && k !== 5 && treeMeta(TREE_KINDS[k], v).crownBottom / treeMeta(TREE_KINDS[k], v).h > 0.56) k = regional(r / h > 0.42 ? 1 : 0, x, z, r / h, h);
         v = variantAt(x, z, TREE_VARIANTS, 11);
       }
       // …unless the map names the tree the survey measured (a mapped street tree under this crown)
@@ -1067,6 +1105,10 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       }
       if (k === MAPLE && v === 2 && !westside && !named?.endsWith(':2')) v = 0;
       if (NW_CONIFER.has(k) && !named) v = nwForm(x, z, mapCover(x, z) === 10 && !walk.blocked(x, z, 14));
+      // (a measured longleaf is grown as tall as the survey says: a grass stage under 1.5 m, a bottlebrush
+      // to 7, the old tree above; the other southern pines as their wood has them)
+      if (k === LONGLEAF) v = h < 1.5 ? 0 : h < 7 ? 1 : 2;
+      else if (SOUTH_PINE.has(k)) v = southPineForm(TREE_KINDS[k], hashf(Math.floor(x * 2.7) * 7919 + Math.floor(z * 3.1) * 104729 + 257), mapCover(x, z) === 10 && !walk.blocked(x, z, 14), cast0);
       const tm = treeMeta(TREE_KINDS[k], v);
       const mh = tm.h, mr = tm.crownR;
       // crowns never thinner than ~the model's own proportions: a lone 20 m oak measured
@@ -1103,7 +1145,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
           if (trees.some((q) => { const e = q.m.elements; return Math.abs(e[12] - x) < 6 && Math.abs(e[14] - z) < 6; })) continue;
           const g = terrain.heightAt(x, z);
           const k = regional(hq < 0.2 ? 1 : 0, x, z), v = k === MAPLE ? variantAt(x, z, 2, 11) : variantAt(x, z, TREE_VARIANTS, 11); // (street maples are sugar and red)
-          const sc = (7 + hq * 6) / treeMeta(TREE_KINDS[k], v).h;
+          // (a street's crape myrtles and redbuds at their own height, under the wires)
+          const sc = (smallMax(k) < Infinity ? treeHeight4(TREE_KINDS[k], v, hq, false) : 7 + hq * 6) / treeMeta(TREE_KINDS[k], v).h;
           trees.push({ m: new THREE.Matrix4().compose(V(x, g - 0.1, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), hq * 40), V(sc * 0.85, sc, sc * 0.85)), c: new THREE.Color(rng.pick(green)), k, v });
           pits.push(new THREE.Matrix4().compose(V(x, g, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(tx, tz)), V(1, 1, 1)));
           walk.addLoop([[x - 0.3, z - 0.3], [x + 0.3, z - 0.3], [x + 0.3, z + 0.3], [x - 0.3, z + 0.3]]);
@@ -1264,6 +1307,11 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     g.computeVertexNormals();
     return colored(g, 0xffffff);
   };
+  const OWN_GREEN4: Partial<Record<TreeKind, [number, number]>> = {
+    tuliptree: [0x6a8a3a, 0.4], sweetgum: [0x46682e, 0.4], hickory: [0x63803a, 0.35], buckeye: [0x5a7a36, 0.35], sycamore: [0x6d8a4a, 0.4], buroak: [0x46602e, 0.45],
+    dogwood: [0x5d7f3e, 0.4], redbud: [0x5a7e4a, 0.4], crapemyrtle: [0x4a6a32, 0.4], loblolly: [0x56693a, 0.5], longleaf: [0x5e7a38, 0.5], slashpine: [0x3f5e34, 0.5],
+    redcedar: [0x2c4630, 0.6], rosebay: [0x2f4c2e, 0.6],
+  };
   // Trees from the foundry (assets/flora.ts): one InstancedMesh per species × grown variant.
   // Trunks keep their bark: instance colour only tints foliage (vertex color white there).
   for (let k = 0; k < TREE_KINDS.length; k++)
@@ -1276,12 +1324,17 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       // palms, magnolias and the desert legumes keep theirs
       const kind = TREE_KINDS[k];
       const decid = DECIDUOUS.has(kind);
-      const im = new THREE.InstancedMesh(treeLib(kind, v).clone(), propMaterial({ wind: true, foliage: true, crown, decid, fallHue: fallHueOf(kind, v), blossom: kind === 'cherry', weep: kind === 'willow', flutter: FLUTTER.has(kind) }), list.length);
+      const im = new THREE.InstancedMesh(treeLib(kind, v).clone(), propMaterial({ wind: true, foliage: true, crown, decid, fallHue: fallHueOf(kind, v), blossom: BLOSSOM_OF[kind] ?? 0, weep: kind === 'willow', motion: MOTION_OF[kind] ?? 0 }), list.length);
       im.name = `trees:${kind}:${v}`;
       // a species' own green over the region's: the desert legumes a dusty grey-green (palo verde a
       // thin yellow-green), the willow a soft yellow-green, the magnolia dark and glossy, the
       // cypress-dark poplar of a Mediterranean hill
-      const own = kind === 'mesquite' ? [new THREE.Color(v === 2 ? 0xa3ad55 : 0x7f8a5c), 0.8]
+      // (package #4's: the tulip tree's fresh yellow-green, the sweetgum's glossy deep green, the hickory's
+      // and the buckeye's, the sycamore's pale olive, the bur oak's dark gloss, the dogwood's, the redbud's
+      // blue-green, the crape myrtle's dark small leaves; the loblolly's yellow-green, the longleaf's bright,
+      // the slash pine's dark glossy needles; the redcedar near-black, the rosebay's dark leather)
+      const own4 = OWN_GREEN4[kind];
+      const own = own4 ? [new THREE.Color(own4[0]), own4[1]] : kind === 'mesquite' ? [new THREE.Color(v === 2 ? 0xa3ad55 : 0x7f8a5c), 0.8]
         : kind === 'willow' ? [new THREE.Color(0xa9b857), 0.6]
           : kind === 'magnolia' ? [new THREE.Color(0x2c4a2a), 0.6]
             : kind === 'poplar' ? [new THREE.Color(clim === 'mediterranean' ? 0x2f4a2c : 0x4f6e34), clim === 'mediterranean' ? 0.7 : 0.35]

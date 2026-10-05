@@ -129,12 +129,14 @@ describe('matTag', () => {
     const dm = matTag(propMaterial({ wind: true, foliage: true, crown: [4, 2], decid: true }));
     expect(dm.t === 'prop' && dm.o.decid).toBe(true);
     expect((matFromTag(dm) as THREE.ShaderMaterial).defines.DECID).toBe(1);
-    // …and its species' autumn, a cherry's blossom and a willow's sway (lost in the pack before)
-    for (const o of [{ fallHue: 2, weep: true }, { fallHue: 1, blossom: true }]) {
+    // …and its species' autumn, its blossom, a willow's sway and its leaves' own motion (lost in the pack
+    // before): a cherry, a redbud, a sweetgum's jewels, a dogwood's bobbing tiers, an aspen's tremble
+    for (const o of [{ fallHue: 2, weep: true }, { fallHue: 1, blossom: 1 }, { fallHue: 2, blossom: 3 }, { fallHue: 4 }, { fallHue: 1, blossom: 2, motion: 2 }, { fallHue: 2, motion: 1 }] as { fallHue: number; weep?: boolean; blossom?: number; motion?: number }[]) {
       const back = matFromTag(matTag(propMaterial({ wind: true, foliage: true, crown: [4, 2], decid: true, ...o }))) as THREE.ShaderMaterial;
       expect(back.defines.FALL_HUE).toBe(o.fallHue);
       expect(!!back.defines.WEEP).toBe(!!o.weep);
-      expect(!!back.defines.BLOSSOM).toBe(!!o.blossom);
+      expect(back.defines.BLOSSOM).toBe(o.blossom ?? 0);
+      expect(back.defines.MOTION).toBe(o.motion ?? 0);
     }
     const e = matTag(propMaterial({ emissive: new THREE.Color(1, 0.72, 0.4), emissiveNight: true }));
     expect(e.t).toBe('prop');

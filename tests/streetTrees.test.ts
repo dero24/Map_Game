@@ -3,7 +3,7 @@ import { type TileJson } from '../src/world/data';
 import { virtualRegion } from '../src/world/virtual';
 import { setActiveStyle, regionStyle } from '../src/world/styles';
 import { buildTile } from '../src/world/tileBuild';
-import { treeMeta, coniferMix, aspenShare, snagShare, type TreeKind } from '../src/assets/flora';
+import { treeMeta, coniferMix, aspenShare, snagShare, broadMix, rosebayShare, bankMix, redcedarShare, understoryTrees, type TreeKind } from '../src/assets/flora';
 import { castOf } from '../src/world/styles';
 
 // The survey's street trees stand (props.ts, the LiDAR trees): a crown measured over the street has
@@ -199,4 +199,87 @@ describe('the northern and mountain conifers by place (flora.ts coniferMix)', ()
     expect(snagShare(at(44.28, -73.98), 'round', true)).toBeGreaterThan(0); // a beaver pond
     expect(snagShare(at(32.08, -81.09), 'liveoak', true)).toBe(0);
   });
+});
+
+// Package #4 (docs/regional-life/models.md build order 4; ranges.md): the eastern hardwoods, the
+// flowering understory and the southern pines, each where it grows and nowhere else
+describe('package #4 by place (flora.ts broadMix, coniferMix, rosebayShare, bankMix)', () => {
+  const at = (lat: number, lon: number) => castOf(regionStyle(lat, lon));
+  const has = (m: [string, number][], k: string) => m.some(([kk, w]) => kk === k && w > 0);
+  const NORTH: [number, number][] = [[42.36, -71.06], [44.48, -73.21], [42.89, -78.88], [40.74, -74.17], [39.95, -75.17], [41.88, -87.63], [44.98, -93.27], [41.26, -95.94], [46.88, -96.79], [43.04, -87.91]];
+  const WEST: [number, number][] = [[47.6, -122.33], [45.52, -122.68], [37.77, -122.42], [34.05, -118.24], [32.72, -117.16], [33.45, -112.07], [32.22, -110.97], [40.76, -111.89], [39.74, -104.99], [43.62, -116.2], [36.17, -115.14], [35.08, -106.65]];
+  it('no crape myrtle in the North; on the streets of the South', () => {
+    for (const [lat, lon] of [...NORTH, ...WEST, [40.44, -80.0]]) expect(has(broadMix(at(lat, lon)), 'crapemyrtle'), `${lat},${lon}`).toBe(false); // (Pittsburgh's Appalachia too)
+    for (const [lat, lon] of [[33.75, -84.39], [32.08, -81.09], [29.76, -95.37], [32.78, -96.8], [30.69, -88.04], [38.9, -77.04], [35.96, -83.92], [29.95, -90.07]]) expect(has(broadMix(at(lat, lon)), 'crapemyrtle'), `${lat},${lon}`).toBe(true);
+  });
+  it('longleaf only on the southern coastal plain and the sandhills', () => {
+    const pines = (lat: number, lon: number) => [20, 300, 900].flatMap((e) => coniferMix(at(lat, lon), 'pine', e, lat).map(([k]) => k));
+    // the Sandhills, the Georgia and Carolina coast, the Gulf's coastal plain, north Florida, the Big Thicket
+    for (const [lat, lon] of [[35.05, -78.88], [32.08, -81.09], [32.78, -79.93], [30.69, -88.04], [30.44, -84.28], [29.65, -82.32], [31.34, -94.73]]) expect(pines(lat, lon), `${lat},${lon}`).toContain('longleaf');
+    // never the Piedmont, the mountains, the Plateau, the Delta's north, Houston's prairie, South Florida, the North or the West
+    for (const [lat, lon] of [[33.75, -84.39], [37.54, -77.43], [35.6, -82.55], [36.16, -86.78], [32.78, -96.8], [29.76, -95.37], [25.76, -80.19], [34.75, -92.29], ...NORTH, ...WEST]) expect(pines(lat, lon), `${lat},${lon}`).not.toContain('longleaf');
+    // the loblolly on the Piedmont; South Florida's own slash pine
+    expect(pines(33.75, -84.39)).toContain('loblolly');
+    expect([...new Set(pines(25.76, -80.19))]).toEqual(['slashpine']);
+  });
+  it('rosebay only in Appalachia', () => {
+    expect(rosebayShare(at(35.6, -82.55), true, false)).toBeGreaterThan(0.5); // Asheville's creeks
+    expect(rosebayShare(at(35.6, -82.55), false, true)).toBeGreaterThan(0); // and its laurel hells
+    for (const [lat, lon] of [[33.75, -84.39], [32.08, -81.09], [36.16, -86.78], [38.9, -77.04], [29.76, -95.37], ...NORTH, ...WEST])
+      for (const [stream, wood] of [[true, false], [false, true]]) expect(rosebayShare(at(lat, lon), stream, wood), `${lat},${lon}`).toBe(0);
+  });
+  it('no sweetgum — nor tulip tree, buckeye, dogwood or redbud — in the West', () => {
+    for (const [lat, lon] of WEST) for (const k of ['sweetgum', 'tuliptree', 'buckeye', 'dogwood', 'redbud', 'hickory', 'buroak']) expect(has(broadMix(at(lat, lon)), k), `${k} at ${lat},${lon}`).toBe(false);
+    expect(has(broadMix(at(33.75, -84.39)), 'sweetgum')).toBe(true);
+    expect(has(broadMix(at(35.6, -82.55)), 'tuliptree')).toBe(true); // the Appalachian coves'
+    expect(has(broadMix(at(41.88, -87.63)), 'buroak')).toBe(true); // the Midwest's savannas'
+    expect(has(broadMix(at(44.98, -93.27)), 'dogwood')).toBe(false); // (the north woods are past its range)
+  });
+  it("the sycamore over the East's creeks, the redcedar on its old fields, the dogwood and the redbud under its woods", () => {
+    expect(bankMix(at(35.6, -82.55)).map(([k]) => k)).toContain('sycamore');
+    expect(bankMix(at(47.6, -122.33)).map(([k]) => k)).toEqual(['willow']);
+    expect(redcedarShare(at(36.37, -94.21))).toBeGreaterThan(0.4); // an Ozark glade
+    expect(redcedarShare(at(39.74, -104.99))).toBe(0);
+    expect(understoryTrees(at(35.6, -82.55)).map(([k]) => k).sort()).toEqual(['dogwood', 'redbud']);
+    expect(understoryTrees(at(47.6, -122.33))).toEqual([]);
+  });
+});
+
+describe('package #4 in the woods (a mapped wood, built)', () => {
+  const wood = async (lat: number, lon: number) => {
+    setActiveStyle(regionStyle(lat, lon));
+    const sq = (x0: number, z0: number, x1: number, z1: number) => [m(x0), m(z0), m(x1), m(z0), m(x1), m(z1), m(x0), m(z1)];
+    const tj = {
+      version: 1, id: '0_0', lod: 0, box: { x0: 0, z0: 0, x1: 256, z1: 256 },
+      origin: { lat, lon }, slice: { x0: 0, z0: 0, x1: 256, z1: 256 }, backdrop: { x0: 0, z0: 0, x1: 256, z1: 256 },
+      landmarks: [], buildings: [], roads: [], lines: [], points: [],
+      areas: [{ c: 'wood', o: [sq(10, 10, 240, 240)], i: [] }],
+    } as unknown as TileJson;
+    const built = await buildTile(tj, virtualRegion([lat, lon]).terrain, { id: 'w0_0', box: tj.box, lod: 0, file: '', world: 1 }, 0);
+    const out: Record<string, number[]> = {}; // 'kind:variant' → heights
+    for (const o of built.objs as { n?: string; im?: Float32Array }[]) {
+      if (!o.n?.startsWith('trees:') || !o.im) continue;
+      const [, kind, v] = o.n.split(':'), mh = treeMeta(kind as TreeKind, +v || 0).h, q = (out[`${kind}:${+v || 0}`] ??= []);
+      for (let i = 0; i + 15 < o.im.length; i += 16) q.push(Math.hypot(o.im[i + 4], o.im[i + 5], o.im[i + 6]) * mh);
+    }
+    return out;
+  };
+  const count = (w: Record<string, number[]>, kind: string) => Object.entries(w).filter(([k]) => k.split(':')[0] === kind).reduce((s, [, h]) => s + h.length, 0);
+  it("an Appalachian cove: tulip trees and hickories, tall; dogwoods, redbuds and rosebay under them", async () => {
+    const w = await wood(35.6, -82.55);
+    expect(count(w, 'tuliptree') + count(w, 'hickory') + count(w, 'buckeye')).toBeGreaterThan(0);
+    for (const h of [...(w['tuliptree:0'] ?? []), ...(w['tuliptree:1'] ?? []), ...(w['tuliptree:2'] ?? [])]) expect(h).toBeGreaterThan(20); // (a cove's tulip trees tower)
+    expect(count(w, 'dogwood') + count(w, 'redbud') + count(w, 'rosebay')).toBeGreaterThan(0);
+    for (const k of ['dogwood:0', 'dogwood:1', 'dogwood:2', 'redbud:0', 'redbud:1', 'redbud:2']) for (const h of w[k] ?? []) expect(h).toBeLessThan(10); // (small trees stay small)
+    for (const k of ['loblolly', 'longleaf', 'slashpine', 'crapemyrtle']) expect(count(w, k), k).toBe(0);
+  }, 60000);
+  it('a Sandhills pine wood: longleaf over its grass stages and bottlebrushes, loblolly; no northern pines', async () => {
+    const w = await wood(35.05, -78.88);
+    expect(count(w, 'longleaf')).toBeGreaterThan(0);
+    expect(count(w, 'loblolly')).toBeGreaterThan(0);
+    for (const h of w['longleaf:0'] ?? []) expect(h).toBeLessThan(1); // the grass stage
+    for (const h of w['longleaf:2'] ?? []) expect(h).toBeGreaterThan(20); // the old trees
+    expect((w['longleaf:0']?.length ?? 0) + (w['longleaf:1']?.length ?? 0)).toBeGreaterThan(0);
+    for (const k of ['whitepine', 'ponderosa', 'lodgepole', 'redspruce', 'rosebay']) expect(count(w, k), k).toBe(0);
+  }, 60000);
 });

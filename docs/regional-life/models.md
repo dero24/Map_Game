@@ -21,7 +21,8 @@ How to use it:
 **The count:** 1,382 models — 46 the foundry has, 1,299 rows on a genome (new parameters), and
 37 new genomes or body plans (each introduced by one row). The Northwest package (build order 1)
 is built (2026-10-04, commit 94ce999), the live oaks with their hangers (build order 2,
-2026-10-05) and the northern and mountain forests (build order 3, 2026-10-05); the rest is to do.
+2026-10-05), the northern and mountain forests (build order 3, 2026-10-05) and the eastern hardwoods,
+the flowering understory and the southern pines (build order 4, 2026-10-05); the rest is to do.
 
 [REGIONAL_LIFE.md §6](../REGIONAL_LIFE.md#6-what-the-foundry-builds-in-order) orders the work by
 family. This list is the same order broken into rows: its P1 rows are §6's families plus each
@@ -1983,7 +1984,16 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
    **subalpine fir**. `conifer†` row: **eastern hemlock**. Birch rows: **quaking aspen** (with its
    flutter), the shrub row **willow thickets**, and the dead **snag** state for beaver ponds,
    beetle-kill and adelgid ghosts.
-4. **Eastern hardwoods and the flowering understory.** Round rows: **tulip tree**, **sweetgum**,
+4. **Eastern hardwoods and the flowering understory** — **built** 2026-10-05 (`docs/earth/LOG.md`
+   "Regional life (4)"): the hardwoods on a leader as `flora.ts LEADERS` (tulip tree, sweetgum,
+   shagbark hickory with its curling strips, yellow buckeye), the sycamore (white climbing limbs,
+   flaking mottle) and the bur oak as `OAKS` rows, the dogwood's tiers, the redbud, crape myrtle (and
+   its pollarded knuckles) and rosebay as `CLUMPS`, the southern pines as `PINES` rows (the longleaf's
+   grass stage, bottlebrush and old flat top), the redcedar's spindle; their leaf pictures (stars,
+   tulips, five leaflets, five fingers, hearts, long needles); blossom as a type and the new fall hues
+   (`render/treeSeasons.ts`); the garden's rhododendron and azalea; placed by `broadMix` with `rangeIn`,
+   `coniferMix`, `bankMix`, `redcedarShare`, `rosebayShare`, `understoryTrees`. The rows: Round rows:
+   **tulip tree**, **sweetgum**,
    **shagbark hickory**, **yellow buckeye**. Oak rows: **American sycamore**, **bur oak**. Cherry
    rows: **flowering dogwood**, **eastern redbud**. Mesquite row: **crape myrtle**. Shrub rows:
    **rhododendron**, **rosebay rhododendron**; mound row: **azalea**. Southern pines: **loblolly**,

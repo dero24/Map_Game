@@ -110,7 +110,11 @@ describe('the casts follow the land (regionStyle → broadMix, plantMix, faunaMi
     expect(shore.st.eco).toBe('mid-atlantic');
     expect(shore.st.trees).toEqual(old.trees);
     expect(shore.st.moss).toBe(old.moss);
-    expect(shore.broad).toBe(JSON.stringify(broadMix({ ...castOf(old) })));
+    // (its original trees at their original weights; package #4 adds the Mid-Atlantic's own natives —
+    // the tulip tree, sweetgum, dogwood, redbud, hickory and redcedar — and no crape myrtle in New Jersey)
+    const now = JSON.parse(shore.broad) as [string, number][], before = broadMix({ ...castOf(old) });
+    expect(now.slice(0, before.length)).toEqual(before);
+    expect(now.slice(before.length).map(([k]) => k).sort()).toEqual(['dogwood', 'hickory', 'redbud', 'redcedar', 'sweetgum', 'tuliptree']);
     expect(shore.fauna).toEqual(faunaMix('na', 'temperate'));
   });
   it("the Northwest: the westside's firs, alders and sword fern; the dry side's ponderosa and no bigleaf moss", () => {

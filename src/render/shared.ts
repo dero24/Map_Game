@@ -2,6 +2,7 @@
 // so updating U.* once per frame updates every material.
 import * as THREE from 'three';
 import { POOL, GLSL_POOL, FLOOR, GLSL_FLOOR } from './nightLight';
+import { GLSL_TREE_SEASONS } from './treeSeasons';
 
 const v3 = (x = 0, y = 0, z = 0) => ({ value: new THREE.Vector3(x, y, z) });
 export const HOLE_MAX = 32;
@@ -67,6 +68,12 @@ export const U = {
   uAutumn: { value: 0 },
   uTurn: { value: 0 }, // season.ts turn: the autumn's progress, each tree turning at its own point
   uBloom: { value: 0 }, // spring blossom on the flowering trees (season.ts bloom)
+  // the flowering trees' calendar (season.ts spring, summer; render/treeSeasons.ts bloomNow): how
+  // far the warming half of the year has come (0 at the winter's mean … 1 at 23 °C; 0 while it cools),
+  // and the summer's heat (0 below 18 °C … 1 from 23 °C) — the redbud, the cherry and the dogwood in
+  // their spring windows, the rosebay in June, the crape myrtle all summer
+  uSpring: { value: 0 },
+  uSummer: { value: 0 },
   uMoss: { value: 0 }, // moss on the trees' bark, the region's (styles.ts moss)
   // how wet the trees are, 0 a dry spell … 1 just rained (main.ts from the day's weather): the
   // resurrection fern greens and opens with it (assets/hangers.ts)
@@ -122,7 +129,7 @@ uniform float uLampBaseY;
 uniform vec3 uLampColor, uPoolColor;
 uniform vec4 uNightFloor;
 uniform float uLampPower, uPigment, uPigmentScale, uWind;
-uniform float uSnow, uLeafFall, uAutumn, uTurn, uBloom, uMoss;
+uniform float uSnow, uLeafFall, uAutumn, uTurn, uBloom, uMoss, uSpring, uSummer;
 uniform vec4 uBiome;
 uniform vec4 uSliceBox;
 uniform vec4 uHoleBox, uHoleInfo;
@@ -146,6 +153,8 @@ float dither4(vec2 fc) {
   vec2 q = mod(floor(fc), 4.0);
   return (bayer2(mod(q, 2.0)) * 4.0 + bayer2(floor(q / 2.0)) + 0.5) / 16.0;
 }
+
+${GLSL_TREE_SEASONS}
 
 float shadowAt(vec3 wpos, vec3 N) {
   if (uShadowOn < 0.5) return 1.0;

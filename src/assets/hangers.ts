@@ -240,8 +240,10 @@ export function spanishMossZone(p: HangPlace): number {
  *  Missouri, whose Delta it never climbs). */
 const MOSS_STATES = new Set(['NC', 'SC', 'GA', 'FL', 'AL', 'MS', 'LA', 'TX', 'AR']);
 /** How readily each kind carries Spanish moss: the live oak most, then the other oaks, the pecans and
- *  water hickories (round), the elms, the swamp's red maples and willows; magnolias seldom. */
-const MOSS_HOST: Partial<Record<TreeKind, number>> = { liveoak: 1, oak: 0.55, round: 0.35, elm: 0.3, willow: 0.25, maple: 0.2, magnolia: 0.1, plateauoak: 0.4 };
+ *  water hickories (round; the hickory), the elms, the bottomland sycamores and sweetgums, the swamp's
+ *  red maples and willows; magnolias and crape myrtles seldom. */
+const MOSS_HOST: Partial<Record<TreeKind, number>> = { liveoak: 1, oak: 0.55, round: 0.35, elm: 0.3, willow: 0.25, maple: 0.2, magnolia: 0.1, plateauoak: 0.4,
+  sycamore: 0.25, hickory: 0.2, sweetgum: 0.15, buroak: 0.3, crapemyrtle: 0.05 };
 /** Central and south Texas, where ball moss greys the live oaks and the cedar elms (EPA 30–34). */
 const BALL_TX = new Set([30, 31, 32, 33, 34]);
 
@@ -264,7 +266,8 @@ export function hangerMix(kind: TreeKind, p: HangPlace): [HangerType, number, nu
   const gulfCoast = p.eco === 'gulf' && (p.l3 === 75 || p.l3 === 34 || (p.l3 === 73 && p.state === 'LA'));
   const ballZone = p.eco === 'florida' ? 0.6 : gulfCoast ? 0.3 : p.eco === 'texas' && BALL_TX.has(p.l3) ? 1 : 0;
   if (ballZone) {
-    const b = ({ plateauoak: 0.85, liveoak: 0.6, elm: 0.45, oak: 0.35, mesquite: 0.3, round: 0.2 } as Partial<Record<TreeKind, number>>)[kind] ?? 0;
+    // (and on Texas's pecans — the hickory — its bur oaks and its crape myrtles)
+    const b = ({ plateauoak: 0.85, liveoak: 0.6, elm: 0.45, oak: 0.35, mesquite: 0.3, round: 0.2, hickory: 0.35, buroak: 0.3, crapemyrtle: 0.2 } as Partial<Record<TreeKind, number>>)[kind] ?? 0;
     if (b) out.push(['ballmoss', b * ballZone, b * ballZone * 0.55]);
   }
   // lace lichen: California's coast live oaks (and its other oaks) in the fog belt

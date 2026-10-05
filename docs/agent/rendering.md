@@ -232,14 +232,43 @@ the sky between the leaves. Past it, the tiles' own solid crowns, as before.
   toward the eye and darken the crown a shade at the hand-over — with 25% of the cluster's own
   roundness, the far crown's underside AO and the heart's cards darker, the instance green × each
   leaf's shade, pigment, snow, the autumn turn by the species' fall hue, leaf fall leaf by leaf,
-  the cherry's blossom. The shadow map holds the far crown's solid ball (the shadow pass's override
+  its blossom, its leaves' own motion (all from the card's flags: below). The shadow map holds the far crown's solid ball (the shadow pass's override
   draws every far instance whole, so the near tree's shadow is the far one's): a card looks it up
   from that ball's surface stepped toward the sun, as the far crown does, so only buildings and
   other trees shade it. The near wood casts nothing of its own for the same reason.
 - **Budgets** (`render/quality.ts` `TREE_TIERS`, tested in `tests/foundry.test.ts` and
   `tests/nearTrees.test.ts`): ≤ 2,500 vertices a near tree; desktop 160 trees to 30 m (band 6),
-  phone 40 to 24 m (band 5), low 20 to 16 m (band 4, 128 px pictures); leaf atlas 1024 × 512 RGBA
-  (2.7 MB with mips; 0.7 MB on low). Draws: the models in use (a street's 2–6) + 1.
+  phone 40 to 24 m (band 5), low 20 to 16 m (band 4, 128 px pictures); leaf atlas 1024 × 1536 RGBA,
+  24 pictures (8.4 MB with mips; 2.1 MB on low), painted a picture a frame while the world boots.
+  Draws: the models in use (a street's 2–6) + 1.
+- **The trees' seasons** (`render/treeSeasons.ts`, its GLSL in `shared.ts`, run by both
+  `propMaterial` and the cards, so the two models agree at the hand-over):
+  - **Fall hue** (`flora.ts FALL_HUE`, propMaterial's `FALL_HUE` define): 0 each tree its own of
+    yellow, orange or red, 1 red (the maples, the cherry, the dogwood's burgundy), 2 gold, 3 drab (the
+    alder), 4 jewel (the sweetgum: purple, red, orange and yellow on one tree, lobe by lobe and on the
+    cards leaf by leaf), 5 pumpkin orange and early (the buckeye turns first and is bare by October:
+    `leafDown`), 6 russet to tan (the bur oak, the sycamore), and 7 an evergreen that bronzes in the
+    cold (the redcedar, the rosebay). `fallOnset` sets where in the turning each turns: the buckeye
+    first, the maples early, the sweetgum, the oaks and the sycamore late.
+  - **Blossom** (`flora.ts BLOSSOM_OF`, the `BLOSSOM` define, a type): 1 cherry, 2 dogwood (white
+    bracts, one tree in six pink), 3 redbud (magenta), 4 crape myrtle (each tree pink, watermelon red,
+    lavender or white, on the crown's top), 5 rosebay (white flushed pink). When: `BLOOM_WINDOWS` —
+    the spring flowers in a window of `U.uSpring` (season.ts `spring`: the warming half's progress from
+    the winter's own mean, or 5 °C, to 23 °C; 0 while the year cools), each tree ±4% by its number; the
+    crape myrtle on `U.uSummer` (18 → 23 °C). Spring's flowers open before the leaves: where leaf fall
+    would take a pixel, a flowering cherry, dogwood or redbud keeps it as a flower, and the redbud's
+    card twigs flower all along.
+  - **Motion** (`flora.ts MOTION_OF`, the `MOTION` define): 1 the aspen's leaves trembling (and their
+    pale undersides flashing), 2 the dogwood's flat tiers bobbing each on its own beat, the outer ends
+    most, 3 the longleaf's needles tossing in gusts (its grass stage a shivering fountain).
+  - **The cards' flags** (`aE.w`, `flora.ts packCardFlags` / `unpackCardFlags`, decoded the same in
+    `leafCards.ts`): `falls 1 + 2·hue (3 bits) + 16·blossom (3 bits) + 128·motion (2 bits)`, under 512.
+    `tests/foundry.test.ts` round-trips every value and checks the shader's decode text.
+  - Every tree's bark a shade of its own (its number from where it stands), far and near.
+  - The leaf pictures (`flora.ts PIC_SHAPE`): 0–1 small leaves, 2–3 large, 4–7 needle tufts, 8–9
+    scale-leaf sprays, 10–11 maple hands, 12–13 sweetgum stars, 14–15 tulip-tree leaves, 16–17
+    hickory (five leaflets), 18–19 buckeye (five fingers), 20–21 redbud hearts, 22–23 the southern
+    pines' long needles in drooping brushes.
 - **The check**: `tools/tree-check.js` (in-page, `?capture=1`: `await __TREECHECK__('tag')`) shoots
   review frame 15's tree at 5, 8, 10 and 11 m, the hand-over at 30 m (near only, far only, both)
   and 40 m, and a mask pass per close frame (that tree alone, leaves green, wood red, sky blue;

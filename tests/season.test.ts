@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { seasonAt, meanTemp, dayOfYear } from '../src/world/season';
+import { bloomNow } from '../src/render/treeSeasons';
 
 const JAN = 25, APR = 105, JUL = 200, SEP = 270, OCT = 280, NOV = 320;
 
@@ -50,6 +51,33 @@ describe('seasons', () => {
     expect(nj(OCT)).toBe(0);
     expect(nj(JUL)).toBe(0);
     expect(nj(JAN)).toBe(0);
+  });
+  // the flowering trees' calendar (package #4; render/treeSeasons.ts — the shaders' own windows)
+  it("the flowering trees open in their order: the redbud, then the dogwood; the rosebay in June; the crape myrtle all summer", () => {
+    // the day a tree of blossom `type` (its number s) is first in flower, here — or -1
+    const first = (type: number, lat: number, lon: number, elev: number, s = 0.5) => {
+      for (let d = 1; d <= 365; d++) { const q = seasonAt(lat, lon, elev, d); if (bloomNow(type, s, q.spring, q.summer) > 0.5) return d; }
+      return -1;
+    };
+    const ATL: [number, number, number] = [33.75, -84.39, 300];
+    const redbud = first(3, ...ATL), dogwood = first(2, ...ATL), cherry = first(1, ...ATL);
+    expect(redbud).toBeGreaterThan(50); // (never in a January thaw)
+    expect(redbud).toBeLessThan(dogwood);
+    expect(cherry).toBeLessThanOrEqual(dogwood);
+    expect(dogwood).toBeGreaterThan(75); // Atlanta's dogwoods: late March into April…
+    expect(dogwood).toBeLessThan(115);
+    expect(first(2, 42.36, -71.06, 10)).toBeGreaterThan(dogwood + 10); // …Boston's weeks later
+    expect(first(2, 29.65, -82.32, 50)).toBeGreaterThan(50); // north Florida's no sooner than March
+    // the rosebay in June up the mountains; the crape myrtle from June to September, never in the spring
+    const rb = first(5, 35.6, -82.55, 900);
+    expect(rb).toBeGreaterThan(140);
+    expect(rb).toBeLessThan(200);
+    const q = (d: number) => seasonAt(...ATL, d);
+    expect(bloomNow(4, 0.5, q(JUL).spring, q(JUL).summer)).toBeGreaterThan(0.9);
+    expect(bloomNow(4, 0.5, q(APR).spring, q(APR).summer)).toBe(0);
+    expect(bloomNow(4, 0.5, q(NOV).spring, q(NOV).summer)).toBe(0);
+    // and nothing flowers in the autumn's warm spells
+    for (const t of [1, 2, 3, 5]) expect(bloomNow(t, 0.5, q(OCT).spring, q(OCT).summer)).toBe(0);
   });
   it('a marine autumn waits for the short days; the tropics never turn', async () => {
     const { dayLength } = await import('../src/world/season');

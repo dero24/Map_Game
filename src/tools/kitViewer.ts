@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { BOAT_TYPES, CAR_TYPES, PLANE_TYPES, boatGeometry, boatRecipe, carGeometry, carRecipe, planeGeometry, planeRecipe, rockGeometry, type RockType } from '../assets/kit';
-import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, crownField, DECIDUOUS, fallHueOf, PLANT_SPECIES, plantGeometry, SPECIES } from '../assets/flora';
+import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, crownField, DECIDUOUS, fallHueOf, BLOSSOM_OF, MOTION_OF, PLANT_SPECIES, plantGeometry, SPECIES } from '../assets/flora';
 import { NearTrees, nearKinds } from '../world/nearTrees';
 import { CRITTERS, critterLib, critterMaterial, dogLib, dogMaterial, DOG_COLLAR } from '../assets/fauna';
 import { personLib, personLiteLib, leadHand, atWorld } from '../assets/people';
@@ -184,7 +184,7 @@ function build() {
     const ks = nearKinds();
     ks.forEach((k, i) => {
       for (let v = 0; v < TREE_VARIANTS; v++) {
-        const im = new THREE.InstancedMesh(treeLib(k, v).clone(), propMaterial({ wind: true, foliage: true, crown: crownField(treeMeta(k, v)), decid: DECIDUOUS.has(k), fallHue: fallHueOf(k, v), blossom: k === 'cherry' }), 1);
+        const im = new THREE.InstancedMesh(treeLib(k, v).clone(), propMaterial({ wind: true, foliage: true, crown: crownField(treeMeta(k, v)), decid: DECIDUOUS.has(k), fallHue: fallHueOf(k, v), blossom: BLOSSOM_OF[k] ?? 0, motion: MOTION_OF[k] ?? 0 }), 1);
         im.name = `trees:${k}:${v}`;
         im.setMatrixAt(0, new THREE.Matrix4().compose(new THREE.Vector3((i - (ks.length - 1) / 2) * 13, 0, v * 16), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -0.6 + v), new THREE.Vector3(1, 1, 1)));
         im.setColorAt(0, new THREE.Color(GREENS[(i + v) % GREENS.length]));

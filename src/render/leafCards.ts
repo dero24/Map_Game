@@ -14,8 +14,10 @@
 // Per card (instanced): aC (middle, region frame; half its width, m) · aD (height : width, turn in
 // the picture plane 0–1, picture, depth in the crown 0 rim … 1 heart) · aT (the tree's foot, region
 // frame; its sway at the card's height) · aK (the crown's middle, region frame; its radius) · aE
-// (the tree's green, linear; flags: 1 broadleaf that falls, + 2 × fall hue, + 8 blossom, + 16 leaves
-// that tremble — the aspen's).
+// (the tree's green, linear; flags, flora.ts packCardFlags: 1 a broadleaf whose leaves fall, + 2 × its
+// fall hue (0–7, treeSeasons.ts fallColour), + 16 × its blossom (0–5, treeSeasons.ts bloomNow), + 128 × its
+// motion: 1 the aspen's leaves trembling, 2 the dogwood's tiers bobbing, 3 the longleaf's needles
+// tossing).
 import * as THREE from 'three';
 import { paintMaterial, GLSL_NOISE } from './shared';
 import { TREE_LOD_U, TREE_MASK_U } from './propMaterial';
@@ -79,9 +81,14 @@ export function leafCardMaterial(tex: THREE.Texture) {
         if (far >= 1.0 || masked) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
         vec3 c = (modelMatrix * vec4(aC.xyz, 1.0)).xyz;
         // the far crown's sway at the card's height (propMaterial WIND), and its own flutter
-        float sway = aT.w * (0.4 + uWind);
+        float sway = aT.w * (0.4 + uWind), mo = floor(aE.w / 128.0);
+        float tree = fract(sin(dot(foot.xz + uWorldOffset.xz, vec2(12.9898, 78.233))) * 43758.5453);
         c.x += sin(uTime * 1.3 + foot.x * 0.21 + foot.z * 0.17) * sway;
         c.z += cos(uTime * 1.1 + foot.z * 0.19) * sway * 0.7;
+        // (the dogwood's tiers bobbing, each on its own beat, the outer ends most — propMaterial MOTION 2)
+        if (mo > 1.5 && mo < 2.5) c.y += sin(uTime * 1.7 + floor((c.y - foot.y) * 1.1) * 2.3 + tree * 6.28) * 0.07 * (0.35 + uWind) * clamp(length(c.xz - foot.xz) / 2.2, 0.0, 1.0);
+        // (the longleaf's brushes tossing, gust by gust — MOTION 3)
+        if (mo > 2.5) c += vec3(sin(uTime * 5.1 + aD.y * 31.0), 0.6 * sin(uTime * 6.5 + aD.y * 17.0), cos(uTime * 4.3 + aD.y * 23.0)) * 0.05 * (0.3 + uWind) * (0.55 + 0.45 * sin(uTime * 0.9 + tree * 5.0));
         vec3 toCam = cameraPosition - c;
         float dc = length(toCam);
         toCam /= max(dc, 1e-4);
@@ -95,8 +102,10 @@ export function leafCardMaterial(tex: THREE.Texture) {
         // each card turned a little (never so far its leaves' lit sides face down) and every other one
         // mirrored, so the few pictures don't repeat; and rocking a little in the wind
         float ang = (fract(aD.y * 2.0) - 0.5) * 0.9 + sin(uTime * 1.9 + aD.y * 37.0 + foot.x * 0.7) * 0.06 * (0.3 + uWind);
-        // (an aspen's leaves tremble on their flat stalks: the card shivers, fast and small)
-        if (aE.w >= 16.0) ang += sin(uTime * 11.0 + aD.y * 53.0 + foot.z * 0.9) * 0.1 * (0.4 + uWind);
+        // (an aspen's leaves tremble on their flat stalks: the card shivers, fast and small; a longleaf's
+        // needles toss)
+        if (mo > 0.5 && mo < 1.5) ang += sin(uTime * 11.0 + aD.y * 53.0 + foot.z * 0.9) * 0.1 * (0.4 + uWind);
+        if (mo > 2.5) ang += sin(uTime * 6.5 + aD.y * 41.0 + foot.x * 0.7) * 0.14 * (0.3 + uWind);
         float cs = cos(ang), sn = sin(ang);
         vec2 k = vec2(aD.y > 0.5 ? -aCorner.x : aCorner.x, aCorner.y);
         vec2 q = vec2(k.x * cs - k.y * sn, k.x * sn + k.y * cs);
@@ -109,7 +118,7 @@ export function leafCardMaterial(tex: THREE.Texture) {
         vUv = (cell + aCorner * 0.5 + 0.5) / vec2(${cols}.0, ${rows}.0);
         vQ = q; // (the pixel's place on the card, −√2 … √2: the cluster's roundness reads it)
         vRight = right; vUp = up; vToCam = toCam;
-        vInfo = vec4(far, aD.w, aE.w, fract(sin(dot(foot.xz + uWorldOffset.xz, vec2(12.9898, 78.233))) * 43758.5453));
+        vInfo = vec4(far, aD.w, aE.w, tree);
         vCrown = vec4(aK.xyz, aK.w);
         vTint = aE.rgb;
         // the far crown's tone mottle (its fbm over the crown, a metre or so across), here once a
@@ -141,16 +150,27 @@ export function leafCardMaterial(tex: THREE.Texture) {
         float lod = log2(max(1.0, max(length(dFdx(vUv)), length(dFdy(vUv))) * uLeafW));
         if (t.a < mix(0.5, 0.35, clamp(lod / 3.0, 0.0, 1.0))) discard;
         if (uTreeMask.w > 0.5) { gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0); return; }
+        // (flora.ts packCardFlags)
         float flags = vInfo.z;
-        float falls = mod(flags, 2.0), hue = mod(floor(flags / 2.0), 4.0), bloom = mod(floor(flags / 8.0), 2.0), flut = floor(flags / 16.0);
+        float falls = mod(flags, 2.0), hue = mod(floor(flags / 2.0), 8.0), bloom = mod(floor(flags / 16.0), 8.0), mo = floor(flags / 128.0);
         float vTree = vInfo.w;
         bool twig = t.g < 0.5;
-        if (falls > 0.5 && uLeafFall > 0.0) {
+        float hi = smoothstep(vCrown.y - vCrown.w, vCrown.y + vCrown.w, vWorldPos.y);
+        // in flower here (propMaterial's sums: treeSeasons.ts bloomNow, bloomCover)
+        float fl = bloom > 0.5 ? bloomNow(bloom, vTree) * bloomCover(bloom, vWorldPos, hi) : 0.0;
+        bool bareFlower = false;
+        float down = falls > 0.5 ? leafDown(hue, vTree) : 0.0;
+        if (down > 0.0) {
           // leaves go clump by clump as the far crown's do (each tree on its own schedule) — and
           // here leaf by leaf within the clump; the card's twigs go with the last of them (bare, a
           // card's twigs would be a starburst: the tree's own limbs and branches are its winter form)
           float clump = mix(vnoise3(vWorldPos * 1.1), t.b, 0.45) * 0.75 + vTree * 0.25;
-          if (twig ? uLeafFall > 0.55 + 0.4 * vnoise3(vWorldPos * 2.3) : clump < uLeafFall * 1.05 - 0.02) discard;
+          if (twig ? down > 0.55 + 0.4 * vnoise3(vWorldPos * 2.3) : clump < down * 1.05 - 0.02) {
+            // …save where the spring's flowers open before the leaves: on the bare twigs (the redbud's
+            // magenta all along them, the dogwood's and the cherry's)
+            if (bloom > 0.5 && bloom < 3.5 && fl > 0.3) bareFlower = true;
+            else discard;
+          }
         }
         // the crown's light field, as the far crown shows it: the normal of the crown's ball where the
         // sight line through this pixel meets its front (flattened as the far field is) — a card
@@ -165,35 +185,25 @@ export function leafCardMaterial(tex: THREE.Texture) {
         vec3 N = normalize(mix(cN, bulge, 0.25));
         vec3 alb = twig ? vec3(0.15, 0.105, 0.068) * (0.9 + 0.4 * t.r) : vTint * (0.48 + 0.75 * t.r); // (twigs: the bark's brown)
         alb *= vMottle;
-        if (!twig && flut > 0.5) {
+        if (!twig && mo > 0.5 && mo < 1.5) {
           // the aspen grove's shimmer: the leaves' pale undersides flashing as they turn (propMaterial flutter)
-          float fl = sin(uTime * 9.0 + dot(vWorldPos, vec3(5.1, 3.7, 4.3)) + t.b * 20.0) * sin(uTime * 5.3 + dot(vWorldPos, vec3(-2.3, 4.1, 3.1)));
-          alb = mix(alb, mix(vec3(0.66, 0.72, 0.5), alb * 1.3, 0.5), clamp(fl, 0.0, 1.0) * (0.14 + 0.24 * uWind));
+          float fsh = sin(uTime * 9.0 + dot(vWorldPos, vec3(5.1, 3.7, 4.3)) + t.b * 20.0) * sin(uTime * 5.3 + dot(vWorldPos, vec3(-2.3, 4.1, 3.1)));
+          alb = mix(alb, mix(vec3(0.66, 0.72, 0.5), alb * 1.3, 0.5), clamp(fsh, 0.0, 1.0) * (0.14 + 0.24 * uWind));
         }
         // underside and heart in shade (the far crown's underside AO, and deeper toward the middle)
         float ao = mix(0.55, 1.0, smoothstep(vCrown.y - vCrown.w, vCrown.y + 0.3 * vCrown.w, vWorldPos.y));
         ao *= 1.0 - 0.25 * smoothstep(0.4, 1.0, vInfo.y); // (the rim's cards as lit as the far crown's skin)
         if (!twig && falls > 0.5 && uTurn > 0.0) {
-          vec3 fall;
-          if (hue > 2.5) {
-            fall = mix(vec3(0.36, 0.38, 0.12), vec3(0.42, 0.32, 0.12), vTree); // drab (the alder)
-          } else if (hue > 1.5) {
-            fall = mix(vec3(0.88, 0.7, 0.14), vec3(0.74, 0.52, 0.08), vTree);
-            fall = mix(fall, vec3(0.62, 0.62, 0.2), 0.25 * vnoise3(vWorldPos * 0.7));
-          } else if (hue > 0.5) {
-            fall = vTree < 0.55 ? vec3(0.76, 0.13, 0.06) : vec3(0.86, 0.36, 0.05);
-            fall = mix(fall, vec3(0.9, 0.55, 0.1), 0.3 * vnoise3(vWorldPos * 0.7));
-          } else {
-            fall = vTree < 0.4 ? vec3(0.78, 0.55, 0.08) : vTree < 0.75 ? vec3(0.8, 0.3, 0.06) : vec3(0.6, 0.1, 0.07);
-            fall = mix(fall, vec3(0.72, 0.5, 0.1), 0.35 * vnoise3(vWorldPos * 0.7));
-          }
-          float onset = vTree * 0.85 * (hue > 0.5 && hue < 1.5 ? 0.7 : 1.0);
-          float hi = smoothstep(vCrown.y - vCrown.w, vCrown.y + vCrown.w, vWorldPos.y);
+          // the far crown's autumn (treeSeasons.ts fallColour), leaf by leaf: the sweetgum's jewels each leaf its own
+          float onset = fallOnset(hue, vTree);
           float turn = smoothstep(onset - 0.02, onset + 0.22, uTurn * 1.25 + 0.14 * (hi - 0.5) + 0.12 * (vnoise3(vWorldPos * 0.8) - 0.5) + 0.08 * (t.b - 0.5)) * smoothstep(0.0, 0.04, uTurn);
-          alb = mix(alb, fall * (0.8 + 0.4 * (vMottle - 0.72) / 0.5) * (0.6 + 0.55 * t.r), turn);
+          alb = mix(alb, fallColour(hue, vTree, vWorldPos, t.b) * (0.8 + 0.4 * (vMottle - 0.72) / 0.5) * (0.6 + 0.55 * t.r), turn);
         }
-        if (!twig && bloom > 0.5)
-          alb = mix(alb, mix(vec3(0.96, 0.72, 0.8), vec3(0.98, 0.9, 0.92), vnoise3(vWorldPos * 2.3)) * (0.9 + 0.2 * fbm3(vWorldPos * 1.3)), uBloom * smoothstep(0.2, 0.5, vnoise3(vWorldPos * 1.6) * 0.8 + 0.3));
+        // an evergreen bronzing in the cold (the redcedar)
+        if (!twig && falls < 0.5 && hue > 6.5) alb = mix(alb, vec3(0.4, 0.31, 0.16) * (0.85 + 0.3 * vnoise3(vWorldPos * 0.8)), 0.55 * uLeafFall * (0.7 + 0.3 * vTree));
+        // in flower: the crown's clumps (and the redbud's twigs, flowering all along them)
+        if (bloom > 0.5 && (!twig || bareFlower || (bloom > 2.5 && bloom < 3.5)))
+          alb = mix(alb, bloomColour(bloom, vTree, vWorldPos) * (0.9 + 0.2 * fbm3(vWorldPos * 1.3)) * (twig ? 0.85 : 0.75 + 0.35 * t.r), bareFlower ? 1.0 : fl);
         alb = snowOn(alb, N, vWorldPos, 0.9);
         alb = pigment(alb, vWorldPos);
         // the shadow map holds the far crown's solid ball: look it up as the far crown does, from its

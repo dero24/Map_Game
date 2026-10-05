@@ -18,7 +18,7 @@
 // The leaf pictures are painted once, a picture a frame while the world boots (flora.ts
 // leafAtlasJob); until they're done every tree draws from its far mesh.
 import * as THREE from 'three';
-import { NEAR_KINDS, TREE_KINDS, nearTreeLib, crownField, CARD_STRIDE, leafAtlasJob, fallHueOf, DECIDUOUS, FLUTTER, treeMeta, type TreeKind } from '../assets/flora';
+import { NEAR_KINDS, TREE_KINDS, nearTreeLib, crownField, CARD_STRIDE, leafAtlasJob, cardFlags, hasNear, treeMeta, type TreeKind } from '../assets/flora';
 import { propMaterial, TREE_LOD_U, TREE_MASK_U } from '../render/propMaterial';
 import { leafCardGeometry, leafCardMaterial, leafTexture, CARD_ATTRS } from '../render/leafCards';
 import type { TreeTier } from '../render/quality';
@@ -81,7 +81,7 @@ export class NearTrees {
       const im = o as THREE.InstancedMesh;
       if (!im.isInstancedMesh || !im.name.startsWith('trees:')) return;
       const [, kind, vs] = im.name.split(':');
-      if (!NEAR_KINDS.has(kind as TreeKind)) return;
+      if (!NEAR_KINDS.has(kind as TreeKind) || !hasNear(kind as TreeKind, +vs || 0)) return; // (the longleaf's grass stage: blades at every distance)
       const n = im.count, near = new THREE.InstancedBufferAttribute(new Float32Array(n), 1);
       im.geometry.setAttribute('aNear', near);
       const mat = im.material as THREE.ShaderMaterial;
@@ -253,7 +253,7 @@ export class NearTrees {
       const fx = e[o + 12], fy = e[o + 13], fz = e[o + 14];
       const col = c.f.im.instanceColor ? (c.f.im.instanceColor.array as Float32Array) : null;
       const r = col ? col[c.i * 3] : 0.35, g = col ? col[c.i * 3 + 1] : 0.45, b = col ? col[c.i * 3 + 2] : 0.25;
-      const flags = (DECIDUOUS.has(c.f.kind) ? 1 : 0) + 2 * fallHueOf(c.f.kind, c.f.v) + (c.f.kind === 'cherry' ? 8 : 0) + (FLUTTER.has(c.f.kind) ? 16 : 0);
+      const flags = cardFlags(c.f.kind, c.f.v); // (leaf fall, fall hue, blossom, motion: flora.ts packCardFlags)
       const seed = fract(Math.sin(fx * 12.9898 + fz * 78.233) * 43758.5453);
       // the crown's middle: the model's crown field, up its own axis
       const kx = e[o + 4] * cyM + fx, ky = e[o + 5] * cyM + fy, kz = e[o + 6] * cyM + fz;

@@ -2,6 +2,95 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-05 — Regional life (4): the eastern hardwoods, the flowering understory, the southern pines
+
+Robby's bar for every package: "make things detailed, and variety and variation matter", "rapid but great
+development". Package #4 of `docs/regional-life/models.md`'s build order, as `docs/earth/HANDOFF.md`
+designed it — fourteen tree kinds appended to `TREE_KINDS` (35–48), three grown forms each, far and near.
+
+- **The hardwoods on a leader** (`flora.ts LEADERS`: a straight trunk up through the crown, limbs off it
+  in a spiral, a core mass and the outline's lobes in the species' own shape):
+  - **Tulip tree**: open-grown, the forest's ramrod (bare more than halfway up), the old cove giant
+    with a dead limb and a stub. Gold in fall.
+  - **Sweetgum**: the young pyramid, the mature oval, the old round one. Its fall the jewel mix —
+    purple, red, orange and yellow on one tree, lobe by lobe (and leaf by leaf on the cards), late.
+  - **Shagbark hickory**: pale strips of bark curling off the trunk at both ends (in both models), a
+    tall oval crown, dead limbs on the old one.
+  - **Yellow buckeye**: round and low-branched; forked low into three stems; the first to turn, pumpkin
+    orange, bare by October (its leaves fall on their own clock: `leafDown`).
+- **On the oak plan** (`OAKS` rows, taught `upper`, `mottle`, `bias`, `limbR`, `dead`, `low`): the
+  **sycamore**'s limbs going ghost-white above the fork and still climbing, its trunk flaking in cream,
+  olive and brown patches, a deep irregular crown (v1 leaning out over a creek, v2 two trunks); the **bur
+  oak** savanna-wide on thick crooked limbs, a stag-head on the old one. Both russet to tan in fall.
+- **The small trees and the rosebay** (`CLUMPS`: stems from one root or a low fork, zigzag, arching or
+  pollarded): the **redbud** flat-topped on two or three trunks, magenta along its bare twigs in March;
+  the **crape myrtle**'s vase of cinnamon stems flaking grey and tan, its summer cones each tree's own
+  colour, and v2 pollarded into knuckles with whips ("crape murder"); the **rosebay** a streamside
+  clump, a laurel-hell tangle, an old one of thick twisting stems. The **flowering dogwood** in flat
+  tiers with air between them, white bracts in April (one tree in six pink), burgundy in fall, its
+  tiers bobbing each on its own beat.
+- **The southern pines** (`PINES` rows; crooked boughs, long drooping brushes): **loblolly** open-grown,
+  the plantation pole, old and flat-topped; **longleaf** as its grass stage (a fountain of needle blades
+  on the sand, no near model, shivering), the bottlebrush sapling and the old open flat top; **slash
+  pine** round-crowned, and South Florida's own leaning flat-topped one. The **eastern redcedar**: a dark
+  flame, an old field's cone, a twisted bluff tree — bronzing in the cold.
+- **Leaf pictures** (`LEAF_PICS` 12 → 24): sweetgum stars, tulip-tree leaves, the hickory's five
+  leaflets, the buckeye's five fingers, redbud hearts, long needles in brushes; the sycamore wears the
+  maple's hands, the redcedar the cedar's sprays.
+- **Seasons as one set of sums** (`render/treeSeasons.ts`, used by the far crowns and the cards):
+  `BLOSSOM` is a type (1 cherry, 2 dogwood, 3 redbud, 4 crape myrtle, 5 rosebay); new fall hues 4–6 and
+  7 (evergreen bronze); `U.uSpring` and `U.uSummer` from `season.ts` (`spring`: the warming half's
+  progress from the winter's own mean, so north Florida's dogwoods wait for March), the bloom windows
+  as data checked against real calendars (DC's cherries late March to mid-April, Atlanta's dogwoods
+  in April, the rosebay June–July in the mountains, crape myrtles mid-May to late September). Spring's
+  flowers open on bare twigs where the leaves aren't out yet. `MOTION` (1 tremble, 2 tiers bobbing, 3
+  needles tossing) replaces `FLUTTER`. Every tree's bark a shade of its own.
+- **The cards' flags re-laid**: `falls 1 + 2·hue (3 bits) + 16·bloom (3 bits) + 128·motion`
+  (`flora.ts packCardFlags`; the aspen still trembles).
+- **The garden**: rhododendron (trusses in May) and azalea (smothered March–May, each plant hot pink,
+  coral, white or magenta) in the Southeast, Appalachia, the Mid-Atlantic, the Gulf, New England and
+  the Northwest.
+- **Placement** (all by `CastPlace`, hashes only — no new `rng.float()` in the scans):
+  - `broadMix` gains each region's new trees, cut to range by `rangeIn` (no crape myrtle north of
+    Delaware or in the West, the north woods past the tulip tree's and the dogwood's reach, Texas's
+    sweetgums in its east, Florida's dogwoods in its north).
+  - `coniferMix`: the South's pines — loblolly on the Piedmont, longleaf on the Sandhills and coastal
+    plains, slash pine on the lower coastal plain and all of South Florida; the loblolly standing in for
+    the Ozarks' shortleaf until its own row.
+  - `bankMix`: in sycamore country a stream's bank grows sycamores beside the willows.
+  - `redcedarShare`: redcedars take the old fields and glades. `rosebayShare`: Appalachia's creeks and
+    laurel hells. `understoryTrees`: dogwoods and redbuds under the eastern woods.
+  - Heights (`treeHeight4`): the tulip tree 26–40 m in a cove, the dogwood 4–9 m, the grass stage under a
+    metre; a survey's tall crown is never a small tree (`SMALL_TREE`); a measured longleaf is grown as
+    tall as it measures. Each species its own green.
+  - Spanish moss on the bottomland sycamores, sweetgums, hickories and bur oaks; ball moss on Texas's
+    pecans (the hickory), bur oaks and crape myrtles.
+  - The "first hints of autumn" tint only on trees that turn (never a pine or a magnolia).
+  - The shore (the baked world, the Mid-Atlantic) keeps its original trees at their original weights
+    and gains the region's new natives (`tests/ecoregions.test.ts`); no crape myrtle in New Jersey.
+- **The near models**: a clump's third and later thin stems are plainer, without a flare (a rosebay
+  thicket stays under 2,500 vertices); dead wood no longer grows a leafy branch; a branch takes the
+  colour of the limb it leaves (the sycamore's white). Far ≤ 1,488 vertices, near ≤ 2,276.
+
+**Verified:** typecheck; `npm test` 907/907 (91 files); `tests/foundry.test.ts` (46: budgets for every form; the tulip tree, the
+sycamore and the street oak told apart by shape; the young sweetgum a pyramid; the shagbark's strips;
+the dogwood's tiers; the stems of the clumps; the southern pines' boles and the longleaf's stages; each
+tree's leaf picture; the flags round-trip and the shader's decode; the azalea's colours),
+`tests/streetTrees.test.ts` (15: no crape myrtle in the North, longleaf only on the southern coastal
+plain and the sandhills, rosebay only in Appalachia, no sweetgum in the West; an Appalachian cove's wood
+and a Sandhills pine wood built), `tests/season.test.ts` (the bloom calendar), `tests/pack.test.ts`,
+`tests/nearTrees.test.ts`, `tests/hangers.test.ts`. The shader compile check (`tools/shader-check.js`,
+every new fall hue, blossom and motion): 15 programs, no errors. Tree studio montages (`shots/trees-h1`,
+`h2`, `h3`, `u1`, `u2`, `p1`): the first pass's tulip trees and young sweetgums were hollow spirals of
+balls and the sycamores read as acacia umbrellas — given a core mass, and climbing limbs with billows
+low on them; the crape myrtle's vase widened.
+
+**Next:** Robby, mid-session: the people need brains — "they just wander around aimlessly … a lot walk
+into buildings and stand there and after 3 minutes its over crowded … not everyone on the street can
+walk into everyones homes"; "ensure all animations are smooth"; "easy streamlined 3 asset mesh animation
+creator all built in". Planned in `feature_list.json` and `HANDOFF.md`; then #5 (bald cypress,
+cottonwoods) and the wildlife packages.
+
 ## 2026-10-05 — Regional life (3), the cloud session: regions as data
 
 Robby, handing over to a cloud session (`docs/earth/HANDOFF.md`): "i want to make sure all these

@@ -20,6 +20,13 @@ export interface Season {
   turn: number;
   /** 0..1 spring blossom on the flowering trees (cherries): the warming weeks near 11 °C */
   bloom: number;
+  /** 0..1 how far the warming half of the year has come, by the air: 0 at the winter's mean (or 5 °C,
+   *  whichever is warmer) … 1 at 23 °C; 0 while the year cools. The flowering trees each open in their
+   *  own window of it (treeSeasons.ts bloomNow): the redbud, the cherry, the dogwood, the rosebay in June —
+   *  later up north and up a mountain, and north Florida's dogwoods no sooner than March */
+  spring: number;
+  /** 0..1 the summer's heat: 0 below 18 °C … 1 from 23 °C (the crape myrtle's cones, June to September) */
+  summer: number;
   /** elevation (m) above which the far mountains are white */
   snowline: number;
   /** the lagged mean air temperature (°C) at the given elevation — for tests and tuning */
@@ -80,10 +87,15 @@ export function seasonAt(lat: number, lon: number, elev: number, doy: number): S
   // (the unlagged air: blossom opens with the first warm weeks, before the canopy has filled)
   const Ta = meanTemp(lat, lon, elev, doy);
   const bloom = !cooling ? Math.min(1, Math.max(0, 1 - Math.abs(Ta - 11.5) / 3.5)) : 0;
+  // (a mild winter's flowers wait for real warmth, not the first day the year turns: from the winter's
+  // own mean, never below 5 °C)
+  const low = Math.max(5, meanTemp(lat, lon, elev, lat < 0 ? 202.75 : 20) + 1.5);
+  const spring = !cooling ? Math.min(1, Math.max(0, (Ta - low) / Math.max(4, 23 - low))) : 0;
+  const summer = Math.min(1, Math.max(0, (Ta - 18) / 5));
   // the far mountains: white where the (unlagged-enough) mean at that height is below −2 °C
   const sea = meanTemp(lat, lon, 0, doy - 12);
   const snowline = Math.max(250, ((sea + 2) / 6.5) * 1000);
-  return { snow, leafFall, autumn, turn, bloom, snowline, temp: T };
+  return { snow, leafFall, autumn, turn, bloom, spring, summer, snowline, temp: T };
 }
 
 /** Day of the year (1..366) of a timestamp, in UTC. */

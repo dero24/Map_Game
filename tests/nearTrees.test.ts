@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { NearTrees, pickNear, MAX_CARDS } from '../src/world/nearTrees';
 import { TREE_TIERS } from '../src/render/quality';
 import { farShare, TREE_LOD_U, propMaterial } from '../src/render/propMaterial';
-import { treeLib, treeMeta, crownField, nearTreeLib, CARD_STRIDE } from '../src/assets/flora';
+import { treeLib, treeMeta, crownField, nearTreeLib, CARD_STRIDE, LEAF_PICS } from '../src/assets/flora';
 
 // a tile's tree meshes as props.ts names and lays them out: one far mesh per species × variant
 function tile(trees: { kind: string; v: number; x: number; z: number; s?: number }[]) {
@@ -25,7 +25,8 @@ function tile(trees: { kind: string; v: number; x: number; z: number; s?: number
   }
   return g;
 }
-const ready = (l: NearTrees) => { for (let i = 0; i < 20 && !l.stats.ready; i++) l.update(1e6, 0, 1e6); };
+// (the leaf pictures paint one a frame while the world boots)
+const ready = (l: NearTrees) => { for (let i = 0; i < LEAF_PICS + 8 && !l.stats.ready; i++) l.update(1e6, 0, 1e6); };
 
 describe('near trees: which trees, where the hand-over stands', () => {
   it('the far and near shares split every pixel: far 0 inside, 1 past the band', () => {

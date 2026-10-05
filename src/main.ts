@@ -1413,6 +1413,8 @@ async function main() {
       U.uAutumn.value = s.autumn;
       U.uTurn.value = s.turn;
       U.uBloom.value = s.bloom;
+      U.uSpring.value = s.spring; // (the flowering trees' windows: treeSeasons.ts bloomNow)
+      U.uSummer.value = s.summer;
       horizon.setSnowline(s.snowline);
     }
 

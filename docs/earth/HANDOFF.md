@@ -66,9 +66,19 @@ The game was smooth and rendering before this work started. Work fast, and keep 
   - **#3, the northern and mountain forests:**
     - `PINES`: white pine, ponderosa, lodgepole.
     - `SPIRES` rows: red spruce, balsam fir, Engelmann spruce, subalpine fir, eastern hemlock.
-    - Aspen, whose leaves tremble (`propMaterial` `flutter`, leaf-card flag 16); willow thickets;
-      snags.
+    - Aspen, whose leaves tremble (`propMaterial` `MOTION` 1); willow thickets; snags.
     - Placed by `coniferMix` by elevation band, with aspen groves, willow thickets and snags.
+  - **#4, the eastern hardwoods, the flowering understory, the southern pines** (2026-10-05; LOG
+    "Regional life (4)"):
+    - `LEADERS`: tulip tree, sweetgum, shagbark hickory, yellow buckeye. `OAKS` rows: sycamore, bur
+      oak. `CLUMPS`: redbud, crape myrtle, rosebay. The dogwood's tiers. `PINES` rows: loblolly,
+      longleaf (grass stage, bottlebrush, old), slash pine. The redcedar.
+    - `render/treeSeasons.ts`: blossom types 1–5, fall hues 0–7, the bloom windows as data on
+      `U.uSpring` / `U.uSummer`. `MOTION` 1 tremble, 2 tiers bobbing, 3 needles tossing. The cards'
+      flags: `falls 1 + 2·hue + 16·bloom + 128·motion` (`flora.ts packCardFlags`).
+    - 24 leaf pictures. Rhododendron and azalea in the gardens.
+    - Placement: `broadMix` + `rangeIn`, `coniferMix`'s southern pines, `bankMix`, `redcedarShare`,
+      `rosebayShare`, `understoryTrees`, `treeHeight4`, `SMALL_TREE`.
 
 ## The bar: detail, variety, variation
 
@@ -106,9 +116,10 @@ This is Robby's priority for every model. "alot of variety even per species, col
 
   Detail comes from smarter geometry (sprays, ribbons, card pictures), not more vertices.
 
-## Next: package #4, the eastern hardwoods, flowering understory and southern pines
+## Package #4, the eastern hardwoods, flowering understory and southern pines — built
 
-This is designed but not started; nothing is half-written.
+Built 2026-10-05 as designed below (kept as the record of the design; LOG "Regional life (4)" says
+what changed from it: the tree studio found hollow crowns and umbrella sycamores, both fixed).
 
 **The trees.** Append these to the end of `TREE_KINDS`. There are 35 kinds today; the last is
 `snag`, index 34. Each needs three forms, with far and near models.
@@ -185,6 +196,14 @@ Add them to `REGION_GARDEN` for the Southeast, Appalachia and the Mid-Atlantic.
 - commit, push and check CI.
 
 ## After #4
+
+Robby, 2026-10-05: "continue on what you were originally doing … just make note of person thing" and
+"you can keep doing trees and vegetation if unfinished … just ensure that is maintained". So the
+vegetation packages go on in order (#5 next); the people work is noted as `people-with-purpose` in
+`feature_list.json` (rank 11.45: walkers on errands, homes private, buildings with a capacity, smooth
+blended animation, a built-in rig and clip maker — its notes say what the code does now and the plan).
+In a cloud session that work is tested headless (`tests/lifeSim.test.ts`) and on the kit page; the
+in-game look is checked on Robby's PC.
 
 - **#5:** bald cypress (knees, buttresses in water, rusty fall) and the cottonwoods.
 - **#6:** California's valley, blue and black oaks; coast redwood; giant sequoia.

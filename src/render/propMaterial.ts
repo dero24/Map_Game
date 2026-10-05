@@ -12,9 +12,13 @@ import { SIGNAL_GLSL } from '../sim/traffic';
 // signal: traffic-signal masts — the instance colour is DATA (r = the junction's phase key, g = the
 // phase group), and the red / amber / green lens the life sim is obeying right now is lit
 // (src/sim/traffic.ts signalState, on the shared clock uTime).
-// fallHue: how a broadleaf turns (flora.ts FALL_HUE): 1 the maples' reds, 2 gold (willow, elm,
-// poplar, birch); else each tree its own of yellow / orange / red. blossom: the flowering cherry's
-// spring pink (season.ts bloom). weep: a willow's hanging strands swing with the wind.
+// fallHue: how a tree turns (flora.ts FALL_HUE; the sums are treeSeasons.ts fallColour, fallOnset,
+// leafDown): 0 each tree its own of yellow / orange / red, 1 the maples' reds, 2 gold, 3 drab, 4 the
+// sweetgum's jewels, 5 the buckeye's early orange (and its early fall), 6 russet; 7 an evergreen that
+// bronzes in the cold (the redcedar). blossom: what a flowering tree blooms as (flora.ts BLOSSOM_OF: 1
+// cherry, 2 dogwood, 3 redbud, 4 crape myrtle, 5 rosebay; treeSeasons.ts bloomNow / bloomColour /
+// bloomCover) — the spring's flowers open on bare twigs, where the leaves aren't out yet. weep: a
+// willow's hanging strands swing with the wind.
 // wash: a thing being painted in by the brush (ui/brush.ts), drawn in the sketch pass (post.ts):
 // translucent paper, hatched, until the wash reaches it — uWashAt = (world x, y, z of the first
 // touch, the wash's radius in m; < 0 all paper); uWash = (dry: 0 wet → 1 dry, opacity, -, -).
@@ -31,8 +35,11 @@ import { SIGNAL_GLSL } from '../sim/traffic';
 // most, out of step with its neighbours, a ripple running down it as the wind rises, the curtain
 // leaning downwind; it rides its tree's own sway from its anchor. The fern greens and opens with
 // uWet and curls brown in a dry spell.
-// flutter: an aspen's round leaves trembling on their flat stalks — each leafy vertex shivering fast and
-// small, the crown shimmering as the pale undersides flash, more as the wind rises.
+// motion (flora.ts MOTION_OF): 1 an aspen's round leaves trembling on their flat stalks — each leafy
+// vertex shivering fast and small, the crown shimmering as the pale undersides flash, more as the wind
+// rises; 2 the dogwood's flat tiers bobbing, each on its own beat, the outer ends most; 3 the longleaf's
+// long needles tossing in brushes, gust by gust (its grass stage a shivering fountain).
+// Every tree's bark a shade of its own (its number from where it stands).
 // treeLod: a tree's two models (world/nearTrees.ts). 'far' (TREE_LOD 1): a tile's trees, the solid
 // lobed crowns — the near-tree layer marks the trees it draws close up (`aNear`, per instance), and
 // for those this gives way to the near model across the hand-over band on the same ordered dither
@@ -51,16 +58,16 @@ const GLSL_TREE_LOD = /* glsl */ `
     if (L.z > 0.5) return L.z > 1.5 ? 0.0 : 1.0;
     return clamp((d - L.x + L.y * 0.5) / max(L.y, 1e-3), 0.0, 1.0);
   }`;
-export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean; signal?: boolean; fallHue?: number; blossom?: boolean; weep?: boolean; wash?: boolean; fade?: boolean; treeLod?: 'far' | 'near'; hang?: boolean; flutter?: boolean } = {}) {
+export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean; signal?: boolean; fallHue?: number; blossom?: number; weep?: boolean; wash?: boolean; fade?: boolean; treeLod?: 'far' | 'near'; hang?: boolean; motion?: number } = {}) {
   const defines: Record<string, number> = {};
   if (opts.hang) defines.HANG = 1;
-  if (opts.flutter) defines.FLUTTER = 1;
+  defines.MOTION = opts.motion ?? 0; // (always defined, as FALL_HUE and BLOSSOM: they're read in #if)
   if (opts.treeLod) defines.TREE_LOD = opts.treeLod === 'far' ? 1 : 2;
   if (opts.fade) defines.FADE = 1;
   if (opts.wash) defines.WASH = 1;
   if (opts.weep) defines.WEEP = 1;
   defines.FALL_HUE = opts.fallHue ?? 0; // (always defined: an undefined macro in #if is a GLSL error)
-  if (opts.blossom) defines.BLOSSOM = 1;
+  defines.BLOSSOM = opts.blossom ?? 0;
   if (opts.wind) defines.WIND = 1;
   if (opts.bob) defines.BOB = 1;
   if (opts.foliage) defines.FOLIAGE = 1;
@@ -138,10 +145,20 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
           #endif
           p.x += sin(uTime * 1.3 + origin.x * 0.21 + origin.z * 0.17) * sway;
           p.z += cos(uTime * 1.1 + origin.z * 0.19) * sway * 0.7;
-          #ifdef FLUTTER
-            // the aspen's leaves trembling: each leafy vertex shivers along its normal, fast and small
+          #if MOTION > 0
             float leafF = step(0.98, min(color.r, min(color.g, color.b)));
-            p += normal * leafF * sin(uTime * 13.0 + dot(position, vec3(4.1, 3.3, 2.7)) + vTree * 31.0) * 0.035 * (0.5 + uWind);
+            #if MOTION == 1
+              // the aspen's leaves trembling: each leafy vertex shivers along its normal, fast and small
+              p += normal * leafF * sin(uTime * 13.0 + dot(position, vec3(4.1, 3.3, 2.7)) + vTree * 31.0) * 0.035 * (0.5 + uWind);
+            #elif MOTION == 2
+              // the dogwood's tiers bobbing: each flat tier (a metre or so apart) rising and falling on its
+              // own beat, its outer ends most
+              p.y += leafF * sin(uTime * 1.7 + floor(position.y * 1.1) * 2.3 + vTree * 6.28) * 0.07 * (0.35 + uWind) * clamp(length(position.xz) / 2.2, 0.0, 1.0);
+            #else
+              // the longleaf's needles tossing: each brush thrown about, gust by gust, more as the wind rises
+              float tph = dot(position, vec3(3.1, 2.3, 2.9)) + vTree * 23.0, gust = 0.55 + 0.45 * sin(uTime * 0.9 + vTree * 5.0);
+              p += (normal * 0.6 + vec3(sin(uTime * 5.1 + tph * 1.3), 0.0, cos(uTime * 4.3 + tph * 1.1)) * 0.5) * leafF * sin(uTime * 6.5 + tph) * 0.06 * (0.3 + uWind) * gust;
+            #endif
           #endif
           #ifdef WEEP
             // a willow's curtain: the further down a strand, the more it swings
@@ -285,6 +302,8 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
         #endif
         #ifdef FOLIAGE
           alb *= 0.72 + 0.5 * fbm3(vWorldPos * 0.9);
+          // (each tree's bark a shade of its own: a street of one species is never one brown)
+          if (uCrown.y > 0.0 && vLeafy < 0.5) alb *= 0.88 + 0.24 * fract(vTree * 13.7);
           #ifdef TREE_LOD
           #if TREE_LOD == 2
             // a near tree's bark: furrows running up the wood (in its own frame, so they stay on it as
@@ -303,46 +322,44 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
             alb = mix(alb, moss, cover);
           }
         #endif
-        #ifdef DECID
+        #if defined(DECID) || BLOSSOM > 0 || FALL_HUE == 7
           if (vLeafy > 0.5) {
-            // leaves go clump by clump (each tree on its own schedule), the last ones thin and high
-            float clump = vnoise3(vWorldPos * 1.1) * 0.75 + vTree * 0.25;
-            if (clump < uLeafFall * 1.05 - 0.02) discard;
-            // autumn: each tree its own colour — yellow, orange, red — mixed through the crown
-            #if FALL_HUE == 1
-              vec3 fall = vTree < 0.55 ? vec3(0.76, 0.13, 0.06) : vec3(0.86, 0.36, 0.05); // maple scarlet / flame
-              fall = mix(fall, vec3(0.9, 0.55, 0.1), 0.3 * vnoise3(vWorldPos * 0.7));
-            #elif FALL_HUE == 2
-              vec3 fall = mix(vec3(0.88, 0.7, 0.14), vec3(0.74, 0.52, 0.08), vTree); // gold
-              fall = mix(fall, vec3(0.62, 0.62, 0.2), 0.25 * vnoise3(vWorldPos * 0.7));
-            #elif FALL_HUE == 3
-              vec3 fall = mix(vec3(0.36, 0.38, 0.12), vec3(0.42, 0.32, 0.12), vTree); // drab: the alder's leaves drop near green
-            #else
-              vec3 fall = vTree < 0.4 ? vec3(0.78, 0.55, 0.08) : vTree < 0.75 ? vec3(0.8, 0.3, 0.06) : vec3(0.6, 0.1, 0.07);
-              fall = mix(fall, vec3(0.72, 0.5, 0.1), 0.35 * vnoise3(vWorldPos * 0.7));
-            #endif
-            // …each on its own schedule: a few early maples by late September, the last oaks into
-            // November (uTurn: the season's progress, never going back), and a crown from its sunlit
-            // top and outside inward — never every tree faintly tinted at once
-            float onset = vTree * 0.85;
-            #if FALL_HUE == 1
-              onset *= 0.7; // (the red and sugar maples lead)
-            #endif
             float hi = uCrown.y > 0.0 ? smoothstep(uCrown.x - uCrown.y, uCrown.x + uCrown.y, vLocal.y) : 0.5;
-            float turn = smoothstep(onset - 0.02, onset + 0.22, uTurn * 1.25 + 0.14 * (hi - 0.5) + 0.12 * (vnoise3(vWorldPos * 0.8) - 0.5)) * smoothstep(0.0, 0.04, uTurn);
-            alb = mix(alb, fall * (0.8 + 0.4 * fbm3(vWorldPos * 0.9)), turn);
+            float fl = 0.0; // (how much of this is in flower)
+            #if BLOSSOM > 0
+              fl = bloomNow(float(BLOSSOM), vTree) * bloomCover(float(BLOSSOM), vWorldPos, hi);
+            #endif
+            #ifdef DECID
+              // leaves go clump by clump (each tree on its own schedule), the last ones thin and high —
+              // and where the spring's flowers open before the leaves (the redbud's, the dogwood's, the
+              // cherry's), the bare twigs carry the flowers
+              float clump = vnoise3(vWorldPos * 1.1) * 0.75 + vTree * 0.25;
+              bool bare = clump < leafDown(float(FALL_HUE), vTree) * 1.05 - 0.02;
+              if (bare && (BLOSSOM == 0 || BLOSSOM > 3 || fl < 0.3)) discard;
+              // autumn: each species its own (fallColour) and each tree its own of it, each on its own
+              // schedule — a few early maples by late September, the last oaks into November (uTurn: the
+              // season's progress, never going back) — and a crown from its sunlit top and outside inward:
+              // never every tree faintly tinted at once
+              float onset = fallOnset(float(FALL_HUE), vTree);
+              float turn = smoothstep(onset - 0.02, onset + 0.22, uTurn * 1.25 + 0.14 * (hi - 0.5) + 0.12 * (vnoise3(vWorldPos * 0.8) - 0.5)) * smoothstep(0.0, 0.04, uTurn);
+              alb = mix(alb, fallColour(float(FALL_HUE), vTree, vWorldPos, 0.0) * (0.8 + 0.4 * fbm3(vWorldPos * 0.9)), turn);
+              if (bare) fl = 1.0;
+            #endif
+            #if FALL_HUE == 7
+              // an evergreen bronzing in the cold: the redcedar's winter coat, the rosebay's curled leaves
+              alb = mix(alb, vec3(0.4, 0.31, 0.16) * (0.85 + 0.3 * vnoise3(vWorldPos * 0.8)), 0.55 * uLeafFall * (0.7 + 0.3 * vTree));
+            #endif
+            #if BLOSSOM > 0
+              alb = mix(alb, bloomColour(float(BLOSSOM), vTree, vWorldPos) * (0.9 + 0.2 * fbm3(vWorldPos * 1.3)), fl);
+            #endif
           }
         #endif
-        #ifdef FLUTTER
+        #if MOTION == 1
           // the grove's shimmer: the leaves' pale undersides flashing, patch by patch, as they turn
           if (vLeafy > 0.5) {
             float fl = sin(uTime * 9.0 + dot(vWorldPos, vec3(5.1, 3.7, 4.3)) + vTree * 17.0) * sin(uTime * 5.3 + dot(vWorldPos, vec3(-2.3, 4.1, 3.1)));
             alb = mix(alb, mix(vec3(0.66, 0.72, 0.5), alb * 1.3, 0.5), clamp(fl, 0.0, 1.0) * (0.12 + 0.22 * uWind));
           }
-        #endif
-        #ifdef BLOSSOM
-          // spring: the crown a cloud of pink, flecked white, clump by clump
-          if (vLeafy > 0.5) alb = mix(alb, mix(vec3(0.96, 0.72, 0.8), vec3(0.98, 0.9, 0.92), vnoise3(vWorldPos * 2.3)) * (0.9 + 0.2 * fbm3(vWorldPos * 1.3)), uBloom * smoothstep(0.2, 0.5, vnoise3(vWorldPos * 1.6) * 0.8 + 0.3));
         #endif
         #ifdef PAVED
           alb = snowOn(alb, N, vWorldPos, snowKeep(alb));

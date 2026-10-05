@@ -17,7 +17,14 @@ window.__SHADERS__ = async () => {
   cam.position.set(0, 4, 20); cam.lookAt(0, 4, 0);
   const add = (geo, mat) => { const im = new THREE.InstancedMesh(geo, mat, 1); im.setMatrixAt(0, new THREE.Matrix4()); im.setColorAt(0, new THREE.Color(0.5, 0.6, 0.4)); scene.add(im); };
   const crown = [4, 3];
-  add(treeLib('aspen', 0).clone(), propMaterial({ wind: true, foliage: true, crown, decid: true, fallHue: 2, flutter: true }));
+  add(treeLib('aspen', 0).clone(), propMaterial({ wind: true, foliage: true, crown, decid: true, fallHue: 2, motion: 1 }));
+  // (package #4: every fall hue, every blossom, every motion — and their mixes as the trees wear them)
+  const k4 = [
+    ['dogwood', { decid: true, fallHue: 1, blossom: 2, motion: 2 }], ['redbud', { decid: true, fallHue: 2, blossom: 3 }], ['crapemyrtle', { decid: true, fallHue: 0, blossom: 4 }],
+    ['sweetgum', { decid: true, fallHue: 4 }], ['buckeye', { decid: true, fallHue: 5 }], ['buroak', { decid: true, fallHue: 6 }], ['redcedar', { fallHue: 7 }],
+    ['rosebay', { fallHue: 7, blossom: 5 }], ['longleaf', { motion: 3 }], ['cherry', { decid: true, fallHue: 1, blossom: 1 }],
+  ];
+  for (const [k, o] of k4) add(treeLib(k, k === 'longleaf' ? 0 : 1).clone(), propMaterial({ wind: true, foliage: true, crown, ...o }));
   add(treeLib('liveoak', 0).clone(), propMaterial({ wind: true, foliage: true, crown }));
   add(treeLib('liveoak', 0).clone(), propMaterial({ wind: true, foliage: true, crown, treeLod: 'far' }));
   for (const t of ['spanish', 'resfern', 'ballmoss', 'lace']) add(hangerLib(t, t === 'lace' ? 'coastoak' : 'liveoak', 0, 1).clone(), propMaterial({ wind: true, hang: true }));

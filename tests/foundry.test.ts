@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { TREE_KINDS, TREE_VARIANTS, treeGeometry, PLANT_SPECIES, plantGeometry, plantMix, inBloom, stageOf, STAGES, fallHueOf, NEAR_KINDS, nearTreeGeometry, CARD_STRIDE, LEAF_PICS, leafAtlas } from '../src/assets/flora';
+import { TREE_KINDS, TREE_VARIANTS, treeGeometry, PLANT_SPECIES, plantGeometry, plantMix, inBloom, stageOf, STAGES, fallHueOf, NEAR_KINDS, nearTreeGeometry, CARD_STRIDE, LEAF_PICS, leafAtlas, hasNear, DECIDUOUS, BLOSSOM_OF, MOTION_OF, packCardFlags, unpackCardFlags, cardFlags, picsOf, NEEDLED, treeHeight4, SMALL_TREE, type TreeKind } from '../src/assets/flora';
+import leafCardsSrc from '../src/render/leafCards.ts?raw';
 import { TREE_TIERS } from '../src/render/quality';
 import { CRITTERS, critterGeometry } from '../src/assets/fauna';
 import { MAILBOXES, mailboxGeometry, gearGeometry, gearFor, CAR_GEAR, umbrellaGeometry, picnicTableGeometry } from '../src/assets/furniture';
@@ -36,7 +37,8 @@ describe('flora', () => {
       const b = bb(geo);
       expect(finite(geo)).toBe(true);
       expect(b.min.y).toBeLessThanOrEqual(0.01); // the trunk reaches into the ground
-      expect(meta.h).toBeGreaterThan(k === 'shrub' || k === 'willowshrub' ? 1.5 : 5);
+      // (the shrubs; the rosebay's laurel hell, low and sprawling; the longleaf's grass stage, under a metre)
+      expect(meta.h).toBeGreaterThan(k === 'shrub' || k === 'willowshrub' ? 1.5 : k === 'rosebay' ? 3.5 : k === 'longleaf' && v === 0 ? 0.6 : 5);
       expect(meta.h).toBeLessThan(14);
       expect(meta.crownR).toBeGreaterThan(0.5);
       expect(meta.crownBottom).toBeLessThan(meta.h);
@@ -143,6 +145,149 @@ describe('flora', () => {
       for (let i = 0; i < n.cards.length; i += CARD_STRIDE) expect([0, 1]).toContain(n.cards[i + 6]);
     }
   });
+  // Package #4 (docs/regional-life/models.md build order 4; Robby: "make things detailed, and variety and
+  // variation matter"): the eastern hardwoods, the flowering understory and the southern pines
+  it('the eastern hardwoods read as themselves: a tulip tree, a sycamore and a white oak tell apart by shape alone', () => {
+    const m = (k: TreeKind, v: number) => treeGeometry(k, v).meta;
+    const rh = (k: TreeKind) => [0, 1, 2].map((v) => m(k, v).crownR / m(k, v).h), deep = (k: TreeKind) => [0, 1, 2].map((v) => (m(k, v).h - m(k, v).crownBottom) / (2 * m(k, v).crownR));
+    const mean = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
+    // the tulip tree a high narrow crown on its ramrod, deeper than it is wide; the sycamore an open crown
+    // deeper than the street oak's and narrower for its height, on big pale limbs, and twice the oak's
+    // height when grown; the street oak a broad shallow dome
+    for (const x of rh('tuliptree')) expect(x).toBeLessThan(0.26);
+    for (const x of deep('tuliptree')) expect(x).toBeGreaterThan(1.0);
+    for (const x of rh('sycamore')) expect(x).toBeGreaterThan(0.38);
+    expect(mean(rh('sycamore'))).toBeLessThan(Math.min(...rh('oak')) - 0.04);
+    expect(mean(deep('sycamore'))).toBeGreaterThan(mean(deep('oak')) + 0.05);
+    expect(mean(rh('sycamore'))).toBeGreaterThan(1.8 * mean(rh('tuliptree')));
+    expect(treeHeight4('sycamore', 0, 0, false)).toBeGreaterThan(15); // (props.ts grows a street oak to 8–15 m)
+    expect(m('tuliptree', 1).crownBottom / m('tuliptree', 1).h).toBeGreaterThan(0.45); // (the forest's: bare more than halfway up)
+    // the young sweetgum a pyramid: its crown wider low than high
+    const sg = treeGeometry('sweetgum', 0).plan.lobes, y0 = Math.min(...sg.map((l) => l.c.y)), y1 = Math.max(...sg.map((l) => l.c.y));
+    const reach = (a: number, b: number) => Math.max(...sg.filter((l) => l.c.y >= y0 + (y1 - y0) * a && l.c.y <= y0 + (y1 - y0) * b).map((l) => Math.hypot(l.c.x, l.c.z) + l.r));
+    expect(reach(0, 0.34)).toBeGreaterThan(1.5 * reach(0.66, 1));
+    // the shagbark's strips curling off its trunk, in both models; the sycamore's white limbs and its
+    // flaking mottle; the buckeye round and low
+    for (let v = 0; v < TREE_VARIANTS; v++) {
+      const hk = treeGeometry('hickory', v).plan;
+      expect(hk.hang.length, `shag ${v}`).toBeGreaterThanOrEqual(8);
+      const sy = treeGeometry('sycamore', v).plan;
+      expect(sy.boughs.some((b) => b.col === 0xe4e0d4 && b.a.y > 2)).toBe(true);
+      expect(sy.hang.length).toBeGreaterThanOrEqual(6);
+    }
+    expect(m('buckeye', 0).crownR / m('buckeye', 0).h).toBeGreaterThan(0.27);
+    expect(m('buckeye', 0).crownBottom / m('buckeye', 0).h).toBeLessThan(0.25);
+    // the bur oak savanna-wide on thick limbs
+    const bo = treeGeometry('buroak', 0);
+    expect(bo.meta.crownR / bo.meta.h).toBeGreaterThan(0.5);
+    expect(bo.plan.boughs.filter((b) => b.a.y > 1 && b.r0 >= 0.6 * bo.meta.trunkR).length).toBeGreaterThanOrEqual(4);
+    // their autumns: the tulip tree gold, the sweetgum's jewels, the buckeye early orange, the bur oak
+    // and the sycamore russet
+    expect([fallHueOf('tuliptree', 0), fallHueOf('sweetgum', 0), fallHueOf('buckeye', 0), fallHueOf('buroak', 0), fallHueOf('sycamore', 0)]).toEqual([2, 4, 5, 6, 6]);
+  });
+  it('the flowering understory: the dogwood in tiers, the redbud and the crape myrtle on many stems, the rosebay a thicket', () => {
+    for (let v = 0; v < TREE_VARIANTS; v++) {
+      // the dogwood's flat tiers, three or more one over another with air between them
+      const dw = treeGeometry('dogwood', v);
+      const tiers = [...new Set(dw.plan.lobes.map((l) => Math.round(l.c.y * 1.2)))];
+      expect(tiers.length, `dogwood ${v}`).toBeGreaterThanOrEqual(3);
+      expect(dw.plan.lobes.every((l) => l.sq <= 0.55)).toBe(true); // (flat: leafy layers, wider than deep)
+      expect(dw.meta.h).toBeLessThan(7.5);
+      // stems from the ground: the redbud's (all but the forked one), the crape myrtle's, the rosebay's
+      const stems = (k: TreeKind) => treeGeometry(k, v).plan.boughs.filter((b) => b.a.y < -0.2).length;
+      if (v !== 1) expect(stems('redbud'), `redbud ${v}`).toBeGreaterThanOrEqual(2);
+      expect(stems('crapemyrtle'), `crape ${v}`).toBeGreaterThanOrEqual(3);
+      expect(stems('rosebay'), `rosebay ${v}`).toBeGreaterThanOrEqual(4);
+      // the redbud flat-topped and spreading, wider than half its height
+      const rb = treeGeometry('redbud', v).meta;
+      expect(rb.crownR / rb.h).toBeGreaterThan(0.45);
+    }
+    // the crape myrtle's mottled bark; the pollarded one's knuckles: whips bunched on fists, a narrow crown
+    expect(treeGeometry('crapemyrtle', 0).plan.hang.length).toBeGreaterThanOrEqual(8);
+    expect(treeGeometry('crapemyrtle', 2).meta.crownR).toBeLessThan(treeGeometry('crapemyrtle', 0).meta.crownR);
+    // what each flowers as, and its fall
+    expect([BLOSSOM_OF.cherry, BLOSSOM_OF.dogwood, BLOSSOM_OF.redbud, BLOSSOM_OF.crapemyrtle, BLOSSOM_OF.rosebay]).toEqual([1, 2, 3, 4, 5]);
+    expect(fallHueOf('dogwood', 0)).toBe(1); // burgundy
+    expect(DECIDUOUS.has('rosebay')).toBe(false); // evergreen…
+    expect(fallHueOf('rosebay', 0)).toBe(7); // …its leaves curling bronze in the cold
+    expect(MOTION_OF.dogwood).toBe(2); // the tiers bob
+  });
+  it('the southern pines: a tall bare bole under a small crown; the longleaf a grass stage, a bottlebrush and an old flat top', () => {
+    const lob = treeGeometry('loblolly', 1).meta, ll = treeGeometry('longleaf', 2).meta;
+    expect(lob.crownBottom / lob.h).toBeGreaterThan(0.55);
+    expect(lob.crownR / lob.h).toBeLessThan(0.25);
+    expect(ll.crownBottom / ll.h).toBeGreaterThan(0.55);
+    // the grass stage: no trunk above the bud, a fountain of needles wider than it stands; never near-drawn
+    const gs = treeGeometry('longleaf', 0);
+    expect(gs.meta.h).toBeLessThan(1.5);
+    expect(gs.meta.crownR).toBeGreaterThan(gs.meta.h * 0.8);
+    expect(Math.max(...gs.plan.boughs.map((b) => b.b.y))).toBeLessThan(0.3);
+    expect(hasNear('longleaf', 0)).toBe(false);
+    // the bottlebrush: one stem, no boughs off it
+    const bb2 = treeGeometry('longleaf', 1);
+    expect(bb2.plan.boughs.length).toBe(2);
+    expect(bb2.meta.crownR).toBeLessThan(1.4);
+    // the old slash pine of the rocklands leaning and flat-topped; all of them needled, the longleaf's tossing
+    for (const k of ['loblolly', 'longleaf', 'slashpine'] as const) {
+      expect(NEEDLED.has(k)).toBe(true);
+      expect(DECIDUOUS.has(k)).toBe(false);
+    }
+    expect(MOTION_OF.longleaf).toBe(3);
+    // the redcedar: a dark column to the ground, a cone on an old field
+    const rc0 = treeGeometry('redcedar', 0).meta, rc1 = treeGeometry('redcedar', 1).meta;
+    expect(rc0.crownR / rc0.h).toBeLessThan(0.16);
+    expect(rc0.crownBottom).toBeLessThan(0.6);
+    expect(rc1.crownR).toBeGreaterThan(rc0.crownR * 1.4);
+    expect(fallHueOf('redcedar', 0)).toBe(7);
+  });
+  it('each new tree wears its own leaf up close, and its real height', () => {
+    const pics = (k: TreeKind, v = 1) => { const n = nearTreeGeometry(k, v), s = new Set<number>(); for (let i = 0; i < n.cards.length; i += CARD_STRIDE) s.add(n.cards[i + 6]); return [...s].sort((a, b) => a - b); };
+    expect(pics('sweetgum')).toEqual([12, 13]); // stars
+    expect(pics('tuliptree')).toEqual([14, 15]); // tulips
+    expect(pics('hickory')).toEqual([16, 17]); // five leaflets
+    expect(pics('buckeye')).toEqual([18, 19]); // five fingers
+    expect(pics('redbud')).toEqual([20, 21]); // hearts
+    for (const k of ['loblolly', 'longleaf', 'slashpine'] as const) expect(pics(k)).toEqual([22, 23]); // long needles in brushes
+    expect(pics('redcedar')).toEqual([8, 9]); // scale-leaf sprays
+    expect(pics('sycamore')).toEqual([10, 11]); // big maple-like hands
+    expect(picsOf('crapemyrtle', 0, false)).toEqual([0, 1]); // small leaves
+    expect(LEAF_PICS).toBe(24);
+    // the small trees never taller than they grow; the tulip tree the tallest hardwood in a cove
+    for (const k of Object.keys(SMALL_TREE) as TreeKind[]) for (let v = 0; v < TREE_VARIANTS; v++) expect(treeHeight4(k, v, 1, true)).toBeLessThanOrEqual(SMALL_TREE[k]!);
+    expect(treeHeight4('tuliptree', 0, 1, true)).toBeGreaterThan(treeHeight4('sweetgum', 0, 1, true));
+    expect(treeHeight4('longleaf', 0, 1, true)).toBeLessThan(1);
+    expect(treeHeight4('round', 0, 0.5, true)).toBe(0); // (props.ts sizes the older kinds itself)
+  });
+  it('the leaf cards\' flags round-trip: leaf fall, a 3-bit fall hue, a 3-bit blossom, the motion', () => {
+    for (const falls of [false, true]) for (let hue = 0; hue < 8; hue++) for (let bloom = 0; bloom < 6; bloom++) for (let motion = 0; motion < 4; motion++) {
+      const f = packCardFlags({ falls, hue, bloom, motion });
+      expect(f).toBeLessThan(512);
+      expect(unpackCardFlags(f)).toEqual({ falls, hue, bloom, motion });
+    }
+    // every kind's own, as the cards get them
+    for (const k of TREE_KINDS) for (let v = 0; v < TREE_VARIANTS; v++)
+      expect(unpackCardFlags(cardFlags(k, v))).toEqual({ falls: DECIDUOUS.has(k), hue: fallHueOf(k, v), bloom: BLOSSOM_OF[k] ?? 0, motion: MOTION_OF[k] ?? 0 });
+    expect(unpackCardFlags(cardFlags('aspen', 0)).motion).toBe(1); // (the aspen still trembles)
+    expect(unpackCardFlags(cardFlags('cherry', 0)).bloom).toBe(1);
+    // and the shader takes them apart the same way
+    expect(leafCardsSrc).toContain('falls = mod(flags, 2.0), hue = mod(floor(flags / 2.0), 8.0), bloom = mod(floor(flags / 16.0), 8.0), mo = floor(flags / 128.0)');
+    expect(leafCardsSrc).toContain('mo = floor(aE.w / 128.0)');
+  });
+  it('the rhododendron and the azalea: blooming in season, each azalea its own colour', () => {
+    expect(inBloom('rhododendron', 5)).toBe(true);
+    expect(inBloom('rhododendron', 8)).toBe(false);
+    expect(inBloom('azalea', 4)).toBe(true);
+    expect(inBloom('azalea', 7)).toBe(false);
+    // the azalea smothered: more flowers than the rhododendron's trusses, both under the lite budget
+    expect(partCount(plantGeometry('azalea', 1, 1), 8)).toBeGreaterThan(partCount(plantGeometry('rhododendron', 1, 1), 8));
+    const colours = new Set<string>();
+    for (let seed = 1; seed < 12; seed++) {
+      const g = plantGeometry('azalea', seed, 1), C = g.getAttribute('color'), A = g.getAttribute('aPart');
+      for (let i = 0; i < A.count; i++) if (A.getX(i) === 8) { colours.add(`${C.getX(i).toFixed(2)},${C.getY(i).toFixed(2)}`); break; }
+    }
+    expect(colours.size).toBeGreaterThanOrEqual(3);
+    for (const eco of ['southeast', 'appalachia', 'mid-atlantic']) expect(plantMix('temperate', eco).some(([sp]) => sp === 'azalea' || sp === 'rhododendron')).toBe(true);
+  });
   it('variants differ', () => {
     const a = bb(treeGeometry('round', 0).geo), b = bb(treeGeometry('round', 1).geo);
     expect(a.max.y === b.max.y && a.max.x === b.max.x).toBe(false);
@@ -166,7 +311,7 @@ describe('flora', () => {
   it('near trees: every species with a near model is sane, grounded, deterministic and within budget', () => {
     let n = 0;
     for (const k of TREE_KINDS) for (let v = 0; v < TREE_VARIANTS; v++) {
-      if (!NEAR_KINDS.has(k)) continue;
+      if (!hasNear(k, v)) continue;
       n++;
       const t = nearTreeGeometry(k, v), b = bb(t.wood), cards = t.cards.length / CARD_STRIDE;
       expect(finite(t.wood)).toBe(true);
@@ -188,10 +333,11 @@ describe('flora', () => {
       expect(verts(again.wood)).toBe(verts(t.wood));
       expect(Array.from(again.cards)).toEqual(Array.from(t.cards));
     }
-    expect(n).toBe(NEAR_KINDS.size * TREE_VARIANTS);
+    expect(n).toBe(NEAR_KINDS.size * TREE_VARIANTS - 1); // (the longleaf's grass stage keeps its blades at every distance)
   });
   it('near trees: the trunk flares and tapers, limbs reach into the crown, the crown stands where the far one does', () => {
     for (const k of NEAR_KINDS) for (let v = 0; v < TREE_VARIANTS; v++) {
+      if (!hasNear(k, v)) continue;
       const t = nearTreeGeometry(k, v), far = treeGeometry(k, v);
       // the trunk's base at least 30% wider than where it meets the crown
       expect(t.trunk[0]).toBeGreaterThanOrEqual(1.3 * t.trunk[1]);
