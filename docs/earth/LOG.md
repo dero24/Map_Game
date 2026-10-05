@@ -2,6 +2,75 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-04 — Regional life (2): every door, the shop's whole window, the lamps, walkers on the steps, the Northwest in the foundry
+
+Robby, through the day:
+
+- Sea Bright: "some buildings i cannot walk inside like ocean house and angelics or sea bright
+  lizza … it should be all buildings";
+- Brooklyn: "the window still was not all see through … just a tiny square";
+- at night the street lights made "cars and everything glow way too light where it washes it all out";
+- "people walking sometimes walk through walls of building to other side around corners and when
+  walking on porch into house they fall into the floor";
+- "do northwest and stuff that doesnt take hrs of processing", with the foundry's models "detailed
+  and well made with amazing animation" from an exhaustive list.
+
+- **Every door opens** (`getting-in`, commit 1c43ebd). The shut-door leaf waited for the building
+  standing open beside you to hand over, and it never did: the door you stand at is now activated
+  whatever is open next to it. Ocean House failed on the old code and passes on the new; all 20
+  commercial doors near Ocean Avenue let you in.
+- **A shop under flats cuts its whole window** (1c43ebd). The facade knew the ground floor of an
+  apartment block was a shop (`bd.gf`), the interior didn't, so it cut only a sash-sized square.
+  The plan, furnishing, layout and views now read it too (`tests/interiorWindows.test.ts`).
+- **The lamps light the street, not wash it out** (65e873f; `nightLight.ts`). A pool's heart is a
+  lit midtone now (gain 1.8 → 1.2, a cream light, its own colour muted 0.55, a floor of 0.28), so a
+  car or a wall in it keeps its colour. `tests/nightLight.test.ts` holds the heart at L* 55–70 on
+  asphalt.
+- **Walkers keep to open ground** (`walkers-clear-of-walls`, ba9d65f):
+  - Every entrance carries its way up (`Door.path`): the top of a porch's steps; a raised house's
+    landings and flights turn by turn. Walkers walk it, up the steps and level across the deck. On
+    a test porch they were up to 0.7–1.0 m under it; now 0.00 m.
+  - A walker sets out only for a door whose wall it stands in front of (`LifeInit.doorN`). One
+    round the corner, or behind a shallow building, it used to reach straight through the walls.
+- **The Northwest in the foundry** (`regional-flora`, 94ce999; Robby: "do northwest"):
+  - **Six trees**, three grown forms each (open-grown, forest, old), far and near models, all under
+    budget: Douglas fir, western hemlock (its nodding leader, and stilt roots where it grew on a
+    nurse log), Sitka spruce (a buttressed foot), western redcedar (J-shaped boughs, an old one's
+    candelabra of dead spikes), red alder (pale stems), vine maple (a sprawl).
+    - A conifer's clumps are *sprays*: drawn out along the bough, the rim drooping, on tiers that
+      spiral and close up toward the top. The first try was stacked plates on a pole (the studio
+      shots `shots/trees-nw*.jpg`).
+    - New leaf pictures for the cedar's flat sprays and a maple's big hands.
+  - **Moss.** Beards of moss under the bigleaf maple's limbs, licorice fern along them. Moss on the
+    bark as the region's damp (`styles.ts moss`): the westside's trunks green on their wet sides
+    and feet. It first read lime and wrapped every trunk, then went a deep olive, in patches.
+  - **Where.** West of the Cascades' crest (`styles.ts westOfCascades`) the conifers are these, at
+    their real heights (fir and Sitka 25–48 m in a wood), Sitka in the outer coast's fog belt, four
+    in five of a wood's trees conifers. The dry side (Bend, Yakima, Spokane) is now the Mountain
+    West's: no westside moss, and cold winters (it had the marine Northwest's mild ones).
+  - **The forest floor** (`world/understory.ts`): sword fern, salal and Oregon grape under a wood's
+    canopy round the walker, and the lawn grass gives way there. It reads the near-tree layer's
+    crowns (`NearTrees.crownsNear`): every mounted tile's trees, shown yet or not.
+  - Seen: a Seattle old-growth wood (`shots/spots-pnw-wood2.jpg`): fir and cedar trunks with moss
+    on their north sides, sword fern and salal between them. Compared (`pnw-flora-1`): mean 0.683.
+    Seattle's Federal Avenue 0.79 (vegetation 43% against the photo's 59%, fir spires along it).
+- **The model list** (`docs/regional-life/models.md`, compiled by a helper agent from the 16
+  region files): every plant and animal the foundry must build, deduplicated — 1,382: 46 the
+  foundry has, 1,299 rows on a genome, 37 new genomes or body plans — each with its genome, regions,
+  real size, seasons, its animation and behaviour, and a priority. Its 16-package build order puts
+  the Northwest (done today) first.
+- Tests 868 + 3 (`tests/understory.test.ts`), the build, and the montages above.
+- **Next:**
+  - The Hoh and Longmire still stand in meadow: the map draws no wood there. That's the canopy
+    layer, which Robby deferred.
+  - The ground under a wood should be duff and moss, not the lawn wash.
+  - Map OSM genera to the new kinds in `realTile` (Pseudotsuga → fir, Thuja → cedar, Tsuga →
+    hemlock, Picea sitchensis → sitka, Alnus → alder, Acer circinatum → vinemaple) with the next
+    worker cache bump.
+  - Queued bug: an upstairs flat's floor and furniture stand out over a shopfront (the Bonobos
+    building; `upstairs-over-shopfront`).
+  - Then `models.md`'s next packages, and the wildlife with its animation.
+
 ## 2026-10-04 — Regional life (1): getting in, people who stay in, the regions' reference, the street trees
 
 Robby, from Brooklyn:

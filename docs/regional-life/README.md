@@ -24,6 +24,7 @@ The plan that builds on it — what the asset foundry has and lacks, how we meas
 - [15-california.md](15-california.md) — California (coast, Central Valley, Sierra, the south)
 - [16-pnw.md](16-pnw.md) — Pacific Northwest (western WA and OR, the Cascades, the dry east side)
 - [ranges.md](ranges.md) — range limits (what never to place where), the season clock, known uncertainties
+- [models.md](models.md) — the build list: every plant and animal the foundry must model (1,382, deduplicated), with genome, size, seasons, animation, priority and the build order
 - [sources.md](sources.md) — sources, web-checked ones marked
 
 ## How to read these files

@@ -366,7 +366,9 @@
         "tools/night-check.mjs",
         "docs/earth/REVIEWER.md round 12"
       ],
-      "evidence": [],
+      "evidence": [
+        "commit 65e873f: the street lamp pools no longer wash cars and walls out — the heart a lit midtone (nightLight.ts POOL gain 1.8 → 1.2, a cream light, mute 0.55, floor 0.28), what stands in it keeps its colour; tests/nightLight.test.ts holds the heart's L* (asphalt 55–70). Robby, 2026-10-04: \"the illumination of street lights makes cars and everything glow way too light where it washes it all out\"."
+      ],
       "notes": "docs/earth/REVIEWER.md round 12; j1-lamp-pools folds in."
     },
     {
@@ -1833,9 +1835,11 @@
         "src/world/buildings.ts (a pane opens whole: nearest-point distance, per-window threshold, storeys round the walker)",
         "src/world/interiors.ts (heading-aware door choice; shutDoor leaf, scope -10; flat-out build near the door)",
         "docs/agent/gameplay.md \"Getting in\"",
-        "commit 4aaeebb"
+        "commit 4aaeebb",
+        "commit 1c43ebd: every door opens — the one you stand at is activated even when an open neighbour holds the slot (the shut-door leaf deadlocked with it: Sea Bright's Ocean House failed on the old code, passes on the new; all 20 commercial doors near Ocean Avenue enterable).",
+        "commit 1c43ebd: apartments over a shop (bd.gf) cut their whole storefront inside too — the interior had no gf flag, so a Brooklyn shopfront under flats opened as a tiny square (tests/interiorWindows.test.ts)."
       ],
-      "notes": "Robby, 2026-10-04: \"the windows are big but only a small portion is see through\"; \"the windows and doors dont load at all … I can see through the house like clipping for 1 second\"."
+      "notes": "Robby, 2026-10-04: \"the windows are big but only a small portion is see through\"; \"the windows and doors dont load at all … I can see through the house like clipping for 1 second\". Robby, 2026-10-04: \"in sea bright why are there some buildings i cannot walk inside like ocean house\"; \"those big window buildings in brooklyn the window still was not all see through … just a tiny square\"."
     },
     {
       "id": "people-persist-indoors",
@@ -1860,7 +1864,7 @@
     {
       "id": "regional-greenery",
       "tier": 1,
-      "rank": 11.6,
+      "rank": 11.4,
       "status": "blocked",
       "area": "world",
       "title": "Greenery as dense and as regional as the photos: yards, verges, street trees, tree lines, woodlots, the far field",
@@ -1877,12 +1881,12 @@
         "tools/class-pass.js (no backdrop ceiling over streamed cells)",
         "green-2 (tools/real-scores.json): green spots vegetation 3% -> 24% (photos 35%), mean 0.57 -> 0.72"
       ],
-      "notes": "national-1: the game shows 5% vegetation where the photos show 14%. The WorldCover scan gives a built-up cell a 3.5% chance of a tree per 9 m cell (a leafy suburb ~4 trees/ha vs 25-45 real); rural roads lose their tree lines; the far field is thin. 2026-10-04 green-2: 24% of the photos' 35%. Still bare: forests neither OSM nor the LiDAR records hold (Longmire, NY-73 in the Adirondacks, Bend) - next, the USFS NLCD Tree Canopy Cover (30 m, public) baked into R2 by 1° blocks as the tree scan's density. Blocked 2026-10-04 on the national canopy layer: Robby, \"do northwest and stuff that doesnt take hrs of processing at the moment\" — the USFS canopy bake waits."
+      "notes": "national-1: the game shows 5% vegetation where the photos show 14%. The WorldCover scan gives a built-up cell a 3.5% chance of a tree per 9 m cell (a leafy suburb ~4 trees/ha vs 25-45 real); rural roads lose their tree lines; the far field is thin. 2026-10-04 green-2: 24% of the photos' 35%. Still bare: forests neither OSM nor the LiDAR records hold (Longmire, NY-73 in the Adirondacks, Bend) - next, the USFS NLCD Tree Canopy Cover (30 m, public) baked into R2 by 1° blocks as the tree scan's density. Blocked 2026-10-04 on the national canopy layer: Robby, \"do northwest and stuff that doesnt take hrs of processing at the moment\" — the USFS canopy bake waits. 2026-10-04 handoff (docs/earth/HANDOFF.md): first in the cloud session's order — confirm with Robby before the R2 upload / worker deploy."
     },
     {
       "id": "ecoregions",
       "tier": 1,
-      "rank": 11.7,
+      "rank": 11.45,
       "status": "not_started",
       "area": "world",
       "title": "Regions as data: EPA Level III ecoregions → 16 regions, so casts follow the land, not coarse boxes",
@@ -1896,7 +1900,7 @@
     {
       "id": "regional-flora",
       "tier": 1,
-      "rank": 11.4,
+      "rank": 11.5,
       "status": "in_progress",
       "area": "assets",
       "title": "The regional flora: live oak and Spanish moss, the PNW conifers and moss on bark, aspen and ponderosa, the eastern hardwoods and flowering understory, bald cypress, cottonwood, the desert, piñon-juniper-sage, palms and palmetto, ferns and ground layers",
@@ -1907,14 +1911,19 @@
         "green-spot montages by region"
       ],
       "evidence": [
-        "docs/regional-life/ (the reference)"
+        "docs/regional-life/ (the reference)",
+        "commit 94ce999 — the Pacific Northwest package (docs/regional-life/models.md build order #1): Douglas fir, western hemlock, Sitka spruce, western redcedar, red alder and vine maple in the foundry, three grown forms each (open-grown, forest, old), far + near models, validated and under budget (tests/foundry.test.ts: the conifers read as spires, bare-trunked in the forest; the hemlock's stilt roots, the cedar's candelabra; the alder narrow, the vine maple a sprawl).",
+        "Moss on bark as a region term (styles.ts moss, U.uMoss: the westside 1, the dry side 0.1); moss beards and licorice fern on the bigleaf maple; leaf pictures for the cedar's sprays and the maples' hands.",
+        "Placement: west of the Cascade crest (styles.ts westOfCascades) the conifers are the Northwest's at real heights (fir and Sitka 25–48 m in a wood), Sitka in the outer coast's fog belt, four in five of a wood's trees conifers; the dry side is now the Mountain West's (tests/streetTrees.test.ts \"the Northwest's woods\").",
+        "The forest floor (world/understory.ts): sword fern, salal and Oregon grape under a wood's canopy round the walker, the lawn grass giving way there (tests/understory.test.ts).",
+        "Comparison pnw-flora-1 (real-compare --kind=green --states=WA,OR): mean 0.683 over 4 scored spots; Seattle's Federal Ave 0.79 (vegetation 43% vs the photo's 59%) with fir spires and mossy trunks; Longmire still 12% vs 60% — no mapped wood there (the canopy layer). In-game: shots/spots-pnw-wood2.jpg (a Seattle old-growth wood), shots/spots-pnw-hoh.jpg."
       ],
-      "notes": "Build order: docs/REGIONAL_LIFE.md §6. Started 2026-10-04 with the Pacific Northwest (Robby: \"do northwest\"): detailed, well-made foundry models from the exhaustive list in docs/REGIONAL_LIFE.md §6."
+      "notes": "Build order: docs/REGIONAL_LIFE.md §6. Started 2026-10-04 with the Pacific Northwest (Robby: \"do northwest\"): detailed, well-made foundry models from the exhaustive list in docs/REGIONAL_LIFE.md §6. 2026-10-04: the Northwest done (trees, moss, the forest floor). Next packages: models.md build order #2 on (live oak + Spanish moss; aspen + ponderosa for the Rockies and the dry side; the eastern hardwoods and flowering understory; the desert). Also: the ground under a wood painted as duff and moss, not lawn; OSM genus → the new kinds in realTile (Pseudotsuga→fir, Thuja→cedar, Tsuga→hemlock, Picea sitchensis→sitka, Alnus→alder, Acer circinatum→vinemaple) with the next worker cache bump."
     },
     {
       "id": "regional-wildlife",
       "tier": 1,
-      "rank": 11.5,
+      "rank": 11.6,
       "status": "not_started",
       "area": "assets",
       "title": "The regional wildlife: each region's cast with how common each animal is, where and when; the new families; regional rares as data",
@@ -2114,6 +2123,18 @@
       "user_visible_behavior": "Name a lobster trap and one appears — the same for every player.",
       "area": "gameplay",
       "rank": 85
+    },
+    {
+      "verification": [],
+      "evidence": [],
+      "notes": "Seen 2026-10-04 while fixing the Brooklyn storefronts: the upstairs flat's floor and furniture protruded over the shopfront of the Bonobos building. Not yet investigated.",
+      "id": "upstairs-over-shopfront",
+      "tier": 1,
+      "rank": 11.8,
+      "status": "not_started",
+      "area": "interiors",
+      "title": "An upstairs flat over a shop stays inside its walls: no floor or furniture standing out over the shopfront",
+      "user_visible_behavior": "Walking past a shop with flats above (the Bonobos building), nothing of the upstairs — floor slab, sofa, shelves — pokes out over the shop's windows or the sidewalk."
     }
   ],
   "regions": {

@@ -38,8 +38,8 @@ has none.
 
 | Family | Now |
 |---|---|
-| Trees (`flora.ts` `TREE_KINDS`) | 15: round, oak, shrub, pine, spruce, palm, birch, mesquite, fan palm, maple, willow, elm, poplar, magnolia, cherry — 3 variants each, autumn colour by kind |
-| Garden plants (`SPECIES`) | 12: hydrangea, rose, hibiscus, daylily, beach grass, lavender, coneflower, sunflower, hosta, agave, fern, boxwood |
+| Trees (`flora.ts` `TREE_KINDS`) | 21: round, oak, shrub, pine, spruce, palm, birch, mesquite, fan palm, maple, willow, elm, poplar, magnolia, cherry, and (2026-10-04) the Northwest's Douglas fir, western redcedar, western hemlock, Sitka spruce, red alder, vine maple — 3 variants each, autumn colour by kind; moss on bark by region |
+| Garden plants (`SPECIES`) | 12: hydrangea, rose, hibiscus, daylily, beach grass, lavender, coneflower, sunflower, hosta, agave, fern, boxwood; and the forest floor's sword fern, salal and Oregon grape (`understoryMix`, `world/understory.ts`) |
 | Animals (`fauna.ts` `CRITTERS`) | 17: squirrel, rabbit, songbird, sandpiper, deer, butterfly, firefly, fox, hawk, coyote, jackrabbit, snowshoe hare, ground squirrel, mule deer, roadrunner, quail, ibis — plus the life sim's gulls, dogs and people |
 
 **How a place picks its cast now:** `styles.ts` `regionStyle`, made of:
@@ -195,6 +195,11 @@ The signatures in brief:
 | Pacific Northwest | [16](regional-life/16-pnw.md) | towering Douglas fir, cedar and hemlock over sword ferns; bigleaf maples dripping moss and licorice fern; banana slugs; Steller's jays |
 
 ## 6. What the foundry builds, in order
+
+**The full build list** is [docs/regional-life/models.md](regional-life/models.md): all 1,382
+plants and animals the regions name, deduplicated, each with its genome, regions, real size, seasons,
+animation and behaviour, and a priority, and the P1 rows as 16 numbered work packages. Below is the
+same order by family.
 
 Ordered by how many regions a family serves and how much of a frame it fills (the signatures above,
 the comparison's montages). Each family lands with validation, a vertex budget in

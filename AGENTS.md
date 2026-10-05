@@ -67,6 +67,8 @@ Context low? Wrap early — write state before polish. A clean handoff beats a r
 
 ## Topic docs — read when the task touches that area
 
+- `docs/earth/HANDOFF.md` — **picking up from another session? read it first**: where the work stands, what comes next and in what order (the lower 48 alive: canopy layer, ecoregions, the flora and wildlife packages), how to check it, Robby's rules
+
 - `docs/GAMEPLAY_VISION.md` — **read before any gameplay work**: the world blooms from pencil into colour as you look, pencil means collectable (tap to paint it), regional rares as data, real travel (van, yacht, plane, balloon), your own private layer of the world, one home behind every door; §17 sets the order — **foundations first** (Tier 0: every tile loads, commercial-safe services; Tier 1: looks right everywhere), the game after. Track each in `feature_list.json`. (`docs/GAME_DESIGN.md` is superseded, apart from learning from life, the Almanac and the summoning solvers)
 
 - `docs/REGIONAL_LIFE.md` — **read before any flora, fauna or greenery work**: the 16 regions, what the foundry has and lacks, how greenery is measured (the green spots), the build order; the reference per region (plants layer by layer, wildlife with how common, signatures, range limits) is `docs/regional-life/`

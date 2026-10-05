@@ -419,6 +419,15 @@ lays the surface between it:
 
 - `src/world/grass.ts` — player-centred tuft cells, masked by `GroundPaint.grassMask` (grows
   only where the painted ground is open/green). Walks start at today's sunrise (`?hour=`).
+  Under a wood's canopy (`understory.ts underWood`: under a crown, three trees within 12 m, from
+  `NearTrees.crownsNear`) only one tuft in seven grows, in the canopy's shade.
+- `src/world/understory.ts` — the forest floor, the same way: cells round the walker (64 m, a
+  phone's 40), each one merged mesh of the region's understory plants (`flora.ts understoryMix`:
+  the westside Northwest's sword fern, salal and Oregon grape; ferns in the damp Eastern and
+  northern woods) under a wood's canopy on open ground. Rebuilt where a tile mounts.
+- Moss on bark (`propMaterial`, FOLIAGE with a crown field): `U.uMoss` from the region's style
+  (`styles.ts moss`: the westside Northwest 1, the humid South 0.35, a desert 0) greens a tree's
+  wood on its wet sides first — up, north and the foot — in patches, a deep olive.
 
 ## The brush's sketch pass
 
