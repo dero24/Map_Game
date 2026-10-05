@@ -11,6 +11,8 @@ import type { WalkWorld } from '../player/collision';
 import { activeStyle, castOf } from './styles';
 import { wildflowerMix, prairieMix } from '../assets/flora';
 import { WILDFLOWERS } from '../render/treeSeasons';
+import { blob } from '../assets/core';
+import { cropMix, fieldAt, CROPS, ROW, GLSL_CROPS, type Crop } from './fields';
 import { roadNear } from './roadBounds';
 import { underWood, type Crown } from './understory';
 
@@ -157,6 +159,120 @@ export function grassMaterial() {
   });
 }
 
+// (package #10) The crops (fields.ts): a corn row's segment — 2 m of it along +x, a wall of leaves either
+// side of the stalks with a ragged top and its tassels over it; a soybean row's metre, a low, lumpy
+// hedge. (The wheat is the grass's own tuft, wider.) Vertex colour .r the height fraction, .g 1 on a
+// tassel or a head.
+function cornRowGeo() {
+  const pos: number[] = [], col: number[] = [], L = 2, segs = 5;
+  const top = (k: number, side: number) => 0.86 + 0.14 * Math.abs(Math.sin(k * 2.7 + side * 1.3));
+  for (const side of [-1, 1]) {
+    const zz = side * 0.11;
+    for (let k = 0; k < segs; k++) {
+      const x0 = -L / 2 + (L * k) / segs, x1 = -L / 2 + (L * (k + 1)) / segs, t0 = top(k, side), t1 = top(k + 1, side);
+      const a = [x0, 0, zz], b = [x1, 0, zz], c = [x1, t1, zz + side * 0.06], d = [x0, t0, zz + side * 0.06];
+      pos.push(...a, ...b, ...c, ...a, ...c, ...d, ...a, ...c, ...b, ...a, ...d, ...c);
+      col.push(0, 0, 0, 0, 0, 0, t1, 0, 0, 0, 0, 0, t1, 0, 0, t0, 0, 0, 0, 0, 0, t1, 0, 0, 0, 0, 0, 0, 0, 0, t0, 0, 0, t1, 0, 0);
+    }
+  }
+  // the tassels: a spike over each stalk, a third of a metre apart
+  for (let i = 0; i < 6; i++) {
+    const x = -L / 2 + (i + 0.5) * (L / 6), z = ((i % 2) - 0.5) * 0.08;
+    pos.push(x - 0.03, 0.92, z, x + 0.03, 0.92, z, x, 1.08, z, x - 0.03, 0.92, z, x, 1.08, z, x + 0.03, 0.92, z);
+    col.push(0.95, 1, 0, 0.95, 1, 0, 1, 1, 0, 0.95, 1, 0, 1, 1, 0, 0.95, 1, 0);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  return g;
+}
+function soyRowGeo() {
+  const g = blob(0.5, 4401, { detail: 0, lump: 0.35, squash: 1 }).scale(1.05, 0.8, 0.42).translate(0, 0.32, 0);
+  const P = g.getAttribute('position'), col = new Float32Array(P.count * 3);
+  for (let i = 0; i < P.count; i++) col[i * 3] = Math.max(0, Math.min(1, P.getY(i) / 0.72));
+  g.deleteAttribute('uv');
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return g.index ? g.toNonIndexed() : g;
+}
+/** The crops' geometries (corn's row segment, soybeans', wheat's tuft) — for the field and its tests. */
+export const cropGeometries = () => ({ corn: cornRowGeo(), soy: soyRowGeo(), wheat: tuftGeo() });
+/** The crops' material: each instance grown to its stage by the calendar (fields.ts GLSL_CROPS on
+ *  uYear) — up from the bare ground, head-high, ripening, cut to stubble — and coloured by it. */
+export function cropMaterial() {
+  return paintMaterial({
+    side: THREE.DoubleSide,
+    vertex: /* glsl */ `
+      attribute vec3 color;
+      attribute float aCrop;
+      attribute float aField;
+      uniform float uSnow, uYear;
+      flat varying vec4 vStage;
+      flat varying float vCrop;
+      varying float vT;
+      varying float vHead;
+      varying vec3 vTint;
+      ${GLSL_CROPS}
+      void main() {
+        vec3 p = position;
+        mat4 m = worldMat();
+        vec3 origin = (m * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+        vec4 st = cropStage(aCrop, aField);
+        vStage = st; vCrop = aCrop; vT = color.r; vHead = color.g;
+        vTint = vec3(1.0);
+        #ifdef USE_INSTANCING_COLOR
+          vTint = instanceColor;
+        #endif
+        // (bare ground: nothing up yet; stubble: the cut stalks a hand high; under snow, nothing)
+        if (st.w > 0.5 || uSnow > 0.6) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+        float h = st.z > 0.5 ? (aCrop < 0.5 ? 0.14 : aCrop < 1.5 ? 0.06 : 0.12) : max(st.x, 0.04);
+        p.y *= h;
+        if (st.z > 0.5 && color.g > 0.5) p.y = 0.0; // (no tassels on stubble)
+        vec4 wp = m * vec4(p, 1.0);
+        // the wind: the tops sway, the wheat in waves rolling across the field
+        float ph = dot(origin.xz + uWorldOffset.xz, vec2(0.11, 0.07));
+        float gust = 0.5 + 0.5 * sin(uTime * 0.8 - ph * 0.9);
+        float sway = (0.04 + 0.12 * uWind) * (0.4 + gust) * vT * vT * h;
+        wp.x += sin(uTime * 1.7 + ph) * sway;
+        wp.z += cos(uTime * 1.3 + ph * 1.2) * sway * 0.6;
+        vWorldPos = wp.xyz + uWorldOffset;
+        vNormalW = normalize(vec3(0.0, 1.0, 0.0) + mat3(m) * normal * 0.4);
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragment: /* glsl */ `
+      flat varying vec4 vStage;
+      flat varying float vCrop;
+      varying float vT;
+      varying float vHead;
+      varying vec3 vTint;
+      void main() {
+        vec3 N = normalize(vNormalW);
+        // green growing (the corn's darkest, the soybeans' fresher), ripening to its own colour —
+        // the corn's tan, the soybeans' yellow and then brown, the wheat's gold — the stubble pale straw
+        vec3 green = vCrop < 0.5 ? vec3(0.2, 0.34, 0.11) : vCrop < 1.5 ? vec3(0.27, 0.42, 0.13) : vec3(0.3, 0.45, 0.14);
+        vec3 ripe = vCrop < 0.5 ? vec3(0.62, 0.52, 0.32) : vCrop < 1.5 ? mix(vec3(0.7, 0.58, 0.16), vec3(0.5, 0.36, 0.2), smoothstep(0.6, 1.0, vStage.y)) : vec3(0.8, 0.64, 0.26);
+        vec3 alb = mix(green, ripe, vStage.y) * vTint;
+        alb *= mix(0.62, 1.08, vT); // (dark down among the stalks, sunlit at the top)
+        // the corn's tassels and the wheat's heads: straw-gold over the green
+        if (vHead > 0.5 || (vCrop > 1.5 && vT > 0.78)) alb = mix(alb, vec3(0.86, 0.74, 0.4), vCrop > 1.5 ? 0.35 + 0.6 * vStage.y : 0.85);
+        if (vStage.z > 0.5) alb = vec3(0.7, 0.62, 0.42) * (0.85 + 0.25 * vnoise(vWorldPos.xz * 2.0));
+        // the stalks a shade darker in their lines, leaf by leaf lighter
+        alb *= 0.9 + 0.2 * vnoise(vWorldPos.xz * 3.1 + vWorldPos.y * 2.0);
+        if (vCrop < 0.5 && vHead < 0.5 && vStage.z < 0.5) {
+          // the corn's wall broken into its plants: a stalk's dark line every third of a metre, its leaves
+          // arching out in light flecks, and the top ragged with them
+          alb *= 0.82 + 0.18 * smoothstep(0.0, 0.25, abs(fract((vWorldPos.x + vWorldPos.z) * 3.0) - 0.5) * 2.0);
+          alb *= 0.9 + 0.25 * smoothstep(0.55, 0.8, vnoise3(vWorldPos * vec3(5.0, 2.2, 5.0)));
+          if (vT > 0.8 && vnoise3(vWorldPos * 6.0) < (vT - 0.8) * 3.5) discard;
+        }
+        alb = pigment(alb, vWorldPos);
+        float sh = shadowAt(vWorldPos, N);
+        vec3 col = paintLight(alb, N, vWorldPos, mix(1.0, sh, 0.8), mix(0.6, 1.0, vT));
+        gl_FragColor = vec4(applyFog(col, vWorldPos), 0.0);
+      }`,
+  });
+}
+
 const hash = (x: number, z: number, k: number) => {
   let h = Math.imul(Math.floor(x * 7.31) ^ 0x9e3779b1, 0x85ebca6b) ^ Math.imul(Math.floor(z * 5.17) + k * 0x27d4eb2f, 0xc2b2ae35);
   h ^= h >>> 15;
@@ -198,7 +314,10 @@ export class GrassField {
   readonly group = new THREE.Group();
   private geo = tuftGeo();
   private mat = grassMaterial();
-  private cells = new Map<string, THREE.InstancedMesh | null>();
+  // (package #10: the crops in the fields)
+  private cropGeos: Record<'corn' | 'soy' | 'wheat', THREE.BufferGeometry> = cropGeometries();
+  private cropMat = cropMaterial();
+  private cells = new Map<string, THREE.Object3D | null>();
   private queue: [number, number][] = [];
   // the streets that can touch a cell around the walker: the ring's 20k roads, sorted once per
   // 25 m walked (or when the tile set changes) instead of for every cell built
@@ -217,13 +336,20 @@ export class GrassField {
     /** the trees round a point (NearTrees.crownsNear): under a wood's closed canopy the floor is
      *  ferns, moss and needles (understory.ts), not lawn — the odd tuft only, dark */
     private crowns?: (x: number, z: number, r: number) => Crown[],
+    /** the region's latitude (the northern Plains' spring wheat: fields.ts cropMix) */
+    private lat = 40,
   ) {
     this.group.name = 'grass';
+  }
+  /** A cell's meshes away: its own geometries (the tufts' kinds, the crops') with it. */
+  private drop(o: THREE.Object3D) {
+    this.group.remove(o);
+    o.traverse((c) => { if (c instanceof THREE.InstancedMesh) (c.dispose(), c.geometry.dispose()); });
   }
 
   /** Streamed tiles changed: rebuild cells so grass never grows through new roads/buildings. */
   invalidate() {
-    for (const m of this.cells.values()) if (m) { this.group.remove(m); m.dispose(); m.geometry.dispose(); }
+    for (const m of this.cells.values()) if (m) this.drop(m);
     this.cells.clear();
   }
   /** Only the cells a freshly mounted tile touches (its box + margin). */
@@ -232,7 +358,7 @@ export class GrassField {
       const [cx, cz] = k.split('_').map(Number);
       const x0 = cx * CELL, z0 = cz * CELL;
       if (x0 + CELL < b.x0 - 50 || x0 > b.x1 + 50 || z0 + CELL < b.z0 - 50 || z0 > b.z1 + 50) continue;
-      if (m) { this.group.remove(m); m.dispose(); m.geometry.dispose(); }
+      if (m) this.drop(m);
       this.cells.delete(k);
     }
   }
@@ -251,7 +377,7 @@ export class GrassField {
         want.add(k);
         if (!this.cells.has(k)) this.queue.push([cx, cz]);
       }
-    for (const [k, m] of this.cells) if (!want.has(k)) { if (m) { this.group.remove(m); m.dispose(); m.geometry.dispose(); } this.cells.delete(k); }
+    for (const [k, m] of this.cells) if (!want.has(k)) { if (m) this.drop(m); this.cells.delete(k); }
     this.queue.sort((a, b) => Math.hypot((a[0] + 0.5) * CELL - x, (a[1] + 0.5) * CELL - z) - Math.hypot((b[0] + 0.5) * CELL - x, (b[1] + 0.5) * CELL - z));
     if (this.queue.length) {
       const roads = this.roads();
@@ -277,7 +403,7 @@ export class GrassField {
     }
   }
 
-  private build(cx: number, cz: number): THREE.InstancedMesh | null {
+  private build(cx: number, cz: number): THREE.Object3D | null {
     const t = this.terrain, walk = this.walk, st = activeStyle();
     const x0 = cx * CELL, z0 = cz * CELL;
     // roads touching this cell (+ margin): the carriageway, sidewalk strip and driveways stay bare
@@ -342,6 +468,7 @@ export class GrassField {
         if (t.sdfAt(x, z) < 4 || t.oceanDistAt(x, z) < 70) continue; // shore, sand, water
         const cov = t.coverAt(x, z);
         if (cov === 60 || cov === 70 || cov === 80) continue; // bare, snow/ice, open water
+        if (cov === 40 && !built) continue; // (a field: its crops' rows, below — no lawn between them)
         if (walk.buildingAt(x, z) >= 0 || walk.blocked(x, z, 0.5) || walk.deckAt(x, z) !== null) continue;
         const wooded = C.length >= 3 && underWood(x, z, C);
         if (wooded && hash(x, z, 15) < 0.85) continue;
@@ -379,14 +506,68 @@ export class GrassField {
         }
         cols.push(c);
       }
-    if (!mats.length) return null;
-    // (each cell its own copy of the tuft, for its tufts' kinds: sixty vertices)
-    const g = this.geo.clone();
-    g.setAttribute('aKind', new THREE.InstancedBufferAttribute(new Float32Array(kinds), 1));
-    const m = new THREE.InstancedMesh(g, this.mat, mats.length);
-    m.renderOrder = 5;
-    mats.forEach((mm, i) => { m.setMatrixAt(i, mm); m.setColorAt(i, cols[i]); });
-    m.frustumCulled = false; // cells are small; the shader fade handles distance
-    return m;
+    const crops = built ? [] : this.crops(x0, z0, open, nearRoad);
+    if (!mats.length && !crops.length) return null;
+    const cell = new THREE.Group();
+    if (mats.length) {
+      // (each cell its own copy of the tuft, for its tufts' kinds: sixty vertices)
+      const g = this.geo.clone();
+      g.setAttribute('aKind', new THREE.InstancedBufferAttribute(new Float32Array(kinds), 1));
+      const m = new THREE.InstancedMesh(g, this.mat, mats.length);
+      m.renderOrder = 5;
+      mats.forEach((mm, i) => { m.setMatrixAt(i, mm); m.setColorAt(i, cols[i]); });
+      m.frustumCulled = false; // cells are small; the shader fade handles distance
+      cell.add(m);
+    }
+    for (const c of crops) cell.add(c);
+    return cell;
+  }
+
+  /** (package #10) A cell's crops (fields.ts): where the land is a field (WorldCover cropland), each
+   *  field's crop in its rows — corn in 2 m segments, soybeans in 1 m, wheat as wide tufts — the rows
+   *  running as its field's do. One mesh a crop. */
+  private crops(x0: number, z0: number, open: (x: number, z: number) => boolean, nearRoad: (x: number, z: number) => boolean): THREE.InstancedMesh[] {
+    const t = this.terrain, walk = this.walk;
+    let any = false;
+    for (let i = 0; i < 3 && !any; i++) for (let j = 0; j < 3 && !any; j++) any = t.coverAt(x0 + 3 + i * 7, z0 + 3 + j * 7) === 40;
+    if (!any) return [];
+    const mix = cropMix(castOf(activeStyle()), this.lat);
+    const out: Record<'corn' | 'soy' | 'wheat', { m: THREE.Matrix4[]; n: number[]; k: number[]; c: THREE.Color[] }> = { corn: { m: [], n: [], k: [], c: [] }, soy: { m: [], n: [], k: [], c: [] }, wheat: { m: [], n: [], k: [], c: [] } };
+    const q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), s = new THREE.Vector3(), p = new THREE.Vector3();
+    const fld = fieldAt(x0 + CELL / 2, z0 + CELL / 2, mix), crop: Crop = fld.crop, geo = crop === 'corn' ? 'corn' : crop === 'soy' ? 'soy' : 'wheat';
+    const row = ROW[crop], seg = crop === 'corn' ? 2 : crop === 'soy' ? 1 : 0.8, k = CROPS.indexOf(crop);
+    // (the rows on the survey's grid: every field's rows line up with the next one's)
+    const a0 = fld.dir === 0 ? z0 : x0, b0 = fld.dir === 0 ? x0 : z0;
+    for (let a = (Math.floor(a0 / row) + 0.5) * row; a < a0 + CELL; a += row)
+      for (let b = (Math.floor(b0 / seg) + 0.5) * seg; b < b0 + CELL; b += seg) {
+        const x = fld.dir === 0 ? b : a, z = fld.dir === 0 ? a : b;
+        if (x < x0 || z < z0 || t.coverAt(x, z) !== 40 || !open(x, z) || nearRoad(x, z) || t.sdfAt(x, z) < 4) continue;
+        if (walk.buildingAt(x, z) >= 0 || walk.blocked(x, z, 0.8)) continue;
+        // (corn head-high: 2.4–2.8 m; soybeans to the knee; wheat to the waist)
+        const H = crop === 'corn' ? 2.4 + hash(x, z, 21) * 0.4 : crop === 'soy' ? 0.8 + hash(x, z, 21) * 0.2 : 0.85 + hash(x, z, 21) * 0.2;
+        p.set(x, t.heightAt(x, z) - 0.03, z);
+        q.setFromAxisAngle(up, (fld.dir === 0 ? 0 : Math.PI / 2) + (geo === 'wheat' ? hash(x, z, 22) * 6.28 : (hash(x, z, 22) - 0.5) * 0.08));
+        s.set(geo === 'wheat' ? 1.5 : 1, H, geo === 'wheat' ? 1.5 : 1);
+        const o = out[geo];
+        o.m.push(new THREE.Matrix4().compose(p, q, s));
+        o.n.push(fld.n);
+        o.k.push(k);
+        o.c.push(new THREE.Color(1, 1, 1).multiplyScalar(0.92 + hash(x, z, 23) * 0.16));
+      }
+    const meshes: THREE.InstancedMesh[] = [];
+    for (const g of ['corn', 'soy', 'wheat'] as const) {
+      const o = out[g];
+      if (!o.m.length) continue;
+      const geom = this.cropGeos[g].clone();
+      geom.setAttribute('aField', new THREE.InstancedBufferAttribute(new Float32Array(o.n), 1));
+      geom.setAttribute('aCrop', new THREE.InstancedBufferAttribute(new Float32Array(o.k), 1));
+      const m = new THREE.InstancedMesh(geom, this.cropMat, o.m.length);
+      m.renderOrder = 5;
+      o.m.forEach((mm, i) => { m.setMatrixAt(i, mm); m.setColorAt(i, o.c[i]); });
+      m.frustumCulled = false;
+      m.name = `crops:${g}`;
+      meshes.push(m);
+    }
+    return meshes;
   }
 }

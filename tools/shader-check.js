@@ -43,6 +43,12 @@ window.__SHADERS__ = async () => {
     g.setAttribute('color', new THREE.Float32BufferAttribute([0, 0, 0, 1, 1, 1, 0, 0, 0], 3));
     g.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
     add(g, grassMaterial());
+    // (package #10: the crops, grown and ripened by the calendar)
+    const { cropMaterial } = await import('/src/world/grass.ts');
+    const cg = g.clone();
+    cg.setAttribute('aCrop', new THREE.InstancedBufferAttribute(new Float32Array([0]), 1));
+    cg.setAttribute('aField', new THREE.InstancedBufferAttribute(new Float32Array([0.5]), 1));
+    add(cg, cropMaterial());
   } catch (e) { errors.push('grass: ' + e.message); }
   const far = scene.children.find((o) => o.material?.defines?.TREE_LOD);
   if (far) far.geometry.setAttribute('aNear', new THREE.InstancedBufferAttribute(new Float32Array(1), 1));

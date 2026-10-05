@@ -2,9 +2,12 @@
 // roads with sidewalks, curbs and markings, and soft contact shadows around buildings.
 // Three canvases: whole backdrop (coarse), whole slice (medium), and a near-field detail window that
 // repaints around the walker so paint at your feet is ~15 cm/px.
+import { cropMix, fieldAt, cropStage, cropWash } from './fields';
+import { seasonAt } from './season';
+import { worldDate } from './calendar';
 import * as THREE from 'three';
 import type { World, TerrainLayer, Road, Area, WorldJson, Building } from './data';
-import { activeStyle } from './styles';
+import { activeStyle, castOf } from './styles';
 import { lotLayout, type LotLayout } from './lots';
 import { MINOR, ROAD_RANK, roadPaint, streetSurface } from './roadPalette';
 import { COURT, courtFrame, diamondFrame, surfacePaint, type Sport } from './sports';
@@ -289,7 +292,10 @@ function edgeGrid(a: Prepared<unknown>) {
   return g;
 }
 
-function coverImage(L: TerrainLayer) {
+/** (package #10) The fields' colour by the season, for the wash (fields.ts): a field's crop at its stage
+ *  today, or null to keep the cropland's own wash. */
+type FieldWash = (x: number, z: number) => [number, number, number] | null;
+function coverImage(L: TerrainLayer, fields?: FieldWash) {
   const { w, h } = L.g;
   const c = document.createElement('canvas');
   c.width = w;
@@ -308,7 +314,8 @@ function coverImage(L: TerrainLayer) {
     if (water) col = ocean ? '#cdb88c' : '#7a7a5a';
     else if (L.oceanD[i] * 2 < 16) col = COVER[60];
     else col = COVER[L.cover[i]] ?? COVER[0];
-    const [r, g, b] = rgb(col);
+    const fc = !water && L.cover[i] === 40 && fields ? fields(L.g.x0 + ((i % w) + 0.5) * L.g.cell, L.g.z0 + (Math.floor(i / w) + 0.5) * L.g.cell) : null;
+    const [r, g, b] = fc ?? rgb(col);
     img.data.set([r, g, b, 255], i * 4);
   }
   ctx.putImageData(img, 0, 0);
@@ -1537,7 +1544,11 @@ export function paintGround(world: World, maxTex: number, walks: number[] = []):
   sc.width = sc.height = size;
   const sx = size / (S.x1 - S.x0), sz = size / (S.z1 - S.z0);
   const ctx = sc.getContext('2d')!;
-  const sliceCover = coverImage(terrain.slice);
+  // (the fields as the season has them today: green, gold, stubble, bare — fields.ts)
+  const lat = json.origin.lat, mix = cropMix(castOf(activeStyle()), lat), date = worldDate();
+  const year = seasonAt(lat, json.origin.lon, 0, Math.floor((date.getTime() - Date.UTC(date.getUTCFullYear(), 0, 1)) / 86400000) + 1).year;
+  const fields: FieldWash = (x, z) => { const f = fieldAt(x, z, mix); return cropWash(f.crop, cropStage(f.crop, year, f.n)); };
+  const sliceCover = coverImage(terrain.slice, fields);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.filter = 'blur(3px)';
@@ -1546,7 +1557,7 @@ export function paintGround(world: World, maxTex: number, walks: number[] = []):
   ctx.setTransform(sx, 0, 0, sz, -S.x0 * sx, -S.z0 * sz);
   painter.paint(ctx, S.x0, S.z0, S.x1, S.z1, sx, 1);
 
-  const backCover0 = coverImage(terrain.backdrop);
+  const backCover0 = coverImage(terrain.backdrop, fields);
   const bw = Math.min(2048, maxTex), bh = Math.min(4096, maxTex);
   const bc = document.createElement('canvas');
   bc.width = bw;

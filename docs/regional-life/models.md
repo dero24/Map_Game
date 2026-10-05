@@ -2064,7 +2064,15 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
    rows: **big** and **little bluestem**, **smooth cordgrass**. Wildflower drifts: **Texas bluebonnet**
    (spike), **California poppy** (stem, cup head), **sky lupine** (spike). The `vine†` genome with
    **kudzu**.
-10. **Fields.** **Corn** (`cane†`), **soybeans** (mound), **winter wheat** (grass).
+10. **Fields** — **built** 2026-10-05 (`docs/earth/LOG.md` "Regional life (10)"): the farmland
+   (WorldCover cropland) planted field by field (`world/fields.ts`: a 400 m block of the survey's grid,
+   its crop by the region's `cropMix`, its rows north–south or east–west), each crop on its calendar
+   (`CROP_CAL`, `cropStage` on the year): **corn** (`cane†` as a row's 2 m segment: walls of leaves,
+   tassels; up in May, head-high by July, tan in October, stubble), **soybeans** (a low hedge; yellow in
+   late September), **winter wheat** (the grass's tuft; green under the winter, gold in June, stubble),
+   and spring wheat on the northern Plains; grown near the walker by the grass field (`grass.ts`
+   crops, `cropMaterial`), and the fields' colour far off in the ground's wash (`groundPaint.ts`
+   `cropWash`).
 11. **Bird plan extensions and the backyard birds.** Add the shared bird parts (long neck, bill
     shapes, swim, bare head, hover). Songbird palette rows: **northern cardinal**, **blue jay**,
     **American robin**, **Steller's jay**, **Gila woodpecker**, **mourning dove**. Bird rows:

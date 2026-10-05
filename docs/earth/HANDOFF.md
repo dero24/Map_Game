@@ -109,6 +109,9 @@ The game was smooth and rendering before this work started. Work fast, and keep 
     - The grass field's tuft kinds (`aKind`, `wildTuft`): the prairie's bluestems (`prairieMix`) and
       wildflower drifts (`WILDFLOWERS` on `U.uYear`, `wildflowerMix`).
     - Kudzu, a tree kind on the South's wood edges (`kudzuShare`, props.ts `woodEdge`).
+  - **#10, the fields** (2026-10-05; LOG "Regional life (10)"): `world/fields.ts` (`cropMix`, `fieldAt`,
+    `CROP_CAL`, `cropStage`, `cropWash`, `GLSL_CROPS`); the crops grown in the grass field's cropland
+    cells (`grass.ts` `crops`, `cropMaterial`); the fields' wash in `groundPaint.ts`.
 
 ## The bar: detail, variety, variation
 
@@ -244,7 +247,8 @@ in-game look is checked on Robby's PC.
 - **#8:** built (2026-10-05).
 - **#9:** built (2026-10-05) but for smooth cordgrass (the salt marsh: the grass keeps off the shore
   today — a marsh layer of its own by the water).
-- **#10:** fields.
+- **#10:** built (2026-10-05). Cotton, peanuts, rice, orchards, vineyards and hay could follow on the
+  same field system (a crop each: a calendar row and a geometry).
 - **#11–#16:** the wildlife packages (`regional-wildlife`).
   - The casts go in `faunaMix`, by `CastPlace`.
   - A range-rules test, from `docs/regional-life/ranges.md`.

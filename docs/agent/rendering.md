@@ -472,6 +472,12 @@ lays the surface between it:
   window of the calendar's `U.uYear` — season.ts `year`: 0 on January 20th — each tuft a day or so off
   its neighbours). A drift is a patch of meadow where a third of the tufts flower, mostly one species to
   a patch; a region with no drifts keeps the old five colours' odd flower.
+  Fields (`world/fields.ts`): where WorldCover says cropland (40) the cell grows no lawn but its field's
+  crop in rows (`GrassField.crops`: corn in 2 m segments, soybeans in 1 m, wheat as wide tufts; one
+  InstancedMesh a crop, per-instance `aCrop` and `aField`), grown and ripened in `cropMaterial` by
+  `GLSL_CROPS` on `U.uYear` — bare ground hidden, stubble a hand high, gone under snow. Farther off
+  the ground's wash colours each field by its crop's stage today (`groundPaint.ts coverImage` with
+  `cropWash`, painted when the ground is).
   The summer-dry hills (the Mediterranean climates': California's golden hills): the tufts are
   built green there (a quarter of the region's dryness) and `U.uHay` (season.ts `hay`: browning
   mid-April → June, gold to November, green again by mid-December; the southern year turned round)

@@ -314,7 +314,7 @@ async function main() {
   // The localhost auto-default was probed before setup: no worker answered → procedural past the bake.
 
   // Grass: tufts grow on open land around the walker (lawns short, open ground tall + lush).
-  const grass = new GrassField(world.terrain, walk, () => stream.primRoads, paint.grassMask, (x, z, r) => treeLayer.crownsNear(x, z, r));
+  const grass = new GrassField(world.terrain, walk, () => stream.primRoads, paint.grassMask, (x, z, r) => treeLayer.crownsNear(x, z, r), json.origin.lat);
   worldRoot.add(grass.group);
   // The forest floor: the region's understory under a wood's canopy round the walker (sword fern,
   // salal and Oregon grape under the westside Northwest's firs: understory.ts)

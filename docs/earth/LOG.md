@@ -2,6 +2,38 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-05 — Regional life (10): the fields
+
+Package #10 of `docs/regional-life/models.md`: the farmland planted, field by field, on each crop's
+calendar.
+
+- **`world/fields.ts`** (new, pure): a field is a 400 m block of the survey's grid (`fieldAt`: its crop by
+  the region's `cropMix`, its rows running north–south or east–west, its own number so neighbours plant
+  and cut a few days apart). The mixes: the Corn Belt's corn and soybeans in rotation; the Plains' winter
+  wheat (Kansas, Oklahoma, the Panhandle, western Nebraska) with some corn; the northern Plains' spring
+  wheat; the East's and the South's corn and soybeans with a little wheat; the Palouse's wheat. Each
+  crop's year (`CROP_CAL`, `cropStage` on `season.ts year`): corn up in May, knee-high by the Fourth,
+  head-high and tasselled in July, tan in October, cut to stubble that stands through the winter;
+  soybeans yellow in late September, cut in October; winter wheat green and short under the winter,
+  tall in May, gold in June, stubble by August, sown again in October; spring wheat gold in August.
+- **The crops near the walker** (`grass.ts`): a cropland cell grows no lawn but its field's rows — corn as
+  a row's 2 m segment (walls of leaves either side of the stalks, a stalk's dark line every third of a
+  metre, leaves flecked light, a ragged top, the tassels), soybeans as a low lumpy hedge, wheat as the
+  grass's tuft, wider. `cropMaterial` grows and ripens each instance by the calendar (`GLSL_CROPS` on
+  `U.uYear`): the bare ground hidden, the stubble a hand high, gone under snow, swaying in the wind.
+- **The fields far off** (`groundPaint.ts`): the ground's wash paints each cropland field by its crop at
+  its stage today (`cropWash`): green, the ripe tan, yellow or gold, pale stubble, tilled brown soil.
+- A scratch render of the crops through the year (May, July, September, October) caught the corn as solid
+  walls; the stalk lines, leaf flecks and ragged top break them into plants.
+
+**Verified:** typecheck; `npm test` 939/939; `tests/fields.test.ts` (new: each region's crops; a field
+one crop and one way of rows; each crop's year; the wash; the shader's calendar the same; the crops'
+geometry). Shader check: 23 programs, no errors.
+
+**Next:** the wildlife packages (`regional-wildlife`, #11–#16: the bird plan's extensions and the backyard
+birds first); smooth cordgrass and duckweed at the water's edge; the people work (`people-with-purpose`)
+when Robby calls it.
+
 ## 2026-10-05 — Regional life (9): the ground layers — ferns, the prairie's bluestems, wildflower drifts, kudzu
 
 Package #9 of `docs/regional-life/models.md`, all but smooth cordgrass.
