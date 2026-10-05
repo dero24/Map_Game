@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { floorAt, underWood, type Crown } from '../src/world/understory';
-import { understoryMix, plantGeometry, SPECIES, plantMix, type CastPlace } from '../src/assets/flora';
+import { understoryMix, plantGeometry, SPECIES, plantMix, inFall, isDormant, type CastPlace } from '../src/assets/flora';
+import * as THREE from 'three';
 
 const at = (sub: string, climate: string, eco = '', l3 = 0, west = false): CastPlace => ({ sub, climate, eco, l3, west });
 
@@ -47,5 +48,30 @@ describe('the forest floor', () => {
     expect(b.max.x - b.min.x).toBeGreaterThan(b.max.y);
     expect(SPECIES.salal.months[0]).toBeLessThanOrEqual(6);
     expect(SPECIES.oregongrape.bloom[0]).toBe(0xe9c93a); // (yellow, in spring)
+  });
+  // package #9: the eastern and northern woods' bracken and cinnamon fern
+  it("the eastern woods' floor: ferns, bracken's colonies and the cinnamon fern — copper in October, bracken gone in the winter", () => {
+    const ny = understoryMix(at('northeast', 'continental', 'upstate-ny', 58));
+    expect(ny.mix.map(([sp]) => sp).sort()).toEqual(['bracken', 'cinnamonfern', 'fern']);
+    const got = grid(6, 6, wood, ny);
+    for (const sp of ['bracken', 'cinnamonfern', 'fern']) expect(got.filter((s) => s === sp).length, sp).toBeGreaterThan(0);
+    for (const c of ['temperate', 'continental', 'boreal']) for (const [sp] of plantMix(c)) expect(['bracken', 'cinnamonfern']).not.toContain(sp);
+    expect(understoryMix(at('south', 'tropical', 'florida', 76)).mix.map(([sp]) => sp)).not.toContain('bracken');
+    // the seasons: bracken copper in October and dead from December to April; the cinnamon fern gold in
+    // September, its spikes up in May
+    expect(inFall('bracken', 10)).toBe(true);
+    expect(inFall('bracken', 7)).toBe(false);
+    for (const m of [12, 1, 3, 4]) expect(isDormant('bracken', m), `month ${m}`).toBe(true);
+    for (const m of [5, 7, 10]) expect(isDormant('bracken', m), `month ${m}`).toBe(false);
+    expect(inFall('cinnamonfern', 9)).toBe(true);
+    // bracken's blade held out near level: wider than it stands; its autumn copper in the geometry
+    const box = (g: THREE.BufferGeometry) => { g.computeBoundingBox(); return g.boundingBox!; };
+    const b = box(plantGeometry('bracken', 1, 1, false, true));
+    expect(b.max.x - b.min.x).toBeGreaterThan(b.max.y);
+    const colourOf = (g: THREE.BufferGeometry) => { const C = g.getAttribute('color'); return [C.getX(0), C.getY(0), C.getZ(0)]; };
+    const green = colourOf(plantGeometry('bracken', 1, 1, false, true)), copper = colourOf(plantGeometry('bracken', 1, 1, false, true, true));
+    expect(copper[0]).toBeGreaterThan(green[0] * 1.5);
+    // the cinnamon fern's spikes: more geometry in flower than out of it
+    expect(plantGeometry('cinnamonfern', 1, 1, true, true).getAttribute('position').count).toBeGreaterThan(plantGeometry('cinnamonfern', 1, 1, false, true).getAttribute('position').count);
   });
 });

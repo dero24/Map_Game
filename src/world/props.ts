@@ -17,7 +17,7 @@ import { activeStyle, castOf, pickWeighted, westside as isWestside } from './sty
 import { hangerLib, hangerMix, HANGERS, HANG_TONES, type HangerType } from '../assets/hangers';
 import { meanTemp } from './season';
 import { caFogBelt, caRedwoodBelt } from './ecoregions';
-import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, broadMix, coniferMix, aspenShare, willowThickets, snagShare, NEEDLED, plantLib, inBloom, SPECIES, STAGES, fallHueOf, DECIDUOUS, BLOSSOM_OF, MOTION_OF, bankMix, redcedarShare, rosebayShare, understoryTrees, SMALL_TREE, treeHeight4, southPineForm, swampMix, swampForm, manzanitaShare, westForm, sequoiaBand, SEQUOIA_GROVE, redwoodCountry, desertMix, desertTrees, STIFF, palmMix, palmettoShare, type PlantSpecies, type TreeKind } from '../assets/flora';
+import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, broadMix, coniferMix, aspenShare, willowThickets, snagShare, NEEDLED, plantLib, inBloom, SPECIES, STAGES, fallHueOf, DECIDUOUS, BLOSSOM_OF, MOTION_OF, bankMix, redcedarShare, rosebayShare, understoryTrees, SMALL_TREE, treeHeight4, southPineForm, swampMix, swampForm, manzanitaShare, westForm, sequoiaBand, SEQUOIA_GROVE, redwoodCountry, desertMix, desertTrees, STIFF, palmMix, palmettoShare, kudzuShare, type PlantSpecies, type TreeKind } from '../assets/flora';
 import { MAILBOXES, mailboxLib, beachLib, gearFor, type MailboxStyle, type CarGear } from '../assets/furniture';
 import { variantAt, hashf } from '../assets/core';
 import { cafeSet, mergeDecor } from '../assets/decor';
@@ -860,6 +860,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   const PALMS_T = palmMix(cast0, 'tropical'), PALMS_D = palmMix(cast0, 'dry');
   const palmsGrow = (x: number, z: number) => { const [lat, lon] = toLatLon(json.origin, x, z); return meanTemp(lat, lon, terrain.heightAt(x, z), 20) > 3.5; };
   const SAWPALMETTO = KI('sawpalmetto');
+  // (kudzu on a wood's edge: a wood tree with open ground — a road, a field, a yard — within 15 m)
+  const KUDZU = KI('kudzu'), KUDZU_SHARE = kudzuShare(cast0);
+  const woodEdge = (x: number, z: number) => [[15, 0], [-15, 0], [0, 15], [0, -15]].some(([dx, dz]) => (mapCover(x + dx, z + dz) || terrain.coverAt(x + dx, z + dz)) !== 10);
   const dryTree = (x: number, z: number) => {
     const m = desertTrees(cast0, terrain.heightAt(x, z), latAt(x, z));
     return m.length ? pickOf(m, hashf(Math.floor(x * 2.9) * 104729 + Math.floor(z * 3.3) * 7919 + 311)) : -1;
@@ -1004,6 +1007,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       if (k === MAPLE && v === 2 && !westside) v = 0; // (the bigleaf maple is the Northwest's westside's alone)
       if (NW_CONIFER.has(k) || NORTH_CONIFER.has(k)) v = nwForm(jx, jz, cov === 10);
       if (SOUTH_PINE.has(k)) v = southPineForm(TREE_KINDS[k], hashf(Math.floor(jx * 2.7) * 7919 + Math.floor(jz * 3.1) * 104729 + 257), cov === 10, cast0);
+      // (package #9: the South's wood edges — along a road, a field — smothered in kudzu)
+      if (KUDZU_SHARE > 0 && cov === 10 && k !== 2 && swampy >= 45 && hashf(Math.floor(jx * 2.7) * 104729 + Math.floor(jz * 1.3) * 7919 + 293) < KUDZU_SHARE && woodEdge(jx, jz)) k = KUDZU;
       const sf = swampForm(TREE_KINDS[k], hashf(Math.floor(jx * 1.7) * 7919 + Math.floor(jz * 2.9) * 104729 + 287), swampy < 25, cast0);
       if (sf >= 0) v = sf;
       const wf = westForm(TREE_KINDS[k], hashf(Math.floor(jx * 2.3) * 104729 + Math.floor(jz * 1.9) * 7919 + 291), cov === 10);
@@ -1392,6 +1397,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     // (package #8: the cabbage palmetto's deep green, the saw palmetto's silver-blue-green, the royal
     // palm's bright, the queen palm's, the Canary palm's dark olive)
     sabal: [0x4e6a34, 0.5], sawpalmetto: [0x6a8a64, 0.55], royalpalm: [0x4e7a34, 0.5], queenpalm: [0x5a7e3a, 0.5], canarypalm: [0x566c34, 0.5],
+    kudzu: [0x5e8a34, 0.5], // (package #9: kudzu's bright, soft green over everything)
   };
   // Trees from the foundry (assets/flora.ts): one InstancedMesh per species × grown variant.
   // Trunks keep their bark: instance colour only tints foliage (vertex color white there).

@@ -30,6 +30,9 @@ export interface Season {
   /** 0..1 the year's cold side by the calendar: 1 on its coldest day (January 20th up north), 0 at
    *  midsummer — the manzanita's urns open in its depth (treeSeasons.ts bloomNow), November to March */
   winter: number;
+  /** 0..1 the year's own phase by the calendar: 0 on its coldest day (January 20th up north), 0.5 at
+   *  midsummer — the wildflowers' windows (treeSeasons.ts WILDFLOWERS) */
+  year: number;
   /** 0..1 the summer-dry climates' grass gone gold (Mediterranean only, else 0): green with the winter
    *  rains, browning from mid-April, gold by June, through to the first rains of November — greening
    *  again by mid-December (main.ts: the ground's straw wash and the grass, grass.ts) */
@@ -104,7 +107,8 @@ export function seasonAt(lat: number, lon: number, elev: number, doy: number): S
   const snowline = Math.max(250, ((sea + 2) / 6.5) * 1000);
   const winter = 0.5 + 0.5 * Math.cos((2 * Math.PI * (d - 20)) / 365.25);
   const hay = climateAt(lat, lon) === 'mediterranean' ? hayOn(d) : 0;
-  return { snow, leafFall, autumn, turn, bloom, spring, summer, winter, hay, snowline, temp: T };
+  const year = ((((d - 20) / 365.25) % 1) + 1) % 1;
+  return { snow, leafFall, autumn, turn, bloom, spring, summer, winter, year, hay, snowline, temp: T };
 }
 
 const sstep = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };

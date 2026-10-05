@@ -2,6 +2,50 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-05 — Regional life (9): the ground layers — ferns, the prairie's bluestems, wildflower drifts, kudzu
+
+Package #9 of `docs/regional-life/models.md`, all but smooth cordgrass.
+
+- **The forest floor** (`world/understory.ts`, `flora.ts understoryMix`): bracken (a new plant form,
+  `frond`: a stalk lifting a broad three-parted blade near level, in colonies) and the cinnamon fern (a
+  tall vase; its cinnamon-brown fertile spikes stand up in May) join the ferns of the eastern and northern
+  woods. Their seasons as data (`Species.fall`, `dormant`; `inFall`, `isDormant`): bracken copper in
+  October and dead and gone from December to April, the cinnamon fern gold in September. (Florida's floor
+  stays the palmetto's.)
+- **The prairie's bluestems** (`world/grass.ts`, `flora.ts prairieMix`): a tall open-ground tuft on the
+  prairie is big bluestem (head-high, 1.6×) or little bluestem — blue-green through the summer, the big one
+  copper-red and the little one orange as the autumn turns (`uTurn`), bronze-tan through the winter. The
+  Flint Hills' and the Corn Belt's tallgrass, the mixed-grass west, Texas's Blackland and Cross Timbers,
+  the Ozarks' glades.
+- **Wildflower drifts** (`render/treeSeasons.ts WILDFLOWERS`, `flora.ts wildflowerMix`, `grass.ts
+  wildTuft`): each tuft has a kind (`aKind`); a drift is a patch of meadow where a third of the tufts
+  flower, mostly one species to a patch, its heads opening in their own weeks of the calendar
+  (`season.ts year` → `U.uYear`, 0 on January 20th): Texas's bluebonnets and paintbrush in late March and
+  April, California's poppies, lupine and goldfields from February, the desert's marigolds and globemallow
+  after the winter rains, black-eyed Susans and coneflowers June to August, goldenrod and asters in the
+  fall, fireweed in July in the mountains and the Northwest. Each tuft a day or so off its neighbours: the
+  drift comes in, it doesn't switch on.
+- **Kudzu** (`vine†`, a tree kind): the tree it climbed and killed, silver under a curtain of big leaves
+  hung from the top to the ground, ropes of vine where it climbs; v0 a smothered young tree, v1 the tall
+  "kudzu monster", v2 a blanket over a roadside thicket. Deciduous: browned by the first frost, bare vines
+  over its dead host in winter. On the South's wood edges (`kudzuShare`: a wood tree with open ground
+  within 15 m — the Deep South's Piedmont and coastal plain, the southern Appalachians' valleys, the
+  Gulf's hills, the Piney Woods; a little in Virginia and Arkansas). Far ≤ 1,320 vertices, near ≤ 2,250.
+  The studio caught the first curtain as a pyramid of separate balls with its host showing (now one sheet).
+- Still open: smooth cordgrass (the salt marsh — the grass keeps off the shore today).
+
+**Verified:** typecheck; `npm test` 934/934; `tests/understory.test.ts` (the eastern woods' bracken and
+cinnamon fern; copper in October, gone in winter; the blade near level; the spikes in flower),
+`tests/groundLayers.test.ts` (new: the calendar's year; each drift's weeks, nothing in January; Texas's
+bluebonnets, California's poppies, the East's goldenrod, never another's; drifts as patches of one
+species; the prairie's bluestems only on the prairie; kudzu only in the South), `tests/foundry.test.ts`
+(kudzu's curtain, host, blanket, season, leaves). Shader check: 22 programs, no errors. Studio:
+`shots/trees-k9.jpg`.
+
+**Next:** #10 fields (corn, soybeans, winter wheat); smooth cordgrass and duckweed (the water's edge);
+then the wildlife packages (`regional-wildlife`, #11–#16); the people work (`people-with-purpose`) when
+Robby calls it.
+
 ## 2026-10-05 — Regional life (8): the palms and the palmettos
 
 Package #8 of `docs/regional-life/models.md`: five kinds appended to `TREE_KINDS` (69–73), three forms

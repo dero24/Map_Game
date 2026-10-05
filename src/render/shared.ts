@@ -78,6 +78,7 @@ export const U = {
   // grass gone to hay (season.ts hay: the grass, grass.ts — the ground's straw wash rides uBiome.x)
   uWinter: { value: 0 },
   uHay: { value: 0 },
+  uYear: { value: 0 }, // (season.ts year: the calendar's phase — the wildflowers' windows, treeSeasons.ts WILDFLOWERS)
   uMoss: { value: 0 }, // moss on the trees' bark, the region's (styles.ts moss)
   // how wet the trees are, 0 a dry spell … 1 just rained (main.ts from the day's weather): the
   // resurrection fern greens and opens with it (assets/hangers.ts)
@@ -133,7 +134,7 @@ uniform float uLampBaseY;
 uniform vec3 uLampColor, uPoolColor;
 uniform vec4 uNightFloor;
 uniform float uLampPower, uPigment, uPigmentScale, uWind;
-uniform float uSnow, uLeafFall, uAutumn, uTurn, uBloom, uMoss, uSpring, uSummer, uWinter, uHay, uWet;
+uniform float uSnow, uLeafFall, uAutumn, uTurn, uBloom, uMoss, uSpring, uSummer, uWinter, uHay, uWet, uYear;
 uniform vec4 uBiome;
 uniform vec4 uSliceBox;
 uniform vec4 uHoleBox, uHoleInfo;

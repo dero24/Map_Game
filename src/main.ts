@@ -1416,6 +1416,7 @@ async function main() {
       U.uSpring.value = s.spring; // (the flowering trees' windows: treeSeasons.ts bloomNow)
       U.uSummer.value = s.summer;
       U.uWinter.value = s.winter;
+      U.uYear.value = s.year; // (the wildflowers' calendar: treeSeasons.ts WILDFLOWERS)
       // the summer-dry hills: green after the winter rains, gold from June to the first rains — the
       // grass (grass.ts) and the ground's straw wash, a quarter of the region's own in the green months
       U.uHay.value = s.hay;

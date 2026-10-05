@@ -58,7 +58,38 @@ export function rainLeaves(s: number, spring: number, winter: number, wet: numbe
   return season * sstep(0.04, 0.12, wet + 0.04 * s);
 }
 
+/** (package #9) The wildflowers that drift through a region's open grass (flora.ts wildflowerMix; the
+ *  grass's tufts, grass.ts): each its colours (linear-ish rgb, a tuft picks one by its own number) and
+ *  its window [from, to] of the calendar's year (season.ts year: 0 on January 20th, 0.5 at midsummer) —
+ *  Texas's bluebonnets and paintbrush from late March, California's poppies, lupines and goldfields from
+ *  February, the desert's marigolds and globemallow after the winter rains, the black-eyed Susans and
+ *  coneflowers of June to August, the goldenrod and the asters of the fall, the fireweed of July. Each
+ *  tuft WILD_SHIFT either way. */
+export const WILDFLOWERS: { id: string; colours: [number, number, number][]; win: [number, number] }[] = [
+  { id: 'bluebonnet', colours: [[0.28, 0.34, 0.82], [0.36, 0.4, 0.88]], win: [0.17, 0.28] },
+  { id: 'paintbrush', colours: [[0.92, 0.32, 0.16], [0.95, 0.48, 0.22]], win: [0.17, 0.33] },
+  { id: 'poppy', colours: [[0.98, 0.54, 0.06], [0.98, 0.68, 0.14]], win: [0.03, 0.33] },
+  { id: 'lupine', colours: [[0.4, 0.36, 0.8], [0.54, 0.44, 0.86]], win: [0.1, 0.36] },
+  { id: 'goldfields', colours: [[0.98, 0.84, 0.16]], win: [0.06, 0.25] },
+  { id: 'blackeyed', colours: [[0.96, 0.68, 0.08], [0.98, 0.78, 0.16]], win: [0.38, 0.6] },
+  { id: 'coneflower', colours: [[0.76, 0.42, 0.66], [0.84, 0.52, 0.72]], win: [0.4, 0.6] },
+  { id: 'goldenrod', colours: [[0.92, 0.78, 0.12], [0.86, 0.72, 0.1]], win: [0.55, 0.75] },
+  { id: 'aster', colours: [[0.56, 0.45, 0.84], [0.66, 0.55, 0.9], [0.9, 0.88, 0.94]], win: [0.6, 0.8] },
+  { id: 'desertgold', colours: [[0.98, 0.86, 0.2], [0.95, 0.52, 0.3]], win: [0.08, 0.35] },
+  { id: 'fireweed', colours: [[0.86, 0.3, 0.6], [0.78, 0.26, 0.56]], win: [0.45, 0.62] },
+];
+export const WILD_SHIFT = 0.02;
+/** How far into flower a wildflower tuft (index in WILDFLOWERS, its number s) is on the calendar's
+ *  `year` — the GLSL wildBloom's own sum. */
+export function wildBloom(k: number, s: number, year: number): number {
+  const w = WILDFLOWERS[k]?.win;
+  if (!w) return 0;
+  const sh = (s - 0.5) * 2 * WILD_SHIFT;
+  return win(year, w[0] + sh, w[1] + sh);
+}
+
 const W = BLOOM_WINDOWS, D = DESERT_BLOOM;
+const glslColour = (c: [number, number, number]) => `vec3(${f(c[0])}, ${f(c[1])}, ${f(c[2])})`;
 export const GLSL_TREE_SEASONS = /* glsl */ `
 // ---- the trees' seasons (render/treeSeasons.ts)
 // The autumn colour: 0 mixed (each tree yellow, orange or red), 1 red (the maples' scarlet and flame,
@@ -155,6 +186,17 @@ vec3 bloomColour(float type, float s, vec3 p) {
 // the cherry's cloud in clumps, the dogwood's bracts specked over its tiers' tops, the redbud's haze, the
 // crape myrtle's cones on the crown's top and outside, the rosebay's trusses scattered, the
 // manzanita's little hanging clusters all over its twigs' ends
+// the wildflowers in the grass (WILDFLOWERS): how far into flower a tuft of kind k (its number s) is
+// today, on the calendar's year, and its colour
+float wildBloom(float k, float s) {
+  float sh = (s - 0.5) * ${f(2 * WILD_SHIFT)};
+${WILDFLOWERS.map((w, i) => `  if (k < ${i}.5) return bloomWin(uYear, ${f(w.win[0])} + sh, ${f(w.win[1])} + sh);`).join('\n')}
+  return 0.0;
+}
+vec3 wildColour(float k, float s) {
+${WILDFLOWERS.map((w, i) => `  if (k < ${i}.5) return ${w.colours.length > 1 ? w.colours.slice(0, -1).map((c, j) => `s < ${f((j + 1) / w.colours.length)} ? ${glslColour(c)} : `).join('') : ''}${glslColour(w.colours[w.colours.length - 1])};`).join('\n')}
+  return vec3(1.0);
+}
 float bloomCover(float type, vec3 p, float hi) {
   if (type > 5.5) return smoothstep(0.42, 0.6, vnoise3(p * 4.4)) * (0.55 + 0.45 * hi);
   if (type > 4.5) return smoothstep(0.55, 0.7, vnoise3(p * 3.1));

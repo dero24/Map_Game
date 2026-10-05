@@ -42,7 +42,7 @@ describe('flora', () => {
       // longleaf's grass stage, under a metre; the desert's cacti and shrubs, and its young spears)
       const low = k === 'shrub' || k === 'willowshrub' ? 1.5 : k === 'rosebay' || k === 'manzanita' ? 3.5 : k === 'longleaf' && v === 0 ? 0.6
         : k === 'pricklypear' || k === 'cholla' ? 0.8 : k === 'creosote' || k === 'sagebrush' || k === 'sawpalmetto' ? 1.2
-          : (['saguaro', 'joshua', 'ocotillo', 'utahjuniper', 'sabal', 'queenpalm', 'canarypalm'] as TreeKind[]).includes(k) && v === 0 ? 2.5 : 5;
+          : (['saguaro', 'joshua', 'ocotillo', 'utahjuniper', 'sabal', 'queenpalm', 'canarypalm'] as TreeKind[]).includes(k) && v === 0 ? 2.5 : k === 'kudzu' && v === 2 ? 3 : 5;
       expect(meta.h, `${k}:${v}`).toBeGreaterThan(low);
       expect(meta.h).toBeLessThan(14);
       expect(meta.crownR).toBeGreaterThan(0.5);
@@ -444,6 +444,27 @@ describe('flora', () => {
     expect(treeHeight4('royalpalm', 2, 1, false)).toBeGreaterThan(treeHeight4('sabal', 2, 1, false));
     for (let v = 0; v < TREE_VARIANTS; v++) expect(treeHeight4('sawpalmetto', v, 1, false)).toBeLessThanOrEqual(2.4);
   });
+  // Package #9 (models.md build order 9): kudzu, the vine that ate the South
+  it("kudzu: its curtain hung to the ground over the tree it killed, bare brown vines in the winter", () => {
+    for (let v = 0; v < TREE_VARIANTS; v++) {
+      const kz = treeGeometry('kudzu', v);
+      expect(kz.meta.crownBottom, `curtain ${v}`).toBeLessThan(0.5);
+      expect(kz.meta.crownR, `wide ${v}`).toBeGreaterThan(3);
+    }
+    // the host, silver: a tree (v0, v1) or a thicket (v2) under it
+    const C = treeGeometry('kudzu', 1).geo.getAttribute('color'), snag = new THREE.Color(0x9e978b);
+    let host = 0;
+    for (let i = 0; i < C.count; i++) if (Math.abs(C.getX(i) - snag.r) < 1e-4 && Math.abs(C.getY(i) - snag.g) < 1e-4) host++;
+    expect(host).toBeGreaterThan(0);
+    // the old blanket over a thicket wider than tall
+    expect(treeGeometry('kudzu', 2).meta.crownR * 2).toBeGreaterThan(treeGeometry('kudzu', 2).meta.h * 2);
+    expect(DECIDUOUS.has('kudzu')).toBe(true);
+    expect(fallHueOf('kudzu', 0)).toBe(3); // (it doesn't colour: the first frost browns it)
+    const n = nearTreeGeometry('kudzu', 1), q = new Set<number>();
+    for (let i = 0; i < n.cards.length; i += CARD_STRIDE) q.add(n.cards[i + 6]);
+    expect([...q].sort((a, b) => a - b)).toEqual([2, 3]); // (its big leaves up close)
+    expect(treeHeight4('kudzu', 1, 1, true)).toBeLessThanOrEqual(15);
+  });
   it('the leaf cards\' flags round-trip: leaf fall, a 3-bit fall hue, a 3-bit blossom, the motion', () => {
     for (const falls of [false, true]) for (let hue = 0; hue < 8; hue++) for (let bloom = 0; bloom < 8; bloom++) for (let motion = 0; motion < 4; motion++) {
       const f = packCardFlags({ falls, hue, bloom, motion });
@@ -529,8 +550,9 @@ describe('flora', () => {
     for (const k of NEAR_KINDS) for (let v = 0; v < TREE_VARIANTS; v++) {
       if (!hasNear(k, v)) continue;
       const t = nearTreeGeometry(k, v), far = treeGeometry(k, v);
-      // the trunk's base at least 30% wider than where it meets the crown
-      expect(t.trunk[0]).toBeGreaterThanOrEqual(1.3 * t.trunk[1]);
+      // the trunk's base at least 30% wider than where it meets the crown (but kudzu's: its dead host's
+      // trunk, lost in the curtain that hangs to the ground)
+      if (k !== 'kudzu') expect(t.trunk[0], `${k}:${v}`).toBeGreaterThanOrEqual(1.3 * t.trunk[1]);
       // …and the mesh says so: its widest ring at the ground against the far trunk's
       const P = t.wood.getAttribute('position');
       let r0 = 0;

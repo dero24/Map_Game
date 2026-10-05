@@ -2049,9 +2049,21 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
    and warm deserts' planted palms only where January's mean is above 3.5 °C) and `palmettoShare`. The
    rows: Fanpalm rows: **cabbage palmetto**, **saw palmetto**. Palm rows: **Florida royal palm**,
    **queen palm**, **Canary Island date palm**.
-9. **The ground layers.** Fern rows: **bracken**, **cinnamon fern**. Clump rows: **big** and
-   **little bluestem**, **smooth cordgrass**. Wildflower drifts: **Texas bluebonnet** (spike),
-   **California poppy** (stem, cup head), **sky lupine** (spike). The `vine†` genome with **kudzu**.
+9. **The ground layers** — **built** 2026-10-05 but for smooth cordgrass (`docs/earth/LOG.md`
+   "Regional life (9)"): bracken (the new `frond` form: a stalk lifting a three-parted blade near level;
+   copper in October, gone from December to April) and the cinnamon fern (a vase, its cinnamon spikes in
+   May, gold in the fall) on the eastern and northern woods' floor (`understoryMix`; `Species.fall`,
+   `dormant`); the prairie's big and little bluestem as the grass field's tall tufts (`prairieMix`:
+   blue-green, then copper-red and orange as the autumn turns, bronze-tan in winter); wildflower drifts
+   in the open grass (`wildflowerMix`, `treeSeasons.ts WILDFLOWERS` on the calendar's `uYear`: Texas's
+   bluebonnets and paintbrush, California's poppies, lupine and goldfields, the desert's marigolds, the
+   East's and Midwest's black-eyed Susans, coneflowers, goldenrod and asters, the mountains' and the
+   Northwest's fireweed); kudzu as a tree kind (`vine†`: its curtain over the tree it killed, brown in
+   winter) on the South's wood edges (`kudzuShare`). Still open: **smooth cordgrass** (the salt marsh:
+   the grass keeps off the shore today). The rows: Fern rows: **bracken**, **cinnamon fern**. Clump
+   rows: **big** and **little bluestem**, **smooth cordgrass**. Wildflower drifts: **Texas bluebonnet**
+   (spike), **California poppy** (stem, cup head), **sky lupine** (spike). The `vine†` genome with
+   **kudzu**.
 10. **Fields.** **Corn** (`cane†`), **soybeans** (mound), **winter wheat** (grass).
 11. **Bird plan extensions and the backyard birds.** Add the shared bird parts (long neck, bill
     shapes, swim, bare head, hover). Songbird palette rows: **northern cardinal**, **blue jay**,

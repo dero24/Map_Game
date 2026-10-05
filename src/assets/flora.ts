@@ -25,7 +25,7 @@ export type TreeKind = 'round' | 'oak' | 'shrub' | 'pine' | 'spruce' | 'palm' | 
   | 'whitepine' | 'ponderosa' | 'lodgepole' | 'redspruce' | 'balsamfir' | 'engelmann' | 'subalpinefir' | 'easthemlock' | 'aspen' | 'willowshrub' | 'snag'
   | 'tuliptree' | 'sweetgum' | 'hickory' | 'buckeye' | 'sycamore' | 'buroak' | 'dogwood' | 'redbud' | 'crapemyrtle' | 'loblolly' | 'longleaf' | 'slashpine' | 'redcedar' | 'rosebay'
   | 'baldcypress' | 'pondcypress' | 'tupelo' | 'cottonwood' | 'fremont'
-  | 'valleyoak' | 'blueoak' | 'redwood' | 'sequoia' | 'manzanita' | 'saguaro' | 'pricklypear' | 'cholla' | 'ocotillo' | 'joshua' | 'creosote' | 'pinyon' | 'utahjuniper' | 'ashejuniper' | 'sagebrush' | 'sabal' | 'sawpalmetto' | 'royalpalm' | 'queenpalm' | 'canarypalm';
+  | 'valleyoak' | 'blueoak' | 'redwood' | 'sequoia' | 'manzanita' | 'saguaro' | 'pricklypear' | 'cholla' | 'ocotillo' | 'joshua' | 'creosote' | 'pinyon' | 'utahjuniper' | 'ashejuniper' | 'sagebrush' | 'sabal' | 'sawpalmetto' | 'royalpalm' | 'queenpalm' | 'canarypalm' | 'kudzu';
 /** (New kinds go on the end: a kind's index is in the tiles' instance names and the region weights.) */
 export const TREE_KINDS: TreeKind[] = ['round', 'oak', 'shrub', 'pine', 'spruce', 'palm', 'birch', 'mesquite', 'fanpalm', 'maple', 'willow', 'elm', 'poplar', 'magnolia', 'cherry', 'fir', 'cedar', 'hemlock', 'sitka', 'alder', 'vinemaple', 'liveoak', 'plateauoak', 'coastoak',
   'whitepine', 'ponderosa', 'lodgepole', 'redspruce', 'balsamfir', 'engelmann', 'subalpinefir', 'easthemlock', 'aspen', 'willowshrub', 'snag',
@@ -38,7 +38,9 @@ export const TREE_KINDS: TreeKind[] = ['round', 'oak', 'shrub', 'pine', 'spruce'
   // (package #7: the desert, piñon-juniper and the sagebrush sea)
   'saguaro', 'pricklypear', 'cholla', 'ocotillo', 'joshua', 'creosote', 'pinyon', 'utahjuniper', 'ashejuniper', 'sagebrush',
   // (package #8: the palms and the palmettos)
-  'sabal', 'sawpalmetto', 'royalpalm', 'queenpalm', 'canarypalm'];
+  'sabal', 'sawpalmetto', 'royalpalm', 'queenpalm', 'canarypalm',
+  // (package #9: the vine that ate the South)
+  'kudzu'];
 /** The live oaks (liveoak†): the South's, the Hill Country's plateau oak, California's coast live oak. */
 export const LIVE_OAKS = new Set<TreeKind>(['liveoak', 'plateauoak', 'coastoak']);
 /** The southern pines (package #4): their long needles in fat, brushy tufts up close. */
@@ -54,7 +56,7 @@ export const NEEDLED = new Set<TreeKind>(['pine', 'spruce', 'fir', 'hemlock', 's
 export const FALL_HUE: Partial<Record<TreeKind, number>> = { maple: 1, cherry: 1, willow: 2, elm: 2, poplar: 2, birch: 2, vinemaple: 1, alder: 3, aspen: 2, willowshrub: 2,
   tuliptree: 2, sweetgum: 4, hickory: 2, buckeye: 5, sycamore: 6, buroak: 6, dogwood: 1, redbud: 2, redcedar: 7, rosebay: 7,
   baldcypress: 6, pondcypress: 6, tupelo: 6, cottonwood: 2, fremont: 2, valleyoak: 6, blueoak: 6,
-  ocotillo: 8 }; // (8: leaves only after rain, in the rainy seasons — the ocotillo's; far models only, past the cards' 3 bits)
+  ocotillo: 8, kudzu: 3 }; // (8: leaves only after rain, in the rainy seasons — the ocotillo's; far models only, past the cards' 3 bits)
 /** How a grown variant turns: the bigleaf maple (maple variant 2) goes gold, not scarlet; the swamp
  *  tupelo (tupelo variant 1, the black gum's kin) the first and brightest scarlet, where the water
  *  tupelo goes a dull rusty brown. */
@@ -62,7 +64,7 @@ export const fallHueOf = (k: TreeKind, v: number) => (k === 'maple' && v === 2 ?
 /** Broadleaves that colour and drop their leaves (magnolias and the palms keep theirs). */
 export const DECIDUOUS = new Set<TreeKind>(['round', 'oak', 'birch', 'shrub', 'maple', 'willow', 'elm', 'poplar', 'cherry', 'alder', 'vinemaple', 'aspen', 'willowshrub',
   'tuliptree', 'sweetgum', 'hickory', 'buckeye', 'sycamore', 'buroak', 'dogwood', 'redbud', 'crapemyrtle',
-  'baldcypress', 'pondcypress', 'tupelo', 'cottonwood', 'fremont', 'valleyoak', 'blueoak', 'ocotillo']); // (the cypresses drop their needles: "bald")
+  'baldcypress', 'pondcypress', 'tupelo', 'cottonwood', 'fremont', 'valleyoak', 'blueoak', 'ocotillo', 'kudzu']); // (the cypresses drop their needles: "bald")
 /** What each flowering tree blooms as (propMaterial BLOSSOM, the cards' bloom bits; the GLSL is
  *  treeSeasons.ts bloomNow / bloomColour): 1 the cherry's pink cloud in April, 2 the dogwood's white bracts
  *  on its tiers (one in six pink), 3 the redbud's magenta along its bare twigs in March, 4 the crape
@@ -1951,6 +1953,42 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
       leaf.push(fr.translate(head.x, head.y + 0.1, head.z));
     }
     lobe(0.5, V3(head.x, head.y + 0.2, head.z), 3620 + v, 0.9, 0);
+  } else if (kind === 'kudzu') {
+    // Kudzu (vine†): the tree it climbed and killed, silver under it, and over it the vine's curtain of big
+    // leaves hung from the top to the ground — heaped highest over the host, belled out at the foot, a few
+    // ropes of vine showing where it climbs. Bare brown vines over the dead host after the first frost
+    // (DECIDUOUS, FALL_HUE 3). v0 a smothered young tree, v1 a tall one (the "kudzu monster"), v2 a blanket
+    // over a roadside thicket
+    const KZ = [{ H: 6.4, R: 2.4, host: 5.0, rings: [1, 3, 4, 5], sq: 1.2, size: 1.15 }, { H: 11.0, R: 2.8, host: 9.6, rings: [1, 3, 4, 5, 5], sq: 1.3, size: 1.3 }, { H: 4.0, R: 4.4, host: 2.4, rings: [3, 6, 8], sq: 0.75, size: 1.3 }][v];
+    trunkR = v === 2 ? 0.07 : 0.16;
+    const lean = V3(j(0.4), 0, j(0.4)), top = V3(lean.x, KZ.host, lean.z);
+    leanPer = [lean.x / (KZ.host + 0.3), lean.z / (KZ.host + 0.3)];
+    if (v < 2) {
+      wood.push(bough(V3(0, -0.3, 0), top, trunkR, trunkR * 0.45, 5, SNAG));
+      for (let i = 0; i < 3; i++) {
+        const a = i * GOLDEN * 2 + j(0.4), from = top.clone().multiplyScalar(0.62), tip = V3(lean.x + Math.cos(a) * KZ.R * 0.55, KZ.host * 0.88, lean.z + Math.sin(a) * KZ.R * 0.55);
+        wood.push(bough(from, tip, trunkR * 0.45, trunkR * 0.18, 3, SNAG));
+      }
+    } else for (let i = 0; i < 4; i++) {
+      // (the thicket it smothers: a few shrub stems)
+      const a = i * GOLDEN * 2, f = V3(Math.cos(a) * 0.8, -0.3, Math.sin(a) * 0.8);
+      wood.push(bough(f, f.clone().add(V3(Math.cos(a) * 0.6, KZ.host + j(0.4), Math.sin(a) * 0.6)), 0.07, 0.03, 3, SNAG));
+    }
+    // the curtain: rings of big leafy lobes from the top down to the ground, wider as they fall
+    const T = KZ.rings.length;
+    for (let t = 0; t < T; t++) {
+      // (the lobes big against their ring, each overlapping the next: one sheet, never a stack of balls)
+      const f = T > 1 ? t / (T - 1) : 0, y = KZ.H * (v === 2 ? 0.72 - 0.45 * f : 0.9 - 0.76 * f), rr = KZ.R * (v === 2 ? 0.25 + 0.75 * f : t ? 0.3 + 0.7 * f : 0);
+      for (let i = 0; i < KZ.rings[t]; i++) {
+        const a = t * GOLDEN + (i * 2 * Math.PI) / KZ.rings[t] + j(0.2);
+        lobe(KZ.size * (1 + 0.3 * f) * (0.9 + r.float() * 0.2), V3(lean.x * (1 - f) + Math.cos(a) * rr, y + j(0.2), lean.z * (1 - f) + Math.sin(a) * rr), 3700 + v * 41 + t * 7 + i, KZ.sq, 0);
+      }
+    }
+    // a few ropes of vine where it climbs, from the ground up the curtain's edge
+    for (let i = 0; i < (v === 1 ? 2 : 3); i++) {
+      const a = i * 2.1 + j(0.3), foot = V3(Math.cos(a) * KZ.R * 0.9, -0.2, Math.sin(a) * KZ.R * 0.9), mid = V3(Math.cos(a) * KZ.R * 0.7, KZ.H * 0.45, Math.sin(a) * KZ.R * 0.7);
+      wood.push(twig(foot, mid, 0.035, 0.025, 3, 0x6a5a40), twig(mid, V3(lean.x + Math.cos(a) * 0.4, KZ.H * 0.85, lean.z + Math.sin(a) * 0.4), 0.025, 0.015, 3, 0x6a5a40));
+    }
   } else if (isCypress(kind)) {
     // The cypresses (CYPRESSES; cypress†): the fluted foot flaring out to the water, the knees standing
     // up out of it all round, the trunk tapering up through tiers of level boughs, each holding out a flat
@@ -2043,7 +2081,7 @@ export const crownField = (m: TreeMeta): [number, number] => [m.crownBottom + 0.
 export const NEAR_KINDS = new Set<TreeKind>(['valleyoak', 'blueoak', 'redwood', 'sequoia', 'manzanita', 'round', 'oak', 'shrub', 'pine', 'spruce', 'birch', 'mesquite', 'maple', 'elm', 'poplar', 'magnolia', 'cherry', 'fir', 'cedar', 'hemlock', 'sitka', 'alder', 'vinemaple', 'liveoak', 'plateauoak', 'coastoak',
   'whitepine', 'ponderosa', 'lodgepole', 'redspruce', 'balsamfir', 'engelmann', 'subalpinefir', 'easthemlock', 'aspen', 'willowshrub',
   'tuliptree', 'sweetgum', 'hickory', 'buckeye', 'sycamore', 'buroak', 'dogwood', 'redbud', 'crapemyrtle', 'loblolly', 'longleaf', 'slashpine', 'redcedar', 'rosebay',
-  'baldcypress', 'pondcypress', 'tupelo', 'cottonwood', 'fremont', 'pinyon', 'utahjuniper', 'ashejuniper', 'creosote', 'sagebrush']); // (the snag is wood alone: its far model at every distance; the desert's cacti, ocotillo and Joshua tree too — DESERT_FAR)
+  'baldcypress', 'pondcypress', 'tupelo', 'cottonwood', 'fremont', 'pinyon', 'utahjuniper', 'ashejuniper', 'creosote', 'sagebrush', 'kudzu']); // (the snag is wood alone: its far model at every distance; the desert's cacti, ocotillo and Joshua tree too — DESERT_FAR)
 /** Does this grown form have a near model? (The longleaf's grass stage keeps its fountain of needle
  *  blades at every distance, as the palms keep their fronds.) */
 export const hasNear = (k: TreeKind, v: number) => NEAR_KINDS.has(k) && !(k === 'longleaf' && v === 0);
@@ -2070,7 +2108,7 @@ export const picsOf = (kind: TreeKind, v: number, big: boolean): number[] =>
     : kind === 'vinemaple' || (kind === 'maple' && v === 2) || kind === 'sycamore' ? [10, 11]
       : kind === 'sweetgum' ? [12, 13] : kind === 'tuliptree' ? [14, 15] : kind === 'hickory' ? [16, 17] : kind === 'buckeye' ? [18, 19] : kind === 'redbud' ? [20, 21]
         : kind === 'baldcypress' || kind === 'pondcypress' || kind === 'redwood' ? [24, 25] : kind === 'cottonwood' || kind === 'fremont' ? [26, 27] : kind === 'sequoia' ? [8, 9]
-          : kind === 'manzanita' || kind === 'creosote' || kind === 'sagebrush' ? [0, 1] : kind === 'utahjuniper' || kind === 'ashejuniper' ? [8, 9]
+          : kind === 'manzanita' || kind === 'creosote' || kind === 'sagebrush' ? [0, 1] : kind === 'kudzu' ? [2, 3] : kind === 'utahjuniper' || kind === 'ashejuniper' ? [8, 9]
         : big || LIVE_OAKS.has(kind) || kind === 'crapemyrtle' ? [0, 1] : [2, 3]; // (a live oak's and a crape myrtle's small leaves)
 export interface NearTree {
   /** the branch skeleton: trunk, limbs, branches — non-indexed, bark colours, aPart 0 */
@@ -2520,8 +2558,9 @@ function paintSpray(stroke: (ax: number, ay: number, bx: number, by: number, w: 
 }
 
 // ================================================================ garden plants
-export type PlantForm = 'mound' | 'rosette' | 'spike' | 'stem' | 'clump' | 'clipped';
-export type PlantSpecies = 'hydrangea' | 'rose' | 'daylily' | 'lavender' | 'sunflower' | 'hosta' | 'agave' | 'hibiscus' | 'beachgrass' | 'boxwood' | 'coneflower' | 'fern' | 'swordfern' | 'salal' | 'oregongrape' | 'rhododendron' | 'azalea';
+export type PlantForm = 'mound' | 'rosette' | 'spike' | 'stem' | 'clump' | 'clipped' | 'frond';
+export type PlantSpecies = 'hydrangea' | 'rose' | 'daylily' | 'lavender' | 'sunflower' | 'hosta' | 'agave' | 'hibiscus' | 'beachgrass' | 'boxwood' | 'coneflower' | 'fern' | 'swordfern' | 'salal' | 'oregongrape' | 'rhododendron' | 'azalea'
+  | 'bracken' | 'cinnamonfern';
 export interface Species {
   form: PlantForm;
   label: string;
@@ -2531,6 +2570,9 @@ export interface Species {
   leaf?: number; // fixed leaf colour (otherwise TINT → region greens)
   months: [number, number]; // bloom season, 1–12 (northern hemisphere; flipped south)
   climates: Partial<Record<string, number>>; // region climate → weight in the garden mix
+  /** (package #9) the fronds' autumn colour and its months (the forest floor's ferns going copper and
+   *  gold), and the months it lies dead and flattened, gone from the floor */
+  fall?: [number, [number, number]]; dormant?: [number, number];
 }
 export const SPECIES: Record<PlantSpecies, Species> = {
   hydrangea: { form: 'mound', label: 'hydrangea', h: 1.3, w: 1.5, bloom: [0x8fa8e0, 0xd99ab8, 0x7f98d8, 0xb39ad9, 0xf0ece4], months: [6, 9], climates: { temperate: 5, continental: 2, mediterranean: 1 } },
@@ -2557,6 +2599,12 @@ export const SPECIES: Record<PlantSpecies, Species> = {
   // Augusta, Charleston and Mobile springs)
   rhododendron: { form: 'mound', label: 'rhododendron', h: 2.0, w: 2.0, bloom: [0xd96aa8, 0x9a6ac4, 0xf2ecec, 0xe58ab0], leaf: 0x30502e, months: [5, 5], climates: {} },
   azalea: { form: 'mound', label: 'azalea', h: 1.3, w: 1.6, bloom: [0xe0337a, 0xf0715a, 0xf6f2ec, 0xc0307a], leaf: 0x3e5e30, months: [3, 5], climates: {} },
+  // (package #9; docs/regional-life/models.md bracken, cinnamon fern) the eastern and northern woods'
+  // floors: bracken, each frond a stalk lifting a broad three-parted blade near level, in colonies — copper
+  // by October, dead and flat from December to April; the cinnamon fern's tall vase of fronds in the wet
+  // woods, the cinnamon-brown fertile spikes standing in its middle in May, gold in the fall
+  bracken: { form: 'frond', label: 'bracken', h: 0.9, w: 1.3, bloom: [], leaf: 0x5a7a34, months: [6, 9], climates: {}, fall: [0xa0602a, [10, 11]], dormant: [12, 4] },
+  cinnamonfern: { form: 'rosette', label: 'cinnamon fern', h: 1.1, w: 1.2, bloom: [0x9a5a2a], leaf: 0x4e7432, months: [4, 6], climates: {}, fall: [0xc8a03a, [9, 10]], dormant: [11, 3] },
 };
 export const PLANT_SPECIES = Object.keys(SPECIES) as PlantSpecies[];
 export const STAGES = 8; // 0 sprout … 7 full bloom
@@ -2605,7 +2653,9 @@ export function understoryMix(p: CastPlace): { mix: [PlantSpecies, number][]; de
   if (p.west) return { mix: [['swordfern', 7], ['salal', 3], ['oregongrape', 1.2]], density: 0.6 };
   if (p.eco === 'california' && p.l3 === 1) return { mix: [['swordfern', 1]], density: 0.45 }; // under the redwoods
   const fern = ({ 'new-england': 0.24, 'upstate-ny': 0.24, appalachia: 0.26, 'mid-atlantic': 0.22, southeast: 0.14, gulf: 0.14, florida: 0.1, ozarks: 0.16, midwest: p.l3 === 49 || p.l3 === 50 ? 0.22 : 0.12 } as Partial<Record<string, number>>)[p.eco];
-  if (fern) return { mix: [['fern', 1]], density: fern };
+  // (package #9: bracken's colonies through the eastern and northern woods — most of all the north woods'
+  // and the pine barrens' — and the cinnamon fern in the wet ones; Florida's floor is the palmetto's)
+  if (fern) return { mix: p.eco === 'florida' ? [['fern', 1]] : [['fern', 1], ['bracken', p.eco === 'midwest' || p.eco === 'new-england' || p.eco === 'upstate-ny' ? 1.2 : 0.7], ['cinnamonfern', 0.5]], density: fern };
   if (p.eco) return { mix: [], density: 0 };
   if ((p.sub === 'northeast' && p.climate !== 'arid') || p.climate === 'boreal') return { mix: [['fern', 1]], density: 0.22 };
   return { mix: [], density: 0 };
@@ -2746,12 +2796,13 @@ export function inBloom(sp: PlantSpecies, month: number, south = false) {
 
 /** A plant at growth g (0 sprout → 1 mature, blooming from ~0.6 when `bloom`). */
 /** `lite`: the budget version for world garden beds (hundreds per tile): fewer organs, same silhouette. */
-export function plantGeometry(sp: PlantSpecies, seed: number, g: number, bloom = true, lite = false): THREE.BufferGeometry {
+/** `autumn`: in its fall colour (a fern's copper, Species.fall). */
+export function plantGeometry(sp: PlantSpecies, seed: number, g: number, bloom = true, lite = false, autumn = false): THREE.BufferGeometry {
   const S = SPECIES[sp];
   const r = makeRng(seed * 4099 + PLANT_SPECIES.indexOf(sp) * 131 + 7);
   const gs = 0.12 + 0.88 * Math.min(1, g); // size follows growth
   const H = S.h * gs, W = S.w * gs;
-  const leafC = S.leaf ?? TINT;
+  const leafC = autumn && S.fall ? S.fall[0] : S.leaf ?? TINT;
   const bc = S.bloom.length ? S.bloom[Math.floor(r.float() * S.bloom.length)] : 0;
   const flowering = bloom && S.bloom.length > 0 && g >= 0.6;
   const fb = flowering ? Math.min(1, (g - 0.55) / 0.35) : 0; // blossom size ramps in
@@ -2778,18 +2829,41 @@ export function plantGeometry(sp: PlantSpecies, seed: number, g: number, bloom =
         flower(blob(hr * (lite && sp !== 'hydrangea' && !azalea ? 1.25 : 1), seed + 50 + i, { detail: sp === 'hydrangea' ? 1 : 0, lump: sp === 'hydrangea' ? 0.3 : 0.35, squash: azalea ? 0.55 : 0.9 }).translate(u.x * W * (azalea ? 0.47 : 0.44), H * ((azalea ? 0.42 : 0.5) + u.y * (azalea ? 0.5 : 0.42)), u.z * W * (azalea ? 0.47 : 0.44)));
       }
     }
+  } else if (S.form === 'frond') {
+    // bracken: each frond a stalk rising to near the plant's height, then its broad blade held out near
+    // level — three-parted, the side pinnae long and the end one longer, each a feathered card
+    const n = lite ? 2 : 3;
+    for (let i = 0; i < n; i++) {
+      const a = i * GOLDEN * 2 + r.float() * 0.6, ca = Math.cos(a), sa = Math.sin(a), d = 0.12 + r.float() * 0.25;
+      const top = V3(ca * d, H * (0.62 + r.float() * 0.25), sa * d);
+      leafy(limb(V3(ca * d * 0.3, -0.05, sa * d * 0.3), top, 0.012, 0.009, 3));
+      const head = a + (r.float() - 0.5) * 0.8;
+      for (const [da, L, w] of [[0, 0.62, 0.3], [1.0, 0.45, 0.24], [-1.0, 0.45, 0.24]] as [number, number, number][]) {
+        const pin = card(w * W, L * W, 0.28, lite ? 2 : 3);
+        pin.rotateX(0.12);
+        pin.rotateY(Math.PI / 2 - (head + da));
+        leafy(pin.translate(top.x, top.y, top.z));
+      }
+    }
   } else if (S.form === 'rosette') {
     // leaves spiral out at the golden angle, longer and flatter toward the outside
     const n = Math.max(3, Math.round(fibCount(Math.min(0.99, g * 1.1), 2, lite ? 3 : 4) * (sp === 'agave' ? 1 : 0.9)));
     for (let i = 0; i < n; i++) {
       const t = i / n;
-      const sword = sp === 'swordfern';
-      const len = (sp === 'agave' ? 0.75 : sword ? 0.8 : sp === 'fern' ? 0.7 : 0.5) * W * (0.55 + t * 0.6);
-      const lf = card(sp === 'agave' ? 0.16 * gs : sword ? 0.15 * gs : sp === 'fern' ? 0.22 * gs : 0.3 * gs, len, sp === 'agave' ? 0.05 : sword ? 0.5 : 0.35, 3);
-      lf.rotateX(-(sp === 'agave' ? 1.1 - t * 0.6 : sword ? 1.15 - t * 0.55 : 0.95 - t * 0.5)); // (a sword fern's fronds stand up and arch over)
+      const sword = sp === 'swordfern', cin = sp === 'cinnamonfern';
+      const len = (sp === 'agave' ? 0.75 : sword ? 0.8 : cin ? 0.95 : sp === 'fern' ? 0.7 : 0.5) * W * (0.55 + t * 0.6);
+      const lf = card(sp === 'agave' ? 0.16 * gs : sword ? 0.15 * gs : cin ? 0.2 * gs : sp === 'fern' ? 0.22 * gs : 0.3 * gs, len, sp === 'agave' ? 0.05 : sword ? 0.5 : cin ? 0.3 : 0.35, 3);
+      lf.rotateX(-(sp === 'agave' ? 1.1 - t * 0.6 : sword || cin ? 1.2 - t * 0.5 : 0.95 - t * 0.5)); // (a sword fern's, a cinnamon fern's fronds stand up as a vase and arch over)
       lf.rotateY(i * GOLDEN);
       lf.translate(0, 0.04, 0);
       leafy(lf);
+    }
+    if (fb > 0 && sp === 'cinnamonfern') {
+      // its fertile fronds: cinnamon-brown spikes standing in the vase's middle
+      for (let k = 0; k < 3; k++) {
+        const a = k * GOLDEN * 2 + r.float(), top = V3(Math.cos(a) * 0.08, H * (0.85 + r.float() * 0.2), Math.sin(a) * 0.08);
+        flower(limb(V3(0, 0.02, 0), top, 0.03 * fb + 0.01, 0.015, 4));
+      }
     }
     if (fb > 0 && sp === 'hosta') {
       for (let k = 0; k < 3; k++) {
@@ -2853,8 +2927,13 @@ export function plantGeometry(sp: PlantSpecies, seed: number, g: number, bloom =
   }
   return merge(parts);
 }
-export const plantLib = (sp: PlantSpecies, v: number, stage: number, bloom = true, lite = false) =>
-  cached(`plant:${sp}:${v}:${stage}:${bloom ? 1 : 0}:${lite ? 1 : 0}`, () => plantGeometry(sp, v + 1, (stage + 1) / STAGES, bloom, lite));
+export const plantLib = (sp: PlantSpecies, v: number, stage: number, bloom = true, lite = false, autumn = false) =>
+  cached(`plant:${sp}:${v}:${stage}:${bloom ? 1 : 0}:${lite ? 1 : 0}${autumn ? ':fall' : ''}`, () => plantGeometry(sp, v + 1, (stage + 1) / STAGES, bloom, lite, autumn));
+/** (package #9) Is a plant in its fall colour this month, or lying dead and gone? (months wrap the
+ *  year's end: [12, 4] is December to April) */
+const inMonths = (m: number, [a, b]: [number, number]) => (a <= b ? m >= a && m <= b : m >= a || m <= b);
+export const inFall = (sp: PlantSpecies, month: number) => { const f = SPECIES[sp].fall; return !!f && inMonths(month, f[1]); };
+export const isDormant = (sp: PlantSpecies, month: number) => { const d = SPECIES[sp].dormant; return !!d && inMonths(month, d); };
 
 
 // ---------------- the northern and mountain conifers by place (models.md build order #3) ----------------
@@ -3008,6 +3087,57 @@ export function desertTrees(p: CastPlace, elev: number, lat: number): [TreeKind,
   if ((p.l3 === 81 || p.l3 === 79) && p.state === 'AZ' && elev < 1250) return [['mesquite', 1.6], ['saguaro', 1]];
   return [];
 }
+// ---------------- package #9 by place: the ground layers ----------------
+
+/** The wildflowers that drift through a place's open grass (grass.ts; render/treeSeasons.ts WILDFLOWERS
+ *  for their colours and windows): [id, weight] — Texas's bluebonnets, paintbrush and (as its summer's
+ *  stand-in) the black-eyed Susan; the Plains' and the Midwest's coneflowers, black-eyed Susans,
+ *  goldenrod and asters; the East's goldenrod and asters in the fall; California's poppies, lupines and
+ *  goldfields; the desert's marigolds and globemallow; the mountains' and the Northwest's lupine,
+ *  paintbrush and fireweed. [] where there's no drift to speak of. */
+export function wildflowerMix(p: CastPlace): [string, number][] {
+  switch (p.eco) {
+    case 'texas': return [29, 30, 31, 32, 33].includes(p.l3) ? [['bluebonnet', 3], ['paintbrush', 1.5], ['blackeyed', 0.8], ['coneflower', 0.4]] : [['paintbrush', 1], ['blackeyed', 1]];
+    case 'plains': return [['coneflower', 1.5], ['blackeyed', 1.2], ['goldenrod', 1], ['aster', 0.6], ...(['OK', 'KS'].includes(p.state ?? '') ? [['paintbrush', 0.5]] as [string, number][] : [])];
+    case 'midwest': return [['blackeyed', 1.2], ['coneflower', 1], ['goldenrod', 1.4], ['aster', 1]];
+    case 'new-england': case 'upstate-ny': case 'mid-atlantic': case 'appalachia': case 'ozarks': return [['blackeyed', 1], ['goldenrod', 1.5], ['aster', 1.2]];
+    case 'southeast': case 'gulf': case 'florida': return [['blackeyed', 1.2], ['goldenrod', 0.8], ['aster', 0.4]];
+    case 'california': return [['poppy', 3], ['lupine', 2], ['goldfields', 1.2]];
+    case 'desert-sw': return [['desertgold', 2], ['poppy', 0.4], ['lupine', 0.4]];
+    case 'great-basin': return [['lupine', 0.8], ['paintbrush', 1], ['desertgold', 0.6]];
+    case 'rockies': return [['lupine', 1], ['paintbrush', 1.2], ['fireweed', 0.8], ['aster', 0.6], ['goldenrod', 0.4]];
+    case 'pnw': return p.west ? [['lupine', 1], ['fireweed', 1.5], ['paintbrush', 0.5]] : [['lupine', 1.2], ['paintbrush', 0.8]];
+  }
+  return [];
+}
+/** The prairie's grasses for a place's tall open-ground tufts (grass.ts): the shares of big bluestem
+ *  (head-high in the tallgrass, copper-red in the fall) and little bluestem (knee-high, blue-green,
+ *  orange in the fall) — the tallgrass prairie's (the Flint Hills, the Corn Belt's remnants, the Red
+ *  River's), the mixed-grass west of it, Texas's Blackland and Cross Timbers — or null. */
+export function prairieMix(p: CastPlace): { big: number; little: number } | null {
+  if (p.eco === 'plains') return [28, 40, 47, 48, 46].includes(p.l3) ? { big: 0.55, little: 0.25 } : { big: 0.15, little: 0.45 };
+  if (p.eco === 'midwest') return [47, 54, 52, 40].includes(p.l3) ? { big: 0.45, little: 0.2 } : null;
+  if (p.eco === 'texas') return [29, 32, 33].includes(p.l3) ? { big: 0.25, little: 0.4 } : p.l3 === 30 ? { big: 0.05, little: 0.35 } : null;
+  if (p.eco === 'ozarks') return { big: 0.2, little: 0.25 };
+  return null;
+}
+
+/** Kudzu's share of a wood's edge trees (props.ts: a wood's tree within ~15 m of its edge): the Deep
+ *  South's Piedmont and coastal plain, the southern Appalachians' valleys, the Gulf's hills, the Piney
+ *  Woods — the roadsides it smothers; a little in Virginia and Arkansas. */
+export function kudzuShare(p: CastPlace): number {
+  const st = p.state ?? '', core = ['GA', 'AL', 'MS', 'SC', 'NC', 'TN'].includes(st);
+  switch (p.eco) {
+    case 'southeast': return core ? 0.25 : 0.12;
+    case 'appalachia': return (p.l3 === 67 || p.l3 === 68 || p.l3 === 71) && (core || st === 'KY') ? 0.2 : 0.04;
+    case 'gulf': return [65, 74, 35].includes(p.l3) ? 0.2 : 0.06;
+    case 'texas': return p.l3 === 35 ? 0.08 : 0;
+    case 'mid-atlantic': return st === 'VA' ? 0.05 : 0;
+    case 'ozarks': return st === 'AR' ? 0.05 : 0;
+  }
+  return 0;
+}
+
 // ---------------- package #8 by place: the palms and the palmettos ----------------
 
 /** The palms of a place's warm branches (props.ts regional): `tropical` — the tropics' palms for a
@@ -3221,6 +3351,8 @@ export function treeHeight4(k: TreeKind, v: number, u: number, wood: boolean): n
     case 'canarypalm': return v === 0 ? 2 + u * 2 : v === 1 ? 5 + u * 5 : 10 + u * 8;
     case 'palm': return 8 + u * 6;
     case 'fanpalm': return 10 + u * 8;
+    // (package #9: kudzu as tall as what it smothered)
+    case 'kudzu': return v === 0 ? 5 + u * 3 : v === 1 ? 9 + u * 6 : 3 + u * 2;
   }
   return 0;
 }

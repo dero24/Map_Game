@@ -1,11 +1,12 @@
 // The forest floor: a walker-centred field of the region's understory — under the westside
-// Northwest's firs, knee-high fountains of sword fern, thickets of salal and Oregon grape (flora.ts
+// Northwest's firs, knee-high fountains of sword fern, thickets of salal and Oregon grape; the East's and
+// the North's ferns, bracken (copper in October, gone in the winter) and cinnamon fern (flora.ts
 // understoryMix) — grown under a wood's canopy only, never under a lone yard tree, on open ground
 // (never a road, a path, a building, a deck or water). Like the grass (grass.ts): cells built nearest
 // first, a few a frame, each cell one merged mesh of foundry plants (flora.ts plantGeometry, the
 // world's lite genome); deterministic per position, so a wood looks the same every visit.
 import * as THREE from 'three';
-import { plantLib, understoryMix, inBloom, STAGES, type PlantSpecies } from '../assets/flora';
+import { plantLib, understoryMix, inBloom, inFall, isDormant, STAGES, type PlantSpecies } from '../assets/flora';
 import { merge } from '../assets/core';
 import { propMaterial } from '../render/propMaterial';
 import { activeStyle, castOf, pickWeighted } from './styles';
@@ -129,8 +130,8 @@ export class UnderstoryField {
       for (let gx = x0; gx < x0 + CELL; gx += step) {
         const x = gx + hash(gx, gz, 7) * step, z = gz + hash(gx, gz, 8) * step;
         const f = floorAt(x, z, crowns, mix, density, open);
-        if (!f) continue;
-        const g = plantLib(f.sp, f.v, STAGES - 1, inBloom(f.sp, month), true).clone();
+        if (!f || isDormant(f.sp, month)) continue; // (bracken dead and flat through the winter)
+        const g = plantLib(f.sp, f.v, STAGES - 1, inBloom(f.sp, month), true, inFall(f.sp, month)).clone(); // (copper in October)
         g.applyMatrix4(m.compose(p.set(x, t.heightAt(x, z) - 0.05, z), q.setFromAxisAngle(up, hash(x, z, 5) * 6.283), s.set(f.s, f.s * (0.85 + hash(x, z, 6) * 0.3), f.s)));
         parts.push(g);
       }

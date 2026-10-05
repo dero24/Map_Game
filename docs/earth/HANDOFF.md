@@ -104,6 +104,11 @@ The game was smooth and rendering before this work started. Work fast, and keep 
       only) for every palm, the old coconut and fan palms too.
     - Placement: `broadMix` + `rangeIn`, `palmMix` (props.ts `palmsGrow`: January's mean > 3.5 °C),
       `palmettoShare`.
+  - **#9, the ground layers** (2026-10-05; LOG "Regional life (9)"), all but smooth cordgrass:
+    - The forest floor's bracken (`frond` form) and cinnamon fern, their autumn and dormancy as data.
+    - The grass field's tuft kinds (`aKind`, `wildTuft`): the prairie's bluestems (`prairieMix`) and
+      wildflower drifts (`WILDFLOWERS` on `U.uYear`, `wildflowerMix`).
+    - Kudzu, a tree kind on the South's wood edges (`kudzuShare`, props.ts `woodEdge`).
 
 ## The bar: detail, variety, variation
 
@@ -237,7 +242,8 @@ in-game look is checked on Robby's PC.
 - **#7:** built (2026-10-05). Rarer desert rows (organ pipe, barrels, chain-fruit cholla, bursage)
   can ride a later package on the same genomes.
 - **#8:** built (2026-10-05).
-- **#9:** the ground layers.
+- **#9:** built (2026-10-05) but for smooth cordgrass (the salt marsh: the grass keeps off the shore
+  today — a marsh layer of its own by the water).
 - **#10:** fields.
 - **#11–#16:** the wildlife packages (`regional-wildlife`).
   - The casts go in `faunaMix`, by `CastPlace`.
