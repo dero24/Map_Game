@@ -2,6 +2,19 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-05 — Fix: the shore didn't boot (the fields' wash)
+
+CI's playtest went red on 7db0be9 (package #10): the shore stopped at "paint" with `TypeError: Cannot
+read properties of undefined (reading 'lat')`. A baked atlas region paints from `paint.json`, which
+carries no `origin`, and the fields' wash read `json.origin.lat`. `paintGround` now takes the region's
+origin (main.ts passes the manifest's) and leaves the wash out without one. The unit tests never boot
+the game, so only the playtest saw it — run `node tools/playtest.mjs --region=shore --quick
+--swiftshader` (about 4 minutes here) after anything that touches the boot path.
+
+**Verified:** reproduced locally (same error), then `node tools/playtest.mjs --url=http://localhost:5173/
+--region=shore --quick --swiftshader --seed=1`: PASS, 6 checks, 0 page errors (with package #11 in);
+typecheck.
+
 ## 2026-10-05 — Regional life (11): the backyard birds
 
 Package #11 of `docs/regional-life/models.md`, the first wildlife package (`regional-wildlife`): the bird

@@ -1534,7 +1534,9 @@ export class DetailGround {
   }
 }
 
-export function paintGround(world: World, maxTex: number, walks: number[] = []): GroundPaint {
+/** `origin`: the region's (the manifest's — a baked region's paint.json carries none); the fields' wash
+ *  needs its latitude and season, and is left out without it. */
+export function paintGround(world: World, maxTex: number, walks: number[] = [], origin: { lat: number; lon: number } | undefined = world.json.origin): GroundPaint {
   const { json, terrain } = world;
   const S = json.slice, B = json.backdrop;
   const painter = new Painter(json, walks);
@@ -1545,9 +1547,12 @@ export function paintGround(world: World, maxTex: number, walks: number[] = []):
   const sx = size / (S.x1 - S.x0), sz = size / (S.z1 - S.z0);
   const ctx = sc.getContext('2d')!;
   // (the fields as the season has them today: green, gold, stubble, bare — fields.ts)
-  const lat = json.origin.lat, mix = cropMix(castOf(activeStyle()), lat), date = worldDate();
-  const year = seasonAt(lat, json.origin.lon, 0, Math.floor((date.getTime() - Date.UTC(date.getUTCFullYear(), 0, 1)) / 86400000) + 1).year;
-  const fields: FieldWash = (x, z) => { const f = fieldAt(x, z, mix); return cropWash(f.crop, cropStage(f.crop, year, f.n)); };
+  let fields: FieldWash | undefined;
+  if (origin) {
+    const lat = origin.lat, mix = cropMix(castOf(activeStyle()), lat), date = worldDate();
+    const year = seasonAt(lat, origin.lon, 0, Math.floor((date.getTime() - Date.UTC(date.getUTCFullYear(), 0, 1)) / 86400000) + 1).year;
+    fields = (x, z) => { const f = fieldAt(x, z, mix); return cropWash(f.crop, cropStage(f.crop, year, f.n)); };
+  }
   const sliceCover = coverImage(terrain.slice, fields);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';

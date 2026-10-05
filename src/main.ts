@@ -243,7 +243,7 @@ async function main() {
 
   diagStage('paint');
   const tt = terrainTextures(world);
-  const paint = paintGround(paintWorld, Math.min(maxTex, tier.paintTex));
+  const paint = paintGround(paintWorld, Math.min(maxTex, tier.paintTex), [], manifest.origin);
   // Floating origin: everything in region coordinates lives under worldRoot. The render loop
   // shifts worldRoot by -origin so the camera stays near 0; shaders add U.uWorldOffset back
   // where they need true world positions (pigment, shadows, lamp/paint maps, fog distance).
