@@ -740,7 +740,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // kinds: 0 round deciduous, 1 tall oak, 2 shrub, 3 pine, 4 spruce
   // kinds: 0 round · 1 oak · 2 shrub · 3 pine · 4 spruce · 5 palm · 6 birch · 7 mesquite · 8 fan palm (assets/flora.ts), each in
   // TREE_VARIANTS grown variants; v is position-hashed so neighbouring tiles agree.
-  const trees: { m: THREE.Matrix4; c: THREE.Color; k: number; v: number }[] = [];
+  /** `meas`: the survey measured it (LiDAR) — a real tree, never dropped for a building's sake. */
+  const trees: { m: THREE.Matrix4; c: THREE.Color; k: number; v: number; meas?: 1 }[] = [];
   // No tree grows on a structure: inside a building's outline (a tower built after the survey, a
   // roof garden's planters read as crowns) or within 15 m of a mast, a chimney or a water tower
   // (a LiDAR survey reads a TV mast as a 60 m tree — Queen Anne grew three 60 m cypresses).
@@ -888,6 +889,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     trees.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), rng.float() * 6.28), V(s, s, s)), c: new THREE.Color(rng.pick(green)), k, v });
   }
 
+  // street trees' pits at the kerb: the survey's, where the street is paved wall to wall, and the
+  // city's own (below)
+  const pits: THREE.Matrix4[] = [];
   if (LT && TB) {
     // model extents per kind (height to crown top, crown radius) — scale each to the measured tree
     const wsum = look.trees.reduce((a, b) => a + b, 0) || 1;
@@ -899,17 +903,38 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       if (terrain.sdfAt(x, z) < 1) continue;
       // taller than any street or park tree in the lower 48 grows: a structure the survey saw
       if (h > 50) continue;
-      if (paved(x, z)) {
-        // crown tops over the street: plant the trunk on the verge beneath the edge of it
+      let pit = false, tx = 0, tz = 0;
+      // (and a crown at the kerb line whose trunk spot a kerb, a door's way in or a stoop takes: the same)
+      if (paved(x, z) || walk.blocked(x, z, 0.6) || onStructure(x, z)) {
+        // crown tops over the street: plant the trunk on the verge beneath the edge of it — past the
+        // paved band (its mask is the road and 1.5 m each side, at 2 m cells) — or, where the street
+        // is paved wall to wall (a town's sidewalks), in a pit at the kerb, as a city's street trees
+        // stand. (Both used to be dropped: of the 35 trees the survey measured within 50 m of a
+        // Savannah street under live oaks, the game kept 6.)
         const e = roadEdge(x, z);
-        if (!e) continue;
+        if (!e || e.d > e.w / 2 + 6) continue; // (not a street's tree: a yard's, under a wall or a deck)
         const nx = x - e.x, nz = z - e.z, L = Math.hypot(nx, nz) || 1;
-        const out = e.w / 2 + 1.6 + rng.float() * 0.8;
-        x = e.x + (nx / L) * out;
-        z = e.z + (nz / L) * out;
-        if (paved(x, z)) continue;
+        tx = -nz / L; tz = nx / L;
+        const out = e.w / 2 + 2.8 + rng.float() * 0.8;
+        const cands: [number, number, boolean][] = [[e.x + (nx / L) * out, e.z + (nz / L) * out, false]];
+        if (e.w >= 5) cands.push([e.x + (nx / L) * (e.w / 2 + 1.1), e.z + (nz / L) * (e.w / 2 + 1.1), true]); // (an alley, a drive: no kerb)
+        // (a stoop, a door's way in, a lamp where the trunk would stand: a step or two along the street)
+        let placed = false;
+        for (const [cx, cz, isPit] of cands) {
+          for (const d of [0, 1.5, -1.5, 3, -3]) {
+            const px = cx + tx * d, pz = cz + tz * d;
+            if ((!isPit && paved(px, pz)) || walk.blocked(px, pz, isPit ? 0.5 : 0.6) || onStructure(px, pz)) continue;
+            (x = px), (z = pz), (pit = isPit), (placed = true);
+            break;
+          }
+          if (placed) break;
+        }
+        if (!placed) continue;
       }
-      if (walk.blocked(x, z, 0.6) || onStructure(x, z)) continue;
+      if (pit) {
+        pits.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(tx, tz)), V(1, 1, 1)));
+        walk.addLoop([[x - 0.3, z - 0.3], [x + 0.3, z - 0.3], [x + 0.3, z + 0.3], [x - 0.3, z + 0.3]]);
+      }
       // species: shrubs are short; a narrow crown for its height reads conifer where the
       // region grows them; otherwise the region's broadleaf mix (oaks for the broad ones)
       const slim = r / h < 0.3;
@@ -946,14 +971,14 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       const c = new THREE.Color(rng.pick(green));
       if (k === 4) c.lerp(new THREE.Color(0x2e4630), 0.55);
       else if (rng.float() < 0.12) c.lerp(new THREE.Color(0xb59a3e), 0.45);
-      trees.push({ m, c, k, v });
+      trees.push({ m, c, k, v, meas: 1 });
     }
   }
 
   // City street trees: in dense cores the side streets are lined with trees in square pits at the
   // kerb (every ~9 m, where nothing else stands), a tree every few spaces — the green of a
   // brownstone block. Mapped street trees already count: none within 6 m of one.
-  const pits: THREE.Matrix4[] = [], bins: THREE.Matrix4[] = [];
+  const bins: THREE.Matrix4[] = [];
   for (const r of json.roads) {
     const rank = RANK[r.c] ?? 0;
     if (r.lod || r.br || rank < 2 || rank > 4) continue;
@@ -1097,9 +1122,14 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       if (n) {
         const tm = treeMeta(TREE_KINDS[t.k], t.v);
         const crownR = tm.crownR * Math.max(sc.x, sc.z), crownBottom = tm.crownBottom * sc.y;
-        if (crownBottom < n.h + 0.8 && crownR > n.d + 0.4) {
-          const f = (n.d + 0.4) / crownR;
-          if (f * Math.max(sc.x, sc.z) < 0.45 * sc.y) { trees.splice(i, 1); continue; } // would be a stick
+        // (a crown topping the roof by 3 m overhangs it, as a row's street trees do over its fronts:
+        // narrowing them to sticks dropped nearly every one of them)
+        if (crownBottom < n.h + 0.8 && crownR > n.d + 0.4 && tm.h * sc.y < n.h + 3) {
+          let f = (n.d + 0.4) / crownR;
+          if (f * Math.max(sc.x, sc.z) < 0.45 * sc.y) {
+            if (!t.meas) { trees.splice(i, 1); continue; } // would be a stick
+            f = (0.45 * sc.y) / Math.max(sc.x, sc.z); // (a measured tree stands, as slim as it may)
+          }
           sc.x *= f;
           sc.z *= f;
         }

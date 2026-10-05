@@ -18,6 +18,9 @@ export function classOf(o, chain) {
   return 'other';
 }
 
+/** The lens's place in the region frame (the walker's: the camera may ride a floating origin). */
+const cam0 = (G) => ({ x: G.walker?.x ?? G.camera.position.x, z: G.walker?.z ?? G.camera.position.z });
+
 /** Draw the world once with each mesh in its class's flat colour (what the lens actually sees: depth
  *  decides), read it back, and count. W: the pass's width (its height follows the window's aspect). */
 export function classPass(G, { W = 256, mask = false } = {}) {
@@ -32,6 +35,14 @@ export function classPass(G, { W = 256, mask = false } = {}) {
   const tints = [];
   const swapped = [], off = [];
   for (const o of G.scene.children) if (o !== world && o.visible) (off.push(o), (o.visible = false));
+  // Over a streamed cell, the region's backdrop ground isn't the ground: its own shader keeps it under
+  // the detail tiles (it raises wooded cells 11 m as a far-forest canopy for the horizon). Drawn here
+  // in flat colour it stood as a ceiling over the lens in exactly the leafy places — green-1 counted
+  // their trees and sky as ground (Rutledge Avenue, Charleston: 86% ground, no sky). A baked region's
+  // `ground` is its real terrain and stays.
+  const at0 = cam0(G), key = `${Math.floor(at0.x / 1024)}_${Math.floor(at0.z / 1024)}`, S = G.stream;
+  const backdrop = world?.getObjectByName('ground');
+  if (backdrop?.visible && S && (S.loaded.has('w' + key) || S.loaded.has('s' + key))) (off.push(backdrop), (backdrop.visible = false));
   world.traverse((o) => {
     if (!(o.isMesh || o.isLine || o.isPoints) || !o.visible) return;
     const chain = [];

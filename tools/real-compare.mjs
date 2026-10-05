@@ -133,7 +133,10 @@ async function render(s) {
     const t0 = performance.now();
     for (let i = 0; i < wait; i++) {
       const real = S.loaded.has('w' + key) || S.loaded.has(key);
-      if (real && !S.worldPending && !S.fetching?.size && !S.buildQueue?.length && i > 4) break;
+      // (and no cell round the lens still owed its relief — the LiDAR record's trees, the roof colours:
+      // queued behind the ring's first builds, they landed after the shot and green-1 measured bare streets)
+      const late = [...S.loaded.values()].some((a) => a.flat && Math.hypot((a.spec.box.x0 + a.spec.box.x1) / 2 - x, (a.spec.box.z0 + a.spec.box.z1) / 2 - z) < 1100);
+      if (real && !late && !S.worldPending && !S.fetching?.size && !S.buildQueue?.length && i > 4) break;
       await sleep(1000);
     }
     const cell = S.loaded.get('w' + key) ? (S.loaded.get('w' + key).vec ? 'twin' : 'real') : S.loaded.has(key) ? 'baked' : S.loaded.get('s' + key)?.vec ? 'twin' : 'stand-in';
