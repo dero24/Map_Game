@@ -105,3 +105,51 @@ describe("the map's own woods", () => {
     expect(outside).toBeLessThan(inWood / 4);
   }, 30000);
 });
+
+// The Northwest's own woods (docs/regional-life/16-pnw.md; Robby: "do northwest"): west of the
+// Cascades' crest a mapped wood grows Douglas fir, western hemlock and redcedar — Sitka spruce too
+// in the outer coast's fog belt — tall, never the generic spruce or pine; east of the crest the dry
+// side is the Mountain West's.
+describe("the Northwest's woods", () => {
+  const wood = async (at: [number, number]) => {
+    setActiveStyle(regionStyle(at[0], at[1]));
+    const sq = (x0: number, z0: number, x1: number, z1: number) => [m(x0), m(z0), m(x1), m(z0), m(x1), m(z1), m(x0), m(z1)];
+    const tj = {
+      version: 1, id: '0_0', lod: 0, box: { x0: 0, z0: 0, x1: 256, z1: 256 },
+      origin: { lat: at[0], lon: at[1] }, slice: { x0: 0, z0: 0, x1: 256, z1: 256 }, backdrop: { x0: 0, z0: 0, x1: 256, z1: 256 },
+      landmarks: [], buildings: [], roads: [], lines: [], points: [],
+      areas: [{ c: 'wood', o: [sq(10, 10, 240, 240)], i: [] }],
+    } as unknown as TileJson;
+    const built = await buildTile(tj, virtualRegion(at).terrain, { id: 'w0_0', box: tj.box, lod: 0, file: '', world: 1 }, 0);
+    const kinds: Record<string, { n: number; tall: number }> = {};
+    for (const o of built.objs as { n?: string; im?: Float32Array }[]) {
+      if (!o.n?.startsWith('trees:') || !o.im) continue;
+      const [, kind, v] = o.n.split(':'), mh = treeMeta(kind as TreeKind, +v || 0).h, q = (kinds[kind] ??= { n: 0, tall: 0 });
+      for (let i = 0; i + 15 < o.im.length; i += 16) { q.n++; if (Math.hypot(o.im[i + 4], o.im[i + 5], o.im[i + 6]) * mh > 20) q.tall++; }
+    }
+    return kinds;
+  };
+  it('west of the crest: Douglas fir, hemlock and redcedar, tall; Sitka spruce on the outer coast', async () => {
+    const inland = await wood([47.6, -122.3]), coast = await wood([47.9, -124.4]);
+    for (const k of [inland, coast]) {
+      expect(k.spruce?.n ?? 0).toBe(0);
+      expect(k.pine?.n ?? 0).toBe(0);
+      const nw = ['fir', 'hemlock', 'cedar', 'sitka'].reduce((s, c) => s + (k[c]?.n ?? 0), 0), all = Object.values(k).reduce((s, q) => s + q.n, 0);
+      expect(nw / all).toBeGreaterThan(0.45); // conifer country
+      expect(k.fir.tall / k.fir.n).toBeGreaterThan(0.8); // towering
+    }
+    expect(inland.hemlock?.n ?? 0).toBeGreaterThan(0);
+    expect(inland.cedar?.n ?? 0).toBeGreaterThan(0);
+    expect(inland.sitka?.n ?? 0).toBe(0); // (no fog belt on the Sound)
+    expect(coast.sitka?.n ?? 0).toBeGreaterThan(0);
+  }, 60000);
+  it('east of the crest the dry side is the Mountain West: none of the westside conifers, no moss', async () => {
+    expect(regionStyle(44.06, -121.31).sub).toBe('mountain');
+    expect(regionStyle(46.6, -120.5).sub).toBe('mountain');
+    expect(regionStyle(47.6, -122.33).sub).toBe('pnw');
+    expect(regionStyle(47.6, -122.33).moss).toBeGreaterThan(0.8);
+    expect(regionStyle(44.06, -121.31).moss).toBeLessThan(0.2);
+    const dry = await wood([44.06, -121.31]);
+    expect(['fir', 'hemlock', 'cedar', 'sitka'].reduce((s, c) => s + (dry[c]?.n ?? 0), 0)).toBe(0);
+  }, 60000);
+});

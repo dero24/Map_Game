@@ -69,6 +69,50 @@ describe('flora', () => {
     expect(fallHueOf('maple', 0)).toBe(1); // sugar and red maples go scarlet…
     expect(fallHueOf('maple', 2)).toBe(2); // …the bigleaf gold
   });
+  // The Northwest's trees (docs/regional-life/16-pnw.md; Robby: "do northwest")
+  it('the Northwest conifers read as themselves: spires, bare-trunked in the forest, each with its mark', () => {
+    for (const k of ['fir', 'hemlock', 'sitka', 'cedar'] as const) {
+      const open = treeGeometry(k, 0).meta, forest = treeGeometry(k, 1).meta;
+      expect(open.crownR / open.h).toBeLessThan(0.32); // a spire, not a ball
+      expect(open.crownBottom / open.h).toBeLessThan(0.12); // grown in the open: foliage near the ground
+      expect(forest.crownBottom / forest.h).toBeGreaterThan(k === 'cedar' ? 0.15 : 0.22); // in the forest, a bare trunk
+      for (let v = 0; v < TREE_VARIANTS; v++) {
+        const n = nearTreeGeometry(k, v), pics = new Set<number>();
+        for (let i = 0; i < n.cards.length; i += CARD_STRIDE) pics.add(n.cards[i + 6]);
+        // needles up close; the redcedar its own flat sprays
+        expect([...pics].every((p) => (k === 'cedar' ? p === 8 || p === 9 : p >= 4 && p <= 7))).toBe(true);
+      }
+    }
+    // the hemlock that grew on a nurse log stands on stilt roots: wood at the ground a metre out from the trunk
+    const P = treeGeometry('hemlock', 2).geo.getAttribute('position');
+    let out = 0;
+    for (let i = 0; i < P.count; i++) if (P.getY(i) < 0.2) out = Math.max(out, Math.hypot(P.getX(i), P.getZ(i)));
+    expect(out).toBeGreaterThan(0.8);
+    // the old redcedar's candelabra: dead silver wood at the very top
+    const cd = treeGeometry('cedar', 2).plan;
+    expect(Math.max(...cd.boughs.filter((b) => b.col === 0x9e978b).map((b) => b.b.y))).toBeGreaterThan(Math.max(...cd.lobes.map((l) => l.c.y)));
+  });
+  it('the Northwest broadleaves: the red alder narrow on pale stems, the vine maple a sprawl, the bigleaf maple hung with moss', () => {
+    for (let v = 0; v < TREE_VARIANTS; v++) {
+      const a = treeGeometry('alder', v), vm = treeGeometry('vinemaple', v).meta;
+      expect(a.meta.crownR / a.meta.h).toBeLessThan(0.36);
+      expect(a.plan.boughs[0].col).toBe(0xc4bfb3); // pale grey bark
+      expect(vm.crownR / vm.h).toBeGreaterThan(0.55);
+      expect(vm.h).toBeLessThan(7.5);
+    }
+    // moss beards under the bigleaf's limbs and licorice fern along them, in both models
+    const bl = treeGeometry('maple', 2);
+    expect(bl.plan.hang.length).toBeGreaterThanOrEqual(6);
+    const C = bl.geo.getAttribute('color'), moss = new THREE.Color(0x8a9a46);
+    let mossy = 0;
+    for (let i = 0; i < C.count; i++) if (Math.abs(C.getX(i) - moss.r) < 1e-3 && Math.abs(C.getY(i) - moss.g) < 1e-3) mossy++;
+    expect(mossy).toBeGreaterThan(0);
+    const near = nearTreeGeometry('maple', 2), pics = new Set<number>();
+    for (let i = 0; i < near.cards.length; i += CARD_STRIDE) pics.add(near.cards[i + 6]);
+    expect([...pics].every((p) => p === 10 || p === 11)).toBe(true); // the maple's big hands
+    expect(fallHueOf('vinemaple', 0)).toBe(1); // scarlet in October
+    expect(fallHueOf('alder', 0)).toBe(3); // the alder's drop near green
+  });
   it('variants differ', () => {
     const a = bb(treeGeometry('round', 0).geo), b = bb(treeGeometry('round', 1).geo);
     expect(a.max.y === b.max.y && a.max.x === b.max.x).toBe(false);

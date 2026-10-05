@@ -248,6 +248,16 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
             alb *= 0.74 + 0.36 * smoothstep(0.2, 0.8, vnoise3(vLocal * vec3(7.0, 0.8, 7.0)));
           #endif
           #endif
+          // moss on the bark, as damp as the region (uMoss): it takes the trunk's foot and the sides
+          // that face up and north first (the wet, shaded sides), in patches, and in the westside
+          // Northwest wraps whole trunks and limbs (a tree's wood only: its crown field is set)
+          if (uMoss > 0.0 && uCrown.y > 0.0 && vLeafy < 0.5) {
+            float wet = clamp(0.5 * N.y + 0.35 * max(0.0, -N.z) + 0.4 * (1.0 - smoothstep(0.5, 5.0, vLocal.y)) + 0.1, 0.0, 1.0);
+            float patchy = vnoise3(vWorldPos * 1.7) * 0.6 + vnoise3(vWorldPos * 5.3 + 3.0) * 0.4;
+            float cover = smoothstep(0.6, 0.75, patchy * 0.55 + wet * uMoss * 0.6 + 0.12 * uMoss);
+            vec3 moss = mix(vec3(0.075, 0.11, 0.025), vec3(0.15, 0.18, 0.045), vnoise3(vWorldPos * 3.1)); // (a deep olive, never lime)
+            alb = mix(alb, moss, cover);
+          }
         #endif
         #ifdef DECID
           if (vLeafy > 0.5) {
@@ -261,6 +271,8 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
             #elif FALL_HUE == 2
               vec3 fall = mix(vec3(0.88, 0.7, 0.14), vec3(0.74, 0.52, 0.08), vTree); // gold
               fall = mix(fall, vec3(0.62, 0.62, 0.2), 0.25 * vnoise3(vWorldPos * 0.7));
+            #elif FALL_HUE == 3
+              vec3 fall = mix(vec3(0.36, 0.38, 0.12), vec3(0.42, 0.32, 0.12), vTree); // drab: the alder's leaves drop near green
             #else
               vec3 fall = vTree < 0.4 ? vec3(0.78, 0.55, 0.08) : vTree < 0.75 ? vec3(0.8, 0.3, 0.06) : vec3(0.6, 0.1, 0.07);
               fall = mix(fall, vec3(0.72, 0.5, 0.1), 0.35 * vnoise3(vWorldPos * 0.7));

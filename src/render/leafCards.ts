@@ -167,7 +167,9 @@ export function leafCardMaterial(tex: THREE.Texture) {
         ao *= 1.0 - 0.25 * smoothstep(0.4, 1.0, vInfo.y); // (the rim's cards as lit as the far crown's skin)
         if (!twig && falls > 0.5 && uTurn > 0.0) {
           vec3 fall;
-          if (hue > 1.5) {
+          if (hue > 2.5) {
+            fall = mix(vec3(0.36, 0.38, 0.12), vec3(0.42, 0.32, 0.12), vTree); // drab (the alder)
+          } else if (hue > 1.5) {
             fall = mix(vec3(0.88, 0.7, 0.14), vec3(0.74, 0.52, 0.08), vTree);
             fall = mix(fall, vec3(0.62, 0.62, 0.2), 0.25 * vnoise3(vWorldPos * 0.7));
           } else if (hue > 0.5) {

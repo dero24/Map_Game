@@ -26,6 +26,7 @@ import { setRoofSource } from './world/aerial';
 import { TAG_ROOF_COLOURS } from './world/realTile';
 import { Vehicles } from './player/vehicles';
 import { GrassField } from './world/grass';
+import { UnderstoryField } from './world/understory';
 import { roadNear } from './world/roadBounds';
 import { buildSky, skyUniforms } from './world/sky';
 import { LifeClient, buildLifeBase, buildLifeInit, lifeInitSteps, lifeParams } from './sim/life';
@@ -219,6 +220,7 @@ async function main() {
   setRoofSource(aerialRoofs && manifest.sources?.roofColours ? 'painted' : null, TAG_ROOF_COLOURS);
   activeBuilding.uWinStyle.value.set(regionLook.windowCode, regionLook.shutterP, 0, 0);
   U.uBiome.value.set(...regionLook.biome);
+  U.uMoss.value = regionLook.moss;
   const townName = meta?.name ?? 'town';
   const shoreLabel = meta?.shoreLabel ?? 'the beach';
   const tz = meta?.tz ?? 'America/New_York';
@@ -311,8 +313,13 @@ async function main() {
   // The localhost auto-default was probed before setup: no worker answered → procedural past the bake.
 
   // Grass: tufts grow on open land around the walker (lawns short, open ground tall + lush).
-  const grass = new GrassField(world.terrain, walk, () => stream.primRoads, paint.grassMask);
+  const grass = new GrassField(world.terrain, walk, () => stream.primRoads, paint.grassMask, (x, z, r) => treeLayer.crownsNear(x, z, r));
   worldRoot.add(grass.group);
+  // The forest floor: the region's understory under a wood's canopy round the walker (sword fern,
+  // salal and Oregon grape under the westside Northwest's firs: understory.ts)
+  const understory = new UnderstoryField(world.terrain, walk, (x, z, r) => treeLayer.crownsNear(x, z, r), paint.grassMask);
+  if (tier.tier === 'phone' || tier.tier === 'low') understory.radius = 40;
+  worldRoot.add(understory.group);
   // Parked kerb and lot cars: one manager draws every tile's, near cars in the lite kit, far ones
   // as two-block proxies (kerbCars.ts)
   const kerbCars = new KerbCars();
@@ -363,6 +370,7 @@ async function main() {
     // the ground under a raised house: a pad, gravel or sand — never lawn (pads.ts), every tile's
     paint.setPads(a.spec.id, underRaised(a.fps, (x, z) => world.terrain.oceanDistAt(x, z)).map((q) => ({ ring: q.ring, fill: PAD_PAINT[q.kind], stone: q.kind === 'gravel' })), [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1]);
     grass.invalidateBox(a.spec.box);
+    understory.invalidateBox(a.spec.box);
   };
   stream.onUnload = (id) => { paint.dropTile(id); kerbCars.remove(id); micro.remove(id); treeLayer.remove(id); crowd.remove(id); queueMicrotask(streamedGround); };
   const plans = stream.plans;
@@ -1454,7 +1462,7 @@ async function main() {
     for (const a of stream.loaded.values()) if (!a.spec.synth || a.vec) realCells.add(`${Math.floor((a.spec.box.x0 + a.spec.box.x1) / 2 / manifest.cell)}_${Math.floor((a.spec.box.z0 + a.spec.box.z1) / 2 / manifest.cell)}`);
     skyline.update(walker.x, walker.z, (k) => realCells.has(k));
     farSkyline.update(walker.x, walker.z, skyline.box);
-    if (!walkParams.fly || walker.y - walker.feet < 60) grass.update(walker.x, walker.z);
+    if (!walkParams.fly || walker.y - walker.feet < 60) { grass.update(walker.x, walker.z); understory.update(walker.x, walker.z); }
     // The traffic's road graph follows the tile set — rebuilt a few ms a frame (life.ts
     // lifeInitSteps): in one go a city's took half a second, every time a tile mounted on a drive.
     // The sim keeps the old graph until the new one is whole.

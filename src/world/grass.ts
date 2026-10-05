@@ -10,6 +10,7 @@ import type { Road, Terrain } from './data';
 import type { WalkWorld } from '../player/collision';
 import { activeStyle } from './styles';
 import { roadNear } from './roadBounds';
+import { underWood, type Crown } from './understory';
 
 const CELL = 20;
 const DESAT = 0.7;
@@ -164,6 +165,9 @@ export class GrassField {
     private walk: WalkWorld,
     private roads: () => Road[],
     private mask?: (x0: number, z0: number, size: number) => { res: number; data: Uint8Array },
+    /** the trees round a point (NearTrees.crownsNear): under a wood's closed canopy the floor is
+     *  ferns, moss and needles (understory.ts), not lawn — the odd tuft only, dark */
+    private crowns?: (x: number, z: number, r: number) => Crown[],
   ) {
     this.group.name = 'grass';
   }
@@ -270,6 +274,8 @@ export class GrassField {
     const lstep = built ? step * 0.8 : step;
     const lawnWash = new THREE.Color(0xa6b27a);
     const mats: THREE.Matrix4[] = [], cols: THREE.Color[] = [];
+    const C = this.crowns?.(x0 + CELL / 2, z0 + CELL / 2, CELL * 0.75 + 14) ?? [];
+    const shade = new THREE.Color(0x4a5a2c);
     const q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), s = new THREE.Vector3(), p = new THREE.Vector3();
     for (let gz = z0; gz < z0 + CELL; gz += lstep)
       for (let gx = x0; gx < x0 + CELL; gx += lstep) {
@@ -281,6 +287,8 @@ export class GrassField {
         const cov = t.coverAt(x, z);
         if (cov === 60 || cov === 70 || cov === 80) continue; // bare, snow/ice, open water
         if (walk.buildingAt(x, z) >= 0 || walk.blocked(x, z, 0.5) || walk.deckAt(x, z) !== null) continue;
+        const wooded = C.length >= 3 && underWood(x, z, C);
+        if (wooded && hash(x, z, 15) < 0.85) continue;
         // patchiness: meadow vs mown lawn vs bare-ish; lawns hug the houses
         const meadow = vn(x * 0.045, z * 0.045) * 0.7 + vn(x * 0.13 + 9, z * 0.13) * 0.3;
         const nearHouse = built || !WILD.has(cov) || walk.blocked(x, z, 7);
@@ -306,6 +314,7 @@ export class GrassField {
           c.multiplyScalar((1 - cold * 0.2) * (1 + lush * 0.12));
           c.offsetHSL(0, 0.04, nearHouse ? 0.03 : 0); // mown lawns read a touch brighter
           if (nearHouse) c.lerp(lawnWash, 0.35);
+          if (wooded) c.lerp(shade, 0.6); // (the few under the canopy, in its shade)
         }
         cols.push(c);
       }

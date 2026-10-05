@@ -18,7 +18,7 @@
 // The leaf pictures are painted once, a picture a frame while the world boots (flora.ts
 // leafAtlasJob); until they're done every tree draws from its far mesh.
 import * as THREE from 'three';
-import { NEAR_KINDS, TREE_KINDS, nearTreeLib, crownField, CARD_STRIDE, leafAtlasJob, fallHueOf, DECIDUOUS, type TreeKind } from '../assets/flora';
+import { NEAR_KINDS, TREE_KINDS, nearTreeLib, crownField, CARD_STRIDE, leafAtlasJob, fallHueOf, DECIDUOUS, treeMeta, type TreeKind } from '../assets/flora';
 import { propMaterial, TREE_LOD_U, TREE_MASK_U } from '../render/propMaterial';
 import { leafCardGeometry, leafCardMaterial, leafTexture, CARD_ATTRS } from '../render/leafCards';
 import type { TreeTier } from '../render/quality';
@@ -107,6 +107,26 @@ export class NearTrees {
     this.dirty = true;
   }
   refresh() { this.dirty = true; }
+
+  /** The trees standing within r of (x, z), each its foot and its crown's reach (its model's crown
+   *  radius × its scale) — every mounted tile's, shown yet or not: where a wood's canopy closes, the
+   *  forest floor grows (understory.ts) and the lawn grass gives way (grass.ts). */
+  crownsNear(x: number, z: number, r: number): { x: number; z: number; r: number }[] {
+    const out: { x: number; z: number; r: number }[] = [];
+    for (const fars of this.tiles.values())
+      for (const f of fars) {
+        const b = f.box;
+        if (f.kind === 'shrub' || b[0] - r > x || b[2] + r < x || b[1] - r > z || b[3] + r < z) continue;
+        const e = f.im.instanceMatrix.array as Float32Array, cr = treeMeta(f.kind, f.v).crownR;
+        for (let i = 0; i < f.im.count; i++) {
+          const o = i * 16, tx = e[o + 12], tz = e[o + 14];
+          if (Math.abs(tx - x) > r || Math.abs(tz - z) > r) continue;
+          const sx = Math.hypot(e[o], e[o + 1], e[o + 2]);
+          if (sx > 0) out.push({ x: tx, z: tz, r: cr * sx });
+        }
+      }
+    return out;
+  }
 
   /** The mask pass for the metrics: only the tree standing within r of (x, z), drawn flat — its
    *  leaves green, its wood red. off: everything as painted. */
