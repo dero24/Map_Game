@@ -608,6 +608,7 @@ async function main() {
 
   const lifeBase = buildLifeBase(paintWorld, walk);
   lifeBase.rhythm = rhythmFor(regionLook.climate, lifeBase.beachPts.length > 0); // the shape of this place's day
+  let visitSeen = 0; // (interiors.visitV last told to the life sim)
   const life = new LifeClient(buildLifeInit(lifeBase, stream.primRoads, walk, stream.doors, stream.junctions, stream.tunnels));
   life.ground = (x, z, y) => walk.outdoorNear(x, z, y);
   worldRoot.add(life.group);
@@ -1487,6 +1488,8 @@ async function main() {
     focus.set(camera.position.x + fwd.x * 60, walker.y - walkParams.eyeHeight, camera.position.z + fwd.z * 60);
     const ti = performance.now();
     interiors.update(walker.x, walker.z, dt, walker.feet, !vehicles.driving && !walkParams.fly);
+    // (the people outside learn which building stands open: who walks in by its door goes on in)
+    if (interiors.visitV !== visitSeen) { visitSeen = interiors.visitV; life.setIndoor(interiors.visit); }
     liftUI.update(dt);
     if ((settleT -= dt) <= 0) { settleT = 1; if (!vehicles.driving) settleWalker(); }
     perf.interior = Math.max(perf.interior, performance.now() - ti);

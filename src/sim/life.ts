@@ -567,6 +567,9 @@ export class LifeClient {
   /** The player's car at (x,z) moving (vx,vz): walkers in its path are knocked down (lifeSim.bump). */
   bump(x: number, z: number, vx: number, vz: number) { this.worker.postMessage({ kind: 'bump', x, z, vx, vz }); }
   /** The page is asleep (hidden, a phone locked): the sim worker stops ticking until resume(). */
+  /** The building standing open (world/interiors.ts `Visit`; null: none): who walks in by its door
+   *  goes on in to one of its places. */
+  setIndoor(v: { door: [number, number]; spots: Float32Array } | null) { this.worker.postMessage({ kind: 'indoor', indoor: v }); }
   pause() { this.worker.postMessage({ kind: 'pause' }); }
   resume() { this.worker.postMessage({ kind: 'resume' }); }
   onBumped: ((n: number) => void) | null = null;

@@ -36,6 +36,8 @@ type P2 = [number, number];
 const SCOPES = [-7, -8];
 /** The lift car's floor while you ride (player/lift.ts): its own collision scope. */
 const CAR_SCOPE = -9;
+/** A shut front door's leaf (`shutDoor`): its own scope. */
+const LEAF_SCOPE = -10;
 /** A lift car's inside (liftCar): 2.1 m across, 1.6 m deep, standing 0.12 m behind the shaft's face. */
 const CAR = { w: 2.1, d: 1.6, gap: 0.12 };
 const NPC_MAX = 12; // residents an interior shows at once (the shared ped geometry's aAnim covers this many)
@@ -74,7 +76,13 @@ interface Job {
   stats: InteriorStats | null;
   fab: number;
   dims: [number, number];
+  /** Where people who walk in from the street stand (see `visit`). */
+  visit: Visit | null;
 }
+/** The building standing open, for the people outside (sim/lifeSim.ts `setIndoor`): its front door,
+ *  and the ground storey's free standing places — world x, y (the floor), z, and the yaw a walker
+ *  faces there. Whoever walks in by that door goes to one and stays; nobody vanishes at the door. */
+export interface Visit { door: [number, number]; spots: Float32Array }
 /** A door that stands shut and swings open as you come to it (a WC's off the living room): its
  *  leaf's InstancedMesh (by name) and instance, its storey, its hinge (local), its wall (axis, line,
  *  the doorway's middle along it and width, which way its room is), the leaf's x shut (across the
@@ -131,6 +139,14 @@ export class Interiors {
   onStairs = false;
   /** A lift ride's doors are shut: build the next window flat out (player/lift.ts). */
   hurry = false;
+  /** The building standing open's door and free places, for the people who walk in (`Visit`); `visitV`
+   *  counts its changes. */
+  visit: Visit | null = null;
+  visitV = 0;
+  /** The front door shut in the walker's way while its building isn't ready (`shutDoor`). */
+  private leaf: string | null = null;
+  /** The walker's heading (smoothed from their steps): the door they walk toward opens first. */
+  private vel = { x: 0, z: 0, px: NaN, pz: NaN };
   /** A lift ride has the walker (stepping into the car, riding, stepping out: player/lift.ts) — they
    *  cross the shaft's wall on purpose, so nothing may "settle" them out of it meanwhile (main.ts). */
   riding = false;
@@ -191,9 +207,18 @@ export class Interiors {
       const k = this.storeyFor(TP, feet);
       if (k !== this.want) this.recentre(k);
     }
-    this.pump(this.hurry ? 14 : 3.5);
+    if (Number.isFinite(this.vel.px) && dt > 0) {
+      const k = Math.min(1, dt * 3), sx = (x - this.vel.px) / dt, sz = (z - this.vel.pz) / dt;
+      if (Math.hypot(sx, sz) < 20) (this.vel.x += (sx - this.vel.x) * k), (this.vel.z += (sz - this.vel.z) * k); // (a teleport's jump isn't a step)
+    }
+    this.vel.px = x; this.vel.pz = z;
+    // (walking up to a door whose building isn't built yet: its build runs flat out, as a lift's does)
+    const AP = this.active !== null ? this.plans.get(this.active) : undefined;
+    const near = !!AP && !this.mesh && Math.hypot(AP.door.x - x, AP.door.z - z) < 6;
+    this.pump(this.hurry || near ? 14 : 3.5);
     const inside = this.walk.interiorAt(x, z, feet);
     this.indoors = inside >= 0 && inside === this.walkId(this.active);
+    this.shutDoor(x, z, onFoot);
     // Windows + door become real openings as you come close: a hysteresis switch (open < 8 m,
     // close > 10 m), only once the interior mesh exists, and a short time-based wash (~0.3 s,
     // world-anchored noise in the facade shader). (A tall building's next window building behind
@@ -224,17 +249,52 @@ export class Interiors {
     // switching mid-open used to snap its windows and door shut in one frame.
     if (target === null && this.active !== null && this.openAmt > 0.001) return;
     if (target === null) {
-      let best = 16;
+      // the nearest door — and the one you're walking toward before a nearer one you pass: on a
+      // street of shopfronts the nearest door changed every few steps, and the one you meant to go
+      // in by only started building at 8 m (Robby: "the windows and doors don't load at all", then
+      // the house see-through for a second as you walked in)
+      let best = 24;
+      const sp = Math.hypot(this.vel.x, this.vel.z);
       const gx = Math.floor(x / 25), gz = Math.floor(z / 25);
       for (let a = -1; a <= 1; a++)
         for (let b = -1; b <= 1; b++)
           for (const fi of this.doorGrid.get((gx + a) * 92821 + gz + b) ?? []) {
             const d = this.plans.get(fi)!.door;
-            const dist = Math.hypot(d.x - x, d.z - z) - (fi === this.active ? 3 : 0);
-            if (dist < best) (best = dist), (target = fi);
+            const dd = Math.hypot(d.x - x, d.z - z);
+            const toward = sp > 0.5 && dd > 0.1 ? ((d.x - x) * this.vel.x + (d.z - z) * this.vel.z) / (dd * sp) : 0;
+            // (past 16 m only one you're walking straight at)
+            const dist = dd - (fi === this.active ? 3 : 0) - 8 * Math.max(0, toward - 0.5);
+            if (dist < best && (dd < 16 || toward > 0.85)) (best = dist), (target = fi);
           }
     }
     if (target !== this.active && !(target !== null && this.failed.has(target))) this.activate(target);
+  }
+
+  /** A front door stays shut until its building stands ready inside: within 2.5 m of a door whose
+   *  interior isn't open, a leaf across its doorway (its own collision scope), and that building
+   *  becomes the one building, flat out. You stop at a closed door for a moment rather than walk into
+   *  an empty shell and see through the house until it lands. */
+  private shutDoor(x: number, z: number, onFoot: boolean) {
+    let key: string | null = null, bd = 2.5;
+    if (onFoot && !this.indoors) {
+      const gx = Math.floor(x / 25), gz = Math.floor(z / 25);
+      for (let a = -1; a <= 1; a++)
+        for (let b = -1; b <= 1; b++)
+          for (const fi of this.doorGrid.get((gx + a) * 92821 + gz + b) ?? []) {
+            const d = this.plans.get(fi)!.door;
+            const dd = Math.hypot(d.x - x, d.z - z);
+            if (dd < bd) (bd = dd), (key = fi);
+          }
+    }
+    const ready = key !== null && key === this.active && !!this.mesh && this.openAmt > 0.5;
+    const want = key !== null && !ready && !this.failed.has(key) ? key : null;
+    if (want === this.leaf) return;
+    if (this.leaf !== null) this.walk.removeScope(LEAF_SCOPE);
+    this.leaf = want;
+    if (want === null) return;
+    const d = this.plans.get(want)!.door, tx = -d.nz, tz = d.nx, h = d.w / 2 + 0.2;
+    this.walk.withScope(LEAF_SCOPE, () => this.walk.addWall([d.x - tx * h, d.z - tz * h], [d.x + tx * h, d.z + tz * h]));
+    if (want !== this.active && this.openAmt <= 0.001) this.activate(want);
   }
 
   get activeIndex() { return this.active; }
@@ -462,6 +522,8 @@ export class Interiors {
   private standUp(job: Job, mesh: THREE.Object3D) {
     this.dropStanding();
     this.mesh = mesh;
+    this.visit = job.visit;
+    this.visitV++;
     this.group.add(mesh);
     this.scope = job.scope;
     this.layout = job.layout;
@@ -494,6 +556,7 @@ export class Interiors {
   }
   /** The standing build goes (its mesh, walls, room map and pieces). */
   private dropStanding() {
+    if (this.visit) { this.visit = null; this.visitV++; }
     if (this.mesh) {
       this.group.remove(this.mesh);
       this.mesh.traverse((o) => {
@@ -543,7 +606,7 @@ export class Interiors {
     this.pending = this.job(this.active!, P, fp, k);
   }
   private job(fi: string, P: Plan, fp: Footprint, k: number): Job {
-    const job: Job = { fi, k: P.tall ? k : -1, win: this.windowOf(P, P.tall ? k : -1), scope: SCOPES[0] === this.scope ? SCOPES[1] : SCOPES[0], gen: null!, layout: null, roomTex: null, inst: null, lights: [], leaves: [], swing: [], taken: [], stats: null, fab: 0xffffff, dims: [P.L / 2, P.W / 2] };
+    const job: Job = { fi, k: P.tall ? k : -1, win: this.windowOf(P, P.tall ? k : -1), scope: SCOPES[0] === this.scope ? SCOPES[1] : SCOPES[0], gen: null!, layout: null, roomTex: null, inst: null, lights: [], leaves: [], swing: [], taken: [], stats: null, fab: 0xffffff, dims: [P.L / 2, P.W / 2], visit: null };
     job.gen = this.steps(P, fp, job);
     return job;
   }
@@ -865,7 +928,7 @@ export class Interiors {
     const ang = Math.atan2(P.uz, P.ux);
     /** Up to n residents on these spots, drawn with r: staff first (a shop is never unattended),
      *  then customers / residents at random. */
-    const people = (spots: NpcSpot[], r: Rng, n: number) => {
+    const people = (spots: NpcSpot[], r: Rng, n: number): Set<number> => {
       const used = new Set<number>();
       const staff = spots.map((sp, k) => (sp[5] ? k : -1)).filter((k) => k >= 0);
       for (let i = 0; i < n; i++) {
@@ -901,7 +964,9 @@ export class Interiors {
           }
         }
       }
+      return used;
     };
+    let took: Set<number> | null = null;
     if (tallB) {
       // (a storey's own few, from its own seed: NPC_MAX shared by the window's storeys)
       const per = Math.floor(NPC_MAX / 3);
@@ -910,7 +975,39 @@ export class Interiors {
         const r = storeyRng(k, 0x9e0);
         people(spots, r, Math.min(per, spots.length, busy ? 1 + Math.floor(r.float() * 3) : 1 + Math.floor(r.float() * 2)));
       }
-    } else people(F.npcs, rng, Math.min(NPC_MAX, F.npcs.length, busy ? 2 + Math.floor(rng.float() * 6) : 1 + Math.floor(rng.float() * 3)));
+    } else took = people(F.npcs, rng, Math.min(NPC_MAX, F.npcs.length, busy ? 2 + Math.floor(rng.float() * 6) : 1 + Math.floor(rng.float() * 3)));
+    // (the ground storey's standing places the residents left free — none in the first steps in from
+    // the door — for whoever walks in from the street; a tall building's window keeps its own people)
+    if (took && L) {
+      // (only the space the front door opens on — the shop floor, a cottage's living room: they walk
+      // straight to their place, never through a partition into the back room or someone's flat)
+      const door = L.rooms.find((r) => r.level === 0 && P.ud + 0.8 >= r.r.u0 && P.ud + 0.8 <= r.r.u1 && P.vd >= r.r.v0 && P.vd <= r.r.v1);
+      const inFront = (u: number, v: number) => !!door && L.rooms.some((r) => r.level === 0 && r.space === door.space && u >= r.r.u0 + 0.3 && u <= r.r.u1 - 0.3 && v >= r.r.v0 + 0.3 && v <= r.r.v1 - 0.3);
+      const vs: number[] = [];
+      const taken: P2[] = stand.map(([m4]) => [m4.elements[12], m4.elements[14]]);
+      const put = (u: number, v: number, y: number, yaw: number) => {
+        const du = u - P.ud, dv = v - P.vd;
+        if (du > -0.5 && du < 3 && Math.abs(dv) < 1) return; // (not in the first steps in from the door)
+        const w = toW(P, u, v);
+        if (taken.some((t) => Math.hypot(t[0] - w[0], t[1] - w[1]) < 0.8)) return;
+        taken.push(w);
+        const fu = -Math.sin(yaw), fv = -Math.cos(yaw), fx = fu * P.ux + fv * P.vx, fz = fu * P.uz + fv * P.vz;
+        vs.push(w[0], y, w[1], Math.atan2(-fx, -fz));
+      };
+      F.npcs.forEach(([u, v, y, yaw, seat, staff], k) => {
+        if (!took!.has(k) && !seat && !staff && Math.abs(y - P.floor0) <= 0.5 && inFront(u, v)) put(u, v, y, yaw);
+      });
+      // …and the open floor: a 1.2 m grid over the space, wherever no furniture stands, each place
+      // facing the nearer long side of its room (where the shelves and the counter are)
+      for (const R of door ? L.rooms.filter((r) => r.level === 0 && r.space === door.space) : [])
+        for (let u = R.r.u0 + 0.7; u <= R.r.u1 - 0.7 && vs.length < 40; u += 1.2)
+          for (let v = R.r.v0 + 0.7; v <= R.r.v1 - 0.7 && vs.length < 40; v += 1.2) {
+            if (!F.freeAt(0, { u0: u - 0.3, u1: u + 0.3, v0: v - 0.3, v1: v + 0.3 })) continue;
+            const toV1 = R.r.v1 - v < v - R.r.v0;
+            put(u, v, P.floor0, Math.atan2(0, toV1 ? -1 : 1) + (rng.float() - 0.5) * 0.8);
+          }
+      job.visit = vs.length ? { door: [P.door.x, P.door.z], spots: new Float32Array(vs) } : null;
+    }
     let npcDraws = 0;
     for (const [list, mt] of [[stand, this.npcMat], [sit, this.npcSeatMat]] as const) {
       if (!list.length) continue;

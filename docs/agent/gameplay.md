@@ -231,6 +231,29 @@ where the two disagree, the vision is the target and this file is the current st
 - Sun pools: the interior shader traces the sun ray to the outer wall (`uDims`) and lights the
   floor where it passes one of that wall's real window cells (the facade's spacing, sill and head
   for the building's kind) and that wall is the same room's (see "The way in" above).
+- Getting in (Robby, Brooklyn, 2026-10-04):
+  - **Which building.** The door you're walking toward (`Interiors.vel`, your heading smoothed from
+    your steps) counts as up to 8 m nearer. Past 16 m, only a door you're walking straight at counts.
+    The nearest door used to change every few steps along a row of shopfronts, so the one you meant
+    began building at 8 m.
+  - **A shut door** (`shutDoor`, scope −10). Within 2.5 m of a door whose interior isn't open, a leaf
+    stands across its doorway, and that building becomes the one building, built flat out (as a
+    lift's next window is, 14 ms a frame). You stop at a closed door for a moment rather than walk
+    into an empty shell and see through the house until it lands.
+  - **The panes.** A pane opens whole or not at all, decided by your distance to its nearest point
+    (under 6.5–8 m, a per-window threshold) and only on the storeys round yours. The old per-pixel
+    noise around a 4.2 m distance to the pane's centre left a big storefront half-dissolved
+    wherever you stood at that distance.
+- People who go in stay in (`Interiors.visit` → `LifeClient.setIndoor` → `lifeSim.ts` `setIndoor`):
+  - The building standing open publishes its door and the ground storey's free standing places:
+    the residents' unused spots and a 1.2 m grid over the open floor. Both are only in the space the
+    front door opens on, so nobody walks through a partition.
+  - A walker going in by that door walks to a place (`IN_WALK`), stays there turned to the room
+    (`IN_STAY`), and walks back out by the door (`IN_OUT` → `FROM_DOOR`): the same person, seen
+    through the windows and in the room with you.
+  - If the building closes, they're inside still, unseen, and come out when they would have. If it
+    opens again, whoever went in by its door is already standing at a place.
+  - `tests/lifeSim.test.ts` covers it.
 - Only on foot: driving or flying (`interiors.update(..., onFoot)`), no interior activates; a build
   in progress drops, and an open one goes once you're 30 m past its door. A downtown drive used to
   assemble an interior for every door it passed, with 70–200 ms spikes.

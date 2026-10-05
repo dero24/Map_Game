@@ -1952,18 +1952,21 @@ export function buildingMaterial() {
             alb = mix(alb, trimCol, barM * nearW);
             alb = mix(alb, shadeCol * (0.92 + 0.08 * step(0.02, fract(W.cy * 4.0)) * fineL), shadeM * nearW);
             glow += shadeM * lit * 0.55 * nearW;
-            // Real room behind: see straight in through the sash bars — but only at the windows
-            // you're actually near (per-window distance, washed edge). From the street the visited
-            // house keeps its glass like its neighbours; from indoors the facade is back-facing
-            // anyway, so the interior wall's own hole is what you look through.
-            if (innerM > 0.5 && barM < 0.5 && cut) {
-              float wd = 0.0;
-              if (dot(vTan, vTan) > 0.5) {
-                vec3 Tw = normalize(vec3(vTan.x, 0.0, vTan.y));
-                vec3 wc = vWorldPos - Tw * W.cu - vec3(0.0, W.cy, 0.0);
-                wd = length(wc - (cameraPosition + uWorldOffset));
-              }
-              if (wd < 4.2 + 1.6 * vnoise3(vWorldPos * 2.2)) discard;
+            // Real room behind: see straight in through the sash bars — at the windows you're near.
+            // From the street the visited house keeps its far glass like its neighbours; from indoors
+            // the facade is back-facing anyway, so the interior wall's own hole is what you look
+            // through. A pane opens whole or not at all: by the eye's distance to its nearest point
+            // (a storefront's middle stands metres from its edge), each pane its own threshold — not
+            // per-pixel noise, which left a big pane half-dissolved wherever you stood at its distance
+            // (Robby, Brooklyn) — and only on the storeys round the walker's (a tall building builds
+            // three). The opening's own wash (uOpenAmt, ~0.3 s) still dissolves it in.
+            if (innerM > 0.5 && barM < 0.5 && cut && dot(vTan, vTan) > 0.5) {
+              vec3 Tw = normalize(vec3(vTan.x, 0.0, vTan.y));
+              vec3 wc = vWorldPos - Tw * W.cu - vec3(0.0, W.cy, 0.0);
+              vec3 eye = cameraPosition + uWorldOffset, e = eye - wc;
+              vec3 q = wc + Tw * clamp(dot(e, Tw), -gw, gw) + vec3(0.0, clamp(e.y, -gh, gh), 0.0);
+              float ks = floor((wc.y - uOpenDoor.y) / W.floorH + 0.5), kc = floor((eye.y - 1.5 - uOpenDoor.y) / W.floorH + 0.5);
+              if (abs(ks - kc) < 1.5 && length(eye - q) < 6.5 + 1.5 * fract(W.h1 * 13.7)) discard;
             }
             float glassM = innerM * (1.0 - barM) * (1.0 - shadeM) * nearW;
             if (glassM > 0.001) {

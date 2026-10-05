@@ -120,6 +120,44 @@ describe('LifeSim', () => {
     expect(sawExit).toBe(true);
   });
 
+  it("who walks in by the open building's door goes on in to a place, and stays inside through a close and a reopen", { timeout: 15000 }, () => {
+    // (Robby: "people going into buildings disappear — it all needs to be persistent")
+    const sim = new LifeSim(town());
+    sim.setEnv({ playerX: -900, playerZ: -900, hour: 14, night: 0, density: 1, wind: 0.5 });
+    const D = town().doors;
+    // the first walker on a door's final approach: their building opens, three places inside it
+    let i = -1;
+    for (let t = 0; t < 20000 && i < 0; t++) {
+      sim.step(0.05);
+      for (let k = RANGES.peds[0]; k < RANGES.peds[1]; k++) if (sim.active[k] && sim.state[k] === PED_STATE.TO_DOOR && sim.leg[k] === 1) { i = k; break; }
+    }
+    expect(i).toBeGreaterThanOrEqual(0);
+    const o = sim.door[i] * 6, dx = D[o], dz = D[o + 2], inward = Math.sign(D[o + 2] - D[o + 5]);
+    const spots = new Float32Array([dx - 2, 1.8, dz + inward * 4, 0, dx, 1.8, dz + inward * 6, 0, dx + 2, 1.8, dz + inward * 4, 0]);
+    sim.setIndoor({ door: [dx, dz], spots });
+    const atSpot = () => [0, 1, 2].some((k) => Math.hypot(sim.x[i] - spots[k * 4], sim.z[i] - spots[k * 4 + 2]) < 0.35);
+    let stayed = false;
+    for (let t = 0; t < 2000 && !stayed; t++) {
+      sim.step(0.05);
+      if (sim.state[i] === PED_STATE.IN_WALK || sim.state[i] === PED_STATE.IN_STAY) expect(sim.y[i]).toBeGreaterThan(1); // seen, on the floor inside
+      if (sim.state[i] === PED_STATE.IN_STAY) stayed = atSpot();
+    }
+    expect(stayed).toBe(true);
+    // the building closes (you walked off): they're inside still, unseen
+    sim.setIndoor(null);
+    expect(sim.state[i]).toBe(PED_STATE.INSIDE);
+    sim.step(0.05);
+    expect(sim.y[i]).toBeLessThan(-500);
+    // it opens again: there they are, at a place, at once
+    sim.setIndoor({ door: [dx, dz], spots });
+    expect(sim.state[i]).toBe(PED_STATE.IN_STAY);
+    expect(atSpot()).toBe(true);
+    // and in time they walk back out by the door, and on down the street
+    let out = false;
+    for (let t = 0; t < 12000 && !out; t++) { sim.step(0.05); out = sim.state[i] === PED_STATE.FROM_DOOR || sim.state[i] === PED_STATE.WALK; }
+    expect(out).toBe(true);
+  });
+
   it('boats stay on the water', () => {
     const { sim } = run(1200);
     for (let i = RANGES.boats[0]; i < RANGES.boats[1]; i++) {

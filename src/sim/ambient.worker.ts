@@ -75,6 +75,8 @@ ctx.onmessage = (e: MessageEvent) => {
   } else if (d.kind === 'regraph' && sim) {
     // new tiles streamed in: same worker, same agents, a bigger road graph
     sim = new LifeSim(d.init as LifeInit, sim);
+  } else if (d.kind === 'indoor' && sim) {
+    sim.setIndoor(d.indoor);
   } else if (d.kind === 'pause') {
     paused = true;
     if (timer) { clearTimeout(timer); timer = 0; }
