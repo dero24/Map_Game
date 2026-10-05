@@ -1,6 +1,6 @@
 {
  "note": "tools/real-spots.mjs: the comparison loop's spots (Mapillary photo ids and poses only — the photos are never kept in the repo or shipped). Photos © their Mapillary contributors, CC BY-SA 4.0.",
- "made": "2026-10-04",
+ "made": "2026-10-05",
  "spots": [
   {
    "id": "AL-largest-0137000",
@@ -50,6 +50,18 @@
    "at": [
     33.8926003,
     -86.757773
+   ],
+   "img": null
+  },
+  {
+   "id": "green-gulf-government-street-mobile",
+   "state": "AL",
+   "town": "Government Street, Mobile",
+   "kind": "green",
+   "region": "gulf",
+   "at": [
+    30.686,
+    -88.06
    ],
    "img": null
   },
@@ -118,6 +130,18 @@
    }
   },
   {
+   "id": "green-ozarks-eureka-springs",
+   "state": "AR",
+   "town": "Eureka Springs",
+   "kind": "green",
+   "region": "ozarks",
+   "at": [
+    36.401,
+    -93.738
+   ],
+   "img": null
+  },
+  {
    "id": "AZ-largest-0455000",
    "state": "AZ",
    "town": "Phoenix, AZ",
@@ -165,6 +189,72 @@
    "at": [
     32.2528519,
     -109.8320124
+   ],
+   "img": null
+  },
+  {
+   "id": "green-desert-sw-cactus-forest-drive-saguaro",
+   "state": "AZ",
+   "town": "Cactus Forest Drive, Saguaro",
+   "kind": "green",
+   "region": "desert-sw",
+   "at": [
+    32.18,
+    -110.73
+   ],
+   "img": {
+    "id": "1409820757512712",
+    "lat": 32.1877759,
+    "lon": -110.7314255,
+    "heading": 14.17,
+    "hfov": 73.4,
+    "vfov": 58.5,
+    "w": 4000,
+    "h": 3008,
+    "captured": "2025-12-31T22:05:12.998Z",
+    "by": "atinhagig",
+    "within": 0.008,
+    "q": 0.622,
+    "calt": 920.9,
+    "pitch": 3.6
+   }
+  },
+  {
+   "id": "green-desert-sw-encanto-palmcroft-phoenix",
+   "state": "AZ",
+   "town": "Encanto-Palmcroft, Phoenix",
+   "kind": "green",
+   "region": "desert-sw",
+   "at": [
+    33.475,
+    -112.09
+   ],
+   "img": {
+    "id": "1214565170029830",
+    "lat": 33.4757972,
+    "lon": -112.089239,
+    "heading": 211.25,
+    "hfov": 102.8,
+    "vfov": 86.4,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2025-02-23T18:36:18.088Z",
+    "by": "mycota",
+    "within": 0.001,
+    "q": 0.692,
+    "calt": 335,
+    "pitch": -3
+   }
+  },
+  {
+   "id": "green-desert-sw-sam-hughes-tucson",
+   "state": "AZ",
+   "town": "Sam Hughes, Tucson",
+   "kind": "green",
+   "region": "desert-sw",
+   "at": [
+    32.24,
+    -110.94
    ],
    "img": null
   },
@@ -250,6 +340,96 @@
    }
   },
   {
+   "id": "green-california-berkeley-hills",
+   "state": "CA",
+   "town": "Berkeley hills",
+   "kind": "green",
+   "region": "california",
+   "at": [
+    37.876,
+    -122.255
+   ],
+   "img": {
+    "id": "1178546631159093",
+    "lat": 37.8746685,
+    "lon": -122.2560541,
+    "heading": 150.9,
+    "hfov": 75.9,
+    "vfov": 60.7,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2025-12-29T23:07:41.089Z",
+    "by": "davidofun",
+    "within": 0.002,
+    "q": 0.476,
+    "calt": 123.4,
+    "pitch": 15.3
+   }
+  },
+  {
+   "id": "green-california-bungalow-heaven-pasadena",
+   "state": "CA",
+   "town": "Bungalow Heaven, Pasadena",
+   "kind": "green",
+   "region": "california",
+   "at": [
+    34.159,
+    -118.13
+   ],
+   "img": {
+    "id": "2902714610044257",
+    "lat": 34.1577615,
+    "lon": -118.1311425,
+    "heading": 87.41,
+    "hfov": 66.8,
+    "vfov": 52.7,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2020-01-12T19:53:23.386Z",
+    "by": "ericaschecter",
+    "within": 0.002,
+    "q": 0.683,
+    "calt": 265.6,
+    "pitch": 9.4
+   }
+  },
+  {
+   "id": "green-california-fab-40s-sacramento",
+   "state": "CA",
+   "town": "Fab 40s, Sacramento",
+   "kind": "green",
+   "region": "california",
+   "at": [
+    38.572,
+    -121.45
+   ],
+   "img": null
+  },
+  {
+   "id": "green-california-highway-1-big-sur",
+   "state": "CA",
+   "town": "Highway 1, Big Sur",
+   "kind": "green",
+   "region": "california",
+   "at": [
+    36.27,
+    -121.81
+   ],
+   "img": null
+  },
+  {
+   "id": "green-california-professorville-palo-alto",
+   "state": "CA",
+   "town": "Professorville, Palo Alto",
+   "kind": "green",
+   "region": "california",
+   "at": [
+    37.443,
+    -122.155
+   ],
+   "img": null
+  },
+  {
    "id": "CO-largest-0820000",
    "state": "CO",
    "town": "Denver, CO",
@@ -314,6 +494,33 @@
     -102.3024103
    ],
    "img": null
+  },
+  {
+   "id": "green-rockies-mapleton-hill-boulder",
+   "state": "CO",
+   "town": "Mapleton Hill, Boulder",
+   "kind": "green",
+   "region": "rockies",
+   "at": [
+    40.02,
+    -105.286
+   ],
+   "img": {
+    "id": "1152080026187948",
+    "lat": 40.0204343,
+    "lon": -105.2853602,
+    "heading": 96.83,
+    "hfov": 58.5,
+    "vfov": 45.6,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2023-04-17T23:40:41.597Z",
+    "by": "dgrinbergs",
+    "within": 0.001,
+    "q": 0.783,
+    "calt": 1663.4,
+    "pitch": 8.1
+   }
   },
   {
    "id": "CT-largest-0908000",
@@ -563,6 +770,84 @@
    "img": null
   },
   {
+   "id": "green-florida-centerville-road-tallahassee",
+   "state": "FL",
+   "town": "Centerville Road, Tallahassee",
+   "kind": "green",
+   "region": "florida",
+   "at": [
+    30.52,
+    -84.24
+   ],
+   "img": {
+    "id": "508336014507322",
+    "lat": 30.5194024,
+    "lon": -84.2396072,
+    "heading": 217.37,
+    "hfov": 106.1,
+    "vfov": 64,
+    "w": 3630,
+    "h": 1706,
+    "captured": "2022-10-30T17:10:37.000Z",
+    "by": "lordsutch",
+    "within": 0.001,
+    "q": 0.587,
+    "calt": 62.2,
+    "pitch": 13.5
+   }
+  },
+  {
+   "id": "green-florida-eaton-street-key-west",
+   "state": "FL",
+   "town": "Eaton Street, Key West",
+   "kind": "green",
+   "region": "florida",
+   "at": [
+    24.559,
+    -81.8
+   ],
+   "img": {
+    "id": "838830090762356",
+    "lat": 24.5604372,
+    "lon": -81.8005559,
+    "heading": 75.18,
+    "hfov": 100.5,
+    "vfov": 68.1,
+    "w": 2704,
+    "h": 1520,
+    "captured": "2021-02-26T21:10:48.246Z",
+    "by": "networklanman",
+    "within": 0.002,
+    "q": 0.764,
+    "calt": 5.3,
+    "pitch": -2.4
+   }
+  },
+  {
+   "id": "green-florida-interlachen-avenue-winter-park",
+   "state": "FL",
+   "town": "Interlachen Avenue, Winter Park",
+   "kind": "green",
+   "region": "florida",
+   "at": [
+    28.596,
+    -81.35
+   ],
+   "img": null
+  },
+  {
+   "id": "green-florida-main-highway-coconut-grove",
+   "state": "FL",
+   "town": "Main Highway, Coconut Grove",
+   "kind": "green",
+   "region": "florida",
+   "at": [
+    25.728,
+    -80.243
+   ],
+   "img": null
+  },
+  {
    "id": "GA-largest-1304000",
    "state": "GA",
    "town": "Atlanta, GA",
@@ -644,6 +929,45 @@
    }
   },
   {
+   "id": "green-southeast-inman-park-atlanta",
+   "state": "GA",
+   "town": "Inman Park, Atlanta",
+   "kind": "green",
+   "region": "southeast",
+   "at": [
+    33.758,
+    -84.354
+   ],
+   "img": null
+  },
+  {
+   "id": "green-southeast-jones-street-savannah",
+   "state": "GA",
+   "town": "Jones Street, Savannah",
+   "kind": "green",
+   "region": "southeast",
+   "at": [
+    32.0745,
+    -81.095
+   ],
+   "img": {
+    "id": "1318354412439033",
+    "lat": 32.0750361,
+    "lon": -81.09454,
+    "heading": 116.14,
+    "hfov": 94.7,
+    "vfov": 62.8,
+    "w": 1920,
+    "h": 1080,
+    "captured": "2023-08-31T17:33:22.716Z",
+    "by": "davegis",
+    "within": 0.002,
+    "q": 0.508,
+    "calt": 36.8,
+    "pitch": -7.5
+   }
+  },
+  {
    "id": "IA-largest-1921000",
    "state": "IA",
    "town": "Des Moines, IA",
@@ -691,6 +1015,18 @@
    "at": [
     41.1814193,
     -91.1854273
+   ],
+   "img": null
+  },
+  {
+   "id": "green-midwest-summit-street-iowa-city",
+   "state": "IA",
+   "town": "Summit Street, Iowa City",
+   "kind": "green",
+   "region": "midwest",
+   "at": [
+    41.651,
+    -91.527
    ],
    "img": null
   },
@@ -757,6 +1093,33 @@
     -111.7482976
    ],
    "img": null
+  },
+  {
+   "id": "green-rockies-coeur-d-alene",
+   "state": "ID",
+   "town": "Coeur d'Alene",
+   "kind": "green",
+   "region": "rockies",
+   "at": [
+    47.674,
+    -116.77
+   ],
+   "img": {
+    "id": "1065047965038387",
+    "lat": 47.6775781,
+    "lon": -116.7855288,
+    "heading": 61.4,
+    "hfov": 103.1,
+    "vfov": 86.8,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2025-06-22T15:57:48.465Z",
+    "by": "plan_c",
+    "within": 0.016,
+    "q": 0.675,
+    "calt": 671.8,
+    "pitch": 20
+   }
   },
   {
    "id": "IL-largest-1714000",
@@ -838,6 +1201,18 @@
     "calt": 178.7,
     "pitch": 5.6
    }
+  },
+  {
+   "id": "green-midwest-kenilworth-avenue-oak-park",
+   "state": "IL",
+   "town": "Kenilworth Avenue, Oak Park",
+   "kind": "green",
+   "region": "midwest",
+   "at": [
+    41.888,
+    -87.788
+   ],
+   "img": null
   },
   {
    "id": "IN-largest-1836003",
@@ -983,6 +1358,60 @@
    "img": null
   },
   {
+   "id": "green-plains-council-grove",
+   "state": "KS",
+   "town": "Council Grove",
+   "kind": "green",
+   "region": "plains",
+   "at": [
+    38.661,
+    -96.489
+   ],
+   "img": {
+    "id": "1377673359836876",
+    "lat": 38.6610531,
+    "lon": -96.4888175,
+    "heading": 69.61,
+    "hfov": 121.3,
+    "vfov": 114.6,
+    "w": 5568,
+    "h": 4872,
+    "captured": "2023-08-05T16:31:00.708Z",
+    "by": "toebee",
+    "within": 0.001,
+    "q": 0.71,
+    "calt": 374.5,
+    "pitch": 14.9
+   }
+  },
+  {
+   "id": "green-plains-old-west-lawrence",
+   "state": "KS",
+   "town": "Old West Lawrence",
+   "kind": "green",
+   "region": "plains",
+   "at": [
+    38.969,
+    -95.245
+   ],
+   "img": {
+    "id": "1197103628392246",
+    "lat": 38.96994,
+    "lon": -95.2452442,
+    "heading": 355.68,
+    "hfov": 77.5,
+    "vfov": 62.1,
+    "w": 4080,
+    "h": 3060,
+    "captured": "2024-02-28T22:12:58.154Z",
+    "by": "kgonterwitz21",
+    "within": 0.001,
+    "q": 0.715,
+    "calt": 265.3,
+    "pitch": 8.8
+   }
+  },
+  {
    "id": "KY-largest-2148006",
    "state": "KY",
    "town": "Louisville/Jefferson County, KY",
@@ -1015,6 +1444,18 @@
    "at": [
     37.9214758,
     -83.2596216
+   ],
+   "img": null
+  },
+  {
+   "id": "green-appalachia-old-frankfort-pike-lexington",
+   "state": "KY",
+   "town": "Old Frankfort Pike, Lexington",
+   "kind": "green",
+   "region": "appalachia",
+   "at": [
+    38.105,
+    -84.6
    ],
    "img": null
   },
@@ -1100,6 +1541,45 @@
    }
   },
   {
+   "id": "green-gulf-girard-park-lafayette",
+   "state": "LA",
+   "town": "Girard Park, Lafayette",
+   "kind": "green",
+   "region": "gulf",
+   "at": [
+    30.213,
+    -92.03
+   ],
+   "img": null
+  },
+  {
+   "id": "green-gulf-st-charles-avenue-new-orleans",
+   "state": "LA",
+   "town": "St. Charles Avenue, New Orleans",
+   "kind": "green",
+   "region": "gulf",
+   "at": [
+    29.93,
+    -90.095
+   ],
+   "img": {
+    "id": "2794268224095651",
+    "lat": 29.9302606,
+    "lon": -90.095245,
+    "heading": 113.79,
+    "hfov": 66,
+    "vfov": 40.1,
+    "w": 1920,
+    "h": 1080,
+    "captured": "2023-05-18T14:57:19.396Z",
+    "by": "WR2_2023",
+    "within": 0.001,
+    "q": 0.605,
+    "calt": 7.1,
+    "pitch": -0.8
+   }
+  },
+  {
    "id": "MA-largest-2507000",
    "state": "MA",
    "town": "Boston, MA",
@@ -1137,6 +1617,33 @@
     -70.978773
    ],
    "img": null
+  },
+  {
+   "id": "green-new-england-monument-street-concord",
+   "state": "MA",
+   "town": "Monument Street, Concord",
+   "kind": "green",
+   "region": "new-england",
+   "at": [
+    42.4636,
+    -71.3489
+   ],
+   "img": {
+    "id": "1109696767679328",
+    "lat": 42.4597246,
+    "lon": -71.3508831,
+    "heading": 68.11,
+    "hfov": 98.4,
+    "vfov": 82.2,
+    "w": 4080,
+    "h": 3072,
+    "captured": "2025-06-28T18:21:31.168Z",
+    "by": "mapillary01730",
+    "within": 0.008,
+    "q": 0.653,
+    "calt": 39.3,
+    "pitch": 0.4
+   }
   },
   {
    "id": "MD-largest-2404000",
@@ -1215,6 +1722,33 @@
     "q": 0.688,
     "calt": 10.6,
     "pitch": 9.1
+   }
+  },
+  {
+   "id": "green-mid-atlantic-prince-george-street-annapolis",
+   "state": "MD",
+   "town": "Prince George Street, Annapolis",
+   "kind": "green",
+   "region": "mid-atlantic",
+   "at": [
+    38.979,
+    -76.49
+   ],
+   "img": {
+    "id": "469466822365295",
+    "lat": 38.9770552,
+    "lon": -76.4880413,
+    "heading": 123.06,
+    "hfov": 58.7,
+    "vfov": 45.7,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2024-07-11T17:51:29.470Z",
+    "by": "DrivingRoundTown",
+    "within": 0.008,
+    "q": 0.536,
+    "calt": 4.3,
+    "pitch": -2.6
    }
   },
   {
@@ -1299,6 +1833,33 @@
    }
   },
   {
+   "id": "green-new-england-park-loop-road-acadia",
+   "state": "ME",
+   "town": "Park Loop Road, Acadia",
+   "kind": "green",
+   "region": "new-england",
+   "at": [
+    44.3205,
+    -68.2533
+   ],
+   "img": {
+    "id": "890647183352364",
+    "lat": 44.323792,
+    "lon": -68.252629,
+    "heading": 0,
+    "hfov": 69.4,
+    "vfov": 54.9,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2023-09-04T17:09:20.872Z",
+    "by": "DrivingRoundTown",
+    "within": 0.016,
+    "q": 0.754,
+    "calt": 85.6,
+    "pitch": 0
+   }
+  },
+  {
    "id": "MI-largest-2622000",
    "state": "MI",
    "town": "Detroit, MI",
@@ -1363,6 +1924,45 @@
     -84.1177451
    ],
    "img": null
+  },
+  {
+   "id": "green-midwest-burns-park-ann-arbor",
+   "state": "MI",
+   "town": "Burns Park, Ann Arbor",
+   "kind": "green",
+   "region": "midwest",
+   "at": [
+    42.27,
+    -83.728
+   ],
+   "img": null
+  },
+  {
+   "id": "green-midwest-traverse-city",
+   "state": "MI",
+   "town": "Traverse City",
+   "kind": "green",
+   "region": "midwest",
+   "at": [
+    44.76,
+    -85.62
+   ],
+   "img": {
+    "id": "454171725848174",
+    "lat": 44.7617637,
+    "lon": -85.6186708,
+    "heading": 291.12,
+    "hfov": 60.5,
+    "vfov": 47.2,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2021-09-26T16:32:16.283Z",
+    "by": "treestryder",
+    "within": 0.002,
+    "q": 0.629,
+    "calt": 185.8,
+    "pitch": 4.8
+   }
   },
   {
    "id": "MN-largest-2743000",
@@ -1495,6 +2095,33 @@
    "img": null
   },
   {
+   "id": "green-ozarks-branson",
+   "state": "MO",
+   "town": "Branson",
+   "kind": "green",
+   "region": "ozarks",
+   "at": [
+    36.644,
+    -93.218
+   ],
+   "img": {
+    "id": "327819016064514",
+    "lat": 36.6476987,
+    "lon": -93.2261833,
+    "heading": 198.11,
+    "hfov": 100.6,
+    "vfov": 84.2,
+    "w": 5184,
+    "h": 3888,
+    "captured": "2022-05-06T18:02:13.900Z",
+    "by": "bundlegut",
+    "within": 0.016,
+    "q": 0.693,
+    "calt": 242.2,
+    "pitch": 19
+   }
+  },
+  {
    "id": "MS-largest-2836000",
    "state": "MS",
    "town": "Jackson, MS",
@@ -1529,7 +2156,22 @@
     34.9342548,
     -88.5222702
    ],
-   "img": null
+   "img": {
+    "id": "1265285537366465",
+    "lat": 34.9191589,
+    "lon": -88.5110579,
+    "heading": 126.11,
+    "hfov": 87.8,
+    "vfov": 41,
+    "w": 3716,
+    "h": 1444,
+    "captured": "2023-01-01T18:59:52.900Z",
+    "by": "lordsutch",
+    "within": 0.016,
+    "q": 0.715,
+    "calt": 142.2,
+    "pitch": 4.9
+   }
   },
   {
    "id": "MS-small-2871600",
@@ -1610,6 +2252,33 @@
    "img": null
   },
   {
+   "id": "green-rockies-south-willson-avenue-bozeman",
+   "state": "MT",
+   "town": "South Willson Avenue, Bozeman",
+   "kind": "green",
+   "region": "rockies",
+   "at": [
+    45.672,
+    -111.039
+   ],
+   "img": {
+    "id": "1819796018787430",
+    "lat": 45.6773636,
+    "lon": -111.0311274,
+    "heading": 270.6,
+    "hfov": 67.6,
+    "vfov": 53.4,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2024-12-23T17:07:32.038Z",
+    "by": "whitecotton",
+    "within": 0.016,
+    "q": 0.732,
+    "calt": 1466.3,
+    "pitch": 4.7
+   }
+  },
+  {
    "id": "NC-largest-3712000",
    "state": "NC",
    "town": "Charlotte, NC",
@@ -1686,6 +2355,60 @@
     "q": 0.593,
     "calt": 196.5,
     "pitch": 10.3
+   }
+  },
+  {
+   "id": "green-appalachia-montford-avenue-asheville",
+   "state": "NC",
+   "town": "Montford Avenue, Asheville",
+   "kind": "green",
+   "region": "appalachia",
+   "at": [
+    35.607,
+    -82.56
+   ],
+   "img": {
+    "id": "344464871228359",
+    "lat": 35.6031678,
+    "lon": -82.5573566,
+    "heading": 157.62,
+    "hfov": 68.6,
+    "vfov": 54.2,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2022-08-09T00:03:34.426Z",
+    "by": "_jcaruso",
+    "within": 0.004,
+    "q": 0.767,
+    "calt": 648.3,
+    "pitch": 3.4
+   }
+  },
+  {
+   "id": "green-southeast-trinity-park-durham",
+   "state": "NC",
+   "town": "Trinity Park, Durham",
+   "kind": "green",
+   "region": "southeast",
+   "at": [
+    36.008,
+    -78.905
+   ],
+   "img": {
+    "id": "279590907733471",
+    "lat": 36.0054799,
+    "lon": -78.9055965,
+    "heading": 94.29,
+    "hfov": 59.3,
+    "vfov": 46.3,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2023-10-21T20:19:14.650Z",
+    "by": "guyutetube",
+    "within": 0.004,
+    "q": 0.749,
+    "calt": 105.1,
+    "pitch": 1.9
    }
   },
   {
@@ -1834,6 +2557,33 @@
    }
   },
   {
+   "id": "green-plains-sheridan-boulevard-lincoln",
+   "state": "NE",
+   "town": "Sheridan Boulevard, Lincoln",
+   "kind": "green",
+   "region": "plains",
+   "at": [
+    40.792,
+    -96.658
+   ],
+   "img": {
+    "id": "2440890896370133",
+    "lat": 40.7916867,
+    "lon": -96.6579414,
+    "heading": 270.86,
+    "hfov": 58.8,
+    "vfov": 45.8,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2026-02-11T22:08:56.198Z",
+    "by": "quickness805",
+    "within": 0.001,
+    "q": 0.708,
+    "calt": 370.8,
+    "pitch": 1.8
+   }
+  },
+  {
    "id": "NH-largest-3345140",
    "state": "NH",
    "town": "Manchester, NH",
@@ -1951,6 +2701,60 @@
     "q": 0.662,
     "calt": 13.5,
     "pitch": 1.4
+   }
+  },
+  {
+   "id": "green-mid-atlantic-hughes-street-cape-may",
+   "state": "NJ",
+   "town": "Hughes Street, Cape May",
+   "kind": "green",
+   "region": "mid-atlantic",
+   "at": [
+    38.933,
+    -74.923
+   ],
+   "img": {
+    "id": "1727448987640598",
+    "lat": 38.9336265,
+    "lon": -74.923135,
+    "heading": 40.15,
+    "hfov": 95.1,
+    "vfov": 78.7,
+    "w": 5184,
+    "h": 3888,
+    "captured": "2022-10-07T16:10:26.044Z",
+    "by": "roadgeek_md99",
+    "within": 0.001,
+    "q": 0.787,
+    "calt": 6.8,
+    "pitch": 15.8
+   }
+  },
+  {
+   "id": "green-mid-atlantic-library-place-princeton",
+   "state": "NJ",
+   "town": "Library Place, Princeton",
+   "kind": "green",
+   "region": "mid-atlantic",
+   "at": [
+    40.348,
+    -74.6672
+   ],
+   "img": {
+    "id": "1081651513269729",
+    "lat": 40.3470278,
+    "lon": -74.6662354,
+    "heading": 141.57,
+    "hfov": 93.4,
+    "vfov": 77.1,
+    "w": 4000,
+    "h": 3000,
+    "captured": "2024-11-11T15:30:07.000Z",
+    "by": "roadgeek_md99",
+    "within": 0.001,
+    "q": 0.73,
+    "calt": 67.1,
+    "pitch": 0
    }
   },
   {
@@ -2109,6 +2913,45 @@
    "img": null
   },
   {
+   "id": "green-desert-sw-canyon-road-santa-fe",
+   "state": "NM",
+   "town": "Canyon Road, Santa Fe",
+   "kind": "green",
+   "region": "desert-sw",
+   "at": [
+    35.681,
+    -105.93
+   ],
+   "img": {
+    "id": "537789929106592",
+    "lat": 35.6808566,
+    "lon": -105.9319184,
+    "heading": 190.53,
+    "hfov": 70,
+    "vfov": 55.4,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2024-10-12T23:06:04.777Z",
+    "by": "whitecotton",
+    "within": 0.002,
+    "q": 0.667,
+    "calt": 2152.1,
+    "pitch": 2.9
+   }
+  },
+  {
+   "id": "green-desert-sw-las-cruces",
+   "state": "NM",
+   "town": "Las Cruces",
+   "kind": "green",
+   "region": "desert-sw",
+   "at": [
+    32.31,
+    -106.77
+   ],
+   "img": null
+  },
+  {
    "id": "NV-largest-3240000",
    "state": "NV",
    "town": "Las Vegas, NV",
@@ -2188,6 +3031,18 @@
    }
   },
   {
+   "id": "green-great-basin-old-southwest-reno",
+   "state": "NV",
+   "town": "Old Southwest, Reno",
+   "kind": "green",
+   "region": "great-basin",
+   "at": [
+    39.515,
+    -119.82
+   ],
+   "img": null
+  },
+  {
    "id": "NY-largest-3651000",
    "state": "NY",
    "town": "New York, NY",
@@ -2264,6 +3119,114 @@
     "by": "daalso",
     "within": 0.016,
     "unfit": "not segmented"
+   }
+  },
+  {
+   "id": "green-upstate-ny-fall-creek-ithaca",
+   "state": "NY",
+   "town": "Fall Creek, Ithaca",
+   "kind": "green",
+   "region": "upstate-ny",
+   "at": [
+    42.4482,
+    -76.495
+   ],
+   "img": {
+    "id": "1383316172287036",
+    "lat": 42.4521628,
+    "lon": -76.4947183,
+    "heading": 79.09,
+    "hfov": 74.9,
+    "vfov": 59.8,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2024-04-10T21:05:09.821Z",
+    "by": "quickness805",
+    "within": 0.008,
+    "q": 0.512,
+    "calt": 130.5,
+    "pitch": 7.8
+   }
+  },
+  {
+   "id": "green-upstate-ny-north-broadway-saratoga-springs",
+   "state": "NY",
+   "town": "North Broadway, Saratoga Springs",
+   "kind": "green",
+   "region": "upstate-ny",
+   "at": [
+    43.0905,
+    -73.7836
+   ],
+   "img": {
+    "id": "1653383621819802",
+    "lat": 43.0908787,
+    "lon": -73.7827226,
+    "heading": 109.53,
+    "hfov": 64.7,
+    "vfov": 51,
+    "w": 4080,
+    "h": 3072,
+    "captured": "2023-08-03T21:30:38.620Z",
+    "by": "MafogMachine",
+    "within": 0.001,
+    "q": 0.704,
+    "calt": 109.7,
+    "pitch": 17.1
+   }
+  },
+  {
+   "id": "green-upstate-ny-ny-73-keene",
+   "state": "NY",
+   "town": "NY-73, Keene",
+   "kind": "green",
+   "region": "upstate-ny",
+   "at": [
+    44.205,
+    -73.776
+   ],
+   "img": {
+    "id": "2126144054601408",
+    "lat": 44.2079529,
+    "lon": -73.7881774,
+    "heading": 11.3,
+    "hfov": 116.1,
+    "vfov": 100.5,
+    "w": 2592,
+    "h": 1944,
+    "captured": "2026-06-19T16:01:59.466Z",
+    "by": "DrivingRoundTown",
+    "within": 0.016,
+    "q": 0.666,
+    "calt": 335.5,
+    "pitch": 27.5
+   }
+  },
+  {
+   "id": "green-upstate-ny-saranac-avenue-lake-placid",
+   "state": "NY",
+   "town": "Saranac Avenue, Lake Placid",
+   "kind": "green",
+   "region": "upstate-ny",
+   "at": [
+    44.284,
+    -73.9967
+   ],
+   "img": {
+    "id": "2354159441741194",
+    "lat": 44.2760187,
+    "lon": -73.988832,
+    "heading": 260.16,
+    "hfov": 100.8,
+    "vfov": 84.4,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2026-07-12T20:21:42.093Z",
+    "by": "CameraPerson",
+    "within": 0.008,
+    "q": 0.751,
+    "calt": 534,
+    "pitch": -10.8
    }
   },
   {
@@ -2461,6 +3424,45 @@
    "img": null
   },
   {
+   "id": "green-pnw-bend-the-dry-side",
+   "state": "OR",
+   "town": "Bend (the dry side)",
+   "kind": "green",
+   "region": "pnw",
+   "at": [
+    44.056,
+    -121.315
+   ],
+   "img": {
+    "id": "1178846100297413",
+    "lat": 44.0569037,
+    "lon": -121.3153346,
+    "heading": 171.73,
+    "hfov": 44.5,
+    "vfov": 25.9,
+    "w": 3840,
+    "h": 2160,
+    "captured": "2025-03-14T17:02:26.000Z",
+    "by": "n_skinner",
+    "within": 0.001,
+    "q": 0.684,
+    "calt": 1105.2,
+    "pitch": -1
+   }
+  },
+  {
+   "id": "green-pnw-laurelhurst-portland",
+   "state": "OR",
+   "town": "Laurelhurst, Portland",
+   "kind": "green",
+   "region": "pnw",
+   "at": [
+    45.527,
+    -122.626
+   ],
+   "img": null
+  },
+  {
    "id": "PA-largest-4260000",
    "state": "PA",
    "town": "Philadelphia, PA",
@@ -2643,6 +3645,33 @@
    }
   },
   {
+   "id": "green-southeast-rutledge-avenue-charleston",
+   "state": "SC",
+   "town": "Rutledge Avenue, Charleston",
+   "kind": "green",
+   "region": "southeast",
+   "at": [
+    32.77,
+    -79.935
+   ],
+   "img": {
+    "id": "1002157638852432",
+    "lat": 32.7708344,
+    "lon": -79.9353869,
+    "heading": 356.27,
+    "hfov": 70.5,
+    "vfov": 55.9,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2026-06-15T23:44:30.040Z",
+    "by": "AmericanMapper",
+    "within": 0.001,
+    "q": 0.54,
+    "calt": 4.2,
+    "pitch": 1.8
+   }
+  },
+  {
    "id": "SD-largest-4659020",
    "state": "SD",
    "town": "Sioux Falls, SD",
@@ -2690,6 +3719,18 @@
    "at": [
     43.4230394,
     -97.2606153
+   ],
+   "img": null
+  },
+  {
+   "id": "green-plains-rapid-city",
+   "state": "SD",
+   "town": "Rapid City",
+   "kind": "green",
+   "region": "plains",
+   "at": [
+    44.075,
+    -103.23
    ],
    "img": null
   },
@@ -2775,6 +3816,33 @@
    }
   },
   {
+   "id": "green-appalachia-little-river-road-the-smokies",
+   "state": "TN",
+   "town": "Little River Road, the Smokies",
+   "kind": "green",
+   "region": "appalachia",
+   "at": [
+    35.66,
+    -83.6
+   ],
+   "img": {
+    "id": "1148878405834368",
+    "lat": 35.6673421,
+    "lon": -83.5933757,
+    "heading": 247.9,
+    "hfov": 60.9,
+    "vfov": 36.6,
+    "w": 1920,
+    "h": 1080,
+    "captured": "2021-04-26T23:57:17.000Z",
+    "by": "networklanman",
+    "within": 0.008,
+    "q": 0.45,
+    "calt": 643.4,
+    "pitch": 0
+   }
+  },
+  {
    "id": "TX-largest-4835000",
    "state": "TX",
    "town": "Houston, TX",
@@ -2841,6 +3909,111 @@
    }
   },
   {
+   "id": "green-texas-hyde-park-austin",
+   "state": "TX",
+   "town": "Hyde Park, Austin",
+   "kind": "green",
+   "region": "texas",
+   "at": [
+    30.306,
+    -97.727
+   ],
+   "img": {
+    "id": "143042564472001",
+    "lat": 30.3062327,
+    "lon": -97.7257737,
+    "heading": 128.89,
+    "hfov": 66.5,
+    "vfov": 52.4,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2019-12-12T17:37:36.204Z",
+    "by": "oscartx512",
+    "within": 0.001,
+    "q": 0.661,
+    "calt": 195.2,
+    "pitch": -5.6
+   }
+  },
+  {
+   "id": "green-texas-king-william-san-antonio",
+   "state": "TX",
+   "town": "King William, San Antonio",
+   "kind": "green",
+   "region": "texas",
+   "at": [
+    29.414,
+    -98.495
+   ],
+   "img": {
+    "id": "1907861489608390",
+    "lat": 29.411062,
+    "lon": -98.5003909,
+    "heading": 100.96,
+    "hfov": 69.4,
+    "vfov": 54.9,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2023-10-26T22:17:11.770Z",
+    "by": "texman36",
+    "within": 0.016,
+    "q": 0.695,
+    "calt": 195.1,
+    "pitch": 12.9
+   }
+  },
+  {
+   "id": "green-texas-main-street-fredericksburg",
+   "state": "TX",
+   "town": "Main Street, Fredericksburg",
+   "kind": "green",
+   "region": "texas",
+   "at": [
+    30.2752,
+    -98.872
+   ],
+   "img": null
+  },
+  {
+   "id": "green-texas-north-boulevard-houston",
+   "state": "TX",
+   "town": "North Boulevard, Houston",
+   "kind": "green",
+   "region": "texas",
+   "at": [
+    29.727,
+    -95.405
+   ],
+   "img": null
+  },
+  {
+   "id": "green-texas-wolflin-amarillo",
+   "state": "TX",
+   "town": "Wolflin, Amarillo",
+   "kind": "green",
+   "region": "texas",
+   "at": [
+    35.19,
+    -101.865
+   ],
+   "img": {
+    "id": "328980129505517",
+    "lat": 35.1950527,
+    "lon": -101.868875,
+    "heading": 81.02,
+    "hfov": 48.2,
+    "vfov": 37.1,
+    "w": 4000,
+    "h": 3000,
+    "captured": "2023-09-02T00:24:22.375Z",
+    "by": "vorpalblade",
+    "within": 0.008,
+    "q": 0.631,
+    "calt": 1103.2,
+    "pitch": 16.2
+   }
+  },
+  {
    "id": "UT-largest-4967000",
    "state": "UT",
    "town": "Salt Lake City, UT",
@@ -2903,6 +4076,45 @@
    "at": [
     39.5469073,
     -111.4554659
+   ],
+   "img": null
+  },
+  {
+   "id": "green-great-basin-moab",
+   "state": "UT",
+   "town": "Moab",
+   "kind": "green",
+   "region": "great-basin",
+   "at": [
+    38.58,
+    -109.54
+   ],
+   "img": {
+    "id": "781184157404876",
+    "lat": 38.5717595,
+    "lon": -109.5429764,
+    "heading": 309.88,
+    "hfov": 77.5,
+    "vfov": 62.1,
+    "w": 4080,
+    "h": 3060,
+    "captured": "2024-07-05T19:11:37.042Z",
+    "by": "Montrose_Lyle",
+    "within": 0.016,
+    "q": 0.738,
+    "calt": 1240.6,
+    "pitch": 6.5
+   }
+  },
+  {
+   "id": "green-great-basin-the-avenues-salt-lake-city",
+   "state": "UT",
+   "town": "The Avenues, Salt Lake City",
+   "kind": "green",
+   "region": "great-basin",
+   "at": [
+    40.776,
+    -111.875
    ],
    "img": null
   },
@@ -3063,6 +4275,18 @@
    }
   },
   {
+   "id": "green-new-england-mountain-road-stowe",
+   "state": "VT",
+   "town": "Mountain Road, Stowe",
+   "kind": "green",
+   "region": "new-england",
+   "at": [
+    44.4865,
+    -72.7369
+   ],
+   "img": null
+  },
+  {
    "id": "WA-largest-5363000",
    "state": "WA",
    "town": "Seattle, WA",
@@ -3127,6 +4351,99 @@
    }
   },
   {
+   "id": "green-pnw-federal-avenue-east-seattle",
+   "state": "WA",
+   "town": "Federal Avenue East, Seattle",
+   "kind": "green",
+   "region": "pnw",
+   "at": [
+    47.63,
+    -122.314
+   ],
+   "img": {
+    "id": "3946960048758215",
+    "lat": 47.6298284,
+    "lon": -122.3124934,
+    "heading": 186.98,
+    "hfov": 62.3,
+    "vfov": 37.5,
+    "w": 4096,
+    "h": 2304,
+    "captured": "2020-01-30T20:14:16.366Z",
+    "by": "lovestodrive",
+    "within": 0.002,
+    "q": 0.557,
+    "calt": 3.3,
+    "pitch": 0.1
+   }
+  },
+  {
+   "id": "green-pnw-forks",
+   "state": "WA",
+   "town": "Forks",
+   "kind": "green",
+   "region": "pnw",
+   "at": [
+    47.95,
+    -124.385
+   ],
+   "img": {
+    "id": "558374512109981",
+    "lat": 47.9501726,
+    "lon": -124.3853785,
+    "heading": 11.66,
+    "hfov": 65.4,
+    "vfov": 51.4,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2021-09-25T22:05:32.763Z",
+    "by": "cmiles",
+    "within": 0.001,
+    "q": 0.733,
+    "calt": 95,
+    "pitch": 13.6
+   }
+  },
+  {
+   "id": "green-pnw-longmire-mount-rainier",
+   "state": "WA",
+   "town": "Longmire, Mount Rainier",
+   "kind": "green",
+   "region": "pnw",
+   "at": [
+    46.75,
+    -121.813
+   ],
+   "img": {
+    "id": "1120346639933962",
+    "lat": 46.7490197,
+    "lon": -121.8129422,
+    "heading": 253.85,
+    "hfov": 71,
+    "vfov": 43.7,
+    "w": 5312,
+    "h": 2988,
+    "captured": "2025-07-12T21:49:24.710Z",
+    "by": "robinmonks",
+    "within": 0.001,
+    "q": 0.68,
+    "calt": 838.9,
+    "pitch": 4.1
+   }
+  },
+  {
+   "id": "green-pnw-upper-hoh-road-the-hoh-rainforest",
+   "state": "WA",
+   "town": "Upper Hoh Road, the Hoh Rainforest",
+   "kind": "green",
+   "region": "pnw",
+   "at": [
+    47.86,
+    -124.25
+   ],
+   "img": null
+  },
+  {
    "id": "WI-largest-5553000",
    "state": "WI",
    "town": "Milwaukee, WI",
@@ -3176,6 +4493,33 @@
     -90.0792975
    ],
    "img": null
+  },
+  {
+   "id": "green-midwest-vilas-madison",
+   "state": "WI",
+   "town": "Vilas, Madison",
+   "kind": "green",
+   "region": "midwest",
+   "at": [
+    43.059,
+    -89.41
+   ],
+   "img": {
+    "id": "1326926105705411",
+    "lat": 43.0634945,
+    "lon": -89.4139591,
+    "heading": 314.53,
+    "hfov": 108,
+    "vfov": 75.5,
+    "w": 3840,
+    "h": 2160,
+    "captured": "2025-09-15T23:32:38.000Z",
+    "by": "vgxhc",
+    "within": 0.008,
+    "q": 0.724,
+    "calt": 279.1,
+    "pitch": -2.1
+   }
   },
   {
    "id": "WV-largest-5414600",
@@ -3244,6 +4588,33 @@
    "img": null
   },
   {
+   "id": "green-appalachia-kanawha-boulevard-charleston",
+   "state": "WV",
+   "town": "Kanawha Boulevard, Charleston",
+   "kind": "green",
+   "region": "appalachia",
+   "at": [
+    38.342,
+    -81.65
+   ],
+   "img": {
+    "id": "1509785380722326",
+    "lat": 38.3358587,
+    "lon": -81.6573576,
+    "heading": 232.9,
+    "hfov": 60.9,
+    "vfov": 47.6,
+    "w": 3680,
+    "h": 2760,
+    "captured": "2026-03-25T20:26:58.171Z",
+    "by": "wvuferrari",
+    "within": 0.008,
+    "q": 0.458,
+    "calt": 308.7,
+    "pitch": 0
+   }
+  },
+  {
    "id": "WY-largest-5613900",
    "state": "WY",
    "town": "Cheyenne, WY",
@@ -3291,6 +4662,18 @@
    "at": [
     41.2688392,
     -110.3398785
+   ],
+   "img": null
+  },
+  {
+   "id": "green-rockies-jackson",
+   "state": "WY",
+   "town": "Jackson",
+   "kind": "green",
+   "region": "rockies",
+   "at": [
+    43.48,
+    -110.762
    ],
    "img": null
   }

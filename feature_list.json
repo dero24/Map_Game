@@ -261,7 +261,7 @@
       "id": "real-world-comparison",
       "tier": 1,
       "rank": 11,
-      "status": "in_progress",
+      "status": "passing",
       "area": "tools",
       "title": "The real-world comparison loop: Mapillary photos against game renders from the same spot, heading and field of view, a montage per state, scored, worst fixed first",
       "user_visible_behavior": "(Developer) One command samples seeded spots in every state, fetches an openly licensed street photo for each (Mapillary; never Google Street View), renders the game from the same pose, puts the pairs side by side and scores them — the score history says whether a change made the lower 48 more like itself.",
@@ -280,7 +280,7 @@
         "shots/real/<ST>-montage.jpg",
         "docs/agent/debugging.md \"The real-world comparison\""
       ],
-      "notes": "docs/GAMEPLAY_VISION.md §17. Photos cached outside git, never shipped; never unblur faces or plates; NAIP aerial comparison where no photo. Mapillary token from Robby in .env (git-ignored). Blocked 2026-10-03 on own-osm-extract: the per-state run waits for real cells (most new places are vector twins until the extract is live). Unblocked 2026-10-04: the extract is live (every cell real, AUDIT_48 round 2). 2026-10-04: the loop measures honestly on real cells (named ground; fit photos; pitch) and ran nationally. Worst-first queue from it: vegetation (a third of the photos', worst in the South), then street furniture."
+      "notes": "docs/GAMEPLAY_VISION.md §17. Photos cached outside git, never shipped; never unblur faces or plates; NAIP aerial comparison where no photo. Mapillary token from Robby in .env (git-ignored). Blocked 2026-10-03 on own-osm-extract: the per-state run waits for real cells (most new places are vector twins until the extract is live). Unblocked 2026-10-04: the extract is live (every cell real, AUDIT_48 round 2). 2026-10-04: the loop measures honestly on real cells (named ground; fit photos; pitch) and ran nationally. Worst-first queue from it: vegetation (a third of the photos', worst in the South), then street furniture. 2026-10-04: the loop is built and runs nationally (national-1) and by region over curated green spots (tools/real-spots.mjs GREEN, --kind=green --group=region); the worst-first fixing continues as regional-greenery."
     },
     {
       "id": "place-parity",
@@ -1816,6 +1816,114 @@
         "commit 51d1cc8 — seam fix shipped"
       ],
       "notes": "Fix committed in 51d1cc8. Confirm at a known seam site; reopen if the shelf is still visible."
+    },
+    {
+      "id": "getting-in",
+      "tier": 1,
+      "rank": 11.1,
+      "status": "passing",
+      "area": "gameplay",
+      "title": "Getting in: a storefront opens whole, the door you walk toward is ready, never a see-through house",
+      "user_visible_behavior": "Walking up to a building, its windows open onto the room whole (no half-dissolved pane), the door you are heading for opens when you reach it, and you never walk into an empty, see-through shell.",
+      "verification": [
+        "Court Street, Brooklyn walk-in montage: the whole storefront shows the shop from 5 m; inside continuous",
+        "shut door: a step into the doorway stops at the door until the interior opens, then goes through (in-page check)"
+      ],
+      "evidence": [
+        "src/world/buildings.ts (a pane opens whole: nearest-point distance, per-window threshold, storeys round the walker)",
+        "src/world/interiors.ts (heading-aware door choice; shutDoor leaf, scope -10; flat-out build near the door)",
+        "docs/agent/gameplay.md \"Getting in\"",
+        "commit 4aaeebb"
+      ],
+      "notes": "Robby, 2026-10-04: \"the windows are big but only a small portion is see through\"; \"the windows and doors dont load at all … I can see through the house like clipping for 1 second\"."
+    },
+    {
+      "id": "people-persist-indoors",
+      "tier": 1,
+      "rank": 11.2,
+      "status": "passing",
+      "area": "gameplay",
+      "title": "People who go into a building stay there: seen inside, and back out the door",
+      "user_visible_behavior": "Someone who walks into the building you are visiting goes to a place inside and stays — through the windows and in the room with you — and walks back out the door; nobody vanishes at a door.",
+      "verification": [
+        "tests/lifeSim.test.ts: in by the open door, to a place, inside through a close and a reopen, back out",
+        "live: Court Street, Brooklyn — a walker went in and stood inside the open building for the rest of the watch"
+      ],
+      "evidence": [
+        "src/sim/lifeSim.ts (IN_WALK / IN_STAY / IN_OUT, setIndoor)",
+        "src/world/interiors.ts (Visit: the door and free places)",
+        "src/sim/life.ts, src/sim/ambient.worker.ts, src/main.ts",
+        "commits 4aaeebb, 779197f"
+      ],
+      "notes": "Robby, 2026-10-04: \"people going into buildings dissappear it all needs to be persistent\"."
+    },
+    {
+      "id": "regional-greenery",
+      "tier": 1,
+      "rank": 11.5,
+      "status": "in_progress",
+      "area": "world",
+      "title": "Greenery as dense and as regional as the photos: yards, verges, street trees, tree lines, woodlots, the far field",
+      "user_visible_behavior": "Every region is as green as its street photos — leafy suburbs, tree-lined country roads, woods — and the trees are the region's own.",
+      "verification": [
+        "tools/real-compare.mjs --kind=green --group=region: every region's vegetation share within 5 points of its photos; montages reviewed",
+        "national run: downtowns not over-planted"
+      ],
+      "evidence": [
+        "docs/REGIONAL_LIFE.md (the plan)",
+        "tools/real-spots.mjs GREEN (64 curated green spots, 16 regions)"
+      ],
+      "notes": "national-1: the game shows 5% vegetation where the photos show 14%. The WorldCover scan gives a built-up cell a 3.5% chance of a tree per 9 m cell (a leafy suburb ~4 trees/ha vs 25-45 real); rural roads lose their tree lines; the far field is thin."
+    },
+    {
+      "id": "ecoregions",
+      "tier": 1,
+      "rank": 11.6,
+      "status": "not_started",
+      "area": "world",
+      "title": "Regions as data: EPA Level III ecoregions → 16 regions, so casts follow the land, not coarse boxes",
+      "user_visible_behavior": "Kentucky and Ohio, Savannah and Raleigh, Austin and Phoenix each get their own plants and animals.",
+      "verification": [
+        "a baked lat/lon grid of EPA Level III codes (public domain) and a code → region table; tests: known towns resolve to their regions"
+      ],
+      "evidence": [],
+      "notes": "docs/REGIONAL_LIFE.md §2."
+    },
+    {
+      "id": "regional-flora",
+      "tier": 1,
+      "rank": 11.7,
+      "status": "not_started",
+      "area": "assets",
+      "title": "The regional flora: live oak and Spanish moss, the PNW conifers and moss on bark, aspen and ponderosa, the eastern hardwoods and flowering understory, bald cypress, cottonwood, the desert, piñon-juniper-sage, palms and palmetto, ferns and ground layers",
+      "user_visible_behavior": "A place's trees and plants are the ones that grow there, layer by layer, through the seasons.",
+      "verification": [
+        "tests/foundry.test.ts: each family validated with a vertex budget",
+        "range rules: none placed out of range",
+        "green-spot montages by region"
+      ],
+      "evidence": [
+        "docs/regional-life/ (the reference)"
+      ],
+      "notes": "Build order: docs/REGIONAL_LIFE.md §6."
+    },
+    {
+      "id": "regional-wildlife",
+      "tier": 1,
+      "rank": 11.8,
+      "status": "not_started",
+      "area": "assets",
+      "title": "The regional wildlife: each region's cast with how common each animal is, where and when; the new families; regional rares as data",
+      "user_visible_behavior": "You meet the animals of the place — cardinals and fox squirrels in Ohio, an alligator in a Florida retention pond, elk in Estes Park, a roadrunner in Tucson — and a rare one is a find.",
+      "verification": [
+        "tests/foundry.test.ts budgets for each new animal",
+        "range rules test (ranges.md)",
+        "casts by region reviewed in montages"
+      ],
+      "evidence": [
+        "docs/regional-life/ (the reference)"
+      ],
+      "notes": "Build order: docs/REGIONAL_LIFE.md §6; rares tie to docs/GAMEPLAY_VISION.md §3."
     }
   ],
   "regions": {

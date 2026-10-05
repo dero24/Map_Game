@@ -40,7 +40,8 @@ const TZ = await load('src/world/tz.ts');
 // ---- the spots ----
 const spots = JSON.parse(readFileSync(resolve(ROOT, 'tools/real-spots.json'), 'utf8')).spots.filter((s) => s.img)
   .filter((s) => !args.states || String(args.states).split(',').includes(s.state))
-  .filter((s) => !args.ids || String(args.ids).split(',').includes(s.id));
+  .filter((s) => !args.ids || String(args.ids).split(',').includes(s.id))
+  .filter((s) => !args.kind || s.kind === args.kind); // (--kind=green: the green spots only)
 if (!spots.length) { console.error('no spots (tools/real-spots.mjs first)'); process.exit(1); }
 
 // ---- a photo and its segmentation, cached ----
@@ -168,7 +169,8 @@ const history = existsSync(scoresFile) ? JSON.parse(readFileSync(scoresFile, 'ut
 const commit = (() => { try { return execSync('git rev-parse --short HEAD', { cwd: ROOT, encoding: 'utf8' }).trim(); } catch { return ''; } })();
 const run = { at: new Date().toISOString(), commit, tag: args.tag ?? '', spots: {} };
 const byState = new Map();
-for (const s of spots) { if (!byState.has(s.state)) byState.set(s.state, []); byState.get(s.state).push(s); }
+// (one montage a state; `--group=region`: a region's, for the green spots)
+for (const s of spots) { const k = args.group === 'region' ? s.region ?? s.state : s.state; if (!byState.has(k)) byState.set(k, []); byState.get(k).push(s); }
 for (const [st, list] of byState) {
   const pairs = [];
   for (const s of list) {

@@ -69,6 +69,7 @@ Context low? Wrap early — write state before polish. A clean handoff beats a r
 
 - `docs/GAMEPLAY_VISION.md` — **read before any gameplay work**: the world blooms from pencil into colour as you look, pencil means collectable (tap to paint it), regional rares as data, real travel (van, yacht, plane, balloon), your own private layer of the world, one home behind every door; §17 sets the order — **foundations first** (Tier 0: every tile loads, commercial-safe services; Tier 1: looks right everywhere), the game after. Track each in `feature_list.json`. (`docs/GAME_DESIGN.md` is superseded, apart from learning from life, the Almanac and the summoning solvers)
 
+- `docs/REGIONAL_LIFE.md` — **read before any flora, fauna or greenery work**: the 16 regions, what the foundry has and lacks, how greenery is measured (the green spots), the build order; the reference per region (plants layer by layer, wildlife with how common, signatures, range limits) is `docs/regional-life/`
 - `docs/agent/world-data.md` — regions, REGIONS spec, fetch/merge/bake, detail zone, `?at=` deep links, NAIP roof imagery
 - `docs/agent/streaming.md` — tile stream + margin semantics, tile worker + BuiltTile packing, terrain packs, real-lite worker (wrangler/R2/virtual manifests), DEM, LiDAR measure pipeline
 - `docs/agent/rendering.md` — styles/recipe, shader + material conventions, ground paint, grass
