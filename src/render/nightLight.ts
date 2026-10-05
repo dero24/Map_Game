@@ -23,18 +23,22 @@ export const POOL = {
   height: 8, // m: the lamp over the street (a cobra head on its mast, 8 m up)
   reach: 22, // m: how far a pool runs in the map
   ease: 12, // m: the lamp's own fall-off holds to here, then eases out to nothing at the reach
-  // the heart's light against the lamp's colour: a pale heart (L* ~75 on asphalt) on the filmic
-  // curve's straight part, so the glow's fall-off shows. (At 3, right for the old small disc, a
-  // broad pool sat on the curve's shoulder: a flat cream plateau, and where lamps stand 30 m apart
-  // a floodlit street.)
-  gain: 1.8,
+  // the heart's light against the lamp's colour: a lit midtone (L* ~65 on asphalt) on the filmic
+  // curve's straight part, so the glow's fall-off shows and what stands in it keeps its own colour.
+  // (At 3, right for the old small disc, a broad pool sat on the curve's shoulder: a flat cream
+  // plateau. At 1.8, L* ~75, the cars and the street under a lamp went one pale beige — Robby,
+  // 2026-10-04: "makes cars and everything glow way too light where it washes it all out".)
+  gain: 1.2,
   headroom: 2, // the map holds light ÷ this: overlapping pools add up to twice a lone heart
-  // the light (linear): a warm cream — sRGB #ffecce, about 4000 K — not the sodium orange (#ffb86a)
-  // that painted every heart at C* 48–55
-  color: [1.0, 0.84, 0.62] as RGB,
+  // the light (linear): a warm cream, about 4000 K — not the sodium orange (#ffb86a) that painted every
+  // heart at C* 48–55 (a shade paler since the heart dimmed: at a midtone the cream read orange)
+  color: [1.0, 0.86, 0.68] as RGB,
   // how much of a surface's own colour the lamplight mutes (by night the lamp's cream leads: a tan
   // sidewalk or a lawn under it doesn't flare orange or lime)
-  mute: 0.6,
+  mute: 0.55,
+  // the darkest a surface reads under the lamp (its albedo, before the lamp's colour): a pool is painted
+  // as light, so black asphalt still glows (it also keeps a lawn's green from going lime)
+  floor: 0.28,
 };
 export type Pool = typeof POOL;
 
@@ -54,7 +58,7 @@ export const poolStops = (n = 16, p: Pool = POOL) => Array.from({ length: n + 1 
  *  on a wall, none on what faces down (the lamp is overhead: a passer-by isn't lit like the street). */
 export function poolOn(albedo: RGB, light: number, up = 1, p: Pool = POOL): RGB {
   const l = albedo[0] * 0.2126 + albedo[1] * 0.7152 + albedo[2] * 0.0722, face = 0.5 + 0.5 * up;
-  return albedo.map((a, i) => Math.max(a + (l - a) * p.mute, 0.3) * p.color[i] * p.gain * light * face) as RGB;
+  return albedo.map((a, i) => Math.max(a + (l - a) * p.mute, p.floor) * p.color[i] * p.gain * light * face) as RGB;
 }
 
 /** The same, in the shaders (shared.ts lampField, paintLight): uLampPool = (height, reach, gain,
@@ -62,7 +66,7 @@ export function poolOn(albedo: RGB, light: number, up = 1, p: Pool = POOL): RGB 
 export const GLSL_POOL = /* glsl */ `
 float poolLight(float g) { return clamp(g, 0.0, 1.0) * uLampPool.w; }
 vec3 poolOn(vec3 albedo, float light, float up) {
-  vec3 a = max(mix(albedo, vec3(dot(albedo, vec3(0.2126, 0.7152, 0.0722))), ${POOL.mute.toFixed(3)}), vec3(0.3));
+  vec3 a = max(mix(albedo, vec3(dot(albedo, vec3(0.2126, 0.7152, 0.0722))), ${POOL.mute.toFixed(3)}), vec3(${POOL.floor.toFixed(3)}));
   return a * uPoolColor * (light * (0.5 + 0.5 * up));
 }`;
 

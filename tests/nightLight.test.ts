@@ -163,12 +163,15 @@ describe('the street at night, end to end (scene light → the default look → 
   const lit = (alb: RGB, d: number, m = 0, up = 1) => alb.map((a, i) => a * (sky[i] + moon[i] * m) + floorLight(alb)[i] + poolOn(alb, poolLight(d), up)[i]) as RGB;
   const gapOf = (alb: RGB, m = 0) => show(lit(alb, 60, m));
 
-  it("the heart is a warm cream (C* ≤ 30), pale and bright", () => {
+  it("the heart is a warm cream (C* ≤ 30), lit but not washed out", () => {
     for (const alb of [ASPHALT, WALK, LAWN]) {
       const h = labOf(show(lit(alb, 0)));
       expect(h.C).toBeLessThan(26); expect(h.C).toBeGreaterThan(12); // (cream, not white, not orange)
       expect(h.h).toBeGreaterThan(65); expect(h.h).toBeLessThan(100); // (a lawn's a little yellow)
-      expect(h.L).toBeGreaterThan(72); expect(h.L).toBeLessThan(85); // (pale, but under a lit window's ~90)
+      // (lit, a midtone that keeps what's under it: at L* 72–85 the cars and the street under a lamp went one
+      // pale beige — Robby, 2026-10-04: "makes cars and everything glow way too light where it washes it all out")
+      const [lo, hi] = alb === ASPHALT ? [55, 70] : [60, 82]; // (a pale sidewalk is paler under the same lamp)
+      expect(h.L).toBeGreaterThan(lo); expect(h.L).toBeLessThan(hi);
     }
     // the sidewalk you stand on doesn't flare orange: its tan is muted under the lamp
     expect(labOf(show(lit(WALK, 0))).C).toBeLessThan(21);
