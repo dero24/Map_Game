@@ -342,6 +342,9 @@ else.
 
 ## 7. Home: one home, behind every door
 
+*The door, the cockpit, entering while driving and the safe-stop for side doors are designed in
+`docs/MOBILE_BASE.md`, which wins where the two differ.*
+
 ### The space
 - **One home, the same in every special vehicle.** The van, yacht, plane and balloon are each a
   door into it. You build once and never lose anything.
