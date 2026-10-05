@@ -25,6 +25,9 @@ window.__SHADERS__ = async () => {
     ['rosebay', { fallHue: 7, blossom: 5 }], ['longleaf', { motion: 3 }], ['cherry', { decid: true, fallHue: 1, blossom: 1 }],
     // (package #6: the manzanita's winter urns, the valley oak's russet)
     ['manzanita', { blossom: 6 }], ['valleyoak', { decid: true, fallHue: 6 }],
+    // (package #7: the desert's flowers and fruit as parts of their own; the ocotillo's leaves after rain;
+    // the cacti stiff in the wind)
+    ['saguaro', { blossom: 7, wind: false }], ['ocotillo', { decid: true, fallHue: 8, blossom: 8 }], ['pricklypear', { blossom: 9, wind: false }], ['joshua', { blossom: 10, wind: false }],
   ];
   for (const [k, o] of k4) add(treeLib(k, k === 'longleaf' ? 0 : 1).clone(), propMaterial({ wind: true, foliage: true, crown, ...o }));
   add(treeLib('liveoak', 0).clone(), propMaterial({ wind: true, foliage: true, crown }));

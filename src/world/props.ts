@@ -16,7 +16,7 @@ import { pointInRing, ringTester } from './realTile';
 import { activeStyle, castOf, pickWeighted, westside as isWestside } from './styles';
 import { hangerLib, hangerMix, HANGERS, HANG_TONES, type HangerType } from '../assets/hangers';
 import { caFogBelt, caRedwoodBelt } from './ecoregions';
-import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, broadMix, coniferMix, aspenShare, willowThickets, snagShare, NEEDLED, plantLib, inBloom, SPECIES, STAGES, fallHueOf, DECIDUOUS, BLOSSOM_OF, MOTION_OF, bankMix, redcedarShare, rosebayShare, understoryTrees, SMALL_TREE, treeHeight4, southPineForm, swampMix, swampForm, manzanitaShare, westForm, sequoiaBand, SEQUOIA_GROVE, redwoodCountry, type PlantSpecies, type TreeKind } from '../assets/flora';
+import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, broadMix, coniferMix, aspenShare, willowThickets, snagShare, NEEDLED, plantLib, inBloom, SPECIES, STAGES, fallHueOf, DECIDUOUS, BLOSSOM_OF, MOTION_OF, bankMix, redcedarShare, rosebayShare, understoryTrees, SMALL_TREE, treeHeight4, southPineForm, swampMix, swampForm, manzanitaShare, westForm, sequoiaBand, SEQUOIA_GROVE, redwoodCountry, desertMix, desertTrees, STIFF, type PlantSpecies, type TreeKind } from '../assets/flora';
 import { MAILBOXES, mailboxLib, beachLib, gearFor, type MailboxStyle, type CarGear } from '../assets/furniture';
 import { variantAt, hashf } from '../assets/core';
 import { cafeSet, mergeDecor } from '../assets/decor';
@@ -846,6 +846,17 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   const redwoodCoast = (x: number, z: number) => redwoodCountry(cast0, beltAt(x, z));
   // (California's chaparral: the manzanita among the scan's shrubs; its native oaks for a mapped oak)
   const manzanita = manzanitaShare(cast0);
+  // (package #7: the dry country's own — the desert's creosote, cacti, ocotillo and Joshua trees, the
+  // sagebrush sea, the piñon-juniper, the Hill Country's Ashe juniper: flora.ts desertMix, desertTrees)
+  const pickOf = (m: [TreeKind, number][], u: number) => TREE_KINDS.indexOf(m[pickWeighted(m.map(([, w]) => w), u)][0]);
+  const dryShrub = (x: number, z: number) => {
+    const m = desertMix(cast0, terrain.heightAt(x, z), latAt(x, z));
+    return m.length ? pickOf(m, hashf(Math.floor(x * 3.7) * 7919 + Math.floor(z * 2.9) * 104729 + 307)) : -1;
+  };
+  const dryTree = (x: number, z: number) => {
+    const m = desertTrees(cast0, terrain.heightAt(x, z), latAt(x, z));
+    return m.length ? pickOf(m, hashf(Math.floor(x * 2.9) * 104729 + Math.floor(z * 3.3) * 7919 + 311)) : -1;
+  };
   const aspenAt = (x: number, z: number) => {
     const share = aspenShare(cast0, terrain.heightAt(x, z), latAt(x, z));
     // (a grove is one clone: a 35 m patch where nearly every round tree is an aspen)
@@ -887,6 +898,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     if (k === 2 && rosebay && terrain.sdfAt(x, z) < 30 && terrain.oceanDistAt(x, z) > 250 && hashf(Math.floor(x * 3.3) * 104729 + Math.floor(z * 2.7) * 7919 + 223) < rosebayShare(cast0, true, false)) return ROSEBAY;
     // (the chaparral's manzanita, red-stemmed among the scan's shrubs — not down by the creek)
     if (k === 2 && manzanita > 0 && terrain.sdfAt(x, z) > 25 && hashf(Math.floor(x * 2.9) * 7919 + Math.floor(z * 3.9) * 104729 + 229) < manzanita) return MANZANITA;
+    // (the dry country's shrubs — and a pine pick where no conifer grows: the low desert has none)
+    if (k >= 2 && k <= 4) { const d = dryShrub(x, z); if (d >= 0) return d; }
     if (k > 1) return k;
     if (k === 0 && aspenAt(x, z)) return ASPEN;
     const u = hashf(Math.floor(x * 3.1) * 7919 + Math.floor(z * 2.7) * 104729);
@@ -896,7 +909,10 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     // the desert's own shade trees: mesquite and palo verde (a few fan palms in town) — and down a wash or
     // by a river, its gallery of Fremont cottonwoods and willows
     if (desert && terrain.sdfAt(x, z) < 40 && terrain.oceanDistAt(x, z) > 250 && hashf(Math.floor(x * 2.3) * 7919 + Math.floor(z * 1.7) * 104729 + 271) < 0.55) return BANK[pickWeighted(BANK.map(([, w]) => w), hashf(Math.floor(x * 1.3) * 104729 + Math.floor(z * 3.3) * 7919 + 277))][0];
-    if (desert) return u < 0.14 ? 8 : 7;
+    // (the desert's own trees: the Mojave's Joshua trees, Arizona's saguaros, the piñon-juniper in its band;
+    // the Great Basin's towns grow the region's planted shade trees, never mesquite)
+    if (desert && u >= 0.14) { const d = dryTree(x, z); if (d >= 0) return d; }
+    if (desert && cast0.eco !== 'great-basin') return u < 0.14 ? 8 : 7;
     if (birchy && k === 0 && u < 0.35) return 6;
     return broad(k, x, z, ratio, h);
   };
@@ -1360,6 +1376,10 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     // (package #6: the valley oak's dull mid-green, the blue oak's blue-grey, the redwood's deep green
     // sprays, the sequoia's grey-green scales, the manzanita's grey-green leather)
     valleyoak: [0x5a7438, 0.4], blueoak: [0x7f9488, 0.6], redwood: [0x30502e, 0.5], sequoia: [0x4f6a40, 0.45], manzanita: [0x7f8f74, 0.6],
+    // (package #7: the ocotillo's fresh green after rain, the Joshua tree's yellow-green bayonets, the
+    // creosote's dark glossy olive, the piñon's grey-green, the Utah juniper's yellowish grey-green, the
+    // Ashe juniper's dark, the sagebrush's silver)
+    ocotillo: [0x6e9a3a, 0.6], joshua: [0x7a8c48, 0.6], creosote: [0x5a6a32, 0.6], pinyon: [0x3c5232, 0.55], utahjuniper: [0x6a7a4e, 0.55], ashejuniper: [0x3a5032, 0.6], sagebrush: [0x9aa48c, 0.75],
   };
   // Trees from the foundry (assets/flora.ts): one InstancedMesh per species × grown variant.
   // Trunks keep their bark: instance colour only tints foliage (vertex color white there).
@@ -1373,7 +1393,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       // palms, magnolias and the desert legumes keep theirs
       const kind = TREE_KINDS[k];
       const decid = DECIDUOUS.has(kind);
-      const im = new THREE.InstancedMesh(treeLib(kind, v).clone(), propMaterial({ wind: true, foliage: true, crown, decid, fallHue: fallHueOf(kind, v), blossom: BLOSSOM_OF[kind] ?? 0, weep: kind === 'willow', motion: MOTION_OF[kind] ?? 0 }), list.length);
+      const im = new THREE.InstancedMesh(treeLib(kind, v).clone(), propMaterial({ wind: !STIFF.has(kind), foliage: true, crown, decid, fallHue: fallHueOf(kind, v), blossom: BLOSSOM_OF[kind] ?? 0, weep: kind === 'willow', motion: MOTION_OF[kind] ?? 0 }), list.length);
       im.name = `trees:${kind}:${v}`;
       // a species' own green over the region's: the desert legumes a dusty grey-green (palo verde a
       // thin yellow-green), the willow a soft yellow-green, the magnolia dark and glossy, the

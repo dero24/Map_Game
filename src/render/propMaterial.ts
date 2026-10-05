@@ -90,6 +90,9 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
       #ifdef FOLIAGE
       varying vec3 vRimN;
       #endif
+      #if BLOSSOM >= 7
+      varying float vBloomPart;
+      #endif
       #ifdef SIGNAL
       ${SIGNAL_GLSL}
       #endif
@@ -121,6 +124,9 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
         vAO = 1.0;
         vSig = 0.0;
         vLeafy = 0.0;
+        #if BLOSSOM >= 7
+          vBloomPart = 0.0;
+        #endif
         vLocal = position;
         mat4 m = worldMat();
         vec3 origin = (m * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
@@ -197,6 +203,10 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
         #ifdef FOLIAGE
           vRimN = vNormalW; // (the lobe's own normal, before the crown's light field bends it)
           float leafy = step(0.98, min(color.r, min(color.g, color.b)));
+          #if BLOSSOM >= 7
+            // (the desert's flowers and fruit: a part of their own, a hair off white — flora.ts BLOOM_PART)
+            vBloomPart = leafy * step(color.b, 0.995);
+          #endif
           if (uCrown.y > 0.0) {
             // one spherical light field per crown (slightly flattened), foliage only
             vec3 cN = normalize(mat3(m) * ((position - vec3(0.0, uCrown.x, 0.0)) * vec3(1.0, 1.4, 1.0)));
@@ -241,6 +251,9 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
       varying float vTree;
       varying float vSig;
       uniform vec2 uCrown;
+      #if BLOSSOM >= 7
+      varying float vBloomPart;
+      #endif
       #ifdef PAVED
       uniform vec4 uDetailBox;
       #endif
@@ -323,10 +336,20 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
           }
         #endif
         #if defined(DECID) || BLOSSOM > 0 || FALL_HUE == 7
+          #if BLOSSOM >= 7
+          if (vBloomPart > 0.5) {
+            // the desert's flowers and fruit, parts of their own: out in their season, a few at a time as
+            // it comes and goes (each its own number), and not there at all the rest of the year
+            float own = fract(vnoise3(vWorldPos * 7.0) * 3.7 + vTree * 1.3) * 0.85 + 0.08;
+            float bl = bloomNow(float(BLOSSOM), vTree), fr = fruitNow(float(BLOSSOM), vTree);
+            if (bl < own && fr < own) discard;
+            alb = (bl >= fr ? bloomColour(float(BLOSSOM), vTree, vWorldPos) : fruitColour(float(BLOSSOM), vTree, vWorldPos)) * (0.9 + 0.2 * fbm3(vWorldPos * 3.0));
+          } else
+          #endif
           if (vLeafy > 0.5) {
             float hi = uCrown.y > 0.0 ? smoothstep(uCrown.x - uCrown.y, uCrown.x + uCrown.y, vLocal.y) : 0.5;
             float fl = 0.0; // (how much of this is in flower)
-            #if BLOSSOM > 0
+            #if BLOSSOM > 0 && BLOSSOM < 7
               fl = bloomNow(float(BLOSSOM), vTree) * bloomCover(float(BLOSSOM), vWorldPos, hi);
             #endif
             #ifdef DECID
@@ -349,7 +372,7 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
               // an evergreen bronzing in the cold: the redcedar's winter coat, the rosebay's curled leaves
               alb = mix(alb, vec3(0.4, 0.31, 0.16) * (0.85 + 0.3 * vnoise3(vWorldPos * 0.8)), 0.55 * uLeafFall * (0.7 + 0.3 * vTree));
             #endif
-            #if BLOSSOM > 0
+            #if BLOSSOM > 0 && BLOSSOM < 7
               alb = mix(alb, bloomColour(float(BLOSSOM), vTree, vWorldPos) * (0.9 + 0.2 * fbm3(vWorldPos * 1.3)), fl);
             #endif
           }

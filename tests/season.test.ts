@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { seasonAt, meanTemp, dayOfYear } from '../src/world/season';
-import { bloomNow } from '../src/render/treeSeasons';
+import { bloomNow, fruitNow, rainLeaves } from '../src/render/treeSeasons';
 
 const JAN = 25, APR = 105, JUL = 200, SEP = 270, OCT = 280, NOV = 320;
 
@@ -101,6 +101,37 @@ describe('seasons', () => {
     // the calendar's winter: deepest in January, gone by midsummer
     expect(q(JAN).winter).toBeGreaterThan(0.95);
     expect(q(JUL).winter).toBeLessThan(0.05);
+  });
+  // package #7: the desert's flowers and fruit by the calendar; the ocotillo's leaves after rain
+  it("the desert's calendar: the Joshua tree, the ocotillo, the prickly pear and the saguaro open in turn; fruit after; the ocotillo leafs out after rain in its rainy seasons", () => {
+    const TUC: [number, number, number] = [32.22, -110.97, 750], JT: [number, number, number] = [34.13, -116.31, 1200];
+    const first = (type: number, at: [number, number, number]) => {
+      for (let d = 1; d <= 365; d++) { const q = seasonAt(...at, d); if (bloomNow(type, 0.5, q.spring, q.summer, q.winter) > 0.5) return d; }
+      return -1;
+    };
+    const joshua = first(10, JT), ocotillo = first(8, TUC), pear = first(9, TUC), saguaro = first(7, TUC);
+    expect(joshua).toBeGreaterThan(45); // the Joshua tree's from late February…
+    expect(joshua).toBeLessThan(ocotillo + 20);
+    expect(ocotillo).toBeGreaterThan(55); // …the ocotillo's flames in March…
+    expect(ocotillo).toBeLessThan(95);
+    expect(pear).toBeGreaterThan(ocotillo); // …the prickly pear's cups and the saguaro's crowns late April into May
+    expect(saguaro).toBeGreaterThan(100);
+    expect(saguaro).toBeLessThan(135);
+    const q = (d: number) => seasonAt(...TUC, d);
+    // nothing in the autumn or the winter
+    for (const t of [7, 8, 9, 10]) for (const d of [JAN, SEP, NOV]) expect(bloomNow(t, 0.5, q(d).spring, q(d).summer, q(d).winter), `${t} on ${d}`).toBe(0);
+    // the saguaro's red fruit in late June and July; the prickly pear's tunas in September — not in April
+    expect(fruitNow(7, 0.5, q(185).spring, q(185).winter)).toBeGreaterThan(0.5);
+    expect(fruitNow(7, 0.5, q(APR).spring, q(APR).winter)).toBe(0);
+    expect(fruitNow(9, 0.5, q(SEP).spring, q(SEP).winter)).toBeGreaterThan(0.5);
+    expect(fruitNow(9, 0.5, q(APR).spring, q(APR).winter)).toBe(0);
+    // the ocotillo: green within days of the monsoon's rain, bare when it's dry or in the fore-summer's drought
+    const leaves = (d: number, wet: number) => rainLeaves(0.5, q(d).spring, q(d).winter, wet);
+    expect(leaves(225, 0.8)).toBeGreaterThan(0.9); // August, after a storm
+    expect(leaves(225, 0)).toBe(0); // August, dry for days
+    expect(leaves(165, 0.8)).toBe(0); // mid-June: the fore-summer's drought
+    expect(leaves(75, 0.6)).toBeGreaterThan(0.9); // March, after the winter rain
+    expect(leaves(330, 0.8)).toBe(0); // late November
   });
   it('a marine autumn waits for the short days; the tropics never turn', async () => {
     const { dayLength } = await import('../src/world/season');

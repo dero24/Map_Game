@@ -133,7 +133,7 @@ uniform float uLampBaseY;
 uniform vec3 uLampColor, uPoolColor;
 uniform vec4 uNightFloor;
 uniform float uLampPower, uPigment, uPigmentScale, uWind;
-uniform float uSnow, uLeafFall, uAutumn, uTurn, uBloom, uMoss, uSpring, uSummer, uWinter, uHay;
+uniform float uSnow, uLeafFall, uAutumn, uTurn, uBloom, uMoss, uSpring, uSummer, uWinter, uHay, uWet;
 uniform vec4 uBiome;
 uniform vec4 uSliceBox;
 uniform vec4 uHoleBox, uHoleInfo;

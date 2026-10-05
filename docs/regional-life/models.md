@@ -2023,9 +2023,20 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
    Oak rows: **valley oak**, **blue oak**. `conifer†` rows: **coast redwood**, **giant sequoia**.
    Clump row: **manzanita**. Grass: the **California annual grassland** (the golden hills, a season
    of the grass rather than a model).
-7. **The desert.** `columnar†`: **saguaro**. `opuntia†`: **Engelmann prickly pear**, **teddy bear
-   cholla**. `cane†`: **ocotillo**. `yucca†`: **Joshua tree**. Shrub row: **creosote**. Pine row:
-   **two-needle piñon**. Mesquite rows: **Utah juniper**, **Ashe juniper**. Mound row: **big
+7. **The desert** — **built** 2026-10-05 (`docs/earth/LOG.md` "Regional life (7)"): the saguaro
+   (`columnar†`: a pleated column, `flora.ts fluted`, its arms leaving level and rising; a young spear,
+   grown, old with a bowed arm, woodpecker holes and boots), the Engelmann prickly pear (`opuntia†`:
+   flat pads each on the rim of the last; a clump, an old sprawl, a tree form on a trunk) and the
+   teddy bear cholla (golden joints over a black dead trunk, fallen joints round it), the ocotillo
+   (`cane†`: a vase of grey canes, sleeved in leaves after rain), the Joshua tree (`yucca†`: corky
+   trunk, shaggy arms, spiky rosettes; one stem, branched, old) — far models only (`DESERT_FAR`),
+   their flowers and fruit parts of their own (`BLOOM_PART`, blossom 7–10 by the calendar); the
+   creosote (its old clonal ring), the Utah and Ashe junipers and the big sagebrush as `CLUMPS` rows,
+   the two-needle piñon as a `PINES` row; placed by `desertMix`, `desertTrees` and `pjBand` (the
+   piñon-juniper's band, below the ponderosa). The rows: `columnar†`: **saguaro**. `opuntia†`:
+   **Engelmann prickly pear**, **teddy bear cholla**. `cane†`: **ocotillo**. `yucca†`: **Joshua
+   tree**. Shrub row: **creosote**. Pine row: **two-needle piñon**. Clump rows (the models' mesquite
+   row in the plan): **Utah juniper**, **Ashe juniper**. Clump row (the mound row): **big
    sagebrush**. (Mesquite and palo verde exist.)
 8. **Palms.** Fanpalm rows: **cabbage palmetto**, **saw palmetto**.
 9. **The ground layers.** Fern rows: **bracken**, **cinnamon fern**. Clump rows: **big** and

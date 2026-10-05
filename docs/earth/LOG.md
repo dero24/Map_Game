@@ -2,6 +2,72 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-05 — Regional life (7): the desert, the piñon-juniper and the sagebrush sea
+
+Package #7 of `docs/regional-life/models.md` (Robby: "make things detailed, and variety and variation
+matter"): ten kinds appended to `TREE_KINDS` (59–68), three forms each.
+
+- **New genomes, far models only** (`flora.ts DESERT_FAR`: their pleats, pads, joints and canes are
+  already the detail; no leaf cards):
+  - **Saguaro** (`columnar†`): a pleated column (`fluted`: ridges and furrows on a parallel-transport
+    frame, flat facets so each pleat is lit one side) swelling a little at the waist, its arms leaving
+    level, bending up at the elbow and rising beside it. v0 a young spear, v1 grown with a few arms, v2
+    old: many arms, one bowed over and down, the Gila woodpecker's holes and the callused boots.
+  - **Engelmann prickly pear** (`opuntia†`): flat pads each standing on the rim of one already there,
+    leaning on as it leans; a young clump, an old sprawl wider than it stands, a tree form on a woody
+    trunk with a crown of pads.
+  - **Teddy bear cholla**: fat golden joints in stubby chains over a black trunk of dead joints, fallen
+    joints rooting round its foot; young, grown, old (more of it dark).
+  - **Ocotillo** (`cane†`): a vase of grey canes from one crown, a few sprawling on an old one; leaf
+    sleeves along each cane.
+  - **Joshua tree** (`yucca†`): a corky trunk branching into crooked arms clad in their dead leaves'
+    straw, each tipped with a dense burst of bayonets round a dark heart; one stem, branched, old.
+- **Flowers and fruit as parts of their own**: geometry painted `BLOOM_PART` (it reads as foliage — every
+  channel ≥ 0.98 — but a hair off white in blue, `vBloomPart`), shown only in season and discarded the
+  rest of the year, a few at a time as the season comes and goes: blossom 7 the saguaro's white crowns
+  then its red fruit, 8 the ocotillo's scarlet flames, 9 the prickly pear's yellow cups then its purple
+  tunas, 10 the Joshua tree's cream clusters (`treeSeasons.ts DESERT_BLOOM`, `fruitNow`: by the
+  calendar, `1 − U.uWinter`, in the warming half). Past the cards' 3 bits, so far models only.
+- **The ocotillo's leaves after rain** (FALL_HUE 8, `rainLeaves`): out within days of rain (`U.uWet`,
+  now in the shared GLSL) in its rainy seasons — the monsoon, the late winter — bare in the fore-summer's
+  drought and the autumn.
+- **Clump and pine rows with near models**: creosote (an open vase; the old clonal ring round an empty
+  heart), Utah juniper (bushy; twisted trunks; old with silver driftwood), Ashe juniper (a dense cone;
+  the cedar brake's stems; old on one trunk), big sagebrush (a silver mound; old and gnarled), two-needle
+  piñon (a rounded cone; broad and full; old, flat-topped and leaning).
+- The cacti and the Joshua tree stand stiff in the wind (`STIFF`).
+- **Placement**: `desertMix` turns the scan's shrubs (and a pine pick where no conifer grows — the low
+  desert had a coastal pitch pine) into the dry country's own by ecoregion and elevation: the Sonoran's
+  creosote flats with chollas, prickly pears, ocotillos and Arizona's saguaros below ~1,250 m; the
+  Mojave's creosote and its Joshua tree woodland at 600–1,800 m; the Chihuahuan's creosote, prickly pear
+  and ocotillo; the sagebrush sea of the basins, the Wyoming Basin, the Columbia Plateau; the Hill
+  Country's Ashe juniper and the brush country's prickly pear. `desertTrees` gives the desert's
+  broadleaf picks their Joshua trees and saguaros among the mesquite; `pjBand` puts piñon and juniper
+  in their band below the ponderosa (the Great Basin's ranges, the Colorado Plateau, New Mexico's
+  plateau, Arizona's mountains, the sky islands, the Trans-Pecos, the Mojave's mountains, the southern
+  Rockies' foothills), juniper alone on the northern basins' edges. The Great Basin's arid towns now
+  grow the region's planted shade trees instead of the Sonoran's mesquite and fan palms. Each its own
+  green (the sagebrush silver).
+- Far ≤ 1,476 vertices, near ≤ 2,248. The tree studio caught the prickly pear as a stack (now a sprawl
+  wider than it stands, and a tree form with a crown of pads), the cholla as thin claws (now fat golden
+  joints), the Joshua tree's rosettes as sticks (now dense bursts round a heart), the piñon too tall and
+  tiered, the junipers and the sage as lollipops (their foliage now down their stems).
+
+**Verified:** typecheck; `npm test` 921/921; `tests/foundry.test.ts` (the saguaro's spear vs its arms and
+flower crowns, the holes; the marker colour leafy but not white; the prickly pear's sprawl and tree
+form, the cholla's gold and black, the ocotillo's vase and rain-leaves, the Joshua tree's rosettes; the
+near kinds' leaf pictures; heights), `tests/season.test.ts` (the Joshua tree, the ocotillo, the prickly
+pear and the saguaro open in that order; nothing in autumn or winter; the fruit after; the ocotillo
+green after the monsoon's rain, bare in the drought), `tests/streetTrees.test.ts` (saguaros only in
+Arizona's Sonoran desert, Joshua trees only in the Mojave's band, creosote in the warm deserts, the
+sage in the basins, piñon at Santa Fe and Prescott but not on the basin floor nor in Flagstaff's
+pines, none of it east or on the Northwest's west side; Ashe juniper in the Hill Country only; a
+Sonoran scrub built near Tucson). Shader check: 21 programs, no errors. Studio: `shots/trees-d1.jpg`
+… `d5`.
+
+**Next:** #8 palms and palmettos (fronds thrashing in a gust); #9 the ground layers; #10 fields;
+duckweed (#5's last); the people work (`people-with-purpose`) when Robby calls it.
+
 ## 2026-10-05 — Regional life (6): California's oaks, its giants, its chaparral and its golden hills
 
 Package #6 of `docs/regional-life/models.md` (Robby: "make things detailed, and variety and variation

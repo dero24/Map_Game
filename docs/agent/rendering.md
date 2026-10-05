@@ -253,7 +253,17 @@ the sky between the leaves. Past it, the tiles' own solid crowns, as before.
   - **Blossom** (`flora.ts BLOSSOM_OF`, the `BLOSSOM` define, a type): 1 cherry, 2 dogwood (white
     bracts, one tree in six pink), 3 redbud (magenta), 4 crape myrtle (each tree pink, watermelon red,
     lavender or white, on the crown's top), 5 rosebay (white flushed pink), 6 manzanita (little
-    pink-white urns all over its twigs' ends, in the winter). When: `BLOOM_WINDOWS` —
+    pink-white urns all over its twigs' ends, in the winter); the desert's, far models only (past the
+    cards' 3 bits), as **parts of their own** — geometry painted `flora.ts BLOOM_PART` (white enough to
+    be foliage, a hair off white in blue; `vBloomPart` in the vertex shader) that is out only in its
+    season and discarded the rest of the year, a few at a time as the season comes and goes: 7 the
+    saguaro's white crowns (late April to mid-June) then its red fruit (June–July), 8 the ocotillo's
+    scarlet flames (March–April), 9 the prickly pear's yellow cups (April–May) then its purple tunas
+    (August–October), 10 the Joshua tree's cream clusters (late February–April) — `DESERT_BLOOM`,
+    `fruitNow`, by the calendar (`1 − U.uWinter`) in the warming half. FALL_HUE 8 (far only): the
+    ocotillo's leaves, out after rain (`U.uWet`) in its rainy seasons (the monsoon, the late winter)
+    and gone in the drought (`rainLeaves`). The cacti and the Joshua tree stand stiff
+    (`flora.ts STIFF`: `propMaterial({ wind: false })`). When: `BLOOM_WINDOWS` —
     the spring flowers in a window of `U.uSpring` (season.ts `spring`: the warming half's progress from
     the winter's own mean, or 5 °C, to 23 °C; 0 while the year cools), each tree ±4% by its number; the
     crape myrtle on `U.uSummer` (18 → 23 °C); the manzanita on `U.uWinter` (season.ts `winter`: the

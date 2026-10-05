@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
+import { DESERT_FAR, STIFF, BLOOM_PART } from '../src/assets/flora';
 import { TREE_KINDS, TREE_VARIANTS, treeGeometry, PLANT_SPECIES, plantGeometry, plantMix, inBloom, stageOf, STAGES, fallHueOf, NEAR_KINDS, nearTreeGeometry, CARD_STRIDE, LEAF_PICS, leafAtlas, hasNear, DECIDUOUS, BLOSSOM_OF, MOTION_OF, packCardFlags, unpackCardFlags, cardFlags, picsOf, NEEDLED, treeHeight4, SMALL_TREE, type TreeKind } from '../src/assets/flora';
 import leafCardsSrc from '../src/render/leafCards.ts?raw';
 import { TREE_TIERS } from '../src/render/quality';
@@ -38,8 +39,10 @@ describe('flora', () => {
       expect(finite(geo)).toBe(true);
       expect(b.min.y).toBeLessThanOrEqual(0.01); // the trunk reaches into the ground
       // (the shrubs; the rosebay's laurel hell, low and sprawling, and the chaparral's manzanita; the
-      // longleaf's grass stage, under a metre)
-      expect(meta.h).toBeGreaterThan(k === 'shrub' || k === 'willowshrub' ? 1.5 : k === 'rosebay' || k === 'manzanita' ? 3.5 : k === 'longleaf' && v === 0 ? 0.6 : 5);
+      // longleaf's grass stage, under a metre; the desert's cacti and shrubs, and its young spears)
+      const low = k === 'shrub' || k === 'willowshrub' ? 1.5 : k === 'rosebay' || k === 'manzanita' ? 3.5 : k === 'longleaf' && v === 0 ? 0.6
+        : k === 'pricklypear' || k === 'cholla' ? 0.8 : k === 'creosote' || k === 'sagebrush' ? 1.8 : (k === 'saguaro' || k === 'joshua' || k === 'ocotillo' || k === 'utahjuniper') && v === 0 ? 2.5 : 5;
+      expect(meta.h, `${k}:${v}`).toBeGreaterThan(low);
       expect(meta.h).toBeLessThan(14);
       expect(meta.crownR).toBeGreaterThan(0.5);
       expect(meta.crownBottom).toBeLessThan(meta.h);
@@ -355,15 +358,69 @@ describe('flora', () => {
     expect(treeHeight4('blueoak', 0, 1, false)).toBeLessThanOrEqual(15);
     expect(treeHeight4('valleyoak', 0, 1, true)).toBeGreaterThan(treeHeight4('blueoak', 0, 1, true));
   });
+  // Package #7 (models.md build order 7): the desert, the piñon-juniper and the sagebrush sea
+  it("the desert: the saguaro's pleated column and its arms, the prickly pear's sprawl, the cholla's gold, the ocotillo's canes, the Joshua tree's rosettes", () => {
+    const coloured = (k: TreeKind, v: number, hex: number) => {
+      const C = treeGeometry(k, v).geo.getAttribute('color'), c = new THREE.Color(hex);
+      let n = 0;
+      for (let i = 0; i < C.count; i++) if (Math.abs(C.getX(i) - c.r) < 1e-4 && Math.abs(C.getY(i) - c.g) < 1e-4 && Math.abs(C.getZ(i) - c.b) < 1e-4) n++;
+      return n;
+    };
+    const width = (k: TreeKind, v: number) => { const b = bb(treeGeometry(k, v).geo); return Math.max(b.max.x - b.min.x, b.max.z - b.min.z); };
+    // the saguaro: a young spear (no arms, no flowers), grown and old with arms and their flower crowns;
+    // the old one's woodpecker holes
+    const sg = (v: number) => treeGeometry('saguaro', v).meta;
+    expect(width('saguaro', 0)).toBeLessThan(3 * sg(0).trunkR);
+    for (const v of [1, 2]) expect(width('saguaro', v), `arms ${v}`).toBeGreaterThan(5 * sg(v).trunkR);
+    expect(coloured('saguaro', 0, BLOOM_PART)).toBe(0);
+    for (const v of [1, 2]) expect(coloured('saguaro', v, BLOOM_PART), `flowers ${v}`).toBeGreaterThan(0);
+    expect(coloured('saguaro', 2, 0x1c1812)).toBeGreaterThan(0);
+    // the marker reads as foliage to the shader (leafy: every channel ≥ 0.98) but not as plain white
+    const m = new THREE.Color(BLOOM_PART);
+    expect(Math.min(m.r, m.g, m.b)).toBeGreaterThanOrEqual(0.98);
+    expect(m.b).toBeLessThan(0.995);
+    // the prickly pear's old sprawl wider than it stands; its tree form up on a trunk
+    const pp1 = treeGeometry('pricklypear', 1).meta;
+    expect(width('pricklypear', 1)).toBeGreaterThan(pp1.h);
+    expect(treeGeometry('pricklypear', 2).meta.h).toBeGreaterThan(pp1.h * 1.5);
+    for (let v = 0; v < TREE_VARIANTS; v++) expect(coloured('pricklypear', v, BLOOM_PART), `pear ${v}`).toBeGreaterThan(0);
+    // the cholla's golden joints above, its black dead ones below
+    for (let v = 0; v < TREE_VARIANTS; v++) (expect(coloured('cholla', v, 0xcabf86)).toBeGreaterThan(0), expect(coloured('cholla', v, 0x2c2822)).toBeGreaterThan(0));
+    // the ocotillo: a vase of canes, wider at the top than its foot by far; leaves only after rain
+    expect(width('ocotillo', 2)).toBeGreaterThan(treeGeometry('ocotillo', 2).meta.h * 0.6);
+    expect(DECIDUOUS.has('ocotillo')).toBe(true);
+    expect(fallHueOf('ocotillo', 0)).toBe(8);
+    // the Joshua tree: one rosette when young, many when old
+    expect(treeGeometry('joshua', 2).plan.lobes.length).toBeGreaterThan(4 * treeGeometry('joshua', 0).plan.lobes.length);
+    // their seasons' own: the desert's flowers as parts of their own; the cacti stand stiff
+    expect([BLOSSOM_OF.saguaro, BLOSSOM_OF.ocotillo, BLOSSOM_OF.pricklypear, BLOSSOM_OF.joshua]).toEqual([7, 8, 9, 10]);
+    for (const k of ['saguaro', 'pricklypear', 'cholla', 'joshua'] as const) expect(STIFF.has(k)).toBe(true);
+    // the piñon and the junipers, the creosote and the sage: their near leaves
+    const pics = (k: TreeKind) => { const n = nearTreeGeometry(k, 1), q = new Set<number>(); for (let i = 0; i < n.cards.length; i += CARD_STRIDE) q.add(n.cards[i + 6]); return [...q].sort((a, b) => a - b); };
+    expect(pics('pinyon')).toEqual([4, 5, 6, 7]);
+    expect(pics('utahjuniper')).toEqual([8, 9]);
+    expect(pics('sagebrush')).toEqual([0, 1]);
+    // the old Utah juniper's silver driftwood
+    expect(coloured('utahjuniper', 2, 0x9e978b)).toBeGreaterThan(0);
+    // at their heights: the saguaro to 14 m, the prickly pear and the cholla under 2.6, the sage to 2
+    expect(treeHeight4('saguaro', 2, 1, false)).toBeLessThanOrEqual(14);
+    expect(treeHeight4('saguaro', 0, 0, false)).toBeGreaterThanOrEqual(2);
+    for (const k of ['pricklypear', 'cholla', 'sagebrush'] as const) for (let v = 0; v < TREE_VARIANTS; v++) expect(treeHeight4(k, v, 1, false)).toBeLessThanOrEqual(2.6);
+    expect(treeHeight4('joshua', 2, 1, false)).toBeLessThanOrEqual(12);
+  });
   it('the leaf cards\' flags round-trip: leaf fall, a 3-bit fall hue, a 3-bit blossom, the motion', () => {
     for (const falls of [false, true]) for (let hue = 0; hue < 8; hue++) for (let bloom = 0; bloom < 8; bloom++) for (let motion = 0; motion < 4; motion++) {
       const f = packCardFlags({ falls, hue, bloom, motion });
       expect(f).toBeLessThan(512);
       expect(unpackCardFlags(f)).toEqual({ falls, hue, bloom, motion });
     }
-    // every kind's own, as the cards get them
-    for (const k of TREE_KINDS) for (let v = 0; v < TREE_VARIANTS; v++)
+    // every kind's own, as the cards get them (the kinds with cards: the desert's far-only plants carry
+    // their hues and blossoms past the cards' bits, in their far material alone)
+    for (const k of TREE_KINDS) for (let v = 0; v < TREE_VARIANTS; v++) {
+      if (!hasNear(k, v)) continue;
       expect(unpackCardFlags(cardFlags(k, v))).toEqual({ falls: DECIDUOUS.has(k), hue: fallHueOf(k, v), bloom: BLOSSOM_OF[k] ?? 0, motion: MOTION_OF[k] ?? 0 });
+    }
+    for (const k of DESERT_FAR) expect(NEAR_KINDS.has(k)).toBe(false);
     expect(unpackCardFlags(cardFlags('aspen', 0)).motion).toBe(1); // (the aspen still trembles)
     expect(unpackCardFlags(cardFlags('cherry', 0)).bloom).toBe(1);
     // and the shader takes them apart the same way

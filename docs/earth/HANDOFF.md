@@ -93,6 +93,12 @@ The game was smooth and rendering before this work started. Work fast, and keep 
     - Placement: `broadMix` + `rangeIn`, `redwoodCountry` (EPA 1 + `ecoregions.ts caRedwoodBelt` on EPA
       6), `sequoiaBand` + `SEQUOIA_GROVE` (props.ts groves by 600 m patch), `manzanitaShare`, `westForm`;
       the LiDAR's giants kept to 116 m there.
+  - **#7, the desert** (2026-10-05; LOG "Regional life (7)"):
+    - Far-only builders (`DESERT_FAR`): saguaro (`fluted`), prickly pear, cholla, ocotillo, Joshua
+      tree; their flowers and fruit as `BLOOM_PART` parts (blossom 7–10, `DESERT_BLOOM`, `fruitNow`);
+      the ocotillo's rain leaves (FALL_HUE 8, `rainLeaves`, `uWet` now in the shared GLSL); `STIFF`.
+    - `CLUMPS` rows creosote, Utah and Ashe juniper, big sagebrush; `PINES` row piñon.
+    - Placement: `desertMix`, `desertTrees`, `pjBand` (props.ts `dryShrub`, `dryTree`).
 
 ## The bar: detail, variety, variation
 
@@ -223,8 +229,8 @@ in-game look is checked on Robby's PC.
   (`world/water.ts`), not a tree: a lime carpet in summer, gone in winter, parting in a wake.
 - **#6:** built (2026-10-05) but for the black oak (the Sierra's mixed-conifer oak, gold in the fall)
   and the gray pine of the blue oak's foothills — both could ride a later package.
-- **#7:** the desert: saguaro, Joshua tree, ocotillo, creosote, cholla, palo verde, mesquite,
-  piñon-juniper, sagebrush.
+- **#7:** built (2026-10-05). Rarer desert rows (organ pipe, barrels, chain-fruit cholla, bursage)
+  can ride a later package on the same genomes.
 - **#8:** palms (cabbage, Washington fan, royal, queen) and saw palmetto. The fronds thrash in a
   gust.
 - **#9:** the ground layers.

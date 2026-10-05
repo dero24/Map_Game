@@ -3,7 +3,7 @@ import { type TileJson } from '../src/world/data';
 import { virtualRegion } from '../src/world/virtual';
 import { setActiveStyle, regionStyle } from '../src/world/styles';
 import { buildTile } from '../src/world/tileBuild';
-import { treeMeta, coniferMix, aspenShare, snagShare, broadMix, rosebayShare, bankMix, redcedarShare, understoryTrees, swampMix, swampForm, manzanitaShare, sequoiaBand, redwoodCountry, westForm, type TreeKind } from '../src/assets/flora';
+import { treeMeta, coniferMix, aspenShare, snagShare, broadMix, rosebayShare, bankMix, redcedarShare, understoryTrees, swampMix, swampForm, manzanitaShare, sequoiaBand, redwoodCountry, westForm, desertMix, desertTrees, pjBand, type TreeKind } from '../src/assets/flora';
 import { caRedwoodBelt } from '../src/world/ecoregions';
 import { castOf } from '../src/world/styles';
 
@@ -313,15 +313,54 @@ describe('package #6 by place (flora.ts broadMix, coniferMix, redwoodCountry, se
   });
 });
 
+// Package #7 (models.md build order 7): the desert, the piñon-juniper and the sagebrush sea
+describe('package #7 by place (flora.ts desertMix, desertTrees, pjBand, coniferMix)', () => {
+  const at = (lat: number, lon: number) => castOf(regionStyle(lat, lon));
+  const kinds = (lat: number, lon: number, elev: number) => [...desertMix(at(lat, lon), elev, lat), ...desertTrees(at(lat, lon), elev, lat)].filter(([, w]) => w > 0).map(([k]) => k);
+  const EAST_WEST: [number, number][] = [[42.36, -71.06], [33.75, -84.39], [41.88, -87.63], [47.6, -122.33], [45.52, -122.68], [37.77, -122.42], [29.95, -90.07], [44.98, -93.27], [35.6, -82.55]];
+  it("the saguaro only in Arizona's Sonoran desert; the Joshua tree only in the Mojave's band", () => {
+    expect(kinds(32.22, -110.97, 750)).toContain('saguaro'); // Tucson
+    expect(kinds(33.45, -112.07, 340)).toContain('saguaro'); // Phoenix
+    expect(kinds(33.83, -116.55, 150)).not.toContain('saguaro'); // Palm Springs: the Colorado Desert, California's
+    expect(kinds(32.22, -110.97, 1500)).not.toContain('saguaro'); // (above its frost line)
+    expect(kinds(34.13, -116.31, 1200)).toContain('joshua'); // Joshua Tree's high desert
+    expect(kinds(36.17, -115.14, 900)).toContain('joshua'); // the Las Vegas valley's edge
+    expect(kinds(33.83, -116.55, 150)).not.toContain('joshua'); // (the low desert)
+    expect(kinds(32.22, -110.97, 750)).not.toContain('joshua');
+    // the warm deserts' creosote; El Paso's Chihuahuan ocotillo and prickly pear
+    for (const [lat, lon, e] of [[32.22, -110.97, 750], [36.17, -115.14, 650], [31.76, -106.49, 1140]] as [number, number, number][]) expect(kinds(lat, lon, e), `${lat},${lon}`).toContain('creosote');
+    expect(kinds(31.76, -106.49, 1140)).toContain('ocotillo');
+    // none of it in the East, the Northwest's west side, the Bay
+    for (const [lat, lon] of EAST_WEST) expect(kinds(lat, lon, 200), `${lat},${lon}`).toEqual([]);
+  });
+  it('the sagebrush sea in the basins; the piñon-juniper in its band, below the ponderosa', () => {
+    expect(kinds(39.53, -119.81, 1400)).toContain('sagebrush'); // Reno
+    expect(kinds(40.83, -115.76, 1550)).toContain('sagebrush'); // Elko
+    // Santa Fe's piñon and juniper; Prescott's; never on the basin floor nor up in Flagstaff's pines
+    const pines = (lat: number, lon: number, elev: number) => coniferMix(at(lat, lon), 'pine', elev, lat).map(([k]) => k);
+    expect(pines(35.69, -105.94, 2150)).toContain('pinyon');
+    expect(pines(34.54, -112.47, 1650)).toContain('pinyon');
+    expect(pines(35.2, -111.65, 2100)).not.toContain('pinyon');
+    expect(pines(35.2, -111.65, 2100)).toContain('ponderosa');
+    expect(pjBand(at(39.53, -119.81), 39.53)!.lo).toBeGreaterThan(1400);
+    for (const [lat, lon] of EAST_WEST) expect(pines(lat, lon, 1800), `${lat},${lon}`).not.toContain('pinyon');
+    // the Great Basin's towns grow planted shade trees, not the Sonoran's mesquite
+    expect(broadMix(at(39.53, -119.81)).map(([k]) => k)).not.toContain('mesquite');
+    // the Hill Country's Ashe juniper, not Dallas's or Houston's
+    expect(broadMix(at(30.27, -98.87)).map(([k]) => k)).toContain('ashejuniper');
+    for (const [lat, lon] of [[32.78, -96.8], [29.76, -95.37], [33.75, -84.39]]) expect(broadMix(at(lat, lon)).map(([k]) => k), `${lat},${lon}`).not.toContain('ashejuniper');
+  });
+});
+
 describe('package #4 in the woods (a mapped wood, built)', () => {
-  const wood = async (lat: number, lon: number) => {
+  const wood = async (lat: number, lon: number, cls = 'wood') => {
     setActiveStyle(regionStyle(lat, lon));
     const sq = (x0: number, z0: number, x1: number, z1: number) => [m(x0), m(z0), m(x1), m(z0), m(x1), m(z1), m(x0), m(z1)];
     const tj = {
       version: 1, id: '0_0', lod: 0, box: { x0: 0, z0: 0, x1: 256, z1: 256 },
       origin: { lat, lon }, slice: { x0: 0, z0: 0, x1: 256, z1: 256 }, backdrop: { x0: 0, z0: 0, x1: 256, z1: 256 },
       landmarks: [], buildings: [], roads: [], lines: [], points: [],
-      areas: [{ c: 'wood', o: [sq(10, 10, 240, 240)], i: [] }],
+      areas: [{ c: cls, o: [sq(10, 10, 240, 240)], i: [] }],
     } as unknown as TileJson;
     const built = await buildTile(tj, virtualRegion([lat, lon]).terrain, { id: 'w0_0', box: tj.box, lod: 0, file: '', world: 1 }, 0);
     const out: Record<string, number[]> = {}; // 'kind:variant' → heights
@@ -350,6 +389,12 @@ describe('package #4 in the woods (a mapped wood, built)', () => {
     expect(cols.length).toBeGreaterThan(0);
     expect(cols.filter((h) => h > 44).length / cols.length).toBeGreaterThan(0.6);
     for (const k of ['tuliptree', 'sweetgum', 'loblolly', 'whitepine', 'sequoia', 'blueoak']) expect(count(w, k), k).toBe(0);
+  }, 60000);
+  it("a Sonoran scrub near Tucson: saguaros, chollas, creosote and the rest; no eastern trees, no pitch pine", async () => {
+    const w = await wood(32.3, -111.1, 'scrub');
+    expect(count(w, 'saguaro') + count(w, 'creosote') + count(w, 'cholla')).toBeGreaterThan(0);
+    for (const k of ['pine', 'tuliptree', 'sweetgum', 'whitepine', 'joshua', 'sagebrush']) expect(count(w, k), k).toBe(0);
+    for (const h of [...(w['saguaro:1'] ?? []), ...(w['saguaro:2'] ?? [])]) expect(h).toBeGreaterThan(6.5);
   }, 60000);
   it('a Sandhills pine wood: longleaf over its grass stages and bottlebrushes, loblolly; no northern pines', async () => {
     const w = await wood(35.05, -78.88);
