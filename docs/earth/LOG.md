@@ -56,8 +56,8 @@ geese on the lawn, herons at the edge, turkeys in flocks; the loon's dive, the h
 paddling off; on a beach — gulls on the sand and wheeling, pelicans skimming, a vulture that never
 stoops, an osprey that hovers and plunges; the strutting tom; the nests at the edge, one to a cell, the
 same however the land is tiled); `tests/foundry.test.ts` (the nest's budget, under 600); shader check 24
-programs, no errors; the shore's playtest (`tools/playtest.mjs --region=shore --quick --swiftshader`): booted,
-overlaps, doors, posts, walkabout and drive passing at commit time.
+programs, no errors; the shore's playtest (`tools/playtest.mjs --region=shore --quick --swiftshader`): PASS,
+6 checks, 0 page errors.
 
 **Next:** package #13, the mammals on the existing bases (the coat patterns and tail types first: the
 raccoon, opossum, skunk; fox squirrel, chipmunk, woodchuck, beaver with its lodge and dam; the prairie
