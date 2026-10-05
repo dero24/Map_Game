@@ -74,6 +74,9 @@ export interface LifeInit {
   downtown: [number, number, number, number]; // bias box for pedestrians (where the shops are)
   seaward: [number, number]; // unit direction from the beach out to sea (gulls wheel over the surf)
   doors: Float32Array; // per door: x, y, z (threshold), fx, fy, fz (front / foot of the steps)
+  doorN?: Float32Array; // per door: its wall's outward normal (nx, nz)
+  doorPath?: Float32Array; // the doors' ways up (Door.path): x,y,z turns from the foot to the door
+  doorPathAt?: Int32Array; // per door: its first turn in doorPath (one more entry: the end)
   rhythm?: Rhythm; // the shape of the place's day (lifeSim.desired); 'shore' when absent
   edgeShops?: Float32Array; // per edge: shop doors along it (pedestrians gather where the shops are)
   edgeKerb?: Float32Array; // per edge: [left, right] metres of kerb the parked cars take (kerbside.ts), left/right of the edge's own direction

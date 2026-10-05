@@ -323,3 +323,83 @@ describe('who walks the street (review round 12: "dogs fill the street")', () =>
     expect(seen / assigned).toBeLessThan(1.3);
   });
 });
+
+// Robby, 2026-10-04: "people walking sometimes walk through walls of building to other side around
+// corners and when walking on porch into house they fall into the floor then stand normal on floor again"
+describe('walkers keep to open ground', () => {
+  it('climb a porch: up its steps, then level across the deck — never sinking into either', { timeout: 30000 }, () => {
+    // town()'s shopfronts given porches: the deck 1.1 m up, 2 m deep before the wall, its steps 1 m
+    // from the foot (9 m back from the road) to the deck's edge (10 m)
+    const w = town(), n = w.doors.length / 6, path: number[] = [], at = [0];
+    for (let k = 0; k < n; k++) {
+      const s = Math.sign(w.doors[k * 6 + 2]);
+      w.doors[k * 6 + 1] = 2.6;
+      path.push(w.doors[k * 6], 2.6, 10 * s);
+      at.push(path.length / 3);
+    }
+    w.doorPath = new Float32Array(path); w.doorPathAt = new Int32Array(at);
+    w.doorN = new Float32Array(Array.from({ length: n }, (_, k) => [0, -Math.sign(w.doors[k * 6 + 2])]).flat());
+    const profile = (z: number) => { const a = Math.abs(z); return a >= 10 ? 2.6 : a <= 9 ? 1.5 : 1.5 + 1.1 * (a - 9); };
+    const sim = new LifeSim(w);
+    sim.setEnv({ playerX: 200, playerZ: 0, hour: 14, night: 0, density: 1, wind: 0.5 });
+    let onSteps = 0, worst = 0;
+    for (let t = 0; t < 9000; t++) {
+      sim.step(0.05);
+      for (let i = RANGES.peds[0]; i < RANGES.peds[1]; i++) {
+        const st = sim.state[i];
+        // (the stair legs: up from the foot to the door, down from the door to the foot)
+        if (!sim.active[i] || !((st === PED_STATE.TO_DOOR && sim.leg[i] === 1) || (st === PED_STATE.FROM_DOOR && sim.leg[i] === 0))) continue;
+        const a = Math.abs(sim.z[i]);
+        if (a < 9.05 || a > 12) continue;
+        onSteps++;
+        worst = Math.max(worst, profile(sim.z[i]) - sim.y[i]);
+      }
+    }
+    console.log(`[life] porch: ${onSteps} samples on the steps and deck, deepest ${worst.toFixed(2)} m under`);
+    expect(onSteps).toBeGreaterThan(50);
+    expect(worst).toBeLessThan(0.08); // (a step's nosing, at most — a straight glide was 0.7 m under)
+  });
+
+  it('never set out for a door round the corner, through its building', { timeout: 30000 }, () => {
+    // grid()'s blocks with a door every 10 m down every street (both sides, 9 m back): the buildings
+    // fill each block more than 9.5 m from its streets
+    const crossings = (normals: boolean) => {
+      const w = grid(), N = 6, B = 80, doors: number[] = [], nrm: number[] = [];
+      for (let e = 0; e < w.edgeNodes.length / 2; e++) {
+        const a = w.edgeNodes[e * 2], b = w.edgeNodes[e * 2 + 1];
+        const ax = (a % N) * B, az = Math.floor(a / N) * B, dx = ((b % N) * B - ax) / B, dz = (Math.floor(b / N) * B - az) / B;
+        for (let t = 5; t < B; t += 10) for (const s of [-1, 1]) {
+          const x = ax + dx * t, z = az + dz * t;
+          doors.push(x - dz * s * 9, 1.8, z + dx * s * 9, x - dz * s * 6, 1.5, z + dx * s * 6);
+          nrm.push(dz * s, -dx * s);
+        }
+      }
+      w.doors = new Float32Array(doors);
+      if (normals) w.doorN = new Float32Array(nrm);
+      const sim = new LifeSim(w);
+      sim.setEnv({ playerX: 200, playerZ: 200, hour: 14, night: 0, density: 1, wind: 0.5 });
+      const was = new Uint8Array(sim.state.length);
+      const inBlock = (x: number, z: number) => { const u = ((x % B) + B) % B, v = ((z % B) + B) % B; return u > 9.5 && u < B - 9.5 && v > 9.5 && v < B - 9.5; };
+      let set = 0, through = 0;
+      for (let t = 0; t < 6000; t++) {
+        sim.step(0.05);
+        for (let i = RANGES.peds[0]; i < RANGES.peds[1]; i++) {
+          if (sim.state[i] === PED_STATE.TO_DOOR && was[i] !== PED_STATE.TO_DOOR) {
+            set++;
+            const o = sim.door[i] * 6, fx = w.doors[o + 3], fz = w.doors[o + 5];
+            let hit = false;
+            for (let k = 1; k < 20 && !hit; k++) hit = inBlock(sim.fx[i] + ((fx - sim.fx[i]) * k) / 20, sim.fz[i] + ((fz - sim.fz[i]) * k) / 20);
+            if (hit) through++;
+          }
+          was[i] = sim.state[i];
+        }
+      }
+      return { set, through };
+    };
+    const before = crossings(false), after = crossings(true);
+    console.log(`[life] corners: ${before.through}/${before.set} set out through a building without the wall's side, ${after.through}/${after.set} with it`);
+    expect(before.through).toBeGreaterThan(0); // (the test sees the glitch)
+    expect(after.set).toBeGreaterThan(30);
+    expect(after.through).toBe(0);
+  });
+});

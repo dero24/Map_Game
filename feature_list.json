@@ -1930,13 +1930,19 @@
       "notes": "Build order: docs/REGIONAL_LIFE.md §6; rares tie to docs/GAMEPLAY_VISION.md §3. Robby, 2026-10-04: models from the foundry, detailed, with \"amazing animation\"; an exhaustive list first."
     },
     {
-      "verification": [],
-      "evidence": [],
+      "verification": [
+        "npx vitest run tests/lifeSim.test.ts -t \"open ground\""
+      ],
+      "evidence": [
+        "2026-10-04: a walker sets out only for a door whose wall it stands in front of (LifeInit.doorN, the facade side, 0.8 m) — never one round the corner or on the far side of a shallow building, reached straight through it. Test grid with a door every 10 m: 1 of 1958 set out through a building without the check, 0 of 1967 with it.",
+        "2026-10-04: every entrance carries its way up (Door.path: the top of a porch's steps; a raised house's landing, side, parallel and dogleg flights turn by turn) and walkers walk it — up the steps, level across the deck. Test porch (1.1 m deck, 1 m of steps): 102,948 samples on the stair legs, deepest 0.00 m under the steps or the deck (a straight glide was 0.7–1.0 m under).",
+        "npm test 864/864, npm run build OK."
+      ],
       "notes": "Robby, 2026-10-04: \"people walking sometimes walk through walls of building to other side around corners and when walking on porch into house they fall into the floor then stand normal on floor again\".",
       "id": "walkers-clear-of-walls",
       "tier": 1,
       "rank": 11.3,
-      "status": "not_started",
+      "status": "passing",
       "area": "life",
       "title": "Walkers keep to open ground: never through a building at a corner, up a porch's steps rather than through its deck",
       "user_visible_behavior": "People walking the streets go round buildings, never through their walls at a corner; someone going into a house climbs its porch steps and walks its deck, never sinking into the floor and popping up."

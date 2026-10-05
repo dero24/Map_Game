@@ -373,8 +373,14 @@ export function* lifeInitSteps(base: LifeBase, roads: Road[], walk: WalkWorld, d
     }
     yield;
   }
-  const dr = new Float32Array(doors.length * 6);
-  doors.forEach((d, i) => dr.set([d.x, d.y, d.z, d.fx, d.fy, d.fz], i * 6));
+  const dr = new Float32Array(doors.length * 6), dn = new Float32Array(doors.length * 2), pathAt = new Int32Array(doors.length + 1), path: number[] = [];
+  doors.forEach((d, i) => {
+    dr.set([d.x, d.y, d.z, d.fx, d.fy, d.fz], i * 6);
+    dn.set([d.nx, d.nz], i * 2);
+    pathAt[i] = path.length / 3;
+    if (d.path) path.push(...d.path);
+  });
+  pathAt[doors.length] = path.length / 3;
   return {
     ...base,
     // base arrays are shared across reinits — fresh copies, since init buffers transfer to the worker
@@ -390,6 +396,9 @@ export function* lifeInitSteps(base: LifeBase, roads: Road[], walk: WalkWorld, d
     nodeEdgeStart: deg,
     nodeEdges: adj,
     doors: dr,
+    doorN: dn,
+    doorPath: new Float32Array(path),
+    doorPathAt: pathAt,
     edgeShops: new Float32Array(shops),
     armCtl, nodeKey, nodeSet,
     nodeXZ: new Float32Array(nodeXZ),
@@ -582,7 +591,7 @@ export class LifeClient {
   /** The road graph changed (tiles streamed in or out): hand the worker the new graph. Its agents
    *  carry over by position (LifeSim.adopt), so traffic and walkers never reset. */
   reinit(init: LifeInit) {
-    const transfer = [init.edgePts.buffer, init.edgeStart.buffer, init.edgeCount.buffer, init.edgeLen.buffer, init.edgeInfo.buffer, init.edgeNodes.buffer, init.nodeEdgeStart.buffer, init.nodeEdges.buffer, init.beachPts.buffer, init.waterGrid.buffer, init.doors.buffer] as ArrayBuffer[];
+    const transfer = [init.edgePts.buffer, init.edgeStart.buffer, init.edgeCount.buffer, init.edgeLen.buffer, init.edgeInfo.buffer, init.edgeNodes.buffer, init.nodeEdgeStart.buffer, init.nodeEdges.buffer, init.beachPts.buffer, init.waterGrid.buffer, init.doors.buffer, ...[init.doorN, init.doorPath, init.doorPathAt].filter((a) => !!a).map((a) => a!.buffer)] as ArrayBuffer[];
     this.worker.postMessage({ kind: 'regraph', init }, transfer);
   }
 
@@ -590,7 +599,7 @@ export class LifeClient {
     const total = layout().total;
     this.worker = new Worker(new URL('./ambient.worker.ts', import.meta.url), { type: 'module' });
     this.worker.addEventListener('message', (e) => { if (e.data?.kind === 'bumped') this.onBumped?.(e.data.n as number); });
-    const transfer: Transferable[] = [init.edgePts.buffer, init.edgeStart.buffer, init.edgeCount.buffer, init.edgeLen.buffer, init.edgeInfo.buffer, init.edgeNodes.buffer, init.nodeEdgeStart.buffer, init.nodeEdges.buffer, init.beachPts.buffer, init.waterGrid.buffer, init.doors.buffer] as ArrayBuffer[];
+    const transfer: Transferable[] = [init.edgePts.buffer, init.edgeStart.buffer, init.edgeCount.buffer, init.edgeLen.buffer, init.edgeInfo.buffer, init.edgeNodes.buffer, init.nodeEdgeStart.buffer, init.nodeEdges.buffer, init.beachPts.buffer, init.waterGrid.buffer, init.doors.buffer, ...[init.doorN, init.doorPath, init.doorPathAt].filter((a) => !!a).map((a) => a!.buffer)] as ArrayBuffer[];
     if (this.sab) {
       this.worker.postMessage({ kind: 'init', init, sab: this.buf }, transfer);
     } else {

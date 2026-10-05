@@ -296,8 +296,10 @@ class RingGrid {
 }
 
 // ---------------- doors, steps, porches ----------------
-// x,z,y: threshold just outside; wx,wz: centre of the opening in the wall; fx,fy,fz: foot of the steps.
-export interface Door { x: number; z: number; y: number; nx: number; nz: number; fx: number; fz: number; fy: number; b: number; w: number; h: number; wx: number; wz: number; col: number; street?: string; porch?: boolean; kind?: string; name?: string; use?: string }
+// x,z,y: threshold just outside; wx,wz: centre of the opening in the wall; fx,fy,fz: foot of the steps;
+// path: the way up between them (x,y,z turns: the top of a flight, a landing), foot first — straight
+// from the foot to the door when absent (a stoop's steps run straight up to it).
+export interface Door { x: number; z: number; y: number; nx: number; nz: number; fx: number; fz: number; fy: number; path?: number[]; b: number; w: number; h: number; wx: number; wz: number; col: number; street?: string; porch?: boolean; kind?: string; name?: string; use?: string }
 export interface Colliders { walls: [P2, P2, number, number][]; decks: Deck[] }
 export interface SignSpec { x: number; z: number; y: number; tx: number; tz: number; nx: number; nz: number; w: number; h: number; text: string; style: 'shop' | 'number'; color: number }
 export interface Mailbox { x: number; z: number; yaw: number }
@@ -578,6 +580,8 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
   b.setInfo(B.id, kindI, PART.trim, B.fo);
 
   let fx = cx + nx * 1.4, fz = cz + nz * 1.4, fy = floorY;
+  const path: number[] = [];
+  const turn = (pt: P2, y: number) => path.push(pt[0], y, pt[1]);
   const concrete = lin(0xc8c1b3), wood = lin(0xa8998a);
   const gAt = (out: number, du = 0) => terrain.heightAt(cx + nx * out + tx * du, cz + nz * out + tz * du);
 
@@ -612,6 +616,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
       const out = 0.08 + sw / 2;
       const sx0 = side.cx + side.sx * out, sz0 = side.cz + side.sz * out;
       st = stairFlight(C, sx0, sz0, side.dx, side.dz, sw, floorY, g, wood);
+      turn([sx0, sz0], floorY);
       const P3 = (pt: P2) => V(pt[0], floorY, pt[1]);
       railPanel(b, P3(at(l0, D)), P3(at(l1, D)), 0.95);
       railPanel(b, P3(at(la, 0.05)), P3(at(la, D)), 0.95);
@@ -640,6 +645,8 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
       const uEnd = uA + dir * sw; // far edge of the mid landing
       const [bx, bz] = at(uA, outB);
       st = stairFlight(C, bx, bz, -tx * dir, -tz * dir, sw, midY, g, wood);
+      // (up flight B, across the mid landing, up flight A)
+      turn([bx, bz], midY); turn(at(uA + (dir * sw) / 2, outB), midY); turn(at(uA + (dir * sw) / 2, outA), midY); turn(at(uA, outA), midY); turn(at(lb, outA), floorY);
       // rails: door landing's outer edge up to flight A, the mid landing's far end and outer side
       const P3 = (pt: P2, y: number) => V(pt[0], y, pt[1]);
       railPanel(b, P3(at(l0, D), floorY), P3(at(l1, D), floorY), 0.95);
@@ -652,6 +659,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
       const ue = lb, out = 0.08 + sw / 2;
       const [sx, sz] = at(ue, out);
       st = stairFlight(C, sx, sz, tx * dir, tz * dir, sw, floorY, g, wood);
+      turn([sx, sz], floorY);
       // rail along the landing's outer edge and far end
       const A = at(l0, D), Bp = at(l1, D), Cp = at(la, 0.05);
       const P3 = (pt: P2) => V(pt[0], floorY, pt[1]);
@@ -663,6 +671,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
     } else {
       const [sx, sz] = at(u, D);
       st = stairFlight(C, sx, sz, nx, nz, sw, floorY, g, wood);
+      turn([sx, sz], floorY);
       const P3 = (pt: P2) => V(pt[0], floorY, pt[1]);
       railPanel(b, P3(at(l0, D)), P3(at(u - sw / 2, D)), 0.95);
       railPanel(b, P3(at(u + sw / 2, D)), P3(at(l1, D)), 0.95);
@@ -725,6 +734,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
       const st = stairFlight(C, sx, sz, nx, nz, 1.3, deckY, gFront, concrete, rise > 0.6);
       (fx = st.fx), (fz = st.fz), (fy = gFront);
     } else (fx = at(u, D + 0.8)[0]), (fz = at(u, D + 0.8)[1]), (fy = gFront);
+    turn(at(u, D), deckY); // (the top of the steps: then level across the deck)
   } else {
     // Stoop: a landing slab and steps down to the walk.
     const g = gAt(1.2);
@@ -795,7 +805,7 @@ function buildEntrance(C: Ctx, B: BInfo, wall: { i: number; u: number; len: numb
       }
     }
   }
-  return { x: cx + nx * 0.2, z: cz + nz * 0.2, y: floorY, nx, nz, fx, fz, fy, b: B.bi, w: wide, h: tall, wx: cx, wz: cz, col: doorHex, street, porch: porch && B.raise <= 0.5, kind: B.kind, name: B.name, use: B.use };
+  return { x: cx + nx * 0.2, z: cz + nz * 0.2, y: floorY, nx, nz, fx, fz, fy, b: B.bi, w: wide, h: tall, wx: cx, wz: cz, col: doorHex, street, porch: porch && B.raise <= 0.5, kind: B.kind, name: B.name, use: B.use, ...(path.length ? { path } : {}) };
 }
 
 // Is there room for a porch on this wall (no neighbours, not onto the street)?

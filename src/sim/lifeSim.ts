@@ -83,6 +83,10 @@ export class LifeSim {
   /** The crosswalk's two ends (x, z, x, z) for a walker crossing one street: kerb → kerb. */
   private xp: Float32Array;
   private doorGrid = new Map<number, number[]>();
+  /** On the way between a door's foot and its threshold: the turn of its path (LifeInit.doorPath)
+   *  a walker is making for — up a porch's steps, across a landing — counted from the end it set
+   *  out from. */
+  wp: Uint8Array;
   private drivableLen = 0;
   visits = 0;
 
@@ -111,6 +115,7 @@ export class LifeSim {
     this.dir = new Int8Array(n); this.side = new Int8Array(n);
     this.state = new Uint8Array(n); this.active = new Uint8Array(n); this.variant = new Uint8Array(n); this.lights = new Uint8Array(n);
     this.door = new Int32Array(n).fill(-1); this.leg = new Uint8Array(n);
+    this.wp = new Uint8Array(n);
     this.spot = new Int16Array(n).fill(-1);
     this.lead = new Int32Array(n).fill(-1); this.leadGap = new Float32Array(n);
     this.nxtE = new Int32Array(n).fill(-1); this.nxtD = new Int8Array(n); this.stopDone = new Int32Array(n); this.waitT = new Float32Array(n); this.holdT = new Float32Array(n);
@@ -190,7 +195,7 @@ export class LifeSim {
     this.indoor = o.indoor;
     const copy = (i: number) => {
       for (const k of ['x', 'y', 'z', 'yaw', 'vx', 'vy', 'vz', 'speed', 'anim', 'amt', 'timer', 'dodge', 'tx', 'ty', 'tz', 'fx', 'fy', 'fz', 's', 'phase', 'radius'] as const) this[k][i] = o[k][i];
-      this.side[i] = o.side[i]; this.state[i] = o.state[i]; this.variant[i] = o.variant[i]; this.lights[i] = o.lights[i]; this.leg[i] = o.leg[i]; this.spot[i] = o.spot[i];
+      this.side[i] = o.side[i]; this.state[i] = o.state[i]; this.variant[i] = o.variant[i]; this.lights[i] = o.lights[i]; this.leg[i] = o.leg[i]; this.wp[i] = o.wp[i]; this.spot[i] = o.spot[i];
       this.active[i] = o.active[i];
     };
     // gulls and boats don't ride the road graph: they carry over as they are
@@ -207,9 +212,9 @@ export class LifeSim {
         if (!car && (st === ST.BEACH || ((st === ST.PAUSE || st === ST.CHAT) && o.edge[i] < 0))) continue;
         if (!car && (st === ST.TO_DOOR || st === ST.FROM_DOOR || st === ST.INSIDE || INDOORS(st))) {
           const od = o.door[i], d = od >= 0 ? this.findDoor(o.w.doors[od * 6], o.w.doors[od * 6 + 2]) : -1;
-          if (d >= 0) { this.door[i] = d; continue; }
+          if (d >= 0) { this.door[i] = d; this.wp[i] = Math.min(this.wp[i], this.turns(d)); continue; }
           if (st === ST.INSIDE || INDOORS(st)) { this.active[i] = 0; this.y[i] = -1000; this.spot[i] = -1; continue; } // unseen either way
-          if (st === ST.FROM_DOOR) { this.leg[i] = 1; continue; } // straight back to the pavement
+          if (st === ST.FROM_DOOR) { this.leg[i] = 1; this.wp[i] = 0; continue; } // straight back to the pavement
           this.state[i] = ST.WALK; // TO_DOOR lost its door: carry on down the street
         }
         const ne = this.nearestEdge(o.x[i], o.z[i], car ? (e) => this.drivable(e) : (e) => this.walkable(e), car ? 6 : 16); // walkers keep to the sidewalk, well off the centre line
@@ -1231,6 +1236,10 @@ export class LifeSim {
           const fx = D[k * 6 + 3], fz = D[k * 6 + 5];
           const d = Math.hypot(fx - this.x[i], fz - this.z[i]);
           if (d > 26) continue;
+          // a door the walker stands in front of: a straight walk to its foot then never crosses its
+          // wall's line — one round the corner was reached straight through the corner building
+          // (Robby: "people walking sometimes walk through walls of building to other side around corners")
+          if (this.w.doorN && (this.x[i] - D[k * 6]) * this.w.doorN[k * 2] + (this.z[i] - D[k * 6 + 2]) * this.w.doorN[k * 2 + 1] < 0.8) continue;
           const lat = (fx - this.tmp[0]) * -tz + (fz - this.tmp[2]) * tx;
           if (Math.sign(lat) !== side) continue;
           const score = d + this.rng.float() * 12;
@@ -1240,8 +1249,14 @@ export class LifeSim {
     this.door[i] = best;
     this.fx[i] = this.x[i]; this.fy[i] = this.y[i]; this.fz[i] = this.z[i];
     this.state[i] = ST.TO_DOOR;
-    this.leg[i] = 0;
+    this.leg[i] = 0; this.wp[i] = 0;
     this.dodge[i] = 0;
+  }
+
+  /** The turns on door k's way up (0: straight from the foot to the threshold). */
+  private turns(k: number) {
+    const A = this.w.doorPathAt;
+    return A && k >= 0 && k + 1 < A.length ? A[k + 1] - A[k] : 0;
   }
 
   private walkTo(i: number, gx: number, gy: number, gz: number, dt: number) {
@@ -1526,12 +1541,22 @@ export class LifeSim {
         }
       } else if (st === ST.TO_DOOR || st === ST.FROM_DOOR) {
         const o = this.door[i] * 6, D = this.w.doors;
+        // the stair legs (to the door from its foot; from the door down to it) walk the door's path
+        // turn by turn: up a porch's steps to the top, then level across the deck — a straight glide
+        // from the ground to the threshold sank into the steps and the deck (Robby: "when walking on
+        // porch into house they fall into the floor then stand normal on floor again")
+        const up = st === ST.TO_DOOR && this.leg[i] === 1, down = st === ST.FROM_DOOR && this.leg[i] === 0;
+        const m = up || down ? this.turns(this.door[i]) : 0, P = this.w.doorPath!;
         let gx: number, gy: number, gz: number;
-        if (this.leg[i] === 0) { gx = D[o + 3]; gy = D[o + 4]; gz = D[o + 5]; }
+        if (this.wp[i] < m) {
+          const t = (this.w.doorPathAt![this.door[i]] + (up ? this.wp[i] : m - 1 - this.wp[i])) * 3;
+          gx = P[t]; gy = P[t + 1]; gz = P[t + 2];
+        } else if (this.leg[i] === 0) { gx = D[o + 3]; gy = D[o + 4]; gz = D[o + 5]; }
         else if (st === ST.TO_DOOR) { gx = D[o]; gy = D[o + 1]; gz = D[o + 2]; }
         else { gx = this.fx[i]; gy = this.fy[i]; gz = this.fz[i]; }
         if (this.walkTo(i, gx, gy, gz, dt)) {
-          if (this.leg[i] === 0) this.leg[i] = 1;
+          if (this.wp[i] < m) this.wp[i]++;
+          else if (this.leg[i] === 0) { this.leg[i] = 1; this.wp[i] = 0; }
           else if (st === ST.TO_DOOR) {
             // step inside — into the building standing open (on to a free place in it), else close
             // the door behind you
@@ -1553,7 +1578,7 @@ export class LifeSim {
         if (!I || k < 0) { this.state[i] = ST.INSIDE; this.y[i] = -1000; this.snapPrev(i); }
         else if (st === ST.IN_WALK ? this.walkTo(i, I.s[k * 4], I.s[k * 4 + 1], I.s[k * 4 + 2], dt) : this.walkTo(i, D[o], D[o + 1], D[o + 2], dt)) {
           if (st === ST.IN_WALK) this.state[i] = ST.IN_STAY;
-          else { this.freeSpot(i); this.state[i] = ST.FROM_DOOR; this.leg[i] = 0; }
+          else { this.freeSpot(i); this.state[i] = ST.FROM_DOOR; this.leg[i] = 0; this.wp[i] = 0; }
         }
       } else if (st === ST.IN_STAY) {
         // at their place: turned to the shelf, the counter, the window — then back out the door
@@ -1570,7 +1595,7 @@ export class LifeSim {
           this.yaw[i] = Math.atan2(-(D[o + 3] - D[o]), -(D[o + 5] - D[o + 2]));
           this.snapPrev(i);
           this.state[i] = ST.FROM_DOOR;
-          this.leg[i] = 0;
+          this.leg[i] = 0; this.wp[i] = 0;
         }
       } else if (st === ST.DOWN) {
         // thrown, sliding to a stop on the ground, then back on their feet
