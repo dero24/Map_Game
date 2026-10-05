@@ -1,10 +1,10 @@
 # Gameplay vision: you are the brush
 
 A living document. Robby's direction, reasoned through with Claude and an outside design review
-(2026-10-03). Merged into the repo on 2026-10-03, replacing the earlier version (its "one brush"
-and "mobile base" sections are superseded; it's in git at `abc02db`). `docs/GAME_DESIGN.md` is
-superseded too, apart from the parts listed at its top. Add ideas at the bottom under **Ideas
-inbox**; move them up when they're decided.
+(2026-10-03; combining added 2026-10-05). Merged into the repo on 2026-10-03, replacing the earlier
+version (its "one brush" and "mobile base" sections are superseded; it's in git at `abc02db`).
+`docs/GAME_DESIGN.md` is superseded too, apart from the parts listed at its top. Add ideas at the
+bottom under **Ideas inbox**; move them up when they're decided.
 
 **In one line:** wherever you look, the real world blooms from pencil into watercolour. The few
 things still in pencil are yours to paint and keep. What you keep, you can place: in a home that
@@ -16,6 +16,10 @@ own layer of the real world.
 - **One layer:** everything you place is added on top of the real world, private to you. Nothing
   real is ever removed or changed.
 - **One test:** does it belong there? Things only settle where they make sense in the real data.
+  (Combining cards, section 6.5, is free everywhere; only *settling* a result in the world faces
+  this test, and the home's outdoor room is the sandbox with no test.)
+- **One surprise:** cards are ingredients. Anything you keep can be combined with anything else,
+  with no menu and no failure, and sometimes the result is something nobody planned (section 6.5).
 
 Flying stays a dev tool. The game is walking, driving and sailing through real places. It's
 playable for anyone, with depth if you look for it.
@@ -107,7 +111,9 @@ Tap stays the whole verb; the depth is in what you get.
   - plants grow at home;
   - fish swim in your aquarium;
   - kitchen things let you cook;
-  - building facades become wall and floor finishes at home.
+  - building facades become wall and floor finishes at home;
+  - **and every card is an ingredient:** drag it onto another card to make something new
+    (section 6.5). Cooking is the same gesture.
 - **Every card teaches a real fact, honestly.** Facts come only from data that exists, and
   degrade gracefully:
   - almost always: the species (from map tags), the car or boat type (from the asset kit), the
@@ -122,7 +128,14 @@ furniture and kitchenware inside buildings, building facades, and the regional r
 
 **A card means you know how to paint it.** There's no count of copies and no running out. The
 only limits are your home's floor space (section 7) and a generous technical safety cap on your
-layer of the world (section 6).
+layer of the world (section 6). Because cards are knowledge rather than stock, combining them
+costs nothing and needs no inventory screen.
+
+**Cards carry tags from day one.** Each card stores its kind, its moment (light, weather, season,
+what it was doing) and tags derived from data (`floats`, `lights`, `grows`, `edible`...), so
+combining (section 6.5) never needs a retrofit of the card format. Honesty still holds: tags come
+from foundry families and map data, and a card's *fact line* is only ever real (see 6.5 for how
+crafted cards are labelled).
 
 ## 3. Rares
 
@@ -239,6 +252,65 @@ creek. All of it lives on **your own layer** of the real world.
 | **Things that decorate** | Bridge lights, lanterns, flags, flowers, benches | Stay put on your layer, attached to real places. Light up the bridge for the night it opens |
 | **Things that solve** | A plank across a creek, a ladder up a dune fence, a rowboat to an island | Paint a way across and it's there, and it stays. Next time you come back, your plank is still across the creek |
 
+### 6.5 Combine: cards are ingredients
+The one place the game is allowed to surprise even its makers. Four promises: **no menu, no cost,
+never fails, and some results nobody authored.**
+
+1. **The gesture.** In the sketchbook or in the world, drag a card onto another card, or onto
+   something you've placed. The result appears at once as the placing outline (the same pencil
+   outline as section 6; it is a preview, not a world collectable, so it never counts toward the
+   3-5 nearby pencil things). Tap to keep it; undo takes it back. There is no craft button, no
+   recipe list, no workbench screen, and nothing is used up. Works anywhere, including in the van.
+2. **Tags, not recipes.** Every card carries tags derived from data, never hand-written per card:
+   from its foundry family and variant (a lobster boat `floats`, a lantern `lights`, a tree
+   `grows`), from map tags (`edible`, `wet`), and from its moment (`rain`, `dusk`, `winter`,
+   `storm`). Tag tables are data per family, like `carMix`, with no place names (hard constraint 5).
+3. **Rules act on tags.** A rule says "these tags together mean this modifier", where a modifier
+   comes from a closed, validated set: add a part, change a material or a shader value, or add a
+   behaviour. A new card multiplies the possibilities with no new recipes. Examples:
+   - `floats` + a car: a car that drives on water;
+   - `grows` + a bench: moss at first, a tree through it over real time (the Grow verb's clock);
+   - `lights` + a bridge, made at `dusk`: string lights that come on at dusk;
+   - `rain` heron + `lights` lantern: a lantern that glows only under overcast skies;
+   - cooking (section 11.2) is this gesture with `edible` tags.
+4. **A wrong pairing still makes something.** The fallback is a "stuck together" collage of the two
+   parts, usually funny, always valid. There is no error and no "that doesn't work".
+5. **Discoveries.** About one combination in eight is a *mutation*: a bigger, stranger result.
+   It is seeded by the sorted pair of (kind, moment tags), never by a card's unique id, so it is the
+   same for every player and worth talking about (determinism, hard constraint 3). Mutations aren't
+   announced; they land on a **Discoveries** page in the sketchbook. They are separate from rares
+   (section 3), which are placed in the world.
+6. **Results are cards.** A crafted card is drawn in a distinct "yours" style, keeps its
+   ingredients as lineage, and can be renamed. **It has no fact line:** the honesty rule (section 2)
+   is about real facts, and a crafted card claims none. It can be combined again, up to a
+   complexity budget (a depth of about three) so it stays inside vertex budgets.
+7. **The world answers, on your layer only.** Crafted things plug into systems that already run:
+   a glowing thing draws moths, a grown thing keeps growing, a floating car can enter water,
+   a sail changes what a van can do. All of it is visual or behavioural on *your* layer. It never
+   alters real data and never touches anyone else's world (section 6 rule 1 and 2). Effects that
+   would change the real map, such as moving where a real creek pools, happen only in the outdoor
+   room's own ground.
+8. **Where results settle.** A result takes the placement rule of its base thing, widened by its
+   tags (`floats` + car: roads *and* water). Buildings are only ever ingredients for home items
+   (a miniature, a finish), never placed in the world. The outdoor room has no placement test.
+9. **Crafted vehicles.** A crafted vehicle is its own kind (so it doesn't replace your painted boat
+   or car). It obeys the strictest rules of its parts (fuel, airfields, water), has no home inside,
+   and has no sleep travel (section 4).
+10. **Limits.** Crafted things are ordinary placed things for the layer's caps. Ones with ongoing
+    behaviour (growing, glowing, attracting animals) also count against a small "alive" budget near
+    you (tens, set by testing); past it they draw as still flat paintings. Results are
+    **compositions of existing foundry parts plus a modifier**, never new meshes. Every modifier
+    gets validation and a vertex budget in `tests/foundry.test.ts` (hard constraint 9), so no new
+    foundry family is needed per combination.
+11. **Paint anything (later).** A player names a thing ("lobster trap") and it is made. The AI
+    writes a JSON recipe from the fixed parts library (the recipe maker, section 11.7), **not a
+    mesh**, so the earlier stance against live AI mesh generation still stands. The recipe is
+    validated, saved per keyword in the shared recipe table and made only once, so every player
+    gets the same thing and it costs nothing after. Needs: a keyword filter (no real people, brands
+    or hateful words), a daily cost cap, an on/off switch, and a proven dev-time recipe maker first.
+12. **Sharing.** A combination travels as a short code in a postcard (section 13). The friend tries
+    it with their own cards; if they lack an ingredient, they see its silhouette in the sketchbook.
+
 ### Everything stays, like Minecraft
 - **Whatever you place stays until you remove it.** Nothing dries away or expires. Players love
   permanence, and since the layer is private, nobody else's world gets cluttered.
@@ -256,7 +328,8 @@ creek. All of it lives on **your own layer** of the real world.
     number to set by testing);
   - **farther ones are drawn as flat paintings** (the impostor system the game already uses for
     distant detail), which takes it to many thousands in an area.
-- **A generous safety cap per area**, in the thousands, so a phone never chokes. Most players
+- **A generous safety cap per area**, in the thousands, so a phone never chokes (crafted things
+  with ongoing behaviour also have the small "alive" budget in 6.5). Most players
   will never reach it; if someone does, a gentle note suggests their home.
 - **Saving is no limit:** each placed thing is about 50 bytes (which card, where, which way it
   faces). 10,000 things is about half a megabyte.
@@ -319,7 +392,8 @@ else.
 ### What the home is for
 - **Sleep** (section 5): passing time, travelling, ending a session gently.
 - **Your gallery:** your paintings hang on the walls, labelled with the time and place.
-- **The workbench:** combine cards into placeable variants (later).
+- **Combining** (section 6.5) has no workbench: it is a gesture that works anywhere. Home is just
+  where you have the room (and the outdoor room's open ground) to see the results.
 - **Living things:** plants, fish, the dog later.
 
 ## 8. The first ten minutes
@@ -355,8 +429,165 @@ else.
 - **It comes along everywhere:** it sleeps at the foot of the bed, rides with its head out of the
   van window, stands at the yacht's bow and in the balloon basket, and appears in your paintings.
 
-## 11. More ways to play
+## 11. Fun on your own
 
+A great single-player game makes a great multiplayer one. The systems above are the bones; this
+section is what you actually do minute to minute, and why you keep going for 20 hours. Most of
+it is built once and then works everywhere, because the map already knows where every court,
+pier, beach and diner is.
+
+### 11.1 Moving is fun in itself
+You'll spend most of your time moving, so moving has to feel good:
+- **A small hop:** over a low fence, onto a dock, off a step. No platforming, just freedom.
+- **Wade and swim** wherever the map says beach or water. Waves push you gently; you float.
+- **Surf** at mapped surf spots when the seeded waves are up: paddle out, catch one, ride it in.
+- **Bike and skateboard** (collected like any vehicle, on the existing vehicle code).
+- **Kayak or paddleboard** on rivers, lakes and bays.
+- **Sled** on hills when the seasons system says snow.
+
+### 11.2 Things to do at real places
+Each kind of mapped place gets one small, cozy activity, built once and working at every one of
+them in the lower 48:
+
+| Place (from the map) | Activity |
+|---|---|
+| Basketball courts | Shoot hoops |
+| Piers, riverbanks, docks | Fish. The fish become cards and swim in your aquarium |
+| Mini golf courses | Play the real course |
+| Rivers and lakes | Skim stones |
+| Ice cream shops, diners, cafés | Order, sit, watch the street go by |
+| Tennis courts, beaches | A rally against a friendly local; beach volleyball |
+| Bowling alleys, arcades | A frame or a game |
+| Parks with picnic tables | Sit, eat, let time pass |
+| Kitchens (any home or your own) | Cook: combine `edible` cards (section 6.5) |
+
+- **Short and cozy:** each activity is a minute or two, with no fail state, and a card for doing
+  it well.
+- **Start with three:** fishing, shooting hoops and sitting at the ice cream shop. Then the rest.
+
+### 11.3 A reason to cross the country: the old sketchbook
+- Early on you find an **old sketchbook** in the van, full of watercolours of real places across
+  America by someone who travelled before you.
+- Each page is a riddle with a clue: "where the river meets the bay, at dawn", "the tallest
+  thing in a flat land, after rain".
+- Find the place, paint the same view at the right time, and the page completes: a short
+  margin note from the old painter, and a new page further west.
+- **Pages are data, not code:** each is a place, conditions and a clue, keyed by region, chosen
+  from real landmarks and viewpoints, so the story can grow without hard-coding places.
+- A light story with no cutscenes. It gives the road trip a direction without taking away
+  freedom, and the ending (whose sketchbook it was) is a reason to finish.
+
+### 11.4 People who remember you
+- **A few named regulars per town** (the café owner, the lifeguard, the man always fixing his
+  boat): procedural, seeded per place, the same for everyone.
+- **They remember you:** what you painted, what you gave them, how long since you visited ("you're
+  back, did you catch the heron?").
+- **They give commissions** with conditions ("paint my boat at sunset?") and small gifts (a
+  card, a recipe, an outfit).
+- **A travelling friend** you keep running into at rest stops across the country, whose story
+  unfolds a little at each meeting.
+
+### 11.5 Small optional skill challenges
+- Land the balloon on a target, dock the yacht neatly, glide the plane in smoothly, surf a long
+  wave, a clean shot in mini golf.
+- Commissions with conditions ("the bridge, raised, at sunset").
+- Never punishing: doing it well earns a gold card or a small reward.
+
+### 11.6 "Today in your town": every session has something
+When you open the game, a small card shows today:
+- what turned to pencil because of today's weather, time or season;
+- today's events (section 11.7): the farmers market, a festival, the fireworks, low tide;
+- a regular's commission.
+
+A 10-minute session always has something to do; a long session has a list.
+
+### 11.7 Events: the world's own calendar
+**Research (2026-10-03): there is no free, open, commercial-OK API that lists every local event
+everywhere.**
+- **Ticketmaster's Discovery API** is free, but its terms forbid deriving revenue from it and
+  limit caching, and it only covers ticketed concerts and sports.
+- **Eventbrite** removed public event search in 2020.
+- **PredictHQ** aggregates millions of events (festivals, community, sports, holidays) but is a
+  paid enterprise service with no public pricing.
+
+**So events are mostly generated, from rules plus open data: free, the same for everyone, and
+deterministic:**
+
+| Source | Examples | Data |
+|---|---|---|
+| **Calendar rules** (computed) | July 4 fireworks over every town's park or beach; Halloween trick-or-treaters in residential streets; December lights on houses; Memorial Day beaches opening; Thanksgiving parades downtown | Holiday dates are fixed or computed |
+| **Recurring markets and opening hours** | Farmers markets on their real days, shops open or closed by the clock | USDA farmers market directory (public); OSM `opening_hours` |
+| **Famous annual festivals** | A town's well-known festival in its usual week | Wikidata recurring events (CC0) |
+| **Nature's calendar** | Low and high tide, sunrise and sunset, full moon, meteor showers, bird migrations, fall colour, first snow | NOAA tides (public domain); computed astronomy; seasons system |
+| **Weather** | Storm surf, fog, snow days, rainbows after rain | Seeded weather (NWS live weather as an option later) |
+| **Sports seasons** | Friday night high school football lights, Little League in spring | Rules by season and mapped fields |
+
+- A paid service like PredictHQ could add real local events later, if the game earns money and
+  its licence allows.
+
+**Assets and animations for events, on the fly:** the asset foundry already grows things from
+recipes, so each event is an **event kit**: a set of recipes plus placement rules.
+- Examples: market stalls and awnings (already exist), festival tents and string lights,
+  fireworks (particles and sound), parade floats and a marching band, pumpkins and jack-o'-lanterns,
+  Christmas lights on real house outlines, bleachers and field lights.
+- **Placement uses the real map:** fireworks over the mapped park or beach, the parade down the
+  main street, stalls on the mapped market square.
+- **Each event brings its own collectables:** a July 4 sparkler, a festival ribbon, a parade
+  float card. They turn to pencil only while the event is on, so they're natural moment rares.
+- **Generated, not downloaded:** variety comes from seeds, so every town's festival looks a
+  little different. Recipes are written once and then grow endlessly (see "The recipe maker"
+  below). Generating 3D models (meshes) with AI live in the game is not recommended: per-use
+  costs, an inconsistent style and unclear licences. (Recipes as data are different: see "Paint
+  anything" in section 6.5.)
+
+**The recipe maker: keyword → recipe** (Robby, 2026-10-04)
+A recipe is a short set of building instructions for the asset foundry: which simple parts,
+how they fit together, and how much each can vary (a pumpkin: a squashed ball with 8–12 grooves,
+orange from pale to deep, a short bent stem, 25–60 cm). Today the agents write each recipe in
+code by hand. To make hundreds of things quickly:
+1. **A parts library** for recipes: boxes, balls, tubes, cones, flat cards, plus the foundry's
+   existing tricks (grooves, tapering, golden-angle spirals, Fibonacci counts).
+2. **A recipe format as data** (JSON), so a recipe can be written without new code.
+3. **A dev tool where AI turns a keyword into a recipe:** "festival tent", "lobster trap",
+   "parade float". It writes the JSON from the parts library.
+4. **Automatic checks:** the same validation every foundry recipe passes (finite, sized,
+   grounded, within the vertex budget).
+5. **A preview page** (like `/kit.html`) to look at each result from several seeds, keep the
+   good ones and tweak the rest.
+6. **Saved in the shared recipe table**, keyed by keyword, so every player gets the same thing
+   and it costs nothing at runtime.
+
+When the AI writes recipes:
+- **During development (the main way):** batches of keywords for event kits, regional rares,
+  furniture, activities. Cheap, consistent in style, reviewed, and fully owned.
+- **Live in the game (later, as "paint anything", section 6.5):** a player names a thing and
+  it's made. It costs a little per new keyword and can come out odd,
+  so results are validated, then saved and shared so each keyword is only made once.
+
+### 11.8 Self-expression
+- **Outfits** collected on your travels (a fisherman's sweater in Maine, a cowboy hat in Texas).
+- **Paint jobs for the van**, and your other vehicles.
+- **A painting style per painting:** palette, brush, paper. The card keeps the style you chose.
+
+### 11.9 Long-term goals
+- **Complete a state's painted map**, and earn its state card.
+- **A masterpiece per region:** one big painting combining your best cards from there.
+- **Your gallery becomes a little museum** that townspeople visit and comment on.
+- **The 48-state journey card,** and the old sketchbook's last page.
+
+### 11.10 Music and sound
+- **Soft music** that changes with region, time and weather (a calm, sparse, Minecraft-like
+  feel), made with the same in-browser synthesis as the game's sounds. Robby's **Sound Studio**
+  (`for_mapgame/sound-studio`) makes the themes as small recipes the game plays.
+- Music fades for real-place moments: the bell buoy, the gulls, the bridge horn.
+
+### 11.11 Smaller things
+- **Controller support** (gamepad), alongside mouse, keyboard and touch.
+- **Weather as play:** splash in puddles, snowball fights with townspeople, kites on windy beaches.
+- **Far-off things catch your eye:** a hot air balloon on the horizon, fireworks in the distance,
+  a lighthouse beam, so you know where to go next.
+
+### 11.12 Earlier ideas that still stand
 - **Series:** the same view painted at three hours or in three seasons makes one card that
   cross-fades between them. The road trip card (section 4) is one too.
 - **The bridge opens on its real schedule.** Sound one long and one short blast from your boat to
@@ -385,6 +616,7 @@ moments, not fail states.
 
 - **Postcards:** send a painting to a friend's game. When they open it, they can travel to that
   spot at that time.
+- **Recipes:** a combination can travel in a postcard as a short code (section 6.5).
 - **Visits:** since the real world is the same for everyone, a friend can step into your home or
   walk a town with you, and see your layer while visiting.
 - **An optional, joinable shared world** comes much later; it needs accounts and moderation.
@@ -418,6 +650,14 @@ moments, not fail states.
 | Huge home with many windows | Each window shows the vehicle's real view in its facing direction |
 | Big painted things at home (trees, boats, lighthouses) | As a miniature, or full size in an outdoor room (a no-ceiling backyard inside your home) |
 | A card fact the data doesn't have | Left out. Cards never make facts up |
+| Combining two cards that "don't go together" | Always makes something: a stuck-together collage. No error |
+| Crafted card and the honesty rule | Crafted cards carry no fact line and are labelled "yours" |
+| A crafted effect that would change the real world | Never: effects are on your layer only; real-map-like changes only in the outdoor room |
+| Crafted vehicle (a car that floats) | Its own kind; strictest rules of its parts; no home inside, no sleep travel |
+| Combining a building card | Building is an ingredient for home items only (a miniature, a finish), never placed in the world |
+| Mutation results across players | Same for everyone (seeded by kind + moment tags, not card ids) |
+| Too many crafted things behaving near you | A small "alive" budget; past it they draw as still flat paintings |
+| Combining result placed where it doesn't belong | The usual outline fades and won't settle; the outdoor room has no test |
 | Cleared browser data | Progress lives in the browser for now (IndexedDB); account sync and export later |
 
 ## 15. Order of work
@@ -435,18 +675,33 @@ Each gameplay step builds what the next one needs.
    "pencil overlay" system, testable on its own, with no change to the shared shaders.
 3. **The van-home start and placing at home:** wake up in the van, "Start near you?", step out.
    Placing your first card at home builds the placing tools (the hold gesture, the pencil
-   outline, the "does it belong here" check) that the world version reuses.
-4. **Placing things in the world:** your layer, ride what you've painted, light the bridge, plank
+   outline, the "does it belong here" check) that the world version reuses. Cards already carry
+   tags (section 2), and a first five-rule **combine prototype** (drag card onto card, outline
+   preview, tap to keep) runs here, at home, to see whether results surprise before building more.
+4. **Moving is fun (11.1):** the hop, wading and swimming, the bike. Surfing, kayaks and sleds
+   follow later.
+5. **Placing things in the world:** your layer, ride what you've painted, light the bridge, plank
    the creek, everything kept (near in full, far as flat paintings), the camp kit.
-5. **Regional rares** as data, sketchbook silhouettes, sets, then moment rares.
-6. **Van travel:** call it, drive it, fuel, self-drive, sleep legs with planned stops and arrival
-   cards.
-7. **Growing the home:** rooms, windows (the all-around capture), miniatures, outdoor rooms.
-8. **The other special vehicles:** yacht, plane, balloon, each earned in the world.
-9. **The portal gun.**
-10. **Series, the bridge, postcards.**
-11. **The dog.**
-12. **Friends and visits.**
+6. **Combine (6.5):** the full tag rules as a data table, mutations and Discoveries, crafted things
+   in the world, the "alive" budget. The outdoor-room sandbox joins in step 10, and "paint anything"
+   comes after step 11.
+7. **Things to do at real places (11.2)**, starting with fishing, hoops and the ice cream shop,
+   plus **a few regulars who remember you (11.4)**.
+8. **Regional rares** as data, sketchbook silhouettes, sets, then moment rares, with the
+   **events calendar (11.7)** and **"today in your town" (11.6)**.
+9. **Van travel:** call it, drive it, fuel, self-drive, sleep legs with planned stops and arrival
+   cards, plus **the old sketchbook (11.3)** and the travelling friend.
+10. **Growing the home:** rooms, windows (the all-around capture), miniatures, outdoor rooms, plus
+   **self-expression (11.8)**.
+11. **The other special vehicles:** yacht, plane, balloon, each earned in the world, plus their
+    **skill challenges (11.5)**.
+12. **The portal gun.**
+13. **Series, the bridge, postcards and long-term goals (11.9).**
+14. **The dog.**
+15. **Friends and visits.**
+
+Alongside from step 2: **music (11.10)**, made in Sound Studio, and the smaller things (11.11)
+as they fit.
 
 The visual must-fixes from `docs/earth/REVIEWER.md` round 12 are in the foundation tier
 (section 17), ahead of all of this.
@@ -460,6 +715,9 @@ The visual must-fixes from `docs/earth/REVIEWER.md` round 12 are in the foundati
 - How much floor space a handful of cards earns.
 - Real weather or seeded weather?
 - The world clock rate while awake: real time, or faster?
+- How many tags per card, and how many rules before combining feels rich rather than random?
+- The mutation rate (about 1 in 8?) and the depth limit for combining crafted cards.
+- How big the "alive" budget for behaving crafted things is on a phone.
 - Can you paint a person? (Probably as a portrait card only, never a collectable "thing".)
 
 ## 17. When this merges into the repo: reprioritise for the real goal
@@ -650,7 +908,8 @@ What this means for a paid game:
 - **Interiors** at real scale (`interiors-rooms`, `city-doors`).
 
 ### Tier 2: the game (section 15's order)
-The bloom, pencil collecting, the van-home, placing things, rares, travel, and the rest.
+The bloom, pencil collecting, the van-home, fun movement, placing things, combining cards,
+activities at real places, rares and events, travel and the old sketchbook, and the rest.
 
 ### Tier 3: polish and later
 Older items that don't serve tiers 0–2 now (vehicle polish, cross-gable roofs, a second baked
@@ -667,3 +926,13 @@ hero region and similar) stay on the list at low priority, not deleted.
 ## Ideas inbox
 
 Add new ideas here, with a date.
+
+- **2026-10-05, combining.** Cards as tagged ingredients, drag-to-combine, mutations and a
+  Discoveries page: now designed in section 6.5. Still open: how "paint anything" is gated, and
+  whether crafted things should ever be shareable as placed objects (today only recipe codes travel).
+- **2026-10-05, moment as modifier.** A card's moment (rain, dusk, winter) is a crafting input, so
+  the same two kinds combined at different times give different results. Test early in the prototype.
+- **2026-10-05, the dog and crafted things.** The dog could react to crafted things (sniff a glowing
+  one) without pointing at them as pencil. Later, with the dog.
+- **2026-10-05, regional ingredients.** Rares and regional everyday cards (a lobster buoy, a chile
+  ristra) carry regional tags, so combining makes places feel different from each other.
