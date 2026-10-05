@@ -976,6 +976,9 @@ export class Interiors {
         people(spots, r, Math.min(per, spots.length, busy ? 1 + Math.floor(r.float() * 3) : 1 + Math.floor(r.float() * 2)));
       }
     } else took = people(F.npcs, rng, Math.min(NPC_MAX, F.npcs.length, busy ? 2 + Math.floor(rng.float() * 6) : 1 + Math.floor(rng.float() * 3)));
+    // (a tower's window with its ground storey: its open floor takes visitors too — the grid's places,
+    // clear of the residents standing there; Midtown's shops are all in towers)
+    if (tallB && k0 === 0) took = new Set(F.npcs.map((_, k) => k));
     // (the ground storey's standing places the residents left free — none in the first steps in from
     // the door — for whoever walks in from the street; a tall building's window keeps its own people)
     if (took && L) {
