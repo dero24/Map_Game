@@ -23,11 +23,22 @@ window.__SHADERS__ = async () => {
     ['dogwood', { decid: true, fallHue: 1, blossom: 2, motion: 2 }], ['redbud', { decid: true, fallHue: 2, blossom: 3 }], ['crapemyrtle', { decid: true, fallHue: 0, blossom: 4 }],
     ['sweetgum', { decid: true, fallHue: 4 }], ['buckeye', { decid: true, fallHue: 5 }], ['buroak', { decid: true, fallHue: 6 }], ['redcedar', { fallHue: 7 }],
     ['rosebay', { fallHue: 7, blossom: 5 }], ['longleaf', { motion: 3 }], ['cherry', { decid: true, fallHue: 1, blossom: 1 }],
+    // (package #6: the manzanita's winter urns, the valley oak's russet)
+    ['manzanita', { blossom: 6 }], ['valleyoak', { decid: true, fallHue: 6 }],
   ];
   for (const [k, o] of k4) add(treeLib(k, k === 'longleaf' ? 0 : 1).clone(), propMaterial({ wind: true, foliage: true, crown, ...o }));
   add(treeLib('liveoak', 0).clone(), propMaterial({ wind: true, foliage: true, crown }));
   add(treeLib('liveoak', 0).clone(), propMaterial({ wind: true, foliage: true, crown, treeLod: 'far' }));
   for (const t of ['spanish', 'resfern', 'ballmoss', 'lace']) add(hangerLib(t, t === 'lace' ? 'coastoak' : 'liveoak', 0, 1).clone(), propMaterial({ wind: true, hang: true }));
+  // the grass (the summer-dry hills' hay: grass.ts)
+  try {
+    const { grassMaterial } = await import('/src/world/grass.ts');
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0.1, 0.5, 0, 0.2, 0, 0], 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute([0, 0, 0, 1, 1, 1, 0, 0, 0], 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
+    add(g, grassMaterial());
+  } catch (e) { errors.push('grass: ' + e.message); }
   const far = scene.children.find((o) => o.material?.defines?.TREE_LOD);
   if (far) far.geometry.setAttribute('aNear', new THREE.InstancedBufferAttribute(new Float32Array(1), 1));
   try {

@@ -37,8 +37,9 @@ describe('flora', () => {
       const b = bb(geo);
       expect(finite(geo)).toBe(true);
       expect(b.min.y).toBeLessThanOrEqual(0.01); // the trunk reaches into the ground
-      // (the shrubs; the rosebay's laurel hell, low and sprawling; the longleaf's grass stage, under a metre)
-      expect(meta.h).toBeGreaterThan(k === 'shrub' || k === 'willowshrub' ? 1.5 : k === 'rosebay' ? 3.5 : k === 'longleaf' && v === 0 ? 0.6 : 5);
+      // (the shrubs; the rosebay's laurel hell, low and sprawling, and the chaparral's manzanita; the
+      // longleaf's grass stage, under a metre)
+      expect(meta.h).toBeGreaterThan(k === 'shrub' || k === 'willowshrub' ? 1.5 : k === 'rosebay' || k === 'manzanita' ? 3.5 : k === 'longleaf' && v === 0 ? 0.6 : 5);
       expect(meta.h).toBeLessThan(14);
       expect(meta.crownR).toBeGreaterThan(0.5);
       expect(meta.crownBottom).toBeLessThan(meta.h);
@@ -300,8 +301,62 @@ describe('flora', () => {
     expect(pics('baldcypress')).toEqual([24, 25]);
     expect(pics('cottonwood')).toEqual([26, 27]);
   });
+  // Package #6 (models.md build order 6): California's oaks, its giants and its chaparral
+  it("California: the valley oak's weeping spread, the blue oak small, the redwood's column on its fluted foot, the sequoia's, the manzanita's red stems", () => {
+    const groundReach = (k: TreeKind, v: number, y0: number, y1: number) => {
+      const P = treeGeometry(k, v).geo.getAttribute('position');
+      let r = 0;
+      for (let i = 0; i < P.count; i++) if (P.getY(i) > y0 && P.getY(i) < y1) r = Math.max(r, Math.hypot(P.getX(i), P.getZ(i)));
+      return r;
+    };
+    const coloured = (k: TreeKind, v: number, hex: number) => {
+      const C = treeGeometry(k, v).geo.getAttribute('color'), c = new THREE.Color(hex);
+      let n = 0;
+      for (let i = 0; i < C.count; i++) if (Math.abs(C.getX(i) - c.r) < 1e-3 && Math.abs(C.getY(i) - c.g) < 1e-3 && Math.abs(C.getZ(i) - c.b) < 1e-3) n++;
+      return n;
+    };
+    for (let v = 0; v < TREE_VARIANTS; v++) {
+      const vo = treeGeometry('valleyoak', v).meta, bo = treeGeometry('blueoak', v).meta;
+      expect((2 * vo.crownR) / vo.h, `valley oak ${v}`).toBeGreaterThan(1.0); // as wide as it stands tall, or wider
+      expect(bo.crownR, `blue oak ${v}`).toBeLessThan(vo.crownR); // the blue oak the smaller tree
+      // the redwood's foot fluted and flaring
+      expect(groundReach('redwood', v, 0.05, 0.6), `redwood foot ${v}`).toBeGreaterThan(1.4 * treeGeometry('redwood', v).meta.trunkR);
+    }
+    const vo0 = treeGeometry('valleyoak', 0).meta;
+    expect(vo0.crownBottom / vo0.h).toBeLessThan(0.25); // its outer branches hanging near the grass
+    // the redwood: young a spire to the ground; the grove's a bare column, its crown narrow and high
+    const r0 = treeGeometry('redwood', 0).meta, r1 = treeGeometry('redwood', 1).meta;
+    expect(r0.crownBottom).toBeLessThan(1);
+    expect(r1.crownBottom / r1.h).toBeGreaterThan(0.4);
+    expect(r1.crownR / r1.h).toBeLessThan(0.2);
+    // the sequoia: grown and ancient, the thickest trunk of all, its fire scar on the old one alone
+    for (const v of [1, 2]) expect(treeGeometry('sequoia', v).meta.trunkR).toBeGreaterThan(1.5 * r1.trunkR);
+    expect(coloured('sequoia', 2, 0x231e1a)).toBeGreaterThan(0);
+    expect(coloured('sequoia', 1, 0x231e1a)).toBe(0);
+    // the manzanita's red stems; the old one's dead and silver among them
+    for (let v = 0; v < TREE_VARIANTS; v++) expect(coloured('manzanita', v, 0x7a2a22), `manzanita ${v}`).toBeGreaterThan(0);
+    expect(coloured('manzanita', 2, 0x9e978b)).toBeGreaterThan(0);
+    expect(coloured('manzanita', 0, 0x9e978b)).toBe(0);
+    // seasons: the valley and blue oaks bare in winter, brown in autumn; the giants and the manzanita
+    // evergreen — the manzanita's urns in the winter
+    for (const k of ['valleyoak', 'blueoak'] as const) (expect(DECIDUOUS.has(k)).toBe(true), expect(fallHueOf(k, 0)).toBe(6));
+    for (const k of ['redwood', 'sequoia', 'manzanita'] as const) expect(DECIDUOUS.has(k)).toBe(false);
+    expect(BLOSSOM_OF.manzanita).toBe(6);
+    // their own leaves up close: the redwood's flat sprays, the sequoia's scales
+    const pics = (k: TreeKind) => { const n = nearTreeGeometry(k, 1), q = new Set<number>(); for (let i = 0; i < n.cards.length; i += CARD_STRIDE) q.add(n.cards[i + 6]); return [...q].sort((a, b) => a - b); };
+    expect(pics('redwood')).toEqual([24, 25]);
+    expect(pics('sequoia')).toEqual([8, 9]);
+    // at their real heights: the old redwood the tallest tree there is, the sequoia's grove next; the
+    // blue oak a small tree
+    expect(treeHeight4('redwood', 2, 0, true)).toBeGreaterThanOrEqual(70);
+    expect(treeHeight4('redwood', 2, 1, true)).toBeLessThanOrEqual(116);
+    expect(treeHeight4('sequoia', 1, 0, true)).toBeGreaterThanOrEqual(50);
+    expect(treeHeight4('redwood', 0, 1, false)).toBeLessThan(30); // (a yard's young one)
+    expect(treeHeight4('blueoak', 0, 1, false)).toBeLessThanOrEqual(15);
+    expect(treeHeight4('valleyoak', 0, 1, true)).toBeGreaterThan(treeHeight4('blueoak', 0, 1, true));
+  });
   it('the leaf cards\' flags round-trip: leaf fall, a 3-bit fall hue, a 3-bit blossom, the motion', () => {
-    for (const falls of [false, true]) for (let hue = 0; hue < 8; hue++) for (let bloom = 0; bloom < 6; bloom++) for (let motion = 0; motion < 4; motion++) {
+    for (const falls of [false, true]) for (let hue = 0; hue < 8; hue++) for (let bloom = 0; bloom < 8; bloom++) for (let motion = 0; motion < 4; motion++) {
       const f = packCardFlags({ falls, hue, bloom, motion });
       expect(f).toBeLessThan(512);
       expect(unpackCardFlags(f)).toEqual({ falls, hue, bloom, motion });

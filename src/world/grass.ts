@@ -71,7 +71,7 @@ function tuftGeo() {
   return g;
 }
 
-function grassMaterial() {
+export function grassMaterial() {
   return paintMaterial({
     side: THREE.DoubleSide,
     // Blades write depth (so they sort) and alpha 0: the post pass reads scene alpha as a
@@ -117,6 +117,10 @@ function grassMaterial() {
         // dark, damp base → sunlit tip; the instance tint carries the region's green (or a flower)
         // roots sink into the lawn wash (ground.ts lawn colour), tips carry the tint
         vec3 alb = mix(vec3(0.30, 0.34, 0.18), vTint, smoothstep(0.0, 0.55, vT)) * mix(0.75, 1.1, vT);
+        // the summer-dry hills gone gold (season.ts hay): oat-straw by the tuft, the tips first, a
+        // greener tuft here and there in a hollow
+        float gold = uHay * smoothstep(0.15, 0.55, vnoise(vWorldPos.xz * 0.11) * 0.6 + 0.25 + 0.35 * vT);
+        alb = mix(alb, vec3(0.74, 0.62, 0.36) * mix(0.8, 1.08, vT) * (0.92 + 0.16 * vnoise(vWorldPos.xz * 0.7)), gold);
         alb *= 0.9 + 0.2 * vnoise(vWorldPos.xz * 1.7);
         alb = pigment(alb, vWorldPos);
         float sh = shadowAt(vWorldPos, N);
@@ -255,7 +259,9 @@ export class GrassField {
       }
       return false;
     };
-    const [dry, lush, cold] = st.biome;
+    const [dry0, lush, cold] = st.biome;
+    // (the summer-dry climates grow green, the season turns them gold in the shader: uHay)
+    const dry = st.climate === 'mediterranean' ? dry0 * 0.25 : dry0;
     const greens = (LUSH[st.climate] ?? LUSH.temperate).map((h) => { const c = new THREE.Color(h), hsl = { h: 0, s: 0, l: 0 }; c.getHSL(hsl); return c.setHSL(hsl.h, hsl.s * DESAT, hsl.l); });
     const straw = new THREE.Color(0xc2a86a);
     const flowers = [0xf4f1ea, 0xe8c547, 0xc8584f, 0x9a86c8, 0xf0a7b8].map((h) => new THREE.Color(h));

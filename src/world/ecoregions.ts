@@ -184,10 +184,22 @@ export const pnwWestside = (p: { region: string; l3: number } | null | undefined
 /** California's coast, south to north (lat, lon): the coastal fog belt is the land within ~45 km of it
  *  (lace lichen on the oaks, the marine layer's summer). */
 const CA_COAST: [number, number][] = [[32.5, -117.15], [33.7, -118.3], [34.05, -118.8], [34.45, -120.45], [35.4, -120.9], [36.3, -121.9], [37.0, -122.2], [37.8, -122.55], [38.5, -123.2], [39.5, -123.8], [40.4, -124.4], [41.5, -124.1], [42.0, -124.25]];
-export function caFogBelt(lat: number, lon: number): boolean {
-  if (lat < CA_COAST[0][0] - 0.2 || lat > CA_COAST[CA_COAST.length - 1][0] + 0.2) return false;
+const caCoastLon = (lat: number) => {
   let coast = CA_COAST[0][1];
   for (let i = 0; i + 1 < CA_COAST.length; i++) if (lat >= CA_COAST[i][0] && lat <= CA_COAST[i + 1][0]) coast = CA_COAST[i][1] + ((lat - CA_COAST[i][0]) / (CA_COAST[i + 1][0] - CA_COAST[i][0])) * (CA_COAST[i + 1][1] - CA_COAST[i][1]);
   if (lat > CA_COAST[CA_COAST.length - 1][0]) coast = CA_COAST[CA_COAST.length - 1][1];
+  return coast;
+};
+export function caFogBelt(lat: number, lon: number): boolean {
+  if (lat < CA_COAST[0][0] - 0.2 || lat > CA_COAST[CA_COAST.length - 1][0] + 0.2) return false;
+  const coast = caCoastLon(lat);
   return lon - coast < 0.5 && lon - coast > -0.6;
+}
+/** The coast redwood's belt: the fog belt's seaward ~35 km from Big Sur's canyons (35.8°N) to the
+ *  Oregon line — Muir Woods, the Santa Cruz Mountains and the Oakland hills in it, Napa and San Jose
+ *  past it (flora.ts redwoodCountry). */
+export function caRedwoodBelt(lat: number, lon: number): boolean {
+  if (lat < 35.8 || lat > CA_COAST[CA_COAST.length - 1][0] + 0.2) return false;
+  const coast = caCoastLon(lat);
+  return lon - coast < 0.38 && lon - coast > -0.6;
 }

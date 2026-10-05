@@ -2008,9 +2008,21 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
    The rows: the `cypress†` genome with **bald cypress**, **cypress knees** and **water
    tupelo**; **duckweed** on the water. Oak rows: **eastern/plains cottonwood** and **Fremont
    cottonwood**.
-6. **California's oaks and redwoods.** Oak rows: **valley oak**, **blue oak**. `conifer†` row:
-   **coast redwood**. Mesquite row: **manzanita**. Grass row: the **California annual grassland**
-   (the golden hills).
+6. **California's oaks and redwoods** — **built** 2026-10-05 (`docs/earth/LOG.md` "Regional life
+   (6)"): the valley oak (its vast spread, outer branches hanging to the grass; a valley town's; an
+   old one with a limb dead) and the blue oak (small, compact, pale-barked; one trunk, two, old and
+   gnarled) as `OAKS` rows; the coast redwood (a young spire to the ground; the grove's bare column
+   with its narrow crown high up; the old-growth giant with burls, a fluted flaring foot and its
+   reiterated tops) and the giant sequoia (the town's young cone; the vast orange column with its
+   rounded top; the fire-scarred ancient, top broken) as `SPIRES` rows with the new `foot`, `burls`,
+   `scar` and the `round` and `reit` tops; the manzanita as a `CLUMPS` row (red twisting stems, an old
+   one's dead and silver among them) with blossom 6, its urns in the winter (`season.ts winter`); the
+   golden hills as the season's `hay` (the grass and the ground's straw wash gold June to November,
+   green with the rains); placed by `broadMix` with `rangeIn`, `redwoodCountry` (the Coast Range and
+   `ecoregions.ts caRedwoodBelt`), `sequoiaBand` (in groves), `manzanitaShare`, `westForm`. The rows:
+   Oak rows: **valley oak**, **blue oak**. `conifer†` rows: **coast redwood**, **giant sequoia**.
+   Clump row: **manzanita**. Grass: the **California annual grassland** (the golden hills, a season
+   of the grass rather than a model).
 7. **The desert.** `columnar†`: **saguaro**. `opuntia†`: **Engelmann prickly pear**, **teddy bear
    cholla**. `cane†`: **ocotillo**. `yucca†`: **Joshua tree**. Shrub row: **creosote**. Pine row:
    **two-needle piñon**. Mesquite rows: **Utah juniper**, **Ashe juniper**. Mound row: **big

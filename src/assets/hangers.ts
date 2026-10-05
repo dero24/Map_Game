@@ -271,9 +271,10 @@ export function hangerMix(kind: TreeKind, p: HangPlace): [HangerType, number, nu
     const b = ({ plateauoak: 0.85, liveoak: 0.6, elm: 0.45, oak: 0.35, mesquite: 0.3, round: 0.2, hickory: 0.35, buroak: 0.3, crapemyrtle: 0.2 } as Partial<Record<TreeKind, number>>)[kind] ?? 0;
     if (b) out.push(['ballmoss', b * ballZone, b * ballZone * 0.55]);
   }
-  // lace lichen: California's coast live oaks (and its other oaks) in the fog belt
+  // lace lichen: California's coast live oaks (and its other oaks) in the fog belt — the valley oaks of the
+  // coast's valleys, the odd blue oak where the fog reaches the foothills
   if (p.eco === 'california' && p.fog) {
-    const l = kind === 'coastoak' ? 0.75 : kind === 'oak' ? 0.4 : kind === 'round' ? 0.1 : 0;
+    const l = kind === 'coastoak' ? 0.75 : kind === 'valleyoak' ? 0.5 : kind === 'oak' ? 0.4 : kind === 'blueoak' ? 0.3 : kind === 'round' ? 0.1 : 0;
     if (l) out.push(['lace', l, l * 0.5]);
   }
   return out;

@@ -27,6 +27,13 @@ export interface Season {
   spring: number;
   /** 0..1 the summer's heat: 0 below 18 °C … 1 from 23 °C (the crape myrtle's cones, June to September) */
   summer: number;
+  /** 0..1 the year's cold side by the calendar: 1 on its coldest day (January 20th up north), 0 at
+   *  midsummer — the manzanita's urns open in its depth (treeSeasons.ts bloomNow), November to March */
+  winter: number;
+  /** 0..1 the summer-dry climates' grass gone gold (Mediterranean only, else 0): green with the winter
+   *  rains, browning from mid-April, gold by June, through to the first rains of November — greening
+   *  again by mid-December (main.ts: the ground's straw wash and the grass, grass.ts) */
+  hay: number;
   /** elevation (m) above which the far mountains are white */
   snowline: number;
   /** the lagged mean air temperature (°C) at the given elevation — for tests and tuning */
@@ -95,7 +102,17 @@ export function seasonAt(lat: number, lon: number, elev: number, doy: number): S
   // the far mountains: white where the (unlagged-enough) mean at that height is below −2 °C
   const sea = meanTemp(lat, lon, 0, doy - 12);
   const snowline = Math.max(250, ((sea + 2) / 6.5) * 1000);
-  return { snow, leafFall, autumn, turn, bloom, spring, summer, snowline, temp: T };
+  const winter = 0.5 + 0.5 * Math.cos((2 * Math.PI * (d - 20)) / 365.25);
+  const hay = climateAt(lat, lon) === 'mediterranean' ? hayOn(d) : 0;
+  return { snow, leafFall, autumn, turn, bloom, spring, summer, winter, hay, snowline, temp: T };
+}
+
+const sstep = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+/** The summer-dry grass on day `d` of the (hemisphere-turned) year: browning April 15th → June 9th,
+ *  greening November 1st → December 16th. */
+function hayOn(d: number): number {
+  const y = ((d - 1) % 365.25 + 365.25) % 365.25 + 1;
+  return sstep(105, 160, y) * (1 - sstep(305, 350, y));
 }
 
 /** Day of the year (1..366) of a timestamp, in UTC. */

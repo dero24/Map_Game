@@ -15,7 +15,7 @@
 // the picture plane 0–1, picture, depth in the crown 0 rim … 1 heart) · aT (the tree's foot, region
 // frame; its sway at the card's height) · aK (the crown's middle, region frame; its radius) · aE
 // (the tree's green, linear; flags, flora.ts packCardFlags: 1 a broadleaf whose leaves fall, + 2 × its
-// fall hue (0–7, treeSeasons.ts fallColour), + 16 × its blossom (0–5, treeSeasons.ts bloomNow), + 128 × its
+// fall hue (0–7, treeSeasons.ts fallColour), + 16 × its blossom (0–6, treeSeasons.ts bloomNow), + 128 × its
 // motion: 1 the aspen's leaves trembling, 2 the dogwood's tiers bobbing, 3 the longleaf's needles
 // tossing).
 import * as THREE from 'three';

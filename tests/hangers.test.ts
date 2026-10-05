@@ -65,6 +65,9 @@ describe('hangers', () => {
     expect(has('coastoak', at(36.27, -121.81), 'lace')).toBe(true); // Big Sur
     expect(has('coastoak', at(38.58, -121.49), 'lace')).toBe(false); // Sacramento: the valley's dry heat
     expect(has('coastoak', at(36.74, -119.79), 'lace')).toBe(false); // Fresno
+    expect(has('valleyoak', at(37.876, -122.255), 'lace')).toBe(true); // (and the coast's valley oaks)
+    expect(has('valleyoak', at(38.58, -121.49), 'lace')).toBe(false);
+    expect(has('redwood', at(37.89, -122.57), 'lace')).toBe(false); // (never the conifers)
   });
   it('resurrection fern on the South\'s live oaks; tones vary tree to tree', () => {
     expect(has('liveoak', at(32.08, -81.09), 'resfern')).toBe(true);

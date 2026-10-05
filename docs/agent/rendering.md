@@ -252,10 +252,13 @@ the sky between the leaves. Past it, the tiles' own solid crowns, as before.
     first, the maples early, the sweetgum, the oaks and the sycamore late.
   - **Blossom** (`flora.ts BLOSSOM_OF`, the `BLOSSOM` define, a type): 1 cherry, 2 dogwood (white
     bracts, one tree in six pink), 3 redbud (magenta), 4 crape myrtle (each tree pink, watermelon red,
-    lavender or white, on the crown's top), 5 rosebay (white flushed pink). When: `BLOOM_WINDOWS` —
+    lavender or white, on the crown's top), 5 rosebay (white flushed pink), 6 manzanita (little
+    pink-white urns all over its twigs' ends, in the winter). When: `BLOOM_WINDOWS` —
     the spring flowers in a window of `U.uSpring` (season.ts `spring`: the warming half's progress from
     the winter's own mean, or 5 °C, to 23 °C; 0 while the year cools), each tree ±4% by its number; the
-    crape myrtle on `U.uSummer` (18 → 23 °C). Spring's flowers open before the leaves: where leaf fall
+    crape myrtle on `U.uSummer` (18 → 23 °C); the manzanita on `U.uWinter` (season.ts `winter`: the
+    year's cold side by the calendar, 1 on January 20th, 0 at midsummer — November to March) and
+    never under snow. Spring's flowers open before the leaves: where leaf fall
     would take a pixel, a flowering cherry, dogwood or redbud keeps it as a flower, and the redbud's
     card twigs flower all along.
   - **Motion** (`flora.ts MOTION_OF`, the `MOTION` define): 1 the aspen's leaves trembling (and their
@@ -449,6 +452,11 @@ lays the surface between it:
 
 - `src/world/grass.ts` — player-centred tuft cells, masked by `GroundPaint.grassMask` (grows
   only where the painted ground is open/green). Walks start at today's sunrise (`?hour=`).
+  The summer-dry hills (the Mediterranean climates': California's golden hills): the tufts are
+  built green there (a quarter of the region's dryness) and `U.uHay` (season.ts `hay`: browning
+  mid-April → June, gold to November, green again by mid-December; the southern year turned round)
+  turns them oat-straw in the shader, tips first, a greener tuft in the hollows; main.ts scales the
+  ground's straw wash (`uBiome.x`) with it the same way. (`uGolden` is the golden hour's.)
   Under a wood's canopy (`understory.ts underWood`: under a crown, three trees within 12 m, from
   `NearTrees.crownsNear`) only one tuft in seven grows, in the canopy's shade.
 - `src/world/understory.ts` — the forest floor, the same way: cells round the walker (64 m, a

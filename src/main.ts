@@ -1415,6 +1415,11 @@ async function main() {
       U.uBloom.value = s.bloom;
       U.uSpring.value = s.spring; // (the flowering trees' windows: treeSeasons.ts bloomNow)
       U.uSummer.value = s.summer;
+      U.uWinter.value = s.winter;
+      // the summer-dry hills: green after the winter rains, gold from June to the first rains — the
+      // grass (grass.ts) and the ground's straw wash, a quarter of the region's own in the green months
+      U.uHay.value = s.hay;
+      if (regionLook.climate === 'mediterranean') U.uBiome.value.x = regionLook.biome[0] * (0.25 + 0.75 * s.hay);
       horizon.setSnowline(s.snowline);
     }
 

@@ -74,6 +74,10 @@ export const U = {
   // their spring windows, the rosebay in June, the crape myrtle all summer
   uSpring: { value: 0 },
   uSummer: { value: 0 },
+  // the year's cold side by the calendar (season.ts winter: the manzanita's urns), and the summer-dry
+  // grass gone to hay (season.ts hay: the grass, grass.ts — the ground's straw wash rides uBiome.x)
+  uWinter: { value: 0 },
+  uHay: { value: 0 },
   uMoss: { value: 0 }, // moss on the trees' bark, the region's (styles.ts moss)
   // how wet the trees are, 0 a dry spell … 1 just rained (main.ts from the day's weather): the
   // resurrection fern greens and opens with it (assets/hangers.ts)
@@ -129,7 +133,7 @@ uniform float uLampBaseY;
 uniform vec3 uLampColor, uPoolColor;
 uniform vec4 uNightFloor;
 uniform float uLampPower, uPigment, uPigmentScale, uWind;
-uniform float uSnow, uLeafFall, uAutumn, uTurn, uBloom, uMoss, uSpring, uSummer;
+uniform float uSnow, uLeafFall, uAutumn, uTurn, uBloom, uMoss, uSpring, uSummer, uWinter, uHay;
 uniform vec4 uBiome;
 uniform vec4 uSliceBox;
 uniform vec4 uHoleBox, uHoleInfo;

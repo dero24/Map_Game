@@ -3,7 +3,8 @@ import { type TileJson } from '../src/world/data';
 import { virtualRegion } from '../src/world/virtual';
 import { setActiveStyle, regionStyle } from '../src/world/styles';
 import { buildTile } from '../src/world/tileBuild';
-import { treeMeta, coniferMix, aspenShare, snagShare, broadMix, rosebayShare, bankMix, redcedarShare, understoryTrees, swampMix, swampForm, type TreeKind } from '../src/assets/flora';
+import { treeMeta, coniferMix, aspenShare, snagShare, broadMix, rosebayShare, bankMix, redcedarShare, understoryTrees, swampMix, swampForm, manzanitaShare, sequoiaBand, redwoodCountry, westForm, type TreeKind } from '../src/assets/flora';
+import { caRedwoodBelt } from '../src/world/ecoregions';
 import { castOf } from '../src/world/styles';
 
 // The survey's street trees stand (props.ts, the LiDAR trees): a crown measured over the street has
@@ -268,6 +269,50 @@ describe('package #5 by place (flora.ts swampMix, bankMix)', () => {
   });
 });
 
+// Package #6 (models.md build order 6): California's oaks, its giants and its chaparral
+describe('package #6 by place (flora.ts broadMix, coniferMix, redwoodCountry, sequoiaBand, manzanitaShare)', () => {
+  const at = (lat: number, lon: number) => castOf(regionStyle(lat, lon));
+  const has = (m: [string, number][], k: string) => m.some(([kk, w]) => kk === k && w > 0);
+  const ELSEWHERE: [number, number][] = [[47.6, -122.33], [45.52, -122.68], [42.19, -122.7], [39.74, -104.99], [33.45, -112.07], [40.76, -111.89], [42.36, -71.06], [33.75, -84.39], [29.76, -95.37], [41.88, -87.63], [35.6, -82.55]];
+  it("California's oaks only in California: the valley oak on the valley floor, the blue oak round the foothills", () => {
+    for (const [lat, lon] of ELSEWHERE) for (const k of ['valleyoak', 'blueoak', 'redwood', 'sequoia']) expect(has(broadMix(at(lat, lon)), k), `${k} at ${lat},${lon}`).toBe(false);
+    expect(has(broadMix(at(38.58, -121.49)), 'valleyoak')).toBe(true); // Sacramento
+    expect(has(broadMix(at(38.9, -121.08)), 'blueoak')).toBe(true); // Auburn, in the foothills
+    expect(has(broadMix(at(35.63, -120.69)), 'blueoak')).toBe(true); // Paso Robles
+    expect(has(broadMix(at(34.05, -118.24)), 'blueoak')).toBe(false); // (never Los Angeles's basin)
+    // the coast live oak still the commonest oak of all the state's
+    const sac = broadMix(at(38.58, -121.49)), w = (k: string) => sac.find(([kk]) => kk === k)?.[1] ?? 0;
+    expect(w('coastoak')).toBeGreaterThan(w('blueoak'));
+  });
+  it('the coast redwood wild in its belt — the north coast, Muir Woods, the Santa Cruz Mountains, Big Sur — and nowhere else', () => {
+    const wild = (lat: number, lon: number) => [20, 300, 800].flatMap((e) => [...coniferMix(at(lat, lon), 'pine', e, lat, false, caRedwoodBelt(lat, lon)), ...coniferMix(at(lat, lon), 'spruce', e, lat, false, caRedwoodBelt(lat, lon))].map(([k]) => k));
+    for (const [lat, lon] of [[40.8, -124.16], [41.75, -124.2], [37.89, -122.57], [37.05, -122.1], [36.27, -121.81]]) expect(wild(lat, lon), `${lat},${lon}`).toContain('redwood');
+    // not Sacramento's valley, Napa's, San Jose's, Fresno's, Los Angeles's, San Diego's — nor Oregon's or anywhere else
+    for (const [lat, lon] of [[38.58, -121.49], [38.3, -122.29], [37.34, -121.89], [36.74, -119.79], [34.05, -118.24], [32.72, -117.16], ...ELSEWHERE]) expect(wild(lat, lon), `${lat},${lon}`).not.toContain('redwood');
+    expect(redwoodCountry(at(40.8, -124.16), false)).toBe(true); // (the north coast whatever the belt says)
+    expect(redwoodCountry(at(38.58, -121.49), true)).toBe(false); // (the valley never)
+    // a grove's bare columns, a yard's young spires
+    expect(westForm('redwood', 0.5, true)).toBe(1);
+    expect(westForm('redwood', 0.1, true)).toBe(2);
+    expect(westForm('redwood', 0.3, false)).toBe(0);
+    expect(westForm('oak', 0.3, false)).toBe(-1);
+  });
+  it("the giant sequoia in the Sierra's band, 1,400–2,300 m on its west slope; the chaparral's manzanita", () => {
+    expect(sequoiaBand(at(36.56, -118.75), 2000, 36.56)).toBe(true); // the Giant Forest
+    expect(sequoiaBand(at(37.5, -119.6), 1900, 37.5)).toBe(true); // the Mariposa Grove
+    expect(sequoiaBand(at(36.56, -118.75), 3000, 36.56)).toBe(false); // (above it)
+    expect(sequoiaBand(at(36.56, -118.75), 900, 36.56)).toBe(false); // (below)
+    expect(sequoiaBand(at(39.74, -105.5), 2000, 39.74)).toBe(false); // (the Rockies never)
+    expect(coniferMix(at(36.56, -118.75), 'pine', 2000, 36.56).map(([k]) => k)).toContain('sequoia');
+    expect(coniferMix(at(39.6, -120.5), 'pine', 2000, 39.6).map(([k]) => k)).not.toContain('sequoia'); // (north of the American's groves)
+    expect(manzanitaShare(at(34.05, -118.24))).toBeGreaterThan(0.3); // the San Gabriels' chaparral over Los Angeles
+    expect(manzanitaShare(at(38.9, -121.08))).toBeGreaterThan(0.3); // the foothills'
+    expect(manzanitaShare(at(38.58, -121.49))).toBeLessThan(0.1); // (the valley floor's few)
+    expect(manzanitaShare(at(34.54, -112.47))).toBeGreaterThan(0); // Prescott's pointleaf manzanita
+    for (const [lat, lon] of [[47.6, -122.33], [42.36, -71.06], [33.75, -84.39], [41.88, -87.63]]) expect(manzanitaShare(at(lat, lon)), `${lat},${lon}`).toBe(0);
+  });
+});
+
 describe('package #4 in the woods (a mapped wood, built)', () => {
   const wood = async (lat: number, lon: number) => {
     setActiveStyle(regionStyle(lat, lon));
@@ -295,6 +340,16 @@ describe('package #4 in the woods (a mapped wood, built)', () => {
     expect(count(w, 'dogwood') + count(w, 'redbud') + count(w, 'rosebay')).toBeGreaterThan(0);
     for (const k of ['dogwood:0', 'dogwood:1', 'dogwood:2', 'redbud:0', 'redbud:1', 'redbud:2']) for (const h of w[k] ?? []) expect(h).toBeLessThan(10); // (small trees stay small)
     for (const k of ['loblolly', 'longleaf', 'slashpine', 'crapemyrtle']) expect(count(w, k), k).toBe(0);
+  }, 60000);
+  it("a north coast wood: the coast redwood's grove, tall; no eastern trees", async () => {
+    const w = await wood(40.75, -124.0);
+    expect(count(w, 'redwood')).toBeGreaterThan(0);
+    // (the grove's columns: most of them past 44 m — the few out on the tile's open margin, past the
+    // mapped wood, a yard's)
+    const cols = [...(w['redwood:1'] ?? []), ...(w['redwood:2'] ?? [])];
+    expect(cols.length).toBeGreaterThan(0);
+    expect(cols.filter((h) => h > 44).length / cols.length).toBeGreaterThan(0.6);
+    for (const k of ['tuliptree', 'sweetgum', 'loblolly', 'whitepine', 'sequoia', 'blueoak']) expect(count(w, k), k).toBe(0);
   }, 60000);
   it('a Sandhills pine wood: longleaf over its grass stages and bottlebrushes, loblolly; no northern pines', async () => {
     const w = await wood(35.05, -78.88);

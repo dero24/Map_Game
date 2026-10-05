@@ -16,7 +16,7 @@ import { SIGNAL_GLSL } from '../sim/traffic';
 // leafDown): 0 each tree its own of yellow / orange / red, 1 the maples' reds, 2 gold, 3 drab, 4 the
 // sweetgum's jewels, 5 the buckeye's early orange (and its early fall), 6 russet; 7 an evergreen that
 // bronzes in the cold (the redcedar). blossom: what a flowering tree blooms as (flora.ts BLOSSOM_OF: 1
-// cherry, 2 dogwood, 3 redbud, 4 crape myrtle, 5 rosebay; treeSeasons.ts bloomNow / bloomColour /
+// cherry, 2 dogwood, 3 redbud, 4 crape myrtle, 5 rosebay, 6 manzanita; treeSeasons.ts bloomNow / bloomColour /
 // bloomCover) — the spring's flowers open on bare twigs, where the leaves aren't out yet. weep: a
 // willow's hanging strands swing with the wind.
 // wash: a thing being painted in by the brush (ui/brush.ts), drawn in the sketch pass (post.ts):

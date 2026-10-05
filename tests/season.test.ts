@@ -79,6 +79,29 @@ describe('seasons', () => {
     // and nothing flowers in the autumn's warm spells
     for (const t of [1, 2, 3, 5]) expect(bloomNow(t, 0.5, q(OCT).spring, q(OCT).summer)).toBe(0);
   });
+  // package #6: the manzanita's winter flowers; the summer-dry hills gone gold (season.ts winter, hay)
+  it("the manzanita flowers in the winter, never in summer nor under snow; the summer-dry hills go gold and green again with the rains", () => {
+    const q = (d: number) => seasonAt(38.9, -121.0, 500, d); // the Sierra foothills
+    const m = (d: number, s = 0.5) => bloomNow(6, s, q(d).spring, q(d).summer, q(d).winter);
+    expect(m(JAN)).toBeGreaterThan(0.9);
+    expect(m(350)).toBeGreaterThan(0.5); // (mid-December)
+    for (const d of [APR, JUL, SEP, OCT]) expect(m(d), `day ${d}`).toBe(0);
+    // each its own weeks: the earliest open by late November, the latest not before December
+    expect(m(NOV + 10, 0)).toBeGreaterThan(0.5);
+    expect(m(NOV + 10, 1)).toBeLessThan(0.5);
+    // the summer-dry grass: gold from June through October, green from the winter rains to April
+    const hay = (lat: number, lon: number, d: number) => seasonAt(lat, lon, 20, d).hay;
+    for (const d of [170, JUL, SEP, OCT]) expect(hay(38.58, -121.49, d), `Sacramento ${d}`).toBeGreaterThan(0.9);
+    for (const d of [JAN, 60, 90, 360]) expect(hay(38.58, -121.49, d), `Sacramento ${d}`).toBeLessThan(0.1);
+    // never where the summer rains: Boston, Atlanta, Seattle's green
+    for (const [lat, lon] of [[42.36, -71.06], [33.75, -84.39], [47.6, -122.33]]) for (const d of [JAN, JUL, OCT]) expect(hay(lat, lon, d)).toBe(0);
+    // and the southern year turned round: central Chile gold in January, green in July
+    expect(hay(-33.45, -70.67, JAN)).toBeGreaterThan(0.9);
+    expect(hay(-33.45, -70.67, JUL)).toBeLessThan(0.1);
+    // the calendar's winter: deepest in January, gone by midsummer
+    expect(q(JAN).winter).toBeGreaterThan(0.95);
+    expect(q(JUL).winter).toBeLessThan(0.05);
+  });
   it('a marine autumn waits for the short days; the tropics never turn', async () => {
     const { dayLength } = await import('../src/world/season');
     expect(dayLength(47.6, 172)).toBeGreaterThan(15.5); // Seattle midsummer

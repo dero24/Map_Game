@@ -2,6 +2,66 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-05 — Regional life (6): California's oaks, its giants, its chaparral and its golden hills
+
+Package #6 of `docs/regional-life/models.md` (Robby: "make things detailed, and variety and variation
+matter"): five kinds appended to `TREE_KINDS` (54–58), three forms each, and the golden hills as a
+season.
+
+- **Valley oak** (`OAKS`): v0 the savanna's giant, a vast spread with its long outer branches hanging
+  to the grass; v1 a valley town's yard oak; v2 old, a limb broken and one dead. Checkered grey bark,
+  bare December to March, russet in the fall.
+- **Blue oak** (`OAKS`): small and compact over the foothills' grass, pale bark, blue-grey leaves
+  (its own green); one trunk, two, and old and gnarled.
+- **Coast redwood** (`SPIRES`, new `foot`, `burls`, the `reit` top): v0 a young spire of flat sprays
+  to the ground; v1 the grove's column, bare most of its height, the crown a narrow spire high up, on a
+  fluted, flaring foot; v2 old growth, burls on its foot and its top long broken and grown again as two
+  leaders, each a small spire of its own, a dead spike between them. Cinnamon-red bark.
+- **Giant sequoia** (`SPIRES`, the `round` top, `scar`): v0 the town's dense young cone; v1 the vast
+  orange-red column barely tapering, its crown rounded; v2 the fire-scarred ancient, its top broken.
+- **Manzanita** (`CLUMPS`, new `dead` stems): smooth red-maroon stems twisting up into a grey-green
+  mound; v1 a tree-form one; v2 old, two stems dead and silver among the red. **Blossom 6**: its
+  pink-white urns all over its twigs' ends in the winter — `season.ts winter` (the year's cold side by
+  the calendar, `U.uWinter`), November to March, each bush its own weeks, never under snow.
+- **The golden hills** (`season.ts hay`, `U.uHay`): in the Mediterranean climates the grass is built
+  green and the season turns it oat-straw from mid-April, gold by June, through to the first rains,
+  green again by mid-December (the southern year turned round); the ground's straw wash
+  (`uBiome.x`) follows it, a quarter of the region's own in the green months. (`uGolden` was taken:
+  the golden hour's.)
+- **Placement**: `broadMix` + `rangeIn` — the valley oak on the Central Valley's floor and in the
+  coast ranges' valleys, the blue oak round the foothills, the redwood and the sequoia planted in
+  towns; `redwoodCountry` — wild redwoods in the Coast Range (EPA 1) and the coast ranges' fog belt
+  south of it (EPA 6 in `ecoregions.ts caRedwoodBelt`: Muir Woods, the Santa Cruz Mountains, Big Sur),
+  where three in five of a wood's broadleaves become redwood or Douglas fir; `sequoiaBand` — the
+  Sierra's west slope 1,400–2,300 m from 35.7° to 39.2°N, in groves (a 600 m patch is one or isn't);
+  `manzanitaShare` — the chaparral's shrubs (and Arizona's pointleaf); `westForm` — the grove's bare
+  columns, a yard's young spires. Heights: the redwood's grove 45–75 m, its old giants 70–100; the
+  sequoia 50–85; the valley oak 20–30; the blue oak 6–15; the manzanita 1.5–4 (a tree-form one to 6).
+  A mapped oak in California is its coast live oak, valley oak or blue oak as the place grows them;
+  lace lichen on the coast's valley oaks and blue oaks too.
+- **The survey's giants**: LiDAR crowns over 50 m were dropped as masts; in the redwood country and the
+  Sierra they're kept to 116 m (Hyperion), read as the region's conifers, and stay in town.
+- **Fixed in passing**: `coniferMix`'s `coast` was `oceanDistAt < 3000`, but the ocean distance reads
+  no farther than ~510 m, so it was always true — New England's inland pines were all its coast's pitch
+  pines. Now `< 500`.
+- The tree studio caught the manzanita as a bonsai of flat pads on thin sticks (now a full mound on
+  thicker red stems) and the old redwood's new leaders as two balloons on stalks (now clothed from the
+  old top). Far ≤ 1,464 vertices, near ≤ 1,960. Shader check: 17 programs, no errors (the manzanita's
+  blossom, the valley oak's russet, the grass).
+
+**Verified:** typecheck; `npm test` 916/916; `tests/foundry.test.ts` (the valley oak's spread and hanging
+branches, the blue oak the smaller, the redwood's foot, column and narrow high crown, the sequoia's
+trunk and its scar, the manzanita's red and dead stems, their seasons, leaf pictures and heights),
+`tests/streetTrees.test.ts` (California's oaks only in California; wild redwoods in the north coast,
+Muir Woods, the Santa Cruz Mountains and Big Sur and never Sacramento, Napa, San Jose, Fresno or the
+south; the sequoia's band; the manzanita's share; a north coast wood built: redwoods, tall),
+`tests/season.test.ts` (the manzanita in the winter only; the hay in Sacramento's summer, never
+Boston's, Atlanta's or Seattle's; central Chile turned round), `tests/hangers.test.ts`. Studio:
+`shots/trees-cal.jpg`, `trees-cal3.jpg`, `trees-cal5.jpg`.
+
+**Next:** #7 the desert (saguaro, prickly pear, cholla, ocotillo, Joshua tree, creosote, piñon,
+junipers, sagebrush); duckweed (#5's last); the people work (`people-with-purpose`) when Robby calls it.
+
 ## 2026-10-05 — Regional life (5): the swamps and the rivers
 
 Robby, after #4: "continue on what you were originally doing you were killing it just make note of

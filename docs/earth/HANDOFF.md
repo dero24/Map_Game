@@ -84,6 +84,15 @@ The game was smooth and rendering before this work started. Work fast, and keep 
       (`flaredFoot`) and knees. Water tupelo on `LEADERS` with `foot`. Cottonwood and Fremont as `OAKS`
       rows, `MOTION` 1.
     - Placement: `swampMix`, `swampForm`, `bankMix` (cottonwoods, Fremont's, cypress).
+  - **#6, California** (2026-10-05; LOG "Regional life (6)"):
+    - Valley oak and blue oak as `OAKS` rows; coast redwood and giant sequoia as `SPIRES` rows (`foot`,
+      `burls`, `scar`, the `round` and `reit` tops); manzanita as a `CLUMPS` row (`dead` stems) with
+      blossom 6 on `U.uWinter` (`season.ts winter`).
+    - The golden hills: `season.ts hay` → `U.uHay` (the grass, `grass.ts`; the ground's `uBiome.x`
+      scaled in `main.ts`). Mind the name: `uGolden` is the golden hour's.
+    - Placement: `broadMix` + `rangeIn`, `redwoodCountry` (EPA 1 + `ecoregions.ts caRedwoodBelt` on EPA
+      6), `sequoiaBand` + `SEQUOIA_GROVE` (props.ts groves by 600 m patch), `manzanitaShare`, `westForm`;
+      the LiDAR's giants kept to 116 m there.
 
 ## The bar: detail, variety, variation
 
@@ -212,7 +221,8 @@ in-game look is checked on Robby's PC.
 
 - **#5:** built (2026-10-05) but for **duckweed** on the swamps' still water — a water-surface paint
   (`world/water.ts`), not a tree: a lime carpet in summer, gone in winter, parting in a wake.
-- **#6:** California's valley, blue and black oaks; coast redwood; giant sequoia.
+- **#6:** built (2026-10-05) but for the black oak (the Sierra's mixed-conifer oak, gold in the fall)
+  and the gray pine of the blue oak's foothills — both could ride a later package.
 - **#7:** the desert: saguaro, Joshua tree, ocotillo, creosote, cholla, palo verde, mesquite,
   piñon-juniper, sagebrush.
 - **#8:** palms (cabbage, Washington fan, royal, queen) and saw palmetto. The fronds thrash in a
