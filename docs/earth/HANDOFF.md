@@ -10,6 +10,58 @@ color, all that". At the wrap-up: **"make things detailed, and variety and varia
 Read this first. Then read `docs/regional-life/models.md` (the build list) and the rows of the
 package you're on. `docs/REGIONAL_LIFE.md` and the latest `docs/earth/LOG.md` entry are background.
 
+## Confirm on Robby's PC (after the cloud session of 2026-10-06)
+
+The cloud session built packages #11–#16, the leftovers and the West's lizards. They were checked with
+tests, CI, the shore playtest and studio montages, never in a real browser on a real GPU. On the PC:
+
+1. **The baseline.** `git checkout feature/lower48-alive && git pull`, then `npm run init`: typecheck,
+   982 tests, pack and invariant checks. Then `npm run build`.
+2. **The heavy checks the cloud skipped.**
+   - `node tools/playtest.mjs --region=shore` (the full one, not `--quick`): PASS.
+   - `node tools/soak.mjs --region=shore --seconds=120`: no freezes (more animals about now: up to 30
+     fiddlers, 24 roosting monarchs).
+   - The shader check on a real GPU: `npm run dev`, then in the console
+     `await import('/tools/shader-check.js'); await __SHADERS__()`. Expect 27 programs, no errors.
+   - Phones: `node tools/mobile-check.mjs --device=pixel7` and `--device=iphone`.
+   - Montages: `node tools/audit48.mjs --towns=seabright-nj,miamibeach-fl,asheville-nc,chicago-il,tucson-az,santamonica-ca,seattle-wa`,
+     then read `shots/audit48/<town>-montage.jpg`.
+3. **Walk these places** (`npm run dev`, then `http://localhost:5173/?at=LAT,LON&date=YYYY-MM-DD&hour=H`).
+   - The shore, July, midday (`?region=shore&date=2026-07-15&hour=12`): laughing gulls with a few
+     ring-billed on the beach. Fiddler crabs on the sand: walk up and the whole flat goes down its
+     burrows; the males wave their great claws. Turtles on logs at the ponds slide off with a splash.
+     Darners patrol the water's edge. Monarchs over the gardens. The cicadas' chorus in the trees in the
+     afternoon.
+   - The Georgia coast, July (`?at=31.99,-81.0&date=2026-07-15&hour=11`): smooth cordgrass right down to
+     the water on the salt marsh; an alligator on a bank that slides in; green anoles up the trunks
+     flashing their pink throat fans; crawfish chimneys in wet lawns.
+   - New Orleans, July, then January (`?at=29.95,-90.07&date=2026-07-15&hour=10`, then
+     `date=2026-01-15`): duckweed's lime carpet on the still ponds, never the river, gone in January.
+     Crawfish on the banks raise their claws and back off.
+   - Monterey's coast, December (`?at=36.62,-121.92&date=2026-12-15&hour=13`): monarchs hanging in
+     clusters under the crown of the biggest tree about; on a warm afternoon some fly out and settle again.
+   - Yosemite Valley, late October (`?at=37.745,-119.59&date=2026-10-25&hour=14`): black oaks gold among
+     the pines. The Sierra foothills (`?at=38.9,-121.08`): gray pines, leaning and sparse, among the blue
+     oaks.
+   - Tucson, May (`?at=32.22,-110.97&date=2026-05-15&hour=10`): side-blotched and spiny lizards doing
+     push-ups and dashing a few metres; a collared lizard running on its hind legs; rarely a horned
+     lizard that sits tight.
+   - Chicago, July, then late September (`?at=41.88,-87.62&date=2026-07-15&hour=12`, then
+     `date=2026-09-20`): ring-billed and herring gulls on the lots and the fields; in September the
+     monarchs streaming south overhead.
+   - Seattle, November (`?at=47.6,-122.3&date=2026-11-10&hour=15`): banana slugs on the forest floor that
+     draw in their tentacles when you stand over one.
+   - Asheville, June, early morning (`?at=35.6,-82.55&date=2026-06-15&hour=7`): a black bear standing up
+     to look before it goes; a sow's cubs going up a tree.
+4. **Watch for:** frame rate with the bigger casts (PC and phone); anything floating, sunk or
+   pointing the wrong way; a lizard, crab or slug too small to notice (they're drawn larger than life on
+   purpose: say if it's too much or too little); the duckweed's look up close; the cordgrass at a
+   marsh's edge.
+
+Known gaps, by design for now: the duckweed doesn't part in a wake; the slug leaves no slime trail; the
+crawfish chimneys stand all year; the fiddlers use the beach for the marsh's mud; no snakes, frogs,
+bees or grasshoppers yet (the reference's P2 plans).
+
 ## How to work in this cloud session (Robby's call)
 
 The game was smooth and rendering before this work started. Work fast, and keep the work great.
