@@ -30,6 +30,7 @@ export interface AudioFrame {
   city?: number; // 0..1 how built-up the blocks around you are (stream.cityGrid): traffic roar, horns, sirens, crowds
   climate?: string; // styles.ts climate: the desert's cicadas and doves
   summer?: boolean; // the warm months where you are (hemisphere-aware)
+  cicadas?: number; // 0..1 the annual cicadas on the bark about you (sim/critters.ts chorus): their buzzing chorus
 }
 
 function noiseBuffer(ctx: AudioContext, seconds: number, color: 'white' | 'pink' | 'brown') {
@@ -719,10 +720,11 @@ export class Ambience {
       this.pigeonT = 6 + Math.random() * 16;
       if (city > 0.25 && day > 0.6 && !f.indoors) this.coo(0.012, false);
     }
-    // The desert: cicadas through the heat of a summer day; mourning doves at dawn
+    // The desert: cicadas through the heat of a summer day; mourning doves at dawn. Elsewhere the annual
+    // cicadas' chorus wherever they're on the bark about you (the East's dog days, the Plains', Texas's)
     const desert = f.climate === 'arid';
     const heat = f.hour > 9 && f.hour < 19.5 ? 1 : 0;
-    set(this.cicadaGain.gain, desert && f.summer ? heat * day * 0.014 * muffle * (1 - city * 0.7) : 0, 2.5);
+    set(this.cicadaGain.gain, Math.max(desert && f.summer ? heat * day * 0.014 : 0, (f.cicadas ?? 0) * day * 0.016) * muffle * (1 - city * 0.7), 2.5);
     if ((this.doveT -= f.dt) <= 0) {
       this.doveT = 7 + Math.random() * 18;
       const dawn = f.hour > 5 && f.hour < 10;

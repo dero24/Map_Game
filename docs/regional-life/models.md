@@ -2125,9 +2125,14 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
     **green anole** and **brown anole** (up the trunks, the throat fan). `turtle†` (`turtleGeometry`):
     **painted turtle**, then **red-eared** and **yellow-bellied sliders** basking on a log (`signs.ts`
     `baskingLogs`), sliding off when you come.
-16. **Small life.** Butterfly row: **monarch**. `dragonfly†`: **common green darner**. `bug†`:
-    **annual cicada**. `slug†`: **Pacific banana slug**. `crab†`: **Atlantic marsh fiddler crab**,
-    then **crawfish** with their **chimneys** (`sign†`).
+16. **Small life** — **built** 2026-10-06 (`docs/earth/LOG.md` "Regional life (16)"). Butterfly row:
+    **monarch** (`monarchGeometry`: the flap and glide, the fall streams south, California's winter
+    roosts). `dragonfly†` (`dragonflyGeometry`): **common green darner** (its beat along the water's
+    edge). `bug†` (`bugGeometry`): **annual cicada** (on the bark, its chorus) and its shell. `slug†`
+    (`slugGeometry`): **Pacific banana slug** (tentacles drawn in when you come). `crab†`
+    (`crabGeometry`): **Atlantic marsh fiddler crab** (the great claw waved, the flat down its burrows),
+    then **crawfish** (claws up, backing off) with their **chimneys** (`sign†`: `signs.ts`
+    `chimneyGeometry`, `crawfishChimneys`).
 
 The P1 rows marked `have` (sugar and red maple, mesquite and palo verde, eastern gray squirrel,
 eastern cottontail, white-tailed and mule deer, coyote) need no new model; they come into a package

@@ -2,6 +2,77 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-06 — Regional life (16): the small life — monarchs, darners, cicadas, banana slugs, fiddlers, crawfish
+
+Package #16 of `docs/regional-life/models.md`, the last of the build order: four new plans (`fauna.ts`
+`dragonflyGeometry`, `bugGeometry`, `slugGeometry`, `crabGeometry`), the monarch on the butterfly row
+(`monarchGeometry`), four new roles (`dragonfly`, `bug`, `crawler`, `crab`) and the crawfish's chimneys
+(`signs.ts`).
+
+- **The monarch** (the butterfly row): orange wings veined in black, the black borders dotted white,
+  the forewing's black tip with its orange spots, paler underneath; the black body dotted white, the
+  clubbed antennae. It flaps and glides (a few deep beats, then a sail: the wing shader holds its wings
+  out flat while its amount is below zero). With every region's butterflies in summer. In September and
+  October it **streams south**: in over the walker from the north, high and steady, along a broad front
+  (`monarchMigrating`). On California's coast from November to February it **winters in a roost**: in
+  the biggest tree about, three clusters hanging under the crown, the monarchs shingled down them with
+  their wings closed (`monarchRoost`); on a warm afternoon some burst into flight round the tree and
+  settle again.
+- **The common green darner** (dragonfly†): the great eyes, the green thorax, the long abdomen (a male's
+  blue, a female's red-brown) ringed dark at each segment, four long clear wings with dark leading
+  edges and the stigma near each tip. It **patrols a beat** along a pond's or a creek's edge at head
+  height (`patrol`): along and back, hanging still a moment at each end, darting off and turning on a
+  dime, now and then aside after a midge. Its wings a blur on the wing (the shader's new bug mode: wings
+  as built at rest, a fast beat in flight).
+- **The annual cicada** (bug†): the broad head with its eyes set wide, the green thorax and its dark
+  saddle, the black abdomen, the clear green-veined wings tented over the back like a roof. On the bark
+  two to five metres up through a summer's day; **its chorus** fills the ambience wherever cicadas are
+  on the bark about you (`Critters.chorus` → `ambience.ts`, now the East's, the Plains' and Texas's as
+  well as the desert's); come within 2.5 m and it buzzes off. **Its shell** (the same plan, `shell`):
+  the nymph's amber skin left lower on the bark, humped, split down the back, the wing pads and the
+  digging forelegs.
+- **The Pacific banana slug** (slug†): the long soft body (yellow to olive, by the instance) flat on its
+  foot, the mantle's saddle and its breathing hole, black spots, the tail tapering to a point; its
+  **tentacles** — the upper long with eyes at their tips — on the display part, out while nothing's near
+  and **drawn in when you stand over it**. On the forest floor of the wet Northwest and the redwood
+  coast, through the wet months; it glides a few centimetres at a time.
+- **The Atlantic marsh fiddler crab** (crab†): the carapace on four pairs of legs, the eyes on long
+  stalks; a male's **great claw**, white-yellow and longer than he is wide, folded across his front
+  (the display part, worn by half of them: `RACK`), **waved** by the head's idle bob. By the score on the
+  shore by day; it goes sideways; come within 5 m and **the whole flat goes down its burrows at once**
+  (the alarm spreads a beat apart), coming up again once you've gone by.
+- **The crawfish** (crab†, the long tail): dark red, the segmented tail and its fan, the long feelers,
+  the big bumpy claws out ahead. On the bank by a ditch, a creek or a pond; come within 3 m and it
+  **stands its ground, claws raised, backing off** (the warning pose). **Its chimneys** (`signs.ts`
+  `chimneyGeometry`, `crawfishChimneys`): towers of mud pellets a hand high in clusters in a wet lawn or
+  a ditch near fresh water, in the Gulf's, Texas's, the Southeast's, the Plains' and the Ozarks' crawfish
+  country (`chimneyCountry`).
+- **Where and when** (ranges.md): the monarch everywhere from May to October (the South's from March,
+  Florida's and California's the year round); the darner everywhere spring to fall; the annual cicadas
+  the East's, the Plains', Texas's and the desert's in summer, their shells into the fall; the banana slug
+  the westside Northwest's and the redwood coast's and the Klamath's, not the dry end of summer; the
+  fiddlers from Cape Cod round to Texas (the year round in Florida); the crawfish the Gulf's, the
+  Southeast's, East Texas's, the Ozarks', Appalachia's, the Midwest's, Upstate New York's and the Plains'.
+- Fixed on the way: the black bear's stand-up was a coin from the shared random stream (the new roles
+  drew from it first and the bear's test lost its luck); it's the bear's own temperament now (by its
+  seed, most stand up to look), and it stays up until it goes (it used to wander off mid-look and stand
+  again).
+- Left out, honestly: the slug's slime trail (a strip on the ground read as a stick in the studio); the
+  chimneys stand the year round (the "spring after rain" timing isn't modelled); the fiddlers take the
+  map's shore (the beach) for the marsh's mud, which the map doesn't tell apart yet; the crawfish keep to
+  the bank (not seen under the water).
+
+**Verified:** typecheck; `npm test` 972/972; `tests/smallLife.test.ts` (new: the ranges and seasons; each
+plan's build; the chimneys clustered and tile-independent; the darner's beat with its turns and hovers;
+the cicada's chorus and its buzzing off; the slug's tentacles in and out; the fiddler flat down its
+burrows and up again, males and females; the crawfish's warning; the monarchs' winter roost in the
+tallest tree, their warm-afternoon flight and settling, their fall stream south); budgets in
+`tests/foundry.test.ts` (every one under 1,600; the chimney under 600); the shader check (24 programs,
+no errors); the shore's playtest; studio montages of all seven and the chimney.
+
+**Next:** the leftovers (duckweed, smooth cordgrass, black oak and gray pine, the inland gulls), then
+the reference's P2 rows (the West's lizards first).
+
 ## 2026-10-06 — Regional life (15): the reptiles — the alligator, the anoles, the turtles on a log
 
 Package #15 of `docs/regional-life/models.md`: two new plans on the same joints (`fauna.ts`

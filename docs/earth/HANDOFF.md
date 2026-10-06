@@ -289,7 +289,12 @@ in-game look is checked on Robby's PC.
   (`models.md` §13.1: fence lizards, western fence, spiny, side-blotched, collared, horned) are rows on
   the same `sprawlerGeometry` — the West has no lizard yet — and the snakes and frogs need their own
   plans (snake†, frog†).
-- **#16:** the last wildlife package (`regional-wildlife`): the small life next.
+- **#16:** built (2026-10-06): all sixteen build-order packages are in. Left out of #16: the slug's
+  slime trail, the chimneys' season, the fiddlers on marsh mud (the map doesn't tell it from the beach),
+  crawfish seen under the water.
+- **Next for the wildlife:** the leftovers below, then the reference's P2 rows (`models.md` §13 on): the
+  West's lizards first (rows on `sprawlerGeometry`), the snake† and frog† plans, more insects on the
+  bug† and dragonfly† plans.
 - **Before 1.0:** a lighter version of each animal for phones and far off (about 40% of the vertices),
   like the trees' far model and the crowd's lite person.
   - The casts go in `faunaMix`, by `CastPlace`.

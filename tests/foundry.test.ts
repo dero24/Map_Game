@@ -4,8 +4,8 @@ import { DESERT_FAR, STIFF, BLOOM_PART } from '../src/assets/flora';
 import { TREE_KINDS, TREE_VARIANTS, treeGeometry, PLANT_SPECIES, plantGeometry, plantMix, inBloom, stageOf, STAGES, fallHueOf, NEAR_KINDS, nearTreeGeometry, CARD_STRIDE, LEAF_PICS, leafAtlas, hasNear, DECIDUOUS, BLOSSOM_OF, MOTION_OF, packCardFlags, unpackCardFlags, cardFlags, picsOf, NEEDLED, treeHeight4, SMALL_TREE, type TreeKind } from '../src/assets/flora';
 import leafCardsSrc from '../src/render/leafCards.ts?raw';
 import { TREE_TIERS } from '../src/render/quality';
-import { CRITTERS, critterGeometry, critterBudget } from '../src/assets/fauna';
-import { ospreyNestGeometry } from '../src/assets/signs';
+import { CRITTERS, ROLE, critterGeometry, critterBudget } from '../src/assets/fauna';
+import { ospreyNestGeometry, chimneyGeometry } from '../src/assets/signs';
 import { MAILBOXES, mailboxGeometry, gearGeometry, gearFor, CAR_GEAR, umbrellaGeometry, picnicTableGeometry } from '../src/assets/furniture';
 import { fibCount, fibSphere, hashf, variantAt, tube } from '../src/assets/core';
 import { personGeometry, personLiteGeometry, HAIRSTYLES, MARK, warmthFor } from '../src/assets/people';
@@ -634,7 +634,7 @@ describe('fauna', () => {
       expect(finite(g)).toBe(true);
       expect(g.getAttribute('aPivot')).toBeTruthy();
       expect(g.getAttribute('aPivot').count).toBe(verts(g));
-      if (k !== 'butterfly' && k !== 'firefly') expect(Math.abs(bb(g).min.y)).toBeLessThan(0.03);
+      if (ROLE[k] !== 'butterfly' && k !== 'firefly') expect(Math.abs(bb(g).min.y), k).toBeLessThan(0.03); // (a butterfly's built about its body: it flies)
       expect(verts(g), k).toBeLessThan(critterBudget(k)); // (2,500 for the big animals, 1,600 for the rest)
     }
     expect(critterBudget('elk')).toBe(2500);
@@ -659,6 +659,12 @@ describe('fauna', () => {
     expect(bb(g).max.y).toBeGreaterThan(7.5); // (the nest atop a 7.5 m pole)
     expect(bb(g).max.x - bb(g).min.x).toBeGreaterThan(1.6); // (a heap wider than its platform)
     expect(verts(g)).toBeLessThan(600);
+    // a crawfish's chimney: a mud tower a hand high, standing on its foot
+    const ch = chimneyGeometry();
+    expect(finite(ch)).toBe(true);
+    expect(Math.abs(bb(ch).min.y)).toBeLessThan(0.02);
+    expect(bb(ch).max.y).toBeGreaterThan(0.1);
+    expect(verts(ch)).toBeLessThan(600);
   });
 });
 

@@ -1,7 +1,7 @@
 // Signs of life (docs/regional-life/models.md, the `sign†` genome): what an animal builds and leaves in
 // the land — the osprey's nest, a great stick nest on a platform atop a pole where the shore meets the
-// water; the beaver's lodge, a dome of sticks in a pond; the prairie dogs' town of mounds. The
-// crawfish's chimneys follow on the same genome.
+// water; the beaver's lodge, a dome of sticks in a pond; the prairie dogs' town of mounds; the crawfish's
+// mud chimneys in a wet lawn.
 import * as THREE from 'three';
 import { part, merge, blob, hashf } from './core';
 
@@ -129,4 +129,38 @@ export function baskingLogs(zone: { x0: number; z0: number; x1: number; z1: numb
     // (local +z down the slope, into the water: the yaw that turns (0, 0, 1) to −grad)
     return { ...l, yaw: Math.atan2(-gx, -gz) };
   });
+}
+
+/** A crawfish's chimney: a little tower of mud pellets over its burrow, 12 cm tall, the pellets' lumps
+ *  round it, a dark hole at the top, a spill of mud at its foot (local: its foot at the origin); under
+ *  400 vertices. */
+export function chimneyGeometry(): THREE.BufferGeometry {
+  const t = new THREE.CylinderGeometry(0.026, 0.042, 0.12, 8, 5, true).translate(0, 0.06, 0);
+  const p = t.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    // (the pellets: each ring's vertices pushed in and out, the rings turned against each other)
+    const y = p.getY(i), ring = Math.round(y / 0.024), a = Math.atan2(p.getZ(i), p.getX(i)) + ring * 0.4, k = 1 + (hashf(ring * 31 + Math.round(a * 4) * 7 + 3) - 0.5) * 0.35;
+    p.setXYZ(i, p.getX(i) * k, y, p.getZ(i) * k);
+  }
+  t.computeVertexNormals();
+  const lip = new THREE.TorusGeometry(0.026, 0.009, 4, 8).rotateX(Math.PI / 2).translate(0, 0.12, 0);
+  const hole = new THREE.CircleGeometry(0.02, 8).rotateX(-Math.PI / 2).translate(0, 0.116, 0);
+  const spill = blob(0.5, 951, { detail: 0, lump: 0.3 }).scale(0.13, 0.03, 0.12).translate(0.01, 0.004, 0.005);
+  return merge([part(t, 0x7a6248), part(lip, 0x6e5840), part(hole, 0x2a2018), part(spill, 0x6a5440)]);
+}
+
+/** Where the crawfish's chimneys stand: in a wet lawn or a ditch near fresh water (`ok`), a cluster of a few
+ *  to a spot, one spot at most to a 120 m cell in about half the cells. */
+export function crawfishChimneys(zone: { x0: number; z0: number; x1: number; z1: number }, ok: (x: number, z: number) => boolean, heightAt: (x: number, z: number) => number) {
+  const out: { x: number; y: number; z: number; yaw: number }[] = [];
+  for (const c of cellSpots({ x0: zone.x0 - 4, z0: zone.z0 - 4, x1: zone.x1 + 4, z1: zone.z1 + 4 }, ok, heightAt, 120, 0.5, 8, 951)) {
+    const n = 3 + Math.floor(hashf(c.x * 13 + c.z * 7) * 5);
+    for (let i = 0; i < n; i++) {
+      const a = hashf(c.x * 3 + c.z * 5 + i * 17) * Math.PI * 2, r = i === 0 ? 0 : 0.6 + hashf(c.x + c.z * 11 + i * 29) * 2.4;
+      const x = c.x + Math.cos(a) * r, z = c.z + Math.sin(a) * r;
+      if (x < zone.x0 || x >= zone.x1 || z < zone.z0 || z >= zone.z1 || !ok(x, z)) continue;
+      out.push({ x, y: heightAt(x, z), z, yaw: hashf(i * 41 + c.x) * Math.PI * 2 });
+    }
+  }
+  return out;
 }

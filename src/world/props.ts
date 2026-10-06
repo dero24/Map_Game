@@ -36,8 +36,8 @@ import { playLib, PLAY_KINDS, PLAY_PAINT, PLAY_FOOT, type PlayKind } from '../as
 import { beachSeason, beachLotFill, marinaSeason, windowFor, worldDate } from './calendar';
 import { seaLevel, type Berth } from './docks';
 import { GUARD_SEAT, type Gear, type Stand } from './crowd';
-import { faunaMix } from '../assets/fauna';
-import { ospreyNestGeometry, ospreyNests, beaverLodgeGeometry, beaverLodges, moundGeometry, prairieMounds, baskingLogGeometry, baskingLogs } from '../assets/signs';
+import { faunaMix, chimneyCountry } from '../assets/fauna';
+import { ospreyNestGeometry, ospreyNests, beaverLodgeGeometry, beaverLodges, moundGeometry, prairieMounds, baskingLogGeometry, baskingLogs, chimneyGeometry, crawfishChimneys } from '../assets/signs';
 
 type P = [number, number];
 /** The hours a thing is there for when it's there all day (calendar.ts windows). */
@@ -1581,6 +1581,11 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   if (has(fauna0.burrower, 'prairiedog')) {
     const grass = (x: number, z: number) => terrain.coverAt(x, z) === 30 && terrain.sdfAt(x, z) > 3 && walk.buildingAt(x, z) < 0 && !walk.blocked(x, z, 1) && !paved(x, z);
     signs('prairie-mounds', moundGeometry, prairieMounds(SZ, grass, hgt).filter((n) => inSlice(n.x, n.z)));
+  }
+  if (has(fauna0.crab, 'crawfish') && chimneyCountry(cast0)) {
+    // (a wet lawn or a ditch within a stone's throw of fresh water: the crawfish's chimneys)
+    const wet = (x: number, z: number) => { const c = terrain.coverAt(x, z), d = terrain.sdfAt(x, z); return (c === 30 || c === 20) && d > 1.5 && d < 30 && terrain.oceanDistAt(x, z) > 300 && walk.buildingAt(x, z) < 0 && !walk.blocked(x, z, 0.3) && !paved(x, z); };
+    signs('crawfish-chimneys', chimneyGeometry, crawfishChimneys(SZ, wet, hgt).filter((n) => inSlice(n.x, n.z)));
   }
 
   // ---------- parked cars at the house end of real driveways ----------

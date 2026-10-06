@@ -53,7 +53,7 @@ window.__SHADERS__ = async () => {
   // the critters (fauna.ts): a perched bird's closed wings, the hawk soaring, a butterfly, a fox
   try {
     const { critterLib, critterMaterial } = await import('/src/assets/fauna.ts');
-    for (const k of ['cardinal', 'hawk', 'butterfly', 'fox', 'greatblueheron', 'turkeyvulture', 'elk']) {
+    for (const k of ['cardinal', 'hawk', 'butterfly', 'fox', 'greatblueheron', 'turkeyvulture', 'elk', 'monarch', 'greendarner']) {
       const cg = critterLib(k).clone();
       cg.setAttribute('aAnim', new THREE.InstancedBufferAttribute(new Float32Array([0.3, 0.5, k === 'hawk' ? 2 : 0]), 3));
       add(cg, critterMaterial(k));
