@@ -2,6 +2,82 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-06 — How common each animal is: rare in town, more in the wild
+
+Robby, walking Sea Bright: turkeys and foxes "running around everywhere" — in a shore town they'd be a
+rare sighting. The cause: the sim filled every role's slots from whatever species the region has, and
+its town measure counted only shops and downtowns, so a suburb read as the wild. Now:
+
+- **`ABUNDANCE`** (`fauna.ts`): each species' `[town, common]` — how well it lives among people, and how
+  often it's about even where it lives. `presenceOdds(kind, wild)` = common × (town + (1 − town) ×
+  wild). The squirrels, the pigeons, the robins, the gulls: everywhere. The raccoons and opossums: in
+  town now and then. The deer, the foxes, the coyotes: a sighting at a town's edge, ordinary only in
+  the woods and the fields. The turkeys: one patch in twenty in a town. The elk, the moose, the black
+  bear, the horned lizard: rare even in the wild. Every species has its row (a test holds it).
+- **A lottery per patch of ground** (`Critters.present`): each species is about a 160 m patch this
+  month or it isn't — seeded by the patch and the month, so the same for every visitor (a walk across
+  town meets a fox in one patch, none in the next ten). The sim only fills a role's slots from the
+  species present.
+- **How settled the land is** (`CritterEnv.settled`, main.ts): the houses in the 3×3 of 80 m squares
+  about the walker (~6 to a square is a full suburb), or the town measure if higher. Sea Bright's
+  streets read as settled; the woods and the farmland as wild.
+
+**Verified:** typecheck; `npm test` 999/999; `tests/abundance.test.ts` (new: every species has its odds;
+the town birds and the squirrels everywhere, the shy and big ones scarce in town, never fewer in the
+wild; the lottery deterministic and keeping its odds, a new draw each month; a walk over 30 patches of a
+settled Sea Bright — squirrels and robins in most, a turkey in at most two, the foxes and coyotes at
+dusk in at most four — against the same walk out of town, with more of both). A probe over 60 patches:
+settled Sea Bright 1 turkey, wild 21; settled Seattle 1 elk, wild 24 (so the elk's odds came down,
+0.35 → 0.2, and the sandhill crane's, 0.5 → 0.25). The shore playtest PASS (main.ts's settled measure).
+
+**Next:** Robby's PC: walk Sea Bright and a stretch of woods and say if the balance feels right (the
+table is one line per species).
+
+## 2026-10-06 — Regional life: the water's life, seen from above — fish, seals, dolphins, whales
+
+Robby's option A: the life in the water as you see it from the shore, a dock or a boat — what breaks the
+surface — with no underwater world, and cheap ("don't need a million fish spawned if I can't see
+them"). The big ones get the polygons; the fish stay light.
+
+- **The fish** (`fishGeometry`: a countershaded body, dorsal, pectoral and anal fins, the tail fin on its
+  own pivot swinging side to side — `uWag`): **rainbow trout** (its pink band and spots), **largemouth
+  bass**, **mullet**, **Pacific salmon** (the fall run), **tarpon** (big and silver, the upturned jaw),
+  **silver carp** (the Midwest's rivers). They cruise unseen under the surface — **not drawn** — and
+  now and then come up: a trout's rise and its ring, a tarpon rolling, a **leap** (the mullet again and
+  again; the silver carp when you come close), with a splash and a ring where it lands.
+- **The schools** (`shoalGeometry`): dozens of little fish milling just under the surface, turning
+  together — the Caribbean's and Florida's clear shallows above all (Robby: "lots of small fish from
+  above"), the Gulf's, the Mid-Atlantic's in the warm months.
+- **The dolphins and the whales** (`whaleGeometry`, 10–12 sides: flukes on the tail's pivot, flippers,
+  a fin by kind): the **bottlenose dolphin** and the **harbor porpoise** in pods beyond the breakers,
+  rolling over the surface in arcs; the **orca** (tall fin, eye patch, grey saddle) **breaching** clear
+  of the water; the **humpback** (long white flippers, the knobs on its head) and the **gray whale**
+  (mottled, its knuckles), 250–700 m out: up, **two or three blows**, then sounding with **its flukes
+  lifted**, and long under. In their seasons: the Jersey Shore's dolphins in summer and its humpbacks
+  in winter, California's gray whales from December to April.
+- **The seals and the otters** (`pinnipedGeometry`): the **harbor seal** (spotted), the **gray seal**
+  (its Roman nose), the **California sea lion** (ear flaps, up on its flippers) hauled out on the beach
+  or riding low in the water, humping down into it when you come; the **sea otter** afloat on its back
+  off California's central coast; the **river otter** on the banks and in the rivers.
+- **The beaver, done properly** (Robby: "ensure they are done nicely"): its own plan (`beaverGeometry`)
+  — a rotund body, orange incisors, webbed hind feet, the scaly black paddle of a tail, a peeled stick
+  carried now and then; a wake as it swims; **the tail slap**, a ring and a burst of spray, and under.
+- **The cost**: the fish only within ~30 m of water and only near the walker; cruising fish and the
+  pods and whales between breaths not drawn; one humpback or two grays at most; the water's rings and
+  blows (`Critters.fx`) capped at a dozen each; empty meshes not drawn. A splash sound (`ambience.ts`).
+
+**Verified:** typecheck; `npm test` 999/999; `tests/waterLife.test.ts` (new: ranges and seasons; the
+fish's tail pivot and sizes, the school, the flukes, flippers and marks, the seals' and the sea otter's
+float, the beaver's incisors, paddle and stick; a mullet's leap with its ring and splash, a cruising fish
+not drawn, the fx cap, a dolphin's arc and an orca's breach, a whale's blows and fluke dive kept at
+400 m, whales placed far out, a seal humping into the sea, the sea otter on its back, the beaver's tail
+slap); foundry budgets (`tests/foundry.test.ts`); shader check 27/27; studio montages of the fish, the
+seals, the cetaceans and the river life; the shore playtest (`--quick --swiftshader`) PASS, 6 checks, no
+page errors.
+
+**Next:** Robby's PC: the shore in July (dolphins), January (seals, a humpback), Key West's shallows,
+Seattle's orcas; then the P2 water rows — sharks' fins, rays, menhaden's ripples, the elephant seals.
+
 ## 2026-10-06 — Regional life: the West's lizards — fence, side-blotched, spiny, collared, horned
 
 The reference's first P2 rows (`docs/regional-life/models.md` §13.1), so the West has its lizards: five

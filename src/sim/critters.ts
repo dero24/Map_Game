@@ -15,8 +15,9 @@
 import * as THREE from 'three';
 import type { Terrain } from '../world/data';
 import type { WalkWorld } from '../player/collision';
-import { CRITTERS, ROLE, ROLES, critterLib, critterMaterial, faunaMix, swimSink, sitPivot, monarchRoost, monarchMigrating, type CritterKind, type CritterRole } from '../assets/fauna';
+import { CRITTERS, ROLE, ROLES, critterLib, critterMaterial, faunaMix, swimSink, sitPivot, monarchRoost, monarchMigrating, rippleGeometry, spoutGeometry, WHALES, BODY_DEPTH, presenceOdds, type CritterKind, type CritterRole } from '../assets/fauna';
 import { prairieTown, baskingLogs } from '../assets/signs';
+import { hashf } from '../assets/core';
 
 // Small animals are drawn a little larger than life (×1.3–2): at painting scale a true-size
 // squirrel dissolves into the grass wash — the same licence an illustrator takes.
@@ -79,6 +80,25 @@ const SPEC: Record<CritterKind, Spec> = {
   spinylizard: { cap: 4, walk: 0.35, flee: 3, fleeR: 5, gaitHz: 4, scale: [1.4, 1.6], colors: [0x8a7a5a, 0x9a8a62, 0x7a6e50] },
   collaredlizard: { cap: 3, walk: 0.4, flee: 3.5, fleeR: 6, gaitHz: 4.5, scale: [1.25, 1.4], colors: [0xffffff] },
   hornedlizard: { cap: 2, walk: 0.12, flee: 0.4, fleeR: 1.5, gaitHz: 3, scale: [2.0, 2.3], colors: [0xb09a78, 0x9a8466, 0xa89070] },
+  // the water's life: a few fish at a time and only near the walker (seen when they rise, roll or leap);
+  // the seals shy on land, the sea lions bold; the dolphins' `walk` their cruising speed; a whale or two
+  rainbowtrout: { cap: 3, walk: 0.5, flee: 0.5, fleeR: 0, gaitHz: 2, scale: [1.2, 1.4], colors: [0xffffff] },
+  largemouthbass: { cap: 3, walk: 0.4, flee: 0.4, fleeR: 0, gaitHz: 2, scale: [1.1, 1.3], colors: [0xffffff] },
+  mullet: { cap: 4, walk: 0.7, flee: 0.7, fleeR: 0, gaitHz: 2, scale: [1.2, 1.4], colors: [0xffffff] },
+  salmon: { cap: 3, walk: 0.4, flee: 0.4, fleeR: 0, gaitHz: 1.5, scale: [1.0, 1.15], colors: [0xffffff] },
+  tarpon: { cap: 2, walk: 0.5, flee: 0.5, fleeR: 0, gaitHz: 1, scale: [0.9, 1.1], colors: [0xffffff] },
+  silvercarp: { cap: 5, walk: 0.5, flee: 0.5, fleeR: 0, gaitHz: 2, scale: [1.0, 1.2], colors: [0xffffff] },
+  shoal: { cap: 3, walk: 0.35, flee: 0.35, fleeR: 0, gaitHz: 3, scale: [1.0, 1.4], colors: [0xffffff] },
+  harborseal: { cap: 8, walk: 0.5, flee: 1.5, fleeR: 22, gaitHz: 1, scale: [0.95, 1.05], colors: [0x8a8a84, 0x9a968c, 0x6a6258, 0xa8a49a] },
+  grayseal: { cap: 6, walk: 0.5, flee: 1.5, fleeR: 18, gaitHz: 0.9, scale: [0.95, 1.05], colors: [0x7a7a74, 0x8a8682, 0x5a5856] },
+  sealion: { cap: 8, walk: 0.7, flee: 2, fleeR: 8, gaitHz: 1.2, scale: [0.9, 1.05], colors: [0x5a4630, 0x6a5238, 0x8a6a48] },
+  seaotter: { cap: 4, walk: 0.25, flee: 1, fleeR: 12, gaitHz: 1, scale: [1.0, 1.1], colors: [0xffffff] },
+  riverotter: { cap: 3, walk: 0.8, flee: 2.5, fleeR: 15, gaitHz: 1.6, scale: [1.0, 1.1], colors: [0xffffff] },
+  dolphin: { cap: 6, walk: 3, flee: 3, fleeR: 0, gaitHz: 1.4, scale: [0.9, 1.1], colors: [0xffffff] },
+  porpoise: { cap: 4, walk: 2, flee: 2, fleeR: 0, gaitHz: 1.6, scale: [0.9, 1.1], colors: [0xffffff] },
+  orca: { cap: 4, walk: 2.5, flee: 2.5, fleeR: 0, gaitHz: 0.9, scale: [0.9, 1.1], colors: [0xffffff] },
+  humpback: { cap: 1, walk: 1.2, flee: 1.2, fleeR: 0, gaitHz: 0.4, scale: [0.9, 1.1], colors: [0xffffff] },
+  graywhale: { cap: 2, walk: 1.0, flee: 1.0, fleeR: 0, gaitHz: 0.4, scale: [0.9, 1.1], colors: [0xffffff] },
   // the mammals (fauna.ts package #13): the night's waddlers, the squirrels, the burrowers (a prairie dog
   // town's many), the beaver, the herds wary from far off (a pronghorn from 70 m, and the fastest)
   raccoon: { cap: 3, walk: 0.7, flee: 3.5, fleeR: 10, gaitHz: 1.6, scale: [1.0, 1.1], colors: [0xffffff] },
@@ -120,6 +140,10 @@ const SPEC: Record<CritterKind, Spec> = {
   fiddlercrab: { cap: 30, walk: 0.25, flee: 1.6, fleeR: 5, gaitHz: 6, scale: [2.3, 2.7], colors: [0x4a4034, 0x5a5048, 0x3e3c38, 0x6a5a48] },
   crawfish: { cap: 6, walk: 0.12, flee: 0.4, fleeR: 3, gaitHz: 3, scale: [1.4, 1.6], colors: [0xffffff] },
 };
+/** How often a fish leaps when it comes up (else it rises: a ring), and how high (m, at its own size): the
+ *  mullet again and again, the salmon at its run, the silver carp at anything coming near; the bass and
+ *  the trout mostly rise; the tarpon rolls. */
+const LEAP: Partial<Record<CritterKind, [number, number]>> = { mullet: [0.85, 0.8], salmon: [0.6, 1.0], silvercarp: [0.5, 1.4], largemouthbass: [0.25, 0.6], rainbowtrout: [0.15, 0.5], tarpon: [0.1, 1.6] };
 /** The monarchs' way south in the fall (a unit heading, south a little west: toward Mexico, the West's
  *  toward the coast). */
 const MIG = [-0.35, 0.937] as const;
@@ -139,6 +163,8 @@ const RACK: Partial<Record<CritterKind, { male: number; months: number[] | null 
   fiddlercrab: { male: 0.5, months: null }, crawfish: { male: 1, months: null },
   // (a male fence lizard's and spiny lizard's blue patches; a collared lizard's colours)
   fencelizard: { male: 0.5, months: null }, spinylizard: { male: 0.5, months: null }, collaredlizard: { male: 0.5, months: null },
+  // (and a beaver with a peeled stick in its teeth: a third of them, on their way to the lodge)
+  beaver: { male: 0.33, months: null },
 };
 /** The burrowers that sit bolt upright by their holes (a prairie dog town's sentries, a woodchuck). */
 const SITTERS = new Set<CritterKind>(['prairiedog', 'woodchuck', 'blackbear']);
@@ -150,6 +176,8 @@ const STOOPS = new Set<CritterKind>(['hawk']);
 const PREY: Partial<Record<CritterRole, CritterRole[]>> = { predator: ['grazer', 'climber', 'songbird', 'burrower'], raptor: ['grazer', 'climber', 'songbird', 'burrower'] };
 const HUNTED = new Set<CritterRole>(['grazer', 'climber', 'songbird', 'shorebird', 'burrower']);
 const R = (c: { kind: CritterKind }) => ROLE[c.kind];
+/** At most this many of each water mark at once. */
+const FX_CAP = 12;
 /** A moving thing animals give way to: traffic and the player's vehicle (x, z, velocity). */
 export interface Mover { x: number; z: number; vx: number; vz: number }
 
@@ -157,8 +185,8 @@ type State = 'idle' | 'move' | 'flee' | 'climb' | 'perch' | 'fly' | 'drift' | 's
   // (package #13: an opossum playing dead, a skunk's warning)
   | 'possum' | 'warn'
   // (package #14: a bison rolling in its wallow; #15: a basker sliding off its bank or log into the water;
-  // #16: a darner on its beat)
-  | 'wallow' | 'slide' | 'patrol'
+  // #16: a darner on its beat; the water's life: a fish cruising, leaping, rising; a pod surfacing; a whale)
+  | 'wallow' | 'slide' | 'patrol' | 'cruise' | 'leap' | 'sip' | 'porpoise' | 'surface'
   // (package #12: a gull wheeling and coming down again, a pelican skimming the waves, an osprey's hover
   // and plunge, a loon under the water)
   | 'glide' | 'alight' | 'skim' | 'hover' | 'plunge' | 'dive';
@@ -178,6 +206,7 @@ interface Critter {
   yip?: number;                    // a prairie dog's jump-yip, an armadillo's leap: seconds left of it
   lead?: Critter;                  // a cub's mother: it keeps by her, and goes where she goes
   beat?: number;                   // a darner's beat: the line it patrols along, by its angle
+  stage?: number;                  // a surfacer's part of its cycle (under, up, a breach; a whale's blow and its dive)
 }
 export interface CritterEnv {
   hour: number; night: number; month: number; wind: number; south: boolean;
@@ -192,6 +221,10 @@ export interface CritterEnv {
   paved?: (x: number, z: number) => boolean;
   /** 0 (open country) … 1 (a built-up downtown) at the walker: fewer wild animals in town. */
   urban?: number;
+  /** 0 (the woods, the fields) … 1 (a suburb's streets of houses, a town, a downtown) at the walker: how
+   *  settled the land is (main.ts from the houses, the shops and the city's volume about it). A wild
+   *  animal is rare where it's high (fauna.ts ABUNDANCE). When absent, `urban`. */
+  settled?: number;
 }
 
 export class Critters {
@@ -206,6 +239,9 @@ export class Critters {
   private v = new THREE.Vector3();
   private sv = new THREE.Vector3();
   enabled = true;
+  /** Every species of the place's cast about, whatever its odds (the review harness's, and the tests' of
+   *  how an animal lives — not of how often you meet it). */
+  everyone = false;
   /** A sound cue: the sound family (squirrel chatter, a flush of wings, a deer's snort) — not the species. */
   onEvent: ((sound: string, what: 'flee' | 'flush', pan: number, dist: number) => void) | null = null;
   private sound(c: Critter) { const r = R(c); return r === 'climber' || r === 'burrower' ? 'squirrel' : r === 'browser' ? 'deer' : r === 'shorebird' ? 'sandpiper' : r === 'songbird' ? 'songbird' : c.kind; }
@@ -231,6 +267,35 @@ export class Critters {
       this.group.add(m);
       this.meshes.set(k, { m, anim });
     }
+    // the water's marks: a ring spreading where something broke the surface; a whale's blow, a breach's splash
+    for (const [i, geo0] of [rippleGeometry(), spoutGeometry()].entries()) {
+      const geo = geo0.clone();
+      geo.setAttribute('aAnim', new THREE.InstancedBufferAttribute(new Float32Array(FX_CAP * 3), 3));
+      const m = new THREE.InstancedMesh(geo, critterMaterial('manatee'), FX_CAP);
+      m.name = i ? 'critter-fx:spout' : 'critter-fx:ripple';
+      m.count = 0; m.visible = false; m.frustumCulled = false;
+      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      m.layers.enable(1);
+      this.group.add(m);
+      this.fxMesh.push(m);
+    }
+  }
+  /** The rings and the blows on the water (a few at a time: FX_CAP each), aging out. */
+  private fx: { k: 0 | 1; x: number; y: number; z: number; t: number; life: number; s: number }[] = [];
+  private fxMesh: THREE.InstancedMesh[] = [];
+  private ripple(x: number, y: number, z: number, s: number) { if (this.fx.filter((f) => f.k === 0).length < FX_CAP) this.fx.push({ k: 0, x, y: y + 0.03, z, t: 0, life: 1.8, s }); }
+  private spout(x: number, y: number, z: number, s: number, life = 2.6) { if (this.fx.filter((f) => f.k === 1).length < FX_CAP) this.fx.push({ k: 1, x, y, z, t: 0, life, s }); }
+  /** Water about the walker, kept for its 25 m square: fresh water within ~30 m (the fish's, a river
+   *  otter's), the sea within ~150 m (the dolphins', the seals'), within ~800 m (the whales'). */
+  private wet = { key: '', fresh: false, sea: false, offshore: false };
+  private wetAt(wx: number, wz: number) {
+    const key = `${Math.round(wx / 25)},${Math.round(wz / 25)}`;
+    if (key === this.wet.key) return this.wet;
+    const T = this.terrain, od = T.oceanDistAt(wx, wz);
+    let fresh = false;
+    for (const [ox, oz] of [[0, 0], [28, 0], [-28, 0], [0, 28], [0, -28], [20, 20], [-20, 20], [20, -20], [-20, -20]]) if (T.sdfAt(wx + ox, wz + oz) < -1.5) { fresh = true; break; }
+    this.wet = { key, fresh, sea: od < 150, offshore: od < 800 };
+    return this.wet;
   }
 
   private rnd() { this.seed = (Math.imul(this.seed ^ 0x9e3779b9, 0x85ebca6b) + 0x6b43a9b3) >>> 0; return this.seed / 4294967296; }
@@ -296,7 +361,7 @@ export class Critters {
   private valid(c: Critter, x: number, z: number) {
     const r = R(c);
     if (r === 'wader') return this.edge(x, z);
-    if (c.wl !== undefined) return this.swimmable(x, z, c.kind === 'loon' ? 6 : 1.2, c.kind === 'loon' || c.kind === 'brownpelican' || c.kind === 'manatee' || r === 'gull');
+    if (c.wl !== undefined) return this.swimmable(x, z, c.kind === 'loon' ? 6 : 1.2, c.kind === 'loon' || c.kind === 'brownpelican' || c.kind === 'manatee' || r === 'gull' || (r === 'swimmer' && c.kind !== 'riverotter'));
     if (r === 'gull') return this.gullGround(x, z, c.kind);
     if (c.kind === 'pigeon' && this.paved(x, z)) return this.walk.buildingAt(x, z) < 0 && !this.walk.blocked(x, z, 0.2);
     if (c.kind === 'prairiedog' && !prairieTown(x, z)) return false; // (a prairie dog never leaves its town)
@@ -356,10 +421,15 @@ export class Critters {
       case 'crawler': return env.night > 0.5 ? 5 : 3;
       case 'crab': return day ? 24 : 4;
       case 'lizard': return day && h > 8 && h < 18.5 ? 5 : 0;
+      // (the water's life only where there's water near: a few fish, most at dawn and dusk; the swimmers;
+      // the dolphins and the whales by day)
+      case 'fish': return this.wet.fresh || this.wet.sea ? (dawnDusk ? 6 : 4) : 0;
+      case 'swimmer': return this.wet.fresh || this.wet.sea ? (day ? 5 : 2) : 0;
+      case 'cetacean': return this.wet.offshore && day ? 6 : 0;
     }
   }
   private place(k: CritterRole, wx: number, wz: number, env: CritterEnv, sp?: CritterKind): Omit<Critter, 'kind' | 'seed' | 'c' | 's'> | null {
-    const near = k === 'butterfly' || k === 'firefly' || k === 'dragonfly' || k === 'crawler' || k === 'lizard';
+    const near = k === 'butterfly' || k === 'firefly' || k === 'dragonfly' || k === 'crawler' || k === 'lizard' || k === 'fish';
     for (let tries = 0; tries < 8; tries++) {
       const a = this.rnd() * Math.PI * 2;
       const d = near ? 6 + this.rnd() * 22 : 20 + this.rnd() * 40;
@@ -464,6 +534,53 @@ export class Critters {
         if (!((s > -10 && s < 12 && this.terrain.oceanDistAt(x, z) > 40) || (this.field(x, z) && this.rnd() < 0.3))) continue;
         const y = this.airBase(x, z) + 0.9 + this.rnd() * 1.2;
         return { x, y, z, yaw: this.rnd() * 6.28, pitch: 0, state: 'patrol', t: 0.5, tx: x, tz: z, ty: y, home: { x, z }, beat: this.rnd() * Math.PI, phase: this.rnd(), amt: 1 };
+      } else if (k === 'fish') {
+        // in the water near the walker: the salt fish in the sea's bays and creeks, the rest in fresh water; a
+        // school in any clear shallow water, salt or fresh
+        const s0 = this.terrain.sdfAt(x, z), od = this.terrain.oceanDistAt(x, z), salt = sp === 'mullet' || sp === 'tarpon';
+        if (!(salt ? s0 < -2 && s0 > -60 && od < 3000 : sp === 'shoal' ? s0 < -1.5 && s0 > -40 : s0 < -1.5 && od > 8)) continue;
+        const wl = this.level(x, z), yaw = this.rnd() * 6.28;
+        if (sp === 'shoal') return { x, y: wl + 0.015, z, yaw, pitch: 0, state: 'cruise', t: 1e6, tx: x, tz: z, ty: wl, wl, phase: this.rnd(), amt: 0.5 };
+        return { x, y: wl - 0.6, z, yaw, pitch: 0, state: 'cruise', t: 2 + this.rnd() * 8, tx: x, tz: z, ty: wl, wl, phase: this.rnd(), amt: 0.4 };
+      } else if (k === 'swimmer') {
+        const T = this.terrain, s0 = T.sdfAt(x, z), od = T.oceanDistAt(x, z), base = { yaw: this.rnd() * 6.28, pitch: 0, t: 1 + this.rnd() * 4, tx: x, tz: z, phase: this.rnd(), amt: 0 };
+        if (sp === 'seaotter') {
+          // afloat on its back in the kelp, off the central coast
+          if (!(s0 < -8 && s0 > -200 && od < 6)) continue;
+          return { ...base, x, z, y: 0, ty: 0, wl: 0, roll: Math.PI, state: 'idle' };
+        }
+        const river = sp === 'riverotter', kin = this.list.find((o) => o.kind === sp && o.wl === undefined && Math.hypot(o.x - x, o.z - z) < 40);
+        if (kin && this.rnd() < 0.7) { x = kin.x + (this.rnd() - 0.5) * 6; z = kin.z + (this.rnd() - 0.5) * 6; }
+        if (this.rnd() < 0.5 || kin) {
+          // hauled out: the seals on the beach by the water, packed together; an otter on a riverbank
+          const s1 = T.sdfAt(x, z);
+          if (river ? !(s1 > 0.3 && s1 < 4 && T.oceanDistAt(x, z) > 300 && this.walk.buildingAt(x, z) < 0) : !(this.shore(x, z) && s1 < 8)) continue;
+          return { ...base, x, z, y: this.ground(x, z), ty: 0, state: 'idle' };
+        }
+        if (river ? !(this.swimmable(x, z, 1.5) && od > 300) : !(this.swimmable(x, z, 3, true) && od < 6 && s0 > -80)) continue;
+        const wl = this.level(x, z);
+        return { ...base, x, z, y: wl, ty: wl, wl, state: 'idle' };
+      } else if (k === 'cetacean') {
+        const T = this.terrain;
+        if (sp && WHALES.has(sp)) {
+          // far out in the open sea, a few hundred metres off
+          let ok = false;
+          for (let i = 0; i < 6 && !ok; i++) { const a2 = this.rnd() * 6.28, d2 = 250 + this.rnd() * 450; x = wx + Math.sin(a2) * d2; z = wz + Math.cos(a2) * d2; ok = T.sdfAt(x, z) < -150 && T.oceanDistAt(x, z) < 6; }
+          if (!ok) continue;
+          return { x, y: -10, z, yaw: this.rnd() * 6.28, pitch: 0, state: 'surface', stage: 0, t: 3 + this.rnd() * 12, tx: x, tz: z, ty: 0, wl: 0, phase: this.rnd(), amt: 0.5 };
+        }
+        // a pod beyond the breakers: alongside one already there, heading its way
+        const kin = this.list.find((o) => o.kind === sp && o.state === 'porpoise' && Math.hypot(o.x - wx, o.z - wz) < 120);
+        let yaw = this.rnd() * 6.28;
+        if (kin) { const side = (this.rnd() - 0.5) * 10, back = 2 + this.rnd() * 6; yaw = kin.yaw; x = kin.x + Math.cos(yaw) * side + Math.sin(yaw) * back; z = kin.z - Math.sin(yaw) * side + Math.cos(yaw) * back; }
+        else {
+          // (along the shore, one way or the other)
+          const gx = T.sdfAt(x + 2, z) - T.sdfAt(x - 2, z), gz = T.sdfAt(x, z + 2) - T.sdfAt(x, z - 2);
+          yaw = Math.atan2(gz, -gx) + (this.rnd() < 0.5 ? Math.PI : 0);
+        }
+        const s0 = T.sdfAt(x, z);
+        if (!(s0 < -15 && s0 > -250 && T.oceanDistAt(x, z) < 6)) continue;
+        return { x, y: -2, z, yaw, pitch: 0, state: 'porpoise', stage: 0, t: kin ? (kin.t as number) + this.rnd() * 0.8 : this.rnd() * 3, tx: x, tz: z, ty: 0, wl: 0, phase: this.rnd(), amt: 1 };
       } else if (k === 'lizard') {
         // out in the sun on open ground: the desert's flats and trails, the grass and the scrub's edges
         const cv = this.terrain.coverAt(x, z);
@@ -561,6 +678,15 @@ export class Critters {
     }
     return this.logs;
   }
+  /** Whether a species is about this patch of ground this month: a lottery by its odds (fauna.ts
+   *  presenceOdds) for each 160 m square — deterministic, the same for every visitor — so a rare animal is
+   *  in a few patches and a common one in most. A winter roost's monarchs and a prairie dog town's prairie
+   *  dogs are always there. */
+  private present(sp: CritterKind, x: number, z: number, wild: number, month: number) {
+    if (this.everyone || (sp === 'monarch' && this.roost) || (sp === 'prairiedog' && this.inTown)) return true;
+    const ci = Math.floor(x / 160), cj = Math.floor(z / 160);
+    return hashf(ci * 92821 + cj * 68917 + CRITTERS.indexOf(sp) * 7919 + month * 104729) < presenceOdds(sp, wild);
+  }
   /** Whether a prairie dog town lies within ~60 m of the walker (signs.ts prairieTown). */
   private inTown = false;
   /** A monarchs' winter roost near the walker (its tree, how high its crown starts, which way its
@@ -583,14 +709,16 @@ export class Critters {
     this.paved = env.paved ?? (() => false);
     this.inTown = [[0, 0], [60, 0], [-60, 0], [0, 60], [0, -60], [42, 42], [-42, 42], [42, -42], [-42, -42]].some(([ox, oz]) => prairieTown(wx + ox, wz + oz) !== null);
     this.roost = this.roostAt(wx, wz, env);
+    this.wetAt(wx, wz);
     this.migrating = monarchMigrating(env.place?.eco, this.month(env));
     const count: Record<string, number> = {}, roleCount: Record<string, number> = {};
     for (const c of this.list) { count[c.kind] = (count[c.kind] ?? 0) + 1; roleCount[R(c)] = (roleCount[R(c)] ?? 0) + 1; }
     if (this.enabled && (this.spawnT -= dt) <= 0) {
       this.spawnT = 0.6;
-      const mix = this.mix(env);
+      const mix = this.mix(env), mo = this.month(env), wild = 1 - Math.max(env.settled ?? 0, env.urban ?? 0);
       for (const role of ROLES) {
-        const cast = mix[role];
+        // (only the species about this patch of ground this month: most patches have none of the rare ones)
+        const cast = mix[role]?.filter(([sp]) => this.present(sp, wx, wz, wild, mo));
         if (!cast?.length) continue;
         const cap = Math.max(...cast.map(([sp]) => SPEC[sp].cap));
         const want = Math.min(cap, this.want(role, env));
@@ -614,7 +742,6 @@ export class Critters {
         }
         // a loon grey in winter; a laughing gull's black hood gone white from September to March; a western
         // black bear any of its colours
-        const mo = this.month(env);
         if (k === 'greenanole' && !(mo >= 4 && mo <= 10 && env.hour > 8 && env.hour < 19)) c.set(0x7a5a3a); // (brown when it's cool)
         if (k === 'collaredlizard') c.set((this.seed % 997) / 997 < RACK.collaredlizard!.male ? 0x3aa080 : 0x9a8a6a); // (a male turquoise, a female tan)
         if (k === 'blackbear') c.set(env.place?.west || ['rockies', 'great-basin', 'desert-sw', 'california', 'pnw'].includes(env.place?.eco ?? '') ? WEST_BEAR[Math.floor(this.rnd() * WEST_BEAR.length)] : 0x1e1a18);
@@ -636,10 +763,12 @@ export class Critters {
     for (let i = this.list.length - 1; i >= 0; i--) {
       const c = this.list[i];
       const d = Math.hypot(c.x - wx, c.z - wz);
-      const gone = c.dead || d > 95 || (!this.enabled) || (this.want(R(c), env) === 0 && d > 30) || (c.state === 'fly' && c.t <= 0) || (c.state === 'skim' && c.t <= 0) || (c.state === 'perch' && c.t <= 0 && d > 18);
+      const gone = c.dead || d > (WHALES.has(c.kind) ? 1500 : 95) || (!this.enabled) || (this.want(R(c), env) === 0 && d > 30) || (c.state === 'fly' && c.t <= 0) || (c.state === 'skim' && c.t <= 0) || (c.state === 'perch' && c.t <= 0 && d > 18);
       if (gone) { this.list.splice(i, 1); continue; }
       this.step(c, dt, wx, wz, d, env);
     }
+    // the water's marks age out
+    for (let i = this.fx.length - 1; i >= 0; i--) if ((this.fx[i].t += dt) > this.fx[i].life) this.fx.splice(i, 1);
     this.stats = count;
     this.mo = this.month(env);
     this.draw(wx, wz, env.camFwd);
@@ -667,6 +796,7 @@ export class Critters {
     switch (c.state) {
       case 'idle':
         c.amt = Math.max(0, c.amt - dt * 4);
+        if (c.wl !== undefined && R(c) === 'swimmer') { c.y = this.stand(c); if (c.kind === 'seaotter') c.phase += dt * 0.3; } // (afloat; a sea otter drifting)
         if (c.t <= 0 && R(c) === 'predator' && this.rnd() < 0.6) {
           const p = this.quarry(c, 24);
           if (p) { c.state = 'stalk'; c.prey = p; c.t = 14; this.eco.hunts++; break; }
@@ -695,7 +825,7 @@ export class Critters {
           const flock = c.lead && this.list.includes(c.lead) ? c.lead : FLOCKS.has(R(c)) && this.rnd() < 0.5 ? this.list.find((o) => o !== c && o.kind === c.kind && (o.wl === undefined) === (c.wl === undefined) && Math.hypot(o.x - c.x, o.z - c.z) < 25 && Math.hypot(o.x - c.x, o.z - c.z) > 3) : undefined;
           for (let k = 0; k < 4; k++) {
             // (the small things a step at a time: a crab's, a crawfish's, a slug's, a lizard's scurry)
-            const a = this.rnd() * 6.28, r = R(c) === 'wader' ? 0.8 + this.rnd() * 2.5 : R(c) === 'crab' || R(c) === 'crawler' || R(c) === 'lizard' ? 0.3 + this.rnd() * 0.9 : 2 + this.rnd() * (R(c) === 'browser' ? 8 : 5);
+            const a = this.rnd() * 6.28, r = R(c) === 'wader' ? 0.8 + this.rnd() * 2.5 : R(c) === 'crab' || R(c) === 'crawler' || R(c) === 'lizard' || (R(c) === 'swimmer' && c.wl === undefined) ? 0.3 + this.rnd() * 0.9 : 2 + this.rnd() * (R(c) === 'browser' ? 8 : 5);
             const tx = flock ? flock.x + Math.sin(a) * (1.5 + this.rnd() * 2) : c.x + Math.sin(a) * r, tz = flock ? flock.z + Math.cos(a) * (1.5 + this.rnd() * 2) : c.z + Math.cos(a) * r;
             if (!this.valid(c, tx, tz)) continue;
             if (R(c) === 'shorebird' && !this.shore(tx, tz)) continue;
@@ -724,6 +854,8 @@ export class Critters {
         c.yaw = Math.atan2(-dx, -dz) + (c.kind === 'fiddlercrab' ? Math.PI / 2 : 0); // (a crab goes sideways)
         c.y = this.stand(c);
         c.amt = Math.min(c.wl !== undefined && R(c) !== 'wader' ? 0.3 : 1, c.amt + dt * 6); // (a swimmer's paddling feet, under the water)
+        // (a swimming beaver, otter or seal draws a wake behind it: small rings left where it's been)
+        if (c.wl !== undefined && (c.kind === 'beaver' || R(c) === 'swimmer') && this.rnd() < dt * 1.6) this.ripple(c.x + Math.sin(c.yaw) * 0.5 * c.s, c.wl, c.z + Math.cos(c.yaw) * 0.5 * c.s, 0.3 * c.s);
         c.phase += dt * S.gaitHz * (c.state === 'flee' ? 2.2 : 1);
         break;
       }
@@ -949,6 +1081,104 @@ export class Critters {
         if (Math.hypot(c.x - wx, c.z - wz) > 40 && !env.gardens(c.x, c.z, 25).length && R(c) === 'butterfly' && !mig) c.t = Math.min(c.t, 0);
         break;
       }
+      case 'cruise': {
+        const wl = c.wl ?? 0;
+        if (c.kind === 'shoal') {
+          // a school milling just under the surface, turning together now and then, away from the shallows' edge
+          const tt = performance.now() / 1000 + c.phase * 40;
+          c.yaw += Math.sin(tt * 0.3 + c.phase * 9) * 0.35 * dt;
+          const nx = c.x - Math.sin(c.yaw) * S.walk * dt, nz = c.z - Math.cos(c.yaw) * S.walk * dt, s1 = this.terrain.sdfAt(nx, nz);
+          if (s1 < -1.2 && s1 > -45) (c.x = nx), (c.z = nz);
+          else c.yaw += Math.PI * 0.6;
+          c.y = wl + 0.015; c.amt = 0.6; c.phase += dt;
+          break;
+        }
+        // a fish under the surface (not drawn: unseen), cruising; now and then up to the top — a rise and its
+        // ring, a roll — or out of it in a leap
+        const dx = c.tx - c.x, dz = c.tz - c.z, L = Math.hypot(dx, dz);
+        if (L < 0.4) {
+          for (let k = 0; k < 4; k++) {
+            const a = this.rnd() * 6.28, r = 1 + this.rnd() * 4, tx = c.x + Math.sin(a) * r, tz = c.z + Math.cos(a) * r;
+            if (this.terrain.sdfAt(tx, tz) < -1.2) { c.tx = tx; c.tz = tz; break; }
+          }
+        } else {
+          const st = Math.min(L, S.walk * dt);
+          c.x += (dx / L) * st; c.z += (dz / L) * st; c.yaw = Math.atan2(-dx, -dz);
+        }
+        c.y = wl - 0.6; c.pitch = 0; c.amt = 0.4; c.phase += dt * S.gaitHz;
+        if (c.t <= 0) {
+          const [p] = LEAP[c.kind] ?? [0, 0];
+          if (this.rnd() < (c.kind === 'silvercarp' && d < 18 ? 0.95 : p)) { c.state = 'leap'; c.t = c.kind === 'tarpon' ? 1.3 : 0.9; c.stage = 0; }
+          else { c.state = 'sip'; c.t = c.kind === 'tarpon' ? 1.8 : 0.7; this.ripple(c.x, wl, c.z, 0.35 * c.s); }
+        }
+        break;
+      }
+      case 'leap': {
+        // out of the water in an arc, nose up and then down, and back in with a splash and a ring
+        const wl = c.wl ?? 0, T0 = c.kind === 'tarpon' ? 1.3 : 0.9, u = Math.min(1, 1 - c.t / T0), h = (LEAP[c.kind]?.[1] ?? 0.6) * c.s;
+        if (c.stage === 0) { c.stage = 1; this.ripple(c.x, wl, c.z, 0.3 * c.s); }
+        c.x -= Math.sin(c.yaw) * 2.2 * dt; c.z -= Math.cos(c.yaw) * 2.2 * dt;
+        c.y = wl - 0.3 + (h + 0.3) * 4 * u * (1 - u);
+        c.pitch = (0.5 - u) * 1.8; c.amt = 1; c.phase += dt * 4;
+        if (c.t <= 0) {
+          this.ripple(c.x, wl, c.z, 0.5 * c.s); this.spout(c.x, wl, c.z, 0.35 * c.s, 0.7);
+          if (d < 45) this.onEvent?.('splash', 'flush', Math.max(-1, Math.min(1, ((c.x - wx) * env.camFwd.z - (c.z - wz) * env.camFwd.x) / Math.max(1, d))), d);
+          c.state = 'cruise'; c.t = 3 + this.rnd() * 9; c.pitch = 0;
+        }
+        break;
+      }
+      case 'sip': {
+        // up to the top: a trout's nose taking a fly, a bass's mouth, a tarpon's back and fin rolling over
+        const wl = c.wl ?? 0, H = (BODY_DEPTH[c.kind] ?? 0.1) * c.s, roll = c.kind === 'tarpon';
+        c.y += (wl - H * (roll ? 0.55 : 0.8) - c.y) * Math.min(1, dt * 6);
+        c.pitch = roll ? -0.2 : 0.35; c.amt = 0.6; c.phase += dt * 3;
+        if (c.t <= 0) { c.state = 'cruise'; c.t = 4 + this.rnd() * 10; c.pitch = 0; }
+        break;
+      }
+      case 'porpoise': {
+        // a pod travelling beyond the breakers: under, then up and over in an arc — the back and the fin
+        // rolling over the surface — and under again; now and then one breaches clear of the water
+        const wl = c.wl ?? 0, H = (BODY_DEPTH[c.kind] ?? 0.5) * c.s, arc = c.kind === 'orca' ? 2.2 : c.kind === 'porpoise' ? 1.0 : 1.3;
+        const nx = c.x - Math.sin(c.yaw) * S.walk * dt, nz = c.z - Math.cos(c.yaw) * S.walk * dt;
+        if (this.terrain.sdfAt(nx, nz) < -8 && this.terrain.oceanDistAt(nx, nz) < 6) (c.x = nx), (c.z = nz);
+        else c.yaw += Math.PI * 0.8 * dt * 2; // (turning off the shallows)
+        c.amt = 1; c.phase += dt * S.gaitHz;
+        if (c.stage === 0) {
+          c.y = wl - H * 2.6; c.pitch = 0;
+          if (c.t <= 0) { const breach = this.rnd() < (c.kind === 'orca' ? 0.14 : c.kind === 'dolphin' ? 0.1 : 0); c.stage = breach ? 2 : 1; c.t = breach ? 1.8 : arc; }
+        } else {
+          const T0 = c.stage === 2 ? 1.8 : arc, u = Math.min(1, 1 - c.t / T0);
+          if (c.stage === 1) { c.y = wl - H * 1.15 + H * Math.sin(Math.PI * u); c.pitch = (0.5 - u) * 0.8; }
+          else { const len = H / 0.21; c.y = wl - H + len * 0.55 * 4 * u * (1 - u); c.pitch = (0.6 - u) * 2.0; }
+          if (c.t <= 0) {
+            if (c.stage === 2) { this.ripple(c.x, wl, c.z, H * 2.5); this.spout(c.x, wl, c.z, H * 2.2, 1.2); if (d < 120) this.onEvent?.('splash', 'flush', 0, d); }
+            c.stage = 0; c.t = c.kind === 'orca' ? 4 + this.rnd() * 5 : 2 + this.rnd() * 4;
+          }
+        }
+        break;
+      }
+      case 'surface': {
+        // a whale offshore: long under; then up, its back out, blowing two or three times; then sounding —
+        // head down, its back arched, its flukes lifting clear — and under again
+        const wl = c.wl ?? 0, H = (BODY_DEPTH[c.kind] ?? 3) * c.s, len = H / 0.25;
+        const nx = c.x - Math.sin(c.yaw) * S.walk * dt, nz = c.z - Math.cos(c.yaw) * S.walk * dt;
+        if (this.terrain.sdfAt(nx, nz) < -120) (c.x = nx), (c.z = nz);
+        else c.yaw += 0.5 * dt;
+        c.amt = 0.5; c.phase += dt * S.gaitHz;
+        if (c.stage === 0) {
+          c.y = wl - H * 3; c.pitch = 0;
+          if (c.t <= 0) { c.stage = 1; c.t = 7; }
+        } else if (c.stage === 1) {
+          c.y += (wl - H * 0.62 - c.y) * Math.min(1, dt * 1.5); c.pitch = 0;
+          for (const at of [6.2, 4.0, 1.8]) if (c.t + dt > at && c.t <= at) this.spout(c.x - Math.sin(c.yaw) * len * 0.32, wl, c.z - Math.cos(c.yaw) * len * 0.32, H * 1.5);
+          if (c.t <= 0) { c.stage = 2; c.t = 3.2; }
+        } else {
+          const u = Math.min(1, 1 - c.t / 3.2);
+          c.pitch = -1.15 * Math.min(1, u * 1.6); c.y = wl - H * 0.62 - u * H * 1.2;
+          if (c.t <= 0) { c.stage = 0; c.t = 15 + this.rnd() * 20; c.pitch = 0; }
+        }
+        break;
+      }
       case 'patrol': {
         // a darner on its beat: along the water's edge and back at head height, hanging still a moment at
         // each end, darting off and turning on a dime; now and then aside after a midge
@@ -1032,14 +1262,14 @@ export class Critters {
     else if (c.kind === 'loon') { c.state = 'dive'; c.t = 5 + this.rnd() * 5; } // (it slips under)
     else if (c.kind === 'hornedlizard') { c.state = 'idle'; c.t = 3 + this.rnd() * 3; } // (it sits tight, trusting its colours)
     else if (TRUNKERS.has(c.kind) && c.home) { c.state = 'climb'; c.t = 1; c.ty = Math.min(this.ground(c.home.x, c.home.z) + Math.max(1, (c.home.trunk ?? 3) * 0.9), c.y + 0.6 + this.rnd() * 0.8); } // (round the trunk and up)
-    else if (role === 'basker' && c.wl !== undefined) { c.state = 'dive'; c.t = 6 + this.rnd() * 6; } // (it sinks without a ripple)
-    else if (role === 'basker') {
-      // off the bank or the log, down into the water
+    else if ((role === 'basker' || role === 'swimmer') && c.wl !== undefined) { c.state = 'dive'; c.t = 6 + this.rnd() * 6; } // (it sinks without a ripple)
+    else if (role === 'basker' || role === 'swimmer') {
+      // off the bank or the log, down into the water (a seal humping down the beach, an otter's slide)
       const T = this.terrain, gx = T.sdfAt(c.x + 1, c.z) - T.sdfAt(c.x - 1, c.z), gz = T.sdfAt(c.x, c.z + 1) - T.sdfAt(c.x, c.z - 1), L = Math.hypot(gx, gz) || 1;
       c.state = 'slide'; c.t = 4; c.tx = c.x - (gx / L) * 6; c.tz = c.z - (gz / L) * 6;
       if (heard) this.onEvent?.('splash', 'flush', pan, d);
     }
-    else if (c.kind === 'beaver' && c.wl !== undefined) { c.state = 'dive'; c.t = 6 + this.rnd() * 6; if (heard) this.onEvent?.('splash', 'flush', pan, d); } // (a slap of the tail, and under)
+    else if (c.kind === 'beaver' && c.wl !== undefined) { c.state = 'dive'; c.t = 6 + this.rnd() * 6; this.ripple(c.x, c.wl, c.z, 0.6); this.spout(c.x, c.wl, c.z, 0.5, 0.6); if (heard) this.onEvent?.('splash', 'flush', pan, d); } // (a slap of the tail, a burst of spray, and under)
     else if (c.kind === 'opossum' && d < SPEC.opossum.fleeR * 0.6) { c.state = 'possum'; c.t = 10 + this.rnd() * 6; }
     else if (c.kind === 'skunk') { c.state = 'warn'; c.t = 2.2 + this.rnd(); }
     else if (c.kind === 'annualcicada') { c.state = 'fly'; c.t = 3; c.home = undefined; if (heard) this.onEvent?.(this.sound(c), 'flush', pan, d); } // (it buzzes off)
@@ -1089,6 +1319,8 @@ export class Critters {
     for (const c of this.list) {
       const M = this.meshes.get(c.kind)!;
       if (c.state === 'dive') continue; // (under the water)
+      // (a fish cruising under the surface, a pod or a whale deep between its breaths: unseen, so not drawn)
+      if ((c.state === 'cruise' && c.kind !== 'shoal') || ((c.state === 'porpoise' || c.state === 'surface') && c.stage === 0)) continue;
       if (level) {
         const dx = c.x - wx, dz = c.z - wz, d = Math.hypot(dx, dz);
         if (d > 8 && (dx * fwd.x + dz * fwd.z) / (d * fl) < -0.25) { this.drawn.behind++; continue; }
@@ -1132,6 +1364,16 @@ export class Critters {
       const shown = this.horned(c, this.mo) || (ANOLES.has(c.kind) && c.state === 'perch' && Math.sin(c.phase * 6.28 + (c.seed % 7)) > 0.7) || (c.kind === 'bananaslug' && Math.hypot(c.x - wx, c.z - wz) > 1.6);
       M.anim.setXYZ(i, c.phase, c.amt, pose + (shown ? 10 : 0));
     }
+    // the water's marks: a ring spreading and thinning; a blow rising, hanging and sinking away
+    const nfx = [0, 0];
+    for (const f of this.fx) {
+      const M = this.fxMesh[f.k], i = nfx[f.k]++, u = f.t / f.life;
+      const sc = f.k === 0 ? f.s * (0.3 + 1.7 * u) : f.s * (u < 0.25 ? 0.3 + 2.8 * u : 1 - (u - 0.25) * 0.5);
+      this.v.set(f.x, f.y - (f.k === 1 && u > 0.6 ? (u - 0.6) * f.s * 0.6 : 0), f.z);
+      this.mat4.compose(this.v, this.q.identity(), this.sv.set(sc, f.k === 0 ? 1 : sc * (f.k === 1 && u > 0.6 ? 1 - (u - 0.6) * 1.2 : 1), sc));
+      M.setMatrixAt(i, this.mat4);
+    }
+    this.fxMesh.forEach((M, k) => { M.count = nfx[k]; M.visible = nfx[k] > 0; M.instanceMatrix.needsUpdate = true; });
     for (const [k, M] of this.meshes) {
       M.m.count = per.get(k) ?? 0;
       M.m.visible = M.m.count > 0; // most of the cast is absent in any one place: no empty draws

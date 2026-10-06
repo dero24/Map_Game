@@ -71,7 +71,7 @@ collisions.
 
 | Track | Work | Where it runs |
 |---|---|---|
-| **A. Regional life** | The reference's P2 rows: snakes, frogs, more insects (the West's lizards done) | Cloud sessions (tests and the scratch studio; no long captures) |
+| **A. Regional life** | The reference's P2 rows: snakes, frogs, more insects (the West's lizards and the water's life seen from above done; each species' abundance set, to tune by eye) | Cloud sessions (tests and the scratch studio; no long captures) |
 | **B. Region pass** | Montages per region against the scorecard; fix what's wrong | Robby's PC or a session that can run captures (they're too slow in the cloud) |
 | **C. People** | `people-with-purpose`: walkers on errands, homes only for those who live there, buildings with a capacity, smooth animation | Its own branch; mostly `sim/` and `life` files |
 | **D. Leftovers** | Moss on the ground and on boulders, `upstairs-over-shopfront` (duckweed, cordgrass, the black oak and gray pine and the inland gulls done 2026-10-06) | Fill-in work between packages |
@@ -155,6 +155,12 @@ Notes:
 - **Small life** is done everywhere (package 16: the monarch and the darner in every region, the
   cicadas, the slug, the fiddlers and the crawfish where they live). More insects (bees, skimmers,
   grasshoppers, the spotted lanternfly) are the reference's P2 rows on the same plans.
+- **The water's life** (2026-10-06), seen from above: the fish (trout, bass, mullet, salmon, tarpon,
+  silver carp, the schools of little fish), the dolphins, porpoise, orca, humpback and gray whale, the
+  seals, sea lion and otters, the beaver rebuilt. Sharks' fins, rays and the elephant seals are P2.
+- **How common each animal is** (2026-10-06): each species' odds (`ABUNDANCE`), lower the more settled
+  the land — the turkeys, foxes and deer a sighting in a town, the elk, moose and bears rare even in the
+  wild. To tune by eye on Robby's PC.
 
 ## How sessions pick work
 

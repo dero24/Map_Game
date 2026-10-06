@@ -324,7 +324,11 @@ export class Ambience {
   /** Wildlife: a squirrel's scolding chatter, a flush of wings, a deer's snort. */
   critter(kind: string, what: 'flee' | 'flush', pan: number, dist: number) {
     const vol = Math.min(1, 12 / (dist + 4));
-    if (kind === 'squirrel') {
+    if (kind === 'splash') {
+      // something going into the water: a soft low slap and its spray
+      this.blip({ freq: 520, q: 0.7, dur: 0.22, gain: 0.05 * vol, pan, type: 'lowpass' });
+      setTimeout(() => this.blip({ freq: 1800, q: 0.6, dur: 0.12, gain: 0.018 * vol, pan }), 40);
+    } else if (kind === 'squirrel') {
       for (let k = 0; k < 6; k++) setTimeout(() => this.blip({ freq: 3200 + Math.random() * 900, q: 7, dur: 0.035, gain: 0.03 * vol, pan }), k * 70);
     } else if (what === 'flush') {
       // a whirr of wings: a few fast noise bursts

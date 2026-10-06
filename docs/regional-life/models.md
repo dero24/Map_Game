@@ -1128,8 +1128,8 @@ species takes the role of its row's base unless the row says otherwise. Marine m
 | fisher-marten | Fisher and American (pine) marten | row: fox — long, low; chocolate frosted (fisher), golden with orange throat (marten) | new-england, upstate-ny, midwest, rockies, pnw | O | 60-100 cm incl. tail | Res | bounding lope; crosses roads | P3 |
 | mink-weasel | Mink and long-tailed weasel | row: fox — small, long, thin | all | O | 30-50 cm | weasels white in winter in the north | bounding along stream banks | P3 |
 | wolverine | Wolverine | row: fox — heavy, dark, pale side bands | rockies, pnw | R | 0.8-1.1 m | Res | lopes over snow | P3 |
-| river-otter | North American river otter | row: fox — sleek dark brown, thick tapering tail | all | O | 1-1.3 m | family groups | porpoises, slides down banks, rolls; on docks on salt water | P2 |
-| sea-otter | Southern sea otter | row: fox — dark brown, frosted pale head | california, pnw | C | 1-1.4 m | rafts | floats on its back in kelp, cracking shells on its chest; grooms | P2 |
+| river-otter | North American river otter | row: fox — sleek dark brown, thick tapering tail | all | O | 1-1.3 m | family groups | porpoises, slides down banks, rolls; on docks on salt water | P2 (**built** 2026-10-06) |
+| sea-otter | Southern sea otter | row: fox — dark brown, frosted pale head | california, pnw | C | 1-1.4 m | rafts | floats on its back in kelp, cracking shells on its chest; grooms | P2 (**built** 2026-10-06) |
 
 ### 11.4 Bears (bear†)
 
@@ -1854,29 +1854,29 @@ surface and the move that breaks it; the body under the water can be simple.
 | id | Name | Build | Regions | C | Size | Seasons / states | Animation & behaviour | P |
 |---|---|---|---|---|---|---|---|---|
 | manatee | West Indian manatee | new: swimmer† — gray-brown wrinkled potato shape, round paddle tail, flippers, whiskered square snout; propeller scars, algae | florida, southeast, gulf | C | 3-4 m, 400-600 kg | crowds warm springs and outfalls Nov-Mar; summer in canals and creeks | drifts; slow rolls; snout breaks the surface to breathe | P1 |
-| bottlenose-dolphin | Bottlenose dolphin | row: swimmer† — gray, curved dorsal fin, short beak | mid-atlantic, southeast, florida, gulf, texas, california | C | 2.5-3 m | Sum off northern beaches; Res south | pods of 5-20 roll past beyond the breakers; leap; strand-feed on mudbanks | P2 |
+| bottlenose-dolphin | Bottlenose dolphin | row: swimmer† — gray, curved dorsal fin, short beak | mid-atlantic, southeast, florida, gulf, texas, california | C | 2.5-3 m | Sum off northern beaches; Res south | pods of 5-20 roll past beyond the breakers; leap; strand-feed on mudbanks | P2 (**built** 2026-10-06) |
 | common-dolphin | Common dolphin | row: swimmer† — hourglass flank pattern | california | C | 2-2.5 m | Res | big fast pods in the surf line | P3 |
-| porpoises | Harbor and Dall's porpoises | row: swimmer† — small dark, small triangular fin; black and white (Dall's) | new-england, pnw | C | 1.5-2.2 m | Res | roll quietly (harbor); rooster-tail splash (Dall's) | P3 |
-| orca | Orca (killer whale) | row: swimmer† — glossy black, white chin, belly and eye patch, gray saddle, tall dorsal fin | pnw, california | O | 6-9 m; fin to 1.8 m | Res and transient pods | pods surface in rhythm; spyhop; breach | P2 |
-| humpback-whale | Humpback whale | row: swimmer† — dark, long white flippers, knobby head | new-england, mid-atlantic, california, pnw | O | 12-16 m | Nov-Apr off NJ and NY; spring-fall in the West | blows; breaches; raises its fluke to dive; lunge-feeds with gulls and pelicans | P2 |
-| gray-whale | Gray whale | row: swimmer† — mottled gray with barnacle patches, no fin, knuckles along the back | california, pnw | C | 12-14 m | migration close to headlands Dec-May | heart-shaped blows; flukes up | P2 |
+| porpoises | Harbor and Dall's porpoises | row: swimmer† — small dark, small triangular fin; black and white (Dall's) | new-england, pnw | C | 1.5-2.2 m | Res | roll quietly (harbor); rooster-tail splash (Dall's) | P3 (**built** 2026-10-06: the harbor porpoise) |
+| orca | Orca (killer whale) | row: swimmer† — glossy black, white chin, belly and eye patch, gray saddle, tall dorsal fin | pnw, california | O | 6-9 m; fin to 1.8 m | Res and transient pods | pods surface in rhythm; spyhop; breach | P2 (**built** 2026-10-06) |
+| humpback-whale | Humpback whale | row: swimmer† — dark, long white flippers, knobby head | new-england, mid-atlantic, california, pnw | O | 12-16 m | Nov-Apr off NJ and NY; spring-fall in the West | blows; breaches; raises its fluke to dive; lunge-feeds with gulls and pelicans | P2 (**built** 2026-10-06) |
+| gray-whale | Gray whale | row: swimmer† — mottled gray with barnacle patches, no fin, knuckles along the back | california, pnw | C | 12-14 m | migration close to headlands Dec-May | heart-shaped blows; flukes up | P2 (**built** 2026-10-06) |
 | other-whales | Fin, minke, blue and North Atlantic right whales | row: swimmer† — long and dark; no fin and V-shaped blow (right) | new-england, california, southeast | R | 8-30 m | by species | spouts offshore | P3 |
-| harbor-seal | Harbor seal | new: pinniped† — spotted gray-silver to brown, round dog-like head | new-england, mid-atlantic, california, pnw | C | 1.5 m | Res; Win south of New England; pups in spring-summer | hauls out on ledges in a "banana" pose; head bobs in harbors | P2 |
-| gray-seal | Gray seal | row: pinniped† — long "Roman nose" head, mottled gray | new-england, mid-atlantic | C | 2-2.5 m | herds of hundreds to thousands on Cape Cod bars | packed haul-outs | P3 |
-| sea-lions | California and Steller sea lions | row: pinniped† — dark brown males with forehead bump; ear flaps; Steller's golden-tan, maned | california, pnw | C | 2-3 m | Res | bark and pile on docks and buoys; walk on their flippers | P2 |
+| harbor-seal | Harbor seal | new: pinniped† — spotted gray-silver to brown, round dog-like head | new-england, mid-atlantic, california, pnw | C | 1.5 m | Res; Win south of New England; pups in spring-summer | hauls out on ledges in a "banana" pose; head bobs in harbors | P2 (**built** 2026-10-06) |
+| gray-seal | Gray seal | row: pinniped† — long "Roman nose" head, mottled gray | new-england, mid-atlantic | C | 2-2.5 m | herds of hundreds to thousands on Cape Cod bars | packed haul-outs | P3 (**built** 2026-10-06) |
+| sea-lions | California and Steller sea lions | row: pinniped† — dark brown males with forehead bump; ear flaps; Steller's golden-tan, maned | california, pnw | C | 2-3 m | Res | bark and pile on docks and buoys; walk on their flippers | P2 (**built** 2026-10-06: the California sea lion) |
 | elephant-fur-seals | Northern elephant seal and northern fur seal | row: pinniped† — huge males with a drooping trunk nose | california, pnw | O | 3-5 m | breeding Dec-Mar; molting spring-summer | lie in heaps on rookery beaches; flip sand | P3 |
 
 ### 15.2 Fish (fish†)
 
 | id | Name | Build | Regions | C | Size | Seasons / states | Animation & behaviour | P |
 |---|---|---|---|---|---|---|---|---|
-| pacific-salmon | Pacific salmon (Chinook, coho, sockeye, pink, chum) | new: fish† — red sides and green back, hooked jaw (coho); purple-green calico bars (chum) | pnw, california | C | 0.5-1 m | fall runs in urban creeks Sep-Dec | hold in current; leap at falls and fish ladders; spawn in gravel; dead fish on banks feed eagles | P2 |
+| pacific-salmon | Pacific salmon (Chinook, coho, sockeye, pink, chum) | new: fish† — red sides and green back, hooked jaw (coho); purple-green calico bars (chum) | pnw, california | C | 0.5-1 m | fall runs in urban creeks Sep-Dec | hold in current; leap at falls and fish ladders; spawn in gravel; dead fish on banks feed eagles | P2 (**built** 2026-10-06) |
 | kokanee | Kokanee salmon | row: fish† — red body, green head, hooked jaw | rockies | C | 30-40 cm | spawning Oct | red schools in tributaries | P3 |
-| trout | Cutthroat, rainbow and brown trout | row: fish† — speckled | rockies, ozarks, pnw, great-basin | C | 25-50 cm | — | rise to hatches | P3 |
-| mullet | Mullet | row: fish† — gray, silver | florida, gulf, texas, southeast | C | 30-50 cm | — | leap again and again from glassy canals | P2 |
-| southern-gamefish | Atlantic tarpon, snook, barracuda, sheepshead, redfish (red drum), speckled trout | row: fish† — big silver with an upturned mouth (tarpon); copper back with a black tail spot (redfish) | florida, gulf, texas | C | 0.3-2 m | — | tarpon roll near docks gulping air; redfish tail in shallow marsh | P3 |
-| menhaden | Menhaden (bunker, pogies) | row: fish† — small silvery | mid-atlantic, gulf | C | 20-30 cm | — | rippling brown schools chased by ospreys, dolphins and whales | P3 |
-| asian-carp | Asian (silver) carp | row: fish† — 60-90 cm silver | midwest | C | 60-90 cm | summer | leap out of the water at boat noise | P3 |
+| trout | Cutthroat, rainbow and brown trout | row: fish† — speckled | rockies, ozarks, pnw, great-basin | C | 25-50 cm | — | rise to hatches | P3 (**built** 2026-10-06: the rainbow trout) |
+| mullet | Mullet | row: fish† — gray, silver | florida, gulf, texas, southeast | C | 30-50 cm | — | leap again and again from glassy canals | P2 (**built** 2026-10-06) |
+| southern-gamefish | Atlantic tarpon, snook, barracuda, sheepshead, redfish (red drum), speckled trout | row: fish† — big silver with an upturned mouth (tarpon); copper back with a black tail spot (redfish) | florida, gulf, texas | C | 0.3-2 m | — | tarpon roll near docks gulping air; redfish tail in shallow marsh | P3 (**built** 2026-10-06: the tarpon) |
+| menhaden | Menhaden (bunker, pogies) | row: fish† — small silvery | mid-atlantic, gulf | C | 20-30 cm | — | rippling brown schools chased by ospreys, dolphins and whales | P3 (**built** 2026-10-06: the schools of small silver fish (`shoal`)) |
+| asian-carp | Asian (silver) carp | row: fish† — 60-90 cm silver | midwest | C | 60-90 cm | summer | leap out of the water at boat noise | P3 (**built** 2026-10-06) |
 | great-lakes-fish | Round goby, alewife and sea lamprey | row: fish† — small; eel-like (lamprey) | midwest | O | 10-60 cm | alewife die-offs on beaches in summer | — | P3 |
 | clear-river-fish | Longear sunfish, smallmouth bass, paddlefish, Ozark cavefish | row: fish† — vivid orange and turquoise (longear); white eyeless (cavefish) | ozarks | C | 10-150 cm | longear males guard gravel nests | hover over nests in clear water | P3 |
 | gulf-sturgeon | Gulf sturgeon | row: fish† — armored, prehistoric | gulf | R | 1.5-2 m | summer | jumps clear of the river | P3 |
@@ -2136,6 +2136,17 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
     (`crabGeometry`): **Atlantic marsh fiddler crab** (the great claw waved, the flat down its burrows),
     then **crawfish** (claws up, backing off) with their **chimneys** (`sign†`: `signs.ts`
     `chimneyGeometry`, `crawfishChimneys`).
+17. **The water's life, seen from above** — **built** 2026-10-06 (`docs/earth/LOG.md` "the water's
+    life"). `fish†` (`fishGeometry`: a countershaded body, its fins, the tail fin on its own pivot that
+    swings side to side, `uWag`): **rainbow trout**, **largemouth bass**, **mullet**, **Pacific salmon**,
+    **tarpon**, **silver carp**; a **school** (`shoalGeometry`, dozens of little fish milling just under
+    the surface). `swimmer†` (`whaleGeometry`: flukes on the tail's pivot, flippers, the fin's shapes):
+    **bottlenose dolphin**, **harbor porpoise**, **orca**, **humpback** and **gray whale**.
+    `pinniped†` (`pinnipedGeometry`): **harbor seal**, **gray seal**, **California sea lion**, the **sea
+    otter** (afloat on its back) and the **river otter**. The **beaver** rebuilt on its own plan
+    (`beaverGeometry`: the incisors, the scaly paddle, a peeled stick). The sim's `fish`, `swimmer` and
+    `cetacean` roles, with only a few near the walker at a time (a fish under the surface isn't drawn;
+    the rings and blows capped at a dozen each).
 
 The P1 rows marked `have` (sugar and red maple, mesquite and palo verde, eastern gray squirrel,
 eastern cottontail, white-tailed and mule deer, coyote) need no new model; they come into a package

@@ -29,7 +29,11 @@ export type CritterKind =
   // (the leftovers: the inland gulls)
   | 'ringbilledgull' | 'herringgull'
   // (the reference's P2 rows: the West's lizards, on the sprawler plan)
-  | 'fencelizard' | 'sideblotched' | 'spinylizard' | 'collaredlizard' | 'hornedlizard';
+  | 'fencelizard' | 'sideblotched' | 'spinylizard' | 'collaredlizard' | 'hornedlizard'
+  // (the water's life: the fish, the seals and the otters, the dolphins and the whales)
+  | 'rainbowtrout' | 'largemouthbass' | 'mullet' | 'salmon' | 'tarpon' | 'silvercarp' | 'shoal'
+  | 'harborseal' | 'grayseal' | 'sealion' | 'seaotter' | 'riverotter'
+  | 'dolphin' | 'porpoise' | 'orca' | 'humpback' | 'graywhale';
 export const CRITTERS: CritterKind[] = ['squirrel', 'rabbit', 'songbird', 'sandpiper', 'deer', 'butterfly', 'firefly', 'fox', 'hawk', 'coyote', 'jackrabbit', 'snowshoe', 'groundSquirrel', 'muleDeer', 'roadrunner', 'quail', 'ibis',
   'cardinal', 'bluejay', 'robin', 'stellersjay', 'gilawoodpecker', 'mourningdove', 'crow', 'pigeon',
   'canadagoose', 'mallard', 'mallardhen', 'loon', 'greatblueheron', 'greategret', 'snowyegret', 'spoonbill', 'sandhillcrane',
@@ -39,7 +43,10 @@ export const CRITTERS: CritterKind[] = ['squirrel', 'rabbit', 'songbird', 'sandp
   'alligator', 'greenanole', 'brownanole', 'paintedturtle', 'redslider', 'yellowslider',
   'monarch', 'greendarner', 'annualcicada', 'cicadashell', 'bananaslug', 'fiddlercrab', 'crawfish',
   'ringbilledgull', 'herringgull',
-  'fencelizard', 'sideblotched', 'spinylizard', 'collaredlizard', 'hornedlizard'];
+  'fencelizard', 'sideblotched', 'spinylizard', 'collaredlizard', 'hornedlizard',
+  'rainbowtrout', 'largemouthbass', 'mullet', 'salmon', 'tarpon', 'silvercarp', 'shoal',
+  'harborseal', 'grayseal', 'sealion', 'seaotter', 'riverotter',
+  'dolphin', 'porpoise', 'orca', 'humpback', 'graywhale'];
 export const CRITTER_NAME: Record<CritterKind, string> = {
   squirrel: 'squirrel', rabbit: 'rabbit', songbird: 'songbird', sandpiper: 'sandpiper', deer: 'white-tailed deer', butterfly: 'butterfly', firefly: 'firefly', fox: 'red fox', hawk: 'red-tailed hawk',
   coyote: 'coyote', jackrabbit: 'black-tailed jackrabbit', snowshoe: 'snowshoe hare', groundSquirrel: 'ground squirrel', muleDeer: 'mule deer', roadrunner: 'greater roadrunner', quail: 'quail', ibis: 'white ibis',
@@ -52,6 +59,9 @@ export const CRITTER_NAME: Record<CritterKind, string> = {
   monarch: 'monarch', greendarner: 'common green darner', annualcicada: 'annual cicada', cicadashell: "cicada's shell", bananaslug: 'Pacific banana slug', fiddlercrab: 'Atlantic marsh fiddler crab', crawfish: 'red swamp crawfish',
   ringbilledgull: 'ring-billed gull', herringgull: 'herring gull',
   fencelizard: 'fence lizard', sideblotched: 'side-blotched lizard', spinylizard: 'spiny lizard', collaredlizard: 'collared lizard', hornedlizard: 'horned lizard',
+  rainbowtrout: 'rainbow trout', largemouthbass: 'largemouth bass', mullet: 'striped mullet', salmon: 'Chinook salmon', tarpon: 'tarpon', silvercarp: 'silver carp', shoal: 'a school of baitfish',
+  harborseal: 'harbor seal', grayseal: 'gray seal', sealion: 'California sea lion', seaotter: 'sea otter', riverotter: 'North American river otter',
+  dolphin: 'bottlenose dolphin', porpoise: 'harbor porpoise', orca: 'orca', humpback: 'humpback whale', graywhale: 'gray whale',
 };
 
 /** Ecological roles: the sim (sim/critters.ts) gives each role its habitat and behaviour; the
@@ -68,8 +78,11 @@ export type CritterRole = 'climber' | 'burrower' | 'grazer' | 'songbird' | 'shor
   // forest floor, the crabs and the crawfish at the water's edge)
   | 'dragonfly' | 'bug' | 'crawler' | 'crab'
   // (the lizards out in the sun on the open ground, the rocks and the fence posts)
-  | 'lizard';
-export const ROLES: CritterRole[] = ['climber', 'burrower', 'grazer', 'songbird', 'shorebird', 'browser', 'butterfly', 'firefly', 'predator', 'raptor', 'waterfowl', 'wader', 'gull', 'fowl', 'forager', 'herd', 'basker', 'dragonfly', 'bug', 'crawler', 'crab', 'lizard'];
+  | 'lizard'
+  // (the water's life: the fish under the surface, rising and leaping; the swimmers that haul out — the
+  // seals, the sea lions, the otters; the dolphins and the whales out at sea)
+  | 'fish' | 'swimmer' | 'cetacean';
+export const ROLES: CritterRole[] = ['climber', 'burrower', 'grazer', 'songbird', 'shorebird', 'browser', 'butterfly', 'firefly', 'predator', 'raptor', 'waterfowl', 'wader', 'gull', 'fowl', 'forager', 'herd', 'basker', 'dragonfly', 'bug', 'crawler', 'crab', 'lizard', 'fish', 'swimmer', 'cetacean'];
 export const ROLE: Record<CritterKind, CritterRole> = {
   squirrel: 'climber', groundSquirrel: 'burrower', rabbit: 'grazer', jackrabbit: 'grazer', snowshoe: 'grazer', roadrunner: 'grazer',
   songbird: 'songbird', quail: 'songbird', sandpiper: 'shorebird', ibis: 'shorebird', deer: 'browser', muleDeer: 'browser',
@@ -97,6 +110,9 @@ export const ROLE: Record<CritterKind, CritterRole> = {
   // the banana slug on the forest floor; the fiddler crab on the marsh's mud, the crawfish by its ditch)
   monarch: 'butterfly', greendarner: 'dragonfly', annualcicada: 'bug', cicadashell: 'bug', bananaslug: 'crawler', fiddlercrab: 'crab', crawfish: 'crab',
   fencelizard: 'lizard', sideblotched: 'lizard', spinylizard: 'lizard', collaredlizard: 'lizard', hornedlizard: 'lizard',
+  rainbowtrout: 'fish', largemouthbass: 'fish', mullet: 'fish', salmon: 'fish', tarpon: 'fish', silvercarp: 'fish', shoal: 'fish',
+  harborseal: 'swimmer', grayseal: 'swimmer', sealion: 'swimmer', seaotter: 'swimmer', riverotter: 'swimmer',
+  dolphin: 'cetacean', porpoise: 'cetacean', orca: 'cetacean', humpback: 'cetacean', graywhale: 'cetacean',
 };
 export type FaunaMix = Partial<Record<CritterRole, [CritterKind, number][]>>;
 // Species per role by climate (Köppen-ish, the same key the plant and car mixes use). North
@@ -278,6 +294,76 @@ const LIZARDS: Partial<Record<EcoRegion | 'pnw-dry', Mix>> = {
   appalachia: [['fencelizard', 0.8]], southeast: [['fencelizard', 0.8]], 'mid-atlantic': [['fencelizard', 0.5]], midwest: [['fencelizard', 0.3]], gulf: [['fencelizard', 0.5]],
 };
 for (const k of Object.keys(LIZARDS) as (keyof typeof LIZARDS)[]) REGION_FAUNA[k] = { ...REGION_FAUNA[k], lizard: LIZARDS[k]! };
+// (the water's life — the fish: trout in the cold streams and the mountain lakes, bass in every warm lake
+// and pond, the mullet leaping in the South's bays and canals, the tarpon rolling in Florida's, the salmon's
+// fall run up the Northwest's rivers, the silver carp leaping in the Midwest's, the schools of baitfish in
+// clear shallow water (most of all Florida's); the swimmers: the harbor and gray seals of the Northeast's
+// coast (the Mid-Atlantic's in winter), the West's sea lions and harbor seals, the sea otter off
+// California's central coast, the river otter in rivers and lakes most everywhere; the cetaceans: the
+// bottlenose dolphins beyond the breakers from the Mid-Atlantic round to Texas and in California, the
+// harbor porpoise of the cold coasts, the orcas of the Northwest, the humpback and the gray whale offshore
+// in their seasons)
+const WATER_LIFE: Partial<Record<EcoRegion | 'pnw-dry', FaunaMix>> = {
+  'new-england': { fish: [['rainbowtrout', 1], ['largemouthbass', 0.8]], swimmer: [['harborseal', 1], ['grayseal', 0.6], ['riverotter', 0.3]], cetacean: [['porpoise', 0.6], ['humpback', 0.3]] },
+  'upstate-ny': { fish: [['rainbowtrout', 1], ['largemouthbass', 0.8]], swimmer: [['riverotter', 0.4]] },
+  'mid-atlantic': { fish: [['largemouthbass', 1], ['rainbowtrout', 0.3], ['shoal', 0.5]], swimmer: [['harborseal', 0.6], ['grayseal', 0.2], ['riverotter', 0.2]], cetacean: [['dolphin', 1], ['humpback', 0.2]] },
+  appalachia: { fish: [['rainbowtrout', 1], ['largemouthbass', 0.8]], swimmer: [['riverotter', 0.3]] },
+  southeast: { fish: [['largemouthbass', 1], ['mullet', 1], ['shoal', 0.6]], swimmer: [['riverotter', 0.4]], cetacean: [['dolphin', 1]] },
+  florida: { fish: [['mullet', 1.3], ['shoal', 1.4], ['largemouthbass', 0.7], ['tarpon', 0.4]], swimmer: [['riverotter', 0.4]], cetacean: [['dolphin', 1]] },
+  gulf: { fish: [['largemouthbass', 1], ['mullet', 1.2], ['shoal', 0.6], ['tarpon', 0.2]], swimmer: [['riverotter', 0.4]], cetacean: [['dolphin', 1]] },
+  texas: { fish: [['largemouthbass', 1], ['mullet', 0.6], ['shoal', 0.4], ['tarpon', 0.1]], cetacean: [['dolphin', 0.8]] },
+  plains: { fish: [['largemouthbass', 1], ['silvercarp', 0.3]] },
+  midwest: { fish: [['largemouthbass', 1], ['silvercarp', 0.6], ['rainbowtrout', 0.3]], swimmer: [['riverotter', 0.2]] },
+  ozarks: { fish: [['largemouthbass', 1], ['rainbowtrout', 0.6], ['shoal', 0.5]], swimmer: [['riverotter', 0.3]] },
+  rockies: { fish: [['rainbowtrout', 1.4]], swimmer: [['riverotter', 0.2]] },
+  'desert-sw': { fish: [['largemouthbass', 1], ['rainbowtrout', 0.3]] },
+  'great-basin': { fish: [['rainbowtrout', 1], ['largemouthbass', 0.4]] },
+  california: { fish: [['largemouthbass', 0.8], ['rainbowtrout', 0.8], ['salmon', 0.3], ['shoal', 0.4]], swimmer: [['sealion', 1], ['harborseal', 0.6], ['seaotter', 0.5]], cetacean: [['dolphin', 0.8], ['humpback', 0.25], ['graywhale', 0.3]] },
+  pnw: { fish: [['rainbowtrout', 1], ['salmon', 1]], swimmer: [['harborseal', 1], ['sealion', 0.5], ['riverotter', 0.5]], cetacean: [['porpoise', 0.6], ['orca', 0.3], ['humpback', 0.15], ['graywhale', 0.2]] },
+  'pnw-dry': { fish: [['rainbowtrout', 1], ['salmon', 0.5], ['largemouthbass', 0.3]], swimmer: [['riverotter', 0.2]] },
+};
+for (const k of Object.keys(WATER_LIFE) as (keyof typeof WATER_LIFE)[]) REGION_FAUNA[k] = { ...REGION_FAUNA[k], ...WATER_LIFE[k] };
+/** How common each animal is, as in life: [how well it lives among people (0 never in a town … 1 as much
+ *  in a town as out of it), how often it's about even where it lives (0 … 1)]. The sim gives each species
+ *  a lottery per patch of ground and month (sim/critters.ts present): its odds = common × (town + (1 −
+ *  town) × wildness). So the pigeons, the squirrels, the robins and the gulls are everywhere; a fox, a
+ *  flock of turkeys, a deer is a sighting in a suburb and an everyday thing only in the woods and the
+ *  fields; an elk, a moose, a bear is rare even in the wild. Unlisted: [0.6, 0.8]. */
+export const ABUNDANCE: Partial<Record<CritterKind, [number, number]>> = {
+  // birds: the town birds everywhere; the shy ones and the big ones out of town
+  songbird: [1, 1], robin: [0.9, 1], cardinal: [0.8, 0.9], bluejay: [0.7, 0.8], stellersjay: [0.5, 0.7], gilawoodpecker: [0.6, 0.7], mourningdove: [0.9, 1], crow: [0.9, 0.9], pigeon: [1, 1],
+  quail: [0.3, 0.8], californiaquail: [0.4, 0.7], roadrunner: [0.2, 0.4], sandpiper: [0.6, 1], ibis: [0.6, 0.8],
+  canadagoose: [0.9, 0.9], mallard: [0.9, 0.9], mallardhen: [0.9, 0.9], loon: [0.05, 0.6], greatblueheron: [0.4, 0.6], greategret: [0.5, 0.6], snowyegret: [0.5, 0.6], spoonbill: [0.2, 0.5], sandhillcrane: [0.05, 0.25],
+  turkeyvulture: [0.5, 0.6], baldeagle: [0.15, 0.3], osprey: [0.4, 0.6], hawk: [0.5, 0.6], wildturkey: [0.05, 0.35], brownpelican: [0.6, 0.8],
+  laughinggull: [0.8, 1], californiagull: [0.9, 1], ringbilledgull: [1, 1], herringgull: [0.9, 1],
+  // mammals: the squirrels everywhere; the night's raiders in town now and then; the deer at a town's
+  // edge; the foxes and the coyotes a sighting; the big ones the wild's, and rare even there
+  squirrel: [1, 1], foxsquirrel: [0.8, 0.9], chipmunk: [0.5, 0.8], groundSquirrel: [0.4, 0.9], prairiedog: [0.1, 0.9], woodchuck: [0.3, 0.5], rabbit: [0.6, 0.8], jackrabbit: [0.2, 0.7], snowshoe: [0.05, 0.5],
+  deer: [0.25, 0.5], muleDeer: [0.25, 0.5], elk: [0.02, 0.2], moose: [0.01, 0.12], pronghorn: [0, 0.5], bighorn: [0, 0.25], bison: [0, 0.3], blackbear: [0.02, 0.08],
+  fox: [0.2, 0.25], coyote: [0.15, 0.25], raccoon: [0.6, 0.5], opossum: [0.5, 0.4], skunk: [0.4, 0.35], armadillo: [0.3, 0.5], beaver: [0.1, 0.35], manatee: [0.3, 0.5],
+  // reptiles and the small life
+  alligator: [0.15, 0.4], greenanole: [0.9, 0.9], brownanole: [0.9, 0.9], paintedturtle: [0.5, 0.7], redslider: [0.5, 0.7], yellowslider: [0.5, 0.7],
+  fencelizard: [0.4, 0.7], sideblotched: [0.4, 0.8], spinylizard: [0.3, 0.6], collaredlizard: [0.05, 0.35], hornedlizard: [0.02, 0.12],
+  butterfly: [0.7, 0.8], monarch: [0.5, 0.6], firefly: [0.6, 0.9], greendarner: [0.5, 0.7], annualcicada: [0.8, 0.9], cicadashell: [0.8, 0.9], bananaslug: [0.3, 0.6], fiddlercrab: [0.3, 0.9], crawfish: [0.3, 0.6],
+  // the water's life (a town on the water doesn't keep the dolphins away: theirs is the sea's)
+  rainbowtrout: [0.3, 0.7], largemouthbass: [0.6, 0.7], mullet: [0.7, 0.8], salmon: [0.3, 0.6], tarpon: [0.4, 0.4], silvercarp: [0.5, 0.6], shoal: [0.6, 0.8],
+  harborseal: [0.2, 0.5], grayseal: [0.1, 0.4], sealion: [0.7, 0.7], seaotter: [0.3, 0.5], riverotter: [0.05, 0.25],
+  dolphin: [1, 0.5], porpoise: [1, 0.4], orca: [1, 0.2], humpback: [1, 0.35], graywhale: [1, 0.4],
+};
+/** A species' odds of being about a patch of ground (0–1) where the land is `wild` (0 a built-up town … 1
+ *  the woods and the fields: 1 − sim/critters.ts settled). */
+export function presenceOdds(k: CritterKind, wild: number) {
+  const [town, common] = ABUNDANCE[k] ?? [0.6, 0.8];
+  return common * (town + (1 - town) * Math.max(0, Math.min(1, wild)));
+}
+/** The whales: far out to sea (a few hundred metres), seen by their blows, their backs and their flukes. */
+export const WHALES = new Set<CritterKind>(['humpback', 'graywhale']);
+/** A swimmer's or a fish's body depth in metres at its own size (sim/critters.ts: how deep it rides, how
+ *  high its back comes up). */
+export const BODY_DEPTH: Partial<Record<CritterKind, number>> = {
+  dolphin: 0.57, porpoise: 0.44, orca: 1.95, humpback: 3.9, graywhale: 3.1,
+  rainbowtrout: 0.08, largemouthbass: 0.11, mullet: 0.07, salmon: 0.19, tarpon: 0.37, silvercarp: 0.17,
+};
 /** Where the monarchs winter, hanging in clusters in the coast's trees (ranges.md: the West's on
  *  California's coast, November to February). */
 export const monarchRoost = (eco: string | undefined, m: number) => eco === 'california' && months(m, 11, 2);
@@ -333,6 +419,20 @@ const SEASON: Partial<Record<CritterKind, (eco: string, m: number) => boolean>> 
   // Southeast's coast in winter)
   ringbilledgull: (e, m) => !['southeast', 'florida', 'gulf', 'texas', 'desert-sw', 'california'].includes(e) || months(m, 9, 4),
   herringgull: (e, m) => !['southeast', 'gulf'].includes(e) || months(m, 10, 4),
+  // (the water's life: the harbor and gray seals the Mid-Atlantic's in winter; the dolphins its summer's;
+  // the humpbacks off New England and the West in the warm months, off New Jersey and New York in winter;
+  // the gray whales' migration past California from December to April, the Northwest's in spring; the
+  // salmon's fall run; the tarpon and the baitfish Florida's the year round, elsewhere's in the warm
+  // months; the silver carp leaping April to October)
+  harborseal: (e, m) => e !== 'mid-atlantic' || months(m, 11, 4),
+  grayseal: (e, m) => e !== 'mid-atlantic' || months(m, 12, 4),
+  dolphin: (e, m) => e !== 'mid-atlantic' || months(m, 5, 10),
+  humpback: (e, m) => (e === 'mid-atlantic' ? months(m, 11, 4) : e === 'california' ? months(m, 4, 11) : months(m, 4, 10)),
+  graywhale: (e, m) => (e === 'california' ? months(m, 12, 4) : months(m, 3, 5)),
+  salmon: (_e, m) => months(m, 9, 11),
+  tarpon: (e, m) => e === 'florida' || months(m, 5, 9),
+  shoal: (e, m) => e === 'florida' || months(m, 4, 10),
+  silvercarp: (_e, m) => months(m, 4, 10),
   // (the lizards out April to October — the South's and the desert's from March)
   ...Object.fromEntries((['fencelizard', 'sideblotched', 'spinylizard', 'collaredlizard', 'hornedlizard'] as CritterKind[]).map((k) => [k, (e: string, m: number) => (['texas', 'desert-sw', 'gulf', 'southeast', 'california'].includes(e) ? months(m, 3, 10) : months(m, 4, 10))])),
 };
@@ -378,6 +478,11 @@ export function faunaMix(region: string, climate: string, place?: { eco: string;
     // Cascades; the Sonoran's Gila woodpecker only below the desert's mountains)
     if (eco === 'california' && [1, 4, 5, 78].includes(l3)) m = { ...m, songbird: [...(m.songbird ?? []), ['stellersjay', 0.8]] };
     if (eco === 'desert-sw' && l3 !== 81 && l3 !== 79) m = { ...m, songbird: (m.songbird ?? []).filter(([k]) => k !== 'gilawoodpecker') };
+    // (the sea otter off the central coast only; the trout in California's mountain and north-coast
+    // streams, not the valley's or the south's; no salmon run in the south)
+    if (eco === 'california' && l3 !== 6) drop('swimmer', 'seaotter');
+    if (eco === 'california' && ![1, 4, 5, 78].includes(l3)) drop('fish', 'rainbowtrout');
+    if (eco === 'california' && [8, 85, 14, 81].includes(l3)) drop('fish', 'salmon');
     // (the banana slug only in the redwood coast's and the Klamath's wet forests)
     if (eco === 'california' && l3 !== 1 && l3 !== 78) drop('crawler', 'bananaslug');
     if (eco === 'texas' && TEXAS_WEST.has(l3)) {
@@ -413,10 +518,9 @@ interface Quad {
   mask?: number; blaze?: number;
   /** stripes along the back, each [offset across it: −1 … 1, colour] (a skunk's white V, a chipmunk's) */
   stripes?: [number, number][];
-  /** the tail: a raccoon's ringed brush, an opossum's naked one, a skunk's plume, a beaver's paddle, a
-   *  woodchuck's stub; `ring`: the ringed tail's dark bands; `tailC`: the tail's own colour (a fox
-   *  squirrel's orange plume, a beaver's black paddle) */
-  tail?: 'ringed' | 'naked' | 'plume' | 'paddle' | 'stub'; ring?: number; tailC?: number;
+  /** the tail: a raccoon's ringed brush, an opossum's naked one, a skunk's plume, a woodchuck's stub;
+   *  `ring`: the ringed tail's dark bands; `tailC`: the tail's own colour (a fox squirrel's orange plume) */
+  tail?: 'ringed' | 'naked' | 'plume' | 'stub'; ring?: number; tailC?: number;
   /** stockier (the body's width and depth ×) and the legs' length × (a raccoon's short legs) */
   girth?: number; legs?: number;
   /** a deer's lower legs, its rump patch, a moose's long overhanging muzzle (the head's length ×),
@@ -450,8 +554,6 @@ const QUAD: Partial<Record<CritterKind, Quad>> = {
   chipmunk: { base: 'squirrel', k: 0.75, coat: 0x9a6a42, belly: 0xe8dcc8, stripes: [[0, 0x2a2220], [-0.32, 0xe8dcc8], [0.32, 0xe8dcc8], [-0.55, 0x2a2220], [0.55, 0x2a2220]], plume: 0.55 },
   // a woodchuck: chunky, grizzled brown, small ears, a short flat tail
   woodchuck: { base: 'squirrel', k: 2.3, coat: 0x6a5a48, belly: 0x8a6a4a, ear: 0.6, tail: 'stub', girth: 1.3 },
-  // an American beaver: big, chestnut, the flat black paddle of a tail
-  beaver: { base: 'squirrel', k: 3.2, coat: 0x5a3a24, belly: 0x6a4a34, ear: 0.5, tail: 'paddle', tailC: 0x2a2420, girth: 1.25, legs: 0.8 },
   // a black-tailed prairie dog: plump, tan-buff, the short black-tipped tail
   prairiedog: { base: 'squirrel', k: 1.3, coat: 0xb89870, belly: 0xd8c4a0, ear: 0.5, tail: 'stub', tailTip: 0x2a2420, girth: 1.2 },
   // an elk: big, tan-grey, the chocolate neck mane and legs, the cream rump; a bull's great rack
@@ -1358,6 +1460,206 @@ function crabGeometry(o: CrabRow): THREE.BufferGeometry {
   return scaleGeo(merge(parts), o.w / (long ? 0.1 : 0.025));
 }
 
+// ---- the water's life (models.md: fish†, pinniped†, swimmer† rows) ----
+/** Lift a built animal so its lowest point is the ground (its pivots with it). */
+function ground0(g: THREE.BufferGeometry) {
+  g.computeBoundingBox();
+  const lo = g.boundingBox!.min.y;
+  for (const a of ['position', 'aPivot']) { const at = g.getAttribute(a); for (let i = 0; i < at.count; i++) at.setY(i, at.getY(i) - lo); }
+  g.computeBoundingBox();
+  return g;
+}
+/** Paint a body by height: its back dark, its sides, its belly pale (countershading), and a band along the
+ *  middle (a trout's pink stripe, a bass's dark one); `lo`–`hi` the body's bottom and top. */
+function countershade(g: THREE.BufferGeometry, lo: number, hi: number, back: number, side: number, belly: number, band?: number) {
+  const p = g.getAttribute('position'), c = g.getAttribute('color'), B = new THREE.Color(back), S = new THREE.Color(side), L = new THREE.Color(belly), N = band !== undefined ? new THREE.Color(band) : null;
+  for (let i = 0; i < p.count; i++) {
+    const u = (p.getY(i) - lo) / (hi - lo), col = u > 0.66 ? B : u < 0.3 ? L : N && u > 0.44 && u < 0.56 ? N : S;
+    c.setXYZ(i, col.r, col.g, col.b);
+  }
+  return g;
+}
+/** A fin: a flat panel standing in the y–z plane (points as [y, z]), seen from both sides. */
+const fin = (pts: [number, number][]) => flat(pts.map(([y, z]) => [y, z] as XZ), 0, 0).rotateZ(Math.PI / 2);
+
+interface FishRow { len: number; back: number; side: number; belly: number; fin: number; tail: 'fork' | 'square'; deep?: number; slim?: number; band?: number; spots?: number; jaw?: boolean; upturned?: boolean }
+/** The fish plan (fish†): the body laterally flattened, countershaded (a dark back, silver or green
+ *  sides, a pale belly) with its band and spots; the dorsal and anal fins, the pectorals, the eye; the
+ *  tail fin (forked or square) on the tail part, swept side to side (critterMaterial's wag). A bass's
+ *  big mouth, a tarpon's upturned jaw. Built at a nominal length of 1, scaled to `len`. Seen when it
+ *  rises, rolls or leaps (sim/critters.ts): never drawn while it cruises under the water. */
+function fishGeometry(o: FishRow): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [], d = o.deep ?? 1, w = 0.5 * (o.slim ?? 1), cy = 0.1 * d;
+  const zs = [-0.5, -0.45, -0.36, -0.22, -0.06, 0.1, 0.22, 0.3, 0.34], rs = [0.02, 0.055, 0.085, 0.1, 0.1, 0.08, 0.05, 0.03, 0.026].map((r) => r * d);
+  parts.push(countershade(still(tube(zs.map((z) => V3(0, cy, z)), rs, 6).scale(w, 1, 1), o.side), cy - 0.1 * d, cy + 0.1 * d, o.back, o.side, o.belly, o.band));
+  parts.push(still(blob(0.5, 201, { detail: 0, lump: 0 }).scale(0.05 * w * 2, 0.045 * d, 0.06).translate(0, cy, -0.48), o.back)); // (the snout)
+  if (o.jaw) parts.push(still(blob(0.5, 202, { detail: 0, lump: 0 }).scale(0.1 * w * 2, 0.05 * d, 0.1).translate(0, cy - 0.045 * d, -0.43), o.belly)); // (a bass's big mouth)
+  if (o.upturned) parts.push(still(new THREE.ConeGeometry(0.018 * d, 0.1, 4).rotateX(-Math.PI / 2 - 0.5).translate(0, cy - 0.03 * d, -0.47), o.side)); // (a tarpon's jaw, jutting up)
+  for (const s of [-1, 1]) {
+    parts.push(still(new THREE.SphereGeometry(0.016, 5, 3).translate(s * 0.07 * w * d, cy + 0.02 * d, -0.4), 0x1a1a16)); // (the eye)
+    parts.push(still(flat(mirror([[0, -0.3], [0.07, -0.25], [0.06, -0.19], [0, -0.23]], s), cy - 0.045 * d, 0).rotateZ(s * 0.35).translate(s * 0.07 * w * d, 0, 0), o.fin)); // (the pectorals)
+  }
+  const top = cy + 0.098 * d, bot = cy - 0.07 * d;
+  parts.push(still(fin([[top - 0.01, -0.2], [top + 0.075 * d, -0.13], [top + 0.055 * d, 0.0], [top - 0.005, 0.06]]), o.fin)); // (the dorsal)
+  parts.push(still(fin([[bot + 0.01, 0.12], [bot - 0.05 * d, 0.16], [bot - 0.04 * d, 0.24], [bot + 0.01, 0.24]]), o.fin)); // (the anal fin)
+  // the tail fin, swept side to side about the narrow of the tail
+  const tp = V3(0, cy, 0.32), tl: [number, number][] = o.tail === 'fork'
+    ? [[0, 0.3], [0.11 * d, 0.47], [0.12 * d, 0.53], [0, 0.44], [-0.12 * d, 0.53], [-0.11 * d, 0.47]]
+    : [[0, 0.3], [0.1 * d, 0.46], [0.1 * d, 0.51], [-0.1 * d, 0.51], [-0.1 * d, 0.46]];
+  parts.push(jointed(fin(tl).translate(0, cy, 0), o.fin, P.tail, tp));
+  if (o.spots !== undefined) for (let i = 0; i < 6; i++) {
+    const z = -0.28 + i * 0.09, k = Math.min(zs.length - 2, Math.max(0, Math.floor((z + 0.5) / 0.11))), r = rs[k];
+    for (const s of [-1, 1]) parts.push(still(new THREE.OctahedronGeometry(0.008).translate(s * (w * r + 0.002), cy + 0.03 * d + (hashf(i * 7 + s) - 0.5) * 0.03, z), o.spots));
+  }
+  return scaleGeo(ground0(merge(parts)), o.len);
+}
+
+interface WhaleRow { len: number; coat: number; belly: number; fin: 'falcate' | 'tall' | 'hump' | 'tri' | 'none'; flipper: number; sides?: number; beak?: number; stout?: number; flipperC?: number; patch?: number; saddle?: number; mottle?: number; knobs?: number; fluke?: number }
+/** The swimmer plan's whales and dolphins (swimmer†): the torpedo body, dark above and pale below; the
+ *  head's melon and a dolphin's beak; the dorsal fin (a dolphin's curved, an orca's tall, a humpback's
+ *  small one on its hump, none on a gray whale but the knuckles down its back); the flippers (a
+ *  humpback's long and white) on the fore part; the flukes on the tail part, beating up and down. An
+ *  orca's eye patch and saddle, a gray whale's barnacle mottling, a humpback's knobs. Built at a nominal
+ *  length of 1, scaled to `len`. */
+function whaleGeometry(o: WhaleRow): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [], st = o.stout ?? 1, cy = 0.105 * st;
+  const zs = [-0.42, -0.36, -0.26, -0.12, 0.02, 0.16, 0.28, 0.37, 0.43], rs = [0.045, 0.075, 0.095, 0.105, 0.1, 0.085, 0.06, 0.035, 0.02].map((r) => r * st);
+  const rAt = (z: number) => { let i = 0; while (i < zs.length - 2 && zs[i + 1] < z) i++; const t = Math.max(0, Math.min(1, (z - zs[i]) / (zs[i + 1] - zs[i]))); return rs[i] + (rs[i + 1] - rs[i]) * t; };
+  parts.push(countershade(still(tube(zs.map((z) => V3(0, cy, z)), rs, o.sides ?? 8), o.coat), cy - 0.105 * st, cy + 0.105 * st, o.coat, o.coat, o.belly));
+  parts.push(still(blob(0.5, 211, { detail: o.sides && o.sides > 8 ? 1 : 0, lump: 0 }).scale(0.09 * st, 0.085 * st, 0.1 * st).translate(0, cy, -0.42), o.coat)); // (the melon)
+  if (o.beak) parts.push(still(new THREE.ConeGeometry(0.02 * st, o.beak, 6).rotateX(-Math.PI / 2).translate(0, cy - 0.02 * st, -0.44 - o.beak / 2), o.coat));
+  for (const s of [-1, 1]) {
+    parts.push(still(new THREE.SphereGeometry(0.008 * st, 4, 3).translate(s * 0.075 * st, cy - 0.005, -0.34), 0x141412));
+    if (o.patch !== undefined) parts.push(still(blob(0.5, 212, { detail: 0, lump: 0 }).scale(0.012, 0.03 * st, 0.07).translate(s * 0.09 * st, cy + 0.025 * st, -0.27), o.patch)); // (an orca's eye patch)
+    // the flippers, swept back and down from the shoulder
+    const sh = V3(s * 0.07 * st, cy - 0.045 * st, -0.22), fl = o.flipper;
+    const panel = flat(mirror([[0, -0.02], [fl * 0.7, 0.015], [fl, 0.065], [fl * 0.55, 0.06], [0, 0.04]], s), 0, 0).rotateZ(-s * 0.5).translate(sh.x, sh.y, sh.z);
+    parts.push(jointed(panel, o.flipperC ?? o.coat, P.fore, sh));
+  }
+  const top = (z: number) => cy + rAt(z) - 0.004;
+  if (o.fin === 'falcate') parts.push(still(fin([[top(0), -0.03], [top(0) + 0.05, 0.05], [top(0) + 0.08, 0.13], [top(0) + 0.035, 0.1], [top(0.12) - 0.004, 0.13]]), o.coat));
+  if (o.fin === 'tri') parts.push(still(fin([[top(0), -0.02], [top(0) + 0.05, 0.04], [top(0.1), 0.1]]), o.coat)); // (a porpoise's small triangle)
+  if (o.fin === 'tall') parts.push(still(fin([[top(0), -0.04], [top(0) + 0.2, 0.02], [top(0) + 0.17, 0.06], [top(0.08), 0.1]]), o.coat));
+  if (o.fin === 'hump') {
+    parts.push(still(blob(0.5, 213, { detail: 0, lump: 0 }).scale(0.05, 0.035 * st, 0.09).translate(0, top(0.17), 0.17), o.coat));
+    parts.push(still(fin([[top(0.15), 0.15], [top(0.15) + 0.04, 0.2], [top(0.15) + 0.025, 0.22], [top(0.22), 0.23]]), o.coat));
+  }
+  if (o.fin === 'none') for (let i = 0; i < 6; i++) { const z = 0.2 + i * 0.035; parts.push(still(new THREE.OctahedronGeometry(0.012 * st).scale(1, 0.7, 1.4).translate(0, top(z) + 0.004, z), o.coat)); } // (the knuckles)
+  if (o.saddle !== undefined) parts.push(still(blob(0.5, 214, { detail: 0, lump: 0 }).scale(0.12 * st, 0.03 * st, 0.09).translate(0, top(0.12) - 0.004, 0.12), o.saddle));
+  if (o.mottle !== undefined) for (let i = 0; i < 12; i++) {
+    const z = -0.32 + i * 0.05, a = (hashf(i * 13 + 5) - 0.5) * 2.4, r = rAt(z);
+    parts.push(still(new THREE.OctahedronGeometry(0.012 * st * (0.7 + hashf(i * 3) * 0.8)).scale(1, 0.5, 1.3).translate(Math.sin(a) * r, cy + Math.cos(a) * r, z), o.mottle));
+  }
+  if (o.knobs !== undefined) for (let i = 0; i < 6; i++) parts.push(still(new THREE.SphereGeometry(0.008 * st, 4, 2).translate((i % 2 ? 1 : -1) * 0.02 * st, top(-0.4 + i * 0.012) + 0.003, -0.42 + i * 0.016), o.knobs));
+  // the flukes, beating up and down about the tail stock
+  const tp = V3(0, cy, 0.4), fw = o.fluke ?? 1;
+  const flukes = flat([[0, 0.4], [0.08 * fw, 0.43], [0.15 * fw, 0.5], [0.1 * fw, 0.525], [0, 0.48], [-0.1 * fw, 0.525], [-0.15 * fw, 0.5], [-0.08 * fw, 0.43]], cy, 0);
+  parts.push(jointed(flukes, o.coat, P.tail, tp));
+  return scaleGeo(ground0(merge(parts)), o.len);
+}
+
+interface SealRow { len: number; coat: number; belly: number; spots?: number; neck?: number; ears?: boolean; otter?: boolean; face?: number; roman?: boolean }
+/** The pinniped plan (pinniped†): a seal's spindle of a body lying on its belly, the round dog-like head
+ *  and its muzzle, the big dark eyes, the fore flippers on the fore part, the hind flippers fanned behind
+ *  on the tail part; a harbor seal's spots; a sea lion's longer neck and its ear flaps; `otter`: a sea
+ *  otter's slimmer body, pale face, short forepaws and long flat tail (it floats on its back: the sim's
+ *  roll). Built at a nominal length of 1, scaled to `len`. */
+function pinnipedGeometry(o: SealRow): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [], nk = o.neck ?? 1, sl = o.otter ? 0.7 : 1;
+  const zs = [-0.32, -0.24, -0.12, 0.02, 0.16, 0.28, 0.36], rs = [0.075, 0.1, 0.13, 0.135, 0.11, 0.075, 0.045].map((r) => r * sl);
+  const ys = rs.map((r, i) => r + (i < 2 ? (nk - 1) * (0.12 - i * 0.05) : 0)); // (a sea lion's neck held up)
+  parts.push(countershade(still(tube(zs.map((z, i) => V3(0, ys[i], z)), rs, 8), o.coat), 0, 0.27 * sl, o.coat, o.coat, o.belly));
+  const neck = V3(0, ys[0], -0.3), hy = ys[0] + 0.03 * nk + 0.02, face = o.face ?? o.coat;
+  parts.push(jointed(blob(0.5, 221, { detail: 0, lump: 0.03 }).scale(0.19 * sl, 0.16 * sl, 0.19).translate(0, hy, -0.38), o.otter ? face : o.coat, P.skull, neck));
+  const mz = o.roman ? 0.07 : 0; // (a gray seal's long "Roman nose")
+  parts.push(jointed(blob(0.5, 222, { detail: 0, lump: 0 }).scale(0.11 * sl, 0.085 * sl, 0.1 + mz * 1.6).translate(0, hy - 0.02 + mz * 0.3, -0.47 - mz * 0.6), face, P.skull, neck)); // (the muzzle)
+  parts.push(jointed(new THREE.SphereGeometry(0.014, 4, 3).translate(0, hy - 0.01, -0.505 - mz * 1.3), 0x141210, P.skull, neck)); // (the nose)
+  for (const s of [-1, 1]) {
+    parts.push(jointed(new THREE.SphereGeometry(0.018 * sl, 5, 3).translate(s * 0.052 * sl, hy + 0.025, -0.42), 0x101010, P.skull, neck)); // (the big dark eyes)
+    if (o.ears) parts.push(jointed(new THREE.ConeGeometry(0.01, 0.03, 3).rotateX(0.6).translate(s * 0.065 * sl, hy + 0.05, -0.35), o.coat, P.skull, neck));
+    const sh = V3(s * 0.1 * sl, 0.07 * sl, -0.12);
+    if (o.otter) {
+      // a sea otter's short forepaws (held on its chest as it floats)
+      parts.push(jointed(limb(sh, V3(s * 0.08, 0.005, -0.2), 0.022, 0.018, 4), o.coat, P.fore, sh));
+      parts.push(jointed(flat(mirror([[0, 0.3], [0.06, 0.36], [0.05, 0.42], [0, 0.4]], s), 0.02, 0), o.coat, P.hind, V3(0, 0.03, 0.3))); // (the webbed hind feet)
+    } else {
+      const L = o.ears ? 1.6 : 1;
+      parts.push(jointed(flat(mirror([[0, 0], [0.05 * L, 0.06 * L], [0.07 * L, 0.14 * L], [0.03 * L, 0.15 * L], [0, 0.05]], s), 0, 0).rotateZ(-s * (o.ears ? 0.9 : 0.55)).translate(sh.x, sh.y, sh.z), o.coat, P.fore, sh));
+    }
+  }
+  const tp = V3(0, 0.05 * sl, 0.34);
+  if (o.otter) parts.push(jointed(limb(tp, V3(0, 0.03, 0.62), 0.04, 0.025, 4).scale(1.4, 0.5, 1), o.coat, P.tail, tp)); // (the flat tail)
+  else for (const s of [-1, 1]) parts.push(jointed(flat(mirror([[0, 0.34], [0.06, 0.42], [0.09, 0.51], [0.03, 0.5], [0, 0.42]], s), 0.045, 0), o.coat, P.tail, tp)); // (the hind flippers)
+  if (o.spots !== undefined) for (let i = 0; i < 12; i++) {
+    const z = -0.2 + (i / 12) * 0.48, a = (hashf(i * 11 + 3) - 0.5) * 2.2, k = Math.min(zs.length - 2, Math.max(0, Math.floor(((z + 0.32) / 0.68) * 6))), r = rs[k];
+    parts.push(still(new THREE.OctahedronGeometry(0.012).scale(1, 0.5, 1.2).translate(Math.sin(a) * r, ys[k] + Math.cos(a) * r, z), o.spots));
+  }
+  return scaleGeo(ground0(merge(parts)), o.len);
+}
+
+interface ShoalRow { n: number; len: number; spread: number; back: number; flank: number }
+/** A shoal of small fish (fish†, a school's row): `n` little fish seen from above just under the
+ *  surface — slim dark backs with a silver flash along the flank — milling in a loose oval, all heading
+ *  roughly one way, each its own tail on the tail part about its own root (critterMaterial's wag sets
+ *  every one swimming). One instance draws the whole school. Built in metres. */
+function shoalGeometry(o: ShoalRow): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < o.n; i++) {
+    // (a loose oval, thicker in its middle; each fish a little off the school's heading)
+    const a = hashf(i * 17 + 1) * 6.283, r = Math.sqrt(hashf(i * 29 + 2)), x = Math.cos(a) * r * o.spread * 0.6, z = Math.sin(a) * r * o.spread, yaw = (hashf(i * 41 + 3) - 0.5) * 0.7;
+    const L = o.len * (0.8 + hashf(i * 53 + 4) * 0.4), y = 0.01 + hashf(i * 7 + 5) * 0.02, rot = (g: THREE.BufferGeometry) => g.rotateY(yaw).translate(x, y, z);
+    parts.push(still(rot(flat([[0, -0.5 * L], [0.09 * L, -0.15 * L], [0.07 * L, 0.2 * L], [0, 0.3 * L], [-0.07 * L, 0.2 * L], [-0.09 * L, -0.15 * L]], 0, 1)), o.back));
+    parts.push(still(rot(flat([[0.055 * L, -0.3 * L], [0.075 * L, -0.1 * L], [0.05 * L, 0.15 * L], [0.035 * L, 0.0]], 0.002, 1)), o.flank)); // (the flank's flash)
+    const root = new THREE.Vector3(0, y, 0.28 * L).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).add(V3(x, 0, z));
+    parts.push(jointed(rot(flat([[0, 0.27 * L], [0.09 * L, 0.48 * L], [-0.09 * L, 0.48 * L]], 0, 1)), o.back, P.tail, root));
+  }
+  return merge(parts);
+}
+
+/** The American beaver, its own build (it was the squirrel plan's, scaled up): the big hunched body with
+ *  the head joined to its shoulders, the blunt muzzle and the orange incisors, the small eyes and ears up
+ *  top, short forelegs with dark paws, the hind legs' big webbed feet, the broad flat scaled paddle of a
+ *  tail; a peeled stick carried crosswise in its teeth (the display part: some of them). In metres. */
+function beaverGeometry(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [], coat = 0x5a3a24, belly = 0x6a4a34, paw = 0x2a2018, legH = 0.05;
+  const zs = [-0.26, -0.18, -0.06, 0.08, 0.2, 0.28], rs = [0.11, 0.15, 0.19, 0.19, 0.16, 0.1], ys = rs.map((r) => legH + r * 0.95);
+  parts.push(countershade(still(tube(zs.map((z, i) => V3(0, ys[i], z)), rs, 8), coat), legH - 0.01, legH + 0.38, coat, coat, belly));
+  parts.push(still(blob(0.5, 241, { detail: 0, lump: 0.04 }).scale(0.2, 0.18, 0.16).translate(0, ys[5], 0.29), coat)); // (the rump)
+  const neck = V3(0, ys[0], -0.24), hy = ys[0] + 0.02;
+  parts.push(jointed(blob(0.5, 242, { lump: 0.04 }).scale(0.21, 0.18, 0.22).translate(0, hy, -0.34), coat, P.skull, neck));
+  parts.push(jointed(blob(0.5, 243, { detail: 0, lump: 0 }).scale(0.13, 0.1, 0.1).translate(0, hy - 0.03, -0.44), coat, P.skull, neck)); // (the blunt muzzle)
+  parts.push(jointed(new THREE.SphereGeometry(0.018, 4, 3).translate(0, hy - 0.01, -0.49), 0x141210, P.skull, neck)); // (the nose)
+  for (const s of [-1, 1]) {
+    parts.push(jointed(new THREE.BoxGeometry(0.012, 0.03, 0.008).translate(s * 0.007, hy - 0.08, -0.475), 0xd8762a, P.skull, neck)); // (the orange incisors)
+    parts.push(jointed(new THREE.SphereGeometry(0.012, 4, 3).translate(s * 0.06, hy + 0.05, -0.39), 0x141210, P.skull, neck)); // (the small eyes)
+    parts.push(jointed(blob(0.5, 244, { detail: 0, lump: 0 }).scale(0.03, 0.03, 0.02).translate(s * 0.08, hy + 0.08, -0.3), 0x3a2618, P.skull, neck)); // (the small ears)
+    const sh = V3(s * 0.09, legH + 0.1, -0.15), hip = V3(s * 0.11, legH + 0.12, 0.16);
+    parts.push(jointed(limb(sh, V3(s * 0.1, 0.02, -0.19), 0.035, 0.025, 4), coat, P.fore, sh));
+    parts.push(jointed(blob(0.5, 245, { detail: 0, lump: 0 }).scale(0.05, 0.025, 0.06).translate(s * 0.1, 0.012, -0.21), paw, P.fore, sh));
+    parts.push(jointed(limb(hip, V3(s * 0.12, 0.02, 0.18), 0.05, 0.03, 4), coat, P.hind, hip));
+    parts.push(jointed(flat(mirror([[0, 0.12], [0.05, 0.18], [0.06, 0.3], [0, 0.31], [-0.035, 0.2]], s), 0.012, 0).translate(s * 0.12, 0, 0), paw, P.hind, hip)); // (the big webbed hind feet)
+  }
+  // the paddle: broad, flat, held low behind, its scales crossing it
+  const tb = V3(0, legH + 0.06, 0.32), tail = 0x2a2420;
+  parts.push(jointed(blob(0.5, 246, { detail: 1, lump: 0.02 }).scale(0.17, 0.035, 0.3).translate(0, legH + 0.015, 0.5), tail, P.tail, tb));
+  for (let i = 0; i < 4; i++) parts.push(jointed(flat([[-0.07 + i * 0.006, 0.4 + i * 0.05], [0.07 - i * 0.006, 0.4 + i * 0.05], [0.07 - i * 0.006, 0.408 + i * 0.05], [-0.07 + i * 0.006, 0.408 + i * 0.05]], legH + 0.033, 1), 0x1a1614, P.tail, tb));
+  parts.push(jointed(limb(V3(-0.19, hy - 0.06, -0.47), V3(0.21, hy - 0.05, -0.46), 0.012, 0.01, 4), 0xd8c8a4, ANTLER, neck)); // (a peeled stick, carried)
+  return ground0(merge(parts));
+}
+
+/** The water's two marks (sim/critters.ts): the ring a rise or a splash leaves spreading on the water,
+ *  and a whale's blow, a bushy column of mist. Unit size, scaled by the sim. */
+export function rippleGeometry(): THREE.BufferGeometry {
+  return still(new THREE.TorusGeometry(1, 0.04, 3, 24).rotateX(Math.PI / 2).scale(1, 0.3, 1), 0xdce8ea);
+}
+export function spoutGeometry(): THREE.BufferGeometry {
+  return merge([
+    still(blob(0.5, 231, { detail: 0, lump: 0.2 }).scale(0.22, 0.5, 0.22).translate(0, 0.25, 0), 0xeef2f2),
+    still(blob(0.5, 232, { detail: 0, lump: 0.3 }).scale(0.42, 0.38, 0.42).translate(0, 0.6, 0), 0xf2f4f4),
+    still(blob(0.5, 233, { detail: 0, lump: 0.35 }).scale(0.56, 0.32, 0.56).translate(0, 0.86, 0), 0xf4f6f6),
+  ]);
+}
+
 /** The new plans' animals, by kind (package #14). */
 const NEW_PLAN: Partial<Record<CritterKind, () => THREE.BufferGeometry>> = {
   blackbear: () => bearGeometry({ k: 1 }),
@@ -1387,6 +1689,26 @@ const NEW_PLAN: Partial<Record<CritterKind, () => THREE.BufferGeometry>> = {
   spinylizard: () => sprawlerGeometry({ len: 0.26, coat: 0xffffff, belly: 0xd0c8a8, snout: 'pointed', tail: 0.7, slim: 1.0, collar: [0x1a1816, 1], spines: 0x6a5e44, patch: 0x3a8a8a }),
   collaredlizard: () => sprawlerGeometry({ len: 0.3, coat: 0xffffff, belly: 0xe8e0c0, snout: 'pointed', tail: 0.9, slim: 0.9, head: 1.3, headC: 0xd8b85a, collar: [0x141414, 2] }),
   hornedlizard: () => sprawlerGeometry({ len: 0.1, coat: 0xffffff, belly: 0xe0d8c0, snout: 'pointed', tail: 0.35, slim: 1.8, flat: 0.7, horns: 0xd8c8a0 }),
+  beaver: () => beaverGeometry(),
+  // (the water's life: the fish, countershaded, each its own marks; a school of baitfish as one; the
+  // seals' and the otters' coats; the dolphins and the whales, the big ones finer)
+  rainbowtrout: () => fishGeometry({ len: 0.4, back: 0x4a5a3a, side: 0xc4c6b8, belly: 0xe8e4d8, fin: 0x8a8a6a, tail: 'square', band: 0xd47a86, spots: 0x1e1e18, slim: 0.95 }),
+  largemouthbass: () => fishGeometry({ len: 0.45, back: 0x34522a, side: 0x86a05e, belly: 0xe8e4c8, fin: 0x6a7a4a, tail: 'square', band: 0x2a3a1e, deep: 1.25, jaw: true }),
+  mullet: () => fishGeometry({ len: 0.4, back: 0x46546a, side: 0xb4bcc4, belly: 0xe8eaea, fin: 0x7a8490, tail: 'fork', band: 0x6a7480, slim: 0.9 }),
+  salmon: () => fishGeometry({ len: 0.85, back: 0x2e3a34, side: 0x7a5a50, belly: 0xc8c0b0, fin: 0x4a4a40, tail: 'square', spots: 0x161a16, deep: 1.1, jaw: true }),
+  tarpon: () => fishGeometry({ len: 1.6, back: 0x46566a, side: 0xd8dce2, belly: 0xf2f2f2, fin: 0x6a7684, tail: 'fork', deep: 1.15, upturned: true }),
+  silvercarp: () => fishGeometry({ len: 0.7, back: 0x6a7480, side: 0xc8ccd0, belly: 0xeaeaea, fin: 0x8a9098, tail: 'fork', deep: 1.2 }),
+  shoal: () => shoalGeometry({ n: 34, len: 0.19, spread: 2.6, back: 0x3a5258, flank: 0xa8c0c4 }),
+  harborseal: () => pinnipedGeometry({ len: 1.6, coat: 0xffffff, belly: 0xc8c4b8, spots: 0x3a3834 }),
+  grayseal: () => pinnipedGeometry({ len: 2.2, coat: 0xffffff, belly: 0xb8b4a8, spots: 0x34322e, roman: true }),
+  sealion: () => pinnipedGeometry({ len: 2.1, coat: 0xffffff, belly: 0xffffff, neck: 1.3, ears: true }),
+  seaotter: () => pinnipedGeometry({ len: 1.2, coat: 0x4a3a2c, belly: 0x56463a, otter: true, face: 0xc4b49c }),
+  riverotter: () => pinnipedGeometry({ len: 1.1, coat: 0x4a3a2a, belly: 0x8a7a64, otter: true, face: 0x5a4a38 }),
+  dolphin: () => whaleGeometry({ len: 2.7, coat: 0x6a7480, belly: 0xc8ccd0, fin: 'falcate', flipper: 0.12, beak: 0.06, sides: 10 }),
+  porpoise: () => whaleGeometry({ len: 1.6, coat: 0x3a4048, belly: 0xb0b4b8, fin: 'tri', flipper: 0.09, stout: 1.15 }),
+  orca: () => whaleGeometry({ len: 7.5, coat: 0x141416, belly: 0xf0f0ec, fin: 'tall', flipper: 0.14, stout: 1.1, patch: 0xf2f2ee, saddle: 0x8a8c90, sides: 12 }),
+  humpback: () => whaleGeometry({ len: 14, coat: 0x2a2e34, belly: 0xc8ccd0, fin: 'hump', flipper: 0.32, flipperC: 0xe8ecec, stout: 1.15, knobs: 0x3a3e44, fluke: 1.15, sides: 12 }),
+  graywhale: () => whaleGeometry({ len: 13, coat: 0x6a6e70, belly: 0x8a8e90, fin: 'none', flipper: 0.1, stout: 1.05, mottle: 0xc8ccc8, sides: 12 }),
 };
 
 /** Build one animal (front toward −z, feet at y = 0). Colours: TINT-free — each species has its own coat. */
@@ -1474,10 +1796,7 @@ export function critterGeometry(kind: CritterKind): THREE.BufferGeometry {
     // tails: squirrel = a tall bushy S of blobs, rabbit = a cotton puff, deer = a white flag
     const tb = V3(0, bodyY + S * 0.05, S * 0.48);
     const tc = Q.tailC ?? coat;
-    if (Q.tail === 'paddle') {
-      // a beaver's paddle: broad, flat, scaled black, held low behind
-      parts.push(jointed(blob(S * 0.3, 66, { detail: 0, lump: 0.05 }).scale(0.62, 0.16, 1.35).translate(tb.x, tb.y - S * 0.2, tb.z + S * 0.32), tc, P.tail, tb));
-    } else if (Q.tail === 'stub') {
+    if (Q.tail === 'stub') {
       // a woodchuck's or a prairie dog's: short and flat, a prairie dog's tipped black
       parts.push(jointed(blob(S * 0.12, 67, { detail: 0, lump: 0.08 }).scale(0.75, 0.55, 1.5).translate(tb.x, tb.y - S * 0.05, tb.z + S * 0.1), tc, P.tail, tb));
       if (Q.tailTip !== undefined) parts.push(jointed(blob(S * 0.07, 68, { detail: 0, lump: 0 }).translate(tb.x, tb.y - S * 0.06, tb.z + S * 0.26), Q.tailTip, P.tail, tb));
@@ -1544,7 +1863,7 @@ export const critterLib = (k: CritterKind) => cached(`critter:${k}`, () => critt
 export const sitPivot = (k: CritterKind) => { const Q = QUAD[k]; return k === 'blackbear' ? 0.44 : Q?.base === 'squirrel' ? 0.09 * (Q.k ?? 1) : 0; };
 /** The big animals, seen large and close (the deer family, the bear and the bison to come, the great
  *  birds): their vertex budget is a near tree's. */
-const BIG_CRITTERS = new Set<CritterKind>(['alligator', 'blackbear', 'bison', 'manatee', 'deer', 'muleDeer', 'elk', 'moose', 'pronghorn', 'bighorn', 'greatblueheron', 'sandhillcrane', 'wildturkey', 'baldeagle', 'brownpelican', 'canadagoose', 'turkeyvulture']);
+const BIG_CRITTERS = new Set<CritterKind>(['orca', 'humpback', 'graywhale', 'alligator', 'blackbear', 'bison', 'manatee', 'deer', 'muleDeer', 'elk', 'moose', 'pronghorn', 'bighorn', 'greatblueheron', 'sandhillcrane', 'wildturkey', 'baldeagle', 'brownpelican', 'canadagoose', 'turkeyvulture']);
 /** A species' vertex budget (tests/foundry.test.ts): 2,500 for the big animals — a near tree's, and only a
  *  few on screen; 2,000 for the middling ones on the fox's plan (the fox, the coyote, the raccoon, the
  *  opossum, the skunk, a walker's dog), met close at dusk; 1,600 for the rest, whose extra detail would
@@ -1556,20 +1875,24 @@ export function swimSink(k: CritterKind) {
   const B = BIRD[k];
   if (B) return (B.legH + 0.045 - 0.016) * (B.k ?? 1);
   if (k === 'manatee') return 0.78; // (only its back and its snout at the surface)
+  // (a seal's, a sea lion's, a river otter's head and the top of its back out; a sea otter afloat on its
+  // back, its chest and its head out of the water)
+  if (k === 'harborseal') return 0.42;
+  if (k === 'grayseal') return 0.58;
+  if (k === 'sealion') return 0.58;
+  if (k === 'riverotter') return 0.18;
+  if (k === 'seaotter') return -0.12;
   // (an alligator only its eyes and snout up; a turtle its head and the top of its shell)
   if (k === 'alligator') return 0.095 * (3.2 / 0.98);
   if (k === 'paintedturtle' || k === 'redslider' || k === 'yellowslider') return 0.28 * (k === 'paintedturtle' ? 0.2 : k === 'redslider' ? 0.24 : 0.25);
-  // (a swimming mammal — a beaver — lower: its legs and most of its body under, its back and head out)
-  const Q = QUAD[k];
-  if (!Q) return 0;
-  const S = Q.base === 'squirrel' ? 0.2 : Q.base === 'rabbit' ? 0.3 : Q.base === 'fox' ? 0.62 : 1.55;
-  const legH = (Q.base === 'squirrel' ? 0.07 : Q.base === 'rabbit' ? 0.1 : Q.base === 'fox' ? 0.26 : 0.85) * (Q.legs ?? 1);
-  return (legH + S * 0.2 + S * 0.5 * 0.62 * (Q.girth ?? 1) * 0.4) * (Q.k ?? 1);
+  // (a beaver swimming: its legs and most of its body under, its head and the top of its back out)
+  if (k === 'beaver') return 0.32;
+  return 0;
 }
 /** The painted (TINT) parts' colour in a portrait of the species — the Almanac's card, the kit viewer —
  *  where the sim paints each animal its own: the cardinal's red, the pigeon's grey, the Gila
  *  woodpecker's red cap, a monarch's orange. */
-export const CRITTER_TINT: Partial<Record<CritterKind, number>> = { cardinal: 0xc4302a, pigeon: 0x9098a4, gilawoodpecker: 0xc8302a, butterfly: 0xe8862a, loon: 0x1e2224, laughinggull: 0x1e1e22, greendarner: 0x3a7ad0, bananaslug: 0xd8c030, fiddlercrab: 0x4a4034 };
+export const CRITTER_TINT: Partial<Record<CritterKind, number>> = { harborseal: 0x8a8a84, grayseal: 0x7a7a74, sealion: 0x5a4630, cardinal: 0xc4302a, pigeon: 0x9098a4, gilawoodpecker: 0xc8302a, butterfly: 0xe8862a, loon: 0x1e2224, laughinggull: 0x1e1e22, greendarner: 0x3a7ad0, bananaslug: 0xd8c030, fiddlercrab: 0x4a4034 };
 
 // A dog on a lead (life.ts walks it beside its walker): the fox plan a little bigger and
 // stockier, the coat all tintable (white) so the instance colour makes the breed's coat —
@@ -1599,7 +1922,9 @@ export const LIMB: Record<CritterKind, number> = { squirrel: 0.9, rabbit: 0.85, 
   blackbear: 0.45, bison: 0.35, armadillo: 0.6, manatee: 0.25,
   alligator: 0.5, greenanole: 0.8, brownanole: 0.8, paintedturtle: 0.6, redslider: 0.6, yellowslider: 0.6,
   monarch: 0, greendarner: 0, annualcicada: 0, cicadashell: 0, bananaslug: 0, fiddlercrab: 0.6, crawfish: 0.45,
-  fencelizard: 0.8, sideblotched: 0.8, spinylizard: 0.75, collaredlizard: 0.85, hornedlizard: 0.6 };
+  fencelizard: 0.8, sideblotched: 0.8, spinylizard: 0.75, collaredlizard: 0.85, hornedlizard: 0.6,
+  rainbowtrout: 0, largemouthbass: 0, mullet: 0, salmon: 0, tarpon: 0, silvercarp: 0, shoal: 0,
+  harborseal: 0.3, grayseal: 0.3, sealion: 0.4, seaotter: 0.5, riverotter: 0.5, dolphin: 0.15, porpoise: 0.15, orca: 0.12, humpback: 0.1, graywhale: 0.1 };
 export const GAIT: Record<CritterKind, [number, number, number, number]> = {
   squirrel: [0.5, 0.5, 0, 0.25], rabbit: [0.3, 0.2, 0, 0.2], songbird: [0, 0.3, 1.2, -0.5], sandpiper: [3.14, 0.2, 1.1, -0.35],
   deer: [3.14, 0.4, 0, 0.12], butterfly: [0, 0, 1.3, 0], firefly: [0, 0, 0, 0], fox: [3.14, 0.45, 0, 0.2], hawk: [0, 0.2, 0.55, 0.3],
@@ -1629,7 +1954,14 @@ export const GAIT: Record<CritterKind, [number, number, number, number]> = {
   // (the lizards' diagonal scurry and swinging tails, a head lifted to look about; a horned lizard's
   // stiff little waddle)
   fencelizard: [3.14, 0.4, 0, 0.35], sideblotched: [3.14, 0.4, 0, 0.35], spinylizard: [3.14, 0.35, 0, 0.3], collaredlizard: [3.14, 0.45, 0, 0.4], hornedlizard: [3.14, 0.1, 0, 0.15],
+  // (the fish swim by their tails' wag, WAG; a seal's flippers and a head lifted to look; the flukes'
+  // beat, up and down)
+  rainbowtrout: [0, 0, 0, 0], largemouthbass: [0, 0, 0, 0], mullet: [0, 0, 0, 0], salmon: [0, 0, 0, 0], tarpon: [0, 0, 0, 0], silvercarp: [0, 0, 0, 0], shoal: [0, 0, 0, 0],
+  harborseal: [3.14, 0.35, 0, 0.3], grayseal: [3.14, 0.35, 0, 0.25], sealion: [3.14, 0.35, 0, 0.35], seaotter: [3.14, 0.4, 0, 0.3], riverotter: [3.14, 0.45, 0, 0.3],
+  dolphin: [0, 0.35, 0, 0], porpoise: [0, 0.35, 0, 0], orca: [0, 0.3, 0, 0], humpback: [0, 0.28, 0, 0], graywhale: [0, 0.28, 0, 0],
 };
+/** A fish's tail wag (radians, beats a second ×2π): the shader swings each tail side to side about its root. */
+const WAG: Partial<Record<CritterKind, [number, number]>> = { rainbowtrout: [0.35, 9], largemouthbass: [0.3, 8], mullet: [0.35, 10], salmon: [0.3, 6], tarpon: [0.25, 5], silvercarp: [0.3, 8], shoal: [0.5, 14] };
 /** Wingbeats (radians a second of the flap's sine; 38 ≈ six a second): the hawk's slow soaring
  *  strokes, a crow's steady rowing, the pigeons' and doves' clatter, the jays' and the robin's. */
 const FLAP: Partial<Record<CritterKind, number>> = {
@@ -1657,7 +1989,7 @@ export const flapOf = (k: CritterKind) => FLAP[k] ?? 38;
 export function critterMaterial(kind: CritterKind) {
   const g = GAIT[kind];
   return paintMaterial({
-    uniforms: { uGait: { value: new THREE.Vector4(...g) }, uLimb: { value: LIMB[kind] }, uFlap: { value: new THREE.Vector3(flapOf(kind), kind === 'butterfly' ? 2 : FLIGHT[kind]?.[0] ?? 0, FLIGHT[kind]?.[1] ?? 0.14) }, uWag: { value: new THREE.Vector2(0, 0) } },
+    uniforms: { uGait: { value: new THREE.Vector4(...g) }, uLimb: { value: LIMB[kind] }, uFlap: { value: new THREE.Vector3(flapOf(kind), kind === 'butterfly' ? 2 : FLIGHT[kind]?.[0] ?? 0, FLIGHT[kind]?.[1] ?? 0.14) }, uWag: { value: new THREE.Vector2(...(WAG[kind] ?? [0, 0])) } },
     vertex: /* glsl */ `
       attribute vec3 color;
       attribute float aPart;

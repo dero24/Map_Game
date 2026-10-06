@@ -12,11 +12,12 @@ package you're on. `docs/REGIONAL_LIFE.md` and the latest `docs/earth/LOG.md` en
 
 ## Confirm on Robby's PC (after the cloud session of 2026-10-06)
 
-The cloud session built packages #11–#16, the leftovers and the West's lizards. They were checked with
+The cloud session built packages #11–#16, the leftovers, the West's lizards, the water's life (seen
+from above) and each animal's abundance. They were checked with
 tests, CI, the shore playtest and studio montages, never in a real browser on a real GPU. On the PC:
 
 1. **The baseline.** `git checkout feature/lower48-alive && git pull`, then `npm run init`: typecheck,
-   982 tests, pack and invariant checks. Then `npm run build`.
+   999 tests, pack and invariant checks. Then `npm run build`.
 2. **The heavy checks the cloud skipped.**
    - `node tools/playtest.mjs --region=shore` (the full one, not `--quick`): PASS.
    - `node tools/soak.mjs --region=shore --seconds=120`: no freezes (more animals about now: up to 30
@@ -53,7 +54,23 @@ tests, CI, the shore playtest and studio montages, never in a real browser on a 
      draw in their tentacles when you stand over one.
    - Asheville, June, early morning (`?at=35.6,-82.55&date=2026-06-15&hour=7`): a black bear standing up
      to look before it goes; a sow's cubs going up a tree.
-4. **Watch for:** frame rate with the bigger casts (PC and phone); anything floating, sunk or
+   - **How common the animals are.** Sea Bright, July, at dusk (`?region=shore&date=2026-07-15&hour=19`):
+     squirrels, robins, gulls, the odd raccoon — a turkey or a fox only now and then over a long walk,
+     not round every corner. Then the woods (`?at=40.25,-74.35&date=2026-07-15&hour=19`, the Pine
+     Barrens' edge) or Seattle's Discovery Park against downtown: more deer, turkeys, foxes out of town;
+     an elk a rare find in the Cascades' foothills. Say which species feel too common or too rare (one
+     line each in `ABUNDANCE`, `src/assets/fauna.ts`).
+   - **The water's life.** The shore in July from the beach or a jetty, looking out (`?region=shore&date=2026-07-15&hour=10`):
+     a dolphin pod rolling past beyond the breakers. The same in January (`date=2026-01-20`): harbor
+     seals hauled out or riding low, humping into the water when you come; with luck a humpback's blows
+     far out, then its flukes. Key West's or Miami's shallows (`?at=24.55,-81.8&date=2026-03-15&hour=12`):
+     schools of little fish milling under the surface, mullet leaping, a tarpon rolling. Puget Sound,
+     summer (`?at=47.6,-122.43&date=2026-07-15&hour=14`): orcas, the odd breach; harbor seals.
+     Monterey (`?at=36.62,-121.9&date=2026-01-15&hour=12`): sea otters on their backs, sea lions, a gray
+     whale's blows. A beaver pond: the beaver's wake, the tail slap and dive when you come. A Chicago
+     river in July: the silver carp jumping when you're close.
+4. **Watch for:** frame rate with the bigger casts (PC and phone) and by the water (the fish, rings
+   and blows are few and capped — say if the shore's frame rate dips); anything floating, sunk or
    pointing the wrong way; a lizard, crab or slug too small to notice (they're drawn larger than life on
    purpose: say if it's too much or too little); the duckweed's look up close; the cordgrass at a
    marsh's edge.

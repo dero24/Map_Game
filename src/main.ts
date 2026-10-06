@@ -723,7 +723,7 @@ async function main() {
   garden.onClear = (x, z) => grass.invalidateBox({ x0: x - 3, z0: z - 3, x1: x + 3, z1: z + 3 });
   garden.onBloom = (p) => { toast(`your ${SPECIES[p.sp].label} is in bloom ✿`); ambience?.ui('chime'); };
   // habitat lookups for the critters: trees + garden beds near the walker, refreshed every 2 s
-  let habitatT = 0, townHere = 0, nearTrees: { x: number; z: number; trunk?: number; r?: number; lean?: [number, number] }[] = [], nearGardens: { x: number; z: number }[] = [];
+  let habitatT = 0, townHere = 0, settledHere = 0, nearTrees: { x: number; z: number; trunk?: number; r?: number; lean?: [number, number] }[] = [], nearGardens: { x: number; z: number }[] = [];
   const within = (list: { x: number; z: number }[], x: number, z: number, r: number) => list.filter((p) => Math.abs(p.x - x) < r && Math.abs(p.z - z) < r && Math.hypot(p.x - x, p.z - z) < r);
   const south = json.origin.lat < 0;
   // the world's month (the chosen date, not the machine's): critters, gardens and sound follow it
@@ -1614,6 +1614,14 @@ async function main() {
       life.coastal = world.terrain.oceanDistAt(walker.x, walker.z) < 5000;
       const cityHere = cityAt(walker.x, walker.z);
       townHere = townAt(walker.x, walker.z);
+      // (how settled the land is about the walker: a suburb's houses count, not only a main street's shops —
+      // ~6 houses to an 80 m square over the 3×3 about you is a full suburb)
+      {
+        const i = Math.floor(walker.x / 80), j = Math.floor(walker.z / 80);
+        let n = 0;
+        for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) n += houseGrid.get((i + di) * 92821 + (j + dj)) ?? 0;
+        settledHere = Math.max(townHere, Math.min(1, Math.max(0, (n / 9 - 0.5) / 6)));
+      }
       life.taxiShare = Math.max(0, cityHere - 0.2) * 0.45;
       life.crowd = 1 + 1.6 * cityHere; // a Midtown sidewalk is busier than a shore town's
     }
@@ -1621,7 +1629,7 @@ async function main() {
     movers.length = 0;
     for (const m of life.movers) movers.push(m);
     if (rideMoving-- > 0) movers.push(rideMover);
-    critters.update(dt, walker.x, walker.z, { hour: timeParams.hour, night: U.uNight.value, month: worldMonth(), south, wind: weather.wind, region: regionLook.region, climate: regionLook.climate, place: regionCast, camFwd: fwd, trees: (x, z, r) => within(nearTrees, x, z, r), gardens: (x, z, r) => within(nearGardens, x, z, r), movers, paved: pavedAt, urban: townHere });
+    critters.update(dt, walker.x, walker.z, { hour: timeParams.hour, night: U.uNight.value, month: worldMonth(), south, wind: weather.wind, region: regionLook.region, climate: regionLook.climate, place: regionCast, camFwd: fwd, trees: (x, z, r) => within(nearTrees, x, z, r), gardens: (x, z, r) => within(nearGardens, x, z, r), movers, paved: pavedAt, urban: townHere, settled: settledHere });
     garden.update(dt, worldMonth(), south);
     waterParams.uDuckweed.value = duckweedCover(regionCast, south ? ((worldMonth() + 5) % 12) + 1 : worldMonth()); // (the South's still water, summer's lime carpet)
     frames++;
