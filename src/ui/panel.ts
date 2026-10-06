@@ -123,6 +123,7 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   life.add(lifeParams, 'towns', 0, 3, 0.01).name('how busy: main streets');
   life.add(lifeParams, 'cities', 0, 3, 0.01).name('how busy: cities');
   life.add(lifeParams, 'beach', 0, 1, 0.01).name('how busy: the beach');
+  life.add(lifeParams, 'animals', 0, 2, 0.01).name('how many animals');
   life.add(audioParams, 'volume', 0, 1, 0.01).name('volume');
   life.add(audioParams, 'muted').name('mute');
 

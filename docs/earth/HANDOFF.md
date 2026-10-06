@@ -72,9 +72,11 @@ tests, CI, the shore playtest and studio montages, never in a real browser on a 
    - **The panel's Creatures folder** (`` ` `` opens the panel): pick an animal, "go see it" — it should
      land you where it lives at the right month and hour, by its water if it keeps to one, then say how
      far and which way it is. Try a near one (the dolphin from the shore) and a far one (the orca).
-   - **How busy**: a main street and the summer beach as busy as before; residential streets and
-     mornings quieter. The knobs are in Life & sound (everywhere, suburbs & country, main streets,
-     cities, the beach).
+   - **How busy** (toned down after Robby's phone walk, Sea Bright to the Rumson bridge): fewer people,
+     cars and animals everywhere, a phone at half again; no gulls standing in the roads (parking lots and
+     the beach only). The knobs are in Life & sound (everywhere, suburbs & country, main streets, cities,
+     the beach, how many animals). If a slider was ever moved, "reset all settings" (Debug) brings the
+     new defaults back.
 4. **Watch for:** frame rate with the bigger casts (PC and phone) and by the water (the fish, rings
    and blows are few and capped — say if the shore's frame rate dips); anything floating, sunk or
    pointing the wrong way; a lizard, crab or slug too small to notice (they're drawn larger than life on

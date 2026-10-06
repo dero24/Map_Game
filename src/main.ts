@@ -29,7 +29,7 @@ import { GrassField } from './world/grass';
 import { UnderstoryField } from './world/understory';
 import { roadNear } from './world/roadBounds';
 import { buildSky, skyUniforms } from './world/sky';
-import { LifeClient, buildLifeBase, buildLifeInit, crowdOf, lifeInitSteps, lifeParams } from './sim/life';
+import { LifeClient, TIER_LIFE, buildLifeBase, buildLifeInit, crowdOf, lifeInitSteps, lifeParams } from './sim/life';
 import { Ambience } from './audio/ambience';
 import { Journal } from './ui/journal';
 import { Explore, SEEN_REACH } from './world/explore';
@@ -1321,6 +1321,17 @@ async function main() {
   let pavedIdx = stream.pavedIndex();
   // Wildlife habitat: a parking lot, a plaza or a street is no place for a rabbit, and a town's
   // main street (shops round you) keeps only its park squirrels and birds
+  // (a parking lot or a plaza: the paved index's rings, not its road segments)
+  const lotAt = (x: number, z: number) => {
+    for (const it of pavedIdx.get(Math.floor(x / 40) * 92821 + Math.floor(z / 40)) ?? []) {
+      if (!('ring' in it)) continue;
+      const r = it.ring;
+      let c = false;
+      for (let i = 0, j = r.length - 1; i < r.length; j = i++) if (r[i][1] > z !== r[j][1] > z && x < ((r[j][0] - r[i][0]) * (z - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) c = !c;
+      if (c) return true;
+    }
+    return false;
+  };
   const pavedAt = (x: number, z: number) => {
     for (const it of pavedIdx.get(Math.floor(x / 40) * 92821 + Math.floor(z / 40)) ?? []) {
       if ('ring' in it) {
@@ -1552,7 +1563,7 @@ async function main() {
     camera.getWorldDirection(fwd);
     crowd.group.visible = lifeParams.enabled;
     // (the beach's people: the overall knob and the beach's own — its day already its own, calendar.ts)
-    if (crowd.group.visible) crowd.update(walker.x, walker.z, timeParams.hour, [camera.position.x + origin.x, camera.position.z + origin.z, fwd.x, fwd.z], Math.tan(Math.PI * 31 / 180) / Math.tan((camera.fov * Math.PI) / 360), lifeParams.density * lifeParams.beach);
+    if (crowd.group.visible) crowd.update(walker.x, walker.z, timeParams.hour, [camera.position.x + origin.x, camera.position.z + origin.z, fwd.x, fwd.z], Math.tan(Math.PI * 31 / 180) / Math.tan((camera.fov * Math.PI) / 360), lifeParams.density * lifeParams.beach * (TIER_LIFE[tier.tier] ?? 1));
     focus.set(camera.position.x + fwd.x * 60, walker.y - walkParams.eyeHeight, camera.position.z + fwd.z * 60);
     const ti = performance.now();
     interiors.update(walker.x, walker.z, dt, walker.feet, !vehicles.driving && !walkParams.fly);
@@ -1673,13 +1684,14 @@ async function main() {
         settledHere = Math.max(townHere, Math.min(1, Math.max(0, (n / 9 - 0.5) / 6)));
       }
       life.taxiShare = Math.max(0, cityHere - 0.2) * 0.45;
-      life.crowd = crowdOf(townHere, cityHere); // a Midtown sidewalk is busier than a shore town's (the panel's knobs per kind of place)
+      life.crowd = crowdOf(townHere, cityHere) * (TIER_LIFE[tier.tier] ?? 1); // a Midtown sidewalk is busier than a shore town's (the panel's knobs per kind of place; a phone half as busy)
     }
     critters.enabled = lifeParams.enabled && !interiors.indoors;
+    critters.amount = lifeParams.animals * (TIER_LIFE[tier.tier] ?? 1);
     movers.length = 0;
     for (const m of life.movers) movers.push(m);
     if (rideMoving-- > 0) movers.push(rideMover);
-    critters.update(dt, walker.x, walker.z, { hour: timeParams.hour, night: U.uNight.value, month: worldMonth(), south, wind: weather.wind, region: regionLook.region, climate: regionLook.climate, place: regionCast, camFwd: fwd, trees: (x, z, r) => within(nearTrees, x, z, r), gardens: (x, z, r) => within(nearGardens, x, z, r), movers, paved: pavedAt, urban: townHere, settled: settledHere });
+    critters.update(dt, walker.x, walker.z, { hour: timeParams.hour, night: U.uNight.value, month: worldMonth(), south, wind: weather.wind, region: regionLook.region, climate: regionLook.climate, place: regionCast, camFwd: fwd, trees: (x, z, r) => within(nearTrees, x, z, r), gardens: (x, z, r) => within(nearGardens, x, z, r), movers, paved: pavedAt, lot: lotAt, urban: townHere, settled: settledHere });
     garden.update(dt, worldMonth(), south);
     waterParams.uDuckweed.value = duckweedCover(regionCast, south ? ((worldMonth() + 5) % 12) + 1 : worldMonth()); // (the South's still water, summer's lime carpet)
     frames++;

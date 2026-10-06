@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { CRITTERS, type CritterKind } from '../src/assets/fauna';
 import { animalList, bearing, habitatOf, hourOf, livesAt, standBy, whereToSee } from '../src/ui/seeIt';
 import { Critters, type CritterEnv } from '../src/sim/critters';
-import { crowdOf, lifeParams } from '../src/sim/life';
+import { TIER_LIFE, crowdOf, lifeParams } from '../src/sim/life';
 import { LifeSim, RHYTHM } from '../src/sim/lifeSim';
 import { CrowdLayer, CROWD_TIERS } from '../src/world/crowdLayer';
 import { CROWD_STRIDE } from '../src/world/crowd';
@@ -87,12 +87,16 @@ describe('go see it', () => {
 });
 
 describe('how busy the world is', () => {
-  it("the busy places keep their crowds; the suburbs' and the country's streets thinner; the knobs per kind of place", () => {
-    expect(lifeParams.density).toBe(1);
-    expect(crowdOf(1, 0)).toBeCloseTo(1); // (a main street as busy as ever)
-    expect(crowdOf(1, 1)).toBeCloseTo(2.6); // (a Midtown core too)
-    expect(crowdOf(0, 0)).toBeCloseTo(0.65); // (a quiet street, a country road)
-    expect(crowdOf(0.5, 0)).toBeCloseTo(0.825);
+  it("toned down (Robby: \"still too busy … too much\"): all of it at 0.7, the suburbs' and the country's streets thinner than a main street or the towers, a phone at half; the knobs per kind of place", () => {
+    expect(lifeParams.density).toBeLessThanOrEqual(0.7);
+    expect(lifeParams.animals).toBeLessThanOrEqual(0.5);
+    expect(TIER_LIFE.phone).toBeLessThanOrEqual(0.5);
+    expect(TIER_LIFE.low).toBeLessThan(TIER_LIFE.phone);
+    expect(TIER_LIFE.desktop).toBe(1);
+    expect(crowdOf(1, 0)).toBeCloseTo(1); // (a main street: the busiest of the town)
+    expect(crowdOf(1, 1)).toBeCloseTo(2.6); // (a Midtown core)
+    expect(crowdOf(0, 0)).toBeCloseTo(0.55); // (a quiet street, a country road)
+    expect(crowdOf(0.5, 0)).toBeCloseTo(0.775);
     expect(crowdOf(0, 0, { suburbs: 1, towns: 1, cities: 1 })).toBeCloseTo(1);
     expect(crowdOf(1, 1, { suburbs: 1, towns: 1, cities: 0.5 })).toBeCloseTo(1.3);
     expect(crowdOf(1, 0, { suburbs: 1, towns: 2, cities: 1 })).toBeCloseTo(2);
@@ -132,6 +136,31 @@ describe('how busy the world is', () => {
     M.add('t', new Float32Array(rec));
     M.update(40, 40, 13, undefined, 1, 0.5);
     expect(M.drawn.full + M.drawn.lite).toBe(half); // (deterministic)
-    expect(lifeParams.beach).toBe(1); // (the summer beach as crowded as ever)
+    expect(lifeParams.beach).toBeLessThan(1); // (the beach thinned too)
+  });
+});
+
+describe('fewer animals about', () => {
+  const coast = { heightAt: () => 0, sdfAt: () => 40, coverAt: () => 30, oceanDistAt: () => 500 } as unknown as Terrain;
+  const walk = { buildingAt: () => -1, blocked: () => false, deckAt: () => null } as unknown as WalkWorld;
+  const env = (o: Partial<CritterEnv> = {}): CritterEnv => ({ hour: 11, night: 0, month: 7, wind: 0.2, south: false, camFwd: new THREE.Vector3(0, 0, -1), trees: () => [{ x: 5, z: 5 }], gardens: () => [], movers: [], place: castOf(regionStyle(40.36, -73.97)), ...o });
+  const GULLS = new Set(['laughinggull', 'herringgull', 'ringbilledgull']);
+  const run = (o: Partial<CritterEnv>, amount = 1) => {
+    const c = new Critters(coast, walk);
+    c.everyone = true;
+    c.amount = amount;
+    const kinds: string[] = [];
+    for (let i = 0; i < 200; i++) { c.update(0.05, 0, 0, env(o)); }
+    for (const k of (c as unknown as { list: { kind: string }[] }).list) kinds.push(k.kind);
+    return kinds;
+  };
+  it("a shore town's gulls come down on its parking lots, never in its streets (Robby: six gulls in the road wherever he went)", () => {
+    expect(run({ paved: () => true, lot: () => false }).filter((k) => GULLS.has(k)).length).toBe(0);
+    expect(run({ paved: () => true, lot: () => true }).filter((k) => GULLS.has(k)).length).toBeGreaterThan(0);
+  });
+  it("the game's share of each role's animals: half as many at 0.5", () => {
+    const all = run({}).length, half = run({}, 0.5).length;
+    expect(half).toBeLessThan(all * 0.7);
+    expect(half).toBeGreaterThan(0);
   });
 });

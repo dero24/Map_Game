@@ -219,6 +219,8 @@ export interface CritterEnv {
   movers?: Mover[];
   /** Paved open ground — parking lots, plazas — where no rabbit grazes (main.ts from the map). */
   paved?: (x: number, z: number) => boolean;
+  /** A parking lot or a plaza (not a road): where the gulls come down off the beach. */
+  lot?: (x: number, z: number) => boolean;
   /** 0 (open country) … 1 (a built-up downtown) at the walker: fewer wild animals in town. */
   urban?: number;
   /** 0 (the woods, the fields) … 1 (a suburb's streets of houses, a town, a downtown) at the walker: how
@@ -245,6 +247,9 @@ export class Critters {
   /** The one species to show (the panel's "go see it"): always about, and filling its role's slots
    *  first, wherever its cast is. */
   spotlight: CritterKind | null = null;
+  /** How many animals about, of each role's own count (main.ts: lifeParams.animals, and less on a phone):
+   *  Robby, 2026-10-06 — "too much". 1 here (the tests' and the harness's); the game's well under. */
+  amount = 1;
   /** The nearest of a kind about now, and how far (the panel's "where is it?"). */
   nearestOf(kind: CritterKind, x: number, z: number) {
     let best: { x: number; y: number; z: number; d: number } | null = null;
@@ -364,7 +369,8 @@ export class Critters {
    *  anywhere, the ring-billed's and the herring gull's away from the sea) lots and fields too. */
   private gullGround(x: number, z: number, sp: CritterKind) {
     if (this.shore(x, z)) return true;
-    const lot = this.paved(x, z) && this.walk.buildingAt(x, z) < 0 && !this.walk.blocked(x, z, 0.6) && this.terrain.sdfAt(x, z) > 1;
+    // (a parking lot or a plaza, never the road: they'd stand in every street of a shore town)
+    const lot = this.lotAt(x, z) && this.walk.buildingAt(x, z) < 0 && !this.walk.blocked(x, z, 0.6) && this.terrain.sdfAt(x, z) > 1;
     // (the ring-billed and the herring gull keep to the beach and the coast's lots like the rest by the sea;
     // inland — the Great Lakes, the Plains — any lot or field)
     const od = this.terrain.oceanDistAt(x, z);
@@ -419,7 +425,7 @@ export class Critters {
       case 'raptor': return day && h > 8 && h < 17.5 ? 3 : 0;
       case 'waterfowl': return day ? (dawnDusk ? 8 : 6) : 0;
       case 'wader': return day ? (dawnDusk ? 4 : 3) : 0;
-      case 'gull': return day ? 9 : 0;
+      case 'gull': return day ? 4 : 0;
       case 'fowl': return day ? Math.round(6 * (0.3 + 0.7 * town)) : 0;
       // (the raccoon, the opossum and the skunk out at night, in town as much as out of it; the herds
       // in open country only, most at dawn and dusk)
@@ -679,6 +685,7 @@ export class Critters {
 
   // ---------------- tick ----------------
   private paved: (x: number, z: number) => boolean = () => false;
+  private lotAt: (x: number, z: number) => boolean = () => false;
   /** The basking logs about the walker (signs.ts baskingLogs: the props' own), kept for its 50 m square. */
   private logs: { x: number; y: number; z: number; yaw: number }[] = [];
   private logsAt = '';
@@ -719,7 +726,7 @@ export class Critters {
   /** How loud the annual cicadas' chorus is about the walker (0–1: those on the bark near; ambience.ts). */
   get chorus() { return Math.min(1, this.list.filter((c) => c.kind === 'annualcicada' && c.state === 'perch').length / 2); }
   update(dt: number, wx: number, wz: number, env: CritterEnv) {
-    this.paved = env.paved ?? (() => false);
+    this.paved = env.paved ?? (() => false); this.lotAt = env.lot ?? (() => false);
     this.inTown = [[0, 0], [60, 0], [-60, 0], [0, 60], [0, -60], [42, 42], [-42, 42], [42, -42], [-42, -42]].some(([ox, oz]) => prairieTown(wx + ox, wz + oz) !== null);
     this.roost = this.roostAt(wx, wz, env);
     this.wetAt(wx, wz);
@@ -734,7 +741,7 @@ export class Critters {
         const cast = mix[role]?.filter(([sp]) => this.present(sp, wx, wz, wild, mo));
         if (!cast?.length) continue;
         const cap = Math.max(...cast.map(([sp]) => SPEC[sp].cap));
-        const want = Math.min(cap, this.want(role, env));
+        const want = Math.min(cap, Math.round(this.want(role, env) * this.amount));
         if ((roleCount[role] ?? 0) >= want) continue;
         // which of the place's species fills this slot (weighted)
         // (pigeons are the town's: few in the country, the most of the birds downtown)

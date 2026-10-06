@@ -23,11 +23,15 @@ const LIFE_GEAR: CarGear[] = ['rack', 'surf', 'kayak', 'cargo', 'taxi'];
 const ROOF = Object.fromEntries(CAR_TYPES.map((t) => [t, carRecipe(t, 1).roof])) as Record<(typeof CAR_TYPES)[number], number>;
 
 /** How busy the world is (the panel's "Life & sound"). Robby, 2026-10-06: "always crowded everywhere at
- *  all times" — but "I do like it crowded in some spots": so the busy places keep their crowds (a town's
- *  main street, a city's towers, the summer beach) and the quiet ones thin out (the suburbs' and the
- *  country's streets at 0.65), and off the hour's peak it's quieter too (lifeSim.ts PEAK). `density` the
- *  overall knob; then each kind of place's own (`crowdOf`); `beach` the beach's people (crowdLayer.ts). */
-export const lifeParams = { density: 1, suburbs: 0.65, towns: 1, cities: 1, beach: 1, enabled: true };
+ *  all times" — "I do like it crowded in some spots" — then, from Sea Bright to the Rumson bridge on a
+ *  phone, "still too busy … too much": so a main street and a city's towers busier than the rest, the
+ *  suburbs' and the country's streets thinner still (×0.55), the hours off the day's peaks quieter
+ *  (lifeSim.ts RHYTHM), all of it at 0.7, and a phone at half that (TIER_LIFE). `density` the overall
+ *  knob; each kind of place's own (`crowdOf`); `beach` the beach's people (crowdLayer.ts); `animals` the
+ *  wildlife's share of each role's count (sim/critters.ts amount). */
+export const lifeParams = { density: 0.7, suburbs: 0.55, towns: 1, cities: 1, beach: 0.7, animals: 0.5, enabled: true };
+/** A phone's share of the crowd, the traffic and the animals (on top of the knobs): its GPU's frame. */
+export const TIER_LIFE: Record<string, number> = { desktop: 1, phone: 0.5, low: 0.35 };
 /** The place's crowd multiplier (LifeClient.crowd) from how much of a town (`town`, main.ts townAt: the
  *  shops about the walker) and a city (`city`, cityAt: the built volume) it is: the suburbs' knob where
  *  neither, the towns' on a main street, ×2.6 and the cities' knob among the towers. */

@@ -2,6 +2,25 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-06 — Toned down: fewer people, cars and animals; a phone lighter; no gulls in the road
+
+Robby, flying from Sea Bright to the Rumson bridge on his phone: "still too busy, for people, animals
+and cars … like 6 seagulls in the road wherever I went … like 2 fps".
+
+- **The gulls in the road**: a gull could come down on any paved ground within 3 km of the sea — and
+  the paved index holds every road. Now a parking lot or a plaza only (`CritterEnv.lot`, main.ts
+  `lotAt`: the index's rings, not its road segments), or the beach; and 4 of them about, not 9.
+- **The animals**: each role's count × `lifeParams.animals` (0.5; `Critters.amount`), and a phone at
+  half that again.
+- **People and cars**: `density` 0.7, the suburbs' and the country's streets ×0.55 (a main street and a
+  city's towers busier than the rest), the beach's people 0.7; a phone at half of all of it
+  (`TIER_LIFE`: desktop 1, phone 0.5, low 0.35).
+- Panel: "how many animals" beside the "how busy" knobs.
+
+**Verified:** typecheck; `npm test` (all but the two default-pinning tests, updated); `tests/seeIt.test.ts`
+(the gulls on a lot, never a road; half the animals at 0.5; the new defaults and the phone's share). No
+browser run (Robby tests on his PC and phone).
+
 ## 2026-10-06 — The panel's Creatures folder ("go see it"); a better balance of how busy the world is
 
 - **Creatures** (the dev panel, `` ` ``): pick any of the 95 animals; "goes to" shows where and when;
