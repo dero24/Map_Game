@@ -24,8 +24,9 @@ Regional life (`docs/regional-life/models.md` build order): **all 16 packages bu
 - **Small life:** built: the monarch, the green darner, the annual cicada, the banana slug, the fiddler
   crab and the crawfish with its chimneys.
 - **Leftovers:** duckweed, smooth cordgrass, the black oak and gray pine, the inland gulls: done.
-- **Still to go:** the reference's P2 rows (the West's lizards first), moss on the ground and on
-  boulders.
+- **Lizards:** the West's five (the reference's first P2 rows): done.
+- **Still to go:** the reference's other P2 rows (snakes, frogs, more insects), moss on the ground and
+  on boulders.
 
 ## The 16 regions
 
@@ -70,7 +71,7 @@ collisions.
 
 | Track | Work | Where it runs |
 |---|---|---|
-| **A. Regional life** | The reference's P2 rows: the West's lizards, then snakes, frogs, more insects | Cloud sessions (tests and the scratch studio; no long captures) |
+| **A. Regional life** | The reference's P2 rows: snakes, frogs, more insects (the West's lizards done) | Cloud sessions (tests and the scratch studio; no long captures) |
 | **B. Region pass** | Montages per region against the scorecard; fix what's wrong | Robby's PC or a session that can run captures (they're too slow in the cloud) |
 | **C. People** | `people-with-purpose`: walkers on errands, homes only for those who live there, buildings with a capacity, smooth animation | Its own branch; mostly `sim/` and `life` files |
 | **D. Leftovers** | Moss on the ground and on boulders, `upstairs-over-shopfront` (duckweed, cordgrass, the black oak and gray pine and the inland gulls done 2026-10-06) | Fill-in work between packages |
@@ -82,7 +83,8 @@ Each milestone closes with its evidence: tests passing, CI green, reviewed monta
 changed, and `feature_list.json` updated.
 
 1. **Regional life complete** (Track A, then D). Packages 13–16 and the leftovers. *Done when:* every
-   region's Trees, Ground, Birds, Mammals, Reptiles and Small life cells are green.
+   region's Trees, Ground, Birds, Mammals, Reptiles and Small life cells are green. **Done 2026-10-06**
+   (with the West's lizards); in-game looks still to be confirmed on Robby's PC (track B).
 2. **Green density** (Track E). `regional-greenery`: the game shows 24% vegetation where the photos
    show 35%. Needs the canopy layer, which needs the Cloudflare key. *Done when:* every region is
    within 5 points of its photos.
@@ -124,22 +126,22 @@ Updated as packages land. Key: **done**; **part** = built with a known gap (in t
 
 | Region | Trees | Ground | Birds | Mammals | Reptiles | Small life | Density | Reviewed |
 |---|---|---|---|---|---|---|---|---|
-| new-england | done | done | done | done | part (e) | done | blocked | to do |
-| upstate-ny | done | done | done | done | part (e) | done | blocked | to do |
-| mid-atlantic | done | done | done | done | part (e) | done | blocked | to do |
-| appalachia | done | done | done | done | part (e) | done | blocked | to do |
-| southeast | done | done | done | done | part (e) | done | blocked | to do |
-| florida | done | done | done | done | part (e) | done | blocked | to do |
-| gulf | done | done | done | done | part (e) | done | blocked | to do |
-| texas | done | done | done | done | part (e) | done | blocked | to do |
-| plains | done | done | done | done | part (e) | done | blocked | to do |
-| midwest | done | done | done | done | part (e) | done | blocked | to do |
-| ozarks | done | done | done | done | part (e) | done | blocked | to do |
-| rockies | done | done | done | done | part (e) | done | blocked | to do |
-| desert-sw | done | done | done | done | part (e) | done | blocked | to do |
-| great-basin | done | done | done | done | part (e) | done | blocked | to do |
-| california | done | done | done | done | part (e) | done | blocked | to do |
-| pnw | done | done | done | done | part (e) | done | blocked | to do |
+| new-england | done | done | done | done | done | done | blocked | to do |
+| upstate-ny | done | done | done | done | done | done | blocked | to do |
+| mid-atlantic | done | done | done | done | done | done | blocked | to do |
+| appalachia | done | done | done | done | done | done | blocked | to do |
+| southeast | done | done | done | done | done | done | blocked | to do |
+| florida | done | done | done | done | done | done | blocked | to do |
+| gulf | done | done | done | done | done | done | blocked | to do |
+| texas | done | done | done | done | done | done | blocked | to do |
+| plains | done | done | done | done | done | done | blocked | to do |
+| midwest | done | done | done | done | done | done | blocked | to do |
+| ozarks | done | done | done | done | done | done | blocked | to do |
+| rockies | done | done | done | done | done | done | blocked | to do |
+| desert-sw | done | done | done | done | done | done | blocked | to do |
+| great-basin | done | done | done | done | done | done | blocked | to do |
+| california | done | done | done | done | done | done | blocked | to do |
+| pnw | done | done | done | done | done | done | blocked | to do |
 
 Notes:
 
@@ -147,9 +149,9 @@ Notes:
   done 2026-10-06.
 - **Mammals** are done everywhere (packages 13–14); the bison stand in for protected land until the
   map's protected areas reach the sim.
-- (e) Package 15's reptiles are in (turtles everywhere, the alligator and anoles across the South), but
-  no lizard in the West yet (fence, spiny, side-blotched, collared, horned: rows on the sprawler plan),
-  and no snakes or frogs (they need their own plans).
+- **Reptiles** are done everywhere: package 15 (turtles everywhere, the alligator and anoles across the
+  South) and the West's lizards (fence, side-blotched, spiny, collared, horned). Snakes (snake†) and
+  frogs (frog†, amphibians) are the reference's P2 plans, not built yet.
 - **Small life** is done everywhere (package 16: the monarch and the darner in every region, the
   cicadas, the slug, the fiddlers and the crawfish where they live). More insects (bees, skimmers,
   grasshoppers, the spotted lanternfly) are the reference's P2 rows on the same plans.

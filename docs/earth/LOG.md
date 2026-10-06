@@ -2,6 +2,46 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-06 — Regional life: the West's lizards — fence, side-blotched, spiny, collared, horned
+
+The reference's first P2 rows (`docs/regional-life/models.md` §13.1), so the West has its lizards: five
+rows on package #15's `sprawlerGeometry`, which grows the marks they're known by (`SprawlerRow`: a male's
+`patch`, the `blotch`, `collar`s, `spines`, `horns`, the head's size and colour, the body's depth). A
+small one's legs and tail are open rods now (a hand-long lizard needs no capped tubes: the budget went to
+the marks).
+
+- **The fence lizards** (the eastern, the prairie and plateau lizards; the western fence and sagebrush
+  lizards): grey-brown, spiny-backed; **a male's blue flank patches** on the display part (`RACK`: half
+  of them). East and West: the Ozarks', Appalachia's, the Southeast's, the Mid-Atlantic's pine barrens',
+  the Gulf's, the southern Midwest's; California's, the Northwest's, the Great Basin's, the Rockies',
+  the Plains', Texas's.
+- **The side-blotched lizard**: small, brown-grey, the **dark blotch behind the foreleg** — the desert's,
+  the Basin's and California's most-seen lizard on a trail.
+- **The spiny lizards** (Texas's, the desert spiny, the granite spiny): big and spiny, the desert
+  spiny's **black collar**, a male's blue-green patches; as often as not **up a trunk**, going round and
+  up when you come, like the anoles.
+- **The collared lizard** ("mountain boomer"): the **big pale head** and **two black collars**, a male
+  turquoise and a female tan (set at spawn by its sex); it **runs up on its hind legs**. The Ozarks'
+  glades to the Plains, Texas, the desert and the Basin.
+- **The horned lizards** (Texas, regal, desert, short-horned, coast): **a pancake of a body, its crown
+  of horns and the fringe along its flanks**; it **sits tight** when you come. Rare (a find), by the
+  ant mounds of Texas, the Plains, the desert, the Basin, the Rockies and California.
+- How they live (`lizard`, a new role): out in the sun on open ground (shrub, grass, bare: the desert's
+  flats and trails) by day, April to October (the South's and the desert's from March); **push-ups** now
+  and then (the forelegs' bob); a **dash of a few metres** to cover, not a forty-metre run; short
+  scurries between pauses.
+- Fixed on the way: a broad lizard's tail and legs had scaled with its width (the horned lizard's tail
+  stood up like a fin); they follow the body now.
+
+**Verified:** typecheck; `npm test` 982/982; `tests/lizards.test.ts` (new: the ranges and seasons; each
+build's marks — the blue patches on the display part, the blotch, one collar and two, the pale head, the
+pancake and its horns; push-ups, the short dash, the horned lizard sitting tight, the spiny lizard up its
+trunk); budgets in `tests/foundry.test.ts` (each under 1,600); a studio montage of the five beside an
+anole and the alligator.
+
+**Next:** the snake† and frog† plans (the reference's P2), more insects on the bug† and dragonfly†
+plans; moss on the ground and on boulders; then the region pass (track B) on Robby's PC.
+
 ## 2026-10-06 — Regional life: the leftovers — the inland gulls, the black oak and the gray pine, smooth cordgrass, duckweed
 
 The leftovers the packages left open (`docs/ROADMAP.md` track D), each on the system already built for

@@ -282,16 +282,14 @@ in-game look is checked on Robby's PC.
   ponds and lakes).
 - **#14:** built (2026-10-06). The bison stand in "deep open country" until the map's protected areas
   reach the sim (they're kept herds: parks and preserves).
-- **#15:** built (2026-10-06). The build order's reptiles are in; the reference's P2 lizards
-  (`models.md` §13.1: fence lizards, western fence, spiny, side-blotched, collared, horned) are rows on
-  the same `sprawlerGeometry` — the West has no lizard yet — and the snakes and frogs need their own
-  plans (snake†, frog†).
+- **#15:** built (2026-10-06); the West's lizards too (the reference's P2 §13.1: fence, side-blotched,
+  spiny, collared, horned — rows on the same `sprawlerGeometry`, LOG "the West's lizards"). The snakes
+  and frogs need their own plans (snake†, frog†).
 - **#16:** built (2026-10-06): all sixteen build-order packages are in. Left out of #16: the slug's
   slime trail, the chimneys' season, the fiddlers on marsh mud (the map doesn't tell it from the beach),
   crawfish seen under the water.
-- **Next for the wildlife:** the leftovers below, then the reference's P2 rows (`models.md` §13 on): the
-  West's lizards first (rows on `sprawlerGeometry`), the snake† and frog† plans, more insects on the
-  bug† and dragonfly† plans.
+- **Next for the wildlife:** the reference's P2 rows (`models.md` §13 on): the snake† and frog† plans,
+  more insects on the bug† and dragonfly† plans (bees, skimmers, grasshoppers, the spotted lanternfly).
 - **Before 1.0:** a lighter version of each animal for phones and far off (about 40% of the vertices),
   like the trees' far model and the crowd's lite person.
   - The casts go in `faunaMix`, by `CastPlace`.

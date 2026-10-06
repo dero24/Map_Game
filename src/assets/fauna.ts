@@ -27,7 +27,9 @@ export type CritterKind =
   // (package #16: the small life)
   | 'monarch' | 'greendarner' | 'annualcicada' | 'cicadashell' | 'bananaslug' | 'fiddlercrab' | 'crawfish'
   // (the leftovers: the inland gulls)
-  | 'ringbilledgull' | 'herringgull';
+  | 'ringbilledgull' | 'herringgull'
+  // (the reference's P2 rows: the West's lizards, on the sprawler plan)
+  | 'fencelizard' | 'sideblotched' | 'spinylizard' | 'collaredlizard' | 'hornedlizard';
 export const CRITTERS: CritterKind[] = ['squirrel', 'rabbit', 'songbird', 'sandpiper', 'deer', 'butterfly', 'firefly', 'fox', 'hawk', 'coyote', 'jackrabbit', 'snowshoe', 'groundSquirrel', 'muleDeer', 'roadrunner', 'quail', 'ibis',
   'cardinal', 'bluejay', 'robin', 'stellersjay', 'gilawoodpecker', 'mourningdove', 'crow', 'pigeon',
   'canadagoose', 'mallard', 'mallardhen', 'loon', 'greatblueheron', 'greategret', 'snowyegret', 'spoonbill', 'sandhillcrane',
@@ -36,7 +38,8 @@ export const CRITTERS: CritterKind[] = ['squirrel', 'rabbit', 'songbird', 'sandp
   'blackbear', 'bison', 'armadillo', 'manatee',
   'alligator', 'greenanole', 'brownanole', 'paintedturtle', 'redslider', 'yellowslider',
   'monarch', 'greendarner', 'annualcicada', 'cicadashell', 'bananaslug', 'fiddlercrab', 'crawfish',
-  'ringbilledgull', 'herringgull'];
+  'ringbilledgull', 'herringgull',
+  'fencelizard', 'sideblotched', 'spinylizard', 'collaredlizard', 'hornedlizard'];
 export const CRITTER_NAME: Record<CritterKind, string> = {
   squirrel: 'squirrel', rabbit: 'rabbit', songbird: 'songbird', sandpiper: 'sandpiper', deer: 'white-tailed deer', butterfly: 'butterfly', firefly: 'firefly', fox: 'red fox', hawk: 'red-tailed hawk',
   coyote: 'coyote', jackrabbit: 'black-tailed jackrabbit', snowshoe: 'snowshoe hare', groundSquirrel: 'ground squirrel', muleDeer: 'mule deer', roadrunner: 'greater roadrunner', quail: 'quail', ibis: 'white ibis',
@@ -48,6 +51,7 @@ export const CRITTER_NAME: Record<CritterKind, string> = {
   alligator: 'American alligator', greenanole: 'green anole', brownanole: 'brown anole', paintedturtle: 'painted turtle', redslider: 'red-eared slider', yellowslider: 'yellow-bellied slider',
   monarch: 'monarch', greendarner: 'common green darner', annualcicada: 'annual cicada', cicadashell: "cicada's shell", bananaslug: 'Pacific banana slug', fiddlercrab: 'Atlantic marsh fiddler crab', crawfish: 'red swamp crawfish',
   ringbilledgull: 'ring-billed gull', herringgull: 'herring gull',
+  fencelizard: 'fence lizard', sideblotched: 'side-blotched lizard', spinylizard: 'spiny lizard', collaredlizard: 'collared lizard', hornedlizard: 'horned lizard',
 };
 
 /** Ecological roles: the sim (sim/critters.ts) gives each role its habitat and behaviour; the
@@ -62,8 +66,10 @@ export type CritterRole = 'climber' | 'burrower' | 'grazer' | 'songbird' | 'shor
   | 'basker'
   // (package #16: the dragonflies on their beats over the water, the insects on the bark, the slugs on the
   // forest floor, the crabs and the crawfish at the water's edge)
-  | 'dragonfly' | 'bug' | 'crawler' | 'crab';
-export const ROLES: CritterRole[] = ['climber', 'burrower', 'grazer', 'songbird', 'shorebird', 'browser', 'butterfly', 'firefly', 'predator', 'raptor', 'waterfowl', 'wader', 'gull', 'fowl', 'forager', 'herd', 'basker', 'dragonfly', 'bug', 'crawler', 'crab'];
+  | 'dragonfly' | 'bug' | 'crawler' | 'crab'
+  // (the lizards out in the sun on the open ground, the rocks and the fence posts)
+  | 'lizard';
+export const ROLES: CritterRole[] = ['climber', 'burrower', 'grazer', 'songbird', 'shorebird', 'browser', 'butterfly', 'firefly', 'predator', 'raptor', 'waterfowl', 'wader', 'gull', 'fowl', 'forager', 'herd', 'basker', 'dragonfly', 'bug', 'crawler', 'crab', 'lizard'];
 export const ROLE: Record<CritterKind, CritterRole> = {
   squirrel: 'climber', groundSquirrel: 'burrower', rabbit: 'grazer', jackrabbit: 'grazer', snowshoe: 'grazer', roadrunner: 'grazer',
   songbird: 'songbird', quail: 'songbird', sandpiper: 'shorebird', ibis: 'shorebird', deer: 'browser', muleDeer: 'browser',
@@ -90,6 +96,7 @@ export const ROLE: Record<CritterKind, CritterRole> = {
   // (the monarch with the butterflies; the darner on its beat; the cicada and its cast-off shell on the bark;
   // the banana slug on the forest floor; the fiddler crab on the marsh's mud, the crawfish by its ditch)
   monarch: 'butterfly', greendarner: 'dragonfly', annualcicada: 'bug', cicadashell: 'bug', bananaslug: 'crawler', fiddlercrab: 'crab', crawfish: 'crab',
+  fencelizard: 'lizard', sideblotched: 'lizard', spinylizard: 'lizard', collaredlizard: 'lizard', hornedlizard: 'lizard',
 };
 export type FaunaMix = Partial<Record<CritterRole, [CritterKind, number][]>>;
 // Species per role by climate (Köppen-ish, the same key the plant and car mixes use). North
@@ -257,6 +264,20 @@ const INLAND_GULLS: Partial<Record<EcoRegion | 'pnw-dry', Mix>> = {
   pnw: [['ringbilledgull', 0.5]], 'pnw-dry': [['ringbilledgull', 0.7]],
 };
 for (const k of Object.keys(INLAND_GULLS) as (keyof typeof INLAND_GULLS)[]) REGION_FAUNA[k] = { ...REGION_FAUNA[k], gull: [...(REGION_FAUNA[k].gull ?? []), ...INLAND_GULLS[k]!] };
+// (the reference's P2 rows: the lizards — the fence lizards East and West (the eastern, the prairie and
+// plateau lizards, the western fence and sagebrush lizards), the side-blotched lizard of the desert's
+// trails, the spiny lizards (Texas's, the desert's, the granite spiny), the collared lizard on the hot
+// rocks, the horned lizards by the ant mounds — rare, a find)
+const LIZARDS: Partial<Record<EcoRegion | 'pnw-dry', Mix>> = {
+  california: [['fencelizard', 1.4], ['sideblotched', 0.8], ['spinylizard', 0.4], ['hornedlizard', 0.1]], pnw: [['fencelizard', 0.8]],
+  'pnw-dry': [['fencelizard', 1], ['sideblotched', 0.6], ['hornedlizard', 0.15]],
+  'great-basin': [['fencelizard', 1], ['sideblotched', 1], ['spinylizard', 0.4], ['collaredlizard', 0.3], ['hornedlizard', 0.2]],
+  'desert-sw': [['sideblotched', 1.2], ['spinylizard', 1], ['collaredlizard', 0.4], ['fencelizard', 0.3], ['hornedlizard', 0.2]],
+  rockies: [['fencelizard', 1], ['hornedlizard', 0.15], ['collaredlizard', 0.1]], texas: [['spinylizard', 0.8], ['fencelizard', 0.5], ['collaredlizard', 0.3], ['hornedlizard', 0.15]],
+  plains: [['fencelizard', 0.6], ['collaredlizard', 0.2], ['hornedlizard', 0.1]], ozarks: [['fencelizard', 1], ['collaredlizard', 0.4]],
+  appalachia: [['fencelizard', 0.8]], southeast: [['fencelizard', 0.8]], 'mid-atlantic': [['fencelizard', 0.5]], midwest: [['fencelizard', 0.3]], gulf: [['fencelizard', 0.5]],
+};
+for (const k of Object.keys(LIZARDS) as (keyof typeof LIZARDS)[]) REGION_FAUNA[k] = { ...REGION_FAUNA[k], lizard: LIZARDS[k]! };
 /** Where the monarchs winter, hanging in clusters in the coast's trees (ranges.md: the West's on
  *  California's coast, November to February). */
 export const monarchRoost = (eco: string | undefined, m: number) => eco === 'california' && months(m, 11, 2);
@@ -312,6 +333,8 @@ const SEASON: Partial<Record<CritterKind, (eco: string, m: number) => boolean>> 
   // Southeast's coast in winter)
   ringbilledgull: (e, m) => !['southeast', 'florida', 'gulf', 'texas', 'desert-sw', 'california'].includes(e) || months(m, 9, 4),
   herringgull: (e, m) => !['southeast', 'gulf'].includes(e) || months(m, 10, 4),
+  // (the lizards out April to October — the South's and the desert's from March)
+  ...Object.fromEntries((['fencelizard', 'sideblotched', 'spinylizard', 'collaredlizard', 'hornedlizard'] as CritterKind[]).map((k) => [k, (e: string, m: number) => (['texas', 'desert-sw', 'gulf', 'southeast', 'california'].includes(e) ? months(m, 3, 10) : months(m, 4, 10))])),
 };
 
 /** The north woods' ecoregions (the Adirondacks and northern New England, Maine's Acadian hills, the
@@ -976,37 +999,59 @@ function manateeGeometry(): THREE.BufferGeometry {
 }
 
 // ---- package #15: the reptiles (models.md: sprawler†, turtle†) ----
-interface SprawlerRow { len: number; coat: number; belly: number; snout: 'broad' | 'pointed'; tail: number; scutes?: number; dewlap?: number; slim?: number }
+interface SprawlerRow {
+  len: number; coat: number; belly: number; snout: 'broad' | 'pointed'; tail: number; scutes?: number; dewlap?: number; slim?: number;
+  // (the West's lizards) a male's blue patches on his flanks (the display part: worn by the males), the
+  // dark blotch behind the foreleg (a side-blotched lizard's), black collars round the neck (a spiny
+  // lizard's one, a collared lizard's two), spiny keeled scales down the back, a horned lizard's crown of
+  // horns and its flanks' fringe, the head's size and its own colour (a collared lizard's big yellow head),
+  // the body's depth (a horned lizard's pancake)
+  patch?: number; blotch?: number; collar?: [number, number]; spines?: number; horns?: number; head?: number; headC?: number; flat?: number;
+}
 /** The sprawler plan: a long low body slung between legs splayed out to the sides, the flat head and its
- *  snout (an alligator's broad and rounded, an anole's pointed), the eyes raised on top, the long
- *  tapering tail; an alligator's ridged scutes along the back and tail; an anole's throat fan on the
- *  display part (9: shown only while it displays). Built at a nominal length, scaled to `len` metres. */
+ *  snout (an alligator's broad and rounded, a lizard's pointed), the eyes raised on top, the long
+ *  tapering tail; an alligator's ridged scutes along the back and tail; an anole's throat fan, a fence
+ *  lizard's blue patches on the display part (9: an anole's while it displays, a male's always); a
+ *  lizard's marks (`SprawlerRow`). A small one's legs and tail are open rods (a hand-long lizard needs no
+ *  capped tubes). Built at a nominal length, scaled to `len` metres. */
 function sprawlerGeometry(o: SprawlerRow): THREE.BufferGeometry {
-  const parts: THREE.BufferGeometry[] = [], legH = 0.035, by = legH + 0.045, w = o.slim ?? 1;
-  parts.push(still(blob(0.5, 131, { lump: 0.05 }).scale(0.17 * w, 0.085, 0.34).translate(0, by, 0), o.coat));
-  parts.push(still(blob(0.4, 132, { detail: 0, lump: 0 }).scale(0.18 * w, 0.07, 0.36).translate(0, by - 0.018, 0), o.belly));
-  const neck = V3(0, by, -0.15), hz = -0.21; // (the head on the shoulders, no neck to speak of)
+  const parts: THREE.BufferGeometry[] = [], legH = 0.035, fl = o.flat ?? 1, by = legH + 0.045 * fl, w = o.slim ?? 1, hs = o.head ?? 1, small = o.len < 1;
+  const pipe = (a: THREE.Vector3, b: THREE.Vector3, r0: number, r1: number, sides: number) => (small ? rod(a, b, r0, r1) : limb(a, b, r0, r1, sides));
+  parts.push(still(blob(0.5, 131, { lump: 0.05 }).scale(0.17 * w, 0.085 * fl, 0.34).translate(0, by, 0), o.coat));
+  parts.push(still(blob(0.4, 132, { detail: 0, lump: 0 }).scale(0.18 * w, 0.07 * fl, 0.36).translate(0, by - 0.018 * fl, 0), o.belly));
+  const neck = V3(0, by, -0.15), hz = -0.21 - (hs - 1) * 0.05; // (the head on the shoulders, no neck to speak of)
+  const hc = o.headC ?? o.coat;
   // (a head the size of a fingertip needs no finer mesh: an anole's is the plain icosahedron)
-  parts.push(jointed(blob(0.5, 133, { lump: 0.04, detail: o.len > 1 ? 1 : 0 }).scale(0.13 * w, 0.066, 0.2).translate(0, by + 0.004, hz), o.coat, P.skull, neck));
-  // (an alligator's snout broad, flat and rounded at the end; an anole's a point)
-  const snout = o.snout === 'broad' ? blob(0.5, 136, { lump: 0.03 }).scale(0.1 * w, 0.045, 0.22) : new THREE.ConeGeometry(0.03, 0.12, 5).rotateX(-Math.PI / 2).scale(w, 0.7, 1);
-  parts.push(jointed(snout.translate(0, by - 0.006, hz - (o.snout === 'broad' ? 0.14 : 0.15)), o.coat, P.skull, neck));
+  parts.push(jointed(blob(0.5, 133, { lump: 0.04, detail: o.len > 1 ? 1 : 0 }).scale(0.13 * w * hs, 0.066 * hs * Math.max(fl, 0.8), 0.2 * hs).translate(0, by + 0.004, hz), hc, P.skull, neck));
+  // (an alligator's snout broad, flat and rounded at the end; a lizard's a point)
+  const snout = o.snout === 'broad' ? blob(0.5, 136, { lump: 0.03 }).scale(0.1 * w, 0.045, 0.22) : new THREE.ConeGeometry(0.03 * hs, 0.12 * hs, 5).rotateX(-Math.PI / 2).scale(w, 0.7, 1);
+  parts.push(jointed(snout.translate(0, by - 0.006, hz - (o.snout === 'broad' ? 0.14 : 0.15 * hs)), hc, P.skull, neck));
   for (const s of [-1, 1]) {
-    parts.push(jointed(new THREE.SphereGeometry(0.014, 5, 3).translate(s * 0.035 * w, by + 0.03, hz + 0.02), o.snout === 'broad' ? 0x6a6a30 : 0x1a1a14, P.skull, neck)); // (eyes up on top)
+    parts.push(jointed(new THREE.SphereGeometry(0.014, 5, 3).translate(s * 0.035 * w * hs, by + 0.03 * hs, hz + 0.02), o.snout === 'broad' ? 0x6a6a30 : 0x1a1a14, P.skull, neck)); // (eyes up on top)
     for (const [fz, part] of [[-0.12, P.fore], [0.12, P.hind]] as [number, number][]) {
-      const sh = V3(s * 0.06 * w, by - 0.005, fz), elbow = V3(s * 0.13 * w, by + 0.008, fz - 0.005), foot = V3(s * 0.15 * w, 0.006, fz - 0.03);
-      parts.push(jointed(limb(sh, elbow, 0.022 * w, 0.017 * w, 4), o.coat, part, sh));
-      parts.push(jointed(limb(elbow, foot, 0.017 * w, 0.013 * w, 4), o.coat, part, sh));
-      parts.push(jointed(blob(0.025 * w, 134, { detail: 0, lump: 0 }).scale(1.1, 0.3, 1.3).translate(foot.x, 0.006, foot.z - 0.01), o.coat, part, sh));
+      // (a broad lizard's — a horned lizard's — legs under the edge of its pancake, not splayed out by its width)
+      const ws = Math.min(w, 1.3), wide = (w - ws) * 0.085;
+      const sh = V3(s * 0.06 * w, by - 0.005, fz), elbow = V3(s * (0.13 * ws + wide), by + 0.008, fz - 0.005), foot = V3(s * (0.15 * ws + wide), 0.006, fz - 0.03);
+      parts.push(jointed(pipe(sh, elbow, 0.022 * w, 0.017 * w, 4), o.coat, part, sh));
+      parts.push(jointed(pipe(elbow, foot, 0.017 * w, 0.013 * w, 4), o.coat, part, sh));
+      const pad = small ? new THREE.OctahedronGeometry(0.025 * w).scale(1.1, 0.3, 1.3) : blob(0.025 * w, 134, { detail: 0, lump: 0 }).scale(1.1, 0.3, 1.3);
+      parts.push(jointed(pad.translate(foot.x, 0.006, foot.z - 0.01), o.coat, part, sh));
+    }
+    if (o.blotch !== undefined) parts.push(still(new THREE.OctahedronGeometry(0.024).scale(0.4, 1, 1.2).translate(s * 0.084 * w, by + 0.004 * fl, -0.075), o.blotch)); // (behind the foreleg)
+    if (o.patch !== undefined) {
+      // a male's blue patch along each flank (the display part: the females don't wear it)
+      const c = V3(s * 0.083 * w, by - 0.012 * fl, 0.0);
+      parts.push(jointed(blob(0.5, 137, { detail: 0, lump: 0 }).scale(0.024, 0.045 * fl, 0.16).translate(c.x, c.y, c.z), o.patch, ANTLER, c));
     }
   }
   // the tail: tapering out behind, a little to one side
   // (it drops to the ground but rests on it: never lower than its own thickness)
-  const tb = V3(0, by, 0.15), n = 6, tr = (t: number) => 0.055 * w * (1 - t * 0.85), ty = (t: number) => Math.max(tr(t), by - (by - 0.012) * Math.min(1, t * 1.6));
+  // (its thickness the body's: a broad lizard's tail no fatter than a slim one's)
+  const tb = V3(0, by, 0.15), n = 6, tr = (t: number) => 0.055 * Math.min(w, 1.3) * fl * (1 - t * 0.85), ty = (t: number) => Math.max(tr(t), by - (by - 0.012) * Math.min(1, t * 1.6));
   let prev = tb;
   for (let i = 1; i <= n; i++) {
     const t = i / n, q = V3(Math.sin(t * 2.2) * 0.04 * o.tail, ty(t), 0.15 + o.tail * t);
-    parts.push(jointed(limb(prev, q, tr(t - 1 / n), tr(t), 5), o.coat, P.tail, tb));
+    parts.push(jointed(pipe(prev, q, tr(t - 1 / n), tr(t), 5), o.coat, P.tail, tb));
     prev = q;
   }
   if (o.scutes !== undefined) {
@@ -1016,6 +1061,19 @@ function sprawlerGeometry(o: SprawlerRow): THREE.BufferGeometry {
       const t = (i + 0.5) / 8, z = 0.15 + o.tail * t * 0.85;
       parts.push(jointed(new THREE.ConeGeometry(0.009, 0.02 * (1 - t * 0.6), 4).translate(Math.sin(t * 0.85 * 2.2) * 0.04 * o.tail, ty(t * 0.85) + tr(t * 0.85) * 0.8, z), o.scutes, P.tail, tb));
     }
+  }
+  // a spiny lizard's keeled scales: two rows of small points down the back
+  if (o.spines !== undefined) for (let i = 0; i < 6; i++) for (const s of [-1, 1]) parts.push(still(new THREE.ConeGeometry(0.009, 0.022, 3).rotateX(0.5).translate(s * 0.032 * w, by + 0.038 * fl, -0.1 + i * 0.042), o.spines));
+  // the collars round the neck, between the head and the shoulders
+  if (o.collar !== undefined) for (let i = 0; i < o.collar[1]; i++) parts.push(still(new THREE.CylinderGeometry(0.068 * w * hs, 0.07 * w * hs, 0.014, 6, 1, true).rotateX(Math.PI / 2).scale(1, 0.72 * fl, 1).translate(0, by + 0.002, -0.14 + i * 0.03), o.collar[0]));
+  if (o.horns !== undefined) {
+    // a horned lizard's crown: horns swept back off the back of the head (the middle pair longest); the
+    // fringe of spikes along each flank
+    for (let i = 0; i < 6; i++) {
+      const u = (i - 2.5) / 2.5, L = 0.05 * (1.2 - Math.abs(u) * 0.5);
+      parts.push(jointed(new THREE.ConeGeometry(0.008, L, 3).rotateX(Math.PI / 2 + 0.7).translate(u * 0.08 * w * hs, by + 0.03, hz + 0.08 + L * 0.3), o.horns, P.skull, neck));
+    }
+    for (const s of [-1, 1]) for (let i = 0; i < 5; i++) parts.push(still(new THREE.ConeGeometry(0.007, 0.024, 3).rotateZ(-s * Math.PI / 2).translate(s * 0.09 * w, by - 0.005, -0.08 + i * 0.045), o.horns));
   }
   if (o.dewlap !== undefined) {
     // an anole's throat fan, out only while it displays (the display part)
@@ -1321,6 +1379,14 @@ const NEW_PLAN: Partial<Record<CritterKind, () => THREE.BufferGeometry>> = {
   bananaslug: () => slugGeometry({ len: 0.2, foot: 0xd4c890, spots: 0x1e1c12 }),
   fiddlercrab: () => crabGeometry({ w: 0.025, shell: 0xffffff, legs: 0x6a5a48, claw: 0xc8b8a0, big: 0xeee0b0 }),
   crawfish: () => crabGeometry({ w: 0.1, shell: 0x8a2a1e, legs: 0x7a2a1e, claw: 0x8e2618, tail: 0x7a2218, feelers: true }),
+  // (the West's lizards: grey-brown and spiny, a male's blue flank patches; small, a dark blotch behind the
+  // foreleg; big and spiny, the desert spiny's black collar; a collared lizard's big yellow head and two
+  // black collars; a horned lizard's pancake, its crown of horns, its fringe)
+  fencelizard: () => sprawlerGeometry({ len: 0.17, coat: 0xffffff, belly: 0xd8d0b8, snout: 'pointed', tail: 0.75, slim: 0.85, patch: 0x3a6ab8, spines: 0x5a5448 }),
+  sideblotched: () => sprawlerGeometry({ len: 0.13, coat: 0xffffff, belly: 0xd8d0b8, snout: 'pointed', tail: 0.8, slim: 0.75, blotch: 0x1a1a18 }),
+  spinylizard: () => sprawlerGeometry({ len: 0.26, coat: 0xffffff, belly: 0xd0c8a8, snout: 'pointed', tail: 0.7, slim: 1.0, collar: [0x1a1816, 1], spines: 0x6a5e44, patch: 0x3a8a8a }),
+  collaredlizard: () => sprawlerGeometry({ len: 0.3, coat: 0xffffff, belly: 0xe8e0c0, snout: 'pointed', tail: 0.9, slim: 0.9, head: 1.3, headC: 0xd8b85a, collar: [0x141414, 2] }),
+  hornedlizard: () => sprawlerGeometry({ len: 0.1, coat: 0xffffff, belly: 0xe0d8c0, snout: 'pointed', tail: 0.35, slim: 1.8, flat: 0.7, horns: 0xd8c8a0 }),
 };
 
 /** Build one animal (front toward −z, feet at y = 0). Colours: TINT-free — each species has its own coat. */
@@ -1532,7 +1598,8 @@ export const LIMB: Record<CritterKind, number> = { squirrel: 0.9, rabbit: 0.85, 
   raccoon: 0.55, opossum: 0.5, skunk: 0.5, foxsquirrel: 0.85, chipmunk: 0.95, woodchuck: 0.6, beaver: 0.5, prairiedog: 0.9, elk: 0.4, moose: 0.36, pronghorn: 0.55, bighorn: 0.45,
   blackbear: 0.45, bison: 0.35, armadillo: 0.6, manatee: 0.25,
   alligator: 0.5, greenanole: 0.8, brownanole: 0.8, paintedturtle: 0.6, redslider: 0.6, yellowslider: 0.6,
-  monarch: 0, greendarner: 0, annualcicada: 0, cicadashell: 0, bananaslug: 0, fiddlercrab: 0.6, crawfish: 0.45 };
+  monarch: 0, greendarner: 0, annualcicada: 0, cicadashell: 0, bananaslug: 0, fiddlercrab: 0.6, crawfish: 0.45,
+  fencelizard: 0.8, sideblotched: 0.8, spinylizard: 0.75, collaredlizard: 0.85, hornedlizard: 0.6 };
 export const GAIT: Record<CritterKind, [number, number, number, number]> = {
   squirrel: [0.5, 0.5, 0, 0.25], rabbit: [0.3, 0.2, 0, 0.2], songbird: [0, 0.3, 1.2, -0.5], sandpiper: [3.14, 0.2, 1.1, -0.35],
   deer: [3.14, 0.4, 0, 0.12], butterfly: [0, 0, 1.3, 0], firefly: [0, 0, 0, 0], fox: [3.14, 0.45, 0, 0.2], hawk: [0, 0.2, 0.55, 0.3],
@@ -1559,6 +1626,9 @@ export const GAIT: Record<CritterKind, [number, number, number, number]> = {
   // (the monarch's deep slow beat; the darner's and the cicada's blur; a slug's head lifting to look about;
   // a fiddler's great claw waved, a crawfish's claws lifted a little)
   monarch: [0, 0, 1.25, 0], greendarner: [0, 0, 0.45, 0], annualcicada: [0, 0, 0.6, 0], cicadashell: [0, 0, 0, 0], bananaslug: [0, 0, 0, 0.3], fiddlercrab: [3.14, 0, 0, 0.9], crawfish: [3.14, 0, 0, 0.15],
+  // (the lizards' diagonal scurry and swinging tails, a head lifted to look about; a horned lizard's
+  // stiff little waddle)
+  fencelizard: [3.14, 0.4, 0, 0.35], sideblotched: [3.14, 0.4, 0, 0.35], spinylizard: [3.14, 0.35, 0, 0.3], collaredlizard: [3.14, 0.45, 0, 0.4], hornedlizard: [3.14, 0.1, 0, 0.15],
 };
 /** Wingbeats (radians a second of the flap's sine; 38 ≈ six a second): the hawk's slow soaring
  *  strokes, a crow's steady rowing, the pigeons' and doves' clatter, the jays' and the robin's. */

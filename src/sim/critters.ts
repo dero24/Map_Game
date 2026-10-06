@@ -71,6 +71,14 @@ const SPEC: Record<CritterKind, Spec> = {
   californiagull: { cap: 12, walk: 0.9, flee: 3, fleeR: 6, gaitHz: 3, scale: [1.1, 1.25], colors: [0xffffff] },
   ringbilledgull: { cap: 14, walk: 0.9, flee: 3, fleeR: 5, gaitHz: 3, scale: [1.1, 1.25], colors: [0xffffff] }, // (the boldest: a parking lot's)
   herringgull: { cap: 8, walk: 0.85, flee: 3, fleeR: 7, gaitHz: 2.8, scale: [1.05, 1.15], colors: [0xffffff] },
+  // the West's lizards (fauna.ts, the sprawler plan), drawn larger than life like the anoles: quick off the
+  // mark, a dash to cover; the horned lizard sits tight; a collared lizard's colours set at spawn (a male's
+  // turquoise, a female's tan)
+  fencelizard: { cap: 6, walk: 0.4, flee: 3, fleeR: 4, gaitHz: 5, scale: [1.6, 1.9], colors: [0x7a7468, 0x6a6458, 0x8a8070, 0x5e5a50] },
+  sideblotched: { cap: 6, walk: 0.4, flee: 3, fleeR: 3.5, gaitHz: 5, scale: [1.8, 2.1], colors: [0x8a7a62, 0x7a6e5a, 0x9a8a6e] },
+  spinylizard: { cap: 4, walk: 0.35, flee: 3, fleeR: 5, gaitHz: 4, scale: [1.4, 1.6], colors: [0x8a7a5a, 0x9a8a62, 0x7a6e50] },
+  collaredlizard: { cap: 3, walk: 0.4, flee: 3.5, fleeR: 6, gaitHz: 4.5, scale: [1.25, 1.4], colors: [0xffffff] },
+  hornedlizard: { cap: 2, walk: 0.12, flee: 0.4, fleeR: 1.5, gaitHz: 3, scale: [2.0, 2.3], colors: [0xb09a78, 0x9a8466, 0xa89070] },
   // the mammals (fauna.ts package #13): the night's waddlers, the squirrels, the burrowers (a prairie dog
   // town's many), the beaver, the herds wary from far off (a pronghorn from 70 m, and the fastest)
   raccoon: { cap: 3, walk: 0.7, flee: 3.5, fleeR: 10, gaitHz: 1.6, scale: [1.0, 1.1], colors: [0xffffff] },
@@ -116,6 +124,8 @@ const SPEC: Record<CritterKind, Spec> = {
  *  toward the coast). */
 const MIG = [-0.35, 0.937] as const;
 const ANOLES = new Set<CritterKind>(['greenanole', 'brownanole']);
+/** The lizards up the trunks: the anoles, and a spiny lizard as often as not (it spirals round to the far side). */
+const TRUNKERS = new Set<CritterKind>(['greenanole', 'brownanole', 'spinylizard']);
 const TURTLES = new Set<CritterKind>(['paintedturtle', 'redslider', 'yellowslider']);
 /** A western black bear's colours (the East's all black). */
 const WEST_BEAR = [0x1e1a18, 0x1e1a18, 0x7a4a2a, 0x5a3a24, 0xb08a5a];
@@ -127,6 +137,8 @@ const RACK: Partial<Record<CritterKind, { male: number; months: number[] | null 
   pronghorn: { male: 0.45, months: null }, bighorn: { male: 0.4, months: null }, bison: { male: 1, months: null },
   // (and the claws: a male fiddler's one great claw; a crawfish's pair)
   fiddlercrab: { male: 0.5, months: null }, crawfish: { male: 1, months: null },
+  // (a male fence lizard's and spiny lizard's blue patches; a collared lizard's colours)
+  fencelizard: { male: 0.5, months: null }, spinylizard: { male: 0.5, months: null }, collaredlizard: { male: 0.5, months: null },
 };
 /** The burrowers that sit bolt upright by their holes (a prairie dog town's sentries, a woodchuck). */
 const SITTERS = new Set<CritterKind>(['prairiedog', 'woodchuck', 'blackbear']);
@@ -343,10 +355,11 @@ export class Critters {
       case 'bug': return day && h > 9 && h < 19.5 ? 5 : 0;
       case 'crawler': return env.night > 0.5 ? 5 : 3;
       case 'crab': return day ? 24 : 4;
+      case 'lizard': return day && h > 8 && h < 18.5 ? 5 : 0;
     }
   }
   private place(k: CritterRole, wx: number, wz: number, env: CritterEnv, sp?: CritterKind): Omit<Critter, 'kind' | 'seed' | 'c' | 's'> | null {
-    const near = k === 'butterfly' || k === 'firefly' || k === 'dragonfly' || k === 'crawler';
+    const near = k === 'butterfly' || k === 'firefly' || k === 'dragonfly' || k === 'crawler' || k === 'lizard';
     for (let tries = 0; tries < 8; tries++) {
       const a = this.rnd() * Math.PI * 2;
       const d = near ? 6 + this.rnd() * 22 : 20 + this.rnd() * 40;
@@ -364,7 +377,7 @@ export class Critters {
         const g = this.ground(home.x, home.z), top = Math.max(1.2, (home.trunk ?? 3) * 0.9), ra = this.rnd() * 6.28;
         const y = sp === 'cicadashell' ? g + 0.3 + this.rnd() * 1.1 : g + Math.min(top, 1.6 + this.rnd() * 3);
         return { x: home.x + Math.sin(ra) * 0.5, y, z: home.z + Math.cos(ra) * 0.5, yaw: 0, pitch: Math.PI / 2 - 0.1, state: 'perch', t: 1e6, tx: x, tz: z, ty: y, home, phase: this.rnd(), amt: 0 };
-      } else if (k === 'climber' && sp && ANOLES.has(sp)) {
+      } else if ((k === 'climber' && sp && ANOLES.has(sp)) || (sp === 'spinylizard' && this.rnd() < 0.5 && env.trees(x, z, 14).length)) {
         // an anole up a trunk, head up, a metre or two off the ground
         const t = env.trees(x, z, 14);
         if (!t.length) continue;
@@ -451,6 +464,10 @@ export class Critters {
         if (!((s > -10 && s < 12 && this.terrain.oceanDistAt(x, z) > 40) || (this.field(x, z) && this.rnd() < 0.3))) continue;
         const y = this.airBase(x, z) + 0.9 + this.rnd() * 1.2;
         return { x, y, z, yaw: this.rnd() * 6.28, pitch: 0, state: 'patrol', t: 0.5, tx: x, tz: z, ty: y, home: { x, z }, beat: this.rnd() * Math.PI, phase: this.rnd(), amt: 1 };
+      } else if (k === 'lizard') {
+        // out in the sun on open ground: the desert's flats and trails, the grass and the scrub's edges
+        const cv = this.terrain.coverAt(x, z);
+        if (!(cv === 20 || cv === 30 || cv === 60) || !this.open(x, z, 0.6) || this.paved(x, z) || this.terrain.oceanDistAt(x, z) < 60) continue;
       } else if (k === 'crawler') {
         // the forest floor: under the trees, in the duff and the ferns
         if (!(this.terrain.coverAt(x, z) === 10 || env.trees(x, z, 6).length >= 2) || !this.open(x, z, 0.3) || this.paved(x, z) || this.terrain.oceanDistAt(x, z) < 60) continue;
@@ -599,6 +616,7 @@ export class Critters {
         // black bear any of its colours
         const mo = this.month(env);
         if (k === 'greenanole' && !(mo >= 4 && mo <= 10 && env.hour > 8 && env.hour < 19)) c.set(0x7a5a3a); // (brown when it's cool)
+        if (k === 'collaredlizard') c.set((this.seed % 997) / 997 < RACK.collaredlizard!.male ? 0x3aa080 : 0x9a8a6a); // (a male turquoise, a female tan)
         if (k === 'blackbear') c.set(env.place?.west || ['rockies', 'great-basin', 'desert-sw', 'california', 'pnw'].includes(env.place?.eco ?? '') ? WEST_BEAR[Math.floor(this.rnd() * WEST_BEAR.length)] : 0x1e1a18);
         if (k === 'loon' && (mo >= 10 || mo <= 4)) c.set(0x5e646c);
         if (k === 'laughinggull' && (mo >= 9 || mo <= 3)) c.set(0xe8e8e4);
@@ -637,7 +655,7 @@ export class Critters {
       c.alarm = undefined;
       if (c.state === 'idle' || c.state === 'move') { this.eco.alarm++; this.startle(c, c.fx ?? wx, c.fz ?? wz, wx, wz, d, env); }
     }
-    const basking = c.state === 'perch' && (R(c) === 'basker' || ANOLES.has(c.kind) || c.kind === 'annualcicada');
+    const basking = c.state === 'perch' && (R(c) === 'basker' || TRUNKERS.has(c.kind) || c.kind === 'annualcicada');
     if ((c.state === 'idle' || c.state === 'move' || c.state === 'stalk' || basking) && !(c.kind === 'blackbear' && c.sit)) { // (a bear stood up to look has seen you: it goes on its own count)
       const th = this.threat(c, wx, wz, d, env);
       if (th && (th.src === 'predator' || th.src === 'raptor')) {
@@ -663,6 +681,8 @@ export class Critters {
         // (a bison drops and rolls in a dust wallow; a bull bellows in the July rut)
         if (c.t <= 0 && c.kind === 'bison' && this.rnd() < 0.12) { c.state = 'wallow'; c.t = 3 + this.rnd() * 2; break; }
         if (c.t <= 0 && c.kind === 'bison') c.show = this.month(env) === 7 && c.seed % 3 === 0 && this.rnd() < 0.3;
+        // (a lizard's push-ups: a bob or three on its forelegs, to say whose rock this is)
+        if (c.t <= 0 && R(c) === 'lizard' && c.kind !== 'hornedlizard' && this.rnd() < 0.4) { c.yip = 0.6; c.t = 0.7 + this.rnd() * 0.6; break; }
         if (c.t <= 0 && SITTERS.has(c.kind) && c.kind !== 'blackbear') {
           c.sit = this.rnd() < 0.45;
           if (c.sit) { c.t = 2 + this.rnd() * 4; if (c.kind === 'prairiedog' && this.rnd() < 0.3) c.yip = 0.6; break; }
@@ -674,8 +694,8 @@ export class Critters {
           // always keeps by its mother)
           const flock = c.lead && this.list.includes(c.lead) ? c.lead : FLOCKS.has(R(c)) && this.rnd() < 0.5 ? this.list.find((o) => o !== c && o.kind === c.kind && (o.wl === undefined) === (c.wl === undefined) && Math.hypot(o.x - c.x, o.z - c.z) < 25 && Math.hypot(o.x - c.x, o.z - c.z) > 3) : undefined;
           for (let k = 0; k < 4; k++) {
-            // (the small things a step at a time: a crab's, a crawfish's, a slug's)
-            const a = this.rnd() * 6.28, r = R(c) === 'wader' ? 0.8 + this.rnd() * 2.5 : R(c) === 'crab' || R(c) === 'crawler' ? 0.3 + this.rnd() * 0.9 : 2 + this.rnd() * (R(c) === 'browser' ? 8 : 5);
+            // (the small things a step at a time: a crab's, a crawfish's, a slug's, a lizard's scurry)
+            const a = this.rnd() * 6.28, r = R(c) === 'wader' ? 0.8 + this.rnd() * 2.5 : R(c) === 'crab' || R(c) === 'crawler' || R(c) === 'lizard' ? 0.3 + this.rnd() * 0.9 : 2 + this.rnd() * (R(c) === 'browser' ? 8 : 5);
             const tx = flock ? flock.x + Math.sin(a) * (1.5 + this.rnd() * 2) : c.x + Math.sin(a) * r, tz = flock ? flock.z + Math.cos(a) * (1.5 + this.rnd() * 2) : c.z + Math.cos(a) * r;
             if (!this.valid(c, tx, tz)) continue;
             if (R(c) === 'shorebird' && !this.shore(tx, tz)) continue;
@@ -711,7 +731,7 @@ export class Critters {
         c.pitch = Math.min(Math.PI / 2 - 0.1, c.pitch + dt * 4);
         c.y = Math.min(c.ty, c.y + dt * 3.2);
         c.amt = 1; c.phase += dt * 3.5;
-        if (c.y >= c.ty) { c.state = 'perch'; c.t = ANOLES.has(c.kind) ? 1e6 : 8; c.amt = 0; }
+        if (c.y >= c.ty) { c.state = 'perch'; c.t = TRUNKERS.has(c.kind) ? 1e6 : 8; c.amt = 0; }
         break;
       case 'perch':
         c.amt = 0;
@@ -1010,7 +1030,8 @@ export class Critters {
     const role = R(c);
     if (role === 'songbird') { c.state = 'fly'; c.t = 3.5; if (heard) this.onEvent?.(this.sound(c), 'flush', pan, d); }
     else if (c.kind === 'loon') { c.state = 'dive'; c.t = 5 + this.rnd() * 5; } // (it slips under)
-    else if (ANOLES.has(c.kind) && c.home) { c.state = 'climb'; c.t = 1; c.ty = Math.min(this.ground(c.home.x, c.home.z) + Math.max(1, (c.home.trunk ?? 3) * 0.9), c.y + 0.6 + this.rnd() * 0.8); } // (round the trunk and up)
+    else if (c.kind === 'hornedlizard') { c.state = 'idle'; c.t = 3 + this.rnd() * 3; } // (it sits tight, trusting its colours)
+    else if (TRUNKERS.has(c.kind) && c.home) { c.state = 'climb'; c.t = 1; c.ty = Math.min(this.ground(c.home.x, c.home.z) + Math.max(1, (c.home.trunk ?? 3) * 0.9), c.y + 0.6 + this.rnd() * 0.8); } // (round the trunk and up)
     else if (role === 'basker' && c.wl !== undefined) { c.state = 'dive'; c.t = 6 + this.rnd() * 6; } // (it sinks without a ripple)
     else if (role === 'basker') {
       // off the bank or the log, down into the water
@@ -1043,7 +1064,7 @@ export class Critters {
       c.state = 'flee';
       c.t = role === 'browser' || role === 'predator' || role === 'herd' ? 6 : role === 'waterfowl' || role === 'fowl' ? 3 : 1.6;
       // a burrower dashes a few metres to its hole; a herd runs a long way; everything else runs well clear
-      const run = role === 'burrower' ? 4 + this.rnd() * 4 : role === 'herd' ? 70 : 40;
+      const run = role === 'burrower' ? 4 + this.rnd() * 4 : role === 'lizard' ? 2 + this.rnd() * 3 : role === 'herd' ? 70 : 40; // (a lizard's dash to cover)
       const a = Math.atan2(c.x - fx, c.z - fz) + (this.rnd() - 0.5) * 0.9;
       c.tx = c.x + Math.sin(a) * run; c.tz = c.z + Math.cos(a) * run;
       if (heard && (role === 'shorebird' || role === 'browser' || role === 'burrower')) this.onEvent?.(this.sound(c), role === 'shorebird' ? 'flush' : 'flee', pan, d);
@@ -1095,7 +1116,8 @@ export class Critters {
         y += zp * Math.sin(th);
         x += Math.sin(c.yaw) * zp * (1 - Math.cos(th)); z += Math.cos(c.yaw) * zp * (1 - Math.cos(th));
       }
-      if (c.yip !== undefined) y += Math.sin(Math.PI * Math.min(1, 1 - c.yip / 0.6)) * (c.kind === 'armadillo' ? 0.35 : 0.12) * c.s;
+      if (c.yip !== undefined) y += Math.sin(Math.PI * Math.min(1, 1 - c.yip / 0.6)) * (c.kind === 'armadillo' ? 0.35 : R(c) === 'lizard' ? 0.012 : 0.12) * c.s;
+      if (c.kind === 'collaredlizard' && c.state === 'flee') pitch = 0.55; // (it runs up on its hind legs)
       if (c.state === 'possum') y += 0.11 * c.s;
       this.e.set(pitch, c.yaw, c.roll ?? 0, 'YXZ');
       this.q.setFromEuler(this.e);
