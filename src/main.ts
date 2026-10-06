@@ -52,7 +52,7 @@ import { modelName } from './player/vehicles';
 import { Critters } from './sim/critters';
 import { rhythmFor, type LifeInit } from './sim/protocol';
 import { Garden } from './ui/garden';
-import { SPECIES, TREE_KINDS, treeMeta } from './assets/flora';
+import { SPECIES, TREE_KINDS, treeMeta, duckweedCover } from './assets/flora';
 import { Interiors, planInterior, registerPlan, type Plan } from './world/interiors';
 import { LiftRide } from './player/lift';
 import { LiftUI } from './ui/lift';
@@ -1623,6 +1623,7 @@ async function main() {
     if (rideMoving-- > 0) movers.push(rideMover);
     critters.update(dt, walker.x, walker.z, { hour: timeParams.hour, night: U.uNight.value, month: worldMonth(), south, wind: weather.wind, region: regionLook.region, climate: regionLook.climate, place: regionCast, camFwd: fwd, trees: (x, z, r) => within(nearTrees, x, z, r), gardens: (x, z, r) => within(nearGardens, x, z, r), movers, paved: pavedAt, urban: townHere });
     garden.update(dt, worldMonth(), south);
+    waterParams.uDuckweed.value = duckweedCover(regionCast, south ? ((worldMonth() + 5) % 12) + 1 : worldMonth()); // (the South's still water, summer's lime carpet)
     frames++;
     if (frames === 3) (window as unknown as Record<string, unknown>).__READY__ = true;
     (window as unknown as Record<string, unknown>).__RENDER_INFO__ = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, errors: errors.size, frames };

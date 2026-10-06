@@ -2,6 +2,56 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-06 — Regional life: the leftovers — the inland gulls, the black oak and the gray pine, smooth cordgrass, duckweed
+
+The leftovers the packages left open (`docs/ROADMAP.md` track D), each on the system already built for
+its kind.
+
+- **The inland gulls** (bird plan rows, the `gull` role): the **ring-billed gull** (the pale grey back,
+  the yellow bill with its black ring, yellow legs) and the bigger, paler **herring gull** (pink legs, a
+  red spot on its bill). The bird plan's new bill marks (`billRing`, `billSpot`); the California gull now
+  wears both. The ring-billed in every region (the South's and the West's warm valleys from September to
+  April); the herring gull on the Great Lakes and the North's coasts (the Southeast's and the Gulf's in
+  winter). More than 3 km from the sea they come down on any lot or field: the Midwest's parking lots
+  have their gulls at last. By the sea they keep to the beach and the coast's lots with the laughing
+  gulls (fixed on the way: otherwise, free to settle on any field, they took every gull slot on the
+  Jersey shore's beach).
+- **The California black oak** (an `OAKS` row): a forest tree with its crown held high, an open-grown one
+  on a leaning trunk, an old one on two trunks with a limb dead; near-black bark; **gold in the fall**
+  (Yosemite Valley's). In the Sierra's, the Klamath's and the Cascades' mixed-conifer forest, a few in
+  the north coast ranges (`broadMix`); a mapped oak there may be one.
+- **The gray pine** (a `PINES` row): leaning out over its slope, crooked, so sparse the sky shows
+  through, its long grey-green needles hanging in brushes (the southern pines' long-needle cards). With
+  the blue oaks in the foothills (`broadMix`) and on the Sierra's lowest slopes under 1,000 m, the
+  ponderosa coming in above (`coniferMix`).
+- **Smooth cordgrass** (the grass field's tuft kind 3): on the land cover's herbaceous wetland (ESA
+  WorldCover 90) within 3 km of the sea, on the Atlantic's and the Gulf's coasts (`flora.ts
+  cordgrassCoast`, `grass.ts saltMarsh`), right down to the water's edge (other grass keeps 4 m off the
+  shore). Tall along the water and the creeks (a metre and more), knee-high on the high marsh
+  (`cordgrassHeight`); yellow-green in summer, gold-tan as the fall comes on, tawny straw through the
+  winter.
+- **Duckweed** (the lake shader): on still water only — a pond, a small lake, a swamp's open water
+  (`synth.ts stillWater`: under 25 ha and compact; never a river's ribbon), the sheet's `aStill` — in the
+  Gulf's, the Southeast's and Florida's warm months (`flora.ts duckweedCover` → `waterParams.uDuckweed`:
+  May to October at its height, coming and going in April and November, Florida's thinner through its
+  mild winter). A lime carpet over most of the water, dark lanes of open water wandering through it,
+  its ragged edges breaking into specks.
+- Fixed on the way: the gray pine's and the black oak's leans tuned so the near model's trunk foot sits
+  flat and flared on the ground (the foundry's near-tree check).
+- Left out: the duckweed parting in a wake (the sheet doesn't know where a boat or the walker is yet);
+  the salt-meadow hay of the high marsh; the Pacific's marshes.
+
+**Verified:** typecheck; `npm test` 979/979; `tests/leftovers.test.ts` (new: the gulls' ranges and
+seasons, their bill marks and sizes, gulls coming down on a Midwest town's fields; the black oak's and the
+gray pine's places, fall hue, needles and lean; the salt marsh and cordgrass heights; duckweed's regions
+and months; still water against a lake's and a river's); the shader check, which now compiles the water
+too (27 programs: the sea, a lake sheet with duckweed, the coast's foam; no errors); the shore's
+playtest; studio montages (the four gulls; the black oak and gray pine beside the blue and valley oaks
+and the ponderosa; a pond at three duckweed coverages; cordgrass beside plain grass in summer and fall).
+
+**Next:** the reference's P2 rows, the West's lizards first; moss on the ground and on boulders;
+`upstairs-over-shopfront`.
+
 ## 2026-10-06 — Regional life (16): the small life — monarchs, darners, cicadas, banana slugs, fiddlers, crawfish
 
 Package #16 of `docs/regional-life/models.md`, the last of the build order: four new plans (`fauna.ts`

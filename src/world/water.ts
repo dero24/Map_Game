@@ -20,6 +20,8 @@ export const waterParams = {
   // wherever this plane shows — a cell's ground cut away over its sea — it is open, deep sea.
   // (Read as a shallow wash it was a pale translucent sheet over nothing: "grey concrete".)
   uOpenSea: { value: 0 },
+  // duckweed on the still water (flora.ts duckweedCover: the South's, in the warm months; 0 elsewhere)
+  uDuckweed: { value: 0 },
 };
 
 let lakeMat: THREE.ShaderMaterial | null = null;
@@ -64,6 +66,10 @@ function waterMaterial(tt: TerrainTextures, defines: Record<string, number | str
       attribute float aShore;
       varying float vShore;
       #endif
+      #ifdef LAKE
+      attribute float aStill;
+      varying float vStill;
+      #endif
       void main() {
         vec4 wp = worldMat() * vec4(position, 1.0);
         vWorldPos = wp.xyz + uWorldOffset;
@@ -71,11 +77,14 @@ function waterMaterial(tt: TerrainTextures, defines: Record<string, number | str
         #ifdef SHORE
         vShore = aShore;
         #endif
+        #ifdef LAKE
+        vStill = aStill;
+        #endif
         gl_Position = projectionMatrix * viewMatrix * wp;
       }`,
     fragment: /* glsl */ `
       ${GLSL_TERRAIN}
-      uniform float uWaveScale, uSurf, uGlitter, uGlitterFine, uOpenSea;
+      uniform float uWaveScale, uSurf, uGlitter, uGlitterFine, uOpenSea, uDuckweed;
       uniform vec3 uOceanDeep, uOceanShallow, uRiverDeep, uRiverShallow;
       float waves(vec2 p, float t, float ocean) {
         // long swell from the east-southeast on the ocean, wind ripples everywhere
@@ -84,6 +93,9 @@ function waterMaterial(tt: TerrainTextures, defines: Record<string, number | str
       }
       #ifdef SHORE
       varying float vShore;
+      #endif
+      #ifdef LAKE
+      varying float vStill;
       #endif
       void main() {
         vec2 xz = vWorldPos.xz;
@@ -175,6 +187,21 @@ function waterMaterial(tt: TerrainTextures, defines: Record<string, number | str
         alpha = max(alpha, clamp(fres * 1.2, 0.0, 1.0));
         alpha = max(alpha, foam);
         alpha *= smoothstep(-0.05, 0.12, depth + 0.1);
+      #ifdef LAKE
+        // duckweed and watermeal on the South's still water in the warm months: a lime carpet over most of
+        // it, lanes of dark open water wandering through, its ragged edges breaking into specks
+        float dw = uDuckweed * vStill;
+        if (dw > 0.001) {
+          float n = fbm(xz * 0.06) * 0.7 + vnoise(xz * 0.35) * 0.3;
+          float mat = smoothstep(0.66 - 0.45 * dw, 0.72 - 0.45 * dw, n);
+          float speck = smoothstep(0.55, 0.72, vnoise(xz * 3.1 + 7.0)) * smoothstep(0.56 - 0.45 * dw, 0.66 - 0.45 * dw, n);
+          float m = max(mat, speck * 0.8);
+          vec3 lime = vec3(0.55, 0.7, 0.24) * (0.9 + 0.14 * fbm(xz * 0.9) + 0.06 * vnoise(xz * 1.7));
+          lime *= uAmbSky * 0.8 + uKeyColor * (0.35 + 0.45 * sh) * max(uKeyDir.y + 0.1, 0.0);
+          col = mix(col, lime, m);
+          alpha = max(alpha, m);
+        }
+      #endif
       #ifndef LAKE
         // the open world's plane is the sea only as far as the streamed cells reach (their ground
         // stands over it where there's land); past them the horizon ring's own terrain and water

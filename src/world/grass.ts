@@ -9,7 +9,7 @@ import { paintMaterial } from '../render/shared';
 import type { Road, Terrain } from './data';
 import type { WalkWorld } from '../player/collision';
 import { activeStyle, castOf } from './styles';
-import { wildflowerMix, prairieMix } from '../assets/flora';
+import { wildflowerMix, prairieMix, cordgrassCoast } from '../assets/flora';
 import { WILDFLOWERS } from '../render/treeSeasons';
 import { blob } from '../assets/core';
 import { cropMix, fieldAt, CROPS, ROW, GLSL_CROPS, type Crop } from './fields';
@@ -132,7 +132,14 @@ export function grassMaterial() {
         // greener tuft here and there in a hollow
         float gold = uHay * smoothstep(0.15, 0.55, vnoise(vWorldPos.xz * 0.11) * 0.6 + 0.25 + 0.35 * vT);
         alb = mix(alb, vec3(0.74, 0.62, 0.36) * mix(0.8, 1.08, vT) * (0.92 + 0.16 * vnoise(vWorldPos.xz * 0.7)), gold);
-        if (vKind > 0.5 && vKind < 2.5) {
+        if (vKind > 2.5 && vKind < 3.5) {
+          // smooth cordgrass (the salt marsh): a fresh yellow-green through the summer, gold-tan as the
+          // fall comes on, the tips first, a tawny straw through the winter (the marsh's colour then)
+          alb *= vec3(1.02, 1.04, 0.86);
+          float turn = smoothstep(0.02, 0.5, uTurn + 0.5 * uLeafFall) * smoothstep(0.05, 0.5, vT + 0.25);
+          alb = mix(alb, vec3(0.76, 0.62, 0.36) * mix(0.8, 1.08, vT), turn);
+          alb = mix(alb, vec3(0.62, 0.52, 0.38) * mix(0.82, 1.04, vT), 0.75 * smoothstep(0.5, 1.0, uLeafFall));
+        } else if (vKind > 0.5 && vKind < 2.5) {
           // the prairie's bluestems (flora.ts prairieMix): blue-green through the summer, then as the
           // autumn turns the big bluestem copper-red and the little bluestem orange, tips first; a pale
           // bronze-tan through the winter
@@ -293,6 +300,15 @@ const vn = (x: number, z: number) => {
  *  patch (`mix`: [WILDFLOWERS index, weight]); where the region has no drifts, the odd flower of the old
  *  five colours (`flower` with kind 0). Else on the prairie (`prairie`: flora.ts prairieMix) a tall tuft
  *  is a big bluestem (1) or a little one (2). `hgt`: the tuft's height (m). */
+/** Whether a spot is salt marsh: the land cover's herbaceous wetland (ESA WorldCover 90) within 3 km of
+ *  the sea, on land (a hair above the water's edge). Pure: the field and the tests share it. */
+export function saltMarsh(cover: number, sdf: number, oceanDist: number) { return cover === 90 && oceanDist < 3000 && sdf > 0.3; }
+/** A cordgrass tuft's height (m): the tall form along the water's edge and the creeks (a metre and more),
+ *  the short form back on the high marsh (knee-high). */
+export function cordgrassHeight(sdf: number, x: number, z: number) {
+  return sdf < 6 ? 1.0 + hash(x, z, 14) * 0.7 : 0.35 + hash(x, z, 14) * 0.35;
+}
+
 export function wildTuft(x: number, z: number, hgt: number, mix: [number, number][], prairie: { big: number; little: number } | null): { flower: boolean; kind: number } {
   const drift = vn(x * 0.06 + 31, z * 0.06 - 17);
   const flower = hgt > 0.45 && hash(x, z, 8) < (mix.length ? (drift > 0.62 ? 0.34 : 0.025) : 0.035);
@@ -439,7 +455,7 @@ export class GrassField {
     // (package #9: the region's wildflower drifts, each in its season, and the prairie's bluestems —
     // flora.ts wildflowerMix, prairieMix; a tuft's kind rides its aKind: 0 grass, 1 big bluestem, 2
     // little bluestem, 10 + the WILDFLOWERS index)
-    const place = castOf(st), WILD_MIX = wildflowerMix(place).map(([id, w]) => [WILDFLOWERS.findIndex((f) => f.id === id), w] as [number, number]).filter(([k]) => k >= 0), PRAIRIE = prairieMix(place);
+    const place = castOf(st), MARSH = cordgrassCoast(place), WILD_MIX = wildflowerMix(place).map(([id, w]) => [WILDFLOWERS.findIndex((f) => f.id === id), w] as [number, number]).filter(([k]) => k >= 0), PRAIRIE = prairieMix(place);
     const kinds: number[] = [];
     const step = 0.62 / Math.sqrt(Math.max(0.2, this.density * (1 + lush * 0.4) * (1 - dry * 0.55)));
     const M = this.mask?.(x0, z0, CELL);
@@ -465,7 +481,9 @@ export class GrassField {
         // open land only (cheapest tests first: in a city most of a cell is paint the mask already
         // turned down, and asking the walk world about every one of those was a 10–19 ms cell)
         if (!open(x, z) || nearRoad(x, z)) continue;
-        if (t.sdfAt(x, z) < 4 || t.oceanDistAt(x, z) < 70) continue; // shore, sand, water
+        // (a salt marsh — the land cover's wetland by the sea — grows its cordgrass right down to the water)
+        const sd = t.sdfAt(x, z), marsh = MARSH && saltMarsh(t.coverAt(x, z), sd, t.oceanDistAt(x, z));
+        if (!marsh && (sd < 4 || t.oceanDistAt(x, z) < 70)) continue; // shore, sand, water
         const cov = t.coverAt(x, z);
         if (cov === 60 || cov === 70 || cov === 80) continue; // bare, snow/ice, open water
         if (cov === 40 && !built) continue; // (a field: its crops' rows, below — no lawn between them)
@@ -474,7 +492,7 @@ export class GrassField {
         if (wooded && hash(x, z, 15) < 0.85) continue;
         // patchiness: meadow vs mown lawn vs bare-ish; lawns hug the houses
         const meadow = vn(x * 0.045, z * 0.045) * 0.7 + vn(x * 0.13 + 9, z * 0.13) * 0.3;
-        const nearHouse = built || !WILD.has(cov) || walk.blocked(x, z, 7);
+        const nearHouse = !marsh && (built || !WILD.has(cov) || walk.blocked(x, z, 7));
         // coverage: near-continuous; patchiness comes from height, not bare gaps
         if (hash(x, z, 4) > (nearHouse ? 0.97 : 0.8 + meadow * 0.2) - dry * 0.4) continue;
         // three height tiers (short / mid / tall): open ground is roughly half tall in lush places,
@@ -482,14 +500,14 @@ export class GrassField {
         const roll = hash(x, z, 5);
         const tallP = (0.3 + meadow * 0.45) * (1 + lush * 0.3) * (1 - dry * 0.5);
         const tier = nearHouse ? 0.14 + hash(x, z, 13) * 0.16 : roll < tallP ? 0.6 + hash(x, z, 13) * 0.45 : roll < tallP + 0.3 ? 0.55 + hash(x, z, 13) * 0.35 : 0.25 + hash(x, z, 13) * 0.25;
-        const hgt = Math.max(0.08, tier * (0.85 + hash(x, z, 14) * 0.3));
+        const hgt = marsh ? cordgrassHeight(sd, x, z) : Math.max(0.08, tier * (0.85 + hash(x, z, 14) * 0.3));
         // lawn tufts splay wide and low (a carpet); meadow clumps stand tighter
         const wid = nearHouse ? 0.75 + hash(x, z, 6) * 0.35 : 0.8 + hash(x, z, 6) * 0.6;
         p.set(x, t.heightAt(x, z) - 0.02, z);
         q.setFromAxisAngle(up, hash(x, z, 7) * 6.283);
         s.set(wid, hgt, wid);
         mats.push(new THREE.Matrix4().compose(p, q, s));
-        const { flower, kind } = nearHouse ? { flower: false, kind: 0 } : wildTuft(x, z, hgt, WILD_MIX, PRAIRIE);
+        const { flower, kind } = marsh ? { flower: false, kind: 3 } : nearHouse ? { flower: false, kind: 0 } : wildTuft(x, z, hgt, WILD_MIX, PRAIRIE);
         if (kind === 1) {
           s.y *= 1.6; // (the big bluestem head-high: "turkeyfoot" over a rider's stirrups)
           mats[mats.length - 1].compose(p, q, s);

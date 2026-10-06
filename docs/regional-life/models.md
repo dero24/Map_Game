@@ -23,7 +23,7 @@ How to use it:
 is built (2026-10-04, commit 94ce999), the live oaks with their hangers (build order 2,
 2026-10-05), the northern and mountain forests (build order 3, 2026-10-05), the eastern hardwoods,
 the flowering understory and the southern pines (build order 4, 2026-10-05) and the swamps and rivers'
-trees (build order 5, 2026-10-05; duckweed still to do); the rest is to do.
+trees (build order 5, 2026-10-05; duckweed 2026-10-06); the rest is to do.
 
 [REGIONAL_LIFE.md §6](../REGIONAL_LIFE.md#6-what-the-foundry-builds-in-order) orders the work by
 family. This list is the same order broken into rows: its P1 rows are §6's families plus each
@@ -1999,12 +1999,13 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
    rows: **flowering dogwood**, **eastern redbud**. Mesquite row: **crape myrtle**. Shrub rows:
    **rhododendron**, **rosebay rhododendron**; mound row: **azalea**. Southern pines: **loblolly**,
    **longleaf**, **slash**. Poplar row: **eastern red cedar**.
-5. **Swamps and rivers** — **built** 2026-10-05 but for duckweed (`docs/earth/LOG.md` "Regional life
+5. **Swamps and rivers** — **built** 2026-10-05, duckweed 2026-10-06 (`docs/earth/LOG.md` "Regional life
    (5)"): the cypresses as `flora.ts CYPRESSES` (a fluted, flaring foot as a shell round the trunk, knees
    round it, tiers of level boughs with flat feathery sprays; bald cypress young, grown in the swamp,
    ancient; pond cypress tall, the dome's hat, the marl prairie's dwarf), the water tupelo on the leader
    plan with its swollen bottle foot, the cottonwoods as `OAKS` rows with leaves that rattle; placed by
-   `swampMix`, `swampForm` and `bankMix`. Still open: **duckweed** (a water-surface paint, not a tree).
+   `swampMix`, `swampForm` and `bankMix`. **Duckweed** (2026-10-06, LOG "the leftovers"): the lake shader's
+   lime carpet on still water (`synth.ts stillWater`) in the South's warm months (`duckweedCover`).
    The rows: the `cypress†` genome with **bald cypress**, **cypress knees** and **water
    tupelo**; **duckweed** on the water. Oak rows: **eastern/plains cottonwood** and **Fremont
    cottonwood**.
@@ -2020,7 +2021,8 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
    golden hills as the season's `hay` (the grass and the ground's straw wash gold June to November,
    green with the rains); placed by `broadMix` with `rangeIn`, `redwoodCountry` (the Coast Range and
    `ecoregions.ts caRedwoodBelt`), `sequoiaBand` (in groves), `manzanitaShare`, `westForm`. The rows:
-   Oak rows: **valley oak**, **blue oak**. `conifer†` rows: **coast redwood**, **giant sequoia**.
+   Oak rows: **valley oak**, **blue oak**, and (2026-10-06, LOG "the leftovers") **California black
+   oak**; pine row: **gray pine**. `conifer†` rows: **coast redwood**, **giant sequoia**.
    Clump row: **manzanita**. Grass: the **California annual grassland** (the golden hills, a season
    of the grass rather than a model).
 7. **The desert** — **built** 2026-10-05 (`docs/earth/LOG.md` "Regional life (7)"): the saguaro
@@ -2049,7 +2051,7 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
    and warm deserts' planted palms only where January's mean is above 3.5 °C) and `palmettoShare`. The
    rows: Fanpalm rows: **cabbage palmetto**, **saw palmetto**. Palm rows: **Florida royal palm**,
    **queen palm**, **Canary Island date palm**.
-9. **The ground layers** — **built** 2026-10-05 but for smooth cordgrass (`docs/earth/LOG.md`
+9. **The ground layers** — **built** 2026-10-05, smooth cordgrass 2026-10-06 (`docs/earth/LOG.md`
    "Regional life (9)"): bracken (the new `frond` form: a stalk lifting a three-parted blade near level;
    copper in October, gone from December to April) and the cinnamon fern (a vase, its cinnamon spikes in
    May, gold in the fall) on the eastern and northern woods' floor (`understoryMix`; `Species.fall`,
@@ -2059,8 +2061,9 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
    bluebonnets and paintbrush, California's poppies, lupine and goldfields, the desert's marigolds, the
    East's and Midwest's black-eyed Susans, coneflowers, goldenrod and asters, the mountains' and the
    Northwest's fireweed); kudzu as a tree kind (`vine†`: its curtain over the tree it killed, brown in
-   winter) on the South's wood edges (`kudzuShare`). Still open: **smooth cordgrass** (the salt marsh:
-   the grass keeps off the shore today). The rows: Fern rows: **bracken**, **cinnamon fern**. Clump
+   winter) on the South's wood edges (`kudzuShare`). **Smooth cordgrass** (2026-10-06, LOG "the
+   leftovers"): the grass field's kind 3 on the salt marsh (`saltMarsh`, `cordgrassCoast`), right down to
+   the water. The rows: Fern rows: **bracken**, **cinnamon fern**. Clump
    rows: **big** and **little bluestem**, **smooth cordgrass**. Wildflower drifts: **Texas bluebonnet**
    (spike), **California poppy** (stem, cup head), **sky lupine** (spike). The `vine†` genome with
    **kudzu**.

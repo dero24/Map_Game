@@ -25,7 +25,8 @@ export type TreeKind = 'round' | 'oak' | 'shrub' | 'pine' | 'spruce' | 'palm' | 
   | 'whitepine' | 'ponderosa' | 'lodgepole' | 'redspruce' | 'balsamfir' | 'engelmann' | 'subalpinefir' | 'easthemlock' | 'aspen' | 'willowshrub' | 'snag'
   | 'tuliptree' | 'sweetgum' | 'hickory' | 'buckeye' | 'sycamore' | 'buroak' | 'dogwood' | 'redbud' | 'crapemyrtle' | 'loblolly' | 'longleaf' | 'slashpine' | 'redcedar' | 'rosebay'
   | 'baldcypress' | 'pondcypress' | 'tupelo' | 'cottonwood' | 'fremont'
-  | 'valleyoak' | 'blueoak' | 'redwood' | 'sequoia' | 'manzanita' | 'saguaro' | 'pricklypear' | 'cholla' | 'ocotillo' | 'joshua' | 'creosote' | 'pinyon' | 'utahjuniper' | 'ashejuniper' | 'sagebrush' | 'sabal' | 'sawpalmetto' | 'royalpalm' | 'queenpalm' | 'canarypalm' | 'kudzu';
+  | 'valleyoak' | 'blueoak' | 'redwood' | 'sequoia' | 'manzanita' | 'saguaro' | 'pricklypear' | 'cholla' | 'ocotillo' | 'joshua' | 'creosote' | 'pinyon' | 'utahjuniper' | 'ashejuniper' | 'sagebrush' | 'sabal' | 'sawpalmetto' | 'royalpalm' | 'queenpalm' | 'canarypalm' | 'kudzu'
+  | 'blackoak' | 'graypine';
 /** (New kinds go on the end: a kind's index is in the tiles' instance names and the region weights.) */
 export const TREE_KINDS: TreeKind[] = ['round', 'oak', 'shrub', 'pine', 'spruce', 'palm', 'birch', 'mesquite', 'fanpalm', 'maple', 'willow', 'elm', 'poplar', 'magnolia', 'cherry', 'fir', 'cedar', 'hemlock', 'sitka', 'alder', 'vinemaple', 'liveoak', 'plateauoak', 'coastoak',
   'whitepine', 'ponderosa', 'lodgepole', 'redspruce', 'balsamfir', 'engelmann', 'subalpinefir', 'easthemlock', 'aspen', 'willowshrub', 'snag',
@@ -40,13 +41,15 @@ export const TREE_KINDS: TreeKind[] = ['round', 'oak', 'shrub', 'pine', 'spruce'
   // (package #8: the palms and the palmettos)
   'sabal', 'sawpalmetto', 'royalpalm', 'queenpalm', 'canarypalm',
   // (package #9: the vine that ate the South)
-  'kudzu'];
+  'kudzu',
+  // (the leftovers of package #6: the Sierra's black oak, the foothills' gray pine)
+  'blackoak', 'graypine'];
 /** The live oaks (liveoak†): the South's, the Hill Country's plateau oak, California's coast live oak. */
 export const LIVE_OAKS = new Set<TreeKind>(['liveoak', 'plateauoak', 'coastoak']);
 /** The southern pines (package #4): their long needles in fat, brushy tufts up close. */
 export const SOUTHERN_PINES = new Set<TreeKind>(['loblolly', 'longleaf', 'slashpine']);
 /** The conifers that wear needle tufts up close (the cedars wear their own flat sprays). */
-export const NEEDLED = new Set<TreeKind>(['pine', 'spruce', 'fir', 'hemlock', 'sitka', 'whitepine', 'ponderosa', 'lodgepole', 'redspruce', 'balsamfir', 'engelmann', 'subalpinefir', 'easthemlock', 'loblolly', 'longleaf', 'slashpine', 'pinyon']);
+export const NEEDLED = new Set<TreeKind>(['pine', 'spruce', 'fir', 'hemlock', 'sitka', 'whitepine', 'ponderosa', 'lodgepole', 'redspruce', 'balsamfir', 'engelmann', 'subalpinefir', 'easthemlock', 'loblolly', 'longleaf', 'slashpine', 'pinyon', 'graypine']);
 /** How each tree turns (propMaterial, leafCards; the GLSL is treeSeasons.ts fallColour): 0 mixed, 1 red
  *  (maples, cherries, the vine maple, the dogwood's burgundy), 2 gold, 3 drab (the alder's leaves fall
  *  near green, an olive brown), 4 jewel (the sweetgum: purple, red, orange and yellow on one tree,
@@ -55,7 +58,7 @@ export const NEEDLED = new Set<TreeKind>(['pine', 'spruce', 'fir', 'hemlock', 's
  *  redcedar, the rosebay's curled winter leaves). */
 export const FALL_HUE: Partial<Record<TreeKind, number>> = { maple: 1, cherry: 1, willow: 2, elm: 2, poplar: 2, birch: 2, vinemaple: 1, alder: 3, aspen: 2, willowshrub: 2,
   tuliptree: 2, sweetgum: 4, hickory: 2, buckeye: 5, sycamore: 6, buroak: 6, dogwood: 1, redbud: 2, redcedar: 7, rosebay: 7,
-  baldcypress: 6, pondcypress: 6, tupelo: 6, cottonwood: 2, fremont: 2, valleyoak: 6, blueoak: 6,
+  baldcypress: 6, pondcypress: 6, tupelo: 6, cottonwood: 2, fremont: 2, valleyoak: 6, blueoak: 6, blackoak: 2,
   ocotillo: 8, kudzu: 3 }; // (8: leaves only after rain, in the rainy seasons — the ocotillo's; far models only, past the cards' 3 bits)
 /** How a grown variant turns: the bigleaf maple (maple variant 2) goes gold, not scarlet; the swamp
  *  tupelo (tupelo variant 1, the black gum's kin) the first and brightest scarlet, where the water
@@ -64,7 +67,7 @@ export const fallHueOf = (k: TreeKind, v: number) => (k === 'maple' && v === 2 ?
 /** Broadleaves that colour and drop their leaves (magnolias and the palms keep theirs). */
 export const DECIDUOUS = new Set<TreeKind>(['round', 'oak', 'birch', 'shrub', 'maple', 'willow', 'elm', 'poplar', 'cherry', 'alder', 'vinemaple', 'aspen', 'willowshrub',
   'tuliptree', 'sweetgum', 'hickory', 'buckeye', 'sycamore', 'buroak', 'dogwood', 'redbud', 'crapemyrtle',
-  'baldcypress', 'pondcypress', 'tupelo', 'cottonwood', 'fremont', 'valleyoak', 'blueoak', 'ocotillo', 'kudzu']); // (the cypresses drop their needles: "bald")
+  'baldcypress', 'pondcypress', 'tupelo', 'cottonwood', 'fremont', 'valleyoak', 'blueoak', 'ocotillo', 'kudzu', 'blackoak']); // (the cypresses drop their needles: "bald")
 /** What each flowering tree blooms as (propMaterial BLOSSOM, the cards' bloom bits; the GLSL is
  *  treeSeasons.ts bloomNow / bloomColour): 1 the cherry's pink cloud in April, 2 the dogwood's white bracts
  *  on its tiers (one in six pink), 3 the redbud's magenta along its bare twigs in March, 4 the crape
@@ -205,7 +208,7 @@ const SYC_BARK = 0x857c66, SYC_WHITE = 0xe4e0d4, SYC_PATCH = [0xd8d2bc, 0xa6a488
 // near white on its limbs
 const COTTON_BARK = 0x67615a, FREMONT_BARK = 0x9a9486, FREMONT_UPPER = 0xc6c0b2;
 // (package #6) the valley oak's checkered grey "alligator" bark, the blue oak's pale grey
-const VALLEYOAK_BARK = 0x6c6860, BLUEOAK_BARK = 0xaaa69c;
+const VALLEYOAK_BARK = 0x6c6860, BLUEOAK_BARK = 0xaaa69c, BLACKOAK_BARK = 0x3e3a36;
 /** The live oaks' three grown forms each (liveoak†; docs/regional-life/05, 08, 15): a short, massive
  *  trunk dividing low (`fork`) — or a mott's two or three trunks from one root crown (`stems`) — into
  *  heavy limbs that climb (`up`), level off and sweep out (`reach`), their outer third coming down
@@ -224,8 +227,17 @@ type Oak = { H: number; stems: number; fork: number; trunkR: number; limbs: numb
   upper?: number; mottle?: number; bias?: number; limbR?: number; dead?: number;
   /** a billow low on each limb too, under its knee (a sycamore's crown runs deep, not a plate on top) */
   low?: boolean };
-type OakKind = 'liveoak' | 'plateauoak' | 'coastoak' | 'sycamore' | 'buroak' | 'cottonwood' | 'fremont' | 'valleyoak' | 'blueoak';
+type OakKind = 'liveoak' | 'plateauoak' | 'coastoak' | 'sycamore' | 'buroak' | 'cottonwood' | 'fremont' | 'valleyoak' | 'blueoak' | 'blackoak';
 const OAKS: Record<OakKind, Oak[]> = {
+  // (package #6's leftover) California black oak, the Sierra's and the Klamath's oak among the pines and
+  // firs, gold in the fall (Yosemite Valley's): v0 a forest tree (a tall trunk, the crown high, limbs
+  // climbing toward the light), v1 open-grown (a broad irregular crown on a leaning trunk), v2 old, on two
+  // trunks, a limb dead — the bark near black
+  blackoak: [
+    { H: 11.6, stems: 1, fork: 3.6, trunkR: 0.38, limbs: 5, reach: [2.8, 3.8], up: 4.0, droop: 0.4, rest: 0, snake: 1.1, billow: 1.9, dome: 2.4, sq: 0.82, lean: 0.6, bark: BLACKOAK_BARK, limbR: 0.6 },
+    { H: 11.0, stems: 1, fork: 2.6, trunkR: 0.42, limbs: 5, reach: [3.6, 4.6], up: 3.4, droop: 0.8, rest: 0, snake: 1.2, billow: 2.0, dome: 2.6, sq: 0.8, lean: 0.9, bark: BLACKOAK_BARK, limbR: 0.62 },
+    { H: 10.6, stems: 2, fork: 2.2, trunkR: 0.34, limbs: 4, reach: [3.2, 4.2], up: 3.6, droop: 0.5, rest: 0, snake: 1.3, billow: 1.9, dome: 2.4, sq: 0.8, lean: 0.8, bark: BLACKOAK_BARK, dead: 1 },
+  ],
   // (package #6; docs/regional-life/15-california.md) Valley oak: v0 the savanna's giant (a vast spread,
   // its long outer branches hanging nearly to the grass), v1 a valley town's yard oak, v2 old (a limb
   // broken, one dead) — bare December to March
@@ -311,10 +323,19 @@ type Pine = { H: number; bare: number; trunkR: number; bark: number; tiers: numb
 // the southern pines' barks: the loblolly's red-brown scaly plates, the longleaf's orange-brown plates,
 // the slash pine's purple-brown papery plates
 const LOBLOLLY_BARK = 0x6c4836, LONGLEAF_BARK = 0x7c5a40, SLASH_BARK = 0x684a40;
-type PineKind = 'whitepine' | 'ponderosa' | 'lodgepole' | 'loblolly' | 'longleaf' | 'slashpine' | 'pinyon';
-// (package #7) the piñon's grey-brown scaly bark
-const PINYON_BARK = 0x6a5c4c;
+type PineKind = 'whitepine' | 'ponderosa' | 'lodgepole' | 'loblolly' | 'longleaf' | 'slashpine' | 'pinyon' | 'graypine';
+// (package #7) the piñon's grey-brown scaly bark; (package #6's leftover) the gray pine's dark grey
+const PINYON_BARK = 0x6a5c4c, GRAYPINE_BARK = 0x5e564c;
 const PINES: Record<PineKind, Pine[]> = {
+  // (package #6's leftover; docs/regional-life/15-california.md) Gray pine, the blue oak foothills' pine:
+  // leaning, crooked, so sparse you see the sky through it, its long grey-green needles hanging in
+  // brushes — v0 young, v1 grown (leaning hard, a crooked limb or two), v2 old (a flat open top on heavy
+  // crooked limbs, leaning out over the slope)
+  graypine: [
+    { H: 11.0, bare: 0.25, trunkR: 0.18, bark: GRAYPINE_BARK, tiers: [2, 2, 2, 2, 1], reach: [2.4, 1.0], rise: 0.45, tuft: 1.0, sq: 0.8, top: 'round', lean: 1.2, crook: 0.6, stretch: 1.4, bend: 0.45 },
+    { H: 12.4, bare: 0.35, trunkR: 0.24, bark: GRAYPINE_BARK, tiers: [2, 2, 2, 2, 2], reach: [2.8, 1.6], rise: 0.5, tuft: 1.1, sq: 0.75, top: 'round', lean: 1.5, crook: 0.9, stretch: 1.45, bend: 0.5 },
+    { H: 12.0, bare: 0.4, trunkR: 0.3, bark: GRAYPINE_BARK, tiers: [2, 2, 2, 1], reach: [3.2, 2.4], rise: 0.35, tuft: 1.1, sq: 0.7, top: 'flat', lean: 1.6, crook: 1.1, stretch: 1.5, bend: 0.55 },
+  ],
   // (package #7; docs/regional-life/13, 14) Two-needle piñon: small, rounded and dark — v0 young (a
   // rounded cone from near the ground), v1 grown (broad, irregular, a crooked limb or two), v2 old
   // (twisted, leaning, flat-topped on heavy crooked limbs)
@@ -2078,7 +2099,7 @@ export const crownField = (m: TreeMeta): [number, number] => [m.crownBottom + 0.
 // silhouette its far model was tuned to: the oak's billows at its limbs' ends, the elm's vase, the
 // pine's windswept tufts. Palms and the willow keep their far model at every distance: their
 // leaves are already fronds and tresses.
-export const NEAR_KINDS = new Set<TreeKind>(['valleyoak', 'blueoak', 'redwood', 'sequoia', 'manzanita', 'round', 'oak', 'shrub', 'pine', 'spruce', 'birch', 'mesquite', 'maple', 'elm', 'poplar', 'magnolia', 'cherry', 'fir', 'cedar', 'hemlock', 'sitka', 'alder', 'vinemaple', 'liveoak', 'plateauoak', 'coastoak',
+export const NEAR_KINDS = new Set<TreeKind>(['blackoak', 'graypine', 'valleyoak', 'blueoak', 'redwood', 'sequoia', 'manzanita', 'round', 'oak', 'shrub', 'pine', 'spruce', 'birch', 'mesquite', 'maple', 'elm', 'poplar', 'magnolia', 'cherry', 'fir', 'cedar', 'hemlock', 'sitka', 'alder', 'vinemaple', 'liveoak', 'plateauoak', 'coastoak',
   'whitepine', 'ponderosa', 'lodgepole', 'redspruce', 'balsamfir', 'engelmann', 'subalpinefir', 'easthemlock', 'aspen', 'willowshrub',
   'tuliptree', 'sweetgum', 'hickory', 'buckeye', 'sycamore', 'buroak', 'dogwood', 'redbud', 'crapemyrtle', 'loblolly', 'longleaf', 'slashpine', 'redcedar', 'rosebay',
   'baldcypress', 'pondcypress', 'tupelo', 'cottonwood', 'fremont', 'pinyon', 'utahjuniper', 'ashejuniper', 'creosote', 'sagebrush', 'kudzu']); // (the snag is wood alone: its far model at every distance; the desert's cacti, ocotillo and Joshua tree too — DESERT_FAR)
@@ -2104,7 +2125,7 @@ export const LEAF_PICS = PIC_SHAPE.length;
 /** Which pictures a tree's cards show (two or four, card by card): each its own leaf where the
  *  foundry paints one. */
 export const picsOf = (kind: TreeKind, v: number, big: boolean): number[] =>
-  SOUTHERN_PINES.has(kind) ? [22, 23] : NEEDLED.has(kind) ? [4, 5, 6, 7] : kind === 'cedar' || kind === 'redcedar' ? [8, 9]
+  SOUTHERN_PINES.has(kind) || kind === 'graypine' ? [22, 23] : NEEDLED.has(kind) ? [4, 5, 6, 7] : kind === 'cedar' || kind === 'redcedar' ? [8, 9]
     : kind === 'vinemaple' || (kind === 'maple' && v === 2) || kind === 'sycamore' ? [10, 11]
       : kind === 'sweetgum' ? [12, 13] : kind === 'tuliptree' ? [14, 15] : kind === 'hickory' ? [16, 17] : kind === 'buckeye' ? [18, 19] : kind === 'redbud' ? [20, 21]
         : kind === 'baldcypress' || kind === 'pondcypress' || kind === 'redwood' ? [24, 25] : kind === 'cottonwood' || kind === 'fremont' ? [26, 27] : kind === 'sequoia' ? [8, 9]
@@ -2690,7 +2711,7 @@ const REGION_BROAD: Partial<Record<EcoRegion | 'pnw-dry', [TreeKind, number][]>>
   ozarks: [['round', 2.4], ['oak', 3.4], ['maple', 1.2], ['elm', 0.6], ['cherry', 0.6], ['poplar', 0.2], ['hickory', 1.0], ['redbud', 0.8], ['dogwood', 0.9], ['redcedar', 0.8], ['sweetgum', 0.4], ['buroak', 0.2], ['crapemyrtle', 0.5]],
   rockies: [['round', 2], ['oak', 0.4], ['poplar', 1.8], ['maple', 1], ['cottonwood', 0.7]],
   'great-basin': [['round', 2], ['oak', 0.3], ['poplar', 1.6], ['maple', 0.8], ['elm', 1.2], ['fremont', 0.6]],
-  california: [['round', 1.6], ['coastoak', 2.4], ['oak', 0.6], ['poplar', 1.4], ['magnolia', 0.3], ['fremont', 0.4], ['valleyoak', 1.6], ['blueoak', 1.2], ['redwood', 0.3], ['sequoia', 0.08]],
+  california: [['round', 1.6], ['coastoak', 2.4], ['oak', 0.6], ['poplar', 1.4], ['magnolia', 0.3], ['fremont', 0.4], ['valleyoak', 1.6], ['blueoak', 1.2], ['redwood', 0.3], ['sequoia', 0.08], ['blackoak', 0.9], ['graypine', 0.4]],
   pnw: [['round', 2], ['oak', 0.6], ['maple', 3], ['cherry', 0.9], ['poplar', 0.7], ['elm', 0.3], ['alder', 2.4], ['vinemaple', 0.4]],
   'pnw-dry': [['round', 1.6], ['oak', 0.4], ['poplar', 1.8], ['maple', 1], ['elm', 0.6]],
 };
@@ -2739,6 +2760,10 @@ function rangeIn(k: TreeKind, p: CastPlace): number {
     // ranges' and the south coast's towns (not in the north coast's redwood woods)
     case 'valleyoak': return p.eco === 'california' ? ([1, 6, 7].includes(p.l3) ? 1 : p.l3 === 85 ? 0.3 : 0) : 0;
     case 'blueoak': return p.eco === 'california' ? (p.l3 === 6 ? 1 : p.l3 === 7 || p.l3 === 5 ? 0.3 : 0) : 0;
+    // (the black oak in the Sierra's, the Klamath's and the Cascades' mixed-conifer forest, a few in the
+    // north coast ranges; the gray pine among the blue oaks of the foothills, the Sierra's lowest slopes)
+    case 'blackoak': return p.eco === 'california' ? ([5, 78].includes(p.l3) ? 1 : p.l3 === 4 ? 0.6 : p.l3 === 1 ? 0.3 : 0) : 0;
+    case 'graypine': return p.eco === 'california' ? (p.l3 === 6 ? 0.8 : p.l3 === 5 ? 0.5 : p.l3 === 7 ? 0.15 : 0) : 0;
     case 'redwood': return p.eco === 'california' ? ([1, 6, 7, 78].includes(p.l3) ? 1 : p.l3 === 85 || p.l3 === 5 ? 0.3 : 0) : 0;
     case 'sequoia': return p.eco === 'california' ? ([5, 6, 7, 85].includes(p.l3) ? 1 : 0) : 0;
     // (package #7) the Ashe juniper's cedar brakes: the Edwards Plateau, the Cross Timbers' west
@@ -2957,6 +2982,8 @@ export function coniferMix(p: CastPlace, kind: 'pine' | 'spruce', elev: number, 
     // Monterey pines)
     if (redwoodCountry(p, belt)) return pine ? [['redwood', 0.55], ['fir', 0.25], ['pine', 0.2]] : [['redwood', 0.7], ['fir', 0.3]];
     if (p.eco === 'california' && p.l3 !== 5 && p.l3 !== 4 && p.l3 !== 9 && p.l3 !== 78) return [];
+    // (the Sierra's lowest slopes, under 1,000 m: the gray pine's, the ponderosa coming in above)
+    if (p.eco === 'california' && p.l3 === 5 && elev < 1000 && pine) return [['graypine', 0.65], ['ponderosa', 0.35]];
     // (package #7: the piñon-juniper on the basins' and the plateaus' flanks, below the ponderosa)
     const pj = pjBand(p, lat);
     if (pj && elev > pj.lo && elev < pj.hi) return pj.pinyon ? [['pinyon', pj.pinyon], ['utahjuniper', 1 - pj.pinyon]] : [['utahjuniper', 1]];
@@ -3109,6 +3136,20 @@ export function wildflowerMix(p: CastPlace): [string, number][] {
     case 'pnw': return p.west ? [['lupine', 1], ['fireweed', 1.5], ['paintbrush', 0.5]] : [['lupine', 1.2], ['paintbrush', 0.8]];
   }
   return [];
+}
+/** (package #9's leftover) Smooth cordgrass, the Atlantic's and the Gulf's salt marsh (docs/regional-
+ *  life/models.md): whether a place's coast grows it — Cape Cod round to Texas. The marsh itself is the
+ *  land cover's herbaceous wetland by the sea (grass.ts saltMarsh). */
+const MARSH_COAST = new Set(['new-england', 'mid-atlantic', 'southeast', 'florida', 'gulf', 'texas']);
+export const cordgrassCoast = (p: CastPlace) => MARSH_COAST.has(p.eco);
+/** (package #5's leftover) Duckweed and watermeal on the South's still water (models.md: the Gulf's, the
+ *  Southeast's and Florida's): how much of a pond's surface the lime carpet covers this month (0–1, the
+ *  north's month) — May to October at its height, coming and going in April and November, Florida's
+ *  thinner through its mild winter, gone elsewhere in the cold. */
+export function duckweedCover(p: CastPlace, month: number): number {
+  if (p.eco === 'florida') return month >= 4 && month <= 10 ? 0.85 : 0.4;
+  if (p.eco !== 'gulf' && p.eco !== 'southeast') return 0;
+  return month >= 5 && month <= 10 ? 0.85 : month === 4 || month === 11 ? 0.4 : 0;
 }
 /** The prairie's grasses for a place's tall open-ground tufts (grass.ts): the shares of big bluestem
  *  (head-high in the tallgrass, copper-red in the fall) and little bluestem (knee-high, blue-green,
@@ -3326,6 +3367,8 @@ export function treeHeight4(k: TreeKind, v: number, u: number, wood: boolean): n
     case 'sequoia': return v === 0 ? 15 + u * 20 : v === 2 ? 45 + u * 30 : wood ? 50 + u * 35 : 30 + u * 20;
     case 'valleyoak': return wood ? 20 + u * 10 : 15 + u * 13;
     case 'blueoak': return 6 + u * 9;
+    case 'blackoak': return wood ? 18 + u * 10 : 12 + u * 9;
+    case 'graypine': return v === 0 ? 8 + u * 5 : 12 + u * 9;
     case 'manzanita': return v === 1 ? 3 + u * 3 : 1.5 + u * 2.5;
     // (package #7: the saguaro a spear of 2–4.5 m, grown 7–11, old 10–14; the Joshua tree to 12; the
     // ocotillo's canes 2.5–7; the prickly pear and the cholla under 2.5; the piñon and the junipers

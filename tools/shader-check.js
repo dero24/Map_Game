@@ -59,6 +59,20 @@ window.__SHADERS__ = async () => {
       add(cg, critterMaterial(k));
     }
   } catch (e) { errors.push('critters: ' + e.message); }
+  // the water: the sea, a lake's sheet (the South's duckweed on still water), the coast's foam
+  try {
+    const { buildWater, lakeMaterial, shoreMaterial, waterParams } = await import('/src/world/water.ts');
+    const tex = () => { const t = new THREE.DataTexture(new Float32Array(4), 1, 1, THREE.RGBAFormat, THREE.FloatType); t.needsUpdate = true; return t; };
+    const tt = { uTerrS: { value: tex() }, uTerrB: { value: tex() }, uTerrSBox: { value: new THREE.Vector4(0, 0, 1, 1) }, uTerrBBox: { value: new THREE.Vector4(0, 0, 1, 1) } };
+    scene.add(buildWater(tt));
+    waterParams.uDuckweed.value = 0.85;
+    const sheet = new THREE.PlaneGeometry(4, 4).rotateX(-Math.PI / 2);
+    sheet.setAttribute('aStill', new THREE.Float32BufferAttribute(new Float32Array(sheet.attributes.position.count).fill(1), 1));
+    scene.add(new THREE.Mesh(sheet, lakeMaterial()));
+    const strip = new THREE.PlaneGeometry(4, 1).rotateX(-Math.PI / 2);
+    strip.setAttribute('aShore', new THREE.Float32BufferAttribute(new Float32Array(strip.attributes.position.count).fill(2), 1));
+    scene.add(new THREE.Mesh(strip, shoreMaterial()));
+  } catch (e) { errors.push('water: ' + e.message); }
   const far = scene.children.find((o) => o.material?.defines?.TREE_LOD);
   if (far) far.geometry.setAttribute('aNear', new THREE.InstancedBufferAttribute(new Float32Array(1), 1));
   try {

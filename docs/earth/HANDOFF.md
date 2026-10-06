@@ -266,21 +266,18 @@ blended animation, a built-in rig and clip maker — its notes say what the code
 In a cloud session that work is tested headless (`tests/lifeSim.test.ts`) and on the kit page; the
 in-game look is checked on Robby's PC.
 
-- **#5:** built (2026-10-05) but for **duckweed** on the swamps' still water — a water-surface paint
-  (`world/water.ts`), not a tree: a lime carpet in summer, gone in winter, parting in a wake.
-- **#6:** built (2026-10-05) but for the black oak (the Sierra's mixed-conifer oak, gold in the fall)
-  and the gray pine of the blue oak's foothills — both could ride a later package.
+- **#5:** built (2026-10-05); duckweed 2026-10-06 (the lake shader on still water, LOG "the
+  leftovers") — it doesn't part in a wake yet.
+- **#6:** built (2026-10-05); the black oak and the gray pine 2026-10-06.
 - **#7:** built (2026-10-05). Rarer desert rows (organ pipe, barrels, chain-fruit cholla, bursage)
   can ride a later package on the same genomes.
 - **#8:** built (2026-10-05).
-- **#9:** built (2026-10-05) but for smooth cordgrass (the salt marsh: the grass keeps off the shore
-  today — a marsh layer of its own by the water).
+- **#9:** built (2026-10-05); smooth cordgrass on the salt marsh 2026-10-06.
 - **#10:** built (2026-10-05). Cotton, peanuts, rice, orchards, vineyards and hay could follow on the
   same field system (a crop each: a calendar row and a geometry).
 - **#11:** built (2026-10-05); the long neck, swimming, the bare head and the hover came with #12. A scratch bird studio (perched side on, from above, flying; the fold applied on
   the CPU) is how the birds were reviewed: the in-page tree studio's pattern with `critterLib`.
-- **#12:** built (2026-10-05). No row yet for the inland gulls (ring-billed, herring: the Great
-  Lakes' and every Midwest parking lot's) — the gull role is empty there.
+- **#12:** built (2026-10-05); the inland gulls (ring-billed, herring) 2026-10-06.
 - **#13:** built (2026-10-06) but for the beaver's dam (it needs a stream's line; the lodge stands in
   ponds and lakes).
 - **#14:** built (2026-10-06). The bison stand in "deep open country" until the map's protected areas

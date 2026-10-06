@@ -462,6 +462,19 @@ export function faceUp(flat: number[], idx: number[]): number[] {
   return idx;
 }
 
+/** Whether a water body is still water — a pond, a small lake, a swamp's open water, not a river's
+ *  long ribbon or a big lake's open water: under 25 ha and compact (its area against its outline's, a
+ *  circle's 1, a river's a few hundredths). The lake shader lays the South's duckweed on these. */
+export function stillWater(ring: [number, number][]): boolean {
+  let a = 0, per = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    a += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+    per += Math.hypot(ring[i][0] - ring[j][0], ring[i][1] - ring[j][1]);
+  }
+  const area = Math.abs(a) / 2;
+  return area > 0 && area < 250_000 && (4 * Math.PI * area) / (per * per) > 0.12;
+}
+
 export function waterSheets(bodies: WaterBody[], box: Box): THREE.Group {
   const g = new THREE.Group(), col = WET.water;
   for (const w of bodies) {
@@ -477,10 +490,11 @@ export function waterSheets(bodies: WaterBody[], box: Box): THREE.Group {
     const idx = earcut(flat, hIdx.length ? hIdx : undefined);
     if (!idx.length) continue;
     faceUp(flat, idx);
-    const pos: number[] = [], nrm: number[] = [], cc: number[] = [];
+    const pos: number[] = [], nrm: number[] = [], cc: number[] = [], still = stillWater(w.ring) ? 1 : 0;
     for (let i = 0; i < flat.length; i += 2) (pos.push(flat[i], w.level + 0.06, flat[i + 1]), nrm.push(0, 1, 0), cc.push(col[0], col[1], col[2]));
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('aStill', new THREE.Float32BufferAttribute(new Float32Array(pos.length / 3).fill(still), 1)); // (the lake shader's duckweed)
     geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
     geo.setAttribute('color', new THREE.Float32BufferAttribute(cc, 3));
     geo.setIndex(idx);

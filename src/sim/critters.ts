@@ -69,6 +69,8 @@ const SPEC: Record<CritterKind, Spec> = {
   brownpelican: { cap: 4, walk: 9, flee: 2, fleeR: 14, gaitHz: 1, scale: [1.0, 1.1], colors: [0xffffff] },
   laughinggull: { cap: 12, walk: 0.9, flee: 3, fleeR: 6, gaitHz: 3, scale: [1.15, 1.3], colors: [0x1e1e22] }, // (the winter's white hood set at spawn)
   californiagull: { cap: 12, walk: 0.9, flee: 3, fleeR: 6, gaitHz: 3, scale: [1.1, 1.25], colors: [0xffffff] },
+  ringbilledgull: { cap: 14, walk: 0.9, flee: 3, fleeR: 5, gaitHz: 3, scale: [1.1, 1.25], colors: [0xffffff] }, // (the boldest: a parking lot's)
+  herringgull: { cap: 8, walk: 0.85, flee: 3, fleeR: 7, gaitHz: 2.8, scale: [1.05, 1.15], colors: [0xffffff] },
   // the mammals (fauna.ts package #13): the night's waddlers, the squirrels, the burrowers (a prairie dog
   // town's many), the beaver, the herds wary from far off (a pronghorn from 70 m, and the fastest)
   raccoon: { cap: 3, walk: 0.7, flee: 3.5, fleeR: 10, gaitHz: 1.6, scale: [1.0, 1.1], colors: [0xffffff] },
@@ -268,11 +270,15 @@ export class Critters {
   }
   /** At the water's edge, a step in or out (a heron's, an egret's). */
   private edge(x: number, z: number) { const s = this.terrain.sdfAt(x, z); return s > -2.4 && s < 1.4 && this.walk.buildingAt(x, z) < 0; }
-  /** A gull's ground: the beach, a coastal town's lots and plazas — a California gull's inland lots and fields too. */
+  /** A gull's ground: the beach, a coastal town's lots and plazas — the inland gulls' (the California gull's
+   *  anywhere, the ring-billed's and the herring gull's away from the sea) lots and fields too. */
   private gullGround(x: number, z: number, sp: CritterKind) {
     if (this.shore(x, z)) return true;
     const lot = this.paved(x, z) && this.walk.buildingAt(x, z) < 0 && !this.walk.blocked(x, z, 0.6) && this.terrain.sdfAt(x, z) > 1;
-    return (lot && this.terrain.oceanDistAt(x, z) < 3000) || (sp === 'californiagull' && (lot || this.field(x, z)));
+    // (the ring-billed and the herring gull keep to the beach and the coast's lots like the rest by the sea;
+    // inland — the Great Lakes, the Plains — any lot or field)
+    const od = this.terrain.oceanDistAt(x, z);
+    return (lot && od < 3000) || ((sp === 'californiagull' || ((sp === 'ringbilledgull' || sp === 'herringgull') && od > 3000)) && (lot || this.field(x, z)));
   }
   /** Where this one can go next: on its water, at its edge, on its ground. */
   private valid(c: Critter, x: number, z: number) {

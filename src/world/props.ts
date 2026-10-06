@@ -800,7 +800,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   const SOUTH_PINE = new Set([LOBLOLLY, LONGLEAF, SLASHPINE]);
   const PONDCYPRESS = KI('pondcypress');
   // package #6 (California): its oaks, its giants, its chaparral's manzanita
-  const VALLEYOAK = KI('valleyoak'), BLUEOAK = KI('blueoak'), REDWOOD = KI('redwood'), SEQUOIA = KI('sequoia'), MANZANITA = KI('manzanita');
+  const VALLEYOAK = KI('valleyoak'), BLUEOAK = KI('blueoak'), BLACKOAK = KI('blackoak'), REDWOOD = KI('redwood'), SEQUOIA = KI('sequoia'), MANZANITA = KI('manzanita');
   /** (a kind's height cap, when it is a small tree: a survey's tall crown is never one) */
   const smallMax = (k: number) => SMALL_TREE[TREE_KINDS[k]] ?? Infinity;
   // the northern and mountain conifers (package #3): grown forms like the Northwest's (open-grown, a
@@ -1058,7 +1058,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     // (in live oak country a mapped oak is most likely the live oak: Savannah's squares, St. Charles Avenue)
     if (name === 'oak' && regionLiveOak >= 0 && hashf(Math.floor(x * 2.7) * 7919 + Math.floor(z * 3.1) * 104729 + 211) < 0.72) {
       // (California's: the coast live oak, the valley oak or the blue oak, as the place grows them)
-      const natives = BROAD.filter(([kk, w]) => w > 0 && (kk === regionLiveOak || kk === VALLEYOAK || kk === BLUEOAK));
+      const natives = BROAD.filter(([kk, w]) => w > 0 && (kk === regionLiveOak || kk === VALLEYOAK || kk === BLUEOAK || kk === BLACKOAK));
       const kk = natives.length > 1 ? natives[pickWeighted(natives.map(([, w]) => w), hashf(Math.floor(x * 1.9) * 104729 + Math.floor(z * 2.3) * 7919 + 213))][0] : regionLiveOak;
       return [kk, variantAt(x, z, TREE_VARIANTS, 11)];
     }
@@ -1392,6 +1392,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     // (package #6: the valley oak's dull mid-green, the blue oak's blue-grey, the redwood's deep green
     // sprays, the sequoia's grey-green scales, the manzanita's grey-green leather)
     valleyoak: [0x5a7438, 0.4], blueoak: [0x7f9488, 0.6], redwood: [0x30502e, 0.5], sequoia: [0x4f6a40, 0.45], manzanita: [0x7f8f74, 0.6],
+    // (the black oak's deep glossy green; the gray pine's grey-green, so thin the sky shows through)
+    blackoak: [0x4a6632, 0.45], graypine: [0x7c8c76, 0.6],
     // (package #7: the ocotillo's fresh green after rain, the Joshua tree's yellow-green bayonets, the
     // creosote's dark glossy olive, the piñon's grey-green, the Utah juniper's yellowish grey-green, the
     // Ashe juniper's dark, the sagebrush's silver)

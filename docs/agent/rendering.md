@@ -467,7 +467,9 @@ lays the surface between it:
   only where the painted ground is open/green). Walks start at today's sunrise (`?hour=`).
   Each tuft has a kind (`aKind`, a per-cell copy of the tuft geometry; `wildTuft` decides, pure): 0
   grass; 1 and 2 the prairie's big and little bluestem (`flora.ts prairieMix`: blue-green, copper-red or
-  orange as `uTurn` rises, bronze-tan with `uLeafFall`; the big one 1.6× taller); 10 + k a wildflower
+  orange as `uTurn` rises, bronze-tan with `uLeafFall`; the big one 1.6× taller); 3 smooth cordgrass on
+  the salt marsh (`saltMarsh`: WorldCover 90 within 3 km of the sea, on `flora.ts cordgrassCoast`'s
+  coasts — the only tufts allowed down to the water's edge; yellow-green, gold-tan, tawny straw); 10 + k a wildflower
   drift's (`treeSeasons.ts WILDFLOWERS`, `flora.ts wildflowerMix`: heads on the tufts' tips in their
   window of the calendar's `U.uYear` — season.ts `year`: 0 on January 20th — each tuft a day or so off
   its neighbours). A drift is a patch of meadow where a third of the tufts flower, mostly one species to

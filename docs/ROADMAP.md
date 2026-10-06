@@ -23,7 +23,9 @@ Regional life (`docs/regional-life/models.md` build order): **all 16 packages bu
   sliders on their logs.
 - **Small life:** built: the monarch, the green darner, the annual cicada, the banana slug, the fiddler
   crab and the crawfish with its chimneys.
-- **Still to go:** the leftovers (track D), then the reference's P2 rows (the West's lizards first).
+- **Leftovers:** duckweed, smooth cordgrass, the black oak and gray pine, the inland gulls: done.
+- **Still to go:** the reference's P2 rows (the West's lizards first), moss on the ground and on
+  boulders.
 
 ## The 16 regions
 
@@ -71,7 +73,7 @@ collisions.
 | **A. Regional life** | The reference's P2 rows: the West's lizards, then snakes, frogs, more insects | Cloud sessions (tests and the scratch studio; no long captures) |
 | **B. Region pass** | Montages per region against the scorecard; fix what's wrong | Robby's PC or a session that can run captures (they're too slow in the cloud) |
 | **C. People** | `people-with-purpose`: walkers on errands, homes only for those who live there, buildings with a capacity, smooth animation | Its own branch; mostly `sim/` and `life` files |
-| **D. Leftovers** | Duckweed, smooth cordgrass, black oak and gray pine, inland gulls, moss on the ground and on boulders, `upstairs-over-shopfront` | Fill-in work between packages |
+| **D. Leftovers** | Moss on the ground and on boulders, `upstairs-over-shopfront` (duckweed, cordgrass, the black oak and gray pine and the inland gulls done 2026-10-06) | Fill-in work between packages |
 | **E. Needs keys** | The canopy layer (NLCD in R2), map species to tree kinds (`realTile.treeKindOf`), the Mapillary comparison and objects | When the Cloudflare and Mapillary keys are in the environment |
 
 ## Milestones to 1.0, in order
@@ -122,29 +124,27 @@ Updated as packages land. Key: **done**; **part** = built with a known gap (in t
 
 | Region | Trees | Ground | Birds | Mammals | Reptiles | Small life | Density | Reviewed |
 |---|---|---|---|---|---|---|---|---|
-| new-england | done | part (a) | done | done | part (e) | done | blocked | to do |
-| upstate-ny | done | done | part (b) | done | part (e) | done | blocked | to do |
-| mid-atlantic | done | part (a) | done | done | part (e) | done | blocked | to do |
-| appalachia | done | done | part (b) | done | part (e) | done | blocked | to do |
-| southeast | done | part (a, c) | done | done | part (e) | done | blocked | to do |
-| florida | done | part (a, c) | done | done | part (e) | done | blocked | to do |
-| gulf | done | part (a, c) | done | done | part (e) | done | blocked | to do |
-| texas | done | part (a) | done | done | part (e) | done | blocked | to do |
-| plains | done | done | part (b) | done | part (e) | done | blocked | to do |
-| midwest | done | done | part (b) | done | part (e) | done | blocked | to do |
-| ozarks | done | done | part (b) | done | part (e) | done | blocked | to do |
-| rockies | done | done | part (b) | done | part (e) | done | blocked | to do |
+| new-england | done | done | done | done | part (e) | done | blocked | to do |
+| upstate-ny | done | done | done | done | part (e) | done | blocked | to do |
+| mid-atlantic | done | done | done | done | part (e) | done | blocked | to do |
+| appalachia | done | done | done | done | part (e) | done | blocked | to do |
+| southeast | done | done | done | done | part (e) | done | blocked | to do |
+| florida | done | done | done | done | part (e) | done | blocked | to do |
+| gulf | done | done | done | done | part (e) | done | blocked | to do |
+| texas | done | done | done | done | part (e) | done | blocked | to do |
+| plains | done | done | done | done | part (e) | done | blocked | to do |
+| midwest | done | done | done | done | part (e) | done | blocked | to do |
+| ozarks | done | done | done | done | part (e) | done | blocked | to do |
+| rockies | done | done | done | done | part (e) | done | blocked | to do |
 | desert-sw | done | done | done | done | part (e) | done | blocked | to do |
 | great-basin | done | done | done | done | part (e) | done | blocked | to do |
-| california | part (d) | done | done | done | part (e) | done | blocked | to do |
+| california | done | done | done | done | part (e) | done | blocked | to do |
 | pnw | done | done | done | done | part (e) | done | blocked | to do |
 
 Notes:
 
-- (a) No smooth cordgrass yet: the salt marsh.
-- (b) No inland gulls yet: ring-billed and herring.
-- (c) No duckweed on still swamp water yet.
-- (d) No black oak or gray pine yet.
+- (a)–(d), the leftovers (smooth cordgrass, the inland gulls, duckweed, the black oak and gray pine):
+  done 2026-10-06.
 - **Mammals** are done everywhere (packages 13–14); the bison stand in for protected land until the
   map's protected areas reach the sim.
 - (e) Package 15's reptiles are in (turtles everywhere, the alligator and anoles across the South), but
