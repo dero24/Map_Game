@@ -13,12 +13,13 @@ what "done" means. Written 2026-10-06; update it when a milestone closes or the 
 | **2** | The game itself | 26 items, none started yet (by design: foundations first) |
 | **3** | Polish | 14 passing, 11 not started |
 
-Regional life (`docs/regional-life/models.md` build order): **13 of 16 packages built**.
+Regional life (`docs/regional-life/models.md` build order): **14 of 16 packages built**.
 
 - **Plants:** all 10 packages built.
 - **Birds:** both packages built: the backyard birds, then the water and big birds.
-- **Mammals:** the first package built, on the existing body plans.
-- **Still to go:** the new mammal plans, reptiles, and small life.
+- **Mammals:** both packages built: on the existing body plans, then the new plans (bear, bison,
+  armadillo, manatee).
+- **Still to go:** reptiles and small life.
 
 ## The 16 regions
 
@@ -117,22 +118,22 @@ Updated as packages land. Key: **done**; **part** = built with a known gap (in t
 
 | Region | Trees | Ground | Birds | Mammals | Reptiles | Small life | Density | Reviewed |
 |---|---|---|---|---|---|---|---|---|
-| new-england | done | part (a) | done | part | none | part | blocked | to do |
-| upstate-ny | done | done | part (b) | part | none | part | blocked | to do |
-| mid-atlantic | done | part (a) | done | part | none | part | blocked | to do |
-| appalachia | done | done | part (b) | part | none | part | blocked | to do |
-| southeast | done | part (a, c) | done | part | none | part | blocked | to do |
-| florida | done | part (a, c) | done | part | none | part | blocked | to do |
-| gulf | done | part (a, c) | done | part | none | part | blocked | to do |
-| texas | done | part (a) | done | part | none | part | blocked | to do |
-| plains | done | done | part (b) | part | none | part | blocked | to do |
-| midwest | done | done | part (b) | part | none | part | blocked | to do |
-| ozarks | done | done | part (b) | part | none | part | blocked | to do |
-| rockies | done | done | part (b) | part | none | part | blocked | to do |
-| desert-sw | done | done | done | part | none | part | blocked | to do |
-| great-basin | done | done | done | part | none | part | blocked | to do |
-| california | part (d) | done | done | part | none | part | blocked | to do |
-| pnw | done | done | done | part | none | part | blocked | to do |
+| new-england | done | part (a) | done | done | none | part | blocked | to do |
+| upstate-ny | done | done | part (b) | done | none | part | blocked | to do |
+| mid-atlantic | done | part (a) | done | done | none | part | blocked | to do |
+| appalachia | done | done | part (b) | done | none | part | blocked | to do |
+| southeast | done | part (a, c) | done | done | none | part | blocked | to do |
+| florida | done | part (a, c) | done | done | none | part | blocked | to do |
+| gulf | done | part (a, c) | done | done | none | part | blocked | to do |
+| texas | done | part (a) | done | done | none | part | blocked | to do |
+| plains | done | done | part (b) | done | none | part | blocked | to do |
+| midwest | done | done | part (b) | done | none | part | blocked | to do |
+| ozarks | done | done | part (b) | done | none | part | blocked | to do |
+| rockies | done | done | part (b) | done | none | part | blocked | to do |
+| desert-sw | done | done | done | done | none | part | blocked | to do |
+| great-basin | done | done | done | done | none | part | blocked | to do |
+| california | part (d) | done | done | done | none | part | blocked | to do |
+| pnw | done | done | done | done | none | part | blocked | to do |
 
 Notes:
 
@@ -140,9 +141,8 @@ Notes:
 - (b) No inland gulls yet: ring-billed and herring.
 - (c) No duckweed on still swamp water yet.
 - (d) No black oak or gray pine yet.
-- **Mammals** are part everywhere: package 13's are in (raccoon, opossum, skunk, the squirrels and
-  burrowers, the beaver, elk, moose, pronghorn, bighorn, antlers); package 14 adds the bear, bison,
-  armadillo and manatee.
+- **Mammals** are done everywhere (packages 13–14); the bison stand in for protected land until the
+  map's protected areas reach the sim.
 - **Small life** is part everywhere: generic butterflies and fireflies are in; package 16 adds the
   rest.
 

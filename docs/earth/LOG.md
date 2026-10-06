@@ -2,6 +2,47 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-06 — Regional life (14): the new plans — bear, bison, armadillo, manatee
+
+Package #14 of `docs/regional-life/models.md`: the four animals no existing body could make, each a
+plan of its own (`fauna.ts` `bearGeometry`, `bisonGeometry`, `armadilloGeometry`, `manateeGeometry`,
+dispatched by `NEW_PLAN`) on the same joints, so a grizzly, a cow or a javelina is a row later.
+
+- **The American black bear** (bear†): the heavy rounded body, rump as high as the shoulders, the round
+  head and tan muzzle, small round ears, thick pigeon-toed legs. Its coat a TINT: black in the East;
+  black, cinnamon, brown or blond in the West. It stands up to look when you come (sitting up about its
+  hind feet: `sitPivot`), then goes; a sow in summer has one to three cubs at her heels (`Critter.lead`:
+  a cub keeps by her), and a startled cub goes up the nearest tree. At the wood's edge with the deer
+  (`browser`), denned up through the northern winter.
+- **The American bison** (bovid†): the great woolly forequarters, the high hump, the lighter, smaller rear,
+  the head carried low with its beard, short curved horns (both sexes: `antlers: 'bison'`, `RACK` 1), the
+  tufted tail. In herds; drops and rolls in a dust wallow (`wallow`); a bull bellows in the July rut. Only
+  deep in open country (bison are kept herds: until the map's protected areas reach the sim, "remote" is
+  the stand-in).
+- **The nine-banded armadillo** (armadillo†): the front and rear shields and nine hinged bands, the pointed
+  head, the upright ears, the long banded tail. Out at night (`forager`); jumps straight up when startled
+  (`yip`), then runs.
+- **The West Indian manatee** (swimmer†): the grey wrinkled potato of a body with algae on its back, the
+  round paddle, the flippers, the square snout. Only its back and snout at the surface (`swimSink`), its
+  snout lifting to breathe; it pays you no mind.
+- **Where** (ranges.md): the bear in the forested mountains, the Southeast's swamps and Florida, the north
+  woods, the Rockies, the Northwest and the Sierra — never the open Plains, the Corn Belt, the Central
+  Valley floor or the low deserts; the bison the western Plains' and the Rockies'; the armadillo across
+  the South to Kansas, Missouri and the Interior Plateau; the manatee Florida's the year round, the
+  Carolinas' and the Gulf's from May to October.
+- Fixed on the way: the manatee's belly sat 6 cm above its origin (the foundry's "on its feet" check
+  caught it).
+
+**Verified:** typecheck; `npm test` 962/962; `tests/newPlans.test.ts` (new: the ranges and seasons; each
+plan's build — the bear's size, the bison's hump forward over the shoulders and its horns, the
+armadillo's length, the manatee legless with its paddle wide; the bear standing up then going, cubs by
+the sow and a cub up a tree, the armadillo's jump, the manatee unbothered, the bison's wallow and horns
+on every one); budgets in `tests/foundry.test.ts` (the bear, bison and manatee at the big animals'
+2,500); the shore's playtest.
+
+**Next:** package #15, the reptiles (the alligator, the anoles, the painted turtle and the sliders on a
+log).
+
 ## 2026-10-06 — Regional life (13): the mammals on the existing bases
 
 Package #13 of `docs/regional-life/models.md`. Robby, 2026-10-06, on the vertex budgets: "could we go a

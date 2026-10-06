@@ -19,12 +19,15 @@ export type CritterKind =
   | 'canadagoose' | 'mallard' | 'mallardhen' | 'loon' | 'greatblueheron' | 'greategret' | 'snowyegret' | 'spoonbill' | 'sandhillcrane'
   | 'turkeyvulture' | 'baldeagle' | 'osprey' | 'wildturkey' | 'californiaquail' | 'brownpelican' | 'laughinggull' | 'californiagull'
   // (package #13: the mammals on the existing bases)
-  | 'raccoon' | 'opossum' | 'skunk' | 'foxsquirrel' | 'chipmunk' | 'woodchuck' | 'beaver' | 'prairiedog' | 'elk' | 'moose' | 'pronghorn' | 'bighorn';
+  | 'raccoon' | 'opossum' | 'skunk' | 'foxsquirrel' | 'chipmunk' | 'woodchuck' | 'beaver' | 'prairiedog' | 'elk' | 'moose' | 'pronghorn' | 'bighorn'
+  // (package #14: the new plans)
+  | 'blackbear' | 'bison' | 'armadillo' | 'manatee';
 export const CRITTERS: CritterKind[] = ['squirrel', 'rabbit', 'songbird', 'sandpiper', 'deer', 'butterfly', 'firefly', 'fox', 'hawk', 'coyote', 'jackrabbit', 'snowshoe', 'groundSquirrel', 'muleDeer', 'roadrunner', 'quail', 'ibis',
   'cardinal', 'bluejay', 'robin', 'stellersjay', 'gilawoodpecker', 'mourningdove', 'crow', 'pigeon',
   'canadagoose', 'mallard', 'mallardhen', 'loon', 'greatblueheron', 'greategret', 'snowyegret', 'spoonbill', 'sandhillcrane',
   'turkeyvulture', 'baldeagle', 'osprey', 'wildturkey', 'californiaquail', 'brownpelican', 'laughinggull', 'californiagull',
-  'raccoon', 'opossum', 'skunk', 'foxsquirrel', 'chipmunk', 'woodchuck', 'beaver', 'prairiedog', 'elk', 'moose', 'pronghorn', 'bighorn'];
+  'raccoon', 'opossum', 'skunk', 'foxsquirrel', 'chipmunk', 'woodchuck', 'beaver', 'prairiedog', 'elk', 'moose', 'pronghorn', 'bighorn',
+  'blackbear', 'bison', 'armadillo', 'manatee'];
 export const CRITTER_NAME: Record<CritterKind, string> = {
   squirrel: 'squirrel', rabbit: 'rabbit', songbird: 'songbird', sandpiper: 'sandpiper', deer: 'white-tailed deer', butterfly: 'butterfly', firefly: 'firefly', fox: 'red fox', hawk: 'red-tailed hawk',
   coyote: 'coyote', jackrabbit: 'black-tailed jackrabbit', snowshoe: 'snowshoe hare', groundSquirrel: 'ground squirrel', muleDeer: 'mule deer', roadrunner: 'greater roadrunner', quail: 'quail', ibis: 'white ibis',
@@ -32,6 +35,7 @@ export const CRITTER_NAME: Record<CritterKind, string> = {
   canadagoose: 'Canada goose', mallard: 'mallard', mallardhen: 'mallard (hen)', loon: 'common loon', greatblueheron: 'great blue heron', greategret: 'great egret', snowyegret: 'snowy egret', spoonbill: 'roseate spoonbill', sandhillcrane: 'sandhill crane',
   turkeyvulture: 'turkey vulture', baldeagle: 'bald eagle', osprey: 'osprey', wildturkey: 'wild turkey', californiaquail: 'California quail', brownpelican: 'brown pelican', laughinggull: 'laughing gull', californiagull: 'California gull',
   raccoon: 'raccoon', opossum: 'Virginia opossum', skunk: 'striped skunk', foxsquirrel: 'fox squirrel', chipmunk: 'eastern chipmunk', woodchuck: 'woodchuck', beaver: 'American beaver', prairiedog: 'black-tailed prairie dog', elk: 'elk', moose: 'moose', pronghorn: 'pronghorn', bighorn: 'bighorn sheep',
+  blackbear: 'American black bear', bison: 'American bison', armadillo: 'nine-banded armadillo', manatee: 'West Indian manatee',
 };
 
 /** Ecological roles: the sim (sim/critters.ts) gives each role its habitat and behaviour; the
@@ -61,6 +65,9 @@ export const ROLE: Record<CritterKind, CritterRole> = {
   // moose browsing the willows; the elk, the pronghorn and the bighorn in herds)
   raccoon: 'forager', opossum: 'forager', skunk: 'forager', foxsquirrel: 'climber', chipmunk: 'burrower', woodchuck: 'burrower', prairiedog: 'burrower',
   beaver: 'waterfowl', moose: 'browser', elk: 'herd', pronghorn: 'herd', bighorn: 'herd',
+  // (the bear at the wood's edge with the deer; the bison in the herds; the armadillo out at night; the
+  // manatee in the warm water)
+  blackbear: 'browser', bison: 'herd', armadillo: 'forager', manatee: 'waterfowl',
 };
 export type FaunaMix = Partial<Record<CritterRole, [CritterKind, number][]>>;
 // Species per role by climate (Köppen-ish, the same key the plant and car mixes use). North
@@ -160,9 +167,29 @@ const MAMMALS: Record<EcoRegion | 'pnw-dry', FaunaMix> = {
   pnw: { climber: SQ(0.2), forager: NIGHT(0.7), herd: [['elk', 0.8]] },
   'pnw-dry': { climber: SQ(0.1, 0.6), forager: NIGHT(0.2), herd: [['elk', 0.6], ['pronghorn', 0.3], ['bighorn', 0.2]], browser: [['muleDeer', 1], ['deer', 0.4], ['moose', 0.1]] },
 };
+// (package #14: the black bear in the forested mountains, the Southeast's swamps and Florida, never the
+// open Plains or the Corn Belt (the north woods' alone in the Midwest, ranges.md); the bison the western
+// Plains' and the Rockies' kept herds; the armadillo across the South to Kansas and Kentucky; the
+// manatee Florida's, and the Carolinas' and the Gulf's in summer)
+const BEAR = (w: number): Mix => [['blackbear', w]];
+const NEW_PLANS: Partial<Record<EcoRegion | 'pnw-dry', FaunaMix>> = {
+  'new-england': { browser: [['deer', 1], ...BEAR(0.12)] }, 'upstate-ny': { browser: [['deer', 1], ...BEAR(0.12)] }, 'mid-atlantic': { browser: [['deer', 1], ...BEAR(0.06)] },
+  appalachia: { browser: [['deer', 1], ...BEAR(0.2)], forager: [...NIGHT(), ['armadillo', 0.15]] },
+  southeast: { browser: [['deer', 1], ...BEAR(0.06)], forager: [...NIGHT(1), ['armadillo', 0.6]], waterfowl: [...DUCKS, ['loon', 0.15], ['beaver', 0.15], ['manatee', 0.08]] },
+  florida: { browser: [['deer', 0.5], ...BEAR(0.1)], forager: [...NIGHT(1), ['armadillo', 0.8]], waterfowl: [['mallard', 0.6], ['mallardhen', 0.6], ['canadagoose', 0.3], ['loon', 0.15], ['beaver', 0.05], ['manatee', 0.25]] },
+  gulf: { browser: [['deer', 1], ...BEAR(0.08)], forager: [...NIGHT(1), ['armadillo', 0.8]], waterfowl: [...DUCKS, ['loon', 0.1], ['beaver', 0.15], ['manatee', 0.08]] },
+  texas: { forager: [...NIGHT(0.9), ['armadillo', 0.9]] },
+  ozarks: { browser: [['deer', 1], ...BEAR(0.12)], forager: [...NIGHT(), ['armadillo', 0.6]] },
+  rockies: { browser: [['muleDeer', 1], ['deer', 0.4], ['moose', 0.3], ...BEAR(0.15)], herd: [['elk', 1], ['pronghorn', 0.5], ['bighorn', 0.35], ['bison', 0.2]] },
+  plains: { herd: [['pronghorn', 1], ['elk', 0.1], ['bison', 0.25]], forager: [...NIGHT(0.6), ['armadillo', 0.4]] },
+  california: { browser: [['muleDeer', 1], ...BEAR(0.1)] },
+  pnw: { browser: [['muleDeer', 1], ['deer', 0.15], ...BEAR(0.15)] },
+  'desert-sw': { browser: [['muleDeer', 1], ...BEAR(0.05)] },
+};
+for (const k of Object.keys(NEW_PLANS) as (keyof typeof NEW_PLANS)[]) MAMMALS[k] = { ...MAMMALS[k], ...NEW_PLANS[k] };
 for (const k of Object.keys(MAMMALS) as (keyof typeof MAMMALS)[]) {
   const m = MAMMALS[k], here = REGION_FAUNA[k];
-  REGION_FAUNA[k] = { ...here, ...m, ...(here.waterfowl ? { waterfowl: [...here.waterfowl, ['beaver', 0.15]] } : {}) };
+  REGION_FAUNA[k] = { ...here, ...m, ...(here.waterfowl && !m.waterfowl ? { waterfowl: [...here.waterfowl, ['beaver', 0.15]] } : {}) };
 }
 /** The western Plains (the High Plains, the Southwestern Tablelands, the Northwestern Plains): the
  *  pronghorn's, west of the 100th meridian. */
@@ -184,6 +211,9 @@ const SEASON: Partial<Record<CritterKind, (eco: string, m: number) => boolean>> 
   snowyegret: (e, m) => !['new-england', 'mid-atlantic', 'great-basin'].includes(e) || months(m, 4, 10),
   // (the woodchuck asleep from November to February; the chipmunk under the ground through the winter)
   woodchuck: (_e, m) => months(m, 3, 10),
+  // (the bears denned up through the northern winter; the manatee in the Carolinas' and the Gulf's warm months)
+  blackbear: (e, m) => !NORTHERN.has(e) && !['new-england', 'upstate-ny', 'appalachia', 'midwest'].includes(e) || months(m, 4, 11),
+  manatee: (e, m) => e === 'florida' || months(m, 5, 10),
   chipmunk: (_e, m) => months(m, 3, 11),
 };
 
@@ -206,9 +236,15 @@ export function faunaMix(region: string, climate: string, place?: { eco: string;
     const l3 = place!.l3;
     const key = eco === 'pnw' && !place!.west ? 'pnw-dry' : eco;
     let m = REGION_FAUNA[key];
-    if (NORTH_WOODS.has(l3)) m = { ...m, grazer: [...(m.grazer ?? []), ['snowshoe', 0.6]], browser: [...(m.browser ?? [['deer', 1]]), ['moose', 0.4]] };
+    if (NORTH_WOODS.has(l3)) m = { ...m, grazer: [...(m.grazer ?? []), ['snowshoe', 0.6]], browser: [...(m.browser ?? [['deer', 1]]), ['moose', 0.4], ...(eco === 'midwest' ? [['blackbear', 0.12] as [CritterKind, number]] : [])] };
+    // (no bear on California's valley floor or in the low deserts; the armadillo only in the southern
+    // Plains and Appalachia's Interior Plateau)
+    const drop = (r: CritterRole, k: CritterKind) => { m = { ...m, [r]: (m[r] ?? []).filter(([kk]) => kk !== k) }; };
+    if ((eco === 'california' && l3 === 7) || (eco === 'desert-sw' && (l3 === 81 || l3 === 79 || l3 === 14))) drop('browser', 'blackbear');
+    if (eco === 'plains' && ![26, 27, 29].includes(l3)) drop('forager', 'armadillo');
+    if (eco === 'appalachia' && l3 !== 71) drop('forager', 'armadillo');
     // (the pronghorn west of the 100th meridian only; the Roosevelt elk on California's north coast)
-    if (eco === 'plains' && !PLAINS_WEST.has(l3)) m = { ...m, herd: (m.herd ?? []).filter(([k]) => k !== 'pronghorn'), burrower: (m.burrower ?? []).filter(([k]) => k !== 'prairiedog') };
+    if (eco === 'plains' && !PLAINS_WEST.has(l3)) m = { ...m, herd: (m.herd ?? []).filter(([k]) => k !== 'pronghorn' && k !== 'bison'), burrower: (m.burrower ?? []).filter(([k]) => k !== 'prairiedog') };
     if (eco === 'plains' && !PLAINS_EAST.has(l3)) m = { ...m, burrower: (m.burrower ?? []).filter(([k]) => k !== 'woodchuck') }; // (the woodchuck only at the Plains' eastern edge)
     if (eco === 'california' && l3 === 1) m = { ...m, herd: [['elk', 0.6]] };
     if (eco === 'plains' && PLAINS_EAST.has(l3)) m = { ...m, firefly: [['firefly', 0.6]] };
@@ -259,7 +295,7 @@ interface Quad {
    *  its humped shoulders and its throat bell */
   legC?: number; rump?: number; snout?: number; hump?: boolean; bell?: boolean;
   /** antlers or horns (the sim shows them on its bulls, bucks and rams, in their season) */
-  antlers?: 'whitetail' | 'mule' | 'elk' | 'moose' | 'pronghorn' | 'ram'; antlerC?: number;
+  antlers?: 'whitetail' | 'mule' | 'elk' | 'moose' | 'pronghorn' | 'ram' | 'bison'; antlerC?: number;
 }
 const QUAD: Partial<Record<CritterKind, Quad>> = {
   squirrel: { base: 'squirrel' }, rabbit: { base: 'rabbit' }, deer: { base: 'deer', antlers: 'whitetail' }, fox: { base: 'fox' },
@@ -360,6 +396,9 @@ function antlerSide(type: NonNullable<Quad['antlers']>, s: number, base: THREE.V
       const a = -0.8 + i * 0.4, p = V3(palm.x + s * Math.cos(a) * 0.24, palm.y + 0.08 + Math.sin(i * 1.3) * 0.02, palm.z + Math.sin(a) * 0.18);
       out.push(part(new THREE.ConeGeometry(0.022, 0.1, 4).rotateZ(-s * 0.6).translate(p.x, p.y + 0.04, p.z), c, ANTLER));
     }
+  } else if (type === 'bison') {
+    // a bison's short horns: out from the skull's side, hooking up and in
+    tube([at(0, 0, 0), at(0.12, 0.02, 0), at(0.18, 0.1, 0.02), at(0.15, 0.18, 0.04)], 0.045, 0.012);
   } else if (type === 'pronghorn') {
     const top = at(0.01, 0.2, 0.04);
     tube([at(0, 0, 0), top, at(-0.02, 0.26, 0.08)], 0.022, 0.008); // (curving back and in at the tip)
@@ -710,10 +749,129 @@ function birdGeometry(coat: number, belly: number, legC: number, beakC: number, 
   return merge(parts);
 }
 
+// ---- package #14: the new plans (models.md: bear†, bovid†, armadillo†, swimmer†) ----
+// Each a builder of its own over the same joints (P.fore, P.hind, P.skull, P.tail: the critter material
+// animates them as it does every animal), with its rows as parameters, so a grizzly, a cow or a javelina
+// is a row later. Front toward −z, feet at y 0, real metres (before the sim's scale).
+
+interface BearRow { k?: number; coat?: number; muzzle?: number; hump?: number }
+/** The bear plan: a heavy rounded body, the rump as high as the shoulders, a thick neck, the round head
+ *  and its tan muzzle, small round ears, thick pigeon-toed legs, a stub of a tail. Coat TINT: the sim
+ *  paints a black bear black in the East, black, cinnamon, brown or blond in the West. */
+function bearGeometry(o: BearRow): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [], coat = o.coat ?? 0xffffff, legH = 0.42, by = legH + 0.3;
+  parts.push(still(blob(0.7, 91, { lump: 0.1 }).scale(0.45, 0.48, 0.95).translate(0, by, 0), coat));
+  parts.push(still(blob(0.36, 92, { detail: 0, lump: 0.1 }).scale(0.85, 0.85, 0.9).translate(0, by + 0.04, 0.38), coat)); // (the rump)
+  parts.push(still(blob(0.3, 93, { detail: 0, lump: 0.1 }).scale(0.9, 0.8, 1.1).translate(0, by + 0.14 * (o.hump ?? 1), -0.36), coat)); // (the shoulders)
+  const neck = V3(0, by + 0.12, -0.5), head = V3(0, by + 0.06, -0.86);
+  parts.push(jointed(limb(V3(0, by + 0.08, -0.45), head, 0.2, 0.15, 6), coat, P.skull, neck));
+  parts.push(jointed(blob(0.19, 94, { lump: 0.06 }).scale(0.95, 0.88, 1.0).translate(head.x, head.y, head.z), coat, P.skull, neck));
+  parts.push(jointed(new THREE.ConeGeometry(0.095, 0.24, 6).rotateX(-Math.PI / 2).translate(0, head.y - 0.04, head.z - 0.22), o.muzzle ?? 0xa88a68, P.skull, neck));
+  parts.push(jointed(new THREE.SphereGeometry(0.035, 5, 4).translate(0, head.y - 0.03, head.z - 0.34), 0x161210, P.skull, neck)); // (the nose)
+  for (const s of [-1, 1]) {
+    parts.push(jointed(new THREE.SphereGeometry(0.055, 6, 4).scale(1, 1, 0.55).translate(s * 0.12, head.y + 0.16, head.z + 0.03), coat, P.skull, neck)); // ears
+    parts.push(jointed(new THREE.SphereGeometry(0.018, 4, 3).translate(s * 0.085, head.y + 0.05, head.z - 0.15), 0x120e0c, P.skull, neck)); // eyes
+    const sh = V3(s * 0.17, by - 0.02, -0.4), hip = V3(s * 0.19, by, 0.42);
+    parts.push(jointed(limb(sh, V3(s * 0.18, 0.06, -0.47), 0.105, 0.075, 6), coat, P.fore, sh));
+    parts.push(jointed(blob(0.075, 95, { detail: 0, lump: 0 }).scale(1, 0.55, 1.35).rotateY(s * 0.25).translate(s * 0.17, 0.04, -0.52), coat, P.fore, sh)); // (the paw, toed in)
+    const hock = V3(s * 0.2, 0.22, 0.52);
+    parts.push(jointed(limb(hip, hock, 0.14, 0.085, 6), coat, P.hind, hip));
+    parts.push(jointed(limb(hock, V3(s * 0.19, 0.04, 0.44), 0.08, 0.07, 5), coat, P.hind, hip));
+    parts.push(jointed(blob(0.08, 96, { detail: 0, lump: 0 }).scale(1, 0.5, 1.5).rotateY(s * 0.25).translate(s * 0.18, 0.035, 0.38), coat, P.hind, hip));
+  }
+  const tb = V3(0, by + 0.12, 0.66);
+  parts.push(jointed(blob(0.06, 97, { detail: 0 }).translate(tb.x, tb.y, tb.z), coat, P.tail, tb));
+  return scaleGeo(merge(parts), o.k ?? 1);
+}
+
+/** The bovid plan, as a bison: the great woolly forequarters and head, the high hump, the lighter, smaller
+ *  rear, the head carried low with its beard, short curved horns (both sexes), the tufted tail. */
+function bisonGeometry(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [], wool = 0x3a2618, rear = 0x6e4e32, horn = 0x1a1614;
+  parts.push(still(blob(0.55, 101, { lump: 0.12 }).scale(0.78, 0.82, 1.15).translate(0, 1.12, 0.48), rear));
+  parts.push(still(blob(0.78, 102, { lump: 0.25 }).scale(0.85, 0.95, 0.95).translate(0, 1.25, -0.25), wool));
+  parts.push(still(blob(0.45, 103, { detail: 0, lump: 0.2 }).scale(0.75, 1, 1.15).translate(0, 1.58, -0.18), wool)); // (the hump)
+  const neck = V3(0, 1.1, -0.62), head = V3(0, 0.88, -1.02);
+  parts.push(jointed(blob(0.34, 104, { lump: 0.3 }).scale(0.9, 1, 1.1).translate(head.x, head.y, head.z), wool, P.skull, neck));
+  parts.push(jointed(blob(0.2, 105, { detail: 0, lump: 0.3 }).scale(0.55, 1.25, 0.6).translate(0, head.y - 0.32, head.z + 0.04), wool, P.skull, neck)); // (the beard)
+  parts.push(jointed(blob(0.15, 106, { detail: 0, lump: 0 }).scale(1, 0.8, 0.9).translate(0, head.y - 0.12, head.z - 0.3), 0x241810, P.skull, neck)); // (the muzzle)
+  for (const s of [-1, 1]) {
+    parts.push(jointed(new THREE.SphereGeometry(0.03, 4, 3).translate(s * 0.17, head.y + 0.06, head.z - 0.16), 0x0e0a08, P.skull, neck)); // eyes
+    for (const g of antlerSide('bison', s, V3(s * 0.22, head.y + 0.16, head.z + 0.02), horn, neck)) parts.push(g);
+    const sh = V3(s * 0.24, 1.0, -0.45), hip = V3(s * 0.22, 1.0, 0.68);
+    parts.push(jointed(blob(0.24, 107, { detail: 0, lump: 0.3 }).scale(0.8, 1.1, 0.9).translate(s * 0.24, 0.72, -0.48), wool, P.fore, sh)); // (the woolly chaps)
+    parts.push(jointed(limb(V3(s * 0.24, 0.6, -0.48), V3(s * 0.23, 0, -0.5), 0.085, 0.06, 5), 0x2a1c12, P.fore, sh));
+    const hock = V3(s * 0.21, 0.42, 0.8);
+    parts.push(jointed(limb(hip, hock, 0.15, 0.08, 6), rear, P.hind, hip));
+    parts.push(jointed(limb(hock, V3(s * 0.2, 0, 0.72), 0.07, 0.055, 5), 0x2a1c12, P.hind, hip));
+  }
+  const tb = V3(0, 1.3, 1.08);
+  parts.push(jointed(limb(tb, V3(0, 0.85, 1.18), 0.03, 0.02, 4), rear, P.tail, tb));
+  parts.push(jointed(blob(0.06, 108, { detail: 0, lump: 0.2 }).scale(0.8, 1.6, 0.8).translate(0, 0.78, 1.19), wool, P.tail, tb)); // (the tuft)
+  return merge(parts);
+}
+
+/** The armadillo plan: a small body under its shell — a front shield, nine hinged bands, a rear shield —
+ *  the pointed head, the upright ears, short legs, the long scaled tail. */
+function armadilloGeometry(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [], skin = 0xb09a8c, shell = 0x9a8878, band = 0x857464, by = 0.17;
+  parts.push(still(blob(0.14, 111, { detail: 0, lump: 0.05 }).scale(0.9, 0.7, 1.4).translate(0, by - 0.02, 0), skin));
+  parts.push(still(blob(0.17, 112, { lump: 0.04 }).scale(0.92, 0.72, 0.8).translate(0, by + 0.01, -0.12), shell)); // (the front shield)
+  parts.push(still(blob(0.16, 113, { lump: 0.04 }).scale(0.92, 0.72, 0.75).translate(0, by + 0.01, 0.14), shell)); // (the rear shield)
+  for (let i = 0; i < 9; i++) {
+    // the bands: arches across the middle of the back, each a hair proud of the last
+    const z = -0.06 + i * 0.015, r = 0.158 + Math.sin((i / 8) * Math.PI) * 0.008;
+    const arch = new THREE.CylinderGeometry(r, r, 0.016, 10, 1, true, Math.PI / 2, Math.PI).rotateX(Math.PI / 2).scale(0.92, 0.72, 1).translate(0, by + 0.01, z);
+    parts.push(still(arch, i % 2 ? band : shell));
+  }
+  const neck = V3(0, by, -0.2), head = V3(0, by - 0.02, -0.27);
+  parts.push(jointed(new THREE.ConeGeometry(0.05, 0.16, 6).rotateX(-Math.PI / 2).translate(head.x, head.y, head.z - 0.04), skin, P.skull, neck)); // (the pointed head)
+  parts.push(jointed(blob(0.05, 114, { detail: 0, lump: 0 }).scale(0.85, 0.8, 0.9).translate(head.x, head.y + 0.01, head.z + 0.03), shell, P.skull, neck)); // (its little shield)
+  for (const s of [-1, 1]) {
+    parts.push(jointed(new THREE.ConeGeometry(0.018, 0.06, 4).translate(s * 0.03, head.y + 0.06, head.z + 0.05), skin, P.skull, neck)); // ears, upright
+    const sh = V3(s * 0.08, by - 0.05, -0.1), hip = V3(s * 0.08, by - 0.05, 0.12);
+    parts.push(jointed(limb(sh, V3(s * 0.085, 0, -0.11), 0.022, 0.016, 4), skin, P.fore, sh));
+    parts.push(jointed(limb(hip, V3(s * 0.085, 0, 0.12), 0.026, 0.018, 4), skin, P.hind, hip));
+  }
+  const tb = V3(0, by - 0.02, 0.24), tip = [V3(0, by - 0.05, 0.36), V3(0, by - 0.1, 0.46), V3(0, by - 0.13, 0.54)];
+  let prev = tb;
+  tip.forEach((q, i) => { parts.push(jointed(limb(prev, q, 0.03 - i * 0.008, 0.022 - i * 0.007, 5), i % 2 ? band : shell, P.tail, tb)); prev = q; });
+  return merge(parts);
+}
+
+/** The swimmer plan, as a manatee: the grey wrinkled potato of a body, the round paddle tail, the
+ *  flippers, the square whiskered snout, algae on its back (no legs: it never leaves the water). */
+function manateeGeometry(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [], hide = 0x6a665e, by = 0.392; // (its belly at the origin)
+  parts.push(still(blob(1, 121, { lump: 0.08 }).scale(0.55, 0.45, 1.3).translate(0, by, 0), hide));
+  parts.push(still(blob(0.55, 122, { detail: 0, lump: 0.2 }).scale(0.8, 0.25, 1.4).translate(0.05, by + 0.36, 0.1), 0x5e6a52)); // (algae on its back)
+  const neck = V3(0, by, -1.1);
+  parts.push(jointed(blob(0.32, 123, { lump: 0.08 }).scale(0.95, 0.85, 0.85).translate(0, by - 0.02, -1.38), hide, P.skull, neck));
+  parts.push(jointed(blob(0.2, 124, { detail: 0, lump: 0 }).scale(1.15, 0.9, 0.7).translate(0, by - 0.06, -1.62), 0x7a766c, P.skull, neck)); // (the square snout)
+  for (const s of [-1, 1]) {
+    const f = V3(s * 0.45, by - 0.15, -0.65);
+    parts.push(jointed(blob(0.22, 125, { detail: 0, lump: 0 }).scale(0.5, 0.18, 1).rotateY(s * 0.6).translate(f.x + s * 0.12, f.y - 0.05, f.z - 0.05), hide, P.fore, f)); // flippers
+    parts.push(jointed(new THREE.SphereGeometry(0.03, 4, 3).translate(s * 0.2, by + 0.06, -1.5), 0x161412, P.skull, neck)); // eyes
+  }
+  const tb = V3(0, by - 0.05, 1.2);
+  parts.push(jointed(blob(0.5, 126, { lump: 0.05 }).scale(1.1, 0.14, 0.9).translate(tb.x, tb.y, tb.z + 0.38), hide, P.tail, tb)); // (the round paddle)
+  return merge(parts);
+}
+
+/** The new plans' animals, by kind (package #14). */
+const NEW_PLAN: Partial<Record<CritterKind, () => THREE.BufferGeometry>> = {
+  blackbear: () => bearGeometry({ k: 1 }),
+  bison: () => bisonGeometry(),
+  armadillo: () => armadilloGeometry(),
+  manatee: () => manateeGeometry(),
+};
+
 /** Build one animal (front toward −z, feet at y = 0). Colours: TINT-free — each species has its own coat. */
 export function critterGeometry(kind: CritterKind): THREE.BufferGeometry {
   const B = BIRD[kind];
   if (B) return scaleGeo(birdGeometry(B.coat, B.belly, B.legC, B.beakC, B.legH, B.beakL, B.plan), B.k ?? 1);
+  const N = NEW_PLAN[kind];
+  if (N) return N();
   const parts: THREE.BufferGeometry[] = [];
   const Q = QUAD[kind];
   if (Q) {
@@ -860,10 +1018,10 @@ export function critterGeometry(kind: CritterKind): THREE.BufferGeometry {
 export const critterLib = (k: CritterKind) => cached(`critter:${k}`, () => critterGeometry(k));
 /** Where a sitter's body tips up about its hind feet (its own metres before its size: the sim keeps the
  *  hind foot where it stood when a prairie dog or a woodchuck sits up). */
-export const sitPivot = (k: CritterKind) => { const Q = QUAD[k]; return Q?.base === 'squirrel' ? 0.09 * (Q.k ?? 1) : 0; };
+export const sitPivot = (k: CritterKind) => { const Q = QUAD[k]; return k === 'blackbear' ? 0.44 : Q?.base === 'squirrel' ? 0.09 * (Q.k ?? 1) : 0; };
 /** The big animals, seen large and close (the deer family, the bear and the bison to come, the great
  *  birds): their vertex budget is a near tree's. */
-const BIG_CRITTERS = new Set<CritterKind>(['deer', 'muleDeer', 'elk', 'moose', 'pronghorn', 'bighorn', 'greatblueheron', 'sandhillcrane', 'wildturkey', 'baldeagle', 'brownpelican', 'canadagoose', 'turkeyvulture']);
+const BIG_CRITTERS = new Set<CritterKind>(['blackbear', 'bison', 'manatee', 'deer', 'muleDeer', 'elk', 'moose', 'pronghorn', 'bighorn', 'greatblueheron', 'sandhillcrane', 'wildturkey', 'baldeagle', 'brownpelican', 'canadagoose', 'turkeyvulture']);
 /** A species' vertex budget (tests/foundry.test.ts): 2,500 for the big animals — a near tree's, and only a
  *  few on screen; 2,000 for the middling ones on the fox's plan (the fox, the coyote, the raccoon, the
  *  opossum, the skunk, a walker's dog), met close at dusk; 1,600 for the rest, whose extra detail would
@@ -874,6 +1032,7 @@ export const critterBudget = (k: CritterKind) => (BIG_CRITTERS.has(k) ? 2500 : Q
 export function swimSink(k: CritterKind) {
   const B = BIRD[k];
   if (B) return (B.legH + 0.045 - 0.016) * (B.k ?? 1);
+  if (k === 'manatee') return 0.78; // (only its back and its snout at the surface)
   // (a swimming mammal — a beaver — lower: its legs and most of its body under, its back and head out)
   const Q = QUAD[k];
   if (!Q) return 0;
@@ -910,7 +1069,8 @@ export const LIMB: Record<CritterKind, number> = { squirrel: 0.9, rabbit: 0.85, 
   cardinal: 0.4, bluejay: 0.4, robin: 0.55, stellersjay: 0.4, gilawoodpecker: 0.35, mourningdove: 0.5, crow: 0.5, pigeon: 0.5,
   canadagoose: 0.45, mallard: 0.5, mallardhen: 0.5, loon: 0, greatblueheron: 0.35, greategret: 0.35, snowyegret: 0.45, spoonbill: 0.4, sandhillcrane: 0.35,
   turkeyvulture: 0.2, baldeagle: 0.2, osprey: 0.25, wildturkey: 0.45, californiaquail: 0.5, brownpelican: 0.35, laughinggull: 0.5, californiagull: 0.5,
-  raccoon: 0.55, opossum: 0.5, skunk: 0.5, foxsquirrel: 0.85, chipmunk: 0.95, woodchuck: 0.6, beaver: 0.5, prairiedog: 0.9, elk: 0.4, moose: 0.36, pronghorn: 0.55, bighorn: 0.45 };
+  raccoon: 0.55, opossum: 0.5, skunk: 0.5, foxsquirrel: 0.85, chipmunk: 0.95, woodchuck: 0.6, beaver: 0.5, prairiedog: 0.9, elk: 0.4, moose: 0.36, pronghorn: 0.55, bighorn: 0.45,
+  blackbear: 0.45, bison: 0.35, armadillo: 0.6, manatee: 0.25 };
 export const GAIT: Record<CritterKind, [number, number, number, number]> = {
   squirrel: [0.5, 0.5, 0, 0.25], rabbit: [0.3, 0.2, 0, 0.2], songbird: [0, 0.3, 1.2, -0.5], sandpiper: [3.14, 0.2, 1.1, -0.35],
   deer: [3.14, 0.4, 0, 0.12], butterfly: [0, 0, 1.3, 0], firefly: [0, 0, 0, 0], fox: [3.14, 0.45, 0, 0.2], hawk: [0, 0.2, 0.55, 0.3],
@@ -929,6 +1089,9 @@ export const GAIT: Record<CritterKind, [number, number, number, number]> = {
   // (the waddlers' slow walk; the squirrels' bound; the deer family's walk, heads coming up from grazing)
   raccoon: [3.14, 0.3, 0, 0.2], opossum: [3.14, 0.2, 0, 0.15], skunk: [3.14, 0.25, 0, 0.2], foxsquirrel: [0.5, 0.5, 0, 0.25], chipmunk: [0.5, 0.6, 0, 0.3],
   woodchuck: [3.14, 0.2, 0, 0.25], beaver: [3.14, 0.2, 0, 0.15], prairiedog: [0.5, 0.3, 0, 0.3], elk: [3.14, 0.35, 0, 0.12], moose: [3.14, 0.3, 0, 0.1], pronghorn: [3.14, 0.4, 0, 0.14], bighorn: [3.14, 0.3, 0, 0.14],
+  // (the bear's rolling walk, its head swinging; the bison's slow graze; the armadillo's snuffling trot,
+  // nose down; the manatee's slow tail-beat, its snout up to breathe)
+  blackbear: [3.14, 0.15, 0, 0.18], bison: [3.14, 0.4, 0, 0.16], armadillo: [3.14, 0.2, 0, -0.35], manatee: [3.14, 0.35, 0, 0.3],
 };
 /** Wingbeats (radians a second of the flap's sine; 38 ≈ six a second): the hawk's slow soaring
  *  strokes, a crow's steady rowing, the pigeons' and doves' clatter, the jays' and the robin's. */

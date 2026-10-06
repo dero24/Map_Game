@@ -137,6 +137,9 @@ The game was smooth and rendering before this work started. Work fast, and keep 
     - Roles `forager`, `herd`; states `possum`, `warn`; `Critter.sit`, `yip`; `sitPivot`; `MAMMALS` per
       region; `critterBudget` (2,500 / 2,000 / 1,600); `Critters.drawn` (animals behind not drawn).
     - `signs.ts`: `cellSpots`, `beaverLodges`, `prairieTown`, `prairieMounds`.
+  - **#14, the new plans** (2026-10-06; LOG "Regional life (14)"): `bearGeometry`, `bisonGeometry`,
+    `armadilloGeometry`, `manateeGeometry` (`NEW_PLAN`); `Critter.lead` (a cub keeps by its mother),
+    the `wallow` state, the bear's stand (`sitPivot`, its own count before it goes), `WEST_BEAR`.
 
 ## The bar: detail, variety, variation
 
@@ -280,8 +283,9 @@ in-game look is checked on Robby's PC.
   Lakes' and every Midwest parking lot's) — the gull role is empty there.
 - **#13:** built (2026-10-06) but for the beaver's dam (it needs a stream's line; the lodge stands in
   ponds and lakes).
-- **#14–#16:** the rest of the wildlife packages (`regional-wildlife`): #14 the new plans next (bear,
-  bison, armadillo, manatee).
+- **#14:** built (2026-10-06). The bison stand in "deep open country" until the map's protected areas
+  reach the sim (they're kept herds: parks and preserves).
+- **#15–#16:** the rest of the wildlife packages (`regional-wildlife`): #15 the reptiles next.
 - **Before 1.0:** a lighter version of each animal for phones and far off (about 40% of the vertices),
   like the trees' far model and the crowd's lite person.
   - The casts go in `faunaMix`, by `CastPlace`.

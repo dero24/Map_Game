@@ -120,10 +120,12 @@ describe('the casts follow the land (regionStyle → broadMix, plantMix, faunaMi
     // and package #12's water and big birds: the hawk still first among the raptors)
     // and package #13's mammals: the grey squirrel still first up the trees, the chipmunk and woodchuck,
     // the raccoon, the skunk and the opossum at night)
-    const { songbird: birds, raptor, waterfowl, wader, gull, fowl, climber, burrower, forager, ...rest } = shore.fauna, { songbird: old0, raptor: raptor0, climber: climber0, ...rest0 } = faunaMix('na', 'temperate');
+    // (and package #14's: a black bear now and then at the wood's edge, the deer still first)
+    const { songbird: birds, raptor, waterfowl, wader, gull, fowl, climber, burrower, forager, browser, ...rest } = shore.fauna, { songbird: old0, raptor: raptor0, climber: climber0, browser: browser0, ...rest0 } = faunaMix('na', 'temperate');
     expect(rest).toEqual(rest0);
     expect(raptor![0]).toEqual(raptor0![0]);
     expect(climber![0]).toEqual(climber0![0]);
+    expect(browser![0]).toEqual(browser0![0]);
     for (const r of [waterfowl, wader, gull, fowl, burrower, forager]) expect(r!.length).toBeGreaterThan(0);
     expect(birds![0]).toEqual(old0![0]);
     expect(birds!.map(([k]) => k)).toEqual(expect.arrayContaining(['robin', 'cardinal', 'bluejay', 'mourningdove', 'crow', 'pigeon']));

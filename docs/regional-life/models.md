@@ -2115,8 +2115,11 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
     roles: the raccoon up a tree, the opossum playing dead, the skunk's warning, the prairie dog's
     sentries and jump-yip, the beaver's tail slap and dive, the elk bull's bugle, herds that run
     together.
-14. **New mammal plans.** `bear†`: **black bear**. `bovid†`: **American bison**. `armadillo†`:
-    **nine-banded armadillo**. `swimmer†`: **West Indian manatee**.
+14. **New mammal plans** — **built** 2026-10-06 (`docs/earth/LOG.md` "Regional life (14)"). `bear†`:
+    **black bear** (`bearGeometry`: coat colour by region, standing up to look, a sow's cubs that climb).
+    `bovid†`: **American bison** (`bisonGeometry`: woolly forequarters, hump, horns, wallows). `armadillo†`:
+    **nine-banded armadillo** (`armadilloGeometry`: shields and nine bands, the startled jump).
+    `swimmer†`: **West Indian manatee** (`manateeGeometry`: back and snout at the surface).
 15. **Reptiles.** `sprawler†`: **American alligator**, then **green anole** and **brown anole**.
     `turtle†`: **painted turtle**, then **red-eared** and **yellow-bellied sliders** basking on a log.
 16. **Small life.** Butterfly row: **monarch**. `dragonfly†`: **common green darner**. `bug†`:
