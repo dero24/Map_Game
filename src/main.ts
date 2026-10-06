@@ -29,7 +29,7 @@ import { GrassField } from './world/grass';
 import { UnderstoryField } from './world/understory';
 import { roadNear } from './world/roadBounds';
 import { buildSky, skyUniforms } from './world/sky';
-import { LifeClient, buildLifeBase, buildLifeInit, lifeInitSteps, lifeParams } from './sim/life';
+import { LifeClient, buildLifeBase, buildLifeInit, crowdOf, lifeInitSteps, lifeParams } from './sim/life';
 import { Ambience } from './audio/ambience';
 import { Journal } from './ui/journal';
 import { Explore, SEEN_REACH } from './world/explore';
@@ -47,6 +47,8 @@ import { Hints } from './ui/hints';
 import { Brush } from './ui/brush';
 import { peaksAround, sightsFrom, compassWord, type Peak } from './world/peaks';
 import { Arrival } from './ui/arrival';
+import { bearing, habitatOf, standBy, whereToSee } from './ui/seeIt';
+import { CRITTERS, CRITTER_NAME, type CritterKind } from './assets/fauna';
 import type { GameCtx } from './ui/ctx';
 import { modelName } from './player/vehicles';
 import { Critters } from './sim/critters';
@@ -517,7 +519,9 @@ async function main() {
   };
   if (atPos && params.get('view') === '1') viewpoint(atPos[0], atPos[1]);
   // Runtime teleport (G): same door-snap rule, waiting for the neighbourhood to stream in.
-  const teleportTo = async (lat: number, lon: number, kind?: string) => {
+  // (`extra`: more of the link to carry when the page reloads for a far place — the panel's "go see it"
+  // sends its date, hour and animal. True when it stayed in this world, false when it's reloading.)
+  const teleportTo = async (lat: number, lon: number, kind?: string, extra?: Record<string, string>) => {
     const [x, z] = fromLatLon(json.origin, lat, lon);
     const landmark = !!kind && LANDMARK.test(kind);
     const b = json.backdrop;
@@ -534,12 +538,15 @@ async function main() {
       p.set('at', `${lat},${lon}`);
       if (landmark) p.set('view', '1');
       else p.delete('view');
+      p.delete('see');
+      for (const [k, v] of Object.entries(extra ?? {})) p.set(k, v);
       location.search = p.toString();
-      return;
+      return false;
     }
     toast('walking over');
     await stream.ensureAround(x, z);
     if (!landmark || !viewpoint(x, z)) teleportLocal(x, z);
+    return true;
   };
   // When a real tile swaps in under the walker, the synth placeholder's collision is
   // tombstoned with it — the player can end up inside a wall. Nudge them clear — but
@@ -709,6 +716,37 @@ async function main() {
   worldRoot.add(garden.group);
   void garden.load();
   critters.onEvent = (kind, what, pan, dist) => ambience?.critter(kind, what, pan, dist);
+  // The panel's "go see it" (ui/seeIt.ts): off to where an animal lives, in its month and at its hour;
+  // stood by its water if it keeps to one; made sure to come (critters.spotlight); told where it is.
+  let seeTimer = 0;
+  const watchFor = (kind: CritterKind) => {
+    critters.spotlight = kind;
+    window.clearInterval(seeTimer);
+    const t0 = performance.now(), name = CRITTER_NAME[kind];
+    seeTimer = window.setInterval(() => {
+      const n = critters.nearestOf(kind, walker.x, walker.z);
+      if (n) { toast(`${name}: ${bearing(walker.x, walker.z, n.x, n.z)}`); window.clearInterval(seeTimer); }
+      else if (performance.now() - t0 > 90000) { toast(`no ${name} about yet: try "where is it?" in a while, or another hour`); window.clearInterval(seeTimer); }
+    }, 1000);
+  };
+  const standFor = (kind: CritterKind) => {
+    const at = standBy(habitatOf(kind), walker.x, walker.z, world.terrain, (x, z) => walk.walkable(x, z) && walk.buildingAt(x, z) < 0 && !walk.blocked(x, z, 0.6));
+    if (!at) return;
+    landed = null; // (not pulled back to the arrival when the real cell comes in)
+    walker.place(at.x, at.z, at.yaw, -0.05);
+    void stream.ensureAround(at.x, at.z);
+  };
+  const goSee = async (kind: CritterKind) => {
+    const w = whereToSee(kind);
+    if (!w) { toast(`nowhere for a ${CRITTER_NAME[kind]} yet`); return; }
+    const date = `${new Date().getUTCFullYear()}-${String(w.month).padStart(2, '0')}-15`;
+    toast(`off to see a ${w.name}`);
+    if (!(await teleportTo(w.lat, w.lon, undefined, { date, hour: String(w.hour), see: kind }))) return; // (reloading)
+    timeParams.dayOfYear = dayOfYear(Date.parse(date + 'T12:00:00Z'));
+    setHour(w.hour);
+    standFor(kind);
+    watchFor(kind);
+  };
   // the world reacts to your ride: walkers in a moving car's path are knocked down (they get up and
   // walk on), and animals give way to anything moving — traffic and you alike
   const rideMover = { x: 0, z: 0, vx: 0, vz: 0 };
@@ -877,7 +915,18 @@ async function main() {
       if (debugParams.summons) vehicles.summon(kind);
       else toast('turn on free rides in Debug first');
     },
+    onSee: (kind) => void goSee(kind),
+    onFind: (kind) => {
+      const n = critters.nearestOf(kind, walker.x, walker.z);
+      toast(n ? `${CRITTER_NAME[kind]}: ${bearing(walker.x, walker.z, n.x, n.z)}` : `no ${CRITTER_NAME[kind]} about right now`);
+    },
+    onEveryone: (on) => { critters.everyone = on; },
   }, { name: townName, tz, respawn: spec?.on });
+  // the link's animal (a "go see it" that reloaded for a far place): stood by its water, watched for
+  {
+    const sq = params.get('see');
+    if (sq && (CRITTERS as string[]).includes(sq)) { standFor(sq as CritterKind); watchFor(sq as CritterKind); }
+  }
 
   const weather: Weather = { cloud: weatherParams.cloud, seaFog: weatherParams.seaFog, haze: weatherParams.haze, wind: weatherParams.wind };
   let simTime = 0;
@@ -1502,7 +1551,8 @@ async function main() {
     camera.updateMatrixWorld();
     camera.getWorldDirection(fwd);
     crowd.group.visible = lifeParams.enabled;
-    if (crowd.group.visible) crowd.update(walker.x, walker.z, timeParams.hour, [camera.position.x + origin.x, camera.position.z + origin.z, fwd.x, fwd.z], Math.tan(Math.PI * 31 / 180) / Math.tan((camera.fov * Math.PI) / 360));
+    // (the beach's people: the overall knob and the beach's own — its day already its own, calendar.ts)
+    if (crowd.group.visible) crowd.update(walker.x, walker.z, timeParams.hour, [camera.position.x + origin.x, camera.position.z + origin.z, fwd.x, fwd.z], Math.tan(Math.PI * 31 / 180) / Math.tan((camera.fov * Math.PI) / 360), lifeParams.density * lifeParams.beach);
     focus.set(camera.position.x + fwd.x * 60, walker.y - walkParams.eyeHeight, camera.position.z + fwd.z * 60);
     const ti = performance.now();
     interiors.update(walker.x, walker.z, dt, walker.feet, !vehicles.driving && !walkParams.fly);
@@ -1623,7 +1673,7 @@ async function main() {
         settledHere = Math.max(townHere, Math.min(1, Math.max(0, (n / 9 - 0.5) / 6)));
       }
       life.taxiShare = Math.max(0, cityHere - 0.2) * 0.45;
-      life.crowd = 1 + 1.6 * cityHere; // a Midtown sidewalk is busier than a shore town's
+      life.crowd = crowdOf(townHere, cityHere); // a Midtown sidewalk is busier than a shore town's (the panel's knobs per kind of place)
     }
     critters.enabled = lifeParams.enabled && !interiors.indoors;
     movers.length = 0;

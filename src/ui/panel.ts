@@ -9,6 +9,8 @@ import { waterParams } from '../world/water';
 import { U } from '../render/shared';
 import { lifeParams } from '../sim/life';
 import { audioParams } from '../audio/ambience';
+import { animalList, whereToSee } from './seeIt';
+import type { CritterKind } from '../assets/fauna';
 
 export const timeParams = { realTime: true, hour: 18.5, speed: 60, dayOfYear: 0 };
 export const weatherParams = { cloud: 0.35, seaFog: 0.0, haze: 0.35, wind: 0.5, autoWeather: true, snow: -1, fogMode: 'rare, anywhere' }; // snow −1 = the season's own (season.ts)
@@ -60,7 +62,7 @@ function save() {
   try { localStorage.setItem(STORE, JSON.stringify({ ...out, uniforms: u })); } catch { /* storage off */ }
 }
 
-export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: number) => void; onRespawn: () => void; onResetExplore: () => void; onSummon: (kind: 'car' | 'boat' | 'plane') => void }, region: { name: string; tz: string; respawn?: string }) {
+export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: number) => void; onRespawn: () => void; onResetExplore: () => void; onSummon: (kind: 'car' | 'boat' | 'plane') => void; onSee: (kind: CritterKind) => void; onFind: (kind: CritterKind) => void; onEveryone: (on: boolean) => void }, region: { name: string; tz: string; respawn?: string }) {
   const gui = new GUI({ title: `${region.name} · tuning` });
   gui.onFinishChange(save);
   const ZONES: Record<string, string> = { 'America/Los_Angeles': 'Pacific', 'America/Denver': 'Mountain', 'America/Phoenix': 'Arizona', 'America/Chicago': 'Central', 'America/New_York': 'Eastern' };
@@ -115,9 +117,30 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
 
   const life = gui.addFolder('Life & sound');
   life.add(lifeParams, 'enabled').name('townsfolk, cars, gulls');
-  life.add(lifeParams, 'density', 0, 3, 0.01).name('how busy');
+  life.add(lifeParams, 'density', 0, 3, 0.01).name('how busy (everywhere)');
+  // (each kind of place its own: the quiet streets thinner than a main street or a city's towers)
+  life.add(lifeParams, 'suburbs', 0, 3, 0.01).name('how busy: suburbs & country');
+  life.add(lifeParams, 'towns', 0, 3, 0.01).name('how busy: main streets');
+  life.add(lifeParams, 'cities', 0, 3, 0.01).name('how busy: cities');
+  life.add(lifeParams, 'beach', 0, 1, 0.01).name('how busy: the beach');
   life.add(audioParams, 'volume', 0, 1, 0.01).name('volume');
   life.add(audioParams, 'muted').name('mute');
+
+  // Creatures: off to where an animal lives, in its month and at its hour (seeIt.ts), stood by its water
+  // if it keeps to one; it's made sure to come, and you're told where it is
+  const animals = animalList(), MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const see = { animal: (animals['harbor seal'] ?? Object.values(animals)[0]) as CritterKind, where: '', everyone: false };
+  const where = () => {
+    const w = whereToSee(see.animal);
+    see.where = w ? `${w.lat.toFixed(2)}, ${w.lon.toFixed(2)} · ${MONTH[w.month - 1]} · ${Math.floor(w.hour)}:${String(Math.round((w.hour % 1) * 60)).padStart(2, '0')}${w.habitat === 'land' ? '' : w.habitat === 'sea' ? ' · by the sea' : ' · by fresh water'}` : 'nowhere yet';
+  };
+  where();
+  const cr = gui.addFolder('Creatures');
+  cr.add(see, 'animal', animals).name('animal').onChange(where);
+  cr.add(see, 'where').name('goes to').listen().disable();
+  cr.add({ go: () => hooks.onSee(see.animal) }, 'go').name('go see it');
+  cr.add({ find: () => hooks.onFind(see.animal) }, 'find').name('where is it?');
+  cr.add(see, 'everyone').name('every animal about (ignore how rare)').onChange(hooks.onEveryone);
 
   const p = gui.addFolder('Watercolor');
   p.add(postParams, 'enabled').name('painting on');

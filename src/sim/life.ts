@@ -22,7 +22,19 @@ const LIFE_BOATS: BoatType[] = ['console', 'cabin', 'sail', 'lobster', 'skiff'];
 const LIFE_GEAR: CarGear[] = ['rack', 'surf', 'kayak', 'cargo', 'taxi'];
 const ROOF = Object.fromEntries(CAR_TYPES.map((t) => [t, carRecipe(t, 1).roof])) as Record<(typeof CAR_TYPES)[number], number>;
 
-export const lifeParams = { density: 1, enabled: true };
+/** How busy the world is (the panel's "Life & sound"). Robby, 2026-10-06: "always crowded everywhere at
+ *  all times" — but "I do like it crowded in some spots": so the busy places keep their crowds (a town's
+ *  main street, a city's towers, the summer beach) and the quiet ones thin out (the suburbs' and the
+ *  country's streets at 0.65), and off the hour's peak it's quieter too (lifeSim.ts PEAK). `density` the
+ *  overall knob; then each kind of place's own (`crowdOf`); `beach` the beach's people (crowdLayer.ts). */
+export const lifeParams = { density: 1, suburbs: 0.65, towns: 1, cities: 1, beach: 1, enabled: true };
+/** The place's crowd multiplier (LifeClient.crowd) from how much of a town (`town`, main.ts townAt: the
+ *  shops about the walker) and a city (`city`, cityAt: the built volume) it is: the suburbs' knob where
+ *  neither, the towns' on a main street, ×2.6 and the cities' knob among the towers. */
+export function crowdOf(town: number, city: number, p: { suburbs: number; towns: number; cities: number } = lifeParams) {
+  const t = Math.max(0, Math.min(1, town)), c = Math.max(0, Math.min(1, city));
+  return (p.suburbs + (p.towns - p.suburbs) * t) * (1 + 1.6 * c) * (1 + (p.cities - 1) * c);
+}
 
 import { RANK, STOP_BACK, unpackJunctions } from './traffic';
 

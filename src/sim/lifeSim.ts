@@ -21,6 +21,10 @@ export { STOP_BACK };
 /** The crosswalk over an arm runs across it this far past the setback (groundPaint's ladder). */
 const CROSSWALK = 1.2;
 const BOX = 3; // cars that may share a junction's box, their ways not crossing
+/** How much quieter the hours off the day's peaks are (the rhythm's share raised to `peak`: 1 at a peak
+ *  stays 1, a mid-morning's 0.4 becomes 0.3). Robby, 2026-10-06: crowded in some spots, not all the time.
+ *  (Tests about something else pin it to 1, as they do FLOW.) */
+export const RHYTHM = { peak: 1.3 };
 /** Switches for the flow bench (scratch/flow.mts). */
 export const FLOW = { curves: true, share: true, demand: true };
 /** Cars a kilometre of street carries at the day's peak (both ways), by rank — from the volumes each
@@ -663,7 +667,8 @@ export class LifeSim {
       // (+ a coffee-run morning and a lunch hour: downtown is never empty 8 am – 8 pm)
       f = 0.06 + 0.5 * bell(8.5, 2.5) + 0.35 * bell(12.5, 2.5) + 0.85 * bell(15.5, 4) + 0.3 * bell(20.5, 2.5);
     }
-    f = Math.min(1, f);
+    // (the peaks kept, the hours between them thinner: a quiet morning street, a busy afternoon)
+    f = Math.min(1, f) ** RHYTHM.peak;
     const cap = kind === 'car' ? Math.min(CAPS.cars, Math.floor(this.drivableLen / 25)) : CAPS.peds;
     // cars: what the streets round the walker carry at this hour (by their class)
     if (kind === 'car' && FLOW.demand) { const n = Math.round(this.carDemand * f * d); return raw ? n : Math.min(cap, n); }

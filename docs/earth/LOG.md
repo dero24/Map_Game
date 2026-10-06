@@ -2,6 +2,30 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-06 — The panel's Creatures folder ("go see it"); a better balance of how busy the world is
+
+- **Creatures** (the dev panel, `` ` ``): pick any of the 95 animals; "goes to" shows where and when;
+  **go see it** jumps to a place it lives (`ui/seeIt.ts`: its own where it has one — the sea otters at
+  Monterey, the orcas off San Juan Island, the monarchs' winter roost — else the first of ~34 places
+  across the lower 48 whose cast has it), sets the month and an hour it's up, stands you on the beach or a
+  bank facing the water if it keeps to one (`standBy`), makes sure it comes (`Critters.spotlight`: always
+  present, first pick for its role's slots) and tells you how far and which way once it's about. A far
+  place reloads with `?at=…&date=…&hour=…&see=<kind>` (the link works by hand too). **where is it?**:
+  the nearest one's distance and bearing. **every animal about**: ignores how rare they are.
+- **How busy** (Robby: "always crowded everywhere at all times" — "but I do like it crowded in some
+  spots"): the busy places keep their crowds (a main street, a city's towers, the summer beach); the
+  suburbs' and the country's streets at 0.65 (`lifeParams.suburbs`; `crowdOf`); the hours between the
+  day's peaks thinner (`lifeSim.ts RHYTHM.peak` 1.3: a mid-morning's 0.4 → 0.3, a peak stays). New knobs
+  in Life & sound: how busy everywhere / suburbs & country / main streets / cities / the beach (the
+  beach's people now follow a share knob too, `CrowdLayer.update(…, share)`).
+
+**Verified:** typecheck; `npm test` 1008/1008; `tests/seeIt.test.ts` (new: every animal has a place,
+month and hour where its cast has it; the own places; habitats and hours; standing on the beach and a
+pond's bank facing the water; bearings; a spotlit turkey comes on a settled shore lawn; `crowdOf`; the
+peak kept and the morning thinner; the beach's share deterministic). The lifeSim door test pins
+`RHYTHM.peak` to 1 (the rare glitch it checks for is chaotic under the thinner traffic). Not yet clicked
+through in a browser: Robby is testing on his PC.
+
 ## 2026-10-06 — How common each animal is: rare in town, more in the wild
 
 Robby, walking Sea Bright: turkeys and foxes "running around everywhere" — in a shore town they'd be a

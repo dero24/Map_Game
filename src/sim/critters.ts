@@ -242,6 +242,19 @@ export class Critters {
   /** Every species of the place's cast about, whatever its odds (the review harness's, and the tests' of
    *  how an animal lives — not of how often you meet it). */
   everyone = false;
+  /** The one species to show (the panel's "go see it"): always about, and filling its role's slots
+   *  first, wherever its cast is. */
+  spotlight: CritterKind | null = null;
+  /** The nearest of a kind about now, and how far (the panel's "where is it?"). */
+  nearestOf(kind: CritterKind, x: number, z: number) {
+    let best: { x: number; y: number; z: number; d: number } | null = null;
+    for (const c of this.list) {
+      if (c.kind !== kind || c.dead) continue;
+      const d = Math.hypot(c.x - x, c.z - z);
+      if (!best || d < best.d) best = { x: c.x, y: c.y, z: c.z, d };
+    }
+    return best;
+  }
   /** A sound cue: the sound family (squirrel chatter, a flush of wings, a deer's snort) — not the species. */
   onEvent: ((sound: string, what: 'flee' | 'flush', pan: number, dist: number) => void) | null = null;
   private sound(c: Critter) { const r = R(c); return r === 'climber' || r === 'burrower' ? 'squirrel' : r === 'browser' ? 'deer' : r === 'shorebird' ? 'sandpiper' : r === 'songbird' ? 'songbird' : c.kind; }
@@ -683,7 +696,7 @@ export class Critters {
    *  in a few patches and a common one in most. A winter roost's monarchs and a prairie dog town's prairie
    *  dogs are always there. */
   private present(sp: CritterKind, x: number, z: number, wild: number, month: number) {
-    if (this.everyone || (sp === 'monarch' && this.roost) || (sp === 'prairiedog' && this.inTown)) return true;
+    if (this.everyone || sp === this.spotlight || (sp === 'monarch' && this.roost) || (sp === 'prairiedog' && this.inTown)) return true;
     const ci = Math.floor(x / 160), cj = Math.floor(z / 160);
     return hashf(ci * 92821 + cj * 68917 + CRITTERS.indexOf(sp) * 7919 + month * 104729) < presenceOdds(sp, wild);
   }
@@ -726,7 +739,7 @@ export class Critters {
         // which of the place's species fills this slot (weighted)
         // (pigeons are the town's: few in the country, the most of the birds downtown)
         // (a winter roost's butterflies all monarchs; in their fall streams the monarchs the most of them)
-        const wt = (sp: CritterKind, w: number) => sp === 'pigeon' ? w * (0.2 + 3 * Math.min(1, Math.max(0, env.urban ?? 0))) : sp === 'prairiedog' ? w * (this.inTown ? 5 : 0.05)
+        const wt = (sp: CritterKind, w: number) => sp === this.spotlight ? Math.max(w, 0.1) * 60 : sp === 'pigeon' ? w * (0.2 + 3 * Math.min(1, Math.max(0, env.urban ?? 0))) : sp === 'prairiedog' ? w * (this.inTown ? 5 : 0.05)
           : sp === 'monarch' ? w * (this.migrating ? 4 : 1) : this.roost && ROLE[sp] === 'butterfly' ? 0 : w;
         let r = this.rnd() * cast.reduce((a, [sp, w]) => a + wt(sp, w), 0), k = cast[0][0];
         for (const [sp, w] of cast) { if ((r -= wt(sp, w)) <= 0) { k = sp; break; } }

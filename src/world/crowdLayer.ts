@@ -10,6 +10,7 @@ import { personLib, personLiteLib } from '../assets/people';
 import { creatureMaterial } from '../render/creature';
 import { CROWD_STRIDE, POSE } from './crowd';
 import { present } from './calendar';
+import { hashf } from '../assets/core';
 import type { Tier } from '../render/quality';
 
 /** A tier's crowd: people in the full body within `nearR` (at most `full`), in the lite one out to
@@ -33,6 +34,7 @@ export class CrowdLayer {
   private lz = Infinity;
   private hourDrawn = NaN;
   private lensDrawn = 1;
+  private shareDrawn = 1;
   private dirty = true;
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
@@ -78,9 +80,13 @@ export class CrowdLayer {
   /** Per frame: refill when the walker has moved a few metres, the set changed, the clock has
    *  moved on a minute or so, or the lens changed. `view`: where the camera is and looks (x, z,
    *  forward x, forward z). `lens`: how much the camera magnifies over the walking lens (1 at 62°;
-   *  about 5.5 at 12°). */
-  update(x: number, z: number, hour: number, view?: [number, number, number, number], lens = 1) {
+   *  about 5.5 at 12°). `share`: how busy (sim/life.ts lifeParams × the place's crowd): below 1, only
+   *  that share of the beach's people come (the same ones every visit, by where they'd sit). */
+  update(x: number, z: number, hour: number, view?: [number, number, number, number], lens = 1, share = 1) {
     const dh = Math.abs(hour - this.hourDrawn), jump = !(dh < 0.25) && !(dh > 23.75);
+    // (a new share: those leaving or coming in front of you wait till you look away, as at the hour's turn)
+    share = Math.min(1, Math.max(0, share));
+    if (Math.abs(share - this.shareDrawn) > 0.02) { this.dirty = true; this.shareDrawn = share; }
     if (!(dh < 0.02)) this.dirty = true;
     lens = Math.max(1, lens);
     if (Math.abs(lens / this.lensDrawn - 1) > 0.1) { this.dirty = true; this.lensDrawn = lens; }
@@ -99,7 +105,7 @@ export class CrowdLayer {
       const d = t.d, S = t.shown;
       for (let i = 0, r = 0; i + CROWD_STRIDE <= d.length; i += CROWD_STRIDE, r++) {
         const dx = d[i] - x, dz = d[i + 2] - z, r2 = dx * dx + dz * dz;
-        const want = present(hour, d[i + 9], d[i + 10]) ? 1 : 0;
+        const want = present(hour, d[i + 9], d[i + 10]) && (this.shareDrawn >= 1 || hashf(Math.round(d[i] * 4) * 73856093 ^ Math.round(d[i + 2] * 4) * 19349663) < this.shareDrawn) ? 1 : 0;
         if (S[r] !== want) {
           const held = S[r] !== 255 && !jump && view && r2 < HOLD_R * HOLD_R && (d[i] - view[0]) * view[2] + (d[i + 2] - view[1]) * view[3] > -2;
           if (!held) S[r] = want;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LifeSim, PED_STATE, PED } from '../src/sim/lifeSim';
+import { LifeSim, PED_STATE, PED, RHYTHM } from '../src/sim/lifeSim';
 import { RANGES, S, MAX_ENTITIES, type LifeInit } from '../src/sim/protocol';
 
 // A tiny synthetic town: a 400 m square loop (a main road + side streets), a beach strip and a bay.
@@ -396,7 +396,12 @@ describe('walkers keep to open ground', () => {
       }
       return { set, through };
     };
-    const before = crossings(false), after = crossings(true);
+    // (the glitch is rare, one door trip in a couple of thousand, and chaotic: seen under the traffic this
+    // test was written with — the day's rhythm without the off-peak thinning)
+    const peak = RHYTHM.peak;
+    RHYTHM.peak = 1;
+    let before: { set: number; through: number }, after: typeof before;
+    try { before = crossings(false); after = crossings(true); } finally { RHYTHM.peak = peak; }
     console.log(`[life] corners: ${before.through}/${before.set} set out through a building without the wall's side, ${after.through}/${after.set} with it`);
     expect(before.through).toBeGreaterThan(0); // (the test sees the glitch)
     expect(after.set).toBeGreaterThan(30);
