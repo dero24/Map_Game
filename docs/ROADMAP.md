@@ -92,7 +92,7 @@ changed, and `feature_list.json` updated.
    performance holding on phones; saving that survives updates; the first ten minutes
    (`GAMEPLAY_VISION.md` §8) smooth from start to finish; a store build.
 
-## What 1.0 is (a proposal, for Robby to decide)
+## What 1.0 is (agreed with Robby, 2026-10-06)
 
 **In 1.0:** the lower 48 loading and looking like itself on PC and phone (milestones 1–5), and the
 core loop — explore, collect, travel:
