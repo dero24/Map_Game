@@ -365,6 +365,10 @@ export class Critters {
   }
   /** At the water's edge, a step in or out (a heron's, an egret's). */
   private edge(x: number, z: number) { const s = this.terrain.sdfAt(x, z); return s > -2.4 && s < 1.4 && this.walk.buildingAt(x, z) < 0; }
+  /** A heron's or an egret's edge: a pond's, a river's, a marsh's or a mangrove's — not the open surf. */
+  private wade(x: number, z: number) { const cv = this.terrain.coverAt(x, z); return this.edge(x, z) && (this.terrain.oceanDistAt(x, z) > 40 || cv === 90 || cv === 95); }
+  /** A fiddler's mud: the salt marsh's and the mangroves', by the creeks — never the open beach's sand. */
+  private mud(x: number, z: number) { const s = this.terrain.sdfAt(x, z), cv = this.terrain.coverAt(x, z); return (cv === 90 || cv === 95) && this.terrain.oceanDistAt(x, z) < 3000 && s > 0.3 && s < 8; }
   /** A gull's ground: the beach, a coastal town's lots and plazas — the inland gulls' (the California gull's
    *  anywhere, the ring-billed's and the herring gull's away from the sea) lots and fields too. */
   private gullGround(x: number, z: number, sp: CritterKind) {
@@ -379,15 +383,17 @@ export class Critters {
   /** Where this one can go next: on its water, at its edge, on its ground. */
   private valid(c: Critter, x: number, z: number) {
     const r = R(c);
-    if (r === 'wader') return this.edge(x, z);
+    if (r === 'wader') return this.wade(x, z);
     if (c.wl !== undefined) return this.swimmable(x, z, c.kind === 'loon' ? 6 : 1.2, c.kind === 'loon' || c.kind === 'brownpelican' || c.kind === 'manatee' || r === 'gull' || (r === 'swimmer' && c.kind !== 'riverotter'));
     if (r === 'gull') return this.gullGround(x, z, c.kind);
-    if (c.kind === 'pigeon' && this.paved(x, z)) return this.walk.buildingAt(x, z) < 0 && !this.walk.blocked(x, z, 0.2);
+    if (c.kind === 'pigeon' && this.lotAt(x, z)) return this.walk.buildingAt(x, z) < 0 && !this.walk.blocked(x, z, 0.2); // (a plaza or a lot, not the road)
     if (c.kind === 'prairiedog' && !prairieTown(x, z)) return false; // (a prairie dog never leaves its town)
     // (a fiddler keeps to its mud, a crawfish to its water's edge; a slug to the ground under its trees)
-    if (r === 'crab') return c.kind === 'fiddlercrab' ? this.shore(x, z) : this.terrain.sdfAt(x, z) > 0 && this.terrain.sdfAt(x, z) < 6 && this.walk.buildingAt(x, z) < 0;
+    if (r === 'crab') return c.kind === 'fiddlercrab' ? this.mud(x, z) : this.terrain.sdfAt(x, z) > 0 && this.terrain.sdfAt(x, z) < 6 && this.walk.buildingAt(x, z) < 0;
     if (r === 'crawler') return this.terrain.sdfAt(x, z) > 1 && this.walk.buildingAt(x, z) < 0 && !this.walk.blocked(x, z, 0.1);
-    return this.open(x, z, 0.2);
+    // (wandering, off the road — a deer, a rabbit, a turkey flock don't mill about in the street; one
+    // running from you still dashes across it)
+    return this.open(x, z, 0.2) && !this.paved(x, z);
   }
   /** Its height where it is: on the water by its sink, at the edge knee-deep, else on the ground. */
   private stand(c: Critter) {
@@ -421,11 +427,12 @@ export class Critters {
       case 'butterfly': return this.roost ? 22 : day && (summer || warm === 10) && env.wind < 0.75 ? 8 : 0;
       case 'firefly': return env.night > 0.6 && warm >= 6 && warm <= 8 ? 26 : 0;
       case 'predator': return town < 0.5 ? 0 : dawnDusk ? 2 : env.night > 0.5 ? 1 : 0;
-      // (one raptor where a hawk's alone in the sky; where there are vultures, a few circling with it)
-      case 'raptor': return day && h > 8 && h < 17.5 ? 3 : 0;
+      // (a raptor or two overhead: a hawk alone in the sky; where there are vultures, one circling with it)
+      case 'raptor': return day && h > 8 && h < 17.5 ? 2 : 0;
       case 'waterfowl': return day ? (dawnDusk ? 8 : 6) : 0;
       case 'wader': return day ? (dawnDusk ? 4 : 3) : 0;
-      case 'gull': return day ? 4 : 0;
+      // (a few on a beach; a couple at a lot in town — never a street's worth)
+      case 'gull': return day ? (this.wet.sea ? 6 : 2) : 0;
       case 'fowl': return day ? Math.round(6 * (0.3 + 0.7 * town)) : 0;
       // (the raccoon, the opossum and the skunk out at night, in town as much as out of it; the herds
       // in open country only, most at dawn and dusk)
@@ -521,13 +528,13 @@ export class Critters {
         if (sp === 'bighorn' ? !(this.slope(x, z) > 0.4 && this.open(x, z, 1.5) && !this.paved(x, z)) : !this.field(x, z)) continue;
         if (sp === 'pronghorn' && this.terrain.oceanDistAt(x, z) < 1000) continue;
         // (bison are kept herds — the parks' and the preserves' — so only deep in open country here, never by a town)
-        if (sp === 'bison' && (env.urban ?? 0) > 0.02) continue;
+        if (sp === 'bison' && Math.max(env.urban ?? 0, env.settled ?? 0) > 0.05) continue;
       } else if (k === 'browser' && sp === 'moose' && this.rnd() < 0.35) {
         // a moose in the shallows, feeding
-        if (!this.edge(x, z)) continue;
+        if (!this.wade(x, z)) continue; // (a pond's or a lake's, not the sea's)
       } else if (k === 'grazer' || k === 'songbird' || k === 'burrower') {
-        // (a pigeon's on the plaza and the parking lot as well as the grass)
-        if (!this.field(x, z) && !(sp === 'pigeon' && this.paved(x, z) && this.open(x, z, 1.2) && this.terrain.oceanDistAt(x, z) > 60)) continue;
+        // (a pigeon's on the plaza and the parking lot as well as the grass — never the road)
+        if (!this.field(x, z) && !(sp === 'pigeon' && this.lotAt(x, z) && this.open(x, z, 1.2) && this.terrain.oceanDistAt(x, z) > 60)) continue;
       } else if (k === 'shorebird') {
         if (!this.shore(x, z)) continue;
       } else if (k === 'browser') {
@@ -557,7 +564,8 @@ export class Critters {
         // in the water near the walker: the salt fish in the sea's bays and creeks, the rest in fresh water; a
         // school in any clear shallow water, salt or fresh
         const s0 = this.terrain.sdfAt(x, z), od = this.terrain.oceanDistAt(x, z), salt = sp === 'mullet' || sp === 'tarpon';
-        if (!(salt ? s0 < -2 && s0 > -60 && od < 3000 : sp === 'shoal' ? s0 < -1.5 && s0 > -40 : s0 < -1.5 && od > 8)) continue;
+        // (salt: the sea's own water and the canals and creeks off it — not a pond a few streets inland)
+        if (!(salt ? s0 < -2 && s0 > -60 && od < 400 : sp === 'shoal' ? s0 < -1.5 && s0 > -40 : s0 < -1.5 && od > 8)) continue;
         const wl = this.level(x, z), yaw = this.rnd() * 6.28;
         if (sp === 'shoal') return { x, y: wl + 0.015, z, yaw, pitch: 0, state: 'cruise', t: 1e6, tx: x, tz: z, ty: wl, wl, phase: this.rnd(), amt: 0.5 };
         return { x, y: wl - 0.6, z, yaw, pitch: 0, state: 'cruise', t: 2 + this.rnd() * 8, tx: x, tz: z, ty: wl, wl, phase: this.rnd(), amt: 0.4 };
@@ -612,7 +620,7 @@ export class Critters {
           // a colony out on the mud: by one already out, or a new one on the shore
           const kin = this.nearKin('fiddlercrab');
           if (kin && this.rnd() < 0.85) { x = kin.x + (this.rnd() - 0.5) * 6; z = kin.z + (this.rnd() - 0.5) * 6; }
-          if (!this.shore(x, z) || this.terrain.sdfAt(x, z) > 8) continue;
+          if (!this.mud(x, z)) continue; // (the salt marsh's mud and the mangroves', never the swimming beach)
         } else {
           // a crawfish by its ditch, its creek or its pond: on the bank at the water's edge
           const s = this.terrain.sdfAt(x, z);
@@ -652,7 +660,7 @@ export class Critters {
             return { ...base, x, z, y: wl, ty: wl, wl, state: 'idle' };
           }
         } else if (k === 'wader') {
-          if (!this.edge(x, z)) continue;
+          if (!this.wade(x, z)) continue;
           const wl = this.level(x, z);
           return { ...base, x, z, y: Math.max(this.ground(x, z), wl - 0.1), ty: 0, wl, state: 'idle' };
         } else if (k === 'gull') {

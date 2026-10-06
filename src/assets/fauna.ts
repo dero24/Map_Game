@@ -376,6 +376,9 @@ export const chimneyCountry = (place?: { eco: string }) => !!place && CHIMNEY_CO
  *  pronghorn's, west of the 100th meridian. */
 const PLAINS_WEST = new Set([25, 26, 42, 43, 44]);
 const NORTHERN = new Set(['new-england', 'upstate-ny', 'midwest', 'plains', 'rockies', 'pnw', 'pnw-dry', 'great-basin']);
+/** Where the winter's hard: the robins gone off the lawns, the ground squirrels asleep, the beavers under the
+ *  ice, the fish deep and still (the ecosystem review, 2026-10-06). */
+const HARD_WINTER = new Set(['new-england', 'upstate-ny', 'midwest', 'plains', 'rockies', 'great-basin', 'pnw-dry']);
 function months(m: number, a: number, b: number) { return a <= b ? m >= a && m <= b : m >= a || m <= b; }
 /** When a bird is here (month 1–12, the north's: the sim turns the south's year round), by the region's
  *  table key (ranges.md: who winters where, who only summers): the loons on the northern lakes in summer
@@ -430,6 +433,15 @@ const SEASON: Partial<Record<CritterKind, (eco: string, m: number) => boolean>> 
   humpback: (e, m) => (e === 'mid-atlantic' ? months(m, 11, 4) : e === 'california' ? months(m, 4, 11) : months(m, 4, 10)),
   graywhale: (e, m) => (e === 'california' ? months(m, 12, 4) : months(m, 3, 5)),
   salmon: (_e, m) => months(m, 9, 11),
+  // (the robins: off the northern lawns from December to February — the South's and Florida's winter
+  // visitors, gone north by April; the ground squirrels of the Plains, the mountains and the Basin asleep
+  // from October to March; the beaver under the northern ice; the bass and the trout of the cold country
+  // deep and still through the winter, rising again in April)
+  robin: (e, m) => (['florida', 'gulf', 'texas'].includes(e) ? months(m, 11, 3) : HARD_WINTER.has(e) ? months(m, 3, 11) : true),
+  groundSquirrel: (e, m) => !['plains', 'rockies', 'great-basin', 'pnw-dry', 'midwest'].includes(e) || months(m, 4, 9),
+  beaver: (e, m) => !HARD_WINTER.has(e) || months(m, 3, 11),
+  largemouthbass: (e, m) => !(HARD_WINTER.has(e) || ['mid-atlantic', 'appalachia', 'ozarks', 'pnw'].includes(e)) || months(m, 4, 10),
+  rainbowtrout: (e, m) => !HARD_WINTER.has(e) || months(m, 4, 10),
   tarpon: (e, m) => e === 'florida' || months(m, 5, 9),
   shoal: (e, m) => e === 'florida' || months(m, 4, 10),
   silvercarp: (_e, m) => months(m, 4, 10),
@@ -466,6 +478,7 @@ export function faunaMix(region: string, climate: string, place?: { eco: string;
     // (the alligator only on the coastal plain — not the Piedmont — and in East Texas)
     if (eco === 'southeast' && l3 === 45) drop('basker', 'alligator');
     if (eco === 'texas' && ![33, 34, 35].includes(l3)) drop('basker', 'alligator');
+    if (eco === 'ozarks' && ![35, 73].includes(l3)) drop('basker', 'alligator'); // (southern Arkansas's lowlands, not the Ozark Highlands)
     // (the brown anole on the coasts only, spreading from Florida)
     if ((eco === 'southeast' && l3 === 45) || (eco === 'texas' && l3 !== 34) || (eco === 'gulf' && ![73, 75].includes(l3))) drop('climber', 'brownanole');
     // (the pronghorn west of the 100th meridian only; the Roosevelt elk on California's north coast)

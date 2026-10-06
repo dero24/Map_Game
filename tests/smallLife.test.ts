@@ -130,7 +130,7 @@ describe('the small life', () => {
   });
 
   it('a flat of fiddlers goes down its burrows all at once when you come, and comes up once you have gone; the males wave their great claws; a crawfish stands its ground, claws up, backing off', () => {
-    const mud = { heightAt: () => 0, sdfAt: () => 6, coverAt: () => 30, oceanDistAt: () => 20 } as unknown as Terrain;
+    const mud = { heightAt: () => 0, sdfAt: () => 6, coverAt: () => 90, oceanDistAt: () => 600 } as unknown as Terrain; // (the salt marsh's mud)
     const c = new Critters(mud, walk), sav = cast(T.SAVANNAH);
     const flat = Array.from({ length: 12 }, (_, i) => animal('fiddlercrab', (i % 4) * 1.5 - 2, -6 - Math.floor(i / 4) * 1.5, { seed: 11 + i * 97, t: 5 }));
     list(c).push(...flat);

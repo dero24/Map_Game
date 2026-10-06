@@ -168,7 +168,7 @@ describe('the water and big birds', () => {
     const c = new Critters(sea, walk);
     const seen: Any[] = [];
     for (let t = 0; t < 1600; t++) { c.update(0.05, 0, 30, env({ hour: 10 })); if (t % 80 === 79) seen.push(...list(c).map((o) => ({ ...o }))); }
-    const gulls = seen.filter((o) => o.kind === 'laughinggull');
+    const gulls = seen.filter((o) => ['laughinggull', 'herringgull', 'ringbilledgull'].includes(o.kind as string)); // (whichever of the shore's gulls came down)
     expect(gulls.length).toBeGreaterThan(5);
     expect(gulls.some((o) => o.state === 'glide')).toBe(true);
     for (const o of gulls.filter((g) => g.state === 'idle' || g.state === 'move')) expect(o.z as number).toBeGreaterThan(0.4);

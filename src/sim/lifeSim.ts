@@ -1667,9 +1667,15 @@ export class LifeSim {
   private stepGulls(dt: number) {
     const [g0, g1] = RANGES.gulls;
     const { playerX: px, playerZ: pz, night, wind } = this.env;
+    // (as many over the beach as the place is busy: the panel's knobs and a phone's share — each one
+    // past the count goes or comes back only out where it isn't watched)
+    const nG = g0 + Math.round((g1 - g0) * Math.max(0, Math.min(1, this.env.density)));
     for (let i = g0; i < g1; i++) {
-      const st = this.state[i];
       const dp = Math.hypot(this.x[i] - px, this.z[i] - pz);
+      if (i >= nG) { if (this.active[i] && dp > 160) { this.active[i] = 0; this.y[i] = -1000; this.snapPrev(i); } if (!this.active[i]) continue; }
+      else if (!this.active[i] && this.w.beachPts.length) { this.spawnGull(i); if (Math.hypot(this.x[i] - px, this.z[i] - pz) < 160) { this.active[i] = 0; this.y[i] = -1000; } this.snapPrev(i); continue; }
+      else if (!this.active[i]) continue;
+      const st = this.state[i];
       if (st === ST.STAND) {
         this.amt[i] = -1;
         this.anim[i] += dt * (0.8 + (i % 3) * 0.3);

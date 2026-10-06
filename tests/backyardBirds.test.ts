@@ -103,8 +103,8 @@ describe('the backyard birds', () => {
       }
       return n;
     };
-    // downtown, all paved: only the pigeons come down (the others want grass)
-    const town = tally(env({ urban: 1, paved: () => true }));
+    // downtown, all paved — a plaza: only the pigeons come down (the others want grass)
+    const town = tally(env({ urban: 1, paved: () => true, lot: () => true }));
     expect(town.pigeon ?? 0).toBeGreaterThan(5);
     for (const k of BIRDS.filter((k) => k !== 'pigeon')) expect(town[k] ?? 0, k).toBe(0);
     // the country's lawns: robins and the rest, a pigeon now and then

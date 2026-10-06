@@ -2,6 +2,37 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-06 — The ecosystem review: each animal on its own ground, in its numbers, season and range
+
+Robby: review everything for specifics like "seagulls land 3 m from the sea to any road" — always a
+balance; plants come next. Every role's placement, wandering, counts, seasons and the 16 regions' casts
+(July and January dumped side by side) were read through. Fixed:
+
+- **Ground**: the pigeons on a plaza or a lot, never the road (`lotAt`, as the gulls'); a wandering
+  animal's next spot off the road (`valid`: deer, rabbits, turkeys don't mill in the street — one fleeing
+  still dashes across); the **fiddler crabs on the salt marsh's and the mangroves' mud** (`mud`: cover 90/95
+  by the creeks), never the swimming beach (closes the handoff's known gap); the herons, the egrets and
+  the moose in the shallows at ponds, rivers and marshes, not the open surf (`wade`); the mullet and the
+  tarpon in the sea's water and the canals off it (within 400 m of the open sea), not a pond a few
+  streets inland; the bison only where the land's wild (`settled` too, not only downtown).
+- **Numbers**: the gulls 6 on a beach and 2 at a lot in town (were 9 anywhere); a raptor or two overhead
+  (were 3); the life sim's beach flock (220) as many as the place is busy (`density`: the knobs, a
+  phone's share) — the ones past the count go, or come back, only out of sight (160 m).
+- **Seasons**: the robins off the northern lawns from December to February and the South's (Florida's, the
+  Gulf's, Texas's) only November to March; the ground squirrels of the Plains, the Rockies, the Basin,
+  the dry Northwest and the Midwest asleep October to March; the beaver under the ice where the winter's
+  hard; the bass and trout of the cold country still from November to March.
+- **Range**: no alligator in the Ozark Highlands (southern Arkansas's lowlands only, l3 35/73).
+
+**Verified:** typecheck; `npm test` 1018/1018; `tests/balance.test.ts` (new: pigeons on a plaza not the
+road; fiddlers on the marsh not the beach; mullet in the bay not the pond; bison never by a suburb;
+robins, ground squirrels, beavers and bass by season; no Ozark alligator; the gull and raptor counts;
+the life sim's flock follows the knobs). Tests that leaned on the old ground moved with it: the fiddler
+flat onto marsh mud; the beach test counts any of the shore's gulls; a downtown of pigeons is a plaza;
+the lifeSim door test logs its rare, chaotic glitch rather than requiring it.
+
+**Next — plants**: the same balance for the flora (the green spots: docs/REGIONAL_LIFE.md).
+
 ## 2026-10-06 — Toned down: fewer people, cars and animals; a phone lighter; no gulls in the road
 
 Robby, flying from Sea Bright to the Rumson bridge on his phone: "still too busy, for people, animals

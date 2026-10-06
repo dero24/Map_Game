@@ -72,6 +72,11 @@ tests, CI, the shore playtest and studio montages, never in a real browser on a 
    - **The panel's Creatures folder** (`` ` `` opens the panel): pick an animal, "go see it" — it should
      land you where it lives at the right month and hour, by its water if it keeps to one, then say how
      far and which way it is. Try a near one (the dolphin from the shore) and a far one (the orca).
+   - **Each animal on its own ground** (the ecosystem review): no gulls or pigeons standing in the roads
+     (lots, plazas, the beach); no deer, rabbits or turkeys milling in the street (they still dash across
+     it when chased); fiddler crabs on salt-marsh mud, not the swimming beach (where the map has no
+     marsh, none); herons and egrets at ponds, rivers and marshes, not in the surf; robins gone from
+     northern lawns in midwinter; no fish rising in a northern January.
    - **How busy** (toned down after Robby's phone walk, Sea Bright to the Rumson bridge): fewer people,
      cars and animals everywhere, a phone at half again; no gulls standing in the roads (parking lots and
      the beach only). The knobs are in Life & sound (everywhere, suburbs & country, main streets, cities,
@@ -84,7 +89,7 @@ tests, CI, the shore playtest and studio montages, never in a real browser on a 
    marsh's edge.
 
 Known gaps, by design for now: the duckweed doesn't part in a wake; the slug leaves no slime trail; the
-crawfish chimneys stand all year; the fiddlers use the beach for the marsh's mud; no snakes, frogs,
+crawfish chimneys stand all year; no snakes, frogs,
 bees or grasshoppers yet (the reference's P2 plans).
 
 ## How to work in this cloud session (Robby's call)
