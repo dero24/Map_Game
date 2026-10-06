@@ -13,11 +13,12 @@ what "done" means. Written 2026-10-06; update it when a milestone closes or the 
 | **2** | The game itself | 26 items, none started yet (by design: foundations first) |
 | **3** | Polish | 14 passing, 11 not started |
 
-Regional life (`docs/regional-life/models.md` build order): **12 of 16 packages built**.
+Regional life (`docs/regional-life/models.md` build order): **13 of 16 packages built**.
 
 - **Plants:** all 10 packages built.
 - **Birds:** both packages built: the backyard birds, then the water and big birds.
-- **Still to go:** mammals (2 packages), reptiles, and small life.
+- **Mammals:** the first package built, on the existing body plans.
+- **Still to go:** the new mammal plans, reptiles, and small life.
 
 ## The 16 regions
 
@@ -139,8 +140,9 @@ Notes:
 - (b) No inland gulls yet: ring-billed and herring.
 - (c) No duckweed on still swamp water yet.
 - (d) No black oak or gray pine yet.
-- **Mammals** are part everywhere: squirrels, rabbits, deer, foxes and coyotes are in; packages 13–14
-  add the rest.
+- **Mammals** are part everywhere: package 13's are in (raccoon, opossum, skunk, the squirrels and
+  burrowers, the beaver, elk, moose, pronghorn, bighorn, antlers); package 14 adds the bear, bison,
+  armadillo and manatee.
 - **Small life** is part everywhere: generic butterflies and fireflies are in; package 16 adds the
   rest.
 

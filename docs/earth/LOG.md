@@ -2,6 +2,64 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-06 — Regional life (13): the mammals on the existing bases
+
+Package #13 of `docs/regional-life/models.md`. Robby, 2026-10-06, on the vertex budgets: "could we go a
+little higher for more details without losing performance, only if so" — yes, by size (below).
+
+- **The quad plan** (`fauna.ts Quad`): stripes laid on the back's own curve (`backStripe`: a skunk's white
+  V, a chipmunk's dark and pale ones), a mask (the raccoon's), a forehead blaze (the skunk's), the tail
+  types (`ringed`, `naked`, `plume`, `paddle`, `stub`), `girth` and `legs`, and for the deer plan a mane,
+  lower-leg and rump colours, a long muzzle, a hump and a throat bell.
+- **Antlers and horns** (`antlerSide`): the whitetail's forward-curving beam and tines, the mule deer's
+  forks, the elk's long sweeping rack, the moose's palms, the pronghorn's black prongs, the ram's curl —
+  on their own part (9), which the critter material shrinks away unless the sim says the animal wears
+  them (aAnim.z + 10): a bull, buck or ram by its seed (`RACK`: a third of an elk herd, half the moose),
+  in their months (elk antlers August to March, deer September to January; horns always). The
+  white-tailed and mule deer bucks carry racks now too.
+- **The twelve mammals:** raccoon, Virginia opossum, striped skunk (the fox plan); fox squirrel, eastern
+  chipmunk, woodchuck, American beaver, black-tailed prairie dog (the squirrel plan); elk, moose,
+  pronghorn, bighorn sheep (the deer plan).
+- **New roles** (`sim/critters.ts`): `forager` (raccoon, opossum, skunk: out at night, in town as much as
+  out); `herd` (elk, pronghorn, bighorn: open country at dawn and dusk, coming down by their own, a
+  bighorn only on ground steeper than 0.4, running 70 m together when one is startled). The behaviours:
+  a raccoon goes up the nearest tree; an opossum plays dead on its side until you've walked off; a skunk
+  faces you, stamps, tail stood up (the display pose), then waddles off; a prairie dog sits bolt upright
+  as a sentry (the body tipped about its hind feet, `sitPivot`) and now and then leaps in a jump-yip; a
+  woodchuck sits up by its hole; a beaver slaps its tail and dives (and swims low: `swimSink` for a
+  mammal); an elk bull bugles in the September–October rut, head thrown back; a moose stands in the
+  shallows feeding.
+- **Where** (`fauna.ts MAMMALS`, ranges.md): the grey squirrel the East's, the fox squirrel the Midwest's,
+  Plains' and South's (and planted in western cities); the chipmunk and woodchuck the East's and
+  Midwest's (the woodchuck only on the Plains' eastern edge, asleep November to February); the prairie
+  dog and pronghorn west of the 100th meridian; the opossum east of the Rockies and on the Pacific coast,
+  not the interior West; the elk the West's, California's north coast's, and a few eastern herds; the
+  moose the north woods' and the Rockies'; the bighorn the mountains' and the desert's; the raccoon, the
+  skunk and the beaver everywhere.
+- **Signs** (`assets/signs.ts`): `cellSpots` (the nests' placement, generalised: one to a cell, a cell
+  deciding for itself); the beaver's lodge in ponds and lakes, never the sea (`beaverLodges`); prairie dog
+  towns (`prairieTown`, pure: the props lay the mounds, `prairieMounds`; the sim keeps the dogs inside
+  their town and fills it — the burrowers rise by 14 near a town).
+- **Budgets by size** (`critterBudget`): the big animals (the deer family, the great birds, the bear and
+  bison to come) 2,500 — a near tree's; the fox plan's 2,000; the rest 1,600, whose extra detail would be
+  a few pixels. **And they cost less than before:** an animal more than 8 m away and well behind the
+  walker isn't drawn at all (looking about level; looking down from the air, all are) — before, every
+  live animal was drawn every frame, seen or not (`Critters.drawn`).
+- Fixed on the way: a displaying bird (pose 4, the turkey's strut) counted as flying and flapped; the
+  flight test is pose 2 only now.
+- Reviewed in the scratch studio: the skunk's and chipmunk's stripes first sank into the coat (blob
+  ridges); laid on the body's own curve, they show.
+
+**Verified:** typecheck; `npm test` 959/959; `tests/mammals.test.ts` (new: ranges; marks; antlers on the
+head's part, an elk's rack tall, a moose's palms wide, a ram's curl low; a bull's rack in October, not
+May, never a cow's; the raccoon's climb, the opossum's dead act, the skunk's warning; prairie dogs only in
+their town, sitting up; a herd running together; one behind the walker not drawn, all from the air;
+lodges in ponds not the sea; mounds only in towns, the same however tiled); budgets in
+`tests/foundry.test.ts`; shader check 24 programs, no errors; the shore's playtest (`tools/playtest.mjs
+--region=shore --quick --swiftshader`).
+
+**Next:** package #14, the new mammal plans (black bear, bison, armadillo, manatee).
+
 ## 2026-10-05 — Regional life (12): the water and big birds
 
 Package #12 of `docs/regional-life/models.md`: on the ponds and lakes, at their edges, on the beaches and

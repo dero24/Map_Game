@@ -37,7 +37,7 @@ import { beachSeason, beachLotFill, marinaSeason, windowFor, worldDate } from '.
 import { seaLevel, type Berth } from './docks';
 import { GUARD_SEAT, type Gear, type Stand } from './crowd';
 import { faunaMix } from '../assets/fauna';
-import { ospreyNestGeometry, ospreyNests } from '../assets/signs';
+import { ospreyNestGeometry, ospreyNests, beaverLodgeGeometry, beaverLodges, moundGeometry, prairieMounds } from '../assets/signs';
 
 type P = [number, number];
 /** The hours a thing is there for when it's there all day (calendar.ts windows). */
@@ -1560,19 +1560,26 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       walk.addLoop([[x - 1, z - 0.9], [x + 1, z - 0.9], [x + 1, z + 0.9], [x - 1, z + 0.9]]);
     }
 
-  // ---------- osprey nests on their platform poles at the water's edge ----------
-  // (models.md's osprey-nest, the `sign†` genome: a marsh's, a river's, a lake's — wherever the place's
-  // raptors include the osprey; the nest stands the year round, the bird is the sim's in its season)
-  if (faunaMix('na', clim, cast0).raptor?.some(([k]) => k === 'osprey')) {
-    const at = ospreyNests(SZ, (x, z) => terrain.sdfAt(x, z), (x, z) => terrain.heightAt(x, z)).filter((n) => inSlice(n.x, n.z) && walk.deckAt(n.x, n.z) === null);
-    if (at.length) {
-      const im = new THREE.InstancedMesh(ospreyNestGeometry().clone(), propMaterial(), at.length);
-      im.name = 'osprey-nest';
-      at.forEach((n, i) => im.setMatrixAt(i, new THREE.Matrix4().compose(V(n.x, n.y, n.z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), n.yaw), V(1, 1, 1))));
-      im.layers.enable(1);
-      im.computeBoundingSphere();
-      group.add(im);
-    }
+  // ---------- signs of life: osprey nests, beaver lodges, prairie dog towns ----------
+  // (models.md's `sign†` genome, assets/signs.ts — wherever the place's cast has the animal: the osprey's
+  // nest on its platform pole at the water's edge, the beaver's lodge out in a pond, a prairie dog town's
+  // mounds on the open grass; they stand the year round, the animals are the sim's in their season)
+  const fauna0 = faunaMix('na', clim, cast0), has = (list: [string, number][] | undefined, k: string) => !!list?.some(([kk]) => kk === k);
+  const signs = (name: string, geo: () => THREE.BufferGeometry, at: { x: number; y: number; z: number; yaw: number }[]) => {
+    if (!at.length) return;
+    const im = new THREE.InstancedMesh(geo().clone(), propMaterial(), at.length);
+    im.name = name;
+    at.forEach((n, i) => im.setMatrixAt(i, new THREE.Matrix4().compose(V(n.x, n.y, n.z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), n.yaw), V(1, 1, 1))));
+    im.layers.enable(1);
+    im.computeBoundingSphere();
+    group.add(im);
+  };
+  const sdf = (x: number, z: number) => terrain.sdfAt(x, z), hgt = (x: number, z: number) => terrain.heightAt(x, z);
+  if (has(fauna0.raptor, 'osprey')) signs('osprey-nest', ospreyNestGeometry, ospreyNests(SZ, sdf, hgt).filter((n) => inSlice(n.x, n.z) && walk.deckAt(n.x, n.z) === null));
+  if (has(fauna0.waterfowl, 'beaver')) signs('beaver-lodge', beaverLodgeGeometry, beaverLodges(SZ, sdf, (x, z) => terrain.oceanDistAt(x, z), hgt).filter((n) => inSlice(n.x, n.z) && walk.deckAt(n.x, n.z) === null));
+  if (has(fauna0.burrower, 'prairiedog')) {
+    const grass = (x: number, z: number) => terrain.coverAt(x, z) === 30 && terrain.sdfAt(x, z) > 3 && walk.buildingAt(x, z) < 0 && !walk.blocked(x, z, 1) && !paved(x, z);
+    signs('prairie-mounds', moundGeometry, prairieMounds(SZ, grass, hgt).filter((n) => inSlice(n.x, n.z)));
   }
 
   // ---------- parked cars at the house end of real driveways ----------

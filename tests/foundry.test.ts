@@ -4,7 +4,7 @@ import { DESERT_FAR, STIFF, BLOOM_PART } from '../src/assets/flora';
 import { TREE_KINDS, TREE_VARIANTS, treeGeometry, PLANT_SPECIES, plantGeometry, plantMix, inBloom, stageOf, STAGES, fallHueOf, NEAR_KINDS, nearTreeGeometry, CARD_STRIDE, LEAF_PICS, leafAtlas, hasNear, DECIDUOUS, BLOSSOM_OF, MOTION_OF, packCardFlags, unpackCardFlags, cardFlags, picsOf, NEEDLED, treeHeight4, SMALL_TREE, type TreeKind } from '../src/assets/flora';
 import leafCardsSrc from '../src/render/leafCards.ts?raw';
 import { TREE_TIERS } from '../src/render/quality';
-import { CRITTERS, critterGeometry } from '../src/assets/fauna';
+import { CRITTERS, critterGeometry, critterBudget } from '../src/assets/fauna';
 import { ospreyNestGeometry } from '../src/assets/signs';
 import { MAILBOXES, mailboxGeometry, gearGeometry, gearFor, CAR_GEAR, umbrellaGeometry, picnicTableGeometry } from '../src/assets/furniture';
 import { fibCount, fibSphere, hashf, variantAt, tube } from '../src/assets/core';
@@ -635,8 +635,10 @@ describe('fauna', () => {
       expect(g.getAttribute('aPivot')).toBeTruthy();
       expect(g.getAttribute('aPivot').count).toBe(verts(g));
       if (k !== 'butterfly' && k !== 'firefly') expect(Math.abs(bb(g).min.y)).toBeLessThan(0.03);
-      expect(verts(g)).toBeLessThan(1600);
+      expect(verts(g), k).toBeLessThan(critterBudget(k)); // (2,500 for the big animals, 1,600 for the rest)
     }
+    expect(critterBudget('elk')).toBe(2500);
+    expect(critterBudget('chipmunk')).toBe(1600);
     expect(partCount(critterGeometry('squirrel'), 5)).toBeGreaterThan(0); // the tail swings
     expect(partCount(critterGeometry('songbird'), 7)).toBeGreaterThan(0); // wings
     expect(partCount(critterGeometry('hawk'), 7)).toBeGreaterThan(0); // the hawk soars on the bird plan

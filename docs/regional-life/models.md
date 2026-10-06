@@ -2102,12 +2102,19 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
     **turkey vulture**, **bald eagle**, **osprey** (with its **nest**, `sign†`: `assets/signs.ts`, on a
     platform pole at the water's edge, props.ts); quail rows **wild turkey** and **California quail**;
     **brown pelican**; gull rows **laughing gull** and **California gull**.
-13. **Mammals on the existing bases.** First the quad parameters (coat patterns: stripes, rings,
-    masks; tail types: paddle, naked, ringed). Fox rows: **raccoon**, **Virginia opossum**, **striped
-    skunk**. Squirrel rows: **fox squirrel**, **eastern chipmunk**, **woodchuck**, **American
-    beaver** (with the `sign†` genome's **beaver lodge and dam**). Ground squirrel row: **black-tailed
-    prairie dog**. The `antlers†` and `horns†` add-ons, then deer rows: **elk**, **moose**,
-    **pronghorn**, **bighorn sheep**.
+13. **Mammals on the existing bases** — **built** 2026-10-06 but for the beaver's dam (`docs/earth/LOG.md`
+    "Regional life (13)"). The quad parameters (`fauna.ts Quad`): stripes laid on the back's own curve
+    (`backStripe`), a mask, a forehead blaze, the tail types (ringed, naked, plume, paddle, stub), girth
+    and leg length, a deer's mane, lower legs, rump, long muzzle, hump and bell; the `antlers†` and
+    `horns†` add-ons on their own part (`ANTLER`, 9), worn by the bulls, bucks and rams in their months
+    (the sim's `RACK`; the white-tailed and mule deer's racks too). Fox rows: **raccoon**, **Virginia
+    opossum**, **striped skunk**. Squirrel rows: **fox squirrel**, **eastern chipmunk**, **woodchuck**,
+    **American beaver** (with the `sign†` genome's **beaver lodge** in a pond; the dam is still open).
+    **Black-tailed prairie dog** (on the squirrel plan), in towns (`signs.ts prairieTown`, the mounds).
+    Deer rows: **elk**, **moose**, **pronghorn**, **bighorn sheep**. The sim's new `forager` and `herd`
+    roles: the raccoon up a tree, the opossum playing dead, the skunk's warning, the prairie dog's
+    sentries and jump-yip, the beaver's tail slap and dive, the elk bull's bugle, herds that run
+    together.
 14. **New mammal plans.** `bear†`: **black bear**. `bovid†`: **American bison**. `armadillo†`:
     **nine-banded armadillo**. `swimmer†`: **West Indian manatee**.
 15. **Reptiles.** `sprawler†`: **American alligator**, then **green anole** and **brown anole**.

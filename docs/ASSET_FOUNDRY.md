@@ -73,7 +73,8 @@ vertices are what it costs. There are four axes, cheapest first:
 Vertex budgets (checked by `tests/foundry.test.ts`): trees < 1,500 (most around 800–1,200), and
 a tree's near model (its limbs and leaf cards, the nearest 160 on a desktop, 40 on a phone) ≤ 2,500;
 garden plants in the world use a `lite` genome under 900 (usually 250–840; the full version is
-for plants you grow and the workbench); animals < 1,600; cars about 1,800; a person < 1,600
+for plants you grow and the workbench); animals < 1,600, the big ones (the deer family, the great
+birds, the bear and bison to come: `fauna.ts critterBudget`) < 2,500; cars about 1,800; a person < 1,600
 unique vertices and 2,700 triangles (indexed), the crowd's lite person < 300.
 
 ## Families
@@ -117,7 +118,7 @@ unique vertices and 2,700 triangles (indexed), the crowd's lite person < 300.
     - a fox on lawns and wood edges at dusk and night;
     - a hawk circling a thermal by day.
   - They form one ecosystem: the fox stalks (a slow creep) and pounces; the hawk stoops on animals in the open; prey freeze a beat (shorter for the watchful — per-animal vigilance) then flee the fox, the stoop, the walker or a moving car (the faster it comes, the sooner they go); an alarm spreads through a flock or warren and to other small prey nearby. Tested in `tests/critters.test.ts`.
-  - Budgets: every species < 1600 verts (`tests/foundry.test.ts` walks `CRITTERS`).
+  - Budgets: every species < 1,600 verts, the big ones < 2,500 (`critterBudget`; `tests/foundry.test.ts` walks `CRITTERS`).
   - Small animals are drawn 1.3–2× life size, an illustrator's licence: at painting scale a true-size squirrel dissolves into the grass.
 - **People** (`people.ts`): one jointed body for every walker and resident, varied per instance
   on the GPU: skin, hair, trouser and shoe palettes, five hairstyles (the unworn ones collapse),

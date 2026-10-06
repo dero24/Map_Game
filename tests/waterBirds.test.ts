@@ -198,7 +198,7 @@ describe('the water and big birds', () => {
       const seen = new Set<number>();
       const mesh = (c as unknown as { meshes: Map<string, { m: THREE.InstancedMesh; anim: THREE.InstancedBufferAttribute }> }).meshes.get('wildturkey')!;
       for (let i = 0; i < 1200; i++) {
-        c.update(0.05, 0, 0, env({ month, hour: 12 }));
+        c.update(0.05, 0, 0, env({ month, hour: 12, camFwd: new THREE.Vector3(0, 0, 1) })); // (looking his way: one behind isn't drawn)
         const mine = list(c).filter((o) => o.kind === 'wildturkey').indexOf(t);
         if (mine >= 0) seen.add(mesh.anim.getZ(mine));
       }
