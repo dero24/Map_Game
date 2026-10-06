@@ -141,6 +141,12 @@ behaviour.
 
 ## Phones: quality tiers + the boot report
 
+- **Slow on a device? Read it off the screen**: panel → Debug → "show stats" (`src/ui/stats.ts`): the
+  frame rate, average and worst frame twice a second; the frame's draw calls and triangles over all its
+  passes (`renderer.info` reset per frame while it's on) and the canvas size; the life sim's active
+  people + cars + gulls and its ms; the beach's people drawn; the animals about and drawn; the tiles
+  loaded and whether more are loading; the tier and walking/flying/driving. A phone's share of the
+  crowd, traffic and animals is `TIER_LIFE` (`sim/life.ts`).
 - Boot picks a tier (`src/render/quality.ts` `pickTier`): `desktop` = the shipped defaults;
   `phone` (touch-first, a phone UA, or a small touch screen) = CSS-pixel paint (`hiDpi` off),
   `paintDetail` 0.6, 1024² shadows, 2048² ground-paint canvases, tile rings 900/1500/4000 m;

@@ -48,6 +48,7 @@ import { Brush } from './ui/brush';
 import { peaksAround, sightsFrom, compassWord, type Peak } from './world/peaks';
 import { Arrival } from './ui/arrival';
 import { bearing, habitatOf, standBy, whereToSee } from './ui/seeIt';
+import { StatsHud } from './ui/stats';
 import { CRITTERS, CRITTER_NAME, type CritterKind } from './assets/fauna';
 import type { GameCtx } from './ui/ctx';
 import { modelName } from './player/vehicles';
@@ -1453,7 +1454,11 @@ async function main() {
     // (each round's steps are measured by the next: two rounds of steps, a third to judge the last)
     qDone = (!steps.length && !qUndo.length) || qRound >= 3;
   };
+  // (Debug → "show stats": the frame's draw calls over all its passes, not only the last one's)
+  const statsHud = new StatsHud();
   const frame = (now: number) => {
+    renderer.info.autoReset = !debugParams.showStats;
+    if (debugParams.showStats) renderer.info.reset();
     const rawDt = Math.min(0.25, Math.max(0, (now - last) / 1000));
     const dt = CAPTURE ? 1 / 60 : Math.min(0.1, rawDt);
     last = now;
@@ -1697,6 +1702,14 @@ async function main() {
     frames++;
     if (frames === 3) (window as unknown as Record<string, unknown>).__READY__ = true;
     (window as unknown as Record<string, unknown>).__RENDER_INFO__ = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, errors: errors.size, frames };
+    statsHud.frame(debugParams.showStats, now, rawDt * 1000, () => ({
+      draws: `${renderer.info.render.calls} · ${(renderer.info.render.triangles / 1000).toFixed(0)}k tris · ${renderer.domElement.width}×${renderer.domElement.height} px`,
+      'people+cars+gulls': `${life.stats.active} (sim ${life.stats.simMs.toFixed(1)} ms)`,
+      'beach people': crowd.drawn.full + crowd.drawn.lite,
+      animals: `${Object.values(critters.stats).reduce((a, b) => a + b, 0)} about · ${critters.drawn.shown} drawn`,
+      tiles: `${stream.loaded.size}${stream.busy ? ' · loading' : ''}`,
+      quality: `${tier.tier} · ${walkParams.fly ? 'flying' : vehicles.driving ? 'driving' : 'walking'}`,
+    }));
   };
   // Put away — a phone locked, the app switched, the tab hidden — the game sleeps like a phone
   // game: the townsfolk stop ticking in their worker (it ran on at 20 Hz for a page nobody could

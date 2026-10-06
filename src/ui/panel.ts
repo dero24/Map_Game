@@ -193,6 +193,7 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
 
   const d = gui.addFolder('Debug');
   d.add(debugParams, 'rawScene').name('show raw render');
+  d.add(debugParams, 'showStats').name('show stats (fps, draws, counts)');
   d.add(debugParams, 'summons').name('free rides: V car, ⇧B boat, N plane');
   d.add({ car: () => hooks.onSummon('car') }, 'car').name('summon a car');
   d.add({ boat: () => hooks.onSummon('boat') }, 'boat').name('summon a boat');
