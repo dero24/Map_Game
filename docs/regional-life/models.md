@@ -2120,8 +2120,11 @@ one genome, and lands with validation, vertex budgets in `tests/foundry.test.ts`
     `bovid†`: **American bison** (`bisonGeometry`: woolly forequarters, hump, horns, wallows). `armadillo†`:
     **nine-banded armadillo** (`armadilloGeometry`: shields and nine bands, the startled jump).
     `swimmer†`: **West Indian manatee** (`manateeGeometry`: back and snout at the surface).
-15. **Reptiles.** `sprawler†`: **American alligator**, then **green anole** and **brown anole**.
-    `turtle†`: **painted turtle**, then **red-eared** and **yellow-bellied sliders** basking on a log.
+15. **Reptiles** — **built** 2026-10-06 (`docs/earth/LOG.md` "Regional life (15)"). `sprawler†`
+    (`sprawlerGeometry`): **American alligator** (on the bank or floating, the belly slide in), then
+    **green anole** and **brown anole** (up the trunks, the throat fan). `turtle†` (`turtleGeometry`):
+    **painted turtle**, then **red-eared** and **yellow-bellied sliders** basking on a log (`signs.ts`
+    `baskingLogs`), sliding off when you come.
 16. **Small life.** Butterfly row: **monarch**. `dragonfly†`: **common green darner**. `bug†`:
     **annual cicada**. `slug†`: **Pacific banana slug**. `crab†`: **Atlantic marsh fiddler crab**,
     then **crawfish** with their **chimneys** (`sign†`).

@@ -16,7 +16,7 @@ import * as THREE from 'three';
 import type { Terrain } from '../world/data';
 import type { WalkWorld } from '../player/collision';
 import { CRITTERS, ROLE, ROLES, critterLib, critterMaterial, faunaMix, swimSink, sitPivot, type CritterKind, type CritterRole } from '../assets/fauna';
-import { prairieTown } from '../assets/signs';
+import { prairieTown, baskingLogs } from '../assets/signs';
 
 // Small animals are drawn a little larger than life (×1.3–2): at painting scale a true-size
 // squirrel dissolves into the grass wash — the same licence an illustrator takes.
@@ -90,7 +90,17 @@ const SPEC: Record<CritterKind, Spec> = {
   bison: { cap: 14, walk: 0.7, flee: 7, fleeR: 35, gaitHz: 0.7, scale: [0.95, 1.05], colors: [0xffffff] },
   armadillo: { cap: 3, walk: 0.6, flee: 3, fleeR: 6, gaitHz: 2.6, scale: [1.1, 1.25], colors: [0xffffff] },
   manatee: { cap: 4, walk: 0.35, flee: 0.5, fleeR: 0, gaitHz: 0.4, scale: [0.9, 1.1], colors: [0xffffff] },
+  // the reptiles (fauna.ts package #15): the alligator wary from 12 m, the anoles drawn larger than life
+  // (they're a hand long), the turtles off their log at 10 m
+  alligator: { cap: 3, walk: 0.4, flee: 3.5, fleeR: 12, gaitHz: 0.8, scale: [0.9, 1.15], colors: [0xffffff] },
+  greenanole: { cap: 6, walk: 0.5, flee: 3, fleeR: 3, gaitHz: 4, scale: [1.6, 1.9], colors: [0x5aa040] }, // (brown when it's cool: set at spawn)
+  brownanole: { cap: 6, walk: 0.5, flee: 3, fleeR: 3, gaitHz: 4, scale: [1.6, 1.9], colors: [0xffffff] },
+  paintedturtle: { cap: 8, walk: 0.2, flee: 1, fleeR: 10, gaitHz: 1.2, scale: [1.3, 1.5], colors: [0xffffff] },
+  redslider: { cap: 8, walk: 0.2, flee: 1, fleeR: 10, gaitHz: 1.2, scale: [1.3, 1.5], colors: [0xffffff] },
+  yellowslider: { cap: 8, walk: 0.2, flee: 1, fleeR: 10, gaitHz: 1.2, scale: [1.3, 1.5], colors: [0xffffff] },
 };
+const ANOLES = new Set<CritterKind>(['greenanole', 'brownanole']);
+const TURTLES = new Set<CritterKind>(['paintedturtle', 'redslider', 'yellowslider']);
 /** A western black bear's colours (the East's all black). */
 const WEST_BEAR = [0x1e1a18, 0x1e1a18, 0x7a4a2a, 0x5a3a24, 0xb08a5a];
 /** Who wears antlers or horns, and when: the share of the herd that are bulls, bucks or rams, and the
@@ -116,8 +126,8 @@ export interface Mover { x: number; z: number; vx: number; vz: number }
 type State = 'idle' | 'move' | 'flee' | 'climb' | 'perch' | 'fly' | 'drift' | 'stalk' | 'pounce' | 'soar' | 'stoop' | 'rise'
   // (package #13: an opossum playing dead, a skunk's warning)
   | 'possum' | 'warn'
-  // (package #14: a bison rolling in its wallow)
-  | 'wallow'
+  // (package #14: a bison rolling in its wallow; #15: a basker sliding off its bank or log into the water)
+  | 'wallow' | 'slide'
   // (package #12: a gull wheeling and coming down again, a pelican skimming the waves, an osprey's hover
   // and plunge, a loon under the water)
   | 'glide' | 'alight' | 'skim' | 'hover' | 'plunge' | 'dive';
@@ -294,6 +304,7 @@ export class Critters {
       // in open country only, most at dawn and dusk)
       case 'forager': return env.night > 0.5 ? 3 : dawnDusk && env.night > 0.15 ? 1 : 0;
       case 'herd': return town < 0.6 ? 0 : dawnDusk ? 8 : day ? 4 : 0;
+      case 'basker': return day ? 6 : 0;
     }
   }
   private place(k: CritterRole, wx: number, wz: number, env: CritterEnv, sp?: CritterKind): Omit<Critter, 'kind' | 'seed' | 'c' | 's'> | null {
@@ -306,7 +317,39 @@ export class Critters {
       const f = env.camFwd;
       if (!near && k !== 'raptor' && d < 38 && (Math.sin(a) * f.x + Math.cos(a) * f.z) > 0.25) continue;
       let home: { x: number; z: number; trunk?: number; r?: number; lean?: [number, number] } | undefined;
-      if (k === 'climber') {
+      if (k === 'climber' && sp && ANOLES.has(sp)) {
+        // an anole up a trunk, head up, a metre or two off the ground
+        const t = env.trees(x, z, 14);
+        if (!t.length) continue;
+        home = t[Math.floor(this.rnd() * t.length)];
+        const ra = this.rnd() * 6.28, top = Math.max(0.8, (home.trunk ?? 3) * 0.8), y = this.ground(home.x, home.z) + 0.5 + this.rnd() * Math.min(1.6, top - 0.5);
+        return { x: home.x + Math.sin(ra) * 0.5, y, z: home.z + Math.cos(ra) * 0.5, yaw: 0, pitch: Math.PI / 2 - 0.1, state: 'perch', t: 1e6, tx: x, tz: z, ty: y, home, phase: this.rnd(), amt: 0 };
+      } else if (k === 'basker') {
+        const base = { pitch: 0, t: 1e6, tx: x, tz: z, phase: this.rnd(), amt: 0 };
+        if (sp && TURTLES.has(sp)) {
+          // turtles in a row along a log, necks out; or, with no log about, swimming with their heads up
+          const logs = this.logsNear(wx, wz).filter((l) => Math.hypot(l.x - wx, l.z - wz) < 80);
+          if (logs.length && this.rnd() < 0.8) {
+            const l = logs[Math.floor(this.rnd() * logs.length)], u = -2.1 + this.rnd() * 4;
+            const lx = l.x + Math.sin(l.yaw) * u, lz = l.z + Math.cos(l.yaw) * u;
+            if (this.list.some((o) => TURTLES.has(o.kind) && Math.hypot(o.x - lx, o.z - lz) < 0.4)) continue;
+            return { ...base, x: lx, y: l.y + 0.56, z: lz, ty: l.y + 0.56, yaw: l.yaw + (this.rnd() < 0.5 ? 0 : Math.PI), state: 'perch' };
+          }
+          if (!this.swimmable(x, z, 1.5) || this.terrain.sdfAt(x, z) < -12) continue;
+          const wl = this.level(x, z);
+          return { ...base, x, z, y: wl, ty: wl, wl, yaw: this.rnd() * 6.28, t: 2, state: 'idle' };
+        }
+        // an alligator on a sunny bank, or floating with its eyes and snout up
+        if (this.rnd() < 0.5) {
+          const sd = this.terrain.sdfAt(x, z);
+          if (sd < 1 || sd > 5 || this.walk.buildingAt(x, z) >= 0 || this.terrain.oceanDistAt(x, z) < 100) continue;
+          const gx = this.terrain.sdfAt(x + 1, z) - this.terrain.sdfAt(x - 1, z), gz = this.terrain.sdfAt(x, z + 1) - this.terrain.sdfAt(x, z - 1);
+          return { ...base, x, z, y: this.ground(x, z), ty: 0, yaw: Math.atan2(gx, gz) + (this.rnd() - 0.5), state: 'perch' }; // (facing the water)
+        }
+        if (!this.swimmable(x, z, 3)) continue;
+        const wl = this.level(x, z);
+        return { ...base, x, z, y: wl, ty: wl, wl, yaw: this.rnd() * 6.28, t: 2, state: 'idle' };
+      } else if (k === 'climber') {
         const t = env.trees(x, z, 14);
         if (!t.length) continue;
         home = t[Math.floor(this.rnd() * t.length)];
@@ -409,6 +452,18 @@ export class Critters {
 
   // ---------------- tick ----------------
   private paved: (x: number, z: number) => boolean = () => false;
+  /** The basking logs about the walker (signs.ts baskingLogs: the props' own), kept for its 50 m square. */
+  private logs: { x: number; y: number; z: number; yaw: number }[] = [];
+  private logsAt = '';
+  private logsNear(wx: number, wz: number) {
+    const key = `${Math.round(wx / 50)},${Math.round(wz / 50)}`;
+    if (key !== this.logsAt) {
+      this.logsAt = key;
+      const T = this.terrain;
+      this.logs = baskingLogs({ x0: wx - 90, z0: wz - 90, x1: wx + 90, z1: wz + 90 }, (x, z) => T.sdfAt(x, z), (x, z) => T.oceanDistAt(x, z), (x, z) => T.heightAt(x, z));
+    }
+    return this.logs;
+  }
   /** Whether a prairie dog town lies within ~60 m of the walker (signs.ts prairieTown). */
   private inTown = false;
   update(dt: number, wx: number, wz: number, env: CritterEnv) {
@@ -443,6 +498,7 @@ export class Critters {
         // a loon grey in winter; a laughing gull's black hood gone white from September to March; a western
         // black bear any of its colours
         const mo = this.month(env);
+        if (k === 'greenanole' && !(mo >= 4 && mo <= 10 && env.hour > 8 && env.hour < 19)) c.set(0x7a5a3a); // (brown when it's cool)
         if (k === 'blackbear') c.set(env.place?.west || ['rockies', 'great-basin', 'desert-sw', 'california', 'pnw'].includes(env.place?.eco ?? '') ? WEST_BEAR[Math.floor(this.rnd() * WEST_BEAR.length)] : 0x1e1a18);
         if (k === 'loon' && (mo >= 10 || mo <= 4)) c.set(0x5e646c);
         if (k === 'laughinggull' && (mo >= 9 || mo <= 3)) c.set(0xe8e8e4);
@@ -481,7 +537,8 @@ export class Critters {
       c.alarm = undefined;
       if (c.state === 'idle' || c.state === 'move') { this.eco.alarm++; this.startle(c, c.fx ?? wx, c.fz ?? wz, wx, wz, d, env); }
     }
-    if ((c.state === 'idle' || c.state === 'move' || c.state === 'stalk') && !(c.kind === 'blackbear' && c.sit)) { // (a bear stood up to look has seen you: it goes on its own count)
+    const basking = c.state === 'perch' && (R(c) === 'basker' || ANOLES.has(c.kind));
+    if ((c.state === 'idle' || c.state === 'move' || c.state === 'stalk' || basking) && !(c.kind === 'blackbear' && c.sit)) { // (a bear stood up to look has seen you: it goes on its own count)
       const th = this.threat(c, wx, wz, d, env);
       if (th && (th.src === 'predator' || th.src === 'raptor')) {
         // a predator: a heartbeat of freezing first — the watchful go at once, the dozy a beat late
@@ -552,11 +609,22 @@ export class Critters {
         c.pitch = Math.min(Math.PI / 2 - 0.1, c.pitch + dt * 4);
         c.y = Math.min(c.ty, c.y + dt * 3.2);
         c.amt = 1; c.phase += dt * 3.5;
-        if (c.y >= c.ty) { c.state = 'perch'; c.t = 8; c.amt = 0; }
+        if (c.y >= c.ty) { c.state = 'perch'; c.t = ANOLES.has(c.kind) ? 1e6 : 8; c.amt = 0; }
         break;
       case 'perch':
         c.amt = 0;
+        c.phase += dt * 0.35; // (an anole's displays, by its own clock)
         break;
+      case 'slide': {
+        // down the bank into the water — an alligator's belly slide, a turtle off its log — then under
+        const dx = c.tx - c.x, dz = c.tz - c.z, L = Math.hypot(dx, dz);
+        const step = Math.min(L, S.flee * dt);
+        if (L > 0.05) { c.x += (dx / L) * step; c.z += (dz / L) * step; c.yaw = Math.atan2(-dx, -dz); }
+        c.y = Math.max(this.ground(c.x, c.z), this.level(c.x, c.z) - 0.3);
+        c.amt = 1; c.phase += dt * S.gaitHz * 2;
+        if (this.terrain.sdfAt(c.x, c.z) < -1.2 || L < 0.1 || c.t <= 0) { c.wl = this.level(c.x, c.z); c.state = 'dive'; c.t = 5 + this.rnd() * 6; c.amt = 0; }
+        break;
+      }
       case 'fly': {
         // up and away: a songbird's quick dash; the big birds labour off, heavy and slow
         const a = Math.atan2(c.x - (c.fx ?? wx), c.z - (c.fz ?? wz)), big = R(c) !== 'songbird';
@@ -790,6 +858,14 @@ export class Critters {
     const role = R(c);
     if (role === 'songbird') { c.state = 'fly'; c.t = 3.5; if (heard) this.onEvent?.(this.sound(c), 'flush', pan, d); }
     else if (c.kind === 'loon') { c.state = 'dive'; c.t = 5 + this.rnd() * 5; } // (it slips under)
+    else if (ANOLES.has(c.kind) && c.home) { c.state = 'climb'; c.t = 1; c.ty = Math.min(this.ground(c.home.x, c.home.z) + Math.max(1, (c.home.trunk ?? 3) * 0.9), c.y + 0.6 + this.rnd() * 0.8); } // (round the trunk and up)
+    else if (role === 'basker' && c.wl !== undefined) { c.state = 'dive'; c.t = 6 + this.rnd() * 6; } // (it sinks without a ripple)
+    else if (role === 'basker') {
+      // off the bank or the log, down into the water
+      const T = this.terrain, gx = T.sdfAt(c.x + 1, c.z) - T.sdfAt(c.x - 1, c.z), gz = T.sdfAt(c.x, c.z + 1) - T.sdfAt(c.x, c.z - 1), L = Math.hypot(gx, gz) || 1;
+      c.state = 'slide'; c.t = 4; c.tx = c.x - (gx / L) * 6; c.tz = c.z - (gz / L) * 6;
+      if (heard) this.onEvent?.('splash', 'flush', pan, d);
+    }
     else if (c.kind === 'beaver' && c.wl !== undefined) { c.state = 'dive'; c.t = 6 + this.rnd() * 6; if (heard) this.onEvent?.('splash', 'flush', pan, d); } // (a slap of the tail, and under)
     else if (c.kind === 'opossum' && d < SPEC.opossum.fleeR * 0.6) { c.state = 'possum'; c.t = 10 + this.rnd() * 6; }
     else if (c.kind === 'skunk') { c.state = 'warn'; c.t = 2.2 + this.rnd(); }
@@ -870,7 +946,9 @@ export class Critters {
       const role = R(c);
       const air = c.state === 'fly' || c.state === 'glide' || c.state === 'alight' || c.state === 'skim';
       const pose = role === 'firefly' ? 3 : air || role === 'butterfly' || role === 'raptor' ? 2 : (c.show && c.state === 'idle') || c.state === 'warn' ? 4 : c.amt !== 0 ? 1 : 0;
-      M.anim.setXYZ(i, c.phase, c.amt, pose + (this.horned(c, this.mo) ? 10 : 0)); // (+10: wearing its antlers or horns)
+      // (+10: wearing its antlers or horns — or an anole flashing its throat fan)
+      const shown = this.horned(c, this.mo) || (ANOLES.has(c.kind) && c.state === 'perch' && Math.sin(c.phase * 6.28 + (c.seed % 7)) > 0.7);
+      M.anim.setXYZ(i, c.phase, c.amt, pose + (shown ? 10 : 0));
     }
     for (const [k, M] of this.meshes) {
       M.m.count = per.get(k) ?? 0;

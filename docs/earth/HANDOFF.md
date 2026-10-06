@@ -285,7 +285,11 @@ in-game look is checked on Robby's PC.
   ponds and lakes).
 - **#14:** built (2026-10-06). The bison stand in "deep open country" until the map's protected areas
   reach the sim (they're kept herds: parks and preserves).
-- **#15–#16:** the rest of the wildlife packages (`regional-wildlife`): #15 the reptiles next.
+- **#15:** built (2026-10-06). The build order's reptiles are in; the reference's P2 lizards
+  (`models.md` §13.1: fence lizards, western fence, spiny, side-blotched, collared, horned) are rows on
+  the same `sprawlerGeometry` — the West has no lizard yet — and the snakes and frogs need their own
+  plans (snake†, frog†).
+- **#16:** the last wildlife package (`regional-wildlife`): the small life next.
 - **Before 1.0:** a lighter version of each animal for phones and far off (about 40% of the vertices),
   like the trees' far model and the crowd's lite person.
   - The casts go in `faunaMix`, by `CastPlace`.

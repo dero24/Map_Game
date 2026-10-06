@@ -2,6 +2,47 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-06 — Regional life (15): the reptiles — the alligator, the anoles, the turtles on a log
+
+Package #15 of `docs/regional-life/models.md`: two new plans on the same joints (`fauna.ts`
+`sprawlerGeometry`, `turtleGeometry`, in `NEW_PLAN`) and a new role, `basker`: the animals that lie out
+in the sun by the water and go into it when you come.
+
+- **The American alligator** (sprawler†): the long low body slung between legs splayed out to the
+  sides, the broad rounded snout, the eyes up on top, the ridged scutes down the back and tail, the
+  tail tapering to the ground behind it (it rests on the ground: never lower than its own thickness).
+  Three metres long. It lies on a sunny bank facing the water or floats with only its eyes and snout up
+  (`swimSink`); come within 12 m and it belly-slides into the water (`slide`) and sinks without a
+  ripple.
+- **The green and brown anoles** (sprawler†, the pointed snout): a hand long, up a trunk head up (drawn
+  a little larger than life so you see them). Each flashes its throat fan now and then by its own clock
+  (the dewlap rides the display part, 9, out only while it displays); come close and it goes round the
+  trunk and up. The green anole turns brown when it's cool.
+- **The painted turtle, the red-eared and the yellow-bellied sliders** (turtle†): the domed shell with
+  its coloured rim, the pale plastron, the striped neck, a slider's red or yellow patch behind the eye,
+  the shell riding low on splayed legs. In a row along a log at the water's edge (`signs.ts`
+  `baskingLogs`: a log lying out into the water, one cell at a time, the same however the land is
+  tiled; the props draw it, the sim seats the turtles on it); when you come within 10 m they slide off
+  with a splash and come up swimming, heads up. With no log about, swimming.
+- **Where** (ranges.md): the alligator on the Southeast's coastal plain (not the Piedmont), Florida, the
+  Gulf, East Texas and the Ozarks' south in the warm months; the yellow-bellied slider the Southeast's,
+  Florida's and the Gulf's; the red-eared slider everywhere (planted far and wide); the painted turtle
+  everywhere but Florida and the desert, under the ice in a northern winter; the green anole across the
+  South, the brown anole Florida's and the southern coasts'.
+- Fixed on the way: the alligator's tail dipped 6 cm below the ground (the foundry's "on its feet"
+  check); an anole's head the plain icosahedron (it's a fingertip: the finer mesh put it over the small
+  animals' 1,600).
+
+**Verified:** typecheck; `npm test` 966/966; `tests/reptiles.test.ts` (new: the ranges and seasons; the
+plans — the alligator's length and lowness, the anole's size and its throat fan, the turtle's low shell;
+the logs at the edge lying into the water and tile-independent; turtles on the logs sliding off, the
+alligator sliding in and sinking, the anole going up and flashing its fan); budgets in
+`tests/foundry.test.ts` (the alligator with the big animals at 2,500); the shore's playtest; a studio
+montage of all six (side on, three-quarter, from above).
+
+**Next:** package #16, the small life (the monarch, the green darner, the cicada, the banana slug, the
+fiddler crab, the crawfish and their chimneys).
+
 ## 2026-10-06 — Regional life (14): the new plans — bear, bison, armadillo, manatee
 
 Package #14 of `docs/regional-life/models.md`: the four animals no existing body could make, each a

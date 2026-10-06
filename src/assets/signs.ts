@@ -107,3 +107,26 @@ export function prairieMounds(zone: { x0: number; z0: number; x1: number; z1: nu
     }
   return out;
 }
+
+/** A basking log: a fallen trunk lying out from the bank into the water, its bark, a broken-off limb or
+ *  two, its cut end pale (local: along z, its middle at the origin, resting on y 0; 5 m long). */
+export function baskingLogGeometry(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [];
+  parts.push(part(new THREE.CylinderGeometry(0.26, 0.32, 5, 8, 1, true).rotateX(Math.PI / 2).translate(0, 0.3, 0), 0x6a5e4e));
+  parts.push(part(new THREE.CircleGeometry(0.26, 8).translate(0, 0.3, 2.5), 0xa8987a)); // (the broken end, out in the water)
+  parts.push(part(new THREE.CircleGeometry(0.32, 8).rotateY(Math.PI).translate(0, 0.3, -2.5), 0x8a7a62));
+  for (const [z, a] of [[-1.2, 0.6], [0.9, -0.8]]) parts.push(part(new THREE.CylinderGeometry(0.05, 0.07, 0.6, 4, 1, true).rotateZ(a).translate(Math.sin(a) * -0.3, 0.55, z), 0x5e5244));
+  return merge(parts);
+}
+
+/** Where the basking logs lie: at a pond's, a lake's or a river's edge (not the sea), one to a 300 m
+ *  cell in about half the cells with such a shore, each lying square to the bank — its −z end on the
+ *  bank, its +z end out in the water (`yaw` turns local +z down the water's slope). The sim lines its
+ *  turtles up along it. */
+export function baskingLogs(zone: { x0: number; z0: number; x1: number; z1: number }, sdfAt: (x: number, z: number) => number, oceanDistAt: (x: number, z: number) => number, heightAt: (x: number, z: number) => number) {
+  return cellSpots(zone, (x, z) => { const d = sdfAt(x, z); return d <= 0.6 && d >= -0.6 && oceanDistAt(x, z) > 150; }, heightAt, 300, 0.5, 12, 901).map((l) => {
+    const gx = sdfAt(l.x + 1, l.z) - sdfAt(l.x - 1, l.z), gz = sdfAt(l.x, l.z + 1) - sdfAt(l.x, l.z - 1);
+    // (local +z down the slope, into the water: the yaw that turns (0, 0, 1) to −grad)
+    return { ...l, yaw: Math.atan2(-gx, -gz) };
+  });
+}

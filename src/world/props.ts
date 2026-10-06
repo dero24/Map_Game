@@ -37,7 +37,7 @@ import { beachSeason, beachLotFill, marinaSeason, windowFor, worldDate } from '.
 import { seaLevel, type Berth } from './docks';
 import { GUARD_SEAT, type Gear, type Stand } from './crowd';
 import { faunaMix } from '../assets/fauna';
-import { ospreyNestGeometry, ospreyNests, beaverLodgeGeometry, beaverLodges, moundGeometry, prairieMounds } from '../assets/signs';
+import { ospreyNestGeometry, ospreyNests, beaverLodgeGeometry, beaverLodges, moundGeometry, prairieMounds, baskingLogGeometry, baskingLogs } from '../assets/signs';
 
 type P = [number, number];
 /** The hours a thing is there for when it's there all day (calendar.ts windows). */
@@ -1577,6 +1577,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   const sdf = (x: number, z: number) => terrain.sdfAt(x, z), hgt = (x: number, z: number) => terrain.heightAt(x, z);
   if (has(fauna0.raptor, 'osprey')) signs('osprey-nest', ospreyNestGeometry, ospreyNests(SZ, sdf, hgt).filter((n) => inSlice(n.x, n.z) && walk.deckAt(n.x, n.z) === null));
   if (has(fauna0.waterfowl, 'beaver')) signs('beaver-lodge', beaverLodgeGeometry, beaverLodges(SZ, sdf, (x, z) => terrain.oceanDistAt(x, z), hgt).filter((n) => inSlice(n.x, n.z) && walk.deckAt(n.x, n.z) === null));
+  if (fauna0.basker?.some(([k]) => k !== 'alligator')) signs('basking-log', baskingLogGeometry, baskingLogs(SZ, sdf, (x, z) => terrain.oceanDistAt(x, z), hgt).filter((n) => inSlice(n.x, n.z) && walk.deckAt(n.x, n.z) === null));
   if (has(fauna0.burrower, 'prairiedog')) {
     const grass = (x: number, z: number) => terrain.coverAt(x, z) === 30 && terrain.sdfAt(x, z) > 3 && walk.buildingAt(x, z) < 0 && !walk.blocked(x, z, 1) && !paved(x, z);
     signs('prairie-mounds', moundGeometry, prairieMounds(SZ, grass, hgt).filter((n) => inSlice(n.x, n.z)));

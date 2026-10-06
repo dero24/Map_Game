@@ -21,13 +21,16 @@ export type CritterKind =
   // (package #13: the mammals on the existing bases)
   | 'raccoon' | 'opossum' | 'skunk' | 'foxsquirrel' | 'chipmunk' | 'woodchuck' | 'beaver' | 'prairiedog' | 'elk' | 'moose' | 'pronghorn' | 'bighorn'
   // (package #14: the new plans)
-  | 'blackbear' | 'bison' | 'armadillo' | 'manatee';
+  | 'blackbear' | 'bison' | 'armadillo' | 'manatee'
+  // (package #15: the reptiles)
+  | 'alligator' | 'greenanole' | 'brownanole' | 'paintedturtle' | 'redslider' | 'yellowslider';
 export const CRITTERS: CritterKind[] = ['squirrel', 'rabbit', 'songbird', 'sandpiper', 'deer', 'butterfly', 'firefly', 'fox', 'hawk', 'coyote', 'jackrabbit', 'snowshoe', 'groundSquirrel', 'muleDeer', 'roadrunner', 'quail', 'ibis',
   'cardinal', 'bluejay', 'robin', 'stellersjay', 'gilawoodpecker', 'mourningdove', 'crow', 'pigeon',
   'canadagoose', 'mallard', 'mallardhen', 'loon', 'greatblueheron', 'greategret', 'snowyegret', 'spoonbill', 'sandhillcrane',
   'turkeyvulture', 'baldeagle', 'osprey', 'wildturkey', 'californiaquail', 'brownpelican', 'laughinggull', 'californiagull',
   'raccoon', 'opossum', 'skunk', 'foxsquirrel', 'chipmunk', 'woodchuck', 'beaver', 'prairiedog', 'elk', 'moose', 'pronghorn', 'bighorn',
-  'blackbear', 'bison', 'armadillo', 'manatee'];
+  'blackbear', 'bison', 'armadillo', 'manatee',
+  'alligator', 'greenanole', 'brownanole', 'paintedturtle', 'redslider', 'yellowslider'];
 export const CRITTER_NAME: Record<CritterKind, string> = {
   squirrel: 'squirrel', rabbit: 'rabbit', songbird: 'songbird', sandpiper: 'sandpiper', deer: 'white-tailed deer', butterfly: 'butterfly', firefly: 'firefly', fox: 'red fox', hawk: 'red-tailed hawk',
   coyote: 'coyote', jackrabbit: 'black-tailed jackrabbit', snowshoe: 'snowshoe hare', groundSquirrel: 'ground squirrel', muleDeer: 'mule deer', roadrunner: 'greater roadrunner', quail: 'quail', ibis: 'white ibis',
@@ -36,6 +39,7 @@ export const CRITTER_NAME: Record<CritterKind, string> = {
   turkeyvulture: 'turkey vulture', baldeagle: 'bald eagle', osprey: 'osprey', wildturkey: 'wild turkey', californiaquail: 'California quail', brownpelican: 'brown pelican', laughinggull: 'laughing gull', californiagull: 'California gull',
   raccoon: 'raccoon', opossum: 'Virginia opossum', skunk: 'striped skunk', foxsquirrel: 'fox squirrel', chipmunk: 'eastern chipmunk', woodchuck: 'woodchuck', beaver: 'American beaver', prairiedog: 'black-tailed prairie dog', elk: 'elk', moose: 'moose', pronghorn: 'pronghorn', bighorn: 'bighorn sheep',
   blackbear: 'American black bear', bison: 'American bison', armadillo: 'nine-banded armadillo', manatee: 'West Indian manatee',
+  alligator: 'American alligator', greenanole: 'green anole', brownanole: 'brown anole', paintedturtle: 'painted turtle', redslider: 'red-eared slider', yellowslider: 'yellow-bellied slider',
 };
 
 /** Ecological roles: the sim (sim/critters.ts) gives each role its habitat and behaviour; the
@@ -45,8 +49,10 @@ export type CritterRole = 'climber' | 'burrower' | 'grazer' | 'songbird' | 'shor
   // (package #12: on the water, at its edge, the gulls of the beach and the lot, the big ground birds)
   | 'waterfowl' | 'wader' | 'gull' | 'fowl'
   // (package #13: the night's foragers about the yards and the bins; the herds of the open country)
-  | 'forager' | 'herd';
-export const ROLES: CritterRole[] = ['climber', 'burrower', 'grazer', 'songbird', 'shorebird', 'browser', 'butterfly', 'firefly', 'predator', 'raptor', 'waterfowl', 'wader', 'gull', 'fowl', 'forager', 'herd'];
+  | 'forager' | 'herd'
+  // (package #15: the reptiles that bask — on a bank, on a log — and slide into the water)
+  | 'basker';
+export const ROLES: CritterRole[] = ['climber', 'burrower', 'grazer', 'songbird', 'shorebird', 'browser', 'butterfly', 'firefly', 'predator', 'raptor', 'waterfowl', 'wader', 'gull', 'fowl', 'forager', 'herd', 'basker'];
 export const ROLE: Record<CritterKind, CritterRole> = {
   squirrel: 'climber', groundSquirrel: 'burrower', rabbit: 'grazer', jackrabbit: 'grazer', snowshoe: 'grazer', roadrunner: 'grazer',
   songbird: 'songbird', quail: 'songbird', sandpiper: 'shorebird', ibis: 'shorebird', deer: 'browser', muleDeer: 'browser',
@@ -68,6 +74,8 @@ export const ROLE: Record<CritterKind, CritterRole> = {
   // (the bear at the wood's edge with the deer; the bison in the herds; the armadillo out at night; the
   // manatee in the warm water)
   blackbear: 'browser', bison: 'herd', armadillo: 'forager', manatee: 'waterfowl',
+  // (the alligator and the turtles bask by the water; the anoles up the trunks with the squirrels)
+  alligator: 'basker', paintedturtle: 'basker', redslider: 'basker', yellowslider: 'basker', greenanole: 'climber', brownanole: 'climber',
 };
 export type FaunaMix = Partial<Record<CritterRole, [CritterKind, number][]>>;
 // Species per role by climate (Köppen-ish, the same key the plant and car mixes use). North
@@ -187,6 +195,22 @@ const NEW_PLANS: Partial<Record<EcoRegion | 'pnw-dry', FaunaMix>> = {
   'desert-sw': { browser: [['muleDeer', 1], ...BEAR(0.05)] },
 };
 for (const k of Object.keys(NEW_PLANS) as (keyof typeof NEW_PLANS)[]) MAMMALS[k] = { ...MAMMALS[k], ...NEW_PLANS[k] };
+// (package #15: the reptiles — the alligator in the Southeast's coastal plain, Florida, the Gulf, East
+// Texas and southern Arkansas; the yellow-bellied slider the Southeast's, Florida's and the Gulf's; the
+// red-eared slider everywhere (planted far and wide); the painted turtle everywhere but the desert and
+// Florida; the green anole across the South, the brown anole Florida's and the southern coasts')
+const TURTLES: Mix = [['paintedturtle', 1], ['redslider', 0.8]];
+const REPTILES: Partial<Record<EcoRegion | 'pnw-dry', FaunaMix>> = {
+  southeast: { basker: [['alligator', 0.6], ['yellowslider', 1], ['redslider', 0.8], ['paintedturtle', 0.4]], climber: [...SQ(0.4), ['greenanole', 0.8], ['brownanole', 0.2]] },
+  florida: { basker: [['alligator', 1.2], ['yellowslider', 1], ['redslider', 0.6]], climber: [...SQ(0.3), ['greenanole', 0.6], ['brownanole', 1.4]] },
+  gulf: { basker: [['alligator', 1], ['yellowslider', 0.8], ['redslider', 1], ['paintedturtle', 0.3]], climber: [...SQ(0.5), ['greenanole', 0.8], ['brownanole', 0.2]] },
+  texas: { basker: [['alligator', 0.4], ['redslider', 1], ['paintedturtle', 0.2]], climber: [...SQ(1, 0.5), ['greenanole', 0.7], ['brownanole', 0.15]] },
+  ozarks: { basker: [['redslider', 1], ['paintedturtle', 0.8], ['alligator', 0.1]], climber: [...SQ(0.7), ['greenanole', 0.4]] },
+  appalachia: { basker: TURTLES, climber: [...SQ(0.3), ['greenanole', 0.2]] },
+  'desert-sw': { basker: [['redslider', 0.3]] },
+};
+for (const k of ['new-england', 'upstate-ny', 'mid-atlantic', 'plains', 'midwest', 'rockies', 'great-basin', 'california', 'pnw', 'pnw-dry'] as const) REPTILES[k] = { basker: TURTLES };
+for (const k of Object.keys(REPTILES) as (keyof typeof REPTILES)[]) MAMMALS[k] = { ...MAMMALS[k], ...REPTILES[k] };
 for (const k of Object.keys(MAMMALS) as (keyof typeof MAMMALS)[]) {
   const m = MAMMALS[k], here = REGION_FAUNA[k];
   REGION_FAUNA[k] = { ...here, ...m, ...(here.waterfowl && !m.waterfowl ? { waterfowl: [...here.waterfowl, ['beaver', 0.15]] } : {}) };
@@ -214,6 +238,14 @@ const SEASON: Partial<Record<CritterKind, (eco: string, m: number) => boolean>> 
   // (the bears denned up through the northern winter; the manatee in the Carolinas' and the Gulf's warm months)
   blackbear: (e, m) => !NORTHERN.has(e) && !['new-england', 'upstate-ny', 'appalachia', 'midwest'].includes(e) || months(m, 4, 11),
   manatee: (e, m) => e === 'florida' || months(m, 5, 10),
+  // (the turtles bask spring to fall, the year round in Florida; the anoles out whenever it's warm; the
+  // alligators bask even on a sunny winter's day, but the Ozarks' only in the warm months)
+  paintedturtle: (e, m) => (['southeast', 'gulf', 'texas'].includes(e) ? months(m, 2, 11) : months(m, 4, 9)),
+  redslider: (e, m) => e === 'florida' || (['southeast', 'gulf', 'texas'].includes(e) ? months(m, 2, 11) : months(m, 4, 9)),
+  yellowslider: (e, m) => e === 'florida' || months(m, 2, 11),
+  greenanole: (e, m) => e === 'florida' || months(m, 3, 11),
+  brownanole: (e, m) => e === 'florida' || months(m, 3, 11),
+  alligator: (e, m) => e !== 'ozarks' || months(m, 4, 10),
   chipmunk: (_e, m) => months(m, 3, 11),
 };
 
@@ -242,7 +274,12 @@ export function faunaMix(region: string, climate: string, place?: { eco: string;
     const drop = (r: CritterRole, k: CritterKind) => { m = { ...m, [r]: (m[r] ?? []).filter(([kk]) => kk !== k) }; };
     if ((eco === 'california' && l3 === 7) || (eco === 'desert-sw' && (l3 === 81 || l3 === 79 || l3 === 14))) drop('browser', 'blackbear');
     if (eco === 'plains' && ![26, 27, 29].includes(l3)) drop('forager', 'armadillo');
-    if (eco === 'appalachia' && l3 !== 71) drop('forager', 'armadillo');
+    if (eco === 'appalachia' && l3 !== 71) (drop('forager', 'armadillo'), drop('climber', 'greenanole'));
+    // (the alligator only on the coastal plain — not the Piedmont — and in East Texas)
+    if (eco === 'southeast' && l3 === 45) drop('basker', 'alligator');
+    if (eco === 'texas' && ![33, 34, 35].includes(l3)) drop('basker', 'alligator');
+    // (the brown anole on the coasts only, spreading from Florida)
+    if ((eco === 'southeast' && l3 === 45) || (eco === 'texas' && l3 !== 34) || (eco === 'gulf' && ![73, 75].includes(l3))) drop('climber', 'brownanole');
     // (the pronghorn west of the 100th meridian only; the Roosevelt elk on California's north coast)
     if (eco === 'plains' && !PLAINS_WEST.has(l3)) m = { ...m, herd: (m.herd ?? []).filter(([k]) => k !== 'pronghorn' && k !== 'bison'), burrower: (m.burrower ?? []).filter(([k]) => k !== 'prairiedog') };
     if (eco === 'plains' && !PLAINS_EAST.has(l3)) m = { ...m, burrower: (m.burrower ?? []).filter(([k]) => k !== 'woodchuck') }; // (the woodchuck only at the Plains' eastern edge)
@@ -858,12 +895,99 @@ function manateeGeometry(): THREE.BufferGeometry {
   return merge(parts);
 }
 
+// ---- package #15: the reptiles (models.md: sprawler†, turtle†) ----
+interface SprawlerRow { len: number; coat: number; belly: number; snout: 'broad' | 'pointed'; tail: number; scutes?: number; dewlap?: number; slim?: number }
+/** The sprawler plan: a long low body slung between legs splayed out to the sides, the flat head and its
+ *  snout (an alligator's broad and rounded, an anole's pointed), the eyes raised on top, the long
+ *  tapering tail; an alligator's ridged scutes along the back and tail; an anole's throat fan on the
+ *  display part (9: shown only while it displays). Built at a nominal length, scaled to `len` metres. */
+function sprawlerGeometry(o: SprawlerRow): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [], legH = 0.035, by = legH + 0.045, w = o.slim ?? 1;
+  parts.push(still(blob(0.5, 131, { lump: 0.05 }).scale(0.17 * w, 0.085, 0.34).translate(0, by, 0), o.coat));
+  parts.push(still(blob(0.4, 132, { detail: 0, lump: 0 }).scale(0.18 * w, 0.07, 0.36).translate(0, by - 0.018, 0), o.belly));
+  const neck = V3(0, by, -0.15), hz = -0.21; // (the head on the shoulders, no neck to speak of)
+  // (a head the size of a fingertip needs no finer mesh: an anole's is the plain icosahedron)
+  parts.push(jointed(blob(0.5, 133, { lump: 0.04, detail: o.len > 1 ? 1 : 0 }).scale(0.13 * w, 0.066, 0.2).translate(0, by + 0.004, hz), o.coat, P.skull, neck));
+  // (an alligator's snout broad, flat and rounded at the end; an anole's a point)
+  const snout = o.snout === 'broad' ? blob(0.5, 136, { lump: 0.03 }).scale(0.1 * w, 0.045, 0.22) : new THREE.ConeGeometry(0.03, 0.12, 5).rotateX(-Math.PI / 2).scale(w, 0.7, 1);
+  parts.push(jointed(snout.translate(0, by - 0.006, hz - (o.snout === 'broad' ? 0.14 : 0.15)), o.coat, P.skull, neck));
+  for (const s of [-1, 1]) {
+    parts.push(jointed(new THREE.SphereGeometry(0.014, 5, 3).translate(s * 0.035 * w, by + 0.03, hz + 0.02), o.snout === 'broad' ? 0x6a6a30 : 0x1a1a14, P.skull, neck)); // (eyes up on top)
+    for (const [fz, part] of [[-0.12, P.fore], [0.12, P.hind]] as [number, number][]) {
+      const sh = V3(s * 0.06 * w, by - 0.005, fz), elbow = V3(s * 0.13 * w, by + 0.008, fz - 0.005), foot = V3(s * 0.15 * w, 0.006, fz - 0.03);
+      parts.push(jointed(limb(sh, elbow, 0.022 * w, 0.017 * w, 4), o.coat, part, sh));
+      parts.push(jointed(limb(elbow, foot, 0.017 * w, 0.013 * w, 4), o.coat, part, sh));
+      parts.push(jointed(blob(0.025 * w, 134, { detail: 0, lump: 0 }).scale(1.1, 0.3, 1.3).translate(foot.x, 0.006, foot.z - 0.01), o.coat, part, sh));
+    }
+  }
+  // the tail: tapering out behind, a little to one side
+  // (it drops to the ground but rests on it: never lower than its own thickness)
+  const tb = V3(0, by, 0.15), n = 6, tr = (t: number) => 0.055 * w * (1 - t * 0.85), ty = (t: number) => Math.max(tr(t), by - (by - 0.012) * Math.min(1, t * 1.6));
+  let prev = tb;
+  for (let i = 1; i <= n; i++) {
+    const t = i / n, q = V3(Math.sin(t * 2.2) * 0.04 * o.tail, ty(t), 0.15 + o.tail * t);
+    parts.push(jointed(limb(prev, q, tr(t - 1 / n), tr(t), 5), o.coat, P.tail, tb));
+    prev = q;
+  }
+  if (o.scutes !== undefined) {
+    // the scutes: two rows of ridges down the back, one down the tail
+    for (let i = 0; i < 9; i++) for (const s of [-1, 1]) parts.push(still(new THREE.ConeGeometry(0.011, 0.022, 4).translate(s * 0.035, by + 0.04, -0.12 + i * 0.033), o.scutes));
+    for (let i = 0; i < 7; i++) {
+      const t = (i + 0.5) / 8, z = 0.15 + o.tail * t * 0.85;
+      parts.push(jointed(new THREE.ConeGeometry(0.009, 0.02 * (1 - t * 0.6), 4).translate(Math.sin(t * 0.85 * 2.2) * 0.04 * o.tail, ty(t * 0.85) + tr(t * 0.85) * 0.8, z), o.scutes, P.tail, tb));
+    }
+  }
+  if (o.dewlap !== undefined) {
+    // an anole's throat fan, out only while it displays (the display part)
+    const g = blob(0.05, 135, { detail: 0, lump: 0 }).scale(0.12, 1, 1.15).translate(0, by - 0.05, hz + 0.02);
+    const f = part(g, o.dewlap, ANTLER), m = f.attributes.position.count, pv = new Float32Array(m * 3);
+    for (let i = 0; i < m; i++) pv.set([neck.x, neck.y, neck.z], i * 3);
+    f.setAttribute('aPivot', new THREE.BufferAttribute(pv, 3));
+    parts.push(f);
+  }
+  return scaleGeo(merge(parts), o.len / (0.48 + o.tail));
+}
+
+interface TurtleRow { len: number; shell: number; rim: number; skin: number; stripe: number; ear?: number }
+/** The turtle plan: the domed shell with its coloured rim, the pale plastron under it, the head on its
+ *  neck (striped), a patch behind the eye (a slider's red or yellow), four short flippered legs, the
+ *  stub of a tail. Built with a nominal shell of 1, scaled to `len` metres of shell. */
+function turtleGeometry(o: TurtleRow): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = [], by = 0.12; // (the shell riding low, its legs splayed)
+  parts.push(still(blob(0.5, 141, { lump: 0.04 }).scale(0.8, 0.4, 1).translate(0, by + 0.04, 0), o.shell));
+  parts.push(still(new THREE.TorusGeometry(0.4, 0.03, 4, 16).rotateX(Math.PI / 2).scale(1, 1, 1.24).translate(0, by - 0.01, 0), o.rim)); // (the rim)
+  parts.push(still(blob(0.45, 142, { detail: 0, lump: 0 }).scale(0.82, 0.14, 1.0).translate(0, by - 0.05, 0), 0xd8c890)); // (the plastron)
+  const neck = V3(0, by, -0.44), head = V3(0, by + 0.08, -0.66);
+  parts.push(jointed(limb(neck, head, 0.07, 0.055, 5), o.skin, P.skull, neck));
+  parts.push(jointed(limb(V3(0.035, by + 0.03, -0.46), V3(0.04, by + 0.1, -0.64), 0.012, 0.01, 3), o.stripe, P.skull, neck)); // (the neck's stripe)
+  parts.push(jointed(blob(0.085, 143, { detail: 0, lump: 0 }).scale(0.85, 0.75, 1.25).translate(head.x, head.y, head.z), o.skin, P.skull, neck));
+  for (const s of [-1, 1]) {
+    if (o.ear !== undefined) parts.push(jointed(blob(0.03, 144, { detail: 0, lump: 0 }).scale(0.5, 0.8, 1.4).translate(s * 0.06, head.y + 0.005, head.z + 0.04), o.ear, P.skull, neck)); // (a slider's mark behind the eye)
+    parts.push(jointed(new THREE.SphereGeometry(0.016, 4, 3).translate(s * 0.055, head.y + 0.025, head.z - 0.04), 0x141410, P.skull, neck));
+    for (const [fz, part] of [[-0.28, P.fore], [0.3, P.hind]] as [number, number][]) {
+      const sh = V3(s * 0.3, by - 0.02, fz);
+      parts.push(jointed(limb(sh, V3(s * 0.46, 0.015, fz - 0.05 * Math.sign(-fz)), 0.05, 0.035, 4), o.skin, part, sh));
+      parts.push(jointed(blob(0.05, 145, { detail: 0, lump: 0 }).scale(1.25, 0.3, 1.15).translate(s * 0.48, 0.012, fz - 0.06 * Math.sign(-fz)), o.skin, part, sh));
+    }
+  }
+  const tb = V3(0, by - 0.02, 0.48);
+  parts.push(jointed(new THREE.ConeGeometry(0.035, 0.12, 4).rotateX(Math.PI / 2).translate(tb.x, tb.y, tb.z + 0.05), o.skin, P.tail, tb));
+  return scaleGeo(merge(parts), o.len);
+}
+
 /** The new plans' animals, by kind (package #14). */
 const NEW_PLAN: Partial<Record<CritterKind, () => THREE.BufferGeometry>> = {
   blackbear: () => bearGeometry({ k: 1 }),
   bison: () => bisonGeometry(),
   armadillo: () => armadilloGeometry(),
   manatee: () => manateeGeometry(),
+  // (package #15: the reptiles)
+  alligator: () => sprawlerGeometry({ len: 3.2, coat: 0x2e3226, belly: 0xc8c0a0, snout: 'broad', tail: 0.5, scutes: 0x262a20, slim: 1.3 }),
+  greenanole: () => sprawlerGeometry({ len: 0.18, coat: 0xffffff, belly: 0xe8e8c8, snout: 'pointed', tail: 0.9, dewlap: 0xe86a8a, slim: 0.7 }),
+  brownanole: () => sprawlerGeometry({ len: 0.18, coat: 0x7a5a3a, belly: 0xc8b090, snout: 'pointed', tail: 0.85, dewlap: 0xe0602a, slim: 0.75 }),
+  paintedturtle: () => turtleGeometry({ len: 0.2, shell: 0x2a3026, rim: 0xb83a2a, skin: 0x2a2e24, stripe: 0xe0c040 }),
+  redslider: () => turtleGeometry({ len: 0.24, shell: 0x4a5a34, rim: 0xc8b048, skin: 0x3a4a2e, stripe: 0xd8c84a, ear: 0xc8302a }),
+  yellowslider: () => turtleGeometry({ len: 0.25, shell: 0x2e3428, rim: 0xd8c040, skin: 0x2e3428, stripe: 0xe0c840, ear: 0xe8c838 }),
 };
 
 /** Build one animal (front toward −z, feet at y = 0). Colours: TINT-free — each species has its own coat. */
@@ -1021,7 +1145,7 @@ export const critterLib = (k: CritterKind) => cached(`critter:${k}`, () => critt
 export const sitPivot = (k: CritterKind) => { const Q = QUAD[k]; return k === 'blackbear' ? 0.44 : Q?.base === 'squirrel' ? 0.09 * (Q.k ?? 1) : 0; };
 /** The big animals, seen large and close (the deer family, the bear and the bison to come, the great
  *  birds): their vertex budget is a near tree's. */
-const BIG_CRITTERS = new Set<CritterKind>(['blackbear', 'bison', 'manatee', 'deer', 'muleDeer', 'elk', 'moose', 'pronghorn', 'bighorn', 'greatblueheron', 'sandhillcrane', 'wildturkey', 'baldeagle', 'brownpelican', 'canadagoose', 'turkeyvulture']);
+const BIG_CRITTERS = new Set<CritterKind>(['alligator', 'blackbear', 'bison', 'manatee', 'deer', 'muleDeer', 'elk', 'moose', 'pronghorn', 'bighorn', 'greatblueheron', 'sandhillcrane', 'wildturkey', 'baldeagle', 'brownpelican', 'canadagoose', 'turkeyvulture']);
 /** A species' vertex budget (tests/foundry.test.ts): 2,500 for the big animals — a near tree's, and only a
  *  few on screen; 2,000 for the middling ones on the fox's plan (the fox, the coyote, the raccoon, the
  *  opossum, the skunk, a walker's dog), met close at dusk; 1,600 for the rest, whose extra detail would
@@ -1033,6 +1157,9 @@ export function swimSink(k: CritterKind) {
   const B = BIRD[k];
   if (B) return (B.legH + 0.045 - 0.016) * (B.k ?? 1);
   if (k === 'manatee') return 0.78; // (only its back and its snout at the surface)
+  // (an alligator only its eyes and snout up; a turtle its head and the top of its shell)
+  if (k === 'alligator') return 0.095 * (3.2 / 0.98);
+  if (k === 'paintedturtle' || k === 'redslider' || k === 'yellowslider') return 0.28 * (k === 'paintedturtle' ? 0.2 : k === 'redslider' ? 0.24 : 0.25);
   // (a swimming mammal — a beaver — lower: its legs and most of its body under, its back and head out)
   const Q = QUAD[k];
   if (!Q) return 0;
@@ -1070,7 +1197,8 @@ export const LIMB: Record<CritterKind, number> = { squirrel: 0.9, rabbit: 0.85, 
   canadagoose: 0.45, mallard: 0.5, mallardhen: 0.5, loon: 0, greatblueheron: 0.35, greategret: 0.35, snowyegret: 0.45, spoonbill: 0.4, sandhillcrane: 0.35,
   turkeyvulture: 0.2, baldeagle: 0.2, osprey: 0.25, wildturkey: 0.45, californiaquail: 0.5, brownpelican: 0.35, laughinggull: 0.5, californiagull: 0.5,
   raccoon: 0.55, opossum: 0.5, skunk: 0.5, foxsquirrel: 0.85, chipmunk: 0.95, woodchuck: 0.6, beaver: 0.5, prairiedog: 0.9, elk: 0.4, moose: 0.36, pronghorn: 0.55, bighorn: 0.45,
-  blackbear: 0.45, bison: 0.35, armadillo: 0.6, manatee: 0.25 };
+  blackbear: 0.45, bison: 0.35, armadillo: 0.6, manatee: 0.25,
+  alligator: 0.5, greenanole: 0.8, brownanole: 0.8, paintedturtle: 0.6, redslider: 0.6, yellowslider: 0.6 };
 export const GAIT: Record<CritterKind, [number, number, number, number]> = {
   squirrel: [0.5, 0.5, 0, 0.25], rabbit: [0.3, 0.2, 0, 0.2], songbird: [0, 0.3, 1.2, -0.5], sandpiper: [3.14, 0.2, 1.1, -0.35],
   deer: [3.14, 0.4, 0, 0.12], butterfly: [0, 0, 1.3, 0], firefly: [0, 0, 0, 0], fox: [3.14, 0.45, 0, 0.2], hawk: [0, 0.2, 0.55, 0.3],
@@ -1092,6 +1220,8 @@ export const GAIT: Record<CritterKind, [number, number, number, number]> = {
   // (the bear's rolling walk, its head swinging; the bison's slow graze; the armadillo's snuffling trot,
   // nose down; the manatee's slow tail-beat, its snout up to breathe)
   blackbear: [3.14, 0.15, 0, 0.18], bison: [3.14, 0.4, 0, 0.16], armadillo: [3.14, 0.2, 0, -0.35], manatee: [3.14, 0.35, 0, 0.3],
+  // (a lizard's diagonal walk and swinging tail; an anole's head-bob; a turtle's neck stretched up to bask)
+  alligator: [3.14, 0.5, 0, 0.1], greenanole: [3.14, 0.4, 0, 0.6], brownanole: [3.14, 0.4, 0, 0.6], paintedturtle: [3.14, 0.1, 0, 0.35], redslider: [3.14, 0.1, 0, 0.35], yellowslider: [3.14, 0.1, 0, 0.35],
 };
 /** Wingbeats (radians a second of the flap's sine; 38 ≈ six a second): the hawk's slow soaring
  *  strokes, a crow's steady rowing, the pigeons' and doves' clatter, the jays' and the robin's. */

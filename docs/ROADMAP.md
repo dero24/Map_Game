@@ -13,13 +13,15 @@ what "done" means. Written 2026-10-06; update it when a milestone closes or the 
 | **2** | The game itself | 26 items, none started yet (by design: foundations first) |
 | **3** | Polish | 14 passing, 11 not started |
 
-Regional life (`docs/regional-life/models.md` build order): **14 of 16 packages built**.
+Regional life (`docs/regional-life/models.md` build order): **15 of 16 packages built**.
 
 - **Plants:** all 10 packages built.
 - **Birds:** both packages built: the backyard birds, then the water and big birds.
 - **Mammals:** both packages built: on the existing body plans, then the new plans (bear, bison,
   armadillo, manatee).
-- **Still to go:** reptiles and small life.
+- **Reptiles:** built: the alligator, the green and brown anoles, the painted turtle and the two
+  sliders on their logs.
+- **Still to go:** small life.
 
 ## The 16 regions
 
@@ -64,7 +66,7 @@ collisions.
 
 | Track | Work | Where it runs |
 |---|---|---|
-| **A. Regional life** | Packages 13–16: mammals, new animal plans, reptiles, small life | Cloud sessions (tests and the scratch studio; no long captures) |
+| **A. Regional life** | Package 16 (small life), then the reference's P2 rows (the West's lizards, snakes, frogs) | Cloud sessions (tests and the scratch studio; no long captures) |
 | **B. Region pass** | Montages per region against the scorecard; fix what's wrong | Robby's PC or a session that can run captures (they're too slow in the cloud) |
 | **C. People** | `people-with-purpose`: walkers on errands, homes only for those who live there, buildings with a capacity, smooth animation | Its own branch; mostly `sim/` and `life` files |
 | **D. Leftovers** | Duckweed, smooth cordgrass, black oak and gray pine, inland gulls, moss on the ground and on boulders, `upstairs-over-shopfront` | Fill-in work between packages |
@@ -118,22 +120,22 @@ Updated as packages land. Key: **done**; **part** = built with a known gap (in t
 
 | Region | Trees | Ground | Birds | Mammals | Reptiles | Small life | Density | Reviewed |
 |---|---|---|---|---|---|---|---|---|
-| new-england | done | part (a) | done | done | none | part | blocked | to do |
-| upstate-ny | done | done | part (b) | done | none | part | blocked | to do |
-| mid-atlantic | done | part (a) | done | done | none | part | blocked | to do |
-| appalachia | done | done | part (b) | done | none | part | blocked | to do |
-| southeast | done | part (a, c) | done | done | none | part | blocked | to do |
-| florida | done | part (a, c) | done | done | none | part | blocked | to do |
-| gulf | done | part (a, c) | done | done | none | part | blocked | to do |
-| texas | done | part (a) | done | done | none | part | blocked | to do |
-| plains | done | done | part (b) | done | none | part | blocked | to do |
-| midwest | done | done | part (b) | done | none | part | blocked | to do |
-| ozarks | done | done | part (b) | done | none | part | blocked | to do |
-| rockies | done | done | part (b) | done | none | part | blocked | to do |
-| desert-sw | done | done | done | done | none | part | blocked | to do |
-| great-basin | done | done | done | done | none | part | blocked | to do |
-| california | part (d) | done | done | done | none | part | blocked | to do |
-| pnw | done | done | done | done | none | part | blocked | to do |
+| new-england | done | part (a) | done | done | part (e) | part | blocked | to do |
+| upstate-ny | done | done | part (b) | done | part (e) | part | blocked | to do |
+| mid-atlantic | done | part (a) | done | done | part (e) | part | blocked | to do |
+| appalachia | done | done | part (b) | done | part (e) | part | blocked | to do |
+| southeast | done | part (a, c) | done | done | part (e) | part | blocked | to do |
+| florida | done | part (a, c) | done | done | part (e) | part | blocked | to do |
+| gulf | done | part (a, c) | done | done | part (e) | part | blocked | to do |
+| texas | done | part (a) | done | done | part (e) | part | blocked | to do |
+| plains | done | done | part (b) | done | part (e) | part | blocked | to do |
+| midwest | done | done | part (b) | done | part (e) | part | blocked | to do |
+| ozarks | done | done | part (b) | done | part (e) | part | blocked | to do |
+| rockies | done | done | part (b) | done | part (e) | part | blocked | to do |
+| desert-sw | done | done | done | done | part (e) | part | blocked | to do |
+| great-basin | done | done | done | done | part (e) | part | blocked | to do |
+| california | part (d) | done | done | done | part (e) | part | blocked | to do |
+| pnw | done | done | done | done | part (e) | part | blocked | to do |
 
 Notes:
 
@@ -143,6 +145,9 @@ Notes:
 - (d) No black oak or gray pine yet.
 - **Mammals** are done everywhere (packages 13–14); the bison stand in for protected land until the
   map's protected areas reach the sim.
+- (e) Package 15's reptiles are in (turtles everywhere, the alligator and anoles across the South), but
+  no lizard in the West yet (fence, spiny, side-blotched, collared, horned: rows on the sprawler plan),
+  and no snakes or frogs (they need their own plans).
 - **Small life** is part everywhere: generic butterflies and fireflies are in; package 16 adds the
   rest.
 
