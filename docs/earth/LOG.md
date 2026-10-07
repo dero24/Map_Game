@@ -2,6 +2,39 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-07 (night) — The big cities' streets: stations over them lifted, streets under towers sunk, cars at their own level
+
+The playtest's roads, drive and walkabout checks in the audit's cities after the day's street fixes:
+Midtown 0.8 hits a thousand lane samples, Miami Beach 3.5, Seattle 5.1, Asheville 2.9 — and Chicago's Loop
+20, its drive stalled (47 m in a minute). What stood in Chicago's lanes, named object by object
+(raycast + the nearest instance to each hit):
+- **The L's stations, built from the ground**: Adams/Wabash's platform canopy (142 × 23 m, a 13 m block
+  along Wabash and across Adams), Washington/Wabash's (9 × 122 m over Wabash's east lane). The L is
+  `railway=subway` even elevated, so no line marks it. bridges.ts `dropStreetCrossers` now lifts
+  what stands over a street (`lf` 5.5 m, its top kept): a low one (≤ 20 m) the centre line runs
+  through 25 m, a narrow one (≤ 15 m across, ≥ 20 m long, not a house) 4 m, a long narrow one over a
+  travel lane 25 m. A big low outline 40 m over streets still goes (an underground station's halls);
+  a tower is never lifted nor dropped.
+- **Streets under towers and under streets**: Chicago maps its upper level as layer 1 and its lower as
+  0 (Lower Michigan, Lower Wacker, Lower South Water under Illinois Center's towers): drawn on the
+  street over them, their parked cars in Michigan Avenue's lanes, their lanes through the towers' walls.
+  `sinkLowerLevels`: a car street that runs 40 m, and half of what the tile sees of it, under a footprint
+  still on the ground or under a street on a higher layer is a tunnel — only the traffic takes it.
+- **Parked cars in other streets' lanes**: a kerb car (and a shop door's) never stands in another car
+  street's carriageway at its level or above (props.ts `inOthers`) — a slip road's, the street over a
+  lower one's; **tree pits on a viaduct's deck** (Park Avenue's around Grand Central): none on a deck.
+- After: Chicago 20.2 → 7.3, Asheville 2.9 → 0.85 (passes), Miami Beach 3.5 → 0.31 (passes), Seattle 5.1
+  → 4.3, Midtown 0.8–1.4 with Park Avenue's deck clear; the shore's playtest PASS 11/11 (frames max 33 ms).
+  Wabash under its lifted canopy and Illinois Center's towers looked at: right. Chicago's drive still
+  starts boxed in at a kerb between parked cars (its car, not the street); Seattle's walkabout floated
+  0.4 m down a 34° hillside off any street (the walker's step-down, not today's).
+
+**Verified:** typecheck; `npm test` 1043/1043 (roadsClear: the platform, the lane canopy, the sunk
+streets); the shore's full playtest PASS 11/11; the cities' checks above.
+
+**Next:** Chicago's remaining walls (bus stops and posts in Michigan's and Madison's lanes, lamp masts,
+iron fences mapped along kerbs), Seattle's 123 walls; the drive check's start (a car not boxed in).
+
 ## 2026-10-07 (eve) — A city's frame: what three.js walks, cut; the painter's small windows
 
 Robby: "pleasse optimize performance where possible". Asheville's desktop frame (RTX 4070, vsync off) was
@@ -45,7 +78,9 @@ CPU").
 **Next (the load after a teleport, phone):** the frame half a second after arriving (~520 ms at CPU 4×:
 mostly the browser's own work as the near paint windows repaint at the new place — not the arrival's
 ground: mounted whole, its worst frame is 133–233 ms, and spreading it over frames saved ~15 ms of that
-while the teleport took 1–3 s longer, so it stays whole), the relief swaps (a tile rebuilt with its
+while the teleport took 1–3 s longer, so it stays whole; `DetailGround.show()` uploads its whole 2048²
+canvas, 16 MB, at every step of a window — 9.4 m for the fine one, 50 m for the mid — and both step at
+once on arriving: a wrapped (ring) texture would upload only the new strip), the relief swaps (a tile rebuilt with its
 ground's relief lands whole in one frame: 120–180 ms — its footprint and interior keys are the flat
 copy's, so it unloads that first; staging it wants keys of its own), a 60 m mask block's paint (~77 ms
 at 4×); the city's remaining per-draw cost (Asheville's 387 tree meshes in view).

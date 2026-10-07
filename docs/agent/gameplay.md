@@ -307,8 +307,15 @@ where the two disagree, the vision is the target and this file is the current st
   - The tile service's widths mended: a divided road's one-way halves their own lanes wide
     (realTile.ts `narrowOneWays`), a width tagged in feet read as feet (`feetWidths`).
   - Buildings: a house under a bridge's deck held under it (`bridges.ts fitUnderDecks`, `Building.hy`),
-    the survey's blocks that were the deck dropped; a big outline a street runs through for 40 m — an
-    underground station's halls — dropped (`dropStreetCrossers`; realTile skips `location=underground`).
+    the survey's blocks that were the deck dropped; a big low outline a street runs through for 40 m — an
+    underground station's halls — dropped (`dropStreetCrossers`; realTile skips `location=underground`);
+    what stands over a street lifted clear of it (`lf` 5.5 m, its top kept): a low one (20 m or less) the
+    centre line runs through 25 m, a narrow one (15 m across or less, 20 m long, not a house) 4 m, a long
+    narrow one over a travel lane 25 m — an elevated station's platform and canopy (Chicago's L), a skyway.
+    A tower stands: the street is the one under it.
+  - A street under a tower or under a street on a higher OSM layer — 40 m and half of what the tile sees of
+    it — is a tunnel (`sinkLowerLevels`: only the traffic takes it): Chicago's lower levels (its upper
+    streets are layer 1, the lower 0), drawn on the streets over them, their cars in the upper lanes.
   - **A street fitted to its fronts** (kerbside.ts `fitToFronts`): the tile service widens every
     untagged North American street for a parked lane at each kerb (10.9 m residential); where a tile's
     own street runs 12 m or more past mapped fronts within 1.5 m of its kerb, that stretch is cut out
@@ -320,8 +327,9 @@ where the two disagree, the vision is the target and this file is the current st
     and keeps its things off that wider street, which is safe.
   - Nothing set at a kerb in another street's lanes (kerbside.ts `carriageAt`): the survey's tree pits,
     the city's street trees, their bins (one street's kerb is another's lane at a junction); no parked
-    car through a street, across two at a junction or across one's lanes (`streetThrough`), none on a
-    deck; walls to their own tops (streaming.md "Collision tops").
+    car through a street, across two at a junction or across one's lanes (`streetThrough`), none in
+    another street's lanes at its own level or above (props.ts `inOthers`: a slip road's, the street over a
+    lower level's), none on a deck; walls to their own tops (streaming.md "Collision tops").
 
 ## Vehicles
 

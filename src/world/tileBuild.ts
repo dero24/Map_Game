@@ -14,7 +14,7 @@ import { buildStairs } from './stairs';
 import { buildMicro } from './micro';
 import { activeStyle } from './styles';
 import { narrowOneWays, feetWidths } from './realTile';
-import { fitUnderDecks, dropStreetCrossers } from './bridges';
+import { fitUnderDecks, dropStreetCrossers, sinkLowerLevels } from './bridges';
 import { shoreDocks } from './docks';
 import { beachCrowd } from './crowd';
 
@@ -23,10 +23,12 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
   feetWidths(tj0.roads); // (a width tagged in feet, read as metres)
   // Tunnels leave here: no builder paints, furnishes, parks along, faces a door to or grows grass
   // round a road under the ground — only the life sim's cars take them (BuiltTile.tun)
-  const tunnels = tj0.roads.filter((r) => r.tu);
-  const tjT: TileJson = tunnels.length ? { ...tj0, roads: tj0.roads.filter((r) => !r.tu) } : tj0;
-  // (none standing up through a bridge's deck)
-  tjT.buildings = dropStreetCrossers(fitUnderDecks(tjT.buildings, tjT.roads, terrain), tjT.roads);
+  // (none standing up through a bridge's deck; what stands over a street lifted clear of it — bridges.ts)
+  const standing = dropStreetCrossers(fitUnderDecks(tj0.buildings, tj0.roads.filter((r) => !r.tu), terrain), tj0.roads);
+  // (a street under a tower or under the street above it: a tunnel — bridges.ts)
+  const roads0 = lite ? tj0.roads : sinkLowerLevels(tj0.roads, standing, spec.box);
+  const tunnels = roads0.filter((r) => r.tu);
+  const tjT: TileJson = { ...tj0, roads: tunnels.length ? roads0.filter((r) => !r.tu) : roads0, buildings: standing };
   // (a street's guessed parking given back where its fronts stand: no shop in the lane — kerbside.ts)
   const fitted = lite ? tjT.roads : fitToFronts(tjT.roads, tjT.buildings, spec.box);
   const tj: TileJson = fitted === tjT.roads ? tjT : { ...tjT, roads: fitted };

@@ -9,7 +9,7 @@ import { Terrain, TerrainLayer, type GridHeader, type LayerLayout, type Road, ty
 import { WalkWorld } from '../src/player/collision';
 import { RecWalk, replayOps } from '../src/world/pack';
 import { buildStructures } from '../src/world/structures';
-import { fitUnderDecks, dropStreetCrossers, chainBridges, bridgeProfile, crossingsUnder, nearestOn, profileAt } from '../src/world/bridges';
+import { fitUnderDecks, dropStreetCrossers, sinkLowerLevels, chainBridges, bridgeProfile, crossingsUnder, nearestOn, profileAt } from '../src/world/bridges';
 import { narrowOneWays, feetWidths, osmToTile } from '../src/world/realTile';
 import { streetThrough, fitToFronts, NO_PARK } from '../src/world/kerbside';
 import { wallTop } from '../src/world/buildings';
@@ -70,6 +70,44 @@ describe('roads kept clear', () => {
     const street = road([[-300, 0], [300, 0]], { c: 'residential', w: 10 });
     const halls = { r: sq(0, 0, 200) }, block = { r: sq(0, 60, 40) }, sky = { r: sq(0, 0, 80), lf: 20 };
     expect(dropStreetCrossers([halls, block, sky], [street])).toEqual([block, sky]);
+    // an elevated station's platform along the street it spans (Chicago's Adams/Wabash: 142 × 23 m, built
+    // from the ground it walled Wabash off): lifted clear of the traffic, its top where it was; one beside
+    // the street, a kiosk on it (too small to hold 25 m of street) as they were
+    const rect = (x0: number, z0: number, x1: number, z1: number) => [m(x0), m(z0), m(x1), m(z0), m(x1), m(z1), m(x0), m(z1)];
+    const platform = { r: rect(-70, -11.5, 72, 11.5), h: 13 }, beside = { r: rect(-70, 20, 72, 43), h: 13 }, kiosk = { r: rect(-5, -3, 5, 3), h: 3 };
+    const out = dropStreetCrossers([platform, beside, kiosk], [street]);
+    expect(out[0]).toEqual({ ...platform, lf: 5.5, h: 7.5 });
+    expect(out.slice(1)).toEqual([beside, kiosk]);
+    expect(dropStreetCrossers(out, [street])[0]).toBe(out[0]); // (lifted once)
+  });
+
+  it("a street under a tower or under the street above it is a tunnel; one that only crosses under, or passes a corner, stays", () => {
+    // (Chicago: the map's upper level layer 1, the lower 0 — Lower Michigan under Michigan, Lower South Water
+    // under Illinois Center's towers)
+    const box = { x0: -300, z0: -300, x1: 300, z1: 300 };
+    const rect = (x0: number, z0: number, x1: number, z1: number) => ({ r: [m(x0), m(z0), m(x1), m(z0), m(x1), m(z1), m(x0), m(z1)] });
+    const upper = road([[-200, 0], [200, 0]], { c: 'secondary', w: 15, l: 1 });
+    const lower = road([[-200, 1], [200, 1]], { c: 'secondary', w: 12 });
+    const across = road([[0, -150], [0, 150]], { c: 'secondary', w: 12 });
+    const out = sinkLowerLevels([upper, lower, across], [], box);
+    expect(out.map((r) => !!r.tu)).toEqual([false, true, false]);
+    // under a tower 60 m of its 100; past a tower's corner 10 m
+    const tower = rect(-30, -20, 30, 20);
+    const under = road([[-50, 0], [50, 0]], { c: 'tertiary', w: 8 }), past = road([[25, -60], [25, -15], [25, 60]], { c: 'tertiary', w: 8 });
+    expect(sinkLowerLevels([under, past], [tower], box).map((r) => !!r.tu)).toEqual([true, false]);
+    // a lifted one (a station over a street) isn't over anything
+    const roads = [under];
+    expect(sinkLowerLevels(roads, [{ ...tower, lf: 5.5 }], box)).toBe(roads);
+  });
+
+  it("a long narrow canopy over a street's travel lane is lifted clear, beside its centre line too; a short one by the kerb stays", () => {
+    // (Chicago's Washington/Wabash: 9 × 122 m over Wabash's east lane, the street's centre line just west of it)
+    const rect = (x0: number, z0: number, x1: number, z1: number, h = 11): { r: number[]; h: number; k: string; lf?: number } => ({ r: [m(x0), m(z0), m(x1), m(z0), m(x1), m(z1), m(x0), m(z1)], h, k: 'large' });
+    const wabash = road([[0, -200], [0, 200]], { c: 'secondary', w: 10 });
+    const canopy = rect(1, -61, 10, 61), kerbside = rect(4.5, -10, 14, 10);
+    const out = dropStreetCrossers([canopy, kerbside], [wabash]);
+    expect(out[0].lf).toBe(5.5);
+    expect(out[1]).toBe(kerbside);
   });
 
   it("a divided road's one-way halves are their own lanes wide — a tagged width, a two-way road left alone", () => {

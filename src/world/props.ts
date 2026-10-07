@@ -446,6 +446,10 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   const paved = pavedMask({ json: ctxJson, terrain }, maskZone);
   // (a carriageway's own lanes: a pit dug at one street's kerb stands in another's at a junction — kerbside.ts)
   const lanesAt = carriageAt(ctxJson.roads);
+  // (a car parked at its own street's kerb standing in another's lanes at its level or above — a slip road
+  // alongside, a lower level's under it: Chicago's Lower Michigan Avenue's cars parked in Michigan's lanes;
+  // the upper street's over the lower one stay)
+  const inOthers = (corners: P[], own: Road) => corners.some(([x, z]) => lanesAt(x, z, 0.2, (r) => r === own || (r.l ?? 0) < (own.l ?? 0)));
   const mapCover = areaCoverMask({ json: ctxJson, terrain }, maskZone);
   /** Walls only the builders see — the tile's scratch walk's (pack.ts RecWalk), not shipped with it:
    *  a car that comes and goes keeps its stall clear of what's placed after it, and the main thread
@@ -1228,7 +1232,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
           const x = ax + tx * t + nx * sd * (r.w / 2 + 1.1), z = az + tz * t + nz * sd * (r.w / 2 + 1.1);
           if (!inSlice(x, z) || !urban(x, z)) continue;
           const hq = hashf(Math.floor(x * 3.7) * 7919 + Math.floor(z * 2.9));
-          if (hq > 0.62 || walk.blocked(x, z, 1.4) || terrain.sdfAt(x, z) < 2 || lanesAt(x, z, 0.6)) continue;
+          if (hq > 0.62 || walk.blocked(x, z, 1.4) || terrain.sdfAt(x, z) < 2 || lanesAt(x, z, 0.6) || walk.deckAt(x, z) !== null) continue; // (nor on a bridge's deck: Park Avenue's viaduct had pits in its lanes)
           if (trees.some((q) => { const e = q.m.elements; return Math.abs(e[12] - x) < 6 && Math.abs(e[14] - z) < 6; })) continue;
           const g = terrain.heightAt(x, z);
           const k = regional(hq < 0.2 ? 1 : 0, x, z), v = k === MAPLE ? variantAt(x, z, 2, 11) : variantAt(x, z, TREE_VARIANTS, 11); // (street maples are sugar and red)
@@ -1240,7 +1244,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
           // a litter bin at every few trees' worth of kerb
           if (hq < 0.06) {
             const bx2 = x + tx * 2.2, bz2 = z + tz * 2.2;
-            if (!walk.blocked(bx2, bz2, 0.4) && !lanesAt(bx2, bz2, 0.4)) { bins.push(new THREE.Matrix4().makeTranslation(bx2, terrain.heightAt(bx2, bz2), bz2)); walk.addLoop([[bx2 - 0.3, bz2 - 0.3], [bx2 + 0.3, bz2 - 0.3], [bx2 + 0.3, bz2 + 0.3], [bx2 - 0.3, bz2 + 0.3]], -Infinity, terrain.heightAt(bx2, bz2) + 0.9); }
+            if (!walk.blocked(bx2, bz2, 0.4) && !lanesAt(bx2, bz2, 0.4) && walk.deckAt(bx2, bz2) === null) { bins.push(new THREE.Matrix4().makeTranslation(bx2, terrain.heightAt(bx2, bz2), bz2)); walk.addLoop([[bx2 - 0.3, bz2 - 0.3], [bx2 + 0.3, bz2 - 0.3], [bx2 + 0.3, bz2 + 0.3], [bx2 - 0.3, bz2 + 0.3]], -Infinity, terrain.heightAt(bx2, bz2) + 0.9); }
           }
         }
       }
@@ -1671,7 +1675,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // the nearest carriageway (not the footway in front of the shop, which is usually nearer)
   const CARRIAGE = new Set(['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'residential', 'unclassified', 'living_street']);
   const carriageEdge = (x: number, z: number) => {
-    let best: { x: number; z: number; w: number; d: number; np: boolean } | null = null;
+    let best: { x: number; z: number; w: number; d: number; np: boolean; r: Road } | null = null;
     for (const r of ctxJson.roads) {
       if (r.lod || r.br || !CARRIAGE.has(r.c) || r.w < 9) continue;
       const p = unpackPts(r.p);
@@ -1679,7 +1683,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         const dx = p[i + 1][0] - p[i][0], dz = p[i + 1][1] - p[i][1], L2 = dx * dx + dz * dz || 1;
         const t = Math.max(0, Math.min(1, ((x - p[i][0]) * dx + (z - p[i][1]) * dz) / L2));
         const qx = p[i][0] + dx * t, qz = p[i][1] + dz * t, dd = Math.hypot(x - qx, z - qz);
-        if (!best || dd < best.d) best = { x: qx, z: qz, w: r.w, d: dd, np: r.pk === NO_PARK };
+        if (!best || dd < best.d) best = { x: qx, z: qz, w: r.w, d: dd, np: r.pk === NO_PARK, r };
       }
     }
     return best;
@@ -1700,7 +1704,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       const rc = carRecipe(type, 1), hl = rc.L / 2, hw = rc.W / 2 + 0.05;
       const cy = Math.cos(yaw), sy = Math.sin(yaw);
       const corners: P[] = [[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]].map(([u, v]) => [x + u * cy + v * sy, z - u * sy + v * cy]);
-      if (corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.2)) || terrain.sdfAt(x, z) < 2 || through(corners) || onDeck(corners)) continue;
+      if (corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.2)) || terrain.sdfAt(x, z) < 2 || through(corners) || onDeck(corners) || inOthers(corners, e.r)) continue;
       const key = `${type}|`;
       if (!parked.has(key)) parked.set(key, []);
       const u3 = hashf(Math.floor(x * 13 + z * 97));
@@ -1739,7 +1743,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       for (const v of [-hl, -hl / 2, 0, hl / 2, hl]) for (const u of [-hw, 0, hw]) along.push([k.x + u * cy + v * sy, k.z - u * sy + v * cy]);
       const margin: P[] = [];
       for (const v of [-hl - 0.5, 0, hl + 0.5]) for (const u of [-hw - 3, hw + 3]) margin.push([k.x + u * cy + v * sy, k.z - u * sy + v * cy]);
-      if (along.some(([cx, cz]) => walk.blocked(cx, cz, 0.2)) || margin.some(([cx, cz]) => walk.buildingAt(cx, cz) >= 0) || terrain.sdfAt(k.x, k.z) < 2 || through(corners) || onDeck(corners)) continue;
+      if (along.some(([cx, cz]) => walk.blocked(cx, cz, 0.2)) || margin.some(([cx, cz]) => walk.buildingAt(cx, cz) >= 0) || terrain.sdfAt(k.x, k.z) < 2 || through(corners) || onDeck(corners) || inOthers(corners, k.road)) continue;
       cand.push({ x: k.x, z: k.z, yaw: k.yaw, type, hq: k.hq, corners });
     }
     // Parking lots (lots.ts, the stalls the ground paint stripes): filled by the town's pulse —

@@ -27,7 +27,7 @@ export const CLEAR = {
 /** The share of spaces taken where the blocks are fully built up. */
 export const OCCUPANCY = 0.82;
 
-export interface KerbSpace { x: number; z: number; yaw: number; mode: 1 | 2; hq: number }
+export interface KerbSpace { x: number; z: number; yaw: number; mode: 1 | 2; hq: number; road: Road }
 export interface KerbOpts {
   left: boolean; // the region drives on the left
   built: (x: number, z: number) => number; // footprint cover (builtField): 0.03 open country … 0.23+ downtown
@@ -144,7 +144,7 @@ export function kerbSpaces(roads: Road[], ctx: Road[], points: Point[], o: KerbO
           // angled bays: nose in toward the kerb at 55° to the street
           const a = mode === 2 ? 0.96 : 0;
           const dx = tx * fwd * Math.cos(a) + nx * Math.sin(a), dz = tz * fwd * Math.cos(a) + nz * Math.sin(a);
-          out.push({ x, z, yaw: Math.atan2(-dx, -dz), mode, hq });
+          out.push({ x, z, yaw: Math.atan2(-dx, -dz), mode, hq, road: r });
         }
       }
     }
@@ -275,9 +275,10 @@ export function crossingPaint(roads: Road[], points: Point[]): number[] {
 /** Is (x, z) on a carriageway — within the half width (and `pad`) of any way a car may take, not a
  *  bridge's deck over it or a tunnel under it? For what's set at a kerb (a street tree's pit, its litter
  *  bin: props.ts): one street's kerb is another's lane at a junction — Asheville's pits and their
- *  trees stood in the lanes of the streets they met. */
+ *  trees stood in the lanes of the streets they met. `skip`: ways that don't count (a parked car's own
+ *  street; one a level below it). */
 export function carriageAt(roads: Road[]) {
-  const C = 16, grid = new Map<number, number[]>(), segs: number[] = [];
+  const C = 16, grid = new Map<number, number[]>(), segs: number[] = [], of: Road[] = [];
   const key = (i: number, j: number) => (i + 65536) * 131072 + (j + 65536);
   for (const r of roads) {
     if (r.lod || r.br || r.tu || FOOT.test(r.c) || r.c === 'track' || r.c === 'steps') continue;
@@ -285,13 +286,15 @@ export function carriageAt(roads: Road[]) {
     for (let i = 0; i + 3 < r.p.length; i += 2) {
       const ax = r.p[i] / 10, az = r.p[i + 1] / 10, bx = r.p[i + 2] / 10, bz = r.p[i + 3] / 10, id = segs.length / 5;
       segs.push(ax, az, bx, bz, hw);
+      of.push(r);
       // (a cell lists every segment within its half width and 2 m: a pad up to 2 m is found from the point's cell)
       for (let u = Math.floor((Math.min(ax, bx) - hw - 2) / C); u <= Math.floor((Math.max(ax, bx) + hw + 2) / C); u++)
         for (let v = Math.floor((Math.min(az, bz) - hw - 2) / C); v <= Math.floor((Math.max(az, bz) + hw + 2) / C); v++) (grid.get(key(u, v)) ?? grid.set(key(u, v), []).get(key(u, v))!).push(id);
     }
   }
-  return (x: number, z: number, pad = 0) => {
+  return (x: number, z: number, pad = 0, skip?: (r: Road) => boolean) => {
     for (const id of grid.get(key(Math.floor(x / C), Math.floor(z / C))) ?? []) {
+      if (skip?.(of[id])) continue;
       const ax = segs[id * 5], az = segs[id * 5 + 1], ex = segs[id * 5 + 2] - ax, ez = segs[id * 5 + 3] - az, L2 = ex * ex + ez * ez;
       const t = L2 ? Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / L2)) : 0;
       if (Math.hypot(ax + ex * t - x, az + ez * t - z) < segs[id * 5 + 4] + pad) return true;

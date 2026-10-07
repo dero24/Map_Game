@@ -633,32 +633,129 @@ export function fitUnderDecks<B extends { r: number[]; h: number; hy?: number; g
 
 /** A big outline a car street runs through for 40 m and more isn't a building standing there — an
  *  underground station's halls mapped as one (Times Square's: 435 × 556 m, a dozen streets walled
- *  across), the tile service's data from before realTile.ts left those out. A lifted part (a skybridge)
- *  stays; so does a street's short passage through a building's arch. Before the buildings are built. */
-export function dropStreetCrossers<B extends { r: number[]; lf?: number }>(buildings: B[], roads: Road[]): B[] {
-  const segs: number[][] = [];
+ *  across), the tile service's data from before realTile.ts left those out: gone. A smaller one a street
+ *  runs through for 25 m stands over it — an elevated station's platform and canopy over the street it
+ *  spans (Chicago's Adams/Wabash: 142 m along Wabash, 23 m across Adams, built from the ground up: the
+ *  street walled off, a car couldn't get through the Loop): lifted clear of the traffic (`lf`, its top
+ *  where it was) — and a narrow one (15 m across or less, not a house) a street runs through at all, 4 m
+ *  of its centre line: a station's canopy it crosses, a skyway. A lifted part (a skybridge) stays as it is; so does a street's short passage through a
+ *  building's arch. Before the buildings are built. */
+export function dropStreetCrossers<B extends { r: number[]; lf?: number; h?: number; k?: string }>(buildings: B[], roads: Road[]): B[] {
+  // the car streets' segments, by 32 m cell
+  const C = 32, segs: number[] = [], grid = new Map<number, number[]>();
+  const key = (i: number, j: number) => i * 1048576 + j;
   for (const r of roads) {
     if (r.lod || r.br || r.tu || !CARS.test(r.c)) continue;
-    for (let i = 0; i + 3 < r.p.length; i += 2) segs.push([r.p[i] / 10, r.p[i + 1] / 10, r.p[i + 2] / 10, r.p[i + 3] / 10]);
+    for (let i = 0; i + 3 < r.p.length; i += 2) {
+      const ax = r.p[i] / 10, az = r.p[i + 1] / 10, bx = r.p[i + 2] / 10, bz = r.p[i + 3] / 10, id = segs.length / 5;
+      segs.push(ax, az, bx, bz, r.w / 2);
+      for (let u = Math.floor((Math.min(ax, bx) - r.w / 2) / C); u <= Math.floor((Math.max(ax, bx) + r.w / 2) / C); u++)
+        for (let v = Math.floor((Math.min(az, bz) - r.w / 2) / C); v <= Math.floor((Math.max(az, bz) + r.w / 2) / C); v++) (grid.get(key(u, v)) ?? grid.set(key(u, v), []).get(key(u, v))!).push(id);
+    }
   }
   if (!segs.length) return buildings;
-  return buildings.filter((b) => {
-    if ((b.lf ?? 0) > 1.5) return true;
+  const out: B[] = [];
+  for (const b of buildings) {
+    const fate = streetThroughOf(b, segs, grid, C, key);
+    if (fate === 'drop') continue;
+    out.push(fate === 'lift' ? { ...b, lf: OVER_STREET, h: Math.max(3, (b.h ?? 8) - OVER_STREET) } : b);
+  }
+  return out;
+}
+/** How high a building standing over a street is lifted: a box truck's clearance and a little. */
+const OVER_STREET = 5.5;
+function streetThroughOf(b: { r: number[]; lf?: number; k?: string; h?: number }, segs: number[], grid: Map<number, number[]>, C: number, key: (i: number, j: number) => number): 'keep' | 'drop' | 'lift' {
+  if ((b.lf ?? 0) > 1.5) return 'keep';
+  const ring: P[] = [];
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity, area = 0;
+  for (let i = 0; i + 1 < b.r.length; i += 2) { const x = b.r[i] / 10, z = b.r[i + 1] / 10; ring.push([x, z]); (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z)); }
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) area += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+  const span = Math.hypot(x1 - x0, z1 - z0), big = Math.abs(area) / 2 >= 4000, low = (b.h ?? 8) <= 20;
+  // (narrow: its mean width, its area over its length — a canopy, a platform, a skyway)
+  const narrow = b.k !== 'house' && b.k !== 'shed' && span >= 20 && Math.abs(area) / 2 / Math.max(1, span) <= 15;
+  // (a tower over a street stands: the street is the one under it — sinkLowerLevels)
+  if (!low && !narrow) return 'keep';
+  if (span < 25 && !narrow) return 'keep'; // (too small to hold 25 m of street)
+  const inside = (x: number, z: number) => { let ins = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const [xi, zi] = ring[i], [xj, zj] = ring[j]; if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) ins = !ins; } return ins; };
+  const seen = new Set<number>();
+  let through = 0, lanes = 0;
+  for (let u = Math.floor(x0 / C); u <= Math.floor(x1 / C); u++)
+    for (let v = Math.floor(z0 / C); v <= Math.floor(z1 / C); v++)
+      for (const id of grid.get(key(u, v)) ?? []) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const ax = segs[id * 5], az = segs[id * 5 + 1], bx = segs[id * 5 + 2], bz = segs[id * 5 + 3], hw = segs[id * 5 + 4];
+        if (Math.max(ax, bx) < x0 - hw || Math.min(ax, bx) > x1 + hw || Math.max(az, bz) < z0 - hw || Math.min(az, bz) > z1 + hw) continue;
+        const L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(L / 4)), nx = L ? -(bz - az) / L : 0, nz = L ? (bx - ax) / L : 0, o = hw * 0.6;
+        for (let k = 0; k < n; k++) {
+          const t = (k + 0.5) / n, x = ax + (bx - ax) * t, z = az + (bz - az) * t;
+          if (inside(x, z)) through += L / n;
+          else if (inside(x + nx * o, z + nz * o) || inside(x - nx * o, z - nz * o)) lanes += L / n;
+        }
+        if (big && low && through >= 40) return 'drop';
+      }
+  // (over the centre line 25 m, a low one; 4 m, a narrow one; over a travel lane 25 m, a long narrow one —
+  // Chicago's Washington/Wabash canopy, 9 × 122 m, over Wabash's east lane beside the street's centre line)
+  return !big && ((low && through >= 25) || (narrow && through >= 4) || (narrow && span >= 40 && through + lanes >= 25)) ? 'lift' : 'keep';
+}
+
+/** A street under a tower or under another street isn't a street at the surface: Chicago's multi-level
+ *  streets (Lower Wacker, Lower Michigan, Lower South Water under Illinois Center's towers — the map's upper
+ *  level is layer 1, a lower one 0 or less) were drawn on the streets over them, their parked cars in
+ *  Michigan Avenue's lanes and their lanes through the towers' walls. Taken as tunnels (`tu`: only the
+ *  traffic takes them) where 40 m and half of what the tile sees of one runs under a footprint still
+ *  standing on the ground (after dropStreetCrossers lifts what stands over a street) or under the
+ *  carriageway of a car street on a higher layer — a street that only crosses under another, or past a
+ *  tower's corner, stays. Returns `roads` when none is. */
+export function sinkLowerLevels<B extends { r: number[]; lf?: number }>(roads: Road[], buildings: B[], box: { x0: number; z0: number; x1: number; z1: number }): Road[] {
+  const cars = roads.filter((r) => !r.br && !r.tu && !r.lod && CARS.test(r.c));
+  if (!cars.length) return roads;
+  const rings = buildings.filter((b) => (b.lf ?? 0) <= 1.5).map((b) => {
     const ring: P[] = [];
-    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity, area = 0;
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
     for (let i = 0; i + 1 < b.r.length; i += 2) { const x = b.r[i] / 10, z = b.r[i + 1] / 10; ring.push([x, z]); (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z)); }
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) area += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
-    if (Math.abs(area) / 2 < 4000) return true;
-    const inside = (x: number, z: number) => { let ins = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const [xi, zi] = ring[i], [xj, zj] = ring[j]; if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) ins = !ins; } return ins; };
-    let through = 0;
-    for (const [ax, az, bx, bz] of segs) {
-      if (Math.max(ax, bx) < x0 || Math.min(ax, bx) > x1 || Math.max(az, bz) < z0 || Math.min(az, bz) > z1) continue;
-      const L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(L / 4));
-      for (let k = 0; k < n; k++) { const t = (k + 0.5) / n; if (inside(ax + (bx - ax) * t, az + (bz - az) * t)) through += L / n; }
-      if (through >= 40) return false;
-    }
-    return true;
+    return { ring, x0, z0, x1, z1 };
   });
+  // both by 32 m cell
+  const C = 32, key = (i: number, j: number) => i * 1048576 + j, rg = new Map<number, number[]>(), sg = new Map<number, number[]>(), segs: number[] = [], segRoad: Road[] = [];
+  rings.forEach((q, n) => { for (let i = Math.floor(q.x0 / C); i <= Math.floor(q.x1 / C); i++) for (let j = Math.floor(q.z0 / C); j <= Math.floor(q.z1 / C); j++) (rg.get(key(i, j)) ?? rg.set(key(i, j), []).get(key(i, j))!).push(n); });
+  for (const r of cars)
+    for (let i = 0; i + 3 < r.p.length; i += 2) {
+      const ax = r.p[i] / 10, az = r.p[i + 1] / 10, bx = r.p[i + 2] / 10, bz = r.p[i + 3] / 10, hw = r.w / 2, id = segs.length / 5;
+      segs.push(ax, az, bx, bz, hw);
+      segRoad.push(r);
+      for (let u = Math.floor((Math.min(ax, bx) - hw) / C); u <= Math.floor((Math.max(ax, bx) + hw) / C); u++)
+        for (let v = Math.floor((Math.min(az, bz) - hw) / C); v <= Math.floor((Math.max(az, bz) + hw) / C); v++) (sg.get(key(u, v)) ?? sg.set(key(u, v), []).get(key(u, v))!).push(id);
+    }
+  const inRing = (x: number, z: number, ring: P[]) => { let ins = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const [xi, zi] = ring[i], [xj, zj] = ring[j]; if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) ins = !ins; } return ins; };
+  const covered = (x: number, z: number, own: Road) => {
+    const k = key(Math.floor(x / C), Math.floor(z / C));
+    for (const n of rg.get(k) ?? []) { const q = rings[n]; if (x >= q.x0 && x <= q.x1 && z >= q.z0 && z <= q.z1 && inRing(x, z, q.ring)) return true; }
+    for (const id of sg.get(k) ?? []) {
+      const r = segRoad[id];
+      if (r === own || (r.l ?? 0) <= (own.l ?? 0)) continue;
+      const ax = segs[id * 5], az = segs[id * 5 + 1], ex = segs[id * 5 + 2] - ax, ez = segs[id * 5 + 3] - az, L2 = ex * ex + ez * ez;
+      const t = L2 ? Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / L2)) : 0;
+      if (Math.hypot(ax + ex * t - x, az + ez * t - z) < segs[id * 5 + 4]) return true;
+    }
+    return false;
+  };
+  const seen = (x: number, z: number) => x > box.x0 - 40 && x < box.x1 + 40 && z > box.z0 - 40 && z < box.z1 + 40;
+  const sunk = new Set<Road>();
+  for (const r of cars) {
+    let under = 0, all = 0;
+    for (let i = 0; i + 3 < r.p.length; i += 2) {
+      const ax = r.p[i] / 10, az = r.p[i + 1] / 10, bx = r.p[i + 2] / 10, bz = r.p[i + 3] / 10, L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(L / 3));
+      for (let k = 0; k < n; k++) {
+        const t = (k + 0.5) / n, x = ax + (bx - ax) * t, z = az + (bz - az) * t;
+        if (!seen(x, z)) continue;
+        all += L / n;
+        if (covered(x, z, r)) under += L / n;
+      }
+    }
+    if (under >= 40 && under >= all * 0.5) sunk.add(r);
+  }
+  return sunk.size ? roads.map((r) => (sunk.has(r) ? { ...r, tu: 1 as const } : r)) : roads;
 }
 const CARS = /^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|living_street)(_link)?$/;
 
