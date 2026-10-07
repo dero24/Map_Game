@@ -20,8 +20,12 @@ changes (widths read in their units — feet; a one-way half of a divided road a
   building's and the roof's own.
 Keys bumped together (worker R2 `t/v26`, client `&v=26`, the direct path's `DIRECT_V` 26). **The worker
 must be deployed before the client goes out** — a client asking `&v=26` of the old worker would have the
-edge cache keep the old tiles under the new URL. The deploy itself was held at the session's permission
-check: Robby runs `cd worker && npx wrangler deploy`; then the client is pushed.
+edge cache keep the old tiles under the new URL. Robby ran the deploy (`cd worker && npx wrangler deploy`,
+version 20bd5381); then the client went out (CI green: the checks with must-load against the live
+service, and Pages). Live, before the push: `tools/must-load.mjs --live` — every must-load town's spawn
+cell and its eight neighbours from our extract (Chicago's cold build 29.9 s, the rest 2–6 s); Midtown's
+widest non-motorway street 24.6 m (69 m when feet were read as metres), the Times Square halls' 242,000 m²
+outline gone; Seattle's mapped trees as sweetgum, cedar, dogwood, redwood beside its maples and oaks.
 
 **Verified:** typecheck; `npm test` 1043/1043 (realTile: the species, the genus, the common names, the
 colour spellings); `npm run build`; `wrangler deploy --dry-run` bundles `t/v26` and the new realTile.
