@@ -42,8 +42,10 @@ CPU").
   382 ms over the load's first 20 s (more cells built, 106 against 84), its worst step 270 → 79 ms.
   The phone's load after a teleport: p95 134 → 113–123 ms, 441 → 486–529 frames in its 25 s.
 
-**Next (the load after a teleport, phone):** the teleport's own frame (~550 ms at CPU 4×, mostly the
-spawn's ground mounted whole and the old place torn down), the relief swaps (a tile rebuilt with its
+**Next (the load after a teleport, phone):** the frame half a second after arriving (~520 ms at CPU 4×:
+mostly the browser's own work as the near paint windows repaint at the new place — not the arrival's
+ground: mounted whole, its worst frame is 133–233 ms, and spreading it over frames saved ~15 ms of that
+while the teleport took 1–3 s longer, so it stays whole), the relief swaps (a tile rebuilt with its
 ground's relief lands whole in one frame: 120–180 ms — its footprint and interior keys are the flat
 copy's, so it unloads that first; staging it wants keys of its own), a 60 m mask block's paint (~77 ms
 at 4×); the city's remaining per-draw cost (Asheville's 387 tree meshes in view).
