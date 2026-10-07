@@ -141,7 +141,7 @@ describe('the water and big birds', () => {
       for (const a of turkeys) if (turkeys.some((b) => b !== a && Math.hypot((a.x as number) - (b.x as number), (a.z as number) - (b.z as number)) < 9)) near++;
       expect(near / turkeys.length).toBeGreaterThan(0.6);
     }
-  });
+  }, 30000); // (the whole cast stepped for seconds: under the full suite's load, past 5 s)
   it('the loon slips under when you come close and comes up well away; the heron flies off heavy; a goose on the water only paddles off', () => {
     const c = new Critters(lake, walk);
     const loon = animal('loon', 0, -30, { wl: 0.5 }), heron = animal('greatblueheron', 20, -0.5, { wl: 0.5 }), goose = animal('canadagoose', -20, -20, { wl: 0.5 });

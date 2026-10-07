@@ -2,6 +2,70 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-07 (pm) — Streets fitted to their buildings; the desert's crowns as trees; a phone's far small things
+
+Robby's report, continued ("driving through main cities sometimes the roads have walls or buidlings in
+them … make sure the streets and city traversing via car and on foot all work as it should"; "pleasse
+optimize performance where possible"). The audit48 montages for the handoff's seven towns, read: Sea
+Bright, Miami Beach, Santa Monica and Seattle right; three wrong, each traced in the game
+(`raycast` at the frame's pixel → the object):
+
+**Tucson's black pole** on West Washington Street was a 2 m cholla stretched to a 9 m crown the survey
+measured (its trunk's black dead joints). A slim crown picks a pine; where no conifer grows, the low
+desert's shrub took it (props.ts `regional` → `dryShrub`), at the crown's height — chollas, prickly pears
+and creosotes up to 16× their size. The dry country's picks for a measured crown are now only what grows
+that tall (flora.ts `SMALL_TREE` × 1.15: `fits`), and a survey tree is never a small kind stretched past
+its tallest (re-picked as the region's tree for its height). Tucson: 0 of 33,867 instances over their
+kind's tallest; the pole is a saguaro. (Chicago's dark column was a signal pole a metre and a half from
+the lens: right.)
+
+**Asheville's main street** stood the camera inside a shop: Wall Street was 10.9 m — the tile service
+widens every untagged North American street for a parked lane each side — and its shops' fronts stood
+inside the asphalt, their stoops in the lane, no sidewalk. A twentieth of the street samples in Asheville
+and Chicago had a front inside the road. **kerbside.ts `fitToFronts`** (the tile build, before any
+builder): where a tile's own street runs 12 m or more past mapped fronts within 1.5 m of its kerb, that
+stretch is cut out and drawn at its travel lanes' width, its parking given back (`NO_PARK`: no default
+parking paint, no shop-door cars, no kerb spaces); where fronts stand both sides closer than that (a
+width in feet: Lawyers Alley's "15"), the room between them less a 1.5 m sidewalk each side, never under
+a lane each way, never a motorway's. A tile fits only its own ways from what it sees; its neighbours keep
+the way at its first width as context, which only keeps their things farther off. Fronts inside the road
+(every car street sampled): Asheville 4.4% → 1.3%, Chicago 4.1% → 3.0%, Seattle 1.3% → 0.1% (under a
+metre of sidewalk: 9.7 → 3.9%, 7.0 → 3.8%, 5.3 → 0.9%). Wall Street: 6.5 m, a sidewalk each side, the
+stoops on it, the survey's street trees on the new sidewalk.
+
+**Small things in other streets' lanes**: a pit dug at one street's kerb stood in the street it met at a
+junction — and its tree with it (kerbside.ts `carriageAt`: pits, the city's street trees and their
+bins keep out of any carriageway). Asheville's roads check: 258 hits → 121 (buildings 136 → 45, the
+small things 45 → 17). **An overpass's pier** stood in the freeway's lanes under it (two even spans: the
+pier mid-span): a pier never stands in the way of what passes under a bridge — a street, a railway, a
+lower deck — moved along the span to clear it (up to 15 m) or left out (bridges.ts `drawWay`'s `under`).
+
+**Earlier today, not yet logged** (Manhattan's lanes, 2,318 hits → 81): an underground station's halls
+were one outline over a dozen streets (realTile skips `location=underground` and buried `layer`s;
+`dropStreetCrossers` drops an outline a street runs through for 40 m — the served tiles still carry
+them); widths tagged in feet ("69'6\"") read as metres (`parseLen`, `feetWidths`). **A phone's far small
+things** (`streamParams.smallCull`: phone 120, low 90, desktop 200): an instanced mesh past its own size
+× that from you isn't drawn — mailboxes, hydrants, benches, plants, parked cars (Red Bank on a phone:
+146 meshes, 5,845 instances); a tree mesh spans its tallest tree, so the far woods stay (seen from 35 m:
+the woods to the horizon).
+
+**Also:** the two whole-cast sim tests (a bear stands to look, the lake's geese) and the monarchs' get
+30 s — they ran past 5 s under the full suite's load while the audit ran beside it.
+
+**Verified:** typecheck; `npm test` 1037/1037 (new: tests/smallCull.test.ts; roadsClear's fit, canyon and
+NO_PARK cases; streetTrees' desert crowns); the shore's full playtest PASS (11 checks: frames p50 16.7 ms,
+max 50, no 100 ms hitch; roads 1.28 a thousand; walkabout, drive, teleports 2.9 s, streaming); Asheville's
+walkabout and drive pass (its roads check 2.9 a thousand, over the shore's 2: below). audit48 for
+Asheville, Tucson and Chicago re-shot after the fixes (montages read).
+
+**Next:** what's left in Asheville's lanes — a few small outlines in a street (Hilliard Avenue's is a
+booth on its turnaround's island: real), **a short bridge whose ends are on the ground can't clear
+the road under it** at its grade (a 60 m street bridge over a freeway rises 1.5 m: its deck and
+parapets at a car's height across the road below — Central Avenue's; the approaches want raising on
+their embankments, which a smoothed DEM loses), the narrowest alleys' walls; the tile service's v26
+(osmToTile's widths and underground outlines at the source — Robby's go-ahead and a redeploy); Asheville's
+desktop frames (p50 32 ms among 55,000 trees).
+
 ## 2026-10-07 — Smooth away from Sea Bright; roads and bridges clear (Robby's PC)
 
 Robby: "on mobile sea bright my game runs smooth at high fps but when going away from sea bright or

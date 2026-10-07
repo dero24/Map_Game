@@ -29,7 +29,7 @@ import { sportLib, type SportPiece } from '../assets/sport';
 import { towerLib, TOWER_H, ROOFTOP_H, CHIMNEY_BRICK, type TowerKind } from '../assets/tower';
 import { COURT, courtFrame, diamondFrame, type Sport } from './sports';
 import { stallLib, STALL_VARIANTS, AWNING, STALL_FOOT, type StallKind } from '../assets/market';
-import { kerbSpaces, oneToASpace, streetThrough, OCCUPANCY } from './kerbside';
+import { kerbSpaces, oneToASpace, streetThrough, carriageAt, OCCUPANCY, NO_PARK } from './kerbside';
 import { viewCones, viewDir } from './views';
 import { streetLib, streetPaint, STREET_VARIANTS, type StreetKind } from '../assets/street';
 import { playLib, PLAY_KINDS, PLAY_PAINT, PLAY_FOOT, type PlayKind } from '../assets/play';
@@ -444,6 +444,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     ? { x0: extras.box.x0 - 8, z0: extras.box.z0 - 8, x1: extras.box.x1 + 8, z1: extras.box.z1 + 8 }
     : big;
   const paved = pavedMask({ json: ctxJson, terrain }, maskZone);
+  // (a carriageway's own lanes: a pit dug at one street's kerb stands in another's at a junction — kerbside.ts)
+  const lanesAt = carriageAt(ctxJson.roads);
   const mapCover = areaCoverMask({ json: ctxJson, terrain }, maskZone);
   /** Walls only the builders see — the tile's scratch walk's (pack.ts RecWalk), not shipped with it:
    *  a car that comes and goes keeps its stall clear of what's placed after it, and the main thread
@@ -852,8 +854,11 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // (package #7: the dry country's own — the desert's creosote, cacti, ocotillo and Joshua trees, the
   // sagebrush sea, the piñon-juniper, the Hill Country's Ashe juniper: flora.ts desertMix, desertTrees)
   const pickOf = (m: [TreeKind, number][], u: number) => TREE_KINDS.indexOf(m[pickWeighted(m.map(([, w]) => w), u)][0]);
-  const dryShrub = (x: number, z: number) => {
-    const m = desertMix(cast0, terrain.heightAt(x, z), latAt(x, z));
+  // (a measured crown rules out what never grows so tall — flora.ts SMALL_TREE: a 9 m tree in Tucson is
+  // a mesquite or a palo verde, never a 2 m cholla stretched four times over, its black dead joints a pole)
+  const fits = (m: [TreeKind, number][], h: number) => (h > 0 ? m.filter(([kind]) => h <= (SMALL_TREE[kind] ?? Infinity) * 1.15) : m);
+  const dryShrub = (x: number, z: number, h = 0) => {
+    const m = fits(desertMix(cast0, terrain.heightAt(x, z), latAt(x, z)), h);
     return m.length ? pickOf(m, hashf(Math.floor(x * 3.7) * 7919 + Math.floor(z * 2.9) * 104729 + 307)) : -1;
   };
   // (package #8: the palms — South Florida's tropical mix, the dry coasts' and the warm deserts' planted
@@ -865,8 +870,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // (kudzu on a wood's edge: a wood tree with open ground — a road, a field, a yard — within 15 m)
   const KUDZU = KI('kudzu'), KUDZU_SHARE = kudzuShare(cast0);
   const woodEdge = (x: number, z: number) => [[15, 0], [-15, 0], [0, 15], [0, -15]].some(([dx, dz]) => (mapCover(x + dx, z + dz) || terrain.coverAt(x + dx, z + dz)) !== 10);
-  const dryTree = (x: number, z: number) => {
-    const m = desertTrees(cast0, terrain.heightAt(x, z), latAt(x, z));
+  const dryTree = (x: number, z: number, h = 0) => {
+    const m = fits(desertTrees(cast0, terrain.heightAt(x, z), latAt(x, z)), h);
     return m.length ? pickOf(m, hashf(Math.floor(x * 2.9) * 104729 + Math.floor(z * 3.3) * 7919 + 311)) : -1;
   };
   const aspenAt = (x: number, z: number) => {
@@ -912,7 +917,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     if (k === 2 && hashf(Math.floor(x * 3.1) * 104729 + Math.floor(z * 1.9) * 7919 + 233) < palmettoShare(cast0, mapCover(x, z) === 10)) return SAWPALMETTO;
     if (k === 2 && manzanita > 0 && terrain.sdfAt(x, z) > 25 && hashf(Math.floor(x * 2.9) * 7919 + Math.floor(z * 3.9) * 104729 + 229) < manzanita) return MANZANITA;
     // (the dry country's shrubs — and a pine pick where no conifer grows: the low desert has none)
-    if (k >= 2 && k <= 4) { const d = dryShrub(x, z); if (d >= 0) return d; }
+    if (k >= 2 && k <= 4) { const d = dryShrub(x, z, h); if (d >= 0) return d; }
     if (k > 1) return k;
     if (k === 0 && aspenAt(x, z)) return ASPEN;
     const u = hashf(Math.floor(x * 3.1) * 7919 + Math.floor(z * 2.7) * 104729);
@@ -925,7 +930,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     if (desert && terrain.sdfAt(x, z) < 40 && terrain.oceanDistAt(x, z) > 250 && hashf(Math.floor(x * 2.3) * 7919 + Math.floor(z * 1.7) * 104729 + 271) < 0.55) return BANK[pickWeighted(BANK.map(([, w]) => w), hashf(Math.floor(x * 1.3) * 104729 + Math.floor(z * 3.3) * 7919 + 277))][0];
     // (the desert's own trees: the Mojave's Joshua trees, Arizona's saguaros, the piñon-juniper in its band;
     // the Great Basin's towns grow the region's planted shade trees, never mesquite)
-    if (desert && u >= 0.14) { const d = dryTree(x, z); if (d >= 0) return d; }
+    if (desert && u >= 0.14) { const d = dryTree(x, z, h); if (d >= 0) return d; }
     if (desert && cast0.eco !== 'great-basin') return u < 0.14 && palmsGrow(x, z) ? 8 : 7;
     if (birchy && k === 0 && u < 0.35) return 6;
     return broad(k, x, z, ratio, h);
@@ -1138,7 +1143,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         for (const [cx, cz, isPit] of cands) {
           for (const d of [0, 1.5, -1.5, 3, -3]) {
             const px = cx + tx * d, pz = cz + tz * d;
-            if ((!isPit && paved(px, pz)) || walk.blocked(px, pz, isPit ? 0.5 : 0.6) || onStructure(px, pz)) continue;
+            if ((!isPit && paved(px, pz)) || (isPit && lanesAt(px, pz, 0.5)) || walk.blocked(px, pz, isPit ? 0.5 : 0.6) || onStructure(px, pz)) continue;
             (x = px), (z = pz), (pit = isPit), (placed = true);
             break;
           }
@@ -1177,6 +1182,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         const [nk, nv] = kindOfSp(named, x, z);
         if (nk >= 0) (k = nk), (v = nv);
       }
+      // (and never a small kind stretched past its own tallest to fill a crown: the town's re-pick above,
+      // a shrub's own pick under 4.2 m — the saw palmetto's — would; the region's tree for its height instead)
+      if (!named && h > smallMax(k) * 1.15) (k = regional(r / h > 0.42 ? 1 : 0, x, z, r / h, h)), (v = variantAt(x, z, TREE_VARIANTS, 11));
       if (k === MAPLE && v === 2 && !westside && !named?.endsWith(':2')) v = 0;
       if (NW_CONIFER.has(k) && !named) v = nwForm(x, z, mapCover(x, z) === 10 && !walk.blocked(x, z, 14));
       // (a measured longleaf is grown as tall as the survey says: a grass stage under 1.5 m, a bottlebrush
@@ -1220,7 +1228,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
           const x = ax + tx * t + nx * sd * (r.w / 2 + 1.1), z = az + tz * t + nz * sd * (r.w / 2 + 1.1);
           if (!inSlice(x, z) || !urban(x, z)) continue;
           const hq = hashf(Math.floor(x * 3.7) * 7919 + Math.floor(z * 2.9));
-          if (hq > 0.62 || walk.blocked(x, z, 1.4) || terrain.sdfAt(x, z) < 2) continue;
+          if (hq > 0.62 || walk.blocked(x, z, 1.4) || terrain.sdfAt(x, z) < 2 || lanesAt(x, z, 0.6)) continue;
           if (trees.some((q) => { const e = q.m.elements; return Math.abs(e[12] - x) < 6 && Math.abs(e[14] - z) < 6; })) continue;
           const g = terrain.heightAt(x, z);
           const k = regional(hq < 0.2 ? 1 : 0, x, z), v = k === MAPLE ? variantAt(x, z, 2, 11) : variantAt(x, z, TREE_VARIANTS, 11); // (street maples are sugar and red)
@@ -1232,7 +1240,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
           // a litter bin at every few trees' worth of kerb
           if (hq < 0.06) {
             const bx2 = x + tx * 2.2, bz2 = z + tz * 2.2;
-            if (!walk.blocked(bx2, bz2, 0.4)) { bins.push(new THREE.Matrix4().makeTranslation(bx2, terrain.heightAt(bx2, bz2), bz2)); walk.addLoop([[bx2 - 0.3, bz2 - 0.3], [bx2 + 0.3, bz2 - 0.3], [bx2 + 0.3, bz2 + 0.3], [bx2 - 0.3, bz2 + 0.3]], -Infinity, terrain.heightAt(bx2, bz2) + 0.9); }
+            if (!walk.blocked(bx2, bz2, 0.4) && !lanesAt(bx2, bz2, 0.4)) { bins.push(new THREE.Matrix4().makeTranslation(bx2, terrain.heightAt(bx2, bz2), bz2)); walk.addLoop([[bx2 - 0.3, bz2 - 0.3], [bx2 + 0.3, bz2 - 0.3], [bx2 + 0.3, bz2 + 0.3], [bx2 - 0.3, bz2 + 0.3]], -Infinity, terrain.heightAt(bx2, bz2) + 0.9); }
           }
         }
       }
@@ -1663,7 +1671,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // the nearest carriageway (not the footway in front of the shop, which is usually nearer)
   const CARRIAGE = new Set(['motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'residential', 'unclassified', 'living_street']);
   const carriageEdge = (x: number, z: number) => {
-    let best: { x: number; z: number; w: number; d: number } | null = null;
+    let best: { x: number; z: number; w: number; d: number; np: boolean } | null = null;
     for (const r of ctxJson.roads) {
       if (r.lod || r.br || !CARRIAGE.has(r.c) || r.w < 9) continue;
       const p = unpackPts(r.p);
@@ -1671,7 +1679,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         const dx = p[i + 1][0] - p[i][0], dz = p[i + 1][1] - p[i][1], L2 = dx * dx + dz * dz || 1;
         const t = Math.max(0, Math.min(1, ((x - p[i][0]) * dx + (z - p[i][1]) * dz) / L2));
         const qx = p[i][0] + dx * t, qz = p[i][1] + dz * t, dd = Math.hypot(x - qx, z - qz);
-        if (!best || dd < best.d) best = { x: qx, z: qz, w: r.w, d: dd };
+        if (!best || dd < best.d) best = { x: qx, z: qz, w: r.w, d: dd, np: r.pk === NO_PARK };
       }
     }
     return best;
@@ -1679,7 +1687,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   for (const d of extras.doors ?? []) {
     if (d.kind !== 'commercial') continue;
     const e = carriageEdge(d.fx, d.fz);
-    if (!e || e.d > e.w / 2 + 14) continue;
+    // (none where the street's parking was given back to its shops' fronts: kerbside.ts fitToFronts)
+    if (!e || e.np || e.d > e.w / 2 + 14) continue;
     const ox = d.fx - e.x, oz = d.fz - e.z, ol = Math.hypot(ox, oz) || 1;
     const ux = ox / ol, uz = oz / ol, tx = -uz, tz = ux; // toward the door, and along the curb
     for (const along of [-3.2, 3.3]) {

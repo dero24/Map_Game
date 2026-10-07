@@ -47,7 +47,8 @@ export interface Building {
   eav?: number; // measured eave height above ground (m) — 3DEP LiDAR (lidar.ts); h is then the ridge
   ms?: 1; // h/roof/eav measured from LiDAR (not mapped priors)
 }
-// pk: mapped street parking, left + 4·right (1 parallel, 2 angled). sy: a placeholder street (synth.ts)
+// pk: mapped street parking, left + 4·right (1 parallel, 2 angled); 16 none, the guess given back to
+// the fronts (kerbside.ts NO_PARK). sy: a placeholder street (synth.ts)
 // — unnamed, pencilled on the map — standing in until the real tile arrives.
 /** `sf`: a mapped surface other than asphalt (brick, sett, cobbles, gravel…) — the paint shows it.
  *  `tu`: underground (OSM tunnel=yes/culvert/…, not a building passage) — only the life sim's cars

@@ -370,6 +370,15 @@ export const TAG_ROOF_COLOURS: ReadonlySet<number> = new Set([...Object.values(N
 const ROAD_W: Record<string, number> = { motorway: 14, motorway_link: 7, trunk: 12, trunk_link: 6.5, primary: 11, primary_link: 6, secondary: 9, secondary_link: 6, tertiary: 8, tertiary_link: 5, residential: 6.5, unclassified: 6, living_street: 5, service: 4, pedestrian: 5, track: 3, footway: 1.8, path: 1.5, cycleway: 2, steps: 2, bridleway: 2, construction: 5 };
 const PARK_DEFAULT = new Set(['residential', 'unclassified', 'tertiary', 'secondary']);
 const ONEWAY = /^(yes|true|1|-1)$/;
+/** A street wider than its class ever is in metres was tagged in feet (Manhattan's 10th Avenue
+ *  "69'6\"", West 52nd Street "33'4\"": 69 m and 33 m wide, into the buildings) — the tile service's
+ *  data from before osmToTile read the units: those widths as feet. In place (tileBuild.ts, main.ts). */
+export function feetWidths(roads: Road[]) {
+  for (const r of roads) {
+    const cap = /^(motorway|trunk)(_link)?$/.test(r.c) ? Infinity : /^(primary|secondary|tertiary)(_link)?$/.test(r.c) ? 35 : 20;
+    if (r.w > cap && r.w * 0.3048 >= 3) r.w = +(r.w * 0.3048).toFixed(1);
+  }
+}
 /** A one-way half of a divided road still at its class's two-way width — the baked shore's and the
  *  tile service's data predate the lane rule in osmToTile — narrowed to two lanes (a motorway three).
  *  In place; once narrowed it's left alone (tileBuild.ts, and the shore's paint in main.ts). */
@@ -701,7 +710,8 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       if (t.indoor === 'yes' || t.indoor === 'corridor') continue;
       const pts = wayPts(e);
       if (pts.length < 2) continue;
-      let w = parseFloat(t.width) || ROAD_W[t.highway];
+      // (a width in feet — Manhattan's "69'6\"" — is 21 m, not 69: parseLen reads the units)
+      let w = parseLen(t.width) || ROAD_W[t.highway];
       // mapped lanes set the carriageway (3.2 m a lane, a metre of gutter) when no width is tagged
       const lanes = parseInt(t.lanes);
       if (!t.width && lanes > 0 && ROAD_W[t.highway] >= 6) w = Math.max(w, lanes * 3.2 + 1);
@@ -764,7 +774,7 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
           const p = flat(pts);
           if (anyVertex(p, margin)) {
             const l: Line = { c: lc, p, own: ownV(p) };
-            if (t.width && isFinite(parseFloat(t.width))) l.w = parseFloat(t.width);
+            if (t.width && isFinite(parseLen(t.width))) l.w = parseLen(t.width);
             if (t.bridge && t.bridge !== 'no') l.br = 1;
             if (lc === 'fence') {
               const ft = FENCE_TYPE[t.fence_type ?? ''];
@@ -791,6 +801,9 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       }
     }
     const isPart = !!t['building:part'] && t['building:part'] !== 'no';
+    // (a building under the ground — a subway station's halls, a garage — isn't built: Times Square's
+    // station, mapped as one 435 × 556 m outline, walled a dozen Midtown streets; bake.mjs the same)
+    if ((t.building || isPart) && (t.location === 'underground' || (parseInt(t.layer) < 0 && !(parseInt(t['building:levels']) > 0)))) continue;
     if (t.building || isPart) {
       const rings = areaRings(e);
       if (!rings) continue;

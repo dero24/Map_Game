@@ -545,7 +545,7 @@ export function buildBridges(m: Sink, walk: WalkWorld, roads: Road[], lines: Lin
   const out: BridgeOut = { towers: [], posts: [], piles: [], taken: new Set() };
   // (lowest layer first: a flyover clears the deck it crosses, as that deck was profiled; and the
   // longest first within a layer — a ramp that runs onto a bridge's deck meets it at its height)
-  const done: { ch: Chain; pf: Profile }[] = [];
+  const done: { ch: Chain; pf: Profile; under: Under[] }[] = [];
   const pins = new Map<string, Pin>();
   const order = chainBridges(roads).sort((a, b) => a.layer - b.layer || b.L - a.L || a.pts[0][0] - b.pts[0][0] || a.pts[0][1] - b.pts[0][1]);
   for (const ch of order) {
@@ -553,7 +553,7 @@ export function buildBridges(m: Sink, walk: WalkWorld, roads: Road[], lines: Lin
     const under = crossingsUnder(ch, roads, lines, g);
     for (const o of done) if (o.ch.layer < ch.layer) under.push(...decksUnder(ch, o.ch, o.pf));
     const pf = bridgeProfile(ch, g, under, pins);
-    done.push({ ch, pf });
+    done.push({ ch, pf, under });
     for (const j of ch.joints) {
       if (pins.has(j.key)) continue;
       const c = chainAt(ch, j.s);
@@ -568,7 +568,7 @@ export function buildBridges(m: Sink, walk: WalkWorld, roads: Road[], lines: Lin
     if (!ch.ways.some((w) => w.own)) continue;
     for (const r of ed.taken) out.taken.add(r);
     const others = all.filter((o) => o !== d && boxesMeet(o.ch, ch, 25));
-    ch.ways.forEach((w, k) => { if (w.own) drawWay(m, walk, ch, pf, ed, k, g, out, others); });
+    ch.ways.forEach((w, k) => { if (w.own) drawWay(m, walk, ch, pf, ed, k, g, out, others, d.under); });
   }
   return out;
 }
@@ -631,6 +631,37 @@ export function fitUnderDecks<B extends { r: number[]; h: number; hy?: number; g
   });
 }
 
+/** A big outline a car street runs through for 40 m and more isn't a building standing there — an
+ *  underground station's halls mapped as one (Times Square's: 435 × 556 m, a dozen streets walled
+ *  across), the tile service's data from before realTile.ts left those out. A lifted part (a skybridge)
+ *  stays; so does a street's short passage through a building's arch. Before the buildings are built. */
+export function dropStreetCrossers<B extends { r: number[]; lf?: number }>(buildings: B[], roads: Road[]): B[] {
+  const segs: number[][] = [];
+  for (const r of roads) {
+    if (r.lod || r.br || r.tu || !CARS.test(r.c)) continue;
+    for (let i = 0; i + 3 < r.p.length; i += 2) segs.push([r.p[i] / 10, r.p[i + 1] / 10, r.p[i + 2] / 10, r.p[i + 3] / 10]);
+  }
+  if (!segs.length) return buildings;
+  return buildings.filter((b) => {
+    if ((b.lf ?? 0) > 1.5) return true;
+    const ring: P[] = [];
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity, area = 0;
+    for (let i = 0; i + 1 < b.r.length; i += 2) { const x = b.r[i] / 10, z = b.r[i + 1] / 10; ring.push([x, z]); (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z)); }
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) area += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+    if (Math.abs(area) / 2 < 4000) return true;
+    const inside = (x: number, z: number) => { let ins = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const [xi, zi] = ring[i], [xj, zj] = ring[j]; if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) ins = !ins; } return ins; };
+    let through = 0;
+    for (const [ax, az, bx, bz] of segs) {
+      if (Math.max(ax, bx) < x0 || Math.min(ax, bx) > x1 || Math.max(az, bz) < z0 || Math.min(az, bz) > z1) continue;
+      const L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(L / 4));
+      for (let k = 0; k < n; k++) { const t = (k + 0.5) / n; if (inside(ax + (bx - ax) * t, az + (bz - az) * t)) through += L / n; }
+      if (through >= 40) return false;
+    }
+    return true;
+  });
+}
+const CARS = /^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|living_street)(_link)?$/;
+
 /** Where a chain crosses over a lower bridge's deck: that deck's roadway, a road's clearance under it. */
 export function decksUnder(ch: Chain, lo: Chain, pf: Profile): Under[] {
   const out: Under[] = [];
@@ -648,7 +679,7 @@ export function decksUnder(ch: Chain, lo: Chain, pf: Profile): Under[] {
 }
 
 /** One way of a chain: the stretch of deck it carries, what holds it up, and its collision. */
-function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnType<typeof deckEdges>, k: number, g: Ground, out: BridgeOut, others: { ch: Chain; pf: Profile; ed: ReturnType<typeof deckEdges> }[] = []) {
+function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnType<typeof deckEdges>, k: number, g: Ground, out: BridgeOut, others: { ch: Chain; pf: Profile; ed: ReturnType<typeof deckEdges> }[] = [], under: Under[] = []) {
   const w = ch.ways[k], movable = w.movable, highway = HIGHWAY.has(ch.c), minor = MINOR.has(ch.c);
   const hw = ch.w / 2;
   const kerb = highway ? 0 : KERB; // (a highway's shoulder runs on at the roadway's level, to its barrier)
@@ -890,10 +921,18 @@ function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnTyp
     }
   };
   const { n: spans } = spansOf(w, ch.c);
-  for (let q = 1; q < spans; q++) pierAt(w.s0 + ((w.s1 - w.s0) * q) / spans);
+  // (never in the way of what passes under it — a street's lanes, a railway, a lower deck: Asheville's
+  // overpasses stood their middle pier in the freeway's lanes — moved along the span to clear it, or
+  // left out where nowhere within 15 m does)
+  const clear = (s: number) => under.every((u) => Math.abs(s - u.S) > u.half + 0.8);
+  const pierClear = (s: number) => {
+    if (clear(s)) return pierAt(s);
+    for (let d = 1.5; d <= 15; d += 1.5) for (const t of [s + d, s - d]) if (t > w.s0 + 2 && t < w.s1 - 2 && clear(t)) return pierAt(t);
+  };
+  for (let q = 1; q < spans; q++) pierClear(w.s0 + ((w.s1 - w.s0) * q) / spans);
   // a joint between two fixed ways: the way that starts there carries it
   const prev = ch.ways[k - 1];
-  if (prev && Math.abs(prev.s1 - w.s0) < 1e-3 && !movable && !prev.movable) pierAt(w.s0);
+  if (prev && Math.abs(prev.s1 - w.s0) < 1e-3 && !movable && !prev.movable && clear(w.s0)) pierAt(w.s0);
   // abutments where it lands: a wall under its end, posts on its parapets' ends
   const abut = (s: number, dir: number) => {
     const c = chainAt(ch, s), yy = yAt(s), l = interp(pf.S, ed.left, s), r = interp(pf.S, ed.right, s), ang = Math.atan2(c.tz, c.tx);

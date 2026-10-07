@@ -24,7 +24,7 @@ import { Wakes } from './world/wakes';
 import { activeBuilding, type Door, type Footprint } from './world/buildings';
 import { styleFor, setActiveStyle, castOf } from './world/styles';
 import { setRoofSource } from './world/aerial';
-import { TAG_ROOF_COLOURS, narrowOneWays } from './world/realTile';
+import { TAG_ROOF_COLOURS, narrowOneWays, feetWidths } from './world/realTile';
 import { Vehicles } from './player/vehicles';
 import { GrassField } from './world/grass';
 import { UnderstoryField } from './world/understory';
@@ -196,6 +196,7 @@ async function main() {
       terrain = atlasRes.terrain;
       const paintJson = (await cachedFetchJson(base + 'paint.json')) as WorldJson;
       narrowOneWays(paintJson.roads); // (as the tiles' own: tileBuild.ts)
+      feetWidths(paintJson.roads);
       paintWorld = { json: paintJson, terrain };
     } else {
       const w = await loadWorld(base, (m) => ($('loading').textContent = m));

@@ -102,5 +102,5 @@ describe('the new plans: bear, bison, armadillo, manatee', () => {
     expect(wallowed).toBe(true);
     const anim = (c5 as unknown as { meshes: Map<string, { m: THREE.InstancedMesh; anim: THREE.InstancedBufferAttribute }> }).meshes.get('bison')!;
     for (let i = 0; i < anim.m.count; i++) expect(anim.anim.getZ(i)).toBeGreaterThanOrEqual(10);
-  });
+  }, 30000); // (the whole cast stepped for seconds: under the full suite's load, past 5 s)
 });

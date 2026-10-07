@@ -1933,13 +1933,17 @@
       "verification": [
         "tools/playtest.mjs --region=shore: frames pass (max 50 ms, no 100 ms hitch; was 2,200 ms), the new roads check (tools/playtest.js __ROADWALLS__: nothing on a bridge deck, under 2 a thousand samples elsewhere) and its self-test",
         "tests/warm.test.ts, tests/roadsClear.test.ts",
-        "phone emulation (Pixel 7, phone tier, CPU 4×): Red Bank after a teleport, frames p50 129 → 52 ms; tree vertices in its ring 26.6 M → 13 M"
+        "phone emulation (Pixel 7, phone tier, CPU 4×): Red Bank after a teleport, frames p50 129 → 52 ms; tree vertices in its ring 26.6 M → 13 M",
+        "tools/playtest.mjs --at=<a city> --only=roads,drive,walkabout (Asheville: walkabout + drive pass; roads check hits 258 → 121)",
+        "tests/roadsClear.test.ts (fitToFronts: parking given back, canyons, NO_PARK), tests/streetTrees.test.ts (a desert town's measured crowns), tests/smallCull.test.ts",
+        "front-inside-the-road share over every car street (scratch probe): Asheville 4.4% → 1.3%, Chicago 4.1% → 3.0%, Seattle 1.3% → 0.1%"
       ],
       "evidence": [
         "commit cf19a3e (docs/earth/LOG.md 2026-10-07): shaders compiled ahead (render/warm.ts), a phone's far trees a step coarser, grass and tile mounts in slices, uploads budgeted, matrix and timezone costs cut; roads: one-way widths, parallel decks, buildings under decks (fitUnderDecks), wall tops, trees and parked cars out of the lanes; the roads playtest check",
-        "shore full playtest PASS 11/11 (frames max 50 ms; roads perK 1.28); CI green; soak no stalls; mobile-check pixel7 + iphone clean"
+        "shore full playtest PASS 11/11 (frames max 50 ms; roads perK 1.28); CI green; soak no stalls; mobile-check pixel7 + iphone clean",
+        "2026-10-07 pm (docs/earth/LOG.md \"Streets fitted to their buildings\"): kerbside.ts fitToFronts (a tile's own streets cut where their fronts stand inside the guessed parking — NO_PARK — or a canyon's room), carriageAt (pits, street trees and bins out of other streets' lanes), props.ts desert picks height-aware (Tucson's black pole: a cholla stretched to a 9 m crown), the underground station outlines and widths in feet (Manhattan 2,318 → 81), smallCull for a phone's far small things; npm test 1037/1037; shore full playtest PASS 11/11; audit48 Asheville/Tucson/Chicago re-shot and read"
       ],
-      "notes": "Robby, 2026-10-07: \"on mobile sea bright my game runs smooth at high fps but when going away from sea bright or telelporting it starts to really lag in the game, pleasse optimize performance where possible, also going over sandy hook bridge and driving through main cities sometimes the roads have walls or buidlings in them where they are not supposed to we need to make sure the streets and city traversing via car and on foot all work as it should\"."
+      "notes": "Robby, 2026-10-07: \"on mobile sea bright my game runs smooth at high fps but when going away from sea bright or telelporting it starts to really lag in the game, pleasse optimize performance where possible, also going over sandy hook bridge and driving through main cities sometimes the roads have walls or buidlings in them where they are not supposed to we need to make sure the streets and city traversing via car and on foot all work as it should\". Still open (LOG 2026-10-07 pm \"Next\"): outlines across a street's centre line, piers and low decks over a street, the tile service's v26 (needs the go-ahead), Asheville's desktop frames."
     },
     {
       "id": "regional-flora",

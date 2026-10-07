@@ -3,7 +3,7 @@ import { type TileJson } from '../src/world/data';
 import { virtualRegion } from '../src/world/virtual';
 import { setActiveStyle, regionStyle } from '../src/world/styles';
 import { buildTile } from '../src/world/tileBuild';
-import { treeMeta, coniferMix, aspenShare, snagShare, broadMix, rosebayShare, bankMix, redcedarShare, understoryTrees, swampMix, swampForm, manzanitaShare, sequoiaBand, redwoodCountry, westForm, desertMix, desertTrees, pjBand, palmMix, palmettoShare, type TreeKind } from '../src/assets/flora';
+import { treeMeta, coniferMix, aspenShare, snagShare, broadMix, rosebayShare, bankMix, redcedarShare, understoryTrees, swampMix, swampForm, manzanitaShare, sequoiaBand, redwoodCountry, westForm, desertMix, desertTrees, pjBand, palmMix, palmettoShare, SMALL_TREE, type TreeKind } from '../src/assets/flora';
 import { meanTemp } from '../src/world/season';
 import { caRedwoodBelt } from '../src/world/ecoregions';
 import { castOf } from '../src/world/styles';
@@ -58,6 +58,31 @@ function rowStreet(): TileJson {
 }
 
 describe("the survey's street trees", () => {
+  it("a desert town's measured crowns are trees: never a cholla, a prickly pear or a creosote stretched to fit one (Tucson's black poles)", async () => {
+    // (a slim crown was a pine pick, and where no conifer grows the low desert's shrub took it — the 2 m
+    // cholla stretched to a 9 m crown, its black dead joints a pole on West Washington Street)
+    const at: [number, number] = [32.2226, -110.9747];
+    setActiveStyle(regionStyle(at[0], at[1]));
+    const tj = rowStreet();
+    tj.origin = { lat: at[0], lon: at[1] };
+    const trees: number[] = [];
+    for (let i = 0; i < 160; i++) {
+      const x = 12 + (i % 16) * 15, z = 12 + Math.floor(i / 16) * 24, h = 4.2 + (i % 7) * 1.6, r = i % 2 ? h * 0.2 : h * 0.5;
+      trees.push(m(x), m(z), m(h), m(r));
+    }
+    tj.trees = trees;
+    const built = await buildTile(tj, virtualRegion(at).terrain, { id: 'w0_0', box: tj.box, lod: 0, file: '', world: 1 }, 0);
+    let n = 0;
+    for (const o of built.objs as { n?: string; im?: Float32Array }[]) {
+      if (!o.n?.startsWith('trees:') || !o.im) continue;
+      const [, kind, v] = o.n.split(':'), cap = SMALL_TREE[kind as TreeKind], mh = treeMeta(kind as TreeKind, +v || 0).h;
+      for (let i = 0; i + 15 < o.im.length; i += 16) {
+        n++;
+        if (cap) expect(Math.hypot(o.im[i + 4], o.im[i + 5], o.im[i + 6]) * mh, kind).toBeLessThanOrEqual(cap * 1.15 + 0.05);
+      }
+    }
+    expect(n).toBeGreaterThan(60);
+  }, 60000);
   it('a crown over the kerb of a row-house street keeps its tree: at the kerb, clear of the stoops and doors', async () => {
     setActiveStyle(regionStyle(AT[0], AT[1]));
     const tj = rowStreet(), want = tj.trees!.length / 4;

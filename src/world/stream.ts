@@ -40,10 +40,23 @@ export const streamParams = {
   // a tile's mount, a step at a time: the ms of a frame it may take (its collision is tens of
   // thousands of walls — a phone's 60–90 ms in one go); the spawn's own ground still mounts at once
   mountMs: 4,
+  // a tile's small things (its mailboxes, hydrants, benches, gardens' plants, parked cars) not drawn
+  // past this many times their own size (a 1 m mailbox past 200 m: two pixels): far tiles' draw calls,
+  // a phone's CPU (its tier: 120). 0: all drawn.
+  smallCull: 200,
 };
 // (what a detail tile weighs before its first build: a real city cell, a stand-in, a baked one)
 const EST = { w: 60e6, s: 10e6, b: 20e6 };
 const cellKey = (b: Box, c: number) => `${Math.floor((b.x0 + b.x1) / 2 / c)}_${Math.floor((b.z0 + b.z1) / 2 / c)}`;
+/** An instanced mesh's size for smallCull: its model's radius at its largest instance's scale. */
+export function spanOf(im: THREE.InstancedMesh) {
+  const g = im.geometry;
+  if (!g.boundingSphere) g.computeBoundingSphere();
+  const e = im.instanceMatrix.array as ArrayLike<number>;
+  let s2 = 0;
+  for (let i = 0; i + 15 < e.length; i += 16) s2 = Math.max(s2, e[i] * e[i] + e[i + 1] * e[i + 1] + e[i + 2] * e[i + 2], e[i + 4] * e[i + 4] + e[i + 5] * e[i + 5] + e[i + 6] * e[i + 6], e[i + 8] * e[i + 8] + e[i + 9] * e[i + 9] + e[i + 10] * e[i + 10]);
+  return (g.boundingSphere?.radius ?? Infinity) * Math.sqrt(s2 || 1);
+}
 /** Vertex (and instance) data under a group, bytes — what it costs the GPU and the page, each. */
 function vertexBytes(root: THREE.Object3D) {
   let n = 0;
@@ -453,6 +466,7 @@ export class TileStream {
     this.pz = z;
     if (this.coarseCut < Infinity && this.coarseBytes < streamParams.coarseMB * 1e6 * 0.7) this.coarseCut = Infinity;
     this.reveal();
+    this.cullSmall(x, z);
     this.walk.purgeSome(); // (unloaded tiles' walls, ~1.5 ms a frame until they're gone)
     const now = performance.now();
     const gy = Math.max(0, this.terrain.heightAt(x, z));
@@ -542,6 +556,31 @@ export class TileStream {
         const p = this.coarseQueue.splice(i, 1)[0];
         this.queued.delete('c' + p.spec.id);
         if (boxDist2(p.spec.box, x, z) < COARSE_R * COARSE_R) this.mountCoarse(p);
+      }
+    }
+  }
+
+  /** The far tiles' small things out of the frame (streamParams.smallCull): each instanced mesh past its
+   *  own size × smallCull from you, by its tile's nearest edge, is on no layer (drawn by no camera);
+   *  back as you come. A half-second's pass, or each 15 m walked. */
+  private cullT = 0;
+  private cullAt: [number, number] = [Infinity, Infinity];
+  private cullSmall(x: number, z: number) {
+    const now = performance.now();
+    if (now - this.cullT < 500 && Math.hypot(x - this.cullAt[0], z - this.cullAt[1]) < 15) return;
+    this.cullT = now;
+    this.cullAt = [x, z];
+    const k = streamParams.smallCull;
+    for (const a of this.loaded.values()) {
+      const d = Math.sqrt(boxDist2(a.spec.box, x, z));
+      for (const o of a.group.children) {
+        const span = o.userData.span as number | undefined;
+        if (span === undefined) continue;
+        const far = k > 0 && d > span * k;
+        if (far === !!o.userData.culled) continue;
+        if (far) (o.userData.mask = o.layers.mask), (o.layers.mask = 0);
+        else o.layers.mask = o.userData.mask;
+        o.userData.culled = far;
       }
     }
   }
@@ -865,7 +904,9 @@ export class TileStream {
       const atlasTex = tile.atlas ? signTexture(tile.atlas) : undefined;
       group.userData.atlas = atlasTex; // (freed with the tile: dispose)
       for (let i = 0; i < tile.objs.length; i++) {
-        group.add(buildObject(tile.objs[i], atlasTex));
+        const o = buildObject(tile.objs[i], atlasTex);
+        if ((o as THREE.InstancedMesh).isInstancedMesh) o.userData.span = spanOf(o as THREE.InstancedMesh); // (smallCull)
+        group.add(o);
         if (i % 48 === 47) { lap(); yield; at = performance.now(); }
       }
       group.add(haloPoints(v3s(tile.lanterns), 7, new THREE.Color(1.0, 0.85, 0.55)));

@@ -917,7 +917,8 @@ window.__ROADWALLS__ = (opts = {}) => {
     // an angled bay's 4.6 m) — the travel lanes; a cross street's own samples still cross this one's
     // parking at its mouth, where no car may stand
     // (a main street — 9 m and more — parks at its kerbs in front of shops whatever the map says: props.ts)
-    const hw = (r.w ?? 6) / 2, pk = (r.w ?? 0) >= 10 && r.pk ? r.pk : (r.w ?? 0) >= 9 && !r.br ? 1 + 4 : 0;
+    // (…but not where its parking was given back to its fronts: kerbside.ts NO_PARK)
+    const hw = (r.w ?? 6) / 2, pk = r.pk === 16 ? 0 : (r.w ?? 0) >= 10 && r.pk ? r.pk : (r.w ?? 0) >= 9 && !r.br ? 1 + 4 : 0;
     const laneOf = (mode) => Math.max(0, hw - (mode === 2 ? 5.6 : mode === 1 ? 3.2 : 1.4));
     const lanes = [-laneOf(pk & 3), 0, laneOf((pk >> 2) & 3)].filter((o, k, a) => k === 1 || Math.abs(o) > 0.4);
     for (let i = 0; i + 3 < r.p.length; i += 2) {

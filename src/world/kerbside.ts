@@ -8,7 +8,7 @@
 //   Crosswalks: a mapped `highway=crossing` node on a street is painted exactly there, across the
 // carriageway (ladder bars, or two lines where `crossing:markings` says so; nothing where it's
 // unmarked), and the junction's inferred crosswalk steps aside for it.
-import type { Point, Road } from './data';
+import type { Building, Point, Road } from './data';
 import { hashf } from '../assets/core';
 
 type P = [number, number];
@@ -91,7 +91,7 @@ export function kerbSpaces(roads: Road[], ctx: Road[], points: Point[], o: KerbO
   const feats = points.filter((q) => q.c === 'hydrant' || q.c === 'bus' || q.c === 'bus_shelter' || q.c.startsWith('xing'));
   const out: KerbSpace[] = [];
   for (const r of roads) {
-    if (!r.pk || r.lod || r.br || r.tu || r.w < 10) continue;
+    if (!r.pk || r.pk === NO_PARK || r.lod || r.br || r.tu || r.w < 10) continue;
     const p = unpack(r.p);
     const cum = [0];
     for (let i = 1; i < p.length; i++) cum.push(cum[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]));
@@ -270,4 +270,173 @@ export function crossingPaint(roads: Road[], points: Point[]): number[] {
     out.push(Math.round(best.x * 10) / 10, Math.round(best.z * 10) / 10, +best.ux.toFixed(4), +best.uz.toFixed(4), best.w, style);
   }
   return out;
+}
+
+/** Is (x, z) on a carriageway — within the half width (and `pad`) of any way a car may take, not a
+ *  bridge's deck over it or a tunnel under it? For what's set at a kerb (a street tree's pit, its litter
+ *  bin: props.ts): one street's kerb is another's lane at a junction — Asheville's pits and their
+ *  trees stood in the lanes of the streets they met. */
+export function carriageAt(roads: Road[]) {
+  const C = 16, grid = new Map<number, number[]>(), segs: number[] = [];
+  const key = (i: number, j: number) => (i + 65536) * 131072 + (j + 65536);
+  for (const r of roads) {
+    if (r.lod || r.br || r.tu || FOOT.test(r.c) || r.c === 'track' || r.c === 'steps') continue;
+    const hw = r.w / 2;
+    for (let i = 0; i + 3 < r.p.length; i += 2) {
+      const ax = r.p[i] / 10, az = r.p[i + 1] / 10, bx = r.p[i + 2] / 10, bz = r.p[i + 3] / 10, id = segs.length / 5;
+      segs.push(ax, az, bx, bz, hw);
+      // (a cell lists every segment within its half width and 2 m: a pad up to 2 m is found from the point's cell)
+      for (let u = Math.floor((Math.min(ax, bx) - hw - 2) / C); u <= Math.floor((Math.max(ax, bx) + hw + 2) / C); u++)
+        for (let v = Math.floor((Math.min(az, bz) - hw - 2) / C); v <= Math.floor((Math.max(az, bz) + hw + 2) / C); v++) (grid.get(key(u, v)) ?? grid.set(key(u, v), []).get(key(u, v))!).push(id);
+    }
+  }
+  return (x: number, z: number, pad = 0) => {
+    for (const id of grid.get(key(Math.floor(x / C), Math.floor(z / C))) ?? []) {
+      const ax = segs[id * 5], az = segs[id * 5 + 1], ex = segs[id * 5 + 2] - ax, ez = segs[id * 5 + 3] - az, L2 = ex * ex + ez * ez;
+      const t = L2 ? Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / L2)) : 0;
+      if (Math.hypot(ax + ex * t - x, az + ez * t - z) < segs[id * 5 + 4] + pad) return true;
+    }
+    return false;
+  };
+}
+/** A parked lane's width at the kerb, by mode (realTile.ts: 1 parallel, 2 angled). */
+const PARK_W = [0, 2.2, 4.8];
+/** `pk` for a stretch whose guessed parking fitToFronts gave back: no parked lane at either kerb —
+ *  and none assumed (groundCover.ts laneLayout's default for a wide street, props.ts's cars at a
+ *  shop's door). */
+export const NO_PARK = 16;
+/** A street's guessed parking given back where its buildings stand (tileBuild.ts). The tile service
+ *  widens every untagged street in North America for a parked lane at each kerb (realTile.ts
+ *  PARK_DEFAULT: a residential street 10.9 m), and an old town's fronts stand inside that —
+ *  Asheville's Wall Street ran its asphalt up to its shops, their stoops out in the lane and no
+ *  sidewalk; a twentieth of the streets sampled in Asheville and Chicago had a front inside the
+ *  road. Where a tile's own street runs 12 m or more past mapped fronts closer than 1.5 m beyond its
+ *  kerb, that stretch parks no cars (NO_PARK): the way is cut there and the stretch drawn at its travel
+ *  lanes' width — and where fronts stand both sides closer than that, a canyon's (a width tagged in
+ *  feet, Lawyers Alley's "15"), as wide as the room between them less a sidewalk each side, never under
+ *  a lane each way. Only the tile's own ways and what it can see (its box and 40 m round it): a neighbour has
+ *  the way whole at its first width and keeps its things off that wider street, which is safe. A
+ *  lifted part (an arcade, a skyway), a canopy, a nested or a guessed outline isn't a front.
+ *  Returns `roads` itself when nothing changed. */
+export function fitToFronts(roads: Road[], buildings: Building[], box: { x0: number; z0: number; x1: number; z1: number }): Road[] {
+  const fit = (r: Road) => r.own !== 0 && !r.br && !r.tu && !r.lod && CARRIAGE.test(r.c);
+  if (!roads.some(fit)) return roads;
+  // the fronts' edges, in an 8 m grid
+  const C = 8, grid = new Map<number, number[]>(), E: number[] = [];
+  const key = (i: number, j: number) => (i + 65536) * 131072 + (j + 65536);
+  for (const b of buildings) {
+    if (b.gen || b.cn || b.in || (b.lf ?? 0) > 1.5) continue;
+    const n = b.r.length / 2;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n, ax = b.r[2 * i] / 10, az = b.r[2 * i + 1] / 10, bx = b.r[2 * j] / 10, bz = b.r[2 * j + 1] / 10, id = E.length / 4;
+      E.push(ax, az, bx, bz);
+      for (let u = Math.floor(Math.min(ax, bx) / C); u <= Math.floor(Math.max(ax, bx) / C); u++)
+        for (let v = Math.floor(Math.min(az, bz) / C); v <= Math.floor(Math.max(az, bz) / C); v++) (grid.get(key(u, v)) ?? grid.set(key(u, v), []).get(key(u, v))!).push(id);
+    }
+  }
+  if (!E.length) return roads;
+  const stamp = new Int32Array(E.length / 4);
+  let tick = 0;
+  // the nearest front along the ray from (x, z) in the unit direction (nx, nz), out to L (else Infinity)
+  const ray = (x: number, z: number, nx: number, nz: number, L: number) => {
+    tick++;
+    let best = Infinity;
+    for (let t = 0; t <= L + C / 2; t += C / 2) {
+      const tt = Math.min(t, L), u = Math.floor((x + nx * tt) / C), v = Math.floor((z + nz * tt) / C);
+      for (let du = -1; du <= 1; du++)
+        for (let dv = -1; dv <= 1; dv++)
+          for (const id of grid.get(key(u + du, v + dv)) ?? []) {
+            if (stamp[id] === tick) continue;
+            stamp[id] = tick;
+            const ax = E[id * 4], az = E[id * 4 + 1], ex = E[id * 4 + 2] - ax, ez = E[id * 4 + 3] - az, den = nx * ez - nz * ex;
+            if (Math.abs(den) < 1e-9) continue;
+            const s = ((ax - x) * ez - (az - z) * ex) / den, w = ((ax - x) * nz - (az - z) * nx) / den;
+            if (s >= 0 && s <= L && w >= 0 && w <= 1 && s < best) best = s;
+          }
+    }
+    return best;
+  };
+  const seen = (x: number, z: number) => x > box.x0 - 40 && x < box.x1 + 40 && z > box.z0 - 40 && z < box.z1 + 40;
+  const S = 3; // (a sample every 3 m along the way)
+  const out: Road[] = [];
+  let changed = false;
+  for (const r of roads) {
+    if (!fit(r)) { out.push(r); continue; }
+    const parks = !!r.pk && r.pk !== NO_PARK, travel = parks ? r.w - PARK_W[r.pk! & 3] - PARK_W[(r.pk! >> 2) & 3] : r.w;
+    // (a canyon's street — fronts both sides — no narrower than a lane each way, a one-way's one; never
+    // a motorway's or a trunk road's: their lanes are mapped)
+    const big = /^(motorway|trunk)/.test(r.c), least = r.ow ? 3.6 : 5.6;
+    const gives = parks && travel < r.w && travel >= 3, canyon = !big && r.w > least;
+    if (!gives && !canyon) { out.push(r); continue; }
+    const n = r.p.length / 2, X = (i: number) => r.p[2 * i] / 10, Z = (i: number) => r.p[2 * i + 1] / 10;
+    const cum = [0];
+    for (let i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(X(i) - X(i - 1), Z(i) - Z(i - 1)));
+    const total = cum[n - 1], ns = Math.floor(total / S), reach = r.w / 2 + 1.5;
+    if (ns < 4) { out.push(r); continue; }
+    // each sample's room: the street as it is, its travel lanes where a front stands within 1.5 m past
+    // its kerb (the parking given back), and where fronts stand so both sides of what's left, the room
+    // between them less a 1.5 m sidewalk each side
+    const tight = new Uint8Array(ns), room = new Float32Array(ns).fill(r.w);
+    for (let k = 0, i = 0; k < ns; k++) {
+      const s = (k + 0.5) * S;
+      while (i < n - 2 && cum[i + 1] < s) i++;
+      const L = cum[i + 1] - cum[i];
+      if (L < 1e-6) continue;
+      const tx = (X(i + 1) - X(i)) / L, tz = (Z(i + 1) - Z(i)) / L, x = X(i) + tx * (s - cum[i]), z = Z(i) + tz * (s - cum[i]);
+      if (!seen(x, z)) continue;
+      const dl = ray(x, z, tz, -tx, reach), dr = ray(x, z, -tz, tx, reach);
+      let a = r.w;
+      if (gives && Math.min(dl, dr) < reach) a = travel;
+      if (canyon && dl < a / 2 + 1.5 && dr < a / 2 + 1.5) a = Math.max(least, Math.min(a, 2 * (Math.min(dl, dr) - 1.5)));
+      room[k] = a;
+      if (a < r.w - 0.05) tight[k] = 1;
+    }
+    // the tight stretches: gaps of 6 m or less closed, 12 m or more kept, a sample wider at each end
+    // (each stretch as wide as the narrowest fifth of its samples leave room for: a corner jutting out
+    // doesn't pinch the street, a row standing in it does)
+    const cuts: [number, number, number][] = [];
+    for (let k = 0; k < ns; ) {
+      if (!tight[k]) { k++; continue; }
+      let b = k, gap = 0;
+      for (let j = k + 1; j < ns && gap <= 2; j++) if (tight[j]) (b = j), (gap = 0); else gap++;
+      if (b - k + 1 >= 4) {
+        let s0 = (k - 1) * S, s1 = (b + 2) * S;
+        if (s0 < 6) s0 = 0;
+        if (s1 > total - 6) s1 = total;
+        const rs = Array.from(room.subarray(k, b + 1)).sort((u, v) => u - v), w = +rs[Math.floor(rs.length * 0.2)].toFixed(1);
+        const last = cuts[cuts.length - 1];
+        if (last && s0 <= last[1]) (last[1] = s1), (last[2] = Math.min(last[2], w));
+        else cuts.push([s0, s1, w]);
+      }
+      k = b + 1;
+    }
+    if (!cuts.length) { out.push(r); continue; }
+    changed = true;
+    // the point at s along the way, in the map's 0.1 m units (shared by the two parts it joins)
+    const at = (s: number): [number, number] => {
+      let i = 0;
+      while (i < n - 2 && cum[i + 1] < s) i++;
+      const L = cum[i + 1] - cum[i] || 1, t = Math.max(0, Math.min(1, (s - cum[i]) / L));
+      return [Math.round(r.p[2 * i] + (r.p[2 * i + 2] - r.p[2 * i]) * t), Math.round(r.p[2 * i + 1] + (r.p[2 * i + 3] - r.p[2 * i + 1]) * t)];
+    };
+    const part = (s0: number, s1: number, w = 0) => {
+      const p: number[] = [];
+      const add = (x: number, z: number) => { if (p.length < 2 || p[p.length - 2] !== x || p[p.length - 1] !== z) p.push(x, z); };
+      add(...at(s0));
+      for (let i = 0; i < n; i++) if (cum[i] > s0 && cum[i] < s1) add(r.p[2 * i], r.p[2 * i + 1]);
+      add(...at(s1));
+      if (p.length < 4) return;
+      const q: Road = { ...r, p };
+      if (w) (q.w = w), parks && (q.pk = NO_PARK);
+      out.push(q);
+    };
+    let s = 0;
+    for (const [s0, s1, w] of cuts) {
+      if (s0 > s) part(s, s0);
+      part(s0, s1, Math.min(w, parks ? +travel.toFixed(1) : w));
+      s = s1;
+    }
+    if (s < total) part(s, total);
+  }
+  return changed ? out : roads;
 }

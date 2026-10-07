@@ -46,6 +46,11 @@ terrain/DEM, or the LiDAR measure pipeline.
   compiled off the main thread, kept for good; `nextReady` takes the nearest queued tile that's ready).
 - **A tile mounted whole uploads a budget a frame** (`uploadQ`, `REVEAL_BYTES`/`REVEAL_OBJS` shared with the
   staged reveals): each mesh drawn once out of view, so none uploads at the first turn of the head.
+- **A far tile's small things aren't drawn** (`streamParams.smallCull`, the tier's `stream.smallCull`:
+  desktop 200, phone 120, low 90): an instanced mesh past its own size (`spanOf`: its model's radius at
+  its largest instance's scale) × smallCull from you, by its tile's nearest edge, goes on no layer —
+  mailboxes, hydrants, benches, plants, parked cars (Red Bank on a phone: 146 meshes, 5,845 of them);
+  a tree mesh spans its tallest tree, so the far woods stay. Re-checked each half second or 15 m.
 - **Collision tops.** A building walls up to its ridge (`Footprint.ridge`, buildings.ts `wallTop`); a small
   outline recorded without a top (a post, a car, a planter: under 8 m across) to 8 m over its ground
   (pack.ts `replayOp`'s `ground`); a trunk to its crown. A deck over them, and a car on it, pass.
@@ -80,7 +85,7 @@ terrain/DEM, or the LiDAR measure pipeline.
   server proxies `/__tiles/*` to whichever port answers and the game probes that first
   (`?tiles=` explicit overrides, `?tiles=off` disables; no worker → procedural past the bake
   + a toast).
-- Tile cache key: worker R2 `t/v24`, client `&v=24`, and the direct (Overpass) cache's `DIRECT_V` 24 in `tile.worker.ts` — bump all three together when realTile output changes (v24: `roof:levels` → `Building.rl`, its storeys counted in the height; v23: a bridge's `bridge:structure` → `Road.bs`, drawn by bridges.ts as a truss, an arch, a suspension or a cable-stayed span, and `bridge:movable` → `Road.bm`, a lift or swing span; and the micro layer's furniture — picnic tables, fire rings, grills, planters, boards, recycling, street cabinets, vending machines, clocks, seamarks; v7: named business nodes → `Building.n` / `Building.u`; the worker's Overpass query fetches `node[name][amenity|shop|office]`). **Redeploy the worker** (`cd worker && npx wrangler deploy`) for streamed towns to carry them.
+- Tile cache key: worker R2 `t/v25`, client `&v=25`, and the direct (Overpass) cache's `DIRECT_V` 25 in `tile.worker.ts` — bump all three together when realTile output changes. **Pending v26** (2026-10-07, needs Robby's go-ahead and a redeploy): osmToTile's one-way halves at their lanes' width, widths read in their units (feet), `location=underground` outlines skipped — the served v25 data is mended client-side meanwhile (tileBuild.ts `narrowOneWays`, `feetWidths`, `dropStreetCrossers`). (v25: motorway and trunk links are streets — every interchange keeps its ramps; v24: `roof:levels` → `Building.rl`, its storeys counted in the height; v23: a bridge's `bridge:structure` → `Road.bs`, drawn by bridges.ts as a truss, an arch, a suspension or a cable-stayed span, and `bridge:movable` → `Road.bm`, a lift or swing span; and the micro layer's furniture — picnic tables, fire rings, grills, planters, boards, recycling, street cabinets, vending machines, clocks, seamarks; v7: named business nodes → `Building.n` / `Building.u`; the worker's Overpass query fetches `node[name][amenity|shop|office]`). **Redeploy the worker** (`cd worker && npx wrangler deploy`) for streamed towns to carry them.
 - `?at=lat,lon` beyond every baked backdrop builds a virtual manifest (origin snapped to
   1/64° so players share cell/R2 keys) — `w-<cx>_<cz>` specs stream OSM→TileJson while `s-*`
   synth twins mount instantly and upgrade in place.

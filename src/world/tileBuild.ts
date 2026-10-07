@@ -9,23 +9,27 @@ import { buildProps } from './props';
 import { planInterior } from './interiors';
 import { RecWalk, packGroup, packDeck, type BuiltTile } from './pack';
 import { canvasBitmap } from './canvas';
-import { crossingPaint } from './kerbside';
+import { crossingPaint, fitToFronts } from './kerbside';
 import { buildStairs } from './stairs';
 import { buildMicro } from './micro';
 import { activeStyle } from './styles';
-import { narrowOneWays } from './realTile';
-import { fitUnderDecks } from './bridges';
+import { narrowOneWays, feetWidths } from './realTile';
+import { fitUnderDecks, dropStreetCrossers } from './bridges';
 import { shoreDocks } from './docks';
 import { beachCrowd } from './crowd';
 
 export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec, idBase: number, lite = false): Promise<BuiltTile> {
   narrowOneWays(tj0.roads); // (a divided road's one-way halves: their own lanes wide)
+  feetWidths(tj0.roads); // (a width tagged in feet, read as metres)
   // Tunnels leave here: no builder paints, furnishes, parks along, faces a door to or grows grass
   // round a road under the ground — only the life sim's cars take them (BuiltTile.tun)
   const tunnels = tj0.roads.filter((r) => r.tu);
-  const tj: TileJson = tunnels.length ? { ...tj0, roads: tj0.roads.filter((r) => !r.tu) } : tj0;
+  const tjT: TileJson = tunnels.length ? { ...tj0, roads: tj0.roads.filter((r) => !r.tu) } : tj0;
   // (none standing up through a bridge's deck)
-  tj.buildings = fitUnderDecks(tj.buildings, tj.roads, terrain);
+  tjT.buildings = dropStreetCrossers(fitUnderDecks(tjT.buildings, tjT.roads, terrain), tjT.roads);
+  // (a street's guessed parking given back where its fronts stand: no shop in the lane — kerbside.ts)
+  const fitted = lite ? tjT.roads : fitToFronts(tjT.roads, tjT.buildings, spec.box);
+  const tj: TileJson = fitted === tjT.roads ? tjT : { ...tjT, roads: fitted };
   const world: World = { json: tj as unknown as WorldJson, terrain };
   const w = new RecWalk(terrain, tj.backdrop);
   const bld = buildBuildings(world, idBase, lite);

@@ -202,7 +202,8 @@ const pois = [];
 const POI_KEYS = ['amenity', 'shop', 'tourism', 'leisure', 'club', 'historic', 'man_made', 'office', 'craft'];
 for (const e of els) {
   const t = e.tags ?? {};
-  if (t.building) {
+  // (a building under the ground — a station's halls, a garage — isn't built: realTile.ts the same)
+  if (t.building && !(t.location === 'underground' || (parseInt(t.layer) < 0 && !(parseInt(t['building:levels']) > 0)))) {
     const r = areaRings(e);
     if (r) osmBuildings.push({ ring: r.outer[0], tags: t });
   }
@@ -338,7 +339,7 @@ for (const e of els) {
   if (!inS && minor) continue;
   if (!pts.some(([x, z]) => inBox(B, x, z))) continue;
   if (!inS) pts = simplify(pts, 1.5);
-  let w = parseFloat(t.width) || ROAD_W[t.highway];
+  let w = parseLen(t.width) || ROAD_W[t.highway]; // (a width in feet — "69'6\"" — is 21 m: realTile.ts the same)
   if (t.highway === 'primary' && t.lanes) w = Math.max(w, parseInt(t.lanes) * 3.4 + 1.5);
   // a one-way half of a divided road: its own lanes wide, not a two-way road's (realTile.ts the same)
   if (!t.width && /^(yes|true|1|-1)$/.test(t.oneway ?? '') && ROAD_W[t.highway] >= 8) w = ((parseInt(t.lanes) || 0) > 0 ? parseInt(t.lanes) : t.highway === 'motorway' ? 3 : 2) * 3.2 + 1;
@@ -410,7 +411,7 @@ for (const e of els) {
   const pts = wayPts(e);
   if (!pts.some(([x, z]) => inBox(B, x, z))) continue;
   const l = { c, p: flat(pts) };
-  if (t.width) l.w = parseFloat(t.width);
+  if (t.width) l.w = parseLen(t.width);
   if (t.bridge) l.br = 1;
   lines.push(l);
 }

@@ -288,7 +288,9 @@ where the two disagree, the vision is the target and this file is the current st
     exact over the worker boundary) with square ends (`Deck.cut` — a round end hung over the
     sloping street; where two ways' pieces meet, both end along the drawn mitre; a cut deck reads
     its height at the nearest point of its centreline); parapets are walls a deck-high band; piers,
-    bascule piers, fenders and towers are walls below the deck. A mapped sidewalk alongside widens
+    bascule piers, fenders and towers are walls below the deck. A pier never stands in the way of what
+    passes under (`crossingsUnder`/`decksUnder`, kept with the profile): moved along its span up to
+    15 m to clear it, or left out. A mapped sidewalk alongside widens
     the deck (`deckEdges`).
   - What carries it (`carriedBy`, OSM `bridge:structure` → `Road.bs`, real-lite tiles only — the
     baked pack has none): girders on piers (beam, the default); through trusses (80 m spans);
@@ -298,6 +300,28 @@ where the two disagree, the vision is the target and this file is the current st
     `Road.bm`): a bascule's steel leaves, its piers, four tender houses (their lamps are `towers`)
     and timber fenders; a lift span's two towers and the machinery house over each; a swing span's
     rest piers, the round pier it turns on and the long fender along the river round that.
+- **Streets kept clear** (Robby, 2026-10-07: "the roads have walls or buildings in them"). Measured by
+  the playtest's `roads` check (tools/playtest.js `__ROADWALLS__`: every car street's travel lanes
+  sampled at its own surface for walls at a car's height, footprints and deck gaps). In the tile build
+  (tileBuild.ts), before any builder sees the roads:
+  - The tile service's widths mended: a divided road's one-way halves their own lanes wide
+    (realTile.ts `narrowOneWays`), a width tagged in feet read as feet (`feetWidths`).
+  - Buildings: a house under a bridge's deck held under it (`bridges.ts fitUnderDecks`, `Building.hy`),
+    the survey's blocks that were the deck dropped; a big outline a street runs through for 40 m — an
+    underground station's halls — dropped (`dropStreetCrossers`; realTile skips `location=underground`).
+  - **A street fitted to its fronts** (kerbside.ts `fitToFronts`): the tile service widens every
+    untagged North American street for a parked lane at each kerb (10.9 m residential); where a tile's
+    own street runs 12 m or more past mapped fronts within 1.5 m of its kerb, that stretch is cut out
+    and drawn at its travel lanes' width, its parking given back (`pk` = `NO_PARK`: no paint's default
+    parking, no shop-door cars, no kerb spaces); where fronts stand both sides closer than that (a
+    width tagged in feet), as wide as the room between them less a 1.5 m sidewalk each side, never under
+    a lane each way (3.6 m one-way, 5.6 m two-way), never a motorway or trunk. Only the tile's own ways,
+    from what it can see (its box + 40 m); a neighbour has the way whole at its first width as context
+    and keeps its things off that wider street, which is safe.
+  - Nothing set at a kerb in another street's lanes (kerbside.ts `carriageAt`): the survey's tree pits,
+    the city's street trees, their bins (one street's kerb is another's lane at a junction); no parked
+    car through a street, across two at a junction or across one's lanes (`streetThrough`), none on a
+    deck; walls to their own tops (streaming.md "Collision tops").
 
 ## Vehicles
 
