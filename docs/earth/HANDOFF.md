@@ -18,9 +18,19 @@ playtest (it found the 2.2 s shader freezes, now fixed: frames pass; flicker's s
 commit too — not chased), the soak (no stalls), the shader check on the GPU (27 programs, no errors),
 `mobile-check` on a Pixel 7 and an iPhone (running, no errors, every shader limit inside a phone's). And
 Robby's report the same morning — lag away from Sea Bright and after a teleport, walls and buildings in
-the roads on the Sandy Hook bridge and in towns — worked through (the new `roads` playtest check). Left
-from the list below: the audit48 montages, and walking the places (tools/critter-shots.mjs does the
-animals' part: `node tools/critter-shots.mjs` → shots/critters-handoff-montage.jpg).
+the roads on the Sandy Hook bridge and in towns — worked through (the new `roads` playtest check). The
+audit48 montages read the same day; the animals walked with tools/critter-shots.mjs
+(`node tools/critter-shots.mjs` → shots/critters-handoff-montage.jpg): all 18 found.
+
+**Then, the same day (LOG 2026-10-07 pm, eve, night):** the streets fitted to their buildings (the
+tile service's guessed parking given back where fronts stand), stations over streets lifted, streets
+under towers sunk, nothing set at a kerb in another street's lanes, the desert's measured crowns as
+trees; a city's frame (scene matrix, per-camera tile culling, the coarse ring merged, the painter's
+windows by grid) and the grass after a teleport. `smooth-and-clear` done. **To check a town's streets**:
+`node tools/playtest.mjs --at=LAT,LON --only=roads,drive,walkabout` (roads: hits a thousand lane
+samples — Asheville 0.85, Miami Beach 0.31, Midtown 1.4, Seattle 3.2, Chicago 7.3). What's left there is
+in the LOG's "Next" lines; the tile service's v26 (osmToTile's widths and underground outlines at the
+source) waits on Robby's go-ahead and a redeploy.
 
 The cloud session built packages #11–#16, the leftovers, the West's lizards, the water's life (seen
 from above) and each animal's abundance. They were checked with

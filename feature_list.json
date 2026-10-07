@@ -1926,7 +1926,7 @@
       "id": "smooth-and-clear",
       "tier": 1,
       "rank": 11.4,
-      "status": "in_progress",
+      "status": "done",
       "area": "perf",
       "title": "Smooth away from Sea Bright and after a teleport; streets and bridges clear of walls, buildings and parked cars",
       "user_visible_behavior": "Walk, drive or teleport anywhere — on a phone too — without the frame stalling as new places come in; drive over the Sandy Hook (Route 36) bridge, the Rumson bridge and through a town's streets without a wall, a building, a tree or a parked car standing in the lanes or across a side street's mouth.",
@@ -1945,7 +1945,7 @@
         "2026-10-07 eve (docs/earth/LOG.md \"A city's frame\"): scene.matrixAutoUpdate off, per-camera tile culling (stream.ts cullTiles), the coarse ring's like meshes merged and empties dropped (pack.ts mergeLike/dropEmpty), the painter's windows by grid (groundPaint.ts inWindow); Asheville desktop p50 24.9 → 19.2 ms; shore playtest frames 16.7 ms p50/p95/p99; phone after a teleport (CPU 4×) p50 28 ms (was 129 before the day's fixes)",
         "2026-10-07 night (docs/earth/LOG.md \"The big cities' streets\"): stations over streets lifted, streets under towers / upper streets sunk to tunnels, parked cars and tree pits out of other streets' lanes and off decks; roads check hits per thousand: Chicago 20.2 → 7.3, Asheville 2.9 → 0.85, Miami Beach 3.5 → 0.31, Seattle 5.1 → 4.3; shore PASS 11/11"
       ],
-      "notes": "Robby, 2026-10-07: \"on mobile sea bright my game runs smooth at high fps but when going away from sea bright or telelporting it starts to really lag in the game, pleasse optimize performance where possible, also going over sandy hook bridge and driving through main cities sometimes the roads have walls or buidlings in them where they are not supposed to we need to make sure the streets and city traversing via car and on foot all work as it should\". Still open (LOG 2026-10-07 pm \"Next\"): outlines across a street's centre line, piers and low decks over a street, the tile service's v26 (needs the go-ahead), Asheville's desktop frames."
+      "notes": "Robby, 2026-10-07: \"on mobile sea bright my game runs smooth at high fps but when going away from sea bright or telelporting it starts to really lag in the game, pleasse optimize performance where possible, also going over sandy hook bridge and driving through main cities sometimes the roads have walls or buidlings in them where they are not supposed to we need to make sure the streets and city traversing via car and on foot all work as it should\". Still open (LOG 2026-10-07 pm \"Next\"): outlines across a street's centre line, piers and low decks over a street, the tile service's v26 (needs the go-ahead), Asheville's desktop frames. Done 2026-10-07: verification met (shore playtest frames 16.7 ms p50/p95/p99, roads 1.28; the cities' roads checks; the phone after a teleport p50 28 ms). Left (LOG 2026-10-07 night \"Next\"): Chicago's remaining walls, small outlines mapped in streets, the frame after a teleport's arrival (the paint windows' whole-canvas upload), the relief swaps' one-frame mount, the tile service's v26."
     },
     {
       "id": "regional-flora",
