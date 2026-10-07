@@ -32,10 +32,21 @@ CPU").
 
 **Verified:** typecheck; `npm test` 1041/1041 (new: pack's mergeLike/dropEmpty, groundPaint's inWindow); the shore's full playtest PASS 11/11; the matrix and the culling checks above.
 
-**Next (the load after a teleport, phone):** the teleport's own frame (~600 ms at CPU 4×, mostly the
-spawn's ground mounted whole and the old place torn down), the grass's cells (a pump step up to ~200 ms
-just after: its tufts ask the walk world while the old place's walls are still being purged), a tile's
-synchronous mounts (120–180 ms); the city's remaining per-draw cost (Asheville's 387 tree meshes in view).
+- **The grass after a teleport** (each step of its cell builds timed on the phone): a cell's first step —
+  before its first row of tufts — took up to 270 ms. Its tree shade (`nearTrees.crownsNear`) asked
+  `treeMeta` for each species a tile brought, which grows the whole model on the main thread (up to
+  187 ms a call): the crown radius now comes off the far mesh's own model, its trees by 32 m cell. Its
+  paint mask repainted every 20 m cell on its own: now cut from a 60 m block painted once at 2 px/m for
+  nine, kept until the paint changes within 120 m (the masks match the per-cell ones but for 0.8% of
+  edge pixels); the merged areas' sort no longer asks `indexOf` per comparison. The grass's masks 956 →
+  382 ms over the load's first 20 s (more cells built, 106 against 84), its worst step 270 → 79 ms.
+  The phone's load after a teleport: p95 134 → 113–123 ms, 441 → 486–529 frames in its 25 s.
+
+**Next (the load after a teleport, phone):** the teleport's own frame (~550 ms at CPU 4×, mostly the
+spawn's ground mounted whole and the old place torn down), the relief swaps (a tile rebuilt with its
+ground's relief lands whole in one frame: 120–180 ms — its footprint and interior keys are the flat
+copy's, so it unloads that first; staging it wants keys of its own), a 60 m mask block's paint (~77 ms
+at 4×); the city's remaining per-draw cost (Asheville's 387 tree meshes in view).
 
 ## 2026-10-07 (pm) — Streets fitted to their buildings; the desert's crowns as trees; a phone's far small things
 

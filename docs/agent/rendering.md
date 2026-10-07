@@ -497,6 +497,12 @@ lays the surface between it:
 
 - `src/world/grass.ts` — player-centred tuft cells, masked by `GroundPaint.grassMask` (grows
   only where the painted ground is open/green). Walks start at today's sunrise (`?hour=`).
+  - A 20 m cell's mask is cut from its 60 m block's, painted once at 2 px/m for the block's nine cells
+    and kept until the paint changes within 120 m of it (a tile set or dropped, its walks); any other
+    window (the understory's 16 m) is painted on its own at 4 px/m. Its trees' shade asks the near trees'
+    `crownsNear`: each far mesh's trees by 32 m cell, its crown radius off its own model (asking
+    `treeMeta` grew a species' whole model on the main thread). After a teleport the phone's grass
+    built its first ~90 cells in a third of the time, its worst step 270 → 79 ms (CPU 4×).
   Each tuft has a kind (`aKind`, a per-cell copy of the tuft geometry; `wildTuft` decides, pure): 0
   grass; 1 and 2 the prairie's big and little bluestem (`flora.ts prairieMix`: blue-green, copper-red or
   orange as `uTurn` rises, bronze-tan with `uLeafFall`; the big one 1.6× taller); 3 smooth cordgrass on

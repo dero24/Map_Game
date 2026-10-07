@@ -19,10 +19,12 @@
 // leafAtlasJob); until they're done every tree draws from its far mesh.
 import * as THREE from 'three';
 import { probeGeometry } from '../render/probe';
-import { NEAR_KINDS, TREE_KINDS, nearTreeLib, crownField, CARD_STRIDE, leafAtlasJob, cardFlags, hasNear, treeMeta, type TreeKind } from '../assets/flora';
+import { NEAR_KINDS, TREE_KINDS, nearTreeLib, crownField, CARD_STRIDE, leafAtlasJob, cardFlags, hasNear, type TreeKind } from '../assets/flora';
 import { propMaterial, TREE_LOD_U, TREE_MASK_U } from '../render/propMaterial';
 import { leafCardGeometry, leafCardMaterial, leafTexture, CARD_ATTRS } from '../render/leafCards';
 import type { TreeTier } from '../render/quality';
+/** The cell (m) a far mesh's trees are indexed by for crownsNear. */
+const CROWN_CELL = 32;
 
 /** A tile's far tree mesh this layer can take trees from. */
 interface Far { im: THREE.InstancedMesh; kind: TreeKind; v: number; near: THREE.InstancedBufferAttribute; box: [number, number, number, number] }
@@ -124,15 +126,35 @@ export class NearTrees {
       for (const f of fars) {
         const b = f.box;
         if (f.kind === 'shrub' || b[0] - r > x || b[2] + r < x || b[1] - r > z || b[3] + r < z) continue;
-        const e = f.im.instanceMatrix.array as Float32Array, cr = treeMeta(f.kind, f.v).crownR;
-        for (let i = 0; i < f.im.count; i++) {
-          const o = i * 16, tx = e[o + 12], tz = e[o + 14];
-          if (Math.abs(tx - x) > r || Math.abs(tz - z) > r) continue;
-          const sx = Math.hypot(e[o], e[o + 1], e[o + 2]);
-          if (sx > 0) out.push({ x: tx, z: tz, r: cr * sx });
-        }
+        const e = f.im.instanceMatrix.array as Float32Array, { cr, cells } = this.crownIndex(f.im);
+        for (let ci = Math.floor((x - r) / CROWN_CELL); ci <= Math.floor((x + r) / CROWN_CELL); ci++)
+          for (let cj = Math.floor((z - r) / CROWN_CELL); cj <= Math.floor((z + r) / CROWN_CELL); cj++)
+            for (const i of cells.get(ci * 1048576 + cj) ?? []) {
+              const o = i * 16, tx = e[o + 12], tz = e[o + 14];
+              if (Math.abs(tx - x) > r || Math.abs(tz - z) > r) continue;
+              const sx = Math.hypot(e[o], e[o + 1], e[o + 2]);
+              if (sx > 0) out.push({ x: tx, z: tz, r: cr * sx });
+            }
       }
     return out;
+  }
+  // (a far mesh's crown radius at scale 1, off its own model — treeMeta here grew the species' whole
+  // model on the main thread the first time it was asked, 190 ms a kind on a phone after a teleport —
+  // and its trees by cell: the grass asks about a 30 m circle, not a tile's thousands)
+  private crowns = new WeakMap<THREE.InstancedMesh, { cr: number; cells: Map<number, number[]> }>();
+  private crownIndex(im: THREE.InstancedMesh) {
+    let q = this.crowns.get(im);
+    if (!q) {
+      const g = im.geometry;
+      if (!g.boundingBox) g.computeBoundingBox();
+      const bb = g.boundingBox!, cells = new Map<number, number[]>(), e = im.instanceMatrix.array as Float32Array;
+      for (let i = 0; i < im.count; i++) {
+        const k = Math.floor(e[i * 16 + 12] / CROWN_CELL) * 1048576 + Math.floor(e[i * 16 + 14] / CROWN_CELL);
+        (cells.get(k) ?? cells.set(k, []).get(k)!).push(i);
+      }
+      this.crowns.set(im, (q = { cr: Math.max(-bb.min.x, bb.max.x, -bb.min.z, bb.max.z), cells }));
+    }
+    return q;
   }
 
   /** The mask pass for the metrics: only the tree standing within r of (x, z), drawn flat — its

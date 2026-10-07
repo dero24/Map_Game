@@ -37,6 +37,8 @@ const AREA_FILL: Record<string, string> = {
   bare: '#cbbb93', pier: '#9c8466',
 };
 const AREA_ORDER = ['wood', 'scrub', 'wetland', 'grass', 'golf', 'commercial', 'bare', 'beach', 'pitch', 'marina', 'parking', 'plaza', 'pier', 'pool'];
+// (its index by kind: the merged lists' sort asked AREA_ORDER.indexOf twice a comparison, every tile mount)
+const AREA_RANK = new Map<string, number>(AREA_ORDER.map((c, i) => [c, i]));
 // The ground underfoot (groundCover.ts). Yards: a mown lawn, white gravel, crushed shell.
 const YARD_PAINT: Record<Yard, string> = { lawn: '#93a964', gravel: '#b9b4a9', shell: '#ddd5c2' };
 // Loose stone (a gravel or shell yard, a gravel drive) is marked in the fine window's alpha: the
@@ -463,7 +465,7 @@ export class Painter {
     if (!m.areas) {
       const extra: Prepared<Area>[] = [];
       for (const t of this.tilesOf(key)) extra.push(...t.areas);
-      m.areas = !extra.length ? this.areas : [...this.areas, ...extra].sort((a, b) => AREA_ORDER.indexOf(a.item.c) - AREA_ORDER.indexOf(b.item.c));
+      m.areas = !extra.length ? this.areas : [...this.areas, ...extra].sort((a, b) => (AREA_RANK.get(a.item.c) ?? -1) - (AREA_RANK.get(b.item.c) ?? -1));
     }
     return inWindow(m.areas, x0, z0, x1, z1);
   }
@@ -1609,27 +1611,60 @@ export function paintGround(world: World, maxTex: number, walks: number[] = [], 
   const mc = document.createElement('canvas');
   mc.width = mc.height = 80; // 4 px/m over a 20 m grass cell
   const mctx = mc.getContext('2d', { willReadFrequently: true })!;
-  const grassMask = (x0: number, z0: number, size: number) => {
-    const res = mc.width, k = res / size;
-    mctx.setTransform(1, 0, 0, 1, 0, 0);
-    mctx.clearRect(0, 0, res, res);
-    mctx.setTransform(k, 0, 0, k, -x0 * k, -z0 * k);
-    painter.paint(mctx, x0, z0, x0 + size, z0 + size, k, 2);
-    const d = mctx.getImageData(0, 0, res, res).data;
+  // the open land of a window, 4 px/m: unpainted (the land-cover wash: lawns in town) or a green wash
+  // (grass, park, golf, scrub, wood) — 1; what's paved, built or water — 0
+  const openOf = (ctx: CanvasRenderingContext2D, res: number, x0: number, z0: number, size: number) => {
+    const k = res / size;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, res, res);
+    ctx.setTransform(k, 0, 0, k, -x0 * k, -z0 * k);
+    painter.paint(ctx, x0, z0, x0 + size, z0 + size, k, 2);
+    const d = ctx.getImageData(0, 0, res, res).data;
     const out = new Uint8Array(res * res);
     for (let i = 0; i < out.length; i++) {
       const a = d[i * 4 + 3];
-      if (a < 50) { out[i] = 1; continue; } // unpainted: the land-cover wash (lawns in town)
+      if (a < 50) { out[i] = 1; continue; }
       const r = d[i * 4], g = d[i * 4 + 1], b = d[i * 4 + 2];
-      out[i] = g > r + 4 && g > b + 10 ? 1 : 0; // a green wash (grass/park/golf/scrub/wood)
+      out[i] = g > r + 4 && g > b + 10 ? 1 : 0;
     }
-    return { res, data: out };
+    return out;
+  };
+  // A 20 m cell on the 20 m lattice (the grass's) is cut from its 60 m block's mask, at 2 px/m (its tufts
+  // half a metre apart), the block painted once for its nine: each cell's own paint at 4 px/m paid the
+  // painter's setup and four times the pixels — after a teleport the grass's ~90 new cells' masks were a
+  // second of a phone's CPU. A block is kept until the paint changes within reach of it (a tile set or
+  // dropped, its walks: the painter looks 100 m out).
+  const BLOCK = 60, BPX = 2, CRES = 20 * BPX, blkCv = document.createElement('canvas');
+  blkCv.width = blkCv.height = BLOCK * BPX;
+  const blkCtx = blkCv.getContext('2d', { willReadFrequently: true })!;
+  const blocks = new Map<string, { x: number; z: number; m: Uint8Array }>();
+  const tileBox = new Map<string, [number, number, number, number]>();
+  const forget = (b?: readonly number[]) => {
+    if (!b) return blocks.clear();
+    for (const [k, q] of blocks) if (q.x < b[2] + 120 && q.x + BLOCK > b[0] - 120 && q.z < b[3] + 120 && q.z + BLOCK > b[1] - 120) blocks.delete(k);
+  };
+  const walksBox = (w: number[]) => {
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (let i = 0; i + 4 < w.length; i += 5) (x0 = Math.min(x0, w[i], w[i + 2])), (x1 = Math.max(x1, w[i], w[i + 2])), (z0 = Math.min(z0, w[i + 1], w[i + 3])), (z1 = Math.max(z1, w[i + 1], w[i + 3]));
+    return x0 <= x1 ? [x0, z0, x1, z1] : undefined;
+  };
+  const grassMask = (x0: number, z0: number, size: number) => {
+    if (size !== 20 || x0 % 20 !== 0 || z0 % 20 !== 0) return { res: mc.width, data: openOf(mctx, mc.width, x0, z0, size) };
+    const bx = Math.floor(x0 / BLOCK) * BLOCK, bz = Math.floor(z0 / BLOCK) * BLOCK, key = `${bx},${bz}`;
+    let b = blocks.get(key);
+    if (!b) {
+      if (blocks.size >= 48) blocks.delete(blocks.keys().next().value!);
+      blocks.set(key, (b = { x: bx, z: bz, m: openOf(blkCtx, blkCv.width, bx, bz, BLOCK) }));
+    }
+    const W = blkCv.width, ox = (x0 - bx) * BPX, oz = (z0 - bz) * BPX, out = new Uint8Array(CRES * CRES);
+    for (let j = 0; j < CRES; j++) out.set(b.m.subarray((oz + j) * W + ox, (oz + j) * W + ox + CRES), j * CRES);
+    return { res: CRES, data: out };
   };
   return {
     slice: makeTex(sc), backdrop: makeTex(bc), sliceCanvas: sc, detail, mid, grassMask,
-    addWalks: (w: number[], id?: string) => painter.addWalks(w, id),
-    setTile: (id, roads, rings, box, fronts, areas, weights, xing) => { painter.setTile(id, roads, rings, box, fronts, areas, weights, xing); detail.touch(box); mid.touch(box); },
-    dropTile: (id) => painter.dropTile(id),
-    setPads: (id, pads, box) => { painter.setPads(id, pads, box); if (pads.length) { detail.touch(box); mid.touch(box); } },
+    addWalks: (w: number[], id?: string) => { forget(walksBox(w) ?? (id !== undefined ? tileBox.get(id) : undefined)); painter.addWalks(w, id); },
+    setTile: (id, roads, rings, box, fronts, areas, weights, xing) => { tileBox.set(id, box); forget(box); painter.setTile(id, roads, rings, box, fronts, areas, weights, xing); detail.touch(box); mid.touch(box); },
+    dropTile: (id) => { forget(tileBox.get(id)); tileBox.delete(id); painter.dropTile(id); },
+    setPads: (id, pads, box) => { painter.setPads(id, pads, box); if (pads.length) { forget(box); detail.touch(box); mid.touch(box); } },
   };
 }
