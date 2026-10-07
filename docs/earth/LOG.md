@@ -23,6 +23,11 @@ Midtown 0.8 hits a thousand lane samples, Miami Beach 3.5, Seattle 5.1, Ashevill
 - **Parked cars in other streets' lanes**: a kerb car (and a shop door's) never stands in another car
   street's carriageway at its level or above (props.ts `inOthers`) — a slip road's, the street over a
   lower one's; **tree pits on a viaduct's deck** (Park Avenue's around Grand Central): none on a deck.
+- **Posts in other streets' lanes** (Seattle): a city's lamp masts set 1.2 m past one street's kerb, a
+  utility pole slid along it, a mapped lamp put back on its kerb — all stood in the street they met at a
+  junction; a streetcar's poles 3.4–5.2 m off its track stood in its own street's lanes (Westlake's). None
+  now in any carriageway (kerbside.ts `carriageAt`); the tram's poles reach out to 9.5 m for the kerb.
+  Seattle 4.3 → 3.2, Chicago's deck walls 17 → 9.
 - After: Chicago 20.2 → 7.3, Asheville 2.9 → 0.85 (passes), Miami Beach 3.5 → 0.31 (passes), Seattle 5.1
   → 4.3, Midtown 0.8–1.4 with Park Avenue's deck clear; the shore's playtest PASS 11/11 (frames max 33 ms).
   Wabash under its lifted canopy and Illinois Center's towers looked at: right. Chicago's drive still
@@ -32,8 +37,10 @@ Midtown 0.8 hits a thousand lane samples, Miami Beach 3.5, Seattle 5.1, Ashevill
 **Verified:** typecheck; `npm test` 1043/1043 (roadsClear: the platform, the lane canopy, the sunk
 streets); the shore's full playtest PASS 11/11; the cities' checks above.
 
-**Next:** Chicago's remaining walls (bus stops and posts in Michigan's and Madison's lanes, lamp masts,
-iron fences mapped along kerbs), Seattle's 123 walls; the drive check's start (a car not boxed in).
+**Next:** Chicago's remaining walls (bus stops in Michigan's and Madison's lanes, iron fences mapped along
+kerbs, its bridges' decks), Seattle's market crowd on Pike Place (by design) and small outlines mapped in
+a street (3rd Avenue's, Virginia Street's: kept, houses and sheds aren't lifted); the drive check's start
+(a car not boxed in at a kerb).
 
 ## 2026-10-07 (eve) — A city's frame: what three.js walks, cut; the painter's small windows
 

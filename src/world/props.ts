@@ -499,10 +499,11 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         let x = ax + tx * s + nx * off, z = az + tz * s + nz * off;
         s += spacing;
         if (!inSlice(x, z, 20) || terrain.sdfAt(x, z) < 1.5) { prev = null; continue; }
-        // a porch, a sign or a wall where the pole would go: slide it a few metres along the kerb;
-        // failing that, skip it and let the wires span to the next pole (a gap, not a dead end)
-        if (walk.blocked(x, z, 0.8)) {
-          const alt = [-4, 4, -8, 8].find((d) => !walk.blocked(x + tx * d, z + tz * d, 0.8));
+        // a porch, a sign or a wall where the pole would go — or another street's lanes, at a junction:
+        // slide it a few metres along the kerb; failing that, skip it and let the wires span to the next
+        // pole (a gap, not a dead end)
+        if (walk.blocked(x, z, 0.8) || lanesAt(x, z, 0.4)) {
+          const alt = [-4, 4, -8, 8].find((d) => !walk.blocked(x + tx * d, z + tz * d, 0.8) && !lanesAt(x + tx * d, z + tz * d, 0.4));
           if (alt === undefined) { if (prev && Math.hypot(prev.top.x - x, prev.top.z - z) > 80) prev = null; continue; }
           (x += tx * alt), (z += tz * alt);
         }
@@ -514,7 +515,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
           const off2 = r.w / 2 + 1.2;
           for (const [px, pz, sd] of [[ax + tx * (s - spacing) + nx * off2 * side, az + tz * (s - spacing) + nz * off2 * side, side], [ax + tx * (s - spacing * 1.5) - nx * off2 * side, az + tz * (s - spacing * 1.5) - nz * off2 * side, -side]] as const) {
             if (s - spacing * 1.5 < 0 && sd !== side) continue;
-            if (!inSlice(px, pz, 20) || terrain.sdfAt(px, pz) < 1.5 || walk.blocked(px, pz, 0.6) || lampNear(px, pz)) continue;
+            if (!inSlice(px, pz, 20) || terrain.sdfAt(px, pz) < 1.5 || walk.blocked(px, pz, 0.6) || lampNear(px, pz) || lanesAt(px, pz, 0.4)) continue;
             const gp = terrain.heightAt(px, pz), dir = -sd;
             mastMats.push(new THREE.Matrix4().compose(V(px, gp, pz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -ang), V(1, 1, 1)));
             armMats.push(new THREE.Matrix4().compose(V(px, gp, pz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), -ang + (dir > 0 ? Math.PI : 0)), V(1, 1, 1)));
@@ -584,6 +585,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       const back = best < 20 && best < bw / 2 + 0.3 ? best - bw / 2 - 0.6 : 0;
       const lx = p.x + dx * back, lz = p.z + dz * back;
       if (back && (walk.blocked(lx, lz, 0.25) || terrain.sdfAt(lx, lz) < 1)) continue;
+      if (lanesAt(lx, lz, 0.3)) continue; // (back on its kerb, and still in a street's lanes: another's, at a junction)
       const g = terrain.heightAt(lx, lz), yaw = Math.atan2(dx, dz);
       mastMats.push(new THREE.Matrix4().compose(V(lx, g, lz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, 1)));
       armMats.push(new THREE.Matrix4().compose(V(lx, g, lz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(1, 1, 1)));
@@ -645,7 +647,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     if (l.c !== 'tram' && l.c !== 'trolley') continue;
     const tram = l.c === 'tram', w = l.w ?? 9;
     const offs = tram ? [0] : [-w / 4 - 0.3, -w / 4 + 0.3, w / 4 - 0.3, w / 4 + 0.3];
-    const poleOffs = tram ? [4.2, 5.2, 3.4] : [w / 2 + 0.6, w / 2 + 1.3];
+    // (a tram's poles at the kerb, past the street's lanes — Westlake's streetcar stood them in its lanes)
+    const poleOffs = tram ? [4.2, 5.2, 3.4, 6.5, 8, 9.5] : [w / 2 + 0.6, w / 2 + 1.3];
     const pts = unpackPts(l.p);
     let carry = 12, prevTops: THREE.Vector3[] | null = null;
     for (let i = 0; i + 1 < pts.length; i++) {
@@ -684,7 +687,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         // the pole stands off the track at the kerb side, its arm reaching back over the wire
         for (const off of poleOffs) {
           const px = cx + nx * off, pz = cz + nz * off;
-          if (!inSlice(px, pz, 10) || walk.blocked(px, pz, 0.4) || terrain.sdfAt(px, pz) < 1) continue;
+          if (!inSlice(px, pz, 10) || walk.blocked(px, pz, 0.4) || terrain.sdfAt(px, pz) < 1 || lanesAt(px, pz, 0.3)) continue;
           tramMats.push(new THREE.Matrix4().compose(V(px, terrain.heightAt(px, pz), pz), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(-nx, -nz)), V(1, 1, off / 4.2)));
           walk.addLoop([[px - 0.14, pz - 0.14], [px + 0.14, pz - 0.14], [px + 0.14, pz + 0.14], [px - 0.14, pz + 0.14]]);
           break;
