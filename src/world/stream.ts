@@ -57,6 +57,37 @@ export function spanOf(im: THREE.InstancedMesh) {
   for (let i = 0; i + 15 < e.length; i += 16) s2 = Math.max(s2, e[i] * e[i] + e[i + 1] * e[i + 1] + e[i + 2] * e[i + 2], e[i + 4] * e[i + 4] + e[i + 5] * e[i + 5] + e[i + 6] * e[i + 6], e[i + 8] * e[i + 8] + e[i + 9] * e[i + 9] + e[i + 10] * e[i + 10]);
   return (g.boundingSphere?.radius ?? Infinity) * Math.sqrt(s2 || 1);
 }
+/** Grows a tile's extent (region coordinates, under its group) by an object's bounds: each mesh's bounding
+ *  sphere — worked out now if three.js hasn't yet (it would the first frame the mesh is drawn) — placed by
+ *  its matrices up to the tile's group. False for one it can't bound: that tile is never culled whole. */
+function growBounds(box: THREE.Box3, root: THREE.Object3D, o: THREE.Object3D): boolean {
+  let ok = true;
+  o.traverse((m) => {
+    const im = m as THREE.InstancedMesh, g = (m as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
+    if (!ok || !g) return;
+    let sp: THREE.Sphere | null;
+    if (im.isInstancedMesh) {
+      if (!im.count) return;
+      if (!im.boundingSphere) im.computeBoundingSphere();
+      sp = im.boundingSphere;
+    } else {
+      if (!g.attributes.position?.count) return;
+      if (!g.boundingSphere) g.computeBoundingSphere();
+      sp = g.boundingSphere;
+    }
+    if (!sp || !Number.isFinite(sp.radius) || sp.radius < 0) { ok = false; return; }
+    _bs.copy(sp);
+    for (let p: THREE.Object3D | null = m; p && p !== root; p = p.parent) {
+      if (p.matrixAutoUpdate) p.updateMatrix();
+      _bs.applyMatrix4(p.matrix);
+    }
+    box.expandByPoint(_bv.set(_bs.center.x - _bs.radius, _bs.center.y - _bs.radius, _bs.center.z - _bs.radius));
+    box.expandByPoint(_bv.set(_bs.center.x + _bs.radius, _bs.center.y + _bs.radius, _bs.center.z + _bs.radius));
+  });
+  return ok;
+}
+const _bs = new THREE.Sphere();
+const _bv = new THREE.Vector3();
 /** Vertex (and instance) data under a group, bytes — what it costs the GPU and the page, each. */
 function vertexBytes(root: THREE.Object3D) {
   let n = 0;
@@ -184,6 +215,9 @@ export class TileStream {
   // frame, so none waits to upload until the first time it comes into view (a turn of the head on
   // the shore was 265 meshes, 150 ms, at once)
   private uploadQ: THREE.Object3D[] = [];
+  private mustDraw = new Set<THREE.Object3D>(); // (tiles with a mesh uploading this frame: never culled whole)
+  private cullHidden: THREE.Object3D[] = [];
+  private cullBox = new THREE.Box3();
   /** Where the last detail mount's time went, ms (tools/hitch-probe.js, soak). */
   lastMount: { id: string; collision: number; objects: number; retire: number; hooks: number } | null = null;
   private lampTex: THREE.CanvasTexture | null = null;
@@ -560,6 +594,27 @@ export class TileStream {
     }
   }
 
+  /** Each tile wholly outside a camera's frustum hidden for that one render (main.ts: the scene's
+   *  onBeforeRender, `off` the world's offset) — three.js then never walks it object by object, a fifth
+   *  of a city's frame for the shadow pass and the view each — and shown again after (uncullTiles). A tile
+   *  with a mesh uploading this frame is drawn whatever (reveal). */
+  cullTiles(frustum: THREE.Frustum, off: THREE.Vector3) {
+    this.uncullTiles(); // (a render that threw never showed its own again)
+    const test = (g: THREE.Group) => {
+      const b = g.userData.bounds as THREE.Box3 | undefined;
+      if (!b || !g.visible || this.mustDraw.has(g)) return;
+      if (frustum.intersectsBox(this.cullBox.copy(b).translate(off))) return;
+      g.visible = false;
+      this.cullHidden.push(g);
+    };
+    for (const a of this.loaded.values()) test(a.group);
+    for (const c of this.coarseLoaded.values()) test(c.group);
+  }
+  uncullTiles() {
+    for (const g of this.cullHidden) g.visible = true;
+    this.cullHidden.length = 0;
+  }
+
   /** The far tiles' small things out of the frame (streamParams.smallCull): each instanced mesh past its
    *  own size × smallCull from you, by its tile's nearest edge, is on no layer (drawn by no camera);
    *  back as you come. A half-second's pass, or each 15 m walked. */
@@ -903,14 +958,22 @@ export class TileStream {
       group.matrixWorldNeedsUpdate = true; // (worked out once, under the world's offset, and its objects with it)
       const atlasTex = tile.atlas ? signTexture(tile.atlas) : undefined;
       group.userData.atlas = atlasTex; // (freed with the tile: dispose)
+      const bounds = new THREE.Box3();
+      let bounded = true;
       for (let i = 0; i < tile.objs.length; i++) {
         const o = buildObject(tile.objs[i], atlasTex);
         if ((o as THREE.InstancedMesh).isInstancedMesh) o.userData.span = spanOf(o as THREE.InstancedMesh); // (smallCull)
         group.add(o);
+        bounded = growBounds(bounds, group, o) && bounded; // (cullTiles)
         if (i % 48 === 47) { lap(); yield; at = performance.now(); }
       }
-      group.add(haloPoints(v3s(tile.lanterns), 7, new THREE.Color(1.0, 0.85, 0.55)));
-      group.add(haloPoints(v3s(tile.towers), 1.2, new THREE.Color(1.0, 0.75, 0.45)));
+      // (none for a tile without lanterns or towers: an empty one was a draw's setup in view)
+      for (const h of [tile.lanterns.length ? haloPoints(v3s(tile.lanterns), 7, new THREE.Color(1.0, 0.85, 0.55)) : null, tile.towers.length ? haloPoints(v3s(tile.towers), 1.2, new THREE.Color(1.0, 0.75, 0.45)) : null]) {
+        if (!h) continue;
+        group.add(h);
+        bounded = growBounds(bounds, group, h) && bounded;
+      }
+      if (bounded && !bounds.isEmpty()) group.userData.bounds = bounds;
       const bytes = vertexBytes(group) + (tile.atlas ? tile.atlas.width * tile.atlas.height * 4 * 1.33 : 0); // (a phone's budget)
       this.sizes.set(spec.id, bytes);
       this.unloadCoarse(spec.id, retire); // seamless upgrade — detail replaces the silhouette only once ready
@@ -1189,8 +1252,10 @@ export class TileStream {
       const atlasTex = tile.atlas ? signTexture(tile.atlas) : undefined;
       group.userData.atlas = atlasTex;
       for (const o of tile.objs) group.add(buildObject(o, atlasTex));
-      group.add(haloPoints(v3s(tile.lanterns), 7, new THREE.Color(1.0, 0.85, 0.55)));
-      group.add(haloPoints(v3s(tile.towers), 1.2, new THREE.Color(1.0, 0.75, 0.45)));
+      if (tile.lanterns.length) group.add(haloPoints(v3s(tile.lanterns), 7, new THREE.Color(1.0, 0.85, 0.55)));
+      if (tile.towers.length) group.add(haloPoints(v3s(tile.towers), 1.2, new THREE.Color(1.0, 0.75, 0.45)));
+      const bounds = new THREE.Box3();
+      if (growBounds(bounds, group, group) && !bounds.isEmpty()) group.userData.bounds = bounds; // (cullTiles)
       this.scene.add(group);
       this.uploadSoon(group);
       const bytes = streamParams.coarseMB > 0 ? vertexBytes(group) : 0;
@@ -1267,6 +1332,9 @@ export class TileStream {
       weigh(m);
       if (m.frustumCulled) { m.frustumCulled = false; this.culled.push(m); }
     }
+    // (their tiles drawn whole this frame, wherever the camera looks: cullTiles)
+    this.mustDraw.clear();
+    for (const m of this.culled) { let p = m.parent; while (p && p.parent !== this.scene) p = p.parent; if (p) this.mustDraw.add(p); }
     const r = this.reveals[0];
     if (!r) return;
     while (r.hidden.length && budget > 0 && n++ < REVEAL_OBJS) {

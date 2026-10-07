@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Painter, DetailGround, slices } from '../src/world/groundPaint';
+import { Painter, DetailGround, slices, inWindow } from '../src/world/groundPaint';
 import { LANE, COVERS, laneLayout, wheelPaths } from '../src/world/groundCover';
 import { lotLayout } from '../src/world/lots';
 import type { Road, WorldJson, TerrainLayer } from '../src/world/data';
@@ -504,3 +504,27 @@ describe('the street as traffic wears it', () => {
   });
 });
 const KERB_GUTTER = 0.6;
+
+describe('inWindow', () => {
+  // (the painter's lists by 64 m cell: a 20 m grass mask asked the whole of a 1 km tile's footprints)
+  it("gives every item within 100 m of the window, in the list's order; a long one always; a wide window the list itself", () => {
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const list = Array.from({ length: 600 }, (_, i) => {
+      const x = rnd() * 3000 - 1500, z = rnd() * 3000 - 1500, w = i % 50 === 0 ? 1800 : rnd() * 40, d = i % 50 === 0 ? 30 : rnd() * 40;
+      return { x0: x, z0: z, x1: x + w, z1: z + d, i };
+    });
+    for (let k = 0; k < 200; k++) {
+      const x0 = rnd() * 3000 - 1500, z0 = rnd() * 3000 - 1500, s = 5 + rnd() * 300, x1 = x0 + s, z1 = z0 + s;
+      const got = inWindow(list, x0, z0, x1, z1);
+      const want = list.filter((p) => p.x1 > x0 - 100 && p.x0 < x1 + 100 && p.z1 > z0 - 100 && p.z0 < z1 + 100);
+      const ids = new Set(got.map((p) => p.i));
+      for (const p of want) expect(ids.has(p.i), `item ${p.i} for window ${k}`).toBe(true);
+      for (let j = 1; j < got.length; j++) expect(got[j].i).toBeGreaterThan(got[j - 1].i);
+      expect(got.length).toBeLessThan(list.length);
+    }
+    expect(inWindow(list, -1500, -1500, 1500, 1500)).toBe(list);
+    const few = list.slice(0, 100);
+    expect(inWindow(few, 0, 0, 10, 10)).toBe(few);
+  });
+});

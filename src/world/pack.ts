@@ -266,6 +266,52 @@ export function packGroup(root: THREE.Object3D): PObj[] {
   return out;
 }
 
+/** Has it anything to draw: vertices, and instances if instanced? */
+const drawsSomething = (o: PObj) => {
+  const p = o.at.position;
+  return !!p && p.a.length >= p.n && (o.k !== 'inst' || !!o.im?.length);
+};
+/** A tile's objects less those with nothing to draw (a tile with no bridges' empty structures mesh):
+ *  each was a draw's setup every frame it was in view. */
+export const dropEmpty = (objs: PObj[]) => objs.filter(drawsSomething);
+/** A coarse tile's like meshes as one (tileBuild.ts, the lite build): its silhouettes came in ~18
+ *  building meshes a cell, all one material — 3,800 draws across the coarse ring. Plain meshes only, and
+ *  only where the material, the attributes (names, sizes, types), the index and the flags all match;
+ *  the empty ones dropped. New arrays: none shared with a library geometry. */
+export function mergeLike(objs: PObj[]): PObj[] {
+  const out: PObj[] = [], like = new Map<string, PObj[]>();
+  for (const o of objs) {
+    if (!drawsSomething(o)) continue;
+    if (o.k !== 'mesh') { out.push(o); continue; }
+    const shape = Object.keys(o.at).sort().map((k) => `${k}:${o.at[k].n}:${o.at[k].a.constructor.name}`).join(',');
+    const key = JSON.stringify([o.m, shape, !!o.ix, o.l1, o.ro, o.nc, o.n]);
+    (like.get(key) ?? like.set(key, []).get(key)!).push(o);
+  }
+  for (const list of like.values()) out.push(list.length === 1 ? list[0] : joined(list));
+  return out;
+}
+function joined(list: PObj[]): PObj {
+  const first = list[0], verts = list.map((o) => o.at.position.a.length / o.at.position.n), total = verts.reduce((a, b) => a + b, 0);
+  const at: Record<string, PAttr> = {};
+  for (const [name, a0] of Object.entries(first.at)) {
+    const arr = new (a0.a.constructor as Float32ArrayConstructor)(total * a0.n);
+    let off = 0;
+    list.forEach((o, i) => { arr.set(o.at[name].a.subarray(0, verts[i] * a0.n), off); off += verts[i] * a0.n; });
+    at[name] = { a: arr, n: a0.n };
+  }
+  let ix: Uint16Array | Uint32Array | undefined;
+  if (first.ix) {
+    ix = total > 65535 ? new Uint32Array(list.reduce((s, o) => s + o.ix!.length, 0)) : new Uint16Array(list.reduce((s, o) => s + o.ix!.length, 0));
+    let off = 0, base = 0;
+    list.forEach((o, i) => {
+      for (let j = 0; j < o.ix!.length; j++) ix![off + j] = o.ix![j] + base;
+      off += o.ix!.length;
+      base += verts[i];
+    });
+  }
+  return { ...first, at, ix };
+}
+
 // A phone's tile meshes let go of each attribute's vertex data once it's on the GPU: the page held
 // every vertex twice (~70 of a phone tier's ~250 MB at an airfield). What the CPU reads again stays:
 // positions (bounds; a building hidden by its id, stream.ts) and the ids; the index; the instance

@@ -7,7 +7,7 @@ import { buildStructures } from './structures';
 import { buildSigns } from './signs';
 import { buildProps } from './props';
 import { planInterior } from './interiors';
-import { RecWalk, packGroup, packDeck, type BuiltTile } from './pack';
+import { RecWalk, packGroup, packDeck, type BuiltTile, dropEmpty, mergeLike } from './pack';
 import { canvasBitmap } from './canvas';
 import { crossingPaint, fitToFronts } from './kerbside';
 import { buildStairs } from './stairs';
@@ -45,7 +45,7 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
     return {
       id: spec.id,
       lod: spec.lod,
-      objs: [...packGroup(bld.group), ...packGroup(structures.group)],
+      objs: mergeLike([...packGroup(bld.group), ...packGroup(structures.group)]), // (one draw where many were alike)
       ops: [],
       fps: [],
       doors: [],
@@ -106,7 +106,7 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
   return {
     id: spec.id,
     lod: spec.lod,
-    objs: [...packGroup(bld.group), ...packGroup(structures.group), ...packGroup(signs.mesh), ...packGroup(props.group), ...packGroup(stairs)],
+    objs: dropEmpty([...packGroup(bld.group), ...packGroup(structures.group), ...packGroup(signs.mesh), ...packGroup(props.group), ...packGroup(stairs)]),
     ops: w.ops,
     fps: bld.footprints,
     doors: bld.doors,

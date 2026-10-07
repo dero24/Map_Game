@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import * as THREE from 'three';
 import { Terrain, TerrainLayer } from '../src/world/data';
 import { WalkWorld } from '../src/player/collision';
-import { RecWalk, packDeck, unpackDeck, replayOps, matTag, matFromTag, packGroup, buildObject, setFreeUploaded, type BuiltTile } from '../src/world/pack';
+import { RecWalk, packDeck, unpackDeck, replayOps, matTag, matFromTag, packGroup, buildObject, setFreeUploaded, mergeLike, dropEmpty, type BuiltTile, type PObj } from '../src/world/pack';
 import { propMaterial } from '../src/render/propMaterial';
 import { buildingMaterial } from '../src/world/buildings';
 import { wireMaterial, haloMaterial } from '../src/world/props';
@@ -69,6 +69,32 @@ const tileJson = {
 const spec = { id: '0_0', box: tileJson.box, lod: 0, file: 'tiles/0_0.json' };
 
 // ---------------- decks ----------------
+describe('mergeLike / dropEmpty', () => {
+  // (a coarse tile's ~18 building meshes, all one material, are one draw; the empty ones none)
+  const tri = (x: number, more: Partial<PObj> = {}): PObj => ({ k: 'mesh', m: { t: 'bld' }, at: { position: { a: new Float32Array([x, 0, 0, x + 1, 0, 0, x, 1, 0]), n: 3 }, aInfo: { a: new Float32Array([x, x, x]), n: 1 } }, ix: new Uint16Array([0, 1, 2]), ...more });
+  const empty: PObj = { k: 'mesh', m: { t: 'bld' }, at: { position: { a: new Float32Array(0), n: 3 } } };
+  it('joins like meshes, their indices offset; keeps the unlike apart; drops the empty', () => {
+    const out = mergeLike([tri(0), tri(10), empty, tri(20, { m: { t: 'wire' } }), tri(30, { l1: 1 })]);
+    expect(out.length).toBe(3);
+    const j = out.find((o) => o.m.t === 'bld' && !o.l1)!;
+    expect(Array.from(j.at.position.a)).toEqual([0, 0, 0, 1, 0, 0, 0, 1, 0, 10, 0, 0, 11, 0, 0, 10, 1, 0]);
+    expect(Array.from(j.at.aInfo.a)).toEqual([0, 0, 0, 10, 10, 10]);
+    expect(Array.from(j.ix!)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(out.some((o) => o.m.t === 'wire')).toBe(true);
+    expect(out.some((o) => o.l1 === 1)).toBe(true);
+  });
+  it('leaves instanced meshes, points and lines as they are; past 65,535 vertices, 32-bit indices', () => {
+    const inst: PObj = { ...tri(0), k: 'inst', im: new Float32Array(16) }, pts: PObj = { ...tri(0), k: 'pts', ix: undefined };
+    const out = mergeLike([inst, pts, { ...inst }]);
+    expect(out.length).toBe(3);
+    const big = (x: number): PObj => ({ k: 'mesh', m: { t: 'bld' }, at: { position: { a: new Float32Array(40000 * 3).fill(x), n: 3 } }, ix: new Uint16Array([0, 1, 39999]) });
+    const j = mergeLike([big(0), big(1)])[0];
+    expect(j.ix).toBeInstanceOf(Uint32Array);
+    expect(Array.from(j.ix!)).toEqual([0, 1, 39999, 40000, 40001, 79999]);
+    expect(dropEmpty([empty, tri(0), { ...inst, im: new Float32Array(0) }]).length).toBe(1);
+  });
+});
+
 describe('packDeck/unpackDeck', () => {
   it('reproduces profiled ramps, flats and the bridge arch exactly', () => {
     const ramp = { pts: [[0, 0], [10, 0]] as [number, number][], cum: [0, 10], halfWidth: 1, heightAt: (s: number) => 1 + 0.3 * Math.min(1, Math.max(0, s / 10)), profile: { k: 'ramp', y0: 1, y1: 1.3, total: 10 } as const };

@@ -73,6 +73,32 @@ function prep<T>(item: T, rings: number[][]): Prepared<T> {
   return { item, pts, x0, z0, x1, z1 };
 }
 const overlaps = (p: Prepared<unknown>, x0: number, z0: number, x1: number, z1: number, m = 20) => p.x1 > x0 - m && p.x0 < x1 + m && p.z1 > z0 - m && p.z0 < z1 + m;
+// A list's items by 64 m cell: what a small window asks for comes from the cells round it, not the
+// whole of the tiles it touches — the grass's 20 m masks and the fine window's slices tested every
+// footprint, road and area of a 1 km tile each (`overlaps`: 7.5% of a phone's frames after a teleport).
+// The list's order kept (the painter draws in it); an item over a kilometre across (a long road, a lake)
+// always a candidate; a window as wide gets the list as it is. The callers' own tests stay: a superset,
+// padded past the widest margin they use (100 m).
+const WG = 64, WIN_PAD = 101;
+const winGrids = new WeakMap<object, { cells: Map<number, number[]>; big: number[] }>();
+export function inWindow<T extends { x0: number; z0: number; x1: number; z1: number }>(list: T[], x0: number, z0: number, x1: number, z1: number): T[] {
+  if (list.length < 128 || x1 - x0 > 1000 || z1 - z0 > 1000) return list;
+  let g = winGrids.get(list);
+  if (!g) {
+    const gg = { cells: new Map<number, number[]>(), big: [] as number[] };
+    list.forEach((p, n) => {
+      const i0 = Math.floor(p.x0 / WG), i1 = Math.floor(p.x1 / WG), j0 = Math.floor(p.z0 / WG), j1 = Math.floor(p.z1 / WG);
+      if (!(i1 - i0 < 16 && j1 - j0 < 16)) { gg.big.push(n); return; } // (and a box that isn't one: NaN)
+      for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) { const k = i * 1048576 + j; (gg.cells.get(k) ?? gg.cells.set(k, []).get(k)!).push(n); }
+    });
+    winGrids.set(list, (g = gg));
+  }
+  const hit = new Set<number>(g.big);
+  for (let i = Math.floor((x0 - WIN_PAD) / WG); i <= Math.floor((x1 + WIN_PAD) / WG); i++)
+    for (let j = Math.floor((z0 - WIN_PAD) / WG); j <= Math.floor((z1 + WIN_PAD) / WG); j++)
+      for (const n of g.cells.get(i * 1048576 + j) ?? []) hit.add(n);
+  return [...hit].sort((a, b) => a - b).map((n) => list[n]);
+}
 
 function pathOf(ctx: CanvasRenderingContext2D, p: P[], close = false) {
   ctx.moveTo(p[0][0], p[0][1]);
@@ -432,45 +458,45 @@ export class Painter {
   }
   private tilesOf(key: string) { return key ? key.trim().split(' ').map((id) => this.tiles.get(id)!) : []; }
   private areasIn(x0: number, z0: number, x1: number, z1: number): Prepared<Area>[] {
-    if (!this.tiles.size) return this.areas;
+    if (!this.tiles.size) return inWindow(this.areas, x0, z0, x1, z1);
     const { key, m } = this.near(x0, z0, x1, z1);
     if (!m.areas) {
       const extra: Prepared<Area>[] = [];
       for (const t of this.tilesOf(key)) extra.push(...t.areas);
       m.areas = !extra.length ? this.areas : [...this.areas, ...extra].sort((a, b) => AREA_ORDER.indexOf(a.item.c) - AREA_ORDER.indexOf(b.item.c));
     }
-    return m.areas;
+    return inWindow(m.areas, x0, z0, x1, z1);
   }
   dropTile(id: string) { this.tiles.delete(id); this.tileWalks.delete(id); this.padsBy.delete(id); this.merged.clear(); this.census.clear(); }
   private roadsIn(x0: number, z0: number, x1: number, z1: number): Prepared<Road>[] {
-    if (!this.tiles.size) return this.roads;
+    if (!this.tiles.size) return inWindow(this.roads, x0, z0, x1, z1);
     const { key, m } = this.near(x0, z0, x1, z1);
     if (!m.roads) {
       const extra: Prepared<Road>[] = [];
       for (const t of this.tilesOf(key)) extra.push(...t.roads);
       m.roads = !extra.length ? this.roads : [...this.roads, ...extra].sort((a, b) => (ROAD_RANK[a.item.c] ?? 1) - (ROAD_RANK[b.item.c] ?? 1));
     }
-    return m.roads;
+    return inWindow(m.roads, x0, z0, x1, z1);
   }
   private frontIn(x0: number, z0: number, x1: number, z1: number): Prepared<number>[] {
-    if (!this.tiles.size) return this.front;
+    if (!this.tiles.size) return inWindow(this.front, x0, z0, x1, z1);
     const { key, m } = this.near(x0, z0, x1, z1);
     if (!m.front) {
       const out: Prepared<number>[] = [...this.front];
       for (const t of this.tilesOf(key)) out.push(...t.front);
       m.front = out;
     }
-    return m.front;
+    return inWindow(m.front, x0, z0, x1, z1);
   }
   private footIn(x0: number, z0: number, x1: number, z1: number): Prepared<number>[] {
-    if (!this.tiles.size) return this.foot;
+    if (!this.tiles.size) return inWindow(this.foot, x0, z0, x1, z1);
     const { key, m } = this.near(x0, z0, x1, z1);
     if (!m.foot) {
       const out = [...this.foot];
       for (const t of this.tilesOf(key)) out.push(...t.foot);
       m.foot = out;
     }
-    return m.foot;
+    return inWindow(m.foot, x0, z0, x1, z1);
   }
   // front walks: the bake's, plus each mounted tile's (they go with it — they used to pile up
   // for the whole session, a tile's again every time it remounted)

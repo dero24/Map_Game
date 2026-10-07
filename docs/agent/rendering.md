@@ -68,6 +68,22 @@ or per-region style.
 - A phone's far trees are a step coarser (TreeTier.farDetail −1, assets/flora.ts `setFarDetail`, the tile
   worker's too; `?fardetail=0` keeps them as made): about half the vertices, the full model's measures.
 
+## A frame's CPU: what three.js walks
+
+A city's frame is the CPU's, in three.js's own walk of the scene (2026-10-07, Asheville on the RTX 4070:
+p50 24.9 → 19.2 ms; the shore's frames 60 fps at p95). Keep it so:
+- **The scene doesn't move** (`scene.matrixAutoUpdate = false`, main.ts): its matrix redone every frame
+  forced every object's world matrix to be redone under it. What moves updates its own; a re-anchor marks
+  the world's (`worldRoot.updateMatrix()`); a tile's objects are worked out once, under their group.
+- **Each render walks only the tiles in its camera's frustum** (`scene.onBeforeRender` → stream.ts
+  `cullTiles`, its `onAfterRender` shows them again): the sun's shadow pass and the view each tested
+  every object of the ring. A tile's extent (`userData.bounds`) is its objects' bounding spheres, not
+  its cell (it draws its own roads whole, a kilometre out); a tile with a mesh uploading that frame is
+  never culled (the upload queue draws it out of view).
+- **The coarse ring's like meshes are one** (pack.ts `mergeLike`, the lite build: ~18 building meshes a
+  cell, 3,800 across the ring, now ~60), and nothing empty is drawn (`dropEmpty`; no halo for a tile
+  without lanterns): the view's draw calls 2,119 → 1,003.
+
 ## Night: lamp pools, the night's floor, the night grade (`render/nightLight.ts`)
 
 Night is laid the way a watercolourist lays it: one deep, cool wash over everything, the street
@@ -311,6 +327,9 @@ the sky between the leaves. Past it, the tiles' own solid crowns, as before.
 - `groundPaint.ts` windows `detail` (300 m) + `mid` (1.6 km) re-centre on the walker and paint
   baked + streamed-tile features (stream `onTile`/`onUnload` → `paint.setTile/dropTile`); the
   shader applies them everywhere.
+- What a small window paints comes from the cells round it (`inWindow`: the painter's merged lists by
+  64 m cell, kept in the list's order, padded past the callers' widest margin): the grass's 20 m masks
+  and the fine window's slices tested every footprint, road and area of the tiles they touched.
 - A window never repaints whole in a frame (`DetailGround`). The wash goes through a blur, and a
   whole repaint was the flying hitch: ~0.5 s every 66 m wherever the browser rasters 2D canvases
   on the CPU.

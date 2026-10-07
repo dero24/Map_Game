@@ -2,6 +2,41 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-07 (eve) — A city's frame: what three.js walks, cut; the painter's small windows
+
+Robby: "pleasse optimize performance where possible". Asheville's desktop frame (RTX 4070, vsync off) was
+24.9 ms at p50 with 55,000 trees, but hiding the trees or the shadows saved little, and coarser far trees
+nothing: the frame was the CPU's, in three.js's walk of the scene (`projectObject` 22%, the world
+matrices 10%, the per-draw state ~32%) — the CPU profile, not a guess (docs/agent/rendering.md "A frame's
+CPU").
+- **The scene's own matrix** was redone every frame, which made three.js redo every object's world matrix
+  under it: `scene.matrixAutoUpdate = false` (what moves updates its own; a re-anchor marks the world).
+  Checked: every object's world matrix its parent's times its own — 0 wrong of 4,064–6,903 at the shore
+  and after two teleports that moved the origin.
+- **Each render walks only the tiles in its frustum** (stream.ts `cullTiles` from the scene's
+  `onBeforeRender`, per camera: the sun's shadow pass and the view): a tile's extent from its objects'
+  bounding spheres (it draws its own roads whole, a kilometre out); a tile uploading a mesh that frame is
+  never culled. Checked: no culled tile held an object whose bounds reached the frustum — 0 in 1,116
+  renders over eight Asheville views and 562 over four of Midtown; a render that throws shows its tiles
+  again at the next.
+- **The coarse ring** (210 cells out to 6 km) drew ~18 building meshes a cell, all one material, an empty
+  structures mesh and two empty halo sets: merged and dropped (pack.ts `mergeLike`, `dropEmpty`). The
+  view's draw calls 2,119 → 1,003; the scene's meshes 6,639 → 2,814.
+- Asheville's desktop frame 24.9 → 19.2 ms at p50; the shore's playtest frames now 16.7 ms at p50, p95 and
+  p99 (p95 was 33.3), streaming's worst 100 → 67 ms.
+- **The phone after a teleport** (Pixel 7 tier, CPU 4×, the shore → Red Bank): settled, 28 ms at p50
+  standing and 26.6 walking (this morning 52; before today 129) — quicker than Sea Bright's 34. Through the
+  load the painter was the hot spot: every small window it painted (the grass's 20 m masks, the fine
+  window's slices) tested every footprint, road and area of the tiles it touched (`overlaps` 7.5%):
+  groundPaint.ts `inWindow`, the merged lists by 64 m cell, in their order. The load's p95 134 → 116 ms.
+
+**Verified:** typecheck; `npm test` 1041/1041 (new: pack's mergeLike/dropEmpty, groundPaint's inWindow); the shore's full playtest PASS 11/11; the matrix and the culling checks above.
+
+**Next (the load after a teleport, phone):** the teleport's own frame (~600 ms at CPU 4×, mostly the
+spawn's ground mounted whole and the old place torn down), the grass's cells (a pump step up to ~200 ms
+just after: its tufts ask the walk world while the old place's walls are still being purged), a tile's
+synchronous mounts (120–180 ms); the city's remaining per-draw cost (Asheville's 387 tree meshes in view).
+
 ## 2026-10-07 (pm) — Streets fitted to their buildings; the desert's crowns as trees; a phone's far small things
 
 Robby's report, continued ("driving through main cities sometimes the roads have walls or buidlings in

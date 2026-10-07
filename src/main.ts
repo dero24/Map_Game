@@ -244,6 +244,10 @@ async function main() {
   await new Promise((r) => setTimeout(r, 0));
 
   const scene = new THREE.Scene();
+  // (the scene itself never moves: its matrix redone every frame marked every object in it to have its
+  // world matrix redone too — 10% of a city's desktop frame; what moves updates its own, and a re-anchor
+  // marks the world's)
+  scene.matrixAutoUpdate = false;
   const camera = new THREE.PerspectiveCamera(frameFov(walkParams.fov, innerWidth / innerHeight), innerWidth / innerHeight, 0.25, 25000);
   camera.layers.enable(1);
 
@@ -290,6 +294,14 @@ async function main() {
   // region's backdrop the resident terrain is just its clamped edge, so hills need the patch too.
   const tilesBase = TILES || manifest.tilesUrl || '';
   const stream = new TileStream(base, manifest, world.terrain, walk, interiors, worldRoot, tilesBase, terrBin, !!tilesBase);
+  // (each render's camera — the sun's shadow pass, the view — walks only the tiles in its frustum: three.js
+  // tested every object of every tile in the ring for each, a fifth of a city's frame — stream.ts cullTiles)
+  const cullF = new THREE.Frustum(), cullM = new THREE.Matrix4();
+  scene.onBeforeRender = (_r, _s, cam) => {
+    cullF.setFromProjectionMatrix(cullM.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+    stream.cullTiles(cullF, worldRoot.position);
+  };
+  scene.onAfterRender = () => stream.uncullTiles();
   // Measured buildings from USGS 3DEP LiDAR wherever a survey covers the cell (lidar.ts);
   // `?lidar=0` builds from mapped priors only. A phone's tier builds from them too (quality.ts):
   // a city's survey decoded in the tab was hundreds of MB, and each cell built twice; `?lidar=1`.
