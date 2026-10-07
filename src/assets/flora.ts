@@ -651,8 +651,17 @@ const CLUMPS: Record<ClumpKind, Clump[]> = {
 };
 const isClump = (k: TreeKind): k is ClumpKind => k in CLUMPS;
 
-/** Build one grown tree. Deterministic in (kind, variant). */
+/** Build one grown tree. Deterministic in (kind, variant). A coarser far model (setFarDetail) keeps
+ *  the full one's measures and plan: its crown is lit, and the near model hands over to it, exactly
+ *  as on a desktop. */
 export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeometry; meta: TreeMeta; plan: TreePlan } {
+  const t = growTree(kind, v);
+  if (!farDetail) return t;
+  const d = farDetail;
+  farDetail = 0;
+  try { const full = growTree(kind, v); return { geo: t.geo, meta: full.meta, plan: full.plan }; } finally { farDetail = d; }
+}
+function growTree(kind: TreeKind, v: number): { geo: THREE.BufferGeometry; meta: TreeMeta; plan: TreePlan } {
   const r = makeRng(9173 * (TREE_KINDS.indexOf(kind) + 1) + v * 7919);
   const wood: THREE.BufferGeometry[] = [], leaf: THREE.BufferGeometry[] = [];
   const plan: TreePlan = { boughs: [], lobes: [], hang: [] };
@@ -662,7 +671,7 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
   // tent of foliage, not a plate
   const lobe = (rad: number, c: THREE.Vector3, seed: number, squash = 0.85, detail = 1, spray?: { dir: number; stretch: number; bend: number }) => {
     plan.lobes.push({ c: c.clone(), r: spray ? rad * (1 + spray.stretch) * 0.5 : rad, sq: squash });
-    const g = blob(rad, seed, { squash, detail });
+    const g = blob(rad, seed, { squash, detail: Math.max(-1, detail + farDetail) });
     if (spray) {
       const P = g.getAttribute('position'), ca = Math.cos(spray.dir), sa = Math.sin(spray.dir), R = rad * spray.stretch;
       for (let i = 0; i < P.count; i++) {
@@ -675,14 +684,14 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
   };
   const bough = (a: THREE.Vector3, b: THREE.Vector3, r0: number, r1: number, segs: number, col: number) => {
     plan.boughs.push({ a: a.clone(), b: b.clone(), r0, r1, col });
-    return part(limb(a, b, r0, r1, segs), col);
+    return part(limb(a, b, r0, r1, Math.max(3, segs + farDetail * 2)), col); // (a coarser far model: fewer sides)
   };
   const j = (a: number) => (r.float() * 2 - 1) * a;
   // a piece of wood the far model draws as an open tube (half a capped cylinder's vertices): the
   // many slim boughs of a conifer, which the crown mostly hides
   const twig = (a: THREE.Vector3, b: THREE.Vector3, r0: number, r1: number, sides: number, col: number) => {
     plan.boughs.push({ a: a.clone(), b: b.clone(), r0, r1, col });
-    return part(tube([a, b], [r0, r1], sides), col);
+    return part(tube([a, b], [r0, r1], Math.max(3, sides + farDetail * 2)), col);
   };
   // a beard of moss hanging from a limb: a ribbon (both faces) full where it hangs and narrowing to a
   // ragged tip, drifting a little as it falls
@@ -2074,12 +2083,19 @@ export function treeGeometry(kind: TreeKind, v: number): { geo: THREE.BufferGeom
   return { geo, meta, plan };
 }
 const tmeta = new Map<string, TreeMeta>();
+/** The far models' crowns a step coarser (−1) or as made (0): a phone's tier (render/quality.ts
+ *  TreeTier.farDetail; the tile worker's too). A far model is drawn from ~30 m out, where the near
+ *  model hands over — and a wooded town's ring held some 20,000 of them at 1,000–1,440 vertices
+ *  each: a broadleaf's lobes go from 240 vertices to 60, a conifer's tufts from 60 to 24. */
+let farDetail = 0;
+export function setFarDetail(d: number) { farDetail = Math.max(-1, Math.min(0, Math.round(d))); }
+const treeKey = (kind: TreeKind, v: number) => `tree:${kind}:${v}${farDetail ? `:d${farDetail}` : ''}`;
 export function treeLib(kind: TreeKind, v: number) {
-  const k = `tree:${kind}:${v}`;
+  const k = treeKey(kind, v);
   return cached(k, () => { const t = treeGeometry(kind, v); tmeta.set(k, t.meta); return t.geo; });
 }
 export function treeMeta(kind: TreeKind, v: number): TreeMeta {
-  const k = `tree:${kind}:${v}`;
+  const k = treeKey(kind, v);
   if (!tmeta.has(k)) treeLib(kind, v);
   return tmeta.get(k)!;
 }

@@ -72,14 +72,24 @@ export function celestial(ms: number, lat: number, lon: number): CelestialState 
   };
 }
 
-// Offset (minutes) of an IANA timezone from UTC at a given instant (handles DST via Intl).
+// Offset (minutes) of an IANA timezone from UTC at a given instant (handles DST via Intl). Asked every
+// frame: one formatter a zone, and the answer kept a quarter hour (an offset only changes on one) —
+// a new formatter each call was 1.4% of a phone's frame.
+const tzFmt = new Map<string, Intl.DateTimeFormat>();
+const tzMemo = new Map<string, number>();
 export function tzOffsetMinutes(ms: number, tz: string): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: tz, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric',
-  }).formatToParts(new Date(ms));
+  const q = Math.floor(ms / 900000), key = `${tz}|${q}`;
+  const hit = tzMemo.get(key);
+  if (hit !== undefined) return hit;
+  let f = tzFmt.get(tz);
+  if (!f) tzFmt.set(tz, (f = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' })));
+  const at = q * 900000, parts = f.formatToParts(new Date(at));
   const get = (t: string) => Number(parts.find((p) => p.type === t)!.value);
   const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'));
-  return Math.round((asUtc - Math.floor(ms / 60000) * 60000) / 60000);
+  const off = Math.round((asUtc - at) / 60000);
+  if (tzMemo.size > 2048) tzMemo.clear();
+  tzMemo.set(key, off);
+  return off;
 }
 
 // Epoch ms for a given local (region-tz) date + fractional hour.

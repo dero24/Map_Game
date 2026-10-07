@@ -22,6 +22,7 @@ import { bakedMeasured, serviceMeasured } from './measured';
 import { enrichAerial, initAerial, aerialOn, prefetchAerial, setAerialLog } from './aerialFetch';
 import { setRoofSource } from './aerial';
 import { TAG_ROOF_COLOURS } from './realTile';
+import { setFarDetail } from '../assets/flora';
 
 // First visit to a cell: how long a detail build waits for its LiDAR measurement before
 // building from mapped priors (the measured rebuild then swaps in when it lands).
@@ -696,6 +697,7 @@ ctx.onmessage = (e: MessageEvent) => {
     if (m.vector === false) vecOn = false;
     setMicroDate(m.date); // (the world's chosen day: the beach's season, the carts' collection day)
     setWorldDate(m.date); // (…the marina's boats, the beach's people, its lot's cars: calendar.ts)
+    setFarDetail(m.farDetail ?? 0); // (a phone's far trees a step coarser: flora.ts)
     if (m.demBase) setDemBase(m.demBase);
     // `lidar`: this device measures (desktop); `measured`: precomputed records apply (every tier)
     measuredOn = !!m.measured;

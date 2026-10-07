@@ -6,6 +6,7 @@
 // first, a few a frame, each cell one merged mesh of foundry plants (flora.ts plantGeometry, the
 // world's lite genome); deterministic per position, so a wood looks the same every visit.
 import * as THREE from 'three';
+import { probeGeometry } from '../render/probe';
 import { plantLib, understoryMix, inBloom, inFall, isDormant, STAGES, type PlantSpecies } from '../assets/flora';
 import { merge } from '../assets/core';
 import { propMaterial } from '../render/propMaterial';
@@ -68,6 +69,9 @@ export class UnderstoryField {
   ) {
     this.group.name = 'understory';
   }
+  /** Its material on an empty mesh, for the boot's shader compile (render/warm.ts): the cells come
+   *  later, and the first one froze the frame compiling it. */
+  probes(): THREE.Object3D[] { return [new THREE.Mesh(probeGeometry(), this.mat)]; }
 
   invalidate() {
     for (const m of this.cells.values()) if (m) { this.group.remove(m); m.geometry.dispose(); }

@@ -8,6 +8,7 @@
 // rim; an aerial-perspective wash takes it toward the sky. Rebuilt when you walk more than 5 km
 // from its centre. Deterministic: a pure function of the DEM and the centre.
 import * as THREE from 'three';
+import { probeGeometry } from '../render/probe';
 import { demSampler } from './dem';
 import { makeProjector, type LatLon } from './realTile';
 import { landcoverAround } from './peaks';
@@ -93,6 +94,9 @@ export class Horizon {
     // dry air carries far: desert ranges stand sharp and violet at 30 km, humid ones go pale
     this.mat = horizonMaterial(style.climate === 'arid' ? 0.45 : style.climate === 'mediterranean' || style.climate === 'polar' ? 0.7 : 1);
   }
+  /** Its material on an empty mesh, for the boot's shader compile (render/warm.ts): the ring is
+   *  built later, and compiled as it was first drawn. */
+  probes(): THREE.Object3D[] { return [new THREE.Mesh(probeGeometry(), this.mat)]; }
 
   /** The season's snowline: a move of 250 m or more (a new month, a new date) rebuilds the ring. */
   setSnowline(m: number) {

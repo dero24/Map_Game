@@ -340,6 +340,8 @@ for (const e of els) {
   if (!inS) pts = simplify(pts, 1.5);
   let w = parseFloat(t.width) || ROAD_W[t.highway];
   if (t.highway === 'primary' && t.lanes) w = Math.max(w, parseInt(t.lanes) * 3.4 + 1.5);
+  // a one-way half of a divided road: its own lanes wide, not a two-way road's (realTile.ts the same)
+  if (!t.width && /^(yes|true|1|-1)$/.test(t.oneway ?? '') && ROAD_W[t.highway] >= 8) w = ((parseInt(t.lanes) || 0) > 0 ? parseInt(t.lanes) : t.highway === 'motorway' ? 3 : 2) * 3.2 + 1;
   if (t.footway === 'sidewalk') w = 1.6;
   const r = { p: flat(pts), c: t.highway, w: +w.toFixed(1) };
   if (t.name) r.n = t.name;

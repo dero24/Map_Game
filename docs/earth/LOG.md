@@ -2,6 +2,63 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-07 — Smooth away from Sea Bright; roads and bridges clear (Robby's PC)
+
+Robby: "on mobile sea bright my game runs smooth at high fps but when going away from sea bright or
+telelporting it starts to really lag … also going over sandy hook bridge and driving through main
+cities sometimes the roads have walls or buidlings in them". The first session on his PC after the
+cloud's: the heavy checks the cloud skipped, run on the RTX 4070 (D3D11), found both.
+
+**The freezes — shaders compiled as they were first drawn** (render/warm.ts). On D3D11 one paint shader
+takes 0.15–1.9 s to compile; the shore's full playtest froze 2.2 s walking.
+- The boot's `renderer.compile` built canvas programs: the watercolor post draws into a render target and
+  three.js keys a program by where it draws — 44 of 94 programs were never used, the real ones compiled
+  on first sight. `compileForScene` compiles into a target, in parallel (KHR_parallel_shader_compile), and
+  the lazy layers lend a probe each (near trees' wood and cards — the cards' material now made up front —,
+  understory, horizon ring, far skyline, the residents standing and sitting). Boot to ready 36 → 17 s.
+- A streamed tile mounts once its shaders are built (`ShaderWarm`: a probe per variant, kept; the near
+  trees' far-LOD switch mirrored); the spawn's own tiles wait for theirs.
+- A tile mounted whole (the spawn's ground) uploads a budget a frame (stream.ts `uploadQ`), not 265
+  meshes at the first turn of the head (150 ms).
+
+**The lag away from Sea Bright** (phone emulation: Pixel 7, phone tier, CPU 4×; Red Bank after a teleport):
+- Wooded inland towns carry ~22,000 far trees at 1,000–1,440 vertices (Sea Bright has few). A phone's far
+  models are a step coarser (flora.ts `setFarDetail`, TreeTier.farDetail −1: lobes detail 1→0 / 0→octahedron,
+  limbs two sides fewer; the full model's measures and plan kept): the ring's tree vertices 26.6 M → 13 M.
+- The grass builds a cell a row at a time inside its 3 ms (was 45–180 ms a cell); a tile's mount is a
+  generator pumped 4 ms a frame (`streamParams.mountMs`; its scope closed between steps; a relief swap and
+  the spawn still whole); `worldRoot` and the tiles' objects off matrix auto-update (8% of the frame);
+  the scene's matrices once a frame, not per pass; `tzOffsetMinutes` memoised (a formatter per call was
+  1.4%); the interiors' instanced furniture its own material (one shared with plain meshes re-derived its
+  program every switch). Red Bank after a teleport: p50 129 → 52 ms, now level with Sea Bright.
+
+**The roads** (a new playtest check, `__ROADWALLS__`, `roads`: every car street's lanes sampled at its
+own surface — a bridge's deck — for walls at a car's height, footprints, deck gaps). Before: the
+Highlands (Route 36) bridge 176 walls on its deck and 314 footprints; the shore 67; Red Bank 36.
+- Route 36 is two one-way bridges, each given a two-way trunk's 12 m: a divided road's one-way halves are
+  their own lanes wide (realTile.ts, bake.mjs; `narrowOneWays` for the baked shore's and the tile
+  service's data), and a parapet that would stand on another deck at its height is left out (bridges.ts).
+- The survey's blocks along the bridge were the deck itself (LiDAR returns), made buildings as tall as
+  it: `fitUnderDecks` drops a survey block under a deck and holds a real building's top under the deck's
+  soffit (`hy`, applied after the guessed and measured heights), or drops it where no storey fits.
+- Every building's walls reached the sky: now to its ridge (`Footprint.ridge`, `wallTop`); a small thing's
+  outline (a post, a parked car) to 8 m over its ground (pack.ts `replayOp`); a trunk to its crown.
+- A willow on the bank under the Rumson bridge stood through its roadway: no tree whose height reaches a
+  deck over it, no tree pit under one.
+- Parked cars: a shopfront's spaces and a lot's lay across Church Street's and New Street's mouths, a
+  drive's car across Rumson Road's lanes — none now where a street runs through it, in two streets'
+  carriageways at an angle, or across one's lanes (kerbside.ts `streetThrough`), none on a deck.
+- After: the Highlands bridge 0 on its deck, the shore 15 (1.3 a thousand samples), Red Bank 28.
+
+**Verified:** typecheck; `npm test` 1028/1028 (new: tests/warm.test.ts, tests/roadsClear.test.ts);
+`npm run build`; the shore's full playtest — frames, walkabout, drive, teleports, streaming, roads pass
+(frames max 50 ms, no hitch over 100 ms); self-tests pass but flicker's, which fails on the last commit too
+(its planted 5 mm fight doesn't fight on this GPU's depth — not chased).
+
+**Next:** the cars and footprints left in towns' lanes are where the map's default street (a residential
+street + parking, 10.9 m) runs wider than the street between its buildings; then the rest of the PC checks
+(soak, mobile-check, audit48) and the HANDOFF's walk of the new animals.
+
 ## 2026-10-06 — The ecosystem review: each animal on its own ground, in its numbers, season and range
 
 Robby: review everything for specifics like "seagulls land 3 m from the sea to any road" — always a

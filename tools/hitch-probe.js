@@ -34,7 +34,7 @@ window.__HITCH__ = async (opts = {}) => {
   for (const k of ['onChange', 'onTile', 'onUnload', 'onMount', 'mount', 'unload', 'mountCoarse', 'unloadCoarse', 'rebuild', 'houseGrid', 'shopGrid', 'cityGrid', 'pavedIndex', 'repaintLamps']) wrap(G.stream, k, `stream.${k}`);
   for (const k of ['setTile', 'dropTile', 'addWalks']) wrap(G.paint, k, `paint.${k}`);
   wrap(G.grass, 'invalidateBox', 'grass.invalidateBox');
-  wrap(G.grass, 'build', 'grass.build');
+  wrap(G.grass, 'pump', 'grass.pump');
   if (opts.deep) {
     // the fine grain (tens of thousands of calls a mount: the timers' own cost shows up in them)
     wrap(G.grass, 'mask', 'grass.mask');

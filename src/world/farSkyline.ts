@@ -12,6 +12,7 @@
 // ink: at 40 km a tower is a stroke on the horizon, not a building. Deterministic: a pure function
 // of the map, the DEM and where the read was taken.
 import * as THREE from 'three';
+import { probeGeometry } from '../render/probe';
 import earcut from 'earcut';
 import { demSampler } from './dem';
 import { kvGet, kvPut } from './cache';
@@ -206,6 +207,10 @@ export class FarSkyline {
   private busy = false;
   private retryAt = 0;
   private fails = 0;
+
+  /** Its material on an empty mesh, for the boot's shader compile (render/warm.ts): the sectors
+   *  come later, and compiled as they were first drawn. */
+  probes(): THREE.Object3D[] { return [new THREE.Mesh(probeGeometry(), this.mat)]; }
 
   constructor(private origin: LatLon, private enabled: boolean) {
     this.group.name = 'far-skyline';

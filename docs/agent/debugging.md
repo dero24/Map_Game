@@ -265,6 +265,13 @@ readable), then:
   contact sheet to `shots/fly_<h>.jpg`, with the blue/green flips between frames.
 - `__ROADPOSTS__({ R })`: short collision walls (a post, a mast, a hydrant: sides under a metre)
   standing 60 cm or more inside a car street's kerb. A car stops dead on one.
+- `__ROADWALLS__({ R, step, perK })` (check `roads`): every car street's lanes (less a parking strip where
+  it parks; a main street, 9 m and more, always) sampled every 2 m — centre and both lanes — at the
+  street's own surface (a bridge's deck): a wall within 0.8 m at a car's height (`wall`, `bridgeWall`), a
+  footprint (`building`; not under a deck), ground a car can't go on (`deckGap`, `unwalkable`). Fails on
+  anything on a deck, or more than `perK` (2) a thousand samples elsewhere. `fails` lists each with the
+  street, its class and width, the sample's offset. Its self-test plants a wall across the nearest
+  street and a footprint on it. (2026-10-07: the Highlands bridge 490 → 0 on its deck; the shore 1.3.)
 
 ### Gameplay: walk, drive, teleport, stream, frames
 

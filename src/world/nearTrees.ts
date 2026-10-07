@@ -18,6 +18,7 @@
 // The leaf pictures are painted once, a picture a frame while the world boots (flora.ts
 // leafAtlasJob); until they're done every tree draws from its far mesh.
 import * as THREE from 'three';
+import { probeGeometry } from '../render/probe';
 import { NEAR_KINDS, TREE_KINDS, nearTreeLib, crownField, CARD_STRIDE, leafAtlasJob, cardFlags, hasNear, treeMeta, type TreeKind } from '../assets/flora';
 import { propMaterial, TREE_LOD_U, TREE_MASK_U } from '../render/propMaterial';
 import { leafCardGeometry, leafCardMaterial, leafTexture, CARD_ATTRS } from '../render/leafCards';
@@ -51,7 +52,7 @@ export class NearTrees {
   private wood = new Map<string, THREE.InstancedMesh>();
   private woodMat: THREE.ShaderMaterial;
   private cardGeo: THREE.InstancedBufferGeometry;
-  private cardMat: THREE.ShaderMaterial | null = null;
+  private cardMat: THREE.ShaderMaterial;
   private cards: THREE.Mesh | null = null;
   private job: ReturnType<typeof leafAtlasJob> | null;
   private flagged: { a: THREE.InstancedBufferAttribute; i: number }[] = [];
@@ -70,8 +71,15 @@ export class NearTrees {
     this.group.name = 'near-trees';
     this.woodMat = propMaterial({ wind: true, foliage: true, crown: [3, 1], treeLod: 'near' });
     this.cardGeo = leafCardGeometry(tier.near * MAX_CARDS);
+    // (the cards' material from the start, on a stand-in picture until the leaves are painted: its
+    // shader compiles at boot with the rest — render/warm.ts)
+    this.cardMat = leafCardMaterial(new THREE.DataTexture(new Uint8Array(4), 1, 1));
     this.job = leafAtlasJob(tier.atlas);
   }
+  /** The wood and the leaf cards' materials on empty meshes, for the boot's shader compile
+   *  (render/warm.ts): this layer's meshes come with the first tree near, and compiling them then
+   *  froze the frame for over a second on Windows. */
+  probes(): THREE.Object3D[] { return [new THREE.InstancedMesh(probeGeometry(), this.woodMat, 1), new THREE.Mesh(this.cardGeo, this.cardMat)]; }
 
   /** A mounted tile: take note of its tree meshes (their far material learns the hand-over). */
   add(id: string, root: THREE.Object3D) {
@@ -79,9 +87,8 @@ export class NearTrees {
     const fars: Far[] = [];
     root.traverse((o) => {
       const im = o as THREE.InstancedMesh;
-      if (!im.isInstancedMesh || !im.name.startsWith('trees:')) return;
+      if (!im.isInstancedMesh || !handsOver(im.name)) return;
       const [, kind, vs] = im.name.split(':');
-      if (!NEAR_KINDS.has(kind as TreeKind) || !hasNear(kind as TreeKind, +vs || 0)) return; // (the longleaf's grass stage: blades at every distance)
       const n = im.count, near = new THREE.InstancedBufferAttribute(new Float32Array(n), 1);
       im.geometry.setAttribute('aNear', near);
       const mat = im.material as THREE.ShaderMaterial;
@@ -146,8 +153,10 @@ export class NearTrees {
     if (this.job) {
       // the leaf pictures, one a frame
       if (this.job.step()) {
-        const tex = leafTexture(this.job.data, this.job.w, this.job.h);
-        this.cardMat = leafCardMaterial(tex);
+        const tex = leafTexture(this.job.data, this.job.w, this.job.h), u = this.cardMat.uniforms;
+        (u.uLeaf.value as THREE.Texture).dispose(); // (the stand-in)
+        u.uLeaf.value = tex;
+        u.uLeafW.value = (tex.image as { width: number }).width;
         this.cards = new THREE.Mesh(this.cardGeo, this.cardMat);
         this.cards.name = 'near-trees:cards';
         this.cards.frustumCulled = false; // (refilled round the walker: its bounds would always be stale)
@@ -284,11 +293,18 @@ export class NearTrees {
     for (const m of this.wood.values()) m.dispose();
     this.woodMat.dispose();
     this.cardGeo.dispose();
-    this.cardMat?.dispose();
-    (this.cardMat?.uniforms.uLeaf.value as THREE.Texture | undefined)?.dispose();
+    this.cardMat.dispose();
+    (this.cardMat.uniforms.uLeaf.value as THREE.Texture).dispose();
   }
 }
 
 const fract = (x: number) => x - Math.floor(x);
 /** The kinds a near model exists for, in TREE_KINDS order (for tools). */
 export const nearKinds = () => TREE_KINDS.filter((k) => NEAR_KINDS.has(k));
+/** A tile's tree mesh (`trees:<kind>:<form>`) the near models take over close by — its far material
+ *  learns the hand-over (TREE_LOD 1). Not the longleaf's grass stage: blades at every distance. */
+export function handsOver(name: string) {
+  if (!name.startsWith('trees:')) return false;
+  const [, kind, vs] = name.split(':');
+  return NEAR_KINDS.has(kind as TreeKind) && hasNear(kind as TreeKind, +vs || 0);
+}

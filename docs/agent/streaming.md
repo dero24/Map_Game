@@ -36,6 +36,19 @@ terrain/DEM, or the LiDAR measure pipeline.
   summed from each tile's own, worked out once per tile (they were rebuilt from every footprint
   and segment in the ring on every mount).
 - Regions without a manifest fall back to a single-tile world.json.
+- **A tile mounts a step at a time** (`mountSteps`, pumped `streamParams.mountMs` — 4 ms — a frame by
+  `update()`; nothing new starts until it's in): its collision in slices (ops, footprints, walls, decks,
+  pilings; the tile's scope closed between steps, so nothing registered meanwhile lands in it), its
+  meshes, then in one step on screen and into the lists. A relief swap (it unloads the flat copy first)
+  and the spawn's own ground (`ensureAround`, which finishes any part-way mount first) go whole.
+- **A tile mounts once its shaders are built** (`TileStream.warm`, render/warm.ts `ShaderWarm`: a probe a
+  variant — the object's kind, attributes and material, the near trees' far-LOD switch mirrored —
+  compiled off the main thread, kept for good; `nextReady` takes the nearest queued tile that's ready).
+- **A tile mounted whole uploads a budget a frame** (`uploadQ`, `REVEAL_BYTES`/`REVEAL_OBJS` shared with the
+  staged reveals): each mesh drawn once out of view, so none uploads at the first turn of the head.
+- **Collision tops.** A building walls up to its ridge (`Footprint.ridge`, buildings.ts `wallTop`); a small
+  outline recorded without a top (a post, a car, a planter: under 8 m across) to 8 m over its ground
+  (pack.ts `replayOp`'s `ground`); a trunk to its crown. A deck over them, and a car on it, pass.
 
 ## Tile worker + packing
 

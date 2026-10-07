@@ -243,7 +243,7 @@ export function chainAt(ch: Chain, s: number) {
 }
 
 /** The nearest point of a chain's centreline to (x, z): its station and distance. */
-function nearestOn(ch: Chain, x: number, z: number) {
+export function nearestOn(ch: Chain, x: number, z: number) {
   let best = Infinity, S = 0;
   for (let k = 0; k + 1 < ch.pts.length; k++) {
     const [ax, az] = ch.pts[k], [bx, bz] = ch.pts[k + 1], dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
@@ -559,12 +559,76 @@ export function buildBridges(m: Sink, walk: WalkWorld, roads: Road[], lines: Lin
       const c = chainAt(ch, j.s);
       pins.set(j.key, { y: profileAt(pf, j.s), half: ch.w / 2 + (HIGHWAY.has(ch.c) ? 1.2 : MINOR.has(ch.c) ? 0.6 : 1.8), tx: c.tx, tz: c.tz });
     }
+  }
+  // …then each drawn knowing the others: a dual carriageway's two one-way bridges side by side are
+  // one wide deck, no parapet between them (drawWay's `others`)
+  const all = done.map((d) => ({ ...d, ed: deckEdges(d.ch, d.pf, roads) }));
+  for (const d of all) {
+    const { ch, pf, ed } = d;
     if (!ch.ways.some((w) => w.own)) continue;
-    const ed = deckEdges(ch, pf, roads);
     for (const r of ed.taken) out.taken.add(r);
-    ch.ways.forEach((w, k) => { if (w.own) drawWay(m, walk, ch, pf, ed, k, g, out); });
+    const others = all.filter((o) => o !== d && boxesMeet(o.ch, ch, 25));
+    ch.ways.forEach((w, k) => { if (w.own) drawWay(m, walk, ch, pf, ed, k, g, out, others); });
   }
   return out;
+}
+
+const boxesMeet = (a: Chain, b: Chain, m: number) => {
+  const box = (c: Chain) => { let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity; for (const [x, z] of c.pts) (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z)); return [x0, z0, x1, z1]; };
+  const [ax0, az0, ax1, az1] = box(a), [bx0, bz0, bx1, bz1] = box(b);
+  return ax0 - m < bx1 && bx0 - m < ax1 && az0 - m < bz1 && bz0 - m < az1;
+};
+/** Is (x, z) at height y on another chain's deck (between its parapets, within 2 m of its roadway)? */
+function onDeck(others: { ch: Chain; pf: Profile; ed: ReturnType<typeof deckEdges> }[], x: number, z: number, y: number) {
+  for (const o of others) {
+    const q = nearestOn(o.ch, x, z);
+    if (q.S <= 0.5 || q.S >= o.ch.L - 0.5) continue;
+    const c = chainAt(o.ch, q.S), off = (x - c.x) * c.nx + (z - c.z) * c.nz;
+    const e = interp(o.pf.S, off > 0 ? o.ed.left : o.ed.right, q.S);
+    if (Math.abs(off) < e - 0.2 && Math.abs(profileAt(o.pf, q.S) - y) < 2) return true;
+  }
+  return false;
+}
+
+/** Buildings under a bridge's deck — Route 36 over Highlands: its approach ran through the houses
+ *  there, the LiDAR having measured the deck as their roofs — kept under the deck's underside (its
+ *  slab and girders, a metre and a half), or gone where not a storey fits: a building can't stand in
+ *  the roadway. Any point of its outline (every 2 m along it) or its middle within the deck's width
+ *  (the carriageway and its shoulders) counts. Before the buildings are built (tileBuild.ts). */
+export function fitUnderDecks<B extends { r: number[]; h: number; hy?: number; gen?: string }>(buildings: B[], roads: Road[], g: Ground): B[] {
+  const chains = chainBridges(roads).filter((c) => c.L >= 2);
+  if (!chains.length) return buildings;
+  // (profiled as it's built — over the streets under it — so a flyover's deck is as high as it stands)
+  const prof = chains.map((ch) => ({ ch, pf: bridgeProfile(ch, g, crossingsUnder(ch, roads, [], g)), reach: ch.w / 2 + 1.5 }));
+  return buildings.filter((b) => {
+    const ring: P[] = [], pts: P[] = [];
+    let cx = 0, cz = 0;
+    for (let i = 0; i + 1 < b.r.length; i += 2) { const p: P = [b.r[i] / 10, b.r[i + 1] / 10]; ring.push(p); cx += p[0]; cz += p[1]; }
+    if (!ring.length) return true;
+    for (let i = 0; i < ring.length; i++) {
+      const [ax, az] = ring[i], [bx, bz] = ring[(i + 1) % ring.length], n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 2));
+      for (let k = 0; k < n; k++) pts.push([ax + ((bx - ax) * k) / n, az + ((bz - az) * k) / n]);
+    }
+    pts.push([cx / ring.length, cz / ring.length]);
+    let deck = Infinity, base = Infinity;
+    for (const [x, z] of pts) {
+      base = Math.min(base, g.heightAt(x, z));
+      for (const { ch, pf, reach } of prof) {
+        const q = nearestOn(ch, x, z);
+        if (q.d < reach && q.S > 0.5 && q.S < ch.L - 0.5) deck = Math.min(deck, profileAt(pf, q.S));
+      }
+    }
+    if (deck === Infinity) return true;
+    // (a block the map doesn't know, found by the survey under a deck, is the deck: its returns)
+    if (b.gen === 'lidar') return false;
+    const ceil = deck - 1.6, room = ceil - Math.max(base, 0);
+    if (room < 2.6) return false;
+    // (the builder sets a guessed height, and lifts a measured one on a slope: its top is held under
+    // the ceiling whatever it comes to — buildings.ts)
+    b.hy = Math.min(b.hy ?? Infinity, ceil);
+    if (b.h > room) b.h = room;
+    return true;
+  });
 }
 
 /** Where a chain crosses over a lower bridge's deck: that deck's roadway, a road's clearance under it. */
@@ -584,7 +648,7 @@ export function decksUnder(ch: Chain, lo: Chain, pf: Profile): Under[] {
 }
 
 /** One way of a chain: the stretch of deck it carries, what holds it up, and its collision. */
-function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnType<typeof deckEdges>, k: number, g: Ground, out: BridgeOut) {
+function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnType<typeof deckEdges>, k: number, g: Ground, out: BridgeOut, others: { ch: Chain; pf: Profile; ed: ReturnType<typeof deckEdges> }[] = []) {
   const w = ch.ways[k], movable = w.movable, highway = HIGHWAY.has(ch.c), minor = MINOR.has(ch.c);
   const hw = ch.w / 2;
   const kerb = highway ? 0 : KERB; // (a highway's shoulder runs on at the roadway's level, to its barrier)
@@ -654,9 +718,20 @@ function drawWay(m: Sink, walk: WalkWorld, ch: Chain, pf: Profile, ed: ReturnTyp
       gaps.push({ side, s0: Math.max(jt.s - 40, at - half), s1: Math.min(jt.s + 40, at + half) });
     }
   }
+  // …nor where it would stand on another deck at its height: Route 36's two one-way bridges over the
+  // Shrewsbury, each a carriageway's width, stood each one's inner parapet in the other's lanes
+  const onOther = new Map<number, boolean>();
   const open = (j: number, side: number) => {
     const sm = (st[j] + st[j + 1]) / 2;
-    return gaps.some((q) => q.side === side && sm > q.s0 && sm < q.s1);
+    if (gaps.some((q) => q.side === side && sm > q.s0 && sm < q.s1)) return true;
+    if (!others.length) return false;
+    const key = j * 2 + (side > 0 ? 1 : 0);
+    let v = onOther.get(key);
+    if (v === undefined) {
+      const c = chainAt(ch, sm), e = interp(pf.S, side > 0 ? ed.left : ed.right, sm);
+      onOther.set(key, (v = onDeck(others, c.x + c.nx * side * e * c.mi, c.z + c.nz * side * e * c.mi, profileAt(pf, sm))));
+    }
+    return v;
   };
   for (let j = 0; j + 1 < N; j++) {
     // the roadway — a bascule's leaves an open steel grid — and its lines

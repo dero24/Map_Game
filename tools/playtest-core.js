@@ -5,7 +5,7 @@
 // and the report as text. No DOM, no game state. Types: playtest-core.d.ts.
 
 /** Every check `__PLAYTEST__` knows, in the order it runs them. */
-export const CHECKS = ['overlaps', 'doors', 'posts', 'flicker', 'altitude', 'frames', 'walkabout', 'drive', 'teleports', 'streaming'];
+export const CHECKS = ['overlaps', 'doors', 'posts', 'roads', 'flicker', 'altitude', 'frames', 'walkabout', 'drive', 'teleports', 'streaming'];
 
 /** The checks that wait on the page's own frames (minutes on a software renderer). */
 export const SLOW = ['flicker', 'altitude', 'frames', 'streaming'];
@@ -414,6 +414,7 @@ export function summarize(name, r) {
     frames: ['budget', 'frames', 'fps', 'p50', 'p95', 'p99', 'max', 'hitch50', 'hitch100'],
     walkabout: ['seconds', 'metres', 'legs', 'doorsIn', 'upstairs', 'noUp', 'doorsOut', 'shut', 'noWay', 'stuck', 'trapped', 'noExit', 'stairs', 'wall', 'solid', 'under', 'floating', 'sunk', 'nan', 'settled'],
     posts: ['posts'],
+    roads: ['samples', 'perK', 'walls', 'bridgeWalls', 'buildings', 'gaps'],
     drive: ['source', 'model', 'seconds', 'metres', 'maxKmh', 'routes', 'stalls', 'blocked', 'turns', 'offRoad', 'offRoadMax', 'jumps', 'inside', 'clip', 'clipMax', 'underHouse', 'flying', 'sinking', 'nan', 'exits', 'exitFails'],
     teleports: ['n', 'bad', 'inRooms', 'meanMs', 'maxMs'],
     streaming: ['ring', 'covered', 'coverS', 'standIns', 'mounts', 'unloads', 'twice', 'ghosts', 'failures', 'workerErrors', 'pageErrors', 'frameErrors', 'hitch50', 'hitch100', 'worstMs', 'ownMissS', 'minCover'],

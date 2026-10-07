@@ -50,7 +50,7 @@ export interface PDeck { pts: P2[]; cum: number[]; hw: number; p?: DeckProfile; 
 export type WalkOp =
   | { o: 'w'; a: P2; b: P2; y0: number; y1: number }
   | { o: 'l'; p: P2[]; y0: number; y1: number }
-  | { o: 'p'; r: P2[]; f: Floors | null; g: { x: number; z: number; w: number } | null; y: number }
+  | { o: 'p'; r: P2[]; f: Floors | null; g: { x: number; z: number; w: number } | null; y: number; t?: number }
   | { o: 'd'; d: PDeck };
 
 export interface BuiltTile {
@@ -137,10 +137,10 @@ export class RecWalk extends WalkWorldImpl {
     super.addLoop(p, y0, y1);
     this.recording = was; this.log({ o: 'l', p, y0, y1 });
   }
-  override addPolygon(r: P2[], f: Floors | null = null, g: { x: number; z: number; w: number } | null = null, y = -Infinity) {
+  override addPolygon(r: P2[], f: Floors | null = null, g: { x: number; z: number; w: number } | null = null, y = -Infinity, t = Infinity) {
     const was = this.recording; this.recording = false;
-    const pid = super.addPolygon(r, f, g, y);
-    this.recording = was; this.log({ o: 'p', r, f, g, y });
+    const pid = super.addPolygon(r, f, g, y, t);
+    this.recording = was; this.log({ o: 'p', r, f, g, y, ...(t < Infinity ? { t } : {}) });
     return pid;
   }
   override addDeck(d: Deck) {
@@ -150,14 +150,24 @@ export class RecWalk extends WalkWorldImpl {
   }
 }
 
-export function replayOps(w: WalkWorld, ops: WalkOp[]) {
-  for (const op of ops) {
-    switch (op.o) {
-      case 'w': w.addWall(op.a, op.b, op.y0, op.y1); break;
-      case 'l': w.addLoop(op.p, op.y0, op.y1); break;
-      case 'p': w.addPolygon(op.r, op.f, op.g, op.y); break;
-      case 'd': w.addDeck(unpackDeck(op.d)); break;
-    }
+export function replayOps(w: WalkWorld, ops: WalkOp[], ground?: { heightAt(x: number, z: number): number }) {
+  for (const op of ops) replayOp(w, op, ground);
+}
+const smallTop = (p: P2[], ground: { heightAt(x: number, z: number): number }) => {
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity, top = -Infinity;
+  for (const [x, z] of p) (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z)), (top = Math.max(top, ground.heightAt(x, z)));
+  return x1 - x0 < 8 && z1 - z0 < 8 ? Math.max(top, 0) + 8 : Infinity;
+};
+/** One recorded op (a tile's mount replays them a slice a frame: world/stream.ts). `ground`: the
+ *  terrain — a small thing's outline given no top (a post, a pole, a parked car, a planter: under 8 m
+ *  across) walls only up to 8 m over the ground under it, so a bridge's deck over it, and the cars on
+ *  that deck, pass (Route 36 over Highlands, the Rumson bridge). */
+export function replayOp(w: WalkWorld, op: WalkOp, ground?: { heightAt(x: number, z: number): number }) {
+  switch (op.o) {
+    case 'w': w.addWall(op.a, op.b, op.y0, op.y1); break;
+    case 'l': w.addLoop(op.p, op.y0, op.y1 === Infinity && ground ? smallTop(op.p, ground) : op.y1); break;
+    case 'p': w.addPolygon(op.r, op.f, op.g, op.y, op.t ?? Infinity); break;
+    case 'd': w.addDeck(unpackDeck(op.d)); break;
   }
 }
 
@@ -287,5 +297,6 @@ export function buildObject(p: PObj, atlas?: THREE.Texture): THREE.Object3D {
   if (p.ro !== undefined) o.renderOrder = p.ro;
   if (p.nc) o.frustumCulled = false;
   if (p.n) o.name = p.n;
+  o.matrixAutoUpdate = false; // (a tile's objects never move: their matrices stay the identity)
   return o;
 }

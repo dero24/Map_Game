@@ -113,10 +113,19 @@ export class Interiors {
   readonly sunWinU = { value: new THREE.Vector4(2.7, 0.9, 2.25, 0.5) };
   readonly sunWinUpU = { value: new THREE.Vector4(2.7, 0.9, 2.25, 0.5) };
   private mat: THREE.ShaderMaterial;
+  // the same shader for the instanced furniture: one material shared by plain and instanced meshes
+  // has two programs, and three.js re-derived it at every switch between them, every frame
+  private instMat: THREE.ShaderMaterial;
   private npcMat = creatureMaterial({ LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1 });
   // residents in chairs, on sofas, in booths and on bar stools sit (INDOOR: they don't leave at dusk)
   private npcSeatMat = creatureMaterial({ LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1, SEATED: 1, INDOOR: 1 });
   private npcGeo = pedGeo();
+  /** The residents' materials on one-instance meshes, for the boot's shader compile (render/warm.ts):
+   *  the primed plan may have nobody standing, or nobody sitting, and the first house that did froze
+   *  the frame compiling them. */
+  probes(): THREE.Object3D[] {
+    return [this.npcMat, this.npcSeatMat].map((m) => { const im = new THREE.InstancedMesh(this.npcGeo, m, 1); im.setColorAt(0, new THREE.Color()); return im; });
+  }
   private lights: Light[] = [];
   private failed = new Set<string>();
   private pending: Job | null = null;
@@ -165,6 +174,7 @@ export class Interiors {
   constructor(private walk: WalkWorld) {
     this.group.name = 'interiors';
     this.mat = interiorMaterial(this);
+    this.instMat = interiorMaterial(this);
     this.npcGeo.setAttribute('aAnim', new THREE.InstancedBufferAttribute(new Float32Array(NPC_MAX * 3), 3));
   }
 
@@ -924,7 +934,7 @@ export class Interiors {
 
     // Assemble: the merged mesh, one InstancedMesh per repeated piece; then the residents.
     const group = new THREE.Group();
-    const { meshes, verts } = yield* inst.finishGen(m, this.mat, MAX_INSTANCED, fl(k0), ceil(k1));
+    const { meshes, verts } = yield* inst.finishGen(m, this.instMat, MAX_INSTANCED, fl(k0), ceil(k1));
     yield;
     const main = m.geometries();
     for (const g of main) group.add(new THREE.Mesh(g, this.mat));

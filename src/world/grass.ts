@@ -335,6 +335,9 @@ export class GrassField {
   private cropMat = cropMaterial();
   private cells = new Map<string, THREE.Object3D | null>();
   private queue: [number, number][] = [];
+  // the cell being built, a row at a time across frames (a cell is ~1,500 tufts, each asking the
+  // ground and the walk world about itself: built whole it was 45–180 ms on a phone after a teleport)
+  private job: { k: string; x0: number; z0: number; steps: Generator<void, THREE.Object3D | null> } | null = null;
   // the streets that can touch a cell around the walker: the ring's 20k roads, sorted once per
   // 25 m walked (or when the tile set changes) instead of for every cell built
   private near: Road[] = [];
@@ -367,16 +370,18 @@ export class GrassField {
   invalidate() {
     for (const m of this.cells.values()) if (m) this.drop(m);
     this.cells.clear();
+    this.job = null;
   }
   /** Only the cells a freshly mounted tile touches (its box + margin). */
   invalidateBox(b: { x0: number; z0: number; x1: number; z1: number }) {
+    const hit = (x0: number, z0: number) => !(x0 + CELL < b.x0 - 50 || x0 > b.x1 + 50 || z0 + CELL < b.z0 - 50 || z0 > b.z1 + 50);
     for (const [k, m] of this.cells) {
       const [cx, cz] = k.split('_').map(Number);
-      const x0 = cx * CELL, z0 = cz * CELL;
-      if (x0 + CELL < b.x0 - 50 || x0 > b.x1 + 50 || z0 + CELL < b.z0 - 50 || z0 > b.z1 + 50) continue;
+      if (!hit(cx * CELL, cz * CELL)) continue;
       if (m) this.drop(m);
       this.cells.delete(k);
     }
+    if (this.job && hit(this.job.x0, this.job.z0)) this.job = null; // (begun on the ground before the tile: again)
   }
 
   update(x: number, z: number) {
@@ -394,6 +399,7 @@ export class GrassField {
         if (!this.cells.has(k)) this.queue.push([cx, cz]);
       }
     for (const [k, m] of this.cells) if (!want.has(k)) { if (m) this.drop(m); this.cells.delete(k); }
+    if (this.job && !want.has(this.job.k)) this.job = null;
     this.queue.sort((a, b) => Math.hypot((a[0] + 0.5) * CELL - x, (a[1] + 0.5) * CELL - z) - Math.hypot((b[0] + 0.5) * CELL - x, (b[1] + 0.5) * CELL - z));
     if (this.queue.length) {
       const roads = this.roads();
@@ -408,18 +414,35 @@ export class GrassField {
       }
     }
     // nearest first, a few a frame — and never more than ~3 ms of them (a downtown cell asks the
-    // walk world about every tuft; three of them in one frame was a visible stutter at speed)
+    // walk world about every tuft; three of them in one frame was a visible stutter at speed), a
+    // cell a row at a time: one cell is often more than the frame's 3 ms
+    this.pump(3);
+  }
+
+  /** Builds cells off the queue for `ms` of this frame, a row of tufts at a time. */
+  private pump(ms: number) {
     const t0 = performance.now();
-    for (let i = 0; i < Math.min(PER_FRAME, this.queue.length); i++) {
-      const [cx, cz] = this.queue[i];
-      const m = this.build(cx, cz);
-      this.cells.set(`${cx}_${cz}`, m);
-      if (m) this.group.add(m);
-      if (performance.now() - t0 > 3) break;
+    let done = 0, qi = 0;
+    while (performance.now() - t0 < ms) {
+      if (!this.job) {
+        if (done >= PER_FRAME) return;
+        // (the queue was drawn up before this frame's builds: past the cells built since)
+        while (qi < this.queue.length && this.cells.has(`${this.queue[qi][0]}_${this.queue[qi][1]}`)) qi++;
+        const next = this.queue[qi++];
+        if (!next) return;
+        const [cx, cz] = next;
+        this.job = { k: `${cx}_${cz}`, x0: cx * CELL, z0: cz * CELL, steps: this.build(cx, cz) };
+      }
+      const r = this.job.steps.next();
+      if (!r.done) continue;
+      this.cells.set(this.job.k, r.value);
+      if (r.value) this.group.add(r.value);
+      this.job = null;
+      done++;
     }
   }
 
-  private build(cx: number, cz: number): THREE.Object3D | null {
+  private *build(cx: number, cz: number): Generator<void, THREE.Object3D | null> {
     const t = this.terrain, walk = this.walk, st = activeStyle();
     const x0 = cx * CELL, z0 = cz * CELL;
     // roads touching this cell (+ margin): the carriageway, sidewalk strip and driveways stay bare
@@ -475,7 +498,7 @@ export class GrassField {
     const C = this.crowns?.(x0 + CELL / 2, z0 + CELL / 2, CELL * 0.75 + 14) ?? [];
     const shade = new THREE.Color(0x4a5a2c);
     const q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), s = new THREE.Vector3(), p = new THREE.Vector3();
-    for (let gz = z0; gz < z0 + CELL; gz += lstep)
+    for (let gz = z0; gz < z0 + CELL; gz += lstep) {
       for (let gx = x0; gx < x0 + CELL; gx += lstep) {
         const x = gx + hash(gx, gz, 2) * lstep, z = gz + hash(gx, gz, 3) * lstep;
         // open land only (cheapest tests first: in a city most of a cell is paint the mask already
@@ -524,7 +547,9 @@ export class GrassField {
         }
         cols.push(c);
       }
-    const crops = built ? [] : this.crops(x0, z0, open, nearRoad);
+      yield; // (a row of tufts: the frame's budget is looked at between rows)
+    }
+    const crops = built ? [] : yield* this.crops(x0, z0, open, nearRoad);
     if (!mats.length && !crops.length) return null;
     const cell = new THREE.Group();
     if (mats.length) {
@@ -544,7 +569,7 @@ export class GrassField {
   /** (package #10) A cell's crops (fields.ts): where the land is a field (WorldCover cropland), each
    *  field's crop in its rows — corn in 2 m segments, soybeans in 1 m, wheat as wide tufts — the rows
    *  running as its field's do. One mesh a crop. */
-  private crops(x0: number, z0: number, open: (x: number, z: number) => boolean, nearRoad: (x: number, z: number) => boolean): THREE.InstancedMesh[] {
+  private *crops(x0: number, z0: number, open: (x: number, z: number) => boolean, nearRoad: (x: number, z: number) => boolean): Generator<void, THREE.InstancedMesh[]> {
     const t = this.terrain, walk = this.walk;
     let any = false;
     for (let i = 0; i < 3 && !any; i++) for (let j = 0; j < 3 && !any; j++) any = t.coverAt(x0 + 3 + i * 7, z0 + 3 + j * 7) === 40;
@@ -556,7 +581,7 @@ export class GrassField {
     const row = ROW[crop], seg = crop === 'corn' ? 2 : crop === 'soy' ? 1 : 0.8, k = CROPS.indexOf(crop);
     // (the rows on the survey's grid: every field's rows line up with the next one's)
     const a0 = fld.dir === 0 ? z0 : x0, b0 = fld.dir === 0 ? x0 : z0;
-    for (let a = (Math.floor(a0 / row) + 0.5) * row; a < a0 + CELL; a += row)
+    for (let a = (Math.floor(a0 / row) + 0.5) * row; a < a0 + CELL; a += row) {
       for (let b = (Math.floor(b0 / seg) + 0.5) * seg; b < b0 + CELL; b += seg) {
         const x = fld.dir === 0 ? b : a, z = fld.dir === 0 ? a : b;
         if (x < x0 || z < z0 || t.coverAt(x, z) !== 40 || !open(x, z) || nearRoad(x, z) || t.sdfAt(x, z) < 4) continue;
@@ -572,6 +597,8 @@ export class GrassField {
         o.k.push(k);
         o.c.push(new THREE.Color(1, 1, 1).multiplyScalar(0.92 + hash(x, z, 23) * 0.16));
       }
+      yield; // (a row of the field)
+    }
     const meshes: THREE.InstancedMesh[] = [];
     for (const g of ['corn', 'soy', 'wheat'] as const) {
       const o = out[g];

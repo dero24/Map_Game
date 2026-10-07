@@ -369,6 +369,13 @@ export const TAG_ROOF_COLOURS: ReadonlySet<number> = new Set([...Object.values(N
 // (a motorway's or a trunk's ramps are its links — every interchange's on- and off-ramps)
 const ROAD_W: Record<string, number> = { motorway: 14, motorway_link: 7, trunk: 12, trunk_link: 6.5, primary: 11, primary_link: 6, secondary: 9, secondary_link: 6, tertiary: 8, tertiary_link: 5, residential: 6.5, unclassified: 6, living_street: 5, service: 4, pedestrian: 5, track: 3, footway: 1.8, path: 1.5, cycleway: 2, steps: 2, bridleway: 2, construction: 5 };
 const PARK_DEFAULT = new Set(['residential', 'unclassified', 'tertiary', 'secondary']);
+const ONEWAY = /^(yes|true|1|-1)$/;
+/** A one-way half of a divided road still at its class's two-way width — the baked shore's and the
+ *  tile service's data predate the lane rule in osmToTile — narrowed to two lanes (a motorway three).
+ *  In place; once narrowed it's left alone (tileBuild.ts, and the shore's paint in main.ts). */
+export function narrowOneWays(roads: Road[]) {
+  for (const r of roads) if (r.ow && ROAD_W[r.c] >= 8 && r.w === ROAD_W[r.c]) r.w = +((r.c === 'motorway' ? 3 : 2) * 3.2 + 1).toFixed(1);
+}
 /** Tall structures built from the map's own point (props.ts, assets/tower.ts): a lattice mast (TV,
  *  radio, phone), a water tower, a chimney, a flagpole — trees never grow within 15 m of them
  *  (a LiDAR survey reads a mast as a 60 m tree). An observation or bell tower is a building. */
@@ -698,6 +705,10 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
       // mapped lanes set the carriageway (3.2 m a lane, a metre of gutter) when no width is tagged
       const lanes = parseInt(t.lanes);
       if (!t.width && lanes > 0 && ROAD_W[t.highway] >= 6) w = Math.max(w, lanes * 3.2 + 1);
+      // …and a one-way half of a divided road is its own lanes wide, not a two-way road's width (Route
+      // 36's two one-way bridges into Highlands were each 12 m: their decks ran into each other and
+      // the houses beside them) — scripts/bake.mjs the same
+      if (!t.width && ONEWAY.test(t.oneway ?? '') && ROAD_W[t.highway] >= 8) w = (lanes > 0 ? lanes : t.highway === 'motorway' ? 3 : 2) * 3.2 + 1;
       if (t.footway === 'sidewalk') w = 1.6;
       // mapped street parking widens the carriageway when no width is tagged (a parked lane is
       // 2.2 m, angled bays 4.8 m) and lets props line that kerb with cars

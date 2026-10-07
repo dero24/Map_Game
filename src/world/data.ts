@@ -24,6 +24,7 @@ export interface Building {
   rc?: number; // real roof colour 0xRRGGBB (tags / materials; a baked pack's aerial samples, aerial.ts tileRoofs)
   ar?: number; // roof colour read off an aerial photo, its cast taken out (aerial.ts — the tile worker, streamed US cells)
   fl?: number; // mapped number of floors
+  hy?: number; // the highest its top may reach, absolute: a bridge's deck over it (bridges.ts fitUnderDecks)
   rl?: number; // mapped roof:levels — storeys inside the roof (counted in h: realTile plausibleHeight)
   mh?: number; // mapped min_height (m): the building stands on something (pilings)
   // Simple 3D Buildings (OSM building:part): a tower's setbacks, podium and crown are parts

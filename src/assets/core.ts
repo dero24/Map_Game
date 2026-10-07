@@ -108,7 +108,8 @@ export function tube(pts: THREE.Vector3[], radii: number[], sides = 6) {
 /** A soft lumpy blob (crowns, bodies, bushes): a displaced icosahedron whose shared corners move
  *  together (no cracks). `squash` flattens y; `lump` sets how knobbly. */
 export function blob(r: number, seed: number, opts: { detail?: number; squash?: number; lump?: number } = {}) {
-  const g = new THREE.IcosahedronGeometry(r, opts.detail ?? 1);
+  // (detail −1: an octahedron, 24 vertices — a phone's far crowns, flora.ts setFarDetail)
+  const d = opts.detail ?? 1, g = d < 0 ? new THREE.OctahedronGeometry(r, 0) : new THREE.IcosahedronGeometry(r, d);
   const pos = g.attributes.position;
   const lump = opts.lump ?? 0.28, sq = opts.squash ?? 0.85;
   const seen = new Map<string, number>();

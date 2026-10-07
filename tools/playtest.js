@@ -5,6 +5,7 @@
 //   __OVERLAPS__()                  walkable buildings standing inside or across each other
 //   __DOORS__({ max: 80 })          walk in through every front door near you, and back out
 //   __ROADPOSTS__({ R: 600 })       posts, masts, poles standing in a car street's lanes
+//   __ROADWALLS__({ R: 600 })       walls, footprints, deck gaps in a car street's lanes (bridges too)
 //   await __FLICKER__({ frames })   the same view drawn twice: pixels that change with nothing moving
 //   await __ALTITUDE__({ heights }) fly up and look down: the ground holds still (no water/land flashing)
 //   await __FRAMES__({ seconds })   frame pacing standing, walking, then flying: percentiles and hitches against a budget
@@ -889,6 +890,94 @@ window.__ROADPOSTS_SELFTEST__ = () => {
   return { pass: found && !after.pass, detects: { post: found && !after.pass }, at: [r2(best.x), r2(best.z)], before: before.posts, after: after.posts };
 };
 
+// ---- roads: what stands in a car street's lanes — a wall, a building's footprint, ground a car can't
+// go on (water, a gap in a bridge's deck) — sampled every couple of metres down every car street,
+// bridges at their deck, at the height a car's body is (Robby: "going over sandy hook bridge and
+// driving through main cities sometimes the roads have walls or buildings in them") ----
+window.__ROADWALLS__ = (opts = {}) => {
+  const G = G0(), W = G.walk, T = G.world.terrain, x0 = opts.x ?? G.walker.x, z0 = opts.z ?? G.walker.z, R = opts.R ?? 600, step = opts.step ?? 2;
+  const { counts, ex, note } = events(opts.top ?? 24);
+  let samples = 0;
+  const near = (x, z) => { // (what stands there: the nearest live wall's length and band, its building)
+    let best = null;
+    for (let i = 0; i < W.segs.length; i++) {
+      if (W.segDead[i]) continue;
+      const q = W.segs[i];
+      if (Math.max(q[0], q[2]) < x - 1.5 || Math.min(q[0], q[2]) > x + 1.5 || Math.max(q[1], q[3]) < z - 1.5 || Math.min(q[1], q[3]) > z + 1.5) continue;
+      const ex2 = q[2] - q[0], ez2 = q[3] - q[1], L2 = ex2 * ex2 + ez2 * ez2, t = L2 ? Math.max(0, Math.min(1, ((x - q[0]) * ex2 + (z - q[1]) * ez2) / L2)) : 0;
+      const d = Math.hypot(q[0] + ex2 * t - x, q[1] + ez2 * t - z);
+      if (!best || d < best.d) best = { d, len: Math.hypot(ex2, ez2), y0: q[4], y1: q[5] };
+    }
+    return best && { wallLen: r2(best.len), band: [Number.isFinite(best.y0) ? r2(best.y0) : '-inf', Number.isFinite(best.y1) ? r2(best.y1) : 'inf'], wallOff: r2(best.d) };
+  };
+  for (const r of roadsNear(G, x0, z0, R)) {
+    if (r.lod || r.tu || NOT_FOR_CARS.includes(r.c) || r.c === 'service') continue;
+    // the lanes: the carriageway less a car's half width and a little (a kerb's wall is fine), and less
+    // the parked cars where it parks (kerbside.ts: a parallel car's inside edge 2.2 m from the kerb,
+    // an angled bay's 4.6 m) — the travel lanes; a cross street's own samples still cross this one's
+    // parking at its mouth, where no car may stand
+    // (a main street — 9 m and more — parks at its kerbs in front of shops whatever the map says: props.ts)
+    const hw = (r.w ?? 6) / 2, pk = (r.w ?? 0) >= 10 && r.pk ? r.pk : (r.w ?? 0) >= 9 && !r.br ? 1 + 4 : 0;
+    const laneOf = (mode) => Math.max(0, hw - (mode === 2 ? 5.6 : mode === 1 ? 3.2 : 1.4));
+    const lanes = [-laneOf(pk & 3), 0, laneOf((pk >> 2) & 3)].filter((o, k, a) => k === 1 || Math.abs(o) > 0.4);
+    for (let i = 0; i + 3 < r.p.length; i += 2) {
+      const ax = r.p[i] / 10, az = r.p[i + 1] / 10, bx = r.p[i + 2] / 10, bz = r.p[i + 3] / 10, L = Math.hypot(bx - ax, bz - az);
+      if (L < 0.01) continue;
+      const ux = (bx - ax) / L, uz = (bz - az) / L;
+      for (let s = step / 2; s < L; s += step) {
+        const cx = ax + ux * s, cz = az + uz * s;
+        if (Math.abs(cx - x0) > R || Math.abs(cz - z0) > R) continue;
+        for (const o of lanes) {
+          const x = cx - uz * o, z = cz + ux * o;
+          samples++;
+          const info = () => ({ road: r.n ?? r.c, cls: r.c, w: r.w, bridge: !!r.br, off: r2(o) });
+          if (!W.walkable(x, z)) { note(r.br ? 'deckGap' : 'unwalkable', [x, z], info); continue; }
+          // (a footprint under a bridge's deck is under it — its walls, if they reach the deck, count below)
+          const b = r.br ? -1 : W.buildingAt(x, z);
+          if (b >= 0) { note('building', [x, z], () => ({ ...info(), floors: W.floorsOf(b) ? 1 : 0 })); continue; }
+          // the street's own surface (a bridge's deck, else the ground), a car's body a hand over it
+          const y = r.br ? W.surfaceAt(x, z) : W.surfaceAt(x, z, Math.max(T.heightAt(x, z), -0.2) + 0.3);
+          if (W.touching(x, z, 0.8, y + 0.3)) note(r.br ? 'bridgeWall' : 'wall', [x, z], () => ({ ...info(), y: r2(y), ...near(x, z) }));
+        }
+      }
+    }
+  }
+  // The verdict: nothing on a bridge's deck (a wall there is a car stopped mid-span), and elsewhere
+  // under 2 a thousand samples — a kerb's frame, a low wall where the map's street runs wider than
+  // the real one: the shore 1.3, Red Bank 1.0 (2026-10-07); before that day's fixes, Highlands' 26
+  const n = Object.values(counts).reduce((a, b) => a + b, 0), deck = (counts.bridgeWall ?? 0) + (counts.deckGap ?? 0);
+  const perK = samples ? (1000 * (n - deck)) / samples : 0;
+  return { pass: deck === 0 && perK <= (opts.perK ?? 2), samples, hits: n, perK: r2(perK), walls: counts.wall ?? 0, bridgeWalls: counts.bridgeWall ?? 0, buildings: counts.building ?? 0, gaps: (counts.deckGap ?? 0) + (counts.unwalkable ?? 0), counts, fails: ex };
+};
+/** __ROADWALLS__ has to find a wall planted across the nearest street, and a footprint laid on it. */
+window.__ROADWALLS_SELFTEST__ = () => {
+  const G = G0(), W = G.walk, w = G.walker;
+  let best = null;
+  for (const r of roadsNear(G, w.x, w.z, 300)) {
+    if (r.lod || r.tu || r.br || NOT_FOR_CARS.includes(r.c) || r.c === 'service' || (r.w ?? 6) < 5) continue;
+    for (let i = 0; i + 3 < r.p.length; i += 2) {
+      const ax = r.p[i] / 10, az = r.p[i + 1] / 10, bx = r.p[i + 2] / 10, bz = r.p[i + 3] / 10, L = Math.hypot(bx - ax, bz - az);
+      if (L < 12) continue;
+      const mx = (ax + bx) / 2, mz = (az + bz) / 2, d = Math.hypot(mx - w.x, mz - w.z);
+      if (!best || d < best.d) best = { d, x: mx, z: mz, ux: (bx - ax) / L, uz: (bz - az) / L, hw: (r.w ?? 6) / 2 };
+    }
+  }
+  if (!best) return { pass: null, why: 'no street to plant in' };
+  const before = window.__ROADWALLS__({ x: best.x, z: best.z, R: 30, perK: 0 });
+  const { x, z, ux, uz, hw } = best, px = -uz, pz = ux;
+  // a wall across the lanes, kerb to kerb
+  plantIn(W, () => W.addWall([x + px * hw, z + pz * hw], [x - px * hw, z - pz * hw]));
+  let wall;
+  try { wall = window.__ROADWALLS__({ x, z, R: 30, perK: 0 }); } finally { unplant(W); }
+  // a 6 m square footprint in the middle of it, 20 m on
+  const cx = x + ux * 20, cz = z + uz * 20, h = 3;
+  plantIn(W, () => W.addPolygon([[cx - h, cz - h], [cx + h, cz - h], [cx + h, cz + h], [cx - h, cz + h]]));
+  let bld;
+  try { bld = window.__ROADWALLS__({ x, z, R: 40, perK: 0 }); } finally { unplant(W); }
+  const detects = { wall: wall.walls > before.walls, building: bld.buildings > before.buildings };
+  return { pass: detects.wall && detects.building, detects, at: [r2(x), r2(z)], before: before.hits };
+};
+
 // ---- drive: a parked car (driveway or kerb) taken with E, driven along the streets, left and
 // re-entered every so often, and left for good at the end ----
 const BODY = [[1, 1], [1, -1], [-1, 1], [-1, -1], [1, 0], [-1, 0]]; // (along, across) the car's outline
@@ -1700,6 +1789,7 @@ const RUN = {
   overlaps: (o) => window.__OVERLAPS__(o),
   doors: (o) => window.__DOORS__(o),
   posts: (o) => window.__ROADPOSTS__(o),
+  roads: (o) => window.__ROADWALLS__(o),
   flicker: (o) => window.__FLICKER__(o),
   altitude: (o) => window.__ALTITUDE__(o),
   frames: (o) => window.__FRAMES__(o),
@@ -1712,6 +1802,7 @@ const RUN = {
 const SELF = {
   flicker: async () => { const r = await window.__FLICKER_SELFTEST__(); return { pass: r.detects, detects: { fight: r.detects }, worstShare: r.worstShare }; },
   posts: () => window.__ROADPOSTS_SELFTEST__(),
+  roads: () => window.__ROADWALLS_SELFTEST__(),
   frames: (o) => window.__FRAMES_SELFTEST__(o),
   walkabout: (o) => window.__WALKABOUT_SELFTEST__(o),
   drive: (o) => window.__DRIVE_SELFTEST__(o),

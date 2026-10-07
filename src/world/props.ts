@@ -29,7 +29,7 @@ import { sportLib, type SportPiece } from '../assets/sport';
 import { towerLib, TOWER_H, ROOFTOP_H, CHIMNEY_BRICK, type TowerKind } from '../assets/tower';
 import { COURT, courtFrame, diamondFrame, type Sport } from './sports';
 import { stallLib, STALL_VARIANTS, AWNING, STALL_FOOT, type StallKind } from '../assets/market';
-import { kerbSpaces, oneToASpace, OCCUPANCY } from './kerbside';
+import { kerbSpaces, oneToASpace, streetThrough, OCCUPANCY } from './kerbside';
 import { viewCones, viewDir } from './views';
 import { streetLib, streetPaint, STREET_VARIANTS, type StreetKind } from '../assets/street';
 import { playLib, PLAY_KINDS, PLAY_PAINT, PLAY_FOOT, type PlayKind } from '../assets/play';
@@ -1146,7 +1146,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         }
         if (!placed) continue;
       }
-      if (pit) {
+      // (no pit under a bridge's deck: the tree it was dug for goes — the post-pass below — and its
+      // walls stood on the Rumson bridge's roadway)
+      if (pit && walk.deckAt(x, z) === null) {
         pits.push(new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.atan2(tx, tz)), V(1, 1, 1)));
         walk.addLoop([[x - 0.3, z - 0.3], [x + 0.3, z - 0.3], [x + 0.3, z + 0.3], [x - 0.3, z + 0.3]]);
       }
@@ -1336,6 +1338,12 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     for (let i = trees.length - 1; i >= 0; i--) {
       const t = trees[i];
       t.m.decompose(pos, q, sc);
+      // under a bridge's deck, a tree only where it clears it (a willow on the bank under the Rumson
+      // bridge stood up through its roadway, its trunk walling the lanes)
+      if (walk.deckAt(pos.x, pos.z) !== null) {
+        const deckY = walk.surfaceAt(pos.x, pos.z);
+        if (deckY > pos.y + 0.5 && deckY < pos.y + treeMeta(TREE_KINDS[t.k], t.v).h * sc.y + 2) { trees.splice(i, 1); continue; }
+      }
       let n = nearest(pos.x, pos.z);
       if (!n) continue;
       if (n.inside || n.d < 1.3) {
@@ -1367,8 +1375,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     for (const t of trees) {
       if (t.k === 2) continue;
       t.m.decompose(pos, q, sc);
-      const r = Math.max(0.15, treeMeta(TREE_KINDS[t.k], t.v).trunkR * Math.max(sc.x, sc.z));
-      walk.addLoop([[pos.x - r, pos.z - r], [pos.x + r, pos.z - r], [pos.x + r, pos.z + r], [pos.x - r, pos.z + r]]);
+      const tm = treeMeta(TREE_KINDS[t.k], t.v), r = Math.max(0.15, tm.trunkR * Math.max(sc.x, sc.z));
+      // (up to where its crown begins: a deck, a balcony, a car on a flyover over it pass)
+      walk.addLoop([[pos.x - r, pos.z - r], [pos.x + r, pos.z - r], [pos.x + r, pos.z + r], [pos.x - r, pos.z + r]], -Infinity, pos.y + 0.2 + Math.max(2.3, tm.crownBottom * sc.y));
     }
   }
 
@@ -1591,6 +1600,12 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   }
 
   // ---------- parked cars at the house end of real driveways ----------
+  // (none in a street's way — a corner shop's spaces lay across the side street's mouth, a drive's car
+  // across a main road's lanes: kerbside.ts streetThrough — a mapped driveway's own car and a lot's
+  // tested against the streets alone, the driveway and the lot's aisles theirs by right; and none
+  // parked on a bridge's deck)
+  const through = streetThrough(ctxJson.roads), throughStreet = streetThrough(ctxJson.roads.filter((r) => r.c !== 'service'));
+  const onDeck = (corners: P[]) => corners.some(([x, z]) => walk.deckAt(x, z) !== null);
   // keyed type|gear: every car of a type still differs — proportions breathe ±3–4 % per car, paint
   // fades with age, and some carry gear (surfboards near the coast, racks, kayaks, bikes).
   const parked = new Map<string, { m: THREE.Matrix4; c: THREE.Color }[]>();
@@ -1614,7 +1629,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     const rc = carRecipe(type, 1), hl = rc.L / 2, hw = rc.W / 2 + 0.05;
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     const corners: P[] = [[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]].map(([u, v]) => [x + u * cy + v * sy, z - u * sy + v * cy]);
-    if (!inSlice(x, z, 10) || corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.3)) || terrain.sdfAt(x, z) < 2) continue;
+    if (!inSlice(x, z, 10) || corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.3)) || terrain.sdfAt(x, z) < 2 || throughStreet(corners) || onDeck(corners)) continue;
     const u1 = hashf(r.p[0] * 31 + r.p[1]), u2 = hashf(r.p[1] * 17 + r.p[0] * 5), u3 = hashf(r.p[0] + r.p[1] * 97);
     const gear = gearFor(hashf(r.p[0] * 7 + r.p[1] * 13), terrain.oceanDistAt(x, z) < 3000);
     const key = `${type}|${gear ?? ''}`;
@@ -1632,7 +1647,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     const rc = carRecipe(type, 1), hl = rc.L / 2, hw = rc.W / 2 + 0.05;
     const cy = Math.cos(yaw), sy = Math.sin(yaw);
     const corners: P[] = [[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]].map(([u, v]) => [d.x + u * cy + v * sy, d.z - u * sy + v * cy]);
-    if (corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.3) || paved(cx, cz)) || terrain.sdfAt(d.x, d.z) < 2) continue;
+    if (corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.3) || paved(cx, cz)) || terrain.sdfAt(d.x, d.z) < 2 || through(corners) || onDeck(corners)) continue;
     const e = roadEdge(d.x, d.z);
     if (e && e.d - e.w / 2 < 4.5) continue; // never on the sidewalk strip or a footway
     const u1 = hashf(Math.floor(d.x * 31)), u2 = hashf(Math.floor(d.z * 17)), u3 = hashf(Math.floor(d.x * 13 + d.z * 97));
@@ -1676,7 +1691,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       const rc = carRecipe(type, 1), hl = rc.L / 2, hw = rc.W / 2 + 0.05;
       const cy = Math.cos(yaw), sy = Math.sin(yaw);
       const corners: P[] = [[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]].map(([u, v]) => [x + u * cy + v * sy, z - u * sy + v * cy]);
-      if (corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.2)) || terrain.sdfAt(x, z) < 2) continue;
+      if (corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.2)) || terrain.sdfAt(x, z) < 2 || through(corners) || onDeck(corners)) continue;
       const key = `${type}|`;
       if (!parked.has(key)) parked.set(key, []);
       const u3 = hashf(Math.floor(x * 13 + z * 97));
@@ -1715,7 +1730,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       for (const v of [-hl, -hl / 2, 0, hl / 2, hl]) for (const u of [-hw, 0, hw]) along.push([k.x + u * cy + v * sy, k.z - u * sy + v * cy]);
       const margin: P[] = [];
       for (const v of [-hl - 0.5, 0, hl + 0.5]) for (const u of [-hw - 3, hw + 3]) margin.push([k.x + u * cy + v * sy, k.z - u * sy + v * cy]);
-      if (along.some(([cx, cz]) => walk.blocked(cx, cz, 0.2)) || margin.some(([cx, cz]) => walk.buildingAt(cx, cz) >= 0) || terrain.sdfAt(k.x, k.z) < 2) continue;
+      if (along.some(([cx, cz]) => walk.blocked(cx, cz, 0.2)) || margin.some(([cx, cz]) => walk.buildingAt(cx, cz) >= 0) || terrain.sdfAt(k.x, k.z) < 2 || through(corners) || onDeck(corners)) continue;
       cand.push({ x: k.x, z: k.z, yaw: k.yaw, type, hq: k.hq, corners });
     }
     // Parking lots (lots.ts, the stalls the ground paint stripes): filled by the town's pulse —
@@ -1748,7 +1763,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         const yaw = st.yaw + (st.hq < 0.08 ? Math.PI : 0); // a few backed in
         const cy = Math.cos(yaw), sy = Math.sin(yaw);
         const corners: P[] = [[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]].map(([u, v]) => [st.x + u * cy + v * sy, st.z - u * sy + v * cy]);
-        if (corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.15)) || terrain.sdfAt(st.x, st.z) < 2) continue;
+        // (a lot's stalls nose up to its own aisles, mapped as service ways: tested against the streets)
+        if (corners.some(([cx, cz]) => walk.blocked(cx, cz, 0.15)) || terrain.sdfAt(st.x, st.z) < 2 || throughStreet(corners) || onDeck(corners)) continue;
         cand.push({ x: st.x, z: st.z, yaw, type, hq: st.hq, corners, win });
       }
     }

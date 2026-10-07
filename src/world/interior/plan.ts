@@ -7,7 +7,7 @@
 // shafts, an office tower's double-height lobby, a tower's tiers over its podium (docs/INTERIORS_PLAN.md
 // Slice 3). Stage B (layout.ts) fills in rooms, walls and doors when the building activates.
 import type { Footprint, Door } from '../buildings';
-import { floorHeight, KIND } from '../buildings';
+import { floorHeight, KIND, wallTop } from '../buildings';
 import type { WalkWorld, Floors, Shaft } from '../../player/collision';
 import { useOf, placeOf, hotelOnlyUpstairs, type Place } from '../uses';
 import { makeRng, type Rng } from '../../core/rng';
@@ -1275,7 +1275,7 @@ export function registerPlan(walk: WalkWorld, fp: Footprint, P: Plan) {
   const floors: Floors = { floor0: P.floor0, floorH: P.floorH, levels: P.levels, holes, ground: raised };
   if (shafts.length) floors.shafts = shafts;
   if (tiers.length) floors.tiers = tiers;
-  const pid = walk.addPolygon(fp.ring, floors, { x: d.wx, z: d.wz, w: d.w }, raised ? P.floor0 - 0.6 : -Infinity);
+  const pid = walk.addPolygon(fp.ring, floors, { x: d.wx, z: d.wz, w: d.w }, raised ? P.floor0 - 0.6 : -Infinity, wallTop(fp));
   const stack = (x: Stacked) => (x.rep ? { rep: x.rep, dy: (x.every ?? 1) * P.floorH } : {});
   for (const F of P.flights) {
     const run = Math.abs(F.topU - F.bottomU);

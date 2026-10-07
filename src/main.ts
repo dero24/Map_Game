@@ -8,7 +8,8 @@ import { FarSkyline } from './world/farSkyline';
 import { KerbCars } from './world/kerbCars';
 import { underRaised, PAD_PAINT } from './world/pads';
 import { MicroLayer } from './world/microLayer';
-import { NearTrees } from './world/nearTrees';
+import { NearTrees, handsOver } from './world/nearTrees';
+import { ShaderWarm, compileForScene } from './render/warm';
 import { seasonAt, dayOfYear, autoCloud, wetness } from './world/season';
 import { setWorldDate } from './world/calendar';
 import { CrowdLayer, CROWD_TIERS } from './world/crowdLayer';
@@ -23,7 +24,7 @@ import { Wakes } from './world/wakes';
 import { activeBuilding, type Door, type Footprint } from './world/buildings';
 import { styleFor, setActiveStyle, castOf } from './world/styles';
 import { setRoofSource } from './world/aerial';
-import { TAG_ROOF_COLOURS } from './world/realTile';
+import { TAG_ROOF_COLOURS, narrowOneWays } from './world/realTile';
 import { Vehicles } from './player/vehicles';
 import { GrassField } from './world/grass';
 import { UnderstoryField } from './world/understory';
@@ -55,7 +56,7 @@ import { modelName } from './player/vehicles';
 import { Critters } from './sim/critters';
 import { rhythmFor, type LifeInit } from './sim/protocol';
 import { Garden } from './ui/garden';
-import { SPECIES, TREE_KINDS, treeMeta, duckweedCover } from './assets/flora';
+import { SPECIES, TREE_KINDS, treeMeta, duckweedCover, setFarDetail } from './assets/flora';
 import { Interiors, planInterior, registerPlan, type Plan } from './world/interiors';
 import { LiftRide } from './player/lift';
 import { LiftUI } from './ui/lift';
@@ -194,6 +195,7 @@ async function main() {
       manifest = atlasRes.manifest;
       terrain = atlasRes.terrain;
       const paintJson = (await cachedFetchJson(base + 'paint.json')) as WorldJson;
+      narrowOneWays(paintJson.roads); // (as the tiles' own: tileBuild.ts)
       paintWorld = { json: paintJson, terrain };
     } else {
       const w = await loadWorld(base, (m) => ($('loading').textContent = m));
@@ -252,6 +254,9 @@ async function main() {
   // where they need true world positions (pigment, shadows, lamp/paint maps, fog distance).
   const worldRoot = new THREE.Group();
   worldRoot.name = 'world';
+  // (moved only on a re-anchor, which updates its matrix: kept on, its update every frame marked every
+  // object under it to have its world matrix redone — 8% of a phone's frame)
+  worldRoot.matrixAutoUpdate = false;
   scene.add(worldRoot);
   const groundGroup = buildGround(world, paint, tt);
   U.uDetailBox.value = paint.detail.box; // (the far street ribbons step aside where the paint is fine)
@@ -298,6 +303,11 @@ async function main() {
   // Real roof colours on streamed US cells, off the NAIP aerial photo (aerialFetch.ts) — one
   // photo a cell, read once per browser; every tier. `?aerial=0` keeps the palette roofs.
   stream.aerial = aerialRoofs;
+  // A phone's far trees a step coarser — about half the vertices of a wooded town's ring (assets/flora.ts
+  // setFarDetail): here and in the tile worker alike. `?fardetail=0` keeps them as made.
+  const farDetail = params.has('fardetail') ? Number(params.get('fardetail')) || 0 : tier.trees.farDetail;
+  setFarDetail(farDetail);
+  stream.farDetail = farDetail;
   // The horizon ring: real mountains out to 80 km past the tiles (Terrarium z9 through the same
   // DEM route the cells use). `?horizon=0` turns it off.
   if (tilesBase) setDemBase(tilesBase);
@@ -348,6 +358,10 @@ async function main() {
   const treeLayer = new NearTrees(tier.trees);
   treeLayer.enabled = params.get('neartrees') !== '0';
   worldRoot.add(treeLayer.group);
+  // a tile mounts once the shaders it draws with are built, off the main thread (render/warm.ts):
+  // a new tree variant or the first pond in view froze the frame for a second or two on Windows
+  stream.warm = new ShaderWarm(renderer, camera, scene);
+  stream.warm.farLod = handsOver;
   // the coarse backdrop's far-forest canopy drops wherever a detail tile is mounted (its trees are
   // real), and the backdrop steps aside altogether where a streamed cell brought its own ground
   const streamedGround = () => {
@@ -845,10 +859,18 @@ async function main() {
   const post = new WatercolorPost(renderer);
   const shadows = new SunShadows(renderer);
   diagStage('compile');
-  // Compile every shader now (incl. the interior + NPC materials) so the first front door doesn't hitch.
+  // Compile every shader now (incl. the interior + NPC materials) so the first front door doesn't hitch
+  // — as the frame draws them, into a render target (render/warm.ts: `renderer.compile` alone built
+  // canvas programs the post's frames never used, 44 of 94), in parallel where the browser can.
+  // The layers whose meshes come later (the near trees, the understory, the far ring, the residents)
+  // lend a probe each.
   const firstPlan = plans.keys().next().value;
   if (firstPlan !== undefined) interiors.prime(firstPlan);
-  renderer.compile(scene, camera);
+  const probes = new THREE.Group();
+  for (const o of [...treeLayer.probes(), ...understory.probes(), ...horizon.probes(), ...farSkyline.probes(), ...interiors.probes()]) probes.add(o);
+  scene.add(probes);
+  await compileForScene(renderer, scene, camera);
+  scene.remove(probes);
   if (firstPlan !== undefined) interiors.prime(null);
   const resize = () => {
     // a phone's canvas at up to 1.5× its CSS pixels when the paint is hi-DPI (at 1× a DPR-3 screen
@@ -1396,6 +1418,7 @@ async function main() {
     origin.x = nx;
     origin.z = nz;
     worldRoot.position.set(-nx, 0, -nz);
+    worldRoot.updateMatrix();
     U.uWorldOffset.value.set(nx, 0, nz);
   };
   // Schedule the next frame first: one bad frame must never stop the world. Each chain has an
@@ -1624,8 +1647,14 @@ async function main() {
       }
       ambience.update({ dt, oceanDist, indoors: interiors.indoors, riverDist: Math.max(0, world.terrain.sdfAt(walker.x, walker.z)), wind: weather.wind, night: U.uNight.value, surface, stepped, running: run, life: life.stats, hour: timeParams.hour, churchDist, houses, harbour: harbourD, sails: sailsN, trees: Math.max(treeCover, Math.min(1, houses / 20) * 0.4), ride: vehicles.ride, city: cityAt(walker.x, walker.z), climate: regionLook.climate, summer: isSummer() && U.uSnow.value < 0.1, cicadas: critters.chorus });
     }
-    shadows.update(scene, focus, U.uKeyDir.value);
-    post.render(scene, camera, simTime, U.uNight.value, U.uGolden.value, walker.yaw, walker.pitch, debugParams.rawScene, brush.overlay);
+    // the scene's matrices once a frame: each pass's render() walked the whole graph again (the shadow
+    // pass's, then the paint's) — a phone's 5% (tools rendering between frames keep the update)
+    scene.updateMatrixWorld();
+    scene.matrixWorldAutoUpdate = false;
+    try {
+      shadows.update(scene, focus, U.uKeyDir.value);
+      post.render(scene, camera, simTime, U.uNight.value, U.uGolden.value, walker.yaw, walker.pitch, debugParams.rawScene, brush.overlay);
+    } finally { scene.matrixWorldAutoUpdate = true; }
     frameOk();
     photo.afterRender(); // Space in photo mode grabs this very frame
 

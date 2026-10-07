@@ -278,7 +278,9 @@ export class WalkWorld {
 
   // Register a footprint. `gap` leaves a doorway in the nearest wall; `floors` makes it walkable inside.
   // wallY0: walls only block above this height (raised houses stand on open pilings).
-  addPolygon(ring: P2[], floors: Floors | null = null, gap: { x: number; z: number; w: number } | null = null, wallY0 = -Infinity) {
+  /** A building's footprint: its outline walled from wallY0 up to wallY1 (its roof: a car on a bridge
+   *  over it, a walker on a deck above, isn't stopped by its walls — buildings.ts wallTop). */
+  addPolygon(ring: P2[], floors: Floors | null = null, gap: { x: number; z: number; w: number } | null = null, wallY0 = -Infinity, wallY1 = Infinity) {
     const pid = this.polys.length;
     this.polys.push(ring);
     this.floors.push(floors);
@@ -311,9 +313,9 @@ export class WalkWorld {
         const h = (gap.w / 2 + 0.15) / len;
         const t0 = Math.max(0, gapT - h), t1 = Math.min(1, gapT + h);
         const at = (t: number): P2 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-        if (t0 > 0) this.addWall(a, at(t0), wallY0);
-        if (t1 < 1) this.addWall(at(t1), b, wallY0);
-      } else this.addWall(a, b, wallY0);
+        if (t0 > 0) this.addWall(a, at(t0), wallY0, wallY1);
+        if (t1 < 1) this.addWall(at(t1), b, wallY0, wallY1);
+      } else this.addWall(a, b, wallY0, wallY1);
     }
     return pid;
   }

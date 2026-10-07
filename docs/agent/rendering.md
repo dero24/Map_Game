@@ -55,6 +55,19 @@ or per-region style.
   hair up close). Streets, lakes and shore foam are pulled forward (−1/−4); wakes −2/−6; the sea
   plane is pushed back (+1/+2) under shore ground.
 
+## Shaders compiled ahead (`render/warm.ts`)
+
+- three.js builds a program the first time something draws with it; on Windows (ANGLE/D3D11) a paint
+  shader takes 0.15–1.9 s. The watercolor post draws the scene into a render target, and a program's
+  key includes where it draws: `compileForScene` compiles into a target (a bare `renderer.compile` built
+  canvas programs nothing used), in parallel (KHR_parallel_shader_compile).
+- The boot compiles the scene plus a probe from each layer whose meshes come later (`probes()` on
+  NearTrees, UnderstoryField, Horizon, FarSkyline, Interiors — render/probe.ts `probeGeometry` carries a
+  `position` and a `normal`: the key reads which attributes a mesh has). A new layer with lazily made
+  meshes adds its probe there. Tiles: streaming.md.
+- A phone's far trees are a step coarser (TreeTier.farDetail −1, assets/flora.ts `setFarDetail`, the tile
+  worker's too; `?fardetail=0` keeps them as made): about half the vertices, the full model's measures.
+
 ## Night: lamp pools, the night's floor, the night grade (`render/nightLight.ts`)
 
 Night is laid the way a watercolourist lays it: one deep, cool wash over everything, the street

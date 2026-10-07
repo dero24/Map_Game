@@ -8,8 +8,9 @@ import { seamDuplicates } from './seams';
 import { fetchDem, demLayer, setDemBase, raceNull } from './dem';
 import { cachedFetchJson, manifestFingerprint } from './cache';
 import type { Door, Footprint } from './buildings';
+import { wallTop } from './buildings';
 import { buildTile } from './tileBuild';
-import { buildObject, freesUploaded, packGroup, replayOps, unpackDeck, type BuiltTile } from './pack';
+import { buildObject, packGroup, replayOp, unpackDeck, type BuiltTile } from './pack';
 import { synthTile, realExtras, regionSeed } from './synth';
 import { haloPoints } from './props';
 import { signTexture } from './signs';
@@ -20,6 +21,7 @@ import { POOL, poolStops } from '../render/nightLight';
 import { activeStyle } from './styles';
 import { roofSource } from './aerial';
 import { admitCells, type BudgetCell } from './budget';
+import type { ShaderWarm } from '../render/warm';
 
 // The rings (m). A phone's quality tier (render/quality.ts) tightens them at boot: every detail
 // tile is tens of MB of vertices and textures, and the silhouette ring to 8 km is hundreds of cells.
@@ -35,6 +37,9 @@ export const streamParams = {
   // an unloaded tile's walls taken out of the walk world a slice a frame (WalkWorld.purgeSome), not
   // only marked dead: a long walk's walls would otherwise pile up for the whole session
   purge: true,
+  // a tile's mount, a step at a time: the ms of a frame it may take (its collision is tens of
+  // thousands of walls — a phone's 60–90 ms in one go); the spawn's own ground still mounts at once
+  mountMs: 4,
 };
 // (what a detail tile weighs before its first build: a real city cell, a stand-in, a baked one)
 const EST = { w: 60e6, s: 10e6, b: 20e6 };
@@ -92,7 +97,7 @@ export interface TileArt {
 }
 
 // `replace`: a relief rebuild of an already-mounted flat cell — swapped in atomically.
-interface Pending { spec: TileSpec; tile: BuiltTile; replace?: boolean }
+interface Pending { spec: TileSpec; tile: BuiltTile; replace?: boolean; shaders?: string[] }
 
 const boxDist2 = (b: Box, x: number, z: number) => {
   const dx = Math.max(b.x0 - x, 0, x - b.x1), dz = Math.max(b.z0 - z, 0, z - b.z1);
@@ -118,6 +123,7 @@ export class TileStream {
   private fetching = new Map<string, Promise<Pending | null>>();
   private failed = new Map<string, number>(); // tile -> last failure time (retry backoff)
   private buildQueue: Pending[] = [];
+  private mounting: Generator<void, void> | null = null; // a tile going in a step at a time (mountSteps)
   // Coarse tier: display-only tiles in [DROP_R, COARSE_R) — meshes rebuilt from lite builds,
   // no collision/interiors/plans. A tile entering the detail ring sheds its coarse mount.
   private coarseLoaded = new Map<string, { spec: TileSpec; group: THREE.Group; bytes: number }>();
@@ -161,6 +167,10 @@ export class TileStream {
   private sizes = new Map<string, number>(); // what each detail tile weighed when it was last built (the budget's estimates)
   private culled: THREE.Object3D[] = []; // frustum culling off for the frame they appear (see reveal)
   private culledPrev: THREE.Object3D[] = []; // …and back on a frame later: one mounted between frames is drawn too
+  // a tile mounted whole (the spawn's own ground, a silhouette): its meshes drawn once each, a budget a
+  // frame, so none waits to upload until the first time it comes into view (a turn of the head on
+  // the shore was 265 meshes, 150 ms, at once)
+  private uploadQ: THREE.Object3D[] = [];
   /** Where the last detail mount's time went, ms (tools/hitch-probe.js, soak). */
   lastMount: { id: string; collision: number; objects: number; retire: number; hooks: number } | null = null;
   private lampTex: THREE.CanvasTexture | null = null;
@@ -179,6 +189,11 @@ export class TileStream {
   measured = true;
   /** Real US tiles get real roof colours off the NAIP aerial photo (aerialFetch.ts). Set before the first build. */
   aerial = true;
+  /** A tile mounts once the shaders it draws with are built (render/warm.ts): a new variant compiled
+   *  as it's first drawn froze the frame for a second or two on Windows. Null (the tests): at once. */
+  warm: ShaderWarm | null = null;
+  /** The far trees' detail the tile worker builds with (assets/flora.ts setFarDetail): a phone's −1. Set before the first build. */
+  farDetail = 0;
   /** Recent tile-worker notes (LiDAR cells read/measured/failed) — also in the console. */
   readonly workerLog: string[] = [];
 
@@ -290,7 +305,7 @@ export class TileStream {
   get junctions() { this.sync(); return this._junc; }
   /** The coarse ring's mounted cells (display-only lite builds). */
   get coarseSpecs(): TileSpec[] { return [...this.coarseLoaded.values()].map((c) => c.spec); }
-  get busy() { return this.fetching.size > 0 || this.buildQueue.length > 0 || this.coarseFetching.size > 0 || this.coarseQueue.length > 0; }
+  get busy() { return this.fetching.size > 0 || this.buildQueue.length > 0 || this.coarseFetching.size > 0 || this.coarseQueue.length > 0 || !!this.mounting; }
   // Fired once a detail tile is fully mounted (visual + collision). main.ts uses it to
   // re-settle the walker when a real tile replaces the synth placeholder underfoot.
   onMount?: (spec: TileSpec | null) => void;
@@ -381,6 +396,7 @@ export class TileStream {
   // Load every tile within r of (x,z) now — used during startup so the spawn area is solid.
   // Covers synthetic cells too, so a teleport/respawn past the bake isn't born in a void.
   async ensureAround(x: number, z: number, r = streamParams.loadR) {
+    this.pumpMount(Infinity); // (a tile part-way in finishes first: the spawn's own may be it)
     const c = this.man.cell;
     const wanted: TileSpec[] = [];
     for (let cz = Math.floor((z - r) / c); cz <= Math.floor((z + r) / c); cz++)
@@ -395,6 +411,8 @@ export class TileStream {
     // stream in behind their synth twins; blocking spawn on Overpass is exactly the
     // cold-remote-tile wait the placeholder exists to avoid.
     const pends = await Promise.all(wanted.map((t) => (t.world ? Promise.resolve(null) : this.fetch(t))));
+    if (this.warm) await Promise.all(pends.map((p) => p && this.warm!.whenReady(p.tile.objs)));
+    this.pumpMount(Infinity); // (one begun while we waited, whole first: it may be one of these)
     for (const p of pends) this.mount(p, false); // (the spawn's own ground: all at once)
     // (a phone's budget leaves the real tiles to update(): nearest first, a couple at a time, only
     // those that fit — a teleport into Midtown had every cell of the ring built at once)
@@ -502,18 +520,52 @@ export class TileStream {
     // behind the corner of the box unload the same way the old manifest-wide loop did.
     for (const [id, a] of [...this.loaded]) if (boxDist2(a.spec.box, x, z) > DROP_R * DROP_R) this.unload(id);
     for (const [id, a] of [...this.coarseLoaded]) if (boxDist2(a.spec.box, x, z) > COARSE_R * COARSE_R) this.unloadCoarse(id);
-    if (this.buildQueue.length) {
+    // a tile part-way in: a few ms more of it, and nothing new until it's whole
+    if (this.mounting) this.pumpMount(streamParams.mountMs);
+    else if (this.buildQueue.length) {
       this.buildQueue.sort((a, b) => boxDist2(a.spec.box, x, z) - boxDist2(b.spec.box, x, z));
-      const p = this.buildQueue.shift()!;
-      this.queued.delete(p.spec.id);
-      if (boxDist2(p.spec.box, x, z) < DROP_R * DROP_R && (!admitted || admitted.has(cellKey(p.spec.box, c)))) this.mount(p);
+      const i = this.nextReady(this.buildQueue);
+      if (i >= 0) {
+        const p = this.buildQueue.splice(i, 1)[0];
+        this.queued.delete(p.spec.id);
+        if (boxDist2(p.spec.box, x, z) < DROP_R * DROP_R && (!admitted || admitted.has(cellKey(p.spec.box, c)))) {
+          // (a relief swap unloads the flat copy first: it lands whole, in this frame)
+          if (p.replace) this.mount(p);
+          else { this.mounting = this.mountSteps(p); this.pumpMount(streamParams.mountMs); }
+        }
+      }
     }
     if (this.coarseQueue.length) {
       this.coarseQueue.sort((a, b) => boxDist2(a.spec.box, x, z) - boxDist2(b.spec.box, x, z));
-      const p = this.coarseQueue.shift()!;
-      this.queued.delete('c' + p.spec.id);
-      if (boxDist2(p.spec.box, x, z) < COARSE_R * COARSE_R) this.mountCoarse(p);
+      const i = this.nextReady(this.coarseQueue);
+      if (i >= 0) {
+        const p = this.coarseQueue.splice(i, 1)[0];
+        this.queued.delete('c' + p.spec.id);
+        if (boxDist2(p.spec.box, x, z) < COARSE_R * COARSE_R) this.mountCoarse(p);
+      }
     }
+  }
+
+  /** Runs the tile mounting for `ms` (Infinity: to the end). */
+  private pumpMount(ms: number) {
+    const t0 = performance.now();
+    while (this.mounting) {
+      if (this.mounting.next().done) this.mounting = null;
+      else if (performance.now() - t0 >= ms) return;
+    }
+  }
+
+  /** The nearest queued tile whose shaders are built (render/warm.ts), or -1; the others' start
+   *  compiling now, off the main thread, so they're ready by their turn. */
+  private nextReady(q: Pending[]) {
+    if (!this.warm) return 0;
+    let pick = -1;
+    for (let i = 0; i < q.length; i++) {
+      const p = q[i];
+      p.shaders = p.shaders ? this.warm.pending(p.shaders) : this.warm.prepare(p.tile.objs);
+      if (pick < 0 && !p.shaders.length) pick = i;
+    }
+    return pick;
   }
 
   private spawn() {
@@ -576,7 +628,7 @@ export class TileStream {
           console.warn('lidar worker unavailable; measuring on the tile worker', e);
         }
       }
-      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin, origin: this.man.origin, dem: this.demEnabled, demBase: this.tilesBase, style: activeStyle().key, baked: this.man.tiles.map((t) => t.id), lidar: this.lidar, measured: this.measured, measuredBase: this.tilesBase === 'direct' ? '' : this.tilesBase, lidarPort, fail: new URLSearchParams(location.search).get('fail')?.split(',') ?? [], vector: new URLSearchParams(location.search).get('vector') !== '0', date: new URLSearchParams(location.search).get('date') }, lidarPort ? [lidarPort] : []);
+      w.postMessage({ kind: 'init', base: new URL(this.base, location.href).href, cell: this.man.cell, fp: manifestFingerprint(this.man), seed: this.seed, bin: this.terrBin, origin: this.man.origin, dem: this.demEnabled, demBase: this.tilesBase, style: activeStyle().key, baked: this.man.tiles.map((t) => t.id), lidar: this.lidar, measured: this.measured, farDetail: this.farDetail, measuredBase: this.tilesBase === 'direct' ? '' : this.tilesBase, lidarPort, fail: new URLSearchParams(location.search).get('fail')?.split(',') ?? [], vector: new URLSearchParams(location.search).get('vector') !== '0', date: new URLSearchParams(location.search).get('date') }, lidarPort ? [lidarPort] : []);
       // where roof colours come from (aerial.ts): the pack's aerial samples, the streamed cells' photos
       w.postMessage({ kind: 'roofs', painted: roofSource() === 'painted', aerial: this.aerial, relay: this.tilesBase });
       this.worker = w;
@@ -714,6 +766,13 @@ export class TileStream {
   }
 
   private mount(p: Pending | null, staged = true) {
+    const steps = this.mountSteps(p, staged);
+    while (!steps.next().done);
+  }
+  /** A tile's mount a step at a time (update() pumps it a few ms a frame, render/quality.ts): its
+   *  collision — some 20,000 walls a streamed cell, 60–90 ms on a phone in one go — then its meshes;
+   *  then, in one step, it goes on screen and into the world's lists. */
+  private *mountSteps(p: Pending | null, staged = true): Generator<void, void> {
     if (!p) return;
     if (p.spec.synth && this.loaded.has('w' + p.spec.id.slice(1))) return; // its real-lite twin already won the cell
     const retire: THREE.Group[] | undefined = staged ? [] : undefined; // what this tile replaces, on screen until it's whole
@@ -742,16 +801,23 @@ export class TileStream {
       if (!holders) this.demHolders.set(cell, (holders = new Set()));
       holders.add(spec.id);
     }
-    const t0 = performance.now();
+    // the time each part took, not counting the frames between its steps
+    const spent = { collision: 0, objects: 0 };
+    let at = performance.now(), part: keyof typeof spent = 'collision';
+    const lap = () => { const n = performance.now(); spent[part] += n - at; at = n; };
+    // (the tile's scope closed between steps: whatever registers in the frames between — an
+    // interior's partitions, a parked car driven off — never lands in it)
+    const pause = function* () { w.endScope(); lap(); yield; at = performance.now(); w.beginScope(scope); };
     w.beginScope(scope);
     try {
       // Builder-emitted collision (bridge/pier decks, poles, fences, parked cars) replays first —
       // the same order the live build registered them in.
-      replayOps(w, tile.ops);
+      for (let i = 0; i < tile.ops.length; i++) { replayOp(w, tile.ops[i], this.terrain); if (i % 512 === 511) yield* pause(); }
       const planByFp = new Map(tile.plans.map((pl) => [pl.i, pl.p]));
       const doors: Door[] = [];
       const standIn = !!spec.synth;
-      tile.fps.forEach((f, i) => {
+      for (let i = 0; i < tile.fps.length; i++) {
+        const f = tile.fps[i];
         fpKeys.push((f.key = `${spec.id}:${i}`));
         fpList.push(f);
         const key = f.key!;
@@ -759,8 +825,8 @@ export class TileStream {
         const plan = planByFp.get(i);
         const reg = () => {
           if (!plan) {
-            if (f.raise > 0.5) w.addPolygon(f.ring, { floor0: f.floor0, floorH: 3, levels: 1, ground: true }, null, f.floor0 - 0.6);
-            else w.addPolygon(f.ring);
+            if (f.raise > 0.5) w.addPolygon(f.ring, { floor0: f.floor0, floorH: 3, levels: 1, ground: true }, null, f.floor0 - 0.6, wallTop(f));
+            else w.addPolygon(f.ring, null, null, -Infinity, wallTop(f));
             return;
           }
           const door = tile.doors[f.door!];
@@ -771,24 +837,37 @@ export class TileStream {
           this.interiors.register(key, f, plan, pid);
           keys.push(key);
         };
-        if (!standIn) return reg();
-        const fs = this.scopeSeq++;
-        (fpScopes[i] = fs), w.withScope(fs, reg);
-      });
-      for (const [a, b, y0, y1] of tile.walls) w.addWall(a, b, y0, y1);
-      for (const d of tile.decks) w.addDeck(unpackDeck(d));
-      for (const pl of tile.pilings) {
-        const c = Math.cos(pl.ang) * 0.17, s = Math.sin(pl.ang) * 0.17;
+        if (!standIn) reg();
+        else { const fs = this.scopeSeq++; (fpScopes[i] = fs), w.withScope(fs, reg); }
+        if (i % 64 === 63) yield* pause();
+      }
+      for (let i = 0; i < tile.walls.length; i++) {
+        const [a, b, y0, y1] = tile.walls[i];
+        w.addWall(a, b, y0, y1);
+        if (i % 2048 === 2047) yield* pause();
+      }
+      for (let i = 0; i < tile.decks.length; i++) { w.addDeck(unpackDeck(tile.decks[i])); if (i % 512 === 511) yield* pause(); }
+      for (let i = 0; i < tile.pilings.length; i++) {
+        const pl = tile.pilings[i], c = Math.cos(pl.ang) * 0.17, s = Math.sin(pl.ang) * 0.17;
         w.addLoop([[pl.x - c + s, pl.z - s - c], [pl.x + c + s, pl.z + s - c], [pl.x + c - s, pl.z + s + c], [pl.x - c - s, pl.z - s + c]], -Infinity, 2.2 + Math.max(0, this.terrain.heightAt(pl.x, pl.z)));
+        if (i % 512 === 511) yield* pause();
       }
       w.endScope();
-      const t1 = performance.now();
+      lap();
+      yield;
+      at = performance.now();
+      part = 'objects';
 
       const group = new THREE.Group();
       group.name = `tile:${spec.id}`;
+      group.matrixAutoUpdate = false; // (never moves: see pack.ts buildObject)
+      group.matrixWorldNeedsUpdate = true; // (worked out once, under the world's offset, and its objects with it)
       const atlasTex = tile.atlas ? signTexture(tile.atlas) : undefined;
       group.userData.atlas = atlasTex; // (freed with the tile: dispose)
-      for (const o of tile.objs) group.add(buildObject(o, atlasTex));
+      for (let i = 0; i < tile.objs.length; i++) {
+        group.add(buildObject(tile.objs[i], atlasTex));
+        if (i % 48 === 47) { lap(); yield; at = performance.now(); }
+      }
       group.add(haloPoints(v3s(tile.lanterns), 7, new THREE.Color(1.0, 0.85, 0.55)));
       group.add(haloPoints(v3s(tile.towers), 1.2, new THREE.Color(1.0, 0.75, 0.45)));
       const bytes = vertexBytes(group) + (tile.atlas ? tile.atlas.width * tile.atlas.height * 4 * 1.33 : 0); // (a phone's budget)
@@ -799,6 +878,7 @@ export class TileStream {
         this.unload('s' + spec.id.slice(1), retire);
         this.unloadCoarse('s' + spec.id.slice(1), retire);
       }
+      lap();
       const t2 = performance.now();
       const hidden = retire ? group.children.filter((c) => c.visible) : [];
       for (const c of hidden) c.visible = false;
@@ -839,7 +919,7 @@ export class TileStream {
       this.onTile?.(this.loaded.get(spec.id)!);
       this.onMount?.(spec);
       const t4 = performance.now();
-      this.lastMount = { id: spec.id, collision: t1 - t0, objects: t2 - t1, retire: t3 - t2, hooks: t4 - t3 };
+      this.lastMount = { id: spec.id, collision: spent.collision, objects: spent.objects, retire: t3 - t2, hooks: t4 - t3 };
     } catch (e) {
       w.endScope();
       w.removeScope(scope);
@@ -1063,6 +1143,8 @@ export class TileStream {
     try {
       const group = new THREE.Group();
       group.name = `ctile:${spec.id}`;
+      group.matrixAutoUpdate = false;
+      group.matrixWorldNeedsUpdate = true;
       const atlasTex = tile.atlas ? signTexture(tile.atlas) : undefined;
       group.userData.atlas = atlasTex;
       for (const o of tile.objs) group.add(buildObject(o, atlasTex));
@@ -1122,27 +1204,35 @@ export class TileStream {
    *  silhouette — is drawn its first frame whether or not it's in view, as a revealed one is: uploaded
    *  now, its CPU copy let go now, not whenever you first turn round to it. */
   private uploadSoon(root: THREE.Object3D) {
-    if (!freesUploaded()) return;
-    root.traverse((m) => { if (m.frustumCulled && (m as THREE.Mesh).geometry) { m.frustumCulled = false; this.culled.push(m); } });
+    root.traverse((m) => { if (m.frustumCulled && (m as THREE.Mesh).geometry) this.uploadQ.push(m); });
   }
 
   private reveal() {
     for (const o of this.culledPrev) o.frustumCulled = true;
     this.culledPrev = this.culled;
     this.culled = [];
+    let budget = REVEAL_BYTES, n = 0;
+    const weigh = (m: THREE.Object3D) => {
+      const g = (m as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
+      if (g?.attributes) {
+        for (const k in g.attributes) budget -= (g.attributes[k] as THREE.BufferAttribute).array?.byteLength ?? 0;
+        if (g.index) budget -= g.index.array?.byteLength ?? 0;
+      }
+      if ((m as THREE.InstancedMesh).isInstancedMesh) budget -= (m as THREE.InstancedMesh).instanceMatrix.array?.byteLength ?? 0;
+    };
+    // (one unloaded since is out of the scene: drawn or not, it costs nothing)
+    while (this.uploadQ.length && budget > 0 && n++ < REVEAL_OBJS) {
+      const m = this.uploadQ.shift()!;
+      weigh(m);
+      if (m.frustumCulled) { m.frustumCulled = false; this.culled.push(m); }
+    }
     const r = this.reveals[0];
     if (!r) return;
-    let budget = REVEAL_BYTES, n = 0;
     while (r.hidden.length && budget > 0 && n++ < REVEAL_OBJS) {
       const o = r.hidden.shift()!;
       o.visible = true;
       o.traverse((m) => {
-        const g = (m as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
-        if (g?.attributes) {
-          for (const k in g.attributes) budget -= (g.attributes[k] as THREE.BufferAttribute).array?.byteLength ?? 0;
-          if (g.index) budget -= g.index.array.byteLength;
-        }
-        if ((m as THREE.InstancedMesh).isInstancedMesh) budget -= (m as THREE.InstancedMesh).instanceMatrix.array.byteLength;
+        weigh(m);
         if (m.frustumCulled) { m.frustumCulled = false; this.culled.push(m); }
       });
     }

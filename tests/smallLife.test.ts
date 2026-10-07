@@ -184,5 +184,5 @@ describe('the small life', () => {
     for (let i = 0; i < 60; i++) c2.update(0.05, 0, 0, env({ place: boston, month: 9, hour: 12 }));
     mons.forEach((m, i) => expect(m.z as number).toBeGreaterThan(z0[i] + 2)); // (south is +z)
     for (const m of mons) expect(m.y as number).toBeGreaterThan(1.2);
-  });
+  }, 30000); // (4,000 steps of the whole cast: seconds under the full suite's load)
 });

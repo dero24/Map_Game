@@ -152,6 +152,66 @@ export function kerbSpaces(roads: Road[], ctx: Road[], points: Point[], o: KerbO
   return out;
 }
 
+/** A test for a parked car's body (`corners`, its box): is it in the way — a street's centreline
+ *  running through it (a driveway's mouth, a lot drawn over a carriageway), standing in two streets'
+ *  carriageways that meet at an angle (a side street's mouth), or across one street's lanes rather
+ *  than along its kerb (more than a nose over the kerb line; an angled bay's depth at an angle). A
+ *  car at its own street's kerb stands in that one only. (Sea Bright's shopfront spaces along Ocean Avenue parked across
+ *  Church Street's and New Street's mouths: you couldn't turn in.) Every way a car may take, not a
+ *  bridge's deck over it or a tunnel under it. */
+export function streetThrough(roads: Road[]) {
+  const C = 16, grid = new Map<number, number[]>(), segs: number[] = [], half: number[] = [];
+  const key = (i: number, j: number) => (i + 65536) * 131072 + (j + 65536);
+  for (const r of roads) {
+    if (r.lod || r.br || r.tu || FOOT.test(r.c) || r.c === 'track' || r.c === 'steps') continue;
+    for (let i = 0; i + 3 < r.p.length; i += 2) {
+      const ax = r.p[i] / 10, az = r.p[i + 1] / 10, bx = r.p[i + 2] / 10, bz = r.p[i + 3] / 10, id = segs.length, hw = r.w / 2;
+      segs.push(ax, az, bx, bz);
+      half[id / 4] = hw;
+      for (let u = Math.floor((Math.min(ax, bx) - hw) / C); u <= Math.floor((Math.max(ax, bx) + hw) / C); u++)
+        for (let v = Math.floor((Math.min(az, bz) - hw) / C); v <= Math.floor((Math.max(az, bz) + hw) / C); v++) (grid.get(key(u, v)) ?? grid.set(key(u, v), []).get(key(u, v))!).push(id);
+    }
+  }
+  const cross = (ax: number, az: number, bx: number, bz: number, cx: number, cz: number, dx: number, dz: number) => {
+    const d1 = (bx - ax) * (cz - az) - (bz - az) * (cx - ax), d2 = (bx - ax) * (dz - az) - (bz - az) * (dx - ax);
+    const d3 = (dx - cx) * (az - cz) - (dz - cz) * (ax - cx), d4 = (dx - cx) * (bz - cz) - (dz - cz) * (bx - cx);
+    return d1 * d2 < 0 && d3 * d4 < 0;
+  };
+  const inside = (x: number, z: number, q: P[]) => {
+    let s = 0;
+    for (let i = 0; i < q.length; i++) { const [ax, az] = q[i], [bx, bz] = q[(i + 1) % q.length], c = (bx - ax) * (z - az) - (bz - az) * (x - ax); if (c !== 0) { if (s && Math.sign(c) !== s) return false; s = Math.sign(c); } }
+    return true;
+  };
+  return (corners: P[]) => {
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+    for (const [x, z] of corners) (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z));
+    const seen = new Set<number>(), dirs: number[] = [];
+    const heading = Math.atan2(corners[3][1] - corners[0][1], corners[3][0] - corners[0][0]); // (its length)
+    for (let u = Math.floor(x0 / C); u <= Math.floor(x1 / C); u++)
+      for (let v = Math.floor(z0 / C); v <= Math.floor(z1 / C); v++)
+        for (const id of grid.get(key(u, v)) ?? []) {
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const ax = segs[id], az = segs[id + 1], bx = segs[id + 2], bz = segs[id + 3];
+          if (inside(ax, az, corners) || inside(bx, bz, corners)) return true;
+          for (let k = 0; k < corners.length; k++) { const [cx, cz] = corners[k], [dx, dz] = corners[(k + 1) % corners.length]; if (cross(ax, az, bx, bz, cx, cz, dx, dz)) return true; }
+          // in this street's carriageway (a corner 30 cm and more inside its kerb): its heading noted
+          const ex = bx - ax, ez = bz - az, L2 = ex * ex + ez * ez;
+          if (L2 < 1e-6) continue;
+          let near = Infinity;
+          for (const [x, z] of corners) { const t = Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / L2)); near = Math.min(near, Math.hypot(ax + ex * t - x, az + ez * t - z)); }
+          const depth = half[id / 4] - near;
+          if (depth < 0.3) continue;
+          const a = Math.atan2(ez, ex), turn = Math.abs(((heading - a) % Math.PI) + Math.PI) % Math.PI, rel = Math.min(turn, Math.PI - turn);
+          if ((rel > 1.22 && depth > 0.6) || (rel > 0.44 && depth > 5.2)) return true;
+          // (two streets at an angle — not one street's ways joined end to end)
+          for (const b of dirs) { const d = Math.abs(((a - b) % Math.PI) + Math.PI) % Math.PI; if (Math.min(d, Math.PI - d) > 0.45) return true; }
+          dirs.push(a);
+        }
+    return false;
+  };
+}
+
 /** One car to a space: of parked cars whose bodies (`corners`, a box) overlap, the first keeps it.
  *  The inside of a bend pulls a kerb's spaces together, a lot drawn up to the street puts stalls on
  *  its kerb, two streets' kerbs meet at a corner the map didn't join. Order in, order out. */

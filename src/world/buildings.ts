@@ -21,6 +21,7 @@ export interface Footprint {
   ring: P2[]; // true outline, CCW (math sense)
   base: number; // ground under the building
   top: number; // wall top (eave), absolute
+  ridge?: number; // its highest point (the ridge, a church's steeple), absolute: its walls' top in collision (wallTop)
   floor0: number; // ground-floor level, absolute
   raise: number; // height of the pilings (0 = on a foundation)
   name?: string;
@@ -47,6 +48,19 @@ export interface Footprint {
 
 export const KIND = { house: 0, shed: 1, commercial: 2, large: 3, church: 4, lighthouse: 5 } as const;
 export const PART = { wall: 0, roof: 1, trim: 2, glass: 3, lattice: 4, rail: 5 } as const;
+/** The top of a building's walls for collision: over its eave, its roof (a pitched one up to its ridge,
+ *  bounded by its span), its tiers. A car on a bridge over a house, a walker on a deck above one,
+ *  isn't stopped by it (Route 36's approach over Highlands: every house under it walled the deck). */
+export function wallTop(f: Pick<Footprint, 'ring' | 'top' | 'ridge' | 'pitched' | 'tiers' | 'kind'>) {
+  if (f.ridge !== undefined) { let t = f.ridge + 1; for (const q of f.tiers ?? []) t = Math.max(t, q.top + 1.5); return t; }
+  // (a footprint from elsewhere, without its ridge: its roof as high as its span allows)
+  let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
+  for (const [x, z] of f.ring) (x0 = Math.min(x0, x)), (x1 = Math.max(x1, x)), (z0 = Math.min(z0, z)), (z1 = Math.max(z1, z));
+  const roof = f.kind === 'church' || f.kind === 'lighthouse' ? 40 : f.pitched ? Math.min(14, Math.min(x1 - x0, z1 - z0) * 0.6) + 0.5 : 1.5;
+  let t = f.top + roof;
+  for (const q of f.tiers ?? []) t = Math.max(t, q.top + 1.5);
+  return t;
+}
 export const floorHeight = (kind: string) => (kind === 'commercial' ? 3.8 : kind === 'large' ? 3.1 : 2.9);
 
 // Facade/roof palettes live in styles.ts (per region); recipe.ts picks per building.
@@ -1383,7 +1397,7 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
       const sides = bd.n === 'North Tower' ? 8 : 4;
       lighthouseTower(b, cx, cz, r, base, bd.h, facade, id, sides);
       lanterns.push(V(cx, base + bd.h + 1.5, cz));
-      footprints.push({ ring, base, top: base + bd.h, floor0: base + 0.3, raise: 0, name: bd.n, kind: bd.k, eave: bd.h, seed: r1, id });
+      footprints.push({ ring, base, top: Math.min(bd.hy ?? Infinity, base + bd.h), ridge: Math.min(bd.hy ?? Infinity, base + bd.h), floor0: base + 0.3, raise: 0, name: bd.n, kind: bd.k, eave: bd.h, seed: r1, id });
       return;
     }
 
@@ -1401,7 +1415,8 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
     const floor0 = Math.min(gmax + found, base + 1.6) + raise;
     const fo = floor0 - base;
     // LiDAR heights stand on the footprint's MEAN ground; mapped ones on its lowest corner
-    const top = base + 0.3 + lift + bd.h + (bd.ms ? Math.min(4, (gmax - gmin) / 2) : 0);
+    // (under a bridge's deck, never through it: bridges.ts fitUnderDecks)
+    const top = Math.min(bd.hy ?? Infinity, base + 0.3 + lift + bd.h + (bd.ms ? Math.min(4, (gmax - gmin) / 2) : 0));
     const fH = floorHeight(bd.k);
     const pitched = !bd.hp && (bd.roof === 'gable' || bd.roof === 'hip');
     let eave = top, roofG: RoofGeom | null = null;
@@ -1595,7 +1610,7 @@ export function buildBuildings(world: World, idBase = 0, lite = false): Building
         }
       }
     }
-    const fp: Footprint = { ring, base, top: wallTop, floor0, raise, name: bd.n, use: bd.u, addr: bd.ad, kind: bd.k, eave: wallTop - base, seed: r1, id, pitched: !!roofG, front: bd.k === 'commercial' || !!bd.gf || (!!bd.u && bd.k !== 'house' && bd.k !== 'shed'), ...(rc.siding === SIDING.glass ? { glass: 1 as const } : {}), ...(bd.gf && (bd.k === 'large' || bd.k === 'house') && rc.siding !== SIDING.glass ? { gf: 1 as const } : {}) };
+    const fp: Footprint = { ring, base, top: wallTop, ridge: bd.k === 'church' ? top + 12 : top, floor0, raise, name: bd.n, use: bd.u, addr: bd.ad, kind: bd.k, eave: wallTop - base, seed: r1, id, pitched: !!roofG, front: bd.k === 'commercial' || !!bd.gf || (!!bd.u && bd.k !== 'house' && bd.k !== 'shed'), ...(rc.siding === SIDING.glass ? { glass: 1 as const } : {}), ...(bd.gf && (bd.k === 'large' || bd.k === 'house') && rc.siding !== SIDING.glass ? { gf: 1 as const } : {}) };
     // a tier of a taller building (its part, lifted onto the outline or the tier under it): its
     // storeys are the building's too, up inside it
     if (lifted && part && bd.po != null && bd.po >= 0 && !bd.cn) {
