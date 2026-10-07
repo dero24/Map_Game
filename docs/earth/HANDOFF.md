@@ -12,6 +12,16 @@ package you're on. `docs/REGIONAL_LIFE.md` and the latest `docs/earth/LOG.md` en
 
 ## Confirm on Robby's PC (after the cloud session of 2026-10-06)
 
+**Done on the PC, 2026-10-07** (LOG "Smooth away from Sea Bright; roads and bridges clear"): the baseline
+(init: the monarch test's timeout under load, one feature in progress), the build, the full shore
+playtest (it found the 2.2 s shader freezes, now fixed: frames pass; flicker's self-test fails on the last
+commit too — not chased), the soak (no stalls), the shader check on the GPU (27 programs, no errors),
+`mobile-check` on a Pixel 7 and an iPhone (running, no errors, every shader limit inside a phone's). And
+Robby's report the same morning — lag away from Sea Bright and after a teleport, walls and buildings in
+the roads on the Sandy Hook bridge and in towns — worked through (the new `roads` playtest check). Left
+from the list below: the audit48 montages, and walking the places (tools/critter-shots.mjs does the
+animals' part: `node tools/critter-shots.mjs` → shots/critters-handoff-montage.jpg).
+
 The cloud session built packages #11–#16, the leftovers, the West's lizards, the water's life (seen
 from above) and each animal's abundance. They were checked with
 tests, CI, the shore playtest and studio montages, never in a real browser on a real GPU. On the PC:

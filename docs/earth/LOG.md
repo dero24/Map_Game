@@ -50,14 +50,39 @@ Highlands (Route 36) bridge 176 walls on its deck and 314 footprints; the shore 
   carriageways at an angle, or across one's lanes (kerbside.ts `streetThrough`), none on a deck.
 - After: the Highlands bridge 0 on its deck, the shore 15 (1.3 a thousand samples), Red Bank 28.
 
-**Verified:** typecheck; `npm test` 1028/1028 (new: tests/warm.test.ts, tests/roadsClear.test.ts);
+**Verified:** typecheck; `npm test` 1031/1031 (new: tests/warm.test.ts, tests/roadsClear.test.ts, tests/coverPatch.test.ts);
 `npm run build`; the shore's full playtest — frames, walkabout, drive, teleports, streaming, roads pass
 (frames max 50 ms, no hitch over 100 ms); self-tests pass but flicker's, which fails on the last commit too
 (its planted 5 mm fight doesn't fight on this GPU's depth — not chased).
 
+**The rest of the PC checks:** the soak (shore, 120 s: no stalls, 7 frames over 250 ms in its door, stair,
+flight and hour-skip churn), `mobile-check` on a Pixel 7 and an iPhone (running, no errors, every shader limit
+inside a phone's), the shader check (27 programs, no errors), CI green on the push.
+
+**The animals where they live** (`tools/critter-shots.mjs`, new: each animal's place, date and hour
+opened with its `see=` link, framed close through a long lens and wide, from where nothing walls the
+view → shots/critters-<tag>-montage.jpg; `--set=own` takes the game's own "go see it" places). The
+handoff's 18: the dolphins porpoising past the shore, the seals hauled out on its January beach, the sea
+otter, the orca breaching, the anole on a mossy trunk, the turtle at a dock, the darner, the monarchs, the
+gulls, the lizards, the slug — all at their ground's or water's own level, nothing floating or sunk. Four
+never came, even at their own places — the fiddler, the crawfish, the black bear, the beaver:
+- **A streamed cell had no land and no water's edge**: its land cover was grass (30) everywhere and every
+  land node 50 m from any water, 510 m from the sea — so all that keys on WorldCover (woods 10, scrub 20,
+  wetland 90…) or on the water's edge worked only in the baked shore. `dem.ts coverPatch` (the worker,
+  after `waterPatch`): the map's woods, scrub, lawns, beaches and wetlands as WorldCover's classes; the
+  shore's signed distance, both sides, the shore line where it was (land to 300 m, water to −60 m: checked
+  from above, Lake Placid's shore the same either way); the sea's distance within the cell. The crawfish
+  and the beaver came.
+- **"Go see it" stood you on the wrong ground**: the fiddler is the salt marsh's (a 'marsh' habitat: on it),
+  and its mud is the whole low marsh now, not only a mapped creek's bank (a marsh's creeks are mapped as
+  lines; the tiles carry none); the deer, the bear, the moose and the slugs keep to the woods (a 'woods'
+  habitat: just out of the nearest wood's edge — Cades Cove's open valley had none within the 60 m the
+  sim spawns them in). The fiddler and the bear came.
+
 **Next:** the cars and footprints left in towns' lanes are where the map's default street (a residential
-street + parking, 10.9 m) runs wider than the street between its buildings; then the rest of the PC checks
-(soak, mobile-check, audit48) and the HANDOFF's walk of the new animals.
+street + parking, 10.9 m) runs wider than the street between its buildings; the map's waterways (a marsh's
+creeks, a town's streams) need the tile service's data (keys); the lake's stair-step shore (the streamed
+ground's grid cut at the water) is older than today; the audit48 montages.
 
 ## 2026-10-06 — The ecosystem review: each animal on its own ground, in its numbers, season and range
 

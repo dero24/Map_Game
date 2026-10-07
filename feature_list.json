@@ -1935,7 +1935,10 @@
         "tests/warm.test.ts, tests/roadsClear.test.ts",
         "phone emulation (Pixel 7, phone tier, CPU 4×): Red Bank after a teleport, frames p50 129 → 52 ms; tree vertices in its ring 26.6 M → 13 M"
       ],
-      "evidence": [],
+      "evidence": [
+        "commit cf19a3e (docs/earth/LOG.md 2026-10-07): shaders compiled ahead (render/warm.ts), a phone's far trees a step coarser, grass and tile mounts in slices, uploads budgeted, matrix and timezone costs cut; roads: one-way widths, parallel decks, buildings under decks (fitUnderDecks), wall tops, trees and parked cars out of the lanes; the roads playtest check",
+        "shore full playtest PASS 11/11 (frames max 50 ms; roads perK 1.28); CI green; soak no stalls; mobile-check pixel7 + iphone clean"
+      ],
       "notes": "Robby, 2026-10-07: \"on mobile sea bright my game runs smooth at high fps but when going away from sea bright or telelporting it starts to really lag in the game, pleasse optimize performance where possible, also going over sandy hook bridge and driving through main cities sometimes the roads have walls or buidlings in them where they are not supposed to we need to make sure the streets and city traversing via car and on foot all work as it should\"."
     },
     {

@@ -36,9 +36,10 @@ describe('go see it', () => {
     expect(whereToSee('dolphin')).toMatchObject({ spot: 'seabright', month: 7 });
   });
   it('what to stand by, and when: the sea for the seals, the dolphins and the schools; fresh water for the beaver, the trout and the turtles; the night for the raccoon, dusk for the deer', () => {
-    for (const k of ['dolphin', 'humpback', 'harborseal', 'seaotter', 'shoal', 'mullet', 'fiddlercrab', 'laughinggull'] as CritterKind[]) expect(habitatOf(k), k).toBe('sea');
+    for (const k of ['dolphin', 'humpback', 'harborseal', 'seaotter', 'shoal', 'mullet', 'laughinggull'] as CritterKind[]) expect(habitatOf(k), k).toBe('sea');
     for (const k of ['beaver', 'riverotter', 'rainbowtrout', 'paintedturtle', 'alligator', 'mallard', 'greatblueheron', 'crawfish'] as CritterKind[]) expect(habitatOf(k), k).toBe('fresh');
-    for (const k of ['squirrel', 'deer', 'cardinal', 'hornedlizard'] as CritterKind[]) expect(habitatOf(k), k).toBe('land');
+    for (const k of ['squirrel', 'cardinal', 'hornedlizard'] as CritterKind[]) expect(habitatOf(k), k).toBe('land');
+    for (const k of ['deer', 'blackbear', 'bananaslug'] as CritterKind[]) expect(habitatOf(k), k).toBe('woods');
     expect(hourOf('raccoon', 7)).toBe(22);
     expect(hourOf('deer', 7)).toBeGreaterThan(19);
     expect(hourOf('deer', 1)).toBeLessThan(18);
@@ -61,6 +62,20 @@ describe('go see it', () => {
     expect((look[0] * to[0] + look[1] * to[1]) / L).toBeGreaterThan(0.9); // (facing the pond)
     expect(standBy('fresh', 0, 0, pond, (x) => x < 400)).toBeNull(); // (nowhere to stand that's allowed)
     expect(standBy('land', 0, 0, pond, ok)).toBeNull();
+    // a fiddler's salt marsh 300 m south, by the sea: stood on it (its mud), not on the beach
+    expect(habitatOf('fiddlercrab')).toBe('marsh');
+    const marsh = { sdfAt: (_x: number, z: number) => z, oceanDistAt: () => 600, coverAt: (_x: number, z: number) => (z > 300 ? 90 : z > 0 ? 30 : 80) };
+    const m = standBy('marsh', 0, 0, marsh, ok)!;
+    expect(marsh.coverAt(m.x, m.z)).toBe(90);
+    expect(Math.hypot(m.x, m.z)).toBeLessThan(340);
+    expect(standBy('marsh', 0, 0, pond, ok)).toBeNull(); // (no marsh about)
+    // a wood 400 m east (x > 400) beyond an open valley: stood just out of its edge, facing it
+    const valley = { sdfAt: () => 50, oceanDistAt: () => 510, coverAt: (x: number) => (x > 400 ? 10 : 30) };
+    const w = standBy('woods', 0, 0, valley, ok)!;
+    expect(w.x).toBeGreaterThan(370);
+    expect(w.x).toBeLessThan(400);
+    expect(-Math.sin(w.yaw)).toBeGreaterThan(0.9); // (looking east, into the trees)
+    expect(standBy('woods', 0, 0, pond, ok)).toBeNull(); // (no woods: left be)
   });
   it('how far and which way: north is −z', () => {
     expect(bearing(0, 0, 0, -40)).toBe('40 m north');

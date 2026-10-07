@@ -6,7 +6,7 @@ import { osmToTile, overpassQuery, makeProjector, type OsmDoc } from './realTile
 import { buildTile } from './tileBuild';
 import { packGroup, type BuiltTile } from './pack';
 import { synthTile, realExtras, waterSheets } from './synth';
-import { fetchDem, demLayer, flatDem, setDemBase, raceNull, waterPatch, waterLevel, type WaterBody } from './dem';
+import { fetchDem, demLayer, flatDem, setDemBase, raceNull, waterPatch, waterLevel, coverPatch, type WaterBody } from './dem';
 import { readMvt, ringArea } from './mvt';
 import { vectorToOsm, clipPoly } from './vectorTile';
 import { gradeRoads } from './grade';
@@ -584,6 +584,9 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   if (dem && realish) {
     water = waterBodies(dem, tj, terrain);
     if (water.length || seaFromMap) dem = waterPatch(dem, water, seaFromMap);
+    // …and its land's cover and the sea's distance, off its map (dem.ts coverPatch: woods, scrub,
+    // lawns, beaches, wetlands — what the bake reads off WorldCover)
+    coverPatch(dem, tj.areas);
     if (!msg.lite && dem.layout.grid.cell <= 4) {
       const gr = gradedDem(dem, tj, (m) => ctx.postMessage({ kind: 'log', msg: `[grade ${cellKey}] ${m}` }), true);
       dem = gr.dem;

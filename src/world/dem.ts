@@ -8,7 +8,7 @@
 // the S3 bucket sends no CORP header, so module-worker fetches to S3 are blocked.
 //   height_m = R*256 + G + B/256 - 32768. z14 ≈ 1.2–1.9 km/tile — a 1024 m cell spans
 //   at most a 2×2 tile corner. PNGs are immutable; the worker caches edge + R2.
-import type { Box, LayerLayout } from './data';
+import type { Area, Box, LayerLayout } from './data';
 import { makeProjector, type LatLon } from './realTile';
 import { makeCanvas } from './canvas';
 import { unzlibSync } from 'three/examples/jsm/libs/fflate.module.js';
@@ -263,6 +263,67 @@ export function waterPatch(layer: { buf: ArrayBuffer; layout: LayerLayout }, bod
     oceanD[k] = sea ? 0 : 255; // (a lake is fresh water, not the sea — whatever the DEM guessed)
   }
   return { buf, layout: L };
+}
+
+/** A streamed cell's land cover and its distances, from its map (the bake reads ESA WorldCover and
+ *  measures them; a streamed cell was grass — 30 — everywhere, 50 m from any water and 510 m from the
+ *  sea): WorldCover's classes off the map's areas — woods 10, scrub and heath 20, parks, lawns, pitches
+ *  and golf 30, beaches 60, wetlands 90 —; the shore's signed distance (the bake's decimetres: land out
+ *  to 300 m, water to −60 m — the shore line, where they cross, where it was); the sea's distance (the
+ *  bake's 2 m steps, capped at 510 m). So what keys on the land and its water's edge (the salt marsh's
+ *  cordgrass and its fiddlers, a crawfish's bank, a heron's edge, the forest floor's slugs, the woods'
+ *  animals, the lizards' scrub, the sand at the sea) has it beyond the baked region too. Water stays
+ *  water. In place; returns the layer. */
+const COVER_OF: Record<string, number> = { grass: 30, golf: 30, pitch: 30, scrub: 20, wood: 10, beach: 60, wetland: 90 };
+export function coverPatch(layer: { buf: ArrayBuffer; layout: LayerLayout }, areas: Area[]) {
+  const L = layer.layout, g = L.grid, n = g.w * g.h;
+  const cover = new Uint8Array(layer.buf, L.cover.offset, n), flags = new Uint8Array(layer.buf, L.flags.offset, n), oceanD = new Uint8Array(layer.buf, L.oceanD.offset, n);
+  const ring = (f: number[]): [number, number][] => { const r: [number, number][] = []; for (let i = 0; i + 1 < f.length; i += 2) r.push([f[i] / 10, f[i + 1] / 10]); return r; };
+  // (the most particular last: a wood in a park is wood, a marsh in it a marsh)
+  for (const c of ['grass', 'golf', 'pitch', 'scrub', 'wood', 'beach', 'wetland'])
+    for (const a of areas) {
+      if (a.c !== c || a.lod) continue;
+      const holes = (a.i ?? []).map(ring);
+      for (const o of a.o) eachNodeIn(g, { ring: ring(o), holes }, (k) => { if (!(flags[k] & 1)) cover[k] = COVER_OF[c]; });
+    }
+  const sdf = new Int16Array(layer.buf, L.sdf.offset, n);
+  // the shore's distance, both sides (none of one or the other in the cell: as before)
+  let wet = 0;
+  for (let k = 0; k < n; k++) if (flags[k] & 1) wet++;
+  if (wet && wet < n) {
+    const toWater = chamfer(g, (k) => (flags[k] & 1) !== 0), toLand = chamfer(g, (k) => (flags[k] & 1) === 0), h = g.cell / 2;
+    for (let k = 0; k < n; k++) sdf[k] = flags[k] & 1 ? -Math.min(600, Math.max(1, Math.round((toLand[k] - h) * 10))) : Math.min(3000, Math.max(1, Math.round((toWater[k] - h) * 10)));
+  }
+  // the sea's distance, from its nodes (none in the cell: as before, far)
+  let sea = false;
+  for (let k = 0; k < n && !sea; k++) sea = (flags[k] & 1) !== 0 && oceanD[k] === 0;
+  if (sea) {
+    const d = chamfer(g, (k) => (flags[k] & 1) !== 0 && oceanD[k] === 0);
+    for (let k = 0; k < n; k++) if (!(flags[k] & 1)) oceanD[k] = Math.min(255, Math.round(d[k] / 2));
+  }
+  return layer;
+}
+/** Each node's distance (m) to the nearest node where `from`: a two-pass chamfer (3×3, √2 diagonals). */
+function chamfer(g: Grid, from: (k: number) => boolean) {
+  const n = g.w * g.h, W = g.w, a = g.cell, b = g.cell * Math.SQRT2, d = new Float32Array(n);
+  for (let k = 0; k < n; k++) d[k] = from(k) ? 0 : Infinity;
+  for (let j = 0; j < g.h; j++)
+    for (let i = 0; i < W; i++) {
+      const k = j * W + i;
+      let v = d[k];
+      if (i > 0) v = Math.min(v, d[k - 1] + a);
+      if (j > 0) { v = Math.min(v, d[k - W] + a); if (i > 0) v = Math.min(v, d[k - W - 1] + b); if (i < W - 1) v = Math.min(v, d[k - W + 1] + b); }
+      d[k] = v;
+    }
+  for (let j = g.h - 1; j >= 0; j--)
+    for (let i = W - 1; i >= 0; i--) {
+      const k = j * W + i;
+      let v = d[k];
+      if (i < W - 1) v = Math.min(v, d[k + 1] + a);
+      if (j < g.h - 1) { v = Math.min(v, d[k + W] + a); if (i < W - 1) v = Math.min(v, d[k + W + 1] + b); if (i > 0) v = Math.min(v, d[k + W - 1] + b); }
+      d[k] = v;
+    }
+  return d;
 }
 
 /** The level a lake or river stands at in this cell (m): the DEM inside it, where the survey

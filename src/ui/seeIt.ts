@@ -36,10 +36,14 @@ const OWN: Partial<Record<CritterKind, [Spot, number?, number?]>> = {
 const MONTHS = [7, 6, 8, 5, 9, 10, 4, 3, 11, 12, 1, 2];
 
 /** What to stand by: the sea's beach, fresh water's bank, or wherever you land. */
-export type Habitat = 'sea' | 'fresh' | 'land';
+export type Habitat = 'sea' | 'fresh' | 'marsh' | 'woods' | 'land';
 const SALT = new Set<CritterKind>(['mullet', 'tarpon', 'shoal', 'fiddlercrab', 'sandpiper']);
 export function habitatOf(k: CritterKind): Habitat {
   const r = ROLE[k];
+  if (k === 'fiddlercrab') return 'marsh'; // (the salt marsh's mud: sim/critters.ts mud)
+  // (the wood's edge — the deer, the elk, the moose, a bear — and the forest floor's slugs: sim/critters.ts
+  // spawns them within 60 m of you there; in a wide open valley, none)
+  if (r === 'browser' || r === 'crawler') return 'woods';
   if (SALT.has(k) || r === 'cetacean' || r === 'gull' || (r === 'swimmer' && k !== 'riverotter')) return 'sea';
   if (r === 'fish' || r === 'swimmer' || r === 'waterfowl' || r === 'wader' || r === 'basker' || r === 'dragonfly' || k === 'crawfish' || k === 'ibis') return 'fresh';
   return 'land';
@@ -96,8 +100,38 @@ export function animalList(): Record<string, CritterKind> {
  *  by the sea, on a bank by fresh water — found where the water's within a hundred metres or so, then
  *  stepped down the distance's slope to a few metres from its edge. Faces the water. Null when there's
  *  none in reach (or for 'land': stay where you are). */
-export function standBy(h: Habitat, x0: number, z0: number, T: { sdfAt(x: number, z: number): number; oceanDistAt(x: number, z: number): number }, ok: (x: number, z: number) => boolean, reach = 1500) {
+export function standBy(h: Habitat, x0: number, z0: number, T: { sdfAt(x: number, z: number): number; oceanDistAt(x: number, z: number): number; coverAt?(x: number, z: number): number }, ok: (x: number, z: number) => boolean, reach = 1500) {
   if (h === 'land') return null;
+  if (h === 'woods') {
+    // just out of the nearest wood's edge (open ground, the trees 15 m on), facing into them
+    const woods = (x: number, z: number) => T.coverAt?.(x, z) === 10;
+    for (let r = 0; r <= reach; r += 20) {
+      const n = r === 0 ? 1 : Math.min(480, Math.max(8, Math.round((2 * Math.PI * r) / 20)));
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2, x = x0 + Math.sin(a) * r, z = z0 + Math.cos(a) * r;
+        if (woods(x, z) || T.sdfAt(x, z) < 2 || !ok(x, z)) continue;
+        for (let q = 0; q < 8; q++) {
+          const b = (q / 8) * Math.PI * 2;
+          if (woods(x + Math.sin(b) * 15, z + Math.cos(b) * 15) && woods(x + Math.sin(b) * 30, z + Math.cos(b) * 30)) return { x, z, yaw: b + Math.PI };
+        }
+      }
+    }
+    return null;
+  }
+  if (h === 'marsh') {
+    // on the salt marsh itself, the nearest of it (its mud: sim/critters.ts), facing its water if it has some
+    const wet = (x: number, z: number) => { const c = T.coverAt?.(x, z); return (c === 90 || c === 95) && T.sdfAt(x, z) > 0.5 && T.oceanDistAt(x, z) < 3000; };
+    for (let r = 0; r <= reach; r += 20) {
+      const n = r === 0 ? 1 : Math.min(480, Math.max(8, Math.round((2 * Math.PI * r) / 20)));
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2, x = x0 + Math.sin(a) * r, z = z0 + Math.cos(a) * r;
+        if (!wet(x, z) || !ok(x, z)) continue;
+        const gx = T.sdfAt(x + 2, z) - T.sdfAt(x - 2, z), gz = T.sdfAt(x, z + 2) - T.sdfAt(x, z - 2);
+        return { x, z, yaw: gx || gz ? Math.atan2(gx, gz) : a };
+      }
+    }
+    return null;
+  }
   const sea = h === 'sea';
   const near = (x: number, z: number) => { const s = T.sdfAt(x, z); return s > 0 && s < 120 && (sea ? T.oceanDistAt(x, z) < 400 : T.oceanDistAt(x, z) > 300); };
   const fits = (x: number, z: number) => {

@@ -368,7 +368,9 @@ export class Critters {
   /** A heron's or an egret's edge: a pond's, a river's, a marsh's or a mangrove's — not the open surf. */
   private wade(x: number, z: number) { const cv = this.terrain.coverAt(x, z); return this.edge(x, z) && (this.terrain.oceanDistAt(x, z) > 40 || cv === 90 || cv === 95); }
   /** A fiddler's mud: the salt marsh's and the mangroves', by the creeks — never the open beach's sand. */
-  private mud(x: number, z: number) { const s = this.terrain.sdfAt(x, z), cv = this.terrain.coverAt(x, z); return (cv === 90 || cv === 95) && this.terrain.oceanDistAt(x, z) < 3000 && s > 0.3 && s < 8; }
+  // (the salt marsh's mud and the mangroves': the whole low marsh, not only a mapped creek's bank — the
+  // map draws a marsh's creeks as lines, and a streamed cell's marsh had none of its own: dem.ts coverPatch)
+  private mud(x: number, z: number) { const s = this.terrain.sdfAt(x, z), cv = this.terrain.coverAt(x, z); return (cv === 90 || cv === 95) && this.terrain.oceanDistAt(x, z) < 3000 && s > 0.3; }
   /** A gull's ground: the beach, a coastal town's lots and plazas — the inland gulls' (the California gull's
    *  anywhere, the ring-billed's and the herring gull's away from the sea) lots and fields too. */
   private gullGround(x: number, z: number, sp: CritterKind) {
