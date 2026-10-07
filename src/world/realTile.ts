@@ -401,31 +401,61 @@ const structPoint = (c: string, x: number, z: number, t: Record<string, string>,
   if (isFinite(h) && h > 2 && h < 700) p.h = Math.round(h * 10) / 10;
   return p;
 };
-// A mapped tree's kind (flora.ts TreeKind, `:v` a grown variant) from its genus — `genus`, the
-// first word of `species`/`taxon`, else the common name — so a street of London planes, a row of
-// red maples or a bigleaf maple in a ravine is that tree. `conifer`: needle-leaved, species unknown
-// (the region's pine or fir).
+// A mapped tree's kind (flora.ts TreeKind, `:v` a grown variant) from its species (the binomial in
+// `species`/`taxon`), else its genus — `genus`, the first word of `species`/`taxon` — else the
+// common name: so a street of London planes, a row of red maples, a bigleaf maple in a ravine, a
+// Douglas fir in a Seattle park or Savannah's live oaks are those trees, the foundry's own models
+// (kindOfSp, props.ts, sizes and places them). `conifer`: needle-leaved, species unknown (the region's
+// pine or fir). Taxonomy, not places: the same answer anywhere.
+const SPECIES: [string, string][] = [
+  ['acer macrophyllum', 'maple:2'], ['acer circinatum', 'vinemaple'],
+  ['picea sitchensis', 'sitka'], ['picea rubens', 'redspruce'], ['picea engelmannii', 'engelmann'],
+  ['abies balsamea', 'balsamfir'], ['abies lasiocarpa', 'subalpinefir'], ['tsuga canadensis', 'easthemlock'],
+  ['pinus strobus', 'whitepine'], ['pinus ponderosa', 'ponderosa'], ['pinus contorta', 'lodgepole'], ['pinus taeda', 'loblolly'],
+  ['pinus palustris', 'longleaf'], ['pinus elliottii', 'slashpine'], ['pinus edulis', 'pinyon'], ['pinus monophylla', 'pinyon'],
+  ['pinus sabiniana', 'graypine'],
+  ['quercus virginiana', 'liveoak'], ['quercus fusiformis', 'plateauoak'], ['quercus agrifolia', 'coastoak'], ['quercus lobata', 'valleyoak'],
+  ['quercus douglasii', 'blueoak'], ['quercus kelloggii', 'blackoak'], ['quercus macrocarpa', 'buroak'],
+  ['populus tremuloides', 'aspen'], ['populus deltoides', 'cottonwood'], ['populus fremontii', 'fremont'],
+  ['juniperus virginiana', 'redcedar'], ['juniperus ashei', 'ashejuniper'], ['juniperus osteosperma', 'utahjuniper'],
+  ['taxodium ascendens', 'pondcypress'], ['taxodium distichum var. imbricarium', 'pondcypress'],
+  ['sabal palmetto', 'sabal'], ['phoenix canariensis', 'canarypalm'], ['yucca brevifolia', 'joshua'],
+];
 const GENUS: Record<string, string> = {
-  acer: 'maple', liquidambar: 'maple', quercus: 'oak', prunus: 'cherry', malus: 'cherry', pyrus: 'cherry', cercis: 'cherry',
-  cornus: 'cherry', crataegus: 'cherry', amelanchier: 'cherry', sorbus: 'cherry', lagerstroemia: 'cherry', magnolia: 'magnolia',
+  acer: 'maple', liquidambar: 'sweetgum', quercus: 'oak', prunus: 'cherry', malus: 'cherry', pyrus: 'cherry', cercis: 'redbud',
+  cornus: 'dogwood', crataegus: 'cherry', amelanchier: 'cherry', sorbus: 'cherry', lagerstroemia: 'crapemyrtle', magnolia: 'magnolia',
   ulmus: 'elm', zelkova: 'elm', celtis: 'elm', populus: 'poplar', cupressus: 'poplar', salix: 'willow', betula: 'birch',
-  alnus: 'birch', pinus: 'pine', picea: 'spruce', abies: 'spruce', pseudotsuga: 'spruce', tsuga: 'spruce', thuja: 'spruce',
-  cedrus: 'spruce', sequoia: 'spruce', sequoiadendron: 'spruce', chamaecyparis: 'spruce', calocedrus: 'spruce', juniperus: 'shrub',
-  washingtonia: 'fanpalm', sabal: 'palm', phoenix: 'palm', cocos: 'palm', syagrus: 'palm', roystonea: 'palm', prosopis: 'mesquite',
-  parkinsonia: 'mesquite:2', olneya: 'mesquite', platanus: 'round', tilia: 'round', fraxinus: 'round', gleditsia: 'round',
-  carpinus: 'round', fagus: 'round', aesculus: 'round', liriodendron: 'round', catalpa: 'round', gingko: 'round', ginkgo: 'round',
-  arbutus: 'round', robinia: 'round', sophora: 'round', styphnolobium: 'round', nyssa: 'maple', pistacia: 'round', koelreuteria: 'round',
+  alnus: 'alder', pinus: 'pine', picea: 'spruce', abies: 'spruce', pseudotsuga: 'fir', tsuga: 'hemlock', thuja: 'cedar',
+  cedrus: 'spruce', sequoia: 'redwood', sequoiadendron: 'sequoia', chamaecyparis: 'spruce', calocedrus: 'spruce', juniperus: 'shrub',
+  taxodium: 'baldcypress', nyssa: 'tupelo', liriodendron: 'tuliptree', carya: 'hickory', aesculus: 'buckeye', platanus: 'sycamore',
+  arctostaphylos: 'manzanita', rhododendron: 'rosebay',
+  washingtonia: 'fanpalm', sabal: 'sabal', phoenix: 'palm', cocos: 'palm', syagrus: 'queenpalm', roystonea: 'royalpalm', serenoa: 'sawpalmetto',
+  prosopis: 'mesquite', parkinsonia: 'mesquite:2', olneya: 'mesquite',
+  carnegiea: 'saguaro', opuntia: 'pricklypear', cylindropuntia: 'cholla', fouquieria: 'ocotillo', larrea: 'creosote', artemisia: 'sagebrush',
+  tilia: 'round', fraxinus: 'round', gleditsia: 'round', carpinus: 'round', fagus: 'round', catalpa: 'round', gingko: 'round', ginkgo: 'round',
+  arbutus: 'round', robinia: 'round', sophora: 'round', styphnolobium: 'round', pistacia: 'round', koelreuteria: 'round',
 };
 const COMMON: [RegExp, string][] = [
-  [/bigleaf maple/, 'maple:2'], [/maple|sweetgum/, 'maple'], [/oak/, 'oak'], [/cherry|plum|crabapple|pear|redbud|dogwood|hawthorn|serviceberry|crape/, 'cherry'],
-  [/magnolia/, 'magnolia'], [/elm|zelkova|hackberry/, 'elm'], [/poplar|cypress/, 'poplar'], [/willow/, 'willow'], [/birch|alder|aspen/, 'birch'],
-  [/pine/, 'pine'], [/spruce|fir\b|hemlock|cedar|redwood|sequoia/, 'spruce'], [/palo verde/, 'mesquite:2'], [/mesquite/, 'mesquite'],
-  [/fan palm|washingtonia/, 'fanpalm'], [/palm/, 'palm'], [/plane|linden|lime|ash|locust|beech|hornbeam|chestnut|tulip|ginkgo|madrone/, 'round'],
+  [/bigleaf maple/, 'maple:2'], [/vine maple/, 'vinemaple'], [/sweetgum|sweet gum/, 'sweetgum'], [/maple/, 'maple'],
+  [/live oak/, 'liveoak'], [/bur oak|burr oak/, 'buroak'], [/oak/, 'oak'],
+  [/redbud/, 'redbud'], [/dogwood/, 'dogwood'], [/crape myrtle|crepe myrtle/, 'crapemyrtle'], [/cherry|plum|crabapple|pear|hawthorn|serviceberry/, 'cherry'],
+  [/magnolia/, 'magnolia'], [/elm|zelkova|hackberry/, 'elm'], [/tulip/, 'tuliptree'], [/hickory|pecan/, 'hickory'], [/buckeye|horse ?chestnut/, 'buckeye'],
+  [/sycamore|plane/, 'sycamore'], [/tupelo|black ?gum/, 'tupelo'], [/bald ?cypress/, 'baldcypress'], [/cottonwood/, 'cottonwood'], [/aspen/, 'aspen'],
+  [/poplar|cypress/, 'poplar'], [/willow/, 'willow'], [/alder/, 'alder'], [/birch/, 'birch'],
+  [/white pine/, 'whitepine'], [/ponderosa/, 'ponderosa'], [/lodgepole/, 'lodgepole'], [/loblolly/, 'loblolly'], [/longleaf/, 'longleaf'],
+  [/slash pine/, 'slashpine'], [/pi[nñ]on/, 'pinyon'], [/pine/, 'pine'],
+  [/douglas.?fir/, 'fir'], [/hemlock/, 'hemlock'], [/eastern red ?cedar/, 'redcedar'], [/cedar/, 'cedar'], [/giant sequoia/, 'sequoia'], [/redwood|sequoia/, 'redwood'],
+  [/balsam fir/, 'balsamfir'], [/subalpine fir/, 'subalpinefir'], [/engelmann/, 'engelmann'], [/red spruce/, 'redspruce'], [/sitka/, 'sitka'],
+  [/spruce|fir\b/, 'spruce'], [/palo verde/, 'mesquite:2'], [/mesquite/, 'mesquite'],
+  [/ashe juniper/, 'ashejuniper'], [/utah juniper/, 'utahjuniper'], [/juniper/, 'shrub'],
+  [/fan palm|washingtonia/, 'fanpalm'], [/royal palm/, 'royalpalm'], [/queen palm/, 'queenpalm'], [/canary.*palm/, 'canarypalm'], [/saw palmetto/, 'sawpalmetto'],
+  [/palmetto|sabal/, 'sabal'], [/palm/, 'palm'], [/saguaro/, 'saguaro'], [/joshua/, 'joshua'],
+  [/linden|lime|ash|locust|beech|hornbeam|chestnut|ginkgo|madrone/, 'round'],
 ];
 export function treeKindOf(t: Record<string, string>): string | null {
   const latin = (t.genus ?? (t.species ?? t.taxon ?? '').split(/\s+/)[0] ?? '').toLowerCase();
   const sp = `${t.species ?? t.taxon ?? ''}`.toLowerCase();
-  if (sp.startsWith('acer macrophyllum')) return 'maple:2';
+  for (const [name, kind] of SPECIES) if (sp.startsWith(name)) return kind;
   if (GENUS[latin]) return GENUS[latin];
   const common = `${t['species:en'] ?? ''} ${t['taxon:en'] ?? ''} ${t['genus:en'] ?? ''}`.toLowerCase();
   for (const [re, k] of COMMON) if (re.test(common)) return k;
@@ -858,9 +888,10 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
           : kind === 'large' ? (o.wid < 16 && r4 < 25 && h < 20 ? 'hip' : 'flat')
           : 'flat');
         const b: Building = { r: p, h: +h.toFixed(1), k: kind, roof, s: seed, own: ownC(p) };
-        const fc = parseColour(t['building:colour']) ?? materialColour(t['building:material']);
+        // (the spellings that carry real colours too: building:color, building:facade:colour, roof:color)
+        const fc = parseColour(t['building:colour'] ?? t['building:color'] ?? t['building:facade:colour'] ?? t['building:facade:color']) ?? materialColour(t['building:material']);
         if (fc != null) b.fc = fc;
-        const rc = parseColour(t['roof:colour']) ?? roofMaterialColour(t['roof:material']);
+        const rc = parseColour(t['roof:colour'] ?? t['roof:color']) ?? roofMaterialColour(t['roof:material']);
         if (rc != null) b.rc = rc;
         if (floors) b.fl = Math.round(floors);
         if (roofLv) b.rl = roofLv;

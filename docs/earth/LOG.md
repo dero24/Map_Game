@@ -2,6 +2,30 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-07 (later) — Tiles v26: the street fixes at the source, mapped trees by species, colours in either spelling
+
+Robby gave the go-ahead for the tile service's redeploy and its cache bump. Into v26 with today's osmToTile
+changes (widths read in their units — feet; a one-way half of a divided road at its lanes' width;
+`location=underground` outlines skipped) went the two things that had waited on "the next bump":
+- **Mapped trees by species**, then genus, then common name, to the foundry's own kinds: Douglas fir → fir,
+  western hemlock and eastern hemlock, western redcedar → cedar, eastern redcedar, alder, vine maple,
+  Sitka, Engelmann and red spruce, balsam and subalpine fir, white, ponderosa, lodgepole, loblolly, longleaf,
+  slash and gray pine, piñon; the live, plateau, coast, valley, blue, black and bur oaks; aspen,
+  cottonwood, Fremont cottonwood; tulip tree, sweetgum, hickory, buckeye, sycamore (the London plane, its
+  kin), dogwood, redbud, crape myrtle, tupelo, bald and pond cypress, redwood, giant sequoia, manzanita;
+  the cabbage, royal, queen and Canary palms, saw palmetto; saguaro, prickly pear, cholla, ocotillo,
+  creosote, sagebrush, Joshua tree; Ashe and Utah juniper ("Ashe juniper" is not an ash). Taxonomy, the
+  same answer anywhere (realTile.ts SPECIES, GENUS, COMMON).
+- **Colours in either spelling**: `building:color`, `building:facade:colour`, `roof:color` read as the
+  building's and the roof's own.
+Keys bumped together (worker R2 `t/v26`, client `&v=26`, the direct path's `DIRECT_V` 26). **The worker
+must be deployed before the client goes out** — a client asking `&v=26` of the old worker would have the
+edge cache keep the old tiles under the new URL. The deploy itself was held at the session's permission
+check: Robby runs `cd worker && npx wrangler deploy`; then the client is pushed.
+
+**Verified:** typecheck; `npm test` 1043/1043 (realTile: the species, the genus, the common names, the
+colour spellings); `npm run build`; `wrangler deploy --dry-run` bundles `t/v26` and the new realTile.
+
 ## 2026-10-07 (late) — Arriving after a teleport: the frame you land in, 1.3 s → 0.37 s on a phone
 
 Robby: "when going away from sea bright or telelporting it starts to really lag". After the day's fixes the

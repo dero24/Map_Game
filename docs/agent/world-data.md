@@ -164,9 +164,9 @@ note means the browser was refused CORS and the relay took over (needs the worke
   Phase 2 hood layer (`docs/NEIGHBOURHOODS.md`).
 - The bake could read its roofs the way streamed cells do (registration, street balance:
   `scripts/fetch-imagery.mjs` calling `aerial.ts` `readCell` on its tiles) on the next re-bake.
-- Cheaper first steps: batch with the next `t/vN` bump — read `building:color`,
-  `building:facade:colour` and `roof:color` (common misspellings that carry real colours) in
-  `realTile.ts`; and LiDAR RGB — many 3DEP point clouds carry colour from their project's own
+- Cheaper first steps: `building:color`, `building:facade:colour` and `roof:color` (common
+  misspellings that carry real colours) are read in `realTile.ts` since tiles v26. Still to do: LiDAR
+  RGB — many 3DEP point clouds carry colour from their project's own
   orthos: the LiDAR worker already reads every roof point, so its median is a second roof colour
   for free (a `VER` bump in `lidar.ts`).
 

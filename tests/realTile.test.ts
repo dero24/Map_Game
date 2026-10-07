@@ -598,9 +598,31 @@ describe('mapped trees keep their species', () => {
     expect(treeKindOf({ genus: 'Acer' })).toBe('maple');
     expect(treeKindOf({ species: 'Acer macrophyllum' })).toBe('maple:2');
     expect(treeKindOf({ species: 'Quercus rubra' })).toBe('oak');
-    expect(treeKindOf({ taxon: 'Platanus x acerifolia' })).toBe('round');
+    expect(treeKindOf({ taxon: 'Platanus x acerifolia' })).toBe('sycamore'); // (the London plane: the foundry's sycamore, its kin)
     expect(treeKindOf({ 'species:en': 'Kwanzan Flowering Cherry' })).toBe('cherry');
-    expect(treeKindOf({ 'species:en': 'Douglas-fir' })).toBe('spruce');
+    expect(treeKindOf({ 'species:en': 'Douglas-fir' })).toBe('fir');
+    // the foundry's own kinds: by species first, then genus, then the common name
+    expect(treeKindOf({ species: 'Pseudotsuga menziesii' })).toBe('fir');
+    expect(treeKindOf({ species: 'Tsuga canadensis' })).toBe('easthemlock');
+    expect(treeKindOf({ species: 'Tsuga heterophylla' })).toBe('hemlock');
+    expect(treeKindOf({ genus: 'Thuja' })).toBe('cedar');
+    expect(treeKindOf({ species: 'Picea sitchensis' })).toBe('sitka');
+    expect(treeKindOf({ species: 'Alnus rubra' })).toBe('alder');
+    expect(treeKindOf({ species: 'Acer circinatum' })).toBe('vinemaple');
+    expect(treeKindOf({ species: 'Quercus virginiana' })).toBe('liveoak');
+    expect(treeKindOf({ species: 'Pinus ponderosa' })).toBe('ponderosa');
+    expect(treeKindOf({ species: 'Liriodendron tulipifera' })).toBe('tuliptree');
+    expect(treeKindOf({ species: 'Liquidambar styraciflua' })).toBe('sweetgum');
+    expect(treeKindOf({ species: 'Taxodium distichum' })).toBe('baldcypress');
+    expect(treeKindOf({ species: 'Sequoia sempervirens' })).toBe('redwood');
+    expect(treeKindOf({ species: 'Sabal palmetto' })).toBe('sabal');
+    expect(treeKindOf({ species: 'Carnegiea gigantea' })).toBe('saguaro');
+    expect(treeKindOf({ 'species:en': 'Ashe juniper' })).toBe('ashejuniper'); // (not an "ash")
+    expect(treeKindOf({ 'species:en': 'Green ash' })).toBe('round');
+    // a mapped colour in either spelling (building:color, roof:color carry real ones too)
+    const t = osmToTile(osm(way(1, { building: 'yes', 'building:color': '#aa3322', 'roof:color': 'green' }, sq(100, 100, 12), true), way(2, { building: 'yes', 'building:colour': '#112233' }, sq(200, 100, 12), true)), OPTS);
+    expect(t.buildings.map((b) => b.fc)).toEqual([0xaa3322, 0x112233]);
+    expect(t.buildings[0].rc).not.toBeUndefined();
     expect(treeKindOf({ genus: 'Parkinsonia' })).toBe('mesquite:2');
     expect(treeKindOf({ genus: 'Washingtonia' })).toBe('fanpalm');
     expect(treeKindOf({ leaf_type: 'needleleaved' })).toBe('conifer');

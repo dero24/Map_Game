@@ -60,7 +60,7 @@ const realDem = new Map<string, { buf: ArrayBuffer; layout: LayerLayout }>(); //
 // (the vector twin: real streets and buildings) and the stream asks the service again later.
 // Results are cached per cell in IndexedDB (kvPut), so a revisit never re-queries Overpass.
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-const DIRECT_V = 25; // keep with the tile service's t/vN (realTile output version)
+const DIRECT_V = 26; // keep with the tile service's t/vN (realTile output version)
 // Overpass rate-limits per IP and per server: one query at a time on each mirror, so the three
 // mirrors carry three cells at once. A mirror that answers 429/504 cools down for its
 // retry-after; a query that fails on one mirror moves on to the next free one.
