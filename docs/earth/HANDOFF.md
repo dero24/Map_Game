@@ -29,8 +29,9 @@ trees; a city's frame (scene matrix, per-camera tile culling, the coarse ring me
 windows by grid) and the grass after a teleport. `smooth-and-clear` done. **To check a town's streets**:
 `node tools/playtest.mjs --at=LAT,LON --only=roads,drive,walkabout` (roads: hits a thousand lane
 samples — Asheville 0.85, Miami Beach 0.31, Midtown 1.4, Seattle 3.2, Chicago 7.3). What's left there is
-in the LOG's "Next" lines; the tile service's v26 (osmToTile's widths and underground outlines at the
-source) waits on Robby's go-ahead and a redeploy.
+in the LOG's "Next" lines. The tile service is at v26 (deployed 2026-10-07: osmToTile's widths and
+underground outlines at the source, mapped trees by species, colours in either spelling); the next bump
+deploys the worker before the client goes out (docs/agent/streaming.md).
 
 The cloud session built packages #11–#16, the leftovers, the West's lizards, the water's life (seen
 from above) and each animal's abundance. They were checked with
