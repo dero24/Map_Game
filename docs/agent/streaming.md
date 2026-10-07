@@ -46,6 +46,13 @@ terrain/DEM, or the LiDAR measure pipeline.
   compiled off the main thread, kept for good; `nextReady` takes the nearest queued tile that's ready).
 - **A tile mounted whole uploads a budget a frame** (`uploadQ`, `REVEAL_BYTES`/`REVEAL_OBJS` shared with the
   staged reveals): each mesh drawn once out of view, so none uploads at the first turn of the head.
+- **A teleport lands on ground already in** (`ensureAround(…, spread)` from main.ts `teleportTo`): its tiles
+  mount a step at a time, 20 ms a frame, through the stream's one mount slot while you're still where you
+  were (the spot pinned against the unload sweep), and it resolves once their meshes are uploaded (the
+  upload budget doubled meanwhile; 2.5 s at most). The old place leaves a few tiles a frame (3 detail, 12
+  coarse) and its meshes are freed 2 ms a frame (`freeTick`: three.js walks every program's bindings for
+  each geometry it lets go); the horizon ring is built a ring at a time. The boot still mounts whole. On a
+  phone (CPU 4×) the frame you arrive in went 1.3 s → 0.37 s.
 - **A far tile's small things aren't drawn** (`streamParams.smallCull`, the tier's `stream.smallCull`:
   desktop 200, phone 120, low 90): an instanced mesh past its own size (`spanOf`: its model's radius at
   its largest instance's scale) × smallCull from you, by its tile's nearest edge, goes on no layer —

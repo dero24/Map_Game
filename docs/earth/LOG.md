@@ -2,6 +2,32 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-07 (late) — Arriving after a teleport: the frame you land in, 1.3 s → 0.37 s on a phone
+
+Robby: "when going away from sea bright or telelporting it starts to really lag". After the day's fixes the
+settled frames were good; the arrival wasn't. Measured right (every frame from the call to 3 s after it
+lands; the first try measured only up to the landing and missed the frame that mattered), Pixel 7 tier,
+CPU 4×: the frame you land in was **1.2–1.3 s**. Taken apart:
+- The arrival's ground was mounted whole in that frame (0.65 s): now a step at a time, 20 ms a frame,
+  through the stream's one mount slot while you're still where you were, the spot pinned so the unload
+  sweep leaves it (stream.ts `ensureAround(…, spread)`; the boot still mounts whole) → 0.57 s.
+- 412 of its meshes were still queued for upload, so the first frame at the new place uploaded them all:
+  the teleport now lands once the arrival tiles' meshes are up (the upload budget doubled while it waits,
+  2.5 s at most).
+- The old place — its ring and two hundred silhouettes — went in that same frame, ~880 geometries freed,
+  three.js walking every program's bindings for each: a few tiles a frame now, their meshes freed 2 ms a
+  frame (`freeTick`) → 0.37 s, and the second long frame (0.35 s) gone.
+- The horizon ring (193,000 elevation samples) is built a ring at a time (horizon.ts).
+- Tried and wrong: the paint windows' whole-canvas upload (skipping it changed nothing).
+The teleport itself takes ~1 s longer (6.2 → 7.1 s at 4×; the shore playtest's teleports 2.9 → 3.0 s): you
+wait at the old place, with "walking over", instead of the game freezing at the new one.
+
+**Verified:** typecheck; `npm test` 1043/1043; the shore's full playtest PASS 11/11 (teleports, streaming
+worst 67 ms); every object's world matrix right after two re-anchoring teleports (0 wrong).
+
+**Next:** what's left of the arrival frame — the grass's first mask blocks at the new place and the near paint
+window's first slices (~0.3 s at 4×); the relief swaps' one-frame mount.
+
 ## 2026-10-07 (night) — The big cities' streets: stations over them lifted, streets under towers sunk, cars at their own level
 
 The playtest's roads, drive and walkabout checks in the audit's cities after the day's street fixes:

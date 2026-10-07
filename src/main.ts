@@ -572,7 +572,7 @@ async function main() {
       return false;
     }
     toast('walking over');
-    await stream.ensureAround(x, z);
+    await stream.ensureAround(x, z, undefined, true); // (its ground a step a frame: not the frame you arrive in)
     if (!landmark || !viewpoint(x, z)) teleportLocal(x, z);
     return true;
   };

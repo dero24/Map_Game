@@ -169,7 +169,14 @@ export class Horizon {
     // across it: at 97 km a vertex stands for ~9 km², more than all but the biggest glaciers)
     const pos = new Float32Array(n * 3), col = new Float32Array(n * 3), hts = new Float32Array(n), iceF = new Float32Array(n), rockF = new Float32Array(n);
     const dr = (rMax / R0) ** (1 / (RINGS - 1)) - 1, dA = (Math.PI * 2) / SEG;
+    // (a ring at a time, a few ms of a frame each: all 193,000 samples at once were a third of a second of
+    // a phone's frame after a teleport)
+    let slice = performance.now();
     for (let k = 0; k < RINGS; k++) {
+      if (performance.now() - slice > 6) {
+        await new Promise((res) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => res(null)) : setTimeout(res, 0)));
+        slice = performance.now();
+      }
       const r = radius(k);
       // the inner rings duck under the tiles' own terrain so their coarse silhouette never shows
       const duck = 60 * Math.max(0, 1 - (r - R0) / 4000);

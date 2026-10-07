@@ -168,6 +168,8 @@ export class TileStream {
   private failed = new Map<string, number>(); // tile -> last failure time (retry backoff)
   private buildQueue: Pending[] = [];
   private mounting: Generator<void, void> | null = null; // a tile going in a step at a time (mountSteps)
+  private mounted: (() => void) | null = null; // (a teleport waiting on its ground: told when `mounting` is done)
+  private pin: { x: number; z: number } | null = null; // (a teleport's spot while its ground goes in: kept loaded)
   // Coarse tier: display-only tiles in [DROP_R, COARSE_R) — meshes rebuilt from lite builds,
   // no collision/interiors/plans. A tile entering the detail ring sheds its coarse mount.
   private coarseLoaded = new Map<string, { spec: TileSpec; group: THREE.Group; bytes: number }>();
@@ -442,7 +444,11 @@ export class TileStream {
 
   // Load every tile within r of (x,z) now — used during startup so the spawn area is solid.
   // Covers synthetic cells too, so a teleport/respawn past the bake isn't born in a void.
-  async ensureAround(x: number, z: number, r = streamParams.loadR) {
+  /** The cells round (x, z) mounted — their stand-ins at least — before it resolves. `spread` (a teleport
+   *  in the running game): they go in a step at a time, 20 ms a frame, while you're still where you were —
+   *  all at once they were the frame you arrived in, 0.65 s of it on a phone (CPU 4×); the spot is kept
+   *  loaded meanwhile. At boot (no frames yet) all at once. */
+  async ensureAround(x: number, z: number, r = streamParams.loadR, spread = false) {
     this.pumpMount(Infinity); // (a tile part-way in finishes first: the spawn's own may be it)
     const c = this.man.cell;
     const wanted: TileSpec[] = [];
@@ -460,7 +466,26 @@ export class TileStream {
     const pends = await Promise.all(wanted.map((t) => (t.world ? Promise.resolve(null) : this.fetch(t))));
     if (this.warm) await Promise.all(pends.map((p) => p && this.warm!.whenReady(p.tile.objs)));
     this.pumpMount(Infinity); // (one begun while we waited, whole first: it may be one of these)
-    for (const p of pends) this.mount(p, false); // (the spawn's own ground: all at once)
+    if (!spread) for (const p of pends) this.mount(p, false); // (the spawn's own ground: all at once)
+    else {
+      const pin = { x, z }, self = this;
+      this.pin = pin;
+      try {
+        await new Promise<void>((done) => {
+          this.mounting = (function* () { for (const p of pends) yield* self.mountSteps(p, false); })();
+          this.mounted = done;
+        });
+        // …and their meshes on the GPU before you're stood among them (the upload budget doubled while
+        // you wait): the frame you arrived in uploaded what the queue hadn't yet — 412 meshes, half a
+        // second on a phone. At most 2.5 s more.
+        const groups = new Set(pends.map((p) => (p ? this.loaded.get(p.spec.id)?.group : undefined)).filter((g): g is THREE.Group => !!g));
+        const waiting = () => this.uploadQ.some((m) => { let g = m.parent; while (g && g.parent !== this.scene) g = g.parent; return !!g && groups.has(g as THREE.Group); });
+        const t0 = performance.now();
+        while (performance.now() - t0 < 2500 && waiting()) await new Promise((res) => requestAnimationFrame(() => res(null)));
+      } finally {
+        if (this.pin === pin) this.pin = null;
+      }
+    }
     // (a phone's budget leaves the real tiles to update(): nearest first, a couple at a time, only
     // those that fit — a teleport into Midtown had every cell of the ring built at once)
     if (!streamParams.budgetMB) for (const t of wanted) if (t.world) void this.fetch(t).then((p) => { if (p) { this.queued.add(t.id); this.buildQueue.push(p); } });
@@ -502,6 +527,7 @@ export class TileStream {
     this.reveal();
     this.cullSmall(x, z);
     this.walk.purgeSome(); // (unloaded tiles' walls, ~1.5 ms a frame until they're gone)
+    this.freeTick(2); // (…and their meshes)
     const now = performance.now();
     const gy = Math.max(0, this.terrain.heightAt(x, z));
     if (Number.isFinite(gy)) U.uLampBaseY.value = Number.isFinite(U.uLampBaseY.value) ? U.uLampBaseY.value + (gy - U.uLampBaseY.value) * 0.05 : gy;
@@ -566,10 +592,14 @@ export class TileStream {
     this.drainRelief(x, z);
     // Cells outside the iteration window aren't visited above — sweep mounts so tiles left
     // behind the corner of the box unload the same way the old manifest-wide loop did.
-    for (const [id, a] of [...this.loaded]) if (boxDist2(a.spec.box, x, z) > DROP_R * DROP_R) this.unload(id);
-    for (const [id, a] of [...this.coarseLoaded]) if (boxDist2(a.spec.box, x, z) > COARSE_R * COARSE_R) this.unloadCoarse(id);
-    // a tile part-way in: a few ms more of it, and nothing new until it's whole
-    if (this.mounting) this.pumpMount(streamParams.mountMs);
+    const pinned = (b: Box) => !!this.pin && boxDist2(b, this.pin.x, this.pin.z) <= DROP_R * DROP_R;
+    // (a few a frame: after a teleport the whole of the old place — its ring and two hundred silhouettes —
+    // went in the frame you arrived in, thousands of meshes freed at once)
+    let drops = 3, coarseDrops = 12;
+    for (const [id, a] of [...this.loaded]) if (drops > 0 && boxDist2(a.spec.box, x, z) > DROP_R * DROP_R && !pinned(a.spec.box)) this.unload(id), drops--;
+    for (const [id, a] of [...this.coarseLoaded]) if (coarseDrops > 0 && boxDist2(a.spec.box, x, z) > COARSE_R * COARSE_R) this.unloadCoarse(id), coarseDrops--;
+    // a tile part-way in: a few ms more of it (a teleport's ground, more), and nothing new until it's whole
+    if (this.mounting) this.pumpMount(this.mounted ? 20 : streamParams.mountMs);
     else if (this.buildQueue.length) {
       this.buildQueue.sort((a, b) => boxDist2(a.spec.box, x, z) - boxDist2(b.spec.box, x, z));
       const i = this.nextReady(this.buildQueue);
@@ -644,8 +674,12 @@ export class TileStream {
   private pumpMount(ms: number) {
     const t0 = performance.now();
     while (this.mounting) {
-      if (this.mounting.next().done) this.mounting = null;
-      else if (performance.now() - t0 >= ms) return;
+      if (this.mounting.next().done) {
+        this.mounting = null;
+        const m = this.mounted;
+        this.mounted = null;
+        m?.();
+      } else if (performance.now() - t0 >= ms) return;
     }
   }
 
@@ -1294,14 +1328,22 @@ export class TileStream {
   }
   private dispose(g: THREE.Group) {
     this.scene.remove(g);
-    g.traverse((o) => {
-      const m = o as THREE.Mesh;
-      m.geometry?.dispose?.();
-      if ((m as unknown as THREE.InstancedMesh).isInstancedMesh) (m as THREE.InstancedMesh).dispose();
-    });
+    // (its meshes freed a few ms a frame — freeTick: three.js walks every program's bindings for each
+    // geometry it lets go, and a teleport's whole old place at once was a third of a second on a phone)
+    g.traverse((o) => { if ((o as THREE.Mesh).geometry || (o as unknown as THREE.InstancedMesh).isInstancedMesh) this.freeQ.push(o); });
     // …and its street-sign atlas: the one texture a tile owns. Left, every tile ever passed kept its
     // signs in video memory (a phone's, a few round trips into a town, then the city)
     (g.userData.atlas as THREE.Texture | undefined)?.dispose();
+  }
+  private freeQ: THREE.Object3D[] = [];
+  /** Frees retired tiles' meshes, `ms` of them a frame (update). */
+  private freeTick(ms: number) {
+    const t0 = performance.now();
+    while (this.freeQ.length && performance.now() - t0 < ms) {
+      const m = this.freeQ.pop() as THREE.Mesh;
+      m.geometry?.dispose?.();
+      if ((m as unknown as THREE.InstancedMesh).isInstancedMesh) (m as unknown as THREE.InstancedMesh).dispose();
+    }
   }
   // Show the oldest revealing tile's next meshes (REVEAL_BYTES / REVEAL_OBJS of them), each drawn this frame
   // whether it's in view or not, so its buffers go up now rather than when you turn round; when
@@ -1317,7 +1359,9 @@ export class TileStream {
     for (const o of this.culledPrev) o.frustumCulled = true;
     this.culledPrev = this.culled;
     this.culled = [];
-    let budget = REVEAL_BYTES, n = 0;
+    // (doubled while a teleport waits on its ground: you're not looking at it yet)
+    let budget = REVEAL_BYTES * (this.pin ? 2 : 1), n = 0;
+    const objs = REVEAL_OBJS * (this.pin ? 2 : 1);
     const weigh = (m: THREE.Object3D) => {
       const g = (m as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
       if (g?.attributes) {
@@ -1327,7 +1371,7 @@ export class TileStream {
       if ((m as THREE.InstancedMesh).isInstancedMesh) budget -= (m as THREE.InstancedMesh).instanceMatrix.array?.byteLength ?? 0;
     };
     // (one unloaded since is out of the scene: drawn or not, it costs nothing)
-    while (this.uploadQ.length && budget > 0 && n++ < REVEAL_OBJS) {
+    while (this.uploadQ.length && budget > 0 && n++ < objs) {
       const m = this.uploadQ.shift()!;
       weigh(m);
       if (m.frustumCulled) { m.frustumCulled = false; this.culled.push(m); }
@@ -1337,7 +1381,7 @@ export class TileStream {
     for (const m of this.culled) { let p = m.parent; while (p && p.parent !== this.scene) p = p.parent; if (p) this.mustDraw.add(p); }
     const r = this.reveals[0];
     if (!r) return;
-    while (r.hidden.length && budget > 0 && n++ < REVEAL_OBJS) {
+    while (r.hidden.length && budget > 0 && n++ < objs) {
       const o = r.hidden.shift()!;
       o.visible = true;
       o.traverse((m) => {
