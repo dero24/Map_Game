@@ -1974,7 +1974,7 @@
       "id": "osm-area-relations",
       "tier": 1,
       "rank": 11.42,
-      "status": "not_started",
+      "status": "passing",
       "area": "world",
       "title": "Beaches, woods, wetlands, scrub, heath, grassland and sand mapped as relations fetched like the ways",
       "user_visible_behavior": "Cape May's beach — and every big wood, marsh or beach OpenStreetMap maps as a multipolygon (several outlines bundled as one area) — is there in the game, not only where WorldCover's land cover fills it in.",
@@ -1983,8 +1983,15 @@
         "the live tile at Cape May (38.9318, -74.9213) carries a beach area; scratch beaches28.mjs-style survey: OSM beaches at more than 11 of the 25 US beaches",
         "node tools/must-load.mjs --live"
       ],
-      "evidence": [],
-      "notes": "src/world/osmQuery.ts takes natural=beach|sand|wetland|wood|scrub|heath|grassland only as ways (relations: natural=water alone), so a multipolygon relation is never fetched — from our extract or Overpass. Cape May's beach is one (outer ways 810853698, 40412148). The fix: S('relation', re('natural', '^(beach|sand|wetland|wood|scrub|heath|grassland)$')); the US extract re-cut on D: (scripts/osm-extract.mjs, ~2 h machine time: 1.5 billion points read and cut on the game's grid) and uploaded (scripts/osm-upload.mjs); tiles v29, worker first. Robby's go-ahead before the R2 upload. A faster path to weigh: cut only the new relations and add them to the existing pack."
+      "evidence": [
+        "src/world/osmQuery.ts: relation[\"natural\"~\"^(beach|sand|wetland|wood|scrub|heath|grassland)$\"]; tests/osmQuery.test.ts (the frozen query with it)",
+        "scripts/osm-extract-addon.mjs: the query's relations the extract lacked — 232,988 in the US, 1.29 M member ways, 86.6 M points — cut from the extract's own file and moment (~28 min of steps, ~49 min packing) with the extract's own SQL; stored once past 2 KB: 772.5 MB in 1,013 blocks (the extract: 35 GB)",
+        "R2 osm/v1/addon/ (its own index; the extract's untouched); worker/src/osm.js reads it beside the extract when of the same snapshot (osmTiles.ts mergeSources); tests/osmWorker.test.ts (the add-on, and of another snapshot the extract as it was)",
+        "the US packs on D: (scratch addon-check-us*.mjs): Ruby Beach a beach and two woods where it had neither, Cannon Beach +6, Pismo, Ocean City and Cape May their beaches, the Hoh valley, Wharton and Cades Cove their woods — the extract's own elements none missing, none changed",
+        "tiles v29 (worker t/v29, client &v=29, DIRECT_V 29)",
+        "live 2026-10-08: the add-on uploaded (2,026 objects, its index last), worker 90e0bdeb; must-load --live all from the extract; OSM beach areas at 22 of 25 sampled US beaches (11 on v28; scratch beaches29.mjs)"
+      ],
+      "notes": "src/world/osmQuery.ts takes natural=beach|sand|wetland|wood|scrub|heath|grassland only as ways (relations: natural=water alone), so a multipolygon relation is never fetched — from our extract or Overpass. Cape May's beach is one (outer ways 810853698, 40412148). The fix: S('relation', re('natural', '^(beach|sand|wetland|wood|scrub|heath|grassland)$')); the US extract re-cut on D: (scripts/osm-extract.mjs, ~2 h machine time: 1.5 billion points read and cut on the game's grid) and uploaded (scripts/osm-upload.mjs); tiles v29, worker first. Robby's go-ahead before the R2 upload. A faster path to weigh: cut only the new relations and add them to the existing pack. Done 2026-10-08 as an add-on, not a re-cut (Robby: \"why do we need to redownload everything?\"): the next monthly full cut selects the relations itself (sqlWhere) — retire the add-on then (delete osm/v1/addon/index.json; the service ignores it anyway once the extract's snapshot moves on)."
     },
     {
       "id": "bug-floor-plants-circling",

@@ -50,7 +50,13 @@ a vertex in it clipped to it (the beaches of Ruby, Cannon, Pismo, Cape May and s
 sampled show sand at the water. Next there: beaches, sands, wetlands and woods mapped as multipolygon
 *relations* are never fetched (`osmQuery.ts` takes them as ways only) — the statement, the US extract
 re-cut and uploaded, tiles v29, with Robby's go-ahead (LOG "Next"). Never point a page carrying an
-unreleased `&v=` at the live service (what retired v27). Robby's reports of the same evening — a developer-settings preset for a crisper
+unreleased `&v=` at the live service (what retired v27).
+
+**Then the natural areas mapped as relations (LOG 2026-10-08 "later"):** tiles **v29** live (worker 90e0bdeb):
+the query's new relation statement, and — rather than re-cutting the 35 GB extract — an add-on of just those
+relations (`scripts/osm-extract-addon.mjs`, R2 `osm/v1/addon/`, 772.5 MB) the service reads beside the extract
+when both are of one snapshot. OSM beaches now at 22 of 25 sampled US beaches. At the next monthly full cut the
+relations come with the extract itself: retire the add-on then (docs/agent/streaming.md "The add-on"). Robby's reports of the same evening — a developer-settings preset for a crisper
 watercolor, the harbour's water north of the Statue of Liberty (diagnosis in the LOG), people glowing at
 night, crowds and traffic too dense at night and on desert roads — went to another session.
 

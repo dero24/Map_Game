@@ -2,6 +2,56 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-08 (later) — The natural areas mapped as relations: the query's new statement, the extract's add-on, tiles v29
+
+Robby, on the 2-hour re-cut: "why do we need to redownload everything?" — we don't (the US file is on D:),
+and not the whole extract either: "no need to check with me either just be careful and ensure it doesnt
+break the current game". What changed:
+
+- **The query** (`osmQuery.ts`): `relation["natural"~"^(beach|sand|wetland|wood|scrub|heath|grassland)$"]` — a
+  beach, a wood, a marsh mapped as a multipolygon (several outlines bundled as one area) was never asked
+  for, from the extract or from Overpass: Cape May's beach, Wharton State Forest's wood. Overpass's answers
+  carry them now; the next full cut selects them itself (`sqlWhere`).
+- **The extract's add-on** (`scripts/osm-extract-addon.mjs`, R2 `osm/v1/addon/`): the query's relations the
+  extract's own `sel_r` lacks — 232,988 in the US — cut from the same file and the same moment, without
+  cutting the extract again: the file's relations (41 s), their 1.29 M member ways (5 min), their 86.6 M points (one
+  pass over the nodes, 16 min), then the extract's own SQL for the printing, the tiles and the big relations (read out of
+  `osm-extract.mjs`, as `tests/osmExtractSql.test.ts` reads it). Its relations past 2 KB are stored once
+  (`--big=2000`; the extract's rule is 50 KB): a wood or a marsh of 8–50 K crosses ~14 tiles, and New
+  Jersey's add-on was 88.5 MB of copies — 13.5 MB once, the US 772.5 MB in 1,013 blocks (the extract: 35 GB). Packed a block column at a time
+  (the US's relations stored once are ~4 GB of text: all at once would not fit); `--keep` packs from a
+  run's tables. Uploaded with `osm-upload.mjs --addon` under its own prefix and index — the extract's
+  untouched.
+- **The service** (`worker/src/osm.js`): reads the add-on beside the extract only when its snapshot is the
+  extract's (`osmTiles.ts mergeSources`: a tile's lines from both, each element kept once; a relation stored
+  once from whichever pack holds it). Without the add-on's index, or of another snapshot, the extract as it
+  was. `assemble` reads a cell's relations stored once six at a time. **Taking it back:**
+  `npx wrangler r2 object delete map-game-tiles/osm/v1/addon/index.json --remote`.
+- **Tiles v29** (worker `t/v29`, client `&v=29`, `DIRECT_V` 29), the worker first.
+
+**Verified:** typecheck; `npm test` 1065/1065 (tests/osmQuery.test.ts — the frozen query with its statement;
+tests/osmWorker.test.ts — the add-on: a small relation whole and a big one from its own section beside every
+element of the extract, the cell's TileJson with its beach; of another snapshot, the extract as it was);
+`npm run build`. New Jersey from the local packs (scratch `addon-check.mjs`): Cape May 1,961 → 1,962 elements
+(its beach), Wharton State Forest 8 → 9 (its wood), Sandy Hook +3 (a beach, a wood, scrub), High Point +2 —
+the extract's own elements none missing, none changed; the rest of each tile identical but at Barnegat, where
+one stand-in house (`gen: fill`) no longer stands in the newly mapped wood. The restructured packer: New
+Jersey's blocks byte for byte the same (all nine hashes). The local service (`wrangler dev`, the New Jersey
+extract and its add-on): Cape May's cell carries its beach (394 roads, 1,170 buildings as before), Wharton's
+its wood. The US's packs on D: (scratch `addon-check-us*.mjs`): Ruby Beach 28 → 31 elements, a beach and two woods
+where it had neither; Cannon Beach +6 (its beaches, sand, heath, grassland); Pismo, Ocean City and Cape May their
+beaches; the Hoh valley, Wharton and Cades Cove their woods; Jones Beach a wetland; Discovery Park a wood and a
+wetland — the extract's own elements none missing, none changed anywhere. Live: the add-on uploaded (2,026 objects in ~22 min, its index
+last; both indexes read back — the extract's as it was, 1,481 blocks), then the worker deployed (90e0bdeb), then
+the client. `must-load --live`: every town from the extract, cold, the same buildings and roads as on v28. The 25
+beaches on v29 (scratch `beaches29.mjs`): OSM's beach areas in the cell at 22 (11 on v28) — Ruby 8.8 ha, Cannon
+18.2, Pismo 14.4, Cape May 7.7, Santa Monica 0.1 → 19.2, Sleeping Bear's dunes 67.2; WorldCover's sand at the
+water at 22; neither only Jones Beach (its sample point offshore) and Old Orchard (inland of its beach).
+
+**Next:** retire the add-on at the next monthly full cut (it selects the relations itself; the service ignores an
+add-on of another snapshot); the walker into the wall (Chicago) once Robby gives its spot; the far canopy's winter
+colour (`distant-forests`).
+
 ## 2026-10-08 — Robby's bug folder: the forest floor stands still, the horizon's pyramids gone, no grass on courts; the distant trees reviewed
 
 Robby: "these floating plants are moving in a circle around the terrain and floating it looks horrible, and
