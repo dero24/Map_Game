@@ -60,6 +60,12 @@ relations come with the extract itself: retire the add-on then (docs/agent/strea
 watercolor, the harbour's water north of the Statue of Liberty (diagnosis in the LOG), people glowing at
 night, crowds and traffic too dense at night and on desert roads — went to another session.
 
+**Then the far woods' seasons (LOG 2026-10-08 "evening"):** the far ring's canopy and the wooded horizon
+ridges turn in autumn and go bare in winter with the trees in front of them (their make-up from the trees
+about the walker), and a near wood's floor goes to leaf litter once the leaves are down. Summer is the same
+as before; developer settings → Time of day → "far forests follow the season" (`?farseason=0`) puts the old
+look back. Client only, pushed after Robby saw the before/after.
+
 The cloud session built packages #11–#16, the leftovers, the West's lizards, the water's life (seen
 from above) and each animal's abundance. They were checked with
 tests, CI, the shore playtest and studio montages, never in a real browser on a real GPU. On the PC:

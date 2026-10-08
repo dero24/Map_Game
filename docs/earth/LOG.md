@@ -2,12 +2,13 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
-## 2026-10-08 (evening) — The forest past the trees follows the season (`far-woods-seasons`, committed, not pushed)
+## 2026-10-08 (evening) — The forest past the trees follows the season (`far-woods-seasons`, pushed after Robby's look)
 
 Robby: "so are there different seasons in the game … i just want to ensure it wont make the game look
 worse", then "okay please fix that". His condition, in the feature: summer the same, and he sees the
-before/after before it ships — so this is **committed locally and not pushed** until he has looked
-(https://claude.ai/artifact/MnhtEZBGDE6fqCYF2f54r9, the live service's frames).
+before/after before it ships. It waited, committed and unpushed, until he had looked
+(https://claude.ai/artifact/MnhtEZBGDE6fqCYF2f54r9, the live service's frames): "cool, ill like please
+push" — pushed (Pages). Client only: no tile cache bump, no worker deploy.
 
 - **The far woods** (`world/farWoods.ts`, the GLSL at the end of `render/treeSeasons.ts`): the far ring's
   canopy (`ground.ts` CANOPY: the lite and far cells' raised woods, the bake's backdrop) and the wooded
@@ -45,8 +46,9 @@ live service's. Shenandoah in December looked leafy: every broadleaf there is ba
 its white pines and pines read as round broadleaf crowns from above (the conifers' far models). The pale
 flat band and white patches in the far ring at Cades Cove are in every frame, before and after.
 
-**Next:** Robby's look; then push (Pages). Later: the season by each wood's own height (from Clingmans Dome
-the valleys below take the summit's bare winter; from a valley in early October the high ridges stay green).
+**Next:** the season by each wood's own height (from Clingmans Dome the valleys below take the summit's bare
+winter; from a valley in early October the high ridges stay green). Robby asked after the
+crisper-watercolor preset: it is `look-crisp-preset` (not started, his notes from the other session in it).
 
 ## 2026-10-08 (later) — The natural areas mapped as relations: the query's new statement, the extract's add-on, tiles v29
 
