@@ -200,3 +200,35 @@ describe('flatDem: somewhere for the sea to go when the ground is late', () => {
     expect(L.heightAt(900, 500)).toBeCloseTo(3, 0); // (the land stays land)
   });
 });
+
+import { despike } from '../src/world/dem';
+// The horizon's low-zoom tiles (Robby, 2026-10-07: "weird pyramid in background of a lot of landscapes
+// when it doesn't exist"): the overviews carry single pixels hundreds of metres over flat land — the
+// Pine Barrens' 617 m, Long Island's 300, JFK's 243 — each a pyramid on every horizon within 125 km.
+describe('dem: the low zooms despiked', () => {
+  const grid = (f: (i: number, j: number) => number) => { const h = new Float32Array(256 * 256); for (let j = 0; j < 256; j++) for (let i = 0; i < 256; i++) h[j * 256 + i] = f(i, j); return h; };
+  const at = (i: number, j: number) => j * 256 + i;
+  it('puts a lone spike and a pair of them back down to the land round them', () => {
+    const h = grid((i) => 20 + 0.1 * i);
+    h[at(100, 100)] = 617;
+    h[at(60, 50)] = 300; h[at(61, 50)] = 280; // (two pixels wide)
+    h[at(0, 120)] = 541; // (on the tile's edge: five neighbours)
+    const o = despike(h);
+    for (const [i, j] of [[100, 100], [60, 50], [61, 50], [0, 120]]) expect(o[at(i, j)], `${i},${j}`).toBeLessThan(40);
+    expect(o[at(10, 10)]).toBe(h[at(10, 10)]); // (the rest as it was)
+  });
+  it("keeps a real summit — the Grand Teton's z9 pixel, its ridge standing high with it — and a canyon's rim", () => {
+    // (a steep peak, 130 m a pixel down every side, its summit's eight neighbours as the real tile has them:
+    // 168 m under it at their middle, the second highest 99 under)
+    const h = grid((i, j) => Math.max(1000, 3829 - 130 * Math.hypot(i - 128, j - 128)));
+    const nb = [3760, 3730, 3700, 3670, 3652, 3600, 3550, 3500];
+    h[at(128, 128)] = 3829;
+    [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]].forEach(([a, b], k) => (h[at(128 + a, 128 + b)] = nb[k]));
+    const o = despike(h);
+    expect(o[at(128, 128)]).toBe(3829);
+    for (let k = 0; k < 256 * 256; k++) if (o[k] !== h[k]) throw new Error(`a mountain's pixel moved: ${k % 256},${Math.floor(k / 256)}`);
+    // a rim 1,000 m over its canyon: three of its neighbours down in it, five on the plateau
+    const c = grid((i) => (i < 100 ? 0 : 1000));
+    expect(despike(c)[at(100, 50)]).toBe(1000);
+  });
+});

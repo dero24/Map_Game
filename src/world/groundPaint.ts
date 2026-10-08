@@ -118,6 +118,8 @@ function pathOf(ctx: CanvasRenderingContext2D, p: P[], close = false) {
   for (let i = 1; i < p.length; i++) ctx.lineTo(p[i][0], p[i][1]);
   if (close) ctx.closePath();
 }
+/** A pitch's surfaces the grass never grows on (Painter.hardCourts). */
+const HARD_PITCH = new Set(['asphalt', 'concrete', 'paved', 'acrylic', 'clay', 'rubber', 'tartan', 'sand', 'paving_stones']);
 // A mapped court or field in its own paint (sports.ts: the same fit props.ts stands the hoops,
 // nets and goals in): the run-off, the playing surface and — `lw` > 0, the fine window — its lines.
 function paintCourt(ctx: CanvasRenderingContext2D, ring: P[], sport: Sport, sf: string | undefined, lw: number) {
@@ -470,6 +472,21 @@ export class Painter {
     return { key, m };
   }
   private tilesOf(key: string) { return key ? key.trim().split(' ').map((id) => this.tiles.get(id)!) : []; }
+  /** The grass's mask (openOf): a hard court — basketball, tennis, pickleball, whose paint is a court's
+   *  green or its run-off's (sports.ts COURT), read as lawn: tufts grew over the key and the baseline —
+   *  or any pitch the map says is paved, clay, rubber or sand is no lawn, whatever its colour. */
+  hardCourts(ctx: CanvasRenderingContext2D, x0: number, z0: number, x1: number, z1: number) {
+    ctx.fillStyle = '#808080';
+    ctx.globalAlpha = 1;
+    for (const a of this.areasIn(x0, z0, x1, z1)) {
+      const k = a.item.k, sf = a.item.sf;
+      if (a.item.c !== 'pitch' || !(k === 'basketball' || k === 'tennis' || k === 'pickleball' || (sf !== undefined && HARD_PITCH.has(sf)))) continue;
+      ctx.beginPath();
+      for (const r of a.pts) pathOf(ctx, r, true);
+      ctx.fill('evenodd');
+    }
+  }
+
   private areasIn(x0: number, z0: number, x1: number, z1: number): Prepared<Area>[] {
     if (!this.tiles.size) return inWindow(this.areas, x0, z0, x1, z1);
     const { key, m } = this.near(x0, z0, x1, z1);
@@ -1654,6 +1671,7 @@ export function paintGround(world: World, maxTex: number, walks: number[] = [], 
     ctx.clearRect(0, 0, res, res);
     ctx.setTransform(k, 0, 0, k, -x0 * k, -z0 * k);
     painter.paint(ctx, x0, z0, x0 + size, z0 + size, k, 2);
+    painter.hardCourts(ctx, x0, z0, x0 + size, z0 + size);
     const d = ctx.getImageData(0, 0, res, res).data;
     const out = new Uint8Array(res * res);
     for (let i = 0; i < out.length; i++) {

@@ -2,6 +2,50 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-08 — Robby's bug folder: the forest floor stands still, the horizon's pyramids gone, no grass on courts; the distant trees reviewed
+
+Robby: "these floating plants are moving in a circle around the terrain and floating it looks horrible, and
+more terrain bugs and others are in here now" (`Pictures/Screenshots/_bugs`) — "go back and ensure things
+look good first and check for bugs review your work for distant forests all that". What changed:
+
+- **The forest floor** (`understory.ts`): each 16 m cell's plants built about its own corner and the mesh
+  set there. The wind (propMaterial `WIND`) sways a vertex by its height above the mesh's origin, and the
+  cells were built in the world's own coordinates — every fern 150–180 m up (the Hoh's valley, a Chicago
+  park) swung a metre or more round its foot, circling and floating off its slope. Both reports, one cause;
+  nothing else builds world-space geometry with the wind (trees, hangers, garden and tile plants are
+  instanced or set at their foot).
+- **The horizon's pyramids** (`dem.ts despike`): the Terrarium overviews carry single pixels and clumps
+  hundreds of metres over flat land — the Pine Barrens' 617 m, Long Island's 300, JFK's 243, Rumson's 270, a
+  pixel over Hetch Hetchy 900 over its walls, most over water (voids filled wrong). Each stood as a pyramid
+  on every horizon within 125 km. Every tile below z14 (the horizon's z9/z10, the far towers' z11) is
+  despiked as it's read: a pixel more than 250 m over most of its neighbours, or 150 m over most and over the
+  second highest, takes their middle; twice, for a clump. Real summits keep theirs (their neighbours stand
+  high with them): Rainier 4,367 m and the Grand Teton 4,038 m unchanged; z14 has no such pixels.
+- **Courts** (`groundPaint.ts Painter.hardCourts`): the grass's mask read a basketball court's paint
+  (#5d7f5c) and a tennis court's run-off as lawn. A basketball, tennis or pickleball court, or any pitch
+  mapped as paved, clay or rubber, is drawn out of the mask: no tufts on the court, no ferns either.
+- **The feature list** carries every report: the three fixed (`bug-floor-plants-circling`,
+  `bug-horizon-pyramids`, `bug-grass-on-courts`), `bug-walker-into-wall` (Chicago: a walker into the wall
+  beside an open door — needs its spot), `bug-grandstaff-terrain` (Moab: not reproduced on tiles v28 —
+  river, banks and parking as they are; suspects in its notes), and the evening's other reports, with the
+  other session: `bug-harbour-water` (with its diagnosis), `bug-night-glow-people`, `life-density-realism`,
+  `look-crisp-preset` (the six adjustments); and `distant-forests`, `osm-area-relations`.
+
+**The distant trees reviewed:** the code read again (tile removal, a tile told of twice, phones' freed
+arrays, the shadow pass, the world's offset), and the look: the Hoh and Monmouth Beach on/off the same, and
+winter — Cades Cove in January on/off the same from 40 m and 160 m (bare trees past 300 m are sticks either
+way). Found: the far ring's canopy (v28) stays summer-green in January — in `distant-forests`' notes.
+
+**Verified:** typecheck; `npm test` 1063/1063 (new: tests/understory.test.ts — a cell 180 m up stands its
+plants on the ground, fails on the old code; tests/dem.test.ts — spikes, a pair and an edge spike gone, the
+Teton's summit and a canyon rim kept; tests/groundPaint.test.ts — courts out of the lawn); `npm run build`.
+Montages: `shots/spots-floor-0.jpg` (the Hoh's floor on its feet), `shots/spots-pyramid-before-0.jpg` /
+`-after-0.jpg` (Seaside Heights toward the Pine Barrens' pixel: the bump gone), `shots/spots-grandstaff-0.jpg`,
+`shots/spots-winter2-*.jpg`, `winter3-*.jpg`.
+
+**Next:** `osm-area-relations` (Robby's go-ahead: the extract re-cut and upload); the walker into the wall
+once Robby gives its spot; the far canopy's winter colour.
+
 ## 2026-10-07 (closing) — Land cover everywhere: WorldCover in every cell, beaches that meet a cell, the Olympic forests, distant trees
 
 Robby: "i noticed olympic penisula is pretty bare, like ruby breach, is there even beacjes where theres

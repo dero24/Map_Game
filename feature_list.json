@@ -1968,7 +1968,7 @@
         "commit fb48520: the distant band — past TreeTier.mid (300 m desktop, 180 phone) every tree a 40-vertex hull of its far crown (flora.ts distantTree), the trees within reach drawn whole by a mid mesh per tile mesh (nearTrees.ts); the Hoh 22 → 49 fps standing, 57 walking (phone budget 56, 59); tests/foundry.test.ts, tests/nearTrees.test.ts",
         "docs/agent/rendering.md \"The distant band\"; LOG 2026-10-07 (closing)"
       ],
-      "notes": "The layers today: near models to 30 m (limbs + leaf cards) → far models to 300 m (lobed crowns, ~1,000–1,400 vertices) → 40-vertex hulls to the loaded ring (~2 km) → the far ring (2–8 km) with no trees, its ground raised into a painted canopy. The fly stutter is not the drawing (Moab flies clean; no long tasks): it is forest tiles arriving (~16,000 trees each, their buffers uploaded and the whole tile drawn its first frame). Plan, cheapest first: (1) profile a forest tile's arrival on the GPU and spread its tree uploads over frames (stream.ts reveal / uploadSoon); (2) impostors — each species pictured from 8–16 angles into an atlas (as the leaf atlas is painted, leafAtlasJob), one camera-facing card per tree past ~300 m, the hull kept for the shadow pass; (3) merged blocks (HLOD) — a 256 m block's distant trees one mesh, built in the tile worker; (4) the canopy shell as is. Robby, 2026-10-07: \"something intelligently like rockstar does so things in the distance do not use much resources at all and user does not notice a thing different\"."
+      "notes": "The layers today: near models to 30 m (limbs + leaf cards) → far models to 300 m (lobed crowns, ~1,000–1,400 vertices) → 40-vertex hulls to the loaded ring (~2 km) → the far ring (2–8 km) with no trees, its ground raised into a painted canopy. The fly stutter is not the drawing (Moab flies clean; no long tasks): it is forest tiles arriving (~16,000 trees each, their buffers uploaded and the whole tile drawn its first frame). Plan, cheapest first: (1) profile a forest tile's arrival on the GPU and spread its tree uploads over frames (stream.ts reveal / uploadSoon); (2) impostors — each species pictured from 8–16 angles into an atlas (as the leaf atlas is painted, leafAtlasJob), one camera-facing card per tree past ~300 m, the hull kept for the shadow pass; (3) merged blocks (HLOD) — a 256 m block's distant trees one mesh, built in the tile worker; (4) the canopy shell as is. Robby, 2026-10-07: \"something intelligently like rockstar does so things in the distance do not use much resources at all and user does not notice a thing different\". Seen since: in January the far ring's canopy (v28, the ground raised into woods) stays summer-green — deciduous country's far ridges should go grey-brown in winter (the ground shader's canopy colour by U.uLeafFall and the region's broadleaf share). The distant band itself holds up in winter (Cades Cove, on/off the same from 40 m and 160 m: shots/spots-winter2-*, winter3-*)."
     },
     {
       "id": "osm-area-relations",
@@ -1985,6 +1985,144 @@
       ],
       "evidence": [],
       "notes": "src/world/osmQuery.ts takes natural=beach|sand|wetland|wood|scrub|heath|grassland only as ways (relations: natural=water alone), so a multipolygon relation is never fetched — from our extract or Overpass. Cape May's beach is one (outer ways 810853698, 40412148). The fix: S('relation', re('natural', '^(beach|sand|wetland|wood|scrub|heath|grassland)$')); the US extract re-cut on D: (scripts/osm-extract.mjs, ~2 h machine time: 1.5 billion points read and cut on the game's grid) and uploaded (scripts/osm-upload.mjs); tiles v29, worker first. Robby's go-ahead before the R2 upload. A faster path to weigh: cut only the new relations and add them to the existing pack."
+    },
+    {
+      "id": "bug-floor-plants-circling",
+      "tier": 1,
+      "rank": 11.43,
+      "status": "passing",
+      "area": "world",
+      "title": "The forest floor stands still on its own feet: no ferns circling or floating (the Hoh, Chicago)",
+      "user_visible_behavior": "Sword fern, salal, bracken and the other forest-floor plants stay where they grow, on the ground, at any elevation.",
+      "verification": [
+        "tests/understory.test.ts \"stands each plant at its own foot on high ground\" (fails on the old code)",
+        "shots/spots-floor-0.jpg: the Hoh's floor on its own feet"
+      ],
+      "evidence": [
+        "src/world/understory.ts: each 16 m cell's plants about its own corner, the mesh set there — propMaterial's wind sways a vertex by its height above the mesh's origin, and in world coordinates every plant 150–180 m up swung a metre or more round its foot"
+      ],
+      "notes": "Robby, 2026-10-07: \"_floating_plants_moving_in_circle\", \"_plant_moving_on_ground_in_circle_unrealistically_in_chicago\". Only the understory built world-space geometry with the wind material (trees, hangers, garden and tile plants are instanced or placed at their base)."
+    },
+    {
+      "id": "bug-horizon-pyramids",
+      "tier": 1,
+      "rank": 11.44,
+      "status": "passing",
+      "area": "world",
+      "title": "No pyramids on the horizon: the low-zoom terrain's spikes put back down",
+      "user_visible_behavior": "The horizon shows the real hills only — no sharp green pyramids standing where the land is flat.",
+      "verification": [
+        "tests/dem.test.ts \"the low zooms despiked\": a spike, a pair and an edge spike gone; the Grand Teton's summit and a canyon rim kept",
+        "scratch despike-real.mjs: NJ/NY z10 highest 942 → 390 m, z9 worst spike 1,141 → 191 m; Rainier and the Tetons unchanged; ~2 ms a tile",
+        "shots/spots-pyramid-before-0.jpg / -after-0.jpg (Seaside Heights toward the Pine Barrens' 617 m pixel)"
+      ],
+      "evidence": [
+        "src/world/dem.ts despike, applied to every tile below z14 (the horizon's z9/z10, the far towers' z11)"
+      ],
+      "notes": "Robby, 2026-10-07: \"_weird_pyramid_in_background_of_a_lot_of_landscapes_when_its_doesnt_exist\". The Terrarium overviews carry single pixels and clumps hundreds of metres over flat land (the Pine Barrens 617 m, Long Island 300, JFK 243, a pixel over Hetch Hetchy 900 over its walls), most over water — voids filled wrong; z14 has none."
+    },
+    {
+      "id": "bug-grass-on-courts",
+      "tier": 1,
+      "rank": 11.45,
+      "status": "passing",
+      "area": "world",
+      "title": "No grass on a basketball or tennis court",
+      "user_visible_behavior": "Outdoor basketball, tennis and pickleball courts — and any pitch mapped as paved, clay or rubber — are bare court: no tufts of grass over the key.",
+      "verification": [
+        "tests/groundPaint.test.ts \"courts: no lawn under the hoop\""
+      ],
+      "evidence": [
+        "src/world/groundPaint.ts Painter.hardCourts, drawn into the grass's mask (openOf) — the court's paint (#5d7f5c; a tennis court's run-off) passed the mask's green test for lawn"
+      ],
+      "notes": "Robby, 2026-10-07: \"grass_on_basketball_court_outside\". The understory reads the same mask: no ferns on courts either."
+    },
+    {
+      "id": "bug-walker-into-wall",
+      "tier": 1,
+      "rank": 11.46,
+      "status": "not_started",
+      "area": "life",
+      "title": "A walker going into the open building walks through its door, not into the wall beside it",
+      "user_visible_behavior": "In Chicago (and anywhere), people heading into a building you have open go in through its doorway, their feet on the sidewalk — never into the wall a step to the side, never sunk to the shins.",
+      "verification": [
+        "reproduce at the building (Robby: its spot on the atlas), then a lifeSim test of the walk in"
+      ],
+      "evidence": [],
+      "notes": "Robby, 2026-10-07: \"_man_through_door_chicago\" — a walker 2 m left of an open (yellow) door, facing the wall, his legs in it, his feet below the sidewalk slab. lifeSim.ts: TO_DOOR walks to the door point (Door x,z), then IN_WALK straight to a place inside (setIndoor spots) — a door point off its doorway, or a place the straight line reaches through the front wall, would do it; the slab under him may be a deck the walker's height doesn't follow. Needs the location."
+    },
+    {
+      "id": "bug-grandstaff-terrain",
+      "tier": 1,
+      "rank": 11.47,
+      "status": "not_started",
+      "area": "world",
+      "title": "Grandstaff trailhead (Moab): no wedge of ground and water standing up out of the riverbank",
+      "user_visible_behavior": "By the Colorado at the Grandstaff trailhead the ground and the river lie as they do — no tent of terrain with a triangle of water up its side.",
+      "verification": [
+        "shots/spots-grandstaff-0.jpg (2026-10-08, tiles v28): not reproduced — the river, banks, parking and roads as they are",
+        "reproduce once more at Robby's exact spot, watching the cells arrive"
+      ],
+      "evidence": [],
+      "notes": "Robby, 2026-10-07: \"_grandstaff_terrain_glitch\" (+ location). Seen on tiles v26. Not a DEM spike (z13–z15 clean there). Suspects: a v26 cell that dropped the river where it crossed without a vertex (clipped since v28), or a cell standing on its flat stand-in (flatDem, its DEM late) beside its canyon neighbours until its relief rebuild."
+    },
+    {
+      "id": "bug-harbour-water",
+      "tier": 1,
+      "rank": 11.48,
+      "status": "not_started",
+      "area": "world",
+      "title": "The harbour's water meets its shores: Upper New York Bay north of the Statue of Liberty",
+      "user_visible_behavior": "Looking from Ellis Island or Liberty State Park, the bay is water all the way to the shore — no grey ground standing in it, no straight edge where the river's water stops.",
+      "verification": [
+        "the live tiles 1_0 and 0_1 round Ellis Island (origin 40.703125, -74.046875) carry the bay as water",
+        "montage from Ellis Island, day and night"
+      ],
+      "evidence": [],
+      "notes": "Robby, 2026-10-07 (\"_water_bug*.png\"), with another session. Diagnosis (LOG 2026-10-07 closing): the sea comes only from coastline runs crossing the cell's edge, and a run starts at a vertex inside the cell (realTile.ts coastline block) — a long straight coastline segment through a cell with no vertex in it (the Hudson's closing line, the bay's far shores) is never seen, and the bay is bare ground; v26 and v28 alike."
+    },
+    {
+      "id": "bug-night-glow-people",
+      "tier": 1,
+      "rank": 11.49,
+      "status": "not_started",
+      "area": "life",
+      "title": "People at night lit by the night, not glowing",
+      "user_visible_behavior": "At night the people walking about are as dark as the street they walk on, lit only where a lamp or a window lights them.",
+      "verification": [
+        "night montage (Liberty State Park, a town street) against the same at dusk"
+      ],
+      "evidence": [],
+      "notes": "Robby, 2026-10-07 (the night shot from Liberty State Park; with another session): the walkers read pale and lit against the dark ground."
+    },
+    {
+      "id": "life-density-realism",
+      "tier": 1,
+      "rank": 11.5,
+      "status": "not_started",
+      "area": "life",
+      "title": "Realistic populations and traffic: quiet at night, empty desert roads",
+      "user_visible_behavior": "Crowds and traffic follow the place and the hour: a downtown busy in the evening and quiet at 3 am, a suburb near empty at night, a desert highway with a car every few minutes.",
+      "verification": [
+        "counts of walkers and cars by hour and by place class (downtown, suburb, rural, desert) against a target table",
+        "montages at night and on a desert road"
+      ],
+      "evidence": [],
+      "notes": "Robby, 2026-10-07 (with another session): \"it is still so crowded at nighttime in a lot of places where it shouldnt be and like random desert roads are crowded too\"."
+    },
+    {
+      "id": "look-crisp-preset",
+      "tier": 1,
+      "rank": 11.51,
+      "status": "not_started",
+      "area": "render",
+      "title": "A \"crisp watercolor\" preset in the developer settings, to try",
+      "user_visible_behavior": "One switch in the developer settings that sharpens the watercolor without leaving it, to compare against the default.",
+      "verification": [
+        "montage: the same views with the preset off and on (a street at eye height, the phone shot, night)"
+      ],
+      "evidence": [],
+      "notes": "Robby, 2026-10-07 (with another session): the preset is another agent's \"what I'd try, cheapest first\": (1) the \"clean HD\" look (panel → Look); (2) paintDetail 1.0 on a desktop at 100% scaling (it draws at 82% and stretches); (3) the foreground given crisp marks — hard shadow edges, kerb lines, pavement joints, cracks, puddles — or faded to bare paper on purpose; (4) the focal band sharp (raise clarity at 5–60 m, the edges and the far loose); (5) deeper darks, highlights kept; (6) a thinner torn-paper border while walking. Also noted: the phone canvas capped at 1.5× pixel density (main.ts), the paper grain fixed to the screen (post.ts paperH)."
     },
     {
       "id": "regional-flora",

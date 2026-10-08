@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { floorAt, underWood, type Crown } from '../src/world/understory';
+import { floorAt, underWood, UnderstoryField, type Crown } from '../src/world/understory';
+import { setActiveStyle, regionStyle } from '../src/world/styles';
+import type { Terrain } from '../src/world/data';
+import type { WalkWorld } from '../src/player/collision';
 import { understoryMix, plantGeometry, SPECIES, plantMix, inFall, isDormant, type CastPlace } from '../src/assets/flora';
 import * as THREE from 'three';
 
@@ -8,6 +11,34 @@ const at = (sub: string, climate: string, eco = '', l3 = 0, west = false): CastP
 // The forest floor (world/understory.ts): under the westside Northwest's firs, sword fern, salal and
 // Oregon grape — under a wood's canopy only, never a lone yard tree, never on a path.
 describe('the forest floor', () => {
+  // (Robby, 2026-10-07: "floating plants moving in a circle" in the Hoh, "plant moving on ground in circle"
+  // in Chicago — the cells were built in the world's own coordinates, and the wind swayed every vertex by
+  // its height above the mesh's origin: the ground's 150–180 m)
+  it("stands each plant at its own foot on high ground: a cell's plants about its own corner", () => {
+    setActiveStyle(regionStyle(47.8606, -123.9348));
+    const hill = (x: number, z: number) => 180 + 0.08 * x - 0.05 * z;
+    const terrain = { heightAt: hill, sdfAt: () => 50 } as unknown as Terrain;
+    const walk = { buildingAt: () => -1, deckAt: () => null, blocked: () => false } as unknown as WalkWorld;
+    const firs: Crown[] = [];
+    for (let x = -21; x <= 40; x += 7) for (let z = -21; z <= 40; z += 7) firs.push({ x, z, r: 6 });
+    const f = new UnderstoryField(terrain, walk, (x, z, r) => firs.filter((c) => Math.hypot(c.x - x, c.z - z) < r));
+    for (let i = 0; i < 40; i++) f.update(8, 8);
+    const cells = f.group.children as THREE.Mesh[];
+    expect(cells.length).toBeGreaterThan(0);
+    let n = 0;
+    for (const c of cells) {
+      c.updateMatrixWorld(true);
+      const P = c.geometry.getAttribute('position'), v = new THREE.Vector3();
+      for (let i = 0; i < P.count; i += 7) {
+        expect(Math.abs(P.getY(i))).toBeLessThan(8); // (local: the plant's height, and the cell's slope)
+        v.fromBufferAttribute(P, i).applyMatrix4(c.matrixWorld);
+        expect(v.y - hill(v.x, v.z)).toBeGreaterThan(-0.6); // (in the world: on the ground, not under it…)
+        expect(v.y - hill(v.x, v.z)).toBeLessThan(2.5); // (…nor floating over it)
+        n++;
+      }
+    }
+    expect(n).toBeGreaterThan(50);
+  });
   // a wood: firs every 7 m, crowns 6 m across… and a lone tree 60 m off
   const wood: Crown[] = [];
   for (let x = 0; x <= 42; x += 7) for (let z = 0; z <= 42; z += 7) wood.push({ x, z, r: 6 });

@@ -59,7 +59,7 @@ async function demTile(tx: number, ty: number, z = Z): Promise<Float32Array | nu
       // management), and a worker without OffscreenCanvas — an iPhone before iOS 16.4 — still
       // gets its ground and its sea (it had none: every open-world cell stood flat on the water)
       const own = terrariumFromPng(bytes);
-      if (own) return own;
+      if (own) return z < Z ? despike(own) : own;
       const bmp = await createImageBitmap(new Blob([bytes]));
       const w = bmp.width, hh = bmp.height; // close() zeroes these — read dims first
       const cv = makeCanvas(w, hh); // (OffscreenCanvas where there is one: older iOS has none)
@@ -69,7 +69,7 @@ async function demTile(tx: number, ty: number, z = Z): Promise<Float32Array | nu
       const px = g.getImageData(0, 0, w, hh).data;
       const h = new Float32Array(256 * 256);
       for (let i = 0; i < h.length; i++) h[i] = px[i * 4] * 256 + px[i * 4 + 1] + px[i * 4 + 2] / 256 - 32768;
-      return h;
+      return z < Z ? despike(h) : h;
     } catch {
       return null;
     } finally {
@@ -83,6 +83,55 @@ async function demTile(tx: number, ty: number, z = Z): Promise<Float32Array | nu
   // Failures aren't cached — a transient 5xx/timeout must not pin a cell flat for the session.
   void p.then((h) => { if (!h && tileCache.get(k) === p) tileCache.delete(k); });
   return p;
+}
+
+/** A low zoom's Terrarium tile with its spikes put back down. The overviews (z9–z12; z14 has none of
+ *  them) carry single pixels and clumps of a few hundreds of metres over their neighbours where the land
+ *  is flat — the Pine Barrens' 617 m, Long Island's 300, JFK's 243, a pixel over Hetch Hetchy's reservoir
+ *  900 over its walls (voids filled wrong, most over water) — and each stood as a pyramid on every
+ *  horizon within 125 km. A pixel more than 250 m over most of its neighbours, or 150 m over most of
+ *  them and over the second highest (two pixels wide), takes their middle's height; twice, for a clump.
+ *  A real summit's neighbours stand high with it: the Grand Teton's z9 pixel (168 m over their middle,
+ *  99 over the second) stays. A corner (three neighbours) stays as it is. */
+export function despike(h: Float32Array, w = 256, passes = 2): Float32Array {
+  let src = h, out = h;
+  const nb = new Float64Array(8);
+  for (let pass = 0; pass < passes; pass++) {
+    out = src.slice();
+    let changed = 0;
+    for (let j = 0; j < w; j++)
+      for (let i = 0; i < w; i++) {
+        const v = src[j * w + i];
+        let n = 0, lo250 = 0, lo150 = 0;
+        for (let b = -1; b <= 1; b++)
+          for (let a = -1; a <= 1; a++) {
+            const x = i + a, y = j + b;
+            if ((!a && !b) || x < 0 || y < 0 || x >= w || y >= w) continue;
+            const u = src[y * w + x];
+            n++;
+            if (u < v - 150) { lo150++; if (u < v - 250) lo250++; }
+          }
+        if (n < 5 || lo150 * 2 <= n) continue; // (nearly every pixel: no spike)
+        // (the few left: their neighbours in order, eight at most)
+        n = 0;
+        for (let b = -1; b <= 1; b++)
+          for (let a = -1; a <= 1; a++) {
+            const x = i + a, y = j + b;
+            if ((!a && !b) || x < 0 || y < 0 || x >= w || y >= w) continue;
+            const u = src[y * w + x];
+            let k = n++;
+            while (k > 0 && nb[k - 1] > u) (nb[k] = nb[k - 1]), k--;
+            nb[k] = u;
+          }
+        if (lo250 * 2 > n || (lo150 * 2 > n && v - nb[n - 2] > 150)) {
+          out[j * w + i] = n % 2 ? nb[n >> 1] : (nb[n / 2 - 1] + nb[n / 2]) / 2;
+          changed++;
+        }
+      }
+    if (!changed) break;
+    src = out;
+  }
+  return out;
 }
 
 /** Elevation at any lat/lon from the zoom-z Terrarium tiles covering a lat/lon box (the horizon

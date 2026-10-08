@@ -528,3 +528,22 @@ describe('inWindow', () => {
     expect(inWindow(few, 0, 0, 10, 10)).toBe(few);
   });
 });
+
+// (Robby, 2026-10-07: "grass on basketball court outside" — the court's paint is a court's green, and the
+// grass's mask took green for lawn)
+describe('courts: no lawn under the hoop', () => {
+  it("masks a basketball or a tennis court and a paved pitch out of the grass's lawn — not a football field", () => {
+    const ring = (x: number, z: number, w: number, h: number) => [x * 10, z * 10, (x + w) * 10, z * 10, (x + w) * 10, (z + h) * 10, x * 10, (z + h) * 10];
+    const areas = [
+      { c: 'pitch', k: 'basketball', o: [ring(0, 0, 28, 15)], i: [] },
+      { c: 'pitch', k: 'tennis', o: [ring(40, 0, 24, 11)], i: [] },
+      { c: 'pitch', sf: 'asphalt', o: [ring(0, 40, 20, 20)], i: [] },
+      { c: 'pitch', k: 'soccer', o: [ring(-120, -80, 100, 64)], i: [] },
+    ];
+    const P = new Painter({ areas, roads: [], buildings: [] } as unknown as WorldJson, []);
+    const { ctx, ops } = recorder();
+    P.hardCourts(ctx, -150, -150, 150, 150);
+    const fills = ops.filter((o) => o.op === 'fill' && o.style === '#808080');
+    expect(fills.map((o) => Math.min(...o.rings[0].map(([x]) => x))).sort((a, b) => a - b)).toEqual([0, 0, 40]);
+  });
+});

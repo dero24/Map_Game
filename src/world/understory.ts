@@ -138,6 +138,11 @@ export class UnderstoryField {
     const parts: THREE.BufferGeometry[] = [];
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), s = new THREE.Vector3(), p = new THREE.Vector3();
     const step = 1.8;
+    // (the cell's plants about its own corner, the mesh set there: propMaterial's wind sways a vertex by
+    // its height above the mesh's origin, and in the world's own coordinates every fern 150–180 m up — the
+    // Hoh's valley, a Chicago park — swung a metre or more round its foot: the floor circling and
+    // floating off its slopes)
+    const y0 = t.heightAt(x0 + CELL / 2, z0 + CELL / 2);
     for (let gz = z0; gz < z0 + CELL; gz += step)
       for (let gx = x0; gx < x0 + CELL; gx += step) {
         const x = gx + hash(gx, gz, 7) * step, z = gz + hash(gx, gz, 8) * step;
@@ -147,12 +152,15 @@ export class UnderstoryField {
         const fall = st.brown > 0.35 && !!SPECIES[f.sp].fall; // (copper in October)
         const g = plantLib(f.sp, f.v, STAGES - 1, !fall && inBloom(f.sp, month), true, fall).clone();
         const sc = f.s * st.size;
-        g.applyMatrix4(m.compose(p.set(x, t.heightAt(x, z) - 0.05, z), q.setFromAxisAngle(up, hash(x, z, 5) * 6.283), s.set(sc, sc * (0.85 + hash(x, z, 6) * 0.3), sc)));
+        g.applyMatrix4(m.compose(p.set(x - x0, t.heightAt(x, z) - 0.05 - y0, z - z0), q.setFromAxisAngle(up, hash(x, z, 5) * 6.283), s.set(sc, sc * (0.85 + hash(x, z, 6) * 0.3), sc)));
         parts.push(g);
       }
     if (!parts.length) return null;
     const mesh = new THREE.Mesh(merge(parts), this.mat);
     for (const g of parts) g.dispose();
+    mesh.position.set(x0, y0, z0);
+    mesh.updateMatrix();
+    mesh.matrixAutoUpdate = false;
     mesh.name = 'understory:cell';
     return mesh;
   }
