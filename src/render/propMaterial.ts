@@ -45,7 +45,9 @@ import { SIGNAL_GLSL } from '../sim/traffic';
 // lobed crowns — the near-tree layer marks the trees it draws close up (`aNear`, per instance), and
 // for those this gives way to the near model across the hand-over band on the same ordered dither
 // (and draws nothing at all inside it: the instance folds to a point). 'near' (TREE_LOD 2): the
-// near model's limbs, the other side of the same split. TREE_LOD_U = (hand-over distance, band,
+// near model's limbs, the other side of the same split. A far tree its tile's mid mesh draws (`aLod`,
+// per instance: past the mid reach the tile mesh draws every tree from the distant model, and folds
+// away the ones within it) draws nothing from the tile mesh. TREE_LOD_U = (hand-over distance, band,
 // mode: 0 by distance · 1 far only · 2 near only, -), shared by every tree material; the near
 // layer's mask pass (uTreeMask: x, z, radius, on) draws one tree's wood flat red for the metrics.
 export const TREE_LOD_U = { value: new THREE.Vector4(30, 6, 0, 0) };
@@ -113,6 +115,7 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
       ${GLSL_TREE_LOD}
       #if TREE_LOD == 1
       attribute float aNear;
+      attribute float aLod;
       #endif
       #endif
       void main() {
@@ -134,6 +137,7 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
         #ifdef TREE_LOD
           // the hand-over between a tree's two models, by its foot's distance from the eye
           #if TREE_LOD == 1
+            if (aLod > 0.5) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; } // (its tile's mid mesh draws it whole)
             vLodFar = treeFarShare(length(cameraPosition - origin), uTreeLod, aNear);
             if (vLodFar <= 0.0) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; } // (the near model has it all)
           #else

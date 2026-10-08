@@ -2,6 +2,76 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-07 (closing) — Land cover everywhere: WorldCover in every cell, beaches that meet a cell, the Olympic forests, distant trees
+
+Robby: "i noticed olympic penisula is pretty bare, like ruby breach, is there even beacjes where theres
+supposed to be beaches throughout the USA? please ensure" — and for the canopy layer, "as long as it is
+open source, please go ahead". ESA WorldCover 2021 (10 m, CC BY 4.0, already credited for the bake) now
+comes with every streamed cell. What changed:
+
+- **Tiles v28** (worker + client together; no v27 was ever deployed — a test page asked the live v26
+  service for `&v=27` and the edge keeps those answers under that URL for 30 days, so the version moved
+  on; docs/agent/streaming.md now says never to point an unreleased `&v=` at the live service).
+  - **Each cell's land cover** (`worker/src/landcover.js`, `src/world/landcover.ts`): WorldCover's classes
+    on an 8 m grid over the cell and 96 m round it (`TileJson.lc`, base64), read from the COGs on AWS
+    (one to four 3° files, 1024² tiles, a window each). A cell whose cover can't be read in 20 s is served
+    without it, edge-cached ten minutes and never kept in R2.
+  - **The far ring's woods** (`/cover/<bx>_<bz>.json`, `src/world/farCover.ts`): the far ring builds from
+    synthetic cells that never ask the service, so it was a lawn to the horizon. A block of 8 × 8 cells
+    at 32 m off the 20 m overview, one request a block; its trees raise each far cell's ground into the
+    canopy (`synthTile`), as a real lite cell's own cover does (`realExtras`).
+  - **Areas through the cell** (`realTile.ts clipRingToBox`): an area that meets a cell without a vertex
+    in it — a beach down a straight coast, a national forest or a lake round the whole cell — was
+    dropped. Of 25 US beaches surveyed (scratch `beaches.mjs`: OSM's beach areas in the live cell against
+    WorldCover's sand by the water), 11 had no beach in their cell: Ruby, Cannon, Pismo, Gulf Shores,
+    Galveston, Virginia Beach, Ocean City, Rehoboth, Cape May, Nauset, Sleeping Bear. Now clipped and
+    the cell's own (Sutherland–Hodgman against the cell and its margin). WorldCover's sand lies by the
+    water at most of them; Jones Beach and Sleeping Bear show none there, the OSM beach carries them.
+- **The ground** (`dem.ts coverPatch`): WorldCover's class at each node first, then the map's areas;
+  a lawn the map draws doesn't paint over WorldCover's woods, scrub, wetland or mangrove. The paint
+  windows wash a cell's cover as a layer of its own (`groundPaint.ts lcImage`).
+- **The trees** (`props.ts`): WorldCover's woods grow the region's trees where the map draws none (the
+  Olympic Peninsula's rain forests, Ruby Beach's headland: `tests/landcover.test.ts`); in a surveyed wood
+  the gaps between the LiDAR's crowns grow the region's mix (`surveyGap`: the Hoh's survey finds 3.6–5.2
+  thousand crowns a km², a fifth to a quarter of the ground — the canopy's tall trees, not the ones
+  between them); a westside wood's wild maples are bigleaf.
+- **Distant trees** (`flora.ts distantTree`, `nearTrees.ts`): the Hoh's ring held 165,000 trees at
+  1,000–1,400 vertices — 190 million a frame. Past `TreeTier.mid` (desktop 300 m, phone 180, low 120;
+  `?treemid=`) every tree is a 40-vertex hull of its far crown and a post of a trunk; the trees within
+  reach are drawn whole by a mid mesh beside each tile mesh, refilled every 16 m (docs/agent/rendering.md
+  "The distant band"). Its first try lost every tree within 300 m in Monmouth Beach: a mesh made after the
+  world's offset last moved drew at the identity, 3 km off (a tile's objects never update their own
+  matrices) — `updateMatrixWorld` on making it; the Hoh, at its region's origin, hid it.
+
+**Verified:** typecheck; `npm test` 1059/1059 (new: tests/landcover.test.ts — the grid, the merge rules,
+Ruby Beach's forest, the gap fill; tests/realTile.test.ts "areas through the cell"; tests/foundry.test.ts
+"distant trees" — every species' hull as tall and as wide as its far model, 40 vertices, its attributes;
+tests/nearTrees.test.ts — the distant band, its marks, the world offset); `npm run build`. Frames in the
+Hoh (47.8606, −123.9348; `playtest --only=frames`, local tile service): the live code against live tiles
+stand 22.5 fps, walk 23.2, fly 21.9 with 15 hitches over 100 ms — already slow before today; the new code
+with `?treemid=0` stand 21.5, walk 21.9, fly 23.1; with the distant band stand 49.4, walk 57.5 (p95 16.7 ms),
+fly 43.1 (p95 64 ms, 4 hitches over 100 ms: fails); a phone's budget stand 55.9, walk 58.7, fly 50.6 (2 over
+100 ms: fails `perMin100`). Moab flies clean (0 over 100 ms): the flight's hitches are forest tiles
+streaming in, not the frame's work (no long tasks). Montages: `shots/spots-lod-*.jpg` (the Hoh valley
+with the band on and off the same from the ground, a shade crisper on the far slopes from 120 m; Ruby
+Beach's sand and its forest from offshore), `shots/spots-lod3-*.jpg` (Monmouth Beach at 4 pm, on and off
+the same from the street and from 40 m up, the crowns lit alike).
+
+**Handed to another session (Robby, 2026-10-07):** a developer-settings preset for a crisper watercolor
+(another agent's six adjustments, cheapest first); the harbour's water north of the Statue of Liberty;
+people glowing at night; crowds and traffic too dense at night and on desert roads. For the harbour: the
+live tiles 1_0 and 0_1 round Ellis Island (origin 40.703125, −74.046875) carry no water at all, v26 and
+v28 alike. The sea comes only from coastline runs that cross the cell's edge, and a run starts at a
+vertex inside the cell (`realTile.ts`, the coastline block): a long straight coastline segment through a
+cell with no vertex in it — the Hudson's closing line, the bay's far shores — is never seen, and the bay
+is bare ground.
+
+**Next:** Robby deploys the worker (`cd worker && npx wrangler deploy`: tiles v28 and `/cover`), then
+`node tools/must-load.mjs --live`, a Ruby Beach cell carrying `lc`, Cape May's carrying its beach — and
+only then the client goes out (`&v=28`). Flying over a dense forest still hitches (4 over 100 ms in 8 s
+on a desktop): profile the GPU side of a forest tile's arrival. Then `tools/real-compare.mjs --kind=green`
+against green-2 (`regional-greenery`, unblocked).
+
 ## 2026-10-07 (last) — The flora review: each plant in its season, on its ground, in its numbers; rural roads their own width
 
 The ecosystem review's "next — plants" (`regional-flora`, in progress): the green spots measured by region,

@@ -239,7 +239,7 @@ export function standInLots(win: Box, seed: number): StandInLot[] {
 
 export interface SynthResult { tj: TileJson; extra: THREE.Group }
 
-export function synthTile(spec: TileSpec, seed: number, terrain: { sdfAt(x: number, z: number): number; heightAt(x: number, z: number): number }): SynthResult {
+export function synthTile(spec: TileSpec, seed: number, terrain: { sdfAt(x: number, z: number): number; heightAt(x: number, z: number): number }, canopy?: (x: number, z: number) => number): SynthResult {
   const box = spec.box;
   const M = 48;
   const S = { x0: box.x0 - M, z0: box.z0 - M, x1: box.x1 + M, z1: box.z1 + M };
@@ -335,10 +335,12 @@ export function synthTile(spec: TileSpec, seed: number, terrain: { sdfAt(x: numb
 
   // ---- visuals the bake normally ships via paint/atlas: ground chunk + road ribbons ----
   const extra = new THREE.Group();
-  const g = buildGrid({ x0: box.x0, z0: box.z0, x1: box.x1, z1: box.z1, step: 8 }, (x, z) => terrain.heightAt(x, z), (x, z) => terrain.sdfAt(x, z) > -45);
+  // (a far cell's woods — WorldCover's, off its far block: farCover.ts — raised into the ground's canopy,
+  // as realExtras raises a real far cell's)
+  const g = buildGrid({ x0: box.x0, z0: box.z0, x1: box.x1, z1: box.z1, step: 8 }, canopy ? (x, z) => terrain.heightAt(x, z) + canopy(x, z) * 11 : (x, z) => terrain.heightAt(x, z), (x, z) => terrain.sdfAt(x, z) > -45, canopy);
   if (g.index && g.index.count) {
     const gm = new THREE.Mesh(g, new THREE.ShaderMaterial());
-    gm.material.userData.tag = 'gnd'; // matTag resolves this to the shared ground material
+    gm.material.userData.tag = canopy ? 'gndc' : 'gnd'; // matTag resolves this to the shared ground material (its canopy twin)
     gm.name = 'ground:cell'; // (the scene's family:type names: the tools' class pass reads them)
     extra.add(gm);
   }
@@ -510,7 +512,7 @@ export function waterSheets(bodies: WaterBody[], box: Box): THREE.Group {
   return g;
 }
 
-export function realExtras(tj: TileJson, terrain: { sdfAt(x: number, z: number): number; heightAt(x: number, z: number): number }, step = 8, bodies?: WaterBody[]): THREE.Group {
+export function realExtras(tj: TileJson, terrain: { sdfAt(x: number, z: number): number; heightAt(x: number, z: number): number }, step = 8, bodies?: WaterBody[], canopy?: (x: number, z: number) => number): THREE.Group {
   const box = tj.box;
   const extra = new THREE.Group();
   const unpack = (f: number[]): [number, number][] => {
@@ -535,10 +537,12 @@ export function realExtras(tj: TileJson, terrain: { sdfAt(x: number, z: number):
   const wet = tj.areas.filter((a) => a.c === 'water').map((a) => ({ o: a.o.map(ringOf), i: a.i.map(ringOf) }));
   const inWater = (x: number, z: number) => wet.some((w) => w.o.some((q) => inR(x, z, q)) && !w.i.some((q) => inR(x, z, q)));
   // (a hilly cell's ground is 4 m, fine enough to show its streets' cuts and fills; else 8 m)
-  const g = buildGrid({ x0: box.x0, z0: box.z0, x1: box.x1, z1: box.z1, step }, (x, z) => terrain.heightAt(x, z), (x, z) => terrain.sdfAt(x, z) > -45 && !inWater(x, z));
+  // (a far cell's woods — its `canopy`, 0..1 a node: WorldCover's forests past the detail ring — raise its
+  // ground into the bake's backdrop's lumpy canopy, 11 m at the full, on the ground shader's CANOPY twin)
+  const g = buildGrid({ x0: box.x0, z0: box.z0, x1: box.x1, z1: box.z1, step }, canopy ? (x, z) => terrain.heightAt(x, z) + canopy(x, z) * 11 : (x, z) => terrain.heightAt(x, z), (x, z) => terrain.sdfAt(x, z) > -45 && !inWater(x, z), canopy);
   if (g.index && g.index.count) {
     const gm = new THREE.Mesh(g, new THREE.ShaderMaterial());
-    gm.material.userData.tag = 'gnd';
+    gm.material.userData.tag = canopy ? 'gndc' : 'gnd';
     gm.name = 'ground:cell';
     extra.add(gm);
   }

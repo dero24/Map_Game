@@ -2157,6 +2157,8 @@ export interface NearTree {
   limbsIn: number;
   /** the trunk's radius at the ground and where it meets the crown (m) */
   trunk: [number, number];
+  /** the distant model, off the same plan (distantTree) */
+  distant: THREE.BufferGeometry;
 }
 
 /** Grow a tree's near model from its plan. Deterministic in (kind, variant). */
@@ -2285,7 +2287,7 @@ export function nearTreeGeometry(kind: TreeKind, v: number): NearTree {
     return t0.r[t0.r.length - 1];
   };
   // what hangs from the limbs (moss, licorice fern) as the far model has it
-  return { wood: merge([...wood, ...plan.hang.map((g) => g.clone())]), cards: rec, meta, limbsIn, trunk: [rAt(0), rAt(Math.min(cb, t0.p[t0.p.length - 1].y))] };
+  return { wood: merge([...wood, ...plan.hang.map((g) => g.clone())]), cards: rec, meta, limbsIn, trunk: [rAt(0), rAt(Math.min(cb, t0.p[t0.p.length - 1].y))], distant: distantTree(meta, plan) };
 }
 const nearCache = new Map<string, NearTree>();
 /** One near model per (kind, variant) — its wood through the foundry cache (a builder clones it). */
@@ -2297,6 +2299,80 @@ export function nearTreeLib(kind: TreeKind, v: number): NearTree {
     nearCache.set(k, (t = { ...g, wood: cached(k, () => g.wood) }));
   }
   return t;
+}
+
+// ================================================================ distant trees
+/** A tree's distant model. Past the tier's `mid` reach (world/nearTrees.ts: 300 m on a desktop) a tile
+ *  draws its trees from this, not from the far model's 400–1,400 vertices: the Hoh's ring held 165,000
+ *  trees, 190 million vertices a frame. The crown one hull round the far model's lobes — five rings up
+ *  it, each the lobes' reach six ways at its height (where a crown leans, its hull leans), capped above
+ *  and below — and the trunk a four-sided post from the ground into the crown, leaning as the bark
+ *  does: 40 vertices, indexed. The crown white (the instance colour paints it, as it does the far
+ *  model's foliage), the trunk its bark, the far model's attributes: the same material draws it. */
+export function distantTree(meta: TreeMeta, plan: TreePlan): THREE.BufferGeometry {
+  const S = 6, K = 5, mid = (meta.crownBottom + meta.h) / 2;
+  // (a crown without lobes — none grows one today — stands for its box)
+  const L = plan.lobes.length ? plan.lobes : [{ c: V3(meta.lean[0] * mid, mid, meta.lean[1] * mid), r: Math.max(0.5, meta.crownR), sq: Math.max(0.3, (meta.h - meta.crownBottom) / 2 / Math.max(0.5, meta.crownR)) }];
+  let y0 = Infinity, y1 = -Infinity;
+  for (const l of L) { y0 = Math.min(y0, l.c.y - l.r * l.sq); y1 = Math.max(y1, l.c.y + l.r * l.sq); }
+  y0 = Math.max(0, y0);
+  const ringY = (k: number) => y0 + ((y1 - y0) * (k + 0.5)) / K;
+  // each ring: the lobes' discs at its height, their middle (by area) and their reach each way from it
+  // (× 1.1: the hexagon round the circle, not inside it)
+  const rings: ({ x: number; z: number; R: number[] } | null)[] = [];
+  for (let k = 0; k < K; k++) {
+    const y = ringY(k), d: number[] = [];
+    let w = 0, mx = 0, mz = 0;
+    for (const l of L) {
+      const t = (y - l.c.y) / Math.max(1e-3, l.r * l.sq);
+      if (t * t >= 1) continue;
+      const p = l.r * Math.sqrt(1 - t * t);
+      d.push(l.c.x, l.c.z, p);
+      w += p * p; mx += l.c.x * p * p; mz += l.c.z * p * p;
+    }
+    if (!d.length) { rings.push(null); continue; }
+    const x = mx / w, z = mz / w, R: number[] = [];
+    for (let s = 0; s < S; s++) {
+      const a = (s / S) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+      let r = 0;
+      for (let i = 0; i < d.length; i += 3) r = Math.max(r, (d[i] - x) * ca + (d[i + 1] - z) * sa + d[i + 2]);
+      R.push(r * 1.1);
+    }
+    rings.push({ x, z, R });
+  }
+  // (a height between the lobes — a conifer's tiers wide apart — takes the nearest ring's, pinched)
+  for (let k = 0; k < K; k++) {
+    if (rings[k]) continue;
+    let n: { x: number; z: number; R: number[] } | null = null;
+    for (let q = 1; q < K && !n; q++) n = rings[k - q] ?? rings[k + q] ?? null;
+    rings[k] = n ? { x: n.x, z: n.z, R: n.R.map((r) => r * 0.6) } : { x: meta.lean[0] * ringY(k), z: meta.lean[1] * ringY(k), R: new Array(S).fill(Math.max(0.5, meta.crownR)) };
+  }
+  const pos: number[] = [], col: number[] = [], idx: number[] = [];
+  const leaf = new THREE.Color(TINT), bark = new THREE.Color(plan.boughs.find((b) => b.a.y < 0.05)?.col ?? 0x4a3b2e);
+  const put = (x: number, y: number, z: number, c: THREE.Color) => { pos.push(x, y, z); col.push(c.r, c.g, c.b); return pos.length / 3 - 1; };
+  rings.forEach((g, k) => { for (let s = 0; s < S; s++) { const a = (s / S) * Math.PI * 2; put(g!.x + Math.cos(a) * g!.R[s], ringY(k), g!.z + Math.sin(a) * g!.R[s], leaf); } });
+  const top = put(rings[K - 1]!.x, y1, rings[K - 1]!.z, leaf), bot = put(rings[0]!.x, y0, rings[0]!.z, leaf);
+  for (let k = 0; k + 1 < K; k++)
+    for (let s = 0; s < S; s++) {
+      const a = k * S + s, b = k * S + ((s + 1) % S);
+      idx.push(a, a + S, b, b, a + S, b + S);
+    }
+  for (let s = 0; s < S; s++) {
+    idx.push((K - 1) * S + s, top, (K - 1) * S + ((s + 1) % S));
+    idx.push(bot, s, (s + 1) % S);
+  }
+  // the trunk: into the crown a quarter of the way up it, tapering
+  const yt = y0 + (y1 - y0) * 0.25, r0 = Math.max(0.05, meta.trunkR), t0 = pos.length / 3;
+  for (const [y, r] of [[0, r0], [yt, r0 * 0.6]])
+    for (let s = 0; s < 4; s++) { const a = (s / 4 + 0.125) * Math.PI * 2; put(meta.lean[0] * y + Math.cos(a) * r, y, meta.lean[1] * y + Math.sin(a) * r, bark); }
+  for (let s = 0; s < 4; s++) { const a = t0 + s, b = t0 + ((s + 1) % 4); idx.push(a, a + 4, b, b, a + 4, b + 4); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('aPart', new THREE.Float32BufferAttribute(new Float32Array(pos.length / 3), 1));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
 }
 
 /** The leaf pictures the cards show (LEAF_PICS in a 4 × 2 grid of S-pixel cells), painted once:

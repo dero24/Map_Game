@@ -266,7 +266,7 @@ async function main() {
   const groundGroup = buildGround(world, paint, tt);
   U.uDetailBox.value = paint.detail.box; // (the far street ribbons step aside where the paint is fine)
   worldRoot.add(groundGroup);
-  setGndMaterial(groundGroup.userData.groundMat); // synthetic tiles reuse this material
+  setGndMaterial(groundGroup.userData.groundMat, groundGroup.userData.canopyMat); // synthetic tiles reuse this material (a far cell's woods its canopy twin)
   worldRoot.add(buildWater(tt));
   const wakes = new Wakes(); // (every boat under way draws its V on the water)
   wakes.bedAt = (x, z) => world.terrain.heightAt(x, z); // (none over a dock's sand or a bar)
@@ -367,9 +367,11 @@ async function main() {
   worldRoot.add(micro.group);
   // Trees within ~30 m drawn from their near model — limbs, a tapering trunk, leaf-cluster cards
   // with the sky between the leaves — handing over to the tiles' own crowns further out
-  // (world/nearTrees.ts). `?neartrees=0` keeps every tree on its far model.
+  // (world/nearTrees.ts). `?neartrees=0` keeps every tree on its far model; past `?treemid=` m (the
+  // tier's: 300 on a desktop; 0 never) a tree is drawn from its distant model.
   const treeLayer = new NearTrees(tier.trees);
   treeLayer.enabled = params.get('neartrees') !== '0';
+  if (params.has('treemid')) treeLayer.mid = Math.max(0, Number(params.get('treemid')) || 0);
   worldRoot.add(treeLayer.group);
   // a tile mounts once the shaders it draws with are built, off the main thread (render/warm.ts):
   // a new tree variant or the first pond in view froze the frame for a second or two on Windows
@@ -397,7 +399,7 @@ async function main() {
     crowd.add(a.spec.id, a.crowd);
     streamedGround();
     // J1: streamed tiles (past the bake) paint their streets and footprints into the ground windows
-    if (a.spec.world || a.spec.synth) paint.setTile(a.spec.id, a.primRoads, a.fps.map((f) => f.ring as [number, number][]), [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1], a.fps.map((f) => !!f.front), a.areas, a.fps.map((f) => (f.kind === 'house' || f.kind === 'shed' ? 0.45 : 1)), a.xing);
+    if (a.spec.world || a.spec.synth) paint.setTile(a.spec.id, a.primRoads, a.fps.map((f) => f.ring as [number, number][]), [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1], a.fps.map((f) => !!f.front), a.areas, a.fps.map((f) => (f.kind === 'house' || f.kind === 'shed' ? 0.45 : 1)), a.xing, a.lc);
     // the ground under a raised house: a pad, gravel or sand — never lawn (pads.ts), every tile's
     paint.setPads(a.spec.id, underRaised(a.fps, (x, z) => world.terrain.oceanDistAt(x, z)).map((q) => ({ ring: q.ring, fill: PAD_PAINT[q.kind], stone: q.kind === 'gravel' })), [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1]);
     grass.invalidateBox(a.spec.box);

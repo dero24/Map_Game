@@ -73,7 +73,7 @@ describe('the near-tree layer', () => {
     let marked = 0;
     g.traverse((o) => {
       const im = o as THREE.InstancedMesh;
-      if (!im.isInstancedMesh) return;
+      if (!im.isInstancedMesh || !im.name.startsWith('trees:')) return;
       const a = im.geometry.getAttribute('aNear');
       if (im.name.startsWith('trees:palm')) { expect(a).toBeUndefined(); expect((im.material as THREE.ShaderMaterial).defines.TREE_LOD).toBeUndefined(); return; }
       expect((im.material as THREE.ShaderMaterial).defines.TREE_LOD).toBe(1);
@@ -84,16 +84,34 @@ describe('the near-tree layer', () => {
     const dist: { d: number; m: number }[] = [];
     g.traverse((o) => {
       const im = o as THREE.InstancedMesh;
-      if (!im.isInstancedMesh || im.name.startsWith('trees:palm')) return;
+      if (!im.isInstancedMesh || !im.name.startsWith('trees:') || im.name.startsWith('trees:palm')) return;
       const a = im.geometry.getAttribute('aNear'), e = im.instanceMatrix.array;
       for (let i = 0; i < im.count; i++) dist.push({ d: Math.hypot(e[i * 16 + 12], e[i * 16 + 13] - 1.6, e[i * 16 + 14]), m: a.getX(i) });
     });
     const farthestMarked = Math.max(...dist.filter((q) => q.m).map((q) => q.d)), nearestUnmarked = Math.min(...dist.filter((q) => !q.m).map((q) => q.d));
     expect(farthestMarked).toBeLessThanOrEqual(nearestUnmarked);
+    // the distant band: each tile mesh draws every tree from its 40-vertex distant model, folding away
+    // the ones within the mid reach (all 90 here), which its mid mesh beside it draws whole — marked
+    // for the near models as the tile mesh is; the palm keeps its far model
+    const sum = (a: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, n = a.count) => { let s = 0; for (let i = 0; i < n; i++) s += a.getX(i); return s; };
+    const meshes = (p: string) => g.children.filter((o) => o.name.startsWith(p)) as THREE.InstancedMesh[];
+    const tiles = meshes('trees:').filter((m) => !m.name.startsWith('trees:palm')), mids = meshes('tree-mid:');
+    for (const m of tiles) expect(m.geometry.getAttribute('position').count).toBeLessThanOrEqual(40);
+    expect(meshes('trees:palm')[0].geometry.getAttribute('position').count).toBeGreaterThan(40);
+    expect(tiles.reduce((s, m) => s + sum(m.geometry.getAttribute('aLod')), 0)).toBe(90);
+    expect(mids.length).toBe(6);
+    expect(mids.reduce((s, m) => s + m.count, 0)).toBe(90);
+    expect(l.stats.mid).toBe(90);
+    expect(mids.every((m) => m.visible && m.material === tiles.find((t) => t.name.slice(6) === m.name.slice(9))!.material)).toBe(true);
+    expect(mids.reduce((s, m) => s + sum(m.geometry.getAttribute('aNear'), m.count), 0)).toBe(T.near);
     // walk away: nobody near, nothing marked, nothing drawn
     l.update(5000, 1.6, 5000);
     expect(l.stats.trees).toBe(0);
     expect(l.stats.cards).toBe(0);
+    expect(l.stats.mid).toBe(0);
+    expect(tiles.reduce((s, m) => s + sum(m.geometry.getAttribute('aLod')), 0)).toBe(0);
+    l.update(5000, 1.6, 5000);
+    expect(mids.some((m) => m.visible)).toBe(false);
     // and every card stands where its tree's model puts it (the round tree at the origin's grid)
     l.update(-27, 1.6, -24);
     const C = (l.group.children.find((o) => o.name === 'near-trees:cards') as THREE.Mesh).geometry as THREE.InstancedBufferGeometry;
@@ -104,6 +122,24 @@ describe('the near-tree layer', () => {
     expect(aC.getY(first)).toBeCloseTo(m.cards[1], 4);
     expect(aC.getW(first)).toBeCloseTo(m.cards[3], 4);
     expect(m.cards.length / CARD_STRIDE).toBeLessThanOrEqual(MAX_CARDS);
+  });
+  it('a mid mesh stands where its tile mesh does, in a world moved off its origin', () => {
+    // (a tile's objects never update their own matrices: the world's offset pushes one down when it
+    // moves — a mid mesh made after that drew at the identity, 3 km off: Monmouth Beach's trees gone)
+    const l = new NearTrees({ ...TREE_TIERS.desktop, atlas: 32 });
+    const root = new THREE.Group(), g = tile([{ kind: 'oak', v: 1, x: 3, z: 4 }]);
+    root.position.set(512, 0, -3072);
+    g.matrixAutoUpdate = false;
+    for (const c of g.children) c.matrixAutoUpdate = false;
+    root.add(g);
+    root.updateMatrixWorld(true);
+    l.add('a', g);
+    ready(l);
+    l.update(0, 1.6, 0);
+    const im = g.children.find((o) => o.name.startsWith('trees:'))!, mid = g.children.find((o) => o.name.startsWith('tree-mid:'));
+    expect(mid).toBeDefined();
+    expect(mid!.matrixWorld.equals(im.matrixWorld)).toBe(true);
+    expect(mid!.matrixWorld.elements[12]).toBe(512);
   });
   it('a tile it is told to forget takes its marks with it; ?neartrees=0 marks nothing', () => {
     const l = new NearTrees({ ...TREE_TIERS.desktop, atlas: 32 });

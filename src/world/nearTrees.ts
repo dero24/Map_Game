@@ -17,6 +17,15 @@
 //
 // The leaf pictures are painted once, a picture a frame while the world boots (flora.ts
 // leafAtlasJob); until they're done every tree draws from its far mesh.
+//
+// And far off, a third model: past the tier's `mid` reach (300 m on a desktop) every tree is drawn
+// from its distant model (flora.ts distantTree, 40 vertices) — the Hoh's ring held 165,000 trees, 190
+// million vertices a frame on their far models, 23 fps. Once a species' models are grown, its tile mesh
+// draws every tree from the distant model, and a mid mesh beside it (its tile's, the tile mesh's own
+// material) draws the trees within reach whole from the far model, refilled every MID_STEP m — the
+// tile mesh folds those away (`aLod`, per instance). The tile mesh keeps every tree, as before, for
+// all that reads them (the grass's crowns, the critters' perches, the near trees here); its shadow is
+// the distant model's, every tree's.
 import * as THREE from 'three';
 import { probeGeometry } from '../render/probe';
 import { NEAR_KINDS, TREE_KINDS, nearTreeLib, crownField, CARD_STRIDE, leafAtlasJob, cardFlags, hasNear, type TreeKind } from '../assets/flora';
@@ -25,9 +34,20 @@ import { leafCardGeometry, leafCardMaterial, leafTexture, CARD_ATTRS } from '../
 import type { TreeTier } from '../render/quality';
 /** The cell (m) a far mesh's trees are indexed by for crownsNear. */
 const CROWN_CELL = 32;
+/** How far (m) the eye goes before the mid band is refilled. */
+const MID_STEP = 16;
 
 /** A tile's far tree mesh this layer can take trees from. */
-interface Far { im: THREE.InstancedMesh; kind: TreeKind; v: number; near: THREE.InstancedBufferAttribute; box: [number, number, number, number] }
+interface Far {
+  im: THREE.InstancedMesh; kind: TreeKind; v: number; near: THREE.InstancedBufferAttribute; box: [number, number, number, number];
+  /** per tree: 1 while its tile's mid mesh draws it (the tile mesh folds it away) */
+  lod: THREE.InstancedBufferAttribute;
+  /** the far model, once the tile mesh draws every tree from the distant one */
+  full: THREE.BufferGeometry | null;
+  /** the mid mesh (made the first time a tree of it is within reach), which tree each of its first
+   *  `midN` instances is, and its own aNear (the tile mesh's marks for those trees: mirror) */
+  mid: THREE.InstancedMesh | null; midSrc: Int32Array | null; midNear: THREE.InstancedBufferAttribute | null; midN: number;
+}
 /** Cards a near tree may have at most (flora.ts: 8–20 per crown). */
 export const MAX_CARDS = 20;
 
@@ -63,13 +83,21 @@ export class NearTrees {
   private last = 0;
   private grow = new Set<string>();
   private grown = new Set<string>();
+  private farOf = new Map<THREE.InstancedBufferAttribute, Far>();
+  /** tile meshes waiting on their species' models to go onto the distant one */
+  private pending: Far[] = [];
+  private mx = Infinity; private my = Infinity; private mz = Infinity;
+  private midDirty = true;
+  /** past this (m) a tree is drawn from its distant model (the tier's; 0: never — set before the first tile) */
+  mid: number;
   /** false: every tree from its far mesh (`?neartrees=0`) */
   enabled = true;
   /** 0: hand over by distance · 1 far models only · 2 near models only (within reach) — a comparison */
   mode: 0 | 1 | 2 = 0;
-  readonly stats = { tiles: 0, trees: 0, cards: 0, models: 0, verts: 0, hand: 0, refillMs: 0, ready: false };
+  readonly stats = { tiles: 0, trees: 0, cards: 0, models: 0, verts: 0, hand: 0, refillMs: 0, ready: false, mid: 0, distant: 0, midMs: 0 };
 
   constructor(readonly tier: TreeTier) {
+    this.mid = tier.mid;
     this.group.name = 'near-trees';
     this.woodMat = propMaterial({ wind: true, foliage: true, crown: [3, 1], treeLod: 'near' });
     this.cardGeo = leafCardGeometry(tier.near * MAX_CARDS);
@@ -91,18 +119,28 @@ export class NearTrees {
       const im = o as THREE.InstancedMesh;
       if (!im.isInstancedMesh || !handsOver(im.name)) return;
       const [, kind, vs] = im.name.split(':');
-      const n = im.count, near = new THREE.InstancedBufferAttribute(new Float32Array(n), 1);
+      const n = im.count, near = new THREE.InstancedBufferAttribute(new Float32Array(n), 1), lod = new THREE.InstancedBufferAttribute(new Float32Array(n), 1);
       im.geometry.setAttribute('aNear', near);
+      im.geometry.setAttribute('aLod', lod);
       const mat = im.material as THREE.ShaderMaterial;
       if (mat.defines && mat.defines.TREE_LOD !== 1) { mat.defines.TREE_LOD = 1; mat.needsUpdate = true; }
       const e = im.instanceMatrix.array as Float32Array;
       let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
       for (let i = 0; i < n; i++) { const x = e[i * 16 + 12], z = e[i * 16 + 14]; x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
-      fars.push({ im, kind: kind as TreeKind, v: +vs || 0, near, box: [x0, z0, x1, z1] });
+      // (a mesh told of again — the same tile mounted anew — is on its distant model already: its mid mesh too)
+      const was = im.userData.distant as Far | undefined;
+      if (was?.mid) was.mid.count = 0;
+      const f: Far = { im, kind: kind as TreeKind, v: +vs || 0, near, box: [x0, z0, x1, z1], lod, full: was?.full ?? null, mid: was?.mid ?? null, midSrc: was?.midSrc ?? null, midNear: was?.midNear ?? null, midN: 0 };
+      if (f.full) im.userData.distant = f;
+      fars.push(f);
+      this.farOf.set(near, f);
       if (!this.grown.has(`${kind}:${+vs || 0}`)) this.grow.add(`${kind}:${+vs || 0}`);
+      // (onto its distant model before its first frame when the species is grown: else once it is)
+      if (this.mid > 0 && !f.full && !this.toDistant(f)) this.pending.push(f);
     });
     if (fars.length) this.tiles.set(id, fars);
     this.dirty = true;
+    this.midDirty = true;
   }
   remove(id: string) {
     const f = this.tiles.get(id);
@@ -113,7 +151,11 @@ export class NearTrees {
     for (const e of this.flagged) if (gone.has(e.a)) (e.a.array as Float32Array)[e.i] = 0;
     for (const a of gone) a.needsUpdate = true;
     this.flagged = this.flagged.filter((e) => !gone.has(e.a));
+    // (its mid meshes draw on as they are till it goes — their near trees whole)
+    for (const q of f) { this.mirror(q); this.farOf.delete(q.near); }
+    this.pending = this.pending.filter((q) => !gone.has(q.near));
     this.dirty = true;
+    this.midDirty = true;
   }
   refresh() { this.dirty = true; }
 
@@ -157,6 +199,131 @@ export class NearTrees {
     return q;
   }
 
+  /** A tile mesh onto its species' distant model (flora.ts distantTree): every tree of it drawn from
+   *  40 vertices but those within `mid`, which its mid mesh draws whole (midRefill). The tile mesh's
+   *  own per-tree attributes come with it; its bounds stay the far model's. False while the species'
+   *  models are still to grow. */
+  private toDistant(f: Far): boolean {
+    if (!this.grown.has(`${f.kind}:${f.v}`)) return false;
+    const d = nearTreeLib(f.kind, f.v).distant, full = f.im.geometry, nv = d.getAttribute('position').count;
+    if (!full.boundingBox) full.computeBoundingBox();
+    if (!full.boundingSphere) full.computeBoundingSphere();
+    const g = new THREE.BufferGeometry();
+    for (const [name, a] of Object.entries(full.attributes))
+      g.setAttribute(name, (a as THREE.InstancedBufferAttribute).isInstancedBufferAttribute ? a : (d.getAttribute(name)?.clone() ?? new THREE.BufferAttribute(new Float32Array(nv * a.itemSize), a.itemSize)));
+    g.setIndex(d.index!.clone());
+    g.boundingBox = full.boundingBox!.clone();
+    g.boundingSphere = full.boundingSphere!.clone();
+    g.addEventListener('dispose', () => full.dispose()); // (the far model goes with its tile: stream.ts dispose)
+    f.full = full;
+    f.im.geometry = g;
+    f.im.userData.distant = f;
+    this.midDirty = true;
+    return true;
+  }
+  /** A tile mesh's mid mesh: the far model's own vertices, the tile mesh's material, beside it in its
+   *  tile (shown as it is, freed with it). Not a `trees:` mesh: the tile mesh still holds every tree
+   *  for whoever counts them. The eye's alone (layer 0): the shadows are the tile mesh's. */
+  private midMesh(f: Far): THREE.InstancedMesh {
+    const full = f.full!, n = f.im.count, g = new THREE.BufferGeometry();
+    for (const [name, a] of Object.entries(full.attributes)) if (!(a as THREE.InstancedBufferAttribute).isInstancedBufferAttribute) g.setAttribute(name, a);
+    if (full.index) g.setIndex(full.index);
+    f.midNear = new THREE.InstancedBufferAttribute(new Float32Array(n), 1);
+    g.setAttribute('aNear', f.midNear);
+    g.setAttribute('aLod', new THREE.InstancedBufferAttribute(new Float32Array(n), 1)); // (drawn, always)
+    const m = new THREE.InstancedMesh(g, f.im.material, n);
+    if (f.im.instanceColor) m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
+    m.count = 0;
+    m.name = `tree-mid:${f.kind}:${f.v}`;
+    m.frustumCulled = false; // (refilled round the eye)
+    m.matrixAutoUpdate = false;
+    m.raycast = () => {}; // (the tile mesh answers for its trees)
+    f.midSrc = new Int32Array(n);
+    f.mid = m;
+    f.im.userData.distant = f;
+    f.im.parent?.add(m);
+    // (its place in the world now: a tile's objects never update their own — the world's offset pushes
+    // a new one down when it moves, and one made since would draw at the identity, kilometres off)
+    m.updateMatrixWorld(true);
+    return m;
+  }
+  /** A mid mesh's aNear: the tile mesh's marks for its trees, so the near models take over from it as
+   *  they would from the tile mesh. */
+  private mirror(f: Far) {
+    if (!f.midNear) return;
+    const a = f.midNear.array as Float32Array, s = f.near.array as Float32Array, src = f.midSrc!;
+    for (let j = 0; j < f.midN; j++) a[j] = s[src[j]];
+    f.midNear.clearUpdateRanges();
+    if (f.midN) f.midNear.addUpdateRange(0, f.midN);
+    f.midNear.needsUpdate = f.midN > 0;
+  }
+  /** The mid band: each tile mesh's trees within `mid` of the eye drawn whole from its mid mesh. */
+  private midRefill(cx: number, cy: number, cz: number) {
+    const t0 = performance.now(), R2 = this.mid * this.mid;
+    let trees = 0, distant = 0;
+    for (const fars of this.tiles.values())
+      for (const f of fars) {
+        if (!f.full) continue;
+        distant++;
+        const b = f.box, within = Math.hypot(Math.max(b[0] - cx, 0, cx - b[2]), Math.max(b[1] - cz, 0, cz - b[3])) <= this.mid;
+        if (!within && !f.midN) continue;
+        const lod = f.lod.array as Float32Array;
+        for (let j = 0; j < f.midN; j++) lod[f.midSrc![j]] = 0; // (last time's)
+        let n = 0;
+        if (within) {
+          const m = f.mid ?? this.midMesh(f), e = f.im.instanceMatrix.array as Float32Array, dst = m.instanceMatrix.array as Float32Array, src = f.midSrc!;
+          const c = f.im.instanceColor?.array as Float32Array | undefined, dc = m.instanceColor?.array as Float32Array | undefined;
+          for (let i = 0; i < f.im.count; i++) {
+            const o = i * 16;
+            if (e[o] === 0 && e[o + 1] === 0 && e[o + 2] === 0) continue; // (a tree put away)
+            const dx = e[o + 12] - cx, dy = e[o + 13] - cy, dz = e[o + 14] - cz;
+            if (dx * dx + dy * dy + dz * dz > R2) continue;
+            lod[i] = 1;
+            src[n] = i;
+            for (let q = 0; q < 16; q++) dst[n * 16 + q] = e[o + q];
+            if (c && dc) { dc[n * 3] = c[i * 3]; dc[n * 3 + 1] = c[i * 3 + 1]; dc[n * 3 + 2] = c[i * 3 + 2]; }
+            n++;
+          }
+        }
+        f.midN = n;
+        f.lod.needsUpdate = true;
+        const m = f.mid;
+        if (m) {
+          m.count = n;
+          for (const [a, k] of [[m.instanceMatrix, 16], [m.instanceColor, 3]] as const) {
+            if (!a) continue;
+            a.clearUpdateRanges();
+            if (n) a.addUpdateRange(0, n * k);
+            a.needsUpdate = n > 0;
+          }
+          this.mirror(f);
+        }
+        trees += n;
+      }
+    this.stats.mid = trees;
+    this.stats.distant = distant;
+    this.stats.midMs = performance.now() - t0;
+  }
+  /** Per frame: the tile meshes whose species are grown onto their distant model; the mid band
+   *  refilled every MID_STEP m (or when the tiles change); each mid mesh shown as its tile mesh is
+   *  (revealed, culled: stream.ts), with its material. */
+  private distantStep(x: number, y: number, z: number) {
+    if (this.mid <= 0) return;
+    if (this.pending.length) this.pending = this.pending.filter((f) => !this.toDistant(f));
+    if (this.midDirty || Math.hypot(x - this.mx, y - this.my, z - this.mz) > MID_STEP) {
+      this.midDirty = false;
+      this.mx = x; this.my = y; this.mz = z;
+      this.midRefill(x, y, z);
+    }
+    for (const fars of this.tiles.values())
+      for (const f of fars) {
+        const m = f.mid;
+        if (!m) continue;
+        m.visible = f.midN > 0 && f.im.visible && (f.im.layers.mask & 1) !== 0;
+        if (m.material !== f.im.material) m.material = f.im.material;
+      }
+  }
+
   /** The mask pass for the metrics: only the tree standing within r of (x, z), drawn flat — its
    *  leaves green, its wood red. off: everything as painted. */
   mask(on: boolean, x = 0, z = 0, r = 1) { TREE_MASK_U.value.set(x, z, r, on ? 1 : 0); }
@@ -188,6 +355,7 @@ export class NearTrees {
         this.dirty = true;
       }
     }
+    this.distantStep(x, y, z);
     const live = this.enabled && !!this.cards;
     TREE_LOD_U.value.z = live ? this.mode : 1;
     if (!live) { if (this.flagged.length) this.clear(); return; }
@@ -203,7 +371,7 @@ export class NearTrees {
   private clear() {
     const touched = new Set<THREE.InstancedBufferAttribute>();
     for (const e of this.flagged) { (e.a.array as Float32Array)[e.i] = 0; touched.add(e.a); }
-    for (const a of touched) a.needsUpdate = true;
+    for (const a of touched) { a.needsUpdate = true; const f = this.farOf.get(a); if (f) this.mirror(f); }
     this.flagged = [];
     for (const m of this.wood.values()) (m.count = 0), (m.visible = false);
     this.cardGeo.instanceCount = 0;
@@ -238,7 +406,7 @@ export class NearTrees {
     for (const e of this.flagged) { (e.a.array as Float32Array)[e.i] = 0; touched.add(e.a); }
     this.flagged = take.map((k) => ({ a: cand[k].f.near, i: cand[k].i }));
     for (const e of this.flagged) { (e.a.array as Float32Array)[e.i] = 1; touched.add(e.a); }
-    for (const a of touched) a.needsUpdate = true;
+    for (const a of touched) { a.needsUpdate = true; const f = this.farOf.get(a); if (f) this.mirror(f); }
 
     // the limbs: one instanced draw per model, the far instance's own matrix
     const per = new Map<string, number[]>();

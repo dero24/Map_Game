@@ -11,6 +11,7 @@
 import type { Area, Box, LayerLayout } from './data';
 import { makeProjector, type LatLon } from './realTile';
 import { makeCanvas } from './canvas';
+import { landCoverAt, type LandCover } from './landcover';
 import { unzlibSync } from 'three/examples/jsm/libs/fflate.module.js';
 
 const Z = 14;
@@ -273,19 +274,33 @@ export function waterPatch(layer: { buf: ArrayBuffer; layout: LayerLayout }, bod
  *  bake's 2 m steps, capped at 510 m). So what keys on the land and its water's edge (the salt marsh's
  *  cordgrass and its fiddlers, a crawfish's bank, a heron's edge, the forest floor's slugs, the woods'
  *  animals, the lizards' scrub, the sand at the sea) has it beyond the baked region too. Water stays
- *  water. In place; returns the layer. */
+ *  water. Under the map's areas, where the tile carries it, the land cover WorldCover reads where the
+ *  map is silent (`lc`, landcover.ts): the woods nothing maps, the sand at the sea, the fields, the
+ *  marshes — never its water (the map's water is the water); a park's or a golf course's lawn goes over
+ *  its open and built-up ground but not over its trees, its scrub or its marsh (a park's trees are trees).
+ *  In place; returns the layer. */
 const COVER_OF: Record<string, number> = { grass: 30, golf: 30, pitch: 30, scrub: 20, wood: 10, beach: 60, wetland: 90 };
-export function coverPatch(layer: { buf: ArrayBuffer; layout: LayerLayout }, areas: Area[]) {
+const KEEPS = new Set([10, 20, 90, 95]); // (what a mapped lawn doesn't cover over: trees, scrub, marsh, mangroves)
+export function coverPatch(layer: { buf: ArrayBuffer; layout: LayerLayout }, areas: Area[], lc?: LandCover) {
   const L = layer.layout, g = L.grid, n = g.w * g.h;
   const cover = new Uint8Array(layer.buf, L.cover.offset, n), flags = new Uint8Array(layer.buf, L.flags.offset, n), oceanD = new Uint8Array(layer.buf, L.oceanD.offset, n);
   const ring = (f: number[]): [number, number][] => { const r: [number, number][] = []; for (let i = 0; i + 1 < f.length; i += 2) r.push([f[i] / 10, f[i + 1] / 10]); return r; };
+  if (lc)
+    for (let j = 0, k = 0; j < g.h; j++)
+      for (let i = 0; i < g.w; i++, k++) {
+        if (flags[k] & 1) continue;
+        const v = landCoverAt(lc, g.x0 + (i + 0.5) * g.cell, g.z0 + (j + 0.5) * g.cell);
+        if (v && v !== 80) cover[k] = v;
+      }
   // (the most particular last: a wood in a park is wood, a marsh in it a marsh)
-  for (const c of ['grass', 'golf', 'pitch', 'scrub', 'wood', 'beach', 'wetland'])
+  for (const c of ['grass', 'golf', 'pitch', 'scrub', 'wood', 'beach', 'wetland']) {
+    const lawn = lc && (c === 'grass' || c === 'golf');
     for (const a of areas) {
       if (a.c !== c || a.lod) continue;
       const holes = (a.i ?? []).map(ring);
-      for (const o of a.o) eachNodeIn(g, { ring: ring(o), holes }, (k) => { if (!(flags[k] & 1)) cover[k] = COVER_OF[c]; });
+      for (const o of a.o) eachNodeIn(g, { ring: ring(o), holes }, (k) => { if (!(flags[k] & 1) && !(lawn && KEEPS.has(cover[k]))) cover[k] = COVER_OF[c]; });
     }
+  }
   const sdf = new Int16Array(layer.buf, L.sdf.offset, n);
   // the shore's distance, both sides (none of one or the other in the cell: as before)
   let wet = 0;

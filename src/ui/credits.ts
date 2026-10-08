@@ -23,7 +23,7 @@ export const CREDITS: Credit[] = [
     hosts: ['s3-us-west-2.amazonaws.com', 'raw.githubusercontent.com'] },
   { what: 'Roof colours', credit: 'USDA NAIP imagery via the USGS National Map', licence: 'public domain', link: 'https://naip-usdaonline.hub.arcgis.com/',
     hosts: ['imagery.nationalmap.gov', 'naip-usdaonline.hub.arcgis.com'] },
-  { what: 'Land cover in the baked shore', credit: '© ESA WorldCover project 2021 / contains modified Copernicus Sentinel data (2021) processed by the ESA WorldCover consortium', licence: 'CC BY 4.0', link: 'https://esa-worldcover.org',
+  { what: 'Land cover: the woods, fields, beaches and wetlands of every place', credit: '© ESA WorldCover project 2021 / contains modified Copernicus Sentinel data (2021) processed by the ESA WorldCover consortium', licence: 'CC BY 4.0', link: 'https://esa-worldcover.org',
     hosts: ['esa-worldcover.org', 'esa-worldcover.s3.eu-central-1.amazonaws.com'] },
   { what: 'Place names: the map search', credit: 'USGS Geographic Names Information System (GNIS)', licence: 'public domain', link: 'https://www.usgs.gov/us-board-on-geographic-names', hosts: ['prd-tnm.s3.amazonaws.com'] },
   { what: 'Towns and counties: search and arrival cards', credit: 'U.S. Census Bureau: gazetteer, cartographic boundaries, population estimates', licence: 'public domain', link: 'https://www.census.gov/geographies.html', hosts: ['www2.census.gov'] },

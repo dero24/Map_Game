@@ -43,6 +43,16 @@ the parking guess given back in open country; survey-found blocks in a street go
 server serves whatever the tree holds as each spot loads). Last: `flora-2`, vegetation 24.6% against the
 photos' 34.6%, mean 0.725. What's next is the LOG entry's "Next".
 
+**Then land cover everywhere (LOG 2026-10-07 "closing"):** ESA WorldCover in every streamed cell and the
+far ring (tiles **v28**: the Olympic Peninsula's forests, the far hills' woods), areas that meet a cell without
+a vertex in it clipped to it (the beaches of Ruby, Cannon, Pismo, Cape May and seven more), and distant trees
+(the Hoh 22 → 49–57 fps). **v28 is committed, not deployed:** Robby runs `cd worker && npx wrangler deploy`
+first; then `node tools/must-load.mjs --live`, a Ruby Beach cell carrying `lc`, Cape May's carrying its
+beach — and only then push the client (`&v=28`). Never point a page carrying an unreleased `&v=` at the live
+service (what retired v27). Robby's reports of the same evening — a developer-settings preset for a crisper
+watercolor, the harbour's water north of the Statue of Liberty (diagnosis in the LOG), people glowing at
+night, crowds and traffic too dense at night and on desert roads — went to another session.
+
 The cloud session built packages #11–#16, the leftovers, the West's lizards, the water's life (seen
 from above) and each animal's abundance. They were checked with
 tests, CI, the shore playtest and studio montages, never in a real browser on a real GPU. On the PC:

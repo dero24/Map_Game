@@ -131,6 +131,7 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
     junc: props.junc.length ? props.junc : undefined,
     ...(xing.length ? { xing } : {}),
     ...(vp.length ? { vp } : {}),
+    ...(tj.lc && !lite ? { lc: tj.lc } : {}), // (the ground paint's wash: WorldCover where the map is silent)
   };
 }
 

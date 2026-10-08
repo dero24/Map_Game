@@ -431,6 +431,8 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
   canopyMat.defines = { CANOPY: 1 };
   // clone() copies uniform values, not references: re-share the global ones.
   canopyMat.uniforms = mat.uniforms;
+  // (and the far streamed cells' woods ride it too — pack.ts 'gndc', synth.ts realExtras' canopy)
+  group.userData.canopyMat = canopyMat;
   const sliceMat = mat.clone();
   sliceMat.defines = { SLICE: 1 };
   sliceMat.uniforms = mat.uniforms;

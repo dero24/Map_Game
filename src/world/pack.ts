@@ -9,6 +9,7 @@ import { WalkWorld as WalkWorldImpl, tableHeight } from '../player/collision';
 import type { Footprint, Door } from './buildings';
 import type { Plan } from './interiors';
 import type { Area, LayerLayout, Road } from './data';
+import type { LandCover } from './landcover';
 import { buildingMaterial } from './buildings';
 import { propMaterial } from '../render/propMaterial';
 import { creatureMaterial } from '../render/creature';
@@ -29,6 +30,7 @@ export type PMat =
   | { t: 'people'; seated: boolean }
   | { t: 'prop'; o: { wind?: boolean; bob?: boolean; foliage?: boolean; decid?: boolean; paved?: boolean; signal?: boolean; emissive?: number; emissiveNight?: boolean; crown?: [number, number]; fallHue?: number; blossom?: number; weep?: boolean; hang?: boolean; motion?: number } }
   | { t: 'gnd' } // region ground material (shared; set via setGndMaterial at boot)
+  | { t: 'gndc' } // the same with its canopy bump: a far cell's woods (ground.ts CANOPY; set via setGndMaterial)
   | { t: 'lake' } // a lake's sheet: the water shader at its own level (water.ts lakeMaterial)
   | { t: 'shore' }; // a coast's foam strip (shore.ts, water.ts shoreMaterial)
 
@@ -82,6 +84,7 @@ export interface BuiltTile {
   late?: 1; // built without data still in flight (flat for a late DEM, mapped priors for a late LiDAR read) — relief rebuild wanted
   vec?: 1; // a stand-in built from the vector tiles (vectorTile.ts): real streets and buildings — the skyline steps aside
   xing?: number[]; // the tile's mapped crossings for the ground paint (kerbside.ts crossingPaint): x, z, ux, uz, w, style
+  lc?: LandCover; // the cell's WorldCover land cover, for the ground paint's wash (landcover.ts)
   vp?: number[]; // its viewpoints (tourism=viewpoint): x, z, bearing (° — −1: the map doesn't say)
 }
 
@@ -207,8 +210,8 @@ export function matTag(m: THREE.Material): PMat {
 }
 
 // The ground shader lives on the boot-time region ground mesh; synthetic tiles reuse it.
-let gndMat: THREE.Material | null = null;
-export function setGndMaterial(m: THREE.Material) { gndMat = m; }
+let gndMat: THREE.Material | null = null, gndcMat: THREE.Material | null = null;
+export function setGndMaterial(m: THREE.Material, canopy?: THREE.Material) { gndMat = m; gndcMat = canopy ?? null; }
 
 export function matFromTag(t: PMat, atlas?: THREE.Texture): THREE.Material {
   switch (t.t) {
@@ -217,6 +220,7 @@ export function matFromTag(t: PMat, atlas?: THREE.Texture): THREE.Material {
     case 'signs': return signMaterial(atlas!);
     case 'halo': return haloMaterial(t.size, new THREE.Color(t.color));
     case 'gnd': return gndMat ?? propMaterial();
+    case 'gndc': return gndcMat ?? gndMat ?? propMaterial();
     case 'lake': return lakeMaterial() ?? propMaterial(); // (before boot: the sheet's flat colour)
     case 'shore': return shoreMaterial() ?? new THREE.MeshBasicMaterial({ visible: false });
     case 'people': return creatureMaterial({ LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1, ...(t.seated ? { SEATED: 1 } : {}) });

@@ -7,6 +7,7 @@ import { seasonAt } from './season';
 import { worldDate } from './calendar';
 import * as THREE from 'three';
 import type { World, TerrainLayer, Road, Area, WorldJson, Building } from './data';
+import { landCoverBytes, type LandCover } from './landcover';
 import { activeStyle, castOf } from './styles';
 import { lotLayout, type LotLayout } from './lots';
 import { MINOR, ROAD_RANK, roadPaint, streetSurface } from './roadPalette';
@@ -30,6 +31,16 @@ const COVER: Record<number, string> = {
   // a muted lawn green, not grey khaki (paved things are painted over it)
   10: '#76834f', 20: '#8b9a5c', 30: '#9fb06c', 40: '#b3b070', 50: '#a6b27a', 60: '#d8c8a0', 70: '#f0f0f0',
   80: '#8c8768', 90: '#8e9562', 95: '#708055', 100: '#a8a882', 0: '#aeb08e',
+};
+// A streamed cell's WorldCover wash (landcover.ts): the cover's own colours, but a town's built-up land and
+// what WorldCover doesn't say the lawn as before, and its water (the shore's strip past the map's
+// coastline, a river's bank) sand — the map's water is the water.
+const LC_WASH = (v: number) => (v === 0 || v === 50 ? COVER[50] : v === 80 ? COVER[60] : COVER[v] ?? COVER[50]);
+const HEX = new Map<string, [number, number, number]>();
+const hexRgb = (hex: string) => {
+  let c = HEX.get(hex);
+  if (!c) HEX.set(hex, (c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number]));
+  return c;
 };
 const AREA_FILL: Record<string, string> = {
   beach: '#dccb9f', wood: '#617043', scrub: '#8a955c', wetland: '#8c9761', grass: '#9fb56d', pitch: '#8db35f',
@@ -1312,7 +1323,7 @@ export interface GroundPaint {
   detail: DetailGround;
   mid: DetailGround;
   addWalks: (walks: number[], id?: string) => void;
-  setTile: (id: string, roads: Road[], rings: [number, number][][], box: [number, number, number, number], fronts?: boolean[], areas?: Area[], weights?: number[], xing?: number[]) => void;
+  setTile: (id: string, roads: Road[], rings: [number, number][][], box: [number, number, number, number], fronts?: boolean[], areas?: Area[], weights?: number[], xing?: number[], lc?: LandCover) => void;
   dropTile: (id: string) => void;
   /** The ground under a tile's raised houses (pads.ts), repainted where it lands. */
   setPads: (id: string, pads: { ring: [number, number][]; fill: string; stone: boolean }[], box: [number, number, number, number]) => void;
@@ -1404,7 +1415,7 @@ export class DetailGround {
   private job: { wx: number; wz: number; todo: Rect[] } | null = null;
   private changed: Rect[] = []; // world boxes tiles changed in (touch), not yet in a job
   private slice: AnyCanvas | null = null;
-  constructor(private painter: Painter, private covers: { img: HTMLCanvasElement; L: TerrainLayer }[], res: number, readonly size = 300, private level: 1 | 2 = 2, private blur = 6) {
+  constructor(private painter: Painter, private covers: { img: HTMLCanvasElement; L: Pick<TerrainLayer, 'g'> }[], res: number, readonly size = 300, private level: 1 | 2 = 2, private blur = 6) {
     this.canvas.width = this.canvas.height = res;
     this.texture = makeTex(this.canvas);
   }
@@ -1605,7 +1616,31 @@ export function paintGround(world: World, maxTex: number, walks: number[] = [], 
   painter.paint(bctx, B.x0, B.z0, B.x1, B.z1, bx, 0);
 
   const backCover = backCover0;
-  const covers = [{ img: backCover, L: terrain.backdrop }, { img: sliceCover, L: terrain.slice }];
+  const covers: { img: HTMLCanvasElement; L: Pick<TerrainLayer, 'g'> }[] = [{ img: backCover, L: terrain.backdrop }, { img: sliceCover, L: terrain.slice }];
+  // A streamed cell's WorldCover under its features (landcover.ts): its woods, its sand at the sea, its
+  // fields by the season, its marshes — each tile's own wash, with it while it's mounted (the lawn wash
+  // where none is)
+  const tileCovers = new Map<string, { img: HTMLCanvasElement; L: Pick<TerrainLayer, 'g'> }>();
+  const lcImage = (lc: LandCover) => {
+    const c = document.createElement('canvas');
+    c.width = lc.w;
+    c.height = lc.h;
+    const g = c.getContext('2d')!, img = g.createImageData(lc.w, lc.h), d = landCoverBytes(lc);
+    for (let i = 0; i < d.length; i++) {
+      const fc = d[i] === 40 && fields ? fields(lc.x0 + ((i % lc.w) + 0.5) * lc.cell, lc.z0 + (Math.floor(i / lc.w) + 0.5) * lc.cell) : null;
+      const [r, gg, b] = fc ?? hexRgb(LC_WASH(d[i]));
+      img.data[i * 4] = r, img.data[i * 4 + 1] = gg, img.data[i * 4 + 2] = b, img.data[i * 4 + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    return c;
+  };
+  const dropCover = (id: string) => {
+    const e = tileCovers.get(id);
+    if (!e) return;
+    tileCovers.delete(id);
+    const i = covers.indexOf(e);
+    if (i >= 0) covers.splice(i, 1);
+  };
   const detail = new DetailGround(painter, covers, Math.min(2048, maxTex), 300, 2, 6);
   const mid = new DetailGround(painter, covers, Math.min(2048, maxTex), 1600, 1, 2);
   const mc = document.createElement('canvas');
@@ -1663,8 +1698,20 @@ export function paintGround(world: World, maxTex: number, walks: number[] = [], 
   return {
     slice: makeTex(sc), backdrop: makeTex(bc), sliceCanvas: sc, detail, mid, grassMask,
     addWalks: (w: number[], id?: string) => { forget(walksBox(w) ?? (id !== undefined ? tileBox.get(id) : undefined)); painter.addWalks(w, id); },
-    setTile: (id, roads, rings, box, fronts, areas, weights, xing) => { tileBox.set(id, box); forget(box); painter.setTile(id, roads, rings, box, fronts, areas, weights, xing); detail.touch(box); mid.touch(box); },
-    dropTile: (id) => { forget(tileBox.get(id)); tileBox.delete(id); painter.dropTile(id); },
+    setTile: (id, roads, rings, box, fronts, areas, weights, xing, lc) => {
+      tileBox.set(id, box);
+      forget(box);
+      painter.setTile(id, roads, rings, box, fronts, areas, weights, xing);
+      dropCover(id);
+      if (lc) {
+        const e = { img: lcImage(lc), L: { g: { x0: lc.x0, z0: lc.z0, cell: lc.cell, w: lc.w, h: lc.h } } };
+        tileCovers.set(id, e);
+        covers.push(e);
+      }
+      detail.touch(box);
+      mid.touch(box);
+    },
+    dropTile: (id) => { forget(tileBox.get(id)); tileBox.delete(id); painter.dropTile(id); dropCover(id); },
     setPads: (id, pads, box) => { painter.setPads(id, pads, box); if (pads.length) { forget(box); detail.touch(box); mid.touch(box); } },
   };
 }

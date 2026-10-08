@@ -1,5 +1,6 @@
 // Baked world data: types, loader and CPU-side terrain sampling.
 import { cachedFetch, cachedFetchJson, initCache, manifestFingerprint } from './cache';
+import type { LandCover } from './landcover';
 
 export interface Box { x0: number; z0: number; x1: number; z1: number }
 export interface GridHeader { x0: number; z0: number; cell: number; w: number; h: number }
@@ -95,6 +96,7 @@ export interface WorldJson {
   detail?: Box; // full-detail zone for builders (see detailBox)
   trees?: number[]; // see TileJson.trees
   treeCov?: number[];
+  lc?: LandCover; // see TileJson.lc
   sources: Record<string, string | null>;
   terrain: { slice: LayerLayout; backdrop: LayerLayout };
   buildings: Building[];
@@ -263,6 +265,9 @@ export interface TileJson {
   // back to the WorldCover scan).
   trees?: number[];
   treeCov?: number[];
+  // The land the map is silent on, from ESA WorldCover (landcover.ts; the tile service reads it once a
+  // cell): an 8 m grid over the cell and its ground's overhang, WorldCover's own class codes.
+  lc?: LandCover;
   // Real-lite (worker-served) tiles carry provenance; baked tiles don't emit these.
   attribution?: string;
   osmBase?: string | null;

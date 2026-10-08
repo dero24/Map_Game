@@ -39,7 +39,7 @@ const bucket = {
     objects.set(key, { b: enc.encode(body), meta: opts?.customMetadata });
   },
 };
-const env = { TILES: bucket };
+const env = { TILES: bucket, WORLDCOVER: 'off' }; // (the land cover read off AWS: not in a test)
 const ctx = { waitUntil: () => {} };
 const TS = '2026-10-02T20:21:34Z';
 // New Jersey's corner of the outline (lon, lat), as osm-upload.mjs writes Geofabrik's .poly
@@ -158,7 +158,7 @@ describe('the tile service reads our own extract (worker/src/osm.js)', () => {
     expect(r1.headers.get('x-tile-source')).toBe('extract');
     expect(r1.headers.get('x-tile-cache')).toBe('miss');
     expect(noBase(await r1.json())).toEqual(JSON.parse(JSON.stringify(noBase(expected(f)))));
-    expect(puts.map((p) => [p.key, p.meta?.source])).toEqual([[`t/v26/${f.origin.lat.toFixed(4)},${f.origin.lon.toFixed(4)}/${tileKey(f.box.x0 / 1024, f.box.z0 / 1024)}.json`, 'extract']]);
+    expect(puts.map((p) => [p.key, p.meta?.source])).toEqual([[`t/v28/${f.origin.lat.toFixed(4)},${f.origin.lon.toFixed(4)}/${tileKey(f.box.x0 / 1024, f.box.z0 / 1024)}.json`, 'extract']]);
     const r2 = await worker.fetch(new Request(`https://svc.example${path}`), env, ctx);
     expect([r2.headers.get('x-tile-cache'), r2.headers.get('x-tile-source')]).toEqual(['r2', 'extract']);
   });

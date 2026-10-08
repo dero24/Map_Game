@@ -18,6 +18,7 @@ import { osmToTile, makeProjector, overpassQuery } from '../../src/world/realTil
 import { measured } from './measure';
 import { places } from './places';
 import { extractDoc, skylineDoc } from './osm';
+import { landCover, farCover } from './landcover';
 
 const CELL = 1024; // game cells, metres (region-local frame anchored at olat/olon)
 const MARGIN = 48; // context ring, same as the bake's TILE_MARGIN
@@ -35,7 +36,7 @@ const CORS = {
   // The game page runs cross-origin-isolated (COEP) in dev — tiles must be CORP-readable.
   'cross-origin-resource-policy': 'cross-origin',
 };
-const USAGE = 'GET /tile/<cx>_<cz>.json?olat=<deg>&olon=<deg> | GET /measured/<cx>_<cz>.json?olat=<deg>&olon=<deg>&v=1 | GET /dem/<z>/<x>/<y>.png | GET /naip?bbox=<w,s,e,n>&size=<W,H> | GET /places/search?q=<text>&lat=<deg>&lon=<deg> | GET /places/rt/<ix>_<iy>.json | GET /skyline?s=&w=&n=&e=&h=45&floors=14&mast=0';
+const USAGE = 'GET /tile/<cx>_<cz>.json?olat=<deg>&olon=<deg> | GET /cover/<bx>_<bz>.json?olat=<deg>&olon=<deg>&v=1 | GET /measured/<cx>_<cz>.json?olat=<deg>&olon=<deg>&v=1 | GET /dem/<z>/<x>/<y>.png | GET /naip?bbox=<w,s,e,n>&size=<W,H> | GET /places/search?q=<text>&lat=<deg>&lon=<deg> | GET /places/rt/<ix>_<iy>.json | GET /skyline?s=&w=&n=&e=&h=45&floors=14&mast=0';
 const json = (body, init = {}) =>
   new Response(typeof body === 'string' ? body : JSON.stringify(body), {
     ...init,
@@ -56,6 +57,8 @@ export default {
       const r = await places(request, env, ctx, url, { json });
       if (r) return r;
     }
+    const cm = url.pathname.match(/^\/cover\/(-?\d+)_(-?\d+)\.json$/);
+    if (cm) return cover(request, env, ctx, url, parseInt(cm[1]), parseInt(cm[2]));
     const mm = url.pathname.match(/^\/measured\/(-?\d+)_(-?\d+)\.json$/);
     if (mm) return measured(request, env, ctx, url, parseInt(mm[1]), parseInt(mm[2]), { json, tileText: (olat, olon, cx, cz) => tileText(env, olat, olon, cx, cz) });
     const m = url.pathname.match(/^\/tile\/(-?\d+)_(-?\d+)\.json$/);
@@ -63,6 +66,39 @@ export default {
     return tile(request, env, ctx, url, parseInt(m[1]), parseInt(m[2]));
   },
 };
+
+// GET /cover/<bx>_<bz>.json?olat=&olon=&v=1 — a far block's land cover: 8 × 8 cells (8192 m) of the region's
+// frame at 32 m, off WorldCover's 20 m overview (landcover.js farCover) — the far ring's woods, sand and
+// fields, which builds from synthetic cells (src/world/farCover.ts). Kept in R2 once read; a failed read is
+// answered briefly (and not kept), the open sea with {"lc":null}.
+const BLOCK = 8 * CELL;
+async function cover(request, env, ctx, url, bx, bz) {
+  const olat = parseFloat(url.searchParams.get('olat') ?? 'NaN'), olon = parseFloat(url.searchParams.get('olon') ?? 'NaN');
+  if (!isFinite(olat) || !isFinite(olon) || Math.abs(olat) > 78 || Math.abs(olon) > 180 || Math.abs(bx) > 2500 || Math.abs(bz) > 1200)
+    return json({ error: 'bad block', usage: '/cover/<bx>_<bz>.json?olat=<deg>&olon=<deg>' }, { status: 400 });
+  const cache = caches.default;
+  const hit = await cache.match(request);
+  if (hit) return hit;
+  const key = `c/v1/${olat.toFixed(4)},${olon.toFixed(4)}/${bx}_${bz}.json`, bucket = env.TILES ?? null;
+  const keep = { 'cache-control': 'public, max-age=86400, s-maxage=2592000' };
+  const stored = bucket ? await bucket.get(key).catch(() => null) : null;
+  if (stored) {
+    const resp = json(await stored.text(), { headers: { ...keep, 'x-cover-cache': 'r2' } });
+    ctx.waitUntil(cache.put(request, resp.clone()));
+    return resp;
+  }
+  let body;
+  try {
+    const lc = env.WORLDCOVER === 'off' ? null : await farCover({ x0: bx * BLOCK, z0: bz * BLOCK, x1: bx * BLOCK + BLOCK, z1: bz * BLOCK + BLOCK }, { lat: olat, lon: olon });
+    body = JSON.stringify({ lc });
+  } catch (e) {
+    return json({ error: 'worldcover unavailable', detail: String(e?.message ?? e).slice(0, 200) }, { status: 503, headers: { 'cache-control': 'public, max-age=600', 'retry-after': '600' } });
+  }
+  if (bucket) ctx.waitUntil(bucket.put(key, body, { httpMetadata: { contentType: 'application/json' } }).catch((e) => console.warn('R2 put failed', e)));
+  const resp = json(body, { headers: { ...keep, 'x-cover-cache': 'miss' } });
+  ctx.waitUntil(cache.put(request, resp.clone()));
+  return resp;
+}
 
 // GET /skyline?s=&w=&n=&e=&h=&floors=&mast= — the skylines' towers from our own extract (osm.js),
 // in Overpass's shape. Edge-cached a day (the extract changes monthly).
@@ -163,6 +199,9 @@ async function tile(request, env, ctx, url, cx, cz) {
   // furniture (picnic tables, boards, cabinets, recycling, clocks, seamarks…)
   // v24: roof:levels in the height (Building.rl)
   // v25: motorway and trunk ramps (their links) are streets; every cell from our own extract's snapshot
+  // v28: the cell's land cover from ESA WorldCover (TileJson.lc, worker/src/landcover.js); its areas met
+  // without a vertex in it clipped to it (realTile.ts clipRingToBox). (No v27 was ever deployed: a
+  // test page asked the v26 service for &v=27, and the edge kept those answers under that URL.)
   const okey = tileKey(olat, olon, cx, cz);
   const bucket = env.TILES ?? null; // binding may be absent under `wrangler dev` before the bucket exists
   if (bucket) {
@@ -191,13 +230,15 @@ async function tile(request, env, ctx, url, cx, cz) {
     ctx.waitUntil(cache.put(request, resp.clone()));
     return resp;
   }
-  const headers = { 'cache-control': 'public, max-age=86400, s-maxage=2592000', 'x-tile-stats': out.stats, 'x-tile-source': out.source ?? 'shared' };
+  // (a cell whose land cover couldn't be read is served without it and kept only ten minutes: the next
+  // request builds it again, whole)
+  const headers = { 'cache-control': out.transient ? 'public, max-age=600' : 'public, max-age=86400, s-maxage=2592000', 'x-tile-stats': out.stats, 'x-tile-source': out.source ?? 'shared' };
   // The edge-cached copy mustn't inherit the 'miss' label — store a twin labelled 'edge'.
   ctx.waitUntil(cache.put(request, json(out.body, { headers: { ...headers, 'x-tile-cache': 'edge' } })));
   return json(out.body, { headers: { ...headers, 'x-tile-cache': 'miss' } });
 }
 
-const tileKey = (olat, olon, cx, cz) => `t/v26/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
+const tileKey = (olat, olon, cx, cz) => `t/v28/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
 // A cell's TileJson text, as /tile answers it (R2, else the cold path), or null — the /measured
 // route measures the buildings the client got from /tile, keyed the same way.
 async function tileText(env, olat, olon, cx, cz) {
@@ -313,10 +354,22 @@ async function coldTileNow(env, okey, cx, cz, box, origin, bb) {
 async function build(env, okey, cx, cz, box, origin, osm, source) {
   try {
     const tj = osmToTile(osm, { id: `${cx}_${cz}`, box, origin });
+    // the land the map is silent on: WorldCover's woods, sand, fields and marshes (worker/src/landcover.js);
+    // unread (S3 down, too slow), the tile goes out without it and isn't kept (`WORLDCOVER = "off"`: never read)
+    let transient = false;
+    if (env.WORLDCOVER !== 'off') {
+      try {
+        const lc = await landCover(box, origin);
+        if (lc) tj.lc = lc;
+      } catch (e) {
+        transient = true;
+        console.warn('worldcover read failed', e?.message ?? e);
+      }
+    }
     const body = JSON.stringify(tj);
     const bucket = env.TILES ?? null;
-    if (bucket) await bucket.put(okey, body, { httpMetadata: { contentType: 'application/json' }, customMetadata: { source } }).catch((e) => console.warn('R2 put failed', e));
-    return { body, source, stats: `b${tj.buildings.length} r${tj.roads.length} a${tj.areas.length}${osm.stats ? ` · ${osm.stats.tiles} extract tiles, ${osm.stats.parsed} parsed` : ''}` };
+    if (bucket && !transient) await bucket.put(okey, body, { httpMetadata: { contentType: 'application/json' }, customMetadata: { source } }).catch((e) => console.warn('R2 put failed', e));
+    return { body, source, transient, stats: `b${tj.buildings.length} r${tj.roads.length} a${tj.areas.length}${tj.lc ? ' lc' : ''}${osm.stats ? ` · ${osm.stats.tiles} extract tiles, ${osm.stats.parsed} parsed` : ''}` };
   } catch (e) {
     return { body: null, detail: `transform ${e?.message ?? e}` };
   }

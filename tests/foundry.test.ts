@@ -547,6 +547,33 @@ describe('flora', () => {
     }
     expect(n).toBe(NEAR_KINDS.size * TREE_VARIANTS - 1); // (the longleaf's grass stage keeps its blades at every distance)
   });
+  // The distant model (world/nearTrees.ts, past the tier's mid reach): one hull round the far crown's
+  // lobes and a post of a trunk, off the same plan — the Hoh's 165,000 trees on their far models were
+  // 190 million vertices a frame
+  it('distant trees: 40 vertices standing where the far model does, its attributes, white foliage over bark', () => {
+    for (const k of TREE_KINDS) for (let v = 0; v < TREE_VARIANTS; v++) {
+      if (!hasNear(k, v)) continue;
+      const d = nearTreeGeometry(k, v).distant, far = treeGeometry(k, v), id = `${k}:${v}`;
+      expect(verts(d), id).toBeLessThanOrEqual(40);
+      expect(d.index, id).not.toBeNull();
+      expect(finite(d), id).toBe(true);
+      // the same material draws it: the far model's attributes, no more, no fewer
+      expect(Object.keys(d.attributes).sort(), id).toEqual(Object.keys(far.geo.attributes).sort());
+      d.computeBoundingBox();
+      far.geo.computeBoundingBox();
+      const a = d.boundingBox!, b = far.geo.boundingBox!, hw = Math.max(a.max.x - a.min.x, a.max.z - a.min.z) / 2;
+      expect(a.min.y, id).toBeLessThanOrEqual(0.01); // (on the ground)
+      expect(a.max.y / b.max.y, id).toBeGreaterThan(0.8); // (as tall: a snapped top's spike may stand above the crown)
+      expect(a.max.y / b.max.y, id).toBeLessThan(1.1);
+      expect(hw / far.meta.crownR, id).toBeGreaterThan(0.85); // (as wide)
+      expect(hw / far.meta.crownR, id).toBeLessThan(1.3);
+      // foliage white (the instance colour paints it), the trunk its bark
+      const C = d.getAttribute('color');
+      let white = 0;
+      for (let i = 0; i < C.count; i++) if (Math.min(C.getX(i), C.getY(i), C.getZ(i)) >= 0.98) white++;
+      expect(white, id).toBe(32);
+    }
+  });
   it('near trees: the trunk flares and tapers, limbs reach into the crown, the crown stands where the far one does', () => {
     for (const k of NEAR_KINDS) for (let v = 0; v < TREE_VARIANTS; v++) {
       if (!hasNear(k, v)) continue;

@@ -6,6 +6,7 @@ import { osmToTile, overpassQuery, makeProjector, type OsmDoc } from './realTile
 import { buildTile } from './tileBuild';
 import { packGroup, type BuiltTile } from './pack';
 import { synthTile, realExtras, waterSheets } from './synth';
+import { farCoverFor, farCanopy } from './farCover';
 import { fetchDem, demLayer, flatDem, setDemBase, raceNull, waterPatch, waterLevel, coverPatch, type WaterBody } from './dem';
 import { readMvt, ringArea } from './mvt';
 import { vectorToOsm, clipPoly } from './vectorTile';
@@ -60,7 +61,7 @@ const realDem = new Map<string, { buf: ArrayBuffer; layout: LayerLayout }>(); //
 // (the vector twin: real streets and buildings) and the stream asks the service again later.
 // Results are cached per cell in IndexedDB (kvPut), so a revisit never re-queries Overpass.
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-const DIRECT_V = 26; // keep with the tile service's t/vN (realTile output version)
+const DIRECT_V = 28; // keep with the tile service's t/vN (realTile output version)
 // Overpass rate-limits per IP and per server: one query at a time on each mirror, so the three
 // mirrors carry three cells at once. A mirror that answers 429/504 cools down for its
 // retry-after; a query that fails on one mirror moves on to the next free one.
@@ -500,6 +501,8 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   // rebuild) comes later it awaits the same promise and still gets the real heights.
   // (a real cell's grid is 4 m — fine enough to carry its graded streets; a placeholder's 16 m)
   if (demOn && origin && (spec.synth || spec.world)) demP = demFor(cellKey, spec.box, !msg.lite ? 4 : 16);
+  // (the far ring's woods: its synthetic cells' block of WorldCover off the tile service — farCover.ts)
+  const farP = msg.lite && spec.synth && measuredBase && origin ? raceNull(farCoverFor(measuredBase, origin, spec.box), 6000) : null;
   // Relief rebuilds: a synth cell waits for its DEM, a real cell for its LiDAR (below).
   // (no DEM for good — offline, or a browser that can't read it — still rebuilds when the map's
   // water can come: the flat ground below takes it)
@@ -565,7 +568,9 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
       } else if ((wet || flatGround) && !msg.relief) waterLate = true; // (flat: no way to know it's dry — ask again)
     }
   }
-  const syn: SynthResult | null = spec.synth && !vec ? synthTile(spec, seed, terrain) : null;
+  // (a far synthetic cell's woods: its far block's WorldCover, raised into its ground's canopy — farCover.ts)
+  const far = farP ? await farP : null;
+  const syn: SynthResult | null = spec.synth && !vec ? synthTile(spec, seed, terrain, far ? farCanopy(far) : undefined) : null;
   if (syn && water?.length) syn.extra.add(waterSheets(water, spec.box));
   let tj = vec ?? (tjP ? await tjP : syn!.tj);
   // a real cell's sea is the vector tiles' (the lakes stay its own OSM's, names and all) — for
@@ -585,8 +590,9 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
     water = waterBodies(dem, tj, terrain);
     if (water.length || seaFromMap) dem = waterPatch(dem, water, seaFromMap);
     // …and its land's cover and the sea's distance, off its map (dem.ts coverPatch: woods, scrub,
-    // lawns, beaches, wetlands — what the bake reads off WorldCover)
-    coverPatch(dem, tj.areas);
+    // lawns, beaches, wetlands — what the bake reads off WorldCover) over WorldCover's own where the tile
+    // carries it (landcover.ts: the woods, the sand, the fields the map leaves out)
+    coverPatch(dem, tj.areas, tj.lc);
     if (!msg.lite && dem.layout.grid.cell <= 4) {
       const gr = gradedDem(dem, tj, (m) => ctx.postMessage({ kind: 'log', msg: `[grade ${cellKey}] ${m}` }), true);
       dem = gr.dem;
@@ -634,8 +640,13 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   if (msg.relief && spec.world && (lidarOn() || aerialOn()) && !lidarNew && !aerialNew) return null;
   const tbuf = spec.terrain && !msg.lite ? await cachedFetch(base + spec.terrain.file) : undefined;
   const tile = await buildTile(tj, terrain, spec, msg.idBase, !!msg.lite);
+  // (a far cell's woods: WorldCover's tree cover, the share of a node's 12 m neighbours, raised into the
+  // ground's canopy — the forest on the hills past the detail ring, where the far ring draws no trees: the
+  // Olympic Peninsula's were bare grass)
+  const woods = msg.lite && dem && tj.lc ? new TerrainLayer(dem.buf, dem.layout) : null;
+  const canopy = woods ? (x: number, z: number) => { let n = 0; for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) n += woods.coverAt(x + dx * 12, z + dz * 12) === 10 ? 1 : 0; return n / 9; } : undefined;
   if (syn) tile.objs.push(...packGroup(syn.extra));
-  else if (realish) tile.objs.push(...packGroup(realExtras(tj, terrain, dem && dem.layout.grid.cell <= 4 && relief(dem) > 6 ? 4 : 8, dem ? water : undefined))); // ground + real-street ribbons + water
+  else if (realish) tile.objs.push(...packGroup(realExtras(tj, terrain, dem && dem.layout.grid.cell <= 4 && relief(dem) > 6 ? 4 : 8, dem ? water : undefined, canopy))); // ground + real-street ribbons + water
   if (vec) tile.vec = 1;
   // tunnel mouths: a headwall round a dark opening where a street goes underground
   if (realish && !msg.lite) {

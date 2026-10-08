@@ -678,3 +678,31 @@ describe('ringTester', () => {
     expect(wet).toBeGreaterThan(0);
   }, 30000);
 });
+
+// Areas that meet a cell without a vertex in it (2026-10-08, Robby: "is there even beaches where there's
+// supposed to be beaches"): a beach down a straight coast with its points kilometres apart, a national
+// forest or a lake holding the whole cell — left out, the cell went without its beach, its woods, its lake
+// (Cape May's, Ocean City's, Virginia Beach's, Gulf Shores's beaches all missing from their cells).
+describe('osmToTile — areas through the cell', () => {
+  it('a beach down a straight coast and a forest round the whole cell: clipped to the cell and its margin, the cell\'s own', () => {
+    const t = osmToTile(
+      osm(
+        way(1, { natural: 'beach' }, [[300, -5000], [380, -5000], [380, 6000], [300, 6000]], true), // its corners 5–6 km off
+        way(2, { landuse: 'forest' }, [[-9000, -9000], [9000, -9000], [9000, 9000], [-9000, 9000]], true), // round the whole cell
+        way(3, { natural: 'wood' }, [[5000, 5000], [6000, 5000], [6000, 6000], [5000, 6000]], true), // clear of it
+      ),
+      OPTS,
+    );
+    const beach = t.areas.find((a) => a.c === 'beach')!, wood = t.areas.filter((a) => a.c === 'wood');
+    expect(beach).toBeDefined();
+    expect(beach.own).toBeUndefined();
+    const xs = beach.o[0].filter((_, i) => i % 2 === 0).map((v) => v / 10), zs = beach.o[0].filter((_, i) => i % 2 === 1).map((v) => v / 10);
+    expect(Math.min(...xs)).toBeCloseTo(300, 0);
+    expect(Math.max(...xs)).toBeCloseTo(380, 0);
+    expect(Math.min(...zs)).toBeGreaterThanOrEqual(-48 - 0.1); // (clipped to the cell and its 48 m margin)
+    expect(Math.max(...zs)).toBeLessThanOrEqual(1024 + 48 + 0.1);
+    expect(pointInRing(340, 500, [...Array(beach.o[0].length / 2)].map((_, i) => [beach.o[0][2 * i] / 10, beach.o[0][2 * i + 1] / 10]))).toBe(true);
+    expect(wood).toHaveLength(1); // (the far one left out)
+    expect(pointInRing(512, 512, [...Array(wood[0].o[0].length / 2)].map((_, i) => [wood[0].o[0][2 * i] / 10, wood[0].o[0][2 * i + 1] / 10]))).toBe(true);
+  });
+});

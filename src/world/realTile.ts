@@ -69,6 +69,36 @@ export const pointInRing = (x: number, z: number, r: P2[]) => {
  *  band over the window [z0, z1], so a point tests only the edges crossing its own row. (A cell on
  *  a Great Lake carries the lake's whole outline, 47,000 vertices: tested once a ground quad, it cost
  *  a Chicago cell 8 s of its build.) A point outside the window takes the plain test. */
+/** A ring (flat, the tile's 0.1 m units) clipped to a box (the same units): Sutherland–Hodgman against
+ *  its four sides — a ring holding the whole box comes back as the box, one clear of it as []. (An area
+ *  that meets a cell without a vertex in it: a beach down a straight coast, its points kilometres apart; a
+ *  national forest or a lake holding the whole cell.) */
+export function clipRingToBox(f: number[], x0: number, z0: number, x1: number, z1: number): number[] {
+  let pts: P2[] = [];
+  for (let i = 0; i + 1 < f.length; i += 2) pts.push([f[i], f[i + 1]]);
+  const side = (inside: (p: P2) => boolean, cut: (a: P2, b: P2) => P2) => {
+    const out: P2[] = [];
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[(i + pts.length - 1) % pts.length], b = pts[i];
+      if (inside(b)) { if (!inside(a)) out.push(cut(a, b)); out.push(b); } else if (inside(a)) out.push(cut(a, b));
+    }
+    pts = out;
+  };
+  const atX = (x: number) => (a: P2, b: P2): P2 => [x, a[1] + ((b[1] - a[1]) * (x - a[0])) / (b[0] - a[0])];
+  const atZ = (z: number) => (a: P2, b: P2): P2 => [a[0] + ((b[0] - a[0]) * (z - a[1])) / (b[1] - a[1]), z];
+  side((p) => p[0] >= x0, atX(x0));
+  if (pts.length) side((p) => p[0] <= x1, atX(x1));
+  if (pts.length) side((p) => p[1] >= z0, atZ(z0));
+  if (pts.length) side((p) => p[1] <= z1, atZ(z1));
+  const out: number[] = [];
+  for (const [x, z] of pts) {
+    const X = Math.round(x), Z = Math.round(z);
+    if (out.length >= 2 && out[out.length - 2] === X && out[out.length - 1] === Z) continue;
+    out.push(X, Z);
+  }
+  return out.length >= 6 ? out : [];
+}
+
 export function ringTester(r: P2[], z0: number, z1: number, band = 16): (x: number, z: number) => boolean {
   const n = Math.max(1, Math.ceil((z1 - z0) / band));
   const rows: number[][] = [];
@@ -649,6 +679,19 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
     return n > 0 && inB(x / n / 10, z / n / 10);
   };
   const ownV = (f: number[]) => (firstVertex(f) ? undefined : OWN_CTX);
+  // an area's ring: as mapped when a vertex of it is in the cell (and its margin); else, when it meets the
+  // cell or holds it, clipped to them (clipRingToBox) — the beach down a straight coast, the forest or the
+  // lake round the whole cell, all left out before — and the clipped piece is the cell's own
+  const areaRing = (f: number[]): { f: number[]; cut: boolean } | null => {
+    if (anyVertex(f, margin)) return { f, cut: false };
+    const c = clipRingToBox(f, (box.x0 - margin) * 10, (box.z0 - margin) * 10, (box.x1 + margin) * 10, (box.z1 + margin) * 10);
+    return c.length ? { f: c, cut: true } : null;
+  };
+  const areaRings2 = (outer: number[][], inner: number[][]) => {
+    const o = outer.map(areaRing).filter((r): r is { f: number[]; cut: boolean } => !!r);
+    const i = inner.map(areaRing).filter((r): r is { f: number[]; cut: boolean } => !!r).map((r) => r.f);
+    return o.length ? { o: o.map((r) => r.f), i, own: o[0].cut ? undefined : ownV(o[0].f) } : null;
+  };
   const ownC = (f: number[]) => (centroidIn(f) ? undefined : OWN_CTX);
 
   const buildings: Building[] = [];
@@ -943,9 +986,9 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
     if (wc) {
       const rings = areaRings(e);
       if (!rings) continue;
-      const o = rings.outer.map((ring) => flat(simplify(cleanRing(ring), 0.25))).filter((f) => f.length >= 6);
-      if (!o.length || !o.some((ring) => anyVertex(ring, margin))) continue;
-      const a: Area = { c: wc, o, i: rings.inner.map((ring) => flat(simplify(cleanRing(ring), 0.25))).filter((f) => f.length >= 6), own: ownV(o[0]) };
+      const kept = areaRings2(rings.outer.map((ring) => flat(simplify(cleanRing(ring), 0.25))).filter((f) => f.length >= 6), rings.inner.map((ring) => flat(simplify(cleanRing(ring), 0.25))).filter((f) => f.length >= 6));
+      if (!kept) continue;
+      const a: Area = { c: wc, o: kept.o, i: kept.i, own: kept.own };
       if (t.name) a.n = t.name;
       areas.push(a);
       continue;
@@ -957,9 +1000,9 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
     if (la) {
       const rings = areaRings(e);
       if (!rings) continue;
-      const o = rings.outer.map((ring) => flat(simplify(cleanRing(ring), 0.25))).filter((f) => f.length >= 6);
-      if (!o.length || !o.some((ring) => anyVertex(ring, margin))) continue;
-      const a: Area = { c: la, o, i: rings.inner.map((ring) => flat(simplify(cleanRing(ring), 0.25))).filter((f) => f.length >= 6), own: ownV(o[0]) };
+      const kept = areaRings2(rings.outer.map((ring) => flat(simplify(cleanRing(ring), 0.25))).filter((f) => f.length >= 6), rings.inner.map((ring) => flat(simplify(cleanRing(ring), 0.25))).filter((f) => f.length >= 6));
+      if (!kept) continue;
+      const a: Area = { c: la, o: kept.o, i: kept.i, own: kept.own };
       if (t.name) a.n = t.name;
       // a pitch says what it's for (a basketball court, a block of tennis courts, a diamond) and
       // what it's surfaced with — the paint draws its lines, props.ts its hoops, nets and goals

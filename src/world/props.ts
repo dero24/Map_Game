@@ -970,7 +970,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   };
   // LiDAR trees (lidar.ts): where the survey covered the ground, the real trees replace
   // both the WorldCover scan and OSM tree points (they're the same trees, measured).
-  const LT = json.trees, LC = json.treeCov, TB = extras.box;
+  const LT = json.trees, LC = json.treeCov, TB = extras.box, lcOn = !!json.lc;
   const lidarCovered = (x: number, z: number) => {
     if (!LC || !TB) return false;
     const I = Math.floor(((x - TB.x0) / (TB.x1 - TB.x0)) * 16), J = Math.floor(((z - TB.z0) / (TB.z1 - TB.z0)) * 16);
@@ -1002,6 +1002,47 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     const s = Math.min(2.4, treeHeight4(TREE_KINDS[k], v, hu, false)) / treeMeta(TREE_KINDS[k], v).h, w = 0.85 + 0.3 * hashf(Math.floor(x * 4.1) * 7919 + Math.floor(z * 1.7) * 104729 + 527);
     trees.push({ m: new THREE.Matrix4().compose(V(x, g - 0.2, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), hu * 40), V(s * w, s, s * w)), c: new THREE.Color(green[Math.floor(hu * 997) % green.length]), k, v });
   };
+  // Under the survey, in a forest WorldCover sees (the tile's land cover, landcover.ts): the crowns the
+  // survey finds are a forest's tallest — 3.6–5.2 thousand a square kilometre in the Hoh's old growth,
+  // ~4 m across the middle, a quarter of its ground under them where the canopy closes over nine tenths:
+  // sparse spires over grass — and the woods between them are the scan's: a tree where no measured
+  // crown stands within its own reach and 2.5 m, as tall as two thirds to nine tenths of the nearest's
+  // (they grow in its shade) — the region's own mix as the scan picks it in a wood (the westside's
+  // conifers), its shrubs at a shrub's height. Position hashes only.
+  const LTG = new Map<number, number[]>(), GC = 16;
+  const gk = (i: number, j: number) => i * 92821 + j;
+  if (LT && lcOn)
+    for (let i = 0; i + 3 < LT.length; i += 4) {
+      const x = LT[i] / 10, z = LT[i + 1] / 10, k = gk(Math.floor(x / GC), Math.floor(z / GC)), l = LTG.get(k);
+      if (l) l.push(x, z, LT[i + 2] / 10, LT[i + 3] / 10);
+      else LTG.set(k, [x, z, LT[i + 2] / 10, LT[i + 3] / 10]);
+    }
+  const surveyGap = (x: number, z: number) => {
+    if (!(mapCover(x, z) === 10 || terrain.coverAt(x, z) === 10) || hashf(Math.floor(x * 2.3) * 7919 + Math.floor(z * 3.1) * 104729 + 541) >= 0.75) return;
+    let near = Infinity, h0 = 0;
+    for (let i = Math.floor(x / GC) - 1; i <= Math.floor(x / GC) + 1; i++)
+      for (let j = Math.floor(z / GC) - 1; j <= Math.floor(z / GC) + 1; j++) {
+        const l = LTG.get(gk(i, j));
+        if (l)
+          for (let q = 0; q < l.length; q += 4) {
+            const d = Math.hypot(l[q] - x, l[q + 1] - z);
+            if (d < l[q + 3] + 2.5) return; // (inside a measured crown's reach)
+            if (d < near) (near = d), (h0 = l[q + 2]);
+          }
+      }
+    if (terrain.sdfAt(x, z) < 3 || paved(x, z) || walk.blocked(x, z, 2.2) || onStructure(x, z)) return;
+    const u = hashf(Math.floor(x * 1.7) * 104729 + Math.floor(z * 2.9) * 7919 + 547);
+    let k = regional(pickWeighted(look.trees, hashf(Math.floor(x * 3.3) * 7919 + Math.floor(z * 1.1) * 104729 + 557)), x, z);
+    if (westside && (k === 0 || k === 1) && hashf(Math.floor(x * 3.3) * 104729 + Math.floor(z * 2.1) * 7919 + 77) < 0.7) k = nwConifer(x, z);
+    let v = variantAt(x, z, TREE_VARIANTS, 11);
+    if (NW_CONIFER.has(k) || NORTH_CONIFER.has(k)) v = nwForm(x, z, true);
+    if (k === MAPLE) v = westside ? 2 : v === 2 ? 0 : v; // (a westside wood's maple is the bigleaf, gold in the fall: the sugar and red maples are the East's)
+    const h4 = treeHeight4(TREE_KINDS[k], v, u, true);
+    const h = k === 2 ? 2.4 + u * 1.6 : k === VINEMAPLE ? 3.5 + u * 3.5 : k === WILLOWSHRUB ? 1.6 + u * 2.4 : smallMax(k) < Infinity && h4 > 0 ? h4 : Math.max(6, Math.min(48, (h0 || 22) * (0.65 + 0.25 * u)));
+    const s = h / treeMeta(TREE_KINDS[k], v).h;
+    const w = 0.85 + 0.3 * hashf(Math.floor(x * 4.3) * 7919 + Math.floor(z * 1.9) * 104729 + 563);
+    trees.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z) - 0.2, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), u * 40), V(s * w, s, s * w)), c: new THREE.Color(green[Math.floor(u * 997) % green.length]), k, v });
+  };
   for (let z = zone.z0; z < zone.z1; z += G)
     for (let x = zone.x0; x < zone.x1; x += G) {
       // Only cells this tile owns — the scan zones of adjacent tiles overlap the margin, and
@@ -1009,8 +1050,11 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       // terrain lookups the old S±250 zone spent on cells owned by neighbours.
       if (extras.box && (x < extras.box.x0 || x >= extras.box.x1 || z < extras.box.z0 || z >= extras.box.z1)) continue;
       const jx = x + rng.float() * G, jz = z + rng.float() * G;
-      if (lidarCovered(jx, jz)) { if (desert) surveyFloor(jx, jz); continue; }
-      const cov = mapCover(jx, jz) || terrain.coverAt(jx, jz); // (the map's own woods first)
+      if (lidarCovered(jx, jz)) { if (desert) surveyFloor(jx, jz); else if (lcOn) surveyGap(jx, jz); continue; }
+      // (the map's own woods first — but where the tile carries WorldCover, a mapped lawn doesn't hide its
+      // trees, its scrub or its marsh: a park's trees are trees, as dem.ts coverPatch has it)
+      const mc = mapCover(jx, jz), tc = terrain.coverAt(jx, jz);
+      const cov = lcOn && mc === 30 && (tc === 10 || tc === 20 || tc === 90 || tc === 95) ? tc : mc || tc;
       const beachy = terrain.oceanDistAt(jx, jz) < 90;
       const pr = cov === 10 ? 0.85 : beachy ? 0 : cov === 50 ? 0.035 : cov === 30 ? 0.05 : cov === 20 ? 0.3 : 0;
       // (estate country is old trees round big lawns; an old grid's street trees are mature too)
@@ -1055,6 +1099,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
         k = SWAMP_K[pickWeighted(SWAMP_K.map(([, w]) => w), hashf(Math.floor(jx * 3.1) * 104729 + Math.floor(jz * 2.3) * 7919 + 283))][0];
       let v = variantAt(jx, jz, TREE_VARIANTS, 11);
       if (k === MAPLE && v === 2 && !westside) v = 0; // (the bigleaf maple is the Northwest's westside's alone)
+      else if (k === MAPLE && westside && cov === 10) v = 2; // (…and a westside wood's maple is it: the sugar and red maples, scarlet in the fall, are the East's)
       if (NW_CONIFER.has(k) || NORTH_CONIFER.has(k)) v = nwForm(jx, jz, cov === 10);
       if (SOUTH_PINE.has(k)) v = southPineForm(TREE_KINDS[k], hashf(Math.floor(jx * 2.7) * 7919 + Math.floor(jz * 3.1) * 104729 + 257), cov === 10, cast0);
       // (package #9: the South's wood edges — along a road, a field — smothered in kudzu)
@@ -1095,7 +1140,7 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       if (k === 4) c.lerp(new THREE.Color(0x2e4630), 0.55); // spruces run dark
       else if (rng.float() < 0.12 && DECIDUOUS.has(TREE_KINDS[k])) c.lerp(new THREE.Color(0xb59a3e), 0.45); // first hints of autumn (on the trees that turn: never a pine, a live oak, a magnolia)
       // (dropped only now, its draws all made: the scan's random sequence stays as it was)
-      if (edgeCovered(jx, jz)) { if (desert) surveyFloor(jx, jz); continue; }
+      if (edgeCovered(jx, jz)) { if (desert) surveyFloor(jx, jz); else if (lcOn) surveyGap(jx, jz); continue; }
       trees.push({ m, c, k, v });
     }
   // The map's own species (natural=tree + genus / species / taxon, realTile treeKindOf): a mapped

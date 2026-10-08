@@ -261,10 +261,28 @@ the sky between the leaves. Past it, the tiles' own solid crowns, as before.
   toward the eye and darken the crown a shade at the hand-over — with 25% of the cluster's own
   roundness, the far crown's underside AO and the heart's cards darker, the instance green × each
   leaf's shade, pigment, snow, the autumn turn by the species' fall hue, leaf fall leaf by leaf,
-  its blossom, its leaves' own motion (all from the card's flags: below). The shadow map holds the far crown's solid ball (the shadow pass's override
-  draws every far instance whole, so the near tree's shadow is the far one's): a card looks it up
-  from that ball's surface stepped toward the sun, as the far crown does, so only buildings and
-  other trees shade it. The near wood casts nothing of its own for the same reason.
+  its blossom, its leaves' own motion (all from the card's flags: below). The shadow map holds each
+  tree's distant model (below: the shadow pass's override draws every tile mesh's instance whole, so
+  every tree's shadow is its hull's — the far crown's outline, its gaps filled): a card looks it up
+  from the crown ball's surface stepped toward the sun, as the far crown does, so only buildings and
+  other trees shade it. The near wood and the mid meshes cast nothing of their own for the same reason.
+- **The distant band** (`TreeTier.mid`: desktop 300 m, phone 180, low 120; `?treemid=` m, 0 off):
+  past it a tree is drawn from its **distant model** (`flora.ts distantTree`, off the same plan as the
+  other two: one hull round the far crown's lobes — five rings up it, each the lobes' reach six ways
+  at its height — and a four-sided post of a trunk; 40 vertices, indexed, the far model's attributes
+  — `tests/foundry.test.ts` holds every species to its far model's height and width). Once a
+  species' models are grown (`update`'s one a frame), `toDistant` puts each of its tile meshes onto
+  the distant model — its own per-tree attributes come with it, its bounds stay the far model's —
+  and a **mid mesh** beside it in its tile (`tree-mid:<kind>:<v>`, the tile mesh's own material and
+  far model, layer 0 only) draws the trees within reach whole: `midRefill` every 16 m the eye moves
+  (3D: a flyer high up has none), copying their matrices and colours; the tile mesh folds those away
+  (`aLod` 1, per instance: `propMaterial` `TREE_LOD 1`). The mid mesh's own `aNear` mirrors the
+  tile mesh's marks (`mirror`), so the near models take over from it as from the tile mesh. The
+  tile mesh keeps every tree for whatever reads them (the grass's crowns, the critters, the commissions,
+  the near refill). A mid mesh made after the world's offset last moved gets its world matrix at once
+  (`updateMatrixWorld`: a tile's objects never update their own). The Hoh's ring — 165,000 trees, 190
+  million vertices on their far models — went from 22 fps to 49 standing and 57 walking on a desktop
+  (56 and 59 on a phone's budget); `tests/nearTrees.test.ts`.
 - **Budgets** (`render/quality.ts` `TREE_TIERS`, tested in `tests/foundry.test.ts` and
   `tests/nearTrees.test.ts`): ≤ 2,500 vertices a near tree; desktop 160 trees to 30 m (band 6),
   phone 40 to 24 m (band 5), low 20 to 16 m (band 4, 128 px pictures); leaf atlas 1024 × 1536 RGBA,
@@ -348,6 +366,11 @@ the sky between the leaves. Past it, the tiles' own solid crowns, as before.
   - Slices skip what they can't show: a land-cover layer lying opaque over a slice hides the lawn
     and the layers under it.
   - `tests/groundPaint.test.ts` meters each frame's blurred pixels on a flight.
+- A streamed cell's land cover (`TileJson.lc`, WorldCover) is a layer of its own under its features
+  (`setTile(…, lc)` → `lcImage`: an opaque canvas of its classes in the cover colours — `LC_WASH`: built
+  land and nodata the town's lawn, water the sand of a wet edge, cropland field by field), so where the
+  map draws nothing a forest floor, a field, a beach or a marsh still reads as one; `dropTile` takes
+  it away. A baked region keeps its own covers.
 - `Painter.paint(…, clip)`: the window decides (each building's block-paving census), and the clip
   only limits what's drawn. A slice draws the whole window's strokes that reach it, the same way.
   Junctions are judged on all their arms, the roads within 50 m.

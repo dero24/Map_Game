@@ -52,16 +52,19 @@ export interface TierConfig {
 
 /** A tier's budget for the near trees (world/nearTrees.ts): within `hand` m a tree is drawn from
  *  its near model (limbs and leaf cards) — at most `near` of them, nearest first — across a `band`
- *  of m where the two models trade pixels; re-sorted every `step` m; leaf pictures `atlas` px. */
-export interface TreeTier { near: number; hand: number; band: number; step: number; atlas: number; /** the far models' crowns as made (0) or a step coarser (−1): assets/flora.ts setFarDetail */ farDetail: number }
+ *  of m where the two models trade pixels; re-sorted every `step` m; leaf pictures `atlas` px. Past
+ *  `mid` m a tile's trees are drawn from their distant model (flora.ts distantTree; 0: never). */
+export interface TreeTier { near: number; hand: number; band: number; step: number; atlas: number; /** the far models' crowns as made (0) or a step coarser (−1): assets/flora.ts setFarDetail */ farDetail: number; mid: number }
 // A desktop draws the near model to 30 m (the reviewer's "today's crowns from about 30 m out"), up
 // to 160 trees — ~300k vertices in a wood; a phone 40 trees to 24 m; a weak phone 20 to 16 m with
 // half-size leaf pictures. (Every near tree is under 2,500 vertices: tests/foundry.test.ts.) A phone's
-// far models — every tree past the hand-over — are a step coarser: about half the vertices.
+// far models — every tree past the hand-over — are a step coarser: about half the vertices. Every
+// tree past `mid` is 40 vertices (a forest's ring: 165,000 trees, 190 million vertices on its far
+// models — the Hoh at 23 fps).
 export const TREE_TIERS: Record<Tier, TreeTier> = {
-  desktop: { near: 160, hand: 30, band: 6, step: 2, atlas: 256, farDetail: 0 },
-  phone: { near: 40, hand: 24, band: 5, step: 2, atlas: 256, farDetail: -1 },
-  low: { near: 20, hand: 16, band: 4, step: 3, atlas: 128, farDetail: -1 },
+  desktop: { near: 160, hand: 30, band: 6, step: 2, atlas: 256, farDetail: 0, mid: 300 },
+  phone: { near: 40, hand: 24, band: 5, step: 2, atlas: 256, farDetail: -1, mid: 180 },
+  low: { near: 20, hand: 16, band: 4, step: 3, atlas: 128, farDetail: -1, mid: 120 },
 };
 
 /** A tier's budget for the micro layer (world/microLayer.ts, render/impostor.ts). */

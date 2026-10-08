@@ -225,7 +225,7 @@ What earlier rounds and Seattle already point at:
 | Freeways: interchanges, stacked ramps, trenches, lids | ⬜ weak — spot #49 |
 | Thin OSM in rural counties (missing buildings) | ⬜ Overture footprints |
 | Rivers and creeks drawn only as areas | ⬜ NHD / line waterways |
-| Open land read from landcover (forest, field, desert, wetland) where OSM is silent | 🟡 WorldCover in the bake only |
+| Open land read from landcover (forest, field, desert, wetland) where OSM is silent | ✅ WorldCover in every streamed cell and the far ring (tiles v28) |
 | Tags lost on the fallback tiles (brick, lamps, crossings, species) | 🟡 goes away with Gate A |
 | Snow country and winter light | 🟡 seasons exist; spots #56–57 |
 | **Places that need care**: tribal lands, cemeteries, memorials, places of worship, schools | ⬜ the procedural crowds, commissions and (later) building must respect them — marked from OSM and PAD-US, never given invented cultural content |
