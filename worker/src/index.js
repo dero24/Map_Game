@@ -202,6 +202,7 @@ async function tile(request, env, ctx, url, cx, cz) {
   // v28: the cell's land cover from ESA WorldCover (TileJson.lc, worker/src/landcover.js); its areas met
   // without a vertex in it clipped to it (realTile.ts clipRingToBox). (No v27 was ever deployed: a
   // test page asked the v26 service for &v=27, and the edge kept those answers under that URL.)
+  // v29: the natural areas mapped as relations (osmQuery.ts; the extract's add-on, osm.js)
   const okey = tileKey(olat, olon, cx, cz);
   const bucket = env.TILES ?? null; // binding may be absent under `wrangler dev` before the bucket exists
   if (bucket) {
@@ -238,7 +239,7 @@ async function tile(request, env, ctx, url, cx, cz) {
   return json(out.body, { headers: { ...headers, 'x-tile-cache': 'miss' } });
 }
 
-const tileKey = (olat, olon, cx, cz) => `t/v28/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
+const tileKey = (olat, olon, cx, cz) => `t/v29/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
 // A cell's TileJson text, as /tile answers it (R2, else the cold path), or null — the /measured
 // route measures the buildings the client got from /tile, keyed the same way.
 async function tileText(env, olat, olon, cx, cz) {

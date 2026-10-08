@@ -296,9 +296,9 @@ export class TileStream {
       if (!w) {
         const c = this.man.cell;
         // file is an absolute URL — the tile worker fetches it directly (no base prefix).
-        // &v=28 — the edge Cache API keys on the full URL; bumping alongside the
-        // worker's R2 key (t/v28) retires stale tile payloads.
-        const file = this.tilesBase === 'direct' ? `direct:${key}` : `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}&v=28`;
+        // &v=29 — the edge Cache API keys on the full URL; bumping alongside the
+        // worker's R2 key (t/v29) retires stale tile payloads.
+        const file = this.tilesBase === 'direct' ? `direct:${key}` : `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}&v=29`;
         w = { id: 'w' + key, box: { x0: cx * c, z0: cz * c, x1: cx * c + c, z1: cz * c + c }, lod: 0, file, world: 1 };
         this.worldSpecs.set(key, w);
       }

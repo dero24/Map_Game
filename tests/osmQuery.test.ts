@@ -3,7 +3,8 @@ import { overpassQuery } from '../src/world/realTile';
 import { STATEMENTS, matchesQuery, sqlWhere, queryKeys, overpassStatements } from '../src/world/osmQuery';
 
 // The one list of what a real cell asks for (osmQuery.ts): the Overpass query is generated from it,
-// byte for byte the query the tile service sent before the list existed (frozen below, 2026-10-03);
+// byte for byte the query the tile service sent before the list existed (frozen below, 2026-10-03; one
+// statement since, 2026-10-08: the natural areas mapped as relations);
 // our own extract selects with the same list (scripts/osm-extract.mjs), as DuckDB SQL and as a
 // JavaScript matcher that agree.
 const FROZEN = (bb: { s: number; w: number; n: number; e: number }) => `[out:json][timeout:25][bbox:${bb.s.toFixed(7)},${bb.w.toFixed(7)},${bb.n.toFixed(7)},${bb.e.toFixed(7)}];(
@@ -16,6 +17,7 @@ const FROZEN = (bb: { s: number; w: number; n: number; e: number }) => `[out:jso
   way["amenity"="parking"];
   relation["amenity"="parking"];
   relation["natural"="water"];
+  relation["natural"~"^(beach|sand|wetland|wood|scrub|heath|grassland)$"];
   way["waterway"="riverbank"];
   node["natural"="tree"];
   node["amenity"="bench"];
@@ -67,7 +69,9 @@ describe('the cell query, written once (osmQuery.ts)', () => {
     expect(matchesQuery('node', { shop: 'bakery' })).toBe(false); // a shop needs its name
     expect(matchesQuery('node', { shop: 'bakery', name: 'Crust' })).toBe(true);
     expect(matchesQuery('relation', { natural: 'water', type: 'multipolygon' })).toBe(true);
-    expect(matchesQuery('relation', { natural: 'wood' })).toBe(false);
+    expect(matchesQuery('relation', { natural: 'wood' })).toBe(true); // (since 2026-10-08: a wood mapped as a multipolygon)
+    expect(matchesQuery('relation', { natural: 'beach', type: 'multipolygon' })).toBe(true);
+    expect(matchesQuery('relation', { natural: 'peak' })).toBe(false);
     expect(matchesQuery('way', { natural: 'wood' })).toBe(true);
     expect(matchesQuery('way', { Highway: 'residential' })).toBe(false); // keys are case-sensitive
     expect(matchesQuery('way', {})).toBe(false);

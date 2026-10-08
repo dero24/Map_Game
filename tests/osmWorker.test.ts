@@ -158,7 +158,7 @@ describe('the tile service reads our own extract (worker/src/osm.js)', () => {
     expect(r1.headers.get('x-tile-source')).toBe('extract');
     expect(r1.headers.get('x-tile-cache')).toBe('miss');
     expect(noBase(await r1.json())).toEqual(JSON.parse(JSON.stringify(noBase(expected(f)))));
-    expect(puts.map((p) => [p.key, p.meta?.source])).toEqual([[`t/v28/${f.origin.lat.toFixed(4)},${f.origin.lon.toFixed(4)}/${tileKey(f.box.x0 / 1024, f.box.z0 / 1024)}.json`, 'extract']]);
+    expect(puts.map((p) => [p.key, p.meta?.source])).toEqual([[`t/v29/${f.origin.lat.toFixed(4)},${f.origin.lon.toFixed(4)}/${tileKey(f.box.x0 / 1024, f.box.z0 / 1024)}.json`, 'extract']]);
     const r2 = await worker.fetch(new Request(`https://svc.example${path}`), env, ctx);
     expect([r2.headers.get('x-tile-cache'), r2.headers.get('x-tile-source')]).toEqual(['r2', 'extract']);
   });
@@ -186,5 +186,55 @@ describe('the skylines from the extract\'s tall layer (worker/src/osm.js skyline
     const r = await worker.fetch(new Request(`https://svc.example/skyline?s=${SKY.s}&w=${SKY.w}&n=${SKY.n}&e=${SKY.e}`), { TILES: { get: async () => null, put: async () => {} } }, ctx);
     expect(r.status).toBe(503);
     expect(r.headers.get('cache-control')).toMatch(/max-age=600/);
+  });
+});
+
+// The add-on (osm/v1/addon: scripts/osm-extract-addon.mjs — the natural areas mapped as relations, cut
+// since the extract was): read beside the extract when it is of the same snapshot; without it, or of
+// another, the extract's answer as it was.
+describe('the extract with its add-on (worker/src/osm.js, osm/v1/addon)', () => {
+  const rel = (id: number, wid: number, lat: number, lon: number, natural: string) => ({
+    type: 'relation', id,
+    members: [{ type: 'way', ref: wid, role: 'outer', geometry: [{ lat, lon }, { lat: lat + 0.0004, lon }, { lat: lat + 0.0004, lon: lon + 0.0004 }, { lat, lon }] }],
+    tags: { type: 'multipolygon', natural },
+  });
+  const ids = (doc: { elements: { type: string; id: number }[] }) => new Set(doc.elements.map((e) => `${e.type}${e.id}`));
+  const addOn = async (ts: string) => {
+    const f = fixtures[0], lat = (f.bb.s + f.bb.n) / 2, lon = (f.bb.w + f.bb.e) / 2;
+    const small = rel(9_000_000_001, 9_000_000_011, lat, lon, 'beach'), big = rel(9_000_000_002, 9_000_000_012, lat + 0.001, lon, 'wood');
+    const bbOf = (r: ReturnType<typeof rel>) => { const g = r.members[0].geometry; return { s: Math.min(...g.map((p) => p.lat)), w: Math.min(...g.map((p) => p.lon)), n: Math.max(...g.map((p) => p.lat)), e: Math.max(...g.map((p) => p.lon)) }; };
+    const tx = tileX(lon), ty = tileY(lat), block = blockKey(tx, ty);
+    // (a tile's lines: the small relation whole, the big one a pointer to its home block's big section)
+    const text = [lineOf('r', small.id, bbOf(small), JSON.stringify(small)), lineOf('R', big.id, bbOf(big), block)].join('\n') + '\n';
+    const t = await gzip(text), b = await gzip(JSON.stringify(big)), bin = new Uint8Array(t.length + b.length);
+    bin.set(t, 0); bin.set(b, t.length);
+    objects.set(`osm/v1/addon/b/${block}.ha.0.bin`, { b: bin });
+    objects.set(`osm/v1/addon/b/${block}.ha.json`, { b: enc.encode(JSON.stringify({ v: 1, ts, tiles: { [tileKey(tx, ty)]: [0, t.length, 0] }, big: { [big.id]: [t.length, b.length, 0] } })) });
+    objects.set('osm/v1/addon/index.json', { b: enc.encode(JSON.stringify({ v: 1, ts, tile: 128, block: 128, addon: 'relations', blocks: { [block]: 'ha' } })) });
+    return { f, small, big };
+  };
+  const clear = () => { for (const k of [...objects.keys()]) if (k.startsWith('osm/v1/addon/')) objects.delete(k); };
+  it('of the same snapshot: its relations — a small one whole, a big one from its own big section — beside every element of the extract', async () => {
+    clear();
+    const before = await (await fresh()).osm.extractDoc(env, fixtures[0].bb);
+    const { f, small, big } = await addOn(TS);
+    const after = await (await fresh()).osm.extractDoc(env, f.bb);
+    const A = ids(before), B = ids(after);
+    for (const k of A) expect(B.has(k), k).toBe(true);
+    expect(B.has(`relation${small.id}`)).toBe(true);
+    expect(B.has(`relation${big.id}`)).toBe(true);
+    expect(B.size).toBe(A.size + 2);
+    // …and the cell's TileJson carries the beach and the wood
+    const tj = osmToTile(after, { id: idOf(f), box: f.box, origin: f.origin });
+    expect(tj.areas.some((a) => a.c === 'beach')).toBe(true);
+    clear();
+  });
+  it('of another snapshot, or none: the extract as it was', async () => {
+    clear();
+    const before = await (await fresh()).osm.extractDoc(env, fixtures[0].bb);
+    await addOn('2025-01-01T00:00:00Z');
+    const other = await (await fresh()).osm.extractDoc(env, fixtures[0].bb);
+    expect([...ids(other)].sort()).toEqual([...ids(before)].sort());
+    clear();
   });
 });

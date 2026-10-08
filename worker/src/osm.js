@@ -10,19 +10,25 @@
 //                                  block past 200 MB goes on in another part)
 // A block's keys carry its content hash, so a refresh uploads new keys and switches the index last: a
 // directory held from before the switch still reads the bytes it describes.
-import { assemble, segmentMeets, selects, splitLine } from '../../src/world/osmTiles';
+//
+// R2 `osm/v1/addon/` (optional): the same layout — an add-on cut from the same snapshot, holding what a
+// query statement gained since the extract was cut (scripts/osm-extract-addon.mjs: the natural areas
+// mapped as relations, 2026-10-08). Read beside the extract only when its snapshot is the extract's;
+// without its index the service is as it was. The next full cut carries them itself.
+import { assemble, mergeSources, segmentMeets, selects, splitLine } from '../../src/world/osmTiles';
 
-const PFX = 'osm/v1';
-let index = null, indexAt = 0;
-const dirs = new Map(); // "<block>.<hash>" → directory (the last few blocks read)
+const PFX = 'osm/v1', ADD = 'osm/v1/addon';
+const cache = new Map(); // prefix → { index, at }
+const dirs = new Map(); // "<prefix>|<block>.<hash>" → directory (the last few blocks read)
 
-async function getIndex(bucket) {
-  if (!index || Date.now() - indexAt > 600e3) {
-    const o = await bucket.get(`${PFX}/index.json`).catch(() => null);
-    index = o ? await o.json() : null;
-    indexAt = Date.now();
+async function getIndex(bucket, pfx = PFX) {
+  let c = cache.get(pfx);
+  if (!c || Date.now() - c.at > 600e3) {
+    const o = await bucket.get(`${pfx}/index.json`).catch(() => null);
+    c = { index: o ? await o.json().catch(() => null) : null, at: Date.now() };
+    cache.set(pfx, c);
   }
-  return index;
+  return c.index;
 }
 // (the source extract's outline: a box answered from the extract must lie wholly inside it)
 function inRing(r, x, y) {
@@ -46,15 +52,15 @@ export function covers(idx, bb) {
 // (one read of a block's directory per request, however many of its tiles the box asks for at once:
 // `pending` is the request's own — never another request's promise, which the runtime would cancel
 // this one for waiting on)
-async function directory(bucket, block, hash, pending) {
-  const k = `${block}.${hash}`;
+async function directory(bucket, pfx, block, hash, pending) {
+  const k = `${pfx}|${block}.${hash}`;
   const d = dirs.get(k);
   if (d) return d;
   let p = pending.get(k);
   if (!p) {
     p = (async () => {
-      const o = await bucket.get(`${PFX}/b/${k}.json`);
-      if (!o) throw new Error(`extract directory ${k} missing`);
+      const o = await bucket.get(`${pfx}/b/${block}.${hash}.json`);
+      if (!o) throw new Error(`extract directory ${pfx}/${block}.${hash} missing`);
       const d = await o.json();
       dirs.set(k, d);
       if (dirs.size > 8) dirs.delete(dirs.keys().next().value);
@@ -77,23 +83,30 @@ export async function extractDoc(env, bb) {
   const idx = await getIndex(bucket);
   if (!idx || !covers(idx, bb)) return null;
   const pending = new Map();
-  const src = {
+  const main = packSource(bucket, PFX, idx, pending);
+  // (the add-on, when it's from the extract's own snapshot)
+  const add = await getIndex(bucket, ADD);
+  const src = add && add.ts === idx.ts && add.blocks ? mergeSources(main, packSource(bucket, ADD, add, pending)) : main;
+  return assemble(src, bb, idx.ts);
+}
+/** One pack's tiles and big relations, read by range under its prefix. */
+function packSource(bucket, pfx, idx, pending) {
+  return {
     async tile(block, tile) {
       const hash = idx.blocks[block];
       if (!hash) return null; // a block with nothing in it (open water inside the outline)
-      const d = await directory(bucket, block, hash, pending);
+      const d = await directory(bucket, pfx, block, hash, pending);
       const at = d.tiles[tile];
-      return at ? gunzipRange(bucket, `${PFX}/b/${block}.${hash}.${at[2] ?? 0}.bin`, at) : null;
+      return at ? gunzipRange(bucket, `${pfx}/b/${block}.${hash}.${at[2] ?? 0}.bin`, at) : null;
     },
     async big(block, id) {
       const hash = idx.blocks[block];
       if (!hash) return null;
-      const d = await directory(bucket, block, hash, pending);
+      const d = await directory(bucket, pfx, block, hash, pending);
       const at = d.big?.[id];
-      return at ? gunzipRange(bucket, `${PFX}/b/${block}.${hash}.${at[2] ?? 0}.bin`, at) : null;
+      return at ? gunzipRange(bucket, `${pfx}/b/${block}.${hash}.${at[2] ?? 0}.bin`, at) : null;
     },
   };
-  return assemble(src, bb, idx.ts);
 }
 
 // ---- the skylines' towers (src/world/skyline.ts, farSkyline.ts): the extract's tall layer ----
@@ -123,7 +136,7 @@ export async function skylineDoc(env, bb, q) {
     for (let by = Math.floor(bb.s + 90); by <= Math.floor(bb.n + 90); by++) {
       const block = `${bx}_${by}`, hash = idx.blocks[block];
       if (!hash) continue;
-      const d = await directory(bucket, block, hash, pending);
+      const d = await directory(bucket, PFX, block, hash, pending);
       if (!d.tall) continue;
       const text = await gunzipRange(bucket, `${PFX}/b/${block}.${hash}.${d.tall[2] ?? 0}.bin`, d.tall);
       for (const line of text.split('\n')) {

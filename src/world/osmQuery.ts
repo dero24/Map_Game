@@ -23,6 +23,10 @@ export const STATEMENTS: Stmt[] = [
   S('way', eq('amenity', 'parking')),
   S('relation', eq('amenity', 'parking')),
   S('relation', eq('natural', 'water')),
+  // (2026-10-08: a beach, a wood, a marsh mapped as a multipolygon — several outlines bundled as one area —
+  // was never asked for: Cape May's beach, many a big wood. The extract cut before this carries them in its
+  // add-on: scripts/osm-extract-addon.mjs)
+  S('relation', re('natural', '^(beach|sand|wetland|wood|scrub|heath|grassland)$')),
   S('way', eq('waterway', 'riverbank')),
   S('node', eq('natural', 'tree')),
   S('node', eq('amenity', 'bench')),

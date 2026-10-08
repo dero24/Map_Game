@@ -10,6 +10,10 @@
 //     [--local] (the `wrangler dev` R2 instead of Cloudflare's, for trying the service locally)
 //     [--prune] (list the uploaded keys no index names any more — delete them by hand once the new
 //     index has been live a day)
+//   node scripts/osm-upload.mjs --addon --pack=D:/map_game_osm/out/addon-v1
+//     an add-on (scripts/osm-extract-addon.mjs) under `osm/v1/addon/`: its blocks, then its own index —
+//     the extract's index is never touched; the service reads the add-on beside the extract when the
+//     two are from one snapshot (worker/src/osm.js). Taking it back: delete `osm/v1/addon/index.json`.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { resolve, dirname } from 'node:path';
@@ -18,7 +22,8 @@ import { fileURLToPath } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = Object.fromEntries(process.argv.slice(2).map((a) => { const m = a.match(/^--([^=]+)(?:=(.*))?$/); return m ? [m[1], m[2] ?? true] : [a, true]; }));
 const PACK = String(args.pack ?? 'D:/map_game_osm/out/v1');
-const BUCKET = 'map-game-tiles', PFX = 'osm/v1';
+const ADDON = !!args.addon;
+const BUCKET = 'map-game-tiles', PFX = ADDON ? 'osm/v1/addon' : 'osm/v1';
 const JOBS = Number(args.jobs ?? 4);
 const index = JSON.parse(readFileSync(`${PACK}/index.json`, 'utf8'));
 const doneFile = `${PACK}/uploaded${args.local ? '.local' : ''}.json`;
@@ -41,7 +46,8 @@ function readPoly(file) {
   return rings;
 }
 const cover = args.poly ? readPoly(String(args.poly)) : index.cover;
-if (!cover?.length) { console.error('--poly=<extract outline> is required (Geofabrik: <name>.poly)'); process.exit(1); }
+if (!ADDON && !cover?.length) { console.error('--poly=<extract outline> is required (Geofabrik: <name>.poly)'); process.exit(1); }
+if (ADDON && !index.addon) { console.error(`${PACK} is no add-on (its index has no "addon")`); process.exit(1); }
 
 // (three tries: a wrangler upload now and then fails for nothing — the local store under parallel
 // writes, the network)
@@ -78,7 +84,10 @@ if (!args.dry) writeFileSync(doneFile, JSON.stringify([...done]));
 console.log(`uploaded ${ok}, failed ${bad}`);
 if (bad) process.exit(1);
 if (args['no-index']) { console.log('blocks staged; the index was left as it is (--no-index)'); process.exit(0); }
-const live = { v: 1, ts: index.ts, tile: index.tile, block: index.block, sources: index.sources, made: index.made, cover, blocks: Object.fromEntries(Object.entries(index.blocks).map(([b, i]) => [b, i.hash])) };
+const blocks = Object.fromEntries(Object.entries(index.blocks).map(([b, i]) => [b, i.hash]));
+// (an add-on's index: its snapshot, what it adds, its blocks — no outline: the extract's says what's covered)
+const live = ADDON ? { v: 1, ts: index.ts, tile: index.tile, block: index.block, addon: index.addon, sources: index.sources, made: index.made, blocks }
+  : { v: 1, ts: index.ts, tile: index.tile, block: index.block, sources: index.sources, made: index.made, cover, blocks };
 const f = `${PACK}/index.live.json`;
 writeFileSync(f, JSON.stringify(live));
 if (!(await put(`${PFX}/index.json`, f, 'application/json'))) process.exit(1);

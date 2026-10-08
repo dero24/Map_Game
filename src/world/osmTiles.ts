@@ -80,6 +80,18 @@ export interface TileSource {
   tile(block: string, tile: string): Promise<string | null>;
   big(block: string, id: number): Promise<string | null>;
 }
+/** Two packs read as one: the extract and its add-on — what a query statement gained since the
+ *  extract was cut, cut from the same snapshot (scripts/osm-extract-addon.mjs). A tile's lines from both
+ *  (the assembler keeps each element once), a big relation from whichever holds it. */
+export function mergeSources(a: TileSource, b: TileSource): TileSource {
+  return {
+    async tile(block, tile) {
+      const [x, y] = await Promise.all([a.tile(block, tile), b.tile(block, tile)]);
+      return x && y ? (x.endsWith('\n') ? x : x + '\n') + y : x ?? y;
+    },
+    async big(block, id) { return (await a.big(block, id)) ?? b.big(block, id); },
+  };
+}
 /** A box's answer, as Overpass gives the cell query: every selected element once, by id. */
 export async function assemble(src: TileSource, bb: BBox, timestamp?: string): Promise<OsmDoc & { stats: { tiles: number; lines: number; parsed: number } }> {
   const ts = tilesFor(bb);
@@ -114,12 +126,16 @@ export async function assemble(src: TileSource, bb: BBox, timestamp?: string): P
       if (selects(e, bb)) out.push(e);
     }
   }
-  for (const b of bigs) {
-    const text = await src.big(b.block, b.id);
-    if (!text) continue;
-    parsed++;
-    const e = JSON.parse(text) as OsmElement;
-    if (selects(e, bb)) out.push(e);
+  // (each its own read, a few at once: the add-on stores every relation past 2 KB once — a forest cell's
+  // woods and marshes are a handful of reads, not one after another)
+  for (let i = 0; i < bigs.length; i += 6) {
+    const texts = await Promise.all(bigs.slice(i, i + 6).map((b) => src.big(b.block, b.id)));
+    for (const text of texts) {
+      if (!text) continue;
+      parsed++;
+      const e = JSON.parse(text) as OsmElement;
+      if (selects(e, bb)) out.push(e);
+    }
   }
   out.sort((a, b) => (a.type === b.type ? a.id - b.id : a.type < b.type ? -1 : 1));
   return { elements: out, ...(timestamp ? { osm3s: { timestamp_osm_base: timestamp } } : {}), stats: { tiles: ts.length, lines, parsed } };
