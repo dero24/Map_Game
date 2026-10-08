@@ -66,10 +66,23 @@ vertex inside the cell (`realTile.ts`, the coastline block): a long straight coa
 cell with no vertex in it — the Hudson's closing line, the bay's far shores — is never seen, and the bay
 is bare ground.
 
-**Next:** Robby deploys the worker (`cd worker && npx wrangler deploy`: tiles v28 and `/cover`), then
-`node tools/must-load.mjs --live`, a Ruby Beach cell carrying `lc`, Cape May's carrying its beach — and
-only then the client goes out (`&v=28`). Flying over a dense forest still hitches (4 over 100 ms in 8 s
-on a desktop): profile the GPU side of a forest tile's arrival. Then `tools/real-compare.mjs --kind=green`
+**Live (the same night):** Robby deployed the worker (version 0fb76c69). `must-load --live`: every town
+ok, from the extract. A fresh v28 cell carries `lc` (the Hoh's 98% trees; Ruby Beach's 51% trees, 47%
+water), and `/cover` answers (256 × 256 at 32 m). The 25 beaches against the live v28 cells (scratch
+`beaches28.mjs`): WorldCover's sand at the water at 22 — drawn as sand by the cover and the wash, so
+Ruby, Cannon, Pismo, Cape May, Galveston, Virginia Beach and the rest that had no beach now have one —
+and OSM's beach areas at 11, the same 11 as before. The clipping found none of the missing ones: they
+never reach the cell. The query (`osmQuery.ts`) takes beach, sand, wetland, wood, scrub, heath and
+grassland only as ways, so a multipolygon relation is never fetched, from the extract or from Overpass —
+Cape May's beach is one (outer ways 810853698 and 40412148), and so is many a big wood. Jones Beach's
+sample point lies offshore (the map round it is empty), Old Orchard's inland of its beach (a way, in the
+next cell), Sleeping Bear's in the dunes (sand, away from the water).
+
+**Next:** the relation statements — `S('relation', re('natural', '^(beach|sand|wetland|wood|scrub|heath|grassland)$'))`
+in `osmQuery.ts`, the frozen query in tests/osmQuery.test.ts with it — then the US extract re-cut
+(`scripts/osm-extract.mjs` on D:, about two hours) and uploaded (`scripts/osm-upload.mjs`), and tiles v29:
+Robby's go-ahead first (an R2 upload). Flying over a dense forest still hitches (4 over 100 ms in 8 s on
+a desktop): profile the GPU side of a forest tile's arrival. Then `tools/real-compare.mjs --kind=green`
 against green-2 (`regional-greenery`, unblocked).
 
 ## 2026-10-07 (last) — The flora review: each plant in its season, on its ground, in its numbers; rural roads their own width

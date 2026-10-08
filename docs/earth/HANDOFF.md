@@ -46,10 +46,11 @@ photos' 34.6%, mean 0.725. What's next is the LOG entry's "Next".
 **Then land cover everywhere (LOG 2026-10-07 "closing"):** ESA WorldCover in every streamed cell and the
 far ring (tiles **v28**: the Olympic Peninsula's forests, the far hills' woods), areas that meet a cell without
 a vertex in it clipped to it (the beaches of Ruby, Cannon, Pismo, Cape May and seven more), and distant trees
-(the Hoh 22 → 49–57 fps). **v28 is committed, not deployed:** Robby runs `cd worker && npx wrangler deploy`
-first; then `node tools/must-load.mjs --live`, a Ruby Beach cell carrying `lc`, Cape May's carrying its
-beach — and only then push the client (`&v=28`). Never point a page carrying an unreleased `&v=` at the live
-service (what retired v27). Robby's reports of the same evening — a developer-settings preset for a crisper
+(the Hoh 22 → 49–57 fps). **v28 is live** (worker 0fb76c69, the client pushed after it): 22 of 25 US beaches
+sampled show sand at the water. Next there: beaches, sands, wetlands and woods mapped as multipolygon
+*relations* are never fetched (`osmQuery.ts` takes them as ways only) — the statement, the US extract
+re-cut and uploaded, tiles v29, with Robby's go-ahead (LOG "Next"). Never point a page carrying an
+unreleased `&v=` at the live service (what retired v27). Robby's reports of the same evening — a developer-settings preset for a crisper
 watercolor, the harbour's water north of the Statue of Liberty (diagnosis in the LOG), people glowing at
 night, crowds and traffic too dense at night and on desert roads — went to another session.
 
