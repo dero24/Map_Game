@@ -1,5 +1,37 @@
 # Handoff: the lower 48, alive — part 2 (2026-10-05)
 
+## Start here (2026-10-08): the Sea Bright gameplay proof of concept
+
+Robby, 2026-10-08: "soon will have to do a poc of it at least starting in sea bright". He then agreed
+the gameplay plan, `docs/GAMEPLAY_STREAMLINED.md`. Read all of it; §14 is this work. The next
+sessions build the proof of concept one part at a time:
+
+1. **`poc-first-minute`** (the active item): everything in view colours on first sight; 3–5 pencil
+   things near you, picked out of sight; tap one to paint it, its card into the field guide.
+2. **`poc-touch-moments`**: sit on a bench; toss a crumb and the gulls bunch up, then lift (the
+   warning sign, then the moment); the gold edge; paintings keep the game's date, hour and weather.
+3. **`poc-painted-place`**: the back of the van; hang a painting; step in (time held, no people or
+   traffic, ~250 m to walk, pencil past the edge); release the gull.
+
+- **Everything goes behind `?poc=1`.** It's a throwaway prototype: without the switch the game must
+  not change (run the shore playtest both ways).
+- **Each item's notes say what the code already has and lacks** (an inventory of 2026-10-08, with
+  files and lines). Read them before planning.
+- **Each part ends with** tests, a reviewed montage (`node tools/capture.mjs … --query=poc=1`, or the
+  in-page montage: `docs/agent/debugging.md`; capture mode keeps shots fully painted unless told
+  otherwise, so `?poc=1` must win over it), a LOG entry, the item `passing` with its evidence, and
+  Robby playing it. Then mark the next part `in_progress`.
+- **After part 3,** Robby and two or three people who haven't seen the game play the first ten
+  minutes; record their answers in the LOG. Then back to the roadmap's milestones 2–5
+  (`docs/ROADMAP.md`) unless Robby says otherwise.
+- **Not this work:** Robby's reports of 2026-10-07 (`bug-harbour-water`, `bug-night-glow-people`,
+  `life-density-realism`, `look-crisp-preset`) are for a separate session, only when he names them.
+  "Start near you?" touches privacy: not before Robby says so.
+
+The rest of this file is the regional-life handoff of 2026-10-05, still the reference for that work.
+
+---
+
 Robby: "i want to make sure all these places look alive lower 48 look alive with correct
 vegetatation and animals and all that". Then: "you should just create all the 3d models for
 everywhere based on our procedural 3d asset generator foundry". Then: "ensure animation like for

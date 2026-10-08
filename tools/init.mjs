@@ -77,8 +77,11 @@ try {
   for (const f of fl.features) { counts[f.status] = (counts[f.status] ?? 0) + 1; if (f.status === 'in_progress') active.push(f.id); }
   const done = counts.passing ?? 0, total = fl.features.length;
   ok(`features: ${total} total — ${done} passing, ${counts.not_started ?? 0} not_started, ${counts.blocked ?? 0} blocked, ${counts.superseded ?? 0} superseded, ${active.length} in_progress`);
-  // the queue is ranked by tier (docs/GAMEPLAY_VISION.md §17): the next open item of the lowest tier
-  const next = fl.features.filter((f) => f.status === 'not_started' || f.status === 'in_progress').sort((a, b) => (a.tier ?? 9) - (b.tier ?? 9) || (a.rank ?? 999) - (b.rank ?? 999))[0];
+  // the active item first (finish it before starting another — it may be one run early, like the
+  // gameplay proof of concept); otherwise the queue by tier (docs/GAMEPLAY_VISION.md §17): the next
+  // open item of the lowest tier
+  const open = fl.features.filter((f) => f.status === 'not_started' || f.status === 'in_progress').sort((a, b) => (a.tier ?? 9) - (b.tier ?? 9) || (a.rank ?? 999) - (b.rank ?? 999));
+  const next = open.find((f) => f.status === 'in_progress') ?? open[0];
   if (next) ok(`next: tier ${next.tier ?? '?'} · ${next.id}${next.status === 'in_progress' ? ' (in progress)' : ''}`);
   if (active.length > 1) bad(`WIP limit violated: ${active.join(', ')} all in_progress — keep exactly one`);
   else if (active.length) ok(`active: ${active[0]}`);
@@ -106,7 +109,7 @@ hits.length ? warn(`place names in code (move to config/meta): ${hits.join(', ')
 
 console.log('\n==> Next');
 console.log('  play:        npm run dev  → http://localhost:5173');
-console.log('  pick work:   feature_list.json — the lowest tier’s first open item by rank (one at a time)');
+console.log('  pick work:   feature_list.json — the in_progress item; else the lowest tier’s first open item by rank (one at a time)');
 console.log('  history:     docs/earth/LOG.md (newest entry first)');
 console.log('  tile worker: cd worker && npx wrangler dev   (only if touching real-lite tiles)');
 

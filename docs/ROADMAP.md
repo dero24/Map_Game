@@ -4,13 +4,13 @@ The plan of record for finishing the game: what's done, how the work is divided,
 the milestones to a 1.0 release. `feature_list.json` tracks the items; this doc gives the order and
 what "done" means. Written 2026-10-06; update it when a milestone closes or the plan changes.
 
-## Where we stand (2026-10-06)
+## Where we stand (2026-10-08)
 
 | Tier | What it means | State |
 |---|---|---|
 | **0** | The world loads everywhere | 9 of 9 items passing; the playtest runs on every push |
-| **1** | It looks right everywhere | 32 passing, 2 in progress (regional flora, regional wildlife), 15 not started, 1 blocked |
-| **2** | The game itself | 26 items, none started yet (by design: foundations first) |
+| **1** | It looks right everywhere | 38 passing, 25 not started (regional flora paused for the proof of concept) |
+| **2** | The game itself | 32 open items in `docs/GAMEPLAY_STREAMLINED.md`'s order; the first, the Sea Bright proof of concept, is the active item (Robby's call: the one exception to foundations first) |
 | **3** | Polish | 14 passing, 11 not started |
 
 Regional life (`docs/regional-life/models.md` build order): **all 16 packages built**.
@@ -96,13 +96,20 @@ changed, and `feature_list.json` updated.
 5. **The rest of Tier 1.** Public places (airfields, fuel, campgrounds, marinas), street furniture
    where the map puts it, the night look, phone sharpness on real devices, GPU quality tiers,
    interiors at real scale, every front door opening, tall structures, steady ground when flying high.
-6. **The game core** (Tier 2, `docs/GAMEPLAY_VISION.md` §15). In the vision's order, as far as the 1.0
-   line below.
+6. **The game core** (Tier 2, `docs/GAMEPLAY_STREAMLINED.md` §13). In its order, as far as the 1.0
+   line below. Its proof of concept runs first, ahead of milestones 2–5 (Robby, 2026-10-08): the first
+   ten minutes in Sea Bright, rough, behind `?poc=1` (`poc-first-minute`, `poc-touch-moments`,
+   `poc-painted-place`). After it, back to milestones 2–5 unless Robby says otherwise.
 7. **Release.** Every data licence recorded in `docs/DATA_SOURCES.md` and a credits screen;
    performance holding on phones; saving that survives updates; the first ten minutes
    (`GAMEPLAY_VISION.md` §8) smooth from start to finish; a store build.
 
 ## What 1.0 is (agreed with Robby, 2026-10-06)
+
+The gameplay plan changed on 2026-10-08 (`docs/GAMEPLAY_STREAMLINED.md`): the back of the van is the
+base, painted places are its outdoors, the tap is the one way to collect, and the fuel gauge, the
+portal gun and the yacht, plane and balloon homes are cut. The list below predates it: agree the 1.0
+line again with Robby once the proof of concept has been played.
 
 **In 1.0:** the lower 48 loading and looking like itself on PC and phone (milestones 1–5), and the
 core loop — explore, collect, travel:

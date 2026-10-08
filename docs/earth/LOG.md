@@ -2,6 +2,43 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-08 (night) — The gameplay plan decided; the Sea Bright proof of concept queued (`poc-first-minute` active)
+
+Robby asked where the world stands on feeling alive and functional, and for a review and rating of
+his streamlined gameplay plan ("soon will have to do a poc of it at least starting in sea bright").
+The review rated it 7.5/10: a first-rate hook (pencil means "paint me"; painted places you step into;
+real rarity, ranges and seasons), with eight changes proposed. Robby: "i agree with all you things
+youd change", keeping the vision's 3–5 pencil things and asking for one way to collect ("you reason
+and decide") and a painted place that "saves that tile for the user".
+
+- **`docs/GAMEPLAY_STREAMLINED.md`** (new in the repo, the plan of record; a copy back in Robby's
+  `for_mapgame` folder): 3–5 pencil things picked out of sight, rares first; the tap is the one way
+  to collect, trees and plants too, and paintings don't collect; moments with warning signs (a data
+  table per family) and the gold edge; a painted place keeps its map tiles, ~250 m to walk, pencil
+  past the edge, the bloom as the way in; the base grows by named milestones (a wall per new region,
+  a room per set), not experience; "Start near you?" back in the first ten minutes; the drone after
+  1.0 and never marking the map; the pacing numbers (§15); the proof of concept (§14).
+- **`feature_list.json`:** three proof-of-concept items first in tier 2 (`poc-first-minute` active,
+  then `poc-touch-moments`, `poc-painted-place`), each with what the code has and lacks (an inventory
+  of the code, 2026-10-08); new `touch-features`, `moments-gold-edge`, `painted-places`,
+  `habitats-visitors`, `drone`; `bloom`, `pencil-collecting`, `van-home-start`, `growing-home`,
+  `van-travel` and others updated and tier 2 re-ranked in the plan's order; `special-vehicles` and
+  `portal-gun` superseded (cut); `regional-flora` paused (one active item).
+- **`tools/init.mjs`:** "next" is the active item when there is one, then the queue by tier.
+- **AGENTS.md, ROADMAP.md, HANDOFF.md:** routed to the new plan; ROADMAP's 1.0 list noted as
+  predating it (to agree again after the proof of concept); HANDOFF's "Start here" is this work.
+
+**Where the world stands (for the record):** tier 0 done; tier 1 38 of 63 (every region's plants and
+animals built, seasons, traffic, people indoors, Sea Bright's calendar, interiors, rides). Still
+missing for "alive": people with errands (`people-with-purpose`), quiet nights and desert roads
+(`life-density-realism`), animals that ever approach (they only flee), touching anything, the
+drawbridge opening, greenery at the photos' level, the 16-region review.
+
+**Verified:** `npm run init -- --fast` (one active item, the queue's next is `poc-first-minute`).
+Docs and the feature list only, plus init's "next" line; no game code changed.
+
+**Next:** `poc-first-minute` (HANDOFF "Start here").
+
 ## 2026-10-08 (evening) — The forest past the trees follows the season (`far-woods-seasons`, pushed after Robby's look)
 
 Robby: "so are there different seasons in the game … i just want to ensure it wont make the game look

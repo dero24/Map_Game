@@ -11,7 +11,7 @@
     "in_progress": "The feature is the current active task (at most one).",
     "blocked": "Cannot proceed until the documented blocker clears.",
     "passing": "Verification ran and evidence is recorded.",
-    "superseded": "Replaced by a newer item or by docs/GAMEPLAY_VISION.md; kept for its history (see stale_reason)."
+    "superseded": "Replaced by a newer item or by the gameplay plan (docs/GAMEPLAY_STREAMLINED.md, docs/GAMEPLAY_VISION.md); kept for its history (see stale_reason)."
   },
   "history_note": "Completed work is tracked in docs/earth/LOG.md + git log — do not duplicate it here. This file is the forward-looking queue. Ordering rule: git commits beat docs when they disagree.",
   "features": [
@@ -1159,7 +1159,7 @@
       "user_visible_behavior": "Somewhere new is a pencil sketch; the moment it's in view it washes into watercolour as far as you can see, once, for good.",
       "verification": [],
       "evidence": [],
-      "notes": "docs/GAMEPLAY_VISION.md §1, §15 step 1. The only gameplay allowed before tiers 0–1 pass: a small throwaway prototype."
+      "notes": "docs/GAMEPLAY_VISION.md §1, §15 step 1. The only gameplay allowed before tiers 0–1 pass: a small throwaway prototype. 2026-10-08: the plan of record is docs/GAMEPLAY_STREAMLINED.md (§1: everything in view colours on first sight, never a pencil horizon). Its throwaway prototype is poc-first-minute; this item is the real build after it."
     },
     {
       "id": "pencil-collecting",
@@ -1168,10 +1168,10 @@
       "status": "not_started",
       "area": "gameplay",
       "title": "Pencil collecting: tap to paint, the card into the sketchbook, the out-of-sight rhythm, cards as moments",
-      "user_visible_behavior": "A few things nearby stay in pencil; tap one within ~30 m and it paints in and flies into the sketchbook as a card of that moment.",
+      "user_visible_behavior": "3–5 things near you stay in pencil — kinds you haven't collected, among the animals, objects, trees and plants — picked out of sight, never turning pencil while you watch; rares go first. Tap one within ~30 m and it paints in, its card into the field guide; too far and the stroke falls short with a splash. The one way to collect: paintings don't.",
       "verification": [],
       "evidence": [],
-      "notes": "docs/GAMEPLAY_VISION.md §2, §15 step 2."
+      "notes": "docs/GAMEPLAY_VISION.md §2, §15 step 2. 2026-10-08: docs/GAMEPLAY_STREAMLINED.md §2 (Robby: 3–5 pencil things; one way to collect, trees and plants too). Its prototype is poc-first-minute."
     },
     {
       "id": "van-home-start",
@@ -1179,16 +1179,16 @@
       "rank": 62,
       "status": "not_started",
       "area": "gameplay",
-      "title": "The van-home start and placing at home: wake in the van, \"Start near you?\", step out; the first card placed at home",
-      "user_visible_behavior": "You wake in a small van that's bigger inside; with consent the game starts at a public spot in your town; your first card goes on its shelf.",
+      "title": "The van-home start: wake in the back of the van, \"Start near you?\", step out the back door",
+      "user_visible_behavior": "You wake in the back of a camper van that's bigger inside: a bed, the map table, one wall. With consent the game starts at a public spot in your own town (city level, never stored), otherwise in Sea Bright; you step out the back door, and your first painting goes on the wall.",
       "verification": [],
       "evidence": [],
-      "notes": "docs/GAMEPLAY_VISION.md §7, §8, §15 step 3. City-level location only, never stored (privacy: ask Robby before building). Includes the five-rule combine prototype at home (§15 step 3, §6.5)."
+      "notes": "docs/GAMEPLAY_VISION.md §7, §8, §15 step 3. City-level location only, never stored (privacy: ask Robby before building). Includes the five-rule combine prototype at home (§15 step 3, §6.5). 2026-10-08: docs/GAMEPLAY_STREAMLINED.md §6, §11 — the back of the van is the base; combining comes later (no combine prototype here). \"Start near you?\" still needs Robby's OK before it's built (privacy)."
     },
     {
       "id": "placing-in-world",
       "tier": 2,
-      "rank": 64,
+      "rank": 65.8,
       "status": "not_started",
       "area": "gameplay",
       "title": "Placing things in the world: your own layer, ride what you've painted, light the bridge, plank the creek, near in full and far as flat paintings, the camp kit",
@@ -1198,72 +1198,74 @@
         "src/ui/brush.ts (the prototype)",
         "src/player/place.ts (the solvers)"
       ],
-      "notes": "docs/GAMEPLAY_VISION.md §6, §15 step 4. Supersedes brush-boat-minute."
+      "notes": "docs/GAMEPLAY_VISION.md §6, §15 step 4. Supersedes brush-boat-minute. 2026-10-08: docs/GAMEPLAY_STREAMLINED.md §7 — collected animals are released only in painted places, never in the real world."
     },
     {
       "id": "regional-rares",
       "tier": 2,
-      "rank": 68,
+      "rank": 65,
       "status": "not_started",
       "area": "gameplay",
       "title": "Regional rares as data, sketchbook silhouettes, sets, then moment rares",
       "user_visible_behavior": "Each state and town has its own things worth finding; the sketchbook shows what's still missing and when.",
       "verification": [],
       "evidence": [],
-      "notes": "docs/GAMEPLAY_VISION.md §3, §15 step 5. Folds in almanac-regional."
+      "notes": "docs/GAMEPLAY_VISION.md §3, §15 step 5. Folds in almanac-regional. 2026-10-08: docs/GAMEPLAY_STREAMLINED.md §2 — a rare near you is always one of the pencil things (rares go first); sets by kind of place grow the base (§6)."
     },
     {
       "id": "van-travel",
       "tier": 2,
-      "rank": 71,
+      "rank": 64,
       "status": "not_started",
       "area": "gameplay",
-      "title": "Van travel: call it, drive it, fuel, self-drive, sleep legs with planned stops and arrival cards",
-      "user_visible_behavior": "Tell the map where to go; drive or sleep in the back and wake at a stop chosen for a reason.",
+      "title": "Van travel: drive it, the map table, self-driving, ride awake with call-outs, sleep legs with planned stops and arrival cards (no fuel)",
+      "user_visible_behavior": "Tell the map table where to go: drive, ride awake in the back (the van slows and calls out pencil things near the road), or sleep and wake at a stop chosen for a reason. Asleep, the route stays uncoloured.",
       "verification": [],
       "evidence": [],
-      "notes": "docs/GAMEPLAY_VISION.md §4, §15 step 6. Needs public-places (gas stations, rest areas)."
+      "notes": "docs/GAMEPLAY_VISION.md §4, §15 step 6. Needs public-places (gas stations, rest areas). 2026-10-08: docs/GAMEPLAY_STREAMLINED.md §8 — no fuel gauge (cut); the drone is its own item, after 1.0."
     },
     {
       "id": "growing-home",
       "tier": 2,
-      "rank": 73,
+      "rank": 63.5,
       "status": "not_started",
       "area": "gameplay",
-      "title": "Growing the home: rooms, windows that show the vehicle's view, miniatures, outdoor rooms",
-      "user_visible_behavior": "Add rooms where you like; every window shows the vehicle's real view; a lighthouse as a model on a shelf; a backyard inside.",
+      "title": "Growing the base: named milestones — wall space for your first painting in each new region, a room for each completed set",
+      "user_visible_behavior": "Your first painting in a new region of life adds wall space for one more painted place; a completed set adds a room you place where you like; the windows show the van's real view; a cosy van forever is fine too.",
       "verification": [],
       "evidence": [],
-      "notes": "docs/GAMEPLAY_VISION.md §7, §15 step 7."
+      "notes": "docs/GAMEPLAY_VISION.md §7, §15 step 7. 2026-10-08: docs/GAMEPLAY_STREAMLINED.md §6 — milestones you can name, not an experience bar; the outdoor rooms are painted places now."
     },
     {
       "id": "special-vehicles",
       "tier": 2,
       "rank": 75,
-      "status": "not_started",
+      "status": "superseded",
       "area": "gameplay",
       "title": "The other special vehicles: yacht, plane, balloon, each earned in the world",
       "user_visible_behavior": "Earn a yacht at a marina, a plane at an airfield, a balloon at a festival: the same home behind every door.",
       "verification": [],
       "evidence": [],
-      "notes": "docs/GAMEPLAY_VISION.md §4, §15 step 8. Needs public-places (airfields, marinas)."
+      "notes": "docs/GAMEPLAY_VISION.md §4, §15 step 8. Needs public-places (airfields, marinas).",
+      "stale_reason": "2026-10-08: docs/GAMEPLAY_STREAMLINED.md §12 — the van is the only home; the yacht, plane and balloon homes are cut (Robby agreed)."
     },
     {
       "id": "portal-gun",
       "tier": 2,
       "rank": 77,
-      "status": "not_started",
+      "status": "superseded",
       "area": "gameplay",
       "title": "The portal gun (legendary)",
       "user_visible_behavior": "A one-off find that opens a portal to anywhere you've painted, your portals, or home.",
       "verification": [],
       "evidence": [],
-      "notes": "docs/GAMEPLAY_VISION.md §9, §15 step 9."
+      "notes": "docs/GAMEPLAY_VISION.md §9, §15 step 9.",
+      "stale_reason": "2026-10-08: docs/GAMEPLAY_STREAMLINED.md §12 — cut: the van and painted places cover it (Robby agreed)."
     },
     {
       "id": "series-bridge-postcards",
       "tier": 2,
-      "rank": 78,
+      "rank": 66.5,
       "status": "not_started",
       "area": "gameplay",
       "title": "Series, the bridge on its real schedule, postcards",
@@ -1275,7 +1277,7 @@
     {
       "id": "the-dog",
       "tier": 2,
-      "rank": 80,
+      "rank": 76,
       "status": "not_started",
       "area": "gameplay",
       "title": "The dog (later)",
@@ -1287,7 +1289,7 @@
     {
       "id": "friends-visits",
       "tier": 2,
-      "rank": 81,
+      "rank": 66,
       "status": "not_started",
       "area": "gameplay",
       "title": "Friends and visits",
@@ -2159,7 +2161,7 @@
       "id": "regional-flora",
       "tier": 1,
       "rank": 11.5,
-      "status": "in_progress",
+      "status": "not_started",
       "area": "assets",
       "title": "The regional flora: live oak and Spanish moss, the PNW conifers and moss on bark, aspen and ponderosa, the eastern hardwoods and flowering understory, bald cypress, cottonwood, the desert, piñon-juniper-sage, palms and palmetto, ferns and ground layers",
       "user_visible_behavior": "A place's trees and plants are the ones that grow there, layer by layer, through the seasons.",
@@ -2187,7 +2189,7 @@
         "2026-10-06 the leftovers (docs/earth/LOG.md \"the leftovers\"): the California black oak (an OAKS row: near-black bark, gold in the fall, the Sierra's and the Klamath's mixed-conifer oak) and the gray pine (a PINES row: leaning, sparse, long needles in brushes; with the blue oaks and on the Sierra's lowest slopes); smooth cordgrass on the salt marsh (the grass field's kind 3 on WorldCover wetland by the sea, Atlantic and Gulf: tall at the water, short on the high marsh, gold in the fall); duckweed on the South's still water in the warm months (the lake shader; synth.ts stillWater). tests/leftovers.test.ts; shader check 27 programs (now the water too), no errors.",
         "2026-10-07 the flora review (docs/earth/LOG.md \"The flora review\"): each plant in its season — the mild winter's leaf fall (season.ts leafFall: the Gulf's, Florida's, Texas's, the low deserts' and California's broadleaves bare by Christmas), the lawns' winter (season.ts dormant on U.uHay and the straw wash: the South's warm-season grass straw-tan, the North's dulled), the gardens' year (flora.ts PlantLife, plantNow), the forest floor's ferns by the same season; the generic fern drawn white in every floor cell (TINT in a merged mesh) given its own green; on its ground and in its numbers — verge trees on residential streets nothing measured (flora.ts vergeShare, vergeHeight; props.ts, only where the street fronts homes), the dry country's own floor (flora.ts desertCover) and under the survey too (props.ts surveyFloor: the kinds LiDAR can't see, under 2.4 m), the scan's strip along surveyed tiles' edges dropped (edgeCovered), planted palms only where people live; and two street fixes it turned up — rural roads at their travel width where nothing's built along them (kerbside.ts fitToFronts open country), survey-found blocks standing in a street dropped (bridges.ts dropStreetCrossers). Measured: green spots flora-0b → flora-2 vegetation 23.9% → 24.6% (photos 34.6%), mean 0.719 → 0.725 (Traverse City 0.761 → 0.939, Lake Placid 0.814 → 0.884, Saguaro 0.732 → 0.756); downtowns flora-0-largest → flora-2-largest vegetation 7.6% → 7.6%, mean 0.734 → 0.742. tests/floraBalance.test.ts (new), tests/roadsClear.test.ts; npm test 1052/1052."
       ],
-      "notes": "Build order: docs/REGIONAL_LIFE.md §6. Started 2026-10-04 with the Pacific Northwest (Robby: \"do northwest\"): detailed, well-made foundry models from the exhaustive list in docs/REGIONAL_LIFE.md §6. 2026-10-04: the Northwest done (trees, moss, the forest floor). Next packages: models.md build order #2 on (live oak + Spanish moss; aspen + ponderosa for the Rockies and the dry side; the eastern hardwoods and flowering understory; the desert). Also: the ground under a wood painted as duff and moss, not lawn; OSM genus → the new kinds in realTile (Pseudotsuga→fir, Thuja→cedar, Tsuga→hemlock, Picea sitchensis→sitka, Alnus→alder, Acer circinatum→vinemaple) with the next worker cache bump. 2026-10-05 (the cloud session): Robby, \"ensure animation like for spanish moss and other things are really good too and we want alot of variety even per species, color, all that\" — package #2 built: three live oaks × three forms, the hanger layer with the pendulum swing, per-tree tones and loads. #3 the northern and mountain forests built the same day. #4 the eastern hardwoods and the flowering understory built the same day. Robby at the wrap-up: \"make things derailed [detailed] and variety and variation matter\" — the handoff sets that bar for every package. STILL OPEN (Robby: \"you can keep doing trees and vegetation if unfinished or push it up in featurelist just ensure that is maintained\"): #6 built (valley oak, blue oak, coast redwood, giant sequoia, manzanita, the golden hills; the black oak and the gray pine 2026-10-06); #7 built (saguaro, prickly pear, cholla, ocotillo, Joshua tree, creosote, piñon, Utah and Ashe juniper, big sagebrush) but for the rarer rows (organ pipe, barrels, chain-fruit and cane cholla, beavertail, bursage, alligator juniper as its own row); #8 built (cabbage, saw palmetto, royal, queen, Canary; fronds thrown about in a gust) but for the rarer rows (dwarf palmetto, Texas sabal as its own, windmill/Mediterranean/Bismarck, the Keys' thatch palms, date palm groves); #9 built (bracken, cinnamon fern, big and little bluestem, wildflower drifts in season, kudzu; smooth cordgrass 2026-10-06); #10 built (corn, soybeans, winter and spring wheat, field by field on their calendars; far off in the ground's wash) but for the South's cotton, peanuts and rice, the Valley's orchards and vineyards, hay and pasture as fields of their own; the ground under a wood as duff and moss, moss on boulders; shortleaf pine's own row (the loblolly stands in); OSM genus → kind in realTile with the next worker cache bump; the canopy layer (needs keys). Duckweed (2026-10-06) doesn't part in a wake yet; the high marsh's salt-meadow hay and the Pacific's marshes are still to do. 2026-10-07: set to not_started (was in_progress, two at once broke the WIP rule) while Robby's performance and roads report runs (smooth-and-clear); resume with the flora balance (LOG \"The ecosystem review\": next — plants). 2026-10-07: OSM species/genus → the foundry's own kinds in realTile, with tiles v26 (LOG \"Tiles v26\"). 2026-10-07 (last): the flora review done for seasons, ground and numbers (LOG). Next in it: the near desert floor still thin (a plant a 9 m cell); farmland not in streamed tiles (the next tile bump should carry landuse=farmland — the desert floor and fields.ts want it); the shrub layer under the survey outside the desert (saw palmetto, willow thickets); Bend's comparison lens among a car park's cars; then the rarer rows (#7, #8) and the fields still to do (#10), and the canopy layer when Robby says."
+      "notes": "Build order: docs/REGIONAL_LIFE.md §6. Started 2026-10-04 with the Pacific Northwest (Robby: \"do northwest\"): detailed, well-made foundry models from the exhaustive list in docs/REGIONAL_LIFE.md §6. 2026-10-04: the Northwest done (trees, moss, the forest floor). Next packages: models.md build order #2 on (live oak + Spanish moss; aspen + ponderosa for the Rockies and the dry side; the eastern hardwoods and flowering understory; the desert). Also: the ground under a wood painted as duff and moss, not lawn; OSM genus → the new kinds in realTile (Pseudotsuga→fir, Thuja→cedar, Tsuga→hemlock, Picea sitchensis→sitka, Alnus→alder, Acer circinatum→vinemaple) with the next worker cache bump. 2026-10-05 (the cloud session): Robby, \"ensure animation like for spanish moss and other things are really good too and we want alot of variety even per species, color, all that\" — package #2 built: three live oaks × three forms, the hanger layer with the pendulum swing, per-tree tones and loads. #3 the northern and mountain forests built the same day. #4 the eastern hardwoods and the flowering understory built the same day. Robby at the wrap-up: \"make things derailed [detailed] and variety and variation matter\" — the handoff sets that bar for every package. STILL OPEN (Robby: \"you can keep doing trees and vegetation if unfinished or push it up in featurelist just ensure that is maintained\"): #6 built (valley oak, blue oak, coast redwood, giant sequoia, manzanita, the golden hills; the black oak and the gray pine 2026-10-06); #7 built (saguaro, prickly pear, cholla, ocotillo, Joshua tree, creosote, piñon, Utah and Ashe juniper, big sagebrush) but for the rarer rows (organ pipe, barrels, chain-fruit and cane cholla, beavertail, bursage, alligator juniper as its own row); #8 built (cabbage, saw palmetto, royal, queen, Canary; fronds thrown about in a gust) but for the rarer rows (dwarf palmetto, Texas sabal as its own, windmill/Mediterranean/Bismarck, the Keys' thatch palms, date palm groves); #9 built (bracken, cinnamon fern, big and little bluestem, wildflower drifts in season, kudzu; smooth cordgrass 2026-10-06); #10 built (corn, soybeans, winter and spring wheat, field by field on their calendars; far off in the ground's wash) but for the South's cotton, peanuts and rice, the Valley's orchards and vineyards, hay and pasture as fields of their own; the ground under a wood as duff and moss, moss on boulders; shortleaf pine's own row (the loblolly stands in); OSM genus → kind in realTile with the next worker cache bump; the canopy layer (needs keys). Duckweed (2026-10-06) doesn't part in a wake yet; the high marsh's salt-meadow hay and the Pacific's marshes are still to do. 2026-10-07: set to not_started (was in_progress, two at once broke the WIP rule) while Robby's performance and roads report runs (smooth-and-clear); resume with the flora balance (LOG \"The ecosystem review\": next — plants). 2026-10-07: OSM species/genus → the foundry's own kinds in realTile, with tiles v26 (LOG \"Tiles v26\"). 2026-10-07 (last): the flora review done for seasons, ground and numbers (LOG). Next in it: the near desert floor still thin (a plant a 9 m cell); farmland not in streamed tiles (the next tile bump should carry landuse=farmland — the desert floor and fields.ts want it); the shrub layer under the survey outside the desert (saw palmetto, willow thickets); Bend's comparison lens among a car park's cars; then the rarer rows (#7, #8) and the fields still to do (#10), and the canopy layer when Robby says. 2026-10-08: paused (not_started) so the Sea Bright proof of concept (poc-first-minute) can be the one active item — Robby: \"soon will have to do a poc of it at least starting in sea bright\". Resume from \"Next in it\" above."
     },
     {
       "id": "regional-wildlife",
@@ -2246,31 +2248,31 @@
       "title": "Moving is fun (§11.1): a small hop, wade and swim, the bike; then surfing, kayaks and paddleboards, the skateboard, sleds",
       "user_visible_behavior": "Hop a low fence or onto a dock, wade and swim where the map says beach or water, ride a bike — moving is a pleasure in itself.",
       "area": "gameplay",
-      "rank": 63
+      "rank": 64.5
     },
     {
       "verification": [],
       "evidence": [],
-      "notes": "",
+      "notes": "2026-10-08: later, tried first in the base (docs/GAMEPLAY_STREAMLINED.md §12).",
       "id": "combine-cards",
       "tier": 2,
       "status": "not_started",
       "title": "Combine (§6.5): cards as tagged ingredients — drag onto a card, a preview, tap to keep; tag rules as data, mutations and Discoveries, crafted things in the world, the \"alive\" budget",
       "user_visible_behavior": "Drag one card onto another and something new appears — never a failure, sometimes a surprise nobody authored.",
       "area": "gameplay",
-      "rank": 65
+      "rank": 70
     },
     {
       "verification": [],
       "evidence": [],
-      "notes": "",
+      "notes": "2026-10-08: later; fishing, sitting and skimming stones are touch features now (docs/GAMEPLAY_STREAMLINED.md §3, §12).",
       "id": "place-activities",
       "tier": 2,
       "status": "not_started",
       "title": "Things to do at real places (§11.2): fishing, hoops and the ice cream shop first; then mini golf, skimming stones, a rally, bowling, the picnic table, cooking",
       "user_visible_behavior": "Every mapped court, pier and ice cream shop has a short, cozy thing to do there, with a card for doing it well.",
       "area": "gameplay",
-      "rank": 66
+      "rank": 71
     },
     {
       "verification": [],
@@ -2282,7 +2284,7 @@
       "title": "People who remember you (§11.4): a few named regulars per town, commissions and gifts, the travelling friend",
       "user_visible_behavior": "The café owner remembers what you painted and asks you to paint her boat at sunset.",
       "area": "gameplay",
-      "rank": 67
+      "rank": 72
     },
     {
       "verification": [],
@@ -2294,7 +2296,7 @@
       "title": "Events: the world's own calendar (§11.7) — calendar rules, markets and opening hours, festivals, nature's calendar, weather, sports seasons; event kits from the foundry",
       "user_visible_behavior": "Fireworks over the park on July 4, the farmers market on its real day, low tide, first snow.",
       "area": "gameplay",
-      "rank": 69
+      "rank": 65.3
     },
     {
       "verification": [],
@@ -2306,7 +2308,7 @@
       "title": "\"Today in your town\" (§11.6): a card of what today brings — what turned to pencil, today's events, a commission",
       "user_visible_behavior": "Every session opens with something to do.",
       "area": "gameplay",
-      "rank": 70
+      "rank": 65.4
     },
     {
       "verification": [],
@@ -2318,7 +2320,7 @@
       "title": "The old sketchbook (§11.3): riddle pages of real places across America, as data by region; paint the view at the right time",
       "user_visible_behavior": "A found sketchbook gives the road trip a direction and an ending.",
       "area": "gameplay",
-      "rank": 72
+      "rank": 65.5
     },
     {
       "verification": [],
@@ -2330,7 +2332,7 @@
       "title": "Self-expression (§11.8): outfits from your travels, van paint jobs, a painting style per painting",
       "user_visible_behavior": "A fisherman's sweater from Maine, a cowboy hat from Texas; a van painted your way.",
       "area": "gameplay",
-      "rank": 74
+      "rank": 73
     },
     {
       "verification": [],
@@ -2342,7 +2344,7 @@
       "title": "Small optional skill challenges (§11.5): land the balloon on a target, dock the yacht, glide the plane in, surf a long wave",
       "user_visible_behavior": "Doing it well earns a gold card; never punishing.",
       "area": "gameplay",
-      "rank": 76
+      "rank": 74
     },
     {
       "verification": [],
@@ -2354,7 +2356,7 @@
       "title": "Long-term goals (§11.9): a state's painted map, a masterpiece per region, the gallery museum, the 48-state journey",
       "user_visible_behavior": "Twenty hours in, there is still a reason to cross the country.",
       "area": "gameplay",
-      "rank": 79
+      "rank": 75
     },
     {
       "verification": [],
@@ -2366,7 +2368,7 @@
       "title": "Music (§11.10): soft themes by region, time and weather from Robby's Sound Studio, fading for real-place moments",
       "user_visible_behavior": "Calm, sparse music that changes as you travel.",
       "area": "gameplay",
-      "rank": 82
+      "rank": 77
     },
     {
       "verification": [],
@@ -2378,7 +2380,7 @@
       "title": "The smaller things (§11.11): controller support, weather as play, far-off things that catch your eye",
       "user_visible_behavior": "A gamepad works; puddles splash; a balloon on the horizon pulls you toward it.",
       "area": "gameplay",
-      "rank": 83
+      "rank": 78
     },
     {
       "verification": [],
@@ -2390,7 +2392,7 @@
       "title": "The recipe maker (§11.7): a parts library, recipes as JSON, a dev tool that turns a keyword into a recipe, checks, a preview page, a shared recipe table",
       "user_visible_behavior": "Hundreds of event-kit, rare and furniture models, made quickly and reviewed.",
       "area": "assets",
-      "rank": 84
+      "rank": 79
     },
     {
       "verification": [],
@@ -2402,7 +2404,7 @@
       "title": "\"Paint anything\" (§6.5 rule 11, later): a player names a thing and its recipe is made once, validated and shared",
       "user_visible_behavior": "Name a lobster trap and one appears — the same for every player.",
       "area": "gameplay",
-      "rank": 85
+      "rank": 80
     },
     {
       "verification": [],
@@ -2415,6 +2417,131 @@
       "area": "interiors",
       "title": "An upstairs flat over a shop stays inside its walls: no floor or furniture standing out over the shopfront",
       "user_visible_behavior": "Walking past a shop with flats above (the Bonobos building), nothing of the upstairs — floor slab, sofa, shelves — pokes out over the shop's windows or the sidewalk."
+    },
+    {
+      "id": "poc-first-minute",
+      "tier": 2,
+      "rank": 59.1,
+      "status": "in_progress",
+      "area": "gameplay",
+      "title": "Sea Bright proof of concept (1): the first minute — everything in view colours, 3–5 pencil things, tap to paint",
+      "user_visible_behavior": "With ?poc=1 in Sea Bright, everything in view colours on first sight, not just where you walk, and 3–5 things near you stay in pencil: kinds you haven't collected, among the gulls, herons, fiddler crabs, benches and one tree kind, picked out of sight and never turning pencil while you watch. Tap one within 30 m and it washes into colour with a brush sound, its card lifting into the field guide; too far and the stroke falls short with a splash. A kind once collected is never pencil again.",
+      "verification": [
+        "tests: the pencil chooser (3–5; 30–150 m away; out of view; uncollected kinds only; rares first; a just-collected area quiet ~2 min; never one turning pencil in view), the tap pick (the nearest pencil thing to the tap within 30 m, with a screen tolerance for phones; a drag is never a tap), the collection (a kind collected once, never pencil again; kept across a reload)",
+        "a montage at Sea Bright with ?poc=1: a coloured street with its 3–5 pencil things; one before and after its tap; the splash from too far; the field guide card",
+        "node tools/playtest.mjs --region=shore --quick, with and without ?poc=1: no frame-time cost worth the name; without ?poc=1 nothing changes",
+        "Robby plays it"
+      ],
+      "evidence": [],
+      "notes": "Robby, 2026-10-08: \"soon will have to do a poc of it at least starting in sea bright\"; then, on the review of the plan: \"i agree with all you things youd change\", \"i like the 3-5 pencil things\", one way to collect (\"you reason and decide\": the tap, trees too), a painted place as its saved tiles. A throwaway prototype behind ?poc=1 in Sea Bright — the plan's one exception to tier 2 waiting for tiers 0–1, by Robby's call; without ?poc=1 the game is unchanged. One part at a time, in order; each ends with a reviewed montage and Robby playing it. Design: docs/GAMEPLAY_STREAMLINED.md §1, §2, §14 part 1, §15 (the numbers). From the code (inventory, 2026-10-08): (1) colour by sight — sketch mode (render/post.ts sketchFar, off by default; ?sketch=1) draws pencil to the horizon; world/explore.ts paints a 45 m circle where you walk (revealRadius); photo mode's ctx.paintView paints what a frame sees (render/seen.ts paintSeenSliced, ~4 ms a slice; docs/agent/gameplay.md \"Exploring\") — run it every couple of seconds, sliced, for \"everything in view\"; ?poc=1 turns sketch mode on. (2) The pencil things — draw each of the 3–5 on its own: hide its instance in its batch (scale 0) and draw a copy with a pencil material (GAMEPLAY_VISION §15 step 2: one small pencil overlay, no change to the shared shaders; ui/brush.ts's pencil overlay is the precedent). Animals: one InstancedMesh per species (sim/critters.ts ~272), but their instance slots change every frame — give the chosen one a stable id. Street props: one InstancedMesh per kind per tile (world/props.ts ~2458); benches and bins have no mesh name — name them. Trees: 'trees:<kind>:<v>' InstancedMesh per tile (world/farWoods.ts WoodsTally reads them). (3) Kinds — the Almanac (ui/commissions.ts FAMILY: car, boat, plane, wildlife, tree, flower, balloon; instance prefixes ~252) has no kind for benches; collected kinds kept in IndexedDB like the sketchbook (map-game-sketchbook). (4) The tap — no world picking today (ui/brush.ts raycasts its own sketch; player/vehicles.ts finds parked cars by distance); on a phone the right of the screen drags the view (player/controller.ts ~81–131): a tap is short and barely moves. (5) With ?poc=1 a photo no longer collects (today a photo with a kind in frame paints its Almanac card): one way to collect. Sea Bright in October: laughing gulls and fiddler crabs to the end of October, herons and egrets, sandpipers; no beach crowd out of season (?date= for summer)."
+    },
+    {
+      "id": "poc-touch-moments",
+      "tier": 2,
+      "rank": 59.2,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "Sea Bright proof of concept (2): touch and moments — sit on a bench, feed the gulls, the gold edge",
+      "user_visible_behavior": "With ?poc=1, tapping something coloured touches it: tap a bench and you sit (time runs a little faster, shy animals come closer); tap the gulls and you toss a crumb — they come, bunch up and face the wind (the warning sign), then lift off together (the moment). A painting created during the moment gets a gold edge. Every painting keeps the game's own date, hour and weather.",
+      "verification": [
+        "tests: the touch table and the moment table as data per family (warning sign → moment → how long); the gulls coming to a crumb, bunching and lifting; a gold edge only with a moment in frame; a painting's date, hour and weather kept as numbers",
+        "a montage with ?poc=1: sitting on a bench; the crumb, the bunch, the lift; the gold-edged page",
+        "Robby plays it"
+      ],
+      "evidence": [],
+      "notes": "Robby, 2026-10-08: \"soon will have to do a poc of it at least starting in sea bright\"; then, on the review of the plan: \"i agree with all you things youd change\", \"i like the 3-5 pencil things\", one way to collect (\"you reason and decide\": the tap, trees too), a painted place as its saved tiles. A throwaway prototype behind ?poc=1 in Sea Bright — the plan's one exception to tier 2 waiting for tiers 0–1, by Robby's call; without ?poc=1 the game is unchanged. One part at a time, in order; each ends with a reviewed montage and Robby playing it. Design: docs/GAMEPLAY_STREAMLINED.md §3, §4, §14 part 2. From the code (2026-10-08): no touch verbs exist — only doors that swing open as you come (world/interiors.ts), the lift's floor chooser and E for rides; animals only ever flee (sim/critters.ts: flee, fly off, climb; an alarm spreads to the same kind within 10 m; gulls wheel up and land again) — coming to a crumb is a new behaviour, and the moment table is new data beside the touch table. Photo pages (ui/photo.ts ~153, ~214) keep the real time, lat/lon, yaw, a caption and a \"when\" string — add the game's date, hour and weather as numbers (with ?date= the game's date differs from the real one); photo judge() looks at light, fog, morning, sea, street, height and a subject — the gold edge wants \"a moment in frame\"."
+    },
+    {
+      "id": "poc-painted-place",
+      "tier": 2,
+      "rank": 59.3,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "Sea Bright proof of concept (3): the van and the first painted place — hang a painting, step in, release the gull",
+      "user_visible_behavior": "With ?poc=1 you wake in the back of a van: a bed, the map table, one wall. Hang a painting on the wall and step into it: the painting shows as a pencil sketch and blooms around you — your own copy of that spot at that moment, time and weather held, no people or traffic. You can walk about 250 m from where you painted it; past that the world is drawn in pencil and you can't go on. Release the gull you collected; step back out through the frame. The whole first ten minutes plays from start to end.",
+      "verification": [
+        "tests: a painting → its place (lat/lon, date, hour, weather, its tile ids); the walk held within ~250 m; pencil past the edge; the clock and weather held while inside",
+        "a montage with ?poc=1: the van; the wall with the painting; stepping in (pencil, then the bloom); the edge; the gull released",
+        "node tools/playtest.mjs --region=shore --quick, with and without ?poc=1",
+        "Robby and two or three people who haven't seen the game play the whole first ten minutes; their answers to the two questions (are ten minutes fun? does stepping into your own painting make people say \"whoa\"?) recorded in the LOG"
+      ],
+      "evidence": [],
+      "notes": "Robby, 2026-10-08: \"soon will have to do a poc of it at least starting in sea bright\"; then, on the review of the plan: \"i agree with all you things youd change\", \"i like the 3-5 pencil things\", one way to collect (\"you reason and decide\": the tap, trees too), a painted place as its saved tiles. A throwaway prototype behind ?poc=1 in Sea Bright — the plan's one exception to tier 2 waiting for tiers 0–1, by Robby's call; without ?poc=1 the game is unchanged. One part at a time, in order; each ends with a reviewed montage and Robby playing it. Design: docs/GAMEPLAY_STREAMLINED.md §5, §6, §11, §14 part 3. From the code (2026-10-08): no van inside exists (\"van\" is only a car model, player/vehicles.ts) — one small room scene is enough; ?at=, ?date=/?day= and ?hour= exist (main.ts), but after ?hour= the clock runs on at 60× (hold it), weather has no link parameter (it drifts with the clock — add one), and another month needs a reload (the tile builder's date is fixed at startup, world/tile.worker.ts) — hide the reload behind the pencil-then-bloom way in; lifeParams.enabled and critters.enabled switch people, traffic and animals off; nothing clips the world to a radius (detail tiles load to 1.5 km, outlines to 8 km, the horizon past them): hold the walker within ~250 m and draw past it in pencil with the sketch pass (a disc as its seen map). The critters sim spawns within ~90 m from the abundance table: a released gull is added and kept. Saving the tiles with the painting (so map updates never change it, and it opens offline) is for the real build (painted-places); the prototype may load them live."
+    },
+    {
+      "id": "touch-features",
+      "tier": 2,
+      "rank": 61.5,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "Everything answers: tap a coloured thing to touch it — sit, ring, light, feed, throw, open",
+      "user_visible_behavior": "Tap a bench and you sit; a bell rings and everything near notices; a porch lamp switches on and moths come at night; a crumb brings the gulls or lifts them; a skimming stone skips; a gate opens. People glance, wave back and step around you. It all works in the real world, in your base and in your painted places.",
+      "verification": [
+        "tests: each family lists its features once, as data (no per-town lists); every verb in the world, the base and a painted place",
+        "montages of each verb; tools/playtest.mjs"
+      ],
+      "evidence": [],
+      "notes": "2026-10-08: docs/GAMEPLAY_STREAMLINED.md §3. The proof of concept builds two (sit, feed: poc-touch-moments); this is the full set, built properly."
+    },
+    {
+      "id": "moments-gold-edge",
+      "tier": 2,
+      "rank": 61.6,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "Moments with warning signs, and the gold edge",
+      "user_visible_behavior": "A heron freezes before it strikes, gulls bunch before they lift, an osprey hovers before it plunges, the drawbridge's bell rings before the span rises: a painting created during the moment gets a gold edge. Timing is learned by watching, never luck.",
+      "verification": [
+        "tests: the moment table as data per family (warning sign → moment → how long), across the lower 48 with no per-town work; a gold edge only with a moment in frame",
+        "montages: each moment's warning sign and the gold-edged page"
+      ],
+      "evidence": [],
+      "notes": "2026-10-08: docs/GAMEPLAY_STREAMLINED.md §4. The drawbridge is drawn closed and never opens today (world/bridges.ts, a movable span) — its schedule is series-bridge-postcards'. The proof of concept builds one moment (the gulls lifting: poc-touch-moments)."
+    },
+    {
+      "id": "painted-places",
+      "tier": 2,
+      "rank": 62.5,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "Painted places: step into a painting — your own copy of the place at that moment, its tiles saved for you",
+      "user_visible_behavior": "Step into a painting on your wall and you stand in your own copy of that place at that moment: its map tiles saved with the painting, so it never changes when the map is updated and opens offline; about 250 m to walk, the world past the edge drawn in pencil; the light and weather as they were; no people or traffic. Release your animals, plant your trees, place your benches and boats there.",
+      "verification": [
+        "tests: a painting → its record (place, date, hour, weather, its saved tiles); the same place after a tile version bump; offline; the walk held at the edge; pencil past it; placed things and released animals kept",
+        "montages; the phone check (tools/mobile-check.mjs)"
+      ],
+      "evidence": [],
+      "notes": "2026-10-08: docs/GAMEPLAY_STREAMLINED.md §5. Robby: \"it saves that tile for the user and they can walk back to that tile but not explore the entire world when stepping into a painting\". Streamed tiles are 1024 m cells (docs/agent/streaming.md), so a painted place keeps the one to four around its spot. The proof of concept is poc-painted-place."
+    },
+    {
+      "id": "habitats-visitors",
+      "tier": 2,
+      "rank": 63,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "Habitats: animals at home in painted places that fit, raising young, and visitors by the painting's season",
+      "user_visible_behavior": "A heron released in a marsh painting is at home — active, raising young, and now and then a rare visitor comes that you can only find there; in a painting that doesn't fit it's shy and mostly hides, and nothing ever dies or fails. A marsh painted in spring gets spring birds; the same marsh painted in winter gets winter ducks.",
+      "verification": [
+        "tests: fit by the painting's kind of place (its region of life and land cover) against each animal's habitat; visitors from the abundance tables by the painting's season; nothing dies or fails",
+        "montages: a fitting and an unfitting painted place"
+      ],
+      "evidence": [],
+      "notes": "2026-10-08: docs/GAMEPLAY_STREAMLINED.md §5 (habitats, visitors)."
+    },
+    {
+      "id": "drone",
+      "tier": 2,
+      "rank": 81,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "The drone (after 1.0): an FPV drone from the van's roof",
+      "user_visible_behavior": "Fly a drone a few kilometres from the van on a few minutes' battery: it colours what it sees, creates aerial paintings and collects up close only — and never marks anything on the map.",
+      "verification": [
+        "tests: the battery and the range; its speed held to what tile loading keeps up with",
+        "montages"
+      ],
+      "evidence": [],
+      "notes": "2026-10-08: docs/GAMEPLAY_STREAMLINED.md §8 — after 1.0, with no map markers (the review's change, agreed by Robby)."
     }
   ],
   "regions": {
@@ -2455,7 +2582,7 @@
   "tiers": {
     "0": "Foundations: every tile loads (or falls back gracefully), commercial-safe infrastructure, phones, no glitches.",
     "1": "It looks right everywhere: the real-world comparison loop first, then place parity, public places, Mapillary objects, night/ground/far trees.",
-    "2": "The game (§15 order): the bloom, pencil collecting, the van-home, placing things, rares, travel, the home, the special vehicles, the portal gun, series, the dog, friends. Waits for tiers 0–1, except a throwaway bloom prototype.",
+    "2": "The game (docs/GAMEPLAY_STREAMLINED.md §13 order): the Sea Bright proof of concept first (Robby's call, 2026-10-08: a throwaway prototype behind ?poc=1, the one exception to waiting for tiers 0–1), then the bloom and pencil collecting, touch and moments, the van and painted places, habitats and the base's milestones, the road, rares and the field guide, friends; the rest later.",
     "3": "Polish and later: kept, not deleted.",
     "note": "docs/GAMEPLAY_VISION.md §17: the whole lower 48 loading everywhere, looking right everywhere, on PC and phone — then a game on top. Work the lowest tier first; within a tier, by rank. Re-ranked 2026-10-03 against the lower-48 audit (docs/earth/AUDIT_48.md)."
   }
