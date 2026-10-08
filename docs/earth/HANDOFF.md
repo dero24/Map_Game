@@ -26,6 +26,11 @@ sessions build the proof of concept one part at a time:
   (`docs/ROADMAP.md`) unless Robby says otherwise.
 - **Not this work:** Robby's reports of 2026-10-07 (`bug-harbour-water`, `bug-night-glow-people`,
   `life-density-realism`, `look-crisp-preset`) are for a separate session, only when he names them.
+  When he names one (or any other item), that session works it and hands the proof of concept back:
+  set the active proof-of-concept part to `not_started` (in its notes, "paused for <his item>"),
+  mark his item `in_progress`, and before the session ends leave his item `passing` (or
+  `not_started`, its notes saying where it stands) and the proof-of-concept part `in_progress`
+  again, so the next session picks the proof of concept back up.
   "Start near you?" touches privacy: not before Robby says so.
 
 The rest of this file is the regional-life handoff of 2026-10-05, still the reference for that work.
