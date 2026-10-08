@@ -272,6 +272,11 @@ readable), then:
   anything on a deck, or more than `perK` (2) a thousand samples elsewhere. `fails` lists each with the
   street, its class and width, the sample's offset. Its self-test plants a wall across the nearest
   street and a footprint on it. (2026-10-07: the Highlands bridge 490 → 0 on its deck; the shore 1.3.)
+  It samples the streets with a vertex within `R` of its centre (`roadsNear`): a long way with none
+  nearby isn't sampled there at all, so a change that splits ways (fitToFronts) can bring an old hit into
+  view — Tucson's West Pennington Street went 0 → 28 before its found blocks were dropped, on both codes.
+  And run it alone for an A/B: after `drive` and `walkabout` the walker and the mounted tiles differ
+  (Asheville read 1.04 and 1.78 that way, 0.78 and 0.84 alone).
 
 ### Gameplay: walk, drive, teleport, stream, frames
 
