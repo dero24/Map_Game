@@ -11,6 +11,7 @@ import { MicroLayer } from './world/microLayer';
 import { NearTrees, handsOver } from './world/nearTrees';
 import { ShaderWarm, compileForScene } from './render/warm';
 import { seasonAt, dayOfYear, autoCloud, wetness } from './world/season';
+import { farWoods, blendWoods, WoodsTally, type FarWoods } from './world/farWoods';
 import { setWorldDate } from './world/calendar';
 import { CrowdLayer, CROWD_TIERS } from './world/crowdLayer';
 import { setDemBase } from './world/dem';
@@ -227,6 +228,21 @@ async function main() {
   activeBuilding.uWinStyle.value.set(regionLook.windowCode, regionLook.shutterP, 0, 0);
   U.uBiome.value.set(...regionLook.biome);
   U.uMoss.value = regionLook.moss;
+  // the far woods' make-up (world/farWoods.ts): the trees about you once a few hundred are in (every
+  // mounted tile's, kind by kind), the region's mix before (the West's aspens by the height you stand
+  // at, re-read on a climb of 100 m) — the forest past the trees turns and goes bare as they do
+  const woodsTally = new WoodsTally();
+  let woodsElev = NaN, woodsPrior: FarWoods = farWoods(regionLook, 0, manifest.origin.lat), woodsSeen = -1;
+  const setWoods = (elev: number, lat: number) => {
+    const climbed = !(Math.abs(elev - woodsElev) < 100);
+    if (climbed) (woodsElev = elev), (woodsPrior = farWoods(regionLook, elev, lat));
+    else if (woodsSeen === woodsTally.version) return;
+    woodsSeen = woodsTally.version;
+    const fw = blendWoods(woodsPrior, woodsTally.woods());
+    U.uWoods.value.x = fw.decid;
+    U.uFallMix.value = fw.hues;
+  };
+  setWoods(0, manifest.origin.lat);
   const regionCast = castOf(regionLook); // (the lower 48's region: its trees, gardens and animals)
   const townName = meta?.name ?? 'town';
   const shoreLabel = meta?.shoreLabel ?? 'the beach';
@@ -396,6 +412,7 @@ async function main() {
     kerbCars.add(a.spec.id, a.kerb, [a.spec.box.x0, a.spec.box.z0, a.spec.box.x1, a.spec.box.z1]);
     micro.add(a.spec.id, a.micro);
     treeLayer.add(a.spec.id, a.group);
+    woodsTally.add(a.spec.id, a.group, (x, z) => world.terrain.coverAt(x, z) === 10);
     crowd.add(a.spec.id, a.crowd);
     streamedGround();
     // J1: streamed tiles (past the bake) paint their streets and footprints into the ground windows
@@ -405,7 +422,7 @@ async function main() {
     grass.invalidateBox(a.spec.box);
     understory.invalidateBox(a.spec.box);
   };
-  stream.onUnload = (id) => { paint.dropTile(id); kerbCars.remove(id); micro.remove(id); treeLayer.remove(id); crowd.remove(id); queueMicrotask(streamedGround); };
+  stream.onUnload = (id) => { paint.dropTile(id); kerbCars.remove(id); micro.remove(id); treeLayer.remove(id); woodsTally.remove(id); crowd.remove(id); queueMicrotask(streamedGround); };
   const plans = stream.plans;
   const bld = {
     get footprints() { return stream.footprints; },
@@ -917,6 +934,8 @@ async function main() {
     const dq = params.get('date'), nq = params.get('day');
     if (dq && /^\d{4}-\d{2}-\d{2}$/.test(dq)) timeParams.dayOfYear = dayOfYear(Date.parse(dq + 'T12:00:00Z'));
     else if (nq !== null && isFinite(+nq)) timeParams.dayOfYear = Math.max(0, Math.min(366, Math.round(+nq)));
+    // (?farseason=0: the forest past the trees summer-green all year, as it was — for comparing)
+    if (params.get('farseason') === '0') timeParams.farSeason = false;
   }
   const dayShift = () => {
     const d = timeParams.dayOfYear;
@@ -1110,7 +1129,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { ambientBalloons, horizon, walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, lift: ride, planInterior, registerPlan, plans, bld, life, stream, vehicles, farSkyline, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, streamParams, micro, nearTrees: treeLayer, crowd, kerbCars, wakes, get spawn() { return spawn; }, at: atPos };
+  (window as unknown as Record<string, unknown>).__GAME__ = { ambientBalloons, horizon, walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, lift: ride, planInterior, registerPlan, plans, bld, life, stream, vehicles, farSkyline, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, streamParams, micro, nearTrees: treeLayer, woods: woodsTally, crowd, kerbCars, wakes, get spawn() { return spawn; }, at: atPos };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);
@@ -1512,6 +1531,8 @@ async function main() {
       const [lat, lon] = toLatLon(json.origin, walker.x, walker.z);
       const s = seasonAt(lat, lon, world.terrain.heightAt(walker.x, walker.z), dayOfYear(worldMs));
       U.uSnow.value = weatherParams.snow >= 0 ? weatherParams.snow : s.snow;
+      setWoods(world.terrain.heightAt(walker.x, walker.z), lat);
+      U.uWoods.value.y = timeParams.farSeason ? 1 : 0;
       U.uLeafFall.value = s.leafFall;
       U.uAutumn.value = s.autumn;
       U.uTurn.value = s.turn;

@@ -2,6 +2,52 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-08 (evening) — The forest past the trees follows the season (`far-woods-seasons`, committed, not pushed)
+
+Robby: "so are there different seasons in the game … i just want to ensure it wont make the game look
+worse", then "okay please fix that". His condition, in the feature: summer the same, and he sees the
+before/after before it ships — so this is **committed locally and not pushed** until he has looked
+(https://claude.ai/artifact/MnhtEZBGDE6fqCYF2f54r9, the live service's frames).
+
+- **The far woods** (`world/farWoods.ts`, the GLSL at the end of `render/treeSeasons.ts`): the far ring's
+  canopy (`ground.ts` CANOPY: the lite and far cells' raised woods, the bake's backdrop) and the wooded
+  horizon ridges (`horizon.ts aVeg`, temperate, continental and boreal) were one summer green all year.
+  Now they turn and go bare by the far crowns' own sums, drawn as stands (~44 m) in groves (~220 m: each
+  its own broadleaf share, lead hue and timing), faded by the pixel's footprint to the grove's and then the
+  region's mean — never a speckle. Their snow as their make-up holds it (an evergreen wood's crowns less,
+  a bare wood's floor more): the canopy took snow as a field did.
+- **What they're made of**: the trees about the walker (`WoodsTally`, every mounted tile's `trees:` meshes
+  in woods, each crown weighed by spread × height) over the region's own mix while few are in. The region's
+  mix alone guessed far too many broadleaves where the survey's slim crowns are conifers: Lake Placid's
+  woods are six broadleaves in ten by count, three by what shows over its 25 m white pines — the first
+  frames had the Adirondacks' far hills solid gold behind dark green woods.
+- **The woods' floor once the leaves are down** (`ground.ts vWoods`): a detail cell's ground carries the
+  woods' share round each point where it has a wood (`realExtras(…, woods)`, the tile worker; a baked
+  slice chunk with a wood too), and the shader lays leaf litter (`WOODS_LITTER`) by the broadleaf share ×
+  `uLeafFall`. Without it a wood near the walker in winter was a green floor under bare sticks against
+  grey-brown far woods — a seam at the detail ring's edge (Shenandoah from 300 m).
+- Only while the woods are turning or bare (`woodsTurning()`): a summer frame is the same as before, and
+  the developer settings' **"far forests follow the season"** (`timeParams.farSeason`, `?farseason=0`)
+  puts the old look back.
+
+**Verified:** typecheck; `npm test` 1073/1073 (`tests/farWoods.test.ts`, 8 new); `npm run build`. Before/after
+in the same frame (scratch `farseason-ab.mjs`: the switch off, then on) on the live service:
+`shots/farseason-live-0…7.jpg` — the Smokies Nov 5 and Jan 15, the Adirondacks Oct 14 and Jan 15 (snow),
+Shenandoah Dec 5 (80 m, 300 m, on foot), Sea Bright Jan 15, the Hoh Oct 20 (barely changed), the Smokies
+Jul 20 (identical); Clingmans Dome Nov 5 for the horizon (`farseason-fs2-5.jpg`). `tools/playtest.mjs
+--only=frames` at Cades Cove on Nov 5: 59.3 fps on, 59.4 with `?farseason=0` (fly's busy time +1 ms p50).
+`tools/mobile-check.mjs --device=pixel7`: 60 programs, fragment uniforms 50/224, no errors.
+
+**Found on the way:** two `wrangler dev` workers left on :8787 from this morning's local add-on tests —
+a dev page prefers a local worker (`main.ts probeLocalTiles`), so the first rounds of frames came from it
+(Overpass-backed outside New Jersey, 503s at Cades Cove, stand-in tiles); stopped, the final frames are the
+live service's. Shenandoah in December looked leafy: every broadleaf there is bare (checked kind by kind) —
+its white pines and pines read as round broadleaf crowns from above (the conifers' far models). The pale
+flat band and white patches in the far ring at Cades Cove are in every frame, before and after.
+
+**Next:** Robby's look; then push (Pages). Later: the season by each wood's own height (from Clingmans Dome
+the valleys below take the summit's bare winter; from a valley in early October the high ridges stay green).
+
 ## 2026-10-08 (later) — The natural areas mapped as relations: the query's new statement, the extract's add-on, tiles v29
 
 Robby, on the 2-hour re-cut: "why do we need to redownload everything?" — we don't (the US file is on D:),

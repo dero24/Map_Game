@@ -155,11 +155,15 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
     vertex: /* glsl */ `
       attribute float aCanopy;
       varying float vCanopy;
+      varying float vWoods;
       uniform sampler2D uStreamed;
       uniform vec4 uStreamedBox;
       void main() {
         vec3 p = position;
         vCanopy = 0.0;
+        // (the share of woods round this point: a detail cell's floor, a far cell's canopy — 0 where the
+        // ground carries none)
+        vWoods = aCanopy;
         #ifdef CANOPY
           // a detail tile is mounted in this cell: its trees are real — the canopy bump (and its
           // leaf colour) goes, and this is plain ground
@@ -178,6 +182,7 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
       uniform sampler2D uPaintS, uPaintB, uPaintD, uPaintM;
       uniform vec4 uPaintSBox, uPaintBBox, uPaintDBox, uPaintMBox;
       varying float vCanopy;
+      varying float vWoods;
       uniform sampler2D uStreamed;
       uniform vec4 uStreamedBox;
       uniform vec2 uViewport;
@@ -283,10 +288,60 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
         float n1 = vnoise(xz * 0.9), n2 = fbm(xz * 0.06);
         float wash = 0.9 + 0.16 * n1 + 0.12 * (n2 - 0.5);
         alb *= wash;
+        // the woods' floor once their leaves are down: the leaves where they fell, under the share of a
+        // wood's crowns that drop them (uWoods.x) — so a wood reads brown and grey through the winter near
+        // the walker as it does far off (render/treeSeasons.ts far woods); as it was the rest of the year
+        if (vWoods > 0.01 && woodsTurning() && uLeafFall > 0.0)
+          alb = mix(alb, WOODS_LITTER * (0.8 + 0.4 * fbm(xz * 0.35 + 5.0)), smoothstep(0.15, 0.75, vWoods) * uWoods.x * uLeafFall);
+        // (the far woods' season: how much of this is their canopy, how bare it is, and how much snow
+        // it holds — none of it unless they are turning: the summer's canopy is as it always was)
+        float woodsW = 0.0, woodsBare = 0.0, woodsKeep = 1.0;
+        #ifdef CANOPY
+          // their stands, ~44 m, on a grid warped so no two line up; their groves, ~220 m — a hillside's
+          // make-up varies (a cove of tulip trees gold, a ridge of oaks rust, a north slope's hemlocks
+          // dark), so a wood too far off for its stands is still a patchwork of them; and how many metres
+          // a pixel spans (taken before any branch: past ~3 pixels a stand, a wood is its grove, past ~2
+          // a grove, the region's mean)
+          vec2 woodsQ = xz / 44.0 + (vec2(vnoise(xz * 0.013 + 4.1), vnoise(xz * 0.013 + 9.3)) - 0.5) * 1.7;
+          vec2 groveQ = xz / 220.0 + (vec2(vnoise(xz * 0.0031 + 2.3), vnoise(xz * 0.0031 + 6.1)) - 0.5) * 1.4;
+          float woodsFp = max(length(dFdx(xz)), length(dFdy(xz)));
+        #endif
         // distant woods: lumpy canopy
         if (vCanopy > 0.01) {
           vec3 leaf = mix(vec3(0.10, 0.16, 0.06), vec3(0.22, 0.28, 0.10), fbm(xz * 0.05 + 3.0));
-          leaf *= 0.75 + 0.5 * vnoise(xz * 0.18);
+          float lump = 0.75 + 0.5 * vnoise(xz * 0.18);
+          leaf *= lump;
+          #ifdef CANOPY
+            // …turning and going bare with the trees in front of it (render/treeSeasons.ts far woods):
+            // a stand at a time where its stands show, their mean where they don't
+            if (woodsTurning()) {
+              // the grove: its share of broadleaves round the region's, its lead hue, its own timing
+              vec2 gid = floor(groveQ);
+              float gDecid = clamp(uWoods.x + (hash12(gid + 1.31) - 0.5) * 0.6, 0.0, 1.0);
+              float gPick = hash12(gid + 4.73), lead = 0.0, acc = 0.0, gShift = (hash12(gid + 8.97) - 0.5) * 0.16;
+              for (int i = 0; i < 8; i++) { if (uFallMix[i] > 0.0) lead = float(i); acc += uFallMix[i]; if (gPick < acc) break; }
+              vec3 pm = vec3(xz * 0.002, 0.0), far = leaf;
+              float dg = 0.0, dm = 0.0, ds = 0.0;
+              float gsharp = 1.0 - smoothstep(40.0, 110.0, woodsFp), sharp = 1.0 - smoothstep(6.0, 18.0, woodsFp);
+              if (gsharp > 0.0) far = woodsMix(leaf, pm, lump, gDecid, lead, gShift, dg);
+              if (gsharp < 1.0) far = mix(woodsMean(leaf, pm, lump, dm), far, gsharp);
+              // the stand: broadleaves or not by its grove's share, of its grove's hues
+              vec3 stand = leaf;
+              if (sharp > 0.0) {
+                vec2 id = floor(woodsQ);
+                if (hash12(id + 0.71) < gDecid) {
+                  float pick = hash12(id + 7.13), hue = 0.0, sum = 0.0;
+                  for (int i = 0; i < 8; i++) { float w = groveShare(i, lead); if (w > 0.0) hue = float(i); sum += w; if (pick < sum) break; }
+                  stand = standNow(leaf, hue, hash12(id + 3.37), vec3(xz * 0.06, 0.0), lump, gShift, ds);
+                }
+              }
+              leaf = mix(far, stand, sharp);
+              woodsBare = mix(mix(dm, dg, gsharp), ds, sharp);
+              woodsW = smoothstep(0.05, 0.6, vCanopy);
+              // (snow lies on a bare wood's floor, under its twigs; an evergreen's crowns hold some of it)
+              woodsKeep = mix(0.45, 0.9, woodsBare);
+            }
+          #endif
           alb = mix(alb, leaf, smoothstep(0.05, 0.6, vCanopy));
           N = normalize(N + vec3(vnoise(xz * 0.11) - 0.5, 0.0, vnoise(xz * 0.11 + 9.0) - 0.5) * 1.2);
         }
@@ -416,8 +471,10 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
           }
         }
         alb *= gm;
-        // snow: lawns, yards and sidewalks take it; dark asphalt is ploughed down to slushy tracks
-        alb = snowOn(alb, N, vWorldPos, snowKeep(alb));
+        // snow: lawns, yards and sidewalks take it; dark asphalt is ploughed down to slushy tracks (and
+        // the far woods' as their make-up holds it, a bare wood's grey with its twigs)
+        alb = snowOn(alb, N, vWorldPos, mix(snowKeep(alb), woodsKeep, woodsW));
+        if (woodsW > 0.0) alb = mix(alb, alb * vec3(0.74, 0.7, 0.68), woodsW * woodsBare * uSnow);
         alb = pigment(alb, vWorldPos);
         float sh = shadowAt(vWorldPos, N);
         vec3 col = paintLight(alb, N, vWorldPos, sh, 1.0);
@@ -438,11 +495,16 @@ export function buildGround(world: World, paint: GroundPaint, tt: TerrainTexture
   sliceMat.uniforms = mat.uniforms;
 
   // Fine slice terrain, chunked for culling. Skip open water far from shore (the water shader paints it).
+  // A chunk with a wood in it carries the woods' share round each point (aCanopy, the floor's: no bump —
+  // vWoods), the floor its leaves fall on.
   const CH = 400;
   const heightS = (x: number, z: number) => terrain.slice.heightAt(x, z);
+  const woodsS = (x: number, z: number) => { let n = 0; for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) n += terrain.slice.coverAt(x + dx * 12, z + dz * 12) === 10 ? 1 : 0; return n / 9; };
+  const wooded = (x0: number, z0: number, x1: number, z1: number) => { for (let z = z0 + 8; z < z1; z += 16) for (let x = x0 + 8; x < x1; x += 16) if (terrain.slice.coverAt(x, z) === 10) return true; return false; };
   for (let cz = S.z0; cz < S.z1; cz += CH)
     for (let cx = S.x0; cx < S.x1; cx += CH) {
-      const g = buildGrid({ x0: cx, z0: cz, x1: Math.min(S.x1, cx + CH), z1: Math.min(S.z1, cz + CH), step: 3 }, heightS, (x, z) => terrain.slice.sdfAt(x, z) > -45);
+      const x1 = Math.min(S.x1, cx + CH), z1 = Math.min(S.z1, cz + CH);
+      const g = buildGrid({ x0: cx, z0: cz, x1, z1, step: 3 }, heightS, (x, z) => terrain.slice.sdfAt(x, z) > -45, wooded(cx, cz, x1, z1) ? woodsS : undefined);
       if (!g.index || g.index.count === 0) continue;
       const m = new THREE.Mesh(g, sliceMat);
       m.receiveShadow = true;

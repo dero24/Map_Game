@@ -205,4 +205,54 @@ float bloomCover(float type, vec3 p, float hi) {
   if (type > 1.5) return smoothstep(0.5, 0.62, vnoise3(p * 5.3)) * (0.6 + 0.4 * hi);
   return smoothstep(0.2, 0.5, vnoise3(p * 1.6) * 0.8 + 0.3);
 }
+// ---- the far woods (world/farWoods.ts; ground.ts CANOPY, horizon.ts): the forest past the trees, drawn
+// without a tree — uWoods.x of its crowns broadleaves, turning in uFallMix's hues and going bare by the far
+// crowns' own sums (propMaterial), so it turns with the trees in front of it. k: a colour's lightness over
+// the far canopy's summer green (FAR_LEAF, ground.ts) — the horizon's wooded ridges are darker.
+const vec3 FAR_LEAF = vec3(0.16, 0.22, 0.08);
+// a bare wood far off: grey-brown twigs over the leaf litter
+const vec3 FAR_BARE = vec3(0.17, 0.14, 0.11);
+// the leaf litter on a wood's floor once its leaves are down (ground.ts): oak and maple leaves gone tan
+// and brown, as light as the floor's summer olive
+const vec3 WOODS_LITTER = vec3(0.25, 0.165, 0.085);
+// the fall colours far off: a crown's colour in its own shade
+const float FAR_FALL = 0.75;
+// (uWoods.y 0: the summer green all year, as before — the developer settings' switch)
+bool woodsTurning() { return uWoods.y > 0.5 && (uTurn > 0.0 || uLeafFall > 0.0); }
+// A stand of broadleaves of fall hue \`hue\`, its own number s: its colour today over its summer
+// colour \`leaf\` (turning at its own point of the season, as a far crown does — \`shift\` ahead of it,
+// its grove's), and the share of its leaves down.
+vec3 standNow(vec3 leaf, float hue, float s, vec3 p, float k, float shift, out float down) {
+  float onset = fallOnset(hue, s);
+  float turn = smoothstep(onset - 0.02, onset + 0.22, max(uTurn + shift, 0.0) * 1.25) * smoothstep(0.0, 0.04, uTurn);
+  vec3 c = mix(leaf, fallColour(hue, s, p, 0.0) * FAR_FALL * k, turn);
+  down = leafDown(hue, s);
+  return mix(c, FAR_BARE * k, down);
+}
+// The share of a grove's broadleaves of fall hue i: the region's (uFallMix), half of it given to the
+// grove's lead hue (a cove of tulip trees, a ridge of oaks) — none when lead < 0.
+float groveShare(int i, float lead) {
+  return lead < 0.0 ? uFallMix[i] : 0.5 * uFallMix[i] + (abs(float(i) - lead) < 0.5 ? 0.5 : 0.0);
+}
+// A wood too far off for its stands to tell apart: their mean — each hue's stands turned as far as the
+// season has turned them (fallOnset runs linear in s: the share past their onset), coloured as the middle
+// one — and the share of its crowns bare. decid: its share of broadleaves; lead: its lead hue (groveShare);
+// shift: how far ahead of the season it is turning (a grove's own).
+vec3 woodsMix(vec3 leaf, vec3 p, float k, float decid, float lead, float shift, out float down) {
+  vec3 b = vec3(0.0);
+  down = 0.0;
+  float t = max(uTurn + shift, 0.0);
+  for (int i = 0; i < 8; i++) {
+    float w = groveShare(i, lead);
+    if (w <= 0.0) continue;
+    float hue = float(i), a = fallOnset(hue, 0.0), span = max(fallOnset(hue, 1.0) - a, 0.05);
+    float turned = clamp((t * 1.25 - 0.1 - a) / span, 0.0, 1.0) * smoothstep(0.0, 0.04, uTurn);
+    float dn = leafDown(hue, 0.5);
+    b += w * mix(mix(leaf, fallColour(hue, 0.5, p, 0.0) * FAR_FALL * k, turned), FAR_BARE * k, dn);
+    down += w * dn;
+  }
+  down *= decid;
+  return mix(leaf, b, decid);
+}
+vec3 woodsMean(vec3 leaf, vec3 p, float k, out float down) { return woodsMix(leaf, p, k, uWoods.x, -1.0, 0.0, down); }
 `;

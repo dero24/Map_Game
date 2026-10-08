@@ -512,7 +512,7 @@ export function waterSheets(bodies: WaterBody[], box: Box): THREE.Group {
   return g;
 }
 
-export function realExtras(tj: TileJson, terrain: { sdfAt(x: number, z: number): number; heightAt(x: number, z: number): number }, step = 8, bodies?: WaterBody[], canopy?: (x: number, z: number) => number): THREE.Group {
+export function realExtras(tj: TileJson, terrain: { sdfAt(x: number, z: number): number; heightAt(x: number, z: number): number }, step = 8, bodies?: WaterBody[], canopy?: (x: number, z: number) => number, woods?: (x: number, z: number) => number): THREE.Group {
   const box = tj.box;
   const extra = new THREE.Group();
   const unpack = (f: number[]): [number, number][] => {
@@ -538,8 +538,10 @@ export function realExtras(tj: TileJson, terrain: { sdfAt(x: number, z: number):
   const inWater = (x: number, z: number) => wet.some((w) => w.o.some((q) => inR(x, z, q)) && !w.i.some((q) => inR(x, z, q)));
   // (a hilly cell's ground is 4 m, fine enough to show its streets' cuts and fills; else 8 m)
   // (a far cell's woods — its `canopy`, 0..1 a node: WorldCover's forests past the detail ring — raise its
-  // ground into the bake's backdrop's lumpy canopy, 11 m at the full, on the ground shader's CANOPY twin)
-  const g = buildGrid({ x0: box.x0, z0: box.z0, x1: box.x1, z1: box.z1, step }, canopy ? (x, z) => terrain.heightAt(x, z) + canopy(x, z) * 11 : (x, z) => terrain.heightAt(x, z), (x, z) => terrain.sdfAt(x, z) > -45 && !inWater(x, z), canopy);
+  // ground into the bake's backdrop's lumpy canopy, 11 m at the full, on the ground shader's CANOPY twin;
+  // a detail cell's — its `woods`, the same share — stay on the ground, where their trees stand: the
+  // shader browns their floor once the leaves are down)
+  const g = buildGrid({ x0: box.x0, z0: box.z0, x1: box.x1, z1: box.z1, step }, canopy ? (x, z) => terrain.heightAt(x, z) + canopy(x, z) * 11 : (x, z) => terrain.heightAt(x, z), (x, z) => terrain.sdfAt(x, z) > -45 && !inWater(x, z), canopy ?? woods);
   if (g.index && g.index.count) {
     const gm = new THREE.Mesh(g, new THREE.ShaderMaterial());
     gm.material.userData.tag = canopy ? 'gndc' : 'gnd';

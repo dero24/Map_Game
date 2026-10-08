@@ -79,6 +79,12 @@ export const U = {
   uWinter: { value: 0 },
   uHay: { value: 0 },
   uYear: { value: 0 }, // (season.ts year: the calendar's phase — the wildflowers' windows, treeSeasons.ts WILDFLOWERS)
+  // the far woods (world/farWoods.ts: main.ts sets them off the trees about the walker as tiles come and
+  // go): x the share of a wood's crowns whose leaves colour and fall, y 1 while the forest past the trees
+  // follows the season (0: its summer green — the developer settings' switch, ?farseason=0); and the hues
+  // those turn (flora.ts FALL_HUE 0–7, summing to 1)
+  uWoods: { value: new THREE.Vector4(0, 1, 0, 0) },
+  uFallMix: { value: [1, 0, 0, 0, 0, 0, 0, 0] },
   uMoss: { value: 0 }, // moss on the trees' bark, the region's (styles.ts moss)
   // how wet the trees are, 0 a dry spell … 1 just rained (main.ts from the day's weather): the
   // resurrection fern greens and opens with it (assets/hangers.ts)
@@ -135,6 +141,8 @@ uniform vec3 uLampColor, uPoolColor;
 uniform vec4 uNightFloor;
 uniform float uLampPower, uPigment, uPigmentScale, uWind;
 uniform float uSnow, uLeafFall, uAutumn, uTurn, uBloom, uMoss, uSpring, uSummer, uWinter, uHay, uWet, uYear;
+uniform vec4 uWoods;
+uniform float uFallMix[8];
 uniform vec4 uBiome;
 uniform vec4 uSliceBox;
 uniform vec4 uHoleBox, uHoleInfo;

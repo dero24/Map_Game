@@ -12,7 +12,9 @@ import { audioParams } from '../audio/ambience';
 import { animalList, whereToSee } from './seeIt';
 import type { CritterKind } from '../assets/fauna';
 
-export const timeParams = { realTime: true, hour: 18.5, speed: 60, dayOfYear: 0 };
+// farSeason: the forest past the trees (the far ring's canopy, the wooded ridges) turns and goes bare
+// with the season, as the trees do (world/farWoods.ts) — off, its summer green all year, as it was
+export const timeParams = { realTime: true, hour: 18.5, speed: 60, dayOfYear: 0, farSeason: true };
 export const weatherParams = { cloud: 0.35, seaFog: 0.0, haze: 0.35, wind: 0.5, autoWeather: true, snow: -1, fogMode: 'rare, anywhere' }; // snow −1 = the season's own (season.ts)
 /** Drifting weather's fog (main.ts): now and then anywhere (more on a coastal morning), only a
  *  coastal morning's marine layer, or never. */
@@ -95,6 +97,7 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   t.add(timeParams, 'hour', 0, 24, 0.01).name('hour').listen().onChange(() => (timeParams.realTime = false));
   t.add(timeParams, 'speed', 0, 3600, 1).name('time speed ×');
   t.add(timeParams, 'dayOfYear', 0, 366, 1).name('day of year (0 = today)'); // the season follows: snow, bare trees, autumn
+  t.add(timeParams, 'farSeason').name('far forests follow the season').listen();
   const presets = { sunrise: () => hooks.onPreset(6.9), morning: () => hooks.onPreset(9.5), noon: () => hooks.onPreset(12.9), golden: () => hooks.onPreset(18.35), dusk: () => hooks.onPreset(19.25), night: () => hooks.onPreset(22.5) };
   for (const k of Object.keys(presets)) t.add(presets, k as keyof typeof presets);
 

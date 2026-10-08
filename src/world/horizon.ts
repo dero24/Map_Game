@@ -32,28 +32,42 @@ function toneFor(st: Pick<RegionStyle, 'climate'>): [number, number] {
   }
 }
 
-export function horizonMaterial(haze = 1) {
+/** `veg`: the ridges' wooded tone (toneFor), which the far woods' season turns (aVeg: its share of a
+ *  vertex's colour). */
+export function horizonMaterial(haze = 1, veg = new THREE.Color(0x4f6440)) {
   const m = paintMaterial({
-    uniforms: { uHaze: { value: haze } },
+    uniforms: { uHaze: { value: haze }, uVegTone: { value: veg } },
     vertex: /* glsl */ `
       ${GLSL_FAR_DEPTH}
       attribute vec3 color;
+      attribute float aVeg;
       varying vec3 vCol;
+      varying float vVeg;
       void main() {
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vWorldPos = wp.xyz + uWorldOffset;
         vNormalW = normalize(mat3(modelMatrix) * normal);
         vCol = color;
+        vVeg = aVeg;
         gl_Position = projectionMatrix * viewMatrix * wp;
         // past the camera's far plane: never clipped, and at its true distance in the far layer
         gl_Position.z = farDepth(distance(wp.xyz, cameraPosition)) * gl_Position.w;
       }`,
     fragment: /* glsl */ `
       varying vec3 vCol;
+      varying float vVeg;
       uniform float uHaze;
+      uniform vec3 uVegTone;
       void main() {
         vec3 N = normalize(vNormalW);
-        vec3 col = paintLight(pigment(vCol, vWorldPos * 0.05), N, vWorldPos, 1.0, 1.0);
+        // the wooded ridges turn and go bare with the woods in front of them (render/treeSeasons.ts far
+        // woods: their mean — a ridge is never near enough for a stand)
+        vec3 base = vCol;
+        if (vVeg > 0.0 && woodsTurning()) {
+          float dn, k = dot(uVegTone, vec3(0.3, 0.59, 0.11)) / dot(FAR_LEAF, vec3(0.3, 0.59, 0.11));
+          base += vVeg * (woodsMean(uVegTone, vWorldPos * 0.0005, k, dn) - uVegTone);
+        }
+        vec3 col = paintLight(pigment(base, vWorldPos * 0.05), N, vWorldPos, 1.0, 1.0);
         vec3 v = vWorldPos - (cameraPosition + uWorldOffset);
         float d = length(v);
         // the local haze by the air's clarity (dry desert air carries 100 km), then aerial
@@ -92,7 +106,7 @@ export class Horizon {
   constructor(private origin: LatLon, private style: Pick<RegionStyle, 'climate'>, private enabled: boolean) {
     this.group.name = 'horizon';
     // dry air carries far: desert ranges stand sharp and violet at 30 km, humid ones go pale
-    this.mat = horizonMaterial(style.climate === 'arid' ? 0.45 : style.climate === 'mediterranean' || style.climate === 'polar' ? 0.7 : 1);
+    this.mat = horizonMaterial(style.climate === 'arid' ? 0.45 : style.climate === 'mediterranean' || style.climate === 'polar' ? 0.7 : 1, new THREE.Color(toneFor(style)[1]));
   }
   /** Its material on an empty mesh, for the boot's shader compile (render/warm.ts): the ring is
    *  built later, and compiled as it was first drawn. */
@@ -207,18 +221,25 @@ export class Horizon {
       }
     }
     // colour by height + local relief: flats and valleys vegetated, steep and high bare, snow above the line
-    const c = new THREE.Color();
+    // — and how much of each vertex's colour is the wooded tone (aVeg), which the far woods' season turns
+    // where the ridges are wooded (the summer-dry, the desert and the tropical ridges keep theirs: their
+    // tone is grass, scrub, or leaves that never fall)
+    const c = new THREE.Color(), vegF = new Float32Array(n);
+    const wooded = this.style.climate === 'temperate' || this.style.climate === 'continental' || this.style.climate === 'boreal';
     for (let k = 0; k < RINGS; k++) for (let a = 0; a < SEG; a++) {
       const i = k * SEG + a, h = hts[i];
       const nb = [hts[k * SEG + ((a + 1) % SEG)], hts[k * SEG + ((a + SEG - 1) % SEG)], k > 0 ? hts[i - SEG] : h, k < RINGS - 1 ? hts[i + SEG] : h];
       const relief = Math.max(...nb.map((q) => Math.abs(q - h))) / Math.max(250, radius(k) * 0.03);
       if (h <= 0.5) c.copy(sea);
       else {
-        c.copy(veg).lerp(rock, Math.min(1, relief * 0.8 + Math.max(0, (h - snow * 0.55) / (snow * 0.45)) * 0.6));
-        if (rockF[i] > 0) c.lerp(bareC, 0.65 * rockF[i]);
-        if (h > snow) c.lerp(snowC, Math.min(1, (h - snow) / 400));
+        const t = Math.min(1, relief * 0.8 + Math.max(0, (h - snow * 0.55) / (snow * 0.45)) * 0.6);
+        let v = 1 - t;
+        c.copy(veg).lerp(rock, t);
+        if (rockF[i] > 0) { c.lerp(bareC, 0.65 * rockF[i]); v *= 1 - 0.65 * rockF[i]; }
+        if (h > snow) { const s = Math.min(1, (h - snow) / 400); c.lerp(snowC, s); v *= 1 - s; }
         // (a vertex a third on ice reads as the glacier's edge; half on it, as the glacier)
-        if (iceF[i] > 0) c.lerp(iceC, Math.min(1, iceF[i] * 2));
+        if (iceF[i] > 0) { const s = Math.min(1, iceF[i] * 2); c.lerp(iceC, s); v *= 1 - s; }
+        if (wooded) vegF[i] = v;
       }
       col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
     }
@@ -232,6 +253,7 @@ export class Horizon {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('aVeg', new THREE.BufferAttribute(vegF, 1));
     g.setIndex(idx);
     g.computeVertexNormals();
     const mesh = new THREE.Mesh(g, this.mat);

@@ -470,6 +470,12 @@ function footprintTest(tj: TileJson) {
     return W.size > 0 && nearWall(x, z);
   };
 }
+/** Whether a cell's ground has a wood anywhere in it (its cover, every 16 m): its floor carries the
+ *  woods' share only then. */
+function hasWoods(L: TerrainLayer, box: { x0: number; z0: number; x1: number; z1: number }) {
+  for (let z = box.z0 + 8; z < box.z1; z += 16) for (let x = box.x0 + 8; x < box.x1; x += 16) if (L.coverAt(x, z) === 10) return true;
+  return false;
+}
 /** How much the ground rises and falls in a cell (m) — a hilly cell's ground is built finer. */
 function relief(dem: { buf: ArrayBuffer; layout: LayerLayout }) {
   const L = dem.layout, n = L.grid.w * L.grid.h, h = new Float32Array(dem.buf, L.height.offset, n);
@@ -644,9 +650,14 @@ async function build(msg: { id: number; spec: TileSpec; idBase: number; lite?: b
   // ground's canopy — the forest on the hills past the detail ring, where the far ring draws no trees: the
   // Olympic Peninsula's were bare grass)
   const woods = msg.lite && dem && tj.lc ? new TerrainLayer(dem.buf, dem.layout) : null;
-  const canopy = woods ? (x: number, z: number) => { let n = 0; for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) n += woods.coverAt(x + dx * 12, z + dz * 12) === 10 ? 1 : 0; return n / 9; } : undefined;
+  const shareOf = (L: TerrainLayer) => (x: number, z: number) => { let n = 0; for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) n += L.coverAt(x + dx * 12, z + dz * 12) === 10 ? 1 : 0; return n / 9; };
+  const canopy = woods ? shareOf(woods) : undefined;
+  // (a detail cell's woods, the same share, on its ground where its trees stand: the floor the leaves
+  // fall on — ground.ts vWoods; none for a cell without a wood)
+  const floor = !msg.lite && dem ? new TerrainLayer(dem.buf, dem.layout) : null;
+  const floorWoods = floor && hasWoods(floor, spec.box) ? shareOf(floor) : undefined;
   if (syn) tile.objs.push(...packGroup(syn.extra));
-  else if (realish) tile.objs.push(...packGroup(realExtras(tj, terrain, dem && dem.layout.grid.cell <= 4 && relief(dem) > 6 ? 4 : 8, dem ? water : undefined, canopy))); // ground + real-street ribbons + water
+  else if (realish) tile.objs.push(...packGroup(realExtras(tj, terrain, dem && dem.layout.grid.cell <= 4 && relief(dem) > 6 ? 4 : 8, dem ? water : undefined, canopy, floorWoods))); // ground + real-street ribbons + water
   if (vec) tile.vec = 1;
   // tunnel mouths: a headwall round a dark opening where a street goes underground
   if (realish && !msg.lite) {

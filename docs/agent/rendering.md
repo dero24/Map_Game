@@ -331,6 +331,35 @@ the sky between the leaves. Past it, the tiles' own solid crowns, as before.
   - **The cards' flags** (`aE.w`, `flora.ts packCardFlags` / `unpackCardFlags`, decoded the same in
     `leafCards.ts`): `falls 1 + 2·hue (3 bits) + 16·blossom (3 bits) + 128·motion (2 bits)`, under 512.
     `tests/foundry.test.ts` round-trips every value and checks the shader's decode text.
+  - **The far woods** (`world/farWoods.ts`, the GLSL at the end of `treeSeasons.ts`): the forest past
+    the trees — the far ring's canopy (`ground.ts` CANOPY: the lite and far cells' raised woods, the
+    bake's backdrop) and the wooded ridges past it (`horizon.ts`, temperate, continental and boreal
+    only: `aVeg`, the wooded tone's share of each vertex's colour) — turns and goes bare with the trees
+    in front of it, by the far crowns' own sums (`fallOnset`, `fallColour`, `leafDown`). What it is made
+    of: `U.uWoods.x`, the share of a wood's crowns that drop their leaves, and `U.uFallMix[8]`, the hues
+    those turn — from **the trees about the walker** (`WoodsTally`: every mounted tile's `trees:` meshes
+    standing in a wood (cover 10), each crown weighed by its spread × its height off its far model's
+    bounds — a wood seen from afar is its tallest crowns: Lake Placid's woods are six broadleaves in ten
+    by count, three by what shows over the 25 m white pines), blended in over the region's own mix
+    (`farWoods`, props.ts's scan read analytically) as the first few hundred come in (`blendWoods`).
+    Drawn as **stands** (~44 m, a warped grid: broadleaves or not, a hue, a number s, as a far crown
+    has) inside **groves** (~220 m: their own share of broadleaves ±0.3, a lead hue taking half the
+    mix, turning ±0.08 of the season apart — a cove of tulip trees gold, a ridge of oaks rust, a north
+    slope's hemlocks dark), faded by the pixel's footprint (`dFdx`, before any branch) to the grove's
+    mean past ~3 px a stand and to the region's mean (`woodsMean`: each hue's share past its onset,
+    fallOnset being linear in s) past ~2 px a grove — never a speckle. Fall colours far off at
+    `FAR_FALL` 0.75 of a crown's; a bare wood `FAR_BARE` (grey-brown twigs over the litter); its snow
+    held as its make-up holds it (an evergreen's crowns 0.45, a bare wood's floor 0.9, greyed by its
+    twigs) — the canopy took snow as a lawn did, white fields where the spruce stood.
+  - **The woods' floor** once the leaves are down (`ground.ts` `vWoods`: the share of woods round each
+    ground point — a detail cell's ground carries it, `realExtras(…, woods)` off the cell's cover where
+    it has a wood, as does a baked slice chunk with one; a far cell's is its canopy): the leaf litter
+    (`WOODS_LITTER`, as light as the summer olive) by `uWoods.x × uLeafFall` — a wood near the walker
+    reads brown and grey through the winter as the far woods do, never green with sticks in it.
+  - All of it only while the woods are turning or bare (`woodsTurning()`: `uTurn` or `uLeafFall` > 0) —
+    a summer frame is the same to the pixel — and `timeParams.farSeason` (the developer settings'
+    "far forests follow the season"; `?farseason=0`) puts the summer green back, for comparing.
+    `tests/farWoods.test.ts`.
   - Every tree's bark a shade of its own (its number from where it stands), far and near.
   - The leaf pictures (`flora.ts PIC_SHAPE`): 0–1 small leaves, 2–3 large, 4–7 needle tufts, 8–9
     scale-leaf sprays, 10–11 maple hands, 12–13 sweetgum stars, 14–15 tulip-tree leaves, 16–17
