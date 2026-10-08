@@ -15,9 +15,9 @@ import { makeCanvas } from './canvas';
 import { pointInRing, ringTester } from './realTile';
 import { activeStyle, castOf, pickWeighted, westside as isWestside } from './styles';
 import { hangerLib, hangerMix, HANGERS, HANG_TONES, type HangerType } from '../assets/hangers';
-import { meanTemp } from './season';
+import { meanTemp, seasonAt, dayOfYear } from './season';
 import { caFogBelt, caRedwoodBelt } from './ecoregions';
-import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, broadMix, coniferMix, aspenShare, willowThickets, snagShare, NEEDLED, plantLib, inBloom, SPECIES, STAGES, fallHueOf, DECIDUOUS, BLOSSOM_OF, MOTION_OF, bankMix, redcedarShare, rosebayShare, understoryTrees, SMALL_TREE, treeHeight4, southPineForm, swampMix, swampForm, manzanitaShare, westForm, sequoiaBand, SEQUOIA_GROVE, redwoodCountry, desertMix, desertTrees, STIFF, palmMix, palmettoShare, kudzuShare, type PlantSpecies, type TreeKind } from '../assets/flora';
+import { TREE_KINDS, TREE_VARIANTS, treeLib, treeMeta, plantMix, plantNow, vergeShare, vergeHeight, desertCover, broadMix, coniferMix, aspenShare, willowThickets, snagShare, NEEDLED, plantLib, inBloom, SPECIES, STAGES, fallHueOf, DECIDUOUS, BLOSSOM_OF, MOTION_OF, bankMix, redcedarShare, rosebayShare, understoryTrees, SMALL_TREE, treeHeight4, southPineForm, swampMix, swampForm, manzanitaShare, westForm, sequoiaBand, SEQUOIA_GROVE, redwoodCountry, desertMix, desertTrees, STIFF, palmMix, palmettoShare, kudzuShare, type PlantSpecies, type TreeKind } from '../assets/flora';
 import { MAILBOXES, mailboxLib, beachLib, gearFor, type MailboxStyle, type CarGear } from '../assets/furniture';
 import { variantAt, hashf } from '../assets/core';
 import { cafeSet, mergeDecor } from '../assets/decor';
@@ -415,7 +415,7 @@ export function urbanCore(buildings: { r: number[]; h: number; pt?: 1; lf?: numb
   return (x: number, z: number) => { const [cover, h] = f(x, z); return cover > 0.3 && h > 16; };
 }
 
-export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P; w: number; gen?: 'slip' | 'dock' }[], extras: { mailboxes?: Mailbox[]; drives?: Drive[]; doors?: Door[]; ctx?: WorldJson; box?: Box; hood?: (x: number, z: number) => HoodClass; berths?: Berth[] } = {}) {
+export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P; w: number; gen?: 'slip' | 'dock' }[], extras: { mailboxes?: Mailbox[]; drives?: Drive[]; doors?: Door[]; walks?: number[]; ctx?: WorldJson; box?: Box; hood?: (x: number, z: number) => HoodClass; berths?: Berth[] } = {}) {
   const hoodAt = extras.hood ?? (() => 'suburb' as HoodClass);
   const { json, terrain } = world;
   const S = json.slice; // region slice: lamp-map compositor box
@@ -931,14 +931,17 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     // palms by climate: the tropics' (coconut, and South Florida's royal, cabbage and queen palms), and the
     // dry coasts' and the warm deserts' planted fan, queen and Canary palms — where the winter lets them
     if (tropical && u < 0.75) return pickOf(PALMS_T, u / 0.75);
-    if (aridCoast && u < 0.4 && palmsGrow(x, z)) return pickOf(PALMS_D, u / 0.4);
+    // (planted: where people live — a town's 80 m block a hundredth or more under roofs — never out in the wild
+    // desert or the dry hills, where a measured crown is a palo verde's or an oak's: Saguaro's Cactus Forest
+    // Drive grew a fan palm)
+    if (aridCoast && u < 0.4 && palmsGrow(x, z) && built(x, z)[0] >= 0.01) return pickOf(PALMS_D, u / 0.4);
     // the desert's own shade trees: mesquite and palo verde (a few fan palms in town) — and down a wash or
     // by a river, its gallery of Fremont cottonwoods and willows
     if (desert && terrain.sdfAt(x, z) < 40 && terrain.oceanDistAt(x, z) > 250 && hashf(Math.floor(x * 2.3) * 7919 + Math.floor(z * 1.7) * 104729 + 271) < 0.55) return BANK[pickWeighted(BANK.map(([, w]) => w), hashf(Math.floor(x * 1.3) * 104729 + Math.floor(z * 3.3) * 7919 + 277))][0];
     // (the desert's own trees: the Mojave's Joshua trees, Arizona's saguaros, the piñon-juniper in its band;
     // the Great Basin's towns grow the region's planted shade trees, never mesquite)
     if (desert && u >= 0.14) { const d = dryTree(x, z, h); if (d >= 0) return d; }
-    if (desert && cast0.eco !== 'great-basin') return u < 0.14 && palmsGrow(x, z) ? 8 : 7;
+    if (desert && cast0.eco !== 'great-basin') return u < 0.14 && palmsGrow(x, z) && built(x, z)[0] >= 0.01 ? 8 : 7;
     if (birchy && k === 0 && u < 0.35) return 6;
     return broad(k, x, z, ratio, h);
   };
@@ -973,6 +976,32 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
     const I = Math.floor(((x - TB.x0) / (TB.x1 - TB.x0)) * 16), J = Math.floor(((z - TB.z0) / (TB.z1 - TB.z0)) * 16);
     return I >= 0 && J >= 0 && I < 16 && J < 16 && LC[J * 16 + I] === 1;
   };
+  // (a scan point jittered past the box's east or south edge — up to a 9 m cell out — is its edge block's:
+  // where the survey covers that block, no procedural tree there either; it was a strip of the scan's
+  // trees along every surveyed cell's edge, the desert floor's saguaros among them)
+  const edgeCovered = (x: number, z: number) => {
+    if (!LC || !TB) return false;
+    const I = Math.min(15, Math.max(0, Math.floor(((x - TB.x0) / (TB.x1 - TB.x0)) * 16))), J = Math.min(15, Math.max(0, Math.floor(((z - TB.z0) / (TB.z1 - TB.z0)) * 16)));
+    return LC[J * 16 + I] === 1;
+  };
+  // Under the survey: its crowns are the trees from 2.5 m up (lidarCore detectTrees) — the dry country's
+  // floor below that height is still the scan's: the creosote, the prickly pear and the cholla between
+  // Saguaro's measured saguaros and palo verdes (3% of the view where the photo's scrub is 21%), the
+  // sagebrush sea. Only what the survey can't have seen (kinds whose tallest is ~3 m, grown under 2.4 m),
+  // and by position hashes alone (the scan's random sequence stays as it was).
+  const LOW = (k: TreeKind) => (SMALL_TREE[k] ?? Infinity) <= 3.2;
+  const surveyFloor = (x: number, z: number) => {
+    const mc = mapCover(x, z), cov = mc || terrain.coverAt(x, z);
+    if (!(cov === 30 || cov === 20 || cov === 60) || !(mc === 0 || mc === 20) || terrain.oceanDistAt(x, z) < 90 || built(x, z)[0] >= 0.03) return;
+    const g = terrain.heightAt(x, z), lat = latAt(x, z);
+    if (hashf(Math.floor(x * 2.7) * 7919 + Math.floor(z * 3.3) * 104729 + 521) >= desertCover(cast0, g, lat)) return;
+    const m = desertMix(cast0, g, lat).filter(([k]) => k !== 'shrub' && LOW(k));
+    if (!m.length || terrain.sdfAt(x, z) < 3 || paved(x, z) || walk.blocked(x, z, 2.2) || onStructure(x, z)) return;
+    const k = pickOf(m, hashf(Math.floor(x * 3.7) * 7919 + Math.floor(z * 2.9) * 104729 + 307));
+    const hu = hashf(Math.floor(x * 1.9) * 104729 + Math.floor(z * 2.3) * 7919 + 523), v = variantAt(x, z, TREE_VARIANTS, 11);
+    const s = Math.min(2.4, treeHeight4(TREE_KINDS[k], v, hu, false)) / treeMeta(TREE_KINDS[k], v).h, w = 0.85 + 0.3 * hashf(Math.floor(x * 4.1) * 7919 + Math.floor(z * 1.7) * 104729 + 527);
+    trees.push({ m: new THREE.Matrix4().compose(V(x, g - 0.2, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), hu * 40), V(s * w, s, s * w)), c: new THREE.Color(green[Math.floor(hu * 997) % green.length]), k, v });
+  };
   for (let z = zone.z0; z < zone.z1; z += G)
     for (let x = zone.x0; x < zone.x1; x += G) {
       // Only cells this tile owns — the scan zones of adjacent tiles overlap the margin, and
@@ -980,13 +1009,20 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       // terrain lookups the old S±250 zone spent on cells owned by neighbours.
       if (extras.box && (x < extras.box.x0 || x >= extras.box.x1 || z < extras.box.z0 || z >= extras.box.z1)) continue;
       const jx = x + rng.float() * G, jz = z + rng.float() * G;
-      if (lidarCovered(jx, jz)) continue;
+      if (lidarCovered(jx, jz)) { if (desert) surveyFloor(jx, jz); continue; }
       const cov = mapCover(jx, jz) || terrain.coverAt(jx, jz); // (the map's own woods first)
       const beachy = terrain.oceanDistAt(jx, jz) < 90;
       const pr = cov === 10 ? 0.85 : beachy ? 0 : cov === 50 ? 0.035 : cov === 30 ? 0.05 : cov === 20 ? 0.3 : 0;
       // (estate country is old trees round big lawns; an old grid's street trees are mature too)
       const hk = cov === 10 || beachy ? 'suburb' : hoodAt(jx, jz), canopy = hk === 'estate' ? 3.2 : hk === 'grid' ? 1.2 : 1;
-      if (rng.float() > pr * look.treeDensity * canopy) continue;
+      // (the dry country's own floor where the map draws nothing — or its scrub — and nothing's built:
+      // flora.ts desertCover, not the arid towns' sparse planting)
+      let chance = pr * look.treeDensity * canopy;
+      if (desert && !beachy && (cov === 30 || cov === 20 || cov === 60)) {
+        const mc = mapCover(jx, jz);
+        if ((mc === 0 || mc === 20) && built(jx, jz)[0] < 0.03) chance = Math.max(chance, desertCover(cast0, terrain.heightAt(jx, jz), latAt(jx, jz)));
+      }
+      if (rng.float() > chance) continue;
       if (terrain.sdfAt(jx, jz) < 3 || paved(jx, jz) || walk.blocked(jx, jz, 2.2) || onStructure(jx, jz)) continue;
       const g = terrain.heightAt(jx, jz);
       // species from the region's weights; coastal cells lean to wind-shaped pines everywhere
@@ -1058,6 +1094,8 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       const c = new THREE.Color(rng.pick(green));
       if (k === 4) c.lerp(new THREE.Color(0x2e4630), 0.55); // spruces run dark
       else if (rng.float() < 0.12 && DECIDUOUS.has(TREE_KINDS[k])) c.lerp(new THREE.Color(0xb59a3e), 0.45); // first hints of autumn (on the trees that turn: never a pine, a live oak, a magnolia)
+      // (dropped only now, its draws all made: the scan's random sequence stays as it was)
+      if (edgeCovered(jx, jz)) { if (desert) surveyFloor(jx, jz); continue; }
       trees.push({ m, c, k, v });
     }
   // The map's own species (natural=tree + genus / species / taxon, realTile treeKindOf): a mapped
@@ -1250,6 +1288,100 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
             if (!walk.blocked(bx2, bz2, 0.4) && !lanesAt(bx2, bz2, 0.4) && walk.deckAt(bx2, bz2) === null) { bins.push(new THREE.Matrix4().makeTranslation(bx2, terrain.heightAt(bx2, bz2), bz2)); walk.addLoop([[bx2 - 0.3, bz2 - 0.3], [bx2 + 0.3, bz2 - 0.3], [bx2 + 0.3, bz2 + 0.3], [bx2 - 0.3, bz2 + 0.3]], -Infinity, terrain.heightAt(bx2, bz2) + 0.9); }
           }
         }
+      }
+    }
+  }
+  // Verge trees (the flora review, 2026-10-07): a residential street's own trees where nothing measured
+  // them — no LiDAR survey here, and the map's few. A street that fronts homes (three house-sized
+  // footprints within 40 m of the slot, and fewer big ones than houses: a warehouse road, a strip's car
+  // parks and a downtown's blocks plant none — San Antonio's industrial road grew a row). The
+  // procedural floor under the data: a slot every
+  // ~11 m along each side, on the verge past the paved band where the survey's street trees stand, a tree
+  // in it as often as the region's towns grow them and the neighbourhood keeps them (flora.ts vergeShare:
+  // Durham's old grid under its willow oaks — 2% vegetation where the photo has 57% — a new tract's few
+  // young ones, a desert town's next to none); never in a dense core (its pits, above), a drive's or a front
+  // walk's way, a junction's mouth, a lane, a deck, a wood (the scan's), the sea's front (within 90 m of
+  // the open sea, where the scan plants none: the salt spray's), nor within 6 m of a tree already
+  // standing. Each tile plants its own ground from every street its context sees, the slots measured
+  // along each street's own segments, so a street crossing the seam is lined the same on both sides of it.
+  // (Hashes of the place only: the props' random sequence stays as it was.)
+  {
+    const C6 = 6, near = new Map<number, number[]>();
+    const ck = (i: number, j: number) => i * 92821 + j;
+    const addNear = (x: number, z: number) => { const k = ck(Math.floor(x / C6), Math.floor(z / C6)), a = near.get(k); if (a) a.push(x, z); else near.set(k, [x, z]); };
+    for (const t of trees) addNear(t.m.elements[12], t.m.elements[14]);
+    const crowded = (x: number, z: number) => {
+      const i0 = Math.floor(x / C6), j0 = Math.floor(z / C6);
+      for (let i = i0 - 1; i <= i0 + 1; i++)
+        for (let j = j0 - 1; j <= j0 + 1; j++) {
+          const a = near.get(ck(i, j));
+          if (a) for (let q = 0; q < a.length; q += 2) if (Math.hypot(a[q] - x, a[q + 1] - z) < 6) return true;
+        }
+      return false;
+    };
+    // the homes and the big footprints round a slot (house-sized: 40–400 m², hood.ts's homes), by 32 m
+    const homes = new Map<number, number[]>();
+    for (const b of ctxJson.buildings) {
+      if (b.lod || b.r.length < 6) continue;
+      let a = 0, cx = 0, cz = 0;
+      const n = b.r.length / 2;
+      for (let i = 0, j = b.r.length - 2; i + 1 < b.r.length; j = i, i += 2) (a += (b.r[j] / 10) * (b.r[i + 1] / 10) - (b.r[i] / 10) * (b.r[j + 1] / 10)), (cx += b.r[i] / 10), (cz += b.r[i + 1] / 10);
+      a = Math.abs(a / 2);
+      const home = b.k === 'house' && a >= 40 && a <= 400, big = b.k === 'large' || b.k === 'commercial' || a > 700;
+      if (!home && !big) continue;
+      const k = ck(Math.floor(cx / n / 32), Math.floor(cz / n / 32)), l = homes.get(k);
+      if (l) l.push(cx / n, cz / n, home ? 1 : 0);
+      else homes.set(k, [cx / n, cz / n, home ? 1 : 0]);
+    }
+    const frontsHomes = (x: number, z: number) => {
+      let h = 0, g = 0;
+      for (let i = Math.floor(x / 32) - 1; i <= Math.floor(x / 32) + 1; i++)
+        for (let j = Math.floor(z / 32) - 1; j <= Math.floor(z / 32) + 1; j++) {
+          const l = homes.get(ck(i, j));
+          if (l) for (let p = 0; p < l.length; p += 3) if (Math.hypot(l[p] - x, l[p + 1] - z) < 40) { if (l[p + 2]) h++; else g++; }
+        }
+      return h >= 3 && g < h;
+    };
+    // the front walks and the drives (buildings.ts: x0 z0 x1 z1 width), bucketed by 16 m
+    const WK = extras.walks ?? [], wcell = new Map<number, number[]>();
+    for (let i = 0; i + 4 < WK.length; i += 5)
+      for (let a = Math.floor((Math.min(WK[i], WK[i + 2]) - 4) / 16); a <= Math.floor((Math.max(WK[i], WK[i + 2]) + 4) / 16); a++)
+        for (let b = Math.floor((Math.min(WK[i + 1], WK[i + 3]) - 4) / 16); b <= Math.floor((Math.max(WK[i + 1], WK[i + 3]) + 4) / 16); b++) {
+          const l = wcell.get(ck(a, b));
+          if (l) l.push(i);
+          else wcell.set(ck(a, b), [i]);
+        }
+    const onWay = (x: number, z: number) => {
+      for (const i of wcell.get(ck(Math.floor(x / 16), Math.floor(z / 16))) ?? []) {
+        const ax = WK[i], az = WK[i + 1], dx = WK[i + 2] - ax, dz = WK[i + 3] - az, L2 = dx * dx + dz * dz || 1;
+        const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
+        if (Math.hypot(x - ax - dx * t, z - az - dz * t) < WK[i + 4] / 2 + 1.3) return true;
+      }
+      return false;
+    };
+    for (const r of ctxJson.roads) {
+      const rank = RANK[r.c] ?? 0;
+      if (r.lod || r.br || r.tu || rank < 2) continue;
+      const p = unpackPts(r.p);
+      for (let i = 0; i + 1 < p.length; i++) {
+        const [ax, az] = p[i], [bx, bz] = p[i + 1], L = Math.hypot(bx - ax, bz - az);
+        if (L < 14) continue;
+        const tx = (bx - ax) / L, tz = (bz - az) / L, nx = -tz, nz = tx;
+        for (let t = 7; t < L - 7; t += 11)
+          for (const sd of [1, -1]) {
+            const cx = ax + tx * t, cz = az + tz * t, out = r.w / 2 + 2.8 + hashf(Math.floor(cx * 2.3) * 7919 + Math.floor(cz * 1.9) * 104729 + sd * 13) * 0.8;
+            const x = cx + nx * sd * out, z = cz + nz * sd * out;
+            if (!ownGround(x, z) || !inSlice(x, z)) continue;
+            const hood = hoodAt(x, z), hq = hashf(Math.floor(x * 3.1) * 7919 + Math.floor(z * 2.3) * 104729 + 401);
+            if (hq >= vergeShare(cast0, hood) || urban(x, z) || lidarCovered(x, z) || mapCover(x, z) === 10 || terrain.oceanDistAt(x, z) < 90 || !frontsHomes(x, z)) continue;
+            if (paved(x, z) || walk.blocked(x, z, 1.2) || onStructure(x, z) || terrain.sdfAt(x, z) < 2 || lanesAt(x, z, 1.5) || walk.deckAt(x, z) !== null || onWay(x, z) || crowded(x, z)) continue;
+            const hu = hashf(Math.floor(x * 1.7) * 104729 + Math.floor(z * 2.9) * 7919 + 409), h = vergeHeight(hood, hu);
+            const k = regional(hashf(Math.floor(x * 2.9) * 104729 + Math.floor(z * 1.3) * 7919 + 419) < 0.3 ? 1 : 0, x, z, 0, h);
+            const v = k === MAPLE ? variantAt(x, z, 2, 11) : variantAt(x, z, TREE_VARIANTS, 11); // (the bigleaf maple's the westside's woods', not a street's)
+            const sc = (smallMax(k) < Infinity ? treeHeight4(TREE_KINDS[k], v, hu, false) : h) / treeMeta(TREE_KINDS[k], v).h;
+            trees.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z) - 0.15, z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), hu * 40), V(sc * 0.9, sc, sc * 0.9)), c: new THREE.Color(green[Math.floor(hq * 997) % green.length]), k, v });
+            addNear(x, z);
+          }
       }
     }
   }
@@ -2735,16 +2867,24 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
   // ---------- gardens: foundation beds along the house fronts (assets/flora.ts) ----------
   // Species from the region's garden mix; in bloom when the real calendar says so (seasons flip
   // south of the equator). A house plants one or two species, a few of each either side of the
-  // door, on open (unpaved, unblocked) ground only — storefronts on sidewalks get none.
+  // door, on open (unpaved, unblocked) ground only — storefronts on sidewalks get none. Each through
+  // its year by the place's season (flora.ts plantNow): a northern January's beds are the boxwood and
+  // the rhododendron, the hydrangea's bare twigs and dried heads — the hostas and daylilies back under
+  // the ground, the sunflowers not sown till May.
   const month = worldDate().getUTCMonth() + 1, south = json.origin.lat < 0; // (the world's day: ?date=)
   const gardenMix = plantMix(look.climate, look.eco);
+  const gcx = (zone.x0 + zone.x1) / 2, gcz = (zone.z0 + zone.z1) / 2;
+  const gSeason = seasonAt(...toLatLon(json.origin, gcx, gcz), Math.max(0, terrain.heightAt(gcx, gcz) || 0), dayOfYear(worldDate().getTime()));
+  const DRIED = new THREE.Color(0x8a6e48);
   const beds = new Map<string, { m: THREE.Matrix4; c: THREE.Color }[]>();
-  const bed = (sp: PlantSpecies, v: number, x: number, z: number, yaw: number, s: number) => {
-    const bloom = inBloom(sp, month, south);
-    const key = `${sp}|${v}|${bloom ? 1 : 0}`;
+  const bed = (sp: PlantSpecies, v: number, x: number, z: number, yaw: number, s0: number) => {
+    const now = plantNow(sp, gSeason);
+    if (!now) return;
+    const s = s0 * now.size, bloom = now.brown < 0.3 && inBloom(sp, month, south), fall = now.brown > 0.5 && !!SPECIES[sp].fall;
+    const key = `${sp}|${v}|${bloom ? 1 : 0}|${fall ? 1 : 0}`;
     if (!beds.has(key)) beds.set(key, []);
-    beds.get(key)!.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(s, s * (0.9 + hashf(Math.floor(x * 13)) * 0.2), s)), c: new THREE.Color(rng.pick(green)).lerp(new THREE.Color(0x6f9a48), 0.25) });
-    if (SPECIES[sp].h >= 1) walk.addLoop([[x - 0.3, z - 0.3], [x + 0.3, z - 0.3], [x + 0.3, z + 0.3], [x - 0.3, z + 0.3]], -Infinity, terrain.heightAt(x, z) + SPECIES[sp].h * s);
+    beds.get(key)!.push({ m: new THREE.Matrix4().compose(V(x, terrain.heightAt(x, z), z), new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), yaw), V(s, s * (0.9 + hashf(Math.floor(x * 13)) * 0.2), s)), c: new THREE.Color(rng.pick(green)).lerp(new THREE.Color(0x6f9a48), 0.25).lerp(DRIED, 0.85 * now.brown) });
+    if (SPECIES[sp].h * s >= 1) walk.addLoop([[x - 0.3, z - 0.3], [x + 0.3, z - 0.3], [x + 0.3, z + 0.3], [x - 0.3, z + 0.3]], -Infinity, terrain.heightAt(x, z) + SPECIES[sp].h * s);
   };
   for (const d of extras.doors ?? []) {
     const h0 = hashf(Math.floor(d.wx * 13) * 7919 + Math.floor(d.wz * 11));
@@ -2763,9 +2903,9 @@ export function buildProps(world: World, walk: WalkWorld, pierSegs: { a: P; b: P
       }
   }
   for (const [key, list] of beds) {
-    const [sp, v, bl] = key.split('|');
+    const [sp, v, bl, fa] = key.split('|');
     const stage = bl === '1' ? STAGES - 1 : STAGES - 2;
-    const im = new THREE.InstancedMesh(plantLib(sp as PlantSpecies, +v, stage, bl === '1', true).clone(), propMaterial({ wind: true }), list.length);
+    const im = new THREE.InstancedMesh(plantLib(sp as PlantSpecies, +v, stage, bl === '1', true, fa === '1').clone(), propMaterial({ wind: true }), list.length);
     im.name = `garden:${sp}`;
     list.forEach((q, i) => { im.setMatrixAt(i, q.m); im.setColorAt(i, q.c); });
     im.layers.enable(1);

@@ -149,7 +149,7 @@ describe('the mammals on the existing bases', () => {
     list(c4).push(animal('deer', 0, 30, { t: 30 }), animal('deer', 0, -30, { t: 30 }));
     c4.update(0.05, 0, 0, env({ hour: 23, night: 0.9, camFwd: new THREE.Vector3(0, -1, 0) }));
     expect(mesh(c4, 'deer').m.count).toBe(2);
-  });
+  }, 30000); // (a cast stepped for seconds: under the full suite's load — a comparison run beside it — past 5 s)
   it("the signs: a beaver's lodge out in a pond, never the sea; a prairie dog town's mounds only in the town, the same however the land is tiled", () => {
     const sdf = (x: number, z: number) => z - 40 * Math.sin(x / 150), h = (x: number, z: number) => (sdf(x, z) > 0 ? 0.5 : -1.2);
     const lodges = beaverLodges({ x0: 0, z0: -2700, x1: 5400, z1: 2700 }, sdf, () => 5000, h);

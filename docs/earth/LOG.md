@@ -2,6 +2,107 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-07 (last) — The flora review: each plant in its season, on its ground, in its numbers; rural roads their own width
+
+The ecosystem review's "next — plants" (`regional-flora`, in progress): the green spots measured by region,
+then every flora layer read through for its season, its ground, its numbers and its range, as the animals
+were the day before. What changed:
+
+- **Seasons.**
+  - **The mild winter's leaf fall** (season.ts `leafFall`): where the January mean at the ground's height
+    is over 5 °C (the Gulf, Florida, Texas, the low deserts, California), the short days strip the
+    broadleaves too — under 11.6 h while the lagged mean's under 16 °C. A Houston sweetgum, an Orlando
+    cypress, a Sacramento sycamore and Phoenix's ashes were in leaf all winter (the mean never falls under
+    10 °C): now bare by Christmas, leafing out in late February, in leaf by April. The tropics never drop;
+    the North's timing is as it was (New York in leaf through October, Seattle into November).
+  - **The lawns' winter** (season.ts `dormant`, riding `U.uHay` and the ground's straw wash `uBiome.x`):
+    the hot-summer South's and the low deserts' warm-season grass straw-tan under ~14 °C (Dallas's and Las
+    Vegas's January lawns all straw, Atlanta's six parts in ten, Houston's and Orlando's half), green again
+    in April; the North's cool-season lawns dulled to 0.4 in a snowless cold spell (New York's January
+    0.27); San Francisco's, Seattle's and Miami's green. Sea Bright in January: the verge's summer-green
+    tufts now a winter olive.
+  - **The gardens' year** (flora.ts `PlantLife`, `plantNow`): evergreen (boxwood, rhododendron, azalea,
+    lavender, agave, hibiscus), shrub (hydrangea, rose: bare twigs and dried heads in a hard winter, beach
+    grass gone to straw), perennial (daylily, hosta, coneflower, the ferns: up in April, dying back in
+    November, gone under the ground), annual (the sunflower: sown at 13 °C, a dead stalk in October). The
+    beds ran on bloom months alone: a full green hosta in a Vermont January.
+  - **The forest floor's ferns by the same season** (understory.ts `season`, set with the uniforms): up in
+    the spring, tawny or copper in the fall, gone where the broadleaves are bare.
+- **A bug on the way: the generic fern was white.** Its leaf was TINT (an instance colour paints it in a
+  garden), but a floor cell is a merged mesh with no instance colour — every eastern, southern and Florida
+  wood's ferns drew white. It has its own green now (and every floor plant must: floraBalance.test.ts).
+- **Numbers.**
+  - **Street trees on residential verges where nothing measured them** (props.ts verge trees,
+    flora.ts `vergeShare`, `vergeHeight`): no LiDAR record and few mapped trees left a leafy street with
+    the tree scan's 5% — Durham's Trinity Park showed 2% vegetation where its photo shows 57% (no survey
+    record, seven mapped trees in its square kilometre). A slot every ~11 m a side, past the paved band,
+    planted as often as the region's towns grow street trees (the USFS's urban canopy: the Southeast 0.6
+    … the desert 0.1) and the neighbourhood keeps them (an old grid ×1.25, a tract ×0.5); only along a street
+    that fronts homes (three house-sized footprints within 40 m, fewer big ones — San Antonio's industrial
+    road had grown a row), never in a dense core, a drive's or a front walk's way, a junction's mouth, a
+    wood, within 90 m of the sea, or 6 m from a tree already standing.
+  - **The dry country's own floor** (flora.ts `desertCover`): a streamed cell's DEM ground is "grassland"
+    everywhere, and an arid place's density 0.22 left one plant a hectare in the open Sonoran. Open, unbuilt
+    land the map draws nothing on now grows desertMix's plants at the region's cover (the Sonoran upland
+    0.6 of the 9 m cells, the sagebrush sea 0.65, the Mojave's creosote flats 0.25); an arid town keeps its
+    sparse planting. **Under the survey too**: LiDAR finds crowns from 2.5 m, so where it covers a cell the
+    scan was skipped and the desert's low floor vanished exactly where the survey is best (Saguaro's cells:
+    3–5 thousand measured crowns, no prickly pear) — now `surveyFloor` grows only the kinds it can't have
+    seen, under 2.4 m, by position hashes.
+  - **A strip of the scan along every surveyed tile's edge**: scan points jittered up to 9 m past the east
+    and south edges fell outside the coverage lookup and got the full scan (`edgeCovered`: now their edge
+    block's — dropped after their draws, so the scan's random sequence stays).
+  - **Planted palms only where people live** (an 80 m block a hundredth under roofs): a measured crown out
+    in Saguaro's wild desert had become a fan palm.
+- **Streets, found on the way** (Robby: the streets must work):
+  - **Rural roads their own width** (kerbside.ts `fitToFronts`, open country): the tile service gives every
+    untagged North American residential, unclassified, tertiary and secondary road a parked lane at each
+    kerb, so every rural road through desert, woods and fields was 4.4 m too wide (Cactus Forest Drive, a
+    one-way scenic loop, 10.4 m; its scrub 9 m off its middle where the photo has it at the asphalt). A
+    stretch of 60 m or more with fewer than four buildings within 50 m is drawn at its travel width,
+    NO_PARK; a village keeps its parked lanes; two farmhouses don't make a town.
+  - **Survey-found blocks in a street** (bridges.ts `dropStreetCrossers`): a block the LiDAR found where
+    the map has none, that a car street's centre line runs through for 3 m or its lanes for 8, is gone — a
+    canopy, a truck, a flat crown. Tucson's West Pennington Street had three found "houses" in its lanes; a
+    playtest car stopped dead against one (on the old code too: the check had never sampled that stretch).
+- **The measuring** (tools/real-compare.mjs; docs/agent/debugging.md): a dash camera's lens (its own car in
+  the segmentation) that the GPS put in a parking lane, on a verge or in the woods beside the road (to the
+  half-width + 16 m) is moved into the lane of the street, never a lot's aisle; the game's parked cars
+  within 3 m of the lens are left out. The class pass draws crowns whole, so a season never shows in its
+  shares; moving cars make a few points of score noise.
+
+**Measured** — the 40 green spots, `real-compare --kind=green --group=region`, the baseline on the old
+game with the new lens (`flora-0b`) against everything (`flora-2`): vegetation 23.9% → 24.6% (the photos
+34.6%), mean score 0.719 → 0.725. Traverse City 0.761 → 0.939 (vegetation 30% → 48%), Lake Placid 0.814 →
+0.884, Saratoga Springs 0.798 → 0.825, Princeton 0.726 → 0.746, Saguaro 0.732 → 0.756; Austin's Hyde Park
+0.536 → 0.716 (its lens off the roof it stood on, into the street); Bend 0.646 → 0.416 (its lens among a car
+park's cars by the street — 27% cars before, 58% now: an outlier). Most spots sit in surveyed cells, where
+the verge trees don't go, and Durham's lens stands at a school's frontage, not a home's.
+The downtowns not over-planted — the largest city of twelve states, old code against new (`flora-0-largest`,
+`flora-2-largest`, 11 scored): vegetation 7.6% → 7.6%, mean score 0.734 → 0.742 (Chicago 10.1% → 12.1% and
+Minneapolis 2.9% → 4.5% against photos of 7.4% and 2.8%; Houston 13.6% → 16.8% against 32.4%).
+**Verified:** typecheck; `npm test` 1052/1052 — tests/floraBalance.test.ts (new: the mild winter's leaf
+fall; the lawns' winter by city; the gardens' year; every floor plant its own green; verge trees in Durham
+and not Phoenix, none on a surveyed street; the Sonoran's floor thick, a desert town's sparse, a wet
+country's unchanged, the floor under the survey only under 2.5 m, no palm in the wild desert),
+tests/roadsClear.test.ts (open country's parking given back, a village's kept, settled; found blocks in a
+street gone, the map's own kept; the shop-front test's street given a town to stand in). Playtests, old
+code against new: Asheville's `roads` 0.78 → 0.84 hits a thousand lane samples (the same within noise),
+Tucson's West Pennington 28 → 0; the `drive` check fails in Asheville and Tucson on the old code too
+(stalled against walls). Frames on a phone's budget (`playtest --only=frames --budget=phone`): Saguaro's
+desert floor 59.5 fps, p95 16.7 ms; Durham's verge trees cost its frame's work 10.9 → 11.4 ms at p50 (old code
+against new, twice), its hitches the same. Montages: Sea Bright in October unchanged (its streets surveyed, its roads never
+guessed parking), in January the verge's grass a winter olive; `shots/spots-flora-*.jpg`: Durham's
+streets lined, San Antonio's industrial road bare, Saguaro's scrub in the middle distance.
+
+**Next:** the near desert floor is still thin (a plant a 9 m cell — Saguaro's real upland is several to a
+metre square; three times a forest's instances to match it); farmland can't be told from the open desert
+in a streamed cell (the tile carries no farmland: the Snake River Plain's fields would grow sage — the
+next tile bump should carry `landuse=farmland`, as fields.ts wants too); the drive check's stalls in
+Asheville and Tucson (walls: North Meyer Avenue's low pieces in its lanes); Bend's lens; the shrub layer
+under the survey outside the desert (the flatwoods' saw palmetto, a creek's willow thicket); the NLCD
+canopy layer for the forests nothing maps (Longmire, NY-73) still waits on Robby.
+
 ## 2026-10-07 (later) — Tiles v26: the street fixes at the source, mapped trees by species, colours in either spelling
 
 Robby gave the go-ahead for the tile service's redeploy and its cache bump. Into v26 with today's osmToTile

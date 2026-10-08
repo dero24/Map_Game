@@ -113,7 +113,7 @@ const req = createRequire(resolve(ROOT, '../../shot-harness/package.json'));
 const { chromium } = req('playwright');
 const browser = await chromium.launch({ headless: true, args: ['--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--use-angle=d3d11', '--force-color-profile=srgb', '--mute-audio', ...proxyArgs()] });
 
-async function render(s) {
+async function render(s, onCar = false) {
   const img = s.img, aspect = img.w / img.h, W = 1024, Hh = Math.round(W / aspect);
   const zone = TZ.zoneAt(img.lat, img.lon);
   const local = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date(img.captured));
@@ -126,11 +126,11 @@ async function render(s) {
   page.on('pageerror', (e) => errors.push(String(e.message ?? e).slice(0, 200)));
   await page.goto(`http://localhost:${PORT}/?capture=1&at=${img.lat},${img.lon}&date=${date}`, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForFunction('window.__READY__ === true', null, { timeout: 240000 });
-  const out = await page.evaluate(async ({ img, hour, wait }) => {
+  const out = await page.evaluate(async ({ img, hour, wait, onCar }) => {
     const G = window.__GAME__, S = G.stream, T = G.world.terrain;
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // the place's own cells, real (not stand-ins), and the stream at rest
-    const [x, z] = [G.at[0], G.at[1]];
+    let [x, z] = [G.at[0], G.at[1]];
     const key = `${Math.floor(x / 1024)}_${Math.floor(z / 1024)}`;
     const t0 = performance.now();
     for (let i = 0; i < wait; i++) {
@@ -142,6 +142,30 @@ async function render(s) {
       await sleep(1000);
     }
     const cell = S.loaded.get('w' + key) ? (S.loaded.get('w' + key).vec ? 'twin' : 'real') : S.loaded.has(key) ? 'baked' : S.loaded.get('s' + key)?.vec ? 'twin' : 'stand-in';
+    // (a dash camera rides a car in its lane: a lens the photo's GPS — metres off — put in the parking lane,
+    // at the kerb, on the verge or in the woods beside the road goes to the lane of the street it's beside,
+    // on the right of its heading — Savannah's Jones Street stood among its parked cars under a live oak's
+    // limb, the Smokies' Little River Road in the forest 10 m off it, all trunks)
+    let snap = 0;
+    if (onCar) {
+      let best = null;
+      for (const r of S.primRoads ?? []) {
+        // (a street, not a car park's aisle, a drive or an alley: Bend's lens went into a lot's aisle, among its cars)
+        if (r.tu || r.lod || r.br || /^(footway|path|cycleway|steps|pedestrian|track|bridleway|corridor|platform|service)$/.test(r.c)) continue;
+        for (let i = 0; i + 3 < r.p.length; i += 2) {
+          const ax = r.p[i] / 10, az = r.p[i + 1] / 10, dx = r.p[i + 2] / 10 - ax, dz = r.p[i + 3] / 10 - az, L2 = dx * dx + dz * dz || 1;
+          const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2)), qx = ax + dx * t, qz = az + dz * t, d = Math.hypot(x - qx, z - qz);
+          if (!best || d < best.d) best = { d, qx, qz, r };
+        }
+      }
+      if (best && best.d > best.r.w / 2 - 2.4 && best.d < best.r.w / 2 + 16) {
+        const h = (img.heading * Math.PI) / 180, rx = Math.cos(h), rz = Math.sin(h); // (the heading's right: +x east, +z south)
+        const off = best.r.ow ? 0 : Math.min(1.8, best.r.w / 4);
+        const nx = best.qx + rx * off, nz = best.qz + rz * off;
+        snap = Math.round(Math.hypot(nx - x, nz - z) * 10) / 10;
+        [x, z] = [nx, nz];
+      }
+    }
     G.setHour(hour); G.timeParams.speed = 0;
     G.walkParams.fov = img.vfov; // (the lens: the photo's own, vertically — the window is its shape)
     G.walkParams.fly = true;
@@ -159,10 +183,29 @@ async function render(s) {
     if (under && under.top + 1.6 > ground + 2 + lift) lift = under.top + 1.6 - ground;
     if (lift) G.walker.y = ground + lift;
     for (let i = 0; i < 50; i++) await new Promise((r) => requestAnimationFrame(r));
+    // (the photographer's own car — or bike, or feet — stands where the lens is: a car the game parked at
+    // that kerb can't be in the photo, and one the lens stood inside filled a third of the frame — Bend's,
+    // Savannah's Jones Street, Pasadena's, Bozeman's. Parked cars within 3 m of the lens are left out)
+    const THREE = G.THREE, camP = G.camera.getWorldPosition(new THREE.Vector3()), M = new THREE.Matrix4(), P = new THREE.Vector3(), none = new THREE.Matrix4().makeScale(0, 0, 0);
+    let parked = 0;
+    G.scene.getObjectByName('world')?.traverse((o) => {
+      if (!o.isInstancedMesh) return;
+      let chain = '';
+      for (let p = o; p; p = p.parent) chain = `${p.name || ''}/${chain}`;
+      if (!/(parked-cars|kerb-cars)/.test(chain.toLowerCase())) return;
+      let hit = false;
+      for (let i = 0; i < o.count; i++) {
+        o.getMatrixAt(i, M);
+        P.setFromMatrixPosition(M).applyMatrix4(o.matrixWorld);
+        if (Math.hypot(P.x - camP.x, P.z - camP.z) < 3) (o.setMatrixAt(i, none), (hit = true), parked++);
+      }
+      if (hit) o.instanceMatrix.needsUpdate = true;
+    });
+    for (let i = 0; i < 3; i++) await new Promise((r) => requestAnimationFrame(r));
     const { classPass } = await import('/tools/class-pass.js');
     const cls = classPass(G, { W: 256 });
-    return { cell, secs: Math.round((performance.now() - t0) / 1000), water: T.sdfAt(x, z) < 0, cls, lift: Math.round(lift) };
-  }, { img, hour, wait: WAIT });
+    return { cell, secs: Math.round((performance.now() - t0) / 1000), water: T.sdfAt(x, z) < 0, cls, lift: Math.round(lift), parked, snap };
+  }, { img, hour, wait: WAIT, onCar });
   const shot = await page.screenshot({ type: 'jpeg', quality: 85 });
   await ctx.close();
   return { ...out, shot, date, hour: +hour.toFixed(2), errors };
@@ -182,12 +225,13 @@ for (const [st, list] of byState) {
     try {
       const p = await photo(s.img.id);
       const ps = photoShares(p.det, s.img.w, s.img.h);
-      const g = await render(s);
+      // (a dash camera: Mapillary's segmentation sees its own car's bonnet or mount)
+      const g = await render(s, p.det.some((d) => /^void--(ego-vehicle|car-mount)$/.test(d.value)));
       const unfit = s.img.unfit ?? (segmented(ps) ? null : 'not segmented');
       const sc = unfit ? null : score(ps.shares, g.cls);
       run.spots[s.id] = { score: sc, ...(unfit ? { unscored: unfit } : {}), photo: ps.shares, labelled: ps.labelled, game: g.cls, cell: g.cell, water: g.water, date: g.date, hour: g.hour };
       pairs.push({ s, sc, ps, g, photo: p.jpg.toString('base64'), game: g.shot.toString('base64') });
-      log(`${s.id} ${s.town}: score ${sc ?? `n/a (${unfit})`} · cell ${g.cell}${g.lift ? ` · lens ${g.lift} m up (on the roof it stands in)` : ''}${g.water ? ' (WATER under the lens)' : ''} · photo ${JSON.stringify(ps.shares)} · game ${JSON.stringify(g.cls)}${g.errors.length ? ` · ${g.errors.length} page errors` : ''}`);
+      log(`${s.id} ${s.town}: score ${sc ?? `n/a (${unfit})`} · cell ${g.cell}${g.lift ? ` · lens ${g.lift} m up (on the roof it stands in)` : ''}${g.snap ? ` · lens moved ${g.snap} m into the lane` : ''}${g.parked ? ` · ${g.parked} parked car(s) at the lens left out` : ''}${g.water ? ' (WATER under the lens)' : ''} · photo ${JSON.stringify(ps.shares)} · game ${JSON.stringify(g.cls)}${g.errors.length ? ` · ${g.errors.length} page errors` : ''}`);
     } catch (e) { log(`${s.id}: failed — ${e.message}`); run.spots[s.id] = { error: String(e.message).slice(0, 200) }; }
   }
   if (!pairs.length) continue;

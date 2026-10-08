@@ -308,6 +308,9 @@ const PARK_W = [0, 2.2, 4.8];
  *  and none assumed (groundCover.ts laneLayout's default for a wide street, props.ts's cars at a
  *  shop's door). */
 export const NO_PARK = 16;
+/** Open country along a street (fitToFronts): fewer than OPEN_N buildings within OPEN_R m of a sample,
+ *  for OPEN_RUN samples (3 m each) or more in a row — a pair of farmhouses doesn't make a town. */
+const OPEN_R = 50, OPEN_N = 4, OPEN_RUN = 20;
 /** A street's guessed parking given back where its buildings stand (tileBuild.ts). The tile service
  *  widens every untagged street in North America for a parked lane at each kerb (realTile.ts
  *  PARK_DEFAULT: a residential street 10.9 m), and an old town's fronts stand inside that —
@@ -320,10 +323,36 @@ export const NO_PARK = 16;
  *  a lane each way. Only the tile's own ways and what it can see (its box and 40 m round it): a neighbour has
  *  the way whole at its first width and keeps its things off that wider street, which is safe. A
  *  lifted part (an arcade, a skyway), a canopy, a nested or a guessed outline isn't a front.
+ *  And a stretch with nothing built along it — 60 m or more with fewer than four buildings within 50 m:
+ *  a road through the desert, the woods or the fields, a commercial strip's road past its car parks —
+ *  parks no one either, drawn the same way at its travel lanes' width. The guess made every rural road
+ *  4.4 m too wide: Saguaro's one-way Cactus Forest Drive 10.4 m, its prickly pears 9 m off its middle
+ *  where the photo has them at the asphalt's edge.
  *  Returns `roads` itself when nothing changed. */
 export function fitToFronts(roads: Road[], buildings: Building[], box: { x0: number; z0: number; x1: number; z1: number }): Road[] {
   const fit = (r: Road) => r.own !== 0 && !r.br && !r.tu && !r.lod && CARRIAGE.test(r.c);
   if (!roads.some(fit)) return roads;
+  // every building's middle (a lifted part's too: a skyway is the town's), in a 32 m grid — how built up
+  // a way's surroundings are
+  const BC = 32, mids = new Map<number, number[]>();
+  for (const b of buildings) {
+    if (b.in || b.r.length < 6) continue;
+    let cx = 0, cz = 0;
+    const n = b.r.length / 2;
+    for (let i = 0; i < n; i++) (cx += b.r[2 * i] / 10 / n), (cz += b.r[2 * i + 1] / 10 / n);
+    const k = (Math.floor(cx / BC) + 65536) * 131072 + (Math.floor(cz / BC) + 65536), l = mids.get(k);
+    if (l) l.push(cx, cz);
+    else mids.set(k, [cx, cz]);
+  }
+  const builtNear = (x: number, z: number) => {
+    let c = 0;
+    for (let u = Math.floor((x - OPEN_R) / BC); u <= Math.floor((x + OPEN_R) / BC); u++)
+      for (let v = Math.floor((z - OPEN_R) / BC); v <= Math.floor((z + OPEN_R) / BC); v++) {
+        const l = mids.get((u + 65536) * 131072 + (v + 65536));
+        if (l) for (let q = 0; q < l.length; q += 2) if (Math.hypot(l[q] - x, l[q + 1] - z) < OPEN_R && ++c >= OPEN_N) return c;
+      }
+    return c;
+  };
   // the fronts' edges, in an 8 m grid
   const C = 8, grid = new Map<number, number[]>(), E: number[] = [];
   const key = (i: number, j: number) => (i + 65536) * 131072 + (j + 65536);
@@ -337,7 +366,6 @@ export function fitToFronts(roads: Road[], buildings: Building[], box: { x0: num
         for (let v = Math.floor(Math.min(az, bz) / C); v <= Math.floor(Math.max(az, bz) / C); v++) (grid.get(key(u, v)) ?? grid.set(key(u, v), []).get(key(u, v))!).push(id);
     }
   }
-  if (!E.length) return roads;
   const stamp = new Int32Array(E.length / 4);
   let tick = 0;
   // the nearest front along the ray from (x, z) in the unit direction (nx, nz), out to L (else Infinity)
@@ -369,7 +397,7 @@ export function fitToFronts(roads: Road[], buildings: Building[], box: { x0: num
     // (a canyon's street — fronts both sides — no narrower than a lane each way, a one-way's one; never
     // a motorway's or a trunk road's: their lanes are mapped)
     const big = /^(motorway|trunk)/.test(r.c), least = r.ow ? 3.6 : 5.6;
-    const gives = parks && travel < r.w && travel >= 3, canyon = !big && r.w > least;
+    const gives = parks && travel < r.w && travel >= 3, canyon = !big && r.w > least && E.length > 0;
     if (!gives && !canyon) { out.push(r); continue; }
     const n = r.p.length / 2, X = (i: number) => r.p[2 * i] / 10, Z = (i: number) => r.p[2 * i + 1] / 10;
     const cum = [0];
@@ -377,9 +405,9 @@ export function fitToFronts(roads: Road[], buildings: Building[], box: { x0: num
     const total = cum[n - 1], ns = Math.floor(total / S), reach = r.w / 2 + 1.5;
     if (ns < 4) { out.push(r); continue; }
     // each sample's room: the street as it is, its travel lanes where a front stands within 1.5 m past
-    // its kerb (the parking given back), and where fronts stand so both sides of what's left, the room
-    // between them less a 1.5 m sidewalk each side
-    const tight = new Uint8Array(ns), room = new Float32Array(ns).fill(r.w);
+    // its kerb (the parking given back) or where it runs through open country (below), and where fronts
+    // stand so both sides of what's left, the room between them less a 1.5 m sidewalk each side
+    const tight = new Uint8Array(ns), room = new Float32Array(ns).fill(r.w), open = new Uint8Array(ns);
     for (let k = 0, i = 0; k < ns; k++) {
       const s = (k + 0.5) * S;
       while (i < n - 2 && cum[i + 1] < s) i++;
@@ -393,7 +421,17 @@ export function fitToFronts(roads: Road[], buildings: Building[], box: { x0: num
       if (canyon && dl < a / 2 + 1.5 && dr < a / 2 + 1.5) a = Math.max(least, Math.min(a, 2 * (Math.min(dl, dr) - 1.5)));
       room[k] = a;
       if (a < r.w - 0.05) tight[k] = 1;
+      if (gives && builtNear(x, z) < OPEN_N) open[k] = 1;
     }
+    // (the open country's runs: 60 m or more of them parks no one)
+    if (gives)
+      for (let k = 0; k < ns; ) {
+        if (!open[k]) { k++; continue; }
+        let b = k;
+        while (b + 1 < ns && open[b + 1]) b++;
+        if (b - k + 1 >= OPEN_RUN) for (let j = k; j <= b; j++) (room[j] = Math.min(room[j], travel)), (tight[j] = 1);
+        k = b + 1;
+      }
     // the tight stretches: gaps of 6 m or less closed, 12 m or more kept, a sample wider at each end
     // (each stretch as wide as the narrowest fifth of its samples leave room for: a corner jutting out
     // doesn't pinch the street, a row standing in it does)

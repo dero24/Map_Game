@@ -1,13 +1,13 @@
 // The forest floor: a walker-centred field of the region's understory — under the westside
 // Northwest's firs, knee-high fountains of sword fern, thickets of salal and Oregon grape; the East's and
 // the North's ferns, bracken (copper in October, gone in the winter) and cinnamon fern (flora.ts
-// understoryMix) — grown under a wood's canopy only, never under a lone yard tree, on open ground
+// understoryMix; each through its year by the place's season, flora.ts plantNow) — grown under a wood's canopy only, never under a lone yard tree, on open ground
 // (never a road, a path, a building, a deck or water). Like the grass (grass.ts): cells built nearest
 // first, a few a frame, each cell one merged mesh of foundry plants (flora.ts plantGeometry, the
 // world's lite genome); deterministic per position, so a wood looks the same every visit.
 import * as THREE from 'three';
 import { probeGeometry } from '../render/probe';
-import { plantLib, understoryMix, inBloom, inFall, isDormant, STAGES, type PlantSpecies } from '../assets/flora';
+import { plantLib, understoryMix, inBloom, plantNow, SPECIES, STAGES, type PlantSeason, type PlantSpecies } from '../assets/flora';
 import { merge } from '../assets/core';
 import { propMaterial } from '../render/propMaterial';
 import { activeStyle, castOf, pickWeighted } from './styles';
@@ -57,6 +57,10 @@ export class UnderstoryField {
   enabled = true;
   /** metres round the walker (a phone's is shorter) */
   radius = 64;
+  /** the place's season (main.ts, from season.ts seasonAt): the ferns come up in the spring, colour in
+   *  the fall and are gone back under the ground through the winter */
+  season: PlantSeason = { leafFall: 0, turn: 0, temp: 18, year: 0.5 };
+  private seasonKey = '';
 
   constructor(
     private terrain: Terrain,
@@ -89,7 +93,11 @@ export class UnderstoryField {
   }
 
   update(x: number, z: number) {
-    if (!this.enabled || !understoryMix(castOf(activeStyle())).mix.length) { if (this.cells.size) this.invalidate(); return; }
+    const { mix } = understoryMix(castOf(activeStyle()));
+    if (!this.enabled || !mix.length) { if (this.cells.size) this.invalidate(); return; }
+    // (a season's step for a plant of the mix — up, coming up, turning, gone — rebuilds the floor)
+    const key = mix.map(([sp]) => { const st = plantNow(sp, this.season); return st ? `${Math.round(st.size * 4)}${st.brown > 0.35 ? 'b' : 'g'}` : '-'; }).join();
+    if (key !== this.seasonKey) (this.seasonKey = key), this.invalidate();
     const R = this.radius;
     const want = new Set<string>();
     this.queue.length = 0;
@@ -134,9 +142,12 @@ export class UnderstoryField {
       for (let gx = x0; gx < x0 + CELL; gx += step) {
         const x = gx + hash(gx, gz, 7) * step, z = gz + hash(gx, gz, 8) * step;
         const f = floorAt(x, z, crowns, mix, density, open);
-        if (!f || isDormant(f.sp, month)) continue; // (bracken dead and flat through the winter)
-        const g = plantLib(f.sp, f.v, STAGES - 1, inBloom(f.sp, month), true, inFall(f.sp, month)).clone(); // (copper in October)
-        g.applyMatrix4(m.compose(p.set(x, t.heightAt(x, z) - 0.05, z), q.setFromAxisAngle(up, hash(x, z, 5) * 6.283), s.set(f.s, f.s * (0.85 + hash(x, z, 6) * 0.3), f.s)));
+        const st = f && plantNow(f.sp, this.season);
+        if (!f || !st) continue; // (bracken dead and flat through the winter)
+        const fall = st.brown > 0.35 && !!SPECIES[f.sp].fall; // (copper in October)
+        const g = plantLib(f.sp, f.v, STAGES - 1, !fall && inBloom(f.sp, month), true, fall).clone();
+        const sc = f.s * st.size;
+        g.applyMatrix4(m.compose(p.set(x, t.heightAt(x, z) - 0.05, z), q.setFromAxisAngle(up, hash(x, z, 5) * 6.283), s.set(sc, sc * (0.85 + hash(x, z, 6) * 0.3), sc)));
         parts.push(g);
       }
     if (!parts.length) return null;

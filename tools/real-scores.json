@@ -6945,6 +6945,3903 @@
      "hour": 14.82
     }
    }
+  },
+  {
+   "at": "2026-10-08T00:24:05.721Z",
+   "commit": "8913baf",
+   "tag": "flora-0b",
+   "spots": {
+    "green-desert-sw-cactus-forest-drive-saguaro": {
+     "score": 0.732,
+     "photo": {
+      "sky": 0.575,
+      "building": 0,
+      "vegetation": 0.214,
+      "ground": 0.142,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.069
+     },
+     "labelled": 0.982,
+     "game": {
+      "sky": 0.51,
+      "building": 0.002,
+      "vegetation": 0.03,
+      "ground": 0.407,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.05
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-12-31",
+     "hour": 15.08
+    },
+    "green-desert-sw-encanto-palmcroft-phoenix": {
+     "score": 0.855,
+     "photo": {
+      "sky": 0.271,
+      "building": 0,
+      "vegetation": 0.208,
+      "ground": 0.487,
+      "water": 0.003,
+      "vehicle": 0.001,
+      "other": 0.029
+     },
+     "labelled": 0.994,
+     "game": {
+      "sky": 0.389,
+      "building": 0.004,
+      "vegetation": 0.091,
+      "ground": 0.492,
+      "water": 0.022,
+      "vehicle": 0.001,
+      "other": 0.001
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-02-23",
+     "hour": 11.6
+    },
+    "green-desert-sw-canyon-road-santa-fe": {
+     "score": 0.342,
+     "photo": {
+      "sky": 0.114,
+      "building": 0.012,
+      "vegetation": 0.567,
+      "ground": 0.209,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.098
+     },
+     "labelled": 0.806,
+     "game": {
+      "sky": 0.463,
+      "building": 0.094,
+      "vegetation": 0.001,
+      "ground": 0.331,
+      "water": 0,
+      "vehicle": 0.105,
+      "other": 0.006
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-10-12",
+     "hour": 17.1
+    },
+    "green-california-berkeley-hills": {
+     "score": 0.797,
+     "photo": {
+      "sky": 0.43,
+      "building": 0.105,
+      "vegetation": 0.395,
+      "ground": 0.042,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.027
+     },
+     "labelled": 0.807,
+     "game": {
+      "sky": 0.498,
+      "building": 0.118,
+      "vegetation": 0.208,
+      "ground": 0.12,
+      "water": 0,
+      "vehicle": 0.046,
+      "other": 0.011
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-12-29",
+     "hour": 15.12
+    },
+    "green-california-bungalow-heaven-pasadena": {
+     "score": 0.819,
+     "photo": {
+      "sky": 0.342,
+      "building": 0.015,
+      "vegetation": 0.305,
+      "ground": 0.235,
+      "water": 0,
+      "vehicle": 0.006,
+      "other": 0.097
+     },
+     "labelled": 0.993,
+     "game": {
+      "sky": 0.24,
+      "building": 0.048,
+      "vegetation": 0.387,
+      "ground": 0.216,
+      "water": 0,
+      "vehicle": 0.073,
+      "other": 0.037
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2020-01-12",
+     "hour": 11.88
+    },
+    "green-rockies-mapleton-hill-boulder": {
+     "score": 0.898,
+     "photo": {
+      "sky": 0.181,
+      "building": 0.013,
+      "vegetation": 0.51,
+      "ground": 0.251,
+      "water": 0,
+      "vehicle": 0.01,
+      "other": 0.034
+     },
+     "labelled": 0.998,
+     "game": {
+      "sky": 0.265,
+      "building": 0.01,
+      "vegetation": 0.42,
+      "ground": 0.27,
+      "water": 0,
+      "vehicle": 0.009,
+      "other": 0.026
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-04-17",
+     "hour": 17.67
+    },
+    "green-rockies-coeur-d-alene": {
+     "score": 0.675,
+     "photo": {
+      "sky": 0.256,
+      "building": 0.034,
+      "vegetation": 0.251,
+      "ground": 0.401,
+      "water": 0,
+      "vehicle": 0.018,
+      "other": 0.04
+     },
+     "labelled": 0.998,
+     "game": {
+      "sky": 0.566,
+      "building": 0.049,
+      "vegetation": 0.086,
+      "ground": 0.288,
+      "water": 0,
+      "vehicle": 0.002,
+      "other": 0.009
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-06-22",
+     "hour": 8.95
+    },
+    "green-rockies-south-willson-avenue-bozeman": {
+     "score": 0.656,
+     "photo": {
+      "sky": 0.131,
+      "building": 0.029,
+      "vegetation": 0.612,
+      "ground": 0.215,
+      "water": 0,
+      "vehicle": 0.01,
+      "other": 0.002
+     },
+     "labelled": 0.771,
+     "game": {
+      "sky": 0.302,
+      "building": 0.04,
+      "vegetation": 0.268,
+      "ground": 0.25,
+      "water": 0,
+      "vehicle": 0.134,
+      "other": 0.006
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-12-23",
+     "hour": 10.12
+    },
+    "green-florida-centerville-road-tallahassee": {
+     "score": 0.934,
+     "photo": {
+      "sky": 0.314,
+      "building": 0,
+      "vegetation": 0.356,
+      "ground": 0.197,
+      "water": 0,
+      "vehicle": 0.056,
+      "other": 0.077
+     },
+     "labelled": 0.997,
+     "game": {
+      "sky": 0.341,
+      "building": 0,
+      "vegetation": 0.395,
+      "ground": 0.19,
+      "water": 0,
+      "vehicle": 0.045,
+      "other": 0.028
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2022-10-30",
+     "hour": 13.17
+    },
+    "green-florida-eaton-street-key-west": {
+     "score": 0.62,
+     "photo": {
+      "sky": 0.23,
+      "building": 0.096,
+      "vegetation": 0.07,
+      "ground": 0.434,
+      "water": 0,
+      "vehicle": 0.033,
+      "other": 0.137
+     },
+     "labelled": 0.987,
+     "game": {
+      "sky": 0.168,
+      "building": 0.344,
+      "vegetation": 0.202,
+      "ground": 0.23,
+      "water": 0,
+      "vehicle": 0.007,
+      "other": 0.048
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2021-02-26",
+     "hour": 16.17
+    },
+    "green-southeast-jones-street-savannah": {
+     "score": 0.629,
+     "photo": {
+      "sky": 0.013,
+      "building": 0.247,
+      "vegetation": 0.45,
+      "ground": 0.261,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.029
+     },
+     "labelled": 0.701,
+     "game": {
+      "sky": 0,
+      "building": 0.039,
+      "vegetation": 0.524,
+      "ground": 0.125,
+      "water": 0,
+      "vehicle": 0.297,
+      "other": 0.015
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-08-31",
+     "hour": 13.55
+    },
+    "green-southeast-trinity-park-durham": {
+     "score": 0.388,
+     "photo": {
+      "sky": 0.068,
+      "building": 0.003,
+      "vegetation": 0.569,
+      "ground": 0.232,
+      "water": 0,
+      "vehicle": 0.012,
+      "other": 0.116
+     },
+     "labelled": 0.917,
+     "game": {
+      "sky": 0.424,
+      "building": 0.062,
+      "vegetation": 0.015,
+      "ground": 0.392,
+      "water": 0,
+      "vehicle": 0.049,
+      "other": 0.058
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-10-21",
+     "hour": 16.32
+    },
+    "green-southeast-rutledge-avenue-charleston": {
+     "score": 0.708,
+     "photo": {
+      "sky": 0.124,
+      "building": 0.061,
+      "vegetation": 0.559,
+      "ground": 0.122,
+      "water": 0,
+      "vehicle": 0.002,
+      "other": 0.132
+     },
+     "labelled": 0.744,
+     "game": {
+      "sky": 0.113,
+      "building": 0.023,
+      "vegetation": 0.439,
+      "ground": 0.338,
+      "water": 0,
+      "vehicle": 0.078,
+      "other": 0.008
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-06-15",
+     "hour": 19.73
+    },
+    "green-plains-council-grove": {
+     "score": 0.762,
+     "photo": {
+      "sky": 0.232,
+      "building": 0.077,
+      "vegetation": 0.199,
+      "ground": 0.395,
+      "water": 0,
+      "vehicle": 0.05,
+      "other": 0.047
+     },
+     "labelled": 0.991,
+     "game": {
+      "sky": 0.47,
+      "building": 0.049,
+      "vegetation": 0.099,
+      "ground": 0.381,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-08-05",
+     "hour": 11.52
+    },
+    "green-plains-old-west-lawrence": {
+     "score": 0.632,
+     "photo": {
+      "sky": 0.107,
+      "building": 0.092,
+      "vegetation": 0.626,
+      "ground": 0.138,
+      "water": 0,
+      "vehicle": 0.03,
+      "other": 0.007
+     },
+     "labelled": 0.861,
+     "game": {
+      "sky": 0.327,
+      "building": 0.075,
+      "vegetation": 0.275,
+      "ground": 0.234,
+      "water": 0,
+      "vehicle": 0.062,
+      "other": 0.028
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-02-28",
+     "hour": 16.2
+    },
+    "green-plains-sheridan-boulevard-lincoln": {
+     "score": 0.813,
+     "photo": {
+      "sky": 0.264,
+      "building": 0.019,
+      "vegetation": 0.343,
+      "ground": 0.277,
+      "water": 0,
+      "vehicle": 0.041,
+      "other": 0.055
+     },
+     "labelled": 0.821,
+     "game": {
+      "sky": 0.148,
+      "building": 0.028,
+      "vegetation": 0.376,
+      "ground": 0.422,
+      "water": 0,
+      "vehicle": 0.019,
+      "other": 0.006
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-02-11",
+     "hour": 16.13
+    },
+    "green-gulf-st-charles-avenue-new-orleans": {
+     "score": 0.636,
+     "photo": {
+      "sky": 0.08,
+      "building": 0.268,
+      "vegetation": 0.113,
+      "ground": 0.268,
+      "water": 0,
+      "vehicle": 0.005,
+      "other": 0.266
+     },
+     "labelled": 0.995,
+     "game": {
+      "sky": 0.272,
+      "building": 0.206,
+      "vegetation": 0.062,
+      "ground": 0.441,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.02
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-05-18",
+     "hour": 9.95
+    },
+    "green-new-england-monument-street-concord": {
+     "score": 0.67,
+     "photo": {
+      "sky": 0.274,
+      "building": 0.255,
+      "vegetation": 0.249,
+      "ground": 0.087,
+      "water": 0,
+      "vehicle": 0.124,
+      "other": 0.011
+     },
+     "labelled": 0.637,
+     "game": {
+      "sky": 0.253,
+      "building": 0.185,
+      "vegetation": 0.142,
+      "ground": 0.417,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.003
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-06-28",
+     "hour": 14.35
+    },
+    "green-new-england-park-loop-road-acadia": {
+     "score": 0.742,
+     "photo": {
+      "sky": 0.422,
+      "building": 0,
+      "vegetation": 0.049,
+      "ground": 0,
+      "water": 0.307,
+      "vehicle": 0,
+      "other": 0.222
+     },
+     "labelled": 1,
+     "game": {
+      "sky": 0.386,
+      "building": 0,
+      "vegetation": 0.101,
+      "ground": 0.017,
+      "water": 0.495,
+      "vehicle": 0,
+      "other": 0
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-09-04",
+     "hour": 13.15
+    },
+    "green-mid-atlantic-prince-george-street-annapolis": {
+     "score": 0.521,
+     "photo": {
+      "sky": 0.03,
+      "building": 0.178,
+      "vegetation": 0.153,
+      "ground": 0.17,
+      "water": 0.371,
+      "vehicle": 0,
+      "other": 0.098
+     },
+     "labelled": 0.998,
+     "game": {
+      "sky": 0.178,
+      "building": 0.21,
+      "vegetation": 0.045,
+      "ground": 0.421,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.146
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-07-11",
+     "hour": 13.85
+    },
+    "green-mid-atlantic-hughes-street-cape-may": {
+     "score": 0.901,
+     "photo": {
+      "sky": 0.386,
+      "building": 0.104,
+      "vegetation": 0.172,
+      "ground": 0.278,
+      "water": 0,
+      "vehicle": 0.004,
+      "other": 0.056
+     },
+     "labelled": 0.992,
+     "game": {
+      "sky": 0.362,
+      "building": 0.109,
+      "vegetation": 0.246,
+      "ground": 0.253,
+      "water": 0,
+      "vehicle": 0.024,
+      "other": 0.006
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2022-10-07",
+     "hour": 12.17
+    },
+    "green-mid-atlantic-library-place-princeton": {
+     "score": 0.726,
+     "photo": {
+      "sky": 0.093,
+      "building": 0.037,
+      "vegetation": 0.503,
+      "ground": 0.354,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.013
+     },
+     "labelled": 0.998,
+     "game": {
+      "sky": 0.152,
+      "building": 0.155,
+      "vegetation": 0.241,
+      "ground": 0.451,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.001
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-11-11",
+     "hour": 10.5
+    },
+    "green-midwest-traverse-city": {
+     "score": 0.761,
+     "photo": {
+      "sky": 0.13,
+      "building": 0.002,
+      "vegetation": 0.478,
+      "ground": 0.321,
+      "water": 0,
+      "vehicle": 0.004,
+      "other": 0.065
+     },
+     "labelled": 0.941,
+     "game": {
+      "sky": 0.296,
+      "building": 0.028,
+      "vegetation": 0.295,
+      "ground": 0.337,
+      "water": 0,
+      "vehicle": 0.035,
+      "other": 0.009
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2021-09-26",
+     "hour": 12.53
+    },
+    "green-midwest-vilas-madison": {
+     "score": 0.961,
+     "photo": {
+      "sky": 0.057,
+      "building": 0.091,
+      "vegetation": 0.324,
+      "ground": 0.476,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.051
+     },
+     "labelled": 0.99,
+     "game": {
+      "sky": 0.058,
+      "building": 0.093,
+      "vegetation": 0.338,
+      "ground": 0.492,
+      "water": 0,
+      "vehicle": 0.007,
+      "other": 0.012
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-09-15",
+     "hour": 18.53
+    },
+    "green-ozarks-branson": {
+     "score": 0.98,
+     "photo": {
+      "sky": 0.59,
+      "building": 0,
+      "vegetation": 0.108,
+      "ground": 0.286,
+      "water": 0,
+      "vehicle": 0.006,
+      "other": 0.01
+     },
+     "labelled": 0.985,
+     "game": {
+      "sky": 0.597,
+      "building": 0.001,
+      "vegetation": 0.098,
+      "ground": 0.298,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.006
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2022-05-06",
+     "hour": 13.03
+    },
+    "green-appalachia-montford-avenue-asheville": {
+     "score": 0.737,
+     "photo": {
+      "sky": 0.321,
+      "building": 0.294,
+      "vegetation": 0.095,
+      "ground": 0.217,
+      "water": 0,
+      "vehicle": 0.006,
+      "other": 0.067
+     },
+     "labelled": 0.83,
+     "game": {
+      "sky": 0.409,
+      "building": 0.077,
+      "vegetation": 0.112,
+      "ground": 0.239,
+      "water": 0,
+      "vehicle": 0.142,
+      "other": 0.021
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2022-08-08",
+     "hour": 20.05
+    },
+    "green-appalachia-little-river-road-the-smokies": {
+     "score": 0.496,
+     "photo": {
+      "sky": 0.033,
+      "building": 0,
+      "vegetation": 0.496,
+      "ground": 0.47,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0
+     },
+     "labelled": 0.996,
+     "game": {
+      "sky": 0,
+      "building": 0,
+      "vegetation": 1,
+      "ground": 0,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2021-04-26",
+     "hour": 19.95
+    },
+    "green-appalachia-kanawha-boulevard-charleston": {
+     "score": 0.62,
+     "photo": {
+      "sky": 0.106,
+      "building": 0.015,
+      "vegetation": 0.588,
+      "ground": 0.143,
+      "water": 0.013,
+      "vehicle": 0.012,
+      "other": 0.124
+     },
+     "labelled": 0.575,
+     "game": {
+      "sky": 0.11,
+      "building": 0.005,
+      "vegetation": 0.292,
+      "ground": 0.518,
+      "water": 0,
+      "vehicle": 0.012,
+      "other": 0.063
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-03-25",
+     "hour": 16.43
+    },
+    "green-upstate-ny-fall-creek-ithaca": {
+     "score": 0.782,
+     "photo": {
+      "sky": 0.118,
+      "building": 0,
+      "vegetation": 0.592,
+      "ground": 0.283,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.007
+     },
+     "labelled": 0.751,
+     "game": {
+      "sky": 0.213,
+      "building": 0.002,
+      "vegetation": 0.374,
+      "ground": 0.367,
+      "water": 0,
+      "vehicle": 0.029,
+      "other": 0.016
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-04-10",
+     "hour": 17.08
+    },
+    "green-upstate-ny-north-broadway-saratoga-springs": {
+     "score": 0.798,
+     "photo": {
+      "sky": 0.227,
+      "building": 0.062,
+      "vegetation": 0.608,
+      "ground": 0.098,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.004
+     },
+     "labelled": 0.998,
+     "game": {
+      "sky": 0.382,
+      "building": 0.091,
+      "vegetation": 0.407,
+      "ground": 0.107,
+      "water": 0,
+      "vehicle": 0.006,
+      "other": 0.008
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-08-03",
+     "hour": 17.5
+    },
+    "green-upstate-ny-ny-73-keene": {
+     "score": 0.567,
+     "photo": {
+      "sky": 0.378,
+      "building": 0,
+      "vegetation": 0.421,
+      "ground": 0.092,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.109
+     },
+     "labelled": 0.922,
+     "game": {
+      "sky": 0.592,
+      "building": 0.024,
+      "vegetation": 0.093,
+      "ground": 0.287,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.004
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-06-19",
+     "hour": 12.02
+    },
+    "green-upstate-ny-saranac-avenue-lake-placid": {
+     "score": 0.814,
+     "photo": {
+      "sky": 0.241,
+      "building": 0,
+      "vegetation": 0.272,
+      "ground": 0.421,
+      "water": 0,
+      "vehicle": 0.004,
+      "other": 0.062
+     },
+     "labelled": 0.939,
+     "game": {
+      "sky": 0.279,
+      "building": 0,
+      "vegetation": 0.12,
+      "ground": 0.536,
+      "water": 0.033,
+      "vehicle": 0,
+      "other": 0.032
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-07-12",
+     "hour": 16.35
+    },
+    "green-pnw-bend-the-dry-side": {
+     "score": 0.646,
+     "photo": {
+      "sky": 0.29,
+      "building": 0.077,
+      "vegetation": 0.302,
+      "ground": 0.246,
+      "water": 0,
+      "vehicle": 0.038,
+      "other": 0.047
+     },
+     "labelled": 0.658,
+     "game": {
+      "sky": 0.337,
+      "building": 0.046,
+      "vegetation": 0.022,
+      "ground": 0.32,
+      "water": 0,
+      "vehicle": 0.271,
+      "other": 0.004
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-03-14",
+     "hour": 10.03
+    },
+    "green-pnw-federal-avenue-east-seattle": {
+     "score": 0.804,
+     "photo": {
+      "sky": 0.094,
+      "building": 0.013,
+      "vegetation": 0.592,
+      "ground": 0.222,
+      "water": 0,
+      "vehicle": 0.045,
+      "other": 0.034
+     },
+     "labelled": 0.992,
+     "game": {
+      "sky": 0.059,
+      "building": 0.007,
+      "vegetation": 0.437,
+      "ground": 0.366,
+      "water": 0,
+      "vehicle": 0.097,
+      "other": 0.033
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2020-01-30",
+     "hour": 12.23
+    },
+    "green-pnw-forks": {
+     "score": 0.763,
+     "photo": {
+      "sky": 0.518,
+      "building": 0.207,
+      "vegetation": 0.02,
+      "ground": 0.052,
+      "water": 0,
+      "vehicle": 0.032,
+      "other": 0.172
+     },
+     "labelled": 0.837,
+     "game": {
+      "sky": 0.478,
+      "building": 0.33,
+      "vegetation": 0.009,
+      "ground": 0.166,
+      "water": 0,
+      "vehicle": 0.003,
+      "other": 0.015
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2021-09-25",
+     "hour": 15.08
+    },
+    "green-pnw-longmire-mount-rainier": {
+     "score": 0.519,
+     "photo": {
+      "sky": 0.066,
+      "building": 0.005,
+      "vegetation": 0.6,
+      "ground": 0.209,
+      "water": 0,
+      "vehicle": 0.107,
+      "other": 0.013
+     },
+     "labelled": 0.985,
+     "game": {
+      "sky": 0.357,
+      "building": 0.021,
+      "vegetation": 0.119,
+      "ground": 0.287,
+      "water": 0,
+      "vehicle": 0.202,
+      "other": 0.015
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-07-12",
+     "hour": 14.82
+    },
+    "green-texas-hyde-park-austin": {
+     "score": 0.536,
+     "photo": {
+      "sky": 0.054,
+      "building": 0.248,
+      "vegetation": 0.285,
+      "ground": 0.297,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.116
+     },
+     "labelled": 0.773,
+     "game": {
+      "sky": 0.003,
+      "building": 0.464,
+      "vegetation": 0.533,
+      "ground": 0,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2019-12-12",
+     "hour": 11.62
+    },
+    "green-texas-king-william-san-antonio": {
+     "score": 0.684,
+     "photo": {
+      "sky": 0.356,
+      "building": 0.181,
+      "vegetation": 0.014,
+      "ground": 0.153,
+      "water": 0,
+      "vehicle": 0.048,
+      "other": 0.248
+     },
+     "labelled": 0.863,
+     "game": {
+      "sky": 0.514,
+      "building": 0.128,
+      "vegetation": 0.101,
+      "ground": 0.224,
+      "water": 0,
+      "vehicle": 0.009,
+      "other": 0.024
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-10-26",
+     "hour": 17.28
+    },
+    "green-texas-wolflin-amarillo": {
+     "score": 0.921,
+     "photo": {
+      "sky": 0.842,
+      "building": 0,
+      "vegetation": 0.004,
+      "ground": 0.099,
+      "water": 0,
+      "vehicle": 0.034,
+      "other": 0.021
+     },
+     "labelled": 0.963,
+     "game": {
+      "sky": 0.85,
+      "building": 0.02,
+      "vegetation": 0.055,
+      "ground": 0.07,
+      "water": 0,
+      "vehicle": 0.002,
+      "other": 0.003
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-09-01",
+     "hour": 19.4
+    },
+    "green-great-basin-moab": {
+     "score": 0.927,
+     "photo": {
+      "sky": 0.1,
+      "building": 0.024,
+      "vegetation": 0.548,
+      "ground": 0.302,
+      "water": 0,
+      "vehicle": 0.008,
+      "other": 0.018
+     },
+     "labelled": 0.964,
+     "game": {
+      "sky": 0.099,
+      "building": 0.063,
+      "vegetation": 0.499,
+      "ground": 0.335,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.001
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-07-05",
+     "hour": 13.18
+    }
+   }
+  },
+  {
+   "at": "2026-10-08T00:49:41.999Z",
+   "commit": "8913baf",
+   "tag": "flora-1",
+   "spots": {
+    "green-desert-sw-cactus-forest-drive-saguaro": {
+     "score": 0.736,
+     "photo": {
+      "sky": 0.575,
+      "building": 0,
+      "vegetation": 0.214,
+      "ground": 0.142,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.069
+     },
+     "labelled": 0.982,
+     "game": {
+      "sky": 0.51,
+      "building": 0.001,
+      "vegetation": 0.029,
+      "ground": 0.406,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.055
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-12-31",
+     "hour": 15.08
+    },
+    "green-desert-sw-encanto-palmcroft-phoenix": {
+     "score": 0.855,
+     "photo": {
+      "sky": 0.271,
+      "building": 0,
+      "vegetation": 0.208,
+      "ground": 0.487,
+      "water": 0.003,
+      "vehicle": 0.001,
+      "other": 0.029
+     },
+     "labelled": 0.994,
+     "game": {
+      "sky": 0.389,
+      "building": 0.004,
+      "vegetation": 0.091,
+      "ground": 0.492,
+      "water": 0.022,
+      "vehicle": 0.001,
+      "other": 0.001
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-02-23",
+     "hour": 11.6
+    },
+    "green-desert-sw-canyon-road-santa-fe": {
+     "score": 0.345,
+     "photo": {
+      "sky": 0.114,
+      "building": 0.012,
+      "vegetation": 0.567,
+      "ground": 0.209,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.098
+     },
+     "labelled": 0.806,
+     "game": {
+      "sky": 0.463,
+      "building": 0.091,
+      "vegetation": 0.004,
+      "ground": 0.331,
+      "water": 0,
+      "vehicle": 0.105,
+      "other": 0.005
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-10-12",
+     "hour": 17.1
+    },
+    "green-california-berkeley-hills": {
+     "score": 0.798,
+     "photo": {
+      "sky": 0.43,
+      "building": 0.105,
+      "vegetation": 0.395,
+      "ground": 0.042,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.027
+     },
+     "labelled": 0.807,
+     "game": {
+      "sky": 0.496,
+      "building": 0.118,
+      "vegetation": 0.209,
+      "ground": 0.144,
+      "water": 0,
+      "vehicle": 0.022,
+      "other": 0.011
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-12-29",
+     "hour": 15.12
+    },
+    "green-california-bungalow-heaven-pasadena": {
+     "score": 0.832,
+     "photo": {
+      "sky": 0.342,
+      "building": 0.015,
+      "vegetation": 0.305,
+      "ground": 0.235,
+      "water": 0,
+      "vehicle": 0.006,
+      "other": 0.097
+     },
+     "labelled": 0.993,
+     "game": {
+      "sky": 0.24,
+      "building": 0.046,
+      "vegetation": 0.387,
+      "ground": 0.23,
+      "water": 0,
+      "vehicle": 0.061,
+      "other": 0.036
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2020-01-12",
+     "hour": 11.88
+    },
+    "green-rockies-mapleton-hill-boulder": {
+     "score": 0.898,
+     "photo": {
+      "sky": 0.181,
+      "building": 0.013,
+      "vegetation": 0.51,
+      "ground": 0.251,
+      "water": 0,
+      "vehicle": 0.01,
+      "other": 0.034
+     },
+     "labelled": 0.998,
+     "game": {
+      "sky": 0.265,
+      "building": 0.01,
+      "vegetation": 0.42,
+      "ground": 0.27,
+      "water": 0,
+      "vehicle": 0.009,
+      "other": 0.026
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-04-17",
+     "hour": 17.67
+    },
+    "green-rockies-coeur-d-alene": {
+     "score": 0.675,
+     "photo": {
+      "sky": 0.256,
+      "building": 0.034,
+      "vegetation": 0.251,
+      "ground": 0.401,
+      "water": 0,
+      "vehicle": 0.018,
+      "other": 0.04
+     },
+     "labelled": 0.998,
+     "game": {
+      "sky": 0.566,
+      "building": 0.049,
+      "vegetation": 0.085,
+      "ground": 0.288,
+      "water": 0,
+      "vehicle": 0.002,
+      "other": 0.009
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-06-22",
+     "hour": 8.95
+    },
+    "green-rockies-south-willson-avenue-bozeman": {
+     "score": 0.656,
+     "photo": {
+      "sky": 0.131,
+      "building": 0.029,
+      "vegetation": 0.612,
+      "ground": 0.215,
+      "water": 0,
+      "vehicle": 0.01,
+      "other": 0.002
+     },
+     "labelled": 0.771,
+     "game": {
+      "sky": 0.302,
+      "building": 0.04,
+      "vegetation": 0.268,
+      "ground": 0.25,
+      "water": 0,
+      "vehicle": 0.134,
+      "other": 0.006
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-12-23",
+     "hour": 10.12
+    },
+    "green-florida-centerville-road-tallahassee": {
+     "score": 0.899,
+     "photo": {
+      "sky": 0.314,
+      "building": 0,
+      "vegetation": 0.356,
+      "ground": 0.197,
+      "water": 0,
+      "vehicle": 0.056,
+      "other": 0.077
+     },
+     "labelled": 0.997,
+     "game": {
+      "sky": 0.341,
+      "building": 0,
+      "vegetation": 0.396,
+      "ground": 0.231,
+      "water": 0,
+      "vehicle": 0.002,
+      "other": 0.029
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2022-10-30",
+     "hour": 13.17
+    },
+    "green-florida-eaton-street-key-west": {
+     "score": 0.619,
+     "photo": {
+      "sky": 0.23,
+      "building": 0.096,
+      "vegetation": 0.07,
+      "ground": 0.434,
+      "water": 0,
+      "vehicle": 0.033,
+      "other": 0.137
+     },
+     "labelled": 0.987,
+     "game": {
+      "sky": 0.168,
+      "building": 0.344,
+      "vegetation": 0.203,
+      "ground": 0.232,
+      "water": 0,
+      "vehicle": 0.004,
+      "other": 0.049
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2021-02-26",
+     "hour": 16.17
+    },
+    "green-southeast-jones-street-savannah": {
+     "score": 0.629,
+     "photo": {
+      "sky": 0.013,
+      "building": 0.247,
+      "vegetation": 0.45,
+      "ground": 0.261,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.029
+     },
+     "labelled": 0.701,
+     "game": {
+      "sky": 0,
+      "building": 0.039,
+      "vegetation": 0.524,
+      "ground": 0.125,
+      "water": 0,
+      "vehicle": 0.297,
+      "other": 0.015
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-08-31",
+     "hour": 13.55
+    },
+    "green-southeast-trinity-park-durham": {
+     "score": 0.391,
+     "photo": {
+      "sky": 0.068,
+      "building": 0.003,
+      "vegetation": 0.569,
+      "ground": 0.232,
+      "water": 0,
+      "vehicle": 0.012,
+      "other": 0.116
+     },
+     "labelled": 0.917,
+     "game": {
+      "sky": 0.423,
+      "building": 0.06,
+      "vegetation": 0.018,
+      "ground": 0.392,
+      "water": 0,
+      "vehicle": 0.049,
+      "other": 0.058
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-10-21",
+     "hour": 16.32
+    },
+    "green-southeast-rutledge-avenue-charleston": {
+     "score": 0.708,
+     "photo": {
+      "sky": 0.124,
+      "building": 0.061,
+      "vegetation": 0.559,
+      "ground": 0.122,
+      "water": 0,
+      "vehicle": 0.002,
+      "other": 0.132
+     },
+     "labelled": 0.744,
+     "game": {
+      "sky": 0.113,
+      "building": 0.023,
+      "vegetation": 0.439,
+      "ground": 0.338,
+      "water": 0,
+      "vehicle": 0.078,
+      "other": 0.008
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-06-15",
+     "hour": 19.73
+    },
+    "green-plains-council-grove": {
+     "score": 0.762,
+     "photo": {
+      "sky": 0.232,
+      "building": 0.077,
+      "vegetation": 0.199,
+      "ground": 0.395,
+      "water": 0,
+      "vehicle": 0.05,
+      "other": 0.047
+     },
+     "labelled": 0.991,
+     "game": {
+      "sky": 0.47,
+      "building": 0.049,
+      "vegetation": 0.099,
+      "ground": 0.381,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-08-05",
+     "hour": 11.52
+    },
+    "green-plains-old-west-lawrence": {
+     "score": 0.632,
+     "photo": {
+      "sky": 0.107,
+      "building": 0.092,
+      "vegetation": 0.626,
+      "ground": 0.138,
+      "water": 0,
+      "vehicle": 0.03,
+      "other": 0.007
+     },
+     "labelled": 0.861,
+     "game": {
+      "sky": 0.327,
+      "building": 0.075,
+      "vegetation": 0.275,
+      "ground": 0.234,
+      "water": 0,
+      "vehicle": 0.062,
+      "other": 0.027
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-02-28",
+     "hour": 16.2
+    },
+    "green-plains-sheridan-boulevard-lincoln": {
+     "score": 0.813,
+     "photo": {
+      "sky": 0.264,
+      "building": 0.019,
+      "vegetation": 0.343,
+      "ground": 0.277,
+      "water": 0,
+      "vehicle": 0.041,
+      "other": 0.055
+     },
+     "labelled": 0.821,
+     "game": {
+      "sky": 0.148,
+      "building": 0.029,
+      "vegetation": 0.376,
+      "ground": 0.422,
+      "water": 0,
+      "vehicle": 0.018,
+      "other": 0.007
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-02-11",
+     "hour": 16.13
+    },
+    "green-gulf-st-charles-avenue-new-orleans": {
+     "score": 0.619,
+     "photo": {
+      "sky": 0.08,
+      "building": 0.268,
+      "vegetation": 0.113,
+      "ground": 0.268,
+      "water": 0,
+      "vehicle": 0.005,
+      "other": 0.266
+     },
+     "labelled": 0.995,
+     "game": {
+      "sky": 0.274,
+      "building": 0.207,
+      "vegetation": 0.062,
+      "ground": 0.455,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.001
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-05-18",
+     "hour": 9.95
+    },
+    "green-new-england-monument-street-concord": {
+     "score": 0.67,
+     "photo": {
+      "sky": 0.274,
+      "building": 0.255,
+      "vegetation": 0.249,
+      "ground": 0.087,
+      "water": 0,
+      "vehicle": 0.124,
+      "other": 0.011
+     },
+     "labelled": 0.637,
+     "game": {
+      "sky": 0.253,
+      "building": 0.185,
+      "vegetation": 0.142,
+      "ground": 0.417,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.003
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-06-28",
+     "hour": 14.35
+    },
+    "green-new-england-park-loop-road-acadia": {
+     "score": 0.742,
+     "photo": {
+      "sky": 0.422,
+      "building": 0,
+      "vegetation": 0.049,
+      "ground": 0,
+      "water": 0.307,
+      "vehicle": 0,
+      "other": 0.222
+     },
+     "labelled": 1,
+     "game": {
+      "sky": 0.386,
+      "building": 0,
+      "vegetation": 0.101,
+      "ground": 0.017,
+      "water": 0.495,
+      "vehicle": 0,
+      "other": 0
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-09-04",
+     "hour": 13.15
+    },
+    "green-mid-atlantic-prince-george-street-annapolis": {
+     "score": 0.522,
+     "photo": {
+      "sky": 0.03,
+      "building": 0.178,
+      "vegetation": 0.153,
+      "ground": 0.17,
+      "water": 0.371,
+      "vehicle": 0,
+      "other": 0.098
+     },
+     "labelled": 0.998,
+     "game": {
+      "sky": 0.177,
+      "building": 0.21,
+      "vegetation": 0.046,
+      "ground": 0.421,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.146
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-07-11",
+     "hour": 13.85
+    },
+    "green-mid-atlantic-hughes-street-cape-may": {
+     "score": 0.901,
+     "photo": {
+      "sky": 0.386,
+      "building": 0.104,
+      "vegetation": 0.172,
+      "ground": 0.278,
+      "water": 0,
+      "vehicle": 0.004,
+      "other": 0.056
+     },
+     "labelled": 0.992,
+     "game": {
+      "sky": 0.362,
+      "building": 0.109,
+      "vegetation": 0.246,
+      "ground": 0.253,
+      "water": 0,
+      "vehicle": 0.024,
+      "other": 0.006
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2022-10-07",
+     "hour": 12.17
+    },
+    "green-mid-atlantic-library-place-princeton": {
+     "score": 0.726,
+     "photo": {
+      "sky": 0.093,
+      "building": 0.037,
+      "vegetation": 0.503,
+      "ground": 0.354,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.013
+     },
+     "labelled": 0.998,
+     "game": {
+      "sky": 0.152,
+      "building": 0.155,
+      "vegetation": 0.241,
+      "ground": 0.451,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.001
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-11-11",
+     "hour": 10.5
+    },
+    "green-midwest-traverse-city": {
+     "score": 0.761,
+     "photo": {
+      "sky": 0.13,
+      "building": 0.002,
+      "vegetation": 0.478,
+      "ground": 0.321,
+      "water": 0,
+      "vehicle": 0.004,
+      "other": 0.065
+     },
+     "labelled": 0.941,
+     "game": {
+      "sky": 0.296,
+      "building": 0.028,
+      "vegetation": 0.295,
+      "ground": 0.337,
+      "water": 0,
+      "vehicle": 0.035,
+      "other": 0.009
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2021-09-26",
+     "hour": 12.53
+    },
+    "green-midwest-vilas-madison": {
+     "score": 0.96,
+     "photo": {
+      "sky": 0.057,
+      "building": 0.091,
+      "vegetation": 0.324,
+      "ground": 0.476,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.051
+     },
+     "labelled": 0.99,
+     "game": {
+      "sky": 0.058,
+      "building": 0.093,
+      "vegetation": 0.338,
+      "ground": 0.491,
+      "water": 0,
+      "vehicle": 0.009,
+      "other": 0.011
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-09-15",
+     "hour": 18.53
+    },
+    "green-ozarks-branson": {
+     "score": 0.98,
+     "photo": {
+      "sky": 0.59,
+      "building": 0,
+      "vegetation": 0.108,
+      "ground": 0.286,
+      "water": 0,
+      "vehicle": 0.006,
+      "other": 0.01
+     },
+     "labelled": 0.985,
+     "game": {
+      "sky": 0.597,
+      "building": 0.001,
+      "vegetation": 0.098,
+      "ground": 0.298,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.006
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2022-05-06",
+     "hour": 13.03
+    },
+    "green-appalachia-montford-avenue-asheville": {
+     "score": 0.741,
+     "photo": {
+      "sky": 0.321,
+      "building": 0.294,
+      "vegetation": 0.095,
+      "ground": 0.217,
+      "water": 0,
+      "vehicle": 0.006,
+      "other": 0.067
+     },
+     "labelled": 0.83,
+     "game": {
+      "sky": 0.409,
+      "building": 0.077,
+      "vegetation": 0.112,
+      "ground": 0.236,
+      "water": 0,
+      "vehicle": 0.141,
+      "other": 0.025
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2022-08-08",
+     "hour": 20.05
+    },
+    "green-appalachia-little-river-road-the-smokies": {
+     "score": 0.496,
+     "photo": {
+      "sky": 0.033,
+      "building": 0,
+      "vegetation": 0.496,
+      "ground": 0.47,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0
+     },
+     "labelled": 0.996,
+     "game": {
+      "sky": 0,
+      "building": 0,
+      "vegetation": 1,
+      "ground": 0,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2021-04-26",
+     "hour": 19.95
+    },
+    "green-appalachia-kanawha-boulevard-charleston": {
+     "score": 0.621,
+     "photo": {
+      "sky": 0.106,
+      "building": 0.015,
+      "vegetation": 0.588,
+      "ground": 0.143,
+      "water": 0.013,
+      "vehicle": 0.012,
+      "other": 0.124
+     },
+     "labelled": 0.575,
+     "game": {
+      "sky": 0.107,
+      "building": 0.005,
+      "vegetation": 0.292,
+      "ground": 0.512,
+      "water": 0,
+      "vehicle": 0.02,
+      "other": 0.062
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-03-25",
+     "hour": 16.43
+    },
+    "green-upstate-ny-fall-creek-ithaca": {
+     "score": 0.783,
+     "photo": {
+      "sky": 0.118,
+      "building": 0,
+      "vegetation": 0.592,
+      "ground": 0.283,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.007
+     },
+     "labelled": 0.751,
+     "game": {
+      "sky": 0.213,
+      "building": 0.002,
+      "vegetation": 0.375,
+      "ground": 0.382,
+      "water": 0,
+      "vehicle": 0.015,
+      "other": 0.014
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-04-10",
+     "hour": 17.08
+    },
+    "green-upstate-ny-north-broadway-saratoga-springs": {
+     "score": 0.798,
+     "photo": {
+      "sky": 0.227,
+      "building": 0.062,
+      "vegetation": 0.608,
+      "ground": 0.098,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.004
+     },
+     "labelled": 0.998,
+     "game": {
+      "sky": 0.382,
+      "building": 0.091,
+      "vegetation": 0.407,
+      "ground": 0.108,
+      "water": 0,
+      "vehicle": 0.005,
+      "other": 0.008
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-08-03",
+     "hour": 17.5
+    },
+    "green-upstate-ny-ny-73-keene": {
+     "score": 0.568,
+     "photo": {
+      "sky": 0.378,
+      "building": 0,
+      "vegetation": 0.421,
+      "ground": 0.092,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.109
+     },
+     "labelled": 0.922,
+     "game": {
+      "sky": 0.592,
+      "building": 0.024,
+      "vegetation": 0.094,
+      "ground": 0.287,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.004
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-06-19",
+     "hour": 12.02
+    },
+    "green-upstate-ny-saranac-avenue-lake-placid": {
+     "score": 0.814,
+     "photo": {
+      "sky": 0.241,
+      "building": 0,
+      "vegetation": 0.272,
+      "ground": 0.421,
+      "water": 0,
+      "vehicle": 0.004,
+      "other": 0.062
+     },
+     "labelled": 0.939,
+     "game": {
+      "sky": 0.279,
+      "building": 0,
+      "vegetation": 0.12,
+      "ground": 0.536,
+      "water": 0.033,
+      "vehicle": 0,
+      "other": 0.032
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-07-12",
+     "hour": 16.35
+    },
+    "green-pnw-bend-the-dry-side": {
+     "score": 0.649,
+     "photo": {
+      "sky": 0.29,
+      "building": 0.077,
+      "vegetation": 0.302,
+      "ground": 0.246,
+      "water": 0,
+      "vehicle": 0.038,
+      "other": 0.047
+     },
+     "labelled": 0.658,
+     "game": {
+      "sky": 0.335,
+      "building": 0.045,
+      "vegetation": 0.026,
+      "ground": 0.32,
+      "water": 0,
+      "vehicle": 0.271,
+      "other": 0.004
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-03-14",
+     "hour": 10.03
+    },
+    "green-pnw-federal-avenue-east-seattle": {
+     "score": 0.805,
+     "photo": {
+      "sky": 0.094,
+      "building": 0.013,
+      "vegetation": 0.592,
+      "ground": 0.222,
+      "water": 0,
+      "vehicle": 0.045,
+      "other": 0.034
+     },
+     "labelled": 0.992,
+     "game": {
+      "sky": 0.059,
+      "building": 0.008,
+      "vegetation": 0.438,
+      "ground": 0.365,
+      "water": 0,
+      "vehicle": 0.097,
+      "other": 0.032
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2020-01-30",
+     "hour": 12.23
+    },
+    "green-pnw-forks": {
+     "score": 0.763,
+     "photo": {
+      "sky": 0.518,
+      "building": 0.207,
+      "vegetation": 0.02,
+      "ground": 0.052,
+      "water": 0,
+      "vehicle": 0.032,
+      "other": 0.172
+     },
+     "labelled": 0.837,
+     "game": {
+      "sky": 0.478,
+      "building": 0.33,
+      "vegetation": 0.009,
+      "ground": 0.166,
+      "water": 0,
+      "vehicle": 0.002,
+      "other": 0.015
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2021-09-25",
+     "hour": 15.08
+    },
+    "green-pnw-longmire-mount-rainier": {
+     "score": 0.522,
+     "photo": {
+      "sky": 0.066,
+      "building": 0.005,
+      "vegetation": 0.6,
+      "ground": 0.209,
+      "water": 0,
+      "vehicle": 0.107,
+      "other": 0.013
+     },
+     "labelled": 0.985,
+     "game": {
+      "sky": 0.357,
+      "building": 0.02,
+      "vegetation": 0.122,
+      "ground": 0.284,
+      "water": 0,
+      "vehicle": 0.202,
+      "other": 0.015
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-07-12",
+     "hour": 14.82
+    },
+    "green-texas-hyde-park-austin": {
+     "score": 0.536,
+     "photo": {
+      "sky": 0.054,
+      "building": 0.248,
+      "vegetation": 0.285,
+      "ground": 0.297,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.116
+     },
+     "labelled": 0.773,
+     "game": {
+      "sky": 0.003,
+      "building": 0.464,
+      "vegetation": 0.533,
+      "ground": 0,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2019-12-12",
+     "hour": 11.62
+    },
+    "green-texas-king-william-san-antonio": {
+     "score": 0.682,
+     "photo": {
+      "sky": 0.356,
+      "building": 0.181,
+      "vegetation": 0.014,
+      "ground": 0.153,
+      "water": 0,
+      "vehicle": 0.048,
+      "other": 0.248
+     },
+     "labelled": 0.863,
+     "game": {
+      "sky": 0.514,
+      "building": 0.131,
+      "vegetation": 0.101,
+      "ground": 0.226,
+      "water": 0,
+      "vehicle": 0.005,
+      "other": 0.023
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-10-26",
+     "hour": 17.28
+    },
+    "green-texas-wolflin-amarillo": {
+     "score": 0.921,
+     "photo": {
+      "sky": 0.842,
+      "building": 0,
+      "vegetation": 0.004,
+      "ground": 0.099,
+      "water": 0,
+      "vehicle": 0.034,
+      "other": 0.021
+     },
+     "labelled": 0.963,
+     "game": {
+      "sky": 0.85,
+      "building": 0.02,
+      "vegetation": 0.055,
+      "ground": 0.07,
+      "water": 0,
+      "vehicle": 0.002,
+      "other": 0.003
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-09-01",
+     "hour": 19.4
+    },
+    "green-great-basin-moab": {
+     "score": 0.927,
+     "photo": {
+      "sky": 0.1,
+      "building": 0.024,
+      "vegetation": 0.548,
+      "ground": 0.302,
+      "water": 0,
+      "vehicle": 0.008,
+      "other": 0.018
+     },
+     "labelled": 0.964,
+     "game": {
+      "sky": 0.099,
+      "building": 0.063,
+      "vegetation": 0.499,
+      "ground": 0.335,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.001
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-07-05",
+     "hour": 13.18
+    }
+   }
+  },
+  {
+   "at": "2026-10-08T01:16:53.423Z",
+   "commit": "8913baf",
+   "tag": "flora-1b",
+   "spots": {
+    "green-desert-sw-cactus-forest-drive-saguaro": {
+     "score": 0.738,
+     "photo": {
+      "sky": 0.575,
+      "building": 0,
+      "vegetation": 0.214,
+      "ground": 0.142,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.069
+     },
+     "labelled": 0.982,
+     "game": {
+      "sky": 0.51,
+      "building": 0.002,
+      "vegetation": 0.037,
+      "ground": 0.402,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.049
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-12-31",
+     "hour": 15.08
+    },
+    "green-desert-sw-encanto-palmcroft-phoenix": {
+     "score": 0.855,
+     "photo": {
+      "sky": 0.271,
+      "building": 0,
+      "vegetation": 0.208,
+      "ground": 0.487,
+      "water": 0.003,
+      "vehicle": 0.001,
+      "other": 0.029
+     },
+     "labelled": 0.994,
+     "game": {
+      "sky": 0.389,
+      "building": 0.004,
+      "vegetation": 0.091,
+      "ground": 0.491,
+      "water": 0.022,
+      "vehicle": 0,
+      "other": 0.002
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-02-23",
+     "hour": 11.6
+    },
+    "green-desert-sw-canyon-road-santa-fe": {
+     "score": 0.345,
+     "photo": {
+      "sky": 0.114,
+      "building": 0.012,
+      "vegetation": 0.567,
+      "ground": 0.209,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.098
+     },
+     "labelled": 0.806,
+     "game": {
+      "sky": 0.463,
+      "building": 0.091,
+      "vegetation": 0.004,
+      "ground": 0.329,
+      "water": 0,
+      "vehicle": 0.108,
+      "other": 0.005
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-10-12",
+     "hour": 17.1
+    },
+    "green-pnw-bend-the-dry-side": {
+     "score": 0.65,
+     "photo": {
+      "sky": 0.29,
+      "building": 0.077,
+      "vegetation": 0.302,
+      "ground": 0.246,
+      "water": 0,
+      "vehicle": 0.038,
+      "other": 0.047
+     },
+     "labelled": 0.658,
+     "game": {
+      "sky": 0.335,
+      "building": 0.045,
+      "vegetation": 0.026,
+      "ground": 0.32,
+      "water": 0,
+      "vehicle": 0.27,
+      "other": 0.005
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-03-14",
+     "hour": 10.03
+    },
+    "green-great-basin-moab": {
+     "score": 0.927,
+     "photo": {
+      "sky": 0.1,
+      "building": 0.024,
+      "vegetation": 0.548,
+      "ground": 0.302,
+      "water": 0,
+      "vehicle": 0.008,
+      "other": 0.018
+     },
+     "labelled": 0.964,
+     "game": {
+      "sky": 0.099,
+      "building": 0.063,
+      "vegetation": 0.499,
+      "ground": 0.335,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.001
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-07-05",
+     "hour": 13.18
+    }
+   }
+  },
+  {
+   "at": "2026-10-08T01:47:39.910Z",
+   "commit": "8913baf",
+   "tag": "flora-2",
+   "spots": {
+    "green-desert-sw-cactus-forest-drive-saguaro": {
+     "score": 0.756,
+     "photo": {
+      "sky": 0.575,
+      "building": 0,
+      "vegetation": 0.214,
+      "ground": 0.142,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.069
+     },
+     "labelled": 0.982,
+     "game": {
+      "sky": 0.509,
+      "building": 0.001,
+      "vegetation": 0.039,
+      "ground": 0.385,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.065
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-12-31",
+     "hour": 15.08
+    },
+    "green-desert-sw-encanto-palmcroft-phoenix": {
+     "score": 0.853,
+     "photo": {
+      "sky": 0.271,
+      "building": 0,
+      "vegetation": 0.208,
+      "ground": 0.487,
+      "water": 0.003,
+      "vehicle": 0.001,
+      "other": 0.029
+     },
+     "labelled": 0.994,
+     "game": {
+      "sky": 0.391,
+      "building": 0.003,
+      "vegetation": 0.09,
+      "ground": 0.492,
+      "water": 0.022,
+      "vehicle": 0,
+      "other": 0.001
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-02-23",
+     "hour": 11.6
+    },
+    "green-desert-sw-canyon-road-santa-fe": {
+     "score": 0.345,
+     "photo": {
+      "sky": 0.114,
+      "building": 0.012,
+      "vegetation": 0.567,
+      "ground": 0.209,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.098
+     },
+     "labelled": 0.806,
+     "game": {
+      "sky": 0.463,
+      "building": 0.091,
+      "vegetation": 0.004,
+      "ground": 0.33,
+      "water": 0,
+      "vehicle": 0.107,
+      "other": 0.006
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-10-12",
+     "hour": 17.1
+    },
+    "green-california-berkeley-hills": {
+     "score": 0.802,
+     "photo": {
+      "sky": 0.43,
+      "building": 0.105,
+      "vegetation": 0.395,
+      "ground": 0.042,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.027
+     },
+     "labelled": 0.807,
+     "game": {
+      "sky": 0.487,
+      "building": 0.124,
+      "vegetation": 0.213,
+      "ground": 0.144,
+      "water": 0,
+      "vehicle": 0.021,
+      "other": 0.011
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-12-29",
+     "hour": 15.12
+    },
+    "green-california-bungalow-heaven-pasadena": {
+     "score": 0.843,
+     "photo": {
+      "sky": 0.342,
+      "building": 0.015,
+      "vegetation": 0.305,
+      "ground": 0.235,
+      "water": 0,
+      "vehicle": 0.006,
+      "other": 0.097
+     },
+     "labelled": 0.993,
+     "game": {
+      "sky": 0.24,
+      "building": 0.046,
+      "vegetation": 0.385,
+      "ground": 0.223,
+      "water": 0,
+      "vehicle": 0.053,
+      "other": 0.054
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2020-01-12",
+     "hour": 11.88
+    },
+    "green-rockies-mapleton-hill-boulder": {
+     "score": 0.897,
+     "photo": {
+      "sky": 0.181,
+      "building": 0.013,
+      "vegetation": 0.51,
+      "ground": 0.251,
+      "water": 0,
+      "vehicle": 0.01,
+      "other": 0.034
+     },
+     "labelled": 0.998,
+     "game": {
+      "sky": 0.266,
+      "building": 0.01,
+      "vegetation": 0.419,
+      "ground": 0.269,
+      "water": 0,
+      "vehicle": 0.008,
+      "other": 0.027
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-04-17",
+     "hour": 17.67
+    },
+    "green-rockies-coeur-d-alene": {
+     "score": 0.675,
+     "photo": {
+      "sky": 0.256,
+      "building": 0.034,
+      "vegetation": 0.251,
+      "ground": 0.401,
+      "water": 0,
+      "vehicle": 0.018,
+      "other": 0.04
+     },
+     "labelled": 0.998,
+     "game": {
+      "sky": 0.567,
+      "building": 0.049,
+      "vegetation": 0.085,
+      "ground": 0.287,
+      "water": 0,
+      "vehicle": 0.004,
+      "other": 0.009
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-06-22",
+     "hour": 8.95
+    },
+    "green-rockies-south-willson-avenue-bozeman": {
+     "score": 0.655,
+     "photo": {
+      "sky": 0.131,
+      "building": 0.029,
+      "vegetation": 0.612,
+      "ground": 0.215,
+      "water": 0,
+      "vehicle": 0.01,
+      "other": 0.002
+     },
+     "labelled": 0.771,
+     "game": {
+      "sky": 0.302,
+      "building": 0.04,
+      "vegetation": 0.267,
+      "ground": 0.251,
+      "water": 0,
+      "vehicle": 0.134,
+      "other": 0.006
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-12-23",
+     "hour": 10.12
+    },
+    "green-florida-centerville-road-tallahassee": {
+     "score": 0.913,
+     "photo": {
+      "sky": 0.314,
+      "building": 0,
+      "vegetation": 0.356,
+      "ground": 0.197,
+      "water": 0,
+      "vehicle": 0.056,
+      "other": 0.077
+     },
+     "labelled": 0.997,
+     "game": {
+      "sky": 0.342,
+      "building": 0,
+      "vegetation": 0.397,
+      "ground": 0.215,
+      "water": 0,
+      "vehicle": 0.018,
+      "other": 0.027
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2022-10-30",
+     "hour": 13.17
+    },
+    "green-florida-eaton-street-key-west": {
+     "score": 0.62,
+     "photo": {
+      "sky": 0.23,
+      "building": 0.096,
+      "vegetation": 0.07,
+      "ground": 0.434,
+      "water": 0,
+      "vehicle": 0.033,
+      "other": 0.137
+     },
+     "labelled": 0.987,
+     "game": {
+      "sky": 0.168,
+      "building": 0.344,
+      "vegetation": 0.202,
+      "ground": 0.232,
+      "water": 0,
+      "vehicle": 0.005,
+      "other": 0.049
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2021-02-26",
+     "hour": 16.17
+    },
+    "green-southeast-jones-street-savannah": {
+     "score": 0.605,
+     "photo": {
+      "sky": 0.013,
+      "building": 0.247,
+      "vegetation": 0.45,
+      "ground": 0.261,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.029
+     },
+     "labelled": 0.701,
+     "game": {
+      "sky": 0,
+      "building": 0.021,
+      "vegetation": 0.548,
+      "ground": 0.125,
+      "water": 0,
+      "vehicle": 0.297,
+      "other": 0.009
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-08-31",
+     "hour": 13.55
+    },
+    "green-southeast-trinity-park-durham": {
+     "score": 0.39,
+     "photo": {
+      "sky": 0.068,
+      "building": 0.003,
+      "vegetation": 0.569,
+      "ground": 0.232,
+      "water": 0,
+      "vehicle": 0.012,
+      "other": 0.116
+     },
+     "labelled": 0.917,
+     "game": {
+      "sky": 0.423,
+      "building": 0.06,
+      "vegetation": 0.017,
+      "ground": 0.417,
+      "water": 0,
+      "vehicle": 0.025,
+      "other": 0.058
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-10-21",
+     "hour": 16.32
+    },
+    "green-southeast-rutledge-avenue-charleston": {
+     "score": 0.708,
+     "photo": {
+      "sky": 0.124,
+      "building": 0.061,
+      "vegetation": 0.559,
+      "ground": 0.122,
+      "water": 0,
+      "vehicle": 0.002,
+      "other": 0.132
+     },
+     "labelled": 0.744,
+     "game": {
+      "sky": 0.113,
+      "building": 0.023,
+      "vegetation": 0.439,
+      "ground": 0.338,
+      "water": 0,
+      "vehicle": 0.078,
+      "other": 0.009
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-06-15",
+     "hour": 19.73
+    },
+    "green-plains-council-grove": {
+     "score": 0.758,
+     "photo": {
+      "sky": 0.232,
+      "building": 0.077,
+      "vegetation": 0.199,
+      "ground": 0.395,
+      "water": 0,
+      "vehicle": 0.05,
+      "other": 0.047
+     },
+     "labelled": 0.991,
+     "game": {
+      "sky": 0.474,
+      "building": 0.049,
+      "vegetation": 0.096,
+      "ground": 0.381,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-08-05",
+     "hour": 11.52
+    },
+    "green-plains-old-west-lawrence": {
+     "score": 0.64,
+     "photo": {
+      "sky": 0.107,
+      "building": 0.092,
+      "vegetation": 0.626,
+      "ground": 0.138,
+      "water": 0,
+      "vehicle": 0.03,
+      "other": 0.007
+     },
+     "labelled": 0.861,
+     "game": {
+      "sky": 0.319,
+      "building": 0.068,
+      "vegetation": 0.29,
+      "ground": 0.234,
+      "water": 0,
+      "vehicle": 0.062,
+      "other": 0.027
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-02-28",
+     "hour": 16.2
+    },
+    "green-plains-sheridan-boulevard-lincoln": {
+     "score": 0.794,
+     "photo": {
+      "sky": 0.264,
+      "building": 0.019,
+      "vegetation": 0.343,
+      "ground": 0.277,
+      "water": 0,
+      "vehicle": 0.041,
+      "other": 0.055
+     },
+     "labelled": 0.821,
+     "game": {
+      "sky": 0.132,
+      "building": 0.028,
+      "vegetation": 0.396,
+      "ground": 0.422,
+      "water": 0,
+      "vehicle": 0.017,
+      "other": 0.006
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-02-11",
+     "hour": 16.13
+    },
+    "green-gulf-st-charles-avenue-new-orleans": {
+     "score": 0.621,
+     "photo": {
+      "sky": 0.08,
+      "building": 0.268,
+      "vegetation": 0.113,
+      "ground": 0.268,
+      "water": 0,
+      "vehicle": 0.005,
+      "other": 0.266
+     },
+     "labelled": 0.995,
+     "game": {
+      "sky": 0.272,
+      "building": 0.202,
+      "vegetation": 0.069,
+      "ground": 0.455,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.001
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-05-18",
+     "hour": 9.95
+    },
+    "green-new-england-monument-street-concord": {
+     "score": 0.67,
+     "photo": {
+      "sky": 0.274,
+      "building": 0.255,
+      "vegetation": 0.249,
+      "ground": 0.087,
+      "water": 0,
+      "vehicle": 0.124,
+      "other": 0.011
+     },
+     "labelled": 0.637,
+     "game": {
+      "sky": 0.26,
+      "building": 0.185,
+      "vegetation": 0.134,
+      "ground": 0.417,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.003
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-06-28",
+     "hour": 14.35
+    },
+    "green-new-england-park-loop-road-acadia": {
+     "score": 0.744,
+     "photo": {
+      "sky": 0.422,
+      "building": 0,
+      "vegetation": 0.049,
+      "ground": 0,
+      "water": 0.307,
+      "vehicle": 0,
+      "other": 0.222
+     },
+     "labelled": 1,
+     "game": {
+      "sky": 0.387,
+      "building": 0,
+      "vegetation": 0.101,
+      "ground": 0.016,
+      "water": 0.495,
+      "vehicle": 0,
+      "other": 0
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-09-04",
+     "hour": 13.15
+    },
+    "green-mid-atlantic-prince-george-street-annapolis": {
+     "score": 0.523,
+     "photo": {
+      "sky": 0.03,
+      "building": 0.178,
+      "vegetation": 0.153,
+      "ground": 0.17,
+      "water": 0.371,
+      "vehicle": 0,
+      "other": 0.098
+     },
+     "labelled": 0.998,
+     "game": {
+      "sky": 0.177,
+      "building": 0.21,
+      "vegetation": 0.046,
+      "ground": 0.421,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.145
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-07-11",
+     "hour": 13.85
+    },
+    "green-mid-atlantic-hughes-street-cape-may": {
+     "score": 0.901,
+     "photo": {
+      "sky": 0.386,
+      "building": 0.104,
+      "vegetation": 0.172,
+      "ground": 0.278,
+      "water": 0,
+      "vehicle": 0.004,
+      "other": 0.056
+     },
+     "labelled": 0.992,
+     "game": {
+      "sky": 0.362,
+      "building": 0.109,
+      "vegetation": 0.246,
+      "ground": 0.253,
+      "water": 0,
+      "vehicle": 0.024,
+      "other": 0.006
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2022-10-07",
+     "hour": 12.17
+    },
+    "green-mid-atlantic-library-place-princeton": {
+     "score": 0.746,
+     "photo": {
+      "sky": 0.093,
+      "building": 0.037,
+      "vegetation": 0.503,
+      "ground": 0.354,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.013
+     },
+     "labelled": 0.998,
+     "game": {
+      "sky": 0.144,
+      "building": 0.145,
+      "vegetation": 0.259,
+      "ground": 0.449,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.003
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-11-11",
+     "hour": 10.5
+    },
+    "green-midwest-traverse-city": {
+     "score": 0.939,
+     "photo": {
+      "sky": 0.13,
+      "building": 0.002,
+      "vegetation": 0.478,
+      "ground": 0.321,
+      "water": 0,
+      "vehicle": 0.004,
+      "other": 0.065
+     },
+     "labelled": 0.941,
+     "game": {
+      "sky": 0.132,
+      "building": 0.026,
+      "vegetation": 0.483,
+      "ground": 0.323,
+      "water": 0,
+      "vehicle": 0.032,
+      "other": 0.004
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2021-09-26",
+     "hour": 12.53
+    },
+    "green-midwest-vilas-madison": {
+     "score": 0.961,
+     "photo": {
+      "sky": 0.057,
+      "building": 0.091,
+      "vegetation": 0.324,
+      "ground": 0.476,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.051
+     },
+     "labelled": 0.99,
+     "game": {
+      "sky": 0.058,
+      "building": 0.093,
+      "vegetation": 0.338,
+      "ground": 0.492,
+      "water": 0,
+      "vehicle": 0.007,
+      "other": 0.011
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-09-15",
+     "hour": 18.53
+    },
+    "green-ozarks-branson": {
+     "score": 0.981,
+     "photo": {
+      "sky": 0.59,
+      "building": 0,
+      "vegetation": 0.108,
+      "ground": 0.286,
+      "water": 0,
+      "vehicle": 0.006,
+      "other": 0.01
+     },
+     "labelled": 0.985,
+     "game": {
+      "sky": 0.597,
+      "building": 0.001,
+      "vegetation": 0.099,
+      "ground": 0.297,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.006
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2022-05-06",
+     "hour": 13.03
+    },
+    "green-appalachia-montford-avenue-asheville": {
+     "score": 0.736,
+     "photo": {
+      "sky": 0.321,
+      "building": 0.294,
+      "vegetation": 0.095,
+      "ground": 0.217,
+      "water": 0,
+      "vehicle": 0.006,
+      "other": 0.067
+     },
+     "labelled": 0.83,
+     "game": {
+      "sky": 0.412,
+      "building": 0.076,
+      "vegetation": 0.111,
+      "ground": 0.239,
+      "water": 0,
+      "vehicle": 0.142,
+      "other": 0.021
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2022-08-08",
+     "hour": 20.05
+    },
+    "green-appalachia-little-river-road-the-smokies": {
+     "score": 0.496,
+     "photo": {
+      "sky": 0.033,
+      "building": 0,
+      "vegetation": 0.496,
+      "ground": 0.47,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0
+     },
+     "labelled": 0.996,
+     "game": {
+      "sky": 0,
+      "building": 0,
+      "vegetation": 1,
+      "ground": 0,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2021-04-26",
+     "hour": 19.95
+    },
+    "green-appalachia-kanawha-boulevard-charleston": {
+     "score": 0.633,
+     "photo": {
+      "sky": 0.106,
+      "building": 0.015,
+      "vegetation": 0.588,
+      "ground": 0.143,
+      "water": 0.013,
+      "vehicle": 0.012,
+      "other": 0.124
+     },
+     "labelled": 0.575,
+     "game": {
+      "sky": 0.098,
+      "building": 0.008,
+      "vegetation": 0.335,
+      "ground": 0.51,
+      "water": 0,
+      "vehicle": 0.002,
+      "other": 0.047
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-03-25",
+     "hour": 16.43
+    },
+    "green-upstate-ny-fall-creek-ithaca": {
+     "score": 0.781,
+     "photo": {
+      "sky": 0.118,
+      "building": 0,
+      "vegetation": 0.592,
+      "ground": 0.283,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.007
+     },
+     "labelled": 0.751,
+     "game": {
+      "sky": 0.207,
+      "building": 0.002,
+      "vegetation": 0.373,
+      "ground": 0.385,
+      "water": 0,
+      "vehicle": 0.017,
+      "other": 0.017
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-04-10",
+     "hour": 17.08
+    },
+    "green-upstate-ny-north-broadway-saratoga-springs": {
+     "score": 0.825,
+     "photo": {
+      "sky": 0.227,
+      "building": 0.062,
+      "vegetation": 0.608,
+      "ground": 0.098,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.004
+     },
+     "labelled": 0.998,
+     "game": {
+      "sky": 0.359,
+      "building": 0.088,
+      "vegetation": 0.433,
+      "ground": 0.109,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.011
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-08-03",
+     "hour": 17.5
+    },
+    "green-upstate-ny-ny-73-keene": {
+     "score": 0.57,
+     "photo": {
+      "sky": 0.378,
+      "building": 0,
+      "vegetation": 0.421,
+      "ground": 0.092,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.109
+     },
+     "labelled": 0.922,
+     "game": {
+      "sky": 0.589,
+      "building": 0.024,
+      "vegetation": 0.096,
+      "ground": 0.287,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.003
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-06-19",
+     "hour": 12.02
+    },
+    "green-upstate-ny-saranac-avenue-lake-placid": {
+     "score": 0.884,
+     "photo": {
+      "sky": 0.241,
+      "building": 0,
+      "vegetation": 0.272,
+      "ground": 0.421,
+      "water": 0,
+      "vehicle": 0.004,
+      "other": 0.062
+     },
+     "labelled": 0.939,
+     "game": {
+      "sky": 0.238,
+      "building": 0,
+      "vegetation": 0.194,
+      "ground": 0.516,
+      "water": 0.021,
+      "vehicle": 0,
+      "other": 0.03
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-07-12",
+     "hour": 16.35
+    },
+    "green-pnw-bend-the-dry-side": {
+     "score": 0.416,
+     "photo": {
+      "sky": 0.29,
+      "building": 0.077,
+      "vegetation": 0.302,
+      "ground": 0.246,
+      "water": 0,
+      "vehicle": 0.038,
+      "other": 0.047
+     },
+     "labelled": 0.658,
+     "game": {
+      "sky": 0.333,
+      "building": 0.045,
+      "vegetation": 0.025,
+      "ground": 0.011,
+      "water": 0,
+      "vehicle": 0.58,
+      "other": 0.007
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-03-14",
+     "hour": 10.03
+    },
+    "green-pnw-federal-avenue-east-seattle": {
+     "score": 0.802,
+     "photo": {
+      "sky": 0.094,
+      "building": 0.013,
+      "vegetation": 0.592,
+      "ground": 0.222,
+      "water": 0,
+      "vehicle": 0.045,
+      "other": 0.034
+     },
+     "labelled": 0.992,
+     "game": {
+      "sky": 0.051,
+      "building": 0.007,
+      "vegetation": 0.443,
+      "ground": 0.361,
+      "water": 0,
+      "vehicle": 0.103,
+      "other": 0.035
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2020-01-30",
+     "hour": 12.23
+    },
+    "green-pnw-forks": {
+     "score": 0.764,
+     "photo": {
+      "sky": 0.518,
+      "building": 0.207,
+      "vegetation": 0.02,
+      "ground": 0.052,
+      "water": 0,
+      "vehicle": 0.032,
+      "other": 0.172
+     },
+     "labelled": 0.837,
+     "game": {
+      "sky": 0.478,
+      "building": 0.33,
+      "vegetation": 0.009,
+      "ground": 0.165,
+      "water": 0,
+      "vehicle": 0.003,
+      "other": 0.015
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2021-09-25",
+     "hour": 15.08
+    },
+    "green-pnw-longmire-mount-rainier": {
+     "score": 0.521,
+     "photo": {
+      "sky": 0.066,
+      "building": 0.005,
+      "vegetation": 0.6,
+      "ground": 0.209,
+      "water": 0,
+      "vehicle": 0.107,
+      "other": 0.013
+     },
+     "labelled": 0.985,
+     "game": {
+      "sky": 0.357,
+      "building": 0.021,
+      "vegetation": 0.121,
+      "ground": 0.285,
+      "water": 0,
+      "vehicle": 0.202,
+      "other": 0.015
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-07-12",
+     "hour": 14.82
+    },
+    "green-texas-hyde-park-austin": {
+     "score": 0.716,
+     "photo": {
+      "sky": 0.054,
+      "building": 0.248,
+      "vegetation": 0.285,
+      "ground": 0.297,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.116
+     },
+     "labelled": 0.773,
+     "game": {
+      "sky": 0.007,
+      "building": 0.105,
+      "vegetation": 0.405,
+      "ground": 0.461,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.022
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2019-12-12",
+     "hour": 11.62
+    },
+    "green-texas-king-william-san-antonio": {
+     "score": 0.682,
+     "photo": {
+      "sky": 0.356,
+      "building": 0.181,
+      "vegetation": 0.014,
+      "ground": 0.153,
+      "water": 0,
+      "vehicle": 0.048,
+      "other": 0.248
+     },
+     "labelled": 0.863,
+     "game": {
+      "sky": 0.518,
+      "building": 0.131,
+      "vegetation": 0.097,
+      "ground": 0.226,
+      "water": 0,
+      "vehicle": 0.004,
+      "other": 0.023
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-10-26",
+     "hour": 17.28
+    },
+    "green-texas-wolflin-amarillo": {
+     "score": 0.921,
+     "photo": {
+      "sky": 0.842,
+      "building": 0,
+      "vegetation": 0.004,
+      "ground": 0.099,
+      "water": 0,
+      "vehicle": 0.034,
+      "other": 0.021
+     },
+     "labelled": 0.963,
+     "game": {
+      "sky": 0.852,
+      "building": 0.021,
+      "vegetation": 0.052,
+      "ground": 0.07,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.004
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-09-01",
+     "hour": 19.4
+    },
+    "green-great-basin-moab": {
+     "score": 0.926,
+     "photo": {
+      "sky": 0.1,
+      "building": 0.024,
+      "vegetation": 0.548,
+      "ground": 0.302,
+      "water": 0,
+      "vehicle": 0.008,
+      "other": 0.018
+     },
+     "labelled": 0.964,
+     "game": {
+      "sky": 0.099,
+      "building": 0.064,
+      "vegetation": 0.498,
+      "ground": 0.335,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.001
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2024-07-05",
+     "hour": 13.18
+    }
+   }
+  },
+  {
+   "at": "2026-10-08T02:17:09.861Z",
+   "commit": "8913baf",
+   "tag": "flora-2b",
+   "spots": {
+    "green-pnw-bend-the-dry-side": {
+     "score": 0.416,
+     "photo": {
+      "sky": 0.29,
+      "building": 0.077,
+      "vegetation": 0.302,
+      "ground": 0.246,
+      "water": 0,
+      "vehicle": 0.038,
+      "other": 0.047
+     },
+     "labelled": 0.658,
+     "game": {
+      "sky": 0.333,
+      "building": 0.045,
+      "vegetation": 0.025,
+      "ground": 0.011,
+      "water": 0,
+      "vehicle": 0.58,
+      "other": 0.007
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-03-14",
+     "hour": 10.03
+    }
+   }
+  },
+  {
+   "at": "2026-10-08T02:18:29.943Z",
+   "commit": "8913baf",
+   "tag": "flora-2-largest",
+   "spots": {
+    "CA-largest-0644000": {
+     "score": 0.569,
+     "photo": {
+      "sky": 0.273,
+      "building": 0.088,
+      "vegetation": 0.208,
+      "ground": 0.118,
+      "water": 0,
+      "vehicle": 0.133,
+      "other": 0.18
+     },
+     "labelled": 0.668,
+     "game": {
+      "sky": 0.292,
+      "building": 0.242,
+      "vegetation": 0.031,
+      "ground": 0.376,
+      "water": 0,
+      "vehicle": 0.058,
+      "other": 0.001
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2020-01-15",
+     "hour": 12.65
+    },
+    "CO-largest-0820000": {
+     "score": 0.787,
+     "photo": {
+      "sky": 0.253,
+      "building": 0.396,
+      "vegetation": 0.038,
+      "ground": 0.239,
+      "water": 0,
+      "vehicle": 0.006,
+      "other": 0.067
+     },
+     "labelled": 0.766,
+     "game": {
+      "sky": 0.171,
+      "building": 0.349,
+      "vegetation": 0.008,
+      "ground": 0.447,
+      "water": 0,
+      "vehicle": 0.012,
+      "other": 0.013
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-06-14",
+     "hour": 6.78
+    },
+    "GA-largest-1304000": {
+     "score": 0.649,
+     "photo": {
+      "sky": 0.209,
+      "building": 0.188,
+      "vegetation": 0.221,
+      "ground": 0.213,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.169
+     },
+     "labelled": 0.993,
+     "game": {
+      "sky": 0.273,
+      "building": 0.475,
+      "vegetation": 0.075,
+      "ground": 0.138,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.039
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2022-04-03",
+     "hour": 19.32
+    },
+    "IL-largest-1714000": {
+     "score": 0.812,
+     "photo": {
+      "sky": 0.457,
+      "building": 0.042,
+      "vegetation": 0.074,
+      "ground": 0.305,
+      "water": 0,
+      "vehicle": 0.013,
+      "other": 0.108
+     },
+     "labelled": 0.796,
+     "game": {
+      "sky": 0.36,
+      "building": 0.033,
+      "vegetation": 0.121,
+      "ground": 0.447,
+      "water": 0,
+      "vehicle": 0.004,
+      "other": 0.036
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2020-01-14",
+     "hour": 10.62
+    },
+    "MA-largest-2507000": {
+     "score": 0.88,
+     "photo": {
+      "sky": 0.077,
+      "building": 0.584,
+      "vegetation": 0.019,
+      "ground": 0.212,
+      "water": 0,
+      "vehicle": 0.032,
+      "other": 0.075
+     },
+     "labelled": 0.994,
+     "game": {
+      "sky": 0.067,
+      "building": 0.662,
+      "vegetation": 0.001,
+      "ground": 0.254,
+      "water": 0,
+      "vehicle": 0.005,
+      "other": 0.01
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2020-01-14",
+     "hour": 8.75
+    },
+    "MN-largest-2743000": {
+     "score": 0.853,
+     "photo": {
+      "sky": 0.215,
+      "building": 0.374,
+      "vegetation": 0.028,
+      "ground": 0.315,
+      "water": 0,
+      "vehicle": 0.019,
+      "other": 0.049
+     },
+     "labelled": 0.84,
+     "game": {
+      "sky": 0.19,
+      "building": 0.28,
+      "vegetation": 0.045,
+      "ground": 0.445,
+      "water": 0,
+      "vehicle": 0.007,
+      "other": 0.033
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-07-08",
+     "hour": 19.88
+    },
+    "NC-largest-3712000": {
+     "score": 0.636,
+     "photo": {
+      "sky": 0.098,
+      "building": 0.492,
+      "vegetation": 0.081,
+      "ground": 0.086,
+      "water": 0,
+      "vehicle": 0.244,
+      "other": 0
+     },
+     "labelled": 0.996,
+     "game": {
+      "sky": 0.003,
+      "building": 0.708,
+      "vegetation": 0.055,
+      "ground": 0.229,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.005
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2022-09-07",
+     "hour": 10.9
+    },
+    "NY-largest-3651000": {
+     "score": 0.722,
+     "photo": {
+      "sky": 0.077,
+      "building": 0.599,
+      "vegetation": 0.02,
+      "ground": 0.236,
+      "water": 0,
+      "vehicle": 0.034,
+      "other": 0.035
+     },
+     "labelled": 0.928,
+     "game": {
+      "sky": 0.082,
+      "building": 0.354,
+      "vegetation": 0.254,
+      "ground": 0.275,
+      "water": 0,
+      "vehicle": 0.025,
+      "other": 0.011
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2020-06-07",
+     "hour": 18.55
+    },
+    "OH-largest-3918000": {
+     "score": 0.845,
+     "photo": {
+      "sky": 0.05,
+      "building": 0.251,
+      "vegetation": 0.187,
+      "ground": 0.431,
+      "water": 0,
+      "vehicle": 0.004,
+      "other": 0.077
+     },
+     "labelled": 0.997,
+     "game": {
+      "sky": 0.077,
+      "building": 0.345,
+      "vegetation": 0.082,
+      "ground": 0.465,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.031
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-09-09",
+     "hour": 11.33
+    },
+    "PA-largest-4260000": {
+     "score": 0.629,
+     "photo": {
+      "sky": 0,
+      "building": 0.629,
+      "vegetation": 0.282,
+      "ground": 0,
+      "water": 0,
+      "vehicle": 0.085,
+      "other": 0.004
+     },
+     "labelled": 0.993,
+     "game": {
+      "sky": 0,
+      "building": 0.994,
+      "vegetation": 0,
+      "ground": 0.006,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2019-12-21",
+     "hour": 10.95
+    },
+    "TX-largest-4835000": {
+     "score": 0.782,
+     "photo": {
+      "sky": 0.216,
+      "building": 0.299,
+      "vegetation": 0.324,
+      "ground": 0.116,
+      "water": 0,
+      "vehicle": 0.005,
+      "other": 0.04
+     },
+     "labelled": 0.72,
+     "game": {
+      "sky": 0.229,
+      "building": 0.278,
+      "vegetation": 0.168,
+      "ground": 0.321,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.003
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-08-18",
+     "hour": 18.83
+    }
+   }
+  },
+  {
+   "at": "2026-10-08T02:33:13.769Z",
+   "commit": "8913baf",
+   "tag": "flora-0-largest",
+   "spots": {
+    "CA-largest-0644000": {
+     "score": 0.569,
+     "photo": {
+      "sky": 0.273,
+      "building": 0.088,
+      "vegetation": 0.208,
+      "ground": 0.118,
+      "water": 0,
+      "vehicle": 0.133,
+      "other": 0.18
+     },
+     "labelled": 0.668,
+     "game": {
+      "sky": 0.292,
+      "building": 0.242,
+      "vegetation": 0.031,
+      "ground": 0.376,
+      "water": 0,
+      "vehicle": 0.058,
+      "other": 0.001
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2020-01-15",
+     "hour": 12.65
+    },
+    "CO-largest-0820000": {
+     "score": 0.786,
+     "photo": {
+      "sky": 0.253,
+      "building": 0.396,
+      "vegetation": 0.038,
+      "ground": 0.239,
+      "water": 0,
+      "vehicle": 0.006,
+      "other": 0.067
+     },
+     "labelled": 0.766,
+     "game": {
+      "sky": 0.171,
+      "building": 0.342,
+      "vegetation": 0.014,
+      "ground": 0.352,
+      "water": 0,
+      "vehicle": 0.108,
+      "other": 0.014
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-06-14",
+     "hour": 6.78
+    },
+    "GA-largest-1304000": {
+     "score": 0.603,
+     "photo": {
+      "sky": 0.209,
+      "building": 0.188,
+      "vegetation": 0.221,
+      "ground": 0.213,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.169
+     },
+     "labelled": 0.993,
+     "game": {
+      "sky": 0.272,
+      "building": 0.383,
+      "vegetation": 0.073,
+      "ground": 0.105,
+      "water": 0,
+      "vehicle": 0.139,
+      "other": 0.028
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2022-04-03",
+     "hour": 19.32
+    },
+    "IL-largest-1714000": {
+     "score": 0.831,
+     "photo": {
+      "sky": 0.457,
+      "building": 0.042,
+      "vegetation": 0.074,
+      "ground": 0.305,
+      "water": 0,
+      "vehicle": 0.013,
+      "other": 0.108
+     },
+     "labelled": 0.796,
+     "game": {
+      "sky": 0.369,
+      "building": 0.032,
+      "vegetation": 0.101,
+      "ground": 0.413,
+      "water": 0,
+      "vehicle": 0.047,
+      "other": 0.037
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2020-01-14",
+     "hour": 10.62
+    },
+    "MA-largest-2507000": {
+     "score": 0.892,
+     "photo": {
+      "sky": 0.077,
+      "building": 0.584,
+      "vegetation": 0.019,
+      "ground": 0.212,
+      "water": 0,
+      "vehicle": 0.032,
+      "other": 0.075
+     },
+     "labelled": 0.994,
+     "game": {
+      "sky": 0.067,
+      "building": 0.654,
+      "vegetation": 0.001,
+      "ground": 0.251,
+      "water": 0,
+      "vehicle": 0.019,
+      "other": 0.008
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2020-01-14",
+     "hour": 8.75
+    },
+    "MN-largest-2743000": {
+     "score": 0.874,
+     "photo": {
+      "sky": 0.215,
+      "building": 0.374,
+      "vegetation": 0.028,
+      "ground": 0.315,
+      "water": 0,
+      "vehicle": 0.019,
+      "other": 0.049
+     },
+     "labelled": 0.84,
+     "game": {
+      "sky": 0.187,
+      "building": 0.305,
+      "vegetation": 0.029,
+      "ground": 0.441,
+      "water": 0,
+      "vehicle": 0.004,
+      "other": 0.035
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2025-07-08",
+     "hour": 19.88
+    },
+    "NC-largest-3712000": {
+     "score": 0.635,
+     "photo": {
+      "sky": 0.098,
+      "building": 0.492,
+      "vegetation": 0.081,
+      "ground": 0.086,
+      "water": 0,
+      "vehicle": 0.244,
+      "other": 0
+     },
+     "labelled": 0.996,
+     "game": {
+      "sky": 0.003,
+      "building": 0.709,
+      "vegetation": 0.054,
+      "ground": 0.229,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.005
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2022-09-07",
+     "hour": 10.9
+    },
+    "NY-largest-3651000": {
+     "score": 0.652,
+     "photo": {
+      "sky": 0.077,
+      "building": 0.599,
+      "vegetation": 0.02,
+      "ground": 0.236,
+      "water": 0,
+      "vehicle": 0.034,
+      "other": 0.035
+     },
+     "labelled": 0.928,
+     "game": {
+      "sky": 0.085,
+      "building": 0.273,
+      "vegetation": 0.32,
+      "ground": 0.264,
+      "water": 0,
+      "vehicle": 0.045,
+      "other": 0.012
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2020-06-07",
+     "hour": 18.55
+    },
+    "OH-largest-3918000": {
+     "score": 0.85,
+     "photo": {
+      "sky": 0.05,
+      "building": 0.251,
+      "vegetation": 0.187,
+      "ground": 0.431,
+      "water": 0,
+      "vehicle": 0.004,
+      "other": 0.077
+     },
+     "labelled": 0.997,
+     "game": {
+      "sky": 0.077,
+      "building": 0.351,
+      "vegetation": 0.081,
+      "ground": 0.452,
+      "water": 0,
+      "vehicle": 0.006,
+      "other": 0.033
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2023-09-09",
+     "hour": 11.33
+    },
+    "PA-largest-4260000": {
+     "score": 0.629,
+     "photo": {
+      "sky": 0,
+      "building": 0.629,
+      "vegetation": 0.282,
+      "ground": 0,
+      "water": 0,
+      "vehicle": 0.085,
+      "other": 0.004
+     },
+     "labelled": 0.993,
+     "game": {
+      "sky": 0,
+      "building": 0.994,
+      "vegetation": 0,
+      "ground": 0.006,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2019-12-21",
+     "hour": 10.95
+    },
+    "TX-largest-4835000": {
+     "score": 0.758,
+     "photo": {
+      "sky": 0.216,
+      "building": 0.299,
+      "vegetation": 0.324,
+      "ground": 0.116,
+      "water": 0,
+      "vehicle": 0.005,
+      "other": 0.04
+     },
+     "labelled": 0.72,
+     "game": {
+      "sky": 0.243,
+      "building": 0.276,
+      "vegetation": 0.136,
+      "ground": 0.329,
+      "water": 0,
+      "vehicle": 0.008,
+      "other": 0.009
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2026-08-18",
+     "hour": 18.83
+    }
+   }
   }
  ]
 }

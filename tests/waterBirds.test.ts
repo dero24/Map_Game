@@ -207,7 +207,7 @@ describe('the water and big birds', () => {
     expect(poses(4, 9)).toContain(4);
     expect(poses(7, 9)).not.toContain(4);
     expect(poses(4, 10)).not.toContain(4);
-  });
+  }, 30000); // (a cast stepped for seconds: under the full suite's load — a comparison run beside it — past 5 s)
   it("the osprey's nests: at the water's edge, never two to a 700 m cell, the same whichever way the land is cut into tiles", () => {
     // a winding shore: the water north of z = 40·sin(x/150)
     const sdf = (x: number, z: number) => z - 40 * Math.sin(x / 150), h = (x: number, z: number) => (sdf(x, z) > 0 ? 0.5 : -1.2);

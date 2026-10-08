@@ -639,8 +639,11 @@ export function fitUnderDecks<B extends { r: number[]; h: number; hy?: number; g
  *  street walled off, a car couldn't get through the Loop): lifted clear of the traffic (`lf`, its top
  *  where it was) — and a narrow one (15 m across or less, not a house) a street runs through at all, 4 m
  *  of its centre line: a station's canopy it crosses, a skyway. A lifted part (a skybridge) stays as it is; so does a street's short passage through a
- *  building's arch. Before the buildings are built. */
-export function dropStreetCrossers<B extends { r: number[]; lf?: number; h?: number; k?: string }>(buildings: B[], roads: Road[]): B[] {
+ *  building's arch. And a block the survey found where the map has none (`gen: 'lidar'`) that a car street's
+ *  centre line runs through for 3 m, or its lanes for 8: a canopy over the lanes, a truck or a bus parked
+ *  under the trees, a flat crown — never a building a street goes through: gone (West Pennington Street in
+ *  Tucson had three "houses" standing in its lanes). Before the buildings are built. */
+export function dropStreetCrossers<B extends { r: number[]; lf?: number; h?: number; k?: string; gen?: string }>(buildings: B[], roads: Road[]): B[] {
   // the car streets' segments, by 32 m cell
   const C = 32, segs: number[] = [], grid = new Map<number, number[]>();
   const key = (i: number, j: number) => i * 1048576 + j;
@@ -664,7 +667,7 @@ export function dropStreetCrossers<B extends { r: number[]; lf?: number; h?: num
 }
 /** How high a building standing over a street is lifted: a box truck's clearance and a little. */
 const OVER_STREET = 5.5;
-function streetThroughOf(b: { r: number[]; lf?: number; k?: string; h?: number }, segs: number[], grid: Map<number, number[]>, C: number, key: (i: number, j: number) => number): 'keep' | 'drop' | 'lift' {
+function streetThroughOf(b: { r: number[]; lf?: number; k?: string; h?: number; gen?: string }, segs: number[], grid: Map<number, number[]>, C: number, key: (i: number, j: number) => number): 'keep' | 'drop' | 'lift' {
   if ((b.lf ?? 0) > 1.5) return 'keep';
   const ring: P[] = [];
   let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity, area = 0;
@@ -673,9 +676,11 @@ function streetThroughOf(b: { r: number[]; lf?: number; k?: string; h?: number }
   const span = Math.hypot(x1 - x0, z1 - z0), big = Math.abs(area) / 2 >= 4000, low = (b.h ?? 8) <= 20;
   // (narrow: its mean width, its area over its length — a canopy, a platform, a skyway)
   const narrow = b.k !== 'house' && b.k !== 'shed' && span >= 20 && Math.abs(area) / 2 / Math.max(1, span) <= 15;
-  // (a tower over a street stands: the street is the one under it — sinkLowerLevels)
-  if (!low && !narrow) return 'keep';
-  if (span < 25 && !narrow) return 'keep'; // (too small to hold 25 m of street)
+  // (a tower over a street stands: the street is the one under it — sinkLowerLevels; but what the survey
+  // found in a street, of any size, is measured below)
+  const found = b.gen === 'lidar';
+  if (!found && !low && !narrow) return 'keep';
+  if (!found && span < 25 && !narrow) return 'keep'; // (too small to hold 25 m of street)
   const inside = (x: number, z: number) => { let ins = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const [xi, zi] = ring[i], [xj, zj] = ring[j]; if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) ins = !ins; } return ins; };
   const seen = new Set<number>();
   let through = 0, lanes = 0;
@@ -694,6 +699,7 @@ function streetThroughOf(b: { r: number[]; lf?: number; k?: string; h?: number }
         }
         if (big && low && through >= 40) return 'drop';
       }
+  if (found && (through >= 3 || lanes >= 8)) return 'drop';
   // (over the centre line 25 m, a low one; 4 m, a narrow one; over a travel lane 25 m, a long narrow one —
   // Chicago's Washington/Wabash canopy, 9 × 122 m, over Wabash's east lane beside the street's centre line)
   return !big && ((low && through >= 25) || (narrow && through >= 4) || (narrow && span >= 40 && through + lanes >= 25)) ? 'lift' : 'keep';

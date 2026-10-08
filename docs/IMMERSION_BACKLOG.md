@@ -79,7 +79,7 @@ source, a region/climate table or a foundry family). No hand lists.
 | 1.11b | Foliage self-shadow: crowns shaded by their sphere field + AO, not their own lobes | ✅ | propMaterial.ts |
 | 1.11c | Crown depth from LiDAR (lowest canopy return = crown base); near leaf-card LOD | ⬜ P1 | **the reviewer's outstanding item: street trees read blocky at 5–10 m (3 rounds)** |
 | 1.12 | Wet-edge "bloom" reveal as the world paints in, with a brush-and-water sound | ⬜ P1 | explore.ts + post |
-| 1.13 | Seasonal grade: autumn crowns, winter bare trees + snow cover ✅ (season.ts from date × place; `?day=`/`?date=`, panel day of year); spring blossom, snowbanks on ploughed kerbs, dormant winter lawns ⬜ | 🟡 P1 | 2026-09-27 (o) |
+| 1.13 | Seasonal grade: autumn crowns, winter bare trees + snow cover ✅ (season.ts from date × place; `?day=`/`?date=`, panel day of year); spring blossom ✅ (treeSeasons.ts), dormant winter lawns ✅ (2026-10-07: season.ts `dormant`), snowbanks on ploughed kerbs ⬜ | 🟡 P1 | 2026-09-27 (o) |
 | 1.14 | Weather that reads: rain streak wash, puddle glazes, sea fog banks, falling snow, storms that come and go (a real forecast feed later) | 🟡 P1 | snow cover by season exists; weather events thin |
 | 1.15 | Tree impostors beyond ~1 km; far-field silhouettes painted | ⬜ P2 | perf plus horizon richness |
 | 1.16 | Horizon and sky painting: layered cloud cards, sun/moon halos, lighthouse beams | 🟡 P2 | |

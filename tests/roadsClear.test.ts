@@ -110,6 +110,14 @@ describe('roads kept clear', () => {
     expect(out[1]).toBe(kerbside);
   });
 
+  it("a block the survey found standing in a street isn't a building: a canopy, a truck, a flat crown — gone; one beside the street, and the map's own, stay", () => {
+    // (West Pennington Street, Tucson: three found "houses" in its lanes, a car stopped dead against one)
+    const rect = (x0: number, z0: number, x1: number, z1: number, more: Record<string, unknown> = {}): { r: number[]; h: number; k: string; gen?: string } => ({ r: [m(x0), m(z0), m(x1), m(z0), m(x1), m(z1), m(x0), m(z1)], h: 5, k: 'house', ...more });
+    const street = road([[-200, 0], [200, 0]], { c: 'unclassified', w: 10.4 });
+    const overIt = rect(-5, -6, 5, 6, { gen: 'lidar' }), inALane = rect(-6, 1, 6, 4.5, { gen: 'lidar' }), besideIt = rect(-5, 8, 5, 18, { gen: 'lidar' }), mapped = rect(-5, -6, 5, 6);
+    expect(dropStreetCrossers([overIt, inALane, besideIt, mapped], [street])).toEqual([besideIt, mapped]);
+  });
+
   it("a divided road's one-way halves are their own lanes wide — a tagged width, a two-way road left alone", () => {
     const rs = [road([[0, 0], [10, 0]], { c: 'trunk', w: 12, ow: 1 }), road([[0, 5], [10, 5]], { c: 'trunk', w: 12 }), road([[0, 9], [10, 9]], { c: 'trunk', w: 9.5, ow: 1 }), road([[0, 12], [10, 12]], { c: 'motorway', w: 14, ow: 1 }), road([[0, 15], [10, 15]], { c: 'residential', w: 6.5, ow: 1 })];
     narrowOneWays(rs);
@@ -212,8 +220,12 @@ describe('roads kept clear', () => {
     const m = (v: number) => Math.round(v * 10);
     const street = (): Road => ({ p: [m(10), 0, m(110), 0, m(210), 0], c: 'residential', w: 10.9, pk: 5, n: 'Wall Street' });
     const shop = (x0: number, x1: number, z0: number, z1: number, more: Partial<Building> = {}): Building => ({ r: [m(x0), m(z0), m(x1), m(z0), m(x1), m(z1), m(x0), m(z1)], h: 8, k: 'commercial', roof: 'flat', s: 1, ...more });
+    // the town it runs through: houses down its south side, 10 m back from its middle (past the kerb's
+    // reach, so no front — but built up all along: no open country to give its parking back)
+    const town: Building[] = [];
+    for (let x = 0; x < 220; x += 14) town.push({ ...shop(x, x + 9, 10, 20), k: 'house' });
     // a row of shops 4.5 m north of the centre line from x 70 to 150, an alley 4 m wide at 108
-    const row = [shop(70, 108, -16, -4.5), shop(112, 150, -16, -4.5)];
+    const row = [shop(70, 108, -16, -4.5), shop(112, 150, -16, -4.5), ...town];
     const out = fitToFronts([street()], row, box);
     expect(out.length).toBe(3);
     const [a, b, c] = out;
@@ -237,7 +249,7 @@ describe('roads kept clear', () => {
     expect(fitToFronts(out, row, box)).toBe(out);
     // a sidewalk's room between the kerb and the fronts (5.45 m half-width, fronts 7.5 m off): left alone
     const roads = [street()];
-    expect(fitToFronts(roads, [shop(70, 150, -16, -7.5)], box)).toBe(roads);
+    expect(fitToFronts(roads, [shop(70, 150, -16, -7.5), ...town], box)).toBe(roads);
     // a whole street of fronts: the one way, narrowed, not cut
     const whole = fitToFronts([street()], [shop(0, 220, -16, -4.5)], box);
     expect(whole.length).toBe(1);
@@ -246,7 +258,7 @@ describe('roads kept clear', () => {
     // not a front: a skyway (lifted), a canopy, the survey's guess; not the tile's to fit: a neighbour's way
     for (const b of [shop(70, 150, -16, -4.5, { lf: 6 }), shop(70, 150, -16, -4.5, { cn: 1 }), shop(70, 150, -16, -4.5, { gen: 'lidar' })]) {
       const rs = [street()];
-      expect(fitToFronts(rs, [b], box)).toBe(rs);
+      expect(fitToFronts(rs, [b, ...town], box)).toBe(rs);
     }
     const ctx = [{ ...street(), own: 0 }];
     expect(fitToFronts(ctx, row, box)).toBe(ctx);
@@ -270,7 +282,37 @@ describe('roads kept clear', () => {
     expect(fitToFronts(motorway, both, box)).toBe(motorway);
     // a short front (a kiosk, 8 m) isn't a stretch
     const kiosk = [street()];
-    expect(fitToFronts(kiosk, [shop(100, 108, -10, -4.5)], box)).toBe(kiosk);
+    expect(fitToFronts(kiosk, [shop(100, 108, -10, -4.5), ...town], box)).toBe(kiosk);
+  });
+  it("a road through open country parks no one: the tile service's guessed lanes given back where nothing's built along it — a village on it keeps its own", () => {
+    // (Saguaro's one-way Cactus Forest Drive came 10.4 m wide, two parked lanes the guess gave every
+    // untagged North American street — its prickly pears 9 m off its middle, where the photo has them at
+    // the asphalt's edge; every rural road 4.4 m too wide)
+    const box = { x0: 0, z0: -200, x1: 1024, z1: 200 };
+    const m = (v: number) => Math.round(v * 10);
+    const lane = (more: Partial<Road> = {}): Road => ({ p: [m(10), 0, m(500), 0, m(1000), 0], c: 'tertiary', w: 12.4, pk: 5, n: 'Ranch Road', ...more });
+    const house = (x: number, z: number): Building => ({ r: [m(x), m(z), m(x + 10), m(z), m(x + 10), m(z + 9), m(x), m(z + 9)], h: 7, k: 'house', roof: 'gable', s: x });
+    // nothing along it: the whole way at its travel width, parking none
+    const bare = fitToFronts([lane()], [], box);
+    expect(bare.map((r) => [r.w, r.pk])).toEqual([[8, NO_PARK]]);
+    expect(bare[0].p).toEqual(lane().p);
+    // two farmhouses by it don't make a town
+    expect(fitToFronts([lane()], [house(300, 20), house(330, -30)], box).map((r) => [r.w, r.pk])).toEqual([[8, NO_PARK]]);
+    // a village on it, houses 12 m back both sides from x 400 to 600: its street keeps its parked lanes,
+    // the open road either side given back
+    const village: Building[] = [];
+    for (let x = 400; x < 600; x += 16) village.push(house(x, 12), house(x, -21));
+    const out = fitToFronts([lane()], village, box);
+    expect(out.map((r) => [r.w, r.pk])).toEqual([[8, NO_PARK], [12.4, 5], [8, NO_PARK]]);
+    const xs = (r: Road) => [r.p[0] / 10, r.p[r.p.length - 2] / 10];
+    expect(xs(out[1])[0]).toBeGreaterThan(330); // (the village's street from ~50 m before its first house…)
+    expect(xs(out[1])[0]).toBeLessThan(400);
+    expect(xs(out[1])[1]).toBeGreaterThan(600); // (…to ~50 m past its last)
+    expect(xs(out[1])[1]).toBeLessThan(680);
+    expect(fitToFronts(out, village, box)).toBe(out); // settled
+    // a mapped width, a parking tag, a one-way's own: as the map has them
+    const tagged = [lane({ pk: undefined, w: 8 })];
+    expect(fitToFronts(tagged, [], box)).toBe(tagged);
   });
   it("a parked car isn't in a street's way: at its kerb, in a lot, an angled bay — yes; across a side street's mouth, across the lanes, on a centreline — no", () => {
     const main = road([[-100, 0], [100, 0]], { c: 'primary', w: 11 }); // east–west, its kerbs at z ±5.5

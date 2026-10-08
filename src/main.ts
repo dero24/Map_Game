@@ -1519,9 +1519,12 @@ async function main() {
       U.uWinter.value = s.winter;
       U.uYear.value = s.year; // (the wildflowers' calendar: treeSeasons.ts WILDFLOWERS)
       // the summer-dry hills: green after the winter rains, gold from June to the first rains — the
-      // grass (grass.ts) and the ground's straw wash, a quarter of the region's own in the green months
-      U.uHay.value = s.hay;
-      if (regionLook.climate === 'mediterranean') U.uBiome.value.x = regionLook.biome[0] * (0.25 + 0.75 * s.hay);
+      // grass (grass.ts) and the ground's straw wash, a quarter of the region's own in the green months;
+      // and the lawns' winter (season.ts dormant): the South's warm-season grass straw-tan, the North's
+      // dulled, the same way
+      U.uHay.value = Math.max(s.hay, s.dormant);
+      U.uBiome.value.x = Math.max(regionLook.biome[0] * (regionLook.climate === 'mediterranean' ? 0.25 + 0.75 * s.hay : 1), 0.85 * s.dormant);
+      understory.season = s; // (the forest floor's ferns: up in the spring, gone back after the frosts)
       horizon.setSnowline(s.snowline);
     }
 

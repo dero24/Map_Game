@@ -90,7 +90,7 @@ export async function buildTile(tj0: TileJson, terrain: Terrain, spec: TileSpec,
   const ctx = (docks.lines.length ? { ...tj, lines: [...tj.lines, ...docks.lines] } : tj) as unknown as WorldJson;
   const structures = buildStructures(world2, w, seen);
   const signs = buildSigns(world, bld.signs, w); // full json: intersection signs need context roads
-  const props = buildProps(world2, w, structures.pierSegs, { mailboxes: bld.mailboxes, drives: bld.drives, doors: bld.doors, ctx, box: spec.box, hood: bld.hood, berths: docks.berths });
+  const props = buildProps(world2, w, structures.pierSegs, { mailboxes: bld.mailboxes, drives: bld.drives, doors: bld.doors, walks: bld.walks, ctx, box: spec.box, hood: bld.hood, berths: docks.berths });
   const stairs = buildStairs(pj.roads, (x, z) => terrain.heightAt(x, z), w); // (every highway=steps a flight you climb)
   // the small things — carts, chairs, cleats, towels, the mapped picnic tables — for the micro layer,
   // placed last so they keep off everything above

@@ -33,6 +33,16 @@ in the LOG's "Next" lines. The tile service is at v26 (deployed 2026-10-07: osmT
 underground outlines at the source, mapped trees by species, colours in either spelling); the next bump
 deploys the worker before the client goes out (docs/agent/streaming.md).
 
+**Then the flora review (LOG 2026-10-07 "last"; `regional-flora` in progress):** each plant in its season
+(the mild winter's leaf fall, the lawns' winter, the gardens' and the forest floor's year), on its ground and
+in its numbers (verge trees on residential streets nothing measured, the desert's own floor — under the
+survey too — planted palms only in town), and two street fixes it turned up (rural roads at their own width:
+the parking guess given back in open country; survey-found blocks in a street gone). **To measure greenery**:
+`node tools/real-compare.mjs --kind=green --group=region --tag=<name>` (about 25 minutes; read
+`shots/real/<region>-montage.jpg`; for an A/B stash `src/` and run the same tag pair, since the dev
+server serves whatever the tree holds as each spot loads). Last: `flora-2`, vegetation 24.6% against the
+photos' 34.6%, mean 0.725. What's next is the LOG entry's "Next".
+
 The cloud session built packages #11–#16, the leftovers, the West's lizards, the water's life (seen
 from above) and each animal's abundance. They were checked with
 tests, CI, the shore playtest and studio montages, never in a real browser on a real GPU. On the PC:

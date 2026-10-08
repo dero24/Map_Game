@@ -397,6 +397,14 @@ hour; each pair scored by the class mix (sky, buildings, vegetation, ground, wat
   15 of 83 lenses over photos plainly taken from the street. Lenses under 30° (close-ups) are unfit.
   A game frame that's nearly all wall where the photo isn't is a pose the map can't place (Bangor:
   a car-park deck that isn't mapped as a building). Treat it as an outlier, not a renderer bug.
+  A dash camera (Mapillary's segmentation sees its own car: `void--ego-vehicle`, `void--car-mount`)
+  rides a car in its lane: a lens the photo's GPS put in the parking lane, at the kerb, on the verge or
+  in the woods beside the road (out to the half-width + 16 m) is moved to the lane on the right of its
+  heading — logged "lens moved N m into the lane". The game's parked cars within 3 m of the lens are left
+  out (the photographer's own car stood there): logged "N parked car(s) at the lens left out".
+- **What it can't see:** the class pass draws every mesh in flat colour, so a tree's season — leaves
+  down, a crown bare in January — never shows in the shares (crowns count whole), and the lawns' straw
+  is colour, not class. Moving cars and people differ run to run: a few points of score is noise.
 
 ## Dev-server + worker quirks
 

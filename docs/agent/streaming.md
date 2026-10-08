@@ -213,7 +213,8 @@ own grid, refreshed monthly by a script on his PC.
 - `enrichTile` writes `h/eav/roof/ms` onto real buildings before `buildTile`; a late read
   flags `tile.late` → stream relief rebuild.
 - The same read plants real trees (`detectTrees` → `TileJson.trees/treeCov` → props, which
-  keeps the WorldCover scan only where the survey has no coverage).
+  keeps the WorldCover scan only where the survey has no coverage — and its verge trees, the
+  procedural floor along a residential street nothing measured: `flora.ts vergeShare`).
 - Runs in its own worker (`lidar.worker.ts` → `lidarCell.ts`: EPT reads, rasters, fits,
   `detectBuildings`, `detectTrees`), spawned by the stream and wired to the tile worker with
   a MessageChannel; `lidar.ts` (tile worker) owns the IDB cache and applies results.

@@ -11,7 +11,8 @@ import { climateAt, naSub, worldRegion, type Climate } from './styles';
 export interface Season {
   /** 0..1 snow cover on the ground and roofs */
   snow: number;
-  /** 0..1 share of a broadleaf crown's leaves that are down */
+  /** 0..1 share of a broadleaf crown's leaves that are down: below ~11 °C — and where the winter stays
+   *  mild, by the short days (seasonAt) */
   leafFall: number;
   /** 0..1 autumn colour in the leaves still up */
   autumn: number;
@@ -37,6 +38,12 @@ export interface Season {
    *  rains, browning from mid-April, gold by June, through to the first rains of November — greening
    *  again by mid-December (main.ts: the ground's straw wash and the grass, grass.ts) */
   hay: number;
+  /** 0..1 the lawns' winter (main.ts: the grass and the ground's straw wash ride it as they ride the
+   *  hay): the hot-summer South's and the low deserts' warm-season grass — Bermuda, St. Augustine,
+   *  zoysia, centipede — straw-tan once the air's under ~14 °C (Dallas's, Atlanta's, Las Vegas's
+   *  January lawns), green again in April; the North's cool-season lawns only dulled to an olive in a
+   *  snowless cold spell; the marine coasts' green the winter through */
+  dormant: number;
   /** elevation (m) above which the far mountains are white */
   snowline: number;
   /** the lagged mean air temperature (°C) at the given elevation — for tests and tuning */
@@ -73,10 +80,19 @@ export function dayLength(lat: number, doy: number): number {
   return (2 * ((Math.acos(c) * 180) / Math.PI)) / 15;
 }
 
+const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+
 export function seasonAt(lat: number, lon: number, elev: number, doy: number): Season {
   const T = meanTemp(lat, lon, elev, doy - 12); // snowpack and leaves lag the air by a fortnight
   const snow = Math.min(1, Math.max(0, (2 - T) / 6));
-  const leafFall = Math.min(1, Math.max(0, (11 - T) / 4));
+  // broadleaves drop below ~11 °C — and where the winter stays mild (a January mean over 5 °C at the
+  // ground's height: the Gulf, Florida, Texas, the low deserts, California) the short days and the cool
+  // nights strip them anyway: a Houston sweetgum or a Sacramento sycamore is bare by Christmas though
+  // the mean never falls under 10 °C, and in leaf again as the days pass 11.6 h in late February; the
+  // tropics' (a mean over 16 °C) never drop
+  const { jan, swing } = climateNormals(lat, lon), janE = jan - (6 * Math.max(0, elev)) / 1000;
+  const short = clamp01((11.6 - dayLength(lat, doy)) / 0.9);
+  const leafFall = Math.max(clamp01((11 - T) / 4), clamp01((janE - 5) / 4) * short * clamp01((16 - T) / 4));
   // colour turns on the way down (the cooling half of the year), peaking near 13 °C
   const d = lat < 0 ? doy + 182.5 : doy;
   const cooling = Math.sin((2 * Math.PI * (d - 20)) / 365.25) < 0;
@@ -106,9 +122,14 @@ export function seasonAt(lat: number, lon: number, elev: number, doy: number): S
   const sea = meanTemp(lat, lon, 0, doy - 12);
   const snowline = Math.max(250, ((sea + 2) / 6.5) * 1000);
   const winter = 0.5 + 0.5 * Math.cos((2 * Math.PI * (d - 20)) / 365.25);
-  const hay = climateAt(lat, lon) === 'mediterranean' ? hayOn(d) : 0;
+  const climate = climateAt(lat, lon);
+  const hay = climate === 'mediterranean' ? hayOn(d) : 0;
   const year = ((((d - 20) / 365.25) % 1) + 1) % 1;
-  return { snow, leafFall, autumn, turn, bloom, spring, summer, winter, year, hay, snowline, temp: T };
+  // the lawns' winter: warm-season grass where the summers run hot (by the model's July: past 27.5 °C)
+  // and the winters don't freeze it out, and in the low deserts; the rest cool-season
+  const warm = Math.max(clamp01((janE + swing - 27.5) / 3) * clamp01((janE + 1) / 5), climate === 'arid' ? clamp01((janE - 3) / 4) : 0);
+  const dormant = Math.max(warm * clamp01((14 - T) / 5), (1 - warm) * 0.4 * clamp01((6 - T) / 6));
+  return { snow, leafFall, autumn, turn, bloom, spring, summer, winter, year, hay, dormant, snowline, temp: T };
 }
 
 const sstep = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };

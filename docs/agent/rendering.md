@@ -271,7 +271,11 @@ the sky between the leaves. Past it, the tiles' own solid crowns, as before.
   24 pictures (8.4 MB with mips; 2.1 MB on low), painted a picture a frame while the world boots.
   Draws: the models in use (a street's 2–6) + 1.
 - **The trees' seasons** (`render/treeSeasons.ts`, its GLSL in `shared.ts`, run by both
-  `propMaterial` and the cards, so the two models agree at the hand-over):
+  `propMaterial` and the cards, so the two models agree at the hand-over). Leaf fall (`U.uLeafFall`,
+  season.ts `leafFall`): below ~11 °C of the lagged mean — and where the winter stays mild (a January
+  mean over 5 °C at the ground's height: the Gulf, Florida, Texas, the low deserts, California) by the
+  short days too, under 11.6 h while the mean's under 16 °C, so a Houston sweetgum or a Sacramento
+  sycamore is bare by Christmas and in leaf again by March; the tropics never drop.
   - **Fall hue** (`flora.ts FALL_HUE`, propMaterial's `FALL_HUE` define): 0 each tree its own of
     yellow, orange or red, 1 red (the maples, the cherry, the dogwood's burgundy), 2 gold, 3 drab (the
     alder), 4 jewel (the sweetgum: purple, red, orange and yellow on one tree, lobe by lobe and on the
@@ -523,12 +527,28 @@ lays the surface between it:
   mid-April → June, gold to November, green again by mid-December; the southern year turned round)
   turns them oat-straw in the shader, tips first, a greener tuft in the hollows; main.ts scales the
   ground's straw wash (`uBiome.x`) with it the same way. (`uGolden` is the golden hour's.)
+  The lawns' winter rides the same two (`U.uHay = max(hay, dormant)`, the straw wash `max(…, 0.85 ·
+  dormant)`): season.ts `dormant` — the warm-season grass of the hot-summer South and the low deserts
+  (Bermuda, St. Augustine, zoysia, centipede; by the model's July past 27.5 °C, or an arid January past
+  3 °C) straw-tan once the lagged mean is under ~14 °C (Dallas's and Las Vegas's January lawns all
+  straw, Atlanta's six in ten, Miami's green), green again in April; the North's cool-season lawns only
+  dulled (to 0.4) in a cold spell that leaves no snow; the marine coasts' green the winter through.
   Under a wood's canopy (`understory.ts underWood`: under a crown, three trees within 12 m, from
   `NearTrees.crownsNear`) only one tuft in seven grows, in the canopy's shade.
 - `src/world/understory.ts` — the forest floor, the same way: cells round the walker (64 m, a
   phone's 40), each one merged mesh of the region's understory plants (`flora.ts understoryMix`:
   the westside Northwest's sword fern, salal and Oregon grape; ferns in the damp Eastern and
-  northern woods) under a wood's canopy on open ground. Rebuilt where a tile mounts.
+  northern woods) under a wood's canopy on open ground. Rebuilt where a tile mounts, and when the
+  season steps a plant of the mix (`flora.ts plantNow` on `understory.season`, set by main.ts with the
+  season's uniforms): the ferns coming up in the spring, tawny or copper in the fall (`Species.fall`),
+  gone back under the ground where the broadleaves are bare; the evergreens as they are. Every floor
+  plant carries its own leaf colour (`Species.leaf`): a floor cell is a merged mesh with no instance
+  colour, and the generic fern drew TINT white until 2026-10-07.
+- The gardens (`props.ts` foundation beds): each plant through its year by the tile's season
+  (`plantNow` on season.ts `seasonAt` at the tile's middle and the world's day): a northern January's
+  beds are the boxwood, the rhododendron and the azalea, the hydrangea's and the rose's bare twigs (the
+  instance colour lerped to a dried tan), the hostas, daylilies and coneflowers gone back under the
+  ground, the sunflowers sown only once the mean's past 13 °C and a dead stalk by the frost.
 - Moss on bark (`propMaterial`, FOLIAGE with a crown field): `U.uMoss` from the region's style
   (`styles.ts moss`, by region: the westside Northwest 1, Appalachia's coves and the Gulf 0.45, New
   England 0.4, the Southeast 0.35, the Plains 0.1, a desert 0) greens a tree's

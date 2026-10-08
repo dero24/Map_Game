@@ -2596,6 +2596,13 @@ function paintSpray(stroke: (ax: number, ay: number, bx: number, by: number, w: 
 
 // ================================================================ garden plants
 export type PlantForm = 'mound' | 'rosette' | 'spike' | 'stem' | 'clump' | 'clipped' | 'frond';
+/** How a plant spends the year (plantNow): 'evergreen' the same the year through (boxwood, rhododendron,
+ *  azalea, lavender, agave, hibiscus where it grows, the Northwest's sword fern, salal and Oregon grape);
+ *  'shrub' bare twigs through a hard winter — the hydrangea's dried heads, the rose's canes, the beach
+ *  grass gone to straw; 'perennial' up in the spring and back under the ground after the frosts (daylily,
+ *  hosta, coneflower, the ferns); 'annual' only in its warm weeks (the sunflower: sown in May, a dead stalk
+ *  by the first frost). */
+export type PlantLife = 'evergreen' | 'shrub' | 'perennial' | 'annual';
 export type PlantSpecies = 'hydrangea' | 'rose' | 'daylily' | 'lavender' | 'sunflower' | 'hosta' | 'agave' | 'hibiscus' | 'beachgrass' | 'boxwood' | 'coneflower' | 'fern' | 'swordfern' | 'salal' | 'oregongrape' | 'rhododendron' | 'azalea'
   | 'bracken' | 'cinnamonfern';
 export interface Species {
@@ -2610,19 +2617,23 @@ export interface Species {
   /** (package #9) the fronds' autumn colour and its months (the forest floor's ferns going copper and
    *  gold), and the months it lies dead and flattened, gone from the floor */
   fall?: [number, [number, number]]; dormant?: [number, number];
+  /** how it spends the year (default evergreen) */
+  life?: PlantLife;
 }
 export const SPECIES: Record<PlantSpecies, Species> = {
-  hydrangea: { form: 'mound', label: 'hydrangea', h: 1.3, w: 1.5, bloom: [0x8fa8e0, 0xd99ab8, 0x7f98d8, 0xb39ad9, 0xf0ece4], months: [6, 9], climates: { temperate: 5, continental: 2, mediterranean: 1 } },
-  rose: { form: 'mound', label: 'rosebush', h: 1.1, w: 1.0, bloom: [0xc2303a, 0xe88aa0, 0xf4efe2, 0xf0b440], months: [5, 10], climates: { temperate: 3, mediterranean: 3, continental: 2, arid: 1 } },
+  hydrangea: { form: 'mound', label: 'hydrangea', h: 1.3, w: 1.5, bloom: [0x8fa8e0, 0xd99ab8, 0x7f98d8, 0xb39ad9, 0xf0ece4], months: [6, 9], climates: { temperate: 5, continental: 2, mediterranean: 1 }, life: 'shrub' },
+  rose: { form: 'mound', label: 'rosebush', h: 1.1, w: 1.0, bloom: [0xc2303a, 0xe88aa0, 0xf4efe2, 0xf0b440], months: [5, 10], climates: { temperate: 3, mediterranean: 3, continental: 2, arid: 1 }, life: 'shrub' },
   hibiscus: { form: 'mound', label: 'hibiscus', h: 1.6, w: 1.3, bloom: [0xd8342c, 0xf06a8a, 0xf2b233], months: [1, 12], climates: { tropical: 6, mediterranean: 1 } },
-  daylily: { form: 'clump', label: 'daylily', h: 0.8, w: 0.8, bloom: [0xe9782c, 0xf2c23a, 0xc8403a], months: [6, 8], climates: { temperate: 3, continental: 3 } },
-  beachgrass: { form: 'clump', label: 'beach grass', h: 0.9, w: 0.7, bloom: [], leaf: 0xb8b27a, months: [7, 9], climates: { temperate: 1, mediterranean: 1, tropical: 1 } },
+  daylily: { form: 'clump', label: 'daylily', h: 0.8, w: 0.8, bloom: [0xe9782c, 0xf2c23a, 0xc8403a], months: [6, 8], climates: { temperate: 3, continental: 3 }, life: 'perennial' },
+  beachgrass: { form: 'clump', label: 'beach grass', h: 0.9, w: 0.7, bloom: [], leaf: 0xb8b27a, months: [7, 9], climates: { temperate: 1, mediterranean: 1, tropical: 1 }, life: 'shrub' },
   lavender: { form: 'spike', label: 'lavender', h: 0.6, w: 0.7, bloom: [0x9a7cc8, 0x8468b8], months: [6, 8], climates: { mediterranean: 6, arid: 3, temperate: 1 } },
-  coneflower: { form: 'stem', label: 'coneflower', h: 0.9, w: 0.5, bloom: [0xc76b9a, 0xe8a6c0, 0xf0c040], months: [6, 9], climates: { continental: 4, temperate: 2 } },
-  sunflower: { form: 'stem', label: 'sunflower', h: 2.1, w: 0.6, bloom: [0xf2c028, 0xe8a52a], months: [7, 9], climates: { continental: 4, temperate: 2, arid: 2 } },
-  hosta: { form: 'rosette', label: 'hosta', h: 0.5, w: 0.9, bloom: [0xd8cce8], months: [7, 8], climates: { temperate: 3, continental: 3, boreal: 2 } },
+  coneflower: { form: 'stem', label: 'coneflower', h: 0.9, w: 0.5, bloom: [0xc76b9a, 0xe8a6c0, 0xf0c040], months: [6, 9], climates: { continental: 4, temperate: 2 }, life: 'perennial' },
+  sunflower: { form: 'stem', label: 'sunflower', h: 2.1, w: 0.6, bloom: [0xf2c028, 0xe8a52a], months: [7, 9], climates: { continental: 4, temperate: 2, arid: 2 }, life: 'annual' },
+  hosta: { form: 'rosette', label: 'hosta', h: 0.5, w: 0.9, bloom: [0xd8cce8], months: [7, 8], climates: { temperate: 3, continental: 3, boreal: 2 }, life: 'perennial' },
   agave: { form: 'rosette', label: 'agave', h: 0.9, w: 1.3, bloom: [], leaf: 0x8aa6a0, months: [6, 6], climates: { arid: 6, mediterranean: 2, tropical: 1 } },
-  fern: { form: 'rosette', label: 'fern', h: 0.7, w: 1.0, bloom: [], months: [5, 9], climates: { boreal: 5, temperate: 2, tropical: 2 } },
+  // (its own green: the forest floor's cells are merged meshes with no instance colour to paint a tintable
+  // leaf, and drew it white; tawny gold in the fall, as the hay-scented and lady ferns go)
+  fern: { form: 'rosette', label: 'fern', h: 0.7, w: 1.0, bloom: [], leaf: 0x4a6c30, months: [5, 9], climates: { boreal: 5, temperate: 2, tropical: 2 }, fall: [0xb4924e, [10, 11]], life: 'perennial' },
   boxwood: { form: 'clipped', label: 'boxwood', h: 0.8, w: 0.9, bloom: [], months: [5, 5], climates: { temperate: 2, continental: 1, mediterranean: 1, boreal: 1 } },
   // the forest floor's (understoryMix; never a garden's mix): the westside Northwest's knee-high
   // fountains of dark, leathery sword fern, glossy salal with its pink-white urns in late spring,
@@ -2640,8 +2651,8 @@ export const SPECIES: Record<PlantSpecies, Species> = {
   // floors: bracken, each frond a stalk lifting a broad three-parted blade near level, in colonies — copper
   // by October, dead and flat from December to April; the cinnamon fern's tall vase of fronds in the wet
   // woods, the cinnamon-brown fertile spikes standing in its middle in May, gold in the fall
-  bracken: { form: 'frond', label: 'bracken', h: 0.9, w: 1.3, bloom: [], leaf: 0x5a7a34, months: [6, 9], climates: {}, fall: [0xa0602a, [10, 11]], dormant: [12, 4] },
-  cinnamonfern: { form: 'rosette', label: 'cinnamon fern', h: 1.1, w: 1.2, bloom: [0x9a5a2a], leaf: 0x4e7432, months: [4, 6], climates: {}, fall: [0xc8a03a, [9, 10]], dormant: [11, 3] },
+  bracken: { form: 'frond', label: 'bracken', h: 0.9, w: 1.3, bloom: [], leaf: 0x5a7a34, months: [6, 9], climates: {}, fall: [0xa0602a, [10, 11]], dormant: [12, 4], life: 'perennial' },
+  cinnamonfern: { form: 'rosette', label: 'cinnamon fern', h: 1.1, w: 1.2, bloom: [0x9a5a2a], leaf: 0x4e7432, months: [4, 6], climates: {}, fall: [0xc8a03a, [9, 10]], dormant: [11, 3], life: 'perennial' },
 };
 export const PLANT_SPECIES = Object.keys(SPECIES) as PlantSpecies[];
 export const STAGES = 8; // 0 sprout … 7 full bloom
@@ -2826,6 +2837,28 @@ export function broadMix(p: CastPlace): [TreeKind, number][] {
               : sub === 'midwest' ? [['round', 2.5], ['oak', 2.2], ['maple', 2.4], ['elm', 1.4], ['cherry', 0.3], ['poplar', 0.6]]
                 : [['round', 2.5], ['oak', 2], ['maple', 2.6], ['elm', 1.1], ['cherry', 0.6], ['poplar', 0.4]]; // the Northeast (and temperate elsewhere)
 }
+// The street trees a town grows along its residential verges, by region (props.ts verge trees: the
+// procedural floor where nothing measured a street's own — no LiDAR survey, few mapped): how often a
+// verge slot (one every ~11 m a side) holds a tree on an ordinary street, after the urban tree canopy the
+// USFS's town assessments measure — the Piedmont's and the Southeast's the leafiest (Atlanta, Durham,
+// Raleigh, Charlotte: 45–55%), the Mid-Atlantic's, Appalachia's, New England's, upstate New York's and the
+// Midwest's old towns 30–45%, the Gulf's and the Ozarks' near them, Texas's and the Plains' 25–30%, the
+// dry West's 15–25%, the desert's towns under 10%.
+const VERGE: Partial<Record<EcoRegion | 'pnw-dry', number>> = {
+  southeast: 0.6, appalachia: 0.5, 'mid-atlantic': 0.5, 'new-england': 0.45, 'upstate-ny': 0.45, midwest: 0.45, ozarks: 0.45, gulf: 0.45,
+  florida: 0.35, texas: 0.3, plains: 0.35, rockies: 0.35, 'great-basin': 0.25, california: 0.35, pnw: 0.4, 'pnw-dry': 0.25, 'desert-sw': 0.1,
+};
+const VERGE_CLIMATE: Partial<Record<string, number>> = { temperate: 0.35, continental: 0.3, boreal: 0.2, polar: 0, mediterranean: 0.25, arid: 0.08, tropical: 0.3 };
+/** How often a residential verge slot holds a street tree here: the region's (VERGE) by the
+ *  neighbourhood (hood.ts) — an old grid's mature street trees the most, an estate's trees in its big
+ *  yards instead (the tree scan's), a new tract's few. */
+export function vergeShare(p: CastPlace, hood: string): number {
+  const base = (p.eco ? VERGE[p.eco === 'pnw' && !p.west ? 'pnw-dry' : (p.eco as EcoRegion)] : undefined) ?? VERGE_CLIMATE[p.climate] ?? 0.3;
+  return base * (hood === 'grid' ? 1.25 : hood === 'tract' ? 0.5 : hood === 'estate' ? 0.7 : 0.85);
+}
+/** A verge tree's height (m) by the neighbourhood: an old grid's or an estate's grown street trees, a new
+ *  tract's young ones; u a hash in [0, 1). */
+export const vergeHeight = (hood: string, u: number) => (hood === 'tract' ? 5 + u * 4 : hood === 'grid' || hood === 'estate' ? 11 + u * 8 : 8 + u * 7);
 /** Is a species flowering in this month? (south = southern hemisphere, seasons flip) */
 export function inBloom(sp: PlantSpecies, month: number, south = false) {
   const S = SPECIES[sp];
@@ -2975,6 +3008,28 @@ export const plantLib = (sp: PlantSpecies, v: number, stage: number, bloom = tru
 const inMonths = (m: number, [a, b]: [number, number]) => (a <= b ? m >= a && m <= b : m >= a || m <= b);
 export const inFall = (sp: PlantSpecies, month: number) => { const f = SPECIES[sp].fall; return !!f && inMonths(month, f[1]); };
 export const isDormant = (sp: PlantSpecies, month: number) => { const d = SPECIES[sp].dormant; return !!d && inMonths(month, d); };
+/** The few numbers of the place's season a plant reads (world/season.ts Season). */
+export interface PlantSeason { leafFall: number; turn: number; temp: number; year: number }
+const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+/** A garden's or the forest floor's plant today, by the place's season (season.ts seasonAt — so a
+ *  Houston hosta keeps its leaves into December and a Vermont one is gone by November; the month windows
+ *  above are only the blossom's): null while it's gone — a perennial back under the ground (where the
+ *  broadleaves are bare), an annual not yet sown or pulled after the frost — else its size (0..1 of its
+ *  grown size: a perennial coming up in April, an annual through its summer) and how far its leaves are
+ *  gone brown (0..1: a shrub's bare twigs through the winter, a perennial dying back in the fall, the
+ *  sunflower's dead stalk). Evergreens stay as they are. */
+export function plantNow(sp: PlantSpecies, s: PlantSeason): { size: number; brown: number } | null {
+  const life = SPECIES[sp].life ?? 'evergreen', cooling = s.year > 0.5;
+  if (life === 'evergreen') return { size: 1, brown: 0 };
+  if (life === 'shrub') return { size: 1 - 0.2 * s.leafFall, brown: Math.max(s.leafFall, cooling ? 0.5 * s.turn : 0) };
+  if (life === 'perennial') {
+    if (s.leafFall >= 0.85) return null;
+    return cooling ? { size: 1, brown: clamp01(s.leafFall / 0.85 + 0.4 * s.turn) } : { size: 1 - (0.55 * s.leafFall) / 0.85, brown: 0 };
+  }
+  // the annual: sown once the air's past 13 °C, grown by 22; standing dead as the fall cools it, pulled by the frosts
+  if (cooling) return s.leafFall >= 0.6 ? null : { size: 1, brown: clamp01((21 - s.temp) / 5) };
+  return s.temp < 13 ? null : { size: 0.3 + 0.7 * clamp01((s.temp - 13) / 9), brown: 0 };
+}
 
 
 // ---------------- the northern and mountain conifers by place (models.md build order #3) ----------------
@@ -3118,6 +3173,25 @@ export function desertMix(p: CastPlace, elev: number, lat: number): [TreeKind, n
     case 'pnw': return !p.west && p.l3 === 10 ? [['sagebrush', 3], ['shrub', 0.8]] : [];
   }
   return [];
+}
+/** The dry country's own ground cover (props.ts tree scan): how often an open, unbuilt 9 m cell the map
+ *  draws nothing on grows a plant of desertMix — the floor a streamed cell's DEM ground can't tell from a
+ *  lawn (its cover is grassland everywhere: Saguaro's Cactus Forest Drive stood in bare sand, 3% of the
+ *  view where the photo's scrub is 21%). The Sonoran's upland thick with creosote, cholla, prickly pear,
+ *  ocotillo and saguaro; the sagebrush sea from rim to rim; the piñon-juniper's open woodland; the
+ *  Mojave's creosote flats sparser, its Joshua tree woodland between; the Chihuahuan's thinner. 0 where
+ *  the place isn't dry country (its climate isn't arid, or desertMix has nothing for it). */
+export function desertCover(p: CastPlace, elev: number, lat: number): number {
+  if (p.climate !== 'arid' || !desertMix(p, elev, lat).length) return 0;
+  const pj = pjBand(p, lat);
+  if (pj && elev > pj.lo && elev < pj.hi) return 0.5;
+  switch (p.eco) {
+    case 'desert-sw': return p.l3 === 81 ? (elev < 1250 ? 0.6 : 0.5) : p.l3 === 14 ? (elev < 600 ? 0.25 : 0.4) : p.l3 === 24 ? 0.35 : p.l3 === 79 ? 0.5 : 0.45;
+    case 'great-basin': return [12, 13, 18, 80].includes(p.l3) ? 0.65 : 0.45;
+    case 'texas': return p.l3 === 31 ? 0.5 : 0.35;
+    case 'rockies': case 'pnw': return 0.5;
+  }
+  return 0.35;
 }
 /** The desert's own trees for a scan's broadleaf (props.ts regional's desert branch): the Mojave's Joshua
  *  trees, Arizona's saguaros among the mesquite and palo verde, the piñon-juniper in its band — or [] to
