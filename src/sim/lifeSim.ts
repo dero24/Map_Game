@@ -765,9 +765,12 @@ export class LifeSim {
       // fill in quickly when the crowd slider jumps, a few per manage tick
       for (let i = range[0], k = 0; i < range[1] && k < 8; i++) if (!this.active[i]) { spawn(i); if (this.active[i]) k++; }
     } else if (act > want) {
+      // thin out as fast as the hour turns: an eighth of the excess a manage tick (one at a time, the
+      // night preset left a noon crowd thinning for minutes) — only those past farDist, a car out of view
       const car = range[0] === RANGES.cars[0];
-      for (let i = range[1] - 1; i >= range[0]; i--)
-        if (this.active[i] && this.state[i] !== ST.CHAT && Math.hypot(this.x[i] - px, this.z[i] - pz) > farDist && !(car && this.inView(this.x[i], this.z[i]))) { this.active[i] = 0; this.y[i] = -1000; this.snapPrev(i); break; }
+      let k = Math.max(1, Math.ceil((act - want) / 8));
+      for (let i = range[1] - 1; i >= range[0] && k > 0; i--)
+        if (this.active[i] && this.state[i] !== ST.CHAT && Math.hypot(this.x[i] - px, this.z[i] - pz) > farDist && !(car && this.inView(this.x[i], this.z[i]))) { this.active[i] = 0; this.y[i] = -1000; this.snapPrev(i); k--; }
     }
   }
 

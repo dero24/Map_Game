@@ -141,6 +141,21 @@ describe('arriving', () => {
     const n = active(wait, RANGES.peds);
     expect(n).toBeGreaterThan(10); expect(n).toBeLessThanOrEqual(Math.ceil(want('ped', 'suburb', 12)) + 1);
   });
+  it('the night preset: a noon crowd thins in seconds, not minutes — and nobody within 100 m vanishes', () => {
+    const P = PLACES.main, env = (hour: number) => ({ playerX: 0, playerZ: 0, hour, night: nightAt(hour), density: lifeParams.density * crowdOf(1, 0), wind: 0.5, place: P.place });
+    const sim = new LifeSim({ ...P.world(), rhythm: P.rhythm }, undefined, env(15));
+    for (let t = 0; t < 40; t++) sim.step(0.05);
+    const noon = active(sim, RANGES.peds);
+    const near = () => { let n = 0; for (let i = RANGES.peds[0]; i < RANGES.peds[1]; i++) if (sim.active[i] && Math.hypot(sim.x[i], sim.z[i]) <= 100) n++; return n; };
+    const near0 = near();
+    sim.setEnv(env(3));
+    for (let t = 0; t < 10 * 20; t++) sim.step(0.05); // (10 s)
+    const night = active(sim, RANGES.peds), goal = want('ped', 'main', 3);
+    expect(noon).toBeGreaterThan(100);
+    // what's left is the night's few and those still within 100 m (they walk off before they go)
+    expect(night).toBeLessThanOrEqual(Math.ceil(goal) + near0 + 2);
+    expect(night).toBeLessThan(noon * 0.35);
+  });
 });
 
 /** The cars the sim wants on another road, as the place `key` (its land, rhythm and knobs). */
