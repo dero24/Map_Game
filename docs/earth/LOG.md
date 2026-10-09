@@ -2,7 +2,7 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
-## 2026-10-08 (night) — Robby's four reports on fix/four-reports: walkers lit by the night
+## 2026-10-08 (night) — Robby's four reports on fix/four-reports: walkers lit by the night, who's about by the place and the hour, a crisp watercolor, the harbour's sea
 
 On the branch `fix/four-reports` (off `feature/lower48-alive`, not pushed: Robby's OK first). One
 report at a time, in his order.
@@ -31,7 +31,71 @@ report at a time, in his order.
   Bright 17.3/20.7 → 10.5/20.7; walkers in a lamp's pool 38.9/41.4 → 35.4/41.4, lit; dusk the
   same. Montage `shots/fix/night-people-before-after.jpg` (git-ignored). Noticed, not changed: the
   white gulls on a lawn at night read pale the same way (not in Robby's report).
-- **Next:** `life-density-realism` (in progress).
+- **2. `life-density-realism` — passing.** Robby: "it is still so crowded at nighttime in a lot of
+  places where it shouldnt be and like random desert roads are crowded too". The walkers' count was the
+  place's rhythm × the crowd knobs everywhere: open land took the suburbs' share (a desert road wanted
+  150 walkers at 8 pm; on US-50 west of Ely, the extract's emptiest highway, 145 within 330 m at noon and
+  23 at 3 am), a suburb at 10 pm a shore town's dinner stroll; each class of road carried a town's
+  traffic wherever it ran; and the worker built the sim before it had the page's env, so every arrival
+  seeded a noon crowd at full density that thinned one walker every half second. **Fix** (`lifeSim.ts`
+  LAND, `pedShare`, `homeCurve`, `ruralShare`): a main street and a city's core keep their rhythm (a
+  main street thinner from 20:30, gone 23:30–4:00); a home street keeps its own day (the dog, errands,
+  after work, a walk after dinner, in by 21:00, half after dark); open land 2% (a footpath network about
+  the walker counts as settled: a park, a trail); each rank of road out in the country 5–15% of a town's
+  traffic, a want under one a share of the minutes (a slow coin from the tick: a car every few minutes);
+  the beach's share home after dark; the first crowd from the page's env, waiting for the place (main
+  sets it in a frame; three header slots carry it, in copy mode too), across a regraph; the crowd thins
+  an eighth of the excess a tick (the night preset left a noon crowd thinning for minutes). Tests:
+  `lifeDensity.test.ts`, the target table by place and hour and the rest. In game, walkers within 330 m
+  (cars within 350 m) before → after: Sea Bright (shore town; within 150 m) 12 h 56→34, 20 h 37→18, 22 h 12→12, 3 h 11→7; Levittown (suburb) 12 h 135→44, 20 h 38→31, 22 h 11→6, 3 h 11→3; Midtown Manhattan 12 h 230→183, 20 h 99→66, 22 h 49→34, 3 h 31→27; Liberty State Park 12 h 113→44, 20 h 56→19, 22 h 35→14, 3 h 18→9; US-50, Nevada desert 12 h 145→0, 20 h 56→1, 22 h 37→1, 3 h 23→1 (walkers only: cars in view are never removed, and some runs held stuck ones, so the in-page car counts said little; the cars are the target table's). Montage `shots/fix/density-before-after.jpg`.
+  Noticed: Midtown at 22:00 is as quiet as at 3:00 (the town rhythm's evening ends by 21:30); in some
+  runs (old code and new, with other headless pages loading the machine) a stack of walkers or cars
+  sat at the region's origin with no position of their own — at Sea Bright, 204 m from the spawn, it
+  polluted the 330 m counts (so its row is within 150 m), and it couldn't be made to happen on demand;
+  a Kansas farm-road spot (Old Highway 40 by Hays) had no life at all in either version, so the
+  country's rows are the target table's.
+- **3. `look-crisp-preset` — passing.** Robby: "create the additional preset for better watercolor
+  overlay". `post.ts` LOOKS 'crisp watercolor', the notes' list cheapest first: the brush at the frame's
+  own resolution (paintDetail 1) and a finer, sharper stroke; two new knobs — `focal` (the 5–60 m band
+  given the clean frame and the paint's local contrast; the near and the far left to the brush, the near
+  ground a lighter wash toward the paper by day) and `darks` (a toe under the mid-tones, half by night),
+  0 in every other look; less wobble, grain and paper; a thinner torn edge. The panel's Look folder: a
+  'crisp watercolor' switch beside the preset menu, and the two sliders; `?look=crisp` (or any look's
+  name) for a visit. Tests: `looks.test.ts`. Montages: `shots/fix/look-ab.jpg`, `look-ab-crop.jpg` (the
+  centres at full size), `look-ab-phone.jpg`; `mobile-check --device=pixel7` clean.
+- **4. `bug-harbour-water` — fixed on the branch, waiting on the deploy (in progress).** Not quite the
+  diagnosis of 2026-10-07: rebuilt from our extract (as the service does), the bay's cells hold no coast
+  at all (open water east of Ellis Island: 1_0, −1_2, 0_2 at origin 40.703125, −74.046875) or only an
+  island's (Liberty, Governors), so no sea was made; and where a shore did cross a cell its islands were
+  flooded (Ellis Island's buildings stood in the bay — seen with the vector tiles' water off, which is
+  when a cell's own coast is its sea). **Fix:** `realTile.ts coastSea` — the coast clipped segment by
+  segment; an island a hole in the sea round it; a closed coast the edge cuts walked from outside it; a
+  cell no coast crosses the side of the nearest coast (`waterSide`); the service reads the extract's
+  coastline 2 km round a cell WorldCover calls at least half water with no sea of its own
+  (`coastAbout`, `landCover`'s `stats.wet`). Checked on other coasts against WorldCover's water share:
+  every cell that changed moved to it (Miami Beach −1_−1 68% → 4% against 2.5% — the old builder had
+  flooded part of the island; Bar Harbor −1_−1 0 → 69% against 68%; Sea Bright −1_0 72 → 61% against
+  62%). Tests: `coastSea.test.ts` (synthetic coasts and `tests/fixtures/harbour-coast.json.gz`, the
+  extract's coastline round the bay), `landcover.test.ts`. A local tile worker on port 8795 (its R2 on
+  D:, the extract's index and the New York blocks) built the after; montage
+  `shots/fix/harbour-before-after.jpg`, `liberty-shore-crop.jpg`. Noticed: a railing on a seawall now
+  stands at the water's edge (every coast's sea floor slopes over the terrain's last grid step,
+  `dem.ts waterPatch`).
+- **My mistake, v30:** after bumping the working tree to `&v=30` I took the harbour's "before" from it
+  with no local worker on 8787–8789, so the page asked the live v29 service for `&v=30` round Ellis
+  Island, and the edge keeps those answers under that URL for 30 days — the very cells v31 mends. The
+  release is **v31** (worker `t/v31` on the branch); the client's `&v` and `DIRECT_V` stay at 29 until
+  that worker is deployed (a dev page serving this tree, Robby's on :5173 too, can't burn v31). The
+  memory note and the HANDOFF say so.
+- **Baseline hygiene:** `lifeSim.test.ts` "pedestrians walk up to doors…" and `shoreCalendar.test.ts` "a
+  lot far from any beach…" time out only while Chromium captures load the machine (7–8 s and 1.4 s
+  alone); the suite passes on a quiet machine.
+- **Robby's page:** https://claude.ai/artifact/J7koij7UdW1rjCzrVQmqJS — the four before/after sheets and what waits on him.
+- **Verified:** npm run typecheck; npm test (the full suite on a quiet machine); npm run build;
+  `mobile-check --device=pixel7` (60 programs, no errors). Nothing pushed, nothing deployed.
+- **Next:** Robby's OK to push `fix/four-reports`, to deploy the tile service (then `&v=31`), and to
+  merge back into `feature/lower48-alive`; then `bug-harbour-water` passing and `gameplay-one-plan`
+  (HANDOFF "Start here").
 
 ## 2026-10-08 (late) — Robby's four reports first, then one gameplay plan, then the proof of concept; painted places keep their people
 

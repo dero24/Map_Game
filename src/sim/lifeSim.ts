@@ -33,7 +33,7 @@ export const RHYTHM = { peak: 1.3 };
 /** Who's about where nobody lives, and late at night. Robby, 2026-10-07: "it is still so crowded at
  *  nighttime in a lot of places where it shouldnt be and like random desert roads are crowded too".
  *  The walkers' count was the place's rhythm × the crowd knobs everywhere: an empty desert road took
- *  the suburbs' share (157 walkers at 8 pm, the desert's evening), a suburb at 10 pm a shore town's
+ *  the suburbs' share (150 walkers wanted at 8 pm, the desert's evening), a suburb at 10 pm a shore town's
  *  dinner stroll; and each class of road carried a town's traffic wherever it ran.
  *  - A main street (and a city's core) keeps its place's rhythm; a home street keeps its own day
  *    (homeCurve: in by 21:00), and fewer go out after dark (`dark`); a main street thins from 20:30

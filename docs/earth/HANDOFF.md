@@ -2,6 +2,40 @@
 
 ## Start here (2026-10-08): Robby's four reports, then one gameplay plan, then the proof of concept
 
+### Where the four stand (2026-10-08, night; branch `fix/four-reports`, not pushed)
+
+All four are fixed and committed on `fix/four-reports` (LOG 2026-10-08 night has the numbers;
+before/after montages in the git-ignored `shots/fix/`, and on Robby's page
+https://claude.ai/artifact/J7koij7UdW1rjCzrVQmqJS). Nothing is pushed or deployed: Robby's OK first.
+
+1. `bug-night-glow-people` — **passing** (walkers lit by the night: `nightLight.ts` FIGURE).
+2. `life-density-realism` — **passing** (`lifeSim.ts` LAND: the land's share, a home street's day,
+   the late hours, rural roads; the first crowd the hour's; the crowd thins as the hour turns).
+3. `look-crisp-preset` — **passing** ("crisp watercolor" in the panel's Look folder, `?look=crisp`).
+4. `bug-harbour-water` — **in progress: fixed on the branch, waiting on the deploy.** The tile
+   service must be deployed before this branch reaches a published one. In order, with Robby's OK:
+   1. `cd worker && npx wrangler deploy` (the worker's key is already `t/v31` on the branch);
+   2. `node tools/must-load.mjs --live`, and the live cells round Ellis Island carry the bay as sea:
+      `curl "https://map-game-tiles.map-game-tiles.workers.dev/tile/1_0.json?olat=40.703125&olon=-74.046875&v=31"`
+      (and `0_1`): a `water` area with `k: "sea"` covering the cell, Liberty Island a hole in `0_1`'s;
+   3. only then the client: `&v=29` → `&v=31` in `src/world/stream.ts` and `DIRECT_V` 29 → 31 in
+      `src/world/tile.worker.ts`, the streaming doc's line with them; build, commit;
+   4. then the item `passing`, `gameplay-one-plan` `in_progress`, and the branch merged back into
+      `feature/lower48-alive` when Robby says so (that publishes).
+   **No v30**: this session's before captures asked the live v29 service for `&v=30` round Ellis
+   Island, and the edge keeps those answers under that URL for 30 days. Until the deploy the
+   client stays at the live `&v=29`, so a dev page serving this tree (Robby's on :5173 too) can't
+   burn v31. To look at v31 tiles before the deploy: a local worker on another port
+   (`cd worker && npx wrangler dev --port 8795 --persist-to D:/map_game_osm/wrangler-v30 --local`:
+   its R2 holds the extract's index and the New York blocks 105_130 and 106_130) and the page at
+   `?at=40.6995,-74.0396&tiles=http://localhost:8795`.
+- Noticed, not done (for Robby to rank): the gulls on a lawn at night read pale as the walkers did;
+  a railing on a seawall stands in the water's edge (the sea floor's slope over the terrain's last
+  grid step, every coast: `dem.ts waterPatch`) — new to see on Liberty Island now that its bay is
+  water; Midtown at 10 pm is as quiet as at 3 am (the town rhythm's evening ends by 21:30); now and
+  then (seen under load, old code and new) a stack of walkers or cars at a region's origin with no
+  position of their own.
+
 Robby, 2026-10-08, of his reports of 2026-10-07: "okay i guess it should fix those first"; then
 "we can have the new session fix the bugs first, and then we can do the gameplay implementation
 after". So they come first, one item at a time, in this order:
