@@ -95,6 +95,40 @@ vec3 nightFloor(vec3 albedo, float level) {
   return mix(albedo, vec3(${FLOOR.grey.toFixed(3)}), ${FLOOR.even.toFixed(3)}) * uNightFloor.rgb * (uNight * uNightFloor.w * level);
 }`;
 
+/** A figure by night (a person out of doors: creature.ts sets FIGURE_NIGHT, shared.ts paintLight).
+ *  The floor evens the street's albedos toward a middle grey so the ground between the pools reads;
+ *  a standing figure lit the same way — its sides as fully as the street, a pale shirt or pale skin
+ *  lifted with the rest — read twice as light as the asphalt it walked on, pale and lit against the
+ *  dark ground (Robby, 2026-10-07, the night from Liberty State Park). So the night's own light (the
+ *  moon, the sky's fill, the floor) lights a figure's colours evened toward a dark grey (`grey`,
+ *  `even`) — a white shirt a little lighter than the street, a navy coat darker, never black — and
+ *  only half the sky's fill reaches a figure's sides (`fill`). A lamp's pool lights its own colours:
+ *  a walker is lit where a lamp lights them. Nothing by day: it all goes with uNight. */
+export const FIGURE = {
+  grey: 0.19, // the value a figure's colours are evened toward by night (a little over the asphalt's 0.12)
+  even: 0.84, // how far (white 0.86 → 0.30, navy 0.03 → 0.16: a white shirt about the street, a dark coat half of it)
+  fill: 0.5, // the sky's fill a figure's sides lose by night (they see half the sky, and the street's bounce is dark)
+};
+export type Figure = typeof FIGURE;
+
+/** A figure's colour as the night's own light sees it (night: 0 day … 1 night). */
+export function figureAlbedo(albedo: RGB, night = 1, p: Figure = FIGURE): RGB {
+  return albedo.map((a) => a + (p.grey - a) * p.even * clamp01(night)) as RGB;
+}
+/** The floor's light on a figure at street level: its (evened) colour, with no further evening. */
+export function figureFloor(albedo: RGB, night = 1, f: Floor = FLOOR): RGB {
+  return albedo.map((a, i) => a * f.color[i] * f.strength * clamp01(night)) as RGB;
+}
+
+/** The same, in the shaders (shared.ts paintLight under FIGURE_NIGHT). */
+export const GLSL_FIGURE = /* glsl */ `
+vec3 figureAlbedo(vec3 albedo) { return mix(albedo, vec3(${FIGURE.grey.toFixed(3)}), ${FIGURE.even.toFixed(3)} * uNight); }
+float figureFill() { return 1.0 - ${FIGURE.fill.toFixed(3)} * uNight; }
+vec3 figureFloor(vec3 albedo, float level) {
+  if (uNight <= 0.0) return vec3(0.0);
+  return albedo * uNightFloor.rgb * (uNight * uNightFloor.w * level);
+}`;
+
 /** The night grade (post.ts, after the colour grade, on display colour 0–1). Everything but the
  *  lights goes under one indigo glaze: its value kept, most of its own hue given up to the glaze —
  *  by night the eye reads value, not colour, and the floor's street, a lawn and a tan sidewalk all go

@@ -96,7 +96,7 @@ describe('measured: the shore sidecar', () => {
       for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
     }
     expect((h >>> 0).toString(36)).toBe(man.bakeId);
-  });
+  }, 60000);
 });
 
 // The tile service's records (streamed cells): asked once per cell, patient with a measure in

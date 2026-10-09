@@ -2,6 +2,37 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-08 (night) — Robby's four reports on fix/four-reports: walkers lit by the night
+
+On the branch `fix/four-reports` (off `feature/lower48-alive`, not pushed: Robby's OK first). One
+report at a time, in his order.
+
+- **Baseline:** `npm run init` failed on one test, `measured.test.ts` "leaves the pack as it was
+  baked": it passes alone in 1 s, but hashing 288 tile files char by char ran past vitest's 5 s
+  default under the full parallel run. Given the same 60 s as its sibling.
+- **1. `bug-night-glow-people` — passing.** Robby's night from Liberty State Park
+  (`_water_bug3.png`): the walkers pale and lit against the dark ground. Measured first: the
+  walkers drawn alone as a flat mask against the world's depth (as night-check does the wires), L*
+  on the painted frame against the up-facing ground in a ring round them. From 30 m at 22:00 the
+  walkers were paler than the lawn (19.9 vs 17). The cause, in the light: by night (moon down) the
+  floor (`nightLight.ts` FLOOR, ~0.12 linear) is the light that matters, and it evens every albedo
+  toward a middle grey (0.3) and lights whatever faces any way — a figure's sides as fully as the
+  street; the sky's fill lights a figure's sides with ~90% of the sky (by night the ground's bounce
+  is most of the sky's). A walker's shirts and skin are light (cream, white, pink; pale skin), the
+  street and a lawn dark: in the end-to-end mirror (`tests/nightLight.test.ts`) a white shirt was
+  L* 27.5 on asphalt at 13.7. **Fix:** `FIGURE` in `nightLight.ts` and `FIGURE_NIGHT` in
+  `shared.ts` paintLight, set by `creature.ts` on every people material out of doors: the night's
+  own light (moon, sky, floor) lights a figure's colours evened toward a dark grey (0.19, by 0.84),
+  half the sky's fill reaches its sides, and a lamp's pool lights its own colours. Indoors the
+  room's light is theirs (`INDOOR`, now on the standing residents too). By day nothing changes.
+  Tests: four in `nightLight.test.ts` (every colour a walker wears between the pools, under a high
+  moon, in a lamp's heart, by day). Before/after in one page, the same walkers (the sim paused):
+  Liberty State Park 15.3/16.8 → 8.9/15.9 (people/ground L*), from 30 m 19.9/17 → 11.8/15.7; Sea
+  Bright 17.3/20.7 → 10.5/20.7; walkers in a lamp's pool 38.9/41.4 → 35.4/41.4, lit; dusk the
+  same. Montage `shots/fix/night-people-before-after.jpg` (git-ignored). Noticed, not changed: the
+  white gulls on a lawn at night read pale the same way (not in Robby's report).
+- **Next:** `life-density-realism` (in progress).
+
 ## 2026-10-08 (late) — Robby's four reports first, then one gameplay plan, then the proof of concept; painted places keep their people
 
 Robby, on the plan's third part (the van and the first painted place): it "kinda makes no sense, why

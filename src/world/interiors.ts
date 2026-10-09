@@ -116,7 +116,8 @@ export class Interiors {
   // the same shader for the instanced furniture: one material shared by plain and instanced meshes
   // has two programs, and three.js re-derived it at every switch between them, every frame
   private instMat: THREE.ShaderMaterial;
-  private npcMat = creatureMaterial({ LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1 });
+  // (INDOOR: the room's light is theirs, not the street's night — creature.ts FIGURE_NIGHT)
+  private npcMat = creatureMaterial({ LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1, INDOOR: 1 });
   // residents in chairs, on sofas, in booths and on bar stools sit (INDOOR: they don't leave at dusk)
   private npcSeatMat = creatureMaterial({ LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1, SEATED: 1, INDOOR: 1 });
   private npcGeo = pedGeo();

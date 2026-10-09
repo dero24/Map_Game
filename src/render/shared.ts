@@ -1,7 +1,7 @@
 // Shared uniforms + GLSL chunks for every painted material. Uniform objects are shared by reference,
 // so updating U.* once per frame updates every material.
 import * as THREE from 'three';
-import { POOL, GLSL_POOL, FLOOR, GLSL_FLOOR } from './nightLight';
+import { POOL, GLSL_POOL, FLOOR, GLSL_FLOOR, GLSL_FIGURE } from './nightLight';
 import { GLSL_TREE_SEASONS } from './treeSeasons';
 
 const v3 = (x = 0, y = 0, z = 0) => ({ value: new THREE.Vector3(x, y, z) });
@@ -201,6 +201,7 @@ float canyonAt(vec3 wpos) {
 float streetLevel(vec3 wpos) { return clamp(1.0 - max(wpos.y - uLampBaseY - 1.5, 0.0) / 9.0, 0.0, 1.0); }
 ${GLSL_POOL}
 ${GLSL_FLOOR}
+${GLSL_FIGURE}
 // The street lamps' pools (0–1 of a lone heart) at a point: their light, added up in the lamp map —
 // a pale glow under each lamp that dies away, meeting the next one's faintly (nightLight.ts).
 float lampField(vec3 wpos) {
@@ -246,6 +247,14 @@ float snowKeep(vec3 alb) {
 // the sky, and a blue fill turned every grey shingle teal) — the surface keeps its own hue, the
 // sun keeps its colour, the shade keeps the cool glaze every other surface has
 vec3 paintLight(vec3 albedo, vec3 N, vec3 wpos, float shadow, float ao, float skyNeutral) {
+  vec3 own = albedo;
+  #ifdef FIGURE_NIGHT
+    // a person out of doors (creature.ts): by night the moon, the sky's fill and the floor light the
+    // figure's colours evened toward a dark grey, and half the sky's fill reaches its sides; a lamp's
+    // pool lights its own colours (nightLight.ts FIGURE). By day this is the albedo as it was.
+    albedo = figureAlbedo(albedo);
+    ao *= figureFill();
+  #endif
   float ndl = dot(N, uKeyDir);
   float lowSun = 1.0 - smoothstep(0.05, 0.45, uKeyDir.y);
   float wrap = 0.15 + 0.25 * lowSun * step(0.7, N.y);
@@ -260,9 +269,13 @@ vec3 paintLight(vec3 albedo, vec3 N, vec3 wpos, float shadow, float ao, float sk
   lit = mix(lit, lit * glaze, (1.0 - diff) * uShadowTintAmt);
   // a lamp's pool, painted as light (nightLight.ts poolOn: the lamp's cream leads, the ground gets
   // the whole of it, a wall half)
-  if (uLampPower > 0.001) lit += poolOn(albedo, lampAt(wpos), clamp(N.y, -1.0, 1.0));
+  if (uLampPower > 0.001) lit += poolOn(own, lampAt(wpos), clamp(N.y, -1.0, 1.0));
   // …and between the pools the night's floor, the town's own glow (nothing by day)
-  lit += nightFloor(albedo, streetLevel(wpos));
+  #ifdef FIGURE_NIGHT
+    lit += figureFloor(albedo, streetLevel(wpos));
+  #else
+    lit += nightFloor(albedo, streetLevel(wpos));
+  #endif
   return lit;
 }
 vec3 paintLight(vec3 albedo, vec3 N, vec3 wpos, float shadow, float ao) { return paintLight(albedo, N, wpos, shadow, ao, 0.0); }

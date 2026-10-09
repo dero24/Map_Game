@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { POOL, poolLight, poolStamp, poolRead, poolStops, poolOn, FLOOR, floorLight, NIGHT_GRADE, nightGrade, reserved, tonemap, toSrgb, smoothstep } from '../src/render/nightLight';
+import { POOL, poolLight, poolStamp, poolRead, poolStops, poolOn, FLOOR, floorLight, FIGURE, figureAlbedo, figureFloor, NIGHT_GRADE, nightGrade, reserved, tonemap, toSrgb, smoothstep } from '../src/render/nightLight';
+import { SHIRTS, TROUSERS, SKIN_TONES } from '../src/assets/people';
 import { postParams } from '../src/render/post';
 import { lab, lch, lstar, poolFalloff, nightGapPasses } from '../tools/night-core.js';
 
@@ -180,6 +181,51 @@ describe('the street at night, end to end (scene light → the default look → 
     const coat = [0.45, 0.4, 0.35] as RGB;
     expect(labOf(show(lit(coat, 0, 0, 0))).L).toBeLessThan(labOf(show(lit(coat, 0))).L - 8);
     expect(poolOn(coat, 1, -1)).toEqual([0, 0, 0]); // (what faces down: the lamp is overhead)
+  });
+
+  // A walker by night (creature.ts people: shared.ts paintLight under FIGURE_NIGHT): their side (up 0)
+  // lit by the sky's fill (the whole sky's here, a little over a side's: by night atmosphere.ts's ground
+  // bounce is most of the sky's), the moon and the floor on the figure's evened colours, a lamp's pool
+  // on their own. Every colour a walker wears: the shirts, the trousers, the skin tones (people.ts).
+  const hexLin = (h: number) => [(h >> 16) & 255, (h >> 8) & 255, h & 255].map((v) => lin(v / 255)) as RGB;
+  const WEAR = [...SHIRTS, ...TROUSERS, ...SKIN_TONES].map(hexLin);
+  const walker = (alb: RGB, d = 60, m = 0, night = 1) => {
+    const a = figureAlbedo(alb, night);
+    return a.map((v, i) => v * (sky[i] * (1 - FIGURE.fill * night) + moon[i] * m) + figureFloor(a, night)[i] + poolOn(alb, poolLight(d), 0)[i]) as RGB;
+  };
+  const Ls = (f: (alb: RGB) => RGB) => WEAR.map((alb) => labOf(show(f(alb))).L);
+  const mean = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length;
+  it('a walker between the pools is as dark as the street: a pale shirt about the asphalt, a dark coat darker, never black', () => {
+    const street = labOf(gapOf(ASPHALT)).L, lawn = labOf(gapOf(LAWN)).L, walk = labOf(gapOf(WALK)).L;
+    const now = Ls((alb) => walker(alb));
+    expect(mean(now)).toBeLessThan(street); // (on the whole, darker than the darkest ground they walk on)
+    expect(Math.max(...now)).toBeLessThan(street + 2.5); // (the palest shirt about the asphalt)
+    expect(Math.max(...now)).toBeLessThan(Math.min(lawn, walk)); // (and under a lawn's or a sidewalk's)
+    expect(Math.min(...now)).toBeGreaterThan(5); // (a silhouette with its form, not a hole in the night)
+    expect(Math.max(...now) - Math.min(...now)).toBeGreaterThan(6); // (a white shirt still reads from a navy one)
+    // before (2026-10-07): lit like the street — the floor's evening toward its middle grey and the sky's
+    // whole fill — the palest twice the asphalt's L*, the mean over it
+    const before = Ls((alb) => alb.map((a, i) => a * sky[i] + floorLight(alb)[i]) as RGB);
+    expect(Math.max(...before)).toBeGreaterThan(street * 1.9);
+    expect(mean(before)).toBeGreaterThan(street);
+  });
+  it('under a high moon a walker has a lit side, no lighter than the moonlit lawn', () => {
+    const lawn = labOf(gapOf(LAWN, 1)).L;
+    const lit = Ls((alb) => walker(alb, 60, 1)), dark = Ls((alb) => walker(alb));
+    expect(Math.max(...lit)).toBeLessThan(lawn);
+    lit.forEach((L, i) => expect(L).toBeGreaterThan(dark[i] + 3)); // (the moon's side reads: form)
+  });
+  it("in a lamp's heart a walker is lit, their own colours back", () => {
+    for (const alb of WEAR) expect(labOf(show(walker(alb, 0))).L).toBeGreaterThan(labOf(show(walker(alb))).L + 12);
+    // a pale shirt under the lamp is the same as before: the pool lights the walker's own colour
+    const shirt = hexLin(0xf2efe6);
+    expect(walker(shirt, 0)[0] - walker(shirt)[0]).toBeCloseTo(poolOn(shirt, 1, 0)[0], 9);
+  });
+  it('by day a walker is as they were', () => {
+    for (const alb of WEAR) {
+      expect(figureAlbedo(alb, 0)).toEqual(alb);
+      expect(figureFloor(alb, 0)).toEqual([0, 0, 0]);
+    }
   });
   it("the gap's ground: the night's floor, L* 10–20 and cool, never black", () => {
     for (const alb of [ASPHALT, WALK, LAWN]) {

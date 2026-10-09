@@ -2118,21 +2118,25 @@
       "id": "bug-night-glow-people",
       "tier": 1,
       "rank": 11.3,
-      "status": "in_progress",
+      "status": "passing",
       "area": "life",
       "title": "People at night lit by the night, not glowing",
       "user_visible_behavior": "At night the people walking about are as dark as the street they walk on, lit only where a lamp or a window lights them.",
       "verification": [
         "night montage (Liberty State Park, a town street) against the same at dusk"
       ],
-      "evidence": [],
-      "notes": "Robby, 2026-10-07 (the night shot from Liberty State Park; with another session): the walkers read pale and lit against the dark ground. 2026-10-08 (later): the first of Robby's four reports, which he put before the gameplay proof of concept (\"okay i guess it should fix those first\"); order: bug-night-glow-people, life-density-realism, look-crisp-preset, bug-harbour-water (docs/earth/HANDOFF.md \"Start here\"). Robby's screenshot: C:\\Users\\Robby\\Pictures\\Screenshots\\_bugs\\_water_bug3.png — the night from Liberty State Park, the walkers pale against the dark ground (outside the repo; don't commit it). Worked on the branch fix/four-reports, off feature/lower48-alive (Robby: \"go off of a new branch of this current one\"; HANDOFF \"Start here\")."
+      "evidence": [
+        "src/render/nightLight.ts FIGURE (grey 0.19, even 0.84, fill 0.5), figureAlbedo, figureFloor, GLSL_FIGURE; shared.ts paintLight under FIGURE_NIGHT: by night the moon, the sky's fill and the floor light a figure's colours evened toward a dark grey, half the sky's fill on its sides, a lamp's pool on its own colours; creature.ts sets FIGURE_NIGHT on every people material out of doors (walkers, residents, café guests, the beach); interiors.ts: the standing residents indoors are INDOOR too (the room's light is theirs); people.ts SHIRTS (moved from sim/life.ts)",
+        "tests/nightLight.test.ts (4 new): between the pools every shirt, trouser and skin colour a walker wears is as dark as the street (mean under the asphalt's L*, the palest within 2.5 of it and under a lawn's or a sidewalk's, the darkest over L* 5, a white shirt still reads from a navy one) — before, the palest was twice the asphalt's L*; under a high moon a lit side, no lighter than the moonlit lawn; in a lamp's heart lit, their own colours back; by day as they were. npm test 1077/1077; typecheck; npm run build",
+        "before/after in the same page, the same walkers (the sim paused), FIGURE_NIGHT off then on, the walkers measured on the painted frame against the up-facing ground round them (L*): Liberty State Park 22:00 15.3/16.8 → 8.9/15.9, from 30 m 19.9/17 (paler than the lawn: Robby's report) → 11.8/15.7; Sea Bright 22:00 17.3/20.7 → 10.5/20.7; walkers in a lamp's pool 38.9/41.4 → 35.4/41.4 (lit); dusk 18.4 h unchanged (22.7 → 22.8). shots/fix/night-people-before-after.jpg (git-ignored)"
+      ],
+      "notes": "Robby, 2026-10-07 (the night shot from Liberty State Park; with another session): the walkers read pale and lit against the dark ground. 2026-10-08 (later): the first of Robby's four reports, which he put before the gameplay proof of concept (\"okay i guess it should fix those first\"); order: bug-night-glow-people, life-density-realism, look-crisp-preset, bug-harbour-water (docs/earth/HANDOFF.md \"Start here\"). Robby's screenshot: C:\\Users\\Robby\\Pictures\\Screenshots\\_bugs\\_water_bug3.png — the night from Liberty State Park, the walkers pale against the dark ground (outside the repo; don't commit it). Worked on the branch fix/four-reports, off feature/lower48-alive (Robby: \"go off of a new branch of this current one\"; HANDOFF \"Start here\"). 2026-10-08 (night): fixed on fix/four-reports — the floor evened a figure's light shirt and skin toward its middle grey and lit its sides as fully as the street, so walkers read twice as light as the asphalt; now they're lit by the night (nightLight.ts FIGURE), lit where a lamp lights them. Not yet changed: gulls and other creatures on the ground at night (the white gulls on a lawn read pale too; not in this report)."
     },
     {
       "id": "life-density-realism",
       "tier": 1,
       "rank": 11.31,
-      "status": "not_started",
+      "status": "in_progress",
       "area": "life",
       "title": "Realistic populations and traffic: quiet at night, empty desert roads",
       "user_visible_behavior": "Crowds and traffic follow the place and the hour: a downtown busy in the evening and quiet at 3 am, a suburb near empty at night, a desert highway with a car every few minutes.",

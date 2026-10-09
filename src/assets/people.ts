@@ -45,6 +45,8 @@ const PHONES = 14;
 
 export const SKIN_TONES = [0x8d5524, 0xc68642, 0xe0ac69, 0xf1c27d, 0xffdbac, 0x5c3a21, 0xa86b3c, 0xeac096];
 export const HAIR_COLOURS = [0x1c1612, 0x3b2a1e, 0x6a4a2c, 0xa8814f, 0x8a8a86, 0x2a1d17, 0xc9a36b, 0x4a3426];
+/** The walkers' shirts (the instance colour: sim/life.ts). */
+export const SHIRTS = [0xe8d8b0, 0x5b7fa6, 0xc4553f, 0xf2efe6, 0x6e8c5a, 0xe0a33b, 0x7a5b8c, 0x3f6f78, 0xd98a8a, 0x2f3a4a];
 export const TROUSERS = [0x2e3a52, 0x3b4454, 0x5a5e64, 0xc9b99a, 0x2a2c30, 0x6b5a45, 0x46566e, 0x8c7a5c];
 // shoes: the upper and its sole — white sneakers, black trainers on white soles, brown and tan
 // leather, navy, grey and red trainers, dark brown on a crepe sole (never a black block: the sole

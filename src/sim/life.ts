@@ -13,7 +13,7 @@ import { gearGeometry, gearFor, TAXI_PAINT, type CarGear } from '../assets/furni
 import { hashf } from '../assets/core';
 import { propMaterial } from '../render/propMaterial';
 import { activeStyle } from '../world/styles';
-import { personLib, warmthFor, leadHand, atWorld } from '../assets/people';
+import { personLib, warmthFor, leadHand, atWorld, SHIRTS } from '../assets/people';
 import { dogLib, dogMaterial, DOG_COATS, DOG_COLLAR } from '../assets/fauna';
 import { PED } from './lifeSim';
 
@@ -459,7 +459,6 @@ export { peopleU, creatureMaterial };
 const CAR_COLORS = [0xf2f2ee, 0xb9bcc0, 0x26282c, 0x5a5e64, 0x2b3f63, 0x9c2a26, 0x3d5a46, 0xcdbf9e];
 const DOG_CAP = 96;
 const LEAD_V = 8; // the lead's vertices: four segments
-const SHIRTS = [0xe8d8b0, 0x5b7fa6, 0xc4553f, 0xf2efe6, 0x6e8c5a, 0xe0a33b, 0x7a5b8c, 0x3f6f78, 0xd98a8a, 0x2f3a4a];
 const BOATS = [0xf5f3ee, 0xf5f3ee, 0xe9eef0, 0x2d4a6a, 0xc9d8de, 0x9b3b32];
 
 interface Group { mesh: THREE.InstancedMesh; meshes: THREE.InstancedMesh[]; anim: THREE.InstancedBufferAttribute; range: readonly [number, number]; scale: number }
