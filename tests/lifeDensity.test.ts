@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LifeSim, LAND, RHYTHM, homeCurve, landShare, pedShare, rhythmCurve, ruralShare, type Place } from '../src/sim/lifeSim';
+import { LifeSim, LAND, RHYTHM, cityNight, homeCurve, landShare, pedShare, rhythmCurve, ruralShare, type Place } from '../src/sim/lifeSim';
 import { crowdOf, lifeParams } from '../src/sim/life';
 import { RANGES, SIM_HZ, type LifeInit } from '../src/sim/protocol';
 
@@ -57,7 +57,7 @@ function want(kind: 'ped' | 'car', key: string, hour: number, place: Place | nul
 // their day; a home street goes in by 21:00; the open country next to nobody; a desert road a car every
 // few minutes (a want under one is that share of the minutes: one car crossing the bubble in about one).
 const TABLE: Record<string, Record<number, [number, number]>> = {
-  city: { 3: [10, 60], 12: [400, 640], 20: [150, 640], 22: [10, 640] },
+  city: { 3: [10, 90], 12: [400, 640], 20: [250, 640], 22: [150, 640], 0: [100, 400] }, // (its evening into midnight: cityNight)
   main: { 3: [0, 4], 12: [120, 400], 17: [150, 400], 20: [50, 200], 22: [15, 50] },
   suburb: { 3: [0, 2], 8: [20, 90], 12: [15, 90], 17: [40, 150], 20: [3, 25], 22: [0, 3] },
   rural: { 3: [0, 0.5], 12: [0.5, 8], 17: [1, 10], 20: [0, 2], 22: [0, 0.5] },
@@ -95,10 +95,8 @@ describe('who is about, by the place and the hour', () => {
     expect(want('ped', 'rural', 12, null)).toBeGreaterThan(100);
     expect(want('car', 'desert', 8, null)).toBeGreaterThan(5);
     // …and where the place is known, a city's core and a main street's day as they were
-    for (const h of [8, 12, 17, 20]) {
-      expect(want('ped', 'city', h)).toBeCloseTo(want('ped', 'city', h, null), 0);
-      expect(want('ped', 'main', h)).toBeCloseTo(want('ped', 'main', h, null), 0);
-    }
+    for (const h of [8, 12, 17]) expect(want('ped', 'city', h)).toBeCloseTo(want('ped', 'city', h, null), 0);
+    for (const h of [8, 12, 17, 20]) expect(want('ped', 'main', h)).toBeCloseTo(want('ped', 'main', h, null), 0);
   });
   it("the pieces: the land, the home street's day, the late hours, the roads out in the country", () => {
     expect(landShare(0)).toBeCloseTo(LAND.country); expect(landShare(1)).toBe(1); expect(landShare(0.6)).toBe(1);
@@ -111,11 +109,22 @@ describe('who is about, by the place and the hour', () => {
     const home = { town: 0, city: 0, settled: 1 }, main = { town: 1, city: 0, settled: 1 }, city = { town: 1, city: 1, settled: 1 };
     expect(pedShare('town', 20, 1, home) / pedShare('town', 20, 0, home)).toBeCloseTo(1 - LAND.dark, 5);
     expect(pedShare('shore', 23.5, 1, main) / Math.min(1, rhythmCurve('shore', 'ped', 23.5)) ** RHYTHM.peak).toBeCloseTo(1 - LAND.main, 5);
-    expect(pedShare('town', 23.5, 1, city)).toBeCloseTo(Math.min(1, rhythmCurve('town', 'ped', 23.5)) ** RHYTHM.peak, 9);
+    expect(pedShare('town', 23.5, 1, city)).toBeCloseTo(Math.min(1, rhythmCurve('town', 'ped', 23.5) + cityNight('ped', 23.5)) ** RHYTHM.peak, 9); // (a city's core: its rhythm and its night)
     expect(pedShare('shore', 14, 0, main)).toBeCloseTo(Math.min(1, rhythmCurve('shore', 'ped', 14)) ** RHYTHM.peak, 9); // (by day a main street as it was)
     // the roads: a town's traffic where it's settled; out in the country each rank its share, the big roads more
     for (let r = 2; r <= 5; r++) { expect(ruralShare(r, 1)).toBe(1); expect(ruralShare(r, 0)).toBe(LAND.rural[r]); }
     expect(ruralShare(5, 0)).toBeGreaterThan(ruralShare(2, 0));
+  });
+  it("a city's core keeps its evening — busy into midnight, quiet by 3 am — and only the city (Robby: \"Midtown at 10 pm is as quiet as at 3 am\")", () => {
+    expect(want('ped', 'city', 22)).toBeGreaterThan(want('ped', 'city', 3) * 3);
+    expect(want('ped', 'city', 0)).toBeGreaterThan(want('ped', 'city', 3) * 2);
+    expect(want('ped', 'city', 20)).toBeGreaterThan(want('ped', 'city', 22));
+    expect(want('car', 'city', 22)).toBeGreaterThan(want('car', 'city', 3) * 2);
+    // before: the town rhythm's evening ended by 21:30 — 10 pm and 3 am alike
+    expect(want('ped', 'city', 22, null)).toBeCloseTo(want('ped', 'city', 3, null), 0);
+    // a main street and a suburb keep their quiet nights
+    expect(want('ped', 'main', 0)).toBeLessThan(4); expect(want('ped', 'suburb', 22)).toBeLessThan(3);
+    expect(cityNight('ped', 14)).toBe(0); expect(cityNight('car', 14)).toBe(0); // (by day the rhythm's own)
   });
   it('a park: its footpaths make it as walked as a suburb, with no houses about; and empty at night', () => {
     expect(want('ped', 'park', 12)).toBeGreaterThan(want('ped', 'desert', 12) * 20);

@@ -69,6 +69,19 @@ export function rhythmCurve(rhythm: Rhythm, kind: 'car' | 'ped', h: number) {
   // (+ a coffee-run morning and a lunch hour: downtown is never empty 8 am – 8 pm)
   return 0.06 + 0.5 * bell(8.5, 2.5) + 0.35 * bell(12.5, 2.5) + 0.85 * bell(15.5, 4) + 0.3 * bell(20.5, 2.5);
 }
+/** A city's core after dark, on top of its rhythm (0–1 of the peak, before RHYTHM.peak): the theatres,
+ *  the restaurants and the bars — busy through the evening into midnight, a late crowd to 2 am, quiet
+ *  by 4; its traffic the same, the cabs among it. Robby, 2026-10-08: "Midtown at 10 pm is as quiet as at
+ *  3 am. The city's evening ends too early" — the town rhythm's evening ends by 21:30. */
+export function cityNight(kind: 'car' | 'ped', h: number) {
+  const t = h < 6 ? h + 24 : h; // (6:00 … 30:00: the night in one piece)
+  const bell = (c: number, w: number) => Math.max(0, 1 - ((t - c) / w) ** 2);
+  return kind === 'ped' ? 0.32 * bell(22, 3) + 0.12 * bell(25.5, 2) : 0.25 * bell(21.5, 3.5) + 0.1 * bell(25, 2.5);
+}
+/** A city's core by the hour: its rhythm and its night (0–1 of the peak, after RHYTHM.peak). */
+export function cityShare(rhythm: Rhythm, kind: 'car' | 'ped', h: number) {
+  return Math.min(1, rhythmCurve(rhythm, kind, h) + cityNight(kind, h)) ** RHYTHM.peak;
+}
 /** A home street's walkers by the hour (0–1 of its peak, before RHYTHM.peak): the dog and the early
  *  jog, the late morning's errands, after school and work, a walk after dinner — and in by 21:00. In
  *  the desert the midday heat keeps them in too. */
@@ -79,14 +92,15 @@ export function homeCurve(rhythm: Rhythm, h: number) {
 }
 /** The walkers out in this place at this hour (0–1 of the cap's share; night 0 day … 1 night): its
  *  home streets' day and its main street's rhythm by how much of a town it is, a city's core its
- *  rhythm, all of it by the land's share (`settled`: the place's, or its footpaths'). */
+ *  rhythm and its night (cityShare), all of it by the land's share (`settled`: the place's, or its
+ *  footpaths'). */
 export function pedShare(rhythm: Rhythm, h: number, night: number, p: Place, settled = p.settled) {
   const main = Math.min(1, rhythmCurve(rhythm, 'ped', h)) ** RHYTHM.peak;
   const home = Math.min(1, homeCurve(rhythm, h)) ** RHYTHM.peak * (1 - LAND.dark * clamp01(night));
   const t = h < 6 ? h + 24 : h; // (6:00 … 30:00: the night in one piece)
   const late = 1 - LAND.main * sstep(20.5, 23.5, t) * (1 - sstep(28, 29.5, t));
   const town = clamp01(p.town), city = clamp01(p.city);
-  return ((home + (main * late - home) * town) * (1 - city) + main * city) * landShare(settled);
+  return ((home + (main * late - home) * town) * (1 - city) + cityShare(rhythm, 'ped', h) * city) * landShare(settled);
 }
 /** The land's share of the walkers (settled 0: open country … 0.6 and over: all of them). */
 export function landShare(settled: number) { return LAND.country + (1 - LAND.country) * sstep(0, 0.6, settled); }
@@ -740,6 +754,8 @@ export class LifeSim {
     const rhythm = this.w.rhythm ?? 'shore', P = this.env.place;
     // (the peaks kept, the hours between them thinner: a quiet morning street, a busy afternoon)
     let f = Math.min(1, rhythmCurve(rhythm, kind, h)) ** RHYTHM.peak;
+    // cars: a city's core keeps its traffic into the night (cityNight)
+    if (kind === 'car' && P) f += (cityShare(rhythm, 'car', h) - f) * clamp01(P.city);
     // walkers: the home streets' day and the main street's, out in the country next to none (a footpath
     // network counts as settled) — LAND
     if (kind === 'ped' && P) f = pedShare(rhythm, h, this.env.night, P, Math.max(P.settled, (0.6 * this.footLen) / LAND.paths));
