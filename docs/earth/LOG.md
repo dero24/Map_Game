@@ -30,6 +30,12 @@ gameplay implementation after".
   `life-density-realism`; the HANDOFF's "Start here", ROADMAP, AGENTS and the plan's Decisions
   updated, `for_mapgame/GAMEPLAY_STREAMLINED.md` synced. The HANDOFF also says how a session Robby
   starts for another item hands the queue back.
+- **Then Robby asked** for the four on their own branch ("go off of a new branch of this current
+  one"), the preset in his words ("create the additional preset for better watercolor overlay"),
+  and pointed to his screenshots (`Pictures/Screenshots/_bugs`). The branch is `fix/four-reports`,
+  not a `feature/` name: pushes to `main` and `feature/*` publish the game (`.github/workflows/`).
+  The HANDOFF maps the screenshots to the reports (`_water_bug3.png` the walkers glowing at night;
+  `_water_bug.png`, `_water_bug2.png` the bay's grey ground), and the items' notes carry them.
 - **Verified:** `npm run init -- --fast`: typecheck clean; 135 features (60 passing, 68 not started,
   5 superseded, 1 in progress); "next: tier 1 · bug-night-glow-people (in progress)". Docs and the
   feature list only; no code changed.

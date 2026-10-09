@@ -10,14 +10,30 @@ after". So they come first, one item at a time, in this order:
 2. **`life-density-realism`**: crowds and traffic that follow the place and the hour: quiet at
    night, a car every few minutes on a desert road. Painted places now keep the people and traffic
    of their hour (`docs/GAMEPLAY_STREAMLINED.md` §5), so this also sets what a painting keeps.
-3. **`look-crisp-preset`**: a "crisp watercolor" switch in the developer settings, to compare
-   against the default.
+3. **`look-crisp-preset`**: the additional preset for a better watercolor overlay (Robby: "create
+   the additional preset for better watercolor overlay"): a "crisp watercolor" switch in the
+   developer settings, to compare against the default; its notes list what to try, cheapest first.
 4. **`bug-harbour-water`**: the harbour's water meets its shores. It changes what the tile service
-   builds: a new tile version, the worker deployed before the client is pushed, never an unreleased
-   `&v=` against the live service (`docs/agent/streaming.md`). Ask Robby before deploying.
+   builds: a new tile version, the worker deployed before the client is published (the branch
+   merged back, below), never an unreleased `&v=` against the live service
+   (`docs/agent/streaming.md`). Ask Robby before deploying.
 
+- **On their own branch** (Robby: "go off of a new branch of this current one"):
+  `fix/four-reports`, off `feature/lower48-alive`. The first session creates it; later ones switch
+  to it and carry on. Not a `feature/` name: pushes to `main` and `feature/*` publish the game to
+  GitHub Pages and run the checks (`.github/workflows/`); a `fix/` push publishes nothing, so run
+  the checks on it by hand when wanted (`gh workflow run playtest.yml --ref fix/four-reports`, never
+  `pages.yml`). It goes back into `feature/lower48-alive`, which publishes, when Robby says so.
+- **Robby's screenshots:** `C:\Users\Robby\Pictures\Screenshots\_bugs` (outside the repo: look,
+  don't commit). `_water_bug3.png` is the night from Liberty State Park, the walkers pale against
+  the dark ground (`bug-night-glow-people`); `_water_bug.png` and `_water_bug2.png` are the bay's
+  grey ground and its straight edge, `_water_bug_location_reference.png` where
+  (`bug-harbour-water`). The rest are older: the circling plants, the horizon's pyramids and the
+  grass on courts are fixed (LOG 2026-10-08); `_man_through_door_chicago.png`
+  (`bug-walker-into-wall`) and `_grandstaff_terrain_glitch*.png` (`bug-grandstaff-terrain`) are
+  open but not in this round; the airport shots are from 2026-10-04.
 - **Each one:** read its notes; capture the before; fix it; tests; a before/after montage shown to
-  Robby, pushing only after his OK (as with the far woods); the LOG entry; the item `passing` with
+  Robby; commit on the branch, pushing only after his OK; the LOG entry; the item `passing` with
   its evidence; then mark the next one `in_progress`.
 - **After the four:** mark `gameplay-one-plan` `in_progress` (below).
 - **If Robby names another item** in a session, that session works it and hands back: set the
