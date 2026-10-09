@@ -256,6 +256,8 @@ export class Critters {
   private e = new THREE.Euler();
   private v = new THREE.Vector3();
   private sv = new THREE.Vector3();
+  /** False indoors (or with the life switched off): the animals outside wait where they are, unseen and
+   *  still — the same ones when you step out (they were all dropped: a shop's door was a fresh cast). */
   enabled = true;
   /** Every species of the place's cast about, whatever its odds (the review harness's, and the tests' of
    *  how an animal lives — not of how often you meet it). */
@@ -787,8 +789,9 @@ export class Critters {
     return big ? { home: big, top: big.trunk ?? 4, a: (((Math.floor(big.x) * 73 + Math.floor(big.z) * 19) % 628) + 628) % 628 / 100 } : null;
   }
   /** How loud the annual cicadas' chorus is about the walker (0–1: those on the bark near; ambience.ts). */
-  get chorus() { return Math.min(1, this.list.filter((c) => c.kind === 'annualcicada' && c.state === 'perch').length / 2); }
+  get chorus() { return this.enabled ? Math.min(1, this.list.filter((c) => c.kind === 'annualcicada' && c.state === 'perch').length / 2) : 0; }
   update(dt: number, wx: number, wz: number, env: CritterEnv) {
+    if (!this.enabled) { this.hide(); return; } // (indoors: they wait outside, as they were)
     this.clock += dt;
     this.paved = env.paved ?? (() => false); this.lotAt = env.lot ?? (() => false);
     this.inTown = [[0, 0], [60, 0], [-60, 0], [0, 60], [0, -60], [42, 42], [-42, 42], [42, -42], [-42, -42]].some(([ox, oz]) => prairieTown(wx + ox, wz + oz) !== null);
@@ -797,7 +800,7 @@ export class Critters {
     this.migrating = monarchMigrating(env.place?.eco, this.month(env));
     const count: Record<string, number> = {}, roleCount: Record<string, number> = {};
     for (const c of this.list) { count[c.kind] = (count[c.kind] ?? 0) + 1; roleCount[R(c)] = (roleCount[R(c)] ?? 0) + 1; }
-    if (this.enabled && (this.spawnT -= dt) <= 0) {
+    if ((this.spawnT -= dt) <= 0) {
       this.spawnT = 0.6;
       const mix = this.mix(env), mo = this.month(env), wild = 1 - Math.max(env.settled ?? 0, env.urban ?? 0);
       for (const role of ROLES) {
@@ -848,9 +851,9 @@ export class Critters {
       const c = this.list[i];
       const d = Math.hypot(c.x - wx, c.z - wz);
       // (out of range, out of its hours or its habitat, flown off for good, a pelican's line gone by: it goes
-      // once out of sight, never in plain view — STAY; a fox's catch, and indoors, at once)
+      // once out of sight, never in plain view — STAY; a fox's catch at once)
       const leave = d > (WHALES.has(c.kind) ? 1500 : STAY.keep) || (this.want(R(c), env) === 0 && d > 30) || (c.state === 'fly' && !!c.away) || (c.state === 'skim' && c.t <= 0);
-      const gone = c.dead || !this.enabled || (leave && !this.seen(c, d, wx, wz, env.camFwd));
+      const gone = c.dead || (leave && !this.seen(c, d, wx, wz, env.camFwd));
       if (gone) { this.list.splice(i, 1); continue; }
       this.step(c, dt, wx, wz, d, env);
     }
@@ -1436,6 +1439,12 @@ export class Critters {
   /** Animals drawn last frame, and those left out behind the walker (for the review harness and tests). */
   readonly drawn = { shown: 0, behind: 0 };
   private mo = 6;
+  /** Nothing drawn (indoors): every kind's mesh and the water's marks empty; the animals kept as they are. */
+  private hide() {
+    for (const [, M] of this.meshes) { M.m.count = 0; M.m.visible = false; }
+    for (const M of this.fxMesh) { M.count = 0; M.visible = false; }
+    this.drawn.shown = this.drawn.behind = 0;
+  }
   private draw(wx: number, wz: number, fwd: THREE.Vector3) {
     const per = new Map<CritterKind, number>();
     // (looking about level, an animal well behind the walker isn't drawn — its vertices cost nothing;

@@ -123,6 +123,21 @@ describe('animals you follow stay (STAY)', () => {
     expect(away).toBe(true);
     expect(list(c).includes(bird)).toBe(false); // (on to the pixel it is past STAY.keep)
   });
+  it('indoors the animals outside wait where they are — not drawn — and are the same ones when you step out', () => {
+    const c = alone(), bird = animal('songbird', 0, -20, { t: 1e3 }), deer = animal('deer', 30, -60, { t: 1e3 });
+    list(c).push(bird, deer);
+    c.update(0.05, 0, 0, env({ hour: 7, night: 0.2 }));
+    expect(drawnOf(c, 'songbird')).toBe(1);
+    c.enabled = false; // (in through a shop's door)
+    for (let t = 0; t < 1200; t++) c.update(0.05, 0, 0, env({ hour: 7, night: 0.2 })); // (a minute inside)
+    expect(list(c)).toEqual([bird, deer]);
+    expect(drawnOf(c, 'songbird')).toBe(0);
+    expect(c.chorus).toBe(0);
+    c.enabled = true; // (and out again)
+    c.update(0.05, 0, 0, env({ hour: 7, night: 0.2 }));
+    expect(list(c).includes(bird) && list(c).includes(deer)).toBe(true);
+    expect(drawnOf(c, 'songbird')).toBe(1);
+  });
   it('following costs nothing: never more of a kind than its cap, and only animals in sight past the range — a few at most', () => {
     const trees = Array.from({ length: 30 }, (_, i) => ({ x: ((i * 37) % 120) - 60, z: -((i * 53) % 200), trunk: 4, r: 0.3 }));
     const c = new Critters(lawn, walk);
