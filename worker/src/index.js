@@ -203,9 +203,11 @@ async function tile(request, env, ctx, url, cx, cz) {
   // without a vertex in it clipped to it (realTile.ts clipRingToBox). (No v27 was ever deployed: a
   // test page asked the v26 service for &v=27, and the edge kept those answers under that URL.)
   // v29: the natural areas mapped as relations (osmQuery.ts; the extract's add-on, osm.js)
-  // v30: the sea of a cell out in a bay (realTile.ts coastSea): its islands left standing, a coast
+  // v31: the sea of a cell out in a bay (realTile.ts coastSea): its islands left standing, a coast
   // through it with no vertex in it, and a cell no coast crosses that the land cover calls water —
-  // the sea's where the coast about it (coastAbout: the extract 2 km round) says so
+  // the sea's where the coast about it (coastAbout: the extract 2 km round) says so. (No v30 was ever
+  // deployed: a test page carrying the bump asked the v29 service for &v=30, and the edge kept those
+  // answers under that URL — round Ellis Island, the very cells v31 mends.)
   const okey = tileKey(olat, olon, cx, cz);
   const bucket = env.TILES ?? null; // binding may be absent under `wrangler dev` before the bucket exists
   if (bucket) {
@@ -242,7 +244,7 @@ async function tile(request, env, ctx, url, cx, cz) {
   return json(out.body, { headers: { ...headers, 'x-tile-cache': 'miss' } });
 }
 
-const tileKey = (olat, olon, cx, cz) => `t/v30/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
+const tileKey = (olat, olon, cx, cz) => `t/v31/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
 // A cell's TileJson text, as /tile answers it (R2, else the cold path), or null — the /measured
 // route measures the buildings the client got from /tile, keyed the same way.
 async function tileText(env, olat, olon, cx, cz) {
