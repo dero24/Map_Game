@@ -270,6 +270,7 @@ export class LifeSim {
   }
   private adopt(o: LifeSim) {
     this.tick = o.tick;
+    this.awaitPlace = o.awaitPlace; // (a graph rebuilt before the place was known: the first crowd still waits for it)
     this.rng = makeRng((this.w.seed ^ (o.tick * 2654435761)) >>> 0);
     this.indoor = o.indoor;
     const copy = (i: number) => {

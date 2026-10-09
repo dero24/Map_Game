@@ -141,6 +141,14 @@ describe('arriving', () => {
     const n = active(wait, RANGES.peds);
     expect(n).toBeGreaterThan(10); expect(n).toBeLessThanOrEqual(Math.ceil(want('ped', 'suburb', 12)) + 1);
   });
+  it('a road graph rebuilt before the place is known still waits for it, then seeds the crowd at once', () => {
+    const P = PLACES.suburb;
+    const first = new LifeSim({ ...P.world(), rhythm: P.rhythm }, undefined, { playerX: 0, playerZ: 0, hour: 12, night: 0, density: lifeParams.density * crowdOf(0, 0), wind: 0.5 });
+    const next = new LifeSim({ ...P.world(), rhythm: P.rhythm }, first); // (the worker's regraph: new tiles in)
+    next.setEnv({ playerX: 0, playerZ: 0, hour: 12, night: 0, density: lifeParams.density * crowdOf(0, 0), wind: 0.5, place: P.place });
+    next.step(0.05);
+    expect(active(next, RANGES.peds)).toBeGreaterThan(10);
+  });
   it('the night preset: a noon crowd thins in seconds, not minutes — and nobody within 100 m vanishes', () => {
     const P = PLACES.main, env = (hour: number) => ({ playerX: 0, playerZ: 0, hour, night: nightAt(hour), density: lifeParams.density * crowdOf(1, 0), wind: 0.5, place: P.place });
     const sim = new LifeSim({ ...P.world(), rhythm: P.rhythm }, undefined, env(15));
