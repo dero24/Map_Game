@@ -95,7 +95,8 @@ vec3 nightFloor(vec3 albedo, float level) {
   return mix(albedo, vec3(${FLOOR.grey.toFixed(3)}), ${FLOOR.even.toFixed(3)}) * uNightFloor.rgb * (uNight * uNightFloor.w * level);
 }`;
 
-/** A figure by night (a person out of doors: creature.ts sets FIGURE_NIGHT, shared.ts paintLight).
+/** A figure by night (a person or an animal out of doors: creature.ts and fauna.ts critterMaterial set
+ *  FIGURE_NIGHT, shared.ts paintLight).
  *  The floor evens the street's albedos toward a middle grey so the ground between the pools reads;
  *  a standing figure lit the same way — its sides as fully as the street, a pale shirt or pale skin
  *  lifted with the rest — read twice as light as the asphalt it walked on, pale and lit against the

@@ -42,9 +42,9 @@ const BEACH_GLSL_LOOK = /* glsl */ `
 `;
 export function creatureMaterial(defines: Record<string, number>) {
   return paintMaterial({
-    // people out of doors are lit by the night, not lifted by it (nightLight.ts FIGURE); indoors the
-    // room's own light is theirs
-    defines: defines.PEOPLE && !defines.INDOOR ? { ...defines, FIGURE_NIGHT: 1 } : defines,
+    // people and gulls out of doors are lit by the night, not lifted by it (nightLight.ts FIGURE: a
+    // white gull on a lawn read as pale as the walkers did); indoors the room's own light is theirs
+    defines: !defines.INDOOR ? { ...defines, FIGURE_NIGHT: 1 } : defines,
     uniforms: defines.PEOPLE ? peopleU : {},
     vertex: /* glsl */ `
       attribute vec3 color;

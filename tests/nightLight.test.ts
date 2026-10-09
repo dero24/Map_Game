@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { POOL, poolLight, poolStamp, poolRead, poolStops, poolOn, FLOOR, floorLight, FIGURE, figureAlbedo, figureFloor, NIGHT_GRADE, nightGrade, reserved, tonemap, toSrgb, smoothstep } from '../src/render/nightLight';
 import { SHIRTS, TROUSERS, SKIN_TONES } from '../src/assets/people';
+import { critterGeometry, critterMaterial, type CritterKind } from '../src/assets/fauna';
+import { creatureMaterial } from '../src/render/creature';
 import { postParams } from '../src/render/post';
 import { lab, lch, lstar, poolFalloff, nightGapPasses } from '../tools/night-core.js';
 
@@ -220,6 +222,23 @@ describe('the street at night, end to end (scene light → the default look → 
     // a pale shirt under the lamp is the same as before: the pool lights the walker's own colour
     const shirt = hexLin(0xf2efe6);
     expect(walker(shirt, 0)[0] - walker(shirt)[0]).toBeCloseTo(poolOn(shirt, 1, 0)[0], 9);
+  });
+  it("a gull on a lawn, a goose by the pond, a deer: their palest feather or coat by night about the street's, not twice it (Robby: \"Gulls on a lawn at night look pale\")", () => {
+    const street = labOf(gapOf(ASPHALT)).L, lawn = labOf(gapOf(LAWN)).L;
+    for (const kind of ['herringgull', 'laughinggull', 'canadagoose', 'greategret', 'deer', 'muleDeer'] as CritterKind[]) {
+      const col = critterGeometry(kind).getAttribute('color');
+      let palest: RGB = [0, 0, 0];
+      for (let i = 0; i < col.count; i++) if (col.getX(i) + col.getY(i) + col.getZ(i) > palest[0] + palest[1] + palest[2] && Math.max(col.getX(i), col.getY(i), col.getZ(i)) < 0.98) palest = [col.getX(i), col.getY(i), col.getZ(i)];
+      const now = labOf(show(walker(palest))).L, before = labOf(show(palest.map((a, i) => a * sky[i] + floorLight(palest)[i]) as RGB)).L;
+      expect(now, kind).toBeLessThan(street + 2.5);
+      expect(now, kind).toBeLessThan(lawn);
+      if (palest[0] + palest[1] + palest[2] > 1.5) expect(before, kind).toBeGreaterThan(street * 1.5); // (the pale ones: as the walkers were)
+    }
+    // every animal out of doors takes the night as the walkers do; the residents indoors keep the room's light
+    expect(critterMaterial('herringgull').defines.FIGURE_NIGHT).toBe(1);
+    expect(creatureMaterial({ WINGS: 1 }).defines.FIGURE_NIGHT).toBe(1);
+    expect(creatureMaterial({ LEGS: 1, PEOPLE: 1 }).defines.FIGURE_NIGHT).toBe(1);
+    expect(creatureMaterial({ LEGS: 1, PEOPLE: 1, STATIC_PEOPLE: 1, INDOOR: 1 }).defines.FIGURE_NIGHT).toBeUndefined();
   });
   it('by day a walker is as they were', () => {
     for (const alb of WEAR) {

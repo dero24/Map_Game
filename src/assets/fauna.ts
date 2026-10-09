@@ -2002,6 +2002,9 @@ export const flapOf = (k: CritterKind) => FLAP[k] ?? 38;
 export function critterMaterial(kind: CritterKind) {
   const g = GAIT[kind];
   return paintMaterial({
+    // lit by the night like the walkers, not lifted by it (nightLight.ts FIGURE: a pale goose or deer on
+    // a dark lawn read as lit); a firefly's glow is added after, as its own light
+    defines: { FIGURE_NIGHT: 1 },
     uniforms: { uGait: { value: new THREE.Vector4(...g) }, uLimb: { value: LIMB[kind] }, uFlap: { value: new THREE.Vector3(flapOf(kind), kind === 'butterfly' ? 2 : FLIGHT[kind]?.[0] ?? 0, FLIGHT[kind]?.[1] ?? 0.14) }, uWag: { value: new THREE.Vector2(...(WAG[kind] ?? [0, 0])) } },
     vertex: /* glsl */ `
       attribute vec3 color;
