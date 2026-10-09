@@ -2603,7 +2603,7 @@
       "id": "bug-seawall-railing",
       "tier": 1,
       "rank": 11.35,
-      "status": "in_progress",
+      "status": "passing",
       "area": "world",
       "title": "The sea meets its coastline: a seawall's railing stands on the shore, not in the water",
       "user_visible_behavior": "Where a park or a promenade ends at a seawall, the water comes up to the wall and the railing stands on dry ground above it — no posts in the water, no ground standing out in the sea.",
@@ -2611,14 +2611,18 @@
         "the waterline against the coastline along real seawalls (Liberty Island, the Battery, Hudson River Park): its offset in metres, before and after",
         "montage: Liberty Island's railing, a promenade railing"
       ],
-      "evidence": [],
-      "notes": "Robby, 2026-10-08 (night), after the four reports, of the page's \"noticed, not changed\" list: \"please fix the remaining bugs like this\". His list: \"Railings on seawalls stand at the water's edge.\" Seen on Liberty Island once its bay had water (bug-harbour-water): dem.ts waterPatch drops every node inside the sea to −6 m, so the ground slopes into the water over the terrain's last grid step and whatever stands on the coastline sinks. Worked on feature/four-reports (Robby: \"create new feature branch we will work off of\"); commit each, push only with his OK (a feature/ push publishes)."
+      "evidence": [
+        "src/world/dem.ts waterPatch → seaShore: a sea node beside dry ground goes only as deep as puts the water's edge, along each grid step to its dry neighbours, at the coastline (−h·d_sea/d_land, the shallowest its neighbours ask, never above −5 cm); that dry node at least 30 cm over the water; the open sea keeps its 6 m floor. The game's tile worker runs it — no tile version (v31 stays)",
+        "tests/dem.test.ts: a straight coast between two 16 m nodes — the water's edge within 1 m of it (the old patch: 8 m inland, the test fails on it), the land just inland dry, the open sea at −6 m, the land as it was; an island's shore the same. npm test (dem, waterLife, landcover, coastSea, coverPatch); typecheck",
+        "Liberty Island, the old patch then the fix (the live v31 tiles): the water up the lawn with the railing's posts and two walkers in it → the railing standing along the water's edge, a walker on the path behind it. Montage shots/fix/seawall-before-after.jpg (git-ignored)"
+      ],
+      "notes": "Robby, 2026-10-08 (night), after the four reports, of the page's \"noticed, not changed\" list: \"please fix the remaining bugs like this\". His list: \"Railings on seawalls stand at the water's edge.\" Seen on Liberty Island once its bay had water (bug-harbour-water): dem.ts waterPatch drops every node inside the sea to −6 m, so the ground slopes into the water over the terrain's last grid step and whatever stands on the coastline sinks. Worked on feature/four-reports (Robby: \"create new feature branch we will work off of\"); commit each, push only with his OK (a feature/ push publishes). 2026-10-08 (night, later): passing on feature/four-reports (not pushed)."
     },
     {
       "id": "life-city-night",
       "tier": 1,
       "rank": 11.36,
-      "status": "not_started",
+      "status": "in_progress",
       "area": "life",
       "title": "A city's core keeps its evening: busy into the night, quiet by 3 am",
       "user_visible_behavior": "Midtown at 10 pm still has its crowds and its traffic — thinner than at 8 pm, far busier than at 3 am — while a small town's main street and a suburb stay quiet at night.",

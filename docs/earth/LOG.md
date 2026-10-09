@@ -22,6 +22,13 @@ a change to the game alone needs none (the seawall fix is the game's: dem.ts run
   deer by night about the street's. Montage `shots/fix/night-animals-lsp.jpg`. With it, `critters.ts`
   on its own clock (the butterflies' and the shoals' drift read `performance.now()`, so a test's
   turkeys flocked one run in three): `waterBirds.test.ts` passes five runs of five.
+- **2. `bug-seawall-railing` — passing.** `dem.ts waterPatch` dropped every node inside the sea to −6 m,
+  so across the terrain's 16 m grid step the ground sloped into the water and the water's edge came up
+  to 12 m inland of the coast. `seaShore`: a sea node beside dry ground goes only as deep as puts the
+  edge, along each step, at the coastline; the dry node stays 30 cm over the water. In the game alone
+  (no tile version, as Robby's reminder asked). Liberty Island: the railing's posts and two walkers in
+  the water → the railing along the water's edge. Test: a straight coast — the edge within a metre of
+  it (it was 8 m inland). Montage `shots/fix/seawall-before-after.jpg`.
 - **Next:** the batch, in order.
 
 ## 2026-10-08 (night) — Robby's four reports, live on feature/four-reports: walkers lit by the night, who's about by the place and the hour, a crisp watercolor, the harbour's sea (tiles v31)
