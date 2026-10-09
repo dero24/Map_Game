@@ -62,6 +62,27 @@ describe('waterPatch / waterLevel', () => {
     expect(L.heightAt(120, 120)).toBeCloseTo(20, 1);
   });
 
+  it("meets its coastline: the water's edge at the coast, not a grid step inland (a seawall's railing stood in the water)", () => {
+    // land at 2 m, the sea west of x = 44 — between the node centres at 40 (sea) and 56 (land)
+    const d = demLayer({ heights: Float32Array.from(new Array(100).fill(2)), x0: 0, z0: 0, pitch: 16, nx: 10, nz: 10 });
+    const w = waterPatch(d, [{ ring: sq(-100, -100, 44, 300) }]);
+    const L = new TerrainLayer(w.buf, w.layout), y = (x: number) => L.heightAt(x, 88);
+    let edge = NaN;
+    for (let x = 0; x <= 100; x += 0.25) if (y(x) <= 0 && y(x + 0.25) > 0) { edge = x; break; }
+    expect(Math.abs(edge - 44)).toBeLessThan(1); // (it was at 52: the sea's −6 m floor sloping 8 m inland)
+    expect(y(46)).toBeGreaterThan(0); // (the seawall's top, just inland of the coast: dry)
+    expect(y(42)).toBeLessThan(0);
+    expect(y(8)).toBeCloseTo(-6, 1); // (the open sea keeps its floor)
+    expect(y(72)).toBeCloseTo(2, 1); // (the land as it was)
+    // an island in it: its shore as dry, its middle as it was
+    const i = waterPatch(d, [{ ring: sq(-100, -100, 300, 300), holes: [sq(36, 36, 92, 92)] }]);
+    const LI = new TerrainLayer(i.buf, i.layout);
+    expect(LI.heightAt(64, 64)).toBeCloseTo(2, 1);
+    let e2 = NaN;
+    for (let x = 0; x <= 64; x += 0.25) if (LI.heightAt(x, 64) <= 0 && LI.heightAt(x + 0.25, 64) > 0) { e2 = x; break; }
+    expect(Math.abs(e2 - 36)).toBeLessThan(1.5);
+  });
+
   it('samples each node at its cell centre (half a pitch in)', () => {
     // a strip 0..12 m wide holds no node centre (they sit at 8, 24, …) until it passes 8 m
     const a = waterPatch(land(), [{ ring: sq(0, 0, 6, 160) }]);

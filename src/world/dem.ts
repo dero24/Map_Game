@@ -312,7 +312,52 @@ export function waterPatch(layer: { buf: ArrayBuffer; layout: LayerLayout }, bod
     flags[k] |= 1;
     oceanD[k] = sea ? 0 : 255; // (a lake is fresh water, not the sea — whatever the DEM guessed)
   }
+  seaShore(g, h, flags, level, ordered.filter((w) => w.level === undefined));
   return { buf, layout: L };
+}
+
+/** The sea meets its coastline (waterPatch, in place). Every node inside the sea drops to the 6 m
+ *  floor, and the ground between it and the dry node beside it — a 16 m grid step — sloped from the
+ *  land's +2 m to −6 m: the water's edge came up to 12 m inland of the coast, and what stands on the
+ *  coast sank (Robby, 2026-10-08: "Railings on seawalls stand at the water's edge" — Liberty Island's
+ *  posts in the water). So a sea node beside dry ground goes only as deep as puts the water's edge,
+ *  along each step to its dry neighbours, at the coastline: −h·d_sea/d_land, the land node's height h
+ *  and both nodes' distances to the coast — the shallowest its neighbours ask (the water never comes
+ *  past the coast; a step's edge may stop short of it, a metre or two), never above −5 cm; and that
+ *  dry node stands at least 30 cm over the water. The open sea keeps its floor. */
+function seaShore(g: Grid, h: Float32Array, flags: Uint8Array, level: Float32Array, seas: WaterBody[]) {
+  if (!seas.length) return;
+  const rings = seas.flatMap((w) => [w.ring, ...(w.holes ?? [])]).filter((r) => r.length >= 3);
+  const dist = (x: number, z: number) => {
+    let best = Infinity;
+    for (const r of rings)
+      for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+        const [ax, az] = r[j], [bx, bz] = r[i], dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+        const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)) : 0;
+        const d = (ax + dx * t - x) ** 2 + (az + dz * t - z) ** 2;
+        if (d < best) best = d;
+      }
+    return Math.sqrt(best);
+  };
+  const at = (k: number): [number, number] => [g.x0 + ((k % g.w) + 0.5) * g.cell, g.z0 + (Math.floor(k / g.w) + 0.5) * g.cell];
+  const dryNear = new Map<number, number>(); // a dry node beside the sea → its distance to the coast
+  const near = (k: number) => { let d = dryNear.get(k); if (d === undefined) dryNear.set(k, (d = dist(...at(k)))); return d; };
+  for (let k = 0; k < level.length; k++) {
+    if (level[k] !== Infinity) continue;
+    const i = k % g.w, j = Math.floor(k / g.w);
+    let depth = -Infinity, ds = -1;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const ni = i + di, nj = j + dj;
+      if (ni < 0 || nj < 0 || ni >= g.w || nj >= g.h) continue;
+      const m = nj * g.w + ni;
+      if (!Number.isNaN(level[m]) || flags[m] & 1) continue; // (water, the map's or the DEM's own)
+      if (ds < 0) ds = dist(...at(k));
+      const hl = Math.max(h[m], 30) / 100, dl = Math.max(near(m), 0.5);
+      depth = Math.max(depth, -hl * ds / dl);
+      if (h[m] < 30) h[m] = 30;
+    }
+    if (depth > -Infinity) h[k] = Math.round(Math.max(-6, Math.min(-0.05, depth)) * 100);
+  }
 }
 
 /** A streamed cell's land cover and its distances, from its map (the bake reads ESA WorldCover and
