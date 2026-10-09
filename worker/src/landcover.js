@@ -56,12 +56,13 @@ const timed = async (p, ms) => {
 };
 
 /** The cell's land cover (`box` in the frame of `origin`: an 8 m grid over it and its ground's 96 m
- *  overhang), or null where WorldCover has nothing to add (the open sea). Throws when it can't be read. */
-export const landCover = (box, origin, ms = 20000) => timed(read(box, origin, 0, undefined, LC_OVER), ms);
+ *  overhang), or null where WorldCover has nothing to add (the open sea). Throws when it can't be read.
+ *  `stats.wet`: the share of the cell that is water or past the data (src/world/landcover.ts). */
+export const landCover = (box, origin, ms = 20000, stats) => timed(read(box, origin, 0, undefined, LC_OVER, stats), ms);
 /** A far block's (`box`, 8 km): a 32 m grid off the 20 m overview, no overhang. */
 export const farCover = (box, origin, ms = 20000) => timed(read(box, origin, 1, 32, 0), ms);
 
-async function read(box, origin, k, cell, over) {
+async function read(box, origin, k, cell, over, stats) {
   const P = makeProjector(origin);
   const bb = P.localToBbox({ x0: box.x0 - over, z0: box.z0 - over, x1: box.x1 + over, z1: box.z1 + over });
   // the files the window touches (a window on a 3° line: two, or four)
@@ -78,7 +79,7 @@ async function read(box, origin, k, cell, over) {
     const [data] = await img.readRasters({ window: win });
     wins.push({ data, x0: win[0], y0: win[1], w: win[2] - win[0], h: win[3] - win[1], ox, oy, rx, ry });
   }
-  if (!wins.length) return null;
+  if (!wins.length) { if (stats) stats.wet = 1; return null; } // (no file: the open sea)
   const sample = (lat, lon) => {
     for (const q of wins) {
       const i = Math.floor((lon - q.ox) / q.rx) - q.x0, j = Math.floor((lat - q.oy) / q.ry) - q.y0;
@@ -86,5 +87,5 @@ async function read(box, origin, k, cell, over) {
     }
     return 0;
   };
-  return landCoverGrid(box, P.unproject, sample, cell, over);
+  return landCoverGrid(box, P.unproject, sample, cell, over, stats);
 }

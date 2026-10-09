@@ -27,19 +27,24 @@ const fromBase64 = (s: string) => {
 
 /** The grid over a cell (`box`, in its region's frame): each 8 m cell's class from `sample(lat, lon)` at
  *  its middle. Null when nothing in it is land the map wouldn't know of already — none or only water
- *  (the open sea, past the data). */
-export function landCoverGrid(box: Box, unproject: (x: number, z: number) => [number, number], sample: (lat: number, lon: number) => number, cell = LC_CELL, over = LC_OVER): LandCover | null {
+ *  (the open sea, past the data). `stats.wet`, when asked: the share of the cell itself (not its
+ *  overhang) that is water or past the data — the tile service's cue that a cell with no coast through
+ *  it may be out in a bay (worker/src/index.js). */
+export function landCoverGrid(box: Box, unproject: (x: number, z: number) => [number, number], sample: (lat: number, lon: number) => number, cell = LC_CELL, over = LC_OVER, stats?: { wet: number }): LandCover | null {
   const x0 = box.x0 - over, z0 = box.z0 - over;
   const w = Math.round((box.x1 - box.x0 + 2 * over) / cell), h = Math.round((box.z1 - box.z0 + 2 * over) / cell);
   const d = new Uint8Array(w * h);
-  let land = false;
+  let land = false, own = 0, wet = 0;
   for (let j = 0; j < h; j++)
     for (let i = 0; i < w; i++) {
-      const [lat, lon] = unproject(x0 + (i + 0.5) * cell, z0 + (j + 0.5) * cell);
+      const x = x0 + (i + 0.5) * cell, z = z0 + (j + 0.5) * cell;
+      const [lat, lon] = unproject(x, z);
       const v = sample(lat, lon) | 0;
       d[j * w + i] = v;
       if (v && v !== 80) land = true;
+      if (x >= box.x0 && x < box.x1 && z >= box.z0 && z < box.z1) { own++; if (!v || v === 80) wet++; }
     }
+  if (stats) stats.wet = own ? wet / own : 0;
   return land ? { x0, z0, cell, w, h, d: toBase64(d) } : null;
 }
 

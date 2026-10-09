@@ -203,6 +203,9 @@ async function tile(request, env, ctx, url, cx, cz) {
   // without a vertex in it clipped to it (realTile.ts clipRingToBox). (No v27 was ever deployed: a
   // test page asked the v26 service for &v=27, and the edge kept those answers under that URL.)
   // v29: the natural areas mapped as relations (osmQuery.ts; the extract's add-on, osm.js)
+  // v30: the sea of a cell out in a bay (realTile.ts coastSea): its islands left standing, a coast
+  // through it with no vertex in it, and a cell no coast crosses that the land cover calls water —
+  // the sea's where the coast about it (coastAbout: the extract 2 km round) says so
   const okey = tileKey(olat, olon, cx, cz);
   const bucket = env.TILES ?? null; // binding may be absent under `wrangler dev` before the bucket exists
   if (bucket) {
@@ -239,7 +242,7 @@ async function tile(request, env, ctx, url, cx, cz) {
   return json(out.body, { headers: { ...headers, 'x-tile-cache': 'miss' } });
 }
 
-const tileKey = (olat, olon, cx, cz) => `t/v29/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
+const tileKey = (olat, olon, cx, cz) => `t/v30/${olat.toFixed(4)},${olon.toFixed(4)}/${cx}_${cz}.json`;
 // A cell's TileJson text, as /tile answers it (R2, else the cold path), or null — the /measured
 // route measures the buildings the client got from /tile, keyed the same way.
 async function tileText(env, olat, olon, cx, cz) {
@@ -298,6 +301,15 @@ async function overpassSlot(fn) {
     opSlots++;
   }
 }
+// (a cell at least this much water or past WorldCover's data, with no sea of its own, reads the coast round it)
+const WET = 0.5, COAST_REACH = 2000;
+/** The coastline about a cell (natural=coastline ways from our extract, COAST_REACH m round it), or null
+ *  where the extract doesn't cover it. */
+async function coastAbout(env, box, origin) {
+  const bb = makeProjector(origin).localToBbox({ x0: box.x0 - COAST_REACH, z0: box.z0 - COAST_REACH, x1: box.x1 + COAST_REACH, z1: box.z1 + COAST_REACH });
+  const doc = await extractDoc(env, bb);
+  return doc ? doc.elements.filter((e) => e.type === 'way' && e.tags?.natural === 'coastline') : null;
+}
 async function coldTile(env, okey, cx, cz, box, origin) {
   const bb = makeProjector(origin).localToBbox({ x0: box.x0 - MARGIN, z0: box.z0 - MARGIN, x1: box.x1 + MARGIN, z1: box.z1 + MARGIN });
   // our own extract first: no request leaves Cloudflare, and the answer is the same as Overpass's
@@ -354,17 +366,35 @@ async function coldTileNow(env, okey, cx, cz, box, origin, bb) {
 }
 async function build(env, okey, cx, cz, box, origin, osm, source) {
   try {
-    const tj = osmToTile(osm, { id: `${cx}_${cz}`, box, origin });
+    const opts = { id: `${cx}_${cz}`, box, origin };
+    let tj = osmToTile(osm, opts);
     // the land the map is silent on: WorldCover's woods, sand, fields and marshes (worker/src/landcover.js);
     // unread (S3 down, too slow), the tile goes out without it and isn't kept (`WORLDCOVER = "off"`: never read)
     let transient = false;
+    const cover = { wet: 0 };
     if (env.WORLDCOVER !== 'off') {
       try {
-        const lc = await landCover(box, origin);
+        const lc = await landCover(box, origin, undefined, cover);
         if (lc) tj.lc = lc;
       } catch (e) {
         transient = true;
         console.warn('worldcover read failed', e?.message ?? e);
+      }
+    }
+    // a cell out in a bay: no coast through it but the land cover's water — the sea's where the coast
+    // about it says so (realTile.ts coastSea; Robby, 2026-10-07: the bay north of the Statue of Liberty
+    // was grey ground). Unread, the cell goes out as it is and isn't kept.
+    if (cover.wet >= WET && !tj.areas.some((a) => a.k === 'sea')) {
+      try {
+        const coast = await coastAbout(env, box, origin);
+        if (coast?.length) {
+          const lc = tj.lc;
+          tj = osmToTile(osm, { ...opts, coast });
+          if (lc) tj.lc = lc;
+        }
+      } catch (e) {
+        transient = true;
+        console.warn('coast read failed', e?.message ?? e);
       }
     }
     const body = JSON.stringify(tj);

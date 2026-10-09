@@ -35,6 +35,18 @@ describe('the land cover a tile carries', () => {
     expect(lcOf(box, () => 80)).toBeNull(); // (the open sea: the map's water says it all)
     expect(lcOf(box, () => 0)).toBeNull(); // (past the data)
   });
+  it("how much of the cell is water or past the data: the tile service's cue that a cell with no coast through it is out in a bay", () => {
+    const box = { x0: 0, z0: 0, x1: 1024, z1: 1024 }, origin = { lat: 47.7, lon: -124.4 }, P = makeProjector(origin);
+    const wet = (cls: (x: number, z: number) => number) => {
+      const stats = { wet: -1 };
+      landCoverGrid(box, P.unproject, (lat, lon) => { const [x, z] = P.project(lat, lon); return cls(x, z); }, LC_CELL, LC_OVER, stats);
+      return stats.wet;
+    };
+    expect(wet(() => 80)).toBe(1); expect(wet(() => 0)).toBe(1); expect(wet(() => 10)).toBe(0);
+    expect(wet((x) => (x < 512 ? 80 : 30))).toBeCloseTo(0.5, 2);
+    // (the overhang doesn't count: the sea round a dry cell's edge)
+    expect(wet((x, z) => (x < 0 || z < 0 || x > 1024 || z > 1024 ? 80 : 30))).toBe(0);
+  });
 
   it("laid under the map's areas: WorldCover's woods, sand, fields and marsh where the map is silent; the map's own over them — but a mapped lawn not over its trees", () => {
     const nx = 100, nz = 50, L = demLayer({ heights: new Float32Array(nx * nz).fill(3), x0: 0, z0: 0, pitch: 4, nx, nz });

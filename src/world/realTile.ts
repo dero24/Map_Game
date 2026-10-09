@@ -625,6 +625,164 @@ export interface RealTileOpts {
   box: Box;
   origin: LatLon;
   margin?: number; // context ring around the cell (baked tiles use 48 m)
+  /** The coastline about the cell (natural=coastline ways from a wider box): read only where no
+   *  stretch of coast crosses the cell — the middle of a bay — to tell whether it's the sea's. The tile
+   *  service reads it for a cell the land cover calls water (worker/src/index.js). */
+  coast?: OsmElement[];
+}
+
+/** The sea a cell's coastline makes (OSM: the water lies right of a coastline way's direction), in the
+ *  cell's closing box `cb`:
+ *  - each stretch of coast through the box, from where it crosses in over the edge to where it crosses
+ *    out — clipped segment by segment, so a long straight shore through a box with no vertex in it
+ *    counts too; a coast that ends inside the box is unfinished and skipped;
+ *  - joined round the edge clockwise (rising τ keeps the water on the right as the coast does) into sea
+ *    polygons, every headland and pier the coast wraps out of it;
+ *  - each island inside the box (a closed coast, its water outside it) a hole in the sea round it;
+ *  - and a box no stretch crosses — the middle of a bay, a box holding only an island — is all one thing
+ *    at its edge: the sea where the nearest coast, its own or `wider` (the coast about it), has the edge
+ *    on its water side.
+ *  Robby, 2026-10-07: the bay north of the Statue of Liberty was grey ground — its cells hold no coast
+ *  but an island's, or none at all, and their sea was never made (bug-harbour-water). */
+export function coastSea(parts: P2[][], cb: Box, wider: P2[][] = []): { o: P2[]; i: P2[][] }[] {
+  const chains = assembleChains(parts);
+  const inBox = (p: P2) => p[0] >= cb.x0 && p[0] <= cb.x1 && p[1] >= cb.z0 && p[1] <= cb.z1;
+  const closed = (c: P2[]) => c.length > 3 && Math.hypot(c[0][0] - c.at(-1)![0], c[0][1] - c.at(-1)![1]) < 0.05;
+  // (+x east, +z south: a ring clockwise on a north-up map has a positive area and its inside on its right)
+  const signedArea = (r: P2[]) => { let a = 0; for (let i = 0, j = r.length - 1; i < r.length; j = i++) a += r[j][0] * r[i][1] - r[i][0] * r[j][1]; return a / 2; };
+  // Boundary loop coordinate τ ∈ [0,4): top → right → bottom → left. Corners are the integers.
+  const CORNER: P2[] = [[cb.x0, cb.z0], [cb.x1, cb.z0], [cb.x1, cb.z1], [cb.x0, cb.z1]];
+  const tau = (p: P2) => {
+    if (Math.abs(p[1] - cb.z0) < 0.01) return ((p[0] - cb.x0) / (cb.x1 - cb.x0)) % 4;
+    if (Math.abs(p[0] - cb.x1) < 0.01) return 1 + (p[1] - cb.z0) / (cb.z1 - cb.z0);
+    if (Math.abs(p[1] - cb.z1) < 0.01) return 2 + (cb.x1 - p[0]) / (cb.x1 - cb.x0);
+    return 3 + (cb.z1 - p[1]) / (cb.z1 - cb.z0);
+  };
+  // Corners on the boundary walk from `from` on to `to`, in the τ order.
+  const arc = (from: number, to: number): P2[] => {
+    const out: P2[] = [];
+    const end = to <= from ? to + 4 : to;
+    for (let k = Math.floor(from) + 1; k < end + 0.001; k++) out.push(CORNER[k % 4]);
+    return out;
+  };
+  // a point on the boundary, put exactly on its nearest edge (τ reads the edge from the coordinate)
+  const onEdge = (x: number, z: number): P2 => {
+    x = Math.max(cb.x0, Math.min(cb.x1, x)); z = Math.max(cb.z0, Math.min(cb.z1, z));
+    const gap = [x - cb.x0, cb.x1 - x, z - cb.z0, cb.z1 - z], m = gap.indexOf(Math.min(...gap));
+    return m === 0 ? [cb.x0, z] : m === 1 ? [cb.x1, z] : m === 2 ? [x, cb.z0] : [x, cb.z1];
+  };
+  // the part of the segment a→b in the box: [t0, t1] (Liang–Barsky), or null
+  const clip = (a: P2, b: P2): [number, number] | null => {
+    let t0 = 0, t1 = 1;
+    const dx = b[0] - a[0], dz = b[1] - a[1];
+    for (const [p, q] of [[-dx, a[0] - cb.x0], [dx, cb.x1 - a[0]], [-dz, a[1] - cb.z0], [dz, cb.z1 - a[1]]]) {
+      if (p === 0) { if (q < 0) return null; continue; }
+      const r = q / p;
+      if (p < 0) t0 = Math.max(t0, r); else t1 = Math.min(t1, r);
+      if (t0 > t1) return null;
+    }
+    return [t0, t1];
+  };
+  const runs: { body: P2[]; ta: number; tb: number }[] = [];
+  const islands: P2[][] = [];
+  for (let chain of chains) {
+    if (closed(chain)) {
+      // an island: its water outside it (a closed coast with the water inside is broken data: left out)
+      const out = chain.findIndex((p) => !inBox(p));
+      if (out < 0) { if (signedArea(chain) < 0) islands.push(chain); continue; }
+      // one the edge cuts: walked from a point outside, so no stretch of it is taken for unfinished
+      // (Governors Island, half in the next cell, was flooded whole)
+      chain = [...chain.slice(out, -1), ...chain.slice(0, out + 1)];
+    }
+    let run: P2[] | null = null;
+    for (let i = 0; i + 1 < chain.length; i++) {
+      const a = chain[i], b = chain[i + 1], c = clip(a, b);
+      if (!c) continue;
+      const at = (t: number): P2 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      if (!inBox(a)) run = [onEdge(...at(c[0]))]; // in over the edge
+      if (!run) continue; // (the coast began inside the box: unfinished until it leaves)
+      if (inBox(b)) run.push(b);
+      else {
+        const exit = onEdge(...at(c[1]));
+        run.push(exit);
+        runs.push({ body: run, ta: tau(run[0]), tb: tau(exit) });
+        run = null;
+      }
+    }
+  }
+  const seas: { o: P2[]; i: P2[][] }[] = [];
+  if (runs.length) {
+    // from each stretch's exit, on round the edge to the next stretch's entry, … back to the start: one
+    // sea polygon. (Closing each stretch on its own flooded Pike Place Market: a pier's outline poking
+    // into the cell claimed the whole cell as bay.)
+    const used = new Set<number>();
+    for (let s0 = 0; s0 < runs.length; s0++) {
+      if (used.has(s0)) continue;
+      const ring: P2[] = [];
+      let cur = s0, done = false;
+      for (let guard = 0; guard <= runs.length; guard++) {
+        used.add(cur);
+        ring.push(...runs[cur].body);
+        // the next boundary point clockwise from this exit must be an entry (else the coast is broken)
+        let next = -1, best = Infinity, exitFirst = false;
+        for (let j = 0; j < runs.length; j++) {
+          let d = runs[j].ta - runs[cur].tb;
+          if (d < 0) d += 4;
+          if (d < best) (best = d), (next = j);
+        }
+        for (let j = 0; j < runs.length; j++) {
+          if (j === cur) continue;
+          let d = runs[j].tb - runs[cur].tb;
+          if (d < 0) d += 4;
+          if (d > 1e-9 && d < best) exitFirst = true;
+        }
+        if (next < 0 || exitFirst) break;
+        ring.push(...arc(runs[cur].tb, runs[next].ta));
+        if (next === s0) { done = true; break; }
+        if (used.has(next)) break;
+        cur = next;
+      }
+      if (done) seas.push({ o: ring, i: [] });
+    }
+  } else {
+    // no stretch crosses the box: its edge is all sea or all land — the side of the nearest coast it's on
+    const all = [...chains, ...assembleChains(wider)];
+    if (!all.length || !waterSide(cb.x0, cb.z0, all)) return [];
+    seas.push({ o: CORNER.slice(), i: [] });
+  }
+  for (const isl of islands) seas.find((s) => pointInRing(isl[0][0], isl[0][1], s.o))?.i.push(isl);
+  return seas;
+}
+
+/** Whether (x, z) is on the water side of the coast (`chains`: the water right of each one's direction):
+ *  the side of the nearest piece of coast — at a corner, of both pieces' normals added (the angle's
+ *  bisector, so a point off a headland's tip reads true). */
+function waterSide(x: number, z: number, chains: P2[][]): boolean {
+  let best = Infinity, bc = -1, bi = -1, bt = 0;
+  for (let c = 0; c < chains.length; c++) {
+    const ch = chains[c];
+    for (let i = 0; i + 1 < ch.length; i++) {
+      const [ax, az] = ch[i], [bx, bz] = ch[i + 1], dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+      if (l2 < 1e-9) continue;
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2));
+      const d = (ax + dx * t - x) ** 2 + (az + dz * t - z) ** 2;
+      if (d < best) (best = d), (bc = c), (bi = i), (bt = t);
+    }
+  }
+  if (bc < 0) return false;
+  const ch = chains[bc], ring = ch.length > 3 && Math.hypot(ch[0][0] - ch.at(-1)![0], ch[0][1] - ch.at(-1)![1]) < 0.05;
+  // the right of a piece of coast, unit length: the water lies that way (+x east, +z south)
+  const right = (i: number): P2 => { const [ax, az] = ch[i], [bx, bz] = ch[i + 1], L = Math.hypot(bx - ax, bz - az) || 1; return [-(bz - az) / L, (bx - ax) / L]; };
+  let n = right(bi), V = ch[bi];
+  if (bt <= 1e-6) {
+    const prev = bi > 0 ? bi - 1 : ring ? ch.length - 2 : -1;
+    if (prev >= 0) { const m = right(prev); n = [n[0] + m[0], n[1] + m[1]]; }
+  } else if (bt >= 1 - 1e-6) {
+    V = ch[bi + 1];
+    const next = bi + 2 < ch.length ? bi + 1 : ring ? 0 : -1;
+    if (next >= 0) { const m = right(next); n = [n[0] + m[0], n[1] + m[1]]; }
+  }
+  return (x - V[0]) * n[0] + (z - V[1]) * n[1] > 0;
 }
 
 const OWN_CTX = 0;
@@ -1015,112 +1173,22 @@ export function osmToTile(osm: OsmDoc, opts: RealTileOpts): TileJson {
     }
   }
 
-  // Coastline: open ways whose wet side (OSM: water on the RIGHT of way direction) is the sea.
-  // Closing each in-box fragment against the cell boundary makes a water Area — seaside
-  // tiles get a real shore instead of a void.
+  // Coastline: open ways whose wet side (OSM: water on the RIGHT of way direction) is the sea,
+  // closed against the cell boundary into water Areas (coastSea) — seaside tiles get a real shore
+  // instead of a void, and a cell out in a bay is the sea's.
   {
-    const cb = S; // closing boundary = cell + margin
     const parts: P2[][] = [];
     for (const e of els) {
       if (e.type !== 'way' || e.tags?.natural !== 'coastline') continue;
       const pts = wayPts(e);
       if (pts.length > 1) parts.push(pts);
     }
-    // Boundary loop coordinate τ ∈ [0,4): top → right → bottom → left. Corners are the integers.
-    const CORNER: P2[] = [[cb.x0, cb.z0], [cb.x1, cb.z0], [cb.x1, cb.z1], [cb.x0, cb.z1]];
-    const tau = (p: P2) => {
-      if (Math.abs(p[1] - cb.z0) < 0.01) return ((p[0] - cb.x0) / (cb.x1 - cb.x0)) % 4;
-      if (Math.abs(p[0] - cb.x1) < 0.01) return 1 + (p[1] - cb.z0) / (cb.z1 - cb.z0);
-      if (Math.abs(p[1] - cb.z1) < 0.01) return 2 + (cb.x1 - p[0]) / (cb.x1 - cb.x0);
-      return 3 + (cb.z1 - p[1]) / (cb.z1 - cb.z0);
-    };
-    // Corners on the boundary walk from `from` back to `to`; dir=+1 follows the τ order.
-    const arc = (from: number, to: number, dir: 1 | -1): P2[] => {
-      const out: P2[] = [];
-      if (dir === 1) {
-        const end = to <= from ? to + 4 : to;
-        for (let k = Math.floor(from) + 1; k < end + 0.001; k++) out.push(CORNER[k % 4]);
-      } else {
-        const end = to >= from ? to - 4 : to;
-        for (let k = Math.ceil(from) - 1; k > end - 0.001; k--) out.push(CORNER[((k % 4) + 4) % 4]);
-      }
-      return out;
-    };
-    // Where the segment from inside point P to outside point Q crosses the boundary — exactly on
-    // an edge (τ reads the edge from the coordinate).
-    const cross = (P: P2, Q: P2): P2 => {
-      const dx = Q[0] - P[0], dz = Q[1] - P[1];
-      let t = 1;
-      if (Q[0] > cb.x1) t = Math.min(t, (cb.x1 - P[0]) / dx);
-      if (Q[0] < cb.x0) t = Math.min(t, (cb.x0 - P[0]) / dx);
-      if (Q[1] > cb.z1) t = Math.min(t, (cb.z1 - P[1]) / dz);
-      if (Q[1] < cb.z0) t = Math.min(t, (cb.z0 - P[1]) / dz);
-      t = Math.max(0, Math.min(1, t));
-      let x = Math.max(cb.x0, Math.min(cb.x1, P[0] + dx * t)), z = Math.max(cb.z0, Math.min(cb.z1, P[1] + dz * t));
-      const gap = [x - cb.x0, cb.x1 - x, z - cb.z0, cb.z1 - z], m = gap.indexOf(Math.min(...gap));
-      if (m === 0) x = cb.x0;
-      else if (m === 1) x = cb.x1;
-      else if (m === 2) z = cb.z0;
-      else z = cb.z1;
-      return [x, z];
-    };
-    // Every stretch of coast through the cell, from the point it comes in over the boundary to the
-    // point it leaves (a way's end inside the cell is an unfinished coast: skipped). Overpass
-    // hands whole ways, so the neighbours outside are there to cross against.
-    const runs: { body: P2[]; ta: number; tb: number }[] = [];
-    for (const chain of assembleChains(parts)) {
-      let run: P2[] = [];
-      let entry: P2 | null = null;
-      for (let i = 0; i < chain.length; i++) {
-        const p = chain[i];
-        if (inB(p[0], p[1], margin)) {
-          if (!run.length) entry = i > 0 ? cross(p, chain[i - 1]) : null;
-          run.push(p);
-        } else if (run.length) {
-          if (entry) {
-            const exit = cross(run[run.length - 1], p);
-            runs.push({ body: [entry, ...run, exit], ta: tau(entry), tb: tau(exit) });
-          }
-          run = [];
-        }
-      }
-    }
-    // Water lies right of the coast's direction, and the boundary walked in rising τ (clockwise on
-    // a north-up map) keeps it on the right too: from each stretch's exit, walk on to the next
-    // stretch's entry, follow that, … until back at the start — one sea polygon, with every
-    // headland and pier the coast wraps left out of it. (Closing each stretch on its own flooded
-    // Pike Place Market: a pier's outline poking into the cell claimed the whole cell as bay.)
-    const used = new Set<number>();
-    for (let s0 = 0; s0 < runs.length; s0++) {
-      if (used.has(s0)) continue;
-      const ring: P2[] = [];
-      let cur = s0, closed = false;
-      for (let guard = 0; guard <= runs.length; guard++) {
-        used.add(cur);
-        ring.push(...runs[cur].body);
-        // the next boundary point clockwise from this exit must be an entry (else the coast is broken)
-        let next = -1, best = Infinity, exitFirst = false;
-        for (let j = 0; j < runs.length; j++) {
-          let d = runs[j].ta - runs[cur].tb;
-          if (d < 0) d += 4;
-          if (d < best) (best = d), (next = j);
-        }
-        for (let j = 0; j < runs.length; j++) {
-          if (j === cur) continue;
-          let d = runs[j].tb - runs[cur].tb;
-          if (d < 0) d += 4;
-          if (d > 1e-9 && d < best) exitFirst = true;
-        }
-        if (next < 0 || exitFirst) break;
-        ring.push(...arc(runs[cur].tb, runs[next].ta, 1));
-        if (next === s0) { closed = true; break; }
-        if (used.has(next)) break;
-        cur = next;
-      }
-      if (!closed) continue;
-      const f = flat(simplify(cleanRing(ring), 0.25));
+    const wider = (opts.coast ?? []).filter((e) => e.type === 'way' && e.tags?.natural === 'coastline').map(wayPts).filter((p) => p.length > 1);
+    for (const sea of coastSea(parts, S, wider)) {
+      const f = flat(simplify(cleanRing(sea.o), 0.25));
+      const holes = sea.i.map((h) => flat(simplify(cleanRing(h), 0.25))).filter((h) => h.length >= 6);
       // (k 'sea': no sheet of its own — the ocean plane at sea level shows through; realExtras)
-      if (f.length >= 6 && anyVertex(f, margin)) areas.push({ c: 'water', o: [f], i: [], own: ownV(f), k: 'sea' });
+      if (f.length >= 6 && anyVertex(f, margin)) areas.push({ c: 'water', o: [f], i: holes, own: ownV(f), k: 'sea' });
     }
   }
 
