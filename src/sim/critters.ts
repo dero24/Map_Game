@@ -234,6 +234,9 @@ export class Critters {
   private list: Critter[] = [];
   private meshes = new Map<CritterKind, { m: THREE.InstancedMesh; anim: THREE.InstancedBufferAttribute }>();
   private spawnT = 0;
+  /** The sim's own clock (s): the butterflies' and the shoals' drift run on it — the page's clock made
+   *  every run's draws differ (a test's turkeys flocked one run in three). */
+  private clock = 0;
   private seed = 1;
   private mat4 = new THREE.Matrix4();
   private q = new THREE.Quaternion();
@@ -736,6 +739,7 @@ export class Critters {
   /** How loud the annual cicadas' chorus is about the walker (0–1: those on the bark near; ambience.ts). */
   get chorus() { return Math.min(1, this.list.filter((c) => c.kind === 'annualcicada' && c.state === 'perch').length / 2); }
   update(dt: number, wx: number, wz: number, env: CritterEnv) {
+    this.clock += dt;
     this.paved = env.paved ?? (() => false); this.lotAt = env.lot ?? (() => false);
     this.inTown = [[0, 0], [60, 0], [-60, 0], [0, 60], [0, -60], [42, 42], [-42, 42], [42, -42], [-42, -42]].some(([ox, oz]) => prairieTown(wx + ox, wz + oz) !== null);
     this.roost = this.roostAt(wx, wz, env);
@@ -1088,7 +1092,7 @@ export class Critters {
       }
       case 'drift': {
         // butterflies and fireflies wander on smooth random curves near the ground
-        const tt = performance.now() / 1000 + c.phase * 50;
+        const tt = this.clock + c.phase * 50;
         const fx = Math.sin(tt * 0.7 + c.phase * 9) + Math.sin(tt * 1.9) * 0.4, fz = Math.cos(tt * 0.6 + c.phase * 5) + Math.cos(tt * 1.7) * 0.4;
         const roost = c.kind === 'monarch' && c.home, back = roost && c.t <= 0, mig = c.kind === 'monarch' && !roost && this.migrating;
         let vx = back ? 0 : fx * S.walk * (mig ? 0.35 : 1), vz = back ? 0 : fz * S.walk * (mig ? 0.35 : 1);
@@ -1115,7 +1119,7 @@ export class Critters {
         const wl = c.wl ?? 0;
         if (c.kind === 'shoal') {
           // a school milling just under the surface, turning together now and then, away from the shallows' edge
-          const tt = performance.now() / 1000 + c.phase * 40;
+          const tt = this.clock + c.phase * 40;
           c.yaw += Math.sin(tt * 0.3 + c.phase * 9) * 0.35 * dt;
           const nx = c.x - Math.sin(c.yaw) * S.walk * dt, nz = c.z - Math.cos(c.yaw) * S.walk * dt, s1 = this.terrain.sdfAt(nx, nz);
           if (s1 < -1.2 && s1 > -45) (c.x = nx), (c.z = nz);
