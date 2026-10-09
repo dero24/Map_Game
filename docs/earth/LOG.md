@@ -93,9 +93,17 @@ report at a time, in his order.
 - **Robby's page:** https://claude.ai/artifact/J7koij7UdW1rjCzrVQmqJS — the four before/after sheets and what waits on him.
 - **Verified:** npm run typecheck; npm test (the full suite on a quiet machine); npm run build;
   `mobile-check --device=pixel7` (60 programs, no errors). Nothing pushed, nothing deployed.
-- **Next:** Robby's OK to push `fix/four-reports`, to deploy the tile service (then `&v=31`), and to
-  merge back into `feature/lower48-alive`; then `bug-harbour-water` passing and `gameplay-one-plan`
-  (HANDOFF "Start here").
+- **Robby, after the page:** "yes, just all the above but just create new feature branch we will work
+  off of", then "like push change to new branch inatead of merging to lower48-alive". So nothing is
+  merged into `feature/lower48-alive`: the work goes on from **`feature/four-reports`** (off
+  `fix/four-reports`, the same commits), pushed — a `feature/` push publishes the game (Pages) and runs
+  the checks; with the client still at the live `&v=29` that's safe before the deploy. `fix/four-reports`
+  pushed too. The tile service's deploy (`cd worker && npx wrangler deploy`) was refused from the session
+  by the permission check (a production deploy), as on 2026-10-07: Robby runs it. After it: the live
+  cells round Ellis Island checked at `&v=31`, the client to `&v=31` and `DIRECT_V` 31, must-load
+  --live, the harbour montage from the live service, `bug-harbour-water` passing, `gameplay-one-plan`
+  in progress, pushed again.
+- **Next:** Robby runs the deploy; then the steps above (HANDOFF "Start here").
 
 ## 2026-10-08 (late) — Robby's four reports first, then one gameplay plan, then the proof of concept; painted places keep their people
 

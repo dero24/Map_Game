@@ -2,26 +2,30 @@
 
 ## Start here (2026-10-08): Robby's four reports, then one gameplay plan, then the proof of concept
 
-### Where the four stand (2026-10-08, night; branch `fix/four-reports`, not pushed)
+### Where the four stand (2026-10-08, night; the work goes on from `feature/four-reports`)
 
-All four are fixed and committed on `fix/four-reports` (LOG 2026-10-08 night has the numbers;
-before/after montages in the git-ignored `shots/fix/`, and on Robby's page
-https://claude.ai/artifact/J7koij7UdW1rjCzrVQmqJS). Nothing is pushed or deployed: Robby's OK first.
+All four are fixed (LOG 2026-10-08 night has the numbers; before/after montages in the git-ignored
+`shots/fix/`, and on Robby's page https://claude.ai/artifact/J7koij7UdW1rjCzrVQmqJS). Robby: "yes,
+just all the above but just create new feature branch we will work off of" — "push change to new
+branch inatead of merging to lower48-alive". So **`feature/four-reports`** (off `fix/four-reports`)
+is the branch to work from, pushed; `feature/lower48-alive` is left as it was. The tile service's
+deploy waits on Robby running it (the permission check refuses a production deploy from a session).
 
 1. `bug-night-glow-people` — **passing** (walkers lit by the night: `nightLight.ts` FIGURE).
 2. `life-density-realism` — **passing** (`lifeSim.ts` LAND: the land's share, a home street's day,
    the late hours, rural roads; the first crowd the hour's; the crowd thins as the hour turns).
 3. `look-crisp-preset` — **passing** ("crisp watercolor" in the panel's Look folder, `?look=crisp`).
 4. `bug-harbour-water` — **in progress: fixed on the branch, waiting on the deploy.** The tile
-   service must be deployed before this branch reaches a published one. In order, with Robby's OK:
+   service is deployed before the client asks `&v=31` (the client is at the live `&v=29` until then,
+   so the branch publishes safely as it is). In order (Robby said yes; he runs step 1):
    1. `cd worker && npx wrangler deploy` (the worker's key is already `t/v31` on the branch);
    2. `node tools/must-load.mjs --live`, and the live cells round Ellis Island carry the bay as sea:
       `curl "https://map-game-tiles.map-game-tiles.workers.dev/tile/1_0.json?olat=40.703125&olon=-74.046875&v=31"`
       (and `0_1`): a `water` area with `k: "sea"` covering the cell, Liberty Island a hole in `0_1`'s;
    3. only then the client: `&v=29` → `&v=31` in `src/world/stream.ts` and `DIRECT_V` 29 → 31 in
       `src/world/tile.worker.ts`, the streaming doc's line with them; build, commit;
-   4. then the item `passing`, `gameplay-one-plan` `in_progress`, and the branch merged back into
-      `feature/lower48-alive` when Robby says so (that publishes).
+   4. then the item `passing`, `gameplay-one-plan` `in_progress`, and `feature/four-reports` pushed
+      again (that publishes; nothing is merged into `feature/lower48-alive`).
    **No v30**: this session's before captures asked the live v29 service for `&v=30` round Ellis
    Island, and the edge keeps those answers under that URL for 30 days. Until the deploy the
    client stays at the live `&v=29`, so a dev page serving this tree (Robby's on :5173 too) can't
