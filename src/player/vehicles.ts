@@ -126,6 +126,10 @@ export const modelName = (m: string) => {
   const [base, gear] = m.split('+');
   return (NAME[base] ?? base) + (gear && gear in GEAR_NAME ? ` with ${GEAR_NAME[gear as CarGear]}` : '');
 };
+/** An instance hidden by zero scale (a taken car). Not `decompose`'s scale: three.js reads a singular
+ *  matrix as scale 1 with no rotation at its translation — a hidden instance as a whole one at the origin
+ *  (the "walkers stacked at a region's origin" a probe counted were the life sim's empty slots). */
+export const hiddenInstance = (m: THREE.Matrix4) => { const e = m.elements; return e[0] === 0 && e[1] === 0 && e[2] === 0; };
 /** Every baked driveway-car mesh in a tile (props.ts: one InstancedMesh per kit type, named 'parked-cars:<type>'). */
 function parkedMeshes(g: THREE.Object3D) {
   const out: THREE.InstancedMesh[] = [];
@@ -396,6 +400,7 @@ export class Vehicles {
         const key = `${t.spec.id}:${im.name}:${i}`;
         if (this.taken.has(key)) continue;
         im.getMatrixAt(i, m);
+        if (hiddenInstance(m)) continue; // (another's taken car, still hidden)
         m.decompose(p, q, s);
         const d = Math.hypot(p.x - x, p.z - z);
         if (d < r && (!best || d < best.d)) {
@@ -421,8 +426,7 @@ export class Vehicles {
     for (const im of parkedMeshes(t.group)) for (let i = 0; i < im.count; i++) {
       if (!this.taken.has(`${t.spec.id}:${im.name}:${i}`)) continue;
       im.getMatrixAt(i, m);
-      m.decompose(p, q, sc);
-      if (sc.x > 0) this.clearSpot(p.x, p.z, e.setFromQuaternion(q, 'YXZ').y, im.name.split(':')[1] ?? 'sedan');
+      if (!hiddenInstance(m)) { m.decompose(p, q, sc); this.clearSpot(p.x, p.z, e.setFromQuaternion(q, 'YXZ').y, im.name.split(':')[1] ?? 'sedan'); }
       this.hideInstance(im, i);
     }
     const d = t.kerb;

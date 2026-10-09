@@ -60,7 +60,9 @@ window.__LIFE__ = async (tag = 'life', opts = {}) => {
       const seated = !!o.material.defines.SEATED, indoor = !!o.material.defines.INDOOR || !seated;
       if (!indoor && seated) return; // café terrace guests outdoors
       for (let i = 0; i < o.count; i++) {
-        o.getMatrixAt(i, m4); m4.premultiply(o.matrixWorld); m4.decompose(p, q, s);
+        o.getMatrixAt(i, m4);
+        if (m4.elements[0] === 0 && m4.elements[1] === 0 && m4.elements[2] === 0) continue; // (hidden: decompose would read it as a whole one at the origin)
+        m4.premultiply(o.matrixWorld); m4.decompose(p, q, s);
         const e = new G.THREE.Euler().setFromQuaternion(q, 'YXZ');
         out.push({ x: p.x, y: p.y, z: p.z, yaw: e.y, seated });
       }

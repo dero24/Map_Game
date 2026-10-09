@@ -179,6 +179,7 @@ window.__TREES__ = () => {
     const top = o.geometry.boundingBox.max.y;
     for (let i = 0; i < o.count; i++) {
       o.getMatrixAt(i, m);
+      if (m.elements[0] === 0 && m.elements[1] === 0 && m.elements[2] === 0) continue; // (hidden: decompose would read it as a whole one at the origin)
       m.decompose(p, q, s);
       n++;
       const g = T.heightAt(p.x, p.z), h = top * s.y;

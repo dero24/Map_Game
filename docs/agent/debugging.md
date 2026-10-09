@@ -420,6 +420,13 @@ hour; each pair scored by the class mix (sky, buildings, vegetation, ground, wat
 
 ## Known environment quirks (not bugs — don't chase them)
 
+- **A hidden instance reads as a whole one at the origin.** Instances are hidden by zero scale (life.ts's
+  empty slots under the draw count — every car slot in the seven model meshes it isn't — a taken
+  driveway car), and three.js's `Matrix4.decompose` reads a singular matrix as scale 1, no rotation, at
+  its translation: (0, 0, 0). A probe that counts instances by `decompose` finds a stack of walkers and
+  cars at the region's origin (`bug-life-origin-stack`, 2026-10-08: up to ~250 of them; the game never
+  drew one). Test the matrix's x axis (elements 0–2 all 0: `vehicles.ts hiddenInstance`) first; a lone
+  `elements[0] === 0` would also drop a whole one turned exactly side-on.
 - Soak logs occasional multi-second frames **identically with the worker disabled** —
   headless GPU/GC, not tile-related. `frameErrors=0` is the signal that matters.
 - `lifeSim` pedestrian test sits near the vitest timeout (bumped to 15 s) — flakes under load.
