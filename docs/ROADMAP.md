@@ -72,7 +72,7 @@ collisions.
 | Track | Work | Where it runs |
 |---|---|---|
 | **A. Regional life** | The reference's P2 rows: snakes, frogs, more insects (the West's lizards and the water's life seen from above done; each species' abundance set, to tune by eye) | Cloud sessions (tests and the scratch studio; no long captures) |
-| **B. Region pass** | Montages per region against the scorecard; fix what's wrong | Robby's PC or a session that can run captures (they're too slow in the cloud) |
+| **B. Region pass** | Montages per region against the scorecard; fix what's wrong — the loop, the spots and the knobs in `docs/REGION_MATCH.md` | Robby's PC or a session that can run captures (they're too slow in the cloud) |
 | **C. People** | `people-with-purpose`: walkers on errands, homes only for those who live there, buildings with a capacity, smooth animation | Its own branch; mostly `sim/` and `life` files |
 | **D. Leftovers** | Moss on the ground and on boulders, `upstairs-over-shopfront` (duckweed, cordgrass, the black oak and gray pine and the inland gulls done 2026-10-06) | Fill-in work between packages |
 | **E. Needs keys** | The canopy layer (NLCD in R2), map species to tree kinds (`realTile.treeKindOf`), the Mapillary comparison and objects | When the Cloudflare and Mapillary keys are in the environment |

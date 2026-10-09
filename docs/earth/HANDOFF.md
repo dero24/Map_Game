@@ -1,6 +1,37 @@
 # Handoff: the lower 48, alive — part 2 (2026-10-05)
 
-## Start here (2026-10-08): Robby's four reports, then one gameplay plan, then the proof of concept
+## Start here (2026-10-09): the region pass — each region and sub-region against the real thing
+
+Robby, 2026-10-08 (night): "soon we are going to focus on regions within the 16 regions so this research
+you are doing and only research for rumson amd other towns compare will bw used in next session as
+reference for how to best ensure each eegion and sub region matches qhat they actually look like in a
+super effecient atreamlined wa". So the next session starts **the region pass** (`docs/ROADMAP.md` Track
+B; feature `region-match-pass`) with **`docs/REGION_MATCH.md`**: the loop for one region in one sitting,
+the spots (place types × sub-regions), the photos (Mapillary first, its gaps filled from public photos —
+never Google Street View, not even for testing), the checklist, the knob in the code behind each layer,
+and the worked example (Rumson, Oak Park, Plano: §6). `gameplay-one-plan` and the Sea Bright proof of
+concept (below) wait until Robby says; a session unsure which comes first asks him.
+
+### Robby's second batch (2026-10-08 night → 10-09): all six done, on `feature/four-reports`, not pushed
+
+Robby, after the four reports went live: "please fix the remaining bugs like this", the animals that
+vanished as he followed them, and Rumson's "too much fluffy trees" against real photos. LOG 2026-10-08
+(night, later) has the numbers. Committed one at a time on `feature/four-reports`; **not pushed** (a
+`feature/` push publishes the game: Robby's OK first). No tile version: every fix is the game's (v31
+stays; his reminder — a fix to how the tile service builds coasts would need v32 and a deploy).
+
+1. `bug-night-pale-creatures` — **passing** (the walkers' night lighting on every creature out of doors).
+2. `bug-seawall-railing` — **passing** (`dem.ts seaShore`: the water's edge at the coastline).
+3. `life-city-night` — **passing** (`lifeSim.ts cityNight`: a city's evening into midnight; Midtown by
+   Bryant Park 23:00 4 → 46 walkers, Times Square 22:00 6 → 47; both half a city by `cityAt`'s built
+   volume — a place's own nightlife, OSM's bars and theatres, would say more, if Robby wants it busier).
+4. `life-critters-persist` — **passing** (`critters.ts STAY`: an animal goes only out of sight; flushed
+   birds land again, squirrels come down, burrowers come up, indoors they wait).
+5. `bug-life-origin-stack` — **passing: never in the game** (three.js's `decompose` reads a hidden,
+   zero-scaled instance as a whole one at the origin; `vehicles.ts hiddenInstance`; the debugging doc).
+6. `review-suburbs-real` — **passing** (the comparison and the method: `docs/REGION_MATCH.md`).
+
+### Before that: Robby's four reports (2026-10-08) — all passing and live
 
 ### Where the four stand (2026-10-08, night: all four passing and live; the work goes on from `feature/four-reports`)
 

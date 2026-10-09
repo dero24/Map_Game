@@ -2,10 +2,11 @@
 // The real-world comparison loop's spots (docs/GAMEPLAY_VISION.md §17, Tier 1 #1): in every lower-48
 // state, three towns — the largest place, a mid-sized town and a small one (US Census 2024 estimates;
 // chosen by a seed of the state's code, so the same every time) — and named checks (Bain's Hardware,
-// Shrewsbury, Monmouth Beach); for each, one recent Mapillary street photo near its centre (perspective,
-// not a panorama, since 2019; the most recent few, one picked by the same seed). Only the photo's id and
-// pose are kept (tools/real-spots.json, in the repo); the photos themselves are fetched by
-// tools/real-compare.mjs into raw/mapillary/ (git-ignored), never shipped.
+// Shrewsbury, Monmouth Beach) and the suburbs (Rumson Road, Oak Park, Plano); for each, one recent
+// Mapillary street photo near its centre (perspective, not a panorama, since 2019; the most recent few,
+// one picked by the same seed). Only the photo's id and pose are kept (tools/real-spots.json, in the
+// repo); the photos themselves are fetched by tools/real-compare.mjs into raw/mapillary/ (git-ignored),
+// never shipped.
 //
 //   node tools/real-spots.mjs [--states=NJ,NY] [--per=3] [--recheck]   (needs raw/places: node scripts/build-places.mjs --fetch)
 // A photo must be fit to compare against: Mapillary's quality score ≥ 0.4 (a rain-dark windscreen
@@ -101,7 +102,8 @@ async function segmented(id) {
 }
 // (a lens under 30° is a close-up — Ashland's was a deer at 5.7° — not a view down the street)
 const lensOf = (x) => { const f = x.camera_parameters?.[0], w = x.width, h = x.height; return f > 0 && w > 0 ? (2 * Math.atan((w / Math.max(w, h)) * 0.5 / f) * 180) / Math.PI : null; };
-const fitWhy = async (x, lat, lon) => (x.quality_score != null && x.quality_score < 0.4 ? `quality ${x.quality_score}` : (lensOf(x) ?? 90) < 30 ? 'a close-up lens' : sunAlt(lat, lon, x.captured_at) < 0 ? 'taken in the dark' : (await segmented(x.id)) === false ? 'not segmented' : null);
+// (`unscored`: a spot that takes a photo Mapillary never segmented — shown side by side, not scored)
+const fitWhy = async (x, lat, lon, opt = {}) => (x.quality_score != null && x.quality_score < 0.4 ? `quality ${x.quality_score}` : (lensOf(x) ?? 90) < 30 ? 'a close-up lens' : sunAlt(lat, lon, x.captured_at) < 0 ? 'taken in the dark' : !opt.unscored && (await segmented(x.id)) === false ? 'not segmented' : null);
 // the camera's pitch, degrees up, from Mapillary's computed rotation (OpenSfM: world→camera, the world
 // east-north-up, the camera's z its view): the view is the rotation's third row (its heading matches
 // computed_compass_angle exactly). A dash camera tilts: −10° to +16° across the spots.
@@ -112,21 +114,24 @@ function pitchOf(rv) {
   const kz = rv[2] / t, up = Math.cos(t) + kz * kz * (1 - Math.cos(t)); // (the view's up component: R[2][2], Rodrigues)
   return +((Math.asin(Math.max(-1, Math.min(1, up))) * 180) / Math.PI).toFixed(1);
 }
-const usable = (x) => x.camera_type === 'perspective' && !x.is_pano && x.captured_at >= SINCE && x.computed_geometry && isFinite(x.computed_compass_angle) && x.camera_parameters?.[0] > 0;
-async function photoNear(lat, lon, seed, aim = null) {
+const usable = (x, since = SINCE) => x.camera_type === 'perspective' && !x.is_pano && x.captured_at >= since && x.computed_geometry && isFinite(x.computed_compass_angle) && x.camera_parameters?.[0] > 0;
+// (a spot may take older photos where there are no others — `since`, a year — and only the leaf-on months:
+// Rumson Road's only photos are 2018's; a December one says nothing of a summer's trees)
+async function photoNear(lat, lon, seed, aim = null, opt = {}) {
+  const since = opt.since ? Date.UTC(opt.since, 0, 1) : SINCE, inMonths = (x) => !opt.months || opt.months.includes(new Date(x.captured_at).getUTCMonth() + 1);
   // (small first: a dense centre answers "too much data" for a big box — then smaller still)
   for (const half of [0.001, 0.002, 0.004, 0.008, 0.016]) {
     let got = await images([lon - half, lat - half, lon + half, lat + half]);
     for (let h2 = half / 2; got === null && h2 > 0.0001; h2 /= 2) got = await images([lon - h2, lat - h2, lon + h2, lat + h2]);
     if (got === null) got = [];
-    let ok = got.filter(usable);
+    let ok = got.filter((x) => usable(x, since) && inMonths(x));
     if (aim) ok = ok.filter((x) => { const [px, py] = x.computed_geometry.coordinates; const b = (Math.atan2((aim[1] - px) * Math.cos((py * Math.PI) / 180), aim[0] - py) * 180) / Math.PI; const d = Math.abs((((b - x.computed_compass_angle) % 360) + 540) % 360 - 180); return d < 25; });
     if (!ok.length) continue;
     ok.sort((a, b) => b.captured_at - a.captured_at || (a.id < b.id ? -1 : 1));
     // (the seed's pick of the newest eight, else the next of them that's fit to compare against)
     const cands = ok.slice(0, 8), k0 = seed % cands.length;
     let pick = null;
-    for (let k = 0; k < cands.length && !pick; k++) { const x = cands[(k0 + k) % cands.length], why = await fitWhy(x, lat, lon); if (!why) pick = x; }
+    for (let k = 0; k < cands.length && !pick; k++) { const x = cands[(k0 + k) % cands.length], why = await fitWhy(x, lat, lon, opt); if (!why) pick = x; }
     if (!pick) continue;
     const [plon, plat] = pick.computed_geometry.coordinates;
     const f = pick.camera_parameters[0], w = pick.width, h = pick.height, D = 180 / Math.PI;
@@ -156,6 +161,20 @@ const NAMED = [
   { id: 'named-seabright-center', state: 'NJ', town: 'Center Street, Sea Bright', kind: 'named', at: [40.3597, -73.975] },
   { id: 'named-monmouth-beach', state: 'NJ', town: 'Ocean Avenue, Monmouth Beach', kind: 'named', at: [40.3335, -73.9818] },
   { id: 'named-shrewsbury', state: 'NJ', town: 'Broad Street, Shrewsbury', kind: 'named', at: [40.3297, -74.0617] },
+];
+// The suburbs against their photos (Robby, 2026-10-08: "i feel like suburb towns like rumson have to much
+// fluffy trees and it doesnt really look like rumson road … compare to real photos online, also 2 other
+// random towns"): Rumson Road's estates, an old leafy inner suburb (Oak Park) and a newer Sun Belt one
+// (Plano). Public streets.
+const SUBURBS = [
+  // (Mapillary has nothing of Rumson Road through the estates — its only photos are its west end's, August
+  // and September 2018, never segmented: side by side, not scored)
+  { id: 'suburb-rumson-road-west', state: 'NJ', town: 'Rumson Road (west end), Rumson', kind: 'suburb', at: [40.34306, -74.03928], since: 2018, months: [5, 6, 7, 8, 9, 10], unscored: true },
+  { id: 'suburb-rumson-road-line', state: 'NJ', town: 'Rumson Road at the Little Silver line', kind: 'suburb', at: [40.34542, -74.03458], since: 2018, months: [5, 6, 7, 8, 9, 10], unscored: true },
+  { id: 'suburb-oak-park-kenilworth', state: 'IL', town: 'North Kenilworth Avenue, Oak Park', kind: 'suburb', at: [41.89, -87.7975], since: 2015, months: [5, 6, 7, 8, 9, 10] },
+  { id: 'suburb-oak-park-scoville', state: 'IL', town: 'South Scoville Avenue, Oak Park', kind: 'suburb', at: [41.8846, -87.7879], since: 2015, months: [5, 6, 7, 8, 9, 10] },
+  { id: 'suburb-plano-lone-tree', state: 'TX', town: 'Lone Tree Drive, Plano', kind: 'suburb', at: [33.03638, -96.78255], months: [4, 5, 6, 7, 8, 9, 10, 11] },
+  { id: 'suburb-plano-forbes', state: 'TX', town: 'Forbes Drive, Plano', kind: 'suburb', at: [33.04727, -96.77382], months: [4, 5, 6, 7, 8, 9, 10, 11] },
 ];
 // The green spots (Robby: "really compare … upstate NY, PNW moss trees, ferns, Kentucky, Florida,
 // Texas, middle America"): leafy residential streets, parks, rural and forest roads, three to six a
@@ -244,11 +263,11 @@ for (const st of STATES) {
     console.log(`${id}: ${t.name} (${t.pop.toLocaleString()}) → ${img ? `${img.id} ${img.captured.slice(0, 10)} by ${img.by}, ${img.hfov}°, ${Math.round(img.within * 111000)} m box` : 'no photo near (aerial only)'}`);
   }
 }
-for (const n of [...NAMED, ...GREEN]) {
+for (const n of [...NAMED, ...GREEN, ...SUBURBS]) {
   if (!STATES.includes(n.state)) continue;
   const was = keep.get(n.id), why = was?.img ? await unfitWhy(was.img) : null;
   if (was?.img && !why) { spots.push(was); continue; }
-  const img = (await photoNear(n.at[0], n.at[1], hash(n.id), n.aim ? [n.at[0], n.at[1]] : null)) ?? (was?.img ? { ...was.img, unfit: why } : null);
+  const img = (await photoNear(n.at[0], n.at[1], hash(n.id), n.aim ? [n.at[0], n.at[1]] : null, n)) ?? (was?.img ? { ...was.img, unfit: why } : null);
   spots.push({ id: n.id, state: n.state, town: n.town, kind: n.kind ?? 'named', ...(n.region ? { region: n.region } : {}), at: n.at, img });
   console.log(`${n.id}: ${img ? `${img.id} ${img.captured.slice(0, 10)}` : 'no photo'}`);
 }

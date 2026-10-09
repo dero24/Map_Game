@@ -59,7 +59,24 @@ a change to the game alone needs none (the seawall fix is the game's: dem.ts run
   hidden one as a car at the origin (`vehicles.ts hiddenInstance` now), and two review tools; the
   debugging doc has the rule. The density table of the four reports read 150/330 m rings the stack
   never reached.
-- **Next:** the batch, in order.
+- **6. `review-suburbs-real` — passing (no change to the game).** Rumson Road, Oak Park and Plano against
+  real photos, and the method for the region pass Robby wants next: `docs/REGION_MATCH.md`. Mapillary has
+  nothing of Rumson Road through the estates (its west end's 2018 photos only); the borough's own
+  historic-preservation photos filled in (public, looked at, never kept). The game's Rumson Road is an
+  open wood — 18–39 trees in front within 45 m, 4–6 m apart, 40% pines, lumpy light crowns, pale lawns,
+  small houses half hidden, a sidewalk with tree pits — where the real one has specimen oaks and beeches
+  on deep green lawns, big pale colonials, hedges and grass verges. Oak Park scores 0.83/0.89, Plano
+  0.51/0.58 (a fence-line of evergreens missing). Ranked: fewer, bigger trees from the survey's crowns;
+  broadleaves for the settled coastal plain; darker crowns, no August yellow; mown green lawns; the
+  street's edge by its kind; hedges and walls; then the houses. Montages `shots/real/NJ|IL|TX-montage.jpg`,
+  `shots/fix/rumson-real-vs-game.jpg`. Robby asked about Street View "just for testing": no — its
+  terms forbid it; public photos and the open services instead.
+- **Checks:** typecheck; the full suite, 1,110 tests in 117 files, all passing (a run under three game pages
+  at once timed two out; both pass alone); `npm run build`. Nothing pushed: `feature/four-reports` waits on
+  Robby's OK.
+- **Next:** the region pass (`region-match-pass`) with `docs/REGION_MATCH.md` — Robby: "soon we are going
+  to focus on regions within the 16 regions … used in next session as reference"; `gameplay-one-plan`
+  waits until he says.
 
 ## 2026-10-08 (night) — Robby's four reports, live on feature/four-reports: walkers lit by the night, who's about by the place and the hour, a crisp watercolor, the harbour's sea (tiles v31)
 

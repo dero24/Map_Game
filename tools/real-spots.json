@@ -1,6 +1,6 @@
 {
  "note": "tools/real-spots.mjs: the comparison loop's spots (Mapillary photo ids and poses only — the photos are never kept in the repo or shipped). Photos © their Mapillary contributors, CC BY-SA 4.0.",
- "made": "2026-10-05",
+ "made": "2026-10-09",
  "spots": [
   {
    "id": "AL-largest-0137000",
@@ -1212,7 +1212,74 @@
     41.888,
     -87.788
    ],
-   "img": null
+   "img": {
+    "id": "379189396771247",
+    "lat": 41.8800686,
+    "lon": -87.7802172,
+    "heading": 275.89,
+    "hfov": 68.9,
+    "vfov": 54.4,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2019-12-22T20:07:36.595Z",
+    "by": "gdgj92",
+    "within": 0.008,
+    "q": 0.759,
+    "calt": 191.4,
+    "pitch": 4.7
+   }
+  },
+  {
+   "id": "suburb-oak-park-kenilworth",
+   "state": "IL",
+   "town": "North Kenilworth Avenue, Oak Park",
+   "kind": "suburb",
+   "at": [
+    41.89,
+    -87.7975
+   ],
+   "img": {
+    "id": "864844980736027",
+    "lat": 41.8886664,
+    "lon": -87.7967142,
+    "heading": 91.08,
+    "hfov": 41.8,
+    "vfov": 32,
+    "w": 3264,
+    "h": 2448,
+    "captured": "2015-10-14T12:37:29.576Z",
+    "by": "garret",
+    "within": 0.002,
+    "q": 0.728,
+    "calt": 189.8,
+    "pitch": 7.8
+   }
+  },
+  {
+   "id": "suburb-oak-park-scoville",
+   "state": "IL",
+   "town": "South Scoville Avenue, Oak Park",
+   "kind": "suburb",
+   "at": [
+    41.8846,
+    -87.7879
+   ],
+   "img": {
+    "id": "803363633946880",
+    "lat": 41.8883186,
+    "lon": -87.7849018,
+    "heading": 94.19,
+    "hfov": 59.6,
+    "vfov": 46.5,
+    "w": 3264,
+    "h": 2448,
+    "captured": "2015-10-14T12:39:04.582Z",
+    "by": "garret",
+    "within": 0.004,
+    "q": 0.704,
+    "calt": 196.3,
+    "pitch": 7.7
+   }
   },
   {
    "id": "IN-largest-1836003",
@@ -2847,6 +2914,58 @@
    "img": null
   },
   {
+   "id": "suburb-rumson-road-line",
+   "state": "NJ",
+   "town": "Rumson Road at the Little Silver line",
+   "kind": "suburb",
+   "at": [
+    40.34542,
+    -74.03458
+   ],
+   "img": {
+    "id": "835456153732569",
+    "lat": 40.3432021,
+    "lon": -74.036583,
+    "heading": 154.05,
+    "hfov": 49.4,
+    "vfov": 29,
+    "w": 1920,
+    "h": 1080,
+    "captured": "2018-09-11T20:03:10.892Z",
+    "by": "lvl5",
+    "within": 0.004,
+    "q": 0.559,
+    "calt": 6.5,
+    "pitch": 1.9
+   }
+  },
+  {
+   "id": "suburb-rumson-road-west",
+   "state": "NJ",
+   "town": "Rumson Road (west end), Rumson",
+   "kind": "suburb",
+   "at": [
+    40.34306,
+    -74.03928
+   ],
+   "img": {
+    "id": "2975995366053988",
+    "lat": 40.3425444,
+    "lon": -74.0402748,
+    "heading": 236.21,
+    "hfov": 52.3,
+    "vfov": 30.9,
+    "w": 1920,
+    "h": 1080,
+    "captured": "2018-08-23T14:59:57.734Z",
+    "by": "lvl5",
+    "within": 0.001,
+    "q": 0.674,
+    "calt": 7.1,
+    "pitch": 3.5
+   }
+  },
+  {
    "id": "NM-largest-3502000",
    "state": "NM",
    "town": "Albuquerque, NM",
@@ -3984,7 +4103,22 @@
     29.727,
     -95.405
    ],
-   "img": null
+   "img": {
+    "id": "1627328080786250",
+    "lat": 29.7311139,
+    "lon": -95.4063971,
+    "heading": 272.89,
+    "hfov": 65.8,
+    "vfov": 51.8,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2019-12-12T21:33:31.165Z",
+    "by": "iamjaythomas",
+    "within": 0.004,
+    "q": 0.696,
+    "calt": 12.4,
+    "pitch": 14.6
+   }
   },
   {
    "id": "green-texas-wolflin-amarillo",
@@ -4011,6 +4145,58 @@
     "q": 0.631,
     "calt": 1103.2,
     "pitch": 16.2
+   }
+  },
+  {
+   "id": "suburb-plano-forbes",
+   "state": "TX",
+   "town": "Forbes Drive, Plano",
+   "kind": "suburb",
+   "at": [
+    33.04727,
+    -96.77382
+   ],
+   "img": {
+    "id": "592784931774968",
+    "lat": 33.0413887,
+    "lon": -96.7707103,
+    "heading": 122.4,
+    "hfov": 65.1,
+    "vfov": 51.1,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2021-11-18T19:20:11.326Z",
+    "by": "chuckfinley71",
+    "within": 0.008,
+    "q": 0.635,
+    "calt": 229.8,
+    "pitch": -5
+   }
+  },
+  {
+   "id": "suburb-plano-lone-tree",
+   "state": "TX",
+   "town": "Lone Tree Drive, Plano",
+   "kind": "suburb",
+   "at": [
+    33.03638,
+    -96.78255
+   ],
+   "img": {
+    "id": "3276136855947211",
+    "lat": 33.041944,
+    "lon": -96.7809771,
+    "heading": 127.89,
+    "hfov": 71.1,
+    "vfov": 56.4,
+    "w": 4032,
+    "h": 3024,
+    "captured": "2021-11-18T19:19:18.408Z",
+    "by": "chuckfinley71",
+    "within": 0.008,
+    "q": 0.671,
+    "calt": 225.7,
+    "pitch": 1.6
    }
   },
   {

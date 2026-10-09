@@ -10842,6 +10842,171 @@
      "hour": 18.83
     }
    }
+  },
+  {
+   "at": "2026-10-09T07:16:33.449Z",
+   "commit": "ccabc6d",
+   "tag": "suburbs-2026-10-08",
+   "spots": {
+    "suburb-oak-park-kenilworth": {
+     "score": 0.83,
+     "photo": {
+      "sky": 0.344,
+      "building": 0.113,
+      "vegetation": 0.236,
+      "ground": 0.253,
+      "water": 0,
+      "vehicle": 0.026,
+      "other": 0.028
+     },
+     "labelled": 0.992,
+     "game": {
+      "sky": 0.461,
+      "building": 0.067,
+      "vegetation": 0.191,
+      "ground": 0.199,
+      "water": 0,
+      "vehicle": 0.001,
+      "other": 0.082
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2015-10-14",
+     "hour": 7.62
+    },
+    "suburb-oak-park-scoville": {
+     "score": 0.889,
+     "photo": {
+      "sky": 0.573,
+      "building": 0.07,
+      "vegetation": 0.071,
+      "ground": 0.239,
+      "water": 0,
+      "vehicle": 0.012,
+      "other": 0.035
+     },
+     "labelled": 0.986,
+     "game": {
+      "sky": 0.503,
+      "building": 0.114,
+      "vegetation": 0.032,
+      "ground": 0.301,
+      "water": 0,
+      "vehicle": 0.01,
+      "other": 0.04
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2015-10-14",
+     "hour": 7.65
+    },
+    "suburb-rumson-road-line": {
+     "score": null,
+     "unscored": "not segmented",
+     "photo": {
+      "sky": 0,
+      "building": 0,
+      "vegetation": 0,
+      "ground": 0,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0
+     },
+     "labelled": 0,
+     "game": {
+      "sky": 0,
+      "building": 0.011,
+      "vegetation": 0.441,
+      "ground": 0.084,
+      "water": 0.275,
+      "vehicle": 0.003,
+      "other": 0.185
+     },
+     "cell": "baked",
+     "water": false,
+     "date": "2018-09-11",
+     "hour": 16.05
+    },
+    "suburb-rumson-road-west": {
+     "score": null,
+     "unscored": "not segmented",
+     "photo": {
+      "sky": 0,
+      "building": 0,
+      "vegetation": 0,
+      "ground": 0,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0
+     },
+     "labelled": 0,
+     "game": {
+      "sky": 0.209,
+      "building": 0.01,
+      "vegetation": 0.289,
+      "ground": 0.395,
+      "water": 0,
+      "vehicle": 0,
+      "other": 0.096
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2018-08-23",
+     "hour": 10.98
+    },
+    "suburb-plano-forbes": {
+     "score": 0.514,
+     "photo": {
+      "sky": 0.411,
+      "building": 0.008,
+      "vegetation": 0.163,
+      "ground": 0.162,
+      "water": 0,
+      "vehicle": 0.044,
+      "other": 0.212
+     },
+     "labelled": 0.621,
+     "game": {
+      "sky": 0.091,
+      "building": 0.003,
+      "vegetation": 0.276,
+      "ground": 0.535,
+      "water": 0,
+      "vehicle": 0.003,
+      "other": 0.092
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2021-11-18",
+     "hour": 13.33
+    },
+    "suburb-plano-lone-tree": {
+     "score": 0.583,
+     "photo": {
+      "sky": 0.304,
+      "building": 0.04,
+      "vegetation": 0.465,
+      "ground": 0.127,
+      "water": 0,
+      "vehicle": 0.04,
+      "other": 0.024
+     },
+     "labelled": 0.626,
+     "game": {
+      "sky": 0.377,
+      "building": 0.099,
+      "vegetation": 0.059,
+      "ground": 0.393,
+      "water": 0,
+      "vehicle": 0.06,
+      "other": 0.013
+     },
+     "cell": "real",
+     "water": false,
+     "date": "2021-11-18",
+     "hour": 13.32
+    }
+   }
   }
  ]
 }

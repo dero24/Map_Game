@@ -76,6 +76,8 @@ Context low? Wrap early — write state before polish. A clean handoff beats a r
 
 - `docs/GAMEPLAY_VISION.md` — the full vision behind it, for the detail the streamlined plan leaves out (the rares table, time and weather, the edge cases, the ideas); §17 sets the order — **foundations first** (Tier 0: every tile loads, commercial-safe services; Tier 1: looks right everywhere), the game after, the proof of concept being Robby's one exception. Track each in `feature_list.json`. (`docs/GAME_DESIGN.md` is superseded, apart from learning from life, the Almanac and the summoning solvers)
 
+- `docs/REGION_MATCH.md` — **read before the region pass**: one region (or sub-region) against real photos in one sitting — the spots (place types × sub-regions), where photos come from (never Google Street View), the checklist, the knob in the code behind each layer, and the worked example (Rumson, Oak Park, Plano: the ranked improvements)
+
 - `docs/REGIONAL_LIFE.md` — **read before any flora, fauna or greenery work**: the 16 regions, what the foundry has and lacks, how greenery is measured (the green spots), the build order; the reference per region (plants layer by layer, wildlife with how common, signatures, range limits) is `docs/regional-life/`
 - `docs/agent/world-data.md` — regions, REGIONS spec, fetch/merge/bake, detail zone, `?at=` deep links, NAIP roof imagery
 - `docs/agent/streaming.md` — tile stream + margin semantics, tile worker + BuiltTile packing, terrain packs, real-lite worker (wrangler/R2/virtual manifests), DEM, LiDAR measure pipeline
