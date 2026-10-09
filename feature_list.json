@@ -2622,7 +2622,7 @@
       "id": "life-city-night",
       "tier": 1,
       "rank": 11.36,
-      "status": "in_progress",
+      "status": "passing",
       "area": "life",
       "title": "A city's core keeps its evening: busy into the night, quiet by 3 am",
       "user_visible_behavior": "Midtown at 10 pm still has its crowds and its traffic — thinner than at 8 pm, far busier than at 3 am — while a small town's main street and a suburb stay quiet at night.",
@@ -2630,14 +2630,18 @@
         "the walkers and cars the sim wants by hour for a city's core against the target table (tests/lifeDensity.test.ts): 22:00 well over 3:00",
         "in game: Midtown at 20, 22 and 3 h"
       ],
-      "evidence": [],
-      "notes": "Robby, 2026-10-08 (night), after the four reports, of the page's \"noticed, not changed\" list: \"please fix the remaining bugs like this\". His list: \"Midtown at 10 pm is as quiet as at 3 am. The city's evening ends too early.\" life-density-realism kept a city's core on the town rhythm, whose evening bump ends by 21:30. Worked on feature/four-reports (Robby: \"create new feature branch we will work off of\"); commit each, push only with his OK (a feature/ push publishes)."
+      "evidence": [
+        "src/sim/lifeSim.ts cityNight: a city's core after dark, on top of its rhythm — busy through the evening into midnight, a late crowd to 2 am, quiet by 4; the traffic the same (cityShare: its rhythm and its night). pedShare's city term and the cars' desired() take it by the place's city share, so a main street and a suburb keep their quiet nights. Commit d074272",
+        "tests/lifeDensity.test.ts: the target table's city row (20 h 250–640, 22 h 150–640, 0 h 100–400, 3 h 10–90; the sim wants 447, 298, 210, 61), and a city's evening: 22 h over 3× 3 h, midnight over 2×, the cars over 2×; 10 pm and 3 am alike before; a main street's midnight and a suburb's 10 pm as quiet as they were. npm test (lifeDensity, lifeSim, seeIt), typecheck",
+        "In game (live v31 tiles), a fresh page each hour, the sim's walkers and cars about the walker: Midtown by Bryant Park (city 0.39) 21:00 31 → 80 (20:50), 23:00 4 → 46 (22:40), 01:00 4 → 19, 04:00 3 → 5; Times Square (city 0.51, the hour pinned) 22:00 6 → 47 walkers and 8 → 22 cars, 03:00 4 → 9 and 7 → 10. Montages shots/fix/city-night-midtown.jpg, shots/fix/city-night-times-square.jpg (git-ignored; at night the walkers are dark figures, so the counts carry it)"
+      ],
+      "notes": "Robby, 2026-10-08 (night), after the four reports, of the page's \"noticed, not changed\" list: \"please fix the remaining bugs like this\". His list: \"Midtown at 10 pm is as quiet as at 3 am. The city's evening ends too early.\" life-density-realism kept a city's core on the town rhythm, whose evening bump ends by 21:30. Worked on feature/four-reports (Robby: \"create new feature branch we will work off of\"); commit each, push only with his OK (a feature/ push publishes). 2026-10-08 (night, later): passing on feature/four-reports (not pushed). The city share in the game is the built volume over 240 m (cityAt): Bryant Park reads 0.39, Times Square 0.51, so they take about half the core's evening — a place's own nightlife (OSM's bars, theatres, restaurants) would say more than its built volume, if Robby wants Times Square busier still."
     },
     {
       "id": "life-critters-persist",
       "tier": 1,
       "rank": 11.37,
-      "status": "not_started",
+      "status": "in_progress",
       "area": "life",
       "title": "Animals you follow stay: persistent as far as the frame budget allows",
       "user_visible_behavior": "Walk after a deer, a heron or a squirrel and it keeps going its own way in front of you — it doesn't vanish because you followed it — and the animals round you are the same ones when you turn back.",

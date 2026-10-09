@@ -29,6 +29,15 @@ a change to the game alone needs none (the seawall fix is the game's: dem.ts run
   (no tile version, as Robby's reminder asked). Liberty Island: the railing's posts and two walkers in
   the water → the railing along the water's edge. Test: a straight coast — the edge within a metre of
   it (it was 8 m inland). Montage `shots/fix/seawall-before-after.jpg`.
+- **3. `life-city-night` — passing.** A city's core sat on the town rhythm, whose evening bump ends by
+  21:30. `cityNight`: the theatres, restaurants and bars on top of the rhythm — busy into midnight, a late
+  crowd to 2 am, quiet by 4 — for the walkers and the traffic, by the place's city share; a main street
+  and a suburb keep their quiet nights. A fresh page each hour, the sim's walkers about you: Midtown by
+  Bryant Park (city 0.39) 23:00 4 → 46, 04:00 3 → 5, 21:00 31 → 80; Times Square (city 0.51) 22:00
+  6 → 47 walkers (8 → 22 cars), 03:00 4 → 9. Both read as half a city by the built volume (`cityAt`),
+  so they take about half the core's evening: a place's own nightlife (OSM's bars, theatres) would
+  say more, if Robby wants Times Square busier still. Montages `shots/fix/city-night-midtown.jpg`,
+  `city-night-times-square.jpg` (dark figures at night: the counts carry it).
 - **Next:** the batch, in order.
 
 ## 2026-10-08 (night) — Robby's four reports, live on feature/four-reports: walkers lit by the night, who's about by the place and the hour, a crisp watercolor, the harbour's sea (tiles v31)
