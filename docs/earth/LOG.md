@@ -2,6 +2,28 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-08 (night, later) — Robby's second batch: the animals by night, the seawall, a city's evening, animals that stay, the origin's stack, suburbs against real photos
+
+Robby, after the four reports went live, of the page's "noticed, not changed" list: "please fix the
+remaining bugs like this", and "also i noticed a lot of animals dissapear when i follow them they should
+be persistent as can be without losing performance in the game", and "i feel like suburb towns like rumson
+have to much fluffy trees and it doesnt really look like rumson road, you dont need to fix that right now
+but compare to real photos online, also 2 other random towns, to see what ww can improve on, those other
+towns dont have to be in nj". Six items (feature_list), worked one at a time on `feature/four-reports`,
+committed, pushed only with his OK; `gameplay-one-plan` paused meanwhile. He also passed on a reminder:
+v31 is released, so a fix that changes how the tile service builds coasts needs v32 and another deploy —
+a change to the game alone needs none (the seawall fix is the game's: dem.ts runs in the browser).
+
+- **1. `bug-night-pale-creatures` — passing.** The walkers' night lighting (FIGURE) was set only on people;
+  now every creature out of doors takes it: the life sim's gulls (creature.ts) and the wildlife
+  (fauna.ts critterMaterial, the dogs too). Liberty State Park at 22:00, the define off then on in one
+  frame: the animals on the lawn 7.3/13.9 → 3.4/13.1 (animals/ground L*), dusk unchanged; the white
+  gulls on the dark lawn no longer pale. Test: the palest feather or coat of gulls, a goose, an egret,
+  deer by night about the street's. Montage `shots/fix/night-animals-lsp.jpg`. With it, `critters.ts`
+  on its own clock (the butterflies' and the shoals' drift read `performance.now()`, so a test's
+  turkeys flocked one run in three): `waterBirds.test.ts` passes five runs of five.
+- **Next:** the batch, in order.
+
 ## 2026-10-08 (night) — Robby's four reports, live on feature/four-reports: walkers lit by the night, who's about by the place and the hour, a crisp watercolor, the harbour's sea (tiles v31)
 
 On the branch `fix/four-reports` (off `feature/lower48-alive`, not pushed: Robby's OK first). One
