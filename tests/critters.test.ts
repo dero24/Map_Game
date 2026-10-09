@@ -90,7 +90,7 @@ describe('Critters ecosystem', () => {
     const g = animal('groundSquirrel', 0, 5);
     list(c2).push(g);
     run(c2, 4, env({ climate: 'arid', hour: 12, night: 0 }), 0, 0);
-    expect(list(c2).includes(g)).toBe(false); // gone below
+    expect(g.state).toBe('dive'); // gone below (and up again once you've gone by: crittersStay.test.ts)
   });
 
   it('snowshoe hares turn white in winter', () => {

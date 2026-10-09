@@ -178,10 +178,19 @@ const HUNTED = new Set<CritterRole>(['grazer', 'climber', 'songbird', 'shorebird
 const R = (c: { kind: CritterKind }) => ROLE[c.kind];
 /** At most this many of each water mark at once. */
 const FX_CAP = 12;
+/** How long an animal stays about: past `keep` m from the walker (or out of its hours, its habitat, or
+ *  flown off with nowhere near to come down) it goes — but only out of sight. In sight is drawn, within
+ *  ~70° of where the camera looks (`cone`: room to turn), and big enough to make out: its body's radius ×
+ *  `px` m, a few pixels on a phone's or a laptop's screen (a sparrow's ~120 m, a squirrel's ~185, a
+ *  deer's `max`). Robby, 2026-10-08: "a lot of animals dissapear when i follow them they should be
+ *  persistent as can be without losing performance in the game" — a flushed bird comes down again a
+ *  little way on, a squirrel comes down its tree, a ground squirrel up out of its burrow; the counts and
+ *  the caps are as they were (one kept in sight past the range holds its slot). */
+export const STAY = { keep: 95, px: 600, max: 400, cone: 0.35 } as const;
 /** A moving thing animals give way to: traffic and the player's vehicle (x, z, velocity). */
 export interface Mover { x: number; z: number; vx: number; vz: number }
 
-type State = 'idle' | 'move' | 'flee' | 'climb' | 'perch' | 'fly' | 'drift' | 'stalk' | 'pounce' | 'soar' | 'stoop' | 'rise'
+type State = 'idle' | 'move' | 'flee' | 'climb' | 'perch' | 'descend' | 'fly' | 'drift' | 'stalk' | 'pounce' | 'soar' | 'stoop' | 'rise'
   // (package #13: an opossum playing dead, a skunk's warning)
   | 'possum' | 'warn'
   // (package #14: a bison rolling in its wallow; #15: a basker sliding off its bank or log into the water;
@@ -201,6 +210,8 @@ interface Critter {
   dead?: boolean;
   vig?: number;                    // vigilance 0..1: how early it notices a stalking fox
   wl?: number;                     // its water's level: a swimmer on it (y below by its sink), a wader at its edge
+  seek?: number;                   // a flushed bird's tries at somewhere to come down
+  away?: boolean;                  // flown off with nowhere near to come down: it goes once out of sight
   show?: boolean;                  // displaying: a turkey tom strutting, his fan up; an elk bull bugling
   sit?: boolean;                   // sitting bolt upright by its burrow (a prairie dog's sentry, a woodchuck)
   yip?: number;                    // a prairie dog's jump-yip, an armadillo's leap: seconds left of it
@@ -233,6 +244,8 @@ export class Critters {
   readonly group = new THREE.Group();
   private list: Critter[] = [];
   private meshes = new Map<CritterKind, { m: THREE.InstancedMesh; anim: THREE.InstancedBufferAttribute }>();
+  /** Each kind's body: its model's bounding radius (m, at scale 1) — how far off it can be made out (STAY). */
+  private size = new Map<CritterKind, number>();
   private spawnT = 0;
   /** The sim's own clock (s): the butterflies' and the shoals' drift run on it — the page's clock made
    *  every run's draws differ (a test's turkeys flocked one run in three). */
@@ -275,6 +288,8 @@ export class Critters {
     for (const k of CRITTERS) {
       const cap = SPEC[k].cap;
       const geo = critterLib(k).clone();
+      if (!geo.boundingSphere) geo.computeBoundingSphere();
+      this.size.set(k, geo.boundingSphere?.radius ?? 0.3);
       const anim = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
       anim.setUsage(THREE.DynamicDrawUsage);
       geo.setAttribute('aAnim', anim);
@@ -400,11 +415,46 @@ export class Critters {
     // running from you still dashes across it)
     return this.open(x, z, 0.2) && !this.paved(x, z);
   }
-  /** Its height where it is: on the water by its sink, at the edge knee-deep, else on the ground. */
-  private stand(c: Critter) {
-    if (c.wl === undefined) return this.ground(c.x, c.z);
-    if (R(c) === 'wader') return Math.max(this.ground(c.x, c.z), c.wl - 0.1);
+  /** Its height where it is (or at x, z): on the water by its sink, at the edge knee-deep, else on the ground. */
+  private stand(c: Critter, x = c.x, z = c.z) {
+    if (c.wl === undefined) return this.ground(x, z);
+    if (R(c) === 'wader') return Math.max(this.ground(x, z), c.wl - 0.1);
     return c.wl + 0.06 - swimSink(c.kind) * c.s;
+  }
+  /** Somewhere for a flushed bird to come down a little way on along its flight (bearing a): a duck or a
+   *  goose onto its water if there's water there, a heron at the edge, a sandpiper on its shore, the rest
+   *  on their ground (never the road); a cicada onto another trunk. Sets where (tx, tz, ty; its water's wl). */
+  private landing(c: Critter, a: number, env: CritterEnv) {
+    const role = R(c);
+    for (let k = 0; k < 6; k++) {
+      const r = 3 + this.rnd() * 12, b = a + (this.rnd() - 0.5) * 1.2, x = c.x + Math.sin(b) * r, z = c.z + Math.cos(b) * r;
+      if (c.kind === 'annualcicada') {
+        const t = env.trees(x, z, 10);
+        if (!t.length) continue;
+        const home = t[Math.floor(this.rnd() * t.length)], ra = this.rnd() * 6.28, top = Math.max(1.2, (home.trunk ?? 3) * 0.9);
+        c.home = home; c.tx = home.x + Math.sin(ra) * 0.5; c.tz = home.z + Math.cos(ra) * 0.5; c.ty = this.ground(home.x, home.z) + Math.min(top, 1.6 + this.rnd() * 3);
+        return true;
+      }
+      const wet = (role === 'waterfowl' || role === 'gull') && this.swimmable(x, z, 1.2, role === 'gull');
+      c.wl = wet || role === 'wader' ? this.level(x, z) : undefined;
+      if (!this.valid(c, x, z) || (role === 'shorebird' && !this.shore(x, z))) continue;
+      c.tx = x; c.tz = z; c.ty = this.stand(c, x, z);
+      return true;
+    }
+    c.wl = undefined;
+    return false;
+  }
+  /** Not drawn: under the water or down its burrow (a fish cruising below, a pod or a whale deep between
+   *  its breaths). */
+  private hidden(c: Critter) { return c.state === 'dive' || (c.state === 'cruise' && c.kind !== 'shoal') || ((c.state === 'porpoise' || c.state === 'surface') && c.stage === 0); }
+  /** How far off it can be made out (STAY). */
+  private sight(c: Critter) { return Math.min(STAY.max, Math.max(STAY.keep, STAY.px * (this.size.get(c.kind) ?? 0.3) * c.s)); }
+  /** In sight of the walker (STAY): drawn, near enough to make out, and in the view — or looking down from
+   *  the air, where all of them are. */
+  private seen(c: Critter, d: number, wx: number, wz: number, fwd: THREE.Vector3) {
+    if (this.hidden(c) || d > this.sight(c)) return false;
+    const fl = Math.hypot(fwd.x, fwd.z);
+    return fl <= 0.6 || d < 12 || ((c.x - wx) * fwd.x + (c.z - wz) * fwd.z) / (d * fl) > STAY.cone;
   }
   /** A flock's: near one of its own already here (geese, ducks, gulls, turkeys, cranes), on the same footing. */
   private nearKin(sp: CritterKind) {
@@ -797,7 +847,10 @@ export class Critters {
     for (let i = this.list.length - 1; i >= 0; i--) {
       const c = this.list[i];
       const d = Math.hypot(c.x - wx, c.z - wz);
-      const gone = c.dead || d > (WHALES.has(c.kind) ? 1500 : 95) || (!this.enabled) || (this.want(R(c), env) === 0 && d > 30) || (c.state === 'fly' && c.t <= 0) || (c.state === 'skim' && c.t <= 0) || (c.state === 'perch' && c.t <= 0 && d > 18);
+      // (out of range, out of its hours or its habitat, flown off for good, a pelican's line gone by: it goes
+      // once out of sight, never in plain view — STAY; a fox's catch, and indoors, at once)
+      const leave = d > (WHALES.has(c.kind) ? 1500 : STAY.keep) || (this.want(R(c), env) === 0 && d > 30) || (c.state === 'fly' && !!c.away) || (c.state === 'skim' && c.t <= 0);
+      const gone = c.dead || !this.enabled || (leave && !this.seen(c, d, wx, wz, env.camFwd));
       if (gone) { this.list.splice(i, 1); continue; }
       this.step(c, dt, wx, wz, d, env);
     }
@@ -877,7 +930,7 @@ export class Critters {
           // is 2 m; perching 5 m up put squirrels in the sky over it)
           if (c.state === 'flee' && (R(c) === 'climber' || c.kind === 'raccoon' || (c.kind === 'blackbear' && c.lead)) && c.home && L < 0.6) { const top = Math.max(1.2, (c.home.trunk ?? 4) * 0.85); c.state = 'climb'; c.t = 1.4; c.ty = this.ground(c.home.x, c.home.z) + Math.min(top, 1.2 + this.rnd() * Math.max(0.3, top - 1.2)); break; }
           if (c.state === 'flee' && R(c) === 'shorebird' && d < S.fleeR) { c.state = 'fly'; c.t = 3; break; }
-          if (c.state === 'flee' && R(c) === 'burrower') { c.dead = true; break; } // down its burrow
+          if (c.state === 'flee' && R(c) === 'burrower') { c.state = 'dive'; c.t = 5 + this.rnd() * 8; break; } // down its burrow (and up again once you've gone by)
           if (c.state === 'flee' && c.kind === 'fiddlercrab') { c.state = 'dive'; c.t = 5 + this.rnd() * 8; break; } // (down its burrow, until you've gone by)
           c.state = 'idle'; c.t = 0.8 + this.rnd() * 3; break;
         }
@@ -907,7 +960,23 @@ export class Critters {
           if (env.hour > 11.5 && env.hour < 15.5 && env.wind < 0.6 && this.rnd() < 0.3) { c.state = 'drift'; c.roll = 0; c.t = 5 + this.rnd() * 12; }
           else c.t = 3 + this.rnd() * 8;
         }
+        // a squirrel, a raccoon or a cub up its tree comes down again once you're well off (it waited while
+        // you were close — and, gone before, it vanished off the bark as you walked on)
+        if (c.t <= 0 && c.home && !TRUNKERS.has(c.kind) && (R(c) === 'climber' || c.kind === 'raccoon' || c.kind === 'blackbear')) {
+          if (d > Math.max(10, S.fleeR * 1.6)) { c.state = 'descend'; c.t = 6; }
+          else c.t = 2 + this.rnd() * 3;
+        }
         break;
+      case 'descend': {
+        // down the trunk head first, and off about the ground again — back up if you come close meanwhile
+        const g = this.ground(c.home?.x ?? c.x, c.home?.z ?? c.z);
+        if (c.home && d < S.fleeR) { c.state = 'climb'; c.t = 1.4; c.ty = Math.min(g + Math.max(1.2, (c.home.trunk ?? 4) * 0.85), c.y + 0.8 + this.rnd()); break; }
+        c.pitch = -(Math.PI / 2 - 0.1);
+        c.y = Math.max(g, c.y - dt * 2.4);
+        c.amt = 1; c.phase += dt * 3.5;
+        if (c.y <= g + 0.02 || c.t <= 0 || !c.home) { c.y = this.ground(c.x, c.z); c.pitch = 0; c.amt = 0; c.state = 'idle'; c.t = 0.6 + this.rnd() * 1.5; }
+        break;
+      }
       case 'slide': {
         // down the bank into the water — an alligator's belly slide, a turtle off its log — then under
         const dx = c.tx - c.x, dz = c.tz - c.z, L = Math.hypot(dx, dz);
@@ -919,11 +988,18 @@ export class Critters {
         break;
       }
       case 'fly': {
-        // up and away: a songbird's quick dash; the big birds labour off, heavy and slow
-        const a = Math.atan2(c.x - (c.fx ?? wx), c.z - (c.fz ?? wz)), big = R(c) !== 'songbird';
+        // up and away: a songbird's quick dash; the big birds labour off, heavy and slow — then on, level,
+        // and down again a little way on where it can be (it vanished in the air: Robby, 2026-10-08, STAY)
+        const a = Math.atan2(c.x - (c.fx ?? wx), c.z - (c.fz ?? wz)), big = R(c) !== 'songbird', up = !c.seek && !c.away;
         c.x += Math.sin(a) * (big ? 5 : 7) * dt; c.z += Math.cos(a) * (big ? 5 : 7) * dt;
-        c.y += (big ? 1.8 : 2.6) * dt; c.yaw = a + Math.PI; c.pitch = big ? 0.12 : 0.2;
+        if (up) c.y += (big ? 1.8 : 2.6) * dt;
+        c.yaw = a + Math.PI; c.pitch = up ? (big ? 0.12 : 0.2) : 0;
         c.amt = big ? 1 : 0.2; c.phase += dt * 3;
+        if (c.t <= 0 && !c.away) {
+          if (this.landing(c, a, env)) { c.state = 'alight'; c.t = 12; c.roll = 0; c.seek = undefined; }
+          else if ((c.seek = (c.seek ?? 0) + 1) > 16) c.away = true; // (nowhere near to come down: it flies on, out of sight)
+          else c.t = 0.5;
+        }
         break;
       }
       case 'glide': {
@@ -948,8 +1024,15 @@ export class Critters {
         break;
       }
       case 'alight': {
-        const gy = this.ground(c.tx, c.tz), dx = c.tx - c.x, dz = c.tz - c.z, dy = gy - c.y, L = Math.hypot(dx, dy, dz) || 1;
-        if (L < 0.4 || c.t <= 0) { c.x = c.tx; c.z = c.tz; c.y = gy; c.state = 'idle'; c.t = 1 + this.rnd() * 3; c.pitch = 0; c.amt = 0; break; }
+        // coming down: a gull onto its beach; a flushed bird a little way on (a duck onto its water); a
+        // cicada onto another trunk
+        const bark = c.kind === 'annualcicada' && !!c.home;
+        const gy = bark ? c.ty : this.stand(c, c.tx, c.tz), dx = c.tx - c.x, dz = c.tz - c.z, dy = gy - c.y, L = Math.hypot(dx, dy, dz) || 1;
+        if (L < 0.4 || c.t <= 0) {
+          c.x = c.tx; c.z = c.tz; c.y = gy; c.amt = 0;
+          if (bark) { c.state = 'perch'; c.t = 1e6; c.pitch = Math.PI / 2 - 0.1; } else { c.state = 'idle'; c.t = 1 + this.rnd() * 3; c.pitch = 0; }
+          break;
+        }
         const step = Math.min(L, 4 * dt);
         c.x += dx / L * step; c.y += dy / L * step; c.z += dz / L * step;
         c.yaw = Math.atan2(-dx, -dz); c.pitch = -0.15; c.amt = L < 3 ? 1 : 0.2; // (wings working as it lands)
@@ -1018,6 +1101,15 @@ export class Critters {
       case 'dive': {
         // a fiddler down its burrow: up again once you've gone by
         if (R(c) === 'crab') { if (c.t <= 0) { if (d > 8) { c.state = 'idle'; c.t = 1 + this.rnd() * 3; } else c.t = 1; } break; }
+        // a ground squirrel, a chipmunk, a woodchuck or a prairie dog down its hole: up again once you're
+        // clear of it — a sitter up on its haunches by the hole to look about first
+        if (R(c) === 'burrower') {
+          if (c.t <= 0) {
+            if (d > S.fleeR * 1.2) { c.state = 'idle'; c.y = this.ground(c.x, c.z); c.sit = SITTERS.has(c.kind) && this.rnd() < 0.7; c.t = c.sit ? 2 + this.rnd() * 4 : 1 + this.rnd() * 2; }
+            else c.t = 1 + this.rnd();
+          }
+          break;
+        }
         // a loon gone under: it swims off below and comes up again well away
         const a = Math.atan2(c.x - (c.fx ?? wx), c.z - (c.fz ?? wz));
         const nx = c.x + Math.sin(a) * 2.2 * dt, nz = c.z + Math.cos(a) * 2.2 * dt;
@@ -1352,9 +1444,7 @@ export class Critters {
     this.drawn.shown = this.drawn.behind = 0;
     for (const c of this.list) {
       const M = this.meshes.get(c.kind)!;
-      if (c.state === 'dive') continue; // (under the water)
-      // (a fish cruising under the surface, a pod or a whale deep between its breaths: unseen, so not drawn)
-      if ((c.state === 'cruise' && c.kind !== 'shoal') || ((c.state === 'porpoise' || c.state === 'surface') && c.stage === 0)) continue;
+      if (this.hidden(c)) continue; // (under the water, down its burrow: unseen, so not drawn)
       if (level) {
         const dx = c.x - wx, dz = c.z - wz, d = Math.hypot(dx, dz);
         if (d > 8 && (dx * fwd.x + dz * fwd.z) / (d * fl) < -0.25) { this.drawn.behind++; continue; }
@@ -1364,14 +1454,14 @@ export class Critters {
       if (i >= M.m.instanceMatrix.count) continue;
       per.set(c.kind, i + 1);
       // climbing / perched squirrels face up the trunk, feet on the bark: the trunk's surface at
-      // that height (it tapers, and leans with the tree)
+      // that height (it tapers, and leans with the tree); coming down, head first, belly to the bark
       let x = c.x, z = c.z;
-      if ((c.state === 'climb' || c.state === 'perch') && c.home && c.kind !== 'monarch') { // (a roost's monarchs hang from its crown)
+      if ((c.state === 'climb' || c.state === 'perch' || c.state === 'descend') && c.home && c.kind !== 'monarch') { // (a roost's monarchs hang from its crown)
         const dx = c.x - c.home.x, dz = c.z - c.home.z, L = Math.hypot(dx, dz) || 1;
         const up = Math.max(0, c.y - this.ground(c.home.x, c.home.z)), [lx, lz] = c.home.lean ?? [0, 0];
         const r = (c.home.r ?? 0.25) * Math.max(0.55, 1 - 0.1 * up) + 0.02;
         x = c.home.x + lx * up + (dx / L) * r; z = c.home.z + lz * up + (dz / L) * r;
-        c.yaw = Math.atan2(dx, dz);
+        c.yaw = c.state === 'descend' ? Math.atan2(-dx, -dz) : Math.atan2(dx, dz);
       }
       // sitting up: the body tipped back about its hind feet (the hind foot kept where it stood); a
       // jump-yip lifts it off the ground; an opossum playing dead lies on its side, not through the ground
