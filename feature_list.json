@@ -2641,7 +2641,7 @@
       "id": "life-critters-persist",
       "tier": 1,
       "rank": 11.37,
-      "status": "in_progress",
+      "status": "passing",
       "area": "life",
       "title": "Animals you follow stay: persistent as far as the frame budget allows",
       "user_visible_behavior": "Walk after a deer, a heron or a squirrel and it keeps going its own way in front of you — it doesn't vanish because you followed it — and the animals round you are the same ones when you turn back.",
@@ -2649,28 +2649,36 @@
         "following an animal for minutes in the sim (tests): the same animal, alive and in reach, the whole time; the frame's animal count and sim cost unchanged",
         "in game: following animals in a park and a wood, before and after"
       ],
-      "evidence": [],
-      "notes": "Robby, 2026-10-08 (night): \"also i noticed a lot of animals dissapear when i follow them they should be persistent as can be without losing performance in the game\". With it, the flaky waterBirds test (critters.ts reads performance.now(): the sim's draws differ run to run). Worked on feature/four-reports (Robby: \"create new feature branch we will work off of\"); commit each, push only with his OK (a feature/ push publishes)."
+      "evidence": [
+        "src/sim/critters.ts STAY: an animal goes only out of sight — not drawn, outside ~70° of the view, or too small to make out (its body's radius × 600 m: a sparrow's ~120, a squirrel's ~185, a deer's 400); a flushed bird flies on level and comes down a little way on (landing: a duck onto its water, a heron at the edge, a sandpiper on its shore, a cicada on another trunk; over pavement with nowhere to land it flies on and goes once out of sight); a squirrel, raccoon or cub comes down its tree head first once you're well off (descend); a burrower comes up again once you've gone by; indoors the animals outside wait where they are. The counts and caps as they were. Commits 1396043, ccabc6d",
+        "tests/crittersStay.test.ts (9; 8 fail on the old code): a songbird followed three minutes, a goose run at, a squirrel's descent, a ground squirrel's burrow, a deer across the field, a deer past its hour, a bird over pavement, a minute indoors; a five-minute walk after the nearest animal never over a kind's cap. All the critter tests, typecheck, the full suite",
+        "In game, a probe walking after the nearest animal for three minutes as a player would (round the houses, one animal after another), counting those gone while well in sight: Central Park at 9 am 4 → 0 (two woodchucks at the end of their dash, two robins in mid-air; after, one woodchuck taken by a predator), Rumson at dawn 0 → 0; the animals about 28 → 31 and 13 → 13, their update 0.33 → 0.33 and 0.17 → 0.18 ms a frame. A first probe counting all within 150 m: Central Park 11 → 0, eight of them birds in the air; it walked through houses, which dropped every animal outside — now they wait"
+      ],
+      "notes": "Robby, 2026-10-08 (night): \"also i noticed a lot of animals dissapear when i follow them they should be persistent as can be without losing performance in the game\". With it, the flaky waterBirds test (critters.ts reads performance.now(): the sim's draws differ run to run). Worked on feature/four-reports (Robby: \"create new feature branch we will work off of\"); commit each, push only with his OK (a feature/ push publishes). 2026-10-09 (night): passing on feature/four-reports (not pushed)."
     },
     {
       "id": "bug-life-origin-stack",
       "tier": 1,
       "rank": 11.38,
-      "status": "not_started",
+      "status": "passing",
       "area": "life",
       "title": "No walkers or cars parked at a region's origin",
       "user_visible_behavior": "No crowd of people or cars ever sits motionless at one spot (the region's origin) — every walker and car is somewhere on a street or path, moving or stopped for a reason.",
       "verification": [
         "the life sim's snapshot and the drawn instances: none active at the origin, across arrivals, hour changes and road-graph rebuilds under load"
       ],
-      "evidence": [],
-      "notes": "Robby, 2026-10-08 (night), after the four reports, of the page's \"noticed, not changed\" list: \"please fix the remaining bugs like this\". Seen while measuring life-density-realism (LOG 2026-10-08 night): some runs held ~100–260 walkers (and once 152 cars) at exactly (0, 0, 0) — Sea Bright's origin, 204 m from its spawn — old code and new, only with other headless pages loading the machine; not reproduced on demand (the sim's snapshot then had none there). Worked on feature/four-reports (Robby: \"create new feature branch we will work off of\"); commit each, push only with his OK (a feature/ push publishes)."
+      "evidence": [
+        "Not in the game: the walkers and cars \"stacked at a region's origin\" were a probe's reading. life.ts hides an empty slot by zero scale (every car slot in the seven model meshes it isn't, and the gaps under the draw count), and three.js's Matrix4.decompose reads a singular matrix as scale 1, no rotation, at its translation — so every count by decompose put them at (0, 0, 0). The first offending slot's matrix: all zeros but the last; the sim's snapshot never had an agent there",
+        "The same reading in the game, fixed: vehicles.ts took the nearest parked car by decompose (another's taken, hidden car read as a car at the origin) and its remount guard `sc.x > 0` never held — `hiddenInstance` tests the matrix's x axis; the review tools reading instances by decompose (life-shots.js, grade-audit.js) skip hidden ones; docs/agent/debugging.md says why. tests/hiddenInstance.test.ts. Commit 58f5591",
+        "Sea Bright, three pages at once (two roaming, 12 road-graph rebuilds each), 240 s each: none at the origin in the sim's snapshot or drawn whole; 170–240 empty slots under the draw count — the old stack"
+      ],
+      "notes": "Robby, 2026-10-08 (night), after the four reports, of the page's \"noticed, not changed\" list: \"please fix the remaining bugs like this\". Seen while measuring life-density-realism (LOG 2026-10-08 night): some runs held ~100–260 walkers (and once 152 cars) at exactly (0, 0, 0) — Sea Bright's origin, 204 m from its spawn — old code and new, only with other headless pages loading the machine; not reproduced on demand (the sim's snapshot then had none there). Worked on feature/four-reports (Robby: \"create new feature branch we will work off of\"); commit each, push only with his OK (a feature/ push publishes). 2026-10-09 (night): passing on feature/four-reports (not pushed). The life-density-realism table was read from walkers within 150 m (Sea Bright) or 330 m (the ?at= places, whose origin snaps 470–830 m off their spawn): the stack never reached it."
     },
     {
       "id": "review-suburbs-real",
       "tier": 1,
       "rank": 11.39,
-      "status": "not_started",
+      "status": "in_progress",
       "area": "render",
       "title": "Rumson and two other towns against real photos: what to improve",
       "user_visible_behavior": "A list, with pictures, of how a suburb's street in the game differs from the real one — its trees, houses, lawns, kerbs, fences, road — and what to change first; no change to the game yet.",

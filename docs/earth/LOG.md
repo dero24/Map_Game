@@ -38,6 +38,27 @@ a change to the game alone needs none (the seawall fix is the game's: dem.ts run
   so they take about half the core's evening: a place's own nightlife (OSM's bars, theatres) would
   say more, if Robby wants Times Square busier still. Montages `shots/fix/city-night-midtown.jpg`,
   `city-night-times-square.jpg` (dark figures at night: the counts carry it).
+- **4. `life-critters-persist` — passing.** Why they went (`critters.ts`): a flushed bird was dropped when
+  its flight's timer ran out — in the air, in plain view, 25 m off; a squirrel up its trunk once you
+  were 18 m off; a ground squirrel's dash ended down its hole for good; past 95 m anything, a deer
+  across the field in front of you; out of its hours or habitat past 30 m, in sight or not; and every
+  animal outside the moment you stepped indoors. Now (`STAY`) an animal goes only out of sight — not
+  drawn, outside ~70° of the view, or too small to make out (its body × 600 m: a sparrow ~120 m, a
+  squirrel ~185, a deer 400); a flushed bird flies on and lands a little way on (a duck onto its water),
+  a squirrel comes down its tree head first, a burrower comes up again, and indoors the animals outside
+  wait. Counts and caps as they were. A probe walking after the nearest animal for three minutes, round
+  the houses: Central Park at 9 am 4 vanished in plain view → 0 (two woodchucks, two robins in mid-air),
+  Rumson at dawn 0 → 0; the animals about 28 → 31 and 13 → 13, their update 0.33 → 0.33 ms and 0.17 →
+  0.18 ms a frame. Tests: `crittersStay.test.ts` (9; 8 fail on the old code).
+- **5. `bug-life-origin-stack` — passing: never in the game.** The stack was a probe's reading: an
+  empty slot is hidden by zero scale, and three.js's `decompose` reads a singular matrix as scale 1 at
+  its translation — every count by `decompose` put the empty slots (each car slot in the seven model
+  meshes it isn't, and the gaps under the draw count) at (0, 0, 0). Sea Bright, three pages at once,
+  two roaming through 12 road-graph rebuilds each: none at the origin in the snapshot or drawn whole,
+  170–240 empty slots — the old stack. The same reading did bite the game: taking a parked car read a
+  hidden one as a car at the origin (`vehicles.ts hiddenInstance` now), and two review tools; the
+  debugging doc has the rule. The density table of the four reports read 150/330 m rings the stack
+  never reached.
 - **Next:** the batch, in order.
 
 ## 2026-10-08 (night) — Robby's four reports, live on feature/four-reports: walkers lit by the night, who's about by the place and the hour, a crisp watercolor, the harbour's sea (tiles v31)
