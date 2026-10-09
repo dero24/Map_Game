@@ -296,12 +296,11 @@ export class TileStream {
       if (!w) {
         const c = this.man.cell;
         // file is an absolute URL — the tile worker fetches it directly (no base prefix).
-        // &v=29 — the edge Cache API keys on the full URL; bumping alongside the
-        // worker's R2 key retires stale tile payloads. (The worker's next is t/v31, on
-        // fix/four-reports: this goes to &v=31 — and DIRECT_V with it — only once that worker is
-        // deployed. A page asking the live service for an &v it doesn't serve yet leaves its old
-        // answers at the edge under the new URL for 30 days: v30 was burned that way, 2026-10-08.)
-        const file = this.tilesBase === 'direct' ? `direct:${key}` : `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}&v=29`;
+        // &v=31 — the edge Cache API keys on the full URL; bumping alongside the
+        // worker's R2 key (t/v31) retires stale tile payloads. (Bump it only once that worker is
+        // deployed: a page asking the live service for an &v it doesn't serve yet leaves its old
+        // answers at the edge under the new URL for 30 days — v30 was burned that way, 2026-10-08.)
+        const file = this.tilesBase === 'direct' ? `direct:${key}` : `${this.tilesBase}/tile/${key}.json?olat=${this.man.origin.lat}&olon=${this.man.origin.lon}&v=31`;
         w = { id: 'w' + key, box: { x0: cx * c, z0: cz * c, x1: cx * c + c, z1: cz * c + c }, lod: 0, file, world: 1 };
         this.worldSpecs.set(key, w);
       }

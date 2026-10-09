@@ -2,22 +2,22 @@
 
 ## Start here (2026-10-08): Robby's four reports, then one gameplay plan, then the proof of concept
 
-### Where the four stand (2026-10-08, night; the work goes on from `feature/four-reports`)
+### Where the four stand (2026-10-08, night: all four passing and live; the work goes on from `feature/four-reports`)
 
 All four are fixed (LOG 2026-10-08 night has the numbers; before/after montages in the git-ignored
 `shots/fix/`, and on Robby's page https://claude.ai/artifact/J7koij7UdW1rjCzrVQmqJS). Robby: "yes,
 just all the above but just create new feature branch we will work off of" — "push change to new
 branch inatead of merging to lower48-alive". So **`feature/four-reports`** (off `fix/four-reports`)
-is the branch to work from, pushed; `feature/lower48-alive` is left as it was. The tile service's
-deploy waits on Robby running it (the permission check refuses a production deploy from a session).
+is the branch to work from, pushed and published; `feature/lower48-alive` is left as it was. Robby
+ran the tile service's deploy himself (v31, worker dffa75f6: the permission check refuses a
+production deploy from a session); the client asks `&v=31`. **Next: `gameplay-one-plan`** (below).
 
 1. `bug-night-glow-people` — **passing** (walkers lit by the night: `nightLight.ts` FIGURE).
 2. `life-density-realism` — **passing** (`lifeSim.ts` LAND: the land's share, a home street's day,
    the late hours, rural roads; the first crowd the hour's; the crowd thins as the hour turns).
 3. `look-crisp-preset` — **passing** ("crisp watercolor" in the panel's Look folder, `?look=crisp`).
-4. `bug-harbour-water` — **in progress: fixed on the branch, waiting on the deploy.** The tile
-   service is deployed before the client asks `&v=31` (the client is at the live `&v=29` until then,
-   so the branch publishes safely as it is). In order (Robby said yes; he runs step 1):
+4. `bug-harbour-water` — **passing, live** (tiles v31). How it went out, for the next tile bump —
+   the tile service is deployed before the client asks the new `&v`:
    1. `cd worker && npx wrangler deploy` (the worker's key is already `t/v31` on the branch);
    2. `node tools/must-load.mjs --live`, and the live cells round Ellis Island carry the bay as sea:
       `curl "https://map-game-tiles.map-game-tiles.workers.dev/tile/1_0.json?olat=40.703125&olon=-74.046875&v=31"`
@@ -27,9 +27,9 @@ deploy waits on Robby running it (the permission check refuses a production depl
    4. then the item `passing`, `gameplay-one-plan` `in_progress`, and `feature/four-reports` pushed
       again (that publishes; nothing is merged into `feature/lower48-alive`).
    **No v30**: this session's before captures asked the live v29 service for `&v=30` round Ellis
-   Island, and the edge keeps those answers under that URL for 30 days. Until the deploy the
-   client stays at the live `&v=29`, so a dev page serving this tree (Robby's on :5173 too) can't
-   burn v31. To look at v31 tiles before the deploy: a local worker on another port
+   Island, and the edge keeps those answers under that URL for 30 days. Until a deploy the client
+   stays at the live `&v`, so a dev page serving the tree (Robby's on :5173 too) can't burn the next
+   one. To look at a new tile version before its deploy: a local worker on another port
    (`cd worker && npx wrangler dev --port 8795 --persist-to D:/map_game_osm/wrangler-v30 --local`:
    its R2 holds the extract's index and the New York blocks 105_130 and 106_130) and the page at
    `?at=40.6995,-74.0396&tiles=http://localhost:8795`.
@@ -61,7 +61,8 @@ after". So they come first, one item at a time, in this order:
   to it and carry on. Not a `feature/` name: pushes to `main` and `feature/*` publish the game to
   GitHub Pages and run the checks (`.github/workflows/`); a `fix/` push publishes nothing, so run
   the checks on it by hand when wanted (`gh workflow run playtest.yml --ref fix/four-reports`, never
-  `pages.yml`). It goes back into `feature/lower48-alive`, which publishes, when Robby says so.
+  `pages.yml`). (It was to go back into `feature/lower48-alive`; Robby chose instead to push it to a new
+  branch to work from: `feature/four-reports`, above.)
 - **Robby's screenshots:** `C:\Users\Robby\Pictures\Screenshots\_bugs` (outside the repo: look,
   don't commit). `_water_bug3.png` is the night from Liberty State Park, the walkers pale against
   the dark ground (`bug-night-glow-people`); `_water_bug.png` and `_water_bug2.png` are the bay's

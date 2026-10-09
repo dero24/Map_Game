@@ -2,7 +2,7 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
-## 2026-10-08 (night) — Robby's four reports on fix/four-reports: walkers lit by the night, who's about by the place and the hour, a crisp watercolor, the harbour's sea
+## 2026-10-08 (night) — Robby's four reports, live on feature/four-reports: walkers lit by the night, who's about by the place and the hour, a crisp watercolor, the harbour's sea (tiles v31)
 
 On the branch `fix/four-reports` (off `feature/lower48-alive`, not pushed: Robby's OK first). One
 report at a time, in his order.
@@ -103,7 +103,20 @@ report at a time, in his order.
   cells round Ellis Island checked at `&v=31`, the client to `&v=31` and `DIRECT_V` 31, must-load
   --live, the harbour montage from the live service, `bug-harbour-water` passing, `gameplay-one-plan`
   in progress, pushed again.
-- **Next:** Robby runs the deploy; then the steps above (HANDOFF "Start here").
+- **The deploy, live (Robby ran it: worker dffa75f6).** The live cells round Ellis Island at `&v=31`,
+  cold-built from the extract: 1_0, −1_2 and 0_2 the sea over the whole cell, 0_1 the sea with Liberty
+  Island a hole, 0_0 with Ellis Island's, 2_1 round Governors Island. The client to `&v=31` and
+  `DIRECT_V` 31 (the streaming doc's line with them); `must-load --live` at `&v=31`: every town 9/9
+  cells from the extract; npm test, typecheck, build. The harbour from the live service, v29 against
+  v31, the water tiles off as in Robby's case: `shots/fix/harbour-live-before-after.jpg`, and v31 day
+  and night from Ellis Island (`hb-live31.jpg`). `bug-harbour-water` passing; `gameplay-one-plan` in
+  progress. Pushed `feature/four-reports` (the first push's checks + playtest and the Pages publish
+  passed). Robby's page updated: https://claude.ai/artifact/J7koij7UdW1rjCzrVQmqJS.
+- **A flaky test, not touched:** `waterBirds.test.ts` "on the lake…" failed once on the turkeys'
+  flocking (0.5 against 0.6) and passed four times running after: `critters.ts` reads
+  `performance.now()` for the butterflies' and the shoals' drift, so the sim's draws differ run to run.
+  The sim's own clock there would make it repeatable.
+- **Next:** `gameplay-one-plan` — one gameplay plan agreed with Robby, no code (HANDOFF "Start here").
 
 ## 2026-10-08 (late) — Robby's four reports first, then one gameplay plan, then the proof of concept; painted places keep their people
 
