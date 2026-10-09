@@ -58,6 +58,12 @@ export const postParams = {
   // …and `clarity` sharpens the paint's local contrast, `contrast` an S-curve on the whole frame
   clarity: 0,
   contrast: 0,
+  // the crisp watercolor look (Robby, 2026-10-08: "create the additional preset for better watercolor
+  // overlay"): `focal` keeps the band the eye rests on sharp — the clean frame and the paint's local
+  // contrast where the view is 5–60 m off — and leaves the near and the far to the brush (the near
+  // ground a lighter wash, toward the paper, by day); `darks` deepens the darks and keeps the lights
+  focal: 0,
+  darks: 0,
 };
 
 /** Named looks for the panel's Look menu: each is a set of postParams (the rest stay as they are). */
@@ -78,11 +84,19 @@ export const LOOKS: Record<string, Partial<typeof postParams>> = {
   'clean vibrant': { kuwaharaRadius: 2.2, kuwaharaSharpness: 12, crisp: 0.6, softGlow: 0.2, clarity: 0.35, contrast: 0.22, saturation: 1.42, vibrance: 0.55, exposure: 1.0, wobble: 0.04, edgeDarkening: 0.25, pigmentTurbulence: 0.04, granulation: 0.02, paperTexture: 0.04, ink: 0.12, inkDistance: 250, glow: 1.1, vignette: 0, nightWash: 0.35, paintDetail: 0.92, hiDpi: true, grade: 0.3, gradeShadow: '#2a7a9e', gradeLight: '#ffd9a8' },
   // watercolor HD, cleaned: the same wash with less paper and grain and a little of the clean frame
   'clean HD': { kuwaharaRadius: 3.4, kuwaharaSharpness: 11, crisp: 0.3, softGlow: 0.1, clarity: 0.2, contrast: 0.08, saturation: 1.2, vibrance: 0.3, exposure: 0.94, wobble: 0.2, edgeDarkening: 0.6, pigmentTurbulence: 0.12, granulation: 0.12, paperTexture: 0.25, ink: 0.42, inkDistance: 350, glow: 1.0, vignette: 0.25, nightWash: 0.45, paintDetail: 0.88, hiDpi: true, grade: 0.25, gradeShadow: '#3f6f8a', gradeLight: '#ffcf9a' },
+  // the default wash sharpened without leaving it (look-crisp-preset; its notes' list, cheapest first):
+  // the brush at the frame's own resolution and a finer, sharper stroke; the focal band clean and
+  // clear, the near and far loose; deeper darks; less wobble, grain and paper; a thinner torn edge
+  'crisp watercolor': { kuwaharaRadius: 3.4, kuwaharaSharpness: 11.5, saturation: 1.16, exposure: 0.92, wobble: 0.3, edgeDarkening: 0.85, pigmentTurbulence: 0.18, granulation: 0.2, paperTexture: 0.42, ink: 0.55, inkDistance: 350, glow: 0.92, vignette: 0.28, nightWash: 0.5, paintDetail: 1, hiDpi: true, grade: 0.2, vibrance: 0.22, gradeShadow: '#3f6f8a', gradeLight: '#ffcf9a', crisp: 0.12, softGlow: 0, clarity: 0.2, contrast: 0.06, focal: 0.6, darks: 0.45 },
   // opaque paint: flat, saturated shapes with soft edges, like gouache on a travel poster
   gouache: { kuwaharaRadius: 5.5, kuwaharaSharpness: 16, crisp: 0, softGlow: 0.05, clarity: 0.15, contrast: 0.12, saturation: 1.3, vibrance: 0.35, exposure: 0.96, wobble: 0.12, edgeDarkening: 0.3, pigmentTurbulence: 0.06, granulation: 0.04, paperTexture: 0.28, ink: 0.22, inkDistance: 350, glow: 0.8, vignette: 0.3, nightWash: 0.45, paintDetail: 0.7, hiDpi: true, grade: 0.3, gradeShadow: '#35607a', gradeLight: '#ffc890' },
   // soft pastel light: a dreamy bloom over clean colour
   'dreamy pastel': { kuwaharaRadius: 3, kuwaharaSharpness: 10, crisp: 0.4, softGlow: 0.5, clarity: 0, contrast: 0, saturation: 1.1, vibrance: 0.4, exposure: 1.05, wobble: 0.1, edgeDarkening: 0.35, pigmentTurbulence: 0.06, granulation: 0.04, paperTexture: 0.12, ink: 0.18, inkDistance: 300, glow: 1.2, vignette: 0.12, nightWash: 0.4, paintDetail: 0.9, hiDpi: true, grade: 0.4, gradeShadow: '#6f7fc0', gradeLight: '#ffd0c8' },
 };
+
+// (a look that doesn't set the crisp look's own knobs leaves them off: picking it after the crisp look
+// takes them away)
+for (const l of Object.values(LOOKS)) { l.focal ??= 0; l.darks ??= 0; }
 
 const TONEMAP = /* glsl */ `
 uniform float uExposure;
@@ -256,7 +270,7 @@ export class WatercolorPost {
       ${GLSL_NIGHT_GRADE}
       uniform sampler2D tExplore, tExploreFar;
       uniform vec4 uExploreBox, uExploreFarBox;
-      uniform float uSketch, uSketchFar, uCrisp, uSoftGlow, uClarity, uContrast;
+      uniform float uSketch, uSketchFar, uCrisp, uSoftGlow, uClarity, uContrast, uFocal, uDarks;
       uniform sampler2D tGhost, tGhostDepth;
       uniform vec4 uGhost, uBrush, uRipple;
       uniform mat4 uInvProj, uCamWorld;
@@ -305,8 +319,16 @@ export class WatercolorPost {
         c = mix(c, sc, (1.0 - smoothstep(0.06, 0.14, abs(farA - 0.5))) * step(0.99999, texture2D(tDepth, uv).r));
         // the cleaner looks lay the unbrushed frame back over the paint: crisp edges, flat colour
         c = mix(c, sc, uCrisp);
+        // the focal band (the crisp look): the clean frame and the paint's local contrast where the eye
+        // rests, 5–60 m off; the near and the far stay the brush's — and the near ground a lighter wash,
+        // toward the paper, by day (a painter's loose foreground)
+        float dF = texture2D(tDepth, uv).r, zF = linZ(dF), onGeo = step(dF, 0.99999);
+        float band = uFocal * smoothstep(3.0, 7.0, zF) * (1.0 - smoothstep(55.0, 140.0, zF)) * onGeo;
+        c = mix(c, sc, band * 0.45);
+        float nearF = uFocal * (1.0 - smoothstep(2.5, 6.0, zF)) * onGeo * (1.0 - uNight);
+        c = mix(c, mix(c, vec3(0.97, 0.955, 0.925), 0.4), nearF * 0.5);
         // clarity: the paint's local contrast lifted against its own small blur (clean, crisp forms)
-        c = max(c + (c - bl) * uClarity, 0.0);
+        c = max(c + (c - bl) * (uClarity + band * 0.5), 0.0);
         c = toSrgb(c);
         float lum = dot(c, vec3(0.299, 0.587, 0.114));
         c = mix(vec3(lum), c, uSat);
@@ -316,6 +338,9 @@ export class WatercolorPost {
         // contrast: a gentle S-curve (the cleaner, punchier looks)
         vec3 cc = clamp(c, 0.0, 1.0);
         c = mix(c, cc * cc * (3.0 - 2.0 * cc), uContrast);
+        // deeper darks, the lights kept (the crisp look): a toe under the mid-tones (half of it by night,
+        // whose own grade deepens its darks)
+        c *= 1.0 - uDarks * 0.35 * (1.0 - smoothstep(0.04, 0.6, lum)) * (1.0 - 0.5 * uNight);
         // split-tone grade: cool the shadows, warm the lights (value kept — hue only)
         if (uGrade > 0.001) {
           vec3 tone = mix(uGradeShadow, uGradeLight, smoothstep(0.15, 0.75, lum));
@@ -524,7 +549,7 @@ export class WatercolorPost {
         uInk: { value: 0.5 }, uInkDist: { value: 300 }, uGlow: { value: 0.8 }, uVignette: { value: 0.5 }, uSat: { value: 1 },
         uNightWash: { value: 0.5 }, uNight: { value: 0 }, uGolden: { value: 0 }, uExposure: { value: 1 }, uRaw: { value: 0 },
         uPaperColor: { value: new THREE.Color() }, uInkColor: { value: new THREE.Color() },
-        tExplore: U.uExplore, uExploreBox: U.uExploreBox, tExploreFar: U.uExploreFar, uExploreFarBox: U.uExploreFarBox, uSketch: { value: 0 }, uSketchFar: { value: 0 }, uCrisp: { value: 0 }, uSoftGlow: { value: 0 }, uClarity: { value: 0 }, uContrast: { value: 0 },
+        tExplore: U.uExplore, uExploreBox: U.uExploreBox, tExploreFar: U.uExploreFar, uExploreFarBox: U.uExploreFarBox, uSketch: { value: 0 }, uSketchFar: { value: 0 }, uCrisp: { value: 0 }, uSoftGlow: { value: 0 }, uClarity: { value: 0 }, uContrast: { value: 0 }, uFocal: { value: 0 }, uDarks: { value: 0 },
         tGhost: { value: null }, tGhostDepth: { value: null }, uGhost: U.uGhost, uBrush: U.uBrush, uRipple: U.uRipple,
         uInvProj: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() }, uWorldOff: U.uWorldOffset,
         uNightTint: { value: new THREE.Vector3(...NIGHT_GRADE.tint) }, uWarm: { value: new THREE.Color(1.08, 0.97, 0.86) },
@@ -695,6 +720,8 @@ export class WatercolorPost {
     c.uSoftGlow.value = P.softGlow;
     c.uClarity.value = P.clarity;
     c.uContrast.value = P.contrast;
+    c.uFocal.value = P.focal;
+    c.uDarks.value = P.darks;
     (c.uInvProj.value as THREE.Matrix4).copy(camera.projectionMatrixInverse);
     (c.uCamWorld.value as THREE.Matrix4).copy(camera.matrixWorld);
     (c.uPaperColor.value as THREE.Color).set(P.paperColor).convertLinearToSRGB();

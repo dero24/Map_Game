@@ -64,6 +64,13 @@ function save() {
   try { localStorage.setItem(STORE, JSON.stringify({ ...out, uniforms: u })); } catch { /* storage off */ }
 }
 
+/** The look whose knobs the paint has now (the default's name when none matches exactly). */
+function lookOf() {
+  const P = postParams as unknown as Record<string, unknown>;
+  for (const [k, l] of Object.entries(LOOKS)) if (Object.entries(l).every(([p, v]) => P[p] === v)) return k;
+  return 'watercolor HD';
+}
+
 export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: number) => void; onRespawn: () => void; onResetExplore: () => void; onSummon: (kind: 'car' | 'boat' | 'plane') => void; onSee: (kind: CritterKind) => void; onFind: (kind: CritterKind) => void; onEveryone: (on: boolean) => void }, region: { name: string; tz: string; respawn?: string }) {
   const gui = new GUI({ title: `${region.name} · tuning` });
   gui.onFinishChange(save);
@@ -73,13 +80,18 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   // Look: named presets first (each sets the watercolor knobs below), then the resolution and
   // colour-grade knobs a look is mostly made of. Picking a look saves like any other knob.
   const look = gui.addFolder('Look');
-  const pick = { look: 'watercolor HD' };
-  look.add(pick, 'look', Object.keys(LOOKS)).name('preset').onChange((k: string) => {
+  const pick = { look: lookOf(), crisp: lookOf() === 'crisp watercolor' };
+  const choose = (k: string) => {
     Object.assign(postParams, LOOKS[k]);
+    pick.look = k; pick.crisp = k === 'crisp watercolor';
     hooks.onResize();
     gui.controllersRecursive().forEach((c) => c.updateDisplay());
     save();
-  });
+  };
+  look.add(pick, 'look', Object.keys(LOOKS)).name('preset').listen().onChange(choose);
+  // the crisp watercolor look against the default, one click (Robby, 2026-10-08: "create the
+  // additional preset for better watercolor overlay")
+  look.add(pick, 'crisp').name('crisp watercolor').listen().onChange((on: boolean) => choose(on ? 'crisp watercolor' : 'watercolor HD'));
   look.add(postParams, 'paintDetail', 0.35, 1, 0.01).name('paint detail').onFinishChange(hooks.onResize);
   look.add(postParams, 'hiDpi').name('full screen resolution').onFinishChange(hooks.onResize);
   look.add(postParams, 'renderScale', 0.5, 1.5, 0.05).name('render scale').onFinishChange(hooks.onResize);
@@ -87,6 +99,8 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   look.add(postParams, 'softGlow', 0, 1, 0.01).name('soft glow');
   look.add(postParams, 'clarity', 0, 1, 0.01).name('clarity');
   look.add(postParams, 'contrast', 0, 1, 0.01).name('contrast');
+  look.add(postParams, 'focal', 0, 1, 0.01).name('focal band (5–60 m)');
+  look.add(postParams, 'darks', 0, 1, 0.01).name('deeper darks');
   look.add(postParams, 'vibrance', -0.5, 1.5, 0.01).name('vibrance');
   look.add(postParams, 'grade', 0, 1, 0.01).name('colour grade');
   look.addColor(postParams, 'gradeShadow').name('grade: shadows');

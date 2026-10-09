@@ -63,7 +63,7 @@ import { LiftRide } from './player/lift';
 import { LiftUI } from './ui/lift';
 import { applyAtmosphere, type Weather } from './world/atmosphere';
 import { U } from './render/shared';
-import { WatercolorPost, postParams } from './render/post';
+import { WatercolorPost, postParams, LOOKS } from './render/post';
 import { skyDepth, unprojectDepth, mendDepth } from './render/seen';
 import { SunShadows, shadowParams } from './render/shadows';
 import { applyTier, autoSteps, deviceInfo, isPhoneClass, pickTier, stepsPaid } from './render/quality';
@@ -146,6 +146,9 @@ async function main() {
   // manifest anchored there; every cell streams real-lite (or synth fallback) tiles.
   const VIRTUAL = !!(atLatLon && TILES && !params.get('region') && (!regions?.length || best >= 2));
   loadSettings(REGION);
+  // ?look=<a look's name> (post.ts LOOKS; 'crisp' for the crisp watercolor): the paint's look for this
+  // visit, over what the panel saved — to compare, or to send someone a look
+  { const lq = params.get('look'), k = lq === 'crisp' ? 'crisp watercolor' : lq; if (k && LOOKS[k]) Object.assign(postParams, LOOKS[k]); }
   const canvas = $('view') as HTMLCanvasElement;
   diagStage('webgl');
   let renderer: THREE.WebGLRenderer;
