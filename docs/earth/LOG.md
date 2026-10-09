@@ -2,6 +2,18 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-09 — `feature/four-reports` pushed (Robby's OK); what comes next is open
+
+Robby: "yes push it, but region work will not come next, as I will have another agent assess what to do next and regions will happen and we will use that doc as reference".
+
+- **Pushed** `feature/four-reports`: the second batch's twelve commits (entry below) and this one. A
+  `feature/` push publishes the game to GitHub Pages and runs the checks (`gh run list --branch
+  feature/four-reports`). No tile deploy: every fix is the game's, tiles stay v31.
+- **Nothing queued:** `region-match-pass` back to `not_started` — when the region pass happens,
+  `docs/REGION_MATCH.md` is its reference; no item `in_progress`. HANDOFF "Start here" lists what's
+  on the table for the assessment; AGENTS.md's router line and REGION_MATCH.md's opening say so.
+- **Next:** the assessment of what comes next, by the agent Robby has do it.
+
 ## 2026-10-08 (night, later) — Robby's second batch: the animals by night, the seawall, a city's evening, animals that stay, the origin's stack, suburbs against real photos
 
 Robby, after the four reports went live, of the page's "noticed, not changed" list: "please fix the
@@ -76,7 +88,7 @@ a change to the game alone needs none (the seawall fix is the game's: dem.ts run
   Robby's OK.
 - **Next:** the region pass (`region-match-pass`) with `docs/REGION_MATCH.md` — Robby: "soon we are going
   to focus on regions within the 16 regions … used in next session as reference"; `gameplay-one-plan`
-  waits until he says.
+  waits until he says. (2026-10-09: not next after all — entry above.)
 
 ## 2026-10-08 (night) — Robby's four reports, live on feature/four-reports: walkers lit by the night, who's about by the place and the hour, a crisp watercolor, the harbour's sea (tiles v31)
 

@@ -1,23 +1,34 @@
 # Handoff: the lower 48, alive — part 2 (2026-10-05)
 
-## Start here (2026-10-09): the region pass — each region and sub-region against the real thing
+## Start here (2026-10-09): what comes next is open — an assessment first
 
-Robby, 2026-10-08 (night): "soon we are going to focus on regions within the 16 regions so this research
-you are doing and only research for rumson amd other towns compare will bw used in next session as
-reference for how to best ensure each eegion and sub region matches qhat they actually look like in a
-super effecient atreamlined wa". So the next session starts **the region pass** (`docs/ROADMAP.md` Track
-B; feature `region-match-pass`) with **`docs/REGION_MATCH.md`**: the loop for one region in one sitting,
-the spots (place types × sub-regions), the photos (Mapillary first, its gaps filled from public photos —
-never Google Street View, not even for testing), the checklist, the knob in the code behind each layer,
-and the worked example (Rumson, Oak Park, Plano: §6). `gameplay-one-plan` and the Sea Bright proof of
-concept (below) wait until Robby says; a session unsure which comes first asks him.
+Robby, 2026-10-09, giving the OK to push `feature/four-reports`: "yes push it, but region work will not
+come next, as I will have another agent assess what to do next and regions will happen and we will use
+that doc as reference". So **the next session assesses what comes next** (Robby has another agent do
+it). Nothing is queued: `feature_list.json` has no item `in_progress`, and the "next" that `npm run init`
+prints is only the queue's order by tier and rank. Work from `feature/four-reports` (pushed and
+published; tiles v31). On the table:
 
-### Robby's second batch (2026-10-08 night → 10-09): all six done, on `feature/four-reports`, not pushed
+- **The region pass** (`region-match-pass`, `docs/ROADMAP.md` Track B): it will happen, not
+  necessarily next. When it does, **`docs/REGION_MATCH.md`** is the reference: the loop for one region
+  in one sitting, the spots (place types × sub-regions), the photos (Mapillary first, its gaps filled
+  from public photos — never Google Street View, not even for testing), the checklist, the knob in the
+  code behind each layer, and the worked example (Rumson, Oak Park, Plano: §6, its improvements ranked).
+- **One gameplay plan, agreed with Robby** (`gameplay-one-plan`, no code), and after it **the Sea
+  Bright proof of concept** (`poc-first-minute` → `poc-touch-moments` → `poc-painted-place`): below.
+- **Open bugs from his screenshots, in neither batch:** `bug-walker-into-wall`,
+  `bug-grandstaff-terrain` (below, "Robby's screenshots").
+- **Noticed in the second batch, not asked for:** Times Square and Bryant Park count as half a city by
+  `cityAt`'s built volume (a place's own nightlife — OSM's bars and theatres — would say more); a black
+  square floating in Oak Park's sky; a pagoda-shaped conifer; which kinds the surveyed trees take (the
+  pines on Rumson Road: `docs/REGION_MATCH.md` §6).
+
+### Robby's second batch (2026-10-08 night → 10-09): all six done, pushed on `feature/four-reports`
 
 Robby, after the four reports went live: "please fix the remaining bugs like this", the animals that
 vanished as he followed them, and Rumson's "too much fluffy trees" against real photos. LOG 2026-10-08
-(night, later) has the numbers. Committed one at a time on `feature/four-reports`; **not pushed** (a
-`feature/` push publishes the game: Robby's OK first). No tile version: every fix is the game's (v31
+(night, later) has the numbers. Committed one at a time on `feature/four-reports`; pushed with Robby's
+OK, 2026-10-09 (a `feature/` push publishes the game). No tile version: every fix is the game's (v31
 stays; his reminder — a fix to how the tile service builds coasts would need v32 and a deploy).
 
 1. `bug-night-pale-creatures` — **passing** (the walkers' night lighting on every creature out of doors).
@@ -112,7 +123,7 @@ after". So they come first, one item at a time, in this order:
   saying where it stands) and the paused item `in_progress` again, so the next session picks up
   where the queue was.
 
-### Then: one gameplay plan, agreed with Robby (`gameplay-one-plan`, no code)
+### One gameplay plan, agreed with Robby (`gameplay-one-plan`, no code)
 
 Robby, 2026-10-08: "there are other gameplay files that talk about that as well, we want 1 good
 streamlined approach for gameplay and want to take our time to ensure we get it right before
@@ -131,7 +142,7 @@ implementing and testing". A design session with him, not a coding one:
   record is the streamlined plan; his `for_mapgame` files only with his OK), the tier-2 items
   matching the plan, the item `passing`, and `poc-first-minute` back to `in_progress`.
 
-### Then: the Sea Bright gameplay proof of concept
+### After the plan: the Sea Bright gameplay proof of concept
 
 Robby, 2026-10-08: "soon will have to do a poc of it at least starting in sea bright", and "i like
 that it will be on a switch so it will not affect the current game". The plan's §14 is this work.

@@ -4,7 +4,9 @@ Robby, 2026-10-08: "soon we are going to focus on regions within the 16 regions 
 be used in next session as reference for how to best ensure each region and sub region matches what they
 actually look like in a super efficient streamlined way". This is that reference: one loop to run a region
 (or a sub-region) against real photos, what to look at, where in the code each thing comes from, and the
-first worked example — Rumson (NJ), Oak Park (IL) and Plano (TX), §6.
+first worked example — Rumson (NJ), Oak Park (IL) and Plano (TX), §6. (Robby, 2026-10-09: the region
+pass isn't next — another agent assesses what is — "regions will happen and we will use that doc as
+reference".)
 
 It sits on what's already built — read with it: `docs/ROADMAP.md` (the 16 regions, the scorecard, Track
 B), `docs/REGIONAL_LIFE.md` §3 (the green spots, vegetation share), `docs/NEIGHBOURHOODS.md` (estate,
