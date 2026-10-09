@@ -1758,6 +1758,7 @@ async function main() {
       }
       life.taxiShare = Math.max(0, cityHere - 0.2) * 0.45;
       life.crowd = crowdOf(townHere, cityHere) * (TIER_LIFE[tier.tier] ?? 1); // a Midtown sidewalk is busier than a shore town's (the panel's knobs per kind of place; a phone half as busy)
+      life.place = { town: townHere, city: cityHere, settled: settledHere }; // (open country and the late hours: lifeSim.ts LAND)
     }
     critters.enabled = lifeParams.enabled && !interiors.indoors;
     critters.amount = lifeParams.animals * (TIER_LIFE[tier.tier] ?? 1);

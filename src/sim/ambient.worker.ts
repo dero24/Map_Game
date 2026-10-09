@@ -2,7 +2,7 @@
 //  - 'sab' mode: straight into a SharedArrayBuffer the renderer reads (flip FRONT, bump TICK atomically)
 //  - 'copy' mode (no cross-origin isolation): into a local buffer, then copied into a transferable buffer
 //    borrowed from the renderer's pool and posted back.
-import { LifeSim } from './lifeSim';
+import { LifeSim, type LifeEnv } from './lifeSim';
 import { H, SIM_HZ, layout, views, type LifeInit } from './protocol';
 
 interface WorkerScope { postMessage(msg: unknown, transfer?: Transferable[]): void; onmessage: ((e: MessageEvent) => void) | null }
@@ -19,21 +19,25 @@ let avgCost = 0;
 let paused = false;
 let timer: ReturnType<typeof setTimeout> | 0 = 0;
 
+/** The page's env as the header holds it. */
+const envOf = (h: Int32Array): LifeEnv => ({
+  playerX: h[H.PLAYER_X] / 100,
+  playerZ: h[H.PLAYER_Z] / 100,
+  night: h[H.NIGHT] / 1000,
+  hour: h[H.HOUR] / 100,
+  density: h[H.DENSITY] / 100,
+  wind: h[H.WIND] / 1000,
+  clock: h[H.CLOCK] / 100,
+  playerYaw: h[H.PLAYER_YAW] / 1000,
+  place: h[H.SETTLED] < 0 ? undefined : { town: h[H.TOWN] / 1000, city: h[H.CITY] / 1000, settled: h[H.SETTLED] / 1000 },
+});
+
 function tick() {
   timer = 0;
   if (!sim || paused) return;
   const t0 = performance.now();
   const h = V.header;
-  sim.setEnv({
-    playerX: h[H.PLAYER_X] / 100,
-    playerZ: h[H.PLAYER_Z] / 100,
-    night: h[H.NIGHT] / 1000,
-    hour: h[H.HOUR] / 100,
-    density: h[H.DENSITY] / 100,
-    wind: h[H.WIND] / 1000,
-    clock: h[H.CLOCK] / 100,
-    playerYaw: h[H.PLAYER_YAW] / 1000,
-  });
+  sim.setEnv(envOf(h));
   const dt = 1 / SIM_HZ;
   sim.step(dt);
   const back = 1 - h[H.FRONT];
@@ -66,7 +70,7 @@ ctx.onmessage = (e: MessageEvent) => {
       for (const b of d.pool as ArrayBuffer[]) pool.push(b);
       V.header.set(d.header as Int32Array);
     }
-    sim = new LifeSim(init);
+    sim = new LifeSim(init, undefined, envOf(V.header)); // (the first crowd the hour's and the place's)
     ctx.postMessage({ kind: 'ready', mode });
     tick();
   } else if (d.kind === 'bump' && sim) {
@@ -89,5 +93,6 @@ ctx.onmessage = (e: MessageEvent) => {
     V.header.set((d.header as Int32Array).subarray(H.PLAYER_X, H.WIND + 1), H.PLAYER_X);
     V.header[H.CLOCK] = (d.header as Int32Array)[H.CLOCK];
     V.header[H.PLAYER_YAW] = (d.header as Int32Array)[H.PLAYER_YAW];
+    V.header.set((d.header as Int32Array).subarray(H.TOWN, H.SETTLED + 1), H.TOWN);
   }
 };

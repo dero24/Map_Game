@@ -1,10 +1,15 @@
 // Ambient life simulation: gulls, cars, pedestrians, boats. Structure-of-arrays typed stores, a seeded
 // xorshift RNG and a fixed timestep, so a given seed + input sequence always yields the same town.
 import { makeRng, type Rng } from '../core/rng';
-import { CAPS, RANGES, S, type LifeInit } from './protocol';
+import { CAPS, RANGES, S, SIM_HZ, type LifeInit } from './protocol';
 import { CTL, STOP_BACK, signalState } from './traffic';
 
-export interface LifeEnv { playerX: number; playerZ: number; night: number; hour: number; density: number; wind: number; clock: number; playerYaw?: number }
+export interface LifeEnv { playerX: number; playerZ: number; night: number; hour: number; density: number; wind: number; clock: number; playerYaw?: number; place?: Place }
+/** The place about the walker, 0–1 each (main.ts): `town` a main street's shops or a city (townAt),
+ *  `city` a city's built volume (cityAt), `settled` how lived-in the land is — a suburb's houses, a
+ *  town's shops (settledHere). Absent (tests about something else): the land and the late hours
+ *  change nothing. */
+export interface Place { town: number; city: number; settled: number }
 
 const ST = { WALK: 0, PAUSE: 1, BEACH: 2, FLY: 3, STAND: 4, LAND: 5, TO_DOOR: 6, INSIDE: 7, FROM_DOOR: 8, DOWN: 9, CHAT: 10, CROSS: 11, IN_WALK: 12, IN_STAY: 13, IN_OUT: 14 } as const;
 /** Inside the building standing open (`setIndoor`): walking in to a place, there, walking back out. */
@@ -25,6 +30,71 @@ const BOX = 3; // cars that may share a junction's box, their ways not crossing
  *  stays 1, a mid-morning's 0.4 becomes 0.3). Robby, 2026-10-06: crowded in some spots, not all the time.
  *  (Tests about something else pin it to 1, as they do FLOW.) */
 export const RHYTHM = { peak: 1.3 };
+/** Who's about where nobody lives, and late at night. Robby, 2026-10-07: "it is still so crowded at
+ *  nighttime in a lot of places where it shouldnt be and like random desert roads are crowded too".
+ *  The walkers' count was the place's rhythm × the crowd knobs everywhere: an empty desert road took
+ *  the suburbs' share (157 walkers at 8 pm, the desert's evening), a suburb at 10 pm a shore town's
+ *  dinner stroll; and each class of road carried a town's traffic wherever it ran.
+ *  - A main street (and a city's core) keeps its place's rhythm; a home street keeps its own day
+ *    (homeCurve: in by 21:00), and fewer go out after dark (`dark`); a main street thins from 20:30
+ *    (`main`: gone from 23:30 to 4:00), a city's core doesn't.
+ *  - `country`: open land's share of the walkers (none settled, no footpaths about): a hiker now and
+ *    then. A footpath's length about the walker counts as settled (`paths` m within the bubble's
+ *    350 m: as walked as a suburb): a park, a campus, a trail.
+ *  - `rural`: the share of a town's traffic each rank of road carries out in the country (residential
+ *    and farm roads, tertiary, secondary, primary and trunk): a desert road a car every few minutes.
+ *  - `beachDark`: how much of the beach's share of the walkers goes home after dark. */
+export const LAND = { country: 0.02, paths: 1500, rural: [0, 0, 0.05, 0.08, 0.1, 0.15], dark: 0.5, main: 0.85, beachDark: 0.9 };
+const sstep = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+type Rhythm = NonNullable<LifeInit['rhythm']>;
+/** The walkers or cars of a place's day by the hour (0–1 of its peak, before RHYTHM.peak): protocol.ts
+ *  Rhythm. A shore town: pre-dawn trickle, morning rush, the beach crowd builds toward mid-afternoon,
+ *  a dinner-and-stroll bump after eight, then the streets empty. */
+export function rhythmCurve(rhythm: Rhythm, kind: 'car' | 'ped', h: number) {
+  const bell = (c: number, w: number) => Math.max(0, 1 - ((h - c) / w) ** 2);
+  if (rhythm === 'town') {
+    // commute, lunch, errands after work, an evening stroll
+    return kind === 'car'
+      ? 0.1 + 0.25 * bell(13.5, 6.5) + 0.5 * bell(8, 1.6) + 0.3 * bell(12.5, 2) + 0.55 * bell(17.3, 2) + 0.2 * bell(20, 2)
+      : 0.06 + 0.3 * bell(13.5, 6.5) + 0.35 * bell(8.2, 1.8) + 0.4 * bell(12.5, 1.8) + 0.45 * bell(16.5, 2.5) + 0.3 * bell(19.5, 2);
+  }
+  if (rhythm === 'desert') {
+    // busy in the cool of the morning and after sunset, a midday lull in the heat
+    return kind === 'car'
+      ? 0.1 + 0.2 * bell(13.5, 6.5) + 0.5 * bell(7.8, 1.8) + 0.5 * bell(17.5, 2) + 0.35 * bell(20.5, 2)
+      : 0.05 + 0.12 * bell(13.5, 6.5) + 0.55 * bell(7.8, 2) + 0.7 * bell(19.8, 2.2);
+  }
+  if (kind === 'car') return 0.1 + 0.45 * bell(8.3, 2.2) + 0.55 * bell(15, 4.5) + 0.35 * bell(19, 2.5);
+  // (+ a coffee-run morning and a lunch hour: downtown is never empty 8 am – 8 pm)
+  return 0.06 + 0.5 * bell(8.5, 2.5) + 0.35 * bell(12.5, 2.5) + 0.85 * bell(15.5, 4) + 0.3 * bell(20.5, 2.5);
+}
+/** A home street's walkers by the hour (0–1 of its peak, before RHYTHM.peak): the dog and the early
+ *  jog, the late morning's errands, after school and work, a walk after dinner — and in by 21:00. In
+ *  the desert the midday heat keeps them in too. */
+export function homeCurve(rhythm: Rhythm, h: number) {
+  const bell = (c: number, w: number) => Math.max(0, 1 - ((h - c) / w) ** 2);
+  const f = 0.02 + 0.35 * bell(7.5, 1.8) + 0.3 * bell(11, 2.5) + 0.55 * bell(16.5, 3) + 0.25 * bell(19.3, 1.5);
+  return rhythm === 'desert' ? f * (1 - 0.6 * bell(13.5, 3)) : f;
+}
+/** The walkers out in this place at this hour (0–1 of the cap's share; night 0 day … 1 night): its
+ *  home streets' day and its main street's rhythm by how much of a town it is, a city's core its
+ *  rhythm, all of it by the land's share (`settled`: the place's, or its footpaths'). */
+export function pedShare(rhythm: Rhythm, h: number, night: number, p: Place, settled = p.settled) {
+  const main = Math.min(1, rhythmCurve(rhythm, 'ped', h)) ** RHYTHM.peak;
+  const home = Math.min(1, homeCurve(rhythm, h)) ** RHYTHM.peak * (1 - LAND.dark * clamp01(night));
+  const t = h < 6 ? h + 24 : h; // (6:00 … 30:00: the night in one piece)
+  const late = 1 - LAND.main * sstep(20.5, 23.5, t) * (1 - sstep(28, 29.5, t));
+  const town = clamp01(p.town), city = clamp01(p.city);
+  return ((home + (main * late - home) * town) * (1 - city) + main * city) * landShare(settled);
+}
+/** The land's share of the walkers (settled 0: open country … 0.6 and over: all of them). */
+export function landShare(settled: number) { return LAND.country + (1 - LAND.country) * sstep(0, 0.6, settled); }
+/** The share of a town's traffic a road of this rank carries here (settled 0: out in the country). */
+export function ruralShare(rank: number, settled: number) {
+  const r = LAND.rural[Math.max(0, Math.min(5, rank))];
+  return r + (1 - r) * sstep(0, 0.6, settled);
+}
 /** Switches for the flow bench (scratch/flow.mts). */
 export const FLOW = { curves: true, share: true, demand: true };
 /** Cars a kilometre of street carries at the day's peak (both ways), by rank — from the volumes each
@@ -97,7 +167,12 @@ export class LifeSim {
   /** `prev`: the sim on the previous road graph. Its agents carry over (snapped onto the new
    *  graph by position), so streaming tiles in never resets the town — the same cars keep
    *  driving and the same people keep walking. */
-  constructor(private w: LifeInit, prev?: LifeSim) {
+  /** env: the page's as it stands when the sim starts (the worker reads it from the header) — the first
+   *  crowd is the hour's and the place's, not a noon crowd at full density thinning out a walker every
+   *  half second; and while the place isn't known yet (main sets it within a frame or two) the first
+   *  crowd waits for it. Absent (tests): the crowd at once, as the env stands. */
+  constructor(private w: LifeInit, prev?: LifeSim, env?: Partial<LifeEnv>) {
+    if (env) this.setEnv(env);
     const D = w.doors;
     for (let k = 0; k < D.length / 6; k++) {
       const g = Math.floor(D[k * 6 + 3] / 30) * 92821 + Math.floor(D[k * 6 + 5] / 30);
@@ -144,7 +219,7 @@ export class LifeSim {
     // how many cars the network can hold in free flow (~25 m a car) — more than that is a traffic jam
     for (let e = 0; e < w.edgeLen.length; e++) if (this.drivable(e)) this.drivableLen += w.edgeLen[e];
     if (prev) this.adopt(prev);
-    else this.spawnAll();
+    else this.spawnAll(!!env && !env.place);
     this.px.set(this.x); this.py.set(this.y); this.pz.set(this.z); this.pyaw.set(this.yaw);
   }
 
@@ -367,6 +442,7 @@ export class LifeSim {
   // radius (~250 m) nose to tail, and a beach town's half-kilometre at its own pace.
   private bubble = { car: 600, ped: 330 };
   private carDemand = 0; // cars the streets round the walker carry at the day's peak (CARS_PER_KM)
+  private footLen = 0; // metres of footpath (paths, footways, pedestrian ways) within 350 m: a walked place
   private mids: Float32Array | null = null;
   private sizeBubble() {
     const w = this.w, E = w.edgeLen.length, px = this.env.playerX, pz = this.env.playerZ;
@@ -374,9 +450,15 @@ export class LifeSim {
       this.mids = new Float32Array(E * 2);
       for (let e = 0; e < E; e++) { this.sample(e, w.edgeLen[e] * 0.5, this.tmp); this.mids[e * 2] = this.tmp[0]; this.mids[e * 2 + 1] = this.tmp[2]; }
     }
-    const R = 350;
-    let len = 0, dem = 0;
-    for (let e = 0; e < E; e++) if (this.drivable(e) && Math.abs(this.mids[e * 2] - px) < R && Math.abs(this.mids[e * 2 + 1] - pz) < R && Math.hypot(this.mids[e * 2] - px, this.mids[e * 2 + 1] - pz) < R) { len += w.edgeLen[e]; dem += (w.edgeLen[e] * CARS_PER_KM[Math.min(5, this.rank(e))]) / 1000; }
+    const R = 350, settled = this.env.place ? this.env.place.settled : 1;
+    let len = 0, dem = 0, foot = 0;
+    for (let e = 0; e < E; e++) {
+      if (Math.abs(this.mids[e * 2] - px) >= R || Math.abs(this.mids[e * 2 + 1] - pz) >= R || Math.hypot(this.mids[e * 2] - px, this.mids[e * 2 + 1] - pz) >= R) continue;
+      // (out in the country a road carries a share of a town's traffic: LAND.rural)
+      if (this.drivable(e)) { len += w.edgeLen[e]; dem += (w.edgeLen[e] * CARS_PER_KM[Math.min(5, this.rank(e))] * ruralShare(this.rank(e), settled)) / 1000; }
+      else if (this.walkable(e)) foot += w.edgeLen[e];
+    }
+    this.footLen = foot;
     const rho = Math.max(1e-4, len / (Math.PI * R * R)); // metres of street per m²
     const r = (n: number, per: number) => Math.sqrt((n * per) / (Math.PI * rho));
     if (FLOW.demand) {
@@ -450,7 +532,9 @@ export class LifeSim {
   }
 
   // ---------------- spawning ----------------
-  private spawnAll() {
+  /** The first crowd waits for the place (seedCrowd at the first step that knows it). */
+  private awaitPlace = false;
+  private spawnAll(wait = false) {
     const [g0, g1] = RANGES.gulls;
     for (let i = g0; i < g1; i++) this.spawnGull(i);
     const [c0, c1] = RANGES.cars;
@@ -459,7 +543,12 @@ export class LifeSim {
     for (let i = p0; i < p1; i++) this.variant[i] = Math.floor(this.rng.float() * 10);
     const [b0, b1] = RANGES.boats;
     for (let i = b0; i < b1; i++) this.spawnBoat(i);
-    // the initial crowd, in the bubble round the walker (a city is busy the moment you arrive)
+    if (wait) this.awaitPlace = true;
+    else this.seedCrowd();
+  }
+  /** The initial crowd, in the bubble round the walker (a city is busy the moment you arrive). */
+  private seedCrowd() {
+    const [c0] = RANGES.cars, [p0] = RANGES.peds;
     this.sizeBubble();
     const cars = this.desired('car'), peds = this.desired('ped');
     for (let i = c0; i < c0 + cars; i++) this.spawnCar(i, 'init');
@@ -553,7 +642,8 @@ export class LifeSim {
 
   private spawnPed(i: number, far: boolean | 'init' = false) {
     const [dx0, dz0, dx1, dz1] = this.w.downtown;
-    const beach = this.rng.float() < 0.3 && this.w.beachPts.length > 0;
+    // (after dark the beach's share goes home: LAND.beachDark)
+    const beach = this.rng.float() < 0.3 * (this.env.place ? 1 - LAND.beachDark * this.env.night : 1) && this.w.beachPts.length > 0;
     this.active[i] = 1;
     // who they are, not just where: a jogger (fast, never stops), a dog walker (the dog trots on a
     // lead ahead of them — life.ts draws it), or out for a walk
@@ -646,33 +736,25 @@ export class LifeSim {
   // ---------------- density by time of day ----------------
   private desired(kind: 'car' | 'ped', raw = false) {
     const h = this.env.hour, d = this.env.density;
-    // the place's day (protocol.ts Rhythm). A shore town: pre-dawn trickle, morning rush, the beach
-    // crowd builds toward mid-afternoon, dinner-and-stroll bump after eight, then the streets empty
-    const bell = (c: number, w: number) => Math.max(0, 1 - ((h - c) / w) ** 2);
-    let f: number;
-    const rhythm = this.w.rhythm ?? 'shore';
-    if (rhythm === 'town') {
-      // commute, lunch, errands after work, an evening stroll
-      f = kind === 'car'
-        ? 0.1 + 0.25 * bell(13.5, 6.5) + 0.5 * bell(8, 1.6) + 0.3 * bell(12.5, 2) + 0.55 * bell(17.3, 2) + 0.2 * bell(20, 2)
-        : 0.06 + 0.3 * bell(13.5, 6.5) + 0.35 * bell(8.2, 1.8) + 0.4 * bell(12.5, 1.8) + 0.45 * bell(16.5, 2.5) + 0.3 * bell(19.5, 2);
-    } else if (rhythm === 'desert') {
-      // busy in the cool of the morning and after sunset, a midday lull in the heat
-      f = kind === 'car'
-        ? 0.1 + 0.2 * bell(13.5, 6.5) + 0.5 * bell(7.8, 1.8) + 0.5 * bell(17.5, 2) + 0.35 * bell(20.5, 2)
-        : 0.05 + 0.12 * bell(13.5, 6.5) + 0.55 * bell(7.8, 2) + 0.7 * bell(19.8, 2.2);
-    } else if (kind === 'car') {
-      f = 0.1 + 0.45 * bell(8.3, 2.2) + 0.55 * bell(15, 4.5) + 0.35 * bell(19, 2.5);
-    } else {
-      // (+ a coffee-run morning and a lunch hour: downtown is never empty 8 am – 8 pm)
-      f = 0.06 + 0.5 * bell(8.5, 2.5) + 0.35 * bell(12.5, 2.5) + 0.85 * bell(15.5, 4) + 0.3 * bell(20.5, 2.5);
-    }
+    const rhythm = this.w.rhythm ?? 'shore', P = this.env.place;
     // (the peaks kept, the hours between them thinner: a quiet morning street, a busy afternoon)
-    f = Math.min(1, f) ** RHYTHM.peak;
+    let f = Math.min(1, rhythmCurve(rhythm, kind, h)) ** RHYTHM.peak;
+    // walkers: the home streets' day and the main street's, out in the country next to none (a footpath
+    // network counts as settled) — LAND
+    if (kind === 'ped' && P) f = pedShare(rhythm, h, this.env.night, P, Math.max(P.settled, (0.6 * this.footLen) / LAND.paths));
     const cap = kind === 'car' ? Math.min(CAPS.cars, Math.floor(this.drivableLen / 25)) : CAPS.peds;
+    // (where the place is known, a want under one is a share of the time, not none: a slow coin)
+    const round = (n: number) => (P ? Math.floor(n + this.luck(kind)) : Math.round(n));
     // cars: what the streets round the walker carry at this hour (by their class)
-    if (kind === 'car' && FLOW.demand) { const n = Math.round(this.carDemand * f * d); return raw ? n : Math.min(cap, n); }
-    return Math.min(cap, Math.round(cap * f * d * 0.9));
+    if (kind === 'car' && FLOW.demand) { const n = round(this.carDemand * f * d); return raw ? n : Math.min(cap, n); }
+    return Math.min(cap, round(cap * f * d * 0.9));
+  }
+  /** A slow coin (0–1, a new toss each minute of the sim): a count's fraction rounds up this share of the
+   *  time — on a desert road a car every few minutes, out in the country a walker now and then. (From the
+   *  tick, not the rng: the town's own draws stay as they were.) */
+  private luck(kind: 'car' | 'ped') {
+    const k = Math.floor(this.tick / (60 * SIM_HZ)) * 2 + (kind === 'car' ? 1 : 0);
+    return (Math.imul((k + 1) ^ this.w.seed, 2654435761) >>> 0) / 4294967296;
   }
 
   private manage(range: readonly [number, number], want: number, spawn: (i: number) => void, farDist: number) {
@@ -1785,6 +1867,7 @@ export class LifeSim {
   }
 
   step(dt: number) {
+    if (this.awaitPlace && this.env.place) { this.awaitPlace = false; this.seedCrowd(); }
     this.tick++;
     this.stepGulls(dt);
     this.stepCars(dt);

@@ -15,7 +15,7 @@ import { propMaterial } from '../render/propMaterial';
 import { activeStyle } from '../world/styles';
 import { personLib, warmthFor, leadHand, atWorld, SHIRTS } from '../assets/people';
 import { dogLib, dogMaterial, DOG_COATS, DOG_COLLAR } from '../assets/fauna';
-import { PED } from './lifeSim';
+import { PED, type Place } from './lifeSim';
 
 // Moving boats offshore: the working/pleasure mix (skiffs and pontoons stay moored near shore).
 const LIFE_BOATS: BoatType[] = ['console', 'cabin', 'sail', 'lobster', 'skiff'];
@@ -503,6 +503,7 @@ export class LifeClient {
     this.V = views(this.buf);
     this.V.header[H.DENSITY] = 100;
     this.V.header[H.HOUR] = 1200;
+    this.V.header[H.SETTLED] = -1; // (the place not known yet: main sets it)
     this.spawn(init);
 
     // One InstancedMesh per model variant (the asset kit's car / boat types); an agent shows
@@ -677,6 +678,8 @@ export class LifeClient {
     const hdr = [Math.round(player.x * 100), Math.round(player.z * 100), Math.round(env.night * 1000), Math.round(env.hour * 100), Math.round(lifeParams.density * this.crowd * 100), Math.round(env.wind * 1000)];
     h[H.PLAYER_X] = hdr[0]; h[H.PLAYER_Z] = hdr[1]; h[H.NIGHT] = hdr[2]; h[H.HOUR] = hdr[3]; h[H.DENSITY] = hdr[4]; h[H.WIND] = hdr[5];
     h[H.CLOCK] = Math.round((env.clock ?? now / 1000) * 100) | 0;
+    const P = this.place;
+    h[H.TOWN] = P ? Math.round(P.town * 1000) : 0; h[H.CITY] = P ? Math.round(P.city * 1000) : 0; h[H.SETTLED] = P ? Math.round(P.settled * 1000) : -1;
     h[H.PLAYER_YAW] = Math.round((((player.yaw % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI) * 1000);
     if (!this.sab && this.envFrame++ % 3 === 0) this.worker.postMessage({ kind: 'env', header: h.slice() });
 
@@ -872,6 +875,9 @@ export class LifeClient {
   taxiShare = 0;
   /** crowd multiplier for the place (main: 1 in town, up to ~2.6 among towers) */
   crowd = 1;
+  /** the place about the walker (main: townAt, cityAt, settledHere): the walkers out in the country and
+   *  late at night, the traffic out in the country (lifeSim.ts LAND); null: not known yet */
+  place: Place | null = null;
   /** the open-air surface at (x,z) nearest height y (main: WalkWorld.outdoorNear) — cars pitch
    *  and roll to it; null keeps them level on the sim's centreline height */
   ground: ((x: number, z: number, y: number) => number) | null = null;

@@ -27,6 +27,11 @@ export const H = {
   ACTIVE: 9,
   CLOCK: 10, // the shared clock (uTime) in centiseconds — traffic signals run on it
   PLAYER_YAW: 11, // the way the walker faces (rad * 1000): nothing pops into view
+  // the place about the walker (lifeSim.ts Place, * 1000): a main street's or a city's share, a city's,
+  // how settled the land is (−1: not known yet — the land and the late hours change nothing)
+  TOWN: 12,
+  CITY: 13,
+  SETTLED: 14,
   SIZE: 16,
 } as const;
 
