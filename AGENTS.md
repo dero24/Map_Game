@@ -70,7 +70,7 @@ Context low? Wrap early — write state before polish. A clean handoff beats a r
 
 - `docs/ROADMAP.md` — **the road to 1.0**: where the whole project stands, the 16 regions, how the work divides (build by system, check by region; tracks A–E), the milestones in order, what 1.0 is, and the region scorecard to keep up to date
 
-- `docs/earth/HANDOFF.md` — **picking up from another session? read it first**: where the work stands, what comes next and in what order (now: the Sea Bright gameplay proof of concept; before it, the lower 48 alive: canopy layer, ecoregions, the flora and wildlife packages), how to check it, Robby's rules
+- `docs/earth/HANDOFF.md` — **picking up from another session? read it first**: where the work stands, what comes next and in what order (now: Robby's four reports, then one gameplay plan agreed with him, then the Sea Bright gameplay proof of concept; before them, the lower 48 alive: canopy layer, ecoregions, the flora and wildlife packages), how to check it, Robby's rules
 
 - `docs/GAMEPLAY_STREAMLINED.md` — **the gameplay plan of record; read before any gameplay work** (decided with Robby 2026-10-08): the world colours as you look; 3–5 pencil things near you, picked out of sight, and the tap is the one way to collect; tap anything coloured to touch it; paintings with gold-edged moments; the back of the van is your base and the paintings you hang there are places you step into. §13 the build order, §14 **the Sea Bright proof of concept** (`poc-first-minute` → `poc-touch-moments` → `poc-painted-place`), §15 the pacing numbers. Where it and the vision disagree, it wins.
 

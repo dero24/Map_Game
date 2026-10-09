@@ -2,6 +2,40 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-08 (late) — Robby's four reports first, then one gameplay plan, then the proof of concept; painted places keep their people
+
+Robby, on the plan's third part (the van and the first painted place): it "kinda makes no sense, why
+not have people or cars when stepping into the painting? and I think the van being bigger on the
+inside then outside looking, is that addressed?" Then: "okay i guess it should fix those first" (his
+four reports of 2026-10-07), and "there are other gameplay files that talk about that as well, we
+want 1 good streamlined approach for gameplay and want to take our time to ensure we get it right
+before implementing and testing and i like that it will be on a switch so it will not affect the
+current game, so yeah we can have the new session fix the bugs first, and then we can do the
+gameplay implementation after".
+
+- **Painted places keep their people and traffic** (`docs/GAMEPLAY_STREAMLINED.md` §5): the hour
+  and weather held, the place's life going on as at that hour: held, not frozen. The draft had them
+  quiet; now a quiet painted place is one painted at a quiet hour. The life sim already runs from
+  the hour it's given (`life.update(…, { hour: timeParams.hour, … })`, main.ts ~1642), so holding
+  the hour holds the mix. Two open questions added (§16): the very same passers-by or the same mix;
+  whether a busy painted place makes shy animals hide.
+- **The van, bigger on the inside:** it was in §6 as one line (and in the vision); now §11 and the
+  proof of concept show it on the first morning: wake in a room, step out, look back at a small van.
+- **The order:** `bug-night-glow-people` (active) → `life-density-realism` → `look-crisp-preset` →
+  `bug-harbour-water` (a new tile version; ask Robby before deploying) → **`gameplay-one-plan`**
+  (new: every gameplay file folded into the streamlined plan with Robby, section by section, no
+  code; the files are listed in its verification and in the HANDOFF) → the proof of concept
+  (`poc-first-minute` paused, with a note). The four re-ranked first in tier 1; notes on
+  `poc-painted-place`, `painted-places`, `van-home-start`, `growing-home`, `habitats-visitors`,
+  `life-density-realism`; the HANDOFF's "Start here", ROADMAP, AGENTS and the plan's Decisions
+  updated, `for_mapgame/GAMEPLAY_STREAMLINED.md` synced. The HANDOFF also says how a session Robby
+  starts for another item hands the queue back.
+- **Verified:** `npm run init -- --fast`: typecheck clean; 135 features (60 passing, 68 not started,
+  5 superseded, 1 in progress); "next: tier 1 · bug-night-glow-people (in progress)". Docs and the
+  feature list only; no code changed.
+
+Next: `bug-night-glow-people`.
+
 ## 2026-10-08 (night) — The gameplay plan decided; the Sea Bright proof of concept queued (`poc-first-minute` active)
 
 Robby asked where the world stands on feeling alive and functional, and for a review and rating of

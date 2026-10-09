@@ -5,8 +5,8 @@ The plan of record for the game (2026-10-08). Robby's direction, reasoned throug
 bottom). It is a shorter, tighter version of `GAMEPLAY_VISION.md`: where the two disagree, this one
 wins; the vision keeps the detail this leaves out (the rares table, time and weather, the edge
 cases, the ideas). Multiplayer details stay in `MULTIPLAYER_PLAN.md` (Robby's `for_mapgame`
-folder); section 10 here only says how they fit. The order of work is section 13, and what comes
-next is the Sea Bright proof of concept (section 14). Add ideas at the bottom.
+folder); section 10 here only says how they fit. The order of work is section 13, and its first
+step is the Sea Bright proof of concept (section 14). Add ideas at the bottom.
 
 **In one line:** you travel a real America in a camper van. The world colours in as you look at
 it; the few things still in pencil are yours to paint and keep. Your base is the back of the van,
@@ -158,9 +158,11 @@ same gesture means two things, and the picture tells you which.
 - **you can walk about 250 m from where you painted it** (to tune by playing);
 - **past that, the world is still there, drawn in pencil,** the way a watercolour stops where the
   wash ends: you see the far shore and the hills as a sketch, but you can't walk out into them;
-- the light and weather stay as they were: a beach at golden hour stays at golden hour;
-- **quiet:** no people, no traffic. It's your escape from the real world. Real buildings stand as
-  scenery.
+- **the hour and the weather hold,** so a beach at golden hour stays at golden hour;
+- **held, not frozen: the place's life goes on** as it was at that hour. People stroll, cars pass,
+  boats come and go, the waves roll, as many as that place has at that hour: a boardwalk painted
+  on a summer evening is busy, and the same beach painted at dawn is nearly empty, so when you
+  paint decides how lively it is. They're the place's own passers-by, never other players.
 
 **Going in and out.** The painting fills your view as a pencil sketch, then washes into colour
 around you, which also covers any loading. To leave, step back through the frame, which hangs
@@ -204,8 +206,10 @@ reason to create paintings of the same place in different seasons.
 - **the driver's door** goes to the driver's seat;
 - **from the driver's seat you can get up and walk into the back.** If a destination is set, the
   van drives itself; if not, it parks.
-- **Bigger on the inside:** small from outside, and the windows always show the van's real view
-  at van height, parked or moving.
+- **Bigger on the inside:** from outside it's an ordinary camper van; inside, even the first room
+  is bigger than the van could hold, and so is every room added later. You find out on the first
+  morning: you wake in a room, step out the back door and look back at a small van. The windows
+  always show the van's real view at van height, parked or moving.
 
 **It starts small:** a bed, the map table, a little floor and one wall with room for one painting.
 
@@ -299,14 +303,15 @@ trip.
 2. **"Start near you?"** With your consent, the game starts at a public spot in your own town (the
    centre, a park, a viewpoint), found at city level only and never stored. With no consent or no
    fix, you start in Sea Bright.
-3. **Step out the back door.** The town colours in as you look around. Near the van, a few things
-   are still pencil: a gull on a post, a bench, a tree. (These first ones are there as you step
-   out; after them, new pencil things are picked out of sight.)
+3. **Step out the back door and look back:** the room you woke in is inside that small camper van.
+   The town colours in as you look around. Near the van, a few things are still pencil: a gull on
+   a post, a bench, a tree. (These first ones are there as you step out; after them, new pencil
+   things are picked out of sight.)
 4. **Walk up to the gull and tap it.** It colours and lifts into your field guide.
 5. **On the beach, tap the gulls:** you toss a crumb, they gather and bunch up, then lift off
    together. Create a painting as they rise: your first gold edge.
-6. **Back in the van, hang it on the wall and step in.** Your own beach, at that moment. Release
-   your gull there.
+6. **Back in the van, hang it on the wall and step in.** Your own beach, at that moment: the same
+   light, people strolling, gulls over the water. Release your gull there.
 7. **A note on the map:** "Herons come to the dock at dusk."
 
 ## 12. What this changes from GAMEPLAY_VISION.md
@@ -329,15 +334,16 @@ going quiet, the tap within about 30 m and the splash when too far, cards of the
 
 ## 13. Build order: playable steps, each answering one question
 
-0. **The Sea Bright proof of concept** (next; section 14): the first ten minutes, rough, from end
-   to end, behind a switch. *Are ten minutes fun, and does stepping into your own painting make
+0. **The Sea Bright proof of concept** (section 14; after four fixes to the world that Robby put
+   first, and once he has agreed this as the one gameplay plan): the first ten minutes, rough, from
+   end to end, behind a switch. *Are ten minutes fun, and does stepping into your own painting make
    people say "whoa"?*
 1. **The first minute, built properly:** colouring by sight, the pencil things, collecting, touch
    features for a few families (gull, heron, crab, people, bench, water), moments and gold edges.
    *Are ten minutes fun?*
 2. **The van and the first painted place:** the back door to the base, the wall, hanging a
-   painting, stepping in (its tiles saved, pencil past the edge), releasing an animal, placing an
-   object. *Do I want to come back tomorrow?*
+   painting, stepping in (its tiles saved, its hour held and its life going on, pencil past the
+   edge), releasing an animal, placing an object. *Do I want to come back tomorrow?*
 3. **Habitats and milestones:** fitting and unfitting places, young and visitors, sets, the base
    growing. *Does my base pull me back?*
 4. **The road:** the map table, self-driving, sleeping through legs with stops for a reason, a
@@ -360,9 +366,9 @@ Each step is an item in `feature_list.json` (tier 2), in this order.
   in the world can be tapped yet;
 - **animals:** the wildlife sim and the regional abundance tables (`sim/critters.ts`,
   `assets/fauna.ts`): they turn up by real abundance, range and season, and today only ever flee;
-- **painted places:** `?at=`, `date=` and `hour=` links and the teleport arrival; switches that
-  turn people, traffic and animals off. Nothing yet freezes the clock, sets the weather or keeps
-  the walker inside a radius;
+- **painted places:** `?at=`, `date=` and `hour=` links and the teleport arrival; the people and
+  traffic already run from the hour they're given (`sim/life.ts`), so holding the hour holds their
+  mix. Nothing yet holds the clock, sets the weather or keeps the walker inside a radius;
 - **inside buildings:** interiors furnished by building type (`world/interior/`), every piece
   static;
 - **placing:** the vehicle placing solvers (`player/place.ts`);
@@ -384,10 +390,11 @@ keeping are built properly in steps 1 and 2.
 2. **Touch and moments** (`poc-touch-moments`): tap a bench to sit; tap the gulls to toss a crumb:
    they come, bunch up (the warning sign) and lift off together (the moment); a painting created
    then gets a gold edge; paintings keep the game's date, hour and weather.
-3. **The van and the painted place** (`poc-painted-place`): the back of the van as one small room
-   (a bed, the map table, one wall); hang the painting; step in: time and weather frozen, no
-   people or traffic, about 250 m to walk, pencil past the edge, the bloom as the way in; release
-   the gull; step back out.
+3. **The van and the painted place** (`poc-painted-place`): the back of the van as one room (a
+   bed, the map table, one wall), already bigger than the van, as you see when you step out and
+   look back; hang the painting; step in: the hour and weather held, the place's people and
+   traffic going on as at that hour, about 250 m to walk, pencil past the edge, the bloom as the
+   way in; release the gull; step back out.
 
 **Not in it:** "Start near you?" (it touches privacy, so Robby decides before it's built), the
 drone, the real-world layer, habitats and milestones, self-driving, objects inside buildings,
@@ -395,7 +402,7 @@ multiplayer, and saving the tiles with the painting (the prototype may load them
 
 **What to watch while people play:** how long until the first tap; how often the next pencil thing
 turns up; whether people find the pencil things without help; whether they read the gulls' warning
-sign; what they say the moment they step into their painting.
+sign; what they say when they look back at the van, and the moment they step into their painting.
 
 ## 15. Pacing: the numbers to start from
 
@@ -421,6 +428,10 @@ All to tune by playing; the proof of concept measures the first ones.
 - How many animals in one painted place before a phone slows down?
 - How many kinds make a set, and how many sets does a kind of place have?
 - Can you create a painting inside a painted place, and hang that too?
+- In a painted place, the very same passers-by as in the painting (if the life sim can replay
+  them), or the same mix at that hour?
+- Do people in a busy painted place make shy animals hide, so a marsh painted at dawn suits them
+  better?
 
 ## Decisions (2026-10-08)
 
@@ -437,6 +448,28 @@ Robby, after Claude's review of the first draft ("i agree with all you things yo
   map; named milestones instead of experience; "Start near you?" is back; painted places survive
   map updates; the pacing numbers (section 15).
 
+## Decisions (2026-10-08, later)
+
+Robby, on the proof of concept's third part:
+- **Painted places keep their people and traffic** ("why not have people or cars when stepping
+  into the painting?"). The hour and the weather hold and the place's life goes on as it was at
+  that hour: held, not frozen. The draft had them quiet, an escape from the real world; now a
+  quiet painted place is one painted at a quiet hour.
+- **The van is bigger on the inside, and the first morning shows it** ("the van being bigger on
+  the inside then outside looking, is that addressed?"). It was in section 6 as one line; now
+  section 11 and the proof of concept show it: wake in a room, step out, look back at a small van.
+- **His four reports of 2026-10-07 come first** ("okay i guess it should fix those first"): the
+  people glowing at night, crowds and traffic by place and hour, the crisp watercolor preset, the
+  harbour's water.
+- **Then one gameplay plan, agreed before any gameplay code** ("we want 1 good streamlined approach
+  for gameplay and want to take our time to ensure we get it right before implementing and
+  testing"): every other gameplay file folded into this one, with Robby, section by section
+  (`gameplay-one-plan`). Then the proof of concept, behind its switch ("i like that it will be on
+  a switch so it will not affect the current game").
+
 ## Ideas inbox
 
 Add new ideas here, with a date.
+
+- 2026-10-08: a gold-edged painting replays its moment when you step in (the gulls lift off again
+  as you arrive), so a gold edge is a moment you can go back to.

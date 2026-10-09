@@ -9,8 +9,8 @@ what "done" means. Written 2026-10-06; update it when a milestone closes or the 
 | Tier | What it means | State |
 |---|---|---|
 | **0** | The world loads everywhere | 9 of 9 items passing; the playtest runs on every push |
-| **1** | It looks right everywhere | 38 passing, 25 not started (regional flora paused for the proof of concept) |
-| **2** | The game itself | 32 open items in `docs/GAMEPLAY_STREAMLINED.md`'s order; the first, the Sea Bright proof of concept, is the active item (Robby's call: the one exception to foundations first) |
+| **1** | It looks right everywhere | 38 passing, 24 not started, 1 active: Robby's four reports of 2026-10-07 come first (`bug-night-glow-people` active); regional flora paused |
+| **2** | The game itself | 33 open items in `docs/GAMEPLAY_STREAMLINED.md`'s order: first one gameplay plan agreed with Robby (`gameplay-one-plan`, no code), then the Sea Bright proof of concept (Robby's call: the one exception to foundations first) |
 | **3** | Polish | 14 passing, 11 not started |
 
 Regional life (`docs/regional-life/models.md` build order): **all 16 packages built**.
@@ -99,7 +99,8 @@ changed, and `feature_list.json` updated.
 6. **The game core** (Tier 2, `docs/GAMEPLAY_STREAMLINED.md` §13). In its order, as far as the 1.0
    line below. Its proof of concept runs first, ahead of milestones 2–5 (Robby, 2026-10-08): the first
    ten minutes in Sea Bright, rough, behind `?poc=1` (`poc-first-minute`, `poc-touch-moments`,
-   `poc-painted-place`). After it, back to milestones 2–5 unless Robby says otherwise.
+   `poc-painted-place`). Before it, Robby's four reports of 2026-10-07, then one gameplay plan agreed
+   with him (`gameplay-one-plan`). After it, back to milestones 2–5 unless Robby says otherwise.
 7. **Release.** Every data licence recorded in `docs/DATA_SOURCES.md` and a credits screen;
    performance holding on phones; saving that survives updates; the first ten minutes
    (`GAMEPLAY_VISION.md` §8) smooth from start to finish; a store build.

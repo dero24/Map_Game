@@ -1180,10 +1180,10 @@
       "status": "not_started",
       "area": "gameplay",
       "title": "The van-home start: wake in the back of the van, \"Start near you?\", step out the back door",
-      "user_visible_behavior": "You wake in the back of a camper van that's bigger inside: a bed, the map table, one wall. With consent the game starts at a public spot in your own town (city level, never stored), otherwise in Sea Bright; you step out the back door, and your first painting goes on the wall.",
+      "user_visible_behavior": "You wake in the back of a camper van, in a room already bigger than the van could hold: a bed, the map table, one wall. With consent the game starts at a public spot in your own town (city level, never stored), otherwise in Sea Bright; step out the back door, look back, and it's a small camper van. Your first painting goes on the wall.",
       "verification": [],
       "evidence": [],
-      "notes": "docs/GAMEPLAY_VISION.md §7, §8, §15 step 3. City-level location only, never stored (privacy: ask Robby before building). Includes the five-rule combine prototype at home (§15 step 3, §6.5). 2026-10-08: docs/GAMEPLAY_STREAMLINED.md §6, §11 — the back of the van is the base; combining comes later (no combine prototype here). \"Start near you?\" still needs Robby's OK before it's built (privacy)."
+      "notes": "docs/GAMEPLAY_VISION.md §7, §8, §15 step 3. City-level location only, never stored (privacy: ask Robby before building). Includes the five-rule combine prototype at home (§15 step 3, §6.5). 2026-10-08: docs/GAMEPLAY_STREAMLINED.md §6, §11 — the back of the van is the base; combining comes later (no combine prototype here). \"Start near you?\" still needs Robby's OK before it's built (privacy). 2026-10-08 (later): bigger on the inside, shown on the first morning — wake in the room, step out, look back at a small van (Robby: \"the van being bigger on the inside then outside looking\"; GAMEPLAY_STREAMLINED §6, §11)."
     },
     {
       "id": "placing-in-world",
@@ -1231,7 +1231,7 @@
       "status": "not_started",
       "area": "gameplay",
       "title": "Growing the base: named milestones — wall space for your first painting in each new region, a room for each completed set",
-      "user_visible_behavior": "Your first painting in a new region of life adds wall space for one more painted place; a completed set adds a room you place where you like; the windows show the van's real view; a cosy van forever is fine too.",
+      "user_visible_behavior": "Your first painting in a new region of life adds wall space for one more painted place; a completed set adds a room you place where you like, the van the same small van outside; the windows show the van's real view; a cosy van forever is fine too.",
       "verification": [],
       "evidence": [],
       "notes": "docs/GAMEPLAY_VISION.md §7, §15 step 7. 2026-10-08: docs/GAMEPLAY_STREAMLINED.md §6 — milestones you can name, not an experience bar; the outdoor rooms are painted places now."
@@ -2102,7 +2102,7 @@
     {
       "id": "bug-harbour-water",
       "tier": 1,
-      "rank": 11.48,
+      "rank": 11.33,
       "status": "not_started",
       "area": "world",
       "title": "The harbour's water meets its shores: Upper New York Bay north of the Statue of Liberty",
@@ -2112,13 +2112,13 @@
         "montage from Ellis Island, day and night"
       ],
       "evidence": [],
-      "notes": "Robby, 2026-10-07 (\"_water_bug*.png\"), with another session. Diagnosis (LOG 2026-10-07 closing): the sea comes only from coastline runs crossing the cell's edge, and a run starts at a vertex inside the cell (realTile.ts coastline block) — a long straight coastline segment through a cell with no vertex in it (the Hudson's closing line, the bay's far shores) is never seen, and the bay is bare ground; v26 and v28 alike."
+      "notes": "Robby, 2026-10-07 (\"_water_bug*.png\"), with another session. Diagnosis (LOG 2026-10-07 closing): the sea comes only from coastline runs crossing the cell's edge, and a run starts at a vertex inside the cell (realTile.ts coastline block) — a long straight coastline segment through a cell with no vertex in it (the Hudson's closing line, the bay's far shores) is never seen, and the bay is bare ground; v26 and v28 alike. 2026-10-08 (later): the last of Robby's four reports (order: bug-night-glow-people, life-density-realism, look-crisp-preset, bug-harbour-water (docs/earth/HANDOFF.md \"Start here\")). It changes what the tile service builds: a new tile version (worker R2 t/vN and client &v=N together), the worker deployed before the client is pushed, never an unreleased &v= against the live service (docs/agent/streaming.md); ask Robby before deploying. When it passes, mark gameplay-one-plan in_progress (one gameplay plan with Robby, before the proof of concept's code)."
     },
     {
       "id": "bug-night-glow-people",
       "tier": 1,
-      "rank": 11.49,
-      "status": "not_started",
+      "rank": 11.3,
+      "status": "in_progress",
       "area": "life",
       "title": "People at night lit by the night, not glowing",
       "user_visible_behavior": "At night the people walking about are as dark as the street they walk on, lit only where a lamp or a window lights them.",
@@ -2126,12 +2126,12 @@
         "night montage (Liberty State Park, a town street) against the same at dusk"
       ],
       "evidence": [],
-      "notes": "Robby, 2026-10-07 (the night shot from Liberty State Park; with another session): the walkers read pale and lit against the dark ground."
+      "notes": "Robby, 2026-10-07 (the night shot from Liberty State Park; with another session): the walkers read pale and lit against the dark ground. 2026-10-08 (later): the first of Robby's four reports, which he put before the gameplay proof of concept (\"okay i guess it should fix those first\"); order: bug-night-glow-people, life-density-realism, look-crisp-preset, bug-harbour-water (docs/earth/HANDOFF.md \"Start here\")."
     },
     {
       "id": "life-density-realism",
       "tier": 1,
-      "rank": 11.5,
+      "rank": 11.31,
       "status": "not_started",
       "area": "life",
       "title": "Realistic populations and traffic: quiet at night, empty desert roads",
@@ -2141,12 +2141,12 @@
         "montages at night and on a desert road"
       ],
       "evidence": [],
-      "notes": "Robby, 2026-10-07 (with another session): \"it is still so crowded at nighttime in a lot of places where it shouldnt be and like random desert roads are crowded too\"."
+      "notes": "Robby, 2026-10-07 (with another session): \"it is still so crowded at nighttime in a lot of places where it shouldnt be and like random desert roads are crowded too\". 2026-10-08 (later): the second of Robby's four reports (order: bug-night-glow-people, life-density-realism, look-crisp-preset, bug-harbour-water (docs/earth/HANDOFF.md \"Start here\")). Painted places now keep the people and traffic of their hour (docs/GAMEPLAY_STREAMLINED.md §5), so the life at each hour is also what a painting keeps. Today's rhythm and knobs: lifeSim.ts RHYTHM (the hours off the day's peaks quieter), sim/life.ts lifeParams and crowdOf, and Robby's 2026-10-06 tuning in its comment (\"still too busy … too much\" on a phone, Sea Bright to the Rumson bridge)."
     },
     {
       "id": "look-crisp-preset",
       "tier": 1,
-      "rank": 11.51,
+      "rank": 11.32,
       "status": "not_started",
       "area": "render",
       "title": "A \"crisp watercolor\" preset in the developer settings, to try",
@@ -2155,7 +2155,7 @@
         "montage: the same views with the preset off and on (a street at eye height, the phone shot, night)"
       ],
       "evidence": [],
-      "notes": "Robby, 2026-10-07 (with another session): the preset is another agent's \"what I'd try, cheapest first\": (1) the \"clean HD\" look (panel → Look); (2) paintDetail 1.0 on a desktop at 100% scaling (it draws at 82% and stretches); (3) the foreground given crisp marks — hard shadow edges, kerb lines, pavement joints, cracks, puddles — or faded to bare paper on purpose; (4) the focal band sharp (raise clarity at 5–60 m, the edges and the far loose); (5) deeper darks, highlights kept; (6) a thinner torn-paper border while walking. Also noted: the phone canvas capped at 1.5× pixel density (main.ts), the paper grain fixed to the screen (post.ts paperH)."
+      "notes": "Robby, 2026-10-07 (with another session): the preset is another agent's \"what I'd try, cheapest first\": (1) the \"clean HD\" look (panel → Look); (2) paintDetail 1.0 on a desktop at 100% scaling (it draws at 82% and stretches); (3) the foreground given crisp marks — hard shadow edges, kerb lines, pavement joints, cracks, puddles — or faded to bare paper on purpose; (4) the focal band sharp (raise clarity at 5–60 m, the edges and the far loose); (5) deeper darks, highlights kept; (6) a thinner torn-paper border while walking. Also noted: the phone canvas capped at 1.5× pixel density (main.ts), the paper grain fixed to the screen (post.ts paperH). 2026-10-08 (later): the third of Robby's four reports (order: bug-night-glow-people, life-density-realism, look-crisp-preset, bug-harbour-water (docs/earth/HANDOFF.md \"Start here\"))."
     },
     {
       "id": "regional-flora",
@@ -2419,10 +2419,28 @@
       "user_visible_behavior": "Walking past a shop with flats above (the Bonobos building), nothing of the upstairs — floor slab, sofa, shelves — pokes out over the shop's windows or the sidewalk."
     },
     {
+      "id": "gameplay-one-plan",
+      "tier": 2,
+      "rank": 59,
+      "status": "not_started",
+      "area": "gameplay",
+      "title": "One gameplay plan, agreed with Robby before any gameplay code: every gameplay file folded into docs/GAMEPLAY_STREAMLINED.md",
+      "user_visible_behavior": "Robby has one gameplay document to read, docs/GAMEPLAY_STREAMLINED.md, and has said it's right: what the other gameplay files still have worth keeping is in it (or in an appendix it points to), nothing anywhere disagrees with it, and every other gameplay file says at its top that it's history and points to it.",
+      "verification": [
+        "an inventory in the LOG: every gameplay file and what it still says that the plan leaves out or says differently — in the repo docs/GAMEPLAY_VISION.md, docs/GAME_DESIGN.md, docs/CORE_LOOP_REVIEW.md, docs/Other_Ideas.md, docs/LIST_OF_POTENTIAL_ITEMS_AND_PARTS.md; in Robby's for_mapgame folder GAMEPLAY_VISION.md (an older copy than the repo's) and MULTIPLAYER_PLAN.md (not in the repo)",
+        "each difference decided with Robby — folded into the plan, or dropped with the reason — and recorded in the plan's Decisions",
+        "the other files each with a note at the top: history, the plan of record is docs/GAMEPLAY_STREAMLINED.md (Robby's for_mapgame files only with his OK)",
+        "the tier-2 items in feature_list.json match the plan, the proof of concept's three included",
+        "Robby reads the whole plan and says it's right"
+      ],
+      "evidence": [],
+      "notes": "Robby, 2026-10-08 (later): \"there are other gameplay files that talk about that as well, we want 1 good streamlined approach for gameplay and want to take our time to ensure we get it right before implementing and testing\". After his four reports, before the proof of concept's code. No code: a design session with Robby, section by section, taking the time it needs; ask him the decisions that are his rather than settling them for him. The plan's open questions (§16) are for the proof of concept to answer by playing; this settles what the game is. The vision's detail worth keeping (the rares table, time and weather, the edge cases, the ideas) can stay as an appendix the plan points to, as long as nothing in it disagrees. MULTIPLAYER_PLAN.md isn't in the repo: ask Robby whether to bring it in. Keep for_mapgame/GAMEPLAY_STREAMLINED.md the same as the repo's (its note at the top says the repo copy is the newest). When it passes, mark poc-first-minute in_progress."
+    },
+    {
       "id": "poc-first-minute",
       "tier": 2,
       "rank": 59.1,
-      "status": "in_progress",
+      "status": "not_started",
       "area": "gameplay",
       "title": "Sea Bright proof of concept (1): the first minute — everything in view colours, 3–5 pencil things, tap to paint",
       "user_visible_behavior": "With ?poc=1 in Sea Bright, everything in view colours on first sight, not just where you walk, and 3–5 things near you stay in pencil: kinds you haven't collected, among the gulls, herons, fiddler crabs, benches and one tree kind, picked out of sight and never turning pencil while you watch. Tap one within 30 m and it washes into colour with a brush sound, its card lifting into the field guide; too far and the stroke falls short with a splash. A kind once collected is never pencil again.",
@@ -2433,7 +2451,7 @@
         "Robby plays it"
       ],
       "evidence": [],
-      "notes": "Robby, 2026-10-08: \"soon will have to do a poc of it at least starting in sea bright\"; then, on the review of the plan: \"i agree with all you things youd change\", \"i like the 3-5 pencil things\", one way to collect (\"you reason and decide\": the tap, trees too), a painted place as its saved tiles. A throwaway prototype behind ?poc=1 in Sea Bright — the plan's one exception to tier 2 waiting for tiers 0–1, by Robby's call; without ?poc=1 the game is unchanged. One part at a time, in order; each ends with a reviewed montage and Robby playing it. Design: docs/GAMEPLAY_STREAMLINED.md §1, §2, §14 part 1, §15 (the numbers). From the code (inventory, 2026-10-08): (1) colour by sight — sketch mode (render/post.ts sketchFar, off by default; ?sketch=1) draws pencil to the horizon; world/explore.ts paints a 45 m circle where you walk (revealRadius); photo mode's ctx.paintView paints what a frame sees (render/seen.ts paintSeenSliced, ~4 ms a slice; docs/agent/gameplay.md \"Exploring\") — run it every couple of seconds, sliced, for \"everything in view\"; ?poc=1 turns sketch mode on. (2) The pencil things — draw each of the 3–5 on its own: hide its instance in its batch (scale 0) and draw a copy with a pencil material (GAMEPLAY_VISION §15 step 2: one small pencil overlay, no change to the shared shaders; ui/brush.ts's pencil overlay is the precedent). Animals: one InstancedMesh per species (sim/critters.ts ~272), but their instance slots change every frame — give the chosen one a stable id. Street props: one InstancedMesh per kind per tile (world/props.ts ~2458); benches and bins have no mesh name — name them. Trees: 'trees:<kind>:<v>' InstancedMesh per tile (world/farWoods.ts WoodsTally reads them). (3) Kinds — the Almanac (ui/commissions.ts FAMILY: car, boat, plane, wildlife, tree, flower, balloon; instance prefixes ~252) has no kind for benches; collected kinds kept in IndexedDB like the sketchbook (map-game-sketchbook). (4) The tap — no world picking today (ui/brush.ts raycasts its own sketch; player/vehicles.ts finds parked cars by distance); on a phone the right of the screen drags the view (player/controller.ts ~81–131): a tap is short and barely moves. (5) With ?poc=1 a photo no longer collects (today a photo with a kind in frame paints its Almanac card): one way to collect. Sea Bright in October: laughing gulls and fiddler crabs to the end of October, herons and egrets, sandpipers; no beach crowd out of season (?date= for summer)."
+      "notes": "Robby, 2026-10-08: \"soon will have to do a poc of it at least starting in sea bright\"; then, on the review of the plan: \"i agree with all you things youd change\", \"i like the 3-5 pencil things\", one way to collect (\"you reason and decide\": the tap, trees too), a painted place as its saved tiles. A throwaway prototype behind ?poc=1 in Sea Bright — the plan's one exception to tier 2 waiting for tiers 0–1, by Robby's call; without ?poc=1 the game is unchanged. One part at a time, in order; each ends with a reviewed montage and Robby playing it. Design: docs/GAMEPLAY_STREAMLINED.md §1, §2, §14 part 1, §15 (the numbers). From the code (inventory, 2026-10-08): (1) colour by sight — sketch mode (render/post.ts sketchFar, off by default; ?sketch=1) draws pencil to the horizon; world/explore.ts paints a 45 m circle where you walk (revealRadius); photo mode's ctx.paintView paints what a frame sees (render/seen.ts paintSeenSliced, ~4 ms a slice; docs/agent/gameplay.md \"Exploring\") — run it every couple of seconds, sliced, for \"everything in view\"; ?poc=1 turns sketch mode on. (2) The pencil things — draw each of the 3–5 on its own: hide its instance in its batch (scale 0) and draw a copy with a pencil material (GAMEPLAY_VISION §15 step 2: one small pencil overlay, no change to the shared shaders; ui/brush.ts's pencil overlay is the precedent). Animals: one InstancedMesh per species (sim/critters.ts ~272), but their instance slots change every frame — give the chosen one a stable id. Street props: one InstancedMesh per kind per tile (world/props.ts ~2458); benches and bins have no mesh name — name them. Trees: 'trees:<kind>:<v>' InstancedMesh per tile (world/farWoods.ts WoodsTally reads them). (3) Kinds — the Almanac (ui/commissions.ts FAMILY: car, boat, plane, wildlife, tree, flower, balloon; instance prefixes ~252) has no kind for benches; collected kinds kept in IndexedDB like the sketchbook (map-game-sketchbook). (4) The tap — no world picking today (ui/brush.ts raycasts its own sketch; player/vehicles.ts finds parked cars by distance); on a phone the right of the screen drags the view (player/controller.ts ~81–131): a tap is short and barely moves. (5) With ?poc=1 a photo no longer collects (today a photo with a kind in frame paints its Almanac card): one way to collect. Sea Bright in October: laughing gulls and fiddler crabs to the end of October, herons and egrets, sandpipers; no beach crowd out of season (?date= for summer). Paused 2026-10-08 (later) for Robby's four reports (\"okay i guess it should fix those first\"): order: bug-night-glow-people, life-density-realism, look-crisp-preset, bug-harbour-water (docs/earth/HANDOFF.md \"Start here\"). Then gameplay-one-plan (Robby: one gameplay plan, agreed before any gameplay code); set this back to in_progress when that passes."
     },
     {
       "id": "poc-touch-moments",
@@ -2458,15 +2476,15 @@
       "status": "not_started",
       "area": "gameplay",
       "title": "Sea Bright proof of concept (3): the van and the first painted place — hang a painting, step in, release the gull",
-      "user_visible_behavior": "With ?poc=1 you wake in the back of a van: a bed, the map table, one wall. Hang a painting on the wall and step into it: the painting shows as a pencil sketch and blooms around you — your own copy of that spot at that moment, time and weather held, no people or traffic. You can walk about 250 m from where you painted it; past that the world is drawn in pencil and you can't go on. Release the gull you collected; step back out through the frame. The whole first ten minutes plays from start to end.",
+      "user_visible_behavior": "With ?poc=1 you wake in the back of a van, in a room already bigger than the van could hold: a bed, the map table, one wall. Step out the back door, look back, and it's a small camper van. Hang a painting on the wall and step into it: the painting shows as a pencil sketch and blooms around you — your own copy of that spot at that moment, the hour and weather held and its life going on as at that hour: people strolling, cars passing, gulls over the water. You can walk about 250 m from where you painted it; past that the world is drawn in pencil and you can't go on. Release the gull you collected; step back out through the frame. The whole first ten minutes plays from start to end.",
       "verification": [
-        "tests: a painting → its place (lat/lon, date, hour, weather, its tile ids); the walk held within ~250 m; pencil past the edge; the clock and weather held while inside",
-        "a montage with ?poc=1: the van; the wall with the painting; stepping in (pencil, then the bloom); the edge; the gull released",
+        "tests: a painting → its place (lat/lon, date, hour, weather, its tile ids); the walk held within ~250 m; pencil past the edge; the hour and weather held while inside, the people and traffic running at that hour",
+        "a montage with ?poc=1: waking in the van; the van from outside, looking back; the wall with the painting; stepping in (pencil, then the bloom); its people and traffic; the edge; the gull released",
         "node tools/playtest.mjs --region=shore --quick, with and without ?poc=1",
-        "Robby and two or three people who haven't seen the game play the whole first ten minutes; their answers to the two questions (are ten minutes fun? does stepping into your own painting make people say \"whoa\"?) recorded in the LOG"
+        "Robby and two or three people who haven't seen the game play the whole first ten minutes; their answers to the two questions (are ten minutes fun? does stepping into your own painting make people say \"whoa\"?), and what they say when they look back at the van, recorded in the LOG"
       ],
       "evidence": [],
-      "notes": "Robby, 2026-10-08: \"soon will have to do a poc of it at least starting in sea bright\"; then, on the review of the plan: \"i agree with all you things youd change\", \"i like the 3-5 pencil things\", one way to collect (\"you reason and decide\": the tap, trees too), a painted place as its saved tiles. A throwaway prototype behind ?poc=1 in Sea Bright — the plan's one exception to tier 2 waiting for tiers 0–1, by Robby's call; without ?poc=1 the game is unchanged. One part at a time, in order; each ends with a reviewed montage and Robby playing it. Design: docs/GAMEPLAY_STREAMLINED.md §5, §6, §11, §14 part 3. From the code (2026-10-08): no van inside exists (\"van\" is only a car model, player/vehicles.ts) — one small room scene is enough; ?at=, ?date=/?day= and ?hour= exist (main.ts), but after ?hour= the clock runs on at 60× (hold it), weather has no link parameter (it drifts with the clock — add one), and another month needs a reload (the tile builder's date is fixed at startup, world/tile.worker.ts) — hide the reload behind the pencil-then-bloom way in; lifeParams.enabled and critters.enabled switch people, traffic and animals off; nothing clips the world to a radius (detail tiles load to 1.5 km, outlines to 8 km, the horizon past them): hold the walker within ~250 m and draw past it in pencil with the sketch pass (a disc as its seen map). The critters sim spawns within ~90 m from the abundance table: a released gull is added and kept. Saving the tiles with the painting (so map updates never change it, and it opens offline) is for the real build (painted-places); the prototype may load them live."
+      "notes": "Robby, 2026-10-08: \"soon will have to do a poc of it at least starting in sea bright\"; then, on the review of the plan: \"i agree with all you things youd change\", \"i like the 3-5 pencil things\", one way to collect (\"you reason and decide\": the tap, trees too), a painted place as its saved tiles. A throwaway prototype behind ?poc=1 in Sea Bright — the plan's one exception to tier 2 waiting for tiers 0–1, by Robby's call; without ?poc=1 the game is unchanged. One part at a time, in order; each ends with a reviewed montage and Robby playing it. Design: docs/GAMEPLAY_STREAMLINED.md §5, §6, §11, §14 part 3. From the code (2026-10-08): no van inside exists (\"van\" is only a car model, player/vehicles.ts) — one room scene is enough, visibly bigger than the van outside (Robby, 2026-10-08: \"the van being bigger on the inside then outside looking\"; GAMEPLAY_STREAMLINED §6, §11 step 3): you wake inside, step out the back door, and the van behind you is a small camper van; ?at=, ?date=/?day= and ?hour= exist (main.ts), but after ?hour= the clock runs on at 60× (hold it), weather has no link parameter (it drifts with the clock — add one), and another month needs a reload (the tile builder's date is fixed at startup, world/tile.worker.ts) — hide the reload behind the pencil-then-bloom way in; people and traffic stay on (Robby, 2026-10-08: \"why not have people or cars when stepping into the painting?\"; §5 \"held, not frozen\"): the life sim runs from the hour it's given (life.update(…, { hour: timeParams.hour, clock: simTime }), main.ts ~1642; the beach crowd ~1633), so holding the hour holds the life's mix while it keeps moving — the same passers-by as in the painting if the sim can replay them, otherwise the same mix (an open question, §16); nothing clips the world to a radius (detail tiles load to 1.5 km, outlines to 8 km, the horizon past them): hold the walker within ~250 m and draw past it in pencil with the sketch pass (a disc as its seen map). The critters sim spawns within ~90 m from the abundance table: a released gull is added and kept. Saving the tiles with the painting (so map updates never change it, and it opens offline) is for the real build (painted-places); the prototype may load them live."
     },
     {
       "id": "touch-features",
@@ -2505,13 +2523,13 @@
       "status": "not_started",
       "area": "gameplay",
       "title": "Painted places: step into a painting — your own copy of the place at that moment, its tiles saved for you",
-      "user_visible_behavior": "Step into a painting on your wall and you stand in your own copy of that place at that moment: its map tiles saved with the painting, so it never changes when the map is updated and opens offline; about 250 m to walk, the world past the edge drawn in pencil; the light and weather as they were; no people or traffic. Release your animals, plant your trees, place your benches and boats there.",
+      "user_visible_behavior": "Step into a painting on your wall and you stand in your own copy of that place at that moment: its map tiles saved with the painting, so it never changes when the map is updated and opens offline; about 250 m to walk, the world past the edge drawn in pencil; the hour and the weather held, and its life going on as at that hour: people strolling, cars passing, as many as the place has then (a dawn painting quiet, a summer evening busy). Release your animals, plant your trees, place your benches and boats there.",
       "verification": [
-        "tests: a painting → its record (place, date, hour, weather, its saved tiles); the same place after a tile version bump; offline; the walk held at the edge; pencil past it; placed things and released animals kept",
+        "tests: a painting → its record (place, date, hour, weather, its saved tiles); the same place after a tile version bump; offline; the walk held at the edge; the people and traffic at the painting's hour; pencil past it; placed things and released animals kept",
         "montages; the phone check (tools/mobile-check.mjs)"
       ],
       "evidence": [],
-      "notes": "2026-10-08: docs/GAMEPLAY_STREAMLINED.md §5. Robby: \"it saves that tile for the user and they can walk back to that tile but not explore the entire world when stepping into a painting\". Streamed tiles are 1024 m cells (docs/agent/streaming.md), so a painted place keeps the one to four around its spot. The proof of concept is poc-painted-place."
+      "notes": "2026-10-08: docs/GAMEPLAY_STREAMLINED.md §5. Robby: \"it saves that tile for the user and they can walk back to that tile but not explore the entire world when stepping into a painting\". Streamed tiles are 1024 m cells (docs/agent/streaming.md), so a painted place keeps the one to four around its spot. The proof of concept is poc-painted-place. 2026-10-08 (later), Robby: \"why not have people or cars when stepping into the painting?\" — the place keeps its people and traffic at its hour: the hour and weather held, life going on (§5)."
     },
     {
       "id": "habitats-visitors",
@@ -2526,7 +2544,7 @@
         "montages: a fitting and an unfitting painted place"
       ],
       "evidence": [],
-      "notes": "2026-10-08: docs/GAMEPLAY_STREAMLINED.md §5 (habitats, visitors)."
+      "notes": "2026-10-08: docs/GAMEPLAY_STREAMLINED.md §5 (habitats, visitors). 2026-10-08 (later): painted places keep their people and traffic at their hour (§5); whether a busy one makes shy animals hide (so a marsh painted at dawn suits them better) is an open question (§16), to decide by playing."
     },
     {
       "id": "drone",
@@ -2582,7 +2600,7 @@
   "tiers": {
     "0": "Foundations: every tile loads (or falls back gracefully), commercial-safe infrastructure, phones, no glitches.",
     "1": "It looks right everywhere: the real-world comparison loop first, then place parity, public places, Mapillary objects, night/ground/far trees.",
-    "2": "The game (docs/GAMEPLAY_STREAMLINED.md §13 order): the Sea Bright proof of concept first (Robby's call, 2026-10-08: a throwaway prototype behind ?poc=1, the one exception to waiting for tiers 0–1), then the bloom and pencil collecting, touch and moments, the van and painted places, habitats and the base's milestones, the road, rares and the field guide, friends; the rest later.",
+    "2": "The game (docs/GAMEPLAY_STREAMLINED.md §13 order): first one gameplay plan agreed with Robby (gameplay-one-plan, no code), then the Sea Bright proof of concept (Robby's call, 2026-10-08: a throwaway prototype behind ?poc=1, the one exception to waiting for tiers 0–1), then the bloom and pencil collecting, touch and moments, the van and painted places, habitats and the base's milestones, the road, rares and the field guide, friends; the rest later.",
     "3": "Polish and later: kept, not deleted.",
     "note": "docs/GAMEPLAY_VISION.md §17: the whole lower 48 loading everywhere, looking right everywhere, on PC and phone — then a game on top. Work the lowest tier first; within a tier, by rank. Re-ranked 2026-10-03 against the lower-48 audit (docs/earth/AUDIT_48.md)."
   }

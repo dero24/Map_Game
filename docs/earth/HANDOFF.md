@@ -1,17 +1,64 @@
 # Handoff: the lower 48, alive — part 2 (2026-10-05)
 
-## Start here (2026-10-08): the Sea Bright gameplay proof of concept
+## Start here (2026-10-08): Robby's four reports, then one gameplay plan, then the proof of concept
 
-Robby, 2026-10-08: "soon will have to do a poc of it at least starting in sea bright". He then agreed
-the gameplay plan, `docs/GAMEPLAY_STREAMLINED.md`. Read all of it; §14 is this work. The next
-sessions build the proof of concept one part at a time:
+Robby, 2026-10-08, of his reports of 2026-10-07: "okay i guess it should fix those first"; then
+"we can have the new session fix the bugs first, and then we can do the gameplay implementation
+after". So they come first, one item at a time, in this order:
 
-1. **`poc-first-minute`** (the active item): everything in view colours on first sight; 3–5 pencil
-   things near you, picked out of sight; tap one to paint it, its card into the field guide.
+1. **`bug-night-glow-people`** (the active item): people at night lit by the night, not glowing.
+2. **`life-density-realism`**: crowds and traffic that follow the place and the hour: quiet at
+   night, a car every few minutes on a desert road. Painted places now keep the people and traffic
+   of their hour (`docs/GAMEPLAY_STREAMLINED.md` §5), so this also sets what a painting keeps.
+3. **`look-crisp-preset`**: a "crisp watercolor" switch in the developer settings, to compare
+   against the default.
+4. **`bug-harbour-water`**: the harbour's water meets its shores. It changes what the tile service
+   builds: a new tile version, the worker deployed before the client is pushed, never an unreleased
+   `&v=` against the live service (`docs/agent/streaming.md`). Ask Robby before deploying.
+
+- **Each one:** read its notes; capture the before; fix it; tests; a before/after montage shown to
+  Robby, pushing only after his OK (as with the far woods); the LOG entry; the item `passing` with
+  its evidence; then mark the next one `in_progress`.
+- **After the four:** mark `gameplay-one-plan` `in_progress` (below).
+- **If Robby names another item** in a session, that session works it and hands back: set the
+  active item to `not_started` (in its notes, "paused for <his item>"), mark his item
+  `in_progress`, and before the session ends leave his item `passing` (or `not_started`, its notes
+  saying where it stands) and the paused item `in_progress` again, so the next session picks up
+  where the queue was.
+
+### Then: one gameplay plan, agreed with Robby (`gameplay-one-plan`, no code)
+
+Robby, 2026-10-08: "there are other gameplay files that talk about that as well, we want 1 good
+streamlined approach for gameplay and want to take our time to ensure we get it right before
+implementing and testing". A design session with him, not a coding one:
+
+- **Fold every gameplay file into `docs/GAMEPLAY_STREAMLINED.md`.** In the repo:
+  `docs/GAMEPLAY_VISION.md`, `docs/GAME_DESIGN.md`, `docs/CORE_LOOP_REVIEW.md`,
+  `docs/Other_Ideas.md`, `docs/LIST_OF_POTENTIAL_ITEMS_AND_PARTS.md`. In Robby's `for_mapgame`
+  folder: `GAMEPLAY_VISION.md` (an older copy than the repo's) and `MULTIPLAYER_PLAN.md` (not in
+  the repo; ask him whether to bring it in).
+- **List what each still says that the plan leaves out or says differently, and go through it with
+  Robby** section by section; he decides what's kept. Record it in the plan's Decisions.
+- **Take the time it takes.** The plan's open questions (§16) are for the proof of concept to
+  answer by playing; this settles what the game is.
+- **When Robby says the plan is right:** a note at the top of each other file (history; the plan of
+  record is the streamlined plan; his `for_mapgame` files only with his OK), the tier-2 items
+  matching the plan, the item `passing`, and `poc-first-minute` back to `in_progress`.
+
+### Then: the Sea Bright gameplay proof of concept
+
+Robby, 2026-10-08: "soon will have to do a poc of it at least starting in sea bright", and "i like
+that it will be on a switch so it will not affect the current game". The plan's §14 is this work.
+The proof of concept is built one part at a time:
+
+1. **`poc-first-minute`** (paused until the plan is agreed): everything in view colours on first
+   sight; 3–5 pencil things near you, picked out of sight; tap one to paint it, its card into the
+   field guide.
 2. **`poc-touch-moments`**: sit on a bench; toss a crumb and the gulls bunch up, then lift (the
    warning sign, then the moment); the gold edge; paintings keep the game's date, hour and weather.
-3. **`poc-painted-place`**: the back of the van; hang a painting; step in (time held, no people or
-   traffic, ~250 m to walk, pencil past the edge); release the gull.
+3. **`poc-painted-place`**: the back of the van, a room bigger than the van (step out and look back
+   at a small van); hang a painting; step in (the hour and weather held, the place's people and
+   traffic going on as at that hour, ~250 m to walk, pencil past the edge); release the gull.
 
 - **Everything goes behind `?poc=1`.** It's a throwaway prototype: without the switch the game must
   not change (run the shore playtest both ways).
@@ -24,14 +71,7 @@ sessions build the proof of concept one part at a time:
 - **After part 3,** Robby and two or three people who haven't seen the game play the first ten
   minutes; record their answers in the LOG. Then back to the roadmap's milestones 2–5
   (`docs/ROADMAP.md`) unless Robby says otherwise.
-- **Not this work:** Robby's reports of 2026-10-07 (`bug-harbour-water`, `bug-night-glow-people`,
-  `life-density-realism`, `look-crisp-preset`) are for a separate session, only when he names them.
-  When he names one (or any other item), that session works it and hands the proof of concept back:
-  set the active proof-of-concept part to `not_started` (in its notes, "paused for <his item>"),
-  mark his item `in_progress`, and before the session ends leave his item `passing` (or
-  `not_started`, its notes saying where it stands) and the proof-of-concept part `in_progress`
-  again, so the next session picks the proof of concept back up.
-  "Start near you?" touches privacy: not before Robby says so.
+- **"Start near you?"** touches privacy: not before Robby says so.
 
 The rest of this file is the regional-life handoff of 2026-10-05, still the reference for that work.
 
