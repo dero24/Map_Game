@@ -1133,6 +1133,11 @@ async function main() {
       else if (n === 'van-step') out(0.1, d.z - 0.12, 0, d.z + 8, -0.08);
       else if (n === 'van-back') out(3.2, d.z + 9.5, 0, 0, -0.03);
       else if (n === 'van-side') out(R.x1 + 5.5, -0.6, 0, -0.6, -0.02);
+      // looking in at its windows: beside it on the kerb side, on the driver's side toward the front,
+      // and at its shut back doors (the room through their windows)
+      else if (n === 'van-peek') out(1.75, 0.85, -3, 0.85, -0.03);
+      else if (n === 'van-peek-left') out(-1.8, 1.6, 2.5, -0.6, -0.04);
+      else if (n === 'van-peek-back') { V.openDoors(false); out(0.35, d.z + 3.2, 0.2, R.z0, -0.02); }
       else if (n === 'bloom-0' || n === 'bloom-1') {
         out(0, d.z + 1.2, 0.6, d.z + 30, -0.05);
         if (n === 'bloom-1' && sight) sight.armed = true;

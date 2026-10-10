@@ -2497,15 +2497,17 @@
         "tools/van-check.js still ok (seam: in/up identical, the rest under the world's own motion; walk in→out once)",
         "npm run build && node tools/mobile-check.mjs --device=pixel7 --query=poc=1 (phone tier, 0 errors, 66 programs); node tools/hud-audit.mjs (560 layouts, no overlaps; messages within two lines)",
         "npm run typecheck, npm test, npm run build",
+        "Robby's first note (2026-10-10, looking in at the windows): tests/van.test.ts 43 (the windows open right through, curtains at their ends, panes filling them; the doors' windows over the passage; the portal's window faces; peekSide, windowClip; a look through the doorway never crossing the plane); montages van-peek, van-peek-left, van-peek-back, van-side (desktop and the phone tier); tools/van-check.js ok; mobile-check pixel7 --query=poc=1 0 errors, 66 programs",
         "Robby plays it"
       ],
       "evidence": [
         "src/van/drive.ts (buildGraph, route, lanePath, poseAt, Drive); van.ts (action/act, seat, the curtain's wipe, driveTo, move: carrying the walker, the doors shut for a drive, the steering wheel); layout.ts (cab: eye, door, curtain, the room's way, where you come out); camper.ts (the steering wheel its own geometry, the binnacle and dials, thin dark pillars); room.ts (the curtained way); atlas.ts (driveTo: \"drive here\"); controller.ts (cabFov, shift); main.ts (the touch button and hints by the van's action, the engine's sound, the movers)",
         "npm test: 118 files, 1148 tests passing (tests/van.test.ts 37)",
         "drive probe: arrived (143.0, 727.6) for the pick (145.8, 727.6); 200 samples ahead all built; sight armed on departure",
-        "phone: mobile-check pixel7 running, 0 errors; hud-audit 560 layouts, no overlaps"
+        "phone: mobile-check pixel7 running, 0 errors; hud-audit 560 layouts, no overlaps",
+        "looking in at the windows: camper.ts (camperFrame win, leafWin; the windows holes right through, framed, curtains tied back; panes, leafPane for the shadow); layout.ts (peekSide, windowClip); room.ts (windowFaces; uClip in the room's materials); van.ts (window faces in the portal, the clip, the panes; openDoors(open)); main.ts (van-peek shots); npm test 118 files, 1154 tests"
       ],
-      "notes": "After poc-van (2026-10-09). Fuel, legs and sleep are later; one short drive is enough now (the prompt's \"THE VAN IS THE HEART\"). 2026-10-10: built — E at the driver's door seats you; E at the wheel takes you into the back through the curtain (and the room's curtained way brings you back); E at the map table picks a place to drive on the atlas; the van shuts its doors and drives itself there on the real roads, pulling over at the kerb. Not yet: driving it yourself. Left in_progress only for its last check: Robby plays the van (poc-van and this) and gives his notes — the next session works from those (HANDOFF \"Start here\")."
+      "notes": "After poc-van (2026-10-09). Fuel, legs and sleep are later; one short drive is enough now (the prompt's \"THE VAN IS THE HEART\"). 2026-10-10: built — E at the driver's door seats you; E at the wheel takes you into the back through the curtain (and the room's curtained way brings you back); E at the map table picks a place to drive on the atlas; the van shuts its doors and drives itself there on the real roads, pulling over at the kerb. Not yet: driving it yourself. Left in_progress only for its last check: Robby plays the van (poc-van and this) and gives his notes — the next session works from those (HANDOFF \"Start here\"). Robby's notes as he plays — 2026-10-10: \"why can we not look in the windows of van from outside?\" — done: the side windows and the back doors' are open right through and show the room (the far side of the window's plane only: the room is wider than the van)."
     },
     {
       "id": "poc-first-minute",

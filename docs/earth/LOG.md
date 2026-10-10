@@ -2,6 +2,32 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-10 (later) — Looking in at the van's windows (Robby's first note, `poc-van-drive`)
+
+Robby played the van ("pretty cool honestly so far") and asked: "why can we not look in the windows of
+van from outside?" — they were closed on purpose (the room inside is bigger than the van and doesn't line
+up with its walls), curtains drawn. Now they're open. Committed on `feature/four-reports`, **not pushed**.
+
+- **The windows** (`assets/camper.ts`): the cargo box's side windows and the back doors' are holes right
+  through (`camperFrame` `win`, `leafWin`), framed in black rubber, the curtains in the room's mustard
+  tied back at their ends with its red tie-backs (cream ones vanished into the cream paint), the kerb
+  side's split by the sliding door's post. A pane in each that's never drawn but casts the shadow.
+- **What you see** (`van.ts`, `layout.ts peekSide`/`windowClip`, `room.ts windowFaces`): the room, through
+  the same portal as the doorway — a face across each side window joins the passage's. From beside the
+  van the room's near side stands outside the van, between you and the glass, so through a side's windows
+  only what's beyond their plane is drawn (the room's materials discard the rest); one draw serves the
+  doorway too (a look through it from beside the van never crosses that plane — a test walks it). You see
+  across the room to its far wall, well past the van's other side; at the shut back doors, the passage
+  and the room through their windows.
+- Verified: `tests/van.test.ts` 43 (6 new: the windows open right through, the curtains at the ends, the
+  panes filling them; the doors' windows over the passage; the portal's window faces; which side you look
+  in at; what's kept and what's not; a look through the doorway never crossing the plane); `npm test` 118
+  files, 1154 tests; typecheck; build; montages `van-peek`, `van-peek-left`, `van-peek-back`, `van-side`,
+  `van-near`, `van-wake` (desktop) and the phone tier at 412×915; `tools/van-check.js` ok (the doorway
+  still seamless: looking in identical, out under the world's own motion; the walk in → out once);
+  `mobile-check --device=pixel7 --query=poc=1` (0 page or console errors, 66 programs as before).
+- **Next:** more of Robby's notes as he plays.
+
 ## 2026-10-10 — The van's cab and a short drive (`poc-van-drive`, behind `?poc=1`)
 
 The rest of Robby's van: the driver's door to the seat, the curtain between the cab and the back, the

@@ -124,6 +124,13 @@ export function tunnelFaces(L: VanLayout): { p: [number, number, number][]; n: [
   ];
 }
 
+/** The van's side windows, as the portal (van.ts) draws them: a face across each opening at the
+ *  panel's inside (its frame and the tied-back curtains stand in front of it), facing out. */
+export function windowFaces(L: VanLayout): { p: [number, number, number][]; n: [number, number, number]; side: -1 | 1 }[] {
+  const w = L.frame.win, xi = L.recipe.W / 2 - L.frame.panel;
+  return ([-1, 1] as const).map((s) => ({ p: [[s * xi, w.y0, w.z0], [s * xi, w.y0, w.z1], [s * xi, w.y1, w.z1], [s * xi, w.y1, w.z0]], n: [s, 0, 0], side: s }));
+}
+
 export function tunnelGeometry(L: VanLayout) {
   const b = mk(), C = ROOM_COLORS;
   for (const f of tunnelFaces(L)) quad(b, f.p, f.n, f.n[1] > 0.5 ? C.floor : C.trim, f.n[1] > 0.5 ? FLOOR : TRIM);
@@ -315,6 +322,7 @@ const GLSL_ROOM_LIGHT = /* glsl */ `
   uniform vec4 uLamp[4];
   uniform vec4 uRoomBox; // x0 x1 z0 z1 (van-local)
   uniform vec2 uRoomY; // floor, ceiling
+  uniform vec4 uClip; // what of the room is drawn: where dot(p, uClip.xyz) + uClip.w >= 0 (van-local; layout.ts windowClip)
   // daylight through the openings + the lamps, at a van-local point
   vec3 roomLight(vec3 P, vec3 N) {
     float day = 1.0 - uNight;
@@ -347,9 +355,9 @@ const GLSL_ROOM_LIGHT = /* glsl */ `
 
 /** The room's painted material: vertex colour by channel (aMat) — plaster over wainscot, planks,
  *  boards, wood grain, a fabric's weave, glowing bulbs — lit by roomLight; alpha 0.75. */
-export function roomMaterial(L: VanLayout, lights: RoomLights) {
+export function roomMaterial(L: VanLayout, lights: RoomLights, clip?: THREE.IUniform<THREE.Vector4>) {
   return paintMaterial({
-    uniforms: roomUniforms(L, lights),
+    uniforms: roomUniforms(L, lights, clip),
     vertex: /* glsl */ `
       attribute vec3 color;
       attribute float aMat;
@@ -374,6 +382,7 @@ export function roomMaterial(L: VanLayout, lights: RoomLights) {
       varying vec3 vNormalL;
       flat varying float vMat;
       void main() {
+        if (dot(vec4(vLocal, 1.0), uClip) < 0.0) discard;
         vec3 N = normalize(vNormalL);
         if (!gl_FrontFacing) N = -N;
         vec3 alb = vColor;
@@ -416,8 +425,9 @@ export function roomMaterial(L: VanLayout, lights: RoomLights) {
   });
 }
 
-export function roomUniforms(L: VanLayout, lights: RoomLights) {
+export function roomUniforms(L: VanLayout, lights: RoomLights, clip: THREE.IUniform<THREE.Vector4> = { value: new THREE.Vector4(0, 0, 0, 1) }) {
   return {
+    uClip: clip,
     uWin: { value: lights.win },
     uWinN: { value: lights.winN },
     uLamp: { value: lights.lamp },
@@ -427,9 +437,9 @@ export function roomUniforms(L: VanLayout, lights: RoomLights) {
 }
 
 /** The map on the table: a picture (a canvas) lit like the room. */
-export function mapMaterial(L: VanLayout, lights: RoomLights, tex: THREE.Texture) {
+export function mapMaterial(L: VanLayout, lights: RoomLights, tex: THREE.Texture, clip?: THREE.IUniform<THREE.Vector4>) {
   return paintMaterial({
-    uniforms: { ...roomUniforms(L, lights), tMap: { value: tex } },
+    uniforms: { ...roomUniforms(L, lights, clip), tMap: { value: tex } },
     vertex: /* glsl */ `
       varying vec2 vUv;
       varying vec3 vLocal;
@@ -450,6 +460,7 @@ export function mapMaterial(L: VanLayout, lights: RoomLights, tex: THREE.Texture
       varying vec3 vLocal;
       varying vec3 vNormalL;
       void main() {
+        if (dot(vec4(vLocal, 1.0), uClip) < 0.0) discard;
         vec3 alb = texture2D(tMap, vUv).rgb;
         alb = alb * alb; // (the canvas is sRGB: lit in linear)
         gl_FragColor = vec4(alb * roomLight(vLocal, normalize(vNormalL)), 0.75);

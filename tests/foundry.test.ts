@@ -30,7 +30,7 @@ describe('the camper van (your van: src/van/, the rest of its checks in tests/va
       const c = camperRecipe(seed), g = camperGeometry(c);
       expect(camperValid(c)).toBe(true);
       expect(camperVerts(c)).toBeLessThanOrEqual(CAMPER_BUDGET);
-      for (const k of ['body', 'left', 'right', 'rear', 'leaf'] as const) expect(finite(g[k]), `${seed} ${k}`).toBe(true);
+      for (const k of ['body', 'left', 'right', 'rear', 'leaf', 'panes', 'leafPane'] as const) expect(finite(g[k]), `${seed} ${k}`).toBe(true);
       expect(verts(camperGeometry(camperRecipe(seed)).body)).toBe(verts(g.body));
       expect(partCount(g.body, 3)).toBeGreaterThan(0); // (its head lamps light at night)
       expect(partCount(g.body, 4) + partCount(g.rear, 4)).toBeGreaterThan(0); // (and its tail lamps)

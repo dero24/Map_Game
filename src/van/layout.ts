@@ -5,8 +5,8 @@
 // +x the van's right, +z toward its back, −z its front, y up from the ground under it), so the
 // windows look out from where the van really stands and walking through the back doorway is just
 // walking. The room is wider, longer and taller than the van — it overlaps the world round the
-// van — and is only ever drawn where you can see it: through the doorway from outside (a portal,
-// van.ts), and all round you once you're in. Its back wall stands at the van's back, the doorway
+// van — and is only ever drawn where you can see it: through the doorway and the windows from
+// outside (a portal, van.ts), and all round you once you're in. Its back wall stands at the van's back, the doorway
 // a short passage through it (`tunnel`) so the view through the opening always has a surface to
 // land on as you step through.
 import { camperFrame, camperRecipe, type CamperRecipe } from '../assets/camper';
@@ -120,6 +120,24 @@ export function nextMode(prev: Mode, lx: number, lz: number, L: VanLayout): Mode
   const inRoom = lx > L.room.x0 - 0.5 && lx < L.room.x1 + 0.5 && lz > L.room.z0 - 0.5 && lz < L.door.z + 0.5;
   if (!inRoom) return 'out';
   return inDoor && depth < L.leave ? 'out' : 'in';
+}
+
+/** Which side's windows you look in at from van-local x: −1 the left, 1 the right, 0 neither
+ *  (you're not outside either side — behind the van, or in it). */
+export function peekSide(L: VanLayout, lx: number): -1 | 0 | 1 {
+  const xi = L.recipe.W / 2 - L.frame.panel;
+  return lx < -xi ? -1 : lx > xi ? 1 : 0;
+}
+
+/** What of the room shows through that side's windows: the far side of their plane (van-local, the
+ *  plane a·p + d ≥ 0 kept). The room is wider than the van, so its near side stands outside the van,
+ *  between you and the window — through a window you see only what's beyond it, as through the
+ *  doorway. The doorway's passage is always kept (it's inside both planes), and from outside one side
+ *  a look through the doorway runs on away from that side, so it never crosses the plane. Neither
+ *  side: all of it. */
+export function windowClip(L: VanLayout, side: -1 | 0 | 1): [number, number, number, number] {
+  const xi = L.recipe.W / 2 - L.frame.panel;
+  return side === 0 ? [0, 0, 0, 1] : [-side, 0, 0, xi];
 }
 
 /** The walls inside: the room's four (the back one open at the passage), the passage's two sides

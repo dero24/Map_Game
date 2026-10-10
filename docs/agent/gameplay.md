@@ -360,7 +360,9 @@ park, the town in pencil; without it the game is unchanged (no van, no stencil, 
 - **The body** (`assets/camper.ts`, a foundry family: `camperRecipe(seed)` → `camperGeometry` → body,
   its two cargo sides, the bumper and step, one door leaf): a 5.6 m high-roof camper (2.72 m tall: the
   back doorway is 1.5 × 1.95 m over a 0.58 m floor, so a walker's eye clears its head by 0.3 m), two-tone,
-  curtained windows along the back (you never see into the van from outside), an open cab with seats,
+  windows along the back and in the back doors open right through (`camperFrame` `win`, `leafWin`: a
+  black rubber frame, the room's mustard curtains tied back at their ends, a pane each that is never
+  drawn but casts the shadow glass would — `panes`, `leafPane`), an open cab with seats,
   dash and wheel behind a curtain, barn doors that swing round against its sides (`DOOR_OPEN` 261°)
   as you come within ~2 m of them, from inside or out (a latch sound). Budget `CAMPER_BUDGET` 16k
   vertices (`tests/foundry.test.ts`, `tests/van.test.ts`). Seed 1, yours, is the sea-foam one.
@@ -370,12 +372,22 @@ park, the town in pencil; without it the game is unchanged (no van, no stencil, 
   parallax, and walking in is just walking — no teleport. The room overlaps the world round the van;
   it's only ever drawn where you can see it:
   - **outside** (`van.ts beforeRender`, `after`): the room is rendered from your eye into `portalRT`
-    (colour + depth), scissored to the doorway's patch of the screen. After the world, the passage's
-    five faces (the portal) draw twice: a stencil mark (depth-tested — a walker in front of the van
+    (colour + depth), scissored to the patch of the screen the doorway (from behind the van) and the
+    windows of the side you're beside cover. After the world, the passage's five faces and a face
+    across each side window (`windowFaces`, at the panel's inside: the frame and the curtains stand in
+    front) — the portal — draw twice: a stencil mark (depth-tested — a walker in front of the van
     stays in front), then the room's colour and its **true depth** (`gl_FragDepthEXT`) where marked,
     so the paint, the ink and the brush treat the room exactly as from inside. Where the room shows
     nothing (its windows) nothing is laid: the world behind shows through. The post's scene target
     keeps a stencil only when there's a van (`WatercolorPost({ stencil })`).
+  - **looking in at the windows** (Robby, 2026-10-10: "why can we not look in the windows of van from
+    outside?"): the room is wider than the van, so from beside it the room's near side stands outside
+    the van, between you and the window — through a side's windows only what's beyond their plane is
+    drawn (`peekSide`, `windowClip` → the room's materials' `uClip`, the rest discarded): you see across
+    the room to its far wall, well past the van's other side. A look through the doorway from beside
+    the van runs away from that side and never crosses its plane, so one draw serves the doorway and
+    the windows both. Shut, the back doors' windows look into the passage and the room beyond it; open
+    (folded against the sides), what's behind them.
   - **inside** (`after`, from `post.render`'s new `after` hook): the world draws as ever from where
     you stand (the van's body swapped to an invisible material — it still casts its shadow — and each
     cargo side drawn only from outside it: `beforeRender`), then the room: its shell (convex from
@@ -443,8 +455,9 @@ park, the town in pencil; without it the game is unchanged (no van, no stencil, 
 - Harness: `window.__VAN__` / `__GAME__.van`, `__GAME__.sight`; shots (`?capture=1&poc=1`): `van-wake`,
   `van-room`, `van-door`, `van-window`, `van-wall`, `van-doorway`, `van-near`, `van-step`, `van-back`,
   `van-side`, `van-curtain`, `van-cab`, `van-cab-left`, `van-cab-right`, `van-drive` (35 s into a drive
-  down the shore, at the wheel), `van-drive-out` (the van from the roadside), `bloom-0`, `bloom-1`
-  (`--settle=300` for the bloom).
+  down the shore, at the wheel), `van-drive-out` (the van from the roadside), `van-peek` (in at the
+  kerb side's window), `van-peek-left` (the driver's side, toward the front), `van-peek-back` (the back
+  doors shut: in at their windows), `bloom-0`, `bloom-1` (`--settle=300` for the bloom).
 - Not yet: driving it yourself, fuel and legs and sleep (later, by the plan), the room's things
   working, saving the van; parking at the end of a drive can put the room's far side into a building
   beside the kerb (seen only through that side's windows).

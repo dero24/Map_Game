@@ -1,12 +1,13 @@
 // The camper van — your home on the road (docs/agent/gameplay.md "The van"). A high-roof panel
 // van fitted out as a camper: two-tone paint, a roof rack with a solar panel, a rolled awning,
-// curtained windows along the back, an open cab (seats, dash, wheel) behind a curtain, and two
-// barn doors at the back that swing right round against its sides.
+// windows along the back with their curtains tied open, an open cab (seats, dash, wheel) behind a
+// curtain, and two barn doors at the back that swing right round against its sides.
 //
-// The back doorway is a real opening: what you see through it is the room (src/van/), which is
-// bigger than the van — the doorway is the seam between the two. So the body is built as panels
-// round the cargo box, not one closed extrusion, and the doors are their own geometry, turned on
-// their hinges by the van (src/van/van.ts).
+// The back doorway is a real opening, and so are the windows along the back and in the doors: what
+// you see through them is the room (src/van/), which is bigger than the van — the openings are the
+// seam between the two. So the body is built as panels round the cargo box, not one closed
+// extrusion, the windows holes right through (`win`; each with a pane that only casts the van's
+// shadow), and the doors are their own geometry, turned on their hinges by the van (src/van/van.ts).
 //
 // Output contract (src/assets/core.ts): non-indexed geometry with `color` and `aPart` (0 body,
 // 3 head lamps, 4 tail lamps); metres; y up; the front toward −z; the origin on the ground under
@@ -63,24 +64,44 @@ export function camperFrame(c: CamperRecipe) {
     steer: { x: -0.48, y: 1.24, z: zf + 0.72 + 0.5, tilt: -0.45 },
     doorTop: c.floor + c.doorH,
     post: (c.W - c.doorW) / 2, // each post's width beside the doorway
+    /** a panel's thickness (the cargo box's sides: the windows' faces stand at its inside) */
+    panel: 0.05,
+    /** the cargo box's side windows, the same each side: the clear opening along z and up y */
+    win: { z0: zf + 2.55, z1: zr - 0.85, y0: 1.4, y1: 1.98 },
+    /** the back doors' windows, in a leaf's own frame (camperGeometry's leaf: u along it from the
+     *  hinge, toward −x; y up) */
+    leafWin: { u0: -c.W / 4 - 0.04 - (c.W / 2 - 0.36) / 2, u1: -c.W / 4 - 0.04 + (c.W / 2 - 0.36) / 2, y0: 1.54, y1: 2.06 },
   };
+}
+
+/** A rectangle [ua, ub] × [ya, yb] less a hole inside it, as four rectangles round the hole (below
+ *  and above it the whole width, beside it the hole's height). */
+export function around(ua: number, ub: number, ya: number, yb: number, h: { u0: number; u1: number; y0: number; y1: number }) {
+  return [
+    { u0: ua, u1: ub, y0: ya, y1: h.y0 }, { u0: ua, u1: ub, y0: h.y1, y1: yb },
+    { u0: ua, u1: h.u0, y0: h.y0, y1: h.y1 }, { u0: h.u1, u1: ub, y0: h.y0, y1: h.y1 },
+  ].filter((r) => r.u1 - r.u0 > 1e-4 && r.y1 - r.y0 > 1e-4);
 }
 
 export const CAMPER_BUDGET = 16000; // vertices: one van in the world, seen from two metres
 
 /** The body (everything but the two back doors) and one door leaf. The leaf is built for the
  *  right-hand door: its hinge on the y axis at the origin, the leaf reaching toward −x, its outer
- *  face toward +z; the van mirrors it for the left. */
-export function camperGeometry(c: CamperRecipe): { body: THREE.BufferGeometry; left: THREE.BufferGeometry; right: THREE.BufferGeometry; rear: THREE.BufferGeometry; leaf: THREE.BufferGeometry; wheel: THREE.BufferGeometry } {
+ *  face toward +z; the van mirrors it for the left. `panes` (both sides' windows) and `leafPane`
+ *  fill the windows' holes for the sun's shadow alone (van.ts never draws them). */
+export function camperGeometry(c: CamperRecipe): { body: THREE.BufferGeometry; left: THREE.BufferGeometry; right: THREE.BufferGeometry; rear: THREE.BufferGeometry; leaf: THREE.BufferGeometry; wheel: THREE.BufferGeometry; panes: THREE.BufferGeometry; leafPane: THREE.BufferGeometry } {
   const F = camperFrame(c);
   const { W, H, floor, belt } = c;
   const { zf, zr, zHood, zScreenTop, zB } = F;
-  const hw = W / 2, R = c.wheelR, T = 0.05; // T: a panel's thickness
+  const hw = W / 2, R = c.wheelR, T = F.panel; // T: a panel's thickness
   const P: THREE.BufferGeometry[] = [];
   const paint = c.paint, cream = c.cream;
-  const trim = 0x2b2c30, dark = 0x1d1e21, chrome = 0xb9bcc0, glassDark = 0x334455;
+  const trim = 0x2b2c30, dark = 0x1d1e21, chrome = 0xb9bcc0;
   const stripe = new THREE.Color(paint).multiplyScalar(0.72).getHex();
   const curtain = 0xd9c7a3, seat = 0x4a4f57, dash = 0x3a3c40;
+  // the windows' curtains: the room's own mustard and red tie-backs (src/van/room.ts), so they read as
+  // cloth against the cream, and the van looks like the room it holds
+  const drape = 0xd8a640, drapeDark = new THREE.Color(drape).multiplyScalar(0.82).getHex(), tie = 0xa6382f;
   const add = (g: THREE.BufferGeometry, hex: number, id = 0) => P.push(part(g, hex, id));
   const sill = 0.36; // the bottom of the bodywork over the road
   const sides: THREE.BufferGeometry[] = []; // the cargo box's two sides: their own geometry (van.ts draws each only from its own side)
@@ -94,16 +115,21 @@ export function camperGeometry(c: CamperRecipe): { body: THREE.BufferGeometry; l
   // the cab's sides below the windows (the doors' outer skin), from the hood back to the B-pillar
   for (const s of [-1, 1]) add(box(T, belt - sill, zB - zHood, s * (hw - T / 2), (belt + sill) / 2, (zB + zHood) / 2), paint);
   // the cargo box's sides: the paint below the belt, the cream above, a stripe between. Their
-  // faces toward the inside are left out: through the back doorway you see the room, and through
-  // the room's windows (where the room shows nothing) the world beyond the van's side — never the
-  // inside of its panels (src/van/van.ts, the portal)
+  // faces toward the inside are left out: through the back doorway and the windows you see the
+  // room, and through the room's windows (where the room shows nothing) the world beyond the van's
+  // side — never the inside of its panels (src/van/van.ts, the portal)
+  const wn = F.win, fw = 0.04; // (fw: the windows' rubber frame)
+  const sideHole = { u0: wn.z0 - fw, u1: wn.z1 + fw, y0: wn.y0 - fw, y1: wn.y1 + fw };
   for (const s of [-1, 1]) {
     const x = s * (hw - T / 2), z0 = zB, z1 = zr - 0.02;
     const side: THREE.BufferGeometry[] = [];
     const sadd = (g: THREE.BufferGeometry, hex: number, id = 0) => side.push(part(g, hex, id));
+    // (a rectangle on the side: u along z, y up, d deep across it)
+    const slab = (r: { u0: number; u1: number; y0: number; y1: number }, d: number, hex: number) => sadd(box(d, r.y1 - r.y0, r.u1 - r.u0, x, (r.y0 + r.y1) / 2, (r.u0 + r.u1) / 2), hex);
     sadd(box(T, belt - sill, z1 - z0, x, (belt + sill) / 2, (z0 + z1) / 2), paint);
     sadd(box(T + 0.006, 0.07, z1 - z0, x, belt + 0.035, (z0 + z1) / 2), stripe);
-    sadd(box(T, H - 0.1 - (belt + 0.07), z1 - z0, x, (H - 0.1 + belt + 0.07) / 2, (z0 + z1) / 2), cream);
+    // the cream above, round the window: an opening right through it
+    for (const r of around(z0, z1, belt + 0.07, H - 0.1, sideHole)) slab(r, T, cream);
     // the cab's pillars and roof rail above its open windows: A (along the windshield), B
     const aLen = Math.hypot(zScreenTop - zHood, F.screenTopY - F.hoodY);
     const aPillar = box(0.065, aLen, 0.075, 0, aLen / 2, 0); // (dark, like the windshield's surround: thin from the seat)
@@ -112,17 +138,21 @@ export function camperGeometry(c: CamperRecipe): { body: THREE.BufferGeometry; l
     add(aPillar, trim);
     sadd(box(T, H - 0.1 - belt, 0.12, x, (H - 0.1 + belt) / 2, zB - 0.06), cream); // B-pillar
     add(box(T, H - 0.1 - (F.screenTopY - 0.08), zB - zScreenTop + 0.02, x, (H - 0.1 + F.screenTopY - 0.08) / 2, (zB + zScreenTop) / 2), cream); // over the door glass
-    // a window along the back, curtained (closed from outside: you never see into the van)
-    const wz0 = zB + 0.55, wz1 = zr - 0.85;
-    sadd(box(T + 0.02, 0.66, wz1 - wz0 + 0.08, x, 1.69, (wz0 + wz1) / 2), trim); // its rubber frame
-    sadd(box(T + 0.03, 0.58, wz1 - wz0, x, 1.69, (wz0 + wz1) / 2), glassDark);
-    for (let k = 0; k < 7; k++) { // the curtain behind the glass, gathered in folds
-      const z = wz0 + 0.06 + ((wz1 - wz0 - 0.12) * k) / 6;
-      sadd(box(T + 0.035, 0.52, 0.09, x, 1.69, z), k % 2 ? curtain : new THREE.Color(curtain).multiplyScalar(0.88).getHex());
+    // the window along the back: its rubber frame lining the opening, and the curtains open,
+    // gathered at its ends and tied back — standing in the opening, in front of what shows in it
+    for (const r of around(wn.z0 - fw, wn.z1 + fw, wn.y0 - fw, wn.y1 + fw, { u0: wn.z0, u1: wn.z1, y0: wn.y0, y1: wn.y1 })) slab(r, T + 0.02, trim);
+    for (const [e, dir] of [[wn.z0, 1], [wn.z1, -1]]) {
+      for (let k = 0; k < 2; k++) sadd(box(0.02, wn.y1 - wn.y0 - 0.01, 0.085, s * (hw - T + 0.013), (wn.y0 + wn.y1) / 2, e + dir * (0.045 + k * 0.075)), k % 2 ? drape : drapeDark);
+      sadd(box(0.03, 0.045, 0.19, s * (hw - T + 0.025), (wn.y0 + wn.y1) / 2 - 0.05, e + dir * 0.085), tie);
     }
     if (s > 0) {
-      // the sliding door's seams on the kerb side, and its handle
-      for (const z of [zB + 0.08, zB + 1.32]) sadd(box(T + 0.008, H - 0.16 - sill, 0.012, x, (H - 0.16 + sill) / 2, z), trim);
+      // the sliding door's seams on the kerb side (the back one through the window: a post there,
+      // a pane each side of it), and its handle
+      const zs = zB + 1.32;
+      sadd(box(T + 0.008, H - 0.16 - sill, 0.012, x, (H - 0.16 + sill) / 2, zB + 0.08), trim);
+      sadd(box(T + 0.008, wn.y0 - fw - sill, 0.012, x, (wn.y0 - fw + sill) / 2, zs), trim);
+      sadd(box(T + 0.008, H - 0.16 - (wn.y1 + fw), 0.012, x, (H - 0.16 + wn.y1 + fw) / 2, zs), trim);
+      slab({ u0: zs - fw / 2, u1: zs + fw / 2, y0: wn.y0, y1: wn.y1 }, T + 0.02, trim);
       sadd(box(T + 0.03, 0.035, 0.2, x, belt - 0.12, zB + 1.2), chrome);
     }
     sides.push(dropFacing(merge(side), -s, 0, 0));
@@ -218,29 +248,39 @@ export function camperGeometry(c: CamperRecipe): { body: THREE.BufferGeometry; l
   for (const s of [-1, 1]) for (const z of [F.axleF, F.axleR]) wheel(s * (hw - 0.13), z);
   const body = merge(P);
 
-  // ---- a door leaf (the right-hand one): its outer skin two-tone like the van, a curtained
-  // window in its upper half, a handle by its free edge; its inner face plain wood-brown
+  // ---- a door leaf (the right-hand one): its outer skin two-tone like the van, a window in its
+  // upper half (open right through: shut, the passage and the room show in it), its curtains tied
+  // open, a handle by its free edge; its inner face plain wood-brown
   const lw = hw, lh = H - 0.06 - 0.42, LT = 0.06;
   const Lp: THREE.BufferGeometry[] = [];
   const la = (g: THREE.BufferGeometry, hex: number, id = 0) => Lp.push(part(g, hex, id));
-  const y0 = 0.42;
+  const y0 = 0.42, lf = 0.03; // (lf: its window's frame)
+  const lwn = F.leafWin;
+  const leafHole = { u0: lwn.u0 - lf, u1: lwn.u1 + lf, y0: lwn.y0 - lf, y1: lwn.y1 + lf };
+  // (a rectangle on the leaf: u along x, y up, d deep, centred at z)
+  const lslab = (r: { u0: number; u1: number; y0: number; y1: number }, d: number, z: number, hex: number) => la(box(r.u1 - r.u0, r.y1 - r.y0, d, (r.u0 + r.u1) / 2, (r.y0 + r.y1) / 2, z), hex);
   la(box(lw, belt - y0, LT, -lw / 2, (belt + y0) / 2, 0), paint);
   la(box(lw + 0.004, 0.07, LT + 0.006, -lw / 2, belt + 0.035, 0), stripe);
-  la(box(lw, y0 + lh - belt - 0.07, LT, -lw / 2, (y0 + lh + belt + 0.07) / 2, 0), cream);
-  la(box(lw - 0.3, 0.6, LT + 0.02, -lw / 2 - 0.04, 1.8, 0), trim);
-  la(box(lw - 0.36, 0.52, LT + 0.03, -lw / 2 - 0.04, 1.8, 0), glassDark);
-  for (let k = 0; k < 4; k++) la(box(0.12, 0.46, LT + 0.034, -0.26 - k * 0.15, 1.8, 0), k % 2 ? curtain : new THREE.Color(curtain).multiplyScalar(0.88).getHex());
+  for (const r of around(-lw, 0, belt + 0.07, y0 + lh, leafHole)) lslab(r, LT, 0, cream);
+  for (const r of around(leafHole.u0, leafHole.u1, leafHole.y0, leafHole.y1, lwn)) lslab(r, LT + 0.02, 0, trim);
+  for (const [e, dir] of [[lwn.u0, 1], [lwn.u1, -1]]) {
+    for (let k = 0; k < 2; k++) la(box(0.06, lwn.y1 - lwn.y0 - 0.01, 0.02, e + dir * (0.03 + k * 0.05), (lwn.y0 + lwn.y1) / 2, -LT / 2 + 0.015), k % 2 ? drape : drapeDark);
+    la(box(0.12, 0.04, 0.03, e + dir * 0.055, (lwn.y0 + lwn.y1) / 2 - 0.04, -LT / 2 + 0.018), tie);
+  }
   la(box(0.18, 0.04, 0.04, -lw + 0.16, belt - 0.15, LT / 2 + 0.02), chrome);
-  la(box(lw - 0.06, lh - 0.06, 0.012, -lw / 2, y0 + lh / 2, -LT / 2 - 0.006), 0x8a6a4c); // the inner face
+  for (const r of around(-lw + 0.03, -0.03, y0 + 0.03, y0 + lh - 0.03, leafHole)) lslab(r, 0.012, -LT / 2 - 0.006, 0x8a6a4c); // the inner face
   for (const y of [y0 + 0.25, y0 + lh - 0.3]) la(box(0.05, 0.12, 0.08, -0.02, y, 0), trim); // hinges
   const leaf = merge(Lp);
+  // the windows' panes, for the shadow alone (the van's shadow stays whole, as it was with glass)
+  const panes = merge([-1, 1].map((s) => box(T, wn.y1 - wn.y0, wn.z1 - wn.z0, s * (hw - T / 2), (wn.y0 + wn.y1) / 2, (wn.z0 + wn.z1) / 2)));
+  const leafPane = box(lwn.u1 - lwn.u0, lwn.y1 - lwn.y0, LT, (lwn.u0 + lwn.u1) / 2, (lwn.y0 + lwn.y1) / 2, 0);
   // the steering wheel, about its own hub (its axis along z): a rim, a hub and three spokes
   const Wp: THREE.BufferGeometry[] = [];
   Wp.push(part(new THREE.TorusGeometry(0.19, 0.024, 6, 20), 0x1d1e21));
   Wp.push(part(new THREE.CylinderGeometry(0.05, 0.05, 0.05, 10).rotateX(Math.PI / 2), 0x2b2c30));
   for (const a of [Math.PI / 2, Math.PI * 1.17, -Math.PI * 0.17]) Wp.push(part(box(0.17, 0.03, 0.02, 0.095, 0, 0).rotateZ(a), 0x2b2c30));
   const steering = merge(Wp);
-  return { body, left: sides[0], right: sides[1], rear, leaf, wheel: steering };
+  return { body, left: sides[0], right: sides[1], rear, leaf, wheel: steering, panes, leafPane };
 }
 
 /** The geometry less its triangles facing (nx, ny, nz) (flat-shaded boxes: each face's normal). */
@@ -261,9 +301,9 @@ export function camperValid(c: CamperRecipe) {
   const { body, left, right, rear, leaf } = camperGeometry(c);
   return validGeometry(body, { w: W_MAX, h: 3.0, d: 5.95 }) && [left, right].every((g) => validGeometry(g, { w: 1.2, h: 3.0, d: 4.0 }, 0.4)) && validGeometry(rear, { w: W_MAX, h: 0.6, d: 0.6 }, 0.4) && validGeometry(leaf, { w: 1.1, h: 3.0, d: 0.2 }, 3) && camperVerts(c) <= CAMPER_BUDGET;
 }
-/** All its vertices: the body, the bumper and step, both doors. */
+/** All its vertices: the body, the bumper and step, both doors, the panes. */
 export function camperVerts(c: CamperRecipe) {
   const g = camperGeometry(c);
-  return [g.body, g.left, g.right, g.rear, g.wheel].reduce((n, x) => n + x.getAttribute('position').count, 0) + 2 * g.leaf.getAttribute('position').count;
+  return [g.body, g.left, g.right, g.rear, g.wheel, g.panes].reduce((n, x) => n + x.getAttribute('position').count, 0) + 2 * (g.leaf.getAttribute('position').count + g.leafPane.getAttribute('position').count);
 }
 const W_MAX = 2.9;

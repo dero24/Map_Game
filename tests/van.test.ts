@@ -1,10 +1,11 @@
 // The van (src/van/, ?poc=1): bigger on the inside, through a doorway with no seam — its plan, the
 // change between in and out, walking in it, where it parks, its body (assets/camper.ts).
 import { describe, it, expect } from 'vitest';
-import { vanLayout, nextMode, roomSegments, hullSegments, toWorld, toLocal, boxSegs, type Mode, type VanPose } from '../src/van/layout';
+import type * as THREE from 'three';
+import { vanLayout, nextMode, roomSegments, hullSegments, toWorld, toLocal, boxSegs, peekSide, windowClip, type Mode, type VanPose } from '../src/van/layout';
 import { moveAmong, VanSpace } from '../src/van/space';
 import { findVanSpot, inRing, type SpotEnv } from '../src/van/spot';
-import { wallPieces, shellGeometry, tunnelFaces, contentsGeometry } from '../src/van/room';
+import { wallPieces, shellGeometry, tunnelFaces, contentsGeometry, windowFaces } from '../src/van/room';
 import { camperRecipe, camperGeometry, camperValid, camperVerts, camperFrame, CAMPER_BUDGET, CAMPER_PAINTS } from '../src/assets/camper';
 import { shouldLook, SIGHT } from '../src/world/sight';
 
@@ -272,6 +273,98 @@ describe('the camper van (the foundry\'s family)', () => {
     for (const [side, geo] of [[-1, g.left], [1, g.right]] as const) {
       const n = geo.getAttribute('normal');
       for (let i = 0; i < n.count; i++) expect(n.getX(i) * side).toBeGreaterThan(-0.5);
+    }
+  });
+});
+
+/** Of a grid over a rectangle seen straight on (along the axis neither `ax` nor `bx` names), the
+ *  share no triangle of `g` covers. */
+function clearShare(g: THREE.BufferGeometry, ax: 0 | 1 | 2, bx: 0 | 1 | 2, r: { a0: number; a1: number; b0: number; b1: number }, n = 40, m = 12) {
+  const G = g.index ? g.toNonIndexed() : g, p = G.getAttribute('position');
+  const tris: number[][] = [];
+  for (let t = 0; t + 2 < p.count; t += 3) {
+    const q = [0, 1, 2].map((k) => [p.getComponent(t + k, ax), p.getComponent(t + k, bx)]);
+    const A = (q[1][0] - q[0][0]) * (q[2][1] - q[0][1]) - (q[2][0] - q[0][0]) * (q[1][1] - q[0][1]);
+    if (Math.abs(A) > 1e-9) tris.push([...q.flat(), A]); // (a face seen edge-on covers nothing)
+  }
+  let clear = 0;
+  for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) {
+    const a = r.a0 + ((i + 0.5) / n) * (r.a1 - r.a0), b = r.b0 + ((j + 0.5) / m) * (r.b1 - r.b0);
+    const hit = tris.some(([x0, y0, x1, y1, x2, y2, A]) => {
+      const w0 = ((x1 - a) * (y2 - b) - (x2 - a) * (y1 - b)) / A, w1 = ((x2 - a) * (y0 - b) - (x0 - a) * (y2 - b)) / A;
+      return w0 > 1e-6 && w1 > 1e-6 && 1 - w0 - w1 > 1e-6;
+    });
+    if (!hit) clear++;
+  }
+  return clear / (n * m);
+}
+
+describe('looking in at its windows (from outside, the room through them)', () => {
+  const F = L.frame, xi = L.recipe.W / 2 - F.panel;
+  const keep = (side: -1 | 0 | 1, x: number) => { const [a, , , d] = windowClip(L, side); return a * x + d >= 0; };
+  it('its windows are open right through, the curtains tied back at their ends; the panes keep its shadow whole', () => {
+    const g = camperGeometry(L.recipe);
+    const side = { a0: F.win.z0, a1: F.win.z1, b0: F.win.y0, b1: F.win.y1 }, lw = F.leafWin, leaf = { a0: lw.u0, a1: lw.u1, b0: lw.y0, b1: lw.y1 };
+    expect(clearShare(g.left, 2, 1, side)).toBeGreaterThan(0.75);
+    expect(clearShare(g.right, 2, 1, side)).toBeGreaterThan(0.75); // (the sliding door's post across it too)
+    expect(clearShare(g.body, 2, 1, side)).toBe(1); // (nothing of the body in the way)
+    expect(clearShare(g.leaf, 0, 1, leaf)).toBeGreaterThan(0.6);
+    // the panes fill the openings exactly (never drawn: they cast the shadow glass would)
+    expect(clearShare(g.panes, 2, 1, side)).toBe(0);
+    expect(clearShare(g.leafPane, 0, 1, leaf)).toBe(0);
+    for (const [geo, w] of [[g.panes, F.win.z1 - F.win.z0], [g.leafPane, lw.u1 - lw.u0]] as const) {
+      geo.computeBoundingBox();
+      const b = geo.boundingBox!;
+      expect(Math.max(b.max.x - b.min.x, b.max.z - b.min.z)).toBeGreaterThanOrEqual(w - 1e-6);
+    }
+  });
+  it('shut, the windows in the back doors look into the doorway passage', () => {
+    const lw = F.leafWin, hw = L.recipe.W / 2, d = L.door;
+    // (the right leaf, hinged at the right corner, shut: its u runs from the hinge toward −x)
+    const x0 = hw + lw.u0, x1 = hw + lw.u1;
+    expect((Math.min(x1, d.x1) - Math.max(x0, d.x0)) / (x1 - x0)).toBeGreaterThan(0.9);
+    expect(lw.y0).toBeGreaterThan(d.y0);
+    expect(lw.y1).toBeLessThan(d.y1);
+  });
+  it('the portal\'s face across each side window stands at the panel\'s inside, spans the opening and faces out', () => {
+    const W = windowFaces(L);
+    expect(W.map((f) => f.side)).toEqual([-1, 1]);
+    for (const f of W) {
+      for (const [x] of f.p) expect(x).toBeCloseTo(f.side * xi, 9);
+      const zs = f.p.map((q) => q[2]), ys = f.p.map((q) => q[1]);
+      expect([Math.min(...zs), Math.max(...zs), Math.min(...ys), Math.max(...ys)]).toEqual([F.win.z0, F.win.z1, F.win.y0, F.win.y1]);
+      expect(f.n).toEqual([f.side, 0, 0]);
+    }
+  });
+  it('you look in at a side\'s windows only from outside that side', () => {
+    expect(peekSide(L, -3)).toBe(-1);
+    expect(peekSide(L, 3)).toBe(1);
+    expect(peekSide(L, 0)).toBe(0); // (behind the van or in its doorway: the doorway's)
+    expect(peekSide(L, -xi + 0.01)).toBe(0);
+    expect(peekSide(L, xi - 0.01)).toBe(0);
+  });
+  it('through a side window, only what\'s beyond it: the room\'s far side, never its near side; the passage always', () => {
+    const R = L.room, kitchen = L.furniture.find((f) => f.kind === 'kitchen')!;
+    expect(keep(1, R.x0)).toBe(true);
+    expect(keep(1, R.x1)).toBe(false);
+    expect(keep(1, kitchen.x - kitchen.hz)).toBe(false); // (the kitchen along the near wall: between you and the window)
+    expect(keep(-1, R.x1)).toBe(true);
+    expect(keep(-1, R.x0)).toBe(false);
+    // the far wall you see is well beyond the van's far side: bigger on the inside, through the windows too
+    expect(R.x0).toBeLessThan(-L.recipe.W / 2 - 1);
+    for (const side of [-1, 0, 1] as const) for (const x of [L.door.x0, 0, L.door.x1]) expect(keep(side, x)).toBe(true);
+    for (const x of [R.x0, R.x1]) expect(keep(0, x)).toBe(true);
+  });
+  it('from beside the van, a look through the doorway never crosses that side\'s plane (one draw serves both)', () => {
+    const d = L.door;
+    for (const ex of [-1.2, -2, -4]) for (const ez of [d.z + 0.5, d.z + 3, d.z + 9]) for (let i = 0; i <= 10; i++) {
+      const px = d.x0 + ((d.x1 - d.x0) * i) / 10;
+      for (let k = 1; ; k += 0.05) { // (from the door's plane on in, to the room's front)
+        const x = ex + (px - ex) * k, z = ez + (d.z - ez) * k;
+        if (z < L.room.z0) break;
+        expect(keep(-1, x)).toBe(true);
+        expect(keep(1, -x)).toBe(true); // (and from the right, mirrored)
+      }
     }
   });
 });

@@ -3,12 +3,15 @@
 // Outside it's an ordinary camper van (assets/camper.ts). Inside, the room (room.ts) is wider,
 // longer and taller than the van could hold. There is no loading and no fade between them — the
 // back doorway works like any front door in the game:
-//   - outside, the room is drawn only through the doorway: the room is rendered from your own eye
-//     (`beforeRender` → `portalRT`, colour and depth), and after the world (`after`) the passage's
-//     faces (the portal) mark where the doorway shows (a stencil, depth-tested: whatever stands in
-//     front of it stays), then lay the room's colour and its true depth there — the paint, the ink
-//     and the brush see the room exactly as they do from inside. Where the room has an opening (a
-//     window) it lays nothing, so the world behind shows through;
+//   - outside, the room is drawn only through the doorway and the windows: the room is rendered
+//     from your own eye (`beforeRender` → `portalRT`, colour and depth), and after the world
+//     (`after`) the passage's faces and the windows' (the portal) mark where they show (a stencil,
+//     depth-tested: whatever stands in front stays — the windows' frames, their curtains, you), then
+//     lay the room's colour and its true depth there — the paint, the ink and the brush see the room
+//     exactly as they do from inside. Where the room has an opening (a window) it lays nothing, so
+//     the world behind shows through. The room is wider than the van, so from beside it its near
+//     side stands outside the van: through a side's windows only what's beyond them is drawn
+//     (layout.ts windowClip);
 //   - inside, the world is drawn as ever (from where you stand — the room shares the van's frame),
 //     the van's body left out, then the room over it (`after`, from the post's scene pass): its
 //     shell without a depth test (it's convex from inside, so the world shows only through its
@@ -28,12 +31,12 @@ import { camperGeometry, camperRecipe } from '../assets/camper';
 import { propMaterial } from '../render/propMaterial';
 import { U } from '../render/shared';
 import type { WalkWorld } from '../player/collision';
-import { vanLayout, nextMode, roomSegments, hullSegments, toWorld, toLocal, type VanLayout, type VanPose, type Mode } from './layout';
+import { vanLayout, nextMode, roomSegments, hullSegments, toWorld, toLocal, peekSide, windowClip, type VanLayout, type VanPose, type Mode } from './layout';
 import { VanSpace, type WalkSpace } from './space';
 import { buildGraph, route, lanePath, Drive, type Graph, type PathPt } from './drive';
 import { walkParams, setLens } from '../player/controller';
 import type { Road } from '../world/data';
-import { shellGeometry, tunnelGeometry, contentsGeometry, roomLights, roomMaterial, mapMaterial, chartCanvas, tunnelFaces } from './room';
+import { shellGeometry, tunnelGeometry, contentsGeometry, roomLights, roomMaterial, mapMaterial, chartCanvas, tunnelFaces, windowFaces } from './room';
 
 /** What the van needs of the walker: where they are, and the ground they walk on. */
 export interface VanWalker {
@@ -69,7 +72,9 @@ export class Van {
   private portalRoot = new THREE.Group();
   private portalRT: THREE.WebGLRenderTarget | null = null;
   private portalMat: THREE.ShaderMaterial;
-  private portalOn = false; // (the doorway's room was drawn this frame: `after` lays it)
+  private portalOn = false; // (the room was drawn for the doorway or a window this frame: `after` lays it)
+  /** what of the room is drawn (van-local plane; all of it but through a side's windows) */
+  private clip = { value: new THREE.Vector4(0, 0, 0, 1) };
   private paintMat = propMaterial({ keep: true });
   private hiddenMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
   private roomRoot = new THREE.Group();
@@ -77,7 +82,9 @@ export class Van {
   private space: VanSpace;
   private registered = false;
   private clearC = new THREE.Color();
-  private portalBox = new THREE.Box3();
+  private doorBox = new THREE.Box3(); // (the portal's parts, van-local: the doorway's passage, each side's windows)
+  private winBox = [new THREE.Box3(), new THREE.Box3()];
+  private box3 = new THREE.Box3();
   private frustum = new THREE.Frustum();
   private m4 = new THREE.Matrix4();
   /** You stepped out of the back door (the first time: the town's bloom — main.ts). */
@@ -132,7 +139,12 @@ export class Van {
       this.leaves.push(pivot);
       this.group.add(pivot);
     }
-    for (const m of [this.body, this.rear, ...this.sides, ...this.leaves.map((p) => p.children[0])]) m.layers.enable(1); // (they cast the sun's shadow)
+    // the windows' panes: never drawn, but they cast the sun's shadow as glass would
+    const panes = new THREE.Mesh(geo.panes, this.hiddenMat);
+    panes.name = 'van:panes';
+    this.group.add(panes);
+    for (const p of this.leaves) { const m = new THREE.Mesh(geo.leafPane, this.hiddenMat); m.name = 'van:pane'; p.add(m); }
+    for (const m of [this.body, this.rear, ...this.sides, panes, ...this.leaves.flatMap((p) => p.children)]) m.layers.enable(1); // (they cast the sun's shadow)
     // the steering wheel, on its column: it turns with the road
     const st = L.frame.steer;
     this.wheelPivot.position.set(st.x, st.y, st.z);
@@ -141,8 +153,8 @@ export class Van {
     this.wheelMesh.name = 'van:wheel';
     this.wheelPivot.add(this.wheelMesh);
     this.group.add(this.wheelPivot);
-    // the portal: the passage's faces, twice — first marking where the doorway shows (depth-tested
-    // against the world, nothing drawn), then laying the room's colour and depth there
+    // the portal: the passage's faces and the windows', twice — first marking where they show
+    // (depth-tested against the world, nothing drawn), then laying the room's colour and depth there
     const vert = /* glsl */ `void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
     const markMat = new THREE.ShaderMaterial({
       vertexShader: vert, fragmentShader: /* glsl */ `void main() { gl_FragColor = vec4(0.0); }`,
@@ -166,10 +178,11 @@ export class Van {
       stencilWrite: true, stencilRef: 1, stencilFunc: THREE.EqualStencilFunc, stencilZPass: THREE.KeepStencilOp,
     });
     // (the passage's four faces, and across its far end the way into the room — the room's own
-    // passage has no face there: it opens into the room)
+    // passage has no face there: it opens into the room; then a face across each side window)
     const pg = new THREE.BufferGeometry(), pos: number[] = [], d = L.door, t = L.tunnel;
     const end = { p: [[d.x0, d.y0, t.z0], [d.x1, d.y0, t.z0], [d.x1, d.y1, t.z0], [d.x0, d.y1, t.z0]] as [number, number, number][] };
-    for (const f of [...tunnelFaces(L), end]) for (const i of [0, 1, 2, 0, 2, 3]) pos.push(...f.p[i]);
+    for (const f of [...tunnelFaces(L), end]) for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(...f.p[i]); this.doorBox.expandByPoint(new THREE.Vector3(...f.p[i])); }
+    for (const f of windowFaces(L)) for (const i of [0, 1, 2, 0, 2, 3]) { pos.push(...f.p[i]); this.winBox[f.side < 0 ? 0 : 1].expandByPoint(new THREE.Vector3(...f.p[i])); }
     pg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     const mark = new THREE.Mesh(pg, markMat), fill = new THREE.Mesh(pg, this.portalMat);
     mark.renderOrder = 0;
@@ -179,11 +192,10 @@ export class Van {
     this.portalRoot.matrixAutoUpdate = false;
     this.portalScene.add(this.portalRoot);
     this.portalScene.matrixWorldAutoUpdate = false;
-    this.portalBox.setFromBufferAttribute(pg.getAttribute('position') as THREE.BufferAttribute);
     // the room, in a scene of its own
     const lights = roomLights(L);
-    this.shellMat = roomMaterial(L, lights);
-    const contentMat = roomMaterial(L, lights);
+    this.shellMat = roomMaterial(L, lights, this.clip);
+    const contentMat = roomMaterial(L, lights, this.clip);
     const shell = new THREE.Mesh(shellGeometry(L), this.shellMat);
     shell.renderOrder = 0;
     const tunnel = new THREE.Mesh(tunnelGeometry(L), contentMat);
@@ -195,7 +207,7 @@ export class Van {
       const tex = new THREE.CanvasTexture(chart);
       tex.colorSpace = THREE.NoColorSpace;
       const t = L.furniture.find((f) => f.kind === 'maptable')!;
-      const map = new THREE.Mesh(new THREE.PlaneGeometry(t.hx * 2 - 0.16, t.hz * 2 - 0.14), mapMaterial(L, lights, tex));
+      const map = new THREE.Mesh(new THREE.PlaneGeometry(t.hx * 2 - 0.16, t.hz * 2 - 0.14), mapMaterial(L, lights, tex, this.clip));
       map.rotation.set(-Math.PI / 2, 0, t.yaw, 'YXZ');
       map.position.set(t.x, L.room.y0 + 0.763, t.z);
       map.renderOrder = 1;
@@ -450,10 +462,10 @@ export class Van {
   }
   private cam = new THREE.Vector3();
 
-  /** The doors open at once (shots; a reload into an open van). */
-  openDoors() {
-    this.doorTarget = this.doors = 1;
-    this.leaves.forEach((p, i) => { p.rotation.y = (i === 0 ? 1 : -1) * DOOR_OPEN; p.updateMatrix(); p.userData.set = true; });
+  /** The doors open (or shut) at once (shots; a reload into an open van). */
+  openDoors(open = true) {
+    this.doorTarget = this.doors = open ? 1 : 0;
+    this.leaves.forEach((p, i) => { p.rotation.y = open ? (i === 0 ? 1 : -1) * DOOR_OPEN : 0; p.updateMatrix(); p.userData.set = true; });
     this.group.updateMatrixWorld(true);
   }
 
@@ -474,32 +486,41 @@ export class Van {
     this.portalRoot.updateMatrixWorld(true);
   }
 
-  /** Before the frame's draw: outside with the doorway in view, the room drawn into the portal's
-   *  target from this camera. `size`: the frame's render target (post.ts sceneRT). */
+  /** Before the frame's draw: outside with the doorway or a window in view, the room drawn into the
+   *  portal's target from this camera. `size`: the frame's render target (post.ts sceneRT). */
   beforeRender(r: THREE.WebGLRenderer, cam: THREE.Camera, size: THREE.Vector2, origin: THREE.Vector3) {
     this.placeRoom(origin);
-    // each side of the cargo box only from outside it (its shadow cast either way)
+    // each side of the cargo box only from outside it (its shadow cast either way) — and from there,
+    // the room through its windows
     cam.getWorldPosition(this.cam);
-    const [cx] = toLocal(this.pose, this.cam.x + origin.x, this.cam.z + origin.z), hw = this.layout.recipe.W / 2 - 0.06;
-    this.sides[0].material = this.mode === 'out' && cx < -hw ? this.paintMat : this.hiddenMat;
-    this.sides[1].material = this.mode === 'out' && cx > hw ? this.paintMat : this.hiddenMat;
+    const [cx, cz] = toLocal(this.pose, this.cam.x + origin.x, this.cam.z + origin.z);
+    const side = this.mode === 'out' ? peekSide(this.layout, cx) : 0;
+    this.sides[0].material = side < 0 ? this.paintMat : this.hiddenMat;
+    this.sides[1].material = side > 0 ? this.paintMat : this.hiddenMat;
     this.portalOn = false;
-    if (this.mode !== 'out' || this.doors < 0.02) return;
-    this.frustum.setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
-    const box = this.portalBox.clone().applyMatrix4(this.portalRoot.matrixWorld);
-    if (!this.frustum.intersectsBox(box)) return;
-    const w = Math.max(4, size.x), h = Math.max(4, size.y);
+    if (this.mode !== 'out') return;
+    // what of the portal is in view: the doorway (from behind the van, or in its passage — shut, its
+    // doors' windows show it), and the windows of the side you're beside
+    this.frustum.setFromProjectionMatrix(this.m4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+    const w = Math.max(4, size.x), h = Math.max(4, size.y), M = this.portalRoot.matrixWorld;
+    let rect: [number, number, number, number] | null | undefined; // (undefined: none of it in view; null: the whole frame)
+    for (const b of [cz > this.layout.tunnel.z0 ? this.doorBox : null, side ? this.winBox[side < 0 ? 0 : 1] : null]) {
+      if (!b || !this.frustum.intersectsBox(this.box3.copy(b).applyMatrix4(M))) continue;
+      const q = this.screenRect(this.box3, cam, w, h);
+      rect = rect === undefined ? q : rect && q ? [Math.min(rect[0], q[0]), Math.min(rect[1], q[1]), Math.max(rect[0] + rect[2], q[0] + q[2]) - Math.min(rect[0], q[0]), Math.max(rect[1] + rect[3], q[1] + q[3]) - Math.min(rect[1], q[1])] : null;
+    }
+    if (rect === undefined) return;
     if (!this.portalRT) this.portalRT = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, depthBuffer: true, depthTexture: new THREE.DepthTexture(w, h, THREE.UnsignedIntType) });
     else if (this.portalRT.width !== w || this.portalRT.height !== h) this.portalRT.setSize(w, h);
     this.portalMat.uniforms.tPortal.value = this.portalRT.texture;
     this.portalMat.uniforms.tPortalDepth.value = this.portalRT.depthTexture;
     this.portalOn = true;
-    // only the doorway's patch of the screen: the room shaded there and nowhere else (from across
+    // only the portal's patch of the screen: the room shaded there and nowhere else (from across
     // the car park the doorway is a few hundred pixels; in the passage, most of the frame)
-    const rect = this.screenRect(box, cam, w, h);
     this.portalRT.scissorTest = !!rect;
     if (rect) this.portalRT.scissor.set(rect[0], rect[1], rect[2], rect[3]);
     this.shellMat.depthFunc = THREE.LessEqualDepth;
+    this.clip.value.fromArray(windowClip(this.layout, side));
     const prev = r.getRenderTarget(), a = r.getClearAlpha();
     r.getClearColor(this.clearC);
     r.setRenderTarget(this.portalRT);
@@ -508,6 +529,7 @@ export class Van {
     r.render(this.roomScene, cam);
     r.setClearColor(this.clearC, a);
     r.setRenderTarget(prev);
+    this.clip.value.set(0, 0, 0, 1);
   }
 
   private corner = new THREE.Vector3();
