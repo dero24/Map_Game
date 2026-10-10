@@ -20,6 +20,9 @@ export class MapView {
   private color = document.createElement('canvas');
   private mask = document.createElement('canvas');
   pins: () => Pin[] = () => [];
+  /** the van's drive to draw: its path, from how far along it (the atlas on the van's screen, or opened
+   *  at the map table on the way) */
+  route: () => { pts: readonly { x: number; z: number }[]; from: number } | null = () => null;
   onPick: ((x: number, z: number, sx: number, sy: number) => void) | null = null;
   onPin: ((p: Pin, sx: number, sy: number) => void) | null = null;
   private lastPins: { p: Pin; sx: number; sy: number }[] = [];
@@ -262,6 +265,30 @@ export class MapView {
       ctx.fillText('pencilled streets: the real map of this place is still arriving', 14 * k, H - 14 * k);
     }
 
+    // the van's route: from where it is to where it's going, a flag there
+    const R = this.route();
+    if (R && R.pts.length > 1) {
+      ctx.save();
+      ctx.lineJoin = ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (let i = Math.max(0, Math.floor(R.from)), j = 0; i < R.pts.length; i += i + 4 < R.pts.length ? 4 : 1, j++) {
+        const [a, b] = this.toScreen(R.pts[i].x, R.pts[i].z);
+        if (j) ctx.lineTo(a, b); else ctx.moveTo(a, b);
+      }
+      ctx.strokeStyle = 'rgba(251,246,232,0.95)';
+      ctx.lineWidth = 8 * k;
+      ctx.stroke();
+      ctx.strokeStyle = '#c4553f';
+      ctx.lineWidth = 4.5 * k;
+      ctx.stroke();
+      const e = R.pts[R.pts.length - 1], [fa, fb] = this.toScreen(e.x, e.z);
+      ctx.strokeStyle = '#3a3346';
+      ctx.lineWidth = 2 * k;
+      ctx.beginPath(); ctx.moveTo(fa, fb); ctx.lineTo(fa, fb - 26 * k); ctx.stroke();
+      ctx.fillStyle = '#c4553f';
+      ctx.beginPath(); ctx.moveTo(fa, fb - 26 * k); ctx.lineTo(fa + 17 * k, fb - 21 * k); ctx.lineTo(fa, fb - 16 * k); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
     // pins
     this.lastPins = [];
     ctx.textAlign = 'center';

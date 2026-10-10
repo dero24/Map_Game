@@ -98,7 +98,7 @@ export function vanLayout(recipe: CamperRecipe = camperRecipe(1)): VanLayout {
   const cab = {
     eye: { x: -0.48, y: 1.72, z: frame.zB - 0.3 },
     door: { x: -recipe.W / 2 - 0.55, z: frame.zB - 0.7 },
-    curtain: { x0: -recipe.W / 2 + 0.1, x1: recipe.W / 2 - 0.1, z: frame.zB },
+    curtain: { x0: -recipe.W / 2 + 0.1, x1: recipe.W / 2 - 0.1, z: frame.zC },
     way: { x0: x0 + 0.25, x1: x0 + 1.19, z: z0 },
     into: { x: x0 + 0.72, z: z0 + 0.75, yaw: Math.PI }, // (facing into the room, +z)
   };
@@ -120,6 +120,15 @@ export function nextMode(prev: Mode, lx: number, lz: number, L: VanLayout): Mode
   const inRoom = lx > L.room.x0 - 0.5 && lx < L.room.x1 + 0.5 && lz > L.room.z0 - 0.5 && lz < L.door.z + 0.5;
   if (!inRoom) return 'out';
   return inDoor && depth < L.leave ? 'out' : 'in';
+}
+
+/** Turned round in the driver's seat (`rel`: the look's yaw from the van's nose, rad), how far the eye
+ *  leans (van-local metres): none looking ahead or out of a side window; looking back over either
+ *  shoulder, in to the middle (the driver sits on the left), a little forward and down — you look
+ *  back between the seats, not into your own headrest (van.ts seat). */
+export function seatLean(rel: number) {
+  const a = Math.abs(Math.atan2(Math.sin(rel), Math.cos(rel))), k = Math.min(1, Math.max(0, (a - 1.25) / 1.15)), t = k * k * (3 - 2 * k);
+  return { dx: 0.3 * t, dy: -0.05 * t, dz: -0.16 * t };
 }
 
 /** Which side's windows you look in at from van-local x: −1 the left, 1 the right, 0 neither

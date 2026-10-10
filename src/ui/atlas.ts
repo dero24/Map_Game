@@ -1,6 +1,8 @@
 // The atlas (M): one overlay with four pages — the painted Map (with search + teleport), the
 // Sketchbook (your paintings), Commissions (offers + the spotting log) and the Journal (keys,
-// places found, how much you've painted). G opens it straight to the search box.
+// places found, how much you've painted). G opens it straight to the search box. At the van's wheel
+// it opens on the van's nav screen (`openDash`: the map alone in the screen's bezel, a pick or a search
+// where to drive), the van's route on it.
 import type { GameCtx } from './ctx';
 import { MapView, type Pin } from './mapview';
 import { listPages, deletePage, type Page } from './book';
@@ -24,10 +26,15 @@ export class Atlas {
   /** Opened from the van's map table: a pick (or a search result) is where to drive, not where to
    *  walk. Cleared once used, or when the atlas closes. */
   driveTo: ((x: number, z: number) => void) | null = null;
+  /** the van's drive, drawn on the map (main: van.nav) */
+  route: () => { pts: readonly { x: number; z: number }[]; from: number } | null = () => null;
+  private legend = '';
 
   constructor(private g: GameCtx, private com: Commissions, private stamps: () => { name: string; x: number; z: number }[]) {
     this.map = new MapView(g, this.$('atlas-map') as HTMLCanvasElement);
     this.map.pins = () => this.pins();
+    this.map.route = () => this.route();
+    this.legend = this.$('atlas-legend').textContent ?? '';
     this.map.onPick = (x, z, sx, sy) => {
       const [lat, lon] = g.toLatLon(x, z);
       this.pop(sx, sy, `<b>${lat.toFixed(5)}, ${lon.toFixed(5)}</b>`, () => this.go(lat, lon));
@@ -61,6 +68,7 @@ export class Atlas {
       document.exitPointerLock?.();
       const town = this.g.locality();
       if (town) this.$('journal-title').textContent = town;
+      this.$('atlas-legend').textContent = this.driveTo ? this.legend.replace('click the map to walk there', 'click the map, or search, to drive there') : this.legend;
       this.map.centerOn(this.g.walker.x, this.g.walker.z, this.map.scale);
       this.show(tab ?? this.tab);
       void this.refreshPages();
@@ -68,8 +76,17 @@ export class Atlas {
     } else {
       this.$('lightbox').classList.add('hidden');
       this.driveTo = null;
+      this.$('atlas').classList.remove('dash');
       this.g.lock();
     }
+  }
+  /** On the van's nav screen (M at the wheel, leant in to it: van.ts toggleScreen): the map alone in the
+   *  screen's dark bezel, where to — a pick on the map or a search — the place `drive` takes the van. */
+  openDash(drive: (x: number, z: number) => void) {
+    this.driveTo = drive;
+    this.toggle(true, 'map');
+    this.$('atlas').classList.add('dash');
+    this.$('journal-title').textContent = 'where to?';
   }
   /** `now`: a tap (⌂) focuses in the tap itself — an iPhone raises its keyboard for no other; G waits
    *  a beat, or the key's own "g" would land in the box. */

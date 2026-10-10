@@ -14,7 +14,9 @@ curtain between the cab and the back, the map table's "drive here", the van driv
 roads. It stays `in_progress` for its last check only: **Robby plays the van** (`?poc=1`) and gives
 notes — work from those; then slices B and C as his gameplay doc sets them. His notes so far (2026-10-10, all
 done — LOG "Looking in at the van's windows", "Drive the van yourself"): look in at its windows from
-outside; drive it yourself, from the seat or from behind (V / View); the pillows floating on every bed.
+outside; drive it yourself, from the seat or from behind (V / View); the pillows floating on every bed;
+looking back from the seat, a dash with more to it, a mini-map screen on it that M (a phone's Map) zooms
+into to set where to drive (LOG "The cab to look round").
 Pushed at his word (published) so he can play it on his phone. **The van is now the default start**
 (`src/poc.ts`: `?poc=0` the old one; the tools' `?capture=1` keeps the old start unless `&poc=1`). `gameplay-one-plan` is
 paused (his own doc: don't start a design Q&A). Robby's rules hold (no email, no Street View, tiles

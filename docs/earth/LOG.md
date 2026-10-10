@@ -2,6 +2,51 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-10 (later yet) — The cab to look round, the dash alive, its nav screen (M: where to)
+
+Robby: "when sitting in the van and looking backwards it looks really bad and the dashboard needs to be
+cooler with more details maybe with mini map screen in it or something and can also zoom into mini
+screen with m r map button and set destination that way as well?"
+
+- **Looking back** (it was a flat tan wall a step behind you, your own headrest cut open by the camera's
+  near plane, slits to the street where the B-pillars weren't drawn from inside): the cab is deeper — a
+  little hall behind the seats (camper.ts `frame.zC`): panelled walls, a rug, a cooler, and across its
+  end a panelled partition with a doorway framed in wood, the room's red curtain drawn across it (a
+  mustard hem), a jacket and a hat on their rail, a framed picture of the sea over a shelf with a lantern
+  and a book, a clock over the door. Your own seat's back and headrest are their own mesh
+  (`driverBack`), left out from your own eye; turned round in the seat you lean in to the middle and
+  forward (`layout.ts seatLean`): you look back between the seats. The B-pillars are the cab's now
+  (drawn from inside; vinyl, the seat belts); the doors' insides are vinyl cards (armrest, pull, winder,
+  map pocket, speaker); captain's chairs (bolsters, wings, headrests on posts, armrests), a striped
+  blanket over the passenger's; a console between them (the gear stick, a mug).
+- **The dash** (camper.ts): a padded top with a rolled edge; the binnacle under its cowl, its face tilted
+  to you, four dials — the speedometer and the rev counter live (van.ts `dashLife`: 0–80 mph; idling at
+  the wheel, a gear every 6.5 m/s), fuel full, temperature warm; the wheel's spokes at 3, 9 and 6 so the
+  dials show over the hub; round vents, the radio (its tape slot, its amber dial, knobs), the hazard
+  switch, the heater's knobs, the glovebox; a succulent, a compass ball and a folded paper map on top; a
+  dreamcatcher under the mirror that swings as the van pulls away, brakes and turns (a 15 cm pendulum).
+- **The nav screen** (`src/van/dashMap.ts`): on its mount right of the wheel, turned to you — a live
+  heading-up map (the streets inked on paper, the water washed blue, what you've seen washed in colour,
+  the buildings), the van's arrow, the route it's driving with a flag at the end, the street you're on
+  along the top; along the bottom how far and how long ("0.5 mi · 1 min"), your speed driving it
+  yourself, "where to?" parked. A canvas texture, drawn a dozen times a second at the wheel.
+- **M at the wheel** (a phone: Map): you lean in to the screen — the eye eases to 0.4 m before the glass,
+  square to it, the lens narrowing till it fills the view (van.ts `toggleScreen`, `screenView`) — and the
+  atlas opens on it (`atlas.openDash`: the map alone in the screen's dark bezel, "where to?", the van's
+  route drawn on it — mapview `route`); a pick or a search, "drive here", and the van drives itself there;
+  shut it (M, Esc, ×) and you're back in the seat. On the move it carries on to the new place at the speed
+  it's doing (`lanePath`/`Drive` `v0`; onto its road at the road's speed); driving it yourself, it slows
+  to a stop while you look. The hint at the wheel: "… M where to …" (a phone: "Map: where to").
+- Verified: montages (desktop: the view back three ways, the dash, the gauges, the screen from the seat,
+  the glass up close parked and on the drive — "Ocean Avenue", the route, "0.5 mi · 1 min" — the atlas
+  on it; phone tier 412×915 the same); in the page: seated, M → leaning in → the atlas on the screen
+  ("where to?"), a pick → "drive here" → it drives itself, you're back in the seat; M on the move, a new
+  pick: on at 6.8 m/s, never down to a stop; by hand at 8.9 m/s, M: braking; Esc while leaning in: back;
+  `tests/van.test.ts` (the lean, the screen facing you clear of the wheel, its distances, a new drive from
+  the speed it's doing, the seconds to go), `tests/foundry.test.ts` (the new parts, within CAMPER_BUDGET —
+  now 24 000: the cab is seen from the seat); `npm test` 1167; build; van-check ok; `mobile-check
+  --device=pixel7` (0 errors, 67 programs); `hud-audit` (640 layouts, no overlaps).
+
 ## 2026-10-10 (later still) — Paint your van where you want it
 
 Robby: "we should be able to spawn the van like we do other cars and boats?" (and asked whether we nap

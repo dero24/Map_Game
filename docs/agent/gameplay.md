@@ -434,11 +434,40 @@ park, the town in pencil; without it the game is unchanged (no van, no stencil, 
   eases you into the driver's seat (`cab.eye`); the camera rides the van there, your look free, through
   its own lens (`walkParams.cabFov`, 74: the panel's "driving field of view" while the van is on), the dash,
   the binnacle, the steering wheel (its own mesh, turned by how fast the van turns), the thin dark
-  windshield pillars and the mirrors round it. From the seat, E: into the back — a curtain brushes past
+  windshield pillars and the mirrors round it (the dash, the screen and looking back: the next two). From
+  the seat, E: into the back — a curtain brushes past
   (`wipe`: a quarter second in, at its fullest you're through, then out — no fade), and you come out of
   the curtained way in the room's front wall (`cab.way`, `cab.into`); walk into that curtain and you're
   back at the wheel. `nextMode` keeps you seated (`'cab'`); vehicles.ts's E steps aside while the van
   has an action or you're in it.
+- **Looking round the cab** (camper.ts; Robby: "when sitting in the van and looking backwards it looks
+  really bad"): behind the seats a little hall (`frame.zC`) — panelled walls, a rug, a cooler — and across
+  its end a panelled partition with a doorway framed in wood, the room's red curtain drawn across it (the
+  wipe still brushes past; `layout.cab.curtain`), a jacket and a hat on their rail, a picture of the sea
+  over a shelf with a lantern, a clock. Your own seat's back and headrest are their own mesh
+  (`driverBack`), left out from your own eye (shown from behind the van and outside); turned round in the
+  seat the eye leans in to the middle, forward and down (`layout.ts seatLean`: from 72° round, full by
+  140°), so you look back between the seats, nothing inside the near plane. The B-pillars are the cab's
+  (drawn from inside), the doors' insides vinyl cards; captain's chairs, a blanket over the passenger's,
+  a console between them.
+- **The dash and its nav screen** (camper.ts `frame.cluster`, `dials`, `screen`, `charm`; van.ts
+  `dashLife`, `nav`, `toggleScreen`; `src/van/dashMap.ts`; Robby: "the dashboard needs to be cooler with
+  more details maybe with mini map screen in it … zoom into mini screen with m r map button and set
+  destination that way"): the binnacle's four dials under a cowl, the speedometer (0–80 mph) and the rev
+  counter (idling at the wheel, a gear every 6.5 m/s) live (`DIAL_SWEEP`), the wheel's spokes at 3, 9 and
+  6; vents, the radio, the glovebox; a succulent, a compass ball, a paper map; a dreamcatcher under the
+  mirror swinging on the van's pull (a 15 cm pendulum: back as it pulls away, out on a turn). The screen
+  on its mount, right of the wheel and turned to you, is a live heading-up map (`DashMap`: a 512×306
+  canvas, its streets, buildings and washes gathered round the van every 90 m or 2.5 s, drawn 12× a
+  second at the wheel, now and then from outside within 40 m): the van's arrow, the route it's driving and
+  its flag, the street you're on, "0.5 mi · 1 min" (`timeLeft`), your mph by hand, "where to?" parked; its
+  glass `screenMaterial` (self-lit, always painted). **M at the wheel** (a phone's Map; from behind the van
+  too — back to the seat first) leans you in: the eye eases 0.4 m before the glass, square to it, the lens
+  narrowing till it fills the view, and the atlas opens on it (`atlas.openDash`: the map alone in the
+  screen's dark bezel, "where to?", the route drawn — `MapView.route`); a pick or a search is where to
+  drive ("drive here"); shut (M, Esc, ×) you're back in the seat. Picked on the move it carries on at its
+  speed (`lanePath` / `Drive` `v0`); driving it yourself, it slows to a stop while you look (`stepWheel`'s
+  hold).
 - **Driving itself** (`drive.ts`; `van.ts driveTo`, `move`): E at the map table opens the atlas with a
   pick that drives (`atlas.driveTo`: "drive here"; a search result too). The route: A* over the map's
   own roads (the baked region's paint roads, every class a car takes; the streamed cells' primary roads)
@@ -488,7 +517,10 @@ park, the town in pencil; without it the game is unchanged (no van, no stencil, 
   sides and the room through its windows — shut, the back doors' windows show the room as it drives).
 - Harness: `window.__VAN__` / `__GAME__.van`, `__GAME__.sight`; shots (`?capture=1&poc=1`): `van-wake`,
   `van-room`, `van-door`, `van-window`, `van-wall`, `van-doorway`, `van-near`, `van-step`, `van-back`,
-  `van-side`, `van-curtain`, `van-cab`, `van-cab-left`, `van-cab-right`, `van-drive` (35 s into a drive
+  `van-side`, `van-curtain`, `van-cab`, `van-cab-left`, `van-cab-right` (and `-back`, `-back-left`,
+  `-back-right`: turned round in the seat; `-dash`, `-gauges`, `-screen`: down at the dash, the binnacle,
+  the nav screen — any `van-cab-*` or `van-drive-*`), `van-screen` (leant in to the screen: the atlas
+  on it), `van-screen-glass` (the glass itself), `van-drive` (35 s into a drive
   down the shore, at the wheel), `van-drive-out` (the van from the roadside), `van-peek` (in at the
   kerb side's window), `van-peek-left` (the driver's side, toward the front), `van-peek-back` (the back
   doors shut: in at their windows), `van-third` (at the wheel in its stall, from behind), `van-wheel`

@@ -76,6 +76,7 @@ import { frameFov } from './player/frame';
 import { celestial, localHour, localToMs, sunPosition } from './core/sun';
 import { buildPanel, loadSettings, userKeys, timeParams, weatherParams, debugParams } from './ui/panel';
 import { Van } from './van/van';
+import { DashMap } from './van/dashMap';
 import { findVanSpot } from './van/spot';
 import { vanLayout, toWorld } from './van/layout';
 import { Sight } from './world/sight';
@@ -564,6 +565,8 @@ async function main() {
   // ?poc=1: your van, parked in the nearest car park (its back toward the water), and you sitting on
   // its bed inside (van/van.ts)
   let van: Van | null = null;
+  let dash: DashMap | null = null, dashOpen = false; // (the van's nav screen; the atlas open on it)
+  let screenOpen: (() => void) | null = null; // (leant in to it: the atlas opens on it — van.onScreen)
   if (POC) {
     const t0 = performance.now();
     const at = findVanSpot({ x: walker.x, z: walker.z }, {
@@ -975,9 +978,9 @@ async function main() {
     // E (a phone: the button by your thumb) — the driver's seat, the back, the map table
     hints.add(() => { const a = V.action(); return a ? { key: thumbs() ? a.label : 'E', text: a.text, pri: 9 } : null; });
     // at the wheel, stopped: how to drive it (W/S and A/D; a phone's stick)
-    hints.add(() => (V.mode === 'cab' && !V.selfDriving && V.speed < 0.5 ? (thumbs() ? { text: 'the stick drives · View: from behind', pri: 10 } : { key: 'W', text: 'drive · S brake, back · A D steer · V view · E get up', pri: 10 }) : null));
+    hints.add(() => (V.mode === 'cab' && !V.selfDriving && V.speed < 0.5 && !V.screenOn ? (thumbs() ? { text: 'the stick drives · Map: where to · View: from behind', pri: 10 } : { key: 'W', text: 'drive · S brake, back · A D steer · M where to · V view · E get up', pri: 10 }) : null));
     // at the wheel while it drives itself: it says so, and how to take the wheel (hold a pedal)
-    hints.add(() => (V.mode === 'cab' && V.selfDriving ? (V.taking > 0 ? { text: 'taking the wheel…', pri: 11 } : thumbs() ? { text: 'the van is driving itself · hold the stick up to take the wheel', pri: 11 } : { key: 'W', text: 'hold to take the wheel · the van is driving itself', pri: 11 }) : null));
+    hints.add(() => (V.mode === 'cab' && V.selfDriving && !V.screenOn ? (V.taking > 0 ? { text: 'taking the wheel…', pri: 11 } : thumbs() ? { text: 'the van is driving itself · hold the stick up to take the wheel', pri: 11 } : { key: 'W', text: 'hold to take the wheel · the van is driving itself', pri: 11 }) : null));
     V.onTakeWheel = () => toast('you have the wheel');
     // the map table: pick a place on the map and the van drives you there, on the real roads (the
     // baked region's every road, the streamed cells' own)
@@ -989,6 +992,19 @@ async function main() {
       };
       atlas.toggle(true, 'map');
     };
+    // the nav screen on the dash: the map round the van, its route (van/dashMap.ts) — M at the wheel (a
+    // phone's Map) leans you in to it, and the atlas opens on it to pick where to drive; picked on the
+    // move, the van carries on there
+    dash = new DashMap({ roads: ctx.roads, footprints: ctx.footprints, water: (x, z) => world.terrain.sdfAt(x, z) < 0, painted: (x, z) => explore.valueAt(x, z), place: ctx.locality });
+    V.setScreen(dash.texture);
+    screenOpen = V.onScreen = () => {
+      dashOpen = true;
+      atlas.openDash((x, z) => {
+        const moving = V.moving, ok = V.driveTo(x, z, [...((paintWorld.json as { roads?: Road[] }).roads ?? []), ...stream.primRoads]);
+        toast(ok ? (moving ? 'a new way there — the van drives itself' : 'off we go — the van drives itself there') : 'no road there the van knows');
+      });
+    };
+    atlas.route = () => { const r = V.nav().route; return r ? { pts: r.path, from: r.at } : null; };
     V.onArrive = () => { kerbCars.refresh(); toast('here — the doors open as you come to them'); };
     V.onDepart = () => sight?.bloom(ambience); // (off before you ever stepped out: the town blooms as you pull away)
     V.onMove = (x, z, vx, vz) => { vanMover.x = x; vanMover.z = z; vanMover.vx = vx; vanMover.vz = vz; vanMoving = 2; };
@@ -1132,6 +1148,11 @@ async function main() {
       walker.space = null;
       shots['ocean-golden']();
       walker.holdMove = false;
+      if (atlas.open) atlas.toggle(false);
+      dashOpen = false;
+      V.onScreen = screenOpen;
+      if (V.screenOn) V.toggleScreen();
+      (V as unknown as { scr: { t: number } }).scr.t = 0;
       V.openDoors(!V.moving); // (open, but shut on a van still rolling from the shot before)
       V.third = n.endsWith('-third'); // (at the wheel: `-third` from behind the van)
       const out = (lx: number, lz: number, tx: number, tz: number, pitch = 0) => {
@@ -1161,6 +1182,17 @@ async function main() {
         if (n === 'bloom-1' && sight) sight.armed = true;
       }
       else if (n === 'van-curtain') inn(L.cab.into.x + 0.3, L.cab.into.z + 1.4, (L.cab.way.x0 + L.cab.way.x1) / 2, R.z0, 0.02);
+      else if (n === 'van-screen' || n === 'van-screen-glass') {
+        // leant in to the nav screen (M at the wheel): the atlas open on it — `-glass`: the glass itself,
+        // the atlas held back
+        (V as unknown as { sit(w: typeof walker): void }).sit(walker);
+        (V as unknown as { seatT: number }).seatT = 1;
+        walker.yaw = V.pose.yaw;
+        walker.pitch = -0.06;
+        if (n === 'van-screen-glass') V.onScreen = null;
+        V.toggleScreen();
+        for (let k = 0; k < 40; k++) V.seat(1 / 30, camera, walker);
+      }
       else if (n === 'van-third') { (V as unknown as { sit(w: typeof walker): void }).sit(walker); (V as unknown as { seatT: number }).seatT = 1; walker.yaw = V.pose.yaw; walker.pitch = -0.12; }
       else if (n === 'van-wheel' || n === 'van-wheel-third') {
         // driven by hand: at the wheel, 25 s into a drive down the shore you take the wheel — a second
@@ -1189,8 +1221,12 @@ async function main() {
           V.openDoors(false); // (shut at once, the leaves with them)
           for (let k = 0; k < 35 * 30; k++) V.move(1 / 30, walker);
         }
-        walker.yaw = V.pose.yaw + (n.endsWith('-left') ? 1.25 : n.endsWith('-right') ? -0.9 : 0);
-        walker.pitch = n.endsWith('-left') ? -0.12 : -0.06;
+        // (`-back`: over your shoulder, into the cab behind you — `-back-left`, `-back-right`; `-dash`: down at
+        // the dash; `-gauges`: at the binnacle; `-screen`: at the nav screen)
+        const back = n.includes('-back'), side = n.endsWith('-left') ? 1 : n.endsWith('-right') ? -1 : 0;
+        const look = back ? [Math.PI - side * 0.75, -0.1] : n.endsWith('-dash') ? [-0.3, -0.42] : n.endsWith('-gauges') ? [0, -0.75] : n.endsWith('-screen') ? [-0.55, -0.5] : side > 0 ? [1.25, -0.12] : side < 0 ? [-0.9, -0.06] : [0, -0.06];
+        walker.yaw = V.pose.yaw + look[0];
+        walker.pitch = look[1];
         if (n === 'van-drive-out') {
           const [x, z] = toWorld(V.pose, -6.5, -16), [tx, tz] = toWorld(V.pose, 0, 0);
           V.mode = 'out';
@@ -1398,10 +1434,15 @@ async function main() {
     if ((e.target as HTMLElement)?.closest?.('input,textarea')) return;
     const playing = $('intro').classList.contains('hidden');
     if (e.code === 'KeyP' && playing && !atlas.open && (!vehicles.driving || vehicles.activeKind === 'balloon')) togglePhoto(); // (a balloon's basket is the best seat for a painting)
-    if (e.code === 'KeyM' && playing) { if (photo.active) photo.toggle(false); atlas.toggle(); }
+    if (e.code === 'KeyM' && playing) {
+      if (photo.active) photo.toggle(false);
+      if (van?.mode === 'cab' && !atlas.open) van.toggleScreen(); // (at the van's wheel: lean in to its screen, or back)
+      else atlas.toggle();
+    }
     if (e.code === 'KeyG' && playing && !atlas.open) { if (photo.active) photo.toggle(false); atlas.focusSearch(); }
     if (e.code === 'KeyR' && playing && !atlas.open && !photo.active && !vehicles.driving && !brush.active && !e.repeat) { if (e.shiftKey) garden.cycle(); else garden.plant(); }
     if (e.code === 'Escape' && atlas.open) atlas.toggle(false);
+    else if (e.code === 'Escape' && van?.screenOn) van.toggleScreen();
   });
   // Touch actions mirror the keyboard verbs. The walking stick (left) and the look drag (right) stay
   // the Walker's; these are the rest: the dock, its ⋯ drawer, the ride's own button beside your
@@ -1419,7 +1460,7 @@ async function main() {
   $('tgo').onclick = () => { if (playing() && !atlas.open) { setMore(false); atlas.focusSearch(true); } };
   $('tphoto').onclick = () => { if (playing() && !atlas.open && (!vehicles.driving || vehicles.activeKind === 'balloon')) { setMore(false); togglePhoto(); } };
   $('tview').onclick = () => (van?.mode === 'cab' ? van.toggleView() : vehicles.toggleView()); // (the van's wheel, or a balloon's basket)
-  $('tmenu').onclick = () => { setMore(false); atlas.toggle(); };
+  $('tmenu').onclick = () => { setMore(false); if (van?.mode === 'cab' && !atlas.open) van.toggleScreen(); else atlas.toggle(); }; // (at the van's wheel: its screen)
   $('tplant').addEventListener('click', () => {
     if (playing() && !atlas.open && !photo.active && !vehicles.driving && !brush.active) garden.plant();
   });
@@ -1776,6 +1817,11 @@ async function main() {
     const seated = !!van?.seat(dt, camera, walker); // (at the wheel: the van places the camera)
     if (!vehicles.update(dt, camera) && !seated) walker.update(dt, camera);
     van?.update(dt, walker, walkParams.fly);
+    if (van && dash) {
+      if (dashOpen && !atlas.open) { dashOpen = false; if (van.screenOn) van.toggleScreen(); } // (the atlas closed: back to the seat)
+      const near = Math.hypot(walker.x - van.pose.x, walker.z - van.pose.z) < 40;
+      dash.update(dt, van.nav(), van.mode === 'cab' ? (atlas.open ? 1 : van.screenT > 0 ? 30 : 12) : near ? 0.5 : 0);
+    }
     syncTouchControls(dt);
     camera.position.sub(origin); // walker works in world coords; the renderer works origin-local
     stream.update(walker.x, walker.z);

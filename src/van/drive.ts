@@ -101,8 +101,9 @@ export interface PathPt { x: number; z: number; s: number; v: number; cls: strin
  *  the left), the corners rounded (a radius by the turn), a point every metre, and a speed for each —
  *  the road's own, no faster than the bend allows (2 m/s² sideways), easing on (1.4 m/s²) and off
  *  (2.2 m/s²), stopping at the end. `start`: where the van stands now and which way it faces, joined
- *  to the route by a gentle curve (out of its stall, onto its lane). */
-export function lanePath(pts: { x: number; z: number; cls: string; w: number }[], opts: { driveLeft?: boolean; start?: { x: number; z: number; yaw: number } } = {}): PathPt[] {
+ *  to the route by a gentle curve (out of its stall, onto its lane). `v0`: the speed it's doing there
+ *  (a new destination picked on the move: it carries on, never stops to start again). */
+export function lanePath(pts: { x: number; z: number; cls: string; w: number }[], opts: { driveLeft?: boolean; start?: { x: number; z: number; yaw: number }; v0?: number } = {}): PathPt[] {
   if (pts.length < 2) return [];
   const side = opts.driveLeft ? -1 : 1;
   // offset each point to its lane: half a lane right of the road's middle (a narrow one: its middle)
@@ -129,7 +130,7 @@ export function lanePath(pts: { x: number; z: number; cls: string; w: number }[]
     let j = 0;
     while (j + 1 < off.length - 1 && Math.hypot(off[j].x - x, off[j].z - z) < 9) j++;
     if (j > 0) off.splice(0, j);
-    const p0 = off[0], d = Math.hypot(p0.x - x, p0.z - z);
+    const p0 = off[0], d = Math.hypot(p0.x - x, p0.z - z), rolling = (opts.v0 ?? 0) > 1; // (on the move: onto the road at its own speed, not a car park's crawl)
     if (d > 1) {
       const c1 = { x: x + fx * d * 0.55, z: z + fz * d * 0.55 };
       const n1 = off[Math.min(1, off.length - 1)], tx = n1.x - p0.x, tz = n1.z - p0.z, tl = Math.hypot(tx, tz) || 1;
@@ -138,7 +139,7 @@ export function lanePath(pts: { x: number; z: number; cls: string; w: number }[]
       const n = Math.max(2, Math.ceil(d / 1.5));
       for (let k = 0; k < n; k++) {
         const t = k / n, u = 1 - t;
-        lead.push({ x: u * u * u * x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * p0.x, z: u * u * u * z + 3 * u * u * t * c1.z + 3 * u * t * t * c2.z + t * t * t * p0.z, cls: 'service' });
+        lead.push({ x: u * u * u * x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * p0.x, z: u * u * u * z + 3 * u * u * t * c1.z + 3 * u * t * t * c2.z + t * t * t * p0.z, cls: rolling ? p0.cls : 'service' });
       }
       poly = [...lead, ...off];
     }
@@ -179,7 +180,7 @@ export function lanePath(pts: { x: number; z: number; cls: string; w: number }[]
     const k = dh / ds; // curvature (1/m)
     b.v = Math.min(CLASS_SPEED[b.cls] ?? 10, k > 1e-4 ? Math.sqrt(2 / k) : Infinity);
   }
-  out[0].v = 0;
+  out[0].v = Math.max(0, opts.v0 ?? 0);
   out[n - 1].v = 0;
   for (let i = 1; i < n; i++) out[i].v = Math.min(out[i].v, Math.sqrt(out[i - 1].v ** 2 + 2 * 1.4 * (out[i].s - out[i - 1].s)));
   for (let i = n - 2; i >= 0; i--) out[i].v = Math.min(out[i].v, Math.sqrt(out[i + 1].v ** 2 + 2 * 2.2 * (out[i + 1].s - out[i].s)));
@@ -201,12 +202,20 @@ export function poseAt(path: PathPt[], s: number) {
   return { x, z, yaw, v };
 }
 
-/** Driving a path: the speed follows the path's (no faster than it allows, eased), the van rolls on. */
+/** The seconds from each point of a path to its end, at the path's speeds (the nav screen's minutes). */
+export function timeLeft(path: readonly PathPt[]): Float32Array {
+  const out = new Float32Array(path.length);
+  for (let i = path.length - 2; i >= 0; i--) out[i] = out[i + 1] + (path[i + 1].s - path[i].s) / Math.max(1.5, (path[i].v + path[i + 1].v) / 2);
+  return out;
+}
+
+/** Driving a path: the speed follows the path's (no faster than it allows, eased), the van rolls on —
+ *  from `v0` (a new destination picked on the move). */
 export class Drive {
   s = 0;
   v = 0;
   done = false;
-  constructor(readonly path: PathPt[]) { this.done = path.length < 2; }
+  constructor(readonly path: PathPt[], v0 = 0) { this.done = path.length < 2; this.v = Math.max(0, v0); }
   get length() { return this.path.length ? this.path[this.path.length - 1].s : 0; }
   step(dt: number) {
     if (this.done) return poseAt(this.path, this.s);

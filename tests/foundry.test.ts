@@ -30,7 +30,7 @@ describe('the camper van (your van: src/van/, the rest of its checks in tests/va
       const c = camperRecipe(seed), g = camperGeometry(c);
       expect(camperValid(c)).toBe(true);
       expect(camperVerts(c)).toBeLessThanOrEqual(CAMPER_BUDGET);
-      for (const k of ['body', 'left', 'right', 'rear', 'leaf', 'panes', 'leafPane'] as const) expect(finite(g[k]), `${seed} ${k}`).toBe(true);
+      for (const k of ['body', 'left', 'right', 'rear', 'leaf', 'panes', 'leafPane', 'driverBack', 'needle', 'charm'] as const) expect(finite(g[k]), `${seed} ${k}`).toBe(true);
       expect(verts(camperGeometry(camperRecipe(seed)).body)).toBe(verts(g.body));
       expect(partCount(g.body, 3)).toBeGreaterThan(0); // (its head lamps light at night)
       expect(partCount(g.body, 4) + partCount(g.rear, 4)).toBeGreaterThan(0); // (and its tail lamps)
@@ -38,7 +38,7 @@ describe('the camper van (your van: src/van/, the rest of its checks in tests/va
   });
   it('its picture (a card, the brush sketch) is the whole van, doors shut, every face out', () => {
     const c = camperRecipe(1), g = camperGeometry(c), pic = camperPicture(c);
-    expect(verts(pic)).toBe(verts(g.body) + verts(g.left) + verts(g.right) + verts(g.rear) + 2 * verts(g.leaf));
+    expect(verts(pic)).toBe(verts(g.body) + verts(g.left) + verts(g.right) + verts(g.rear) + 2 * verts(g.leaf) + verts(g.driverBack)); // (your seat: the driver's back is its own — van.ts)
     expect(finite(pic)).toBe(true);
     const b = bb(pic);
     expect(b.max.z).toBeGreaterThan(c.L / 2); // (the doors shut across its back)

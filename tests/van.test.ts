@@ -1,8 +1,9 @@
 // The van (src/van/, ?poc=1): bigger on the inside, through a doorway with no seam — its plan, the
 // change between in and out, walking in it, where it parks, its body (assets/camper.ts).
 import { describe, it, expect } from 'vitest';
-import type * as THREE from 'three';
-import { vanLayout, nextMode, roomSegments, hullSegments, toWorld, toLocal, boxSegs, peekSide, windowClip, type Mode, type VanPose } from '../src/van/layout';
+import * as THREE from 'three';
+import { vanLayout, nextMode, roomSegments, hullSegments, toWorld, toLocal, boxSegs, peekSide, windowClip, seatLean, type Mode, type VanPose } from '../src/van/layout';
+import { miles } from '../src/van/dashMap';
 import { moveAmong, VanSpace } from '../src/van/space';
 import { findVanSpot, inRing, type SpotEnv } from '../src/van/spot';
 import { wallPieces, shellGeometry, tunnelFaces, contentsGeometry, windowFaces } from '../src/van/room';
@@ -397,8 +398,40 @@ describe('colour by sight: when to look again', () => {
 });
 
 // ---- the cab and the drive (poc-van-drive)
-import { buildGraph, route, lanePath, poseAt, Drive, drivable, stepWheel, wheelLock, HANDLING, type Wheel } from '../src/van/drive';
+import { buildGraph, route, lanePath, poseAt, Drive, drivable, stepWheel, wheelLock, timeLeft, HANDLING, type Wheel } from '../src/van/drive';
 import type { Road } from '../src/world/data';
+
+describe('the cab, looked round: the view back, the nav screen', () => {
+  const F = camperFrame(camperRecipe(1)), E = L.cab.eye;
+  it('turned round in the seat you lean in to the middle; looking ahead or out of a window you don\'t', () => {
+    for (const r of [0, 0.6, -0.9, 1.2, -1.2]) expect(seatLean(r).dx).toBe(0);
+    const back = seatLean(Math.PI);
+    expect(back.dx).toBeGreaterThan(0.25); // (to the middle: the driver sits on the left)
+    expect(back.dz).toBeLessThan(-0.1); // (forward, off the headrest)
+    expect(seatLean(-Math.PI + 0.1).dx).toBeCloseTo(seatLean(Math.PI - 0.1).dx, 6); // (over either shoulder)
+    // leant round, the back of the cab (its partition, the curtained doorway) is well out past the near plane
+    expect(F.zC - (E.z + back.dz)).toBeGreaterThan(0.75);
+    expect(L.cab.curtain.z).toBe(F.zC);
+  });
+  it('the nav screen faces the driver, over the dash, right of the wheel; leant in to it, the wheel is out of view', () => {
+    const sc = F.screen, n = new THREE.Vector3(0, 0, 1).applyEuler(new THREE.Euler(sc.tilt, sc.yaw, 0, 'YXZ'));
+    const toEye = new THREE.Vector3(E.x - sc.x, E.y - sc.y, E.z - sc.z).normalize();
+    expect(n.dot(toEye)).toBeGreaterThan(Math.cos(0.35)); // (within 20° of the driver's eye)
+    expect(sc.y - sc.h / 2).toBeGreaterThan(1.17); // (over the dash's top)
+    expect(sc.x - sc.w / 2).toBeGreaterThan(F.steer.x + 0.19); // (clear of the wheel's rim)
+    expect(sc.z).toBeLessThan(E.z - 0.4); // (out in front of you)
+    // where leaning in ends (0.4 m before the glass, square to it): the wheel's hub well off to the side
+    const at = new THREE.Vector3(sc.x, sc.y, sc.z).addScaledVector(n, 0.4), hub = new THREE.Vector3(F.steer.x, F.steer.y, F.steer.z).sub(at);
+    expect(hub.length()).toBeGreaterThan(0.3);
+    expect(hub.normalize().dot(n.clone().negate())).toBeLessThan(Math.cos((50 * Math.PI) / 180));
+  });
+  it('the screen tells a driver\'s distances: feet close in, then miles', () => {
+    expect(miles(30)).toBe('100 ft');
+    expect(miles(250)).toBe('800 ft');
+    expect(miles(1609.34)).toBe('1.0 mi');
+    expect(miles(8000)).toBe('5.0 mi');
+  });
+});
 
 describe('the cab', () => {
   it('the driver\'s eye is in the cab, on the left, under the roof and over the dash; the door outside it', () => {
@@ -514,6 +547,27 @@ describe('the drive', () => {
     const P = lanePath(r, { start });
     expect(Math.hypot(P[0].x - start.x, P[0].z - start.z)).toBeLessThan(1e-6);
     expect(P[3].z).toBeLessThan(start.z - 2); // it sets off the way it faces
+  });
+  it('a new destination picked on the move: it carries on from the speed it\'s doing, never stopping to start again', () => {
+    const start = { x: -250, z: 1.5, yaw: -Math.PI / 2 }; // (on the street at z = 0, heading east in its lane)
+    const r = route(g, { x: -240, z: 0 }, { x: 0, z: 250 })!;
+    const P = lanePath(r, { start, v0: 9 });
+    expect(P[0].v).toBeCloseTo(9, 6);
+    const D = new Drive(P, 9);
+    let least = Infinity;
+    for (let t = 0; t < 4; t += 1 / 30) { D.step(1 / 30); least = Math.min(least, D.v); }
+    expect(least).toBeGreaterThan(5); // (onto its lane at the road's speed, not a car park's crawl)
+    expect(lanePath(r, { start })[0].v).toBe(0); // (from rest, as ever)
+  });
+  it('the seconds to go (the nav screen): none at the end, more back along the way, about the drive\'s time', () => {
+    const P = lanePath(route(g, { x: -250, z: 0 }, { x: 0, z: 250 })!), T = timeLeft(P);
+    expect(T[T.length - 1]).toBe(0);
+    for (let i = 1; i < T.length; i++) expect(T[i]).toBeLessThanOrEqual(T[i - 1]);
+    const D = new Drive(P);
+    let t = 0;
+    while (!D.done && t < 300) { D.step(1 / 30); t += 1 / 30; }
+    expect(T[0]).toBeGreaterThan(t * 0.6);
+    expect(T[0]).toBeLessThan(t * 1.4);
   });
   it('driving it: the van rolls on to the end and stops; poseAt faces the way ahead', () => {
     const r = route(g, { x: -250, z: 0 }, { x: 0, z: 250 })!;

@@ -67,6 +67,16 @@ body.postcard #hud, body.postcard .lil-gui, body.postcard #toast { display: none
 #atlas-pop span { font-size: 12px; opacity: 0.7; font-style: italic; }
 #atlas-pop button { display: block; margin: 6px auto 0; background: #3a3346; color: #f7f2e6; font-size: 14px; }
 #atlas-legend { position: absolute; left: 16px; bottom: 12px; right: 80px; font-size: 12px; font-style: italic; opacity: 0.6; pointer-events: none; }
+/* the atlas on the van's nav screen (M at the wheel: src/van/van.ts toggleScreen) — the map alone in the
+   screen's dark bezel, coming up as you lean in to it */
+#atlas.dash { inset: 5vh 6vw; background: #1d1e21; border: 0; border-radius: 22px; padding: 0 12px 12px; box-shadow: 0 0 0 3px #2b2c30, 0 12px 70px rgba(0, 0, 0, 0.55); animation: dash-in 0.22s ease-out; }
+#atlas.dash #atlas-head { border-bottom: 0; padding: 10px 6px; }
+#atlas.dash #atlas-head h2, #atlas.dash #atlas-close { color: #efe6cf; }
+#atlas.dash #atlas-close:hover { background: #2b2c30; }
+#atlas.dash #atlas-tabs { display: none; }
+#atlas.dash #atlas-close { margin-left: auto; }
+#atlas.dash #page-map { border-radius: 10px; }
+@keyframes dash-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
 #page-book, #page-jobs, #page-journal { padding: 18px 24px; }
 .book { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 18px; }
 .book figure { margin: 0; background: #faf6ec; padding: 8px 8px 10px; box-shadow: 0 2px 10px rgba(40, 30, 60, 0.14); cursor: pointer; transform: rotate(-0.4deg); transition: transform 0.2s; }
@@ -203,6 +213,7 @@ body.nomouse .card .tkeys { display: block; }
   #hud { left: 14px; bottom: calc(30px + env(safe-area-inset-bottom)); font-size: 13px; } /* (clear of the map-data credit line) */
   #osm-credit { right: 10px; bottom: calc(8px + env(safe-area-inset-bottom)); }
   #atlas { inset: 0; }
+  #atlas.dash { inset: 0; border-radius: 0; padding: 0 6px 6px; }
   #atlas-head { gap: 8px; padding: 8px; flex-wrap: wrap; }
   #atlas-head h2 { font-size: 17px; }
   #atlas-tabs button { padding: 4px 7px; font-size: 13px; }

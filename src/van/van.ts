@@ -28,15 +28,21 @@
 // table, the back doors shut, and it carries you — in the room or at the wheel — along its lane. Or you
 // drive it: at the wheel W/S and A/D (a phone's stick) are the pedals and the wheel (`stepWheel`); it
 // leaves the world's walls as it moves, bumps off what it meets, and stops itself if you get up. At the
-// wheel you see from the driver's seat or from behind the van (V; a phone's View: `chase`).
+// wheel you see from the driver's seat or from behind the van (V; a phone's View: `chase`). Turned round
+// in the seat you lean in to the middle (`seat`) and your own seat's back is left out (it's behind your
+// head). The dash lives: the speedometer and the rev counter (`dashLife`), the charm under the mirror
+// swinging as the van pulls away, brakes and turns, and the nav screen (dashMap.ts: main draws it) — M at
+// the wheel (a phone's Map) leans you in to it till it fills the view, and the atlas opens on it to pick
+// where to drive (`toggleScreen`, `onScreen`); driving it yourself, it slows to a stop while you look.
 import * as THREE from 'three';
-import { camperGeometry, camperRecipe } from '../assets/camper';
+import { camperGeometry, camperRecipe, DIAL_SWEEP } from '../assets/camper';
 import { propMaterial } from '../render/propMaterial';
 import { U } from '../render/shared';
 import type { WalkWorld } from '../player/collision';
-import { vanLayout, nextMode, roomSegments, hullSegments, toWorld, toLocal, peekSide, windowClip, type VanLayout, type VanPose, type Mode } from './layout';
+import { vanLayout, nextMode, roomSegments, hullSegments, toWorld, toLocal, peekSide, windowClip, seatLean, type VanLayout, type VanPose, type Mode } from './layout';
 import { VanSpace, type WalkSpace } from './space';
-import { buildGraph, route, lanePath, Drive, stepWheel, HANDLING, type Graph, type PathPt, type Wheel } from './drive';
+import { buildGraph, route, lanePath, Drive, stepWheel, timeLeft, HANDLING, type Graph, type PathPt, type Wheel } from './drive';
+import { screenMaterial, type DashNav } from './dashMap';
 import { walkParams, setLens } from '../player/controller';
 import { stickAxes } from '../player/vehicles';
 import type { Road } from '../world/data';
@@ -128,6 +134,26 @@ export class Van {
   onTakeWheel: (() => void) | null = null;
   private chasePos = new THREE.Vector3();
   private chaseInit = false;
+  private driverBack: THREE.Mesh; // (your seat's back and headrest: not from your own eye)
+  private needles: THREE.Mesh[] = []; // (the speedometer's, the rev counter's)
+  private charm: THREE.Mesh;
+  private glass: THREE.Mesh; // (the nav screen's: main gives it the map — setScreen)
+  private cabBits: THREE.Object3D[] = [];
+  private rpm = 0;
+  private swing = { fb: 0, vb: 0, fs: 0, vs: 0, ax: 0, al: 0, v: 0, yaw: 0, t: 0 }; // (the charm: its swing back and to the side; the van's pull)
+  private scr = { on: false, t: 0, opened: false }; // (leaning in to the screen: M)
+  /** Leant in to the screen, it fills the view (main: the atlas opens on it to pick where to drive). */
+  onScreen: (() => void) | null = null;
+  private pendingV = 0; // (the speed a new drive starts from: picked on the move, it carries on)
+  private tLeft: Float32Array | null = null; // (the drive's seconds to go from each metre: the screen)
+  private v1 = new THREE.Vector3();
+  private v2 = new THREE.Vector3();
+  private v3 = new THREE.Vector3();
+  private v4 = new THREE.Vector3();
+  private q1 = new THREE.Quaternion();
+  private q2 = new THREE.Quaternion();
+  private e1 = new THREE.Euler();
+  private m5 = new THREE.Matrix4();
   private graph: { n: number; g: Graph } | null = null;
   private wipe: { t: number; to: 'in' | 'cab' } | null = null;
   private wipeEl: HTMLElement | null = null;
@@ -176,6 +202,31 @@ export class Van {
     this.wheelMesh.name = 'van:wheel';
     this.wheelPivot.add(this.wheelMesh);
     this.group.add(this.wheelPivot);
+    // your seat's back and headrest (left out from your own eye: they're behind your head)
+    this.driverBack = new THREE.Mesh(geo.driverBack, this.paintMat);
+    this.driverBack.name = 'van:seat';
+    this.group.add(this.driverBack);
+    // the binnacle's live needles (the speedometer, the rev counter), each on its dial's face
+    const cl = L.frame.cluster, ct = cl.tilt;
+    for (const d of L.frame.dials.slice(0, 2)) {
+      const m = new THREE.Mesh(geo.needle, this.paintMat);
+      m.name = 'van:needle';
+      m.position.set(cl.x + d.du, cl.y + Math.cos(ct) * d.dv + Math.sin(ct) * 0.0125, cl.z - Math.sin(ct) * d.dv + Math.cos(ct) * 0.0125);
+      m.rotation.set(-ct, 0, DIAL_SWEEP / 2, 'XYZ');
+      this.needles.push(m);
+    }
+    // the charm under the mirror; the nav screen's glass (drawn nothing till main gives it the map)
+    const ch = L.frame.charm, sc = L.frame.screen;
+    this.charm = new THREE.Mesh(geo.charm, this.paintMat);
+    this.charm.name = 'van:charm';
+    this.charm.position.set(ch.x, ch.y, ch.z);
+    this.glass = new THREE.Mesh(new THREE.PlaneGeometry(sc.w, sc.h), this.hiddenMat);
+    this.glass.name = 'van:screen';
+    this.glass.rotation.set(sc.tilt, sc.yaw, 0, 'YXZ');
+    const out = new THREE.Vector3(0, 0, 0.0008).applyEuler(this.glass.rotation);
+    this.glass.position.set(sc.x + out.x, sc.y + out.y, sc.z + out.z);
+    this.cabBits.push(...this.needles, this.charm, this.glass);
+    this.group.add(...this.cabBits);
     // the portal: the passage's faces and the windows', twice — first marking where they show
     // (depth-tested against the world, nothing drawn), then laying the room's colour and depth there
     const vert = /* glsl */ `void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
@@ -340,8 +391,68 @@ export class Van {
     // inside: the body isn't drawn (you're in the room, which reaches past it) but still casts its shadow
     this.body.material = this.mode === 'in' ? this.hiddenMat : this.paintMat;
     this.wheelMesh.material = this.body.material;
+    for (const m of this.cabBits) m.visible = this.mode !== 'in';
+    this.driverBack.visible = this.mode !== 'in' && !(this.mode === 'cab' && !this.chasing); // (behind your head)
     this.space.closed = this.doors < 0.98; // (the doorway's a wall while the doors aren't open)
+    this.dashLife(dt);
   }
+
+  /** The dials and the charm: the speedometer's needle on the speed (0–80 mph), the rev counter's on the
+   *  engine (idling while you're at the wheel, running with the van: a gear every 6.5 m/s, the revs
+   *  climbing through each), the charm a 15 cm pendulum on the van's pull — swinging back as it pulls
+   *  away, forward as it brakes, out as it turns, a little road shake under it. */
+  private dashLife(dt: number) {
+    if (!(dt > 0)) return;
+    dt = Math.min(dt, 0.1);
+    const v = this.trip ? this.trip.v : this.hand.v, a = Math.abs(v), on = this.mode === 'cab' || this.rolling;
+    const gear = Math.min(3, Math.floor(a / 6.5)), f = Math.min(1, (a - gear * 6.5) / 6.5);
+    this.rpm += ((!on ? 0 : a < 0.3 ? 760 : 1250 + f * 2100 - gear * 120) - this.rpm) * Math.min(1, dt * 4);
+    this.needles[0].rotation.z = DIAL_SWEEP / 2 - Math.min(1, (a * 2.237) / 80) * DIAL_SWEEP;
+    this.needles[1].rotation.z = DIAL_SWEEP / 2 - Math.min(1, this.rpm / 6000) * DIAL_SWEEP;
+    const S = this.swing, dyaw = Math.atan2(Math.sin(this.pose.yaw - S.yaw), Math.cos(this.pose.yaw - S.yaw));
+    const k = Math.min(1, dt * 10), clamp = (x: number) => Math.max(-6, Math.min(6, x));
+    S.ax += (clamp((v - S.v) / dt) - S.ax) * k; // (smoothed: one frame's jolt isn't a swing)
+    S.al += (clamp((v * dyaw) / dt) - S.al) * k;
+    S.v = v;
+    S.yaw = this.pose.yaw;
+    const g = 9.8 / 0.15, n = Math.ceil(dt / 0.008), h = dt / n, shake = Math.min(1, a / 12) * 4;
+    for (let i = 0; i < n; i++) {
+      S.t += h;
+      const bump = shake * Math.sin(S.t * 23) * Math.sin(S.t * 9.7);
+      S.vb += (-g * Math.sin(S.fb) + ((S.ax + bump) / 0.15) * Math.cos(S.fb) - 1.6 * S.vb) * h;
+      S.vs += (-g * Math.sin(S.fs) + (S.al / 0.15) * Math.cos(S.fs) - 1.6 * S.vs) * h;
+      S.fb += S.vb * h;
+      S.fs += S.vs * h;
+    }
+    this.charm.rotation.set(-S.fb, 0, S.fs);
+  }
+
+  /** The nav screen's map (dashMap.ts's canvas, main's). */
+  setScreen(tex: THREE.Texture) { this.glass.material = screenMaterial(tex); }
+  /** What the nav screen shows (dashMap.ts): where the van is, its drive and how far it has to go. */
+  nav(): DashNav {
+    const T = this.trip, path = T ? T.path : this.pending;
+    let route: DashNav['route'] = null;
+    if (path && path.length > 1) {
+      const at = T ? T.s : 0, i = Math.min(path.length - 1, Math.floor(at));
+      route = { path, at, left: Math.max(0, path[path.length - 1].s - at), eta: this.tLeft?.[i] ?? 0 };
+    }
+    return { x: this.pose.x, z: this.pose.z, yaw: this.pose.yaw, speed: this.speed, route, hand: this.driven };
+  }
+  /** M at the wheel (a phone's Map): lean in to the screen, or back to the seat. From behind the van,
+   *  into the seat first. */
+  toggleScreen() {
+    if (this.mode !== 'cab' || this.wipe) return false;
+    const S = this.scr;
+    S.on = !S.on;
+    S.opened = false;
+    if (S.on) { this.third = false; this.chaseInit = false; }
+    return true;
+  }
+  /** Leaning in to the screen, or there. */
+  get screenOn() { return this.scr.on; }
+  /** How far in (0 the seat … 1 the screen fills the view). */
+  get screenT() { return this.scr.t; }
 
   // ---------------- the cab ----------------
   /** What E does here (and the touch button says): sit at the wheel from the driver's door; from the
@@ -379,6 +490,8 @@ export class Van {
   /** A curtain brushes past your face (a quarter second each way): at its fullest, you're through. */
   private startWipe(to: 'in' | 'cab') {
     this.wipe = { t: 0, to };
+    this.scr.on = this.scr.opened = false;
+    this.scr.t = 0;
     if (typeof document === 'undefined') return;
     if (!this.wipeEl) {
       const el = (this.wipeEl = document.createElement('div'));
@@ -426,8 +539,11 @@ export class Van {
   seat(dt: number, cam: THREE.PerspectiveCamera, w: VanWalker): boolean {
     if (this.mode !== 'cab') return false;
     const L = this.layout, e = L.cab.eye;
-    const [x, z] = toWorld(this.pose, e.x, e.z);
-    this.eye.set(x, this.pose.y + e.y, z);
+    // turned round in the seat (looking back over a shoulder) you lean in to the middle and a little
+    // forward: you look back between the seats, never into your own headrest
+    const ln = seatLean(w.yaw - this.pose.yaw);
+    const [x, z] = toWorld(this.pose, e.x + ln.dx, e.z + ln.dz);
+    this.eye.set(x, this.pose.y + e.y + ln.dy, z);
     if (this.seatT < 1) {
       this.seatT = Math.min(1, this.seatT + dt / 0.6);
       const k = this.seatT * this.seatT * (3 - 2 * this.seatT);
@@ -442,7 +558,30 @@ export class Van {
     cam.up.set(0, 1, 0);
     cam.rotation.set(w.pitch, w.yaw, 0, 'YXZ');
     setLens(cam, walkParams.cabFov);
+    this.screenView(dt, cam);
     return true;
+  }
+  /** Leaning in to the screen (M): the eye eases from the seat to just before the glass, square to it,
+   *  the lens narrowing till the screen fills the view (there: `onScreen`); and back. */
+  private screenView(dt: number, cam: THREE.PerspectiveCamera) {
+    const S = this.scr;
+    S.t = Math.min(1, Math.max(0, S.t + (S.on ? dt / 0.55 : -dt / 0.4)));
+    if (S.on && S.t >= 1 && !S.opened) { S.opened = true; this.onScreen?.(); }
+    if (S.t <= 0) return;
+    const k = S.t * S.t * (3 - 2 * S.t), sc = this.layout.frame.screen, p = this.pose, d = 0.4;
+    // the glass in the world: its middle, which way it faces, its up
+    this.m4.makeRotationY(p.yaw).setPosition(p.x, p.y, p.z);
+    const q = this.q1.setFromEuler(this.e1.set(sc.tilt, sc.yaw, 0, 'YXZ'));
+    const n = this.v1.set(0, 0, 1).applyQuaternion(q).transformDirection(this.m4);
+    const up = this.v2.set(0, 1, 0).applyQuaternion(q).transformDirection(this.m4);
+    const c = this.v3.set(sc.x, sc.y, sc.z).applyMatrix4(this.m4), at = this.v4.copy(c).addScaledVector(n, d);
+    cam.position.lerpVectors(this.eye, at, k);
+    this.q2.setFromRotationMatrix(this.m5.lookAt(at, c, up));
+    cam.quaternion.slerp(this.q2, k);
+    // the lens: from the seat's to the one the glass fills, with a margin round it
+    const fit = (2 * Math.atan(Math.max((sc.h * 1.12) / 2, (sc.w * 1.06) / 2 / cam.aspect) / d) * 180) / Math.PI;
+    cam.fov += (fit - cam.fov) * k;
+    cam.updateProjectionMatrix();
   }
   /** From behind the van (vehicles.ts chase, the van's own sizes): the camera behind your look and
    *  above it, on the van; with no mouse to hold the look (a phone) it swings back behind the van. */
@@ -469,16 +608,20 @@ export class Van {
     const [fx, fz] = toWorld(this.pose, 0, F.zf - 2);
     const pts = route(this.graph.g, { x: fx, z: fz }, { x, z });
     if (!pts || pts.length < 2) return false;
-    const path = lanePath(pts, { driveLeft: this.o.driveLeft, start: { x: this.pose.x, z: this.pose.z, yaw: this.pose.yaw } });
+    // (picked on the move — at the screen, driving — it carries on at the speed it's doing)
+    const v0 = this.rolling ? Math.max(0, this.trip ? this.trip.v : this.hand.v) : 0;
+    const path = lanePath(pts, { driveLeft: this.o.driveLeft, start: { x: this.pose.x, z: this.pose.z, yaw: this.pose.yaw }, v0 });
     if (path.length < 2) return false;
     this.pending = path;
+    this.pendingV = v0;
+    this.tLeft = timeLeft(path);
     this.doorTarget = 0;
     return true;
   }
   /** The pedals and the wheel, at the wheel only (seated, no curtain passing): thr −1…1, steer −1…1
    *  (+ left). Keys are all the way; a phone's stick part way, past its dead zones (vehicles.ts). */
   private wheelInput(w: VanWalker) {
-    if (this.mode !== 'cab' || this.seatT < 1 || this.wipe || (this.o.enabled && !this.o.enabled())) return { thr: 0, steer: 0 };
+    if (this.mode !== 'cab' || this.seatT < 1 || this.wipe || this.scr.on || (this.o.enabled && !this.o.enabled())) return { thr: 0, steer: 0 };
     const k = (c: string) => this.keys.has(c), ax = (pos: string[], neg: string[]) => (pos.some(k) ? 1 : 0) - (neg.some(k) ? 1 : 0);
     const t = w.touchAxes ? stickAxes(w.touchAxes.x, w.touchAxes.y) : { x: 0, y: 0 };
     const c = (v: number) => Math.max(-1, Math.min(1, v));
@@ -521,10 +664,11 @@ export class Van {
       }
     } else this.takeT = 0;
     if (this.pending && this.doors < 0.02) {
-      // the doors are shut: off we go
-      this.trip = new Drive(this.pending);
+      // the doors are shut: off we go (already on the move — a new destination — it carries on)
+      this.trip = new Drive(this.pending, this.pendingV);
       this.pending = null;
-      this.depart();
+      this.hand.v = this.hand.steer = 0;
+      if (!this.rolling) this.depart();
     }
     const T = this.trip;
     dt = Math.min(dt, 0.05);
@@ -552,11 +696,12 @@ export class Van {
       const rate = (this.pose.yaw - old.yaw) / Math.max(dt, 1e-3);
       this.steer += (Math.max(-1, Math.min(1, rate * 6 / Math.max(2, T.v))) * 2.4 - this.steer) * Math.min(1, dt * 5);
     } else {
-      // by hand: the pedals and the wheel yours; nobody at the wheel, it brakes to a stop
+      // by hand: the pedals and the wheel yours; nobody at the wheel (or you looking at the screen), it
+      // brakes to a stop
       if (!this.rolling) this.depart();
       const s = this.hand, L = this.layout, r = L.recipe.W / 2 + 0.04, half = Math.max(0, L.recipe.L / 2 - r);
       s.yaw = old.yaw;
-      const d = stepWheel(s, inp.thr, inp.steer, dt, this.mode !== 'cab');
+      const d = stepWheel(s, inp.thr, inp.steer, dt, this.mode !== 'cab' || this.scr.on);
       const fx = -Math.sin(s.yaw), fz = -Math.cos(s.yaw);
       // against the world's walls, its own shape sliding along them (vehicles.ts carMove): it bumps off
       const [nx, nz] = this.o.walk.moveBody(old.x, old.z, fx * d, fz * d, fx, fz, half, half, r, old.y);
