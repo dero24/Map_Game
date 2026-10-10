@@ -11,7 +11,8 @@ export interface WalkGround {
 
 /** `fov` is the lens: the vertical angle on a PC's 4:3–16:9 screen. A phone's frame is fitted to
  *  its shape from it (player/frame.ts) — taller held upright, no wider than 95° on its side. */
-export const walkParams = { speed: 2.4, runSpeed: 6, eyeHeight: 1.65, bob: 0.35, fov: 62, fly: false, flySpeed: 40, mouseSens: 1 };
+/** `cabFov`: the lens from the van's driver's seat (wider: the windshield, the mirrors — van/van.ts). */
+export const walkParams = { speed: 2.4, runSpeed: 6, eyeHeight: 1.65, bob: 0.35, fov: 62, fly: false, flySpeed: 40, mouseSens: 1, cabFov: 74 };
 
 /** Point the camera's lens: `lens`° (walkParams.fov, less any push-in), framed for the screen's
  *  shape. Every camera that follows you (on foot, the chase, the basket) and the resize call it. */
@@ -238,6 +239,15 @@ export class Walker {
     cam.position.set(this.x, this.y, this.z);
     cam.rotation.set(this.pitch, this.yaw, Math.sin(this.bobPhase * 0.5) * 0.004 * walkParams.bob, 'YXZ');
     setLens(cam, walkParams.fov - this.zoom);
+  }
+
+  /** Carried (the van moving under you): shifted and turned with it, feet and all. */
+  shift(dx: number, dy: number, dz: number, dyaw: number) {
+    this.x += dx;
+    this.z += dz;
+    this.y += dy;
+    this.surfaceY += dy;
+    this.yaw += dyaw;
   }
 
   pressed(code: string) { return this.keys.has(code); }

@@ -17,6 +17,12 @@
 //     the same surfaces — the passage's — so nothing on screen changes as you step through.
 // You walk the world's WalkWorld outside (the van stands in it as walls, its step and floor as
 // decks) and the room's own walls inside (space.ts), the van's pose between the two.
+//
+// The cab: the driver's door (outside, on the left) seats you at the wheel — a wide lens, the dash,
+// the windshield's frame, the mirrors, a free look; from the seat you get up and go into the back
+// through the curtain (a curtain brushes past: `wipe`), and through the room's curtained way in its
+// front wall you come back to the seat. The van drives itself (drive.ts): a destination from the map
+// table, the back doors shut, and it carries you — in the room or at the wheel — along its lane.
 import * as THREE from 'three';
 import { camperGeometry, camperRecipe } from '../assets/camper';
 import { propMaterial } from '../render/propMaterial';
@@ -24,10 +30,19 @@ import { U } from '../render/shared';
 import type { WalkWorld } from '../player/collision';
 import { vanLayout, nextMode, roomSegments, hullSegments, toWorld, toLocal, type VanLayout, type VanPose, type Mode } from './layout';
 import { VanSpace, type WalkSpace } from './space';
+import { buildGraph, route, lanePath, Drive, type Graph, type PathPt } from './drive';
+import { walkParams, setLens } from '../player/controller';
+import type { Road } from '../world/data';
 import { shellGeometry, tunnelGeometry, contentsGeometry, roomLights, roomMaterial, mapMaterial, chartCanvas, tunnelFaces } from './room';
 
 /** What the van needs of the walker: where they are, and the ground they walk on. */
-export interface VanWalker { x: number; z: number; y: number; yaw: number; feet: number; space: WalkSpace | null }
+export interface VanWalker {
+  x: number; z: number; y: number; yaw: number; pitch: number; feet: number; space: WalkSpace | null; holdMove: boolean;
+  place(x: number, z: number, yaw?: number, pitch?: number, feet?: number): void;
+  shift(dx: number, dy: number, dz: number, dyaw: number): void;
+}
+/** What E (or the touch button) does now, by the van. */
+export interface VanAction { id: 'sit' | 'back' | 'map'; label: string; text: string }
 
 /** Collision scope for the van's walls in the WalkWorld (tiles count up from 0, kerb cars down
  *  from −1,000,000, interiors −7…−9). */
@@ -69,9 +84,29 @@ export class Van {
   onStepOut: ((first: boolean) => void) | null = null;
   /** The doors started to swing open (a sound). */
   onDoors: (() => void) | null = null;
+  /** E at the map table: choose where to drive (main opens the atlas to pick a place). */
+  onMapTable: (() => void) | null = null;
+  /** The van stopped at the end of a drive (main: the kerb cars about it, a word). */
+  onArrive: (() => void) | null = null;
+  /** The van pulled away (the first time, with the town still in pencil: its bloom — main.ts). */
+  onDepart: (() => void) | null = null;
+  /** The van moving (x, z, vx, vz): animals give way to it as to any traffic. */
+  onMove: ((x: number, z: number, vx: number, vz: number) => void) | null = null;
   private outs = 0;
+  private wheelPivot = new THREE.Group();
+  private wheelMesh: THREE.Mesh;
+  private steer = 0;
+  private trip: Drive | null = null;
+  private pending: PathPt[] | null = null; // (a route waiting for the back doors to shut)
+  private graph: { n: number; g: Graph } | null = null;
+  private wipe: { t: number; to: 'in' | 'cab' } | null = null;
+  private wipeEl: HTMLElement | null = null;
+  private seatT = 1; // (easing into the seat)
+  private seatFrom = new THREE.Vector3();
+  private eye = new THREE.Vector3();
+  private w: VanWalker | null = null;
 
-  constructor(private o: { walk: WalkWorld; root: THREE.Object3D }) {
+  constructor(private o: { walk: WalkWorld; root: THREE.Object3D; ground?: (x: number, z: number, y: number) => number; driveLeft?: boolean; enabled?: () => boolean }) {
     const recipe = camperRecipe(1);
     const L = (this.layout = vanLayout(recipe));
     const geo = camperGeometry(recipe);
@@ -98,6 +133,14 @@ export class Van {
       this.group.add(pivot);
     }
     for (const m of [this.body, this.rear, ...this.sides, ...this.leaves.map((p) => p.children[0])]) m.layers.enable(1); // (they cast the sun's shadow)
+    // the steering wheel, on its column: it turns with the road
+    const st = L.frame.steer;
+    this.wheelPivot.position.set(st.x, st.y, st.z);
+    this.wheelPivot.rotation.x = st.tilt;
+    this.wheelMesh = new THREE.Mesh(geo.wheel, this.paintMat);
+    this.wheelMesh.name = 'van:wheel';
+    this.wheelPivot.add(this.wheelMesh);
+    this.group.add(this.wheelPivot);
     // the portal: the passage's faces, twice — first marking where the doorway shows (depth-tested
     // against the world, nothing drawn), then laying the room's colour and depth there
     const vert = /* glsl */ `void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
@@ -163,12 +206,21 @@ export class Van {
     this.roomScene.add(this.roomRoot);
     this.roomScene.matrixWorldAutoUpdate = false;
     this.space = new VanSpace(roomSegments(L), L.floor, this.pose);
+    this.space.shut = [L.door.x0, L.door.z, L.door.x1, L.door.z];
     o.root.add(this.group);
+    // E: the van's action here (the driver's seat, the back, the map table) — vehicles.ts steps aside
+    // while the van has one (main: its `enabled`)
+    if (typeof window !== 'undefined')
+      window.addEventListener('keydown', (e) => {
+        if (e.code !== 'KeyE' || e.repeat || (e.target as HTMLElement)?.closest?.('input,textarea,.lil-gui')) return;
+        if (this.o.enabled && !this.o.enabled()) return;
+        this.act();
+      });
   }
 
   /** Stand the van at `pose` (world x, z; the ground's y; yaw as three.js turns it). */
   park(pose: VanPose) {
-    this.pose = { ...pose };
+    Object.assign(this.pose, pose);
     this.space.pose = this.pose;
     this.group.position.set(pose.x, pose.y, pose.z);
     this.group.rotation.set(0, pose.yaw, 0);
@@ -197,9 +249,14 @@ export class Van {
 
   /** Is (x, z) (world) where the room is? — for the systems that must look away while you're in. */
   covers(x: number, z: number) {
-    const [lx, lz] = toLocal(this.pose, x, z), R = this.layout.room;
+    const [lx, lz] = toLocal(this.pose, x, z), R = this.layout.room, F = this.layout.frame;
+    if (this.trip) return Math.abs(lx) < this.layout.recipe.W / 2 + 0.3 && lz > F.zf - 0.3 && lz < F.zr + 0.3;
     return lx > R.x0 - 0.3 && lx < R.x1 + 0.3 && lz > R.z0 - 0.3 && lz < this.layout.door.z + 0.6;
   }
+  /** On the move (or about to be: the doors shutting first). */
+  get moving() { return !!this.trip || !!this.pending; }
+  /** How fast it's going (m/s). */
+  get speed() { return this.trip?.v ?? 0; }
   get inside() { return this.mode === 'in'; }
   /** The van's own scenes, for the start's shader compile (render/warm.ts): its room and its doorway. */
   get scenes(): THREE.Scene[] { return [this.roomScene, this.portalScene]; }
@@ -210,16 +267,22 @@ export class Van {
    *  space to match (for the next step), the doors. Flying, you're always out (you leave by the roof). */
   update(dt: number, w: VanWalker, flying = false) {
     const L = this.layout;
+    this.w = w;
     const [lx, lz] = toLocal(this.pose, w.x, w.z);
     const prev = this.mode;
-    this.mode = flying ? 'out' : nextMode(prev, lx, lz, L);
+    this.mode = flying && prev !== 'cab' ? 'out' : nextMode(prev, lx, lz, L);
     if (this.mode !== prev) {
       if (this.mode === 'out') this.onStepOut?.(this.outs++ === 0);
     }
     w.space = this.mode === 'in' ? this.space : null;
-    // the doors open as you come to them, from either side, and stay open
+    // the curtained way to the cab: walk into it and you're through, at the wheel
+    const way = L.cab.way;
+    if (this.mode === 'in' && !this.wipe && lx > way.x0 && lx < way.x1 && lz < way.z + 0.5) this.startWipe('cab');
+    this.wipeStep(dt, w);
+    // the doors open as you come to them, from either side, and stay open — but shut for a drive
     const near = Math.abs(lx) < 2.4 && lz > L.tunnel.z0 - 2.2 && lz < L.door.z + 2.6;
-    if (near && this.doorTarget === 0) { this.doorTarget = 1; this.onDoors?.(); }
+    if (this.moving) this.doorTarget = 0;
+    else if (near && this.doorTarget === 0 && this.mode !== 'cab') { this.doorTarget = 1; this.onDoors?.(); }
     const was = this.doors;
     this.doors = Math.min(1, Math.max(0, this.doors + Math.sign(this.doorTarget - this.doors) * (dt / DOOR_S)));
     if (this.doors !== was || !this.leaves[0].userData.set) {
@@ -229,6 +292,161 @@ export class Van {
     }
     // inside: the body isn't drawn (you're in the room, which reaches past it) but still casts its shadow
     this.body.material = this.mode === 'in' ? this.hiddenMat : this.paintMat;
+    this.wheelMesh.material = this.body.material;
+    this.space.closed = this.doors < 0.98; // (the doorway's a wall while the doors aren't open)
+  }
+
+  // ---------------- the cab ----------------
+  /** What E does here (and the touch button says): sit at the wheel from the driver's door; from the
+   *  seat, go into the back; at the map table, choose where to drive. */
+  action(): VanAction | null {
+    const w = this.w, L = this.layout;
+    if (!w || this.wipe) return null;
+    if (this.mode === 'cab') return { id: 'back', label: 'Back', text: 'get up and go into the back' };
+    const [lx, lz] = toLocal(this.pose, w.x, w.z);
+    if (this.mode === 'out' && !this.moving && Math.hypot(lx - L.cab.door.x, lz - L.cab.door.z) < 1.5) return { id: 'sit', label: 'Sit', text: "the driver's seat" };
+    const t = L.furniture.find((f) => f.kind === 'maptable')!;
+    if (this.mode === 'in' && Math.hypot(lx - t.x, lz - t.z) < 1.4) return { id: 'map', label: 'Map', text: this.moving ? 'where you are going' : 'choose where to drive' };
+    return null;
+  }
+  act() {
+    const a = this.action(), w = this.w;
+    if (!a || !w) return false;
+    if (a.id === 'map') this.onMapTable?.();
+    else if (a.id === 'back') this.startWipe('in');
+    else this.sit(w);
+    return true;
+  }
+  /** Into the driver's seat (from where you stand: the eye eases over). */
+  private sit(w: VanWalker) {
+    this.seatFrom.set(w.x, w.y, w.z);
+    this.seatT = this.mode === 'out' ? 0 : 1;
+    this.mode = 'cab';
+    w.space = null;
+    w.holdMove = true;
+    w.yaw = this.pose.yaw; // (looking out of the windshield)
+    w.pitch = -0.05;
+  }
+  /** A curtain brushes past your face (a quarter second each way): at its fullest, you're through. */
+  private startWipe(to: 'in' | 'cab') {
+    this.wipe = { t: 0, to };
+    if (typeof document === 'undefined') return;
+    if (!this.wipeEl) {
+      const el = (this.wipeEl = document.createElement('div'));
+      el.id = 'van-curtain';
+      Object.assign(el.style, { position: 'fixed', inset: '0', zIndex: '15', pointerEvents: 'none', transform: 'translateX(-110%)', background: 'repeating-linear-gradient(90deg, #8f3f35 0px, #b0544a 26px, #7d362e 52px, #a24a40 78px)', boxShadow: 'inset 0 0 120px rgba(40,10,8,0.6)' });
+      document.body.appendChild(el);
+    }
+  }
+  private wipeStep(dt: number, w: VanWalker) {
+    const W = this.wipe;
+    if (!W) return;
+    const was = W.t;
+    W.t += dt;
+    w.holdMove = true;
+    const IN = 0.22, OUT = 0.3;
+    if (was < IN && W.t >= IN) {
+      // through: at the wheel, or just inside the room's curtained way facing in
+      const L = this.layout;
+      if (W.to === 'cab') { this.sit(w); this.seatT = 1; }
+      else {
+        this.mode = 'in';
+        w.space = this.space;
+        const [x, z] = toWorld(this.pose, L.cab.into.x, L.cab.into.z);
+        w.place(x, z, L.cab.into.yaw + this.pose.yaw, -0.05, this.pose.y + L.floor);
+      }
+    }
+    const k = W.t < IN ? W.t / IN : 1 - (W.t - IN) / OUT;
+    if (this.wipeEl) this.wipeEl.style.transform = `translateX(${W.t < IN ? -110 + 110 * k : 110 * (1 - k)}%)`;
+    if (W.t >= IN + OUT) {
+      this.wipe = null;
+      if (this.wipeEl) this.wipeEl.style.transform = 'translateX(-110%)';
+      w.holdMove = this.mode === 'cab';
+    }
+  }
+  /** At the wheel: the camera is the driver's eye (it rides the van), your look free about it.
+   *  True while seated (the walker doesn't walk). */
+  seat(dt: number, cam: THREE.PerspectiveCamera, w: VanWalker): boolean {
+    if (this.mode !== 'cab') return false;
+    const L = this.layout, e = L.cab.eye;
+    const [x, z] = toWorld(this.pose, e.x, e.z);
+    this.eye.set(x, this.pose.y + e.y, z);
+    if (this.seatT < 1) {
+      this.seatT = Math.min(1, this.seatT + dt / 0.6);
+      const k = this.seatT * this.seatT * (3 - 2 * this.seatT);
+      this.eye.lerpVectors(this.seatFrom, this.eye, k);
+    }
+    w.x = this.eye.x;
+    w.z = this.eye.z;
+    w.y = this.eye.y;
+    w.holdMove = true;
+    cam.position.copy(this.eye);
+    cam.up.set(0, 1, 0);
+    cam.rotation.set(w.pitch, w.yaw, 0, 'YXZ');
+    setLens(cam, walkParams.cabFov);
+    return true;
+  }
+
+  // ---------------- driving ----------------
+  /** Drive to (x, z) on the roads given: plan the route; the doors shut, then it goes. False when
+   *  there's no way there on the roads it knows. */
+  driveTo(x: number, z: number, roads: readonly Road[]) {
+    if (!this.graph || this.graph.n !== roads.length) this.graph = { n: roads.length, g: buildGraph(roads) };
+    const F = this.layout.frame;
+    const [fx, fz] = toWorld(this.pose, 0, F.zf - 2);
+    const pts = route(this.graph.g, { x: fx, z: fz }, { x, z });
+    if (!pts || pts.length < 2) return false;
+    const path = lanePath(pts, { driveLeft: this.o.driveLeft, start: { x: this.pose.x, z: this.pose.z, yaw: this.pose.yaw } });
+    if (path.length < 2) return false;
+    this.pending = path;
+    this.doorTarget = 0;
+    return true;
+  }
+  /** Before the walker moves: the drive on, the van's pose with it, and you carried along. */
+  move(dt: number, w: VanWalker) {
+    if (this.pending && this.doors < 0.02) {
+      // the doors are shut: off we go (out of the world's walls while it moves)
+      this.trip = new Drive(this.pending);
+      this.pending = null;
+      this.onDepart?.();
+      this.o.walk.removeScope(SCOPE, true);
+      this.registered = false;
+    }
+    const T = this.trip;
+    if (!T) return;
+    dt = Math.min(dt, 0.05);
+    const old = { ...this.pose };
+    const p = T.step(dt);
+    const dyaw = Math.atan2(Math.sin(p.yaw - old.yaw), Math.cos(p.yaw - old.yaw));
+    // (the heading eased — never a twitch, and never turning faster than a van can at this speed: a
+    // 4 m turning radius — and the steering wheel turned by how fast it turns)
+    const most = (T.v / 4 + 0.1) * dt;
+    const yaw = old.yaw + Math.max(-most, Math.min(most, dyaw * Math.min(1, dt * 8)));
+    const y = this.o.ground ? this.o.ground(p.x, p.z, old.y) : old.y;
+    this.pose.x = p.x;
+    this.pose.z = p.z;
+    this.pose.yaw = yaw;
+    this.pose.y = old.y + (y - old.y) * Math.min(1, dt * 6);
+    const rate = (yaw - old.yaw) / Math.max(dt, 1e-3);
+    this.steer += (Math.max(-1, Math.min(1, rate * 6 / Math.max(2, T.v))) * 2.4 - this.steer) * Math.min(1, dt * 5);
+    this.wheelMesh.rotation.z = this.steer;
+    this.group.position.set(this.pose.x, this.pose.y, this.pose.z);
+    this.group.rotation.set(0, this.pose.yaw, 0);
+    this.group.updateMatrix();
+    this.group.updateMatrixWorld(true);
+    // carry you: in the room your spot in the van holds; at the wheel the seat (seat()) does
+    if (this.mode === 'in') {
+      const [lx, lz] = toLocal(old, w.x, w.z), [nx, nz] = toWorld(this.pose, lx, lz);
+      w.shift(nx - w.x, this.pose.y - old.y, nz - w.z, this.pose.yaw - old.yaw);
+    } else if (this.mode === 'cab') w.yaw += this.pose.yaw - old.yaw;
+    if (T.v > 0.5) this.onMove?.(this.pose.x, this.pose.z, -Math.sin(this.pose.yaw) * T.v, -Math.cos(this.pose.yaw) * T.v);
+    if (T.done) {
+      this.trip = null;
+      this.steer = 0;
+      this.wheelMesh.rotation.z = 0;
+      this.park({ ...this.pose });
+      this.onArrive?.();
+    }
   }
   private cam = new THREE.Vector3();
 

@@ -21,6 +21,9 @@ export class Atlas {
   private searchSeq = 0;
   /** more pins from the game (your garden) */
   extraPins: () => Pin[] = () => [];
+  /** Opened from the van's map table: a pick (or a search result) is where to drive, not where to
+   *  walk. Cleared once used, or when the atlas closes. */
+  driveTo: ((x: number, z: number) => void) | null = null;
 
   constructor(private g: GameCtx, private com: Commissions, private stamps: () => { name: string; x: number; z: number }[]) {
     this.map = new MapView(g, this.$('atlas-map') as HTMLCanvasElement);
@@ -64,6 +67,7 @@ export class Atlas {
       this.g.sound('page');
     } else {
       this.$('lightbox').classList.add('hidden');
+      this.driveTo = null;
       this.g.lock();
     }
   }
@@ -106,14 +110,16 @@ export class Atlas {
   }
   private pop(sx: number, sy: number, html: string, go: () => void) {
     const el = this.$('atlas-pop');
-    el.innerHTML = `${html}<button>walk here</button>`;
+    el.innerHTML = `${html}<button>${this.driveTo ? 'drive here' : 'walk here'}</button>`;
     el.style.left = `${sx}px`;
     el.style.top = `${sy}px`;
     el.classList.remove('hidden');
     el.querySelector('button')!.onclick = go;
   }
   private go(lat: number, lon: number, kind?: string) {
+    const drive = this.driveTo;
     this.toggle(false);
+    if (drive) { const [x, z] = this.g.fromLatLon(lat, lon); drive(x, z); return; }
     void this.g.teleport(lat, lon, kind);
   }
 

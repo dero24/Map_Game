@@ -2,6 +2,38 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-10 — The van's cab and a short drive (`poc-van-drive`, behind `?poc=1`)
+
+The rest of Robby's van: the driver's door to the seat, the curtain between the cab and the back, the
+map table, and the van driving itself on the real roads. Committed on `feature/four-reports`, **not
+pushed** (Robby's OK first).
+
+- **The cab:** E (a phone: the button by your thumb — Sit, Back, Map by what's in reach) at the driver's
+  door eases you into the seat: the dash and binnacle, a steering wheel that turns with the road, thin
+  dark windshield pillars, the mirrors, a free look through a wider lens (the panel's "driving field of
+  view", 74). E at the wheel: into the back — a curtain brushes past and you step out of the curtained
+  way in the room's front wall (the armchair moved under the empty wall); walk into that curtain and
+  you're back at the wheel. Even while it drives.
+- **The drive** (`src/van/drive.ts`): E at the map table opens the atlas; "drive here" on a pick (or a
+  search result). A* over the map's own roads; half a lane right of the middle, out of its stall a van's
+  turn away, corners rounded, pulled over at the kerb at the end; speeds by road (30 mph on Ocean
+  Avenue, a crawl in the car park), slower into bends, eased; the heading never tighter than a 4 m
+  circle. The back doors shut first; you're carried in the room or at the wheel; the engine is heard;
+  animals give way. It pulls away the town's bloom if you never stepped out.
+  - On the way: the first pull-out was a 2 m pivot out of the stall (the route joined right in front of
+    the van) — now it joins 9 m off along a curve; the heading's catch-up spiked to 3.4 rad/s — now
+    capped at a van's turning circle.
+- Verified: a drive from the car park ~1 km down the shore — on the road the whole way, pulled over 2.8 m
+  from the pick, the cells 120 m ahead built at all 200 samples, the town ahead coloured; the van's walls
+  back when parked; `tools/van-check.js` still ok; typecheck; `npm test` 118 files, 1148 tests
+  (`tests/van.test.ts` 37); build; montages (desktop and phone); `mobile-check --device=pixel7
+  --query=poc=1` (0 errors); `hud-audit` (560 layouts, no overlaps).
+- **For Robby to play:** `http://localhost:5173/?poc=1` — wake, step out, look back; the driver's door
+  (left side) to sit; E at the wheel into the back; E at the map table, pick a spot down the shore, "drive
+  here"; ride at the wheel or watch from the room's windows.
+- **Next:** Robby's notes on the van, then slices B and C as his gameplay doc sets them. Not yet: driving
+  it yourself; fuel, legs and sleep (later, by the plan).
+
 ## 2026-10-09 (late) — The van, bigger on the inside, and the town colouring as you look (`poc-van`, behind `?poc=1`)
 
 Robby changed the plan: no long design Q&A — he's writing the one gameplay doc himself ("just work on

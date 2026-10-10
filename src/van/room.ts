@@ -267,6 +267,20 @@ function furnish(b: Built, f: Furn, L: VanLayout) {
       break;
     }
     case 'doormat': add([part(bx(f.hx * 2, 0.012, f.hz * 2, 0, 0.002, 0), 'fabric', 0xb08a52)]); break;
+    case 'cabcurtain': {
+      // a doorway's frame on the front wall and a heavy curtain drawn across it: through it, the cab
+      const w = f.hx * 2, h = 2.05, parts: D.DecorPart[] = [];
+      parts.push(part(bx(w + 0.2, 0.1, 0.06, 0, h, 0.03), 'wood', C.trim));
+      for (const s of [-1, 1]) parts.push(part(bx(0.1, h, 0.06, s * (w / 2 + 0.05), 0, 0.03), 'wood', C.trim));
+      parts.push(part(bx(w, h, 0.02, 0, 0, 0.05), 'fabric', 0x7a3f36)); // (its lining: nothing shows through)
+      for (let k = 0; k < 9; k++) {
+        const fold = k % 2 ? 0xa64b3f : new THREE.Color(0xa64b3f).multiplyScalar(0.8).getHex();
+        parts.push(part(bx(w / 9 + 0.02, h - 0.04, 0.05, -w / 2 + (k + 0.5) * (w / 9), 0.02, -0.01 - (k % 2) * 0.025), 'fabric', fold));
+      }
+      parts.push(part(bx(w + 0.3, 0.025, 0.025, 0, h - 0.03, -0.04), 'metal', 0x6a5a40)); // its rod
+      add(parts);
+      break;
+    }
   }
 }
 

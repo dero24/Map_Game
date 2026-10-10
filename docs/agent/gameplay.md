@@ -415,11 +415,39 @@ park, the town in pencil; without it the game is unchanged (no van, no stencil, 
   whenever the view has turned ~7°, moved 3 m, or every 2.5 s (`shouldLook`, at most every 0.35 s, one
   at a time). Off until you first step out of the back door; then a held breath (`Ambience.hush`, 0.9 s),
   the wash (`ui('wash')`) and a chime, and the colour runs out from you to the horizon.
+- **The cab** (`van.ts` `action`/`act`, `seat`): E — on a phone the button by your thumb, its word the
+  action's (`VanAction`: Sit, Back, Map) — at the driver's door (outside, on the left: `layout.cab.door`)
+  eases you into the driver's seat (`cab.eye`); the camera rides the van there, your look free, through
+  its own lens (`walkParams.cabFov`, 74: the panel's "driving field of view" with `?poc=1`), the dash,
+  the binnacle, the steering wheel (its own mesh, turned by how fast the van turns), the thin dark
+  windshield pillars and the mirrors round it. From the seat, E: into the back — a curtain brushes past
+  (`wipe`: a quarter second in, at its fullest you're through, then out — no fade), and you come out of
+  the curtained way in the room's front wall (`cab.way`, `cab.into`); walk into that curtain and you're
+  back at the wheel. `nextMode` keeps you seated (`'cab'`); vehicles.ts's E steps aside while the van
+  has an action or you're in it.
+- **Driving itself** (`drive.ts`; `van.ts driveTo`, `move`): E at the map table opens the atlas with a
+  pick that drives (`atlas.driveTo`: "drive here"; a search result too). The route: A* over the map's
+  own roads (the baked region's paint roads, every class a car takes; the streamed cells' primary roads)
+  joined where they share points, the main roads cheaper (`CLASS_COST`). The path: half a lane right of
+  the middle (left where they drive on the left), out of its stall along its nose onto its lane a van's
+  turn away, every corner rounded, a point a metre, the last 30 m pulled over to the kerb; a speed for
+  every metre — the road's (`CLASS_SPEED`: 25–30 mph in town, a car park's crawl), no faster than a bend
+  allows (2 m/s² sideways), easing on (1.4) and off (2.2) — and the heading eased, never turning tighter
+  than a 4 m circle. The back doors shut first (the doorway is a wall while they're not open), then it
+  goes: out of the WalkWorld while it moves (back in when it parks), the walker carried (`Walker.shift`:
+  in the room your spot holds; at the wheel the seat does), the engine heard (a car's), animals giving
+  way (`onMove` → main's movers), the parked cars along the way left alone (`covers` is the van alone
+  while it drives). It pulls away the town's bloom if you never stepped out (`onDepart`). Sea Bright to
+  ~1 km down the shore: the cells 120 m ahead were always built (0 of 200 samples), and what you see
+  out of the windshield colours as you go.
 - Harness: `window.__VAN__` / `__GAME__.van`, `__GAME__.sight`; shots (`?capture=1&poc=1`): `van-wake`,
   `van-room`, `van-door`, `van-window`, `van-wall`, `van-doorway`, `van-near`, `van-step`, `van-back`,
-  `van-side`, `bloom-0`, `bloom-1` (`--settle=300` for the bloom).
-- Not yet: the cab to sit in and drive (the driver's door, the curtain to the back, first-person
-  driving, self-driving on the real roads — next), the room's things working, saving the van.
+  `van-side`, `van-curtain`, `van-cab`, `van-cab-left`, `van-cab-right`, `van-drive` (35 s into a drive
+  down the shore, at the wheel), `van-drive-out` (the van from the roadside), `bloom-0`, `bloom-1`
+  (`--settle=300` for the bloom).
+- Not yet: driving it yourself, fuel and legs and sleep (later, by the plan), the room's things
+  working, saving the van; parking at the end of a drive can put the room's far side into a building
+  beside the kerb (seen only through that side's windows).
 
 ## Hot air balloons
 

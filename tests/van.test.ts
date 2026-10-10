@@ -290,3 +290,137 @@ describe('colour by sight: when to look again', () => {
     expect(shouldLook(v(0), v(0), SIGHT.idle + 0.01)).toBe(true);
   });
 });
+
+// ---- the cab and the drive (poc-van-drive)
+import { buildGraph, route, lanePath, poseAt, Drive, drivable } from '../src/van/drive';
+import type { Road } from '../src/world/data';
+
+describe('the cab', () => {
+  it('the driver\'s eye is in the cab, on the left, under the roof and over the dash; the door outside it', () => {
+    const c = L.cab, F = L.frame;
+    expect(c.eye.x).toBeLessThan(0); // (the driver's side)
+    expect(c.eye.z).toBeGreaterThan(F.zHood);
+    expect(c.eye.z).toBeLessThan(F.zB);
+    expect(c.eye.y).toBeGreaterThan(F.hoodY + 0.3); // looking out over the hood…
+    expect(c.eye.y).toBeLessThan(F.screenTopY - 0.2); // …under the windshield's head
+    expect(c.door.x).toBeLessThan(-L.recipe.W / 2); // you stand outside the van to get in
+    expect(Math.abs(c.door.z - c.eye.z)).toBeLessThan(1);
+  });
+  it('the room\'s way to the cab is in its front wall, clear to walk up to, and you come out into the room', () => {
+    const w = L.cab.way;
+    expect(w.z).toBeCloseTo(L.room.z0, 6);
+    expect(w.x1 - w.x0).toBeGreaterThan(0.8);
+    const [x, z] = moveAmong(roomSegments(L), (w.x0 + w.x1) / 2, L.room.z0 + 2, 0, -3, 0.32);
+    expect(z).toBeLessThan(L.room.z0 + 0.5); // (you reach the curtain: that's the way through)
+    expect(x).toBeGreaterThan(w.x0);
+    const [ix, iz] = moveAmong(roomSegments(L), L.cab.into.x, L.cab.into.z, 0, 0, 0.32);
+    expect(Math.hypot(ix - L.cab.into.x, iz - L.cab.into.z)).toBeLessThan(1e-6);
+  });
+  it('at the wheel you stay at the wheel (the seat is left by getting up, not by where you are)', () => {
+    expect(nextMode('cab', 0, L.door.z + 5, L)).toBe('cab');
+  });
+  it('shut, the back doors are a wall', () => {
+    const S = new VanSpace(roomSegments(L), L.floor, { x: 0, y: 0, z: 0, yaw: 0 });
+    S.shut = [L.door.x0, L.door.z, L.door.x1, L.door.z];
+    S.closed = true;
+    let x = 0, z = L.room.z1 - 1;
+    for (let k = 0; k < 100; k++) [x, z] = S.move(x, z, 0, 0.05, 0.32);
+    expect(z).toBeLessThan(L.door.z - 0.3);
+    S.closed = false;
+    for (let k = 0; k < 100; k++) [x, z] = S.move(x, z, 0, 0.05, 0.32);
+    expect(z).toBeGreaterThan(L.door.z);
+  });
+});
+
+describe('the drive', () => {
+  // a grid town: east–west residential streets every 100 m, one north–south main road (secondary, wide)
+  // (the ways share their points where they cross, as the map's do)
+  const roads: Road[] = [];
+  const line = (pts: number[][]) => pts.flat().map((v) => v * 10);
+  const steps = [-300, -200, -100, 0, 100, 200, 300];
+  for (const z of steps) roads.push({ p: line(steps.map((x) => [x, z])), c: 'residential', w: 7 });
+  roads.push({ p: line(steps.map((z) => [0, z])), c: 'secondary', w: 10 });
+  roads.push({ p: line([[100, -300], [100, 300]]), c: 'footway', w: 2 });
+  const g = buildGraph(roads);
+  it('the network joins its roads where they meet, and leaves out what isn\'t for driving', () => {
+    expect(drivable('footway')).toBe(false);
+    expect(drivable('service')).toBe(true);
+    // the main road crosses each street at a shared point
+    const at00 = [...g.x].findIndex((x, i) => Math.abs(x) < 0.1 && Math.abs(g.z[i]) < 0.1);
+    expect(at00).toBeGreaterThanOrEqual(0);
+    expect(g.adj[at00].length).toBe(4);
+    // the footway isn't in it: no edge runs north–south at x = 100
+    for (let a = 0; a < g.adj.length; a++) for (const e of g.adj[a]) expect(Math.abs(g.x[a] - 100) < 0.1 && Math.abs(g.x[e.to] - 100) < 0.1 && Math.abs(g.z[a] - g.z[e.to]) > 1).toBe(false);
+  });
+  it('a route keeps to the roads and prefers the main road', () => {
+    const r = route(g, { x: -250, z: -200 }, { x: 250, z: 200 })!;
+    expect(r).not.toBeNull();
+    expect(r[0].x).toBeCloseTo(-250, 3);
+    expect(r[r.length - 1].x).toBeCloseTo(250, 3);
+    // it runs north on the main road (x = 0) rather than zig-zagging the streets
+    const onMain = r.filter((p) => Math.abs(p.x) < 0.5).length;
+    expect(onMain).toBeGreaterThanOrEqual(2);
+    expect(route(g, { x: -250, z: -200 }, { x: 5000, z: 5000 })).not.toBeNull(); // (the nearest point it can reach)
+  });
+  it('the path keeps right of the middle, rounds its corners, pulls over at the end, a point a metre', () => {
+    const r = route(g, { x: -250, z: 0 }, { x: 0, z: 250 })!;
+    const P = lanePath(r);
+    for (let i = 1; i < P.length; i++) expect(P[i].s - P[i - 1].s).toBeLessThanOrEqual(1.0001);
+    // heading east on the street at z = 0 (−z north, so right of east is +z): south of the middle
+    const east = P.filter((p) => p.x < -60 && p.x > -200);
+    expect(east.every((p) => p.z > 0.5 && p.z < 3.5)).toBe(true);
+    // then south on the main road at x = 0 (+z is south; right of south is −x, west)
+    const south = P.filter((p) => p.z < 200 && p.z > 40);
+    expect(south.every((p) => p.x < -0.5 && p.x > -3.5)).toBe(true);
+    // no sharp kink: the heading turns smoothly through the corner
+    let worst = 0;
+    for (let i = 2; i + 2 < P.length; i++) {
+      const h1 = Math.atan2(P[i].x - P[i - 2].x, P[i].z - P[i - 2].z), h2 = Math.atan2(P[i + 2].x - P[i].x, P[i + 2].z - P[i].z);
+      worst = Math.max(worst, Math.abs(Math.atan2(Math.sin(h2 - h1), Math.cos(h2 - h1))) / 2);
+    }
+    expect(worst).toBeLessThan(0.35); // (rad a metre)
+    // the end: at the kerb side of the main road (10 m wide: 1.25 m in from its west edge)
+    const end = P[P.length - 1];
+    expect(end.x).toBeLessThan(-3.2);
+    expect(end.x).toBeGreaterThan(-4.2);
+  });
+  it('they drive on the left where they do', () => {
+    const r = route(g, { x: -250, z: 0 }, { x: -50, z: 0 })!;
+    const P = lanePath(r, { driveLeft: true });
+    expect(P.filter((p) => p.x > -200 && p.x < -100).every((p) => p.z < -0.5)).toBe(true);
+  });
+  it('speeds: no faster than the road, slower into the bend, from rest to rest', () => {
+    const r = route(g, { x: -250, z: 0 }, { x: 0, z: 250 })!;
+    const P = lanePath(r);
+    expect(P[0].v).toBe(0);
+    expect(P[P.length - 1].v).toBe(0);
+    expect(Math.max(...P.map((p) => p.v))).toBeLessThanOrEqual(13.4 + 1e-9);
+    const corner = P.reduce((b, p) => (Math.hypot(p.x - 1, p.z - 1) < Math.hypot(b.x - 1, b.z - 1) ? p : b));
+    expect(corner.v).toBeLessThan(8);
+    for (let i = 1; i < P.length; i++) {
+      const ds = P[i].s - P[i - 1].s;
+      expect(P[i].v ** 2 - P[i - 1].v ** 2).toBeLessThanOrEqual(2 * 1.4 * ds + 1e-6);
+      expect(P[i - 1].v ** 2 - P[i].v ** 2).toBeLessThanOrEqual(2 * 2.2 * ds + 1e-6);
+    }
+  });
+  it('out of its stall: from where the van stands along its nose, a van\'s turn onto its lane', () => {
+    const start = { x: -250, z: 30, yaw: 0 }; // facing north (−z), 30 m south of the street
+    const r = route(g, { x: -250, z: 25 }, { x: -100, z: 0 })!;
+    const P = lanePath(r, { start });
+    expect(Math.hypot(P[0].x - start.x, P[0].z - start.z)).toBeLessThan(1e-6);
+    expect(P[3].z).toBeLessThan(start.z - 2); // it sets off the way it faces
+  });
+  it('driving it: the van rolls on to the end and stops; poseAt faces the way ahead', () => {
+    const r = route(g, { x: -250, z: 0 }, { x: 0, z: 250 })!;
+    const D = new Drive(lanePath(r));
+    let s = 0, t = 0;
+    while (!D.done && t < 300) { const p = D.step(1 / 30); expect(D.s).toBeGreaterThanOrEqual(s); s = D.s; t += 1 / 30; expect(Number.isFinite(p.x + p.z + p.yaw)).toBe(true); }
+    expect(D.done).toBe(true);
+    expect(D.v).toBe(0);
+    expect(t).toBeLessThan(120);
+    // heading east: the nose (−z in the van) points +x: yaw −π/2
+    const p = poseAt(lanePath(route(g, { x: -250, z: 0 }, { x: -50, z: 0 })!), 50);
+    expect(Math.cos(p.yaw)).toBeCloseTo(0, 1);
+    expect(Math.sin(p.yaw)).toBeCloseTo(-1, 1);
+  });
+});

@@ -21,8 +21,9 @@ export interface Opening { wall: Wall; c: number; w: number; y0: number; y1: num
  *  faces (yaw: 0 = its back toward +z, as decor builds it), and its footprint's half sizes along its
  *  own x (its width) and z (its depth) — what you can't walk through, when `solid`. */
 export interface Furn { kind: FurnKind; x: number; z: number; yaw: number; hx: number; hz: number; solid: boolean }
-export type FurnKind = 'bed' | 'nightstand' | 'maptable' | 'chair' | 'shelves' | 'kitchen' | 'rug' | 'floorlamp' | 'plant' | 'coats' | 'armchair' | 'picturerail' | 'doormat';
-export type Mode = 'out' | 'in';
+export type FurnKind = 'bed' | 'nightstand' | 'maptable' | 'chair' | 'shelves' | 'kitchen' | 'rug' | 'floorlamp' | 'plant' | 'coats' | 'armchair' | 'picturerail' | 'doormat' | 'cabcurtain';
+/** out: in the world · in: in the room · cab: in the driver's seat */
+export type Mode = 'out' | 'in' | 'cab';
 
 export interface VanLayout {
   recipe: CamperRecipe;
@@ -42,6 +43,10 @@ export interface VanLayout {
   leave: number;
   /** where you wake: sitting on the bed's edge, looking across the room (van-local, yaw as the walker's) */
   wake: { x: number; z: number; yaw: number; pitch: number };
+  /** the cab: the driver's eye in the seat; the driver's door, where you stand outside to get in; the
+   *  curtain behind the seats; and the room's curtained way through to it (in its front wall), with
+   *  where you come out into the room */
+  cab: { eye: { x: number; y: number; z: number }; door: { x: number; z: number }; curtain: { x0: number; x1: number; z: number }; way: { x0: number; x1: number; z: number }; into: { x: number; z: number; yaw: number } };
 }
 
 // The room: 4.8 m across, 6 m deep and 2.85 m to the ceiling, in a van 2 m wide whose back is
@@ -78,8 +83,10 @@ export function vanLayout(recipe: CamperRecipe = camperRecipe(1)): VanLayout {
     { kind: 'kitchen', x: x1 - 0.32, z: z1 - 1.1, yaw: Math.PI / 2, hx: 0.78, hz: 0.32, solid: true },
     { kind: 'plant', x: x0 + 0.35, z: z1 - 2.05, yaw: 0, hx: 0.2, hz: 0.2, solid: true },
     { kind: 'coats', x: door.x0 - 0.62, z: z1 - 0.15, yaw: 0, hx: 0.42, hz: 0.12, solid: true },
-    { kind: 'armchair', x: x0 + 0.62, z: z0 + 0.66, yaw: -Math.PI * 0.75, hx: 0.42, hz: 0.42, solid: true },
-    { kind: 'picturerail', x: x0 + 1.6, z: z0 + 0.02, yaw: Math.PI, hx: 1.4, hz: 0.02, solid: false },
+    { kind: 'armchair', x: x0 + 2.1, z: z0 + 0.62, yaw: Math.PI + 0.2, hx: 0.42, hz: 0.42, solid: true }, // (under the empty wall)
+    { kind: 'picturerail', x: x0 + 2.15, z: z0 + 0.02, yaw: Math.PI, hx: 0.85, hz: 0.02, solid: false },
+    // the curtained way through to the cab, in the front wall's left end (the empty wall beside it)
+    { kind: 'cabcurtain', x: x0 + 0.72, z: z0 + 0.06, yaw: Math.PI, hx: 0.47, hz: 0.06, solid: true },
     { kind: 'doormat', x: 0, z: z1 + 0.28, yaw: 0, hx: 0.6, hz: 0.25, solid: false },
   ];
   // sitting at the bed's near edge, its foot end, looking across at the doorway and the windows
@@ -87,7 +94,15 @@ export function vanLayout(recipe: CamperRecipe = camperRecipe(1)): VanLayout {
   // (just clear of the bed's collider, so the first step doesn't shove you off it)
   const wx = bed.x - bed.hx * 0.92 - 0.33, wz = bed.z + 0.35, tx = -0.9, tz = z1 - 0.5;
   const wake = { x: wx, z: wz, yaw: Math.atan2(-(tx - wx), -(tz - wz)), pitch: -0.06 };
-  return { recipe, frame, floor, door, tunnel: { z0: tz0, z1: zDoor }, room, windows, furniture, enter: 0.3, leave: 0.22, wake };
+  // the cab: the driver sits on the left (x < 0), the curtain across the cab's back (camper.ts)
+  const cab = {
+    eye: { x: -0.48, y: 1.72, z: frame.zB - 0.3 },
+    door: { x: -recipe.W / 2 - 0.55, z: frame.zB - 0.7 },
+    curtain: { x0: -recipe.W / 2 + 0.1, x1: recipe.W / 2 - 0.1, z: frame.zB },
+    way: { x0: x0 + 0.25, x1: x0 + 1.19, z: z0 },
+    into: { x: x0 + 0.72, z: z0 + 0.75, yaw: Math.PI }, // (facing into the room, +z)
+  };
+  return { recipe, frame, floor, door, tunnel: { z0: tz0, z1: zDoor }, room, windows, furniture, enter: 0.3, leave: 0.22, wake, cab };
 }
 
 /** In or out: in once you're `enter` past the door's plane, back out under `leave` (between the
@@ -97,6 +112,7 @@ export function vanLayout(recipe: CamperRecipe = camperRecipe(1)): VanLayout {
  *  past the camera's near plane (0.25 m: under 0.35 in); in, anywhere in it — so the change is
  *  never seen, whichever side of the band a step lands. */
 export function nextMode(prev: Mode, lx: number, lz: number, L: VanLayout): Mode {
+  if (prev === 'cab') return 'cab'; // (the seat is left by getting up: van.ts)
   const depth = L.door.z - lz; // how far past the door's plane, inward
   const inDoor = lx > L.door.x0 - 0.05 && lx < L.door.x1 + 0.05;
   if (prev === 'out') return inDoor && depth > L.enter && depth < TUNNEL + 0.5 ? 'in' : 'out';

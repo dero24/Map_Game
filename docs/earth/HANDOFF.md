@@ -9,12 +9,12 @@ bigger on the inside, the back doorway as seamless as any front door (`tools/van
 real windows, the town in pencil until you look at it. Committed on `feature/four-reports`, **not
 pushed** — a `feature/` push publishes the game; ask Robby first.
 
-**Next: `poc-van-drive`** (in_progress): the driver's door to the driver's seat (dash, windshield frame,
-side windows and mirrors; a wide, steady view; phone too), the curtain between the cab and the back
-(get up from the seat and walk into the back, even while it drives), a short self-drive on the real
-roads from the map table with the tiles streaming and colouring ahead. Fuel, legs and sleep are later.
-`gameplay-one-plan` is paused (Robby's own doc); slices B and C follow his doc. Robby's rules hold (no
-email, no Street View, tiles v31 and he deploys, one subagent at most, short plain updates).
+**Then `poc-van-drive`** (built and verified; LOG 2026-10-10): the driver's door to the seat, the
+curtain between the cab and the back, the map table's "drive here", the van driving itself on the real
+roads. It stays `in_progress` for its last check only: **Robby plays the van** (`?poc=1`) and gives
+notes — work from those; then slices B and C as his gameplay doc sets them. `gameplay-one-plan` is
+paused (his own doc: don't start a design Q&A). Robby's rules hold (no email, no Street View, tiles
+v31 and he deploys, one subagent at most, short plain updates).
 
 ## Before that (2026-10-09): the gameplay design session, with Robby
 

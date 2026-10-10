@@ -46,13 +46,16 @@ export function moveAmong(segs: readonly Seg[], x: number, z: number, dx: number
 
 /** The room as a place to walk: its walls (van-local) and floor, seen through the van's pose. */
 export class VanSpace implements WalkSpace {
+  /** The back doors' line, a wall while they're shut (the van on the move). */
+  shut: Seg | null = null;
+  closed = false;
   constructor(private segs: readonly Seg[], private floor: number, public pose: VanPose) {}
   move(x: number, z: number, dx: number, dz: number, r = 0.32): [number, number] {
     const [lx, lz] = toLocal(this.pose, x, z);
     const c = Math.cos(this.pose.yaw), s = Math.sin(this.pose.yaw);
     // the step turned into the van's frame (the inverse of toWorld's turn)
     const ldx = dx * c - dz * s, ldz = dx * s + dz * c;
-    const [mx, mz] = moveAmong(this.segs, lx, lz, ldx, ldz, r);
+    const [mx, mz] = moveAmong(this.closed && this.shut ? [...this.segs, this.shut] : this.segs, lx, lz, ldx, ldz, r);
     return toWorld(this.pose, mx, mz);
   }
   /** The floor (world height): the same everywhere in the room. */

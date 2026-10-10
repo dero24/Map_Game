@@ -599,7 +599,7 @@ async function main() {
       })(),
     }, vanLayout()) ?? { x: walker.x, y: walk.outdoorSurfaceAt(walker.x, walker.z), z: walker.z, yaw: walker.yaw };
     console.info(`van: parked at ${at.x.toFixed(1)}, ${at.z.toFixed(1)} (${(performance.now() - t0).toFixed(0)} ms to find the spot)`);
-    van = new Van({ walk, root: worldRoot });
+    van = new Van({ walk, root: worldRoot, ground: (x, z, y) => walk.outdoorNear(x, z, y), driveLeft: regionLook.driveLeft, enabled: () => $('intro').classList.contains('hidden') && !atlas.open && !photo.active && !brush.active });
     van.park(at);
     kerbCars.keepOut = (x, z) => van!.covers(x, z);
     kerbCars.refresh();
@@ -660,7 +660,7 @@ async function main() {
   // only when genuinely swallowed: a wall through their position, or inside a solid
   // footprint with no interior. Legit indoor players must not be yanked outside.
   const settleWalker = () => {
-    if (van?.inside) return; // (the room reaches past the van, over whatever stands round it)
+    if (van && van.mode !== 'out') return; // (the room reaches past the van, over whatever stands round it; the seat is in it)
     if (walkParams.fly) return; // flying over a roof isn't being swallowed by it
     if (interiors.riding) return; // (a lift ride walks you through its shaft's wall on purpose)
     // a wall at 0.28 < the walker's 0.32 radius: running *through* their body, not one they're
@@ -704,7 +704,7 @@ async function main() {
     tiles: () => stream.loaded.values(),
     kerb: kerbCars,
     driveLeft: regionLook.driveLeft,
-    enabled: () => $('intro').classList.contains('hidden') && !atlas.open && !photo.active,
+    enabled: () => $('intro').classList.contains('hidden') && !atlas.open && !photo.active && !(van && (van.mode !== 'out' || van.action())),
     summons: () => debugParams.summons,
     geo: { toLatLon: (x, z) => toLatLon(json.origin, x, z), fromLatLon: (lat, lon) => fromLatLon(json.origin, lat, lon) },
   });
@@ -955,10 +955,28 @@ async function main() {
   // the van, after a held breath, with the wash and a chime
   const sight = POC ? new Sight({ post, explore, camera, origin, ground: (x, z) => Math.max(world.terrain.heightAt(x, z), 0), grid: MOBILE ? 128 : 192, reach: () => Math.min(SEEN_REACH, postParams.photoReach) }) : null;
   if (van) {
-    van.onStepOut = (first) => { if (first) sight?.bloom(ambience); };
-    van.onDoors = () => ambience?.ui('latch');
-    hints.add(() => (van!.inside && !van!.steppedOut && simTime > 4 ? { text: 'the back doors: step outside', pri: 6 } : null));
+    const V = van;
+    V.onStepOut = (first) => { if (first) sight?.bloom(ambience); };
+    V.onDoors = () => ambience?.ui('latch');
+    hints.add(() => (V.inside && !V.steppedOut && simTime > 4 ? { text: 'the back doors: step outside', pri: 6 } : null));
+    // E (a phone: the button by your thumb) — the driver's seat, the back, the map table
+    hints.add(() => { const a = V.action(); return a ? { key: thumbs() ? a.label : 'E', text: a.text, pri: 9 } : null; });
+    // the map table: pick a place on the map and the van drives you there, on the real roads (the
+    // baked region's every road, the streamed cells' own)
+    V.onMapTable = () => {
+      if (V.moving) { toast('on the way — the van is driving'); return; }
+      atlas.driveTo = (x, z) => {
+        const ok = V.driveTo(x, z, [...((paintWorld.json as { roads?: Road[] }).roads ?? []), ...stream.primRoads]);
+        toast(ok ? 'off we go — the doors shut, and the van drives itself' : 'no road there the van knows');
+      };
+      atlas.toggle(true, 'map');
+    };
+    V.onArrive = () => { kerbCars.refresh(); toast('here — the doors open as you come to them'); };
+    V.onDepart = () => sight?.bloom(ambience); // (off before you ever stepped out: the town blooms as you pull away)
+    V.onMove = (x, z, vx, vz) => { vanMover.x = x; vanMover.z = z; vanMover.vx = vx; vanMover.vz = vz; vanMoving = 2; };
   }
+  const vanMover = { x: 0, z: 0, vx: 0, vz: 0 };
+  let vanMoving = 0;
   const shadows = new SunShadows(renderer);
   diagStage('compile');
   // Compile every shader now (incl. the interior + NPC materials) so the first front door doesn't hitch
@@ -1119,6 +1137,26 @@ async function main() {
         out(0, d.z + 1.2, 0.6, d.z + 30, -0.05);
         if (n === 'bloom-1' && sight) sight.armed = true;
       }
+      else if (n === 'van-curtain') inn(L.cab.into.x + 0.3, L.cab.into.z + 1.4, (L.cab.way.x0 + L.cab.way.x1) / 2, R.z0, 0.02);
+      else if (n.startsWith('van-cab') || n.startsWith('van-drive')) {
+        // at the wheel (`van-cab`, `-left`, `-right`: looking ahead, at the driver's window, across); on the
+        // road (`van-drive`: 35 s into a drive down the shore; `van-drive-out`: the van from the roadside)
+        (V as unknown as { sit(w: typeof walker): void }).sit(walker);
+        (V as unknown as { seatT: number }).seatT = 1;
+        if (n.startsWith('van-drive') && !V.moving) {
+          V.driveTo(p.x - 80, p.z + 900, [...((paintWorld.json as { roads?: Road[] }).roads ?? []), ...stream.primRoads]);
+          V.doors = 0;
+          for (let k = 0; k < 35 * 30; k++) V.move(1 / 30, walker);
+        }
+        walker.yaw = V.pose.yaw + (n.endsWith('-left') ? 1.25 : n.endsWith('-right') ? -0.9 : 0);
+        walker.pitch = n.endsWith('-left') ? -0.12 : -0.06;
+        if (n === 'van-drive-out') {
+          const [x, z] = toWorld(V.pose, -6.5, -16), [tx, tz] = toWorld(V.pose, 0, 0);
+          V.mode = 'out';
+          walker.holdMove = false;
+          walker.place(x, z, Math.atan2(-(tx - x), -(tz - z)), -0.04);
+        }
+      }
       return n;
     }
     if (n === 'inside' || n === 'inside-night' || n === 'doorway') {
@@ -1247,7 +1285,8 @@ async function main() {
     for (const r of named) scan(r);
     for (const r of stream.primRoads) if (r.n && !r.lod) scan(r); // real streets carried by w-*/s-* tiles
     $('place').textContent = bd < 40 ? best : world.terrain.oceanDistAt(walker.x, walker.z) < 60 ? shoreLabel : arrival.locality || townName;
-    if (van?.inside) $('place').textContent = 'in the van';
+    if (van?.inside) $('place').textContent = van.moving ? 'in the van, on the road' : 'in the van';
+    else if (van?.mode === 'cab') $('place').textContent = van.moving ? `at the wheel · ${$('place').textContent}` : 'at the wheel';
     if (walkParams.fly) $('place').textContent = `flying over ${$('place').textContent} · ${Math.round(walker.y)} m`;
     else if (interiors.indoors && interiors.activePlan) {
       const fp = stream.fpByKey.get(interiors.activeIndex!);
@@ -1390,12 +1429,14 @@ async function main() {
   const BOARD = { car: 'Drive', boat: 'Board', plane: 'Board', balloon: 'Step in' } as const;
   const touchActionState = () => {
     if (!playing() || atlas.open || photo.active || brush.active) return null; // (the options panel leaves it in reach: style.css)
+    const va = van?.action(); // (the van's: the driver's seat, the back, the map table)
+    if (va) return { id: `van:${va.id}`, label: va.label, aria: va.text, still: true };
     const r = vehicles.ride;
     if (r) return { id: `exit:${r.kind}`, label: (r.kind === 'plane' || r.kind === 'balloon') && r.airborne ? 'Jump out' : 'Get out', aria: `get out of the ${modelName(r.model)}`, still: Math.abs(r.v) < 1 && !r.airborne };
     const e = vehicles.enterable();
     return e ? { id: `enter:${e.kind}:${e.model}`, label: BOARD[e.kind], aria: `${BOARD[e.kind].toLowerCase()} the ${modelName(e.model)}`, still: true } : null;
   };
-  touchAction.addEventListener('click', () => { if (touchActionState()) vehicles.interact(); });
+  touchAction.addEventListener('click', () => { const st = touchActionState(); if (!st) return; if (st.id.startsWith('van:')) van?.act(); else vehicles.interact(); });
   let touchActionCheck = 0;
   const syncTouchControls = (dt: number) => {
     if (!document.body.classList.contains('touch')) return;
@@ -1686,7 +1727,9 @@ async function main() {
 
     reanchor();
     if (MOBILE) groundCheck(dt);
-    if (!vehicles.update(dt, camera)) walker.update(dt, camera);
+    van?.move(dt, walker); // (the van drives on, carrying you)
+    const seated = !!van?.seat(dt, camera, walker); // (at the wheel: the van places the camera)
+    if (!vehicles.update(dt, camera) && !seated) walker.update(dt, camera);
     if (van) {
       van.update(dt, walker, walkParams.fly);
       if (waking > 0) {
@@ -1747,7 +1790,7 @@ async function main() {
     if (crowd.group.visible) crowd.update(walker.x, walker.z, timeParams.hour, [camera.position.x + origin.x, camera.position.z + origin.z, fwd.x, fwd.z], Math.tan(Math.PI * 31 / 180) / Math.tan((camera.fov * Math.PI) / 360), lifeParams.density * lifeParams.beach * (TIER_LIFE[tier.tier] ?? 1));
     focus.set(camera.position.x + fwd.x * 60, walker.y - walkParams.eyeHeight, camera.position.z + fwd.z * 60);
     const ti = performance.now();
-    interiors.update(walker.x, walker.z, dt, walker.feet, !vehicles.driving && !walkParams.fly && !van?.inside);
+    interiors.update(walker.x, walker.z, dt, walker.feet, !vehicles.driving && !walkParams.fly && (!van || van.mode === 'out'));
     // (the people outside learn which building stands open: who walks in by its door goes on in)
     if (interiors.visitV !== visitSeen) { visitSeen = interiors.visitV; life.setIndoor(interiors.visit); }
     liftUI.update(dt);
@@ -1798,7 +1841,7 @@ async function main() {
         for (const [ox, oz] of [[0, 0], [20, 0], [-20, 0], [0, 20], [0, -20], [14, 14], [-14, -14], [14, -14], [-14, 14]]) if (world.terrain.coverAt(walker.x + ox, walker.z + oz) === 10) tc++;
         treeCover = tc / 9;
       }
-      ambience.update({ dt, oceanDist, indoors: interiors.indoors || !!van?.inside, riverDist: Math.max(0, world.terrain.sdfAt(walker.x, walker.z)), wind: weather.wind, night: U.uNight.value, surface, stepped, running: run, life: life.stats, hour: timeParams.hour, churchDist, houses, harbour: harbourD, sails: sailsN, trees: Math.max(treeCover, Math.min(1, houses / 20) * 0.4), ride: vehicles.ride, city: cityAt(walker.x, walker.z), climate: regionLook.climate, summer: isSummer() && U.uSnow.value < 0.1, cicadas: critters.chorus });
+      ambience.update({ dt, oceanDist, indoors: interiors.indoors || (!!van && van.mode !== 'out'), riverDist: Math.max(0, world.terrain.sdfAt(walker.x, walker.z)), wind: weather.wind, night: U.uNight.value, surface, stepped, running: run, life: life.stats, hour: timeParams.hour, churchDist, houses, harbour: harbourD, sails: sailsN, trees: Math.max(treeCover, Math.min(1, houses / 20) * 0.4), ride: vehicles.ride ?? (van?.moving ? { kind: 'car' as const, v: van.speed, throttle: 0.25 + Math.min(0.5, van.speed / 25), airborne: false } : null), city: cityAt(walker.x, walker.z), climate: regionLook.climate, summer: isSummer() && U.uSnow.value < 0.1, cicadas: critters.chorus });
     }
     // the scene's matrices once a frame: each pass's render() walked the whole graph again (the shadow
     // pass's, then the paint's) — a phone's 5% (tools rendering between frames keep the update)
@@ -1881,6 +1924,7 @@ async function main() {
     movers.length = 0;
     for (const m of life.movers) movers.push(m);
     if (rideMoving-- > 0) movers.push(rideMover);
+    if (vanMoving-- > 0) movers.push(vanMover); // (the van on the move: animals give way)
     critters.update(dt, walker.x, walker.z, { hour: timeParams.hour, night: U.uNight.value, month: worldMonth(), south, wind: weather.wind, region: regionLook.region, climate: regionLook.climate, place: regionCast, camFwd: fwd, trees: (x, z, r) => within(nearTrees, x, z, r), gardens: (x, z, r) => within(nearGardens, x, z, r), movers, paved: pavedAt, lot: lotAt, urban: townHere, settled: settledHere });
     garden.update(dt, worldMonth(), south);
     waterParams.uDuckweed.value = duckweedCover(regionCast, south ? ((worldMonth() + 5) % 12) + 1 : worldMonth()); // (the South's still water, summer's lime carpet)

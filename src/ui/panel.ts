@@ -202,6 +202,7 @@ export function buildPanel(hooks: { onResize: () => void; onPreset: (hour: numbe
   m.add(walkParams, 'speed', 0.5, 6, 0.1).name('stroll speed');
   m.add(walkParams, 'runSpeed', 2, 20, 0.1).name('shift speed');
   m.add(walkParams, 'fov', 35, 100, 1).name('field of view');
+  if (new URLSearchParams(location.search).get('poc') === '1') m.add(walkParams, 'cabFov', 50, 100, 1).name('driving field of view');
   m.add(walkParams, 'bob', 0, 2, 0.01).name('head bob');
   m.add(walkParams, 'mouseSens', 0.2, 3, 0.01).name(document.body.classList.contains('nomouse') ? 'look sensitivity' : 'mouse sensitivity'); // (a phone's drag to look goes by it too)
   m.add(walkParams, 'flySpeed', 3, 400, 1).name('fly speed');

@@ -1,6 +1,6 @@
 {
   "project": "map_game",
-  "last_updated": "2026-10-09",
+  "last_updated": "2026-10-10",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -2491,13 +2491,21 @@
       "title": "The van's cab and a short drive (?poc=1): the driver's door to the driver's seat, the curtain to the back, first-person driving, self-driving on the real roads",
       "user_visible_behavior": "With ?poc=1, the van's driver's door takes you to the driver's seat: the dash, the windshield's frame and the side windows and mirrors round a wide, steady view you can look about in, on a phone too. From the seat you can get up and walk through the curtain into the back, even while the van drives itself. Set a destination at the map table and it drives itself on the real roads — smooth lanes, turns and speeds — while the tiles stream and colour ahead with no pop-in; the windows show the real world going by from where the van is.",
       "verification": [
-        "tests: the cab's seat and the curtain's way through (in the van's frame), the route on the road graph, the driving (lanes, turns, speeds, stopping), the walker carried by the moving van",
-        "a montage with ?poc=1: the driver's seat (dash, windshield, mirrors), the room's window while it drives, the van on the road from outside",
-        "the phone check for the cab and its HUD",
+        "tests/van.test.ts (the cab, the drive): the driver's eye in the cab, on the left, over the hood and under the windshield's head, the door outside; the room's curtained way in its front wall, clear to walk up to; the seat kept; shut back doors a wall; the network joined where its roads meet (no footways); a route on the roads preferring the main road; the path right of the middle (left where they drive on the left), corners rounded (under 0.35 rad a metre), pulled over at the kerb at the end, a point a metre; speeds within the road's, slower into the bend, rest to rest within 1.4/2.2 m/s²; out of the stall along its nose; driven to the end, stopped; the heading the way ahead",
+        "a drive in Sea Bright (?poc=1, the driver's seat): out of the car park and ~1 km down Ocean Avenue — within the road the whole way, up to 30 mph, slowing into the bends, the heading never turning tighter than a 4 m circle (worst 1.34 rad/s at 5 m/s), pulled over at the kerb 2.8 m from the pick; the cells 120 m ahead built at every sample (0 of 200 not); the town ahead coloured (explore 255); the van's walls back in the WalkWorld when parked",
+        "montages (?poc=1): van-cab, van-cab-left, van-curtain, van-room, van-drive, van-drive-out (desktop); van-cab, van-cab-left, van-drive, van-curtain (phone tier 412×915)",
+        "tools/van-check.js still ok (seam: in/up identical, the rest under the world's own motion; walk in→out once)",
+        "npm run build && node tools/mobile-check.mjs --device=pixel7 --query=poc=1 (phone tier, 0 errors, 66 programs); node tools/hud-audit.mjs (560 layouts, no overlaps; messages within two lines)",
+        "npm run typecheck, npm test, npm run build",
         "Robby plays it"
       ],
-      "evidence": [],
-      "notes": "After poc-van (2026-10-09). Fuel, legs and sleep are later; one short drive is enough now (the prompt's \"THE VAN IS THE HEART\")."
+      "evidence": [
+        "src/van/drive.ts (buildGraph, route, lanePath, poseAt, Drive); van.ts (action/act, seat, the curtain's wipe, driveTo, move: carrying the walker, the doors shut for a drive, the steering wheel); layout.ts (cab: eye, door, curtain, the room's way, where you come out); camper.ts (the steering wheel its own geometry, the binnacle and dials, thin dark pillars); room.ts (the curtained way); atlas.ts (driveTo: \"drive here\"); controller.ts (cabFov, shift); main.ts (the touch button and hints by the van's action, the engine's sound, the movers)",
+        "npm test: 118 files, 1148 tests passing (tests/van.test.ts 37)",
+        "drive probe: arrived (143.0, 727.6) for the pick (145.8, 727.6); 200 samples ahead all built; sight armed on departure",
+        "phone: mobile-check pixel7 running, 0 errors; hud-audit 560 layouts, no overlaps"
+      ],
+      "notes": "After poc-van (2026-10-09). Fuel, legs and sleep are later; one short drive is enough now (the prompt's \"THE VAN IS THE HEART\"). 2026-10-10: built — E at the driver's door seats you; E at the wheel takes you into the back through the curtain (and the room's curtained way brings you back); E at the map table picks a place to drive on the atlas; the van shuts its doors and drives itself there on the real roads, pulling over at the kerb. Not yet: driving it yourself. Left in_progress only for its last check: Robby plays the van (poc-van and this) and gives his notes — the next session works from those (HANDOFF \"Start here\")."
     },
     {
       "id": "poc-first-minute",
