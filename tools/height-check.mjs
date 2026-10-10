@@ -54,7 +54,7 @@ await ctx.addInitScript(() => { Element.prototype.requestPointerLock = undefined
 const page = await ctx.newPage();
 const errors = [], notes = [];
 page.on('pageerror', (e) => errors.push(String(e).slice(0, 300)));
-const q = `watchdog=180&at=${args.at}${args.query ? `&${args.query}` : ''}`;
+const q = `watchdog=180&poc=0&at=${args.at}${args.query ? `&${args.query}` : ''}`; // (the old start: walked to the place, not woken in the van)
 await page.goto(`http://127.0.0.1:${PORT}/Map_Game/?${q}`, { waitUntil: 'domcontentloaded' });
 const boot = await page.waitForFunction(() => {
   const b = document.getElementById('start'), f = document.getElementById('fatal');

@@ -351,10 +351,12 @@ where the two disagree, the vision is the target and this file is the current st
   at a wall, and a post or corner brushing its side pushes it aside. It was a 1.05 m circle round
   the middle, and the nose went 1.15 m into a wall.
 
-## The van (`src/van/`, behind `?poc=1`) — bigger on the inside
+## The van (`src/van/`, the default start; `?poc=0` the old one) — bigger on the inside
 
 Robby, 2026-10-09: "the van is the heart … the van in and out should be seamless like how it is walking
-into buildings already". With `?poc=1` you wake in the back of your camper van, parked in the nearest car
+into buildings already". You wake in the back of your camper van (on by default since 2026-10-10 — Robby:
+"make poc1 the default url"; `src/poc.ts`: `?poc=0` is the old start, and the review tools' `?capture=1`
+keeps the old start unless it adds `&poc=1`), parked in the nearest car
 park, the town in pencil; without it the game is unchanged (no van, no stencil, nothing drawn).
 
 - **The body** (`assets/camper.ts`, a foundry family: `camperRecipe(seed)` → `camperGeometry` → body,
@@ -430,7 +432,7 @@ park, the town in pencil; without it the game is unchanged (no van, no stencil, 
 - **The cab** (`van.ts` `action`/`act`, `seat`): E — on a phone the button by your thumb, its word the
   action's (`VanAction`: Sit, Back, Map) — at the driver's door (outside, on the left: `layout.cab.door`)
   eases you into the driver's seat (`cab.eye`); the camera rides the van there, your look free, through
-  its own lens (`walkParams.cabFov`, 74: the panel's "driving field of view" with `?poc=1`), the dash,
+  its own lens (`walkParams.cabFov`, 74: the panel's "driving field of view" while the van is on), the dash,
   the binnacle, the steering wheel (its own mesh, turned by how fast the van turns), the thin dark
   windshield pillars and the mirrors round it. From the seat, E: into the back — a curtain brushes past
   (`wipe`: a quarter second in, at its fullest you're through, then out — no fade), and you come out of

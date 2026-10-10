@@ -2,6 +2,17 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-10 (night) — The van is the default start
+
+Robby: "please make poc1 the default url as I really like it so far … when clicking the github actions
+link it does not start me in the van right now", and asked whether to keep it on a switch at all. Kept
+the switch, flipped (`src/poc.ts pocOn`): the van is on unless `?poc=0`; the review tools open the game
+with `?capture=1` (capture.mjs, the CI playtest, audit48, real-compare, night-check, critter-shots) and
+keep the old start unless they add `&poc=1`; soak and height-check pin `poc=0` (their routes start in
+the town). Deleting the switch and the old start is one cleanup for when the new gameplay settles.
+`tests/van.test.ts` (the rule); `npm test`; build; the published page boots into the van. Pushed at his
+word.
+
 ## 2026-10-10 (evening) — Drive the van yourself, from the seat or from behind; the pillows
 
 Robby's next notes: "now i want to be able to drive it", "van can also be driven in third person too",

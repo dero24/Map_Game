@@ -27,7 +27,8 @@ page.on('console', (m) => { if (m.type() === 'error') logs.push(m.text().slice(0
 page.on('pageerror', (e) => logs.push('[pageerror] ' + e.message));
 let code = 0;
 try {
-  await page.goto(`http://localhost:${PORT}/?region=${REGION}`, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  // (the old start — the town round the spawn, not the van's room: its route is doors, stairs and streets)
+  await page.goto(`http://localhost:${PORT}/?region=${REGION}&poc=0`, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForFunction('window.__READY__ === true', null, { timeout: 180000 });
   // Optional instrumentation: --inject="…" evaluates a snippet before driving (wrap subsystems, counters).
   if (args.inject) await page.evaluate(String(args.inject));

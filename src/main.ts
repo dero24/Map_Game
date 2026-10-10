@@ -79,13 +79,15 @@ import { Van } from './van/van';
 import { findVanSpot } from './van/spot';
 import { vanLayout, toWorld } from './van/layout';
 import { Sight } from './world/sight';
+import { pocOn } from './poc';
 
 const params = new URLSearchParams(location.search);
 setWorldDate(params.get('date')); // (tiles built in the page keep the tile worker's calendar)
 const CAPTURE = params.has('capture');
-// ?poc=1: the gameplay proof of concept (docs/agent/gameplay.md "The van"): you wake in the back of
-// your van, the town in pencil until you look at it. Without it the game is as it always was.
-const POC = params.get('poc') === '1';
+// The gameplay proof of concept (docs/agent/gameplay.md "The van"): you wake in the back of your van,
+// the town in pencil until you look at it. On by default; `?poc=0` is the old start (src/poc.ts — and
+// the review tools' `?capture=1` keeps the old start unless it asks for the van with `&poc=1`).
+const POC = pocOn(location.search);
 // real-lite tile service base (the H1 worker). Dev convenience: when the page runs on
 // localhost with no explicit ?tiles=, assume the local wrangler dev worker — teleporting
 // past the bake edge and ?at= then just work. ?tiles=off disables; prod never defaults.

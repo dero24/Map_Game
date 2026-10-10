@@ -15,7 +15,8 @@ roads. It stays `in_progress` for its last check only: **Robby plays the van** (
 notes — work from those; then slices B and C as his gameplay doc sets them. His notes so far (2026-10-10, all
 done — LOG "Looking in at the van's windows", "Drive the van yourself"): look in at its windows from
 outside; drive it yourself, from the seat or from behind (V / View); the pillows floating on every bed.
-Pushed at his word (published) so he can play it on his phone. `gameplay-one-plan` is
+Pushed at his word (published) so he can play it on his phone. **The van is now the default start**
+(`src/poc.ts`: `?poc=0` the old one; the tools' `?capture=1` keeps the old start unless `&poc=1`). `gameplay-one-plan` is
 paused (his own doc: don't start a design Q&A). Robby's rules hold (no email, no Street View, tiles
 v31 and he deploys, one subagent at most, short plain updates).
 

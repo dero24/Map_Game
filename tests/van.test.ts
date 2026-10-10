@@ -8,6 +8,7 @@ import { findVanSpot, inRing, type SpotEnv } from '../src/van/spot';
 import { wallPieces, shellGeometry, tunnelFaces, contentsGeometry, windowFaces } from '../src/van/room';
 import { camperRecipe, camperGeometry, camperValid, camperVerts, camperFrame, CAMPER_BUDGET, CAMPER_PAINTS } from '../src/assets/camper';
 import { shouldLook, SIGHT } from '../src/world/sight';
+import { pocOn } from '../src/poc';
 
 const L = vanLayout();
 
@@ -366,6 +367,17 @@ describe('looking in at its windows (from outside, the room through them)', () =
         expect(keep(1, -x)).toBe(true); // (and from the right, mirrored)
       }
     }
+  });
+});
+
+describe('the van is where you start (src/poc.ts)', () => {
+  it('on by default; ?poc=0 the old start; the review tools (capture) keep the old start unless they ask', () => {
+    expect(pocOn('')).toBe(true);
+    expect(pocOn('?region=shore&at=40.36,-73.97')).toBe(true);
+    expect(pocOn('?poc=1')).toBe(true);
+    expect(pocOn('?poc=0')).toBe(false);
+    expect(pocOn('?capture=1&region=shore')).toBe(false);
+    expect(pocOn('?capture=1&poc=1')).toBe(true);
   });
 });
 
