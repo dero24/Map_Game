@@ -43,6 +43,9 @@ export class KerbCars {
   readonly group = new THREE.Group();
   /** vehicles.ts: keys of cars the player drove off in */
   skip: (key: string) => boolean = () => false;
+  /** Ground no car parks on (your van's, and the room that reaches past it: van/van.ts) — the cars
+   *  there aren't drawn, and the ones that come and go don't come. */
+  keepOut: ((x: number, z: number) => boolean) | null = null;
   /** main: the walk world, which walls the cars that come and go while they're parked */
   walls: KerbWalls | null = null;
   /** the world's hour the cars are parked for (update's), and where the camera is and looks */
@@ -164,7 +167,7 @@ export class KerbCars {
     const c = this.comers.get(id), d = this.tiles.get(id), W = this.walls, V = this.view;
     if (!c || !d) return;
     for (const r of c.k) {
-      const i = r * KERB_STRIDE, taken = this.skip(`${id}:kerb:${r}`), want = parkedAt(d, i, this.hour) && !taken ? 1 : 0;
+      const i = r * KERB_STRIDE, taken = this.skip(`${id}:kerb:${r}`) || !!this.keepOut?.(d[i], d[i + 2]), want = parkedAt(d, i, this.hour) && !taken ? 1 : 0;
       if (c.on[r] !== want) {
         const dx = d[i] - (V?.[0] ?? 0), dz = d[i + 2] - (V?.[1] ?? 0);
         const held = c.on[r] !== 255 && !taken && !this.jump && V && dx * dx + dz * dz < 140 * 140 && dx * V[2] + dz * V[3] > -3;
@@ -214,7 +217,7 @@ export class KerbCars {
         const t = d[i + 4];
         // (only a car that will be drawn is posed: the far ring holds tens of thousands)
         if (!(r2 < U2 && fullN[t] < FULL_CAP) && !(r2 < N2 && nearN[t] < NEAR_CAP) && farN >= FAR_CAP) continue;
-        if (!this.parked(id, d, i, k) || this.skip(`${id}:kerb:${k}`)) continue;
+        if (!this.parked(id, d, i, k) || this.skip(`${id}:kerb:${k}`) || this.keepOut?.(d[i], d[i + 2])) continue;
         this.pose(d[i], d[i + 1], d[i + 2], d[i + 3], r2 < N2, hy, k);
         this.c.setRGB(d[i + 5], d[i + 6], d[i + 7]);
         if (r2 < U2 && fullN[t] < FULL_CAP) {
@@ -250,6 +253,15 @@ export class KerbCars {
     if (this.far.instanceColor) this.far.instanceColor.needsUpdate = true;
   }
 
+  /** Where the parked cars within r of (x, z) stand (the van's spot finder: van/spot.ts). */
+  carsNear(x: number, z: number, r: number) {
+    const out: [number, number][] = [];
+    for (const [id, d] of this.tiles)
+      for (let i = 0, k = 0; i + KERB_STRIDE <= d.length; i += KERB_STRIDE, k++)
+        if (Math.abs(d[i] - x) < r && Math.abs(d[i + 2] - z) < r && this.parked(id, d, i, k) && !this.skip(`${id}:kerb:${k}`)) out.push([d[i], d[i + 2]]);
+    return out;
+  }
+
   /** The kerb car nearest (x, z) within r, for the player to drive off in. */
   find(x: number, z: number, r: number) {
     let best: { key: string; x: number; z: number; yaw: number; color: number; model: string; d: number } | null = null;
@@ -258,7 +270,7 @@ export class KerbCars {
         const dist = Math.hypot(d[i] - x, d[i + 2] - z);
         if (dist >= r || (best && dist >= best.d)) continue;
         const key = `${id}:kerb:${k}`;
-        if (!this.parked(id, d, i, k) || this.skip(key)) continue;
+        if (!this.parked(id, d, i, k) || this.skip(key) || this.keepOut?.(d[i], d[i + 2])) continue;
         best = { key, x: d[i], z: d[i + 2], yaw: d[i + 3], color: this.c.setRGB(d[i + 5], d[i + 6], d[i + 7]).getHex(), model: CAR_TYPES[d[i + 4]], d: dist };
       }
     return best;

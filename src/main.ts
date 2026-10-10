@@ -75,10 +75,17 @@ import { Walker, walkParams, setLens } from './player/controller';
 import { frameFov } from './player/frame';
 import { celestial, localHour, localToMs, sunPosition } from './core/sun';
 import { buildPanel, loadSettings, userKeys, timeParams, weatherParams, debugParams } from './ui/panel';
+import { Van } from './van/van';
+import { findVanSpot } from './van/spot';
+import { vanLayout, toWorld } from './van/layout';
+import { Sight } from './world/sight';
 
 const params = new URLSearchParams(location.search);
 setWorldDate(params.get('date')); // (tiles built in the page keep the tile worker's calendar)
 const CAPTURE = params.has('capture');
+// ?poc=1: the gameplay proof of concept (docs/agent/gameplay.md "The van"): you wake in the back of
+// your van, the town in pencil until you look at it. Without it the game is as it always was.
+const POC = params.get('poc') === '1';
 // real-lite tile service base (the H1 worker). Dev convenience: when the page runs on
 // localhost with no explicit ?tiles=, assume the local wrangler dev worker — teleporting
 // past the bake edge and ?at= then just work. ?tiles=off disables; prod never defaults.
@@ -474,12 +481,13 @@ async function main() {
   const journal = new Journal(world, paint.sliceCanvas, toast);
   await journal.load();
   // Paint as you explore: a global, persistent record of where you've been (pencil elsewhere).
-  const explore = new Explore(json.origin);
+  const explore = new Explore(json.origin, { persist: !POC });
   // ?loop=paint: start in the loop under test — the world in pencil, a photo paints what it frames
   // sketch mode: `?loop=paint` starts in it (the photo → paint loop), `?sketch=1` / `?sketch=0` set
   // it; regression shots stay fully painted unless asked
   if (params.get('loop') === 'paint' || params.get('sketch') === '1') postParams.sketchFar = true;
   else if (CAPTURE || params.get('sketch') === '0') postParams.sketchFar = false;
+  if (POC) postParams.sketchFar = true; // (the poc's town is pencil until you see it — captures too)
   const walker = new Walker(walk, canvas);
 
   // Spawn: nearest point on `spawn.on` to an anchor point — the `extreme` end of `spawn.near.road`
@@ -551,6 +559,55 @@ async function main() {
   await stream.ensureAround(spawn.x, spawn.z);
   diagStage('life');
   if (atPos) teleportLocal(atPos[0], atPos[1]);
+  // ?poc=1: your van, parked in the nearest car park (its back toward the water), and you sitting on
+  // its bed inside (van/van.ts)
+  let van: Van | null = null;
+  let waking = 0; // (sitting on the bed: the eye this far down until you first move, then you get up)
+  if (POC) {
+    const t0 = performance.now();
+    const at = findVanSpot({ x: walker.x, z: walker.z }, {
+      areas: [...((paintWorld.json as { areas?: { c: string; o: number[][]; lod?: number }[] }).areas ?? []), ...[...stream.loaded.values()].flatMap((t) => (t as { areas?: { c: string; o: number[][] }[] }).areas ?? [])],
+      oceanDist: (x, z) => world.terrain.oceanDistAt(x, z),
+      height: (x, z) => walk.outdoorSurfaceAt(x, z),
+      building: (x, z) => walk.buildingAt(x, z) >= 0,
+      blocked: (x, z, r) => walk.blocked(x, z, r),
+      car: (() => {
+        // the parked cars round where you start, in a 4 m grid (find() reads every car there is)
+        const grid = new Map<number, [number, number][]>(), key = (i: number, j: number) => i * 92821 + j;
+        for (const [x, z] of kerbCars.carsNear(walker.x, walker.z, 900)) {
+          const k = key(Math.floor(x / 4), Math.floor(z / 4));
+          (grid.get(k) ?? grid.set(k, []).get(k)!).push([x, z]);
+        }
+        return (x: number, z: number) => {
+          const i0 = Math.floor(x / 4), j0 = Math.floor(z / 4);
+          for (let i = i0 - 1; i <= i0 + 1; i++) for (let j = j0 - 1; j <= j0 + 1; j++) for (const [cx, cz] of grid.get(key(i, j)) ?? []) if (Math.hypot(cx - x, cz - z) < 2.4) return true;
+          return false;
+        };
+      })(),
+      road: (() => {
+        // the paved index's road segments (a car park's aisles among them), not its lots' rings
+        const idx = stream.pavedIndex();
+        return (x: number, z: number) => {
+          for (const it of idx.get(Math.floor(x / 40) * 92821 + Math.floor(z / 40)) ?? []) {
+            if ('ring' in it) continue;
+            const [ax, az, bx, bz, hw] = it.seg, dx = bx - ax, dz = bz - az, L2 = dx * dx + dz * dz || 1;
+            const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
+            if (Math.hypot(ax + dx * t - x, az + dz * t - z) < hw) return true;
+          }
+          return false;
+        };
+      })(),
+    }, vanLayout()) ?? { x: walker.x, y: walk.outdoorSurfaceAt(walker.x, walker.z), z: walker.z, yaw: walker.yaw };
+    console.info(`van: parked at ${at.x.toFixed(1)}, ${at.z.toFixed(1)} (${(performance.now() - t0).toFixed(0)} ms to find the spot)`);
+    van = new Van({ walk, root: worldRoot });
+    van.park(at);
+    kerbCars.keepOut = (x, z) => van!.covers(x, z);
+    kerbCars.refresh();
+    const w = van.layout.wake;
+    walker.eyeDrop = waking = 0.5;
+    van.placeInside(walker, w.x, w.z, w.yaw, w.pitch);
+    (window as unknown as Record<string, unknown>).__VAN__ = van;
+  }
 
   // A landmark (a tower, a monument, an attraction) is arrived at from where it's seen: open
   // ground ~90–220 m off, facing it and looking a little up — not at its front door, where a
@@ -603,6 +660,7 @@ async function main() {
   // only when genuinely swallowed: a wall through their position, or inside a solid
   // footprint with no interior. Legit indoor players must not be yanked outside.
   const settleWalker = () => {
+    if (van?.inside) return; // (the room reaches past the van, over whatever stands round it)
     if (walkParams.fly) return; // flying over a roof isn't being swallowed by it
     if (interiors.riding) return; // (a lift ride walks you through its shaft's wall on purpose)
     // a wall at 0.28 < the walker's 0.32 radius: running *through* their body, not one they're
@@ -891,7 +949,16 @@ async function main() {
   hints.add(() => (simTime > 45 ? { key: thumbs() ? 'Paint' : 'P', text: 'frame a view and paint it into your sketchbook', pri: 1, once: 'photo' } : null));
   hints.add(() => (simTime > 100 ? { key: thumbs() ? 'Go' : 'G', text: 'go anywhere — search a town or an address', pri: 1, once: 'go' } : null));
 
-  const post = new WatercolorPost(renderer);
+  const post = new WatercolorPost(renderer, { stencil: !!van });
+  const portalSize = new THREE.Vector2(); // (the frame's target, for the van's doorway: van.beforeRender)
+  // ?poc=1: the town colours as you look at it (world/sight.ts) — from the first time you step out of
+  // the van, after a held breath, with the wash and a chime
+  const sight = POC ? new Sight({ post, explore, camera, origin, ground: (x, z) => Math.max(world.terrain.heightAt(x, z), 0), grid: MOBILE ? 128 : 192, reach: () => Math.min(SEEN_REACH, postParams.photoReach) }) : null;
+  if (van) {
+    van.onStepOut = (first) => { if (first) sight?.bloom(ambience); };
+    van.onDoors = () => ambience?.ui('latch');
+    hints.add(() => (van!.inside && !van!.steppedOut && simTime > 4 ? { text: 'the back doors: step outside', pri: 6 } : null));
+  }
   const shadows = new SunShadows(renderer);
   diagStage('compile');
   // Compile every shader now (incl. the interior + NPC materials) so the first front door doesn't hitch
@@ -905,6 +972,7 @@ async function main() {
   for (const o of [...treeLayer.probes(), ...understory.probes(), ...horizon.probes(), ...farSkyline.probes(), ...interiors.probes()]) probes.add(o);
   scene.add(probes);
   await compileForScene(renderer, scene, camera);
+  for (const s of van?.scenes ?? []) await compileForScene(renderer, s, camera); // (the van's room and doorway: no hitch the first time you look in)
   scene.remove(probes);
   if (firstPlan !== undefined) interiors.prime(null);
   const resize = () => {
@@ -1022,6 +1090,37 @@ async function main() {
   (window as unknown as Record<string, unknown>).__SHOTS__ = shots;
   (window as unknown as Record<string, unknown>).__APPLY_SHOT__ = (n: string) => {
     if (n === 'aerial') { walkParams.fly = true; shots[n](); walker.y = 120; return n; }
+    if ((n.startsWith('van-') || n.startsWith('bloom-')) && van) {
+      // the van (?poc=1): inside (`inn`) or out (`out`) — van-local stand and look-at points
+      const V = van, L = V.layout, p = V.pose;
+      walker.space = null;
+      shots['ocean-golden']();
+      walker.eyeDrop = waking = 0;
+      walker.holdMove = false;
+      V.openDoors();
+      const out = (lx: number, lz: number, tx: number, tz: number, pitch = 0) => {
+        const [x, z] = toWorld(p, lx, lz), [wx, wz] = toWorld(p, tx, tz);
+        V.mode = 'out';
+        walker.place(x, z, Math.atan2(-(wx - x), -(wz - z)), pitch);
+      };
+      const inn = (lx: number, lz: number, tx: number, tz: number, pitch = 0) => V.placeInside(walker, lx, lz, Math.atan2(-(tx - lx), -(tz - lz)), pitch);
+      const R = L.room, d = L.door;
+      if (n === 'van-wake') { walker.eyeDrop = waking = 0.5; V.placeInside(walker, L.wake.x, L.wake.z, L.wake.yaw, L.wake.pitch); }
+      else if (n === 'van-room') inn(R.x0 + 0.7, R.z1 - 0.7, R.x1 - 1.2, R.z0 + 1.2, -0.12);
+      else if (n === 'van-door') inn(0.35, R.z1 - 2.8, 0, d.z + 6, -0.04);
+      else if (n === 'van-window') inn(R.x0 + 1.9, R.z0 + 2.2, R.x0 - 6, R.z0 + 2.4, 0.02);
+      else if (n === 'van-wall') inn(R.x1 - 1.4, R.z1 - 1.0, R.x0 + 1.4, R.z0, 0.05);
+      else if (n === 'van-doorway') out(0.25, d.z + 3.4, 0, R.z0 + 1, -0.05);
+      else if (n === 'van-near') out(-0.15, d.z + 1.5, 0.2, R.z0 + 1, -0.08);
+      else if (n === 'van-step') out(0.1, d.z - 0.12, 0, d.z + 8, -0.08);
+      else if (n === 'van-back') out(3.2, d.z + 9.5, 0, 0, -0.03);
+      else if (n === 'van-side') out(R.x1 + 5.5, -0.6, 0, -0.6, -0.02);
+      else if (n === 'bloom-0' || n === 'bloom-1') {
+        out(0, d.z + 1.2, 0.6, d.z + 30, -0.05);
+        if (n === 'bloom-1' && sight) sight.armed = true;
+      }
+      return n;
+    }
     if (n === 'inside' || n === 'inside-night' || n === 'doorway') {
       // the enterable house nearest the spawn (prefer a multi-storey home)
       let best: Plan | null = null, bd = Infinity;
@@ -1132,7 +1231,7 @@ async function main() {
     shots[n]?.();
     return n;
   };
-  (window as unknown as Record<string, unknown>).__GAME__ = { ambientBalloons, horizon, walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, lift: ride, planInterior, registerPlan, plans, bld, life, stream, vehicles, farSkyline, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, streamParams, micro, nearTrees: treeLayer, woods: woodsTally, crowd, kerbCars, wakes, get spawn() { return spawn; }, at: atPos };
+  (window as unknown as Record<string, unknown>).__GAME__ = { van, sight, ambientBalloons, horizon, walker, walk, world, U, post, postParams, timeParams, weatherParams, debugParams, walkParams, camera, renderer, scene, THREE, interiors, lift: ride, planInterior, registerPlan, plans, bld, life, stream, vehicles, farSkyline, grass, explore, commissions, photo, atlas, arrival, hints, critters, garden, ctx, paint, brush, setHour, teleport: teleportTo, streamParams, micro, nearTrees: treeLayer, woods: woodsTally, crowd, kerbCars, wakes, get spawn() { return spawn; }, at: atPos };
 
   // ---- HUD ----
   const named = json.roads.filter((r) => r.n && !r.lod);
@@ -1148,6 +1247,7 @@ async function main() {
     for (const r of named) scan(r);
     for (const r of stream.primRoads) if (r.n && !r.lod) scan(r); // real streets carried by w-*/s-* tiles
     $('place').textContent = bd < 40 ? best : world.terrain.oceanDistAt(walker.x, walker.z) < 60 ? shoreLabel : arrival.locality || townName;
+    if (van?.inside) $('place').textContent = 'in the van';
     if (walkParams.fly) $('place').textContent = `flying over ${$('place').textContent} · ${Math.round(walker.y)} m`;
     else if (interiors.indoors && interiors.activePlan) {
       const fp = stream.fpByKey.get(interiors.activeIndex!);
@@ -1587,6 +1687,17 @@ async function main() {
     reanchor();
     if (MOBILE) groundCheck(dt);
     if (!vehicles.update(dt, camera)) walker.update(dt, camera);
+    if (van) {
+      van.update(dt, walker, walkParams.fly);
+      if (waking > 0) {
+        // sitting on the bed until you first move: then you get up (no step until you're up)
+        if (walker.wantsMove || walker.eyeDrop < waking) {
+          walker.eyeDrop = Math.max(0, walker.eyeDrop - dt * 0.75);
+          walker.holdMove = walker.eyeDrop > 0.05;
+          if (walker.eyeDrop <= 0) { waking = 0; walker.holdMove = false; }
+        }
+      }
+    }
     syncTouchControls(dt);
     camera.position.sub(origin); // walker works in world coords; the renderer works origin-local
     stream.update(walker.x, walker.z);
@@ -1636,7 +1747,7 @@ async function main() {
     if (crowd.group.visible) crowd.update(walker.x, walker.z, timeParams.hour, [camera.position.x + origin.x, camera.position.z + origin.z, fwd.x, fwd.z], Math.tan(Math.PI * 31 / 180) / Math.tan((camera.fov * Math.PI) / 360), lifeParams.density * lifeParams.beach * (TIER_LIFE[tier.tier] ?? 1));
     focus.set(camera.position.x + fwd.x * 60, walker.y - walkParams.eyeHeight, camera.position.z + fwd.z * 60);
     const ti = performance.now();
-    interiors.update(walker.x, walker.z, dt, walker.feet, !vehicles.driving && !walkParams.fly);
+    interiors.update(walker.x, walker.z, dt, walker.feet, !vehicles.driving && !walkParams.fly && !van?.inside);
     // (the people outside learn which building stands open: who walks in by its door goes on in)
     if (interiors.visitV !== visitSeen) { visitSeen = interiors.visitV; life.setIndoor(interiors.visit); }
     liftUI.update(dt);
@@ -1687,7 +1798,7 @@ async function main() {
         for (const [ox, oz] of [[0, 0], [20, 0], [-20, 0], [0, 20], [0, -20], [14, 14], [-14, -14], [14, -14], [-14, 14]]) if (world.terrain.coverAt(walker.x + ox, walker.z + oz) === 10) tc++;
         treeCover = tc / 9;
       }
-      ambience.update({ dt, oceanDist, indoors: interiors.indoors, riverDist: Math.max(0, world.terrain.sdfAt(walker.x, walker.z)), wind: weather.wind, night: U.uNight.value, surface, stepped, running: run, life: life.stats, hour: timeParams.hour, churchDist, houses, harbour: harbourD, sails: sailsN, trees: Math.max(treeCover, Math.min(1, houses / 20) * 0.4), ride: vehicles.ride, city: cityAt(walker.x, walker.z), climate: regionLook.climate, summer: isSummer() && U.uSnow.value < 0.1, cicadas: critters.chorus });
+      ambience.update({ dt, oceanDist, indoors: interiors.indoors || !!van?.inside, riverDist: Math.max(0, world.terrain.sdfAt(walker.x, walker.z)), wind: weather.wind, night: U.uNight.value, surface, stepped, running: run, life: life.stats, hour: timeParams.hour, churchDist, houses, harbour: harbourD, sails: sailsN, trees: Math.max(treeCover, Math.min(1, houses / 20) * 0.4), ride: vehicles.ride, city: cityAt(walker.x, walker.z), climate: regionLook.climate, summer: isSummer() && U.uSnow.value < 0.1, cicadas: critters.chorus });
     }
     // the scene's matrices once a frame: each pass's render() walked the whole graph again (the shadow
     // pass's, then the paint's) — a phone's 5% (tools rendering between frames keep the update)
@@ -1695,9 +1806,11 @@ async function main() {
     scene.matrixWorldAutoUpdate = false;
     try {
       shadows.update(scene, focus, U.uKeyDir.value);
-      post.render(scene, camera, simTime, U.uNight.value, U.uGolden.value, walker.yaw, walker.pitch, debugParams.rawScene, brush.overlay);
+      van?.beforeRender(renderer, camera, portalSize.set(post.sceneRT.width, post.sceneRT.height), origin);
+      post.render(scene, camera, simTime, U.uNight.value, U.uGolden.value, walker.yaw, walker.pitch, debugParams.rawScene, brush.overlay, van?.after ?? null);
     } finally { scene.matrixWorldAutoUpdate = true; }
     frameOk();
+    sight?.update(dt, { yaw: walker.yaw, pitch: walker.pitch, x: walker.x, z: walker.z }); // (reads the frame just drawn)
     photo.afterRender(); // Space in photo mode grabs this very frame
 
     if ((hudTimer -= dt) < 0) { hudTimer = 0.4; updateHud(); }
@@ -1719,7 +1832,7 @@ async function main() {
     if (!walkParams.fly) journal.update(walker.x, walker.z, dt);
     // (your walks are always recorded — the atlas, the journal and the arrival cards count them —
     // but the world only shows it, near or far, when you've picked it in the panel)
-    explore.enabled = true;
+    explore.enabled = !POC; // (the poc colours only what you see — world/sight.ts — never a circle round you)
     explore.far = postParams.sketchFar; // (the far window: only the far sketch reads it)
     explore.update(walker.x, walker.z, camera.position.y - Math.max(world.terrain.heightAt(walker.x, walker.z), 0), dt, postParams.sketchReach);
     if (atlas.open && (journalTimer -= dt) < 0) {

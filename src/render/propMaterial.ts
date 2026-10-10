@@ -24,6 +24,8 @@ import { SIGNAL_GLSL } from '../sim/traffic';
 // touch, the wash's radius in m; < 0 all paper); uWash = (dry: 0 wet → 1 dry, opacity, -, -).
 // It writes display colour and coverage (+ 2 where the paint is wet) for post.ts to lay over the
 // painting; the outline is drawn there, from the pass's depth.
+// keep: always painted, never the town's pencil (your van: src/van/) — it writes alpha 0.75, which
+// the post's sketch mode leaves alone (render/post.ts).
 // fade: the micro layer's near pieces (world/microLayer.ts), merged into one mesh. `aFade` is each
 // piece's foot (x, y, z) and where it hands over to its impostor card (m; < 0: it has no card and
 // draws whole); across the band uFade.x it gives way pixel by pixel on the ordered dither the cards
@@ -61,8 +63,9 @@ const GLSL_TREE_LOD = /* glsl */ `
     if (L.z > 0.5) return L.z > 1.5 ? 0.0 : 1.0;
     return clamp((d - L.x + L.y * 0.5) / max(L.y, 1e-3), 0.0, 1.0);
   }`;
-export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean; signal?: boolean; fallHue?: number; blossom?: number; weep?: boolean; wash?: boolean; fade?: boolean; treeLod?: 'far' | 'near'; hang?: boolean; motion?: number } = {}) {
+export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: THREE.Color; emissiveNight?: boolean; foliage?: boolean; crown?: [number, number]; decid?: boolean; paved?: boolean; signal?: boolean; fallHue?: number; blossom?: number; weep?: boolean; wash?: boolean; fade?: boolean; treeLod?: 'far' | 'near'; hang?: boolean; motion?: number; keep?: boolean } = {}) {
   const defines: Record<string, number> = {};
+  if (opts.keep) defines.KEEP = 1;
   if (opts.hang) defines.HANG = 1;
   defines.MOTION = opts.motion ?? 0; // (always defined, as FALL_HUE and BLOSSOM: they're read in #if)
   if (opts.treeLod) defines.TREE_LOD = opts.treeLod === 'far' ? 1 : 2;
@@ -451,7 +454,11 @@ export function propMaterial(opts: { wind?: boolean; bob?: boolean; emissive?: T
           return;
         }
         #endif
-        gl_FragColor = vec4(applyFog(col, vWorldPos), 1.0);
+        #ifdef KEEP
+          gl_FragColor = vec4(applyFog(col, vWorldPos), 0.75); // (always painted: render/post.ts)
+        #else
+          gl_FragColor = vec4(applyFog(col, vWorldPos), 1.0);
+        #endif
       }`,
   });
   if (opts.paved) {

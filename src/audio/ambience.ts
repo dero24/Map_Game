@@ -275,8 +275,8 @@ export class Ambience {
   }
 
   // ---- sketchbook + UI sounds ----
-  /** brush: a soft wet stroke · shutter: a longer stroke + paper · chime: two soft bells · page: paper · thud: a body against a bumper · settle: a hull settling into the water. */
-  ui(kind: 'brush' | 'shutter' | 'chime' | 'page' | 'thud' | 'settle') {
+  /** brush: a soft wet stroke · shutter: a longer stroke + paper · chime: two soft bells · page: paper · thud: a body against a bumper · settle: a hull settling into the water · wash: colour flooding across wet paper (the town blooming) · latch: a van door's latch and its hinges. */
+  ui(kind: 'brush' | 'shutter' | 'chime' | 'page' | 'thud' | 'settle' | 'wash' | 'latch') {
     const ctx = this.ctx, t = ctx.currentTime;
     const stroke = (dur: number, f0: number, f1: number, vol: number, delay = 0) => {
       const s = ctx.createBufferSource();
@@ -306,6 +306,18 @@ export class Ambience {
     }
     else if (kind === 'settle') { this.lap(0.16); stroke(0.6, 420, 160, 0.05); this.blip({ freq: 140, q: 1.2, dur: 0.3, gain: 0.06, type: 'lowpass' }); }
     else if (kind === 'page') { this.blip({ freq: 4200, q: 0.6, dur: 0.12, gain: 0.03 }); this.blip({ freq: 2600, q: 0.8, dur: 0.18, gain: 0.02 }); }
+    else if (kind === 'wash') {
+      // a broad wet swell rising and spreading, then a long soft tail as it soaks in
+      stroke(2.4, 260, 1500, 0.07);
+      stroke(1.9, 600, 2600, 0.035, 0.25);
+      stroke(2.6, 180, 420, 0.05, 0.1);
+    }
+    else if (kind === 'latch') {
+      // the handle's click, the latch letting go, a low wooden groan from the hinges
+      this.blip({ freq: 2400, q: 6, dur: 0.05, gain: 0.05 });
+      setTimeout(() => this.blip({ freq: 900, q: 4, dur: 0.07, gain: 0.05 }), 60);
+      setTimeout(() => this.blip({ freq: 210, q: 2.5, dur: 0.5, gain: 0.04, type: 'lowpass' }), 160);
+    }
     else if (kind === 'chime') {
       for (const [f, d] of [[784, 0], [1175, 0.16]]) {
         const o = ctx.createOscillator();
@@ -319,6 +331,16 @@ export class Ambience {
         o.stop(t + d + 1.7);
       }
     }
+  }
+
+  /** A held breath: everything sinks to a hush for `dur` seconds, then comes back over a second. */
+  hush(dur = 0.9) {
+    const g = this.master.gain, t = this.ctx.currentTime;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(0.28, t + 0.3);
+    g.setValueAtTime(0.28, t + dur);
+    g.linearRampToValueAtTime(1, t + dur + 1.1);
   }
 
   /** Wildlife: a squirrel's scolding chatter, a flush of wings, a deer's snort. */

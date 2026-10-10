@@ -1,6 +1,22 @@
 # Handoff: the lower 48, alive — part 2 (2026-10-05)
 
-## Start here (2026-10-09): the gameplay design session, with Robby
+## Start here (2026-10-09, late): the van, behind `?poc=1` — then its cab and a short drive
+
+Robby changed the plan: no design Q&A — he's writing the one gameplay doc himself, and asked for "the
+van portion for now and sketch to color … start smaller with this then slice b and c". **Done:**
+`poc-van` (passing; LOG 2026-10-09 late; docs/agent/gameplay.md "The van"): wake in the van's room,
+bigger on the inside, the back doorway as seamless as any front door (`tools/van-check.js` measures it),
+real windows, the town in pencil until you look at it. Committed on `feature/four-reports`, **not
+pushed** — a `feature/` push publishes the game; ask Robby first.
+
+**Next: `poc-van-drive`** (in_progress): the driver's door to the driver's seat (dash, windshield frame,
+side windows and mirrors; a wide, steady view; phone too), the curtain between the cab and the back
+(get up from the seat and walk into the back, even while it drives), a short self-drive on the real
+roads from the map table with the tiles streaming and colouring ahead. Fuel, legs and sleep are later.
+`gameplay-one-plan` is paused (Robby's own doc); slices B and C follow his doc. Robby's rules hold (no
+email, no Street View, tiles v31 and he deploys, one subagent at most, short plain updates).
+
+## Before that (2026-10-09): the gameplay design session, with Robby
 
 Robby had a session assess what comes next ("I will have another agent assess what to do next"), and
 it brought his two plans into the repo: **`docs/NEXT_STEPS.md`** (the order of work, and why) and

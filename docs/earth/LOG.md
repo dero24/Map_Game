@@ -2,6 +2,49 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-09 (late) — The van, bigger on the inside, and the town colouring as you look (`poc-van`, behind `?poc=1`)
+
+Robby changed the plan: no long design Q&A — he's writing the one gameplay doc himself ("just work on
+the van portion for now and sketch to color … start smaller with this then slice b and c"), and "the van
+in and out should be seamless like how it is walking into buildings already". So `gameplay-one-plan` is
+paused (his), and this session built the parked van and the bloom. Committed on `feature/four-reports`,
+**not pushed** (a `feature/` push publishes the game: Robby's OK first).
+
+- **The van** (`src/van/`, `src/assets/camper.ts`; docs/agent/gameplay.md "The van"): a high-roof camper
+  (a foundry family, budget 16k vertices) parked in the nearest car park, its back toward the sea (Sea
+  Bright: the beach end of the big lot) — found from the map's own car parks (`spot.ts`), never written
+  down per town. Inside, a room 4.8 × 6 × 2.85 m (the van's cargo box is 2 × 3.6 × 2.1): bed, map table
+  with a chart, shelves, a little kitchen, an armchair under the empty wall, beams and string lights,
+  four windows with curtains. You wake sitting on the bed; the back doors open as you come.
+- **Seamless, measured:** the room shares the van's frame, so walking in is just walking and the windows
+  look out from where the van stands. Outside, the room is drawn through the doorway by a stencil portal
+  that lays the room's colour *and true depth* (the paint and the ink see it as from inside); inside, the
+  room is drawn over the world (its convex shell without a depth test). The change happens in a band in
+  the doorway's passage where both draws show the same surfaces. `tools/van-check.js`: drawn out vs in at
+  the doorway, looking in and up the frames are identical; looking out, sideways and down they differ
+  less than the same view does with itself a few frames later (leaves and grass moving). The walk from the
+  bed out of the door: in→out once, eye steps under 6 cm a frame.
+  - On the way: the doorway first showed the van's hollow shell (the portal had no far face); then the
+    ink lines changed as you crossed (the portal was flat) — fixed with the true depth; then the van's own
+    window frames showed through the room's windows from behind — each cargo side is now drawn only from
+    outside it.
+- **Colour by sight** (`world/sight.ts`): with `?poc=1` the town is pencil until you look at it; photo
+  mode's read-back runs as you look about (a few times a second at most, sliced). It starts the first time
+  you step out of the back door: a held breath (the sound sinks), the wash and a chime, the colour running
+  out to the horizon. The van and its room are always painted (alpha 0.75). Each visit starts in pencil
+  (the poc's explore record is in memory only).
+- **Without `?poc=1` nothing changes:** no van, no stencil (the post's target keeps one only with a van),
+  the alpha marker unused by any other material (checked: water and the glows blend over alpha 1).
+- Verified: typecheck; `npm test` 118 files, 1137 tests (`tests/van.test.ts` 26 new, the camper in
+  `tests/foundry.test.ts`); build; montages (desktop and the phone tier at 412×915); `mobile-check
+  --device=pixel7 --query=poc=1` (running, 0 errors, shader limits fine); `hud-audit` (560 layouts, no
+  overlaps). Desktop frame: ~13 ms in the room, ~11–14 ms outside looking into the doorway (1280×720).
+- **For Robby to play:** `http://localhost:5173/?poc=1` (dev) — wake, get up, walk out of the back door,
+  turn round. Each reload is a fresh first morning.
+- **Next:** `poc-van-drive` (in_progress): the driver's door to the seat, the curtain between the cab and
+  the back, first-person driving, a short self-drive on the real roads. Then slices B and C as Robby's doc
+  sets them.
+
 ## 2026-10-09 — What comes next, assessed: the order of work and the whole game in the repo; the design session next
 
 Robby, of the assessment he'd asked for ("I will have another agent assess what to do next"): "okay

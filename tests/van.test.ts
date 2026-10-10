@@ -1,0 +1,292 @@
+// The van (src/van/, ?poc=1): bigger on the inside, through a doorway with no seam — its plan, the
+// change between in and out, walking in it, where it parks, its body (assets/camper.ts).
+import { describe, it, expect } from 'vitest';
+import { vanLayout, nextMode, roomSegments, hullSegments, toWorld, toLocal, boxSegs, type Mode, type VanPose } from '../src/van/layout';
+import { moveAmong, VanSpace } from '../src/van/space';
+import { findVanSpot, inRing, type SpotEnv } from '../src/van/spot';
+import { wallPieces, shellGeometry, tunnelFaces, contentsGeometry } from '../src/van/room';
+import { camperRecipe, camperGeometry, camperValid, camperVerts, camperFrame, CAMPER_BUDGET, CAMPER_PAINTS } from '../src/assets/camper';
+import { shouldLook, SIGHT } from '../src/world/sight';
+
+const L = vanLayout();
+
+describe('the plan: bigger on the inside', () => {
+  it('the room is wider, longer and taller than the van, its back wall at the van\'s back', () => {
+    const R = L.room, c = L.recipe, F = L.frame;
+    expect(R.x1 - R.x0).toBeGreaterThan(c.W * 2);
+    expect(R.z1 - R.z0).toBeGreaterThan(F.zr - F.zB + 1.5); // longer than the van's whole cargo box
+    expect(R.y1 - R.y0).toBeGreaterThan(c.H - c.floor + 0.1); // its ceiling over the van's roof
+    expect(L.tunnel.z1).toBeCloseTo(F.zr, 6); // the passage ends in the door's plane…
+    expect(R.z1).toBeCloseTo(L.tunnel.z0, 6); // …and the room begins where it starts
+    expect(L.door.y0).toBeCloseTo(c.floor, 6); // the doorway's sill is the floor
+  });
+  it('the doorway clears a walker\'s head, the passage outlasts the near plane', () => {
+    const eye = 1.65, near = 0.25;
+    expect(L.door.y1 - L.door.y0 - eye).toBeGreaterThan(0.25);
+    expect(L.door.x1 - L.door.x0).toBeGreaterThan(2 * 0.32 + 0.5); // a walker's body and room to spare
+    // out is drawn up to `enter` in: the passage's far end must lie past the near plane from there
+    expect(L.tunnel.z1 - L.tunnel.z0 - L.enter).toBeGreaterThan(near);
+    expect(L.enter).toBeGreaterThan(L.leave);
+  });
+  it('the windows sit in the side walls, in the room\'s height, clear of each other', () => {
+    for (const w of L.windows) {
+      expect(['left', 'right', 'front']).toContain(w.wall);
+      expect(w.y0).toBeGreaterThan(0.5);
+      expect(w.y1).toBeLessThan(L.room.y1 - L.room.y0);
+      const along = w.wall === 'front' ? [L.room.x0, L.room.x1] : [L.room.z0, L.room.z1];
+      expect(w.c - w.w / 2).toBeGreaterThan(along[0] + 0.2);
+      expect(w.c + w.w / 2).toBeLessThan(along[1] - 0.2);
+    }
+    for (const a of L.windows) for (const b of L.windows) if (a !== b && a.wall === b.wall) expect(Math.abs(a.c - b.c)).toBeGreaterThan((a.w + b.w) / 2);
+  });
+  it('the furniture stands inside the room, clear of the doorway\'s way in', () => {
+    for (const f of L.furniture) {
+      if (f.kind === 'doormat') continue;
+      for (const [ax, az] of boxSegs(f.x, f.z, f.yaw, f.hx, f.hz)) {
+        expect(ax).toBeGreaterThanOrEqual(L.room.x0 - 0.02);
+        expect(ax).toBeLessThanOrEqual(L.room.x1 + 0.02);
+        expect(az).toBeGreaterThanOrEqual(L.room.z0 - 0.02);
+        expect(az).toBeLessThanOrEqual(L.room.z1 + 0.02);
+      }
+      if (f.solid) {
+        // nothing solid within a metre in front of the passage
+        const inWay = f.x + Math.max(f.hx, f.hz) > L.door.x0 && f.x - Math.max(f.hx, f.hz) < L.door.x1 && f.z + Math.max(f.hx, f.hz) > L.room.z1 - 1.0;
+        expect(inWay, f.kind).toBe(false);
+      }
+    }
+  });
+  it('you wake inside, clear of everything, facing into the room', () => {
+    const w = L.wake;
+    expect(w.x).toBeGreaterThan(L.room.x0 + 0.3);
+    expect(w.x).toBeLessThan(L.room.x1 - 0.3);
+    expect(w.z).toBeGreaterThan(L.room.z0 + 0.3);
+    expect(w.z).toBeLessThan(L.room.z1 - 0.3);
+    const [x, z] = moveAmong(roomSegments(L), w.x, w.z, 0, 0, 0.32);
+    expect(Math.hypot(x - w.x, z - w.z)).toBeLessThan(1e-6); // (not standing in the bed)
+  });
+});
+
+describe('in or out: the change is by where you stand, with a band', () => {
+  const d = L.door;
+  const at = (depth: number, x = 0) => [x, d.z - depth] as const;
+  it('out until past `enter`, in until back under `leave`', () => {
+    let m: Mode = 'out';
+    const seen: Mode[] = [];
+    for (const depth of [-2, -0.5, 0, 0.1, 0.2, 0.25, 0.29, 0.31, 0.5, 2, 4]) { m = nextMode(m, ...at(depth), L); seen.push(m); }
+    expect(seen).toEqual(['out', 'out', 'out', 'out', 'out', 'out', 'out', 'in', 'in', 'in', 'in']);
+    for (const depth of [2, 0.5, 0.29, 0.25, 0.23, 0.21, 0, -1]) { m = nextMode(m, ...at(depth), L); seen.push(m); }
+    expect(seen.slice(11)).toEqual(['in', 'in', 'in', 'in', 'in', 'out', 'out', 'out']);
+  });
+  it('standing in the band never flickers', () => {
+    for (const start of ['in', 'out'] as Mode[]) {
+      let m = start;
+      for (let k = 0; k < 50; k++) m = nextMode(m, ...at(0.22 + 0.08 * ((k * 0.618) % 1)), L);
+      expect(m).toBe(start);
+    }
+  });
+  it('beside the van, or behind it off the doorway, you\'re out — even "deep" in its footprint', () => {
+    expect(nextMode('out', L.door.x1 + 0.4, d.z - 1, L)).toBe('out');
+    expect(nextMode('out', L.room.x0 + 0.2, d.z - 3, L)).toBe('out');
+    // in the room, off the doorway, you stay in
+    expect(nextMode('in', L.room.x0 + 0.5, L.room.z0 + 0.5, L)).toBe('in');
+    expect(nextMode('in', L.door.x1 + 0.4, d.z - 0.1, L)).toBe('in');
+  });
+});
+
+describe('frames: van-local ↔ world', () => {
+  it('round trips at any yaw, and turns as three.js turns an object', () => {
+    for (const yaw of [0, 0.7, Math.PI / 2, -2.4, Math.PI]) {
+      const p: VanPose = { x: 120.5, y: 2, z: -33.25, yaw };
+      for (const [lx, lz] of [[0, 0], [1.2, -3.4], [-2.4, 2.8]]) {
+        const [wx, wz] = toWorld(p, lx, lz), [bx, bz] = toLocal(p, wx, wz);
+        expect(bx).toBeCloseTo(lx, 9);
+        expect(bz).toBeCloseTo(lz, 9);
+      }
+    }
+    // yaw π/2: the van's back (+z) toward +x
+    const [wx, wz] = toWorld({ x: 0, y: 0, z: 0, yaw: Math.PI / 2 }, 0, 1);
+    expect(wx).toBeCloseTo(1, 9);
+    expect(wz).toBeCloseTo(0, 9);
+  });
+});
+
+describe('walking in the room', () => {
+  const segs = roomSegments(L);
+  it('the walls hold you in: a long walk at each wall ends a body\'s width inside it', () => {
+    const c = { x: 0, z: (L.room.z0 + L.room.z1) / 2 };
+    for (const [dx, dz] of [[10, 0], [-10, 0], [0, -10]]) {
+      const [x, z] = moveAmong(segs, c.x, c.z + (dx ? -1.1 : 0), dx, dz, 0.32);
+      expect(x).toBeGreaterThan(L.room.x0 + 0.3);
+      expect(x).toBeLessThan(L.room.x1 - 0.3);
+      expect(z).toBeGreaterThan(L.room.z0 + 0.3);
+    }
+  });
+  it('the doorway lets you out — straight through, in steps of a frame', () => {
+    let x = 0.05, z = L.room.z1 - 1.5;
+    for (let k = 0; k < 200 && z < L.door.z + 0.3; k++) [x, z] = moveAmong(segs, x, z, 0, 0.04, 0.32);
+    expect(z).toBeGreaterThan(L.door.z);
+    expect(Math.abs(x)).toBeLessThan((L.door.x1 - L.door.x0) / 2);
+  });
+  it('the back wall beside the doorway is a wall', () => {
+    const [, z] = moveAmong(segs, L.door.x1 + 0.9, L.room.z1 - 1, 0, 5, 0.32);
+    expect(z).toBeLessThan(L.room.z1 - 0.3);
+  });
+  it('a slow frame can\'t carry you through a wall', () => {
+    const [x] = moveAmong(segs, L.room.x1 - 0.5, -1, 3, 0, 0.32); // 3 m in one step at the right wall
+    expect(x).toBeLessThan(L.room.x1);
+  });
+  it('the space works in the world\'s frame, through the van\'s pose', () => {
+    const pose: VanPose = { x: 200, y: 2.2, z: -170, yaw: 1.58 };
+    const S = new VanSpace(segs, L.floor, pose);
+    expect(S.surfaceAt()).toBeCloseTo(2.2 + L.floor, 9);
+    const [sx, sz] = toWorld(pose, 0, 0);
+    const [wx, wz] = S.move(sx, sz, 20, 0, 0.32); // a world step east: inside the room it stops at a wall
+    const [lx, lz] = toLocal(pose, wx, wz);
+    expect(lx).toBeGreaterThan(L.room.x0 - 1e-6);
+    expect(lx).toBeLessThan(L.room.x1 + 1e-6);
+    expect(lz).toBeGreaterThan(L.room.z0 - 1e-6);
+  });
+});
+
+describe('the van in the world', () => {
+  it('its outline is closed but for the doorway', () => {
+    const segs = hullSegments(L);
+    // walk round the outline: every wall's ends meet another wall's, but for the doorway's edges
+    const key = (x: number, z: number) => `${x.toFixed(3)},${z.toFixed(3)}`;
+    const ends = new Map<string, number>();
+    for (const [ax, az, bx, bz] of segs) for (const k of [key(ax, az), key(bx, bz)]) ends.set(k, (ends.get(k) ?? 0) + 1);
+    const loose = [...ends.values()].filter((n) => n === 1).length;
+    expect(loose).toBe(2); // (the doorway's two sides run on in, their inner ends loose)
+    // from straight behind, walking in at the doorway gets you past the door's plane
+    let x = 0, z = L.door.z + 2;
+    for (let k = 0; k < 100; k++) [x, z] = moveAmong(segs, x, z, 0, -0.05, 0.32);
+    expect(z).toBeLessThan(L.door.z - 0.5);
+    // …and beside the doorway (between its edge and the van's side) it's a wall
+    let x2 = (L.door.x1 + L.recipe.W / 2) / 2 + 0.05, z2 = L.door.z + 2;
+    for (let k = 0; k < 100; k++) [x2, z2] = moveAmong(segs, x2, z2, 0, -0.05, 0.32);
+    expect(z2).toBeGreaterThan(L.door.z);
+  });
+});
+
+describe('where it parks', () => {
+  // a car park 60 × 40 m with the sea to the east (x), a road down its middle, a building to the north
+  const lot: number[] = [0, 0, 600, 0, 600, 400, 0, 400].map((v) => v * 1); // decimetres: 60 × 40 m
+  const env: SpotEnv = {
+    areas: [{ c: 'parking', o: [lot] }, { c: 'grass', o: [[0, 0, 10, 0, 10, 10]] }],
+    oceanDist: (x) => Math.max(0, 200 - x),
+    height: () => 1.5,
+    building: (x, z) => z < -2 && x > 10 && x < 50,
+    blocked: () => false,
+    road: (_x, z) => Math.abs(z - 20) < 3,
+  };
+  it('finds a stall with its back to the sea, the room clear of buildings, off the aisle', () => {
+    const p = findVanSpot({ x: 30, z: 20 }, env, L)!;
+    expect(p).not.toBeNull();
+    const [bx] = toWorld(p, 0, 5), [fx] = toWorld(p, 0, -5);
+    expect(bx).toBeGreaterThan(fx + 9); // its back (+z) east, toward the sea
+    expect(p.y).toBe(1.5);
+    for (let u = L.room.x0; u <= L.room.x1; u += 0.5) for (let v = L.room.z0; v <= L.door.z; v += 0.5) {
+      const [x, z] = toWorld(p, u, v);
+      expect(env.building(x, z)).toBe(false);
+    }
+    const [cx, cz] = toWorld(p, 0, 0);
+    expect(inRing(cx, cz, [[0, 0], [60, 0], [60, 40], [0, 40]])).toBe(true);
+    expect(Math.abs(cz - 20)).toBeGreaterThan(1.5); // (not in the aisle)
+  });
+  it('a car behind the back door rules a stall out; cars where the van stands move on', () => {
+    const cars = (x: number, z: number) => Math.hypot(x - 50, z - 10) < 2.4;
+    const p = findVanSpot({ x: 30, z: 20 }, { ...env, car: cars, blocked: (x, z) => cars(x, z) }, L)!;
+    for (let v = 0.5; v <= 3; v += 0.5) { const [x, z] = toWorld(p, 0, L.frame.zr + v); expect(cars(x, z)).toBe(false); }
+  });
+  it('the same answer every time, and none with no car park near', () => {
+    expect(findVanSpot({ x: 30, z: 20 }, env, L)).toEqual(findVanSpot({ x: 30, z: 20 }, env, L));
+    expect(findVanSpot({ x: 3000, z: 20 }, env, L)).toBeNull();
+  });
+});
+
+describe('the room\'s shell', () => {
+  it('a wall less its windows: pieces that cover it once, never a window', () => {
+    const holes = [{ u0: 1, u1: 2, v0: 1, v1: 1.8 }, { u0: 3.2, u1: 4.4, v0: 0.9, v1: 1.9 }];
+    const P = wallPieces(6, 2.8, holes);
+    let area = 0;
+    for (const r of P) { expect(r.u1).toBeGreaterThan(r.u0); expect(r.v1).toBeGreaterThan(r.v0); area += (r.u1 - r.u0) * (r.v1 - r.v0); }
+    expect(area).toBeCloseTo(6 * 2.8 - 0.8 - 1.2, 9);
+    for (let u = 0.05; u < 6; u += 0.1) for (let v = 0.05; v < 2.8; v += 0.1) {
+      const inHole = holes.some((h) => u > h.u0 && u < h.u1 && v > h.v0 && v < h.v1);
+      const n = P.filter((r) => u > r.u0 && u < r.u1 && v > r.v0 && v < r.v1).length;
+      expect(n).toBe(inHole ? 0 : 1);
+    }
+  });
+  it('faces in, and is convex from inside: no face of it hides another', () => {
+    const g = shellGeometry(L), p = g.getAttribute('position'), n = g.getAttribute('normal');
+    const c = { x: 0, y: (L.room.y0 + L.room.y1) / 2, z: (L.room.z0 + L.room.z1) / 2 };
+    for (let i = 0; i < p.count; i += 3) {
+      // the room's middle is in front of every face
+      const d = (c.x - p.getX(i)) * n.getX(i) + (c.y - p.getY(i)) * n.getY(i) + (c.z - p.getZ(i)) * n.getZ(i);
+      expect(d).toBeGreaterThan(0);
+      // and every face lies on the room's box (a convex room: its faces only on its bounding planes)
+      const onBox = [p.getX(i) - L.room.x0, L.room.x1 - p.getX(i), p.getY(i) - L.room.y0, L.room.y1 - p.getY(i), p.getZ(i) - L.room.z0, L.room.z1 - p.getZ(i)].some((v) => Math.abs(v) < 1e-6);
+      expect(onBox).toBe(true);
+    }
+  });
+  it('the passage\'s faces span the doorway, from the room to the door', () => {
+    const F = tunnelFaces(L);
+    expect(F).toHaveLength(4);
+    for (const f of F) for (const [x, y, z] of f.p) {
+      expect(x).toBeGreaterThanOrEqual(L.door.x0 - 1e-9);
+      expect(x).toBeLessThanOrEqual(L.door.x1 + 1e-9);
+      expect(y).toBeGreaterThanOrEqual(L.door.y0 - 1e-9);
+      expect(y).toBeLessThanOrEqual(L.door.y1 + 1e-9);
+      expect(z).toBeGreaterThanOrEqual(L.tunnel.z0 - 1e-9);
+      expect(z).toBeLessThanOrEqual(L.tunnel.z1 + 1e-9);
+    }
+  });
+  it('the furniture is finite and within a room\'s budget', () => {
+    const g = contentsGeometry(L), a = g.getAttribute('position').array as Float32Array;
+    for (let i = 0; i < a.length; i++) expect(Number.isFinite(a[i])).toBe(true);
+    expect(g.getAttribute('position').count).toBeLessThan(120000);
+  });
+});
+
+describe('the camper van (the foundry\'s family)', () => {
+  it('every seed is valid, grounded and within budget; deterministic', () => {
+    for (let seed = 1; seed <= 8; seed++) {
+      const c = camperRecipe(seed);
+      expect(camperValid(c), `seed ${seed}`).toBe(true);
+      expect(camperVerts(c)).toBeLessThanOrEqual(CAMPER_BUDGET);
+      expect(camperRecipe(seed)).toEqual(c);
+      expect(CAMPER_PAINTS).toContain(c.paint as (typeof CAMPER_PAINTS)[number]);
+    }
+    expect(camperRecipe(1).paint).toBe(CAMPER_PAINTS[0]); // (yours: the sea-foam one)
+  });
+  it('its back is open at the doorway, its sides seen only from outside', () => {
+    const c = camperRecipe(1), F = camperFrame(c), g = camperGeometry(c);
+    // nothing of the body inside the doorway's passage (between its posts, over the floor, under the head)
+    const p = g.body.getAttribute('position');
+    const d = { x0: -c.doorW / 2 + 0.005, x1: c.doorW / 2 - 0.005, y0: c.floor + 0.005, y1: F.doorTop - 0.005, z0: F.zr - 0.6, z1: F.zr };
+    for (let i = 0; i < p.count; i++) {
+      const inside = p.getX(i) > d.x0 && p.getX(i) < d.x1 && p.getY(i) > d.y0 && p.getY(i) < d.y1 && p.getZ(i) > d.z0 && p.getZ(i) < d.z1;
+      expect(inside).toBe(false);
+    }
+    // the sides keep no face toward the inside
+    for (const [side, geo] of [[-1, g.left], [1, g.right]] as const) {
+      const n = geo.getAttribute('normal');
+      for (let i = 0; i < n.count; i++) expect(n.getX(i) * side).toBeGreaterThan(-0.5);
+    }
+  });
+});
+
+describe('colour by sight: when to look again', () => {
+  const v = (yaw: number, pitch = 0, x = 0, z = 0) => ({ yaw, pitch, x, z });
+  it('the first look at once; then not sooner than the gap', () => {
+    expect(shouldLook(null, v(0), 0)).toBe(true);
+    expect(shouldLook(v(0), v(1), SIGHT.gap * 0.5)).toBe(false);
+  });
+  it('again once you\'ve turned or walked, or after a while standing still', () => {
+    expect(shouldLook(v(0), v(SIGHT.turn * 0.5), SIGHT.gap + 0.01)).toBe(false);
+    expect(shouldLook(v(0), v(SIGHT.turn * 1.5), SIGHT.gap + 0.01)).toBe(true);
+    expect(shouldLook(v(3.1), v(-3.1), SIGHT.gap + 0.01)).toBe(false); // (across ±π is a small turn)
+    expect(shouldLook(v(0), v(0, 0, SIGHT.move + 0.1, 0), SIGHT.gap + 0.01)).toBe(true);
+    expect(shouldLook(v(0), v(0), SIGHT.idle + 0.01)).toBe(true);
+  });
+});

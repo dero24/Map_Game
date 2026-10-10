@@ -118,14 +118,21 @@ void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }
 // incomplete framebuffer: every pass would draw nothing and the page stay blank — so fall back to
 // 8-bit buffers (highlights clip, the world still shows).
 let rtType: THREE.TextureDataType = THREE.HalfFloatType;
-const makeRT = (w: number, h: number, depth = false) =>
+const makeRT = (w: number, h: number, depth = false, stencil = false) =>
   new THREE.WebGLRenderTarget(w, h, {
     type: rtType,
     minFilter: THREE.LinearFilter,
     magFilter: THREE.LinearFilter,
     depthBuffer: depth,
-    ...(depth ? { depthTexture: new THREE.DepthTexture(w, h, THREE.UnsignedIntType) } : {}),
+    stencilBuffer: stencil,
+    ...(depth ? { depthTexture: depthTex(w, h, stencil) } : {}),
   });
+/** A depth texture — with a stencil (24 + 8 bits) when something marks the frame (the van's doorway). */
+function depthTex(w: number, h: number, stencil: boolean) {
+  const t = new THREE.DepthTexture(w, h, stencil ? THREE.UnsignedInt248Type : THREE.UnsignedIntType);
+  if (stencil) t.format = THREE.DepthStencilFormat;
+  return t;
+}
 
 function pass(fragment: string, uniforms: Record<string, THREE.IUniform>) {
   return new THREE.ShaderMaterial({ vertexShader: FS_VERT, fragmentShader: fragment, uniforms, depthTest: false, depthWrite: false });
@@ -156,12 +163,14 @@ export class WatercolorPost {
   private w = 1;
   private h = 1;
 
-  constructor(private renderer: THREE.WebGLRenderer) {
+  /** `stencil`: the frame's target keeps a stencil (the ?poc=1 van draws its doorway with one:
+   *  van/van.ts); without it the target is as it always was. */
+  constructor(private renderer: THREE.WebGLRenderer, opts: { stencil?: boolean } = {}) {
     const ext = renderer.extensions;
     rtType = ext.has('EXT_color_buffer_half_float') || ext.has('EXT_color_buffer_float') ? THREE.HalfFloatType : THREE.UnsignedByteType;
     if (rtType !== THREE.HalfFloatType) console.warn('no float colour buffers on this GPU: painting in 8-bit');
     const rt = makeRT;
-    this.sceneRT = rt(4, 4, true);
+    this.sceneRT = rt(4, 4, true, !!opts.stencil);
     this.kuwRT = rt(4, 4);
     this.hA = rt(4, 4);
     this.hB = rt(4, 4);
@@ -382,6 +391,8 @@ export class WatercolorPost {
           vec2 ef = min(fe.x, fe.y) > 0.0 ? texture2D(tExploreFar, fu).rg : vec2(0.0);
           float e = max(ef.r, ef.g);
           if (inFine > 0.0) e = mix(e, max(texture2D(tExplore, eu).r, ef.r), inFine);
+          // always painted: what writes alpha 0.75 (your van and its room — propMaterial's keep)
+          e = max(e, 1.0 - smoothstep(0.04, 0.1, abs(texture2D(tScene, uv).a - 0.75)));
           // Painting in, in two passes like a painter's: a pale first wash runs over the pencil, then
           // the pigment deepens into it. The edge is ragged by the paper (fbm) and by brush strokes
           // (long, thin noise laid one way); none of that noise reaches bare paper (e = 0) or finished
@@ -593,16 +604,19 @@ export class WatercolorPost {
    *  async read (no GPU stall). Call right after render(), before the next frame draws. */
   async readSeen(w: number, h: number, near: number, far: number): Promise<Float32Array | null> {
     const r = this.renderer;
+    // (what's always painted — your van, its room: alpha 0.75 — reads as sky: it's never what you
+    // saw of the town)
     this.mSeen ??= pass(
-      /* glsl */ `uniform sampler2D tDepth; uniform float uNear, uFar; varying vec2 vUv;
+      /* glsl */ `uniform sampler2D tDepth, tScene; uniform float uNear, uFar; varying vec2 vUv;
       ${GLSL_PACK_DEPTH}
-      void main() { gl_FragColor = packDepth(texture2D(tDepth, vUv).r); }`,
-      { tDepth: { value: null }, uNear: { value: 0.1 }, uFar: { value: 1000 } },
+      void main() { float keep = step(abs(texture2D(tScene, vUv).a - 0.75), 0.06); gl_FragColor = packDepth(mix(texture2D(tDepth, vUv).r, 1.0, keep)); }`,
+      { tDepth: { value: null }, tScene: { value: null }, uNear: { value: 0.1 }, uFar: { value: 1000 } },
     );
     if (!this.seenRT) this.seenRT = new THREE.WebGLRenderTarget(w, h, { type: THREE.UnsignedByteType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false });
     else if (this.seenRT.width !== w || this.seenRT.height !== h) this.seenRT.setSize(w, h);
     const u = this.mSeen.uniforms;
     u.tDepth.value = this.sceneRT.depthTexture;
+    u.tScene.value = this.sceneRT.texture;
     u.uNear.value = near;
     u.uFar.value = far;
     const prev = r.getRenderTarget();
@@ -616,12 +630,15 @@ export class WatercolorPost {
     return unpackDepth(px, near, far);
   }
 
-  render(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, night: number, golden: number, yaw: number, pitch: number, raw = false, overlay: THREE.Object3D | null = null) {
+  /** `after`: drawn into the frame right after the scene, before the paint (the van's room over
+   *  the world while you're in it: van/van.ts). */
+  render(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, night: number, golden: number, yaw: number, pitch: number, raw = false, overlay: THREE.Object3D | null = null, after: ((r: THREE.WebGLRenderer, cam: THREE.Camera) => void) | null = null) {
     const P = postParams;
     const r = this.renderer;
     r.setRenderTarget(this.sceneRT);
     r.clear();
     r.render(scene, camera);
+    after?.(r, camera);
     const sw = this.sceneRT.width, sh = this.sceneRT.height;
     // the brush's sketch: its own target (colour + depth), cleared to nothing, same camera
     const ghost = !!overlay && P.enabled && !raw;

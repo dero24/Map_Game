@@ -70,7 +70,14 @@ behaviour.
   → `shots/trees-<tag>.jpg` (a blank page, `tools/studio.html`: seconds, where `/kit.html` took minutes).
 - **Shaders compile:** `await import('/tools/shader-check.js'); await __SHADERS__()` on any dev page builds
   and draws every tree and hanger material variant and the leaf cards once → `{ programs, errors }`.
-- Sketch mode in shots: capture mode is fully painted unless the URL has `&sketch=1` (sketch mode on).
+- Sketch mode in shots: capture mode is fully painted unless the URL has `&sketch=1` (sketch mode on)
+  — or `&poc=1` (the van's town is pencil until you look at it; `bloom-1` arms the look).
+- **The van's checks** (`?capture=1&poc=1`): `await import('/tools/van-check.js'); await __VANCHECK__()` →
+  `seam` (in the doorway's band the frame drawn out and drawn in, five views, each pair beside the same
+  view drawn twice: the world's own motion — seamless when no pair differs more than that) and `walk`
+  (bed → doorway → 4 m out, keys held: in → out once, no eye jump over 6 cm a frame, the bloom armed);
+  `ok` both. Montage: `node tools/capture.mjs --shots=van-wake,van-door,van-near,van-back,van-side
+  --query=poc=1`.
 - The brush's readability (reviewer round 9): with the brush out and a sketch showing on a
   `?capture=1` page, `await import('/tools/brush-check.js'); await __BRUSHCHECK__()` paints it in
   and returns the sketch's share of the frame, its visible share at the sketch and through the wash

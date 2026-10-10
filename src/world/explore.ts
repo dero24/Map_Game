@@ -184,7 +184,9 @@ export class Explore {
   /** called with the number of cells that just crossed into "painted" (brush sounds, stats) */
   onBloom: ((n: number) => void) | null = null;
 
-  constructor(origin: { lat: number; lon: number }) {
+  /** `persist: false` keeps the record in memory only — every visit starts unseen (the ?poc=1 van's
+   *  first morning: the town in pencil until you look at it). */
+  constructor(origin: { lat: number; lon: number }, opts: { persist?: boolean } = {}) {
     this.setOrigin(origin);
     this.texture = new THREE.DataTexture(this.data, TEX, TEX, THREE.RedFormat, THREE.UnsignedByteType);
     this.texture.minFilter = THREE.LinearFilter;
@@ -197,7 +199,7 @@ export class Explore {
     this.farTexture.needsUpdate = true;
     U.uExploreFar.value = this.farTexture;
     try {
-      if (typeof indexedDB !== 'undefined')
+      if (typeof indexedDB !== 'undefined' && opts.persist !== false)
         this.db = openDB('map-game-explore', 1, { upgrade: (db) => { db.createObjectStore('blocks'); db.createObjectStore('meta'); } });
     } catch { this.db = null; }
     void this.loadMeta();

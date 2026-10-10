@@ -351,6 +351,76 @@ where the two disagree, the vision is the target and this file is the current st
   at a wall, and a post or corner brushing its side pushes it aside. It was a 1.05 m circle round
   the middle, and the nose went 1.15 m into a wall.
 
+## The van (`src/van/`, behind `?poc=1`) — bigger on the inside
+
+Robby, 2026-10-09: "the van is the heart … the van in and out should be seamless like how it is walking
+into buildings already". With `?poc=1` you wake in the back of your camper van, parked in the nearest car
+park, the town in pencil; without it the game is unchanged (no van, no stencil, nothing drawn).
+
+- **The body** (`assets/camper.ts`, a foundry family: `camperRecipe(seed)` → `camperGeometry` → body,
+  its two cargo sides, the bumper and step, one door leaf): a 5.6 m high-roof camper (2.72 m tall: the
+  back doorway is 1.5 × 1.95 m over a 0.58 m floor, so a walker's eye clears its head by 0.3 m), two-tone,
+  curtained windows along the back (you never see into the van from outside), an open cab with seats,
+  dash and wheel behind a curtain, barn doors that swing round against its sides (`DOOR_OPEN` 261°)
+  as you come within ~2 m of them, from inside or out (a latch sound). Budget `CAMPER_BUDGET` 16k
+  vertices (`tests/foundry.test.ts`, `tests/van.test.ts`). Seed 1, yours, is the sea-foam one.
+- **The room shares the van's frame** (`layout.ts`: van-local +x right, +z toward the back): 4.8 m
+  across, 6 m deep, 2.85 m to the ceiling, its back wall at the van's back with the doorway a 0.6 m
+  passage through it (`tunnel`). So the windows look out from where the van really stands, with true
+  parallax, and walking in is just walking — no teleport. The room overlaps the world round the van;
+  it's only ever drawn where you can see it:
+  - **outside** (`van.ts beforeRender`, `after`): the room is rendered from your eye into `portalRT`
+    (colour + depth), scissored to the doorway's patch of the screen. After the world, the passage's
+    five faces (the portal) draw twice: a stencil mark (depth-tested — a walker in front of the van
+    stays in front), then the room's colour and its **true depth** (`gl_FragDepthEXT`) where marked,
+    so the paint, the ink and the brush treat the room exactly as from inside. Where the room shows
+    nothing (its windows) nothing is laid: the world behind shows through. The post's scene target
+    keeps a stencil only when there's a van (`WatercolorPost({ stencil })`).
+  - **inside** (`after`, from `post.render`'s new `after` hook): the world draws as ever from where
+    you stand (the van's body swapped to an invisible material — it still casts its shadow — and each
+    cargo side drawn only from outside it: `beforeRender`), then the room: its shell (convex from
+    inside, `shellGeometry`) with no depth test, so the world shows only through its openings, then
+    the passage and furniture with one.
+  - **the change** (`nextMode`): in once you're 0.30 m past the door's plane, out under 0.22 m, only
+    through the doorway's width. Anywhere in that band both draws show the same surfaces (out is
+    valid while the passage's far end is past the 0.25 m near plane; in, anywhere in the passage), so
+    the change is invisible — `tools/van-check.js` measures it (docs/agent/debugging.md). Decided
+    after the walker moves, from where the eye is now (`van.update` after `walker.update`).
+- **Walking**: outside, the WalkWorld has the van as walls (scope −5,000,000, open at the doorway, the
+  doorway's sides running 1.2 m in) and decks (the step behind it at 0.32 m, the passage's floor at
+  the floor) — you step up as onto any porch. Inside, the walker walks `VanSpace` (`space.ts`:
+  the room's walls and furniture in the van's frame, its floor; `Walker.space`), so the van can later
+  move under you. `settleWalker` and the interiors leave you alone while you're in; the HUD says "in the
+  van"; sound is indoor. Flying, you're out. Getting up off the bed: `Walker.eyeDrop` (0.5 m sitting),
+  eased away on your first move (`walker.wantsMove`), no steps till you're up.
+- **The room** (`room.ts`): wainscot and plaster, plank floor, beams and two strings of lights, four
+  windows with frames, glazing bars and tied-back curtains, a bed in the front-right corner, the map
+  table (a drawn chart: `chartCanvas`, its own material), chairs, a rug, shelves and a little kitchen
+  either side of the doorway, coats by it, an armchair in the front-left corner under the empty wall (a
+  picture rail and two brass hooks: your first painting's place). Its own light (`roomLight`): the sky
+  through each window and the doorway, warm lamps brighter after dark — never the sun's shadow map.
+  Furniture is decor's (`Furn.hx/hz`: half sizes along the piece's own x and z).
+- **Always painted**: the van, its room and the portal write alpha 0.75 (propMaterial `keep`, the
+  room's materials): the post's sketch mode leaves those pixels painted, and a look (below) reads them
+  as sky — your home is never the town's pencil.
+- **Where it parks** (`spot.ts findVanSpot`): the map's own car parks within 700 m of the spawn (paint
+  and tile `areas` with `c: 'parking'`), the 200 stalls of each nearest the sea and the spawn, the four
+  stall directions: the van clear of every wall (parked cars move on — `kerbCars.keepOut` hides the ones
+  in the van's room and stops the ones that come and go from parking there), off the aisles (roads),
+  nothing behind its back door, no building where the room stands, its back toward the sea and close to
+  it. Sea Bright: the beach end of the big lot, stepping out onto the beach. ~0.3 s at boot.
+- **Colour by sight** (`world/sight.ts`, the first bloom): sketch mode on; the explore record kept in
+  memory (`Explore({ persist: false })`: every visit's first morning is in pencil) and nothing painted
+  round you as you walk; photo mode's read-back (post.readSeen → render/seen.ts → paintSeenSliced) run
+  whenever the view has turned ~7°, moved 3 m, or every 2.5 s (`shouldLook`, at most every 0.35 s, one
+  at a time). Off until you first step out of the back door; then a held breath (`Ambience.hush`, 0.9 s),
+  the wash (`ui('wash')`) and a chime, and the colour runs out from you to the horizon.
+- Harness: `window.__VAN__` / `__GAME__.van`, `__GAME__.sight`; shots (`?capture=1&poc=1`): `van-wake`,
+  `van-room`, `van-door`, `van-window`, `van-wall`, `van-doorway`, `van-near`, `van-step`, `van-back`,
+  `van-side`, `bloom-0`, `bloom-1` (`--settle=300` for the bloom).
+- Not yet: the cab to sit in and drive (the driver's door, the curtain to the back, first-person
+  driving, self-driving on the real roads — next), the room's things working, saving the van.
+
 ## Hot air balloons
 
 - **The family** (`assets/balloon.ts`): a ~2,800 m³ sport balloon from a seed — 12 or 16 scalloped
@@ -670,8 +740,9 @@ Design and reasoning: `docs/ASSET_FOUNDRY.md`.
 
 ## Exploring: the map paints in, and sketch mode (`src/world/explore.ts`)
 
-(The vision's bloom, §1 — everything in view colours on first sight, to the view distance — is
-not built yet; sketch mode below is the nearest thing: it paints where you walk and what photos frame.)
+(The vision's bloom, §1 — everything in view colours on first sight, to the view distance — is built
+behind `?poc=1`: `world/sight.ts`, "The van" above. Without it, sketch mode below paints where you walk
+and what photos frame.)
 
 
 - Where you've been is a sparse bitmap on a **global** grid: Web-Mercator metres, 8 m cells,

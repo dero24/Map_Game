@@ -3,6 +3,12 @@ import * as THREE from 'three';
 import type { WalkWorld } from './collision';
 import { frameFov } from './frame';
 
+/** The ground a walker moves over: the world's WalkWorld, or a room of its own (the van's: van/space.ts). */
+export interface WalkGround {
+  move(x: number, z: number, dx: number, dz: number, r?: number, feetY?: number): [number, number];
+  surfaceAt(x: number, z: number, feetY?: number): number;
+}
+
 /** `fov` is the lens: the vertical angle on a PC's 4:3–16:9 screen. A phone's frame is fitted to
  *  its shape from it (player/frame.ts) — taller held upright, no wider than 95° on its side. */
 export const walkParams = { speed: 2.4, runSpeed: 6, eyeHeight: 1.65, bob: 0.35, fov: 62, fly: false, flySpeed: 40, mouseSens: 1 };
@@ -36,6 +42,10 @@ export class Walker {
   waitGround = false;
   /** Degrees off the field of view: a brief push-in (the brush, as a painted thing dries). */
   zoom = 0;
+  /** Where you walk instead of the world (the van's room, while you're in it: van/van.ts); null: the world. */
+  space: WalkGround | null = null;
+  /** How far the eye sits below standing height (m): sitting on the bed when you wake. */
+  eyeDrop = 0;
   /** The touch ▲ ▼ buttons while flying: +1 climbs, −1 sinks, at the flying speed — with the stick
    *  idle too (the keyboard's Space and C ride on the movement, as they always have). */
   climb = 0;
@@ -169,8 +179,8 @@ export class Walker {
     this.z = z;
     this.yaw = yaw;
     this.pitch = pitch;
-    this.surfaceY = this.world.surfaceAt(x, z, feet);
-    this.y = this.surfaceY + walkParams.eyeHeight;
+    this.surfaceY = (this.space ?? this.world).surfaceAt(x, z, feet);
+    this.y = this.surfaceY + walkParams.eyeHeight - this.eyeDrop;
   }
 
   update(dt: number, cam: THREE.PerspectiveCamera) {
@@ -211,19 +221,19 @@ export class Walker {
       if (len > 0) {
         const sp = (run ? walkParams.runSpeed : walkParams.speed) * mag * dt;
         const dx = ((fx * f + rx * s) / len) * sp, dz = ((fz * f + rz * s) / len) * sp;
-        const [nx, nz] = this.world.move(this.x, this.z, dx, dz, 0.32, this.surfaceY);
+        const [nx, nz] = (this.space ?? this.world).move(this.x, this.z, dx, dz, 0.32, this.surfaceY);
         const moved = Math.hypot(nx - this.x, nz - this.z);
         this.distance += moved;
         this.bobPhase += moved * 1.9;
         this.x = nx;
         this.z = nz;
       }
-      const target = this.world.surfaceAt(this.x, this.z, this.surfaceY);
+      const target = (this.space ?? this.world).surfaceAt(this.x, this.z, this.surfaceY);
       // step up quickly (stairs), settle down gently — but drop, don't float, off a real ledge
       const rate = target > this.surfaceY ? 14 : this.surfaceY - target > 1.2 ? 16 : 9;
       if (isFinite(target)) this.surfaceY += (target - this.surfaceY) * Math.min(1, dt * rate);
       const bob = Math.sin(this.bobPhase) * 0.035 * walkParams.bob * (len > 0 ? 1 : 0);
-      this.y = this.surfaceY + walkParams.eyeHeight + bob;
+      this.y = this.surfaceY + walkParams.eyeHeight - this.eyeDrop + bob;
     }
     cam.position.set(this.x, this.y, this.z);
     cam.rotation.set(this.pitch, this.yaw, Math.sin(this.bobPhase * 0.5) * 0.004 * walkParams.bob, 'YXZ');
@@ -244,4 +254,9 @@ export class Walker {
   /** Walking forward right now — keys or the touch stick pushed up (walk-in boarding, vehicles.ts). */
   get pushing() { return this.keys.has('KeyW') || this.keys.has('ArrowUp') || this.tMove.y < -0.35; }
   get feet() { return this.surfaceY; }
+  /** Any walking asked for right now — the keys or the stick (getting up off the bed: van/). */
+  get wantsMove() {
+    const k = this.keys;
+    return this.tMove.id >= 0 || k.has('KeyW') || k.has('KeyA') || k.has('KeyS') || k.has('KeyD') || k.has('ArrowUp') || k.has('ArrowDown') || k.has('ArrowLeft') || k.has('ArrowRight');
+  }
 }

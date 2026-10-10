@@ -17,11 +17,26 @@ import { TOWER_KINDS, towerGeometry } from '../src/assets/tower';
 import { STALL_KINDS, stallGeometry, STALL_VARIANTS } from '../src/assets/market';
 import { validGeometry } from '../src/assets/core';
 import { courtFrame, diamondFrame, sportOf } from '../src/world/sports';
+import { camperRecipe, camperGeometry, camperValid, camperVerts, CAMPER_BUDGET } from '../src/assets/camper';
 
 const bb = (g: THREE.BufferGeometry) => (g.computeBoundingBox(), g.boundingBox!);
 const verts = (g: THREE.BufferGeometry) => g.getAttribute('position').count;
 const finite = (g: THREE.BufferGeometry) => (g.getAttribute('position').array as Float32Array).every(Number.isFinite);
 const partCount = (g: THREE.BufferGeometry, id: number) => { const a = g.getAttribute('aPart').array; let n = 0; for (let i = 0; i < a.length; i++) if (a[i] === id) n++; return n; };
+
+describe('the camper van (your van: src/van/, the rest of its checks in tests/van.test.ts)', () => {
+  it('every seed is valid, grounded, finite, deterministic and within its vertex budget', () => {
+    for (let seed = 1; seed <= 6; seed++) {
+      const c = camperRecipe(seed), g = camperGeometry(c);
+      expect(camperValid(c)).toBe(true);
+      expect(camperVerts(c)).toBeLessThanOrEqual(CAMPER_BUDGET);
+      for (const k of ['body', 'left', 'right', 'rear', 'leaf'] as const) expect(finite(g[k]), `${seed} ${k}`).toBe(true);
+      expect(verts(camperGeometry(camperRecipe(seed)).body)).toBe(verts(g.body));
+      expect(partCount(g.body, 3)).toBeGreaterThan(0); // (its head lamps light at night)
+      expect(partCount(g.body, 4) + partCount(g.rear, 4)).toBeGreaterThan(0); // (and its tail lamps)
+    }
+  });
+});
 
 describe('foundry core', () => {
   it('growth maths: Fibonacci counts, sphere lattice, hashes', () => {
