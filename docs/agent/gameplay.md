@@ -472,6 +472,14 @@ park, the town in pencil; without it the game is unchanged (no van, no stencil, 
   parks (`arrive`: back in the WalkWorld, the kerb cars round it). The hint at the wheel, stopped: "W
   drive · S brake, back · A D steer · V view · E get up" (a phone: "the stick drives · View: from
   behind"); the stick's label says "drive".
+- **Painting it where you want it** (the brush, below; Robby: "we should be able to spawn the van like we
+  do other cars and boats"): your van is a chip among the cars ("your van", its picture `camperPicture`
+  — the whole van, doors shut — on the chip and as the pencil sketch), always yours (never painted from
+  life first; the "a car?" chip still shows till you have). There's only the one: painting it brings it,
+  room and all, to the street spot you painted (`brush.van`, main.ts: `van.park` there, the kerb cars
+  round its room moved on), "your van, here — its back doors open as you come to them". Only from
+  outside it while it's parked; never on top of you (its spot 4.5 m off at least) nor of a parked car
+  (5.2 m); its own paint (no swatches).
 - **From behind** (`van.ts chase`, `third`, `toggleView`; Robby: "van can also be driven in third person
   too"): V at the wheel (a phone: the View button, the balloon's, in the ride cluster — `body.driving`,
   `data-ride="van"`; `tools/hud-audit.mjs` "at the van's wheel") swings the view behind the van, 9.5 m back
@@ -896,6 +904,7 @@ what the code does:
 - Keys while it's out: 1–9 / wheel choose, R / Shift+R turn (a car takes the other lane), C colour,
   Esc / right-click put away. Hints: "P — paint that boat from life" (until you own one), then
   "B — your brush" (until you've painted once).
+- Your van is a car chip here (`VanHook`, `brush.van`: "The van" above) — `__BRUSH__.choose('car', 'camper')`.
 - Harness: `window.__BRUSH__` (open / close / aim(x, z) / choose / paint / state); `__GAME__.brush`;
   `tools/brush-check.js` → `__BRUSHCHECK__()` measures the reviewer's readability bar on the frame
   (the sketch's share of it, how much is hidden through the wash, ΔE sketch → dry) — debugging.md.

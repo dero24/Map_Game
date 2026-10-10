@@ -9,6 +9,7 @@ import { critterGeometry, CRITTER_TINT, type CritterKind } from '../assets/fauna
 import { treeLib, plantLib, STAGES, type TreeKind, type PlantSpecies } from '../assets/flora';
 import { hashf } from '../assets/core';
 import { balloonGeometry, balloonRecipe, type BalloonPattern } from '../assets/balloon';
+import { camperPicture, camperRecipe } from '../assets/camper';
 
 // smooth value noise in [0,1] for ragged edges and paper tooth
 const noise2 = (x: number, y: number) => {
@@ -46,7 +47,7 @@ const S = 256;
 
 function model(family: string, type: string): THREE.BufferGeometry | null {
   switch (family) {
-    case 'car': return carLib(type as CarType);
+    case 'car': return type === 'camper' ? camperPicture(camperRecipe(1)) : carLib(type as CarType); // (your van: the brush's chip)
     case 'boat': return boatLib(type as BoatType);
     case 'plane': return planeGeometry(planeRecipe(type as PlaneType, 1)).geo;
     case 'wildlife': return critterGeometry(type as CritterKind);

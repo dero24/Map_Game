@@ -2,6 +2,25 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-10 (later still) — Paint your van where you want it
+
+Robby: "we should be able to spawn the van like we do other cars and boats?" (and asked whether we nap
+in the back yet: not yet — sleep is with fuel and legs in the plan's later list).
+
+- **The brush** (`src/ui/brush.ts`): your van is a chip among the cars — "your van", always yours; aim at
+  a street, its pencil sketch snaps to a spot, paint it, and your one van comes there, room and all
+  (main.ts `brush.van`: `van.park`, the kerb cars round its room moved on): "your van, here — its back
+  doors open as you come to them". Only from outside it while it's parked; never on top of you or a
+  parked car; its own paint. The chip's picture and the sketch: `camperPicture` (assets/camper.ts — the
+  whole van, its back doors shut, the left one mirrored and rewound so it faces out), cardArt's car
+  `camper`.
+- Verified: in the page — by a street near the van, the brush's street chips "your van" and "a car?"; the
+  sketch on a spot 5 m from the aim; painted: the van 26 m on at the spot, back in the WalkWorld, the
+  word; the chip's picture (the camper, three-quarter); montages (the van by the parked car; the pencil
+  sketch before painting); `tests/foundry.test.ts` (the picture: the whole van, doors shut, the mirrored
+  door facing out); `npm test` 1162; build; `mobile-check --device=pixel7` (the default start: the van;
+  0 errors, 66 programs). Pushed at his word.
+
 ## 2026-10-10 (late night) — Taking the wheel from the van driving itself; waking standing
 
 Robby: "if it is self driving and i hop in the front seat and try to drive it should block me from

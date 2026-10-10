@@ -17,7 +17,7 @@ import { TOWER_KINDS, towerGeometry } from '../src/assets/tower';
 import { STALL_KINDS, stallGeometry, STALL_VARIANTS } from '../src/assets/market';
 import { validGeometry } from '../src/assets/core';
 import { courtFrame, diamondFrame, sportOf } from '../src/world/sports';
-import { camperRecipe, camperGeometry, camperValid, camperVerts, CAMPER_BUDGET } from '../src/assets/camper';
+import { camperRecipe, camperGeometry, camperValid, camperVerts, camperPicture, CAMPER_BUDGET } from '../src/assets/camper';
 
 const bb = (g: THREE.BufferGeometry) => (g.computeBoundingBox(), g.boundingBox!);
 const verts = (g: THREE.BufferGeometry) => g.getAttribute('position').count;
@@ -35,6 +35,27 @@ describe('the camper van (your van: src/van/, the rest of its checks in tests/va
       expect(partCount(g.body, 3)).toBeGreaterThan(0); // (its head lamps light at night)
       expect(partCount(g.body, 4) + partCount(g.rear, 4)).toBeGreaterThan(0); // (and its tail lamps)
     }
+  });
+  it('its picture (a card, the brush sketch) is the whole van, doors shut, every face out', () => {
+    const c = camperRecipe(1), g = camperGeometry(c), pic = camperPicture(c);
+    expect(verts(pic)).toBe(verts(g.body) + verts(g.left) + verts(g.right) + verts(g.rear) + 2 * verts(g.leaf));
+    expect(finite(pic)).toBe(true);
+    const b = bb(pic);
+    expect(b.max.z).toBeGreaterThan(c.L / 2); // (the doors shut across its back)
+    expect(b.max.x - b.min.x).toBeLessThan(2.9);
+    // the mirrored door faces out like the other: its outer skin (the faces toward +z) is as large
+    const p = pic.getAttribute('position'), n = pic.getAttribute('normal');
+    let lout = 0, rout = 0;
+    for (let i = 0; i < p.count; i += 3) {
+      const ax = p.getX(i), az = p.getZ(i), bx_ = p.getX(i + 1), bz = p.getZ(i + 1), cx = p.getX(i + 2), cz = p.getZ(i + 2);
+      if (Math.min(az, bz, cz) < c.L / 2 + 0.02 || n.getZ(i) < 0.9) continue; // (the doors' outer faces)
+      // the winding agrees with the normal (a face toward +z wound counter-clockwise seen from +z)
+      const cross = (bx_ - ax) * (p.getY(i + 2) - p.getY(i)) - (cx - ax) * (p.getY(i + 1) - p.getY(i));
+      if (cross <= 0) continue;
+      if ((ax + bx_ + cx) / 3 < 0) lout++; else rout++;
+    }
+    expect(lout).toBeGreaterThan(0);
+    expect(lout).toBe(rout);
   });
 });
 

@@ -885,6 +885,19 @@ async function main() {
   const hints = new Hints();
   // the brush: paint anything you've painted from life, where you aim (docs/GAME_DESIGN.md)
   const brush = new Brush(ctx, commissions, vehicles, walk, worldRoot, origin, () => $('intro').classList.contains('hidden') && !atlas.open && !photo.active && !vehicles.driving);
+  // your van among the brush's cars: paint it on a street and it comes to you there, room and all
+  // (only from outside it, while it's parked)
+  if (van) {
+    const V = van;
+    brush.van = {
+      available: () => V.mode === 'out' && !V.moving,
+      place: (s) => {
+        V.park({ x: s.x, y: walk.outdoorSurfaceAt(s.x, s.z), z: s.z, yaw: s.yaw });
+        kerbCars.refresh(); // (the parked cars where its room now stands move on)
+        return { x: s.x, z: s.z, obj: V.group };
+      },
+    };
+  }
   hints.add(() => brush.hint());
   let brushT = 0;
   explore.onBloom = (n) => { if (n > 3 && brushT <= 0) { brushT = 1.6; ambience?.ui('brush'); } };

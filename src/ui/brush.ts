@@ -10,6 +10,8 @@
 // you painted it. A kind you haven't painted from life shows as a pencil chip that says where to
 // find one. The sketch is drawn in a pass of its own over the painting (render/post.ts): paper and
 // a boiling graphite line, the world paling round it, never lost behind whatever stands in front.
+// Your van (src/van/) is among the cars, always yours to paint: there's only the one, so painting it
+// brings it — room and all — to where you painted it (`van`).
 import * as THREE from 'three';
 import type { GameCtx } from './ctx';
 import type { Hint } from './hints';
@@ -21,12 +23,18 @@ import { U } from '../render/shared';
 import { postParams } from '../render/post';
 import { placeBoat, placeCar, placeBalloon, openWater, compass, HULL, type Placement, type Spot } from '../player/place';
 import { boatDims, BOAT_TYPES, type BoatType } from '../assets/kit';
+import { camperPicture, camperRecipe } from '../assets/camper';
 
 import { PAINTABLE } from './commissions';
 export { PAINTABLE };
 type Fam = (typeof PAINTABLE)[number];
 /** A chip: a kind you own, or (type '') a family you haven't painted from life yet. */
 interface Kind { family: Fam; type: string }
+/** Your van's chip (a car's: it goes on a street). */
+const VAN = 'camper';
+/** What the brush needs of your van: whether you can paint it now (outside it, parked), and painting
+ *  it there (main.ts: the van parks at the spot) — the van's own group, which the drying rides. */
+export interface VanHook { available(): boolean; place(spot: Spot): { x: number; z: number; obj: THREE.Object3D } }
 type Site = 'water' | 'street' | 'ground';
 
 // Your own colours: a painted thing is bold by default (Round 9: "the default white and green is
@@ -91,6 +99,8 @@ body.touch #brush .status { white-space: normal; text-align: center; font-size: 
 
 export class Brush {
   active = false;
+  /** Your van (main.ts sets it with ?poc's van): a chip among the cars. */
+  van: VanHook | null = null;
   private kinds: Kind[] = [];
   private view: number[] = []; // the chips shown: the kinds (indices) of the family that fits your aim
   private viewFam: Fam | null = null;
@@ -231,11 +241,12 @@ export class Brush {
 
   // ---------------- chips ----------------
   private refresh() {
-    const owned = this.com.owned(PAINTABLE) as Kind[];
+    const real = this.com.owned(PAINTABLE) as Kind[]; // (painted from life: your van isn't, it's yours)
+    const owned = [...real, ...(this.van?.available() ? [{ family: 'car' as Fam, type: VAN }] : [])];
     const rank = (k: Kind) => { const i = this.saved.recent.indexOf(`${k.family}:${k.type}`); return i < 0 ? 1e3 : i; };
     owned.sort((a, b) => rank(a) - rank(b)); // (a stable sort: newest-painted order otherwise)
     this.kinds = [...owned];
-    for (const f of PAINTABLE) if (!owned.some((k) => k.family === f)) this.kinds.push({ family: f, type: '' });
+    for (const f of PAINTABLE) if (!real.some((k) => k.family === f)) this.kinds.push({ family: f, type: '' });
     this.setView(this.viewFam, true);
   }
   /** Show the family that fits what you aim at (water: boats; a street: cars), else them all. */
@@ -261,13 +272,13 @@ export class Brush {
       img.alt = '';
       try { img.src = this.g.cardArt(k.family, k.type || SAMPLE[k.family], !k.type); } catch { /* no art: the name will do */ }
       const s = document.createElement('span');
-      s.textContent = k.type ? modelName(k.type) : `a ${k.family}?`;
+      s.textContent = k.type === VAN ? 'your van' : k.type ? modelName(k.type) : `a ${k.family}?`;
       b.append(img, s);
       b.onclick = () => this.choose(i);
       chips.appendChild(b);
     });
     const k = this.cur;
-    if (k?.type) {
+    if (k?.type && k.type !== VAN) { // (your van keeps its own paint)
       const sws = document.createElement('div');
       sws.className = 'sws';
       const cur = this.color(k);
@@ -324,7 +335,7 @@ export class Brush {
     this.build();
   }
   rotate(step = Math.PI / 4) { if (!this.washing && !this.drying) this.turn += step; }
-  private color(k: Kind) { return this.saved.colors[`${k.family}:${k.type}`] ?? (k.family === 'balloon' ? 0xd8412f : boldFor(k.type)); }
+  private color(k: Kind) { return k.type === VAN ? camperRecipe(1).paint : this.saved.colors[`${k.family}:${k.type}`] ?? (k.family === 'balloon' ? 0xd8412f : boldFor(k.type)); }
   /** A balloon's second colour (its stripes): chosen, else one that sits well with the first. */
   private stripe(k: Kind) { const c = this.color(k); return this.saved.stripes?.[`${k.family}:${k.type}`] ?? (c === 0xf2b632 ? 0x2f6fb5 : 0xf2b632); }
   private colors(k: Kind) { return k.family === 'balloon' ? [this.color(k), this.stripe(k), 0xf4f1ea] : undefined; }
@@ -335,7 +346,7 @@ export class Brush {
   }
   private cycleColor() {
     const k = this.cur;
-    if (!k?.type || this.washing || this.drying) return;
+    if (!k?.type || k.type === VAN || this.washing || this.drying) return;
     const S = SWATCHES[k.family], i = S.indexOf(this.color(k));
     this.setColor(k, S[(i + 1) % S.length]);
   }
@@ -409,10 +420,11 @@ export class Brush {
     const dims = k.family === 'boat' && (BOAT_TYPES as string[]).includes(k.type) ? boatDims(k.type as BoatType) : null;
     const hull = dims ? { room: dims.L / 2 + 0.8, depth: dims.draft + 0.15 } : HULL;
     // never on top of what's already there: the moored boats and your rides; the parked cars
-    const R = k.family === 'boat' ? hull.room + 3.2 : k.family === 'balloon' ? 18 : 4.2;
+    const van = k.type === VAN, me = this.g.walker; // (your van: longer than a car, and never on top of you)
+    const R = k.family === 'boat' ? hull.room + 3.2 : k.family === 'balloon' ? 18 : van ? 5.2 : 4.2;
     const near = (k.family === 'boat' ? ['moored-boats:', 'life-boat:', 'ride-boat:'] : k.family === 'balloon' ? ['balloon:', 'ride-balloon:'] : ['parked-cars:', 'kerb-cars:', 'life-car:', 'ride-car:'])
       .flatMap((p) => this.g.instances(p, x, z, (k.family === 'boat' ? 40 : 20) + R + 2));
-    const clear = (px: number, pz: number) => !near.some((q) => Math.hypot(q.x - px, q.z - pz) < R);
+    const clear = (px: number, pz: number) => !near.some((q) => Math.hypot(q.x - px, q.z - pz) < R) && (!van || Math.hypot(px - me.x, pz - me.z) > 4.5);
     // the sketch where you can see it (Round 9: "never snap it out of view"), clear of the brush's
     // own bar (a phone's is at the top, or down the side held landscape; a desktop's at the bottom)…
     const touch = document.body.classList.contains('touch'), bar = this.el.getBoundingClientRect(), xr = touch ? 0.72 : 0.75;
@@ -521,7 +533,7 @@ export class Brush {
     const c = this.color(k), key = `${k.family}:${k.type}:${c}:${this.colors(k)?.join(',') ?? ''}`;
     if (this.ghost?.key === key) return this.ghost;
     this.dropGhost();
-    const b = this.veh.build(k.family, k.type, c, this.veh.nextSeed, this.mat, this.colors(k));
+    const b = k.type === VAN ? { obj: new THREE.Group().add(new THREE.Mesh(camperPicture(camperRecipe(1)), this.mat)) } : this.veh.build(k.family, k.type, c, this.veh.nextSeed, this.mat, this.colors(k));
     b.obj.traverse((m) => m.layers.enable(1));
     b.obj.visible = false;
     this.root.add(b.obj);
@@ -557,7 +569,7 @@ export class Brush {
   private dry() {
     const w = this.washing!;
     this.washing = null;
-    const made = this.veh.paint(w.kind.family, w.kind.type, w.spot, w.color, w.colors);
+    const made = w.kind.type === VAN && this.van ? { ...this.van.place(w.spot), model: VAN } : this.veh.paint(w.kind.family, w.kind.type, w.spot, w.color, w.colors);
     const key = `${w.kind.family}:${w.kind.type}`;
     this.saved.recent = [key, ...this.saved.recent.filter((r) => r !== key)].slice(0, 12);
     this.saved.used = true;
@@ -574,7 +586,7 @@ export class Brush {
     const name = modelName(made.model);
     this.drying = {
       t: 0, x: made.x, z: made.z, boat, obj: made.obj, splash: false,
-      toast: boat ? `your ${name} — walk out to it to go aboard` : `your ${name} — ${document.body.classList.contains('nomouse') ? (near ? `tap ${w.kind.family === 'balloon' ? 'Step in' : 'Drive'} to get in` : `walk over, then tap ${w.kind.family === 'balloon' ? 'Step in' : 'Drive'}`) : near ? 'E to get in' : 'walk over, then E'}`,
+      toast: made.model === VAN ? 'your van, here — its back doors open as you come to them' : boat ? `your ${name} — walk out to it to go aboard` : `your ${name} — ${document.body.classList.contains('nomouse') ? (near ? `tap ${w.kind.family === 'balloon' ? 'Step in' : 'Drive'} to get in` : `walk over, then tap ${w.kind.family === 'balloon' ? 'Step in' : 'Drive'}`) : near ? 'E to get in' : 'walk over, then E'}`,
     };
   }
 

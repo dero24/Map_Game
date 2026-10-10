@@ -283,6 +283,29 @@ export function camperGeometry(c: CamperRecipe): { body: THREE.BufferGeometry; l
   return { body, left: sides[0], right: sides[1], rear, leaf, wheel: steering, panes, leafPane };
 }
 
+/** The whole van in one geometry, its back doors shut — a card's picture, the brush's sketch of it
+ *  (ui/brush.ts: you paint your van where you want it). */
+export function camperPicture(c: CamperRecipe) {
+  const g = camperGeometry(c), F = camperFrame(c), hw = c.W / 2;
+  const right = g.leaf.clone().translate(hw, 0, F.zr + 0.03);
+  const left = mirrorX(g.leaf.clone()).translate(-hw, 0, F.zr + 0.03); // (van.ts hangs it mirrored)
+  return merge([g.body, g.left, g.right, g.rear, right, left]);
+}
+
+/** A non-indexed geometry mirrored across x, its triangles rewound so they still face out. */
+function mirrorX(g: THREE.BufferGeometry) {
+  g.scale(-1, 1, 1);
+  for (const name of Object.keys(g.attributes)) {
+    const a = g.getAttribute(name) as THREE.BufferAttribute, n = a.itemSize, arr = a.array;
+    for (let t = 0; t + 2 < a.count; t += 3) for (let k = 0; k < n; k++) {
+      const i1 = (t + 1) * n + k, i2 = (t + 2) * n + k, v = arr[i1];
+      arr[i1] = arr[i2];
+      arr[i2] = v;
+    }
+  }
+  return g;
+}
+
 /** The geometry less its triangles facing (nx, ny, nz) (flat-shaded boxes: each face's normal). */
 function dropFacing(g: THREE.BufferGeometry, nx: number, ny: number, nz: number) {
   const nor = g.getAttribute('normal'), keep: number[] = [];
