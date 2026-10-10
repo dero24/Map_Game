@@ -4,9 +4,10 @@
 //         screen), the frame drawn out and drawn in, looking in, out, sideways, up and down — each
 //         pair's difference beside the same view drawn twice a few frames apart (the world's own
 //         motion: leaves, grass, water). Seamless: no pair differs more than the world does by itself.
-//   walk: from the bed (sitting) to the doorway and four metres out behind the van, keys held —
-//         you get up, cross the room, step down out of the doorway; in → out exactly once, no jump
-//         in the eye's height over 6 cm a frame, the town's bloom armed once you're out.
+//   walk: from where you wake (standing by the bed) to the doorway and four metres out behind the
+//         van, keys held — you cross the room, step down out of the doorway; in → out exactly once,
+//         no jump in the eye's height over 6 cm a frame from the first step, the town's bloom armed
+//         once you're out.
 // (tools/capture.mjs --eval runs it too; it needs the dev server's /tools/ path.)
 window.__VANCHECK__ = async () => {
   const G = window.__GAME__, V = G?.van;
@@ -49,7 +50,7 @@ window.__VANCHECK__ = async () => {
       W.yaw = Math.atan2(-(tx - W.x), -(tz - W.z));
       await frames(1);
       if (V.mode !== modes[modes.length - 1]) modes.push(V.mode);
-      if (f > 60) maxDy = Math.max(maxDy, Math.abs(W.y - prevY)); // (after getting up off the bed)
+      if (f > 0) maxDy = Math.max(maxDy, Math.abs(W.y - prevY)); // (from the first step: you wake standing)
       prevY = W.y;
       if (Math.hypot(tx - W.x, tz - W.z) < 0.25) wi++;
     }

@@ -60,6 +60,9 @@ export interface VanAction { id: 'sit' | 'back' | 'map'; label: string; text: st
 const SCOPE = -5_000_000;
 /** The back doors swing right round, against the van's sides (rad), over this many seconds. */
 const DOOR_OPEN = Math.PI * 1.45, DOOR_S = 1.3;
+/** While it drives itself the pedals and the wheel don't move it: a pedal held this long takes the
+ *  wheel (a tap only brings up how — main's hint). */
+const TAKE_S = 1.1;
 
 export class Van {
   readonly layout: VanLayout;
@@ -120,6 +123,9 @@ export class Van {
   private keys = new Set<string>();
   /** At the wheel, seen from behind the van (V; a phone's View) rather than from the driver's seat. */
   third = false;
+  private takeT = 0; // (a pedal held while it drives itself)
+  /** You took the wheel from the van driving itself (main: a word). */
+  onTakeWheel: (() => void) | null = null;
   private chasePos = new THREE.Vector3();
   private chaseInit = false;
   private graph: { n: number; g: Graph } | null = null;
@@ -294,6 +300,10 @@ export class Van {
   get speed() { return this.trip?.v ?? Math.abs(this.hand.v); }
   /** Driven by hand right now (at the wheel, under way). */
   get driven() { return this.rolling && !this.trip; }
+  /** Driving itself (a drive from the map table), or about to (its doors shutting first). */
+  get selfDriving() { return !!this.trip || !!this.pending; }
+  /** How far along a pedal's hold to take the wheel from it is (0…1). */
+  get taking() { return Math.min(1, this.takeT / TAKE_S); }
   get inside() { return this.mode === 'in'; }
   /** The van's own scenes, for the start's shader compile (render/warm.ts): its room and its doorway. */
   get scenes(): THREE.Scene[] { return [this.roomScene, this.portalScene]; }
@@ -495,14 +505,21 @@ export class Van {
   /** Before the walker moves: the drive on (its own, or yours at the wheel), the van's pose with it,
    *  and you carried along. */
   move(dt: number, w: VanWalker) {
-    const inp = this.wheelInput(w), touched = inp.thr !== 0 || inp.steer !== 0;
-    if (touched && (this.trip || this.pending)) {
-      // you take the wheel: a drive from the map table gives way to you, at the speed it was doing
-      this.hand.v = this.trip?.v ?? 0;
-      this.hand.steer = 0;
-      this.trip = null;
-      this.pending = null;
-    }
+    let inp = this.wheelInput(w);
+    if (this.trip || this.pending) {
+      // driving itself: the pedals and the wheel don't move it — hold a pedal (W or S; a phone's stick
+      // up or down) and you take the wheel, at the speed it was doing
+      this.takeT = inp.thr !== 0 ? this.takeT + dt : 0;
+      if (this.takeT < TAKE_S) inp = { thr: 0, steer: 0 };
+      else {
+        this.hand.v = this.trip?.v ?? 0;
+        this.hand.steer = 0;
+        this.trip = null;
+        this.pending = null;
+        this.takeT = 0;
+        this.onTakeWheel?.();
+      }
+    } else this.takeT = 0;
     if (this.pending && this.doors < 0.02) {
       // the doors are shut: off we go
       this.trip = new Drive(this.pending);

@@ -564,7 +564,6 @@ async function main() {
   // ?poc=1: your van, parked in the nearest car park (its back toward the water), and you sitting on
   // its bed inside (van/van.ts)
   let van: Van | null = null;
-  let waking = 0; // (sitting on the bed: the eye this far down until you first move, then you get up)
   if (POC) {
     const t0 = performance.now();
     const at = findVanSpot({ x: walker.x, z: walker.z }, {
@@ -606,7 +605,6 @@ async function main() {
     kerbCars.keepOut = (x, z) => van!.covers(x, z);
     kerbCars.refresh();
     const w = van.layout.wake;
-    walker.eyeDrop = waking = 0.5;
     van.placeInside(walker, w.x, w.z, w.yaw, w.pitch);
     (window as unknown as Record<string, unknown>).__VAN__ = van;
   }
@@ -964,7 +962,10 @@ async function main() {
     // E (a phone: the button by your thumb) — the driver's seat, the back, the map table
     hints.add(() => { const a = V.action(); return a ? { key: thumbs() ? a.label : 'E', text: a.text, pri: 9 } : null; });
     // at the wheel, stopped: how to drive it (W/S and A/D; a phone's stick)
-    hints.add(() => (V.mode === 'cab' && V.speed < 0.5 ? (thumbs() ? { text: 'the stick drives · View: from behind', pri: 10 } : { key: 'W', text: 'drive · S brake, back · A D steer · V view · E get up', pri: 10 }) : null));
+    hints.add(() => (V.mode === 'cab' && !V.selfDriving && V.speed < 0.5 ? (thumbs() ? { text: 'the stick drives · View: from behind', pri: 10 } : { key: 'W', text: 'drive · S brake, back · A D steer · V view · E get up', pri: 10 }) : null));
+    // at the wheel while it drives itself: it says so, and how to take the wheel (hold a pedal)
+    hints.add(() => (V.mode === 'cab' && V.selfDriving ? (V.taking > 0 ? { text: 'taking the wheel…', pri: 11 } : thumbs() ? { text: 'the van is driving itself · hold the stick up to take the wheel', pri: 11 } : { key: 'W', text: 'hold to take the wheel · the van is driving itself', pri: 11 }) : null));
+    V.onTakeWheel = () => toast('you have the wheel');
     // the map table: pick a place on the map and the van drives you there, on the real roads (the
     // baked region's every road, the streamed cells' own)
     V.onMapTable = () => {
@@ -1117,7 +1118,6 @@ async function main() {
       const V = van, L = V.layout, p = V.pose;
       walker.space = null;
       shots['ocean-golden']();
-      walker.eyeDrop = waking = 0;
       walker.holdMove = false;
       V.openDoors(!V.moving); // (open, but shut on a van still rolling from the shot before)
       V.third = n.endsWith('-third'); // (at the wheel: `-third` from behind the van)
@@ -1128,7 +1128,7 @@ async function main() {
       };
       const inn = (lx: number, lz: number, tx: number, tz: number, pitch = 0) => V.placeInside(walker, lx, lz, Math.atan2(-(tx - lx), -(tz - lz)), pitch);
       const R = L.room, d = L.door;
-      if (n === 'van-wake') { walker.eyeDrop = waking = 0.5; V.placeInside(walker, L.wake.x, L.wake.z, L.wake.yaw, L.wake.pitch); }
+      if (n === 'van-wake') V.placeInside(walker, L.wake.x, L.wake.z, L.wake.yaw, L.wake.pitch);
       else if (n === 'van-room') inn(R.x0 + 0.7, R.z1 - 0.7, R.x1 - 1.2, R.z0 + 1.2, -0.12);
       else if (n === 'van-door') inn(0.35, R.z1 - 2.8, 0, d.z + 6, -0.04);
       else if (n === 'van-window') inn(R.x0 + 1.9, R.z0 + 2.2, R.x0 - 6, R.z0 + 2.4, 0.02);
@@ -1762,17 +1762,7 @@ async function main() {
     van?.move(dt, walker); // (the van drives on, carrying you)
     const seated = !!van?.seat(dt, camera, walker); // (at the wheel: the van places the camera)
     if (!vehicles.update(dt, camera) && !seated) walker.update(dt, camera);
-    if (van) {
-      van.update(dt, walker, walkParams.fly);
-      if (waking > 0) {
-        // sitting on the bed until you first move: then you get up (no step until you're up)
-        if (walker.wantsMove || walker.eyeDrop < waking) {
-          walker.eyeDrop = Math.max(0, walker.eyeDrop - dt * 0.75);
-          walker.holdMove = walker.eyeDrop > 0.05;
-          if (walker.eyeDrop <= 0) { waking = 0; walker.holdMove = false; }
-        }
-      }
-    }
+    van?.update(dt, walker, walkParams.fly);
     syncTouchControls(dt);
     camera.position.sub(origin); // walker works in world coords; the renderer works origin-local
     stream.update(walker.x, walker.z);

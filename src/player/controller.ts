@@ -45,8 +45,6 @@ export class Walker {
   zoom = 0;
   /** Where you walk instead of the world (the van's room, while you're in it: van/van.ts); null: the world. */
   space: WalkGround | null = null;
-  /** How far the eye sits below standing height (m): sitting on the bed when you wake. */
-  eyeDrop = 0;
   /** The touch ▲ ▼ buttons while flying: +1 climbs, −1 sinks, at the flying speed — with the stick
    *  idle too (the keyboard's Space and C ride on the movement, as they always have). */
   climb = 0;
@@ -181,7 +179,7 @@ export class Walker {
     this.yaw = yaw;
     this.pitch = pitch;
     this.surfaceY = (this.space ?? this.world).surfaceAt(x, z, feet);
-    this.y = this.surfaceY + walkParams.eyeHeight - this.eyeDrop;
+    this.y = this.surfaceY + walkParams.eyeHeight;
   }
 
   update(dt: number, cam: THREE.PerspectiveCamera) {
@@ -234,7 +232,7 @@ export class Walker {
       const rate = target > this.surfaceY ? 14 : this.surfaceY - target > 1.2 ? 16 : 9;
       if (isFinite(target)) this.surfaceY += (target - this.surfaceY) * Math.min(1, dt * rate);
       const bob = Math.sin(this.bobPhase) * 0.035 * walkParams.bob * (len > 0 ? 1 : 0);
-      this.y = this.surfaceY + walkParams.eyeHeight - this.eyeDrop + bob;
+      this.y = this.surfaceY + walkParams.eyeHeight + bob;
     }
     cam.position.set(this.x, this.y, this.z);
     cam.rotation.set(this.pitch, this.yaw, Math.sin(this.bobPhase * 0.5) * 0.004 * walkParams.bob, 'YXZ');
@@ -264,9 +262,4 @@ export class Walker {
   /** Walking forward right now — keys or the touch stick pushed up (walk-in boarding, vehicles.ts). */
   get pushing() { return this.keys.has('KeyW') || this.keys.has('ArrowUp') || this.tMove.y < -0.35; }
   get feet() { return this.surfaceY; }
-  /** Any walking asked for right now — the keys or the stick (getting up off the bed: van/). */
-  get wantsMove() {
-    const k = this.keys;
-    return this.tMove.id >= 0 || k.has('KeyW') || k.has('KeyA') || k.has('KeyS') || k.has('KeyD') || k.has('ArrowUp') || k.has('ArrowDown') || k.has('ArrowLeft') || k.has('ArrowRight');
-  }
 }

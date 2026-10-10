@@ -2,6 +2,28 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-10 (late night) — Taking the wheel from the van driving itself; waking standing
+
+Robby: "if it is self driving and i hop in the front seat and try to drive it should block me from
+driving and gently let user know it is self driving and can take over by unlocking some way", and "when
+first starting in the van and i walk forward i am sunken a little bit into the van floor and it first
+has me float up then i walk forward".
+
+- **Taking the wheel** (`van.ts move`, `TAKE_S`; main's hints): while it drives itself the pedals and the
+  wheel don't move it; the hint says "hold to take the wheel · the van is driving itself" (a phone: hold
+  the stick up); a pedal held 1.1 s takes the wheel at the speed it was doing, "taking the wheel…" while
+  you hold, "you have the wheel" when it's yours. A tap or the wheel alone never takes it.
+- **Waking standing**: the start sitting on the bed's edge (the eye 0.5 m down until you first moved,
+  then easing up) read as sunk into the floor; gone — `Walker.eyeDrop`, `wantsMove` and main's `waking`
+  removed; you wake standing at the bed's foot. `tools/van-check.js`'s walk now measures the eye from the
+  first step.
+- Verified: in the page — 35 s into a drive, the hint up; a 0.3 s tap of W: still driving itself; A held:
+  still; W held: "taking the wheel…", then driven by hand at 11 m/s, "you have the wheel"; the eye 1.650
+  m over the floor at the wake; `tools/van-check.js` ok (walk in→out once, the eye never over 5.2 cm a
+  frame from the first step — the step down out of the doorway; the seam in every view under the world's
+  own motion); `npm test` 1161; build; `hud-audit` 640 layouts, no overlaps (the van's longest hint);
+  montages `van-wake`, `van-room`. Pushed at his word.
+
 ## 2026-10-10 (night) — The van is the default start
 
 Robby: "please make poc1 the default url as I really like it so far … when clicking the github actions

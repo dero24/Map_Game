@@ -405,8 +405,8 @@ park, the town in pencil; without it the game is unchanged (no van, no stencil, 
   the floor) — you step up as onto any porch. Inside, the walker walks `VanSpace` (`space.ts`:
   the room's walls and furniture in the van's frame, its floor; `Walker.space`), so the van can later
   move under you. `settleWalker` and the interiors leave you alone while you're in; the HUD says "in the
-  van"; sound is indoor. Flying, you're out. Getting up off the bed: `Walker.eyeDrop` (0.5 m sitting),
-  eased away on your first move (`walker.wantsMove`), no steps till you're up.
+  van"; sound is indoor. Flying, you're out. You wake standing at the bed's foot (`layout.wake`: a start
+  sitting on it read as sunk into the floor, then floating up as you got up — Robby, 2026-10-10).
 - **The room** (`room.ts`): wainscot and plaster, plank floor, beams and two strings of lights, four
   windows with frames, glazing bars and tied-back curtains, a bed in the front-right corner, the map
   table (a drawn chart: `chartCanvas`, its own material), chairs, a rug, shelves and a little kitchen
@@ -465,7 +465,9 @@ park, the town in pencil; without it the game is unchanged (no van, no stencil, 
   WalkWorld (`depart`, the town's bloom if you never stepped out); it moves against the world's walls with
   its own shape (`walk.moveBody`, as a car's: buildings, kerb cars, fences, the water's edge — it bumps
   off and loses its speed); the ground under it as the self-drive's (it stays level: the room shares its
-  frame). A drive from the map table gives way the moment you touch the pedals or the wheel. Get up (E,
+  frame). While it drives itself (from the map table) the pedals and the wheel don't move it: the hint
+  says so — "hold to take the wheel · the van is driving itself" (a phone: hold the stick up) — and a
+  pedal held 1.1 s (`TAKE_S`) takes the wheel at the speed it was doing ("you have the wheel"). Get up (E,
   Back) and it brakes to a stop by itself (`stepWheel`'s `hold`); stopped with nobody at the wheel it
   parks (`arrive`: back in the WalkWorld, the kerb cars round it). The hint at the wheel, stopped: "W
   drive · S brake, back · A D steer · V view · E get up" (a phone: "the stick drives · View: from

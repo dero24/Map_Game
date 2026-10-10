@@ -41,7 +41,7 @@ export interface VanLayout {
   /** how far through the doorway (m past the door's plane) you go in, and come back out */
   enter: number;
   leave: number;
-  /** where you wake: sitting on the bed's edge, looking across the room (van-local, yaw as the walker's) */
+  /** where you wake: standing at the bed's foot, looking across the room (van-local, yaw as the walker's) */
   wake: { x: number; z: number; yaw: number; pitch: number };
   /** the cab: the driver's eye in the seat; the driver's door, where you stand outside to get in; the
    *  curtain behind the seats; and the room's curtained way through to it (in its front wall), with
@@ -89,7 +89,7 @@ export function vanLayout(recipe: CamperRecipe = camperRecipe(1)): VanLayout {
     { kind: 'cabcurtain', x: x0 + 0.72, z: z0 + 0.06, yaw: Math.PI, hx: 0.47, hz: 0.06, solid: true },
     { kind: 'doormat', x: 0, z: z1 + 0.28, yaw: 0, hx: 0.6, hz: 0.25, solid: false },
   ];
-  // sitting at the bed's near edge, its foot end, looking across at the doorway and the windows
+  // standing by the bed's near side, at its foot, looking across at the doorway and the windows
   const bed = furniture[0];
   // (just clear of the bed's collider, so the first step doesn't shove you off it)
   const wx = bed.x - bed.hx * 0.92 - 0.33, wz = bed.z + 0.35, tx = -0.9, tz = z1 - 0.5;
