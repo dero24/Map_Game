@@ -6,7 +6,9 @@ bottom). It is a shorter, tighter version of `GAMEPLAY_VISION.md`: where the two
 wins; the vision keeps the detail this leaves out (the rares table, time and weather, the edge
 cases, the ideas). Multiplayer details stay in `MULTIPLAYER_PLAN.md` (Robby's `for_mapgame`
 folder); section 10 here only says how they fit. The order of work is section 13, and its first
-step is the Sea Bright proof of concept (section 14). Add ideas at the bottom.
+step is the Sea Bright proof of concept (section 14). Add ideas at the bottom. **Read the last
+Decisions section first:** the whole game (`docs/FULL_SCOPE.md`) and the order of work
+(`docs/NEXT_STEPS.md`), 2026-10-09, win where they differ from the sections above.
 
 **In one line:** you travel a real America in a camper van. The world colours in as you look at
 it; the few things still in pencil are yours to paint and keep. Your base is the back of the van,
@@ -311,7 +313,8 @@ trip.
 5. **On the beach, tap the gulls:** you toss a crumb, they gather and bunch up, then lift off
    together. Create a painting as they rise: your first gold edge.
 6. **Back in the van, hang it on the wall and step in.** Your own beach, at that moment: the same
-   light, people strolling, gulls over the water. Release your gull there.
+   light, people strolling, and the gulls lift off again as you arrive (a gold edge replays its
+   moment).
 7. **A note on the map:** "Herons come to the dock at dusk."
 
 ## 12. What this changes from GAMEPLAY_VISION.md
@@ -376,17 +379,21 @@ Each step is an item in `feature_list.json` (tier 2), in this order.
 
 ## 14. The Sea Bright proof of concept
 
-**What it is:** section 11, playable and rough, from waking in the van to releasing the gull on
-your own painted beach. It's a throwaway prototype behind a switch (`?poc=1`, in Sea Bright), and
+**What it is:** section 11, playable and rough, from waking in the van to stepping into your own
+painted beach as its gulls lift off again. The beat by beat (ten beats) is in `docs/NEXT_STEPS.md`
+"The Sea Bright prototype". It's a throwaway prototype behind a switch (`?poc=1`, in Sea Bright), and
 the game without the switch is unchanged. Once it has answered its two questions, the parts worth
 keeping are built properly in steps 1 and 2.
 
 **Who plays it:** Robby, and two or three people who haven't seen the game.
 
 **Three parts, each playable on its own** (each an item in `feature_list.json`):
-1. **The first minute** (`poc-first-minute`): everything in view colours on first sight; 3–5 pencil
+1. **The first minute** (`poc-first-minute`): everything in view colours on first sight; pencil
    things near you, picked out of sight, among gulls, herons, fiddler crabs, benches and one tree
-   kind; tap to paint (the splash when too far); the card into the field guide.
+   kind, with a setting for how many (3–5; 6–8 early then 3–5; every uncollected kind nearby:
+   Robby plays each and picks); approach carefully (rush an animal and it leaves; move slowly or
+   crouch and it comes closer); tap to paint (the splash when too far); the card into the field
+   guide.
 2. **Touch and moments** (`poc-touch-moments`): tap a bench to sit; tap the gulls to toss a crumb:
    they come, bunch up (the warning sign) and lift off together (the moment); a painting created
    then gets a gold edge; paintings keep the game's date, hour and weather.
@@ -394,10 +401,11 @@ keeping are built properly in steps 1 and 2.
    bed, the map table, one wall), already bigger than the van, as you see when you step out and
    look back; hang the painting; step in: the hour and weather held, the place's people and
    traffic going on as at that hour, about 250 m to walk, pencil past the edge, the bloom as the
-   way in; release the gull; step back out.
+   way in; the gold-edged moment replaying as you arrive; step back out.
 
-**Not in it:** "Start near you?" (it touches privacy, so Robby decides before it's built), the
-drone, the real-world layer, habitats and milestones, self-driving, objects inside buildings,
+**Not in it:** releasing animals into paintings, habitats and visitors (later: one idea per beat,
+so "your gull" means only the gull you collected), "Start near you?" (it touches privacy, so Robby
+decides before it's built), the drone, the real-world layer, habitats and milestones, self-driving, objects inside buildings,
 multiplayer, and saving the tiles with the painting (the prototype may load them live).
 
 **What to watch while people play:** how long until the first tap; how often the next pencil thing
@@ -466,6 +474,41 @@ Robby, on the proof of concept's third part:
   testing"): every other gameplay file folded into this one, with Robby, section by section
   (`gameplay-one-plan`). Then the proof of concept, behind its switch ("i like that it will be on
   a switch so it will not affect the current game").
+
+## Decisions (2026-10-08, night → 2026-10-09): the whole game, and the order of work
+
+Worked out with Robby after a creative-director review, in two drafts of his: `docs/FULL_SCOPE.md`
+(what the whole game is, and what's in 1.0) and `docs/NEXT_STEPS.md` (the order of work). **Where
+these differ from the sections above, these win;** the design session (`gameplay-one-plan`) folds
+them in section by section.
+- **Approaching is the skill** (idea A, "i love idea A"): animals keep their real wariness; rush
+  them and they leave, slow down, crouch or sit still and they come closer.
+- **Paintings are places you jump into, like Mario 64** ("i love super mario 64 throwback"); a
+  gold-edged one replays its moment as you arrive.
+- **Releasing animals into paintings, habitats and visitors: later, not in the prototype** (Robby
+  found the gull release confusing: "I think that part is confusing and needs to be rethought").
+- **Real time:** the world follows the real day and night ("in final game it should follow real
+  life day night cycle"); inside a painting it's the moment it was painted. So the bed's "choose
+  when you wake" goes or changes (an open question).
+- **The goals:** finishing the collection and a cozy base ("collecting a building cozy base and
+  finishing collection are good goals"). The state capitols (state sets, 16 regional powers) are a
+  candidate long-game goal beside the sketchbook riddles, for the design session.
+- **Where you start:** near you by IP address (city level, nothing stored) as an option, or type
+  any place; outside the US, a random US city. The wording of the choice gets Robby's OK.
+- **The van drives itself** ("the van is self driving, right? that is what i meant by gps"). Long
+  trips go in legs, one sleep per leg, and what you sleep through stays uncoloured ("world does not
+  get colored when asleep"). **A leg is a tank, about 300 miles:** refuel by pulling up next to a
+  real pump ("uesr can gas up by just driving next to the bump too"); you can never run out (low
+  fuel shows the nearest station; on reserve the self-driving takes over).
+- **How many pencil things:** decided by playing the prototype (a setting: 3–5; 6–8 early then
+  3–5; every uncollected kind nearby).
+- **Micro-regions:** the ~85 EPA Level III ecoregions each get their own plants, ground, light and
+  wildlife ("our 16 regions we need to break out into micro regions").
+- **How much to collect:** ~250–300 kinds today; about 400–600 for 1.0.
+- **The order of work** (`docs/NEXT_STEPS.md`): the design session → the harness cleanup → the
+  prototype's three parts, with the map data list and the one big cut in between while Robby
+  plays → the playtest → the world's features → the micro-regions. The region pass
+  (`docs/REGION_MATCH.md`) "will happen", not next.
 
 ## Ideas inbox
 

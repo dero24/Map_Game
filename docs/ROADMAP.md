@@ -4,13 +4,13 @@ The plan of record for finishing the game: what's done, how the work is divided,
 the milestones to a 1.0 release. `feature_list.json` tracks the items; this doc gives the order and
 what "done" means. Written 2026-10-06; update it when a milestone closes or the plan changes.
 
-## Where we stand (2026-10-08)
+## Where we stand (2026-10-09)
 
 | Tier | What it means | State |
 |---|---|---|
 | **0** | The world loads everywhere | 9 of 9 items passing; the playtest runs on every push |
-| **1** | It looks right everywhere | 38 passing, 24 not started, 1 active: Robby's four reports of 2026-10-07 come first (`bug-night-glow-people` active); regional flora paused |
-| **2** | The game itself | 33 open items in `docs/GAMEPLAY_STREAMLINED.md`'s order: first one gameplay plan agreed with Robby (`gameplay-one-plan`, no code), then the Sea Bright proof of concept (Robby's call: the one exception to foundations first) |
+| **1** | It looks right everywhere | 48 passing, 23 not started: Robby's two batches of reports passing and live (`feature/four-reports`, tiles v31); `micro-regions` added (the ~85 ecoregions); the region pass (`region-match-pass`, `docs/REGION_MATCH.md`) will happen, not next |
+| **2** | The game itself | 37 open items, in `docs/NEXT_STEPS.md`'s order: one gameplay plan agreed with Robby (`gameplay-one-plan`, active, no code), the harness cleanup, then the Sea Bright proof of concept (Robby's call: the one exception to foundations first) with the map data list and the one big cut while he plays its parts, then the playtest. The whole game and the 1.0 line: `docs/FULL_SCOPE.md` |
 | **3** | Polish | 14 passing, 11 not started |
 
 Regional life (`docs/regional-life/models.md` build order): **all 16 packages built**.
@@ -99,8 +99,9 @@ changed, and `feature_list.json` updated.
 6. **The game core** (Tier 2, `docs/GAMEPLAY_STREAMLINED.md` §13). In its order, as far as the 1.0
    line below. Its proof of concept runs first, ahead of milestones 2–5 (Robby, 2026-10-08): the first
    ten minutes in Sea Bright, rough, behind `?poc=1` (`poc-first-minute`, `poc-touch-moments`,
-   `poc-painted-place`). Before it, Robby's four reports of 2026-10-07, then one gameplay plan agreed
-   with him (`gameplay-one-plan`). After it, back to milestones 2–5 unless Robby says otherwise.
+   `poc-painted-place`). Before it, one gameplay plan agreed with him (`gameplay-one-plan`) and the
+   harness cleanup; the full order is `docs/NEXT_STEPS.md` (2026-10-09), which the cleanup rewrites
+   this doc from.
 7. **Release.** Every data licence recorded in `docs/DATA_SOURCES.md` and a credits screen;
    performance holding on phones; saving that survives updates; the first ten minutes
    (`GAMEPLAY_VISION.md` §8) smooth from start to finish; a store build.

@@ -1,27 +1,35 @@
 # Handoff: the lower 48, alive — part 2 (2026-10-05)
 
-## Start here (2026-10-09): what comes next is open — an assessment first
+## Start here (2026-10-09): the gameplay design session, with Robby
 
-Robby, 2026-10-09, giving the OK to push `feature/four-reports`: "yes push it, but region work will not
-come next, as I will have another agent assess what to do next and regions will happen and we will use
-that doc as reference". So **the next session assesses what comes next** (Robby has another agent do
-it). Nothing is queued: `feature_list.json` has no item `in_progress`, and the "next" that `npm run init`
-prints is only the queue's order by tier and rank. Work from `feature/four-reports` (pushed and
-published; tiles v31). On the table:
+Robby had a session assess what comes next ("I will have another agent assess what to do next"), and
+it brought his two plans into the repo: **`docs/NEXT_STEPS.md`** (the order of work, and why) and
+**`docs/FULL_SCOPE.md`** (what the whole game is, and what's in 1.0). Until the harness cleanup puts
+the order in `feature_list.json` as data, **NEXT_STEPS's table is the order**; `npm run init` names
+the active item, and its "next by tier and rank" is not the order. Work from `feature/four-reports`
+(pushed and published; tiles v31).
 
-- **The region pass** (`region-match-pass`, `docs/ROADMAP.md` Track B): it will happen, not
-  necessarily next. When it does, **`docs/REGION_MATCH.md`** is the reference: the loop for one region
-  in one sitting, the spots (place types × sub-regions), the photos (Mapillary first, its gaps filled
-  from public photos — never Google Street View, not even for testing), the checklist, the knob in the
-  code behind each layer, and the worked example (Rumson, Oak Park, Plano: §6, its improvements ranked).
-- **One gameplay plan, agreed with Robby** (`gameplay-one-plan`, no code), and after it **the Sea
-  Bright proof of concept** (`poc-first-minute` → `poc-touch-moments` → `poc-painted-place`): below.
-- **Open bugs from his screenshots, in neither batch:** `bug-walker-into-wall`,
-  `bug-grandstaff-terrain` (below, "Robby's screenshots").
-- **Noticed in the second batch, not asked for:** Times Square and Bryant Park count as half a city by
-  `cityAt`'s built volume (a place's own nightlife — OSM's bars and theatres — would say more); a black
-  square floating in Oak Park's sky; a pagoda-shaped conifer; which kinds the surveyed trees take (the
-  pines on Rumson Road: `docs/REGION_MATCH.md` §6).
+**Next: `gameplay-one-plan`** (`in_progress`): the design session, no code. Read every gameplay doc
+(NEXT_STEPS "The design session" lists them: the streamlined plan, the vision, the old design docs,
+FULL_SCOPE, the code doc `docs/agent/gameplay.md` for what's built), list what each says that the plan
+leaves out or says differently, and go through it with Robby section by section; he decides each.
+**It ends in one document:** the agreed plan in `docs/GAMEPLAY_STREAMLINED.md` (its last Decisions
+section, 2026-10-09, wins where it differs from the sections above it), the old design docs moved to
+`docs/archive/`, everything pointing to the one file, the tier-2 items matching it. Done when Robby
+reads it and says it's right. Take the time it takes; ask him the decisions that are his.
+
+**Then, in order** (NEXT_STEPS "The order"): `harness-cleanup` → `poc-first-minute` →
+`map-data-list` (while Robby plays part 1) → `poc-touch-moments` → `osm-big-cut` (while he plays
+part 2) → `poc-painted-place` → `poc-playtest` → the world's features (the region pass,
+`region-match-pass`, with `docs/REGION_MATCH.md`: "regions will happen", not next) →
+`micro-regions`. One agent session at a time in this folder.
+
+**Also open, not in the order** (for Robby to rank when he wants): `bug-walker-into-wall` and
+`bug-grandstaff-terrain` (his screenshots, below); noticed in the second batch, not asked for: Times
+Square and Bryant Park count as half a city by `cityAt`'s built volume (a place's own nightlife would
+say more), a black square floating in Oak Park's sky, a pagoda-shaped conifer, which kinds the
+surveyed trees take (`docs/REGION_MATCH.md` §6). If Robby names one, work it and hand back
+("If Robby names another item", below).
 
 ### Robby's second batch (2026-10-08 night → 10-09): all six done, pushed on `feature/four-reports`
 
@@ -133,14 +141,19 @@ implementing and testing". A design session with him, not a coding one:
   `docs/GAMEPLAY_VISION.md`, `docs/GAME_DESIGN.md`, `docs/CORE_LOOP_REVIEW.md`,
   `docs/Other_Ideas.md`, `docs/LIST_OF_POTENTIAL_ITEMS_AND_PARTS.md`. In Robby's `for_mapgame`
   folder: `GAMEPLAY_VISION.md` (an older copy than the repo's) and `MULTIPLAYER_PLAN.md` (not in
-  the repo; ask him whether to bring it in).
+  the repo; ask him whether to bring it in). And the two drafts of 2026-10-08/09,
+  `docs/FULL_SCOPE.md` and `docs/NEXT_STEPS.md`, whose decisions are the plan's last Decisions.
+- **It ends in one document** (NEXT_STEPS "The design session"): the old design docs moved to
+  `docs/archive/` (git keeps their history), not just a note at their top; the code doc
+  `docs/agent/gameplay.md` stays, checked against the plan.
 - **List what each still says that the plan leaves out or says differently, and go through it with
   Robby** section by section; he decides what's kept. Record it in the plan's Decisions.
 - **Take the time it takes.** The plan's open questions (§16) are for the proof of concept to
   answer by playing; this settles what the game is.
 - **When Robby says the plan is right:** a note at the top of each other file (history; the plan of
   record is the streamlined plan; his `for_mapgame` files only with his OK), the tier-2 items
-  matching the plan, the item `passing`, and `poc-first-minute` back to `in_progress`.
+  matching the plan, the item `passing`, and `harness-cleanup` `in_progress` (then
+  `poc-first-minute`).
 
 ### After the plan: the Sea Bright gameplay proof of concept
 
@@ -148,14 +161,20 @@ Robby, 2026-10-08: "soon will have to do a poc of it at least starting in sea br
 that it will be on a switch so it will not affect the current game". The plan's §14 is this work.
 The proof of concept is built one part at a time:
 
-1. **`poc-first-minute`** (paused until the plan is agreed): everything in view colours on first
-   sight; 3–5 pencil things near you, picked out of sight; tap one to paint it, its card into the
-   field guide.
+1. **`poc-first-minute`** (after the plan and the harness cleanup): everything in view colours on
+   first sight; pencil things near you, picked out of sight, with a setting for how many (3–5; 6–8
+   early then 3–5; every uncollected kind nearby: Robby plays each); approach carefully (rush an
+   animal and it leaves); tap one to paint it, its card into the field guide.
 2. **`poc-touch-moments`**: sit on a bench; toss a crumb and the gulls bunch up, then lift (the
    warning sign, then the moment); the gold edge; paintings keep the game's date, hour and weather.
 3. **`poc-painted-place`**: the back of the van, a room bigger than the van (step out and look back
    at a small van); hang a painting; step in (the hour and weather held, the place's people and
-   traffic going on as at that hour, ~250 m to walk, pencil past the edge); release the gull.
+   traffic going on as at that hour, ~250 m to walk, pencil past the edge); a gold-edged painting
+   replays its moment as you arrive. No releasing animals (later).
+
+The beat by beat, the hero things, golden hour and what to watch: `docs/NEXT_STEPS.md` "The Sea
+Bright prototype". Between the parts, while Robby plays: `map-data-list` after part 1,
+`osm-big-cut` after part 2.
 
 - **Everything goes behind `?poc=1`.** It's a throwaway prototype: without the switch the game must
   not change (run the shore playtest both ways).
@@ -165,9 +184,9 @@ The proof of concept is built one part at a time:
   in-page montage: `docs/agent/debugging.md`; capture mode keeps shots fully painted unless told
   otherwise, so `?poc=1` must win over it), a LOG entry, the item `passing` with its evidence, and
   Robby playing it. Then mark the next part `in_progress`.
-- **After part 3,** Robby and two or three people who haven't seen the game play the first ten
-  minutes; record their answers in the LOG. Then back to the roadmap's milestones 2–5
-  (`docs/ROADMAP.md`) unless Robby says otherwise.
+- **After part 3, `poc-playtest`:** two or three people who haven't seen the game play the first ten
+  minutes; record their answers in the LOG. Then the world's features and `micro-regions`
+  (NEXT_STEPS steps 10–11) unless Robby says otherwise.
 - **"Start near you?"** touches privacy: not before Robby says so.
 
 The rest of this file is the regional-life handoff of 2026-10-05, still the reference for that work.

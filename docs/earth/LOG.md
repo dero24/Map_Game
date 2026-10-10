@@ -2,6 +2,38 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-09 — What comes next, assessed: the order of work and the whole game in the repo; the design session next
+
+Robby, of the assessment he'd asked for ("I will have another agent assess what to do next"): "okay
+other agent is done … please proceed". This session had worked out his plans with him in his
+`for_mapgame` folder while the bugs were fixed (read-only in the repo meanwhile), after a read-only
+creative-director review of the gameplay loop. Docs and the feature list only; no code.
+
+- **In the repo:** `docs/NEXT_STEPS.md` (the order of work and why; the Sea Bright prototype beat by
+  beat; how many pencil things, decided by playing; how the map gets to the player; store broadly,
+  send narrowly; keeping the map up to date; the harness cleanup) and `docs/FULL_SCOPE.md` (the whole
+  game: the core loop, the goals, the state capitols as a candidate long-game goal, how much to
+  collect, time, where you start, the world and micro-regions, travel; 1.0 and later; open
+  questions). Brought in from `for_mapgame`, updated for where things stand (step 1 done, tiles v31).
+- **`docs/GAMEPLAY_STREAMLINED.md`:** a last Decisions section (2026-10-09), which wins where it
+  differs: approaching is the skill (idea A, "i love idea A"); paintings you jump into like Mario 64,
+  a gold edge replaying its moment; releasing animals later ("I think that part is confusing and
+  needs to be rethought"); real time, a painting keeping its moment; the goals; start by IP city or
+  a typed place; the self-driving van, legs of a ~300-mile tank, refuelling at real pumps ("uesr can
+  gas up by just driving next to the bump too"); micro-regions; 400–600 kinds for 1.0. §11 and §14
+  lose the gull release; §14 part 1 gets the setting for how many pencil things and approaching.
+- **`feature_list.json`:** `gameplay-one-plan` **in_progress** (its inventory now takes in the two
+  drafts and the partly-gameplay docs; done ends in one document, the old ones in `docs/archive/`).
+  New: `harness-cleanup`, `map-data-list`, `osm-big-cut`, `poc-playtest` (tier 2, ranked in the
+  order) and `micro-regions` (tier 1). The prototype's three matched to NEXT_STEPS (the
+  pencil-thing setting and approaching in part 1; part 3 jumps in, no gull release; the playtest
+  its own item). Every new or changed item's notes carry the order: until `harness-cleanup` makes
+  it data, NEXT_STEPS's table is the order, not tier and rank.
+- **HANDOFF "Start here"** rewritten: the design session next, then the order. **ROADMAP** counts
+  and milestone 6's order; **AGENTS.md** routes to the two docs.
+- **Next:** `gameplay-one-plan`, with Robby (the cleanup comes after it, so the ROADMAP is rewritten
+  once, from the agreed plan).
+
 ## 2026-10-09 — `feature/four-reports` pushed (Robby's OK); what comes next is open
 
 Robby: "yes push it, but region work will not come next, as I will have another agent assess what to do next and regions will happen and we will use that doc as reference".
