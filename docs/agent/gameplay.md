@@ -452,15 +452,41 @@ park, the town in pencil; without it the game is unchanged (no van, no stencil, 
   while it drives). It pulls away the town's bloom if you never stepped out (`onDepart`). Sea Bright to
   ~1 km down the shore: the cells 120 m ahead were always built (0 of 200 samples), and what you see
   out of the windshield colours as you go.
+- **Driving it yourself** (`drive.ts stepWheel`, `HANDLING`; `van.ts wheelInput`, `move`; Robby,
+  2026-10-10: "now i want to be able to drive it"): at the wheel, W/S and A/D (arrows too) are the
+  pedals and the wheel; a phone's walking stick is both (past `stickAxes`' dead zones; part way, that
+  share of the top speed). A camper's handling: 22 m/s top (~50 mph), a pull that fades toward it (~9 m/s
+  in 3 s), brakes of 9 m/s² (45 mph to a stop in ~22 m), S held past the stop backs it up (5 m/s), it
+  coasts down when you let go; a 3.4 m wheelbase and a 0.6 rad lock (a ~5 m turning circle at a crawl),
+  never more sideways pull than 7 m/s² (`wheelLock`: at speed the wheel turns it gently, so the view from
+  the seat never swings hard). Sitting down shuts the back doors. The first press takes it out of the
+  WalkWorld (`depart`, the town's bloom if you never stepped out); it moves against the world's walls with
+  its own shape (`walk.moveBody`, as a car's: buildings, kerb cars, fences, the water's edge — it bumps
+  off and loses its speed); the ground under it as the self-drive's (it stays level: the room shares its
+  frame). A drive from the map table gives way the moment you touch the pedals or the wheel. Get up (E,
+  Back) and it brakes to a stop by itself (`stepWheel`'s `hold`); stopped with nobody at the wheel it
+  parks (`arrive`: back in the WalkWorld, the kerb cars round it). The hint at the wheel, stopped: "W
+  drive · S brake, back · A D steer · V view · E get up" (a phone: "the stick drives · View: from
+  behind"); the stick's label says "drive".
+- **From behind** (`van.ts chase`, `third`, `toggleView`; Robby: "van can also be driven in third person
+  too"): V at the wheel (a phone: the View button, the balloon's, in the ride cluster — `body.driving`,
+  `data-ride="van"`; `tools/hud-audit.mjs` "at the van's wheel") swings the view behind the van, 9.5 m back
+  and above it, round your look (the mouse orbits it; with no mouse it swings back behind the van), the
+  walking lens; V again, back in the seat. Seen from behind it's drawn as from outside (`chasing`: its
+  sides and the room through its windows — shut, the back doors' windows show the room as it drives).
 - Harness: `window.__VAN__` / `__GAME__.van`, `__GAME__.sight`; shots (`?capture=1&poc=1`): `van-wake`,
   `van-room`, `van-door`, `van-window`, `van-wall`, `van-doorway`, `van-near`, `van-step`, `van-back`,
   `van-side`, `van-curtain`, `van-cab`, `van-cab-left`, `van-cab-right`, `van-drive` (35 s into a drive
   down the shore, at the wheel), `van-drive-out` (the van from the roadside), `van-peek` (in at the
   kerb side's window), `van-peek-left` (the driver's side, toward the front), `van-peek-back` (the back
-  doors shut: in at their windows), `bloom-0`, `bloom-1` (`--settle=300` for the bloom).
-- Not yet: driving it yourself, fuel and legs and sleep (later, by the plan), the room's things
-  working, saving the van; parking at the end of a drive can put the room's far side into a building
-  beside the kerb (seen only through that side's windows).
+  doors shut: in at their windows), `van-third` (at the wheel in its stall, from behind), `van-wheel`
+  (25 s into the drive down the shore you take the wheel: 1.5 s on the pedal), `van-wheel-third` (the
+  same from behind), `bloom-0`, `bloom-1` (`--settle=300` for the bloom). A van shot opens the back doors
+  unless the van is still rolling from the shot before.
+- Not yet: fuel and legs and sleep (later, by the plan), the room's things working, saving the van;
+  mirrors that show what's behind (backing up is by looking round); it stays level on a slope; parking
+  (by hand or at the end of a drive) can put the room's far side into a building beside it (seen only
+  through that side's windows).
 
 ## Hot air balloons
 

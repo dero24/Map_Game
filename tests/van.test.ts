@@ -385,7 +385,7 @@ describe('colour by sight: when to look again', () => {
 });
 
 // ---- the cab and the drive (poc-van-drive)
-import { buildGraph, route, lanePath, poseAt, Drive, drivable } from '../src/van/drive';
+import { buildGraph, route, lanePath, poseAt, Drive, drivable, stepWheel, wheelLock, HANDLING, type Wheel } from '../src/van/drive';
 import type { Road } from '../src/world/data';
 
 describe('the cab', () => {
@@ -515,5 +515,62 @@ describe('the drive', () => {
     const p = poseAt(lanePath(route(g, { x: -250, z: 0 }, { x: -50, z: 0 })!), 50);
     expect(Math.cos(p.yaw)).toBeCloseTo(0, 1);
     expect(Math.sin(p.yaw)).toBeCloseTo(-1, 1);
+  });
+});
+
+describe('driving it yourself (stepWheel: W/S and A/D at the wheel, or the stick on a phone)', () => {
+  const run = (s: Wheel, thr: number, steer: number, secs: number, hold = false) => { let d = 0; for (let t = 0; t < secs; t += 1 / 60) d += stepWheel(s, thr, steer, 1 / 60, hold); return d; };
+  it('on the pedal it pulls away like a camper and tops out, never past its top speed', () => {
+    const s: Wheel = { v: 0, steer: 0, yaw: 0 };
+    run(s, 1, 0, 3);
+    expect(s.v).toBeGreaterThan(7.5);
+    expect(s.v).toBeLessThan(11);
+    run(s, 1, 0, 30);
+    expect(s.v).toBeLessThanOrEqual(HANDLING.vmax);
+    expect(s.v).toBeGreaterThan(HANDLING.vmax * 0.95);
+    const half: Wheel = { v: 0, steer: 0, yaw: 0 }; // (the stick part way: that share of the top speed)
+    run(half, 0.5, 0, 30);
+    expect(half.v).toBeLessThan(HANDLING.vmax * 0.5 + 0.2);
+  });
+  it('the brakes stop it short, and held on past the stop they take it back, slowly', () => {
+    const s: Wheel = { v: 20, steer: 0, yaw: 0 };
+    let d = 0, t = 0;
+    while (s.v > 0 && t < 10) { d += stepWheel(s, -1, 0, 1 / 60); t += 1 / 60; }
+    expect(d).toBeLessThan(25); // (20 m/s, 45 mph, to a stop in ~22 m)
+    expect(s.v).toBeGreaterThan(-0.1);
+    run(s, -1, 0, 5);
+    expect(s.v).toBeLessThan(-1);
+    expect(s.v).toBeGreaterThanOrEqual(-HANDLING.reverse);
+    run(s, 1, 0, 0.5); // (rolling back, the pedal brakes first)
+    expect(s.v).toBeGreaterThan(-1);
+  });
+  it('let go, it coasts down to a stop; with nobody at the wheel it brakes to a stop and stays', () => {
+    const s: Wheel = { v: 10, steer: 0, yaw: 0 };
+    run(s, 0, 0, 2);
+    expect(s.v).toBeGreaterThan(0);
+    expect(s.v).toBeLessThan(9);
+    run(s, 0, 0, 30);
+    expect(s.v).toBe(0);
+    const h: Wheel = { v: 15, steer: 0.8, yaw: 0 };
+    run(h, 1, 1, 6, true); // (whatever the pedals say)
+    expect(h.v).toBe(0);
+    expect(Math.abs(h.steer)).toBeLessThan(0.01);
+  });
+  it('the wheel turns it only as it rolls, left to the left; slow, the turning circle of a van', () => {
+    const s: Wheel = { v: 0, steer: 0, yaw: 0 };
+    run(s, 0, 1, 2);
+    expect(s.yaw).toBe(0);
+    const l: Wheel = { v: 8, steer: 0, yaw: 0 };
+    run(l, 0.4, 1, 1);
+    expect(l.yaw).toBeGreaterThan(0); // (yaw as three.js turns it: its nose, −z, toward −x — left)
+    const R = 3 / ((3 / HANDLING.wheelbase) * Math.tan(wheelLock(3))); // (at a crawl, full lock)
+    expect(R).toBeGreaterThan(4.8);
+    expect(R).toBeLessThan(5.5);
+  });
+  it('at speed it never pulls sideways harder than its grip: the view from the seat never swings hard', () => {
+    for (const v of [3, 5, 8, 12, 16, 22, -4]) {
+      const rate = (v / HANDLING.wheelbase) * Math.tan(wheelLock(v));
+      expect(Math.abs(v * rate)).toBeLessThanOrEqual(HANDLING.grip + 1e-9);
+    }
   });
 });

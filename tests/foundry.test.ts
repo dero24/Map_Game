@@ -1021,6 +1021,20 @@ describe('decor (interior + terrace furniture)', () => {
     expect(b.max.x - b.min.x).toBeGreaterThan(1.0);
     expect(verts(D.mergeDecor(D.cafeSet(0xf1ede4, 0x2a2622, 0x2f4a6a)))).toBeGreaterThan(verts(g)); // + parasol
   });
+  it('the pillows of a bed rest on its mattress by the headboard, never floating over it', () => {
+    // (Robby, 2026-10-10: tipped about the origin, they had swung up off every bed in the game)
+    for (const [w, d] of [[0.9, 1.9], [1.5, 2.05], [1.8, 2.1]] as const) {
+      const pillows = D.bed(w, d, 0x9c6a5a, 0x8a6242).filter((p) => p.mat === 'fabric' && p.hex === 0xfbfaf6);
+      expect(pillows).toHaveLength(2);
+      for (const p of pillows) {
+        const b = bb(p.g);
+        expect(b.min.y).toBeGreaterThan(0.5); // (the mattress top at 0.54: sunk in a little…)
+        expect(b.min.y).toBeLessThan(0.54); // (…resting on it, never over it)
+        expect(b.max.z).toBeLessThan(d / 2 - 0.08); // (clear of the headboard)
+        expect(b.min.z).toBeGreaterThan(0); // (at the head end)
+      }
+    }
+  });
 });
 
 describe('sport: the courts and fields in the parks', () => {

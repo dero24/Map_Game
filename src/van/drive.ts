@@ -1,7 +1,7 @@
 // The van drives itself (pure — no three.js): a route over the real roads, a path along its lane with
 // the corners rounded, a speed for every metre of it (slower into the bends, easing off and on), and
 // the van's pose as it goes. The roads are the map's own (the baked region's paint roads, the streamed
-// cells' primary roads); the van's GPS is this.
+// cells' primary roads); the van's GPS is this. Or you drive it (`stepWheel`, at the bottom).
 import type { Road } from '../world/data';
 
 /** What the van will drive on, and how gladly (cost per metre: the main roads first). */
@@ -217,4 +217,33 @@ export class Drive {
     if (this.s >= this.length - 0.05) { this.s = this.length; this.v = 0; this.done = true; }
     return poseAt(this.path, this.s);
   }
+}
+
+// ---------------- driven by hand (W/S and A/D at the wheel; a phone's stick) ----------------
+/** How the van handles: its top speed and pull (the pull fading toward the top), its brakes, reverse,
+ *  how it coasts, its wheelbase and the wheel's lock — and never more sideways pull than `grip` (m/s²:
+ *  at speed the wheel turns it gently, so the view from the seat never swings hard). */
+export const HANDLING = { vmax: 22, accel: 3.4, brake: 9, reverse: 5, revAccel: 2.5, coast: 0.9, drag: 0.035, wheelbase: 3.4, lock: 0.6, grip: 7, steerRate: 4, hold: 6 };
+export interface Wheel { v: number; steer: number; yaw: number }
+/** The wheel's turn at speed v: full lock while slow, then no more than the grip allows. */
+export function wheelLock(v: number, H = HANDLING) {
+  const a = Math.abs(v);
+  return a < 0.5 ? H.lock : Math.min(H.lock, Math.atan((H.grip * H.wheelbase) / (a * a)));
+}
+/** One step of the van by hand: `thr` −1…1 (on; brake, then back), `steer` −1…1 (+ left). With no one at
+ *  the wheel (`hold`) it brakes to a stop and stays there. Turns `s` (v m/s along its nose, the wheel's
+ *  eased turn, yaw as three.js turns it) and returns how far it went along its nose. */
+export function stepWheel(s: Wheel, thr: number, steer: number, dt: number, hold = false, H = HANDLING): number {
+  if (hold) s.v -= Math.sign(s.v) * Math.min(Math.abs(s.v), H.hold * dt);
+  else if (thr > 0) {
+    if (s.v < -0.3) s.v = Math.min(0, s.v + H.brake * thr * dt); // (rolling back: the brakes first)
+    else if (thr >= 1 || s.v < H.vmax * thr) s.v += H.accel * thr * Math.max(0.3, 1 - Math.max(0, s.v) / (H.vmax * 1.25)) * dt;
+  } else if (thr < 0) {
+    if (s.v > 0.3) s.v = Math.max(0, s.v + H.brake * thr * dt); // (on the brakes: down to a stop, not past it)
+    else s.v += H.revAccel * thr * dt;
+  } else s.v -= Math.sign(s.v) * Math.min(Math.abs(s.v), (H.coast + Math.abs(s.v) * H.drag) * dt);
+  s.v = Math.max(-H.reverse, Math.min(H.vmax, s.v));
+  s.steer += ((hold ? 0 : steer) - s.steer) * Math.min(1, dt * H.steerRate);
+  s.yaw += (s.v / H.wheelbase) * Math.tan(s.steer * wheelLock(s.v, H)) * dt;
+  return s.v * dt;
 }

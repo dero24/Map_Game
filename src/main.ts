@@ -961,6 +961,8 @@ async function main() {
     hints.add(() => (V.inside && !V.steppedOut && simTime > 4 ? { text: 'the back doors: step outside', pri: 6 } : null));
     // E (a phone: the button by your thumb) — the driver's seat, the back, the map table
     hints.add(() => { const a = V.action(); return a ? { key: thumbs() ? a.label : 'E', text: a.text, pri: 9 } : null; });
+    // at the wheel, stopped: how to drive it (W/S and A/D; a phone's stick)
+    hints.add(() => (V.mode === 'cab' && V.speed < 0.5 ? (thumbs() ? { text: 'the stick drives · View: from behind', pri: 10 } : { key: 'W', text: 'drive · S brake, back · A D steer · V view · E get up', pri: 10 }) : null));
     // the map table: pick a place on the map and the van drives you there, on the real roads (the
     // baked region's every road, the streamed cells' own)
     V.onMapTable = () => {
@@ -1115,7 +1117,8 @@ async function main() {
       shots['ocean-golden']();
       walker.eyeDrop = waking = 0;
       walker.holdMove = false;
-      V.openDoors();
+      V.openDoors(!V.moving); // (open, but shut on a van still rolling from the shot before)
+      V.third = n.endsWith('-third'); // (at the wheel: `-third` from behind the van)
       const out = (lx: number, lz: number, tx: number, tz: number, pitch = 0) => {
         const [x, z] = toWorld(p, lx, lz), [wx, wz] = toWorld(p, tx, tz);
         V.mode = 'out';
@@ -1143,6 +1146,24 @@ async function main() {
         if (n === 'bloom-1' && sight) sight.armed = true;
       }
       else if (n === 'van-curtain') inn(L.cab.into.x + 0.3, L.cab.into.z + 1.4, (L.cab.way.x0 + L.cab.way.x1) / 2, R.z0, 0.02);
+      else if (n === 'van-third') { (V as unknown as { sit(w: typeof walker): void }).sit(walker); (V as unknown as { seatT: number }).seatT = 1; walker.yaw = V.pose.yaw; walker.pitch = -0.12; }
+      else if (n === 'van-wheel' || n === 'van-wheel-third') {
+        // driven by hand: at the wheel, 25 s into a drive down the shore you take the wheel — a second
+        // and a half on the pedal (no hand on the wheel: on a bend that leaves the road)
+        (V as unknown as { sit(w: typeof walker): void }).sit(walker);
+        (V as unknown as { seatT: number }).seatT = 1;
+        if (!V.moving) {
+          V.driveTo(p.x - 80, p.z + 900, [...((paintWorld.json as { roads?: Road[] }).roads ?? []), ...stream.primRoads]);
+          V.openDoors(false); // (shut at once, the leaves with them)
+          for (let k = 0; k < 25 * 30; k++) V.move(1 / 30, walker);
+        }
+        const keys = (V as unknown as { keys: Set<string> }).keys;
+        keys.add('KeyW');
+        for (let k = 0; k < 45; k++) { V.move(1 / 30, walker); V.seat(1 / 30, camera, walker); }
+        keys.clear();
+        walker.yaw = V.pose.yaw;
+        walker.pitch = -0.06;
+      }
       else if (n.startsWith('van-cab') || n.startsWith('van-drive')) {
         // at the wheel (`van-cab`, `-left`, `-right`: looking ahead, at the driver's window, across); on the
         // road (`van-drive`: 35 s into a drive down the shore; `van-drive-out`: the van from the roadside)
@@ -1150,7 +1171,7 @@ async function main() {
         (V as unknown as { seatT: number }).seatT = 1;
         if (n.startsWith('van-drive') && !V.moving) {
           V.driveTo(p.x - 80, p.z + 900, [...((paintWorld.json as { roads?: Road[] }).roads ?? []), ...stream.primRoads]);
-          V.doors = 0;
+          V.openDoors(false); // (shut at once, the leaves with them)
           for (let k = 0; k < 35 * 30; k++) V.move(1 / 30, walker);
         }
         walker.yaw = V.pose.yaw + (n.endsWith('-left') ? 1.25 : n.endsWith('-right') ? -0.9 : 0);
@@ -1382,7 +1403,7 @@ async function main() {
   $('tfly').onclick = () => { setMore(false); toggleFly(); };
   $('tgo').onclick = () => { if (playing() && !atlas.open) { setMore(false); atlas.focusSearch(true); } };
   $('tphoto').onclick = () => { if (playing() && !atlas.open && (!vehicles.driving || vehicles.activeKind === 'balloon')) { setMore(false); togglePhoto(); } };
-  $('tview').onclick = () => vehicles.toggleView();
+  $('tview').onclick = () => (van?.mode === 'cab' ? van.toggleView() : vehicles.toggleView()); // (the van's wheel, or a balloon's basket)
   $('tmenu').onclick = () => { setMore(false); atlas.toggle(); };
   $('tplant').addEventListener('click', () => {
     if (playing() && !atlas.open && !photo.active && !vehicles.driving && !brush.active) garden.plant();
@@ -1450,18 +1471,22 @@ async function main() {
     touchActionCheck = 0.2;
     const action = touchActionState();
     touchAction.classList.toggle('hidden', !action);
+    // (at the van's wheel the stick drives it)
+    const stickWord = van?.mode === 'cab' ? 'drive' : 'walk', stickLabel = $('stick-home').querySelector('span');
+    if (stickLabel && stickLabel.textContent !== stickWord) stickLabel.textContent = stickWord;
     if (action && touchAction.textContent !== action.label) touchAction.textContent = action.label;
     if (action) touchAction.setAttribute('aria-label', action.aria);
     // (a map, a photo, the brush or the panel over the world: the drawer has closed behind it)
     if (atlas.open || photo.active || brush.active || (gui && !gui._hidden)) setMore(false);
     const kind = vehicles.activeKind, flying = walkParams.fly && !kind, climbs = flying || kind === 'balloon'; // (▲ ▼: climb and sink; a balloon's burner and vent)
-    document.body.classList.toggle('driving', !!kind);
+    const wheel = van?.mode === 'cab'; // (at the van's wheel: driving, its View — the seat or behind)
+    document.body.classList.toggle('driving', !!kind || wheel);
     // (which of the ride's buttons stand beside the dock: a phone held upright ends the hint short of them)
-    const beside = kind ?? (flying ? 'fly' : action ? 'near' : '');
+    const beside = kind ?? (wheel ? 'van' : flying ? 'fly' : action ? 'near' : '');
     if (document.body.dataset.ride !== beside) document.body.dataset.ride = beside;
-    $('ride-touch').classList.toggle('hidden', !kind && !flying);
+    $('ride-touch').classList.toggle('hidden', !kind && !flying && !wheel);
     $('ride-touch').classList.toggle('fly', climbs);
-    $('tview').classList.toggle('hidden', kind !== 'balloon');
+    $('tview').classList.toggle('hidden', kind !== 'balloon' && !wheel);
     $('trboost').classList.toggle('hidden', kind !== 'car' && kind !== 'boat');
     for (const id of ['tthrottle-up', 'tthrottle-down']) $(id).classList.toggle('hidden', kind !== 'plane');
     for (const id of ['tfly-up', 'tfly-down']) $(id).classList.toggle('hidden', !climbs);

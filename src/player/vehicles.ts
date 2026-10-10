@@ -255,7 +255,7 @@ export class Vehicles {
   winds(): WindLayer[] { return windLayers(this.windKey, windHour()); }
   /** What E would board right now, without boarding it (context hints). */
   enterable(): { kind: VKind; model: string } | null {
-    if (this.active || walkParams.fly) return null;
+    if (this.active || walkParams.fly || !this.o.enabled()) return null; // (not from the van's seat or room: main's `enabled`)
     const w = this.o.walker;
     let best: Veh | null = null, bd = Infinity;
     for (const v of this.list) {

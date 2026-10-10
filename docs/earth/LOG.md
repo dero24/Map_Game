@@ -2,6 +2,36 @@
 
 Newest first. One entry per work session: what changed, what was verified, what's next.
 
+## 2026-10-10 (evening) — Drive the van yourself, from the seat or from behind; the pillows
+
+Robby's next notes: "now i want to be able to drive it", "van can also be driven in third person too",
+"on all the beds the pillows are floating above the bed", and "please push as ill try it on phone".
+Committed on `feature/four-reports` and **pushed at his word** (published).
+
+- **Driving it** (`src/van/drive.ts stepWheel`, `HANDLING`; `van.ts`): at the wheel W/S and A/D (a phone's
+  stick) — a camper's pull and brakes, S past the stop to back up, a ~5 m turning circle at a crawl and
+  gentle at speed (never more than 7 m/s² sideways: the view from the seat never swings hard). Sitting
+  down shuts the back doors; it leaves the world's walls as it moves and bumps off buildings, parked cars
+  and fences; touching the pedals takes over from a drive from the map table; get up and it stops by
+  itself and parks where it stands. The hint at the wheel says how; the stick's label says "drive".
+- **From behind** (`van.ts chase`): V (a phone: View) swings the view behind the van and back; the mouse
+  orbits it; seen from behind it's drawn as from outside, the room through its windows as it drives.
+- **The pillows** (`src/assets/decor.ts tiltX`): every bed's pillows were tipped about the origin, not
+  their own middles, which swung them ~25 cm up off the mattress — on the van's bed and every bed in
+  every house (they share decor's bed). Now they rest on the mattress against the headboard; the same
+  slip fixed in a chair's top rail, a sofa's back cushions and a pew's back.
+- On the way: at the wheel the hint offered "E drive this wagon" (a kerb car near the van) — vehicles'
+  `enterable` now keeps to its own `enabled` (never from the van's seat or room).
+- Verified: `tests/van.test.ts` 48 (the handling: pull and top speed, the stick part way, brakes and
+  reverse, coasting, nobody at the wheel, turning only as it rolls and left to the left, the turning
+  circle, the grip at every speed); `tests/foundry.test.ts` (the pillows rest on the mattress, three bed
+  sizes); `npm test` 118 files, 1160 tests; typecheck; build; an in-page drive (W 1.5 s: 3.6 m on at
+  4.7 m/s; A: turned; S: braked; E: the van stopped and parked, back in the WalkWorld); montages
+  `van-cab`, `van-wheel`, `van-third`, `van-wheel-third`, `van-room` and a close-up of the bed (desktop and
+  the phone tier at 412×915); `hud-audit` 640 layouts (a new state, "at the van's wheel"), no overlaps;
+  `mobile-check --device=pixel7 --query=poc=1` (0 errors, 66 programs).
+- **Next:** Robby plays it on his phone; more notes.
+
 ## 2026-10-10 (later) — Looking in at the van's windows (Robby's first note, `poc-van-drive`)
 
 Robby played the van ("pretty cool honestly so far") and asked: "why can we not look in the windows of

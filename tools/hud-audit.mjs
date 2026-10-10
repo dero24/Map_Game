@@ -116,6 +116,7 @@ const STATES = {
   'flying a plane': { ride: 'plane', driving: true, action: 'Jump out', show: ['tthrottle-down', 'tthrottle-up'], hud: ['✈ 212 km/h · alt 480 m · throttle 100%', ' · stick: pitch / bank · +/−: throttle'], hint: ['Paint', HINT] },
   'flying on foot': { ride: 'fly', fly: true, show: ['tfly-up', 'tfly-down'], hint: ['Land', 'hold Up and Down to climb and sink · push the stick far to go faster'] },
   'in a balloon': { ride: 'balloon', driving: true, fly: true, action: 'Jump out', show: ['tfly-up', 'tfly-down', 'tview'], hud: ['🎈 312 m · ↑ 2.1 m/s · 84°C · ↗ 14 km/h · holding', ''], hint: ['Paint', 'the best seat for a painting, out to the horizon'] }, // (main.ts: a phone's words)
+  'at the van\'s wheel': { ride: 'van', driving: true, action: 'Back', show: ['tview'], hint: [null, 'the stick drives · View: from behind'] }, // (?poc=1: main.ts syncTouchControls)
 };
 
 // ---- in-page: set a state, measure the HUD ----

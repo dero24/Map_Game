@@ -25,7 +25,10 @@
 // the windshield's frame, the mirrors, a free look; from the seat you get up and go into the back
 // through the curtain (a curtain brushes past: `wipe`), and through the room's curtained way in its
 // front wall you come back to the seat. The van drives itself (drive.ts): a destination from the map
-// table, the back doors shut, and it carries you — in the room or at the wheel — along its lane.
+// table, the back doors shut, and it carries you — in the room or at the wheel — along its lane. Or you
+// drive it: at the wheel W/S and A/D (a phone's stick) are the pedals and the wheel (`stepWheel`); it
+// leaves the world's walls as it moves, bumps off what it meets, and stops itself if you get up. At the
+// wheel you see from the driver's seat or from behind the van (V; a phone's View: `chase`).
 import * as THREE from 'three';
 import { camperGeometry, camperRecipe } from '../assets/camper';
 import { propMaterial } from '../render/propMaterial';
@@ -33,14 +36,19 @@ import { U } from '../render/shared';
 import type { WalkWorld } from '../player/collision';
 import { vanLayout, nextMode, roomSegments, hullSegments, toWorld, toLocal, peekSide, windowClip, type VanLayout, type VanPose, type Mode } from './layout';
 import { VanSpace, type WalkSpace } from './space';
-import { buildGraph, route, lanePath, Drive, type Graph, type PathPt } from './drive';
+import { buildGraph, route, lanePath, Drive, stepWheel, HANDLING, type Graph, type PathPt, type Wheel } from './drive';
 import { walkParams, setLens } from '../player/controller';
+import { stickAxes } from '../player/vehicles';
 import type { Road } from '../world/data';
 import { shellGeometry, tunnelGeometry, contentsGeometry, roomLights, roomMaterial, mapMaterial, chartCanvas, tunnelFaces, windowFaces } from './room';
 
 /** What the van needs of the walker: where they are, and the ground they walk on. */
 export interface VanWalker {
   x: number; z: number; y: number; yaw: number; pitch: number; feet: number; space: WalkSpace | null; holdMove: boolean;
+  /** a phone's walking stick (−1…1 each way, +y down): at the wheel, the pedals and the wheel */
+  readonly touchAxes?: { x: number; y: number };
+  /** the mouse has the look (pointer lock): behind the van the view stays where you turn it */
+  readonly locked?: boolean;
   place(x: number, z: number, yaw?: number, pitch?: number, feet?: number): void;
   shift(dx: number, dy: number, dz: number, dyaw: number): void;
 }
@@ -105,6 +113,15 @@ export class Van {
   private steer = 0;
   private trip: Drive | null = null;
   private pending: PathPt[] | null = null; // (a route waiting for the back doors to shut)
+  /** under way (driven, or driving itself): out of the WalkWorld until it stops and parks */
+  private rolling = false;
+  /** driven by hand: its speed along its nose, the wheel's turn, its heading */
+  private hand: Wheel = { v: 0, steer: 0, yaw: 0 };
+  private keys = new Set<string>();
+  /** At the wheel, seen from behind the van (V; a phone's View) rather than from the driver's seat. */
+  third = false;
+  private chasePos = new THREE.Vector3();
+  private chaseInit = false;
   private graph: { n: number; g: Graph } | null = null;
   private wipe: { t: number; to: 'in' | 'cab' } | null = null;
   private wipeEl: HTMLElement | null = null;
@@ -221,13 +238,19 @@ export class Van {
     this.space.shut = [L.door.x0, L.door.z, L.door.x1, L.door.z];
     o.root.add(this.group);
     // E: the van's action here (the driver's seat, the back, the map table) — vehicles.ts steps aside
-    // while the van has one (main: its `enabled`)
-    if (typeof window !== 'undefined')
+    // while the van has one (main: its `enabled`); the keys held, for the pedals and the wheel
+    if (typeof window !== 'undefined') {
       window.addEventListener('keydown', (e) => {
-        if (e.code !== 'KeyE' || e.repeat || (e.target as HTMLElement)?.closest?.('input,textarea,.lil-gui')) return;
+        if ((e.target as HTMLElement)?.closest?.('input,textarea,.lil-gui')) return;
+        this.keys.add(e.code);
+        if ((e.code !== 'KeyE' && e.code !== 'KeyV') || e.repeat) return;
         if (this.o.enabled && !this.o.enabled()) return;
-        this.act();
+        if (e.code === 'KeyV') this.toggleView();
+        else this.act();
       });
+      window.addEventListener('keyup', (e) => this.keys.delete(e.code));
+      window.addEventListener('blur', () => this.keys.clear());
+    }
   }
 
   /** Stand the van at `pose` (world x, z; the ground's y; yaw as three.js turns it). */
@@ -262,13 +285,15 @@ export class Van {
   /** Is (x, z) (world) where the room is? — for the systems that must look away while you're in. */
   covers(x: number, z: number) {
     const [lx, lz] = toLocal(this.pose, x, z), R = this.layout.room, F = this.layout.frame;
-    if (this.trip) return Math.abs(lx) < this.layout.recipe.W / 2 + 0.3 && lz > F.zf - 0.3 && lz < F.zr + 0.3;
+    if (this.rolling) return Math.abs(lx) < this.layout.recipe.W / 2 + 0.3 && lz > F.zf - 0.3 && lz < F.zr + 0.3;
     return lx > R.x0 - 0.3 && lx < R.x1 + 0.3 && lz > R.z0 - 0.3 && lz < this.layout.door.z + 0.6;
   }
   /** On the move (or about to be: the doors shutting first). */
-  get moving() { return !!this.trip || !!this.pending; }
+  get moving() { return this.rolling || !!this.pending; }
   /** How fast it's going (m/s). */
-  get speed() { return this.trip?.v ?? 0; }
+  get speed() { return this.trip?.v ?? Math.abs(this.hand.v); }
+  /** Driven by hand right now (at the wheel, under way). */
+  get driven() { return this.rolling && !this.trip; }
   get inside() { return this.mode === 'in'; }
   /** The van's own scenes, for the start's shader compile (render/warm.ts): its room and its doorway. */
   get scenes(): THREE.Scene[] { return [this.roomScene, this.portalScene]; }
@@ -314,7 +339,7 @@ export class Van {
   action(): VanAction | null {
     const w = this.w, L = this.layout;
     if (!w || this.wipe) return null;
-    if (this.mode === 'cab') return { id: 'back', label: 'Back', text: 'get up and go into the back' };
+    if (this.mode === 'cab') return { id: 'back', label: 'Back', text: this.driven ? 'get up and go into the back (the van stops itself)' : 'get up and go into the back' };
     const [lx, lz] = toLocal(this.pose, w.x, w.z);
     if (this.mode === 'out' && !this.moving && Math.hypot(lx - L.cab.door.x, lz - L.cab.door.z) < 1.5) return { id: 'sit', label: 'Sit', text: "the driver's seat" };
     const t = L.furniture.find((f) => f.kind === 'maptable')!;
@@ -329,11 +354,13 @@ export class Van {
     else this.sit(w);
     return true;
   }
-  /** Into the driver's seat (from where you stand: the eye eases over). */
+  /** Into the driver's seat (from where you stand: the eye eases over). The back doors swing shut,
+   *  ready to go. */
   private sit(w: VanWalker) {
     this.seatFrom.set(w.x, w.y, w.z);
     this.seatT = this.mode === 'out' ? 0 : 1;
     this.mode = 'cab';
+    if (this.doorTarget !== 0) { this.doorTarget = 0; this.onDoors?.(); }
     w.space = null;
     w.holdMove = true;
     w.yaw = this.pose.yaw; // (looking out of the windshield)
@@ -376,8 +403,16 @@ export class Van {
       w.holdMove = this.mode === 'cab';
     }
   }
-  /** At the wheel: the camera is the driver's eye (it rides the van), your look free about it.
-   *  True while seated (the walker doesn't walk). */
+  /** At the wheel: from the driver's seat, or from behind the van (and back). */
+  toggleView() {
+    if (this.mode !== 'cab') return;
+    this.third = !this.third;
+    this.chaseInit = false;
+  }
+  /** Seen from behind the van now (at the wheel, settled in the seat). */
+  get chasing() { return this.mode === 'cab' && this.third && this.seatT >= 1; }
+  /** At the wheel: the camera is the driver's eye (it rides the van), your look free about it — or,
+   *  from behind, it follows the van round your look. True while seated (the walker doesn't walk). */
   seat(dt: number, cam: THREE.PerspectiveCamera, w: VanWalker): boolean {
     if (this.mode !== 'cab') return false;
     const L = this.layout, e = L.cab.eye;
@@ -392,11 +427,27 @@ export class Van {
     w.z = this.eye.z;
     w.y = this.eye.y;
     w.holdMove = true;
+    if (this.chasing) { this.chase(dt, cam, w); return true; }
     cam.position.copy(this.eye);
     cam.up.set(0, 1, 0);
     cam.rotation.set(w.pitch, w.yaw, 0, 'YXZ');
     setLens(cam, walkParams.cabFov);
     return true;
+  }
+  /** From behind the van (vehicles.ts chase, the van's own sizes): the camera behind your look and
+   *  above it, on the van; with no mouse to hold the look (a phone) it swings back behind the van. */
+  private chase(dt: number, cam: THREE.PerspectiveCamera, w: VanWalker) {
+    if (!w.locked) w.yaw += Math.atan2(Math.sin(this.pose.yaw - w.yaw), Math.cos(this.pose.yaw - w.yaw)) * Math.min(1, dt * 1.2);
+    const el = Math.max(-0.1, Math.min(1.1, 0.2 - w.pitch * 0.8)), dist = 9.5 * (1 + Math.min(0.3, this.speed / 80));
+    const tx = this.pose.x + Math.sin(w.yaw) * Math.cos(el) * dist, tz = this.pose.z + Math.cos(w.yaw) * Math.cos(el) * dist;
+    const ground = this.o.ground ? this.o.ground(tx, tz, this.pose.y) : this.pose.y;
+    const target = this.cam.set(tx, Math.max(this.pose.y + 2.4 + Math.sin(el) * dist, ground + 1.2), tz);
+    if (!this.chaseInit) { this.chasePos.copy(target); this.chaseInit = true; }
+    this.chasePos.lerp(target, Math.min(1, dt * 6));
+    cam.position.copy(this.chasePos);
+    cam.up.set(0, 1, 0);
+    cam.lookAt(this.pose.x, this.pose.y + 1.6, this.pose.z);
+    setLens(cam);
   }
 
   // ---------------- driving ----------------
@@ -414,34 +465,94 @@ export class Van {
     this.doorTarget = 0;
     return true;
   }
-  /** Before the walker moves: the drive on, the van's pose with it, and you carried along. */
+  /** The pedals and the wheel, at the wheel only (seated, no curtain passing): thr −1…1, steer −1…1
+   *  (+ left). Keys are all the way; a phone's stick part way, past its dead zones (vehicles.ts). */
+  private wheelInput(w: VanWalker) {
+    if (this.mode !== 'cab' || this.seatT < 1 || this.wipe || (this.o.enabled && !this.o.enabled())) return { thr: 0, steer: 0 };
+    const k = (c: string) => this.keys.has(c), ax = (pos: string[], neg: string[]) => (pos.some(k) ? 1 : 0) - (neg.some(k) ? 1 : 0);
+    const t = w.touchAxes ? stickAxes(w.touchAxes.x, w.touchAxes.y) : { x: 0, y: 0 };
+    const c = (v: number) => Math.max(-1, Math.min(1, v));
+    return { thr: c(ax(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown']) - t.y), steer: c(ax(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight']) - t.x) };
+  }
+  /** Under way: out of the world's walls while it moves (the town's bloom, if you never stepped out). */
+  private depart() {
+    this.rolling = true;
+    this.onDepart?.();
+    this.o.walk.removeScope(SCOPE, true);
+    this.registered = false;
+  }
+  /** Stopped for good: parked where it stands, back in the world's walls. */
+  private arrive() {
+    this.trip = null;
+    this.rolling = false;
+    this.hand.v = this.hand.steer = 0;
+    this.steer = 0;
+    this.wheelMesh.rotation.z = 0;
+    this.park({ ...this.pose });
+    this.onArrive?.();
+  }
+
+  /** Before the walker moves: the drive on (its own, or yours at the wheel), the van's pose with it,
+   *  and you carried along. */
   move(dt: number, w: VanWalker) {
+    const inp = this.wheelInput(w), touched = inp.thr !== 0 || inp.steer !== 0;
+    if (touched && (this.trip || this.pending)) {
+      // you take the wheel: a drive from the map table gives way to you, at the speed it was doing
+      this.hand.v = this.trip?.v ?? 0;
+      this.hand.steer = 0;
+      this.trip = null;
+      this.pending = null;
+    }
     if (this.pending && this.doors < 0.02) {
-      // the doors are shut: off we go (out of the world's walls while it moves)
+      // the doors are shut: off we go
       this.trip = new Drive(this.pending);
       this.pending = null;
-      this.onDepart?.();
-      this.o.walk.removeScope(SCOPE, true);
-      this.registered = false;
+      this.depart();
     }
     const T = this.trip;
-    if (!T) return;
     dt = Math.min(dt, 0.05);
+    if (!T && !this.rolling && inp.thr === 0) {
+      // parked: the wheel turns in your hands, and nothing moves till you press on
+      const s = this.hand;
+      if (s.steer !== 0 || inp.steer !== 0) {
+        s.steer += (inp.steer - s.steer) * Math.min(1, dt * HANDLING.steerRate);
+        if (inp.steer === 0 && Math.abs(s.steer) < 1e-3) s.steer = 0;
+        this.wheelMesh.rotation.z = this.steer = s.steer * 2.4;
+        this.wheelMesh.updateMatrixWorld();
+      }
+      return;
+    }
     const old = { ...this.pose };
-    const p = T.step(dt);
-    const dyaw = Math.atan2(Math.sin(p.yaw - old.yaw), Math.cos(p.yaw - old.yaw));
-    // (the heading eased — never a twitch, and never turning faster than a van can at this speed: a
-    // 4 m turning radius — and the steering wheel turned by how fast it turns)
-    const most = (T.v / 4 + 0.1) * dt;
-    const yaw = old.yaw + Math.max(-most, Math.min(most, dyaw * Math.min(1, dt * 8)));
-    const y = this.o.ground ? this.o.ground(p.x, p.z, old.y) : old.y;
-    this.pose.x = p.x;
-    this.pose.z = p.z;
-    this.pose.yaw = yaw;
-    this.pose.y = old.y + (y - old.y) * Math.min(1, dt * 6);
-    const rate = (yaw - old.yaw) / Math.max(dt, 1e-3);
-    this.steer += (Math.max(-1, Math.min(1, rate * 6 / Math.max(2, T.v))) * 2.4 - this.steer) * Math.min(1, dt * 5);
+    if (T) {
+      const p = T.step(dt);
+      const dyaw = Math.atan2(Math.sin(p.yaw - old.yaw), Math.cos(p.yaw - old.yaw));
+      // (the heading eased — never a twitch, and never turning faster than a van can at this speed: a
+      // 4 m turning radius — and the steering wheel turned by how fast it turns)
+      const most = (T.v / 4 + 0.1) * dt;
+      this.pose.x = p.x;
+      this.pose.z = p.z;
+      this.pose.yaw = old.yaw + Math.max(-most, Math.min(most, dyaw * Math.min(1, dt * 8)));
+      const rate = (this.pose.yaw - old.yaw) / Math.max(dt, 1e-3);
+      this.steer += (Math.max(-1, Math.min(1, rate * 6 / Math.max(2, T.v))) * 2.4 - this.steer) * Math.min(1, dt * 5);
+    } else {
+      // by hand: the pedals and the wheel yours; nobody at the wheel, it brakes to a stop
+      if (!this.rolling) this.depart();
+      const s = this.hand, L = this.layout, r = L.recipe.W / 2 + 0.04, half = Math.max(0, L.recipe.L / 2 - r);
+      s.yaw = old.yaw;
+      const d = stepWheel(s, inp.thr, inp.steer, dt, this.mode !== 'cab');
+      const fx = -Math.sin(s.yaw), fz = -Math.cos(s.yaw);
+      // against the world's walls, its own shape sliding along them (vehicles.ts carMove): it bumps off
+      const [nx, nz] = this.o.walk.moveBody(old.x, old.z, fx * d, fz * d, fx, fz, half, half, r, old.y);
+      const got = Math.hypot(nx - old.x, nz - old.z);
+      if (Math.abs(d) > 1e-4 && got < Math.abs(d) * 0.5) s.v *= 0.35;
+      this.pose.x = nx;
+      this.pose.z = nz;
+      this.pose.yaw = s.yaw;
+      this.steer += (s.steer * 2.4 - this.steer) * Math.min(1, dt * 10); // (the wheel in your hands)
+    }
     this.wheelMesh.rotation.z = this.steer;
+    const y = this.o.ground ? this.o.ground(this.pose.x, this.pose.z, old.y) : old.y;
+    this.pose.y = old.y + (y - old.y) * Math.min(1, dt * 6);
     this.group.position.set(this.pose.x, this.pose.y, this.pose.z);
     this.group.rotation.set(0, this.pose.yaw, 0);
     this.group.updateMatrix();
@@ -451,14 +562,10 @@ export class Van {
       const [lx, lz] = toLocal(old, w.x, w.z), [nx, nz] = toWorld(this.pose, lx, lz);
       w.shift(nx - w.x, this.pose.y - old.y, nz - w.z, this.pose.yaw - old.yaw);
     } else if (this.mode === 'cab') w.yaw += this.pose.yaw - old.yaw;
-    if (T.v > 0.5) this.onMove?.(this.pose.x, this.pose.z, -Math.sin(this.pose.yaw) * T.v, -Math.cos(this.pose.yaw) * T.v);
-    if (T.done) {
-      this.trip = null;
-      this.steer = 0;
-      this.wheelMesh.rotation.z = 0;
-      this.park({ ...this.pose });
-      this.onArrive?.();
-    }
+    const v = T ? T.v : this.hand.v;
+    if (Math.abs(v) > 0.5) this.onMove?.(this.pose.x, this.pose.z, -Math.sin(this.pose.yaw) * v, -Math.cos(this.pose.yaw) * v);
+    // it parks: at the end of its drive, or stopped with nobody at the wheel
+    if (T ? T.done : this.mode !== 'cab' && this.hand.v === 0) this.arrive();
   }
   private cam = new THREE.Vector3();
 
@@ -494,11 +601,12 @@ export class Van {
     // the room through its windows
     cam.getWorldPosition(this.cam);
     const [cx, cz] = toLocal(this.pose, this.cam.x + origin.x, this.cam.z + origin.z);
-    const side = this.mode === 'out' ? peekSide(this.layout, cx) : 0;
+    const outside = this.mode === 'out' || this.chasing; // (behind the van at the wheel, you see it as from outside)
+    const side = outside ? peekSide(this.layout, cx) : 0;
     this.sides[0].material = side < 0 ? this.paintMat : this.hiddenMat;
     this.sides[1].material = side > 0 ? this.paintMat : this.hiddenMat;
     this.portalOn = false;
-    if (this.mode !== 'out') return;
+    if (!outside) return;
     // what of the portal is in view: the doorway (from behind the van, or in its passage — shut, its
     // doors' windows show it), and the windows of the side you're beside
     this.frustum.setFromProjectionMatrix(this.m4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));

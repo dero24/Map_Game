@@ -12,8 +12,10 @@ pushed** — a `feature/` push publishes the game; ask Robby first.
 **Then `poc-van-drive`** (built and verified; LOG 2026-10-10): the driver's door to the seat, the
 curtain between the cab and the back, the map table's "drive here", the van driving itself on the real
 roads. It stays `in_progress` for its last check only: **Robby plays the van** (`?poc=1`) and gives
-notes — work from those; then slices B and C as his gameplay doc sets them. His first note (2026-10-10,
-done — LOG "Looking in at the van's windows"): look in at the van's windows from outside. `gameplay-one-plan` is
+notes — work from those; then slices B and C as his gameplay doc sets them. His notes so far (2026-10-10, all
+done — LOG "Looking in at the van's windows", "Drive the van yourself"): look in at its windows from
+outside; drive it yourself, from the seat or from behind (V / View); the pillows floating on every bed.
+Pushed at his word (published) so he can play it on his phone. `gameplay-one-plan` is
 paused (his own doc: don't start a design Q&A). Robby's rules hold (no email, no Street View, tiles
 v31 and he deploys, one subagent at most, short plain updates).
 

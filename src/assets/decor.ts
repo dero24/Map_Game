@@ -25,6 +25,14 @@ const cyl = (r0: number, r1: number, h: number, x: number, y: number, z: number,
 const lighten = (hex: number, t: number) => new THREE.Color(hex).lerp(new THREE.Color(0xffffff), t).getHex();
 const darken = (hex: number, t: number) => new THREE.Color(hex).multiplyScalar(1 - t).getHex();
 const P = (g: THREE.BufferGeometry, mat: DecorMat, hex: number): DecorPart => ({ g, mat, hex });
+/** A part tipped about its own middle, round x. (rotateX alone turns it about the origin: a part
+ *  already placed away from it swings off its spot — Robby, 2026-10-10: "the pillows are floating
+ *  above the bed".) */
+const tiltX = (g: THREE.BufferGeometry, a: number) => {
+  g.computeBoundingBox();
+  const c = g.boundingBox!.getCenter(new THREE.Vector3());
+  return g.translate(-c.x, -c.y, -c.z).rotateX(a).translate(c.x, c.y, c.z);
+};
 
 /** Tapered legs at the four corners of a w×d footprint (inset `i`), height h. */
 function legs(w: number, d: number, h: number, i: number, r: number, hex: number, splay = 0): Parts {
@@ -51,8 +59,7 @@ export function sofa(w: number, d: number, fab: number, legHex = 0x3a2e24, cushi
   for (let i = 0; i < n; i++) {
     const x = -w / 2 + 0.2 + cw * (i + 0.5);
     out.push(P(rbox(cw - 0.02, 0.13, d - 0.3, 0.06, x, 0.4, -0.08), 'fabric', cu)); // seat cushion
-    const bk = rbox(cw - 0.04, 0.42, 0.16, 0.07, x, 0.5, d / 2 - 0.27);
-    bk.rotateX(-0.12);
+    const bk = tiltX(rbox(cw - 0.04, 0.42, 0.16, 0.07, x, 0.5, d / 2 - 0.27), -0.12);
     out.push(P(bk, 'fabric', cu)); // back cushion, leaning back a touch
   }
   return out;
@@ -78,12 +85,10 @@ export function bed(w: number, d: number, fab: number, wood: number, sheet = 0xf
     P(rbox(w + 0.03, 0.05, 0.28, 0.025, 0, 0.55, -d / 2 + d * 0.66 - 0.16), 'fabric', lighten(fab, 0.3)), // folded edge
     P(rbox(w, 1.05, 0.08, 0.035, 0, 0.0, d / 2 - 0.04), 'wood', wood), // headboard
   ];
+  // the pillows, on the mattress (its top at 0.54) and sunk into it a little, their head ends tipped
+  // up toward the headboard
   const pw = (w - 0.24) / 2;
-  for (const s of [-1, 1]) {
-    const pl = rbox(pw, 0.14, 0.36, 0.06, s * (pw / 2 + 0.05), 0.54, d / 2 - 0.3);
-    pl.rotateX(-0.25).translate(0, 0.08, -0.02);
-    out.push(P(pl, 'fabric', 0xfbfaf6));
-  }
+  for (const s of [-1, 1]) out.push(P(tiltX(rbox(pw, 0.14, 0.36, 0.06, s * (pw / 2 + 0.05), 0.562, d / 2 - 0.3), -0.25), 'fabric', 0xfbfaf6));
   return out;
 }
 
@@ -110,9 +115,7 @@ export function chair(hex: number, cushion?: number): Parts {
     ...legs(0.4, 0.4, 0.42, 0.04, 0.02, hex, 0.04),
   ];
   for (const s of [-1, 1]) out.push(P(cyl(0.017, 0.02, 0.5, s * 0.17, 0.46, 0.18, 6), 'wood', hex));
-  const rail = rbox(0.4, 0.07, 0.03, 0.012, 0, 0.88, 0.2);
-  rail.rotateX(-0.08);
-  out.push(P(rail, 'wood', hex));
+  out.push(P(tiltX(rbox(0.4, 0.07, 0.03, 0.012, 0, 0.88, 0.2), -0.08), 'wood', hex));
   for (const x of [-0.08, 0, 0.08]) out.push(P(rbox(0.035, 0.36, 0.018, 0.006, x, 0.5, 0.19), 'wood', hex));
   if (cushion !== undefined) out.push(P(rbox(0.38, 0.04, 0.38, 0.018, 0, 0.465, -0.01), 'fabric', cushion));
   return out;
@@ -754,9 +757,7 @@ export function pew(len: number): Parts {
     P(box(len, 0.02, 0.1, 0, 0.8, 0.26), 'wood', T), // the hymnal shelf (the row behind's)
     P(box(len, 0.07, 0.14, 0, 0.1, 0.33), 'fabric', 0x8c2f2a), // the kneeler
   ];
-  const back = box(len, 0.52, 0.045, 0, 0.44, 0.17);
-  back.rotateX(-0.1);
-  out.push(P(back, 'wood', T));
+  out.push(P(tiltX(box(len, 0.52, 0.045, 0, 0.44, 0.17), -0.1), 'wood', T));
   for (const s of [-1, 1]) {
     out.push(P(box(0.07, 0.95, 0.6, s * (len / 2 - 0.035), 0, 0.0), 'wood', T));
     out.push(P(box(0.08, 0.06, 0.64, s * (len / 2 - 0.035), 0.95, 0.0), 'wood', T)); // its cap
